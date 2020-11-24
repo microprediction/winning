@@ -7,7 +7,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="winning",
-    version="0.0.1",
+    version="0.0.2",
     description="Fast algorithm inferring relative ability from contest winning probabilities",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -20,7 +20,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
     ],
-    packages=["humpday"],
+    packages=["winning"],
     test_suite='pytest',
     tests_require=['pytest','pandas'],
     include_package_data=True,
