@@ -16,6 +16,14 @@ To use a default skew-normal performance distribution:
 Alternatively see winning.lattice_calibration and use functions such as state_price_implied_ability(prices, density) which allow
 you to specify whatever performance distribution you like. 
 
+### Practical use
+
+See the  [paper](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf) for why this is useful in lots of places.
+
+
+![](https://i.imgur.com/83iFzel.png)
+
+
 ### Overview 
 
 The lattice_calibration module allows the user to infer relative abilities from state prices in a multi-entrant contest. The assumption
