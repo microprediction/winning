@@ -22,12 +22,12 @@ setup(
     ],
     packages=["humpday"],
     test_suite='pytest',
-    tests_require=['pytest','shgo','pandas'],
+    tests_require=['pytest','pandas'],
     include_package_data=True,
     install_requires=["numpy","pytest","pathlib","wheel","scipy"],
     entry_points={
         "console_scripts": [
-            "humpday=humpday.__main__:main",
+            "winning=winning.__main__:main",
         ]
     },
 )
