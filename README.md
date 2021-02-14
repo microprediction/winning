@@ -2,7 +2,7 @@
 A fast numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. This 
 repo includes code and draft paper accepted for publication into SIAM Journal on Financial Mathematics. 
 
-https://www.overleaf.com/read/qwnkrstmdwtn
+[Inferring relative ability from winning probability in multi-entrant contests](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf)
 
 ### Usage
 
@@ -18,7 +18,7 @@ you to specify whatever performance distribution you like.
 
 ### Practical use
 
-See the  [paper](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf) for why this is useful in lots of places.
+See the  for why this is useful in lots of places.
 
 
 ![](https://i.imgur.com/83iFzel.png)
