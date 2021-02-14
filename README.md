@@ -1,8 +1,9 @@
 
-A fast numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. This 
-repo includes code and draft paper accepted for publication into SIAM Journal on Financial Mathematics. 
+A fast numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. 
 
 [Inferring relative ability from winning probability in multi-entrant contests](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf)
+Peter Cotton
+Forthcoming in SIAM Journal on Quantitative Finance
 
 ### Usage
 
