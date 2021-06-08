@@ -1,8 +1,5 @@
 from winning.lattice_conventions import STD_UNIT, STD_SCALE, STD_L, STD_A
-import matplotlib.pyplot as plt
-plt.rcParams["figure.figsize"] = (10,6)
-from winning.skew_calibration import skew_normal_density
-from winning.lattice_calibration import dividend_implied_ability, normalize_dividends, normalize, dividends_from_prices
+from winning.lattice_calibration import dividend_implied_ability, normalize_dividends, dividends_from_prices
 from winning.lattice import skew_normal_density, densities_from_offsets, pdf_to_cdf, sample_from_cdf
 import heapq
 from collections import Counter
@@ -13,7 +10,7 @@ import numpy as np
 
 BET_TYPES = ['win','place','show','top4','exacta','quinella','trifecta','pick4']
 
-def skew_normal_simulation(dividends, nSamples=5000, longshot_expon=1.0,skew_parameter=0.0,nan_value=10000):
+def skew_normal_simulation(dividends, nSamples=5000, longshot_expon=1.0,skew_parameter=STD_A,nan_value=10000):
     """ Monte carlo the skew normal running time distribution model
         :param dividends array [1.7,...]
         :returns prices  dict  {'win':[1.6,4.5,...], 'place':[  ] , ... }
