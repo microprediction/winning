@@ -16,6 +16,14 @@ To use a default skew-normal performance distribution:
 Alternatively see winning.lattice_calibration and use functions such as state_price_implied_ability(prices, density) which allow
 you to specify whatever performance distribution you like. 
 
+### Pricing show and place from win prices:
+
+    from winning.lattice_pricing import skew_normal_simulation
+    from pprint import pprint
+    dividends = [2.0,3.0,12.0,12.0,24.0,24.0]
+    pricing = skew_normal_simulation(dividends=dividends,longshot_expon=1.15,skew_parameter=1.0,nSamples=1000)
+    pprint(pricing)
+
 ### Practical use
 
 See the  ([paper](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf)) for why this is useful in lots of places.
