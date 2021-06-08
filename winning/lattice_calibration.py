@@ -12,10 +12,10 @@ import numpy as np
 #################################################################
 
 
-def make_nan_2000(x):
+def convert_nan_to(x,nan_value=2000):
     """ Longshots """
     if pd.isnull(x):
-        return 2000.
+        return nan_value
     else:
         return x
 
@@ -25,27 +25,27 @@ def normalize(p):
     S = sum(p)
     return [pr / S for pr in p]
 
-def prices_from_dividends(dividends):
+def prices_from_dividends(dividends,nan_value=2000):
     """ Risk neutral probabilities using naive renormalization """
-    return normalize([1. / make_nan_2000(x) for x in dividends])
+    return normalize([1. / convert_nan_to(x,nan_value=nan_value) for x in dividends])
 
 
-def dividends_from_prices(prices):
+def dividends_from_prices(prices, multiplicity=1.0):
     """ Australian style dividends """
-    return [1. / d for d in normalize(prices)]
+    return [1.0 / (multiplicity*d) if not(np.isnan(d)) and d>0 else np.nan for d in normalize(prices)]
 
 def normalize_dividends(dividends):
     return dividends_from_prices(prices_from_dividends(dividends))
 
 
-def dividend_implied_ability(dividends, density):
+def dividend_implied_ability(dividends, density, nan_value=2000):
     """ Infer risk-neutral implied_ability from Australian style dividends
 
     :param dividends:    [ 7.6, 12.0, ... ]
     :return: [ float ]   Implied ability
 
     """
-    p = prices_from_dividends(dividends)
+    p = prices_from_dividends(dividends,nan_value=nan_value)
     return state_price_implied_ability(prices=p, density=density)
 
 def state_price_implied_ability(prices, density):
