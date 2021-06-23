@@ -32,6 +32,26 @@ See the  ([paper](https://github.com/microprediction/winning/blob/main/docs/Hors
 ![](https://i.imgur.com/83iFzel.png)
 
 
+### Cite
+
+    
+@article{doi:10.1137/19M1276261,
+author = {Cotton, Peter},
+title = {Inferring Relative Ability from Winning Probability in Multientrant Contests},
+journal = {SIAM Journal on Financial Mathematics},
+volume = {12},
+number = {1},
+pages = {295-317},
+year = {2021},
+doi = {10.1137/19M1276261},
+URL = { 
+        https://doi.org/10.1137/19M1276261
+},
+eprint = { 
+        https://doi.org/10.1137/19M1276261
+}
+}
+
 ### Overview 
 
 The lattice_calibration module allows the user to infer relative abilities from state prices in a multi-entrant contest. The assumption
