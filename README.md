@@ -1,7 +1,7 @@
 
 A fast numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. 
 
-The paper is published in SIAM Journal on Quantitative Finance ([draft](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf))
+The paper is published in SIAM Journal on Quantitative Finance ([draft](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_updated.pdf)
  
 
 ### Usage
