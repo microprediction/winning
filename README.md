@@ -3,6 +3,7 @@ A fast numerical algorithm for inferring relative ability from multi-entrant con
 
 Published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_updated.pdf))
  
+![](https://i.imgur.com/83iFzel.png) 
 
 ### Usage
 
