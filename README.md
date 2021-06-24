@@ -51,8 +51,6 @@ See
 
 See the  ([paper](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf)) for why this is useful in lots of places.
 
-![](https://i.imgur.com/tYsrAWY.png "Implied performance distributions")
-
 
 ### Cite
 
