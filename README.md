@@ -81,8 +81,8 @@ made is that the performance distribution of one competitor is a translation of 
 At the racetrack, this would mean looking at the win odds and infering a relative ability of horses. The algorithm is:
 
 - Fast 
-- Scalable (to contests with hundreds of thousands of entrants)
-- General (it works for any performance distribution). 
+- Scalable ... to contests with hundreds of thousands of entrants.
+- General ... as noted it works for any performance distribution. 
 
 The paper explains why it is useful beyond the racetrack, though the code is written with some racing vocabularly. If you're reading the code here's a quick glossary:
 
