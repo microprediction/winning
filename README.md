@@ -21,7 +21,7 @@ Horses with no bid are assigned odds of 1999:1 ... or you can leave them out.
 
 ### Generality
 
-The density is just a vector. So any 'numerical' performance distribution can be used. 
+The density is just a vector representing an atomic distribution supported on the natural numbers. Thus it can approximate any performance distribution you desire. 
 
 ### Plotting. 
 
