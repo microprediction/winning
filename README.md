@@ -74,7 +74,7 @@ See the  ([paper](https://github.com/microprediction/winning/blob/main/docs/Hors
         }
         }
 
-### Overview 
+### Introduction and nomenclature.
 
 The lattice_calibration module allows the user to infer relative abilities from state prices in a multi-entrant contest. The assumption
 made is that the performance distribution of one competitor is a translation of the performance distribution of another. 
@@ -82,25 +82,20 @@ made is that the performance distribution of one competitor is a translation of 
 At the racetrack, this would mean looking at the win odds and infering a relative ability of horses. The algorithm is:
 
 - Fast 
-
 - Scalable (to contests with hundreds of thousands of entrants)
-
 - General (it works for any performance distribution). 
 
+The paper explains why it is useful beyond the racetrack, though the code is written with some racing vocabularly. If you're reading the code here's a quick glossary:
 
-### Nomenclature 
+- *State prices* The expectation of an investment that has a payoff equal to 1 if there is only one winner, 1/2 if two are tied, 1/3 if three are tied and so forth. State prices are synomymous with winning probability, except for dead heats. However in the code a lattice is used so dead-heats must be accomodated and the distinction is important. 
 
-If you're reading the code...
-
-- State prices. The expectation of an investment that has a payoff equal to 1 if there is only one winner, 1/2 if two are tied, 1/3 if three are tied and so forth. State prices are synomymous with winning probability, except for dead heats. However in the code a lattice is used so dead-heats must be accomodated and the distinction is important. 
-
-- Relative ability refers to how much one performance distribution needs to be 
+- (Relative) *ability* refers to how much one performance distribution needs to be 
 translated in order to match another. Implied abilities are vectors of relative abilities consistent with a collection of state prices.
 
-- Dividends are the inverse of state prices. This is Australian tote vernacular. Dividends are 'decimal odds'. A dividend of 9.0 corresponds to a state price of 1/9.0, and a bookmaker quote of 8/1. Don't ask me to translate to American odds conventions because they are so utterly ridiculous!      
+- *Dividends* are the inverse of state prices. This is Australian tote vernacular. Dividends are called 'decimal odds' in the UK and that's probably a better name. A dividend of 9.0 corresponds to a state price of 1/9.0, and a bookmaker quote of 8/1. Don't ask me to translate to American odds conventions because they are so utterly ridiculous!      
 
 
-### Special cases
+### A little sugar on top
 
 The core algorithm is entirely ambivalent to the choice of performance distribution, and that certainly need not correspond to some analytic distribution with known properties. However, to make things convenient, there is some sugar provided:
 
