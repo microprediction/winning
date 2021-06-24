@@ -36,8 +36,8 @@ See
     legend = [ str(d) for d in dividends ]
     densitiesPlot(densities=densities, unit=unit, legend=legend)
     plt.show()
-    
-![](https://i.imgur.com/tYsrAWY.png){:width="36px"}
+
+![](https://i.imgur.com/tYsrAWY.png)
 
 ### Pricing show and place from win prices:
 
