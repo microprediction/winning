@@ -94,7 +94,7 @@ translated in order to match another. Implied abilities are vectors of relative 
 
 ### A little sugar on top
 
-The core algorithm is entirely ambivalent to the choice of performance distribution, and that certainly need not correspond to some analytic distribution with known properties. However, to make things convenient, there is some sugar provided:
+The core algorithm is entirely ambivalent to the choice of performance distribution, and that certainly need not correspond to some analytic distribution with known properties. However, if you just want to use skew_normal say:
 
 - std_calibration module. 
 - skew_calibration module.  
