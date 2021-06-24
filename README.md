@@ -25,9 +25,9 @@ Horses with no bid are assigned odds of nan_value ... or you can leave them out 
 
 The density is just a vector representing an atomic distribution supported on the natural numbers. Thus it can approximate any performance distribution you desire. 
 
-### Plotting. 
+### Plotting.  
 
-See 
+Its a good idea to plot, to ensure you haven't fallen of the grid. 
 
     L = 600
     unit = 0.01
@@ -52,7 +52,6 @@ See
 ### Practical use
 
 See the  ([paper](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf)) for why this is useful in lots of places.
-
 
 ### Cite
 
