@@ -37,9 +37,7 @@ See
     densitiesPlot(densities=densities, unit=unit, legend=legend)
     plt.show()
     
-  
-
-    ![](https://i.imgur.com/tYsrAWY.png){width="200"}
+![](https://i.imgur.com/tYsrAWY.png){width="200"}
 
 ### Pricing show and place from win prices:
 
