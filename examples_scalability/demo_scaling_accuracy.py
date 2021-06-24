@@ -1,5 +1,5 @@
 from winning.lattice import skew_normal_density
-from winning.lattice_calibration import implied_ability, ability_implied_dividends
+from winning.lattice_calibration import solve_for_implied_offsets, ability_implied_dividends
 PLOTS=True
 import math
 import numpy as np
@@ -18,7 +18,7 @@ def demo(  ):
         unnormalized_probs = np.linspace(start=5 / n, stop=5 / (n * math.log(n)), num=n)
         state_prices = [p_ / sum(unnormalized_probs) for p_ in unnormalized_probs]
         assert abs(sum(state_prices)-1)<1e-6
-        implied_offsets = implied_ability(prices=state_prices, density=density, nIter=5)
+        implied_offsets = solve_for_implied_offsets(prices=state_prices, density=density, nIter=5)
         implied_dividends   = ability_implied_dividends(ability=implied_offsets,density=density)
         implied_state_prices = [1/dvd for dvd in implied_dividends ]
         relative_differences   = [ abs(p1-p2)/(p1) for p1, p2 in zip(state_prices,implied_state_prices)]

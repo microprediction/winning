@@ -7,8 +7,11 @@ import numpy as np
 
 # Monte Carlo pricing of win/place/show and exotics
 # This really is inefficient, but hopefully correct
+# It's a little wordy as it predated the convenience functions in skew_calibration
+# Used in the paper, so I'll leave it here for now.
 
 BET_TYPES = ['win','place','show','top4','exacta','quinella','trifecta','pick4']
+
 
 def skew_normal_simulation(dividends, nSamples=5000, longshot_expon=1.0,skew_parameter=STD_A,nan_value=10000):
     """ Monte carlo the skew normal running time distribution model
