@@ -11,14 +11,15 @@ We choose a performance density
 
     density = centered_std_density()
 
-We set 'dividends', a.k.a. 'decimal prices', almost the same as inverse probability
+We set 'dividends', which are for all intents and purposes inverse probabilities
 
     dividends = [2,6,np.nan, 3]
 
-The algorithm implies relative ability (i.e. how much to translate the performance distributions)
-Horses with no bid are assigned odds of 1999:1 ... or you can leave them out.
+The algorithm implies relative ability (i.e. how much to translate the performance distributions to match the winning probabilities). 
 
     abilities = dividend_implied_ability(dividends=dividends,density=density, nan_value=2000)
+
+Horses with no bid are assigned odds of nan_value ... or you can leave them out of course. 
 
 ### Generality
 
