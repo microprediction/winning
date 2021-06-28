@@ -100,10 +100,19 @@ def _unnormalized_skew_cdf(x, loc=0, scale=1.0, a=2.0):
     return 2 / scale * norm.pdf(t) * norm.cdf(a * t)
 
 
-def sample_from_cdf(cdf, nSamples, unit=1.0):
+def sample_from_cdf(cdf, n_samples, unit=1.0, add_noise=False):
     """ Monte Carlo sample """
-    rvs = np.random.rand(nSamples)
-    return [unit * sum([rv > c for c in cdf]) for rv in rvs]
+    rvs = np.random.rand(n_samples)
+    performances = [unit * sum([rv > c for c in cdf]) for rv in rvs]
+    if add_noise:
+        noise = 0.00001 * unit * np.random.randn(n_samples)
+        return [s + x for s, x in zip(performances, noise)]
+    else:
+        return performances
+
+
+def sample_from_cdf_with_noise(cdf, n_samples, unit=1.0):
+    return sample_from_cdf(cdf=cdf, n_samples=n_samples, unit=unit, add_noise=True)
 
 
 #############################################
@@ -151,6 +160,8 @@ def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)
     """ Returns expected _conditional_payoff_against_rest broken down by score,
        where _conditional_payoff_against_rest is 1 if we are better than rest (lower) and 1/(1+multiplicity) if we are equal
 
+
+
     """
     # Use np.sum( expected_payoff ) for the expectation
     if cdf is None:
@@ -159,21 +170,20 @@ def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)
         cdfAll = pdf_to_cdf(densityAll)
     if density is None:
         density = cdf_to_pdf(cdf)
-    if densityAll is None:
+    if densityAll is None:  # Why do we need this??
         densityAll = cdf_to_pdf(cdfAll)
+
     S = 1 - cdfAll
     S1 = 1 - cdf
     Srest = (S + 1e-18) / (S1 + 1e-6)
     cdfRest = 1 - Srest
 
     # Multiplicity inversion (uses notation from blog post)
-    # This is written up in my blog post
+    # This is written up in my blog post and the paper
     m = multiplicityAll
     f1 = density
     m1 = 1.0
     fRest = cdf_to_pdf(cdfRest)
-    # numer = m*f1*Srest + m*(f1+S1)*fRest - m1*f1*( Srest + fRest )
-    # denom = fRest*(f1+S1)
     numer = m * f1 * Srest + m * (f1 + S1) * fRest - m1 * f1 * (Srest + fRest)
     denom = fRest * (f1 + S1)
     multiplicityLeftTail = (1e-18 + numer) / (1e-18 + denom)
@@ -197,8 +207,10 @@ def _winner_of_two_pdf(densityA, densityB, multiplicityA=None, multiplicityB=Non
     :param   densityB:   np.array
     :return: density, multiplicity
     """
-    cdfA = pdf_to_cdf(densityA)
-    cdfB = pdf_to_cdf(densityB)
+    if cdfA is None:
+        cdfA = pdf_to_cdf(densityA)
+    if cdfB is None:
+        cdfB = pdf_to_cdf(densityB)
     cdfMin = 1 - np.multiply(1 - cdfA, 1 - cdfB)
     density = cdf_to_pdf(cdfMin)
     L = int((len(density) - 1) / 2)

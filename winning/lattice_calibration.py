@@ -6,14 +6,15 @@ from winning.lattice_conventions import NAN_DIVIDEND
 
 #################################################################
 #                                                               #
-#      Implements the "method of multiplicity inversion" that   #
-#      quickly solves the ratings race problem                  #
+#      Implements a fast algorithm for inferring                #
+#      relative location parameters of performance              #
+#      distributions, given contest win probabilities           #
 #                                                               #
 #################################################################
 
 # The main two functions are listed first. They can be used to solve the horse race problem when
 # provided "dividends" (i.e. decimal prices).
-#
+
 # The inverse of a dividend is called a state price. So if you want to provide winning probabilities
 # and ignore the possibility of dead-heats, you are well served by 'state_price_implied_ability'
 
@@ -109,7 +110,7 @@ def prices_from_dividends(dividends, nan_value=NAN_DIVIDEND):
 
 
 def dividends_from_prices(prices, multiplicity=1.0):
-    """ Australian style dividends """
+    """ Australian style "dividends" """
     return [1.0 / (multiplicity * d) if not (np.isnan(d)) and d > 0 else np.nan for d in normalize(prices)]
 
 
@@ -146,7 +147,9 @@ def solve_for_implied_offsets(prices, density, offset_samples=None, implied_offs
     densityAllGuess, multiplicityAllGuess = winner_of_many(densities)
     densityAll = densityAllGuess.copy()
     multiplicityAll = multiplicityAllGuess.copy()
-    guess_prices = [np.sum(expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)) for density in
+
+    if verbose:
+        guess_prices = [np.sum(expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)) for density in
                     densities]
 
     for _ in range(nIter):
@@ -154,16 +157,20 @@ def solve_for_implied_offsets(prices, density, offset_samples=None, implied_offs
             from winning.lattice_plot import densitiesPlot
             # temporary hack to check progress of optimization
             densitiesPlot([densityAll] + densities, unit=0.1)
+
+        # Main iteration...
         implied_prices = implicit_state_prices(density=density, densityAll=densityAll, multiplicityAll=multiplicityAll,
                                                offsets=offset_samples)
         implied_offsets = np.interp(prices, implied_prices, offset_samples)
         densities = densities_from_offsets(density, implied_offsets)
         densityAll, multiplicityAll = winner_of_many(densities)
-        guess_prices = [np.sum(expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)) for density
-                        in densities]
-        approx_prices = [np.round(pri, 3) for pri in prices]
-        approx_guesses = [np.round(pri, 3) for pri in guess_prices]
+
         if verbose:
+            guess_prices = [np.sum(expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)) for density
+                            in densities]
+            approx_prices  = [np.round(pri, 3) for pri in prices]
+            approx_guesses = [np.round(pri, 3) for pri in guess_prices]
+
             print(zip(approx_prices, approx_guesses)[:5])
 
     return implied_offsets

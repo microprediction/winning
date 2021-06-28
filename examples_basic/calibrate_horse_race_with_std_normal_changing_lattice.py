@@ -1,6 +1,5 @@
 from winning.std_calibration import centered_std_density
 from winning.lattice_calibration import dividend_implied_ability
-from winning.lattice_conventions import STD_UNIT, STD_SCALE, STD_L, STD_A
 import numpy as np
 
 # Illustrates the basic calibration

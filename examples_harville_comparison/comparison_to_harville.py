@@ -4,7 +4,10 @@ import numpy as np
 from collections import Counter
 import heapq
 from pprint import pprint
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError:
+    raise('pip install pandas')
 
 # An example of pricing exotics by Monte Carlo
 
@@ -21,7 +24,7 @@ def placegetter(scores, position):
 
 def sample_from_cdf_with_noise(cdf, nSamples):
     # Break ties
-    samples = sample_from_cdf(cdf=cdf,nSamples=nSamples)
+    samples = sample_from_cdf(cdf=cdf, n_samples=nSamples)
     noise = 0.00001*np.random.randn(nSamples)
     return [ s+x for s,x in zip(samples,noise) ]
 
