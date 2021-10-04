@@ -125,4 +125,4 @@ For smallish races, we are talking a few hundred milliseconds.
 
 For large races we are talking 25 seconds for a 100,000 horse race. 
 
-![](https://github.com/microprediction/winning/blob/main/docs/inversion_time_small_races.png)
+![](https://github.com/microprediction/winning/blob/main/docs/inversion_time_larger_races.png)
