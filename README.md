@@ -35,6 +35,10 @@ The algorithm implies relative ability (i.e. how much to translate the performan
 
 Horses with no bid are assigned odds of nan_value ... or you can leave them out of course. 
 
+### Examples
+
+See [example_basic](https://github.com/microprediction/winning/tree/main/examples_basic)
+
 ### Generality
 
 The density is just a vector representing an atomic distribution supported on the natural numbers. Thus it can approximate any performance distribution you desire. 
