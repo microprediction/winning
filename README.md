@@ -116,3 +116,8 @@ translated in order to match another. Implied abilities are vectors of relative 
 - *Dividends* are the inverse of state prices. This is Australian tote vernacular. Dividends are called 'decimal odds' in the UK and that's probably a better name. A dividend of 9.0 corresponds to a state price of 1/9.0, and a bookmaker quote of 8/1. Don't ask me to translate to American odds conventions because they are so utterly ridiculous!      
 
 The core algorithm is entirely ambivalent to the choice of performance distribution, and that certainly need not correspond to some analytic distribution with known properties. But normal and skew-normal are simple choices. See the [basic examples](https://github.com/microprediction/winning/tree/main/examples_basic) 
+
+### Performance 
+
+![](https://github.com/microprediction/winning/blob/main/docs/inversion_time_small_races.png)
+
