@@ -7,7 +7,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="winning",
-    version="0.1.2",
+    version="0.2.0",
     description="Fast algorithm inferring relative ability from contest winning probabilities",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -19,12 +19,13 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.9",
     ],
     packages=["winning"],
     test_suite='pytest',
     tests_require=['pytest','pandas'],
     include_package_data=True,
-    install_requires=["numpy","pytest","pathlib","wheel","scipy"],
+    install_requires=["numpy","pytest","pathlib","wheel"],
     entry_points={
         "console_scripts": [
             "winning=winning.__main__:main",

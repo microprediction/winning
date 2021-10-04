@@ -1,4 +1,4 @@
-from scipy.stats import norm
+from winning.normaldist import normcdf, normpdf
 import numpy as np
 import math
 
@@ -97,7 +97,7 @@ def _unnormalized_skew_cdf(x, loc=0, scale=1.0, a=2.0):
     :return:  np.array length 2*L+1
     """
     t = (x - loc) / scale
-    return 2 / scale * norm.pdf(t) * norm.cdf(a * t)
+    return 2 / scale * normpdf(t) * normcdf(a * t)
 
 
 def sample_from_cdf(cdf, n_samples, unit=1.0, add_noise=False):
