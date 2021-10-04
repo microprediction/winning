@@ -117,4 +117,4 @@ The core algorithm is entirely ambivalent to the choice of performance distribut
 - std_calibration module. 
 - skew_calibration module.  
 
-See the examples_basic for a gentle introduction. 
+See the [basic examples](https://github.com/microprediction/winning/tree/main/examples_basic) for a gentle introduction. 
