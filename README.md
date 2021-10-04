@@ -119,5 +119,10 @@ The core algorithm is entirely ambivalent to the choice of performance distribut
 
 ### Performance 
 
+For smallish races, we are talking a few hundred milliseconds. 
+
 ![](https://github.com/microprediction/winning/blob/main/docs/inversion_time_small_races.png)
 
+For large races we are talking 25 seconds for a 100,000 horse race. 
+
+![](https://github.com/microprediction/winning/blob/main/docs/inversion_time_small_races.png)
