@@ -1,4 +1,6 @@
 
+![test-39](https://github.com/microprediction/winning/workflows/tests/test-39.svg) ![test-38](https://github.com/microprediction/winning/workflows/tests/test-38.svg)
+
 A fast numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. 
 
 Published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_updated.pdf))
