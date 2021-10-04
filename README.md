@@ -1,5 +1,5 @@
 
-![test-39](https://github.com/microprediction/winning/workflows/tests/badge.svg)
+![test-39](https://github.com/microprediction/winning/workflows/test-39/badge.svg)
 
 A fast numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. 
 
