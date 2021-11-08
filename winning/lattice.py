@@ -156,12 +156,9 @@ def sample_winner_of_many(densities, nSamples=5000):
     return density
 
 
-def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
+def get_the_rest(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
     """ Returns expected _conditional_payoff_against_rest broken down by score,
        where _conditional_payoff_against_rest is 1 if we are better than rest (lower) and 1/(1+multiplicity) if we are equal
-
-
-
     """
     # Use np.sum( expected_payoff ) for the expectation
     if cdf is None:
@@ -197,8 +194,13 @@ def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)
     k = list(f1 == max(f1)).index(True)
     multiplicityRest[k:] = multiplicityRightTail[k:]
 
-    return _conditional_payoff_against_rest(density=density, densityRest=None, multiplicityRest=multiplicityRest,
-                                            cdf=cdf, cdfRest=cdfRest)
+    return cdfRest, multiplicityRest
+
+def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
+    cdfRest, multiplicityRest = get_the_rest(density=density, densityAll=densityAll, multiplicityAll=multiplicityAll, cdf=cdf, cdfAll=cdfAll)
+    return _conditional_payoff_against_rest(density=density, densityRest=None, multiplicityRest=multiplicityRest, cdf=cdf, cdfRest=cdfRest)
+
+
 
 
 def _winner_of_two_pdf(densityA, densityB, multiplicityA=None, multiplicityB=None, cdfA=None, cdfB=None):
@@ -223,6 +225,22 @@ def _winner_of_two_pdf(densityA, densityB, multiplicityA=None, multiplicityB=Non
     multiplicity = (winA * multiplicityA + draw * (multiplicityA + multiplicityB) + winB * multiplicityB + 1e-18) / (
             winA + draw + winB + 1e-18)
     return density, multiplicity
+
+
+def _loser_of_two_pdf(densityA, densityB):
+    reverse_density, reverse_multiplicity = _winner_of_two_pdf(np.flip(densityA), np.flip(densityB))
+    return np.flip(reverse_density), np.flip(reverse_multiplicity)
+
+
+def beats(densityA, multiplicityA, densityB, multiplicityB):
+    """
+        Returns expected _conditional_payoff_against_rest broken down by score
+    """
+    # use np.sum( _conditional_payoff_against_rest) for the expectation
+    cdfA = pdf_to_cdf(densityA)
+    cdfB = pdf_to_cdf(densityB)
+    win, draw, loss = _conditional_win_draw_loss(densityA, densityB, cdfA, cdfB)
+    return sum( win + draw * (1+multiplicityA) / (2 + multiplicityB + multiplicityA ) )
 
 
 def _conditional_win_draw_loss(densityA, densityB, cdfA, cdfB):
