@@ -19,12 +19,13 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.9",
     ],
     packages=["winning"],
     test_suite='pytest',
     tests_require=['pytest','pandas'],
     include_package_data=True,
-    install_requires=["numpy","pytest","pathlib","wheel","scipy"],
+    install_requires=["numpy","pytest","pathlib","wheel"],
     entry_points={
         "console_scripts": [
             "winning=winning.__main__:main",
