@@ -7,13 +7,13 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="winning",
-    version="0.1.3",
+    version="0.1.4",
     description="Fast algorithm inferring relative ability from contest winning probabilities",
     long_description=README,
     long_description_content_type="text/markdown",
     url="https://github.com/microprediction/winning",
     author="microprediction",
-    author_email="pcotton@intechinvestments.com",
+    author_email="peter.cotton@microprediction.com",
     license="MIT",
     classifiers=[
         "License :: OSI Approved :: MIT License",
