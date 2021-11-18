@@ -2,6 +2,7 @@
 ![test-37](https://github.com/microprediction/winning/workflows/test-37/badge.svg)
 ![test-38](https://github.com/microprediction/winning/workflows/test-38/badge.svg)
 ![test-39](https://github.com/microprediction/winning/workflows/test-39/badge.svg)
+![test-pandas](https://github.com/microprediction/winning/workflows/test-pandas/badge.svg)
 
 A fast, scalable numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. 
 
