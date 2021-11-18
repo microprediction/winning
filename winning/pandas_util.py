@@ -32,7 +32,7 @@ if using_pandas:
         return df.groupby(by).apply(_add_ability, **kwargs)
 
 
-    def add_skew_normal_ability_to_dataframe(df, by: str, prob_col='p', new_col='ability', L=STD_L, scale=STD_SCALE, unit=STD_UNIT):
+    def add_skew_normal_ability_to_dataframe(df, by: str, prob_col='p', new_col='ability', L=STD_L, scale=STD_SCALE, unit=STD_UNIT, a=STD_A, loc=0.0):
         """
         :param df:           pd.DataFrame with probability columns
         :param prob_col:     Name of column holding selection (win) probabilities
@@ -44,5 +44,5 @@ if using_pandas:
         :return:  New data frame with 'ability' column
         """
 
-        density = skew_normal_density(L=L, unit=unit, loc=0, scale=scale, a=STD_A)
+        density = skew_normal_density(L=L, unit=unit, loc=loc, scale=scale, a=a)
         return add_centered_ability_to_dataframe(df=df, prob_col=prob_col, by=by, new_col=new_col, density=density)
