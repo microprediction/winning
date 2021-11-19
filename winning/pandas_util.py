@@ -10,7 +10,7 @@ except ImportError:
 
 if using_pandas:
 
-    def add_centered_ability_to_dataframe(df, prob_col, by:str, density, new_col:str):
+    def add_centered_ability_to_dataframe(df, prob_col, by:str, density, unit, new_col:str):
         """
            :param df:           pd.DataFrame with probability columns
            :param prob_col:     Name of column holding selection (win) probabilities
@@ -24,11 +24,11 @@ if using_pandas:
             mx = sum(x) / len(x)
             return [xi - mx for xi in x]
 
-        def _add_ability(df, prob_col, new_col, density):
-            df[new_col] = center(state_price_implied_ability(prices=df[prob_col].values, density=density))
+        def _add_ability(df, prob_col, new_col, density, unit):
+            df[new_col] = center(state_price_implied_ability(prices=df[prob_col].values, density=density, unit=unit))
             return df
 
-        kwargs = {'prob_col': prob_col, 'new_col': new_col, 'density': density}
+        kwargs = {'prob_col': prob_col, 'new_col': new_col, 'density': density,'unit':unit}
         return df.groupby(by).apply(_add_ability, **kwargs)
 
 
@@ -45,4 +45,4 @@ if using_pandas:
         """
 
         density = skew_normal_density(L=L, unit=unit, loc=loc, scale=scale, a=a)
-        return add_centered_ability_to_dataframe(df=df, prob_col=prob_col, by=by, new_col=new_col, density=density)
+        return add_centered_ability_to_dataframe(df=df, prob_col=prob_col, by=by, new_col=new_col, density=density, unit=unit)
