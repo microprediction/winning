@@ -3,7 +3,7 @@ from winning.pandas_util import using_pandas
 
 if using_pandas:
     import pandas as pd
-    from winning.pandas_util import add_skew_normal_ability_to_dataframe
+    from winning.pandas_util import add_skew_normal_ability_to_dataframe, add_ability_implied_state_price_to_dataframe
     import numpy as np
 
     def test_pandas():
@@ -33,6 +33,11 @@ if using_pandas:
                                    columns=['ndx1' ,'ndx2' ,'ndx3','product_id' ,'survey_id' ,'p1' ,'p2' ,'y' ,'a_check'])
 
         df = add_skew_normal_ability_to_dataframe(df=df ,by='survey_id' ,prob_col='p1' ,new_col='a')
+        from winning.lattice import skew_normal_density
+        unit = 0.01
+        density = skew_normal_density(L=700,a=1.0, unit=unit)
+        df = add_ability_implied_state_price_to_dataframe(df=df,by='survey_id',density=density,unit=unit, ability_col='a', new_col='p3')
+
 
 
 if __name__=='__main__':

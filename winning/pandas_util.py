@@ -1,6 +1,7 @@
 from winning.lattice_conventions import STD_A, STD_L, STD_SCALE, STD_UNIT
 from winning.lattice import skew_normal_density
-from winning.lattice_calibration import state_price_implied_ability
+from winning.lattice_calibration import ability_implied_state_prices, state_price_implied_ability
+from winning.lattice_calibration import normalize
 
 try:
     import pandas as pd
@@ -9,6 +10,27 @@ except ImportError:
     using_pandas = False
 
 if using_pandas:
+
+    def add_ability_implied_state_price_to_dataframe(df, ability_col, by: str, density, new_col: str, unit: float):
+        """
+        :param df:
+        :param ability_col:
+        :param by:            Column to group by
+        :param density:
+        :param new_col:
+        :param unit:
+        :return:
+        """
+
+        def _add_ability_implied(df, ability_col: str, new_col: str, density, unit):
+            p = ability_implied_state_prices(ability=df[ability_col], density=density, unit=unit)
+            p = normalize(p)
+            df[new_col] = p
+            return df
+
+        kwargs = {'ability_col': ability_col, 'new_col': new_col, 'density': density, 'unit': unit}
+        return df.groupby(by).apply(_add_ability_implied, **kwargs)
+
 
     def add_centered_ability_to_dataframe(df, prob_col, by:str, density, unit, new_col:str):
         """
