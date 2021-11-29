@@ -1,5 +1,5 @@
 from winning.lattice import state_prices_from_offsets, densities_and_coefs_from_offsets, \
-    winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices
+    winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices, implied_L
 import numpy as np
 from winning.lattice_conventions import NAN_DIVIDEND
 
@@ -41,7 +41,7 @@ def state_price_implied_ability(prices, density, unit=1.0):
     # User should supply the lattice unit if they wish ability to be commensurate with some latice
     # width that was assumed when generating the density
     implied_offsets_guess = [0 for _ in prices]
-    L = int((len(density) - 1) / 2)
+    L = implied_L(density)
     offset_samples = list(range(int(-L / 2), int(L / 2)))[::-1]
     scale_free_ability = solve_for_implied_offsets(prices=prices, density=density, \
                                                    offset_samples=offset_samples, implied_offsets_guess=implied_offsets_guess, nIter=3)
@@ -132,7 +132,7 @@ def solve_for_implied_offsets(prices, density, offset_samples=None, implied_offs
 
     """
 
-    L = int((len(density) - 1) / 2)
+    L = implied_L(density)
     if offset_samples is None:
         offset_samples = list(range(int(-L / 2), int(L / 2)))[
                          ::-1]

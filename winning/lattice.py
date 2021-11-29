@@ -1,6 +1,7 @@
 from winning.normaldist import normcdf, normpdf
 import numpy as np
 import math
+from collections import Counter
 
 
 #########################################################################################
@@ -11,6 +12,8 @@ import math
 # Where a density is to be interpreted on a lattice with some other unit, the unit parameter is supplied and
 # this is equal to the spacing between lattice points. However, most operations are implemented on the
 # lattice that is the natural numbers.
+
+
 
 
 def integer_shift(cdf, k):
@@ -34,7 +37,10 @@ def fractional_shift(cdf, x):
     :return:
     """
     (l, lc), (u, uc) = _low_high(x)
-    return lc * integer_shift(cdf, l) + uc * integer_shift(cdf, u)
+    try:
+        return lc * integer_shift(cdf, l) + uc * integer_shift(cdf, u)
+    except:
+        raise Exception('nasty bug')
 
 
 def _low_high(offset):
@@ -43,6 +49,19 @@ def _low_high(offset):
     u = math.ceil(offset)
     r = offset - l
     return (l, 1 - r), (u, r)
+
+
+def density_from_samples(x: [float], L: int, unit=1.0):
+    low_highs = [ _low_high(xi / unit) for xi in x]
+    density = [0 for _ in range(2 * L + 1)]
+    mass = 0
+    for lh in low_highs:
+        for (lc, wght) in lh:
+            rel_loc = min(2 * L - 1, max(lc + L, 0))
+            mass += wght
+            density[rel_loc] += wght
+    total_mass = sum(density)
+    return [d / total_mass for d in density]
 
 
 def fractional_shift_density(density, x):
@@ -60,9 +79,12 @@ def center_density(density):
 
 ### Interpretation of density on a grid with known spacing
 
+def implied_L(density):
+   return int((len(density) - 1) / 2)
+
 
 def mean_of_density(density, unit):
-    L = int((len(density) - 1) / 2)
+    L = implied_L(density)
     pts = symmetric_lattice(L=L, unit=unit)
     return np.inner(density, pts)
 
@@ -71,6 +93,85 @@ def symmetric_lattice(L, unit):
     assert isinstance(L, int), "Expecting L to be integer"
     return unit * np.linspace(-L, L, 2 * L + 1)
 
+
+def middle_of_density(density, L:int, do_padding=False):
+    """
+    :param density:
+    :param L:
+    :return: density of len 2*L+1
+    """
+    L0 = implied_L(density)
+    if (L0==L) or ((L0<L) and not do_padding):
+        return density
+    elif L0<L:
+        L0 = implied_L(density)
+        n_extra=L-L0
+        padding = [ 0 for _ in range(n_extra) ]
+        return padding + list(density) + padding
+    else:
+        n_extra = L0-L
+        cdf = cdf_to_pdf(density)
+        cdf_truncated = cdf[n_extra:-n_extra]
+        pdf_truncated = cdf_to_pdf(cdf_truncated)
+        return pdf_truncated
+
+def convolve_two(density1, density2, L=None, do_padding=False):
+    """
+       If X ~ density1 and Y ~ density2 are represented on symmetric lattices
+       then the returned density will approximate X+Y, albeit not perfectly if
+       the support of X or Y comes too close to the end of the lattice. Either way
+       the mean will be preserved.
+
+    :param density1:  2L+1
+    :param density2:  Any odd length
+    :return:
+
+    Note that if, on the other hand, you wish to preserve densities exactly then you can simply
+    use np.convolve
+
+    """
+    assert len(density1) % 2 ==1,  'Expecting odd length density1 '
+    assert len(density2) % 2 == 1, 'Expecting odd length density2 '
+    if L is None:
+        L = implied_L(density1)
+
+    mu1 = mean_of_density(density1, unit=1)
+    mu2 = mean_of_density(density2, unit=1)
+    density = np.convolve(density1, density2)
+    middle = middle_of_density(density=density, L=L, do_padding=do_padding)
+    mu = mean_of_density(middle, unit=1)
+    mu_diff = mu-(mu1+mu2)
+    pdf_shifted = fractional_shift_density(middle,-mu_diff)
+    if sum(pdf_shifted)<0.9:
+        raise ValueError('Urgh')
+    return pdf_shifted
+
+
+def convolve_many(densities, L=None, do_padding=True):
+    """
+
+    :param density[0] has length  2L+1
+    :return:
+
+    Note that if, on the other hand, you wish to preserve densities exactly then you can simply
+    use np.convolve
+
+    """
+    for k,d in enumerate(densities):
+        assert len(d) % 2 ==1,  'Expecting odd length density['+str(k)+']'
+
+    mu_sum = sum( [ mean_of_density(density, unit=1) for density in densities ])
+    if L is None:
+        L = implied_L(densities[0])
+    full_density = [ p for p in densities[0] ]
+    for density in densities[1:-1]:
+        full_density = convolve_two(density1=full_density, density2=density, L=L, do_padding=False)
+    full_density = convolve_two(density1=full_density, density2=densities[-1], L=L, do_padding=do_padding)
+
+    mu = mean_of_density(full_density, unit=1)
+    mu_diff = mu-mu_sum
+    pdf_shifted = fractional_shift_density(full_density,-mu_diff)
+    return pdf_shifted
 
 #############################################
 #   Simple family of skewed distributions   #
@@ -85,6 +186,7 @@ def skew_normal_density(L, unit, loc=0, scale=1.0, a=2.0):
     lattice = symmetric_lattice(L=L, unit=unit)
     density = np.array([_unnormalized_skew_cdf(x, loc=loc, scale=scale, a=a) for x in lattice])
     density = density / np.sum(density)
+    density = center_density(density)
     return density
 
 
@@ -119,6 +221,8 @@ def sample_from_cdf_with_noise(cdf, n_samples, unit=1.0):
 #  Order statistics on lattices             #
 #############################################
 # -------  Nothing below here depends on the unit chosen -------------
+
+
 
 
 def pdf_to_cdf(density):
@@ -196,11 +300,10 @@ def get_the_rest(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
 
     return cdfRest, multiplicityRest
 
+
 def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
     cdfRest, multiplicityRest = get_the_rest(density=density, densityAll=densityAll, multiplicityAll=multiplicityAll, cdf=cdf, cdfAll=cdfAll)
     return _conditional_payoff_against_rest(density=density, densityRest=None, multiplicityRest=multiplicityRest, cdf=cdf, cdfRest=cdfRest)
-
-
 
 
 def _winner_of_two_pdf(densityA, densityB, multiplicityA=None, multiplicityB=None, cdfA=None, cdfB=None):
@@ -215,15 +318,19 @@ def _winner_of_two_pdf(densityA, densityB, multiplicityA=None, multiplicityB=Non
         cdfB = pdf_to_cdf(densityB)
     cdfMin = 1 - np.multiply(1 - cdfA, 1 - cdfB)
     density = cdf_to_pdf(cdfMin)
-    L = int((len(density) - 1) / 2)
+    L = implied_L(density)
     if multiplicityA is None:
         multiplicityA = np.ones(2 * L + 1)
     if multiplicityB is None:
         multiplicityB = np.ones(2 * L + 1)
 
     winA, draw, winB = _conditional_win_draw_loss(densityA, densityB, cdfA, cdfB)
-    multiplicity = (winA * multiplicityA + draw * (multiplicityA + multiplicityB) + winB * multiplicityB + 1e-18) / (
-            winA + draw + winB + 1e-18)
+    try:
+        multiplicity = (winA * multiplicityA + draw * (multiplicityA + multiplicityB) + winB * multiplicityB + 1e-18) / (
+                winA + draw + winB + 1e-18)
+    except ValueError:
+        raise Exception('hit nasty bug')
+        pass
     return density, multiplicity
 
 
@@ -241,6 +348,51 @@ def beats(densityA, multiplicityA, densityB, multiplicityB):
     cdfB = pdf_to_cdf(densityB)
     win, draw, loss = _conditional_win_draw_loss(densityA, densityB, cdfA, cdfB)
     return sum( win + draw * (1+multiplicityA) / (2 + multiplicityB + multiplicityA ) )
+
+
+def state_prices_from_densities(densities:[[float]])->[float]:
+    """
+      :param densities: List of performance distributions
+      :return: state prices
+    """
+    densityAll, multiplicityAll = winner_of_many(densities, multiplicities=None)
+    cdfAll = pdf_to_cdf(densityAll)
+    prices = list()
+    for k, density in enumerate(densities):
+        cdfRest, multiplicityRest = get_the_rest(density=density, densityAll=None,
+                                                 multiplicityAll=multiplicityAll, cdf=None,
+                                                 cdfAll=cdfAll)
+        pdfRest = cdf_to_pdf(cdfRest)
+        multiplicity = np.array([1.0 for _ in density])
+        price_k = beats(densityA=density, multiplicityA=multiplicity, densityB=pdfRest, multiplicityB=multiplicityRest)
+        prices.append(price_k)
+    sum_p = sum(prices)
+    return [pi / sum_p for pi in prices]
+
+
+def densities_from_events(scores:[int], events:[[float]], L:int, unit:float):
+    """
+    :param scores:  List of current scores
+    :param events:  List of densities of future events
+    :param L:
+    :param unit:
+    :return:
+    """
+    assert len(scores)==len(events)
+    low_score = min(scores)
+    adjusted_scores = [ s-low_score for s in scores ]
+    if True:
+        for k,adj_score in enumerate(adjusted_scores):
+            adapted_L = int(math.ceil(abs(adj_score/unit)))
+            events[k].append( density_from_samples(x=[adj_score],L=adapted_L, unit=unit) )
+    densities = [ convolve_many( densities=event, L=L ) for event in events ]
+    return densities
+
+
+def state_prices_from_events(scores:[int], events:[[float]], L:int, unit:float):
+    densities = densities_from_events(scores=scores, events=events, L=L, unit=unit )
+    return state_prices_from_densities(densities)
+
 
 
 def _conditional_win_draw_loss(densityA, densityB, cdfA, cdfB):
@@ -300,7 +452,7 @@ def state_prices_from_offsets(density, offsets):
 def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, cdfAll=None, offsets=None):
     """ Returns the expected _conditional_payoff_against_rest as a function of location changes in cdf """
 
-    L = int((len(density) - 1) / 2)
+    L = implied_L(density)
     if cdf is None:
         cdf = pdf_to_cdf(density)
     if cdfAll is None:
