@@ -57,7 +57,7 @@ def density_from_samples(x: [float], L: int, unit=1.0):
     mass = 0
     for lh in low_highs:
         for (lc, wght) in lh:
-            rel_loc = min(2 * L - 1, max(lc + L, 0))
+            rel_loc = min(2 * L, max(lc + L, 0))
             mass += wght
             density[rel_loc] += wght
     total_mass = sum(density)
