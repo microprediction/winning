@@ -9,12 +9,12 @@ Published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/micr
 ![](https://i.imgur.com/83iFzel.png) 
 
 
-### Install (Python 3.8 and above)
+### Install
 
     pip install winning
     pip install scipy
 
-You can avoid installing scipy if you have Python 3.8 and above and you don't wish to use the copula functionality
+You can avoid installing scipy if you have Python 3.8 and above and you don't wish to use the copula functionality.
 
 ### Usage
 
