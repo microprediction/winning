@@ -143,7 +143,7 @@ def convolve_two(density1, density2, L=None, do_padding=False):
     mu_diff = mu-(mu1+mu2)
     pdf_shifted = fractional_shift_density(middle,-mu_diff)
     if sum(pdf_shifted)<0.9:
-        raise ValueError('Urgh')
+        raise ValueError('Convolution of two densities caused too much mass loss - increase L')
     return pdf_shifted
 
 
@@ -181,12 +181,14 @@ def convolve_many(densities, L=None, do_padding=True):
 # to create densities with unit=0.02, say, then the user must keep the unit chosen for
 # later interpretation.
 
+
 def skew_normal_density(L, unit, loc=0, scale=1.0, a=2.0):
     """ Skew normal as a lattice density """
     lattice = symmetric_lattice(L=L, unit=unit)
     density = np.array([_unnormalized_skew_cdf(x, loc=loc, scale=scale, a=a) for x in lattice])
     density = density / np.sum(density)
     density = center_density(density)
+    density = fractional_shift(density, loc/unit )
     return density
 
 
@@ -350,12 +352,14 @@ def beats(densityA, multiplicityA, densityB, multiplicityB):
     return sum( win + draw * (1+multiplicityA) / (2 + multiplicityB + multiplicityA ) )
 
 
-def state_prices_from_densities(densities:[[float]])->[float]:
+
+def state_prices_from_densities(densities:[[float]], densityAll=None, multiplicityAll=None)->[float]:
     """
       :param densities: List of performance distributions
       :return: state prices
     """
-    densityAll, multiplicityAll = winner_of_many(densities, multiplicities=None)
+    if (densityAll is None) or (multiplicityAll is None):
+        densityAll, multiplicityAll = winner_of_many(densities, multiplicities=None)
     cdfAll = pdf_to_cdf(densityAll)
     prices = list()
     for k, density in enumerate(densities):
@@ -368,6 +372,61 @@ def state_prices_from_densities(densities:[[float]])->[float]:
         prices.append(price_k)
     sum_p = sum(prices)
     return [pi / sum_p for pi in prices]
+
+
+def symmetric_state_prices_from_densities(densities:[[float]], densityAll=None, multiplicityAll=None, with_all=False)->[[float]]:
+    if (densityAll is None) or (multiplicityAll is None):
+        densityAll, multiplicityAll = winner_of_many(densities, multiplicities=None)
+    n = len(densities)
+    bi = np.ndarray(shape=(n, n))
+    for h0 in range(n):
+        density0 = densities[h0]
+        cdfRest0, multiplicityRest0 = get_the_rest(density=density0, densityAll=densityAll,
+                                                   multiplicityAll=multiplicityAll, cdf=None, cdfAll=None)
+        for h1 in range(n):
+            if h1 > h0:
+                density1 = densities[h1]
+                cdfRest01, multiplicityRest01 = get_the_rest(density=density1, densityAll=None,
+                                                             multiplicityAll=multiplicityRest0, cdf=None,
+                                                             cdfAll=cdfRest0)
+                pdfRest01 = cdf_to_pdf(cdfRest01)
+                loser01, loser_multiplicity01 = _loser_of_two_pdf(density0, density1)
+                bi[h0, h1] = beats(loser01, loser_multiplicity01, pdfRest01, multiplicityRest01)
+                bi[h1, h0] = bi[h0, h1]
+    if with_all:
+        return bi, densityAll, multiplicityAll
+    else:
+        return bi
+
+
+def two_prices_from_densities(densities:[[float]], densityAll=None, multiplicityAll=None, with_all=False)->[[float]]:
+    q, densityAll, multiplicityAll = symmetric_state_prices_from_densities(densities=densities, densityAll=densityAll, multiplicityAll=multiplicityAll, with_all=True)
+    w = state_prices_from_densities(densities=densities, densityAll=densityAll, multiplicityAll=multiplicityAll)
+    pl = [0 for _ in w]
+    n = len(w)
+    for i in range(n):
+        for j in range(i+1,n):
+            pl[i] += q[i,j]
+            pl[j] += q[i,j]
+    assert abs(sum(pl)-2.0)<0.01
+    s = [ bi-wi for bi, wi in zip(pl,w)]
+    if with_all:
+        return w, s, densityAll, multiplicityAll
+    else:
+        return w , s
+
+
+def five_prices_from_five_densities(densities:[[float]])->[[float]]:
+    """
+        Rank probabilities for five independent contestants
+        returns [ [first probs], ..., [fifth probs] ]
+    """
+    assert(len(densities)==5)
+    rdensities = [ np.asarray([ p for p in reversed(d)]) for d in densities ]
+    w1, w2 = two_prices_from_densities(densities=densities, with_all=False)
+    w5, w4 = two_prices_from_densities(densities=rdensities, with_all=False)
+    w3 = [1.0-w1i-w2i-w4i-w5i for w1i,w2i,w4i,w5i in zip(w1,w2,w4,w5) ]
+    return [ w1, w2, w3, w4, w5 ]
 
 
 def densities_from_events(scores:[int], events:[[float]], L:int, unit:float):
