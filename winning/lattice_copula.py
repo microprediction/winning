@@ -38,7 +38,7 @@ if using_scipy:
             z_pdfs = [ cdf_to_pdf( gaussian_copula_conditional_cdf(cdf=cdf,rho=rho, z=z)) for cdf in cdfs ]
             return f(z_pdfs)
 
-        res, err = quad_vec(f=conditional_functional, a=1e-6,b=1-1e-6, epsabs=1e-8, epsrel=1e-6)
+        res, err = quad_vec(f=conditional_functional, a=1e-6,b=1-1e-6, epsabs=1e-6, epsrel=1e-4)
         return res
 
     def gaussian_copula_win(densities, rho:float):
