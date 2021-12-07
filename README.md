@@ -1,5 +1,3 @@
-![test-36](https://github.com/microprediction/winning/workflows/test-36/badge.svg)
-![test-37](https://github.com/microprediction/winning/workflows/test-37/badge.svg)
 ![test-38](https://github.com/microprediction/winning/workflows/test-38/badge.svg)
 ![test-39](https://github.com/microprediction/winning/workflows/test-39/badge.svg)
 ![test-pandas](https://github.com/microprediction/winning/workflows/test-pandas/badge.svg)
@@ -16,8 +14,9 @@ Published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/micr
     pip install winning
     
 ### Install (Python 3.7 and below)
+Only Python 3.8 and 3.9 are supported for now but most functionality succeeds with:
 
-    pip instal scipy 
+    pip install scipy 
     pip install winning
     
 ### Usage
