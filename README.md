@@ -96,14 +96,16 @@ See the [basic examples](https://github.com/microprediction/winning/tree/main/ex
 
 ### Nomenclature, assumptions, limitations
 
-The lattice_calibration module allows the user to infer relative abilities from state prices in a multi-entrant contest. The assumption
-made is that the performance distribution of one competitor is a translation of the performance distribution of another. The algorithm is:
+The lattice_calibration module allows the user to infer relative abilities from state prices in a multi-entrant contest. 
+At the racetrack, this would mean looking at the win odds and interpreting them as a relative ability. 
+
+The assumption made is that the performance distribution of one competitor is a translation of the performance distribution of another, and they are indepedent. The algorithm is:
 
 - Fast 
 - Scalable ... to contests with hundreds of thousands of entrants.
 - General ... as noted it works for any performance distribution. 
 
-The paper explains why it is useful beyond the racetrack, though the code is written with some racing vocabularly. At the racetrack, this would mean looking at the win odds and interpreting them as a relative ability. Here's a quick glossary to help with reading the code. It's a mix of financial and racetrack lingo. 
+Here's a quick glossary to help with reading the code. It's a mix of financial and racetrack lingo. 
 
 - *State prices* The expectation of an investment that has a payoff equal to 1 if there is only one winner, 1/2 if two are tied, 1/3 if three are tied and so forth. State prices are synomymous with winning probability, except for dead heats. However in the code a lattice is used so dead-heats must be accomodated and the distinction is important. 
 
