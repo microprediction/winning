@@ -408,6 +408,8 @@ def two_prices_from_densities(densities:[[float]], densityAll=None, multiplicity
         for j in range(i+1,n):
             pl[i] += q[i,j]
             pl[j] += q[i,j]
+    sum_pl = sum(pl)
+    pl = [ 2.0*pli/sum_pl for pli in pl]
     assert abs(sum(pl)-2.0)<0.01
     s = [ bi-wi for bi, wi in zip(pl,w)]
     if with_all:

@@ -1,19 +1,11 @@
 import numpy as np
-from statistics import NormalDist
 import math
 from winning.lattice import cdf_to_pdf, pdf_to_cdf, state_prices_from_densities, five_prices_from_five_densities
 from winning.normaldist import normcdf, invnormcdf
-
-try:
-    from scipy.integrate import quad_vec
-    using_scipy = True
-except ImportError:
-    print('pip install --upgrade scipy')
-    using_scipy = False
+from winning.scipyinclusion import using_scipy
 
 if using_scipy:
-
-    std_normal_dist = NormalDist(mu=0, sigma=1.0)
+    from scipy.integrate import quad_vec
 
     def safe_cond_cdf(c,rho,z):
         if c<1e-6:
@@ -21,7 +13,7 @@ if using_scipy:
         elif c>1-1e-6:
             return c
         else:
-            return std_normal_dist.cdf(   ( std_normal_dist.inv_cdf( c ) - rho*z )/math.sqrt(1-rho))
+            return normcdf(   ( invnormcdf( c ) - rho*z )/math.sqrt(1-rho))
 
     def gaussian_copula_conditional_cdf( cdf, rho:float, z:float ):
         """
@@ -42,7 +34,7 @@ if using_scipy:
         cdfs = [ pdf_to_cdf( pdf ) for pdf in densities ]
 
         def conditional_functional(p):
-            z = std_normal_dist.inv_cdf(p=p)
+            z = invnormcdf(p)
             z_pdfs = [ cdf_to_pdf( gaussian_copula_conditional_cdf(cdf=cdf,rho=rho, z=z)) for cdf in cdfs ]
             return f(z_pdfs)
 

@@ -23,7 +23,7 @@ setup(
     ],
     packages=["winning"],
     test_suite='pytest',
-    tests_require=['pytest','pandas','scipy'],
+    tests_require=['pytest','pandas','scipy>=1.7.3'],
     include_package_data=True,
     install_requires=["numpy","pytest","pathlib","wheel"],
     entry_points={

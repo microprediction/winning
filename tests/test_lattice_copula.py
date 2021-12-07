@@ -3,6 +3,11 @@ from winning.lattice import skew_normal_density
 from winning.lattice_plot import densitiesPlot
 
 
+def test_ensure_scipy():
+    from winning.scipyinclusion import using_scipy
+    assert using_scipy
+
+
 def test_two_skew():
     density1 = skew_normal_density(L=50, unit=0.1, scale=1.0, loc=1.0, a=1.0)
     density2 = skew_normal_density(L=50, unit=0.1, scale=1.0, loc=0, a=1.0)
