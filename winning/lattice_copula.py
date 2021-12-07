@@ -2,7 +2,6 @@ import numpy as np
 from statistics import NormalDist
 import math
 from winning.lattice import cdf_to_pdf, pdf_to_cdf, state_prices_from_densities, five_prices_from_five_densities
-from winning.lattice_plot import densitiesPlot
 
 try:
     from scipy.integrate import quad_vec
