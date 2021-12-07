@@ -12,13 +12,10 @@ Published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/micr
 ### Install (Python 3.8 and above)
 
     pip install winning
-    
-### Install (Python 3.7 and below)
-Only Python 3.8 and 3.9 are supported for now but most functionality succeeds with:
+    pip install scipy
 
-    pip install scipy 
-    pip install winning
-    
+You can avoid installing scipy if you have Python 3.8 and above and you don't wish to use the copula functionality
+
 ### Usage
 
 We choose a performance density
@@ -33,7 +30,7 @@ The algorithm implies relative ability (i.e. how much to translate the performan
 
     abilities = dividend_implied_ability(dividends=dividends,density=density, nan_value=2000)
 
-Horses with no bid are assigned odds of nan_value ... or you can leave them out of course. 
+Horses with no bid are assigned odds of nan_value ... or you can leave them out. 
 
 ### Examples
 
