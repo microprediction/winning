@@ -21,8 +21,11 @@ def test_five_skew():
 
 
 if __name__=='__main__':
+    import time
+    st = time.time()
     densities, rank_probs = test_five_skew()
     legend = ['Asset ' + str(i) for i in range(1, 6)]
+    print({'elapsed':time.time()-st})
     densitiesPlot(densities=densities, unit=0.1, legend=legend)
     pprint(rank_probs)
 
