@@ -1,7 +1,7 @@
 import numpy as np
 import math
 from winning.lattice import cdf_to_pdf, pdf_to_cdf, state_prices_from_densities, five_prices_from_five_densities
-from winning.normaldist import normcdf, invnormcdf
+from winning.normaldist import normcdf, invnormcdf, normpdf
 from winning.scipyinclusion import using_scipy
 
 if using_scipy:
@@ -13,7 +13,7 @@ if using_scipy:
         elif c>1-1e-6:
             return c
         else:
-            return normcdf(   ( invnormcdf( c ) - rho*z )/math.sqrt(1-rho))
+            return normcdf(   ( invnormcdf( c ) - rho*z )/math.sqrt(1-rho*rho))
 
     def gaussian_copula_conditional_cdf( cdf, rho:float, z:float ):
         """
@@ -38,8 +38,8 @@ if using_scipy:
             z_pdfs = [ cdf_to_pdf( gaussian_copula_conditional_cdf(cdf=cdf,rho=rho, z=z)) for cdf in cdfs ]
             return f(z_pdfs)
 
-        res, err = quad_vec(f=conditional_functional, a=1e-6,b=1-1e-6, epsabs=1e-6, epsrel=1e-4)
-        return res
+        I1, err1 = quad_vec(f=conditional_functional, a=1e-12,b=1-1e-12, epsabs=1e-6, epsrel=1e-3)
+        return I1
 
     def gaussian_copula_win(densities, rho:float):
         """
@@ -70,5 +70,13 @@ if using_scipy:
 
 
 
+    def gaussian_copula_margin_0(densities, rho:float):
+        """
+            Returns margin of the first, as a check
+        """
 
+        def conditional_margin_0(ds):
+            return np.asarray( ds[0] )
+
+        return gaussian_copula_functional(densities=densities, f=conditional_margin_0, rho=rho)
 

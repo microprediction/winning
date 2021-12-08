@@ -28,7 +28,7 @@ def backward_compat_invnormcdf_function():
         except ImportError:
             raise Exception('You need to install scipy or a version of Python with statistics.NormalDist')
 
-invnormcdf = backward_compat_normcdf_function()
+invnormcdf = backward_compat_invnormcdf_function()
 
 
 def backward_compat_normpdf_function():
