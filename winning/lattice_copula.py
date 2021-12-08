@@ -1,7 +1,7 @@
 import numpy as np
 import math
 from winning.lattice import cdf_to_pdf, pdf_to_cdf, state_prices_from_densities, five_prices_from_five_densities
-from winning.normaldist import normcdf, invnormcdf, normpdf
+from winning.normaldist import normcdf, invnormcdf
 from winning.scipyinclusion import using_scipy
 
 if using_scipy:
@@ -68,8 +68,6 @@ if using_scipy:
         cfv = gaussian_copula_functional(densities=densities, f=conditional_five, rho=rho)
         return [ cfv[i:i+5] for i in range(0,25,5)]
 
-
-
     def gaussian_copula_margin_0(densities, rho:float):
         """
             Returns margin of the first, as a check
@@ -80,3 +78,19 @@ if using_scipy:
 
         return gaussian_copula_functional(densities=densities, f=conditional_margin_0, rho=rho)
 
+    try:
+        import pandas as pd
+
+        def five_to_df(rank_probs, names:[str]=None):
+            """
+                Convert the output of gaussian_copula_five into M2 format
+            """
+            if names is None:
+                names = ['Asset '+str(i) for i in  range(1,6)]
+            assert len(names)==5
+            index = ['Rank ' + str(i) for i in range(1, 6)]
+            df = pd.DataFrame(columns=names, data=rank_probs, index=index).transpose()
+            return df
+
+    except ImportError:
+        pass
