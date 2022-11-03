@@ -125,3 +125,9 @@ For smallish races, we are talking a few hundred milliseconds.
 For large races we are talking 25 seconds for a 100,000 horse race. 
 
 ![](https://github.com/microprediction/winning/blob/main/docs/inverstion_time_larger_races.png)
+
+### Like parimutuels?
+
+You'll love my book [Microprediction: Building An Open AI Network](https://mitpress.mit.edu/9780262047326/microprediction/) published by MIT Press. 
+
+
