@@ -7,7 +7,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="winning",
-    version="0.4.9",
+    version="0.5.0",
     description="Fast ability inference from contest winning probabilities",
     long_description=README,
     long_description_content_type="text/markdown",
