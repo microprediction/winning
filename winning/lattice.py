@@ -525,7 +525,7 @@ def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, c
     implicit = list()
     for k in offsets:
         if k == int(k):
-            offset_cdf = integer_shift(cdf, k)
+            offset_cdf = integer_shift(cdf, int(k))
             ip = expected_payoff(density=None, densityAll=densityAll, multiplicityAll=multiplicityAll, cdf=offset_cdf,
                                  cdfAll=cdfAll)
             implicit.append(np.sum(ip))
