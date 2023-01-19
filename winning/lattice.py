@@ -299,8 +299,11 @@ def get_the_rest(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
 
     k = list(f1 == max(f1)).index(True)
     multiplicityRest[k:] = multiplicityRightTail[k:]
+    
+    # Force positivity
+    cdfRestMax = np.maximum.accumulate(cdfRest)
 
-    return cdfRest, multiplicityRest
+    return cdfRestMax, multiplicityRest
 
 
 def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
