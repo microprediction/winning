@@ -1,4 +1,4 @@
-from winning.lattice_calibration import state_prices_from_offsets
+from winning.lattice import state_prices_from_offsets
 from winning.std_calibration import centered_std_density
 import numpy as np
 

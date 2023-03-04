@@ -534,8 +534,13 @@ def dilate_density(density, unit_ratio=2):
     return [d / total_mass for d in dilated_density]
 
 
-def state_prices_from_race_split(density, offsets, fast_ndxs:[int], unit_ratio):
-    """ Helper that uses splitting and dilation of a race
+def _state_prices_from_clustered_offsets(density, offsets, fast_ndxs:[int], unit_ratio):
+    """
+         Helper to deal with lattice limitations
+         This splits the race into two groups and then
+         uses a dilated density to estimate the winning
+         share of the lessor group
+
     :param density: 
     :param offsets: 
     :param unit_ratio: 
@@ -662,7 +667,7 @@ def state_prices_from_extended_offsets(density, offsets):
                 offset_divider = 0
 
         fast_ndxs = [ i for i,o in enumerate(centered_offsets) if o < offset_divider ]
-        state_prices = state_prices_from_race_split(density=density, offsets=centered_offsets, fast_ndxs=fast_ndxs,unit_ratio=3)
+        state_prices = _state_prices_from_clustered_offsets(density=density, offsets=centered_offsets, fast_ndxs=fast_ndxs, unit_ratio=3)
         return state_prices
 
 

@@ -1,4 +1,4 @@
-from winning.lattice import state_prices_from_offsets, densities_and_coefs_from_offsets, \
+from winning.lattice import state_prices_from_extended_offsets, densities_and_coefs_from_offsets, \
     winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices, implied_L
 import numpy as np
 from winning.lattice_conventions import NAN_DIVIDEND
@@ -17,7 +17,6 @@ from winning.lattice_conventions import NAN_DIVIDEND
 
 # The inverse of a dividend is called a state price. So if you want to provide winning probabilities
 # and ignore the possibility of dead-heats, you are well served by 'state_price_implied_ability'
-
 
 
 
@@ -58,8 +57,6 @@ def state_price_implied_ability(prices, density, unit=1.0):
 # Here are the inverse operations...
 
 
-
-
 def ability_implied_state_prices(ability, density, unit=1.0):
     """ Return inverse state prices from (by default scale free) ability
         If ability is instead interpreted in reference to an implied lattice width, then user must supply that unit length
@@ -69,7 +66,7 @@ def ability_implied_state_prices(ability, density, unit=1.0):
     :return: [ 7.6, 12.3, ... ]
     """
     scale_free_offsets = [ a/unit for a in ability ]
-    return state_prices_from_offsets(density=density, offsets=scale_free_offsets)
+    return state_prices_from_extended_offsets(density=density, offsets=scale_free_offsets)
 
 
 def safe_inv(x, nan_value=np.nan):
