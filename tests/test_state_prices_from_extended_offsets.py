@@ -147,8 +147,7 @@ def assert_split_race(offsets_1, offsets_2, n_huge=1, n_inf=1, n_neg_inf=3):
     offsets = offsets_1 + offsets_2 + [HUGE] * n_huge + [float('inf')] * n_inf + [float('-inf')] * n_neg_inf
     prices = state_prices_from_extended_offsets(density=density, offsets=offsets, max_depth=1)
 
-
-    # Use a different approximation
+    # Use a different (poor) approximation if the second group is small
     best_in_2 = min(offsets_2)
     group_1 = offsets_1+[best_in_2]
     # Try to approximate if we don't hit lattice issues

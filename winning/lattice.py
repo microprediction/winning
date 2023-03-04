@@ -629,7 +629,7 @@ def divide_offsets(centered_offsets, max_best=20):
         offset_divider = np.mean(centered_offsets)  # should be 0
     else:
         srt_offsets = sorted(centered_offsets)
-        max_best = min(20, int(n/6))
+        max_best = min(20, int(n/6+2))
         gaps = [ abs(a) for a in np.diff([srt_offsets[0]]+srt_offsets) ][:max_best] # [0, 4, 2, ...]
         ndx_gap = gaps.index(max(gaps))
         try:
@@ -682,10 +682,10 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
     # Otherwise, having reached this far we have only float abilities, though some might be extremely large
     L = implied_L(density)
     W = int(approximate_support_width(density))
-    really_bad_horse_offset = min(offsets) + 2*W # <--- No chance of winning
+    really_bad_horse_offset = min(offsets) + W # <--- No chance of winning
 
-    # If there are really bad but finite horses, set them to float('inf') and call again
-    # On the next call, hopefully the centering leaves us with a tractable problem
+    # If there are bad but finite horses, set them to float('inf') and call again
+    # On the next call, hopefully the centering leaves us inside the lattice
     extremely_bad_ndxs = [i for i, o in enumerate(offsets) if o > really_bad_horse_offset ]
     if any(extremely_bad_ndxs):
         augmented_offsets = [o if i not in extremely_bad_ndxs else float('inf') for i, o in enumerate(offsets)]
@@ -693,7 +693,7 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
                                                   offsets=int_centered(augmented_offsets),
                                                   max_depth=max_depth)
 
-    # If there is a solitary extremely good horse, short-circuit
+    # If there is a solitary standout horse, short-circuit
     diff_to_best = [ o - min(offsets) for o in offsets]
     is_walkover = min(diff_to_best) > W*math.sqrt(len(offsets))
     if is_walkover:
