@@ -57,16 +57,17 @@ def state_price_implied_ability(prices, density, unit=1.0):
 # Here are the inverse operations...
 
 
-def ability_implied_state_prices(ability, density, unit=1.0):
+def ability_implied_state_prices(ability, density, unit=1.0, max_depth=3):
     """ Return inverse state prices from (by default scale free) ability
         If ability is instead interpreted in reference to an implied lattice width, then user must supply that unit length
         This should be the unit that was assumed when creating the densities.
     :param ability:   [ float ]
     :param density:  [ float ]
+    :param max_depth 
     :return: [ 7.6, 12.3, ... ]
     """
     scale_free_offsets = [ a/unit for a in ability ]
-    return state_prices_from_extended_offsets(density=density, offsets=scale_free_offsets)
+    return state_prices_from_extended_offsets(density=density, offsets=scale_free_offsets, max_depth=max_depth)
 
 
 def safe_inv(x, nan_value=np.nan):

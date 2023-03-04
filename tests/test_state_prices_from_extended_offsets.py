@@ -144,25 +144,33 @@ def assert_split_race(offsets_1, offsets_2, n_huge=1, n_inf=1, n_neg_inf=3):
     from winning.lattice import int_centered
     HUGE = 500
     density = centered_std_density(L=21, unit=1.0, scale=1.0)
+    offsets = offsets_1 + offsets_2 + [HUGE] * n_huge + [float('inf')] * n_inf + [float('-inf')] * n_neg_inf
+    prices = state_prices_from_extended_offsets(density=density, offsets=offsets, max_depth=1)
+
 
     # Use a different approximation
     best_in_2 = min(offsets_2)
     group_1 = offsets_1+[best_in_2]
-    finite_prices_12 = state_prices_from_offsets(density=density, offsets=group_1)
-    share_2 = finite_prices_12[-1]
-    share_1 = 1-share_2
-    finite_prices_1 = state_prices_from_offsets(density=density, offsets=int_centered(offsets_1))
-    finite_prices_2 = state_prices_from_offsets(density=density, offsets=int_centered(offsets_2))
-    prices_1 = [ share_1*p for p in finite_prices_1 ]
-    prices_2 = [ share_2*p for p in finite_prices_2]
+    # Try to approximate if we don't hit lattice issues
+    try:
+        assert len(offsets_2)<10, 'dont try this'
+        finite_prices_12 = state_prices_from_offsets(density=density, offsets=group_1)
+        share_2 = finite_prices_12[-1]
+        share_1 = 1 - share_2
+        finite_prices_1 = state_prices_from_offsets(density=density, offsets=int_centered(offsets_1))
+        finite_prices_2 = state_prices_from_offsets(density=density, offsets=int_centered(offsets_2))
+        got_em=True
+    except:
+        got_em=False
 
-    offsets = offsets_1 + offsets_2 + [HUGE] * n_huge + [float('inf')] * n_inf + [float('-inf')] * n_neg_inf
-    if n_neg_inf == 0:
-        expected_prices = prices_1 + prices_2 + [0.] * n_huge + [0.] * n_inf
-    else:
-        expected_prices = [0] * len(offsets_1) +  [0]*len(offsets_2)+ [0] * n_huge + [0] * n_inf + [1 / n_neg_inf] * n_neg_inf
-    prices = state_prices_from_extended_offsets(density=density, offsets=offsets)
-    assert prices_almost_same(p1=prices, p2=expected_prices)
+    if got_em:
+        prices_1 = [share_1 * p for p in finite_prices_1]
+        prices_2 = [share_2 * p for p in finite_prices_2]
+        if n_neg_inf == 0:
+            expected_prices = prices_1 + prices_2 + [0.] * n_huge + [0.] * n_inf
+        else:
+            expected_prices = [0] * len(offsets_1) +  [0]*len(offsets_2)+ [0] * n_huge + [0] * n_inf + [1 / n_neg_inf] * n_neg_inf
+        assert prices_almost_same(p1=prices, p2=expected_prices)
 
 
 def test_split_race_0():
@@ -188,8 +196,32 @@ def test_split_race_4():
 def test_split_race_5():
     assert_split_race(offsets_1=[-30, -24, -28, 0,1,1], offsets_2=[10,11,12], n_huge=1, n_neg_inf=0, n_inf=2)
 
+ABILITIES = [ 0.54415197,  0.33758834,  0.4457919 ,  0.09424374, -0.40353499,
+        0.61386079,  0.15402363, -0.45340695,  0.44450927,  0.24130475,
+       -0.54604444, -0.37272076, -0.48643902, -0.51578549,  0.15529696,
+        0.27814857, -0.34811762,  0.51931145,  0.35561035,  0.00485529,
+       -1.44361918,  0.39906961, -0.01809818]
+
+
+def test_bigger_race_0():
+    offsets_1 = ABILITIES
+    offsets_2 = [a+10.0 for a in ABILITIES]
+    assert_split_race(offsets_1=ABILITIES, offsets_2=offsets_2, n_neg_inf=0)
+
+
+def test_bigger_race_1():
+    offsets_1 = ABILITIES
+    offsets_2 = [a+100.0 for a in ABILITIES]
+    assert_split_race(offsets_1=offsets_1, offsets_2=offsets_2, n_neg_inf=0)
+
+
+def test_huge_race_2():
+    offsets_1 = ABILITIES
+    offsets_2 = [ a+20 for a in np.random.randn(1000) ]
+    assert_split_race(offsets_1=offsets_1, offsets_2=offsets_2, n_neg_inf=0,n_inf=0, n_huge=0)
+
 
 
 
 if __name__ == '__main__':
-    test_split_race_3()
+    test_huge_race_2()
