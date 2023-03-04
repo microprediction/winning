@@ -326,6 +326,9 @@ def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)
 
 def _winner_of_two_pdf(densityA, densityB, multiplicityA=None, multiplicityB=None, cdfA=None, cdfB=None):
     """ The PDF of the minimum of two random variables represented by densities
+    
+    See https://medium.com/@mike.roweprediger/probability-of-winning-a-two-horse-race-given-discrete-densities-a0b3fdb50094
+    
     :param   densityA:   np.array
     :param   densityB:   np.array
     :return: density, multiplicity
