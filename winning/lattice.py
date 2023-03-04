@@ -630,8 +630,8 @@ def divide_offsets(centered_offsets, max_best=20):
     else:
         srt_offsets = sorted(centered_offsets)
         max_best = min(20, int(n/6+2))
-        gaps = [ abs(a) for a in np.diff([srt_offsets[0]]+srt_offsets) ][:max_best] # [0, 4, 2, ...]
-        ndx_gap = gaps.index(max(gaps))
+        gaps = [ abs(a) for a in np.diff([srt_offsets[0]]+srt_offsets) ][:max_best+1] # [0, 4, 2, ...]
+        ndx_gap = max(1,gaps.index(max(gaps)))
         try:
             offset_divider = ( srt_offsets[ndx_gap-1] + srt_offsets[ndx_gap] ) / 2.0
         except IndexError:
@@ -726,7 +726,7 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
             offset_divider = divide_offsets(centered_offsets)
             fast_ndxs = [ i for i,o in enumerate(centered_offsets) if o < offset_divider ]
             if (len(fast_ndxs)==n) or (len(fast_ndxs)==0):
-                print('This probably should not happen l717 of lattice.py')
+                print('This probably should not happen as the divider should divide! , but its okay...line l717 of lattice.py')
 
             state_prices = _state_prices_from_clustered_offsets(density=density,
                                                                 offsets=centered_offsets,
