@@ -1,8 +1,6 @@
 from winning.normaldist import normcdf, normpdf
 import numpy as np
 import math
-from collections import Counter
-
 
 #########################################################################################
 #   Operations on univariate atomic distributions supported on evenly spaced points     #
@@ -64,6 +62,9 @@ def density_from_samples(x: [float], L: int, unit=1.0):
     return [d / total_mass for d in density]
 
 
+
+
+
 def fractional_shift_density(density, x):
     """ Shift pdf to the *right* so it represents the pdf for Y ~ X + x*unit """
     cdf = pdf_to_cdf(density)
@@ -80,7 +81,16 @@ def center_density(density):
 ### Interpretation of density on a grid with known spacing
 
 def implied_L(density):
-   return int((len(density) - 1) / 2)
+    return int((len(density) - 1) / 2)
+
+
+def approximate_support(density, tol=1e-12):
+    return [ i  for i in range(len(density)) if density[i]>tol ]
+
+
+def approximate_support_width(density, tol=1e-12):
+    supp = approximate_support(density=density, tol=tol)
+    return max(supp)-min(supp)
 
 
 def mean_of_density(density, unit):
@@ -500,6 +510,160 @@ def densities_and_coefs_from_offsets(density, offsets):
 
 def densities_from_offsets(density, offsets):
     return densities_and_coefs_from_offsets(density, offsets)[0]
+
+
+def dilate_density(density, unit_ratio=2):
+    """ Represent density on a new lattice with a larger unit size 
+    :param density: 
+    :param L: 
+    :param unit_ratio:  e.g. if 2 the new density will be skinnier 
+                        e.g. if 0.5, the new density will be fatter 
+    :return: 
+    """
+    L = implied_L(density)
+    x = list(range(-L,L+1))  
+    low_highs = [ _low_high(xi / unit_ratio) for xi in x]
+    dilated_density = [0 for _ in range(2 * L + 1)]
+    mass = 0
+    for lh, p in zip(low_highs, density):
+        for (lc, wght) in lh:
+            rel_loc = min(2 * L, max(lc + L, 0))
+            mass += p*wght
+            dilated_density[rel_loc] += p*wght
+    total_mass = sum(dilated_density)
+    return [d / total_mass for d in dilated_density]
+
+
+def state_prices_from_race_split(density, offsets, fast_ndxs:[int], unit_ratio):
+    """ Helper that uses splitting and dilation of a race
+    :param density: 
+    :param offsets: 
+    :param unit_ratio: 
+    :param fast_ndxs:    Indexes of fast horses 
+    :return: 
+    """
+    n = len(offsets)
+    slow_ndxs = [ j for j in range(n) if j not in fast_ndxs ]
+    if not slow_ndxs:
+        return state_prices_from_extended_offsets(density=density, offsets=offsets)
+    else:
+        if len(slow_ndxs) == 1:
+            slow_relative_state_prices = [1.0]
+        else:
+            slow_offsets = [offsets[i] for i in slow_ndxs]
+            slow_relative_state_prices = state_prices_from_extended_offsets(density=density,
+                                                                           offsets=int_centered(slow_offsets))
+        fast_ndxs = [j for j in range(n) if j not in slow_ndxs]
+        fast_offsets = [offsets[j] for j in fast_ndxs]
+        fast_relative_state_prices = state_prices_from_extended_offsets(density=density,
+                                                                         offsets=int_centered(fast_offsets))
+
+        # Create approximate race involving everyone
+        dilated_density = dilate_density(density=density, unit_ratio=unit_ratio)
+        dilated_offsets = [o/unit_ratio for o in offsets]
+        dilated_state_prices = state_prices_from_extended_offsets(density=dilated_density, offsets=dilated_offsets)
+        slow_share = sum([p for i, p in enumerate(dilated_state_prices) if i in slow_ndxs])
+        fast_share = 1 - slow_share
+        slow_prices = [p * slow_share for p in slow_relative_state_prices]
+        fast_prices = [p * fast_share for p in fast_relative_state_prices]
+        state_prices = [0 for _ in range(n)]
+        for i, ndx in enumerate(slow_ndxs):
+            state_prices[ndx] = slow_prices[i]
+        for i, ndx in enumerate(fast_ndxs):
+            state_prices[ndx] = fast_prices[i]
+        if not abs(sum(state_prices) - 1) < 1e-4:
+            raise ValueError('lattice line 579')
+        return state_prices
+
+
+def mean_ignoring_inf(values):
+    return np.nanmean([e for e in values if np.isfinite(e)])
+
+
+def int_centered(offsets):
+    int_mean = int(mean_ignoring_inf(offsets))
+    return [o - int_mean for o in offsets]
+
+
+def state_prices_from_extended_offsets(density, offsets):
+    """ Imply state prices but allow the offsets to be float('inf') or float('-inf')
+    :param density:
+    :param offsets:
+    :return:
+    """
+    # First get rid of float('inf')
+    n = len(offsets)
+    if n==1:
+        return [1.0]
+
+    infinite_ndxs = [i for i in range(n) if offsets[i] == float('inf')]
+    if infinite_ndxs:
+        finite_ndxs = [ j for j in range(n) if j not in infinite_ndxs ]
+        finite_offsets = [ offsets[j] for j in finite_ndxs ]
+        if not finite_offsets:
+            # Everyone is float('inf')
+            return [ 1.0/n for _ in range(n) ]
+        else:
+            finite_state_prices = state_prices_from_extended_offsets(density=density, offsets=int_centered(finite_offsets))
+            state_prices = [ 0 for _ in range(n)]
+            for j, ndx in enumerate(finite_ndxs):
+                state_prices[ndx] = finite_state_prices[j]
+            return state_prices
+
+    # Then get rid of float('-inf')
+    neg_infinite_ndxs = [i for i in range(n) if offsets[i] == float('-inf')]
+    if neg_infinite_ndxs:
+        # Split pot amongst those who are float('-inf')
+        n_pot = len(neg_infinite_ndxs)
+        state_prices = [0 for _ in range(n)]
+        for j, ndx in enumerate(neg_infinite_ndxs):
+            state_prices[ndx] = 1/n_pot
+        assert abs(sum(state_prices)-1)<1e-12
+        return state_prices
+
+    L = implied_L(density)
+    W = approximate_support_width(density)
+
+    # If there are really bad but finite horses, just zero them
+    # On the next call, hopefully the centering after we throw out terrible horses leaves us with a tractable problem
+    extremely_bad_ndxs = [i for i, o in enumerate(offsets) if o > L]
+    if any(extremely_bad_ndxs):
+        augmented_offsets = [o if i not in extremely_bad_ndxs else float('inf') for i, o in enumerate(offsets)]
+        return state_prices_from_extended_offsets(density=density, offsets=int_centered(augmented_offsets))
+
+    # If there are major outliers even after centering, just split the pot
+    extremely_good_ndxs = [ i for i,o in enumerate(offsets) if o<-2*L ]
+    if any(extremely_good_ndxs):
+        augmented_offsets = [ o if i in extremely_good_ndxs else float('-inf') for i,o in enumerate(offsets) ]
+        return state_prices_from_extended_offsets(density=density, offsets=int_centered(augmented_offsets))
+
+    # Are any horses hanging off the lattice?
+    centered_offsets = int_centered(offsets)
+    offset_lower_bound = -L + W
+    offset_upper_bound = L - W
+    hanging_left = [ o for o in centered_offsets if o<offset_lower_bound  ]
+    hanging_right = [ o for o in centered_offsets if o>offset_upper_bound ]
+    if (not hanging_left) and (not hanging_right):
+        # If not, great
+        return state_prices_from_offsets(density=density,offsets=centered_offsets)
+    else:
+        # If so, split the race up
+        if len(offsets)==2:
+            offset_divider = np.mean(centered_offsets) # should be 0
+        else:
+            srt_offsets = sorted(centered_offsets)
+            gaps = [ abs(a) for a in np.diff([srt_offsets[0]]+srt_offsets) ] # [0, 4, 2, ...]
+            ndx_gap = gaps.index(max(gaps))
+            if (ndx_gap<n/6) or (ndx_gap>n-n/6):
+                ndx_gap = int(n/2)
+            try:
+                offset_divider = ( srt_offsets[ndx_gap-1] + srt_offsets[ndx_gap] ) / 2.0
+            except:
+                offset_divider = 0
+
+        fast_ndxs = [ i for i,o in enumerate(centered_offsets) if o < offset_divider ]
+        state_prices = state_prices_from_race_split(density=density, offsets=centered_offsets, fast_ndxs=fast_ndxs,unit_ratio=3)
+        return state_prices
 
 
 def state_prices_from_offsets(density, offsets):

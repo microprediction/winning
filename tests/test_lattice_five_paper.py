@@ -12,6 +12,10 @@ def test_ensure_scipy():
 
 
 def test_five_skew():
+    _,_ = do_five_skew()
+
+
+def do_five_skew():
     mus = [-0.5, -0.25, 0, 1, 1.5]
     scales = [1.0, 1.5, 1.2, 1.3, 2.0]
     densities = [skew_normal_density(L=100, unit=0.1, scale=scale, loc=mu, a=1.0) for mu, scale in zip(mus, scales)]
@@ -23,7 +27,7 @@ def test_five_skew():
 if __name__=='__main__':
     import time
     st = time.time()
-    densities, rank_probs = test_five_skew()
+    densities, rank_probs = do_five_skew()
     legend = ['Asset ' + str(i) for i in range(1, 6)]
     print({'elapsed':time.time()-st})
     densitiesPlot(densities=densities, unit=0.1, legend=legend)
