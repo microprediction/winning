@@ -251,6 +251,9 @@ def cdf_to_pdf(cumulative):
 
 def winner_of_many(densities, multiplicities=None):
     """ The PDF of the minimum of the random variables represented by densities
+    See https://medium.com/@mike.roweprediger/density-of-the-minimum-of-n-random-variables-on-a-lattice-45583cc0c2d0
+    See https://github.com/microprediction/winning/blob/main/density_of_minimum_of_many.ipynb
+
     :param   densities:  [ np.array   ]
     :return: np.array
     """
@@ -513,7 +516,11 @@ def densities_from_offsets(density, offsets):
 
 
 def dilate_density(density, unit_ratio=2):
-    """ Represent density on a new lattice with a larger unit size 
+    """ Represent density on a new lattice with a larger unit size
+        Pretty crude
+    See https://github.com/microprediction/winning/blob/main/dilation.ipynb
+    Or see  https://medium.com/@mike.roweprediger/how-to-move-a-discrete-density-from-one-unit-size-to-another-27d4ffeab036
+
     :param density: 
     :param L: 
     :param unit_ratio:  e.g. if 2 the new density will be skinnier 
