@@ -1,4 +1,4 @@
-from winning.lattice import state_prices_from_offsets, densities_and_coefs_from_offsets, \
+from winning.lattice import state_prices_from_extended_offsets, densities_and_coefs_from_offsets, \
     winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices, implied_L
 import numpy as np
 from winning.lattice_conventions import NAN_DIVIDEND
@@ -20,7 +20,6 @@ from winning.lattice_conventions import NAN_DIVIDEND
 
 
 
-
 def dividend_implied_ability(dividends, density, nan_value=NAN_DIVIDEND, unit=1.0):
     """ Infer risk-neutral solve_for_implied_offsets from Australian style dividends
 
@@ -38,13 +37,15 @@ def dividend_implied_ability(dividends, density, nan_value=NAN_DIVIDEND, unit=1.
 def state_price_implied_ability(prices, density, unit=1.0):
     """ Calibrate offsets (translations of the performance density) to match state prices """
     # By default this returns scale free offsets.
-    # User should supply the lattice unit if they wish ability to be commensurate with some latice
+    # User should supply the lattice unit if they wish ability to be commensurate with some lattice
     # width that was assumed when generating the density
     implied_offsets_guess = [0 for _ in prices]
     L = implied_L(density)
     offset_samples = list(range(int(-L / 2), int(L / 2)))[::-1]
     scale_free_ability = solve_for_implied_offsets(prices=prices, density=density, \
-                                                   offset_samples=offset_samples, implied_offsets_guess=implied_offsets_guess, nIter=3)
+                                                   offset_samples=offset_samples,
+                                                   implied_offsets_guess=implied_offsets_guess,
+                                                   nIter=3)
     return [ sfa*unit for sfa in scale_free_ability ]
 
 
@@ -56,16 +57,17 @@ def state_price_implied_ability(prices, density, unit=1.0):
 # Here are the inverse operations...
 
 
-def ability_implied_state_prices(ability, density, unit=1.0):
+def ability_implied_state_prices(ability, density, unit=1.0, max_depth=3):
     """ Return inverse state prices from (by default scale free) ability
         If ability is instead interpreted in reference to an implied lattice width, then user must supply that unit length
         This should be the unit that was assumed when creating the densities.
     :param ability:   [ float ]
     :param density:  [ float ]
+    :param max_depth 
     :return: [ 7.6, 12.3, ... ]
     """
     scale_free_offsets = [ a/unit for a in ability ]
-    return state_prices_from_offsets(density=density, offsets=scale_free_offsets)
+    return state_prices_from_extended_offsets(density=density, offsets=scale_free_offsets, max_depth=max_depth)
 
 
 def safe_inv(x, nan_value=np.nan):
@@ -120,7 +122,9 @@ def normalize_dividends(dividends):
 
 
 
-def solve_for_implied_offsets(prices, density, offset_samples=None, implied_offsets_guess=None, nIter=3, verbose=False,
+def solve_for_implied_offsets(prices, density, offset_samples=None,
+                              implied_offsets_guess=None,
+                              nIter=3, verbose=False,
                               visualize=False):
     """
     This is the main routine.

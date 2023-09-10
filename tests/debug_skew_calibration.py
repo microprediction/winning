@@ -1,8 +1,8 @@
 from winning.skew_calibration import skew_ability_implied_dividends, skew_dividend_implied_ability
 
 
-def test_calibration():
-    dividends               = [ 6.0, 3.0, 2.0 ]
+if __name__=='__main__':
+    dividends               = [ 6.0, 3.0, 2.0, 0.00001 ]
     ability                 = skew_dividend_implied_ability(dividends= dividends)
     print(ability)
     prices                  = skew_ability_implied_dividends(ability)

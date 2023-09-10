@@ -29,7 +29,7 @@ if using_pandas:
             return df
 
         kwargs = {'ability_col': ability_col, 'new_col': new_col, 'density': density, 'unit': unit}
-        return df.groupby(by).apply(_add_ability_implied, **kwargs)
+        return df.groupby(by, group_keys=False).apply(_add_ability_implied, **kwargs)
 
 
     def add_centered_ability_to_dataframe(df, prob_col, by:str, density, unit, new_col:str):
@@ -51,7 +51,7 @@ if using_pandas:
             return df
 
         kwargs = {'prob_col': prob_col, 'new_col': new_col, 'density': density,'unit':unit}
-        return df.groupby(by).apply(_add_ability, **kwargs)
+        return df.groupby(by, group_keys=False).apply(_add_ability, **kwargs)
 
 
     def add_skew_normal_ability_to_dataframe(df, by: str, prob_col='p', new_col='ability', L=STD_L, scale=STD_SCALE, unit=STD_UNIT, a=STD_A, loc=0.0):

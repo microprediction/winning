@@ -5,7 +5,6 @@ from winning.lattice_calibration import solve_for_implied_offsets
 unit = 0.1
 L = 150
 
-
 def test_minimumPdf():
     skew1 = skew_normal_density(L=L, unit=unit, a=1.5)
     skew2 = skew_normal_density(L=L, unit=unit, a=1.5, loc=-0.5)

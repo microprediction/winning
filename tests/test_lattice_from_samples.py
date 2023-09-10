@@ -9,7 +9,7 @@ def test_samples():
     mu = mean_of_density(density=d,unit=unit)
 
 
-def test_die():
+def do_die():
     x = [ np.random.choice([-2.5,-1.5,-0.5,0, 0.5,1.5,2.5]) for _ in range(10000) ]
     unit = 1
     d = density_from_samples(x=x,L=5, unit=0.5)
@@ -18,9 +18,12 @@ def test_die():
     return d
 
 
+def test_die():
+    do_die()
+
 
 if __name__=='__main__':
-    d = test_die()
+    d = do_die()
     import matplotlib.pyplot as plt
     print(d)
 

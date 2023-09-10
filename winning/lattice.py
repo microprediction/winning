@@ -1,8 +1,6 @@
 from winning.normaldist import normcdf, normpdf
 import numpy as np
 import math
-from collections import Counter
-
 
 #########################################################################################
 #   Operations on univariate atomic distributions supported on evenly spaced points     #
@@ -36,23 +34,29 @@ def fractional_shift(cdf, x):
     :param x:     float    Number of lattice points to shift (need not be integer)
     :return:
     """
-    (l, lc), (u, uc) = _low_high(x)
+    L = implied_L(cdf)
+    (l, lc), (u, uc) = _low_high(x, L=L)
     try:
         return lc * integer_shift(cdf, l) + uc * integer_shift(cdf, u)
     except:
         raise Exception('nasty bug')
 
 
-def _low_high(offset):
+def _low_high(offset, L):
     """ Represent a float offset as combination of two discrete ones """
-    l = math.floor(offset)
-    u = math.ceil(offset)
-    r = offset - l
-    return (l, 1 - r), (u, r)
+    if -L+2 < offset < L-2:
+        l = math.floor(offset)
+        u = math.ceil(offset)
+        r = offset - l
+        return (l, 1 - r), (u, r)
+    elif offset >= L-2:
+        return (L-2,1), (L-1,0)
+    elif offset <= -L+2:
+        return (-L+1,0), (-L+2,1)
 
 
 def density_from_samples(x: [float], L: int, unit=1.0):
-    low_highs = [ _low_high(xi / unit) for xi in x]
+    low_highs = [ _low_high(xi / unit, L=L) for xi in x]
     density = [0 for _ in range(2 * L + 1)]
     mass = 0
     for lh in low_highs:
@@ -62,6 +66,9 @@ def density_from_samples(x: [float], L: int, unit=1.0):
             density[rel_loc] += wght
     total_mass = sum(density)
     return [d / total_mass for d in density]
+
+
+
 
 
 def fractional_shift_density(density, x):
@@ -80,7 +87,16 @@ def center_density(density):
 ### Interpretation of density on a grid with known spacing
 
 def implied_L(density):
-   return int((len(density) - 1) / 2)
+    return int((len(density) - 1) / 2)
+
+
+def approximate_support(density, tol=1e-12):
+    return [ i  for i in range(len(density)) if density[i]>tol ]
+
+
+def approximate_support_width(density, tol=1e-12):
+    supp = approximate_support(density=density, tol=tol)
+    return max(supp)-min(supp)
 
 
 def mean_of_density(density, unit):
@@ -241,6 +257,9 @@ def cdf_to_pdf(cumulative):
 
 def winner_of_many(densities, multiplicities=None):
     """ The PDF of the minimum of the random variables represented by densities
+    See https://medium.com/@mike.roweprediger/density-of-the-minimum-of-n-random-variables-on-a-lattice-45583cc0c2d0
+    See https://github.com/microprediction/winning/blob/main/density_of_minimum_of_many.ipynb
+
     :param   densities:  [ np.array   ]
     :return: np.array
     """
@@ -264,7 +283,9 @@ def sample_winner_of_many(densities, nSamples=5000):
 
 def get_the_rest(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
     """ Returns expected _conditional_payoff_against_rest broken down by score,
-       where _conditional_payoff_against_rest is 1 if we are better than rest (lower) and 1/(1+multiplicity) if we are equal
+       where _conditional_payoff_against_rest is:
+                     1 if we are better than rest (lower)
+                     and 1/(1+multiplicity) if we are equal
     """
     # Use np.sum( expected_payoff ) for the expectation
     if cdf is None:
@@ -299,8 +320,11 @@ def get_the_rest(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
 
     k = list(f1 == max(f1)).index(True)
     multiplicityRest[k:] = multiplicityRightTail[k:]
+    
+    # Force positivity
+    cdfRestMax = np.maximum.accumulate(cdfRest)
 
-    return cdfRest, multiplicityRest
+    return cdfRestMax, multiplicityRest
 
 
 def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None):
@@ -310,6 +334,9 @@ def expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)
 
 def _winner_of_two_pdf(densityA, densityB, multiplicityA=None, multiplicityB=None, cdfA=None, cdfB=None):
     """ The PDF of the minimum of two random variables represented by densities
+    
+    See https://medium.com/@mike.roweprediger/probability-of-winning-a-two-horse-race-given-discrete-densities-a0b3fdb50094
+    
     :param   densityA:   np.array
     :param   densityB:   np.array
     :return: density, multiplicity
@@ -489,14 +516,224 @@ def densities_and_coefs_from_offsets(density, offsets):
     :return: [ np.ndarray ]
     """
     cdf = pdf_to_cdf(density)
-    coefs = [_low_high(offset) for offset in offsets]
-    cdfs = [lc * integer_shift(cdf, l) + uc * integer_shift(cdf, u) for (l, lc), (u, uc) in coefs]
+    L = implied_L(cdf)
+    coefs = [_low_high(offset, L=L) for offset in offsets]
+    try:
+        cdfs = [lc * integer_shift(cdf, l) + uc * integer_shift(cdf, u) for (l, lc), (u, uc) in coefs]
+    except ValueError as e:
+        print(e)
+        print('')
+        raise NotImplementedError('fix this peter')
     pdfs = [cdf_to_pdf(cdf) for cdf in cdfs]
     return pdfs, coefs
 
 
 def densities_from_offsets(density, offsets):
     return densities_and_coefs_from_offsets(density, offsets)[0]
+
+
+def dilate_density(density, unit_ratio=2):
+    """ Represent density on a new lattice with a larger unit size
+        Pretty crude
+    See https://github.com/microprediction/winning/blob/main/dilation.ipynb
+    Or see  https://medium.com/@mike.roweprediger/how-to-move-a-discrete-density-from-one-unit-size-to-another-27d4ffeab036
+
+    :param density: 
+    :param L: 
+    :param unit_ratio:  e.g. if 2 the new density will be skinnier 
+                        e.g. if 0.5, the new density will be fatter 
+    :return: 
+    """
+    L = implied_L(density)
+    x = list(range(-L,L+1))  
+    low_highs = [ _low_high(xi / unit_ratio, L=L) for xi in x]
+    dilated_density = [0 for _ in range(2 * L + 1)]
+    mass = 0
+    for lh, p in zip(low_highs, density):
+        for (lc, wght) in lh:
+            rel_loc = min(2 * L, max(lc + L, 0))
+            mass += p*wght
+            dilated_density[rel_loc] += p*wght
+    total_mass = sum(dilated_density)
+    return [d / total_mass for d in dilated_density]
+
+
+def _state_prices_from_clustered_offsets(density, offsets, fast_ndxs:[int], unit_ratio, max_depth):
+    """
+         Helper to deal with lattice limitations
+         This splits the race into two groups and then
+         uses a dilated density to estimate the winning
+         share of the lessor group
+
+    :param density: 
+    :param offsets: 
+    :param unit_ratio: 
+    :param fast_ndxs:    Indexes of fast horses 
+    :return: 
+    """
+    # Hold an approximate race involving everyone
+    dilated_density = dilate_density(density=density, unit_ratio=unit_ratio)
+    dilated_offsets = [o / unit_ratio for o in offsets]
+    dilated_state_prices = state_prices_from_extended_offsets(density=dilated_density, offsets=dilated_offsets,
+                                                              max_depth=max_depth - 1)
+    n = len(offsets)
+    if (len(fast_ndxs)==n) or (len(fast_ndxs)==0) or (max_depth <= 0):
+        return dilated_state_prices
+
+    # Otherwise ...
+    slow_ndxs = [ j for j in range(n) if j not in fast_ndxs ]
+    assert slow_ndxs
+    if len(slow_ndxs) == 1:
+        slow_relative_state_prices = [1.0]
+    else:
+        # Compute the slown guys at low resolution to reduce recursions
+        dilated_slow_offsets = [dilated_offsets[i] for i in slow_ndxs]
+        slow_relative_state_prices = state_prices_from_extended_offsets(density=dilated_density,
+                                                                        offsets=int_centered(dilated_slow_offsets),
+                                                                        max_depth=max_depth - 2)
+    # Race the fast horses
+    fast_ndxs = [j for j in range(n) if j not in slow_ndxs]
+    fast_offsets = [offsets[j] for j in fast_ndxs]
+    fast_relative_state_prices = state_prices_from_extended_offsets(density=density,
+                                                                    offsets=int_centered(fast_offsets),
+                                                                    max_depth=max_depth - 1)
+
+    # It remains to combine the two results in a plausible mannner
+    slow_share = sum([p for i, p in enumerate(dilated_state_prices) if i in slow_ndxs])
+    fast_share = 1 - slow_share
+    slow_prices = [p * slow_share for p in slow_relative_state_prices]
+    fast_prices = [p * fast_share for p in fast_relative_state_prices]
+    state_prices = [0 for _ in range(n)]
+    for i, ndx in enumerate(slow_ndxs):
+        state_prices[ndx] = slow_prices[i]
+    for i, ndx in enumerate(fast_ndxs):
+        state_prices[ndx] = fast_prices[i]
+    state_sum = sum(state_prices)
+    assert state_sum>0.99,'Surprising fail! l606 lattice.py'
+    state_prices = [ si/state_sum for si in state_prices]
+    return state_prices
+
+
+def mean_ignoring_inf(values):
+    return np.nanmean([e for e in values if np.isfinite(e)])
+
+
+def int_centered(offsets):
+    int_mean = int(mean_ignoring_inf(offsets))
+    return [o - int_mean for o in offsets]
+
+
+def divide_offsets(centered_offsets, max_best=20):
+    n = len(centered_offsets)
+    if len(centered_offsets) == 2:
+        offset_divider = np.mean(centered_offsets)  # should be 0
+    else:
+        srt_offsets = sorted(centered_offsets)
+        max_best = min(20, int(n/6+2))
+        gaps = [ abs(a) for a in np.diff([srt_offsets[0]]+srt_offsets) ][:max_best+1] # [0, 4, 2, ...]
+        ndx_gap = max(1,gaps.index(max(gaps)))
+        try:
+            offset_divider = ( srt_offsets[ndx_gap-1] + srt_offsets[ndx_gap] ) / 2.0
+        except IndexError:
+            offset_divider = 0
+    return offset_divider
+
+
+def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio=3):
+    """ Imply state prices but allow the offsets to be float('inf') or float('-inf')
+    :param density:
+    :param offsets:
+    :param max_depth: specifies the max number of times to call recursively, not counting
+                            the recusion calls that merely get rid of float('inf') or float('-inf')
+    :return:
+    """
+    # First get rid of float('inf')
+    n = len(offsets)
+    if n==1:
+        return [1.0]
+
+    infinite_ndxs = [i for i in range(n) if offsets[i] == float('inf')]
+    if infinite_ndxs:
+        finite_ndxs = [ j for j in range(n) if j not in infinite_ndxs ]
+        finite_offsets = [ offsets[j] for j in finite_ndxs ]
+        if not finite_offsets:
+            # Everyone is float('inf')
+            return [ 1.0/n for _ in range(n) ]
+        else:
+            finite_state_prices = state_prices_from_extended_offsets(density=density,
+                                                                     offsets=int_centered(finite_offsets),
+                                                                     max_depth=max_depth)
+            state_prices = [ 0 for _ in range(n)]
+            for j, ndx in enumerate(finite_ndxs):
+                state_prices[ndx] = finite_state_prices[j]
+            return state_prices
+
+    # Then get rid of float('-inf')
+    neg_infinite_ndxs = [i for i in range(n) if offsets[i] == float('-inf')]
+    if neg_infinite_ndxs:
+        # Split pot amongst those who are float('-inf')
+        n_pot = len(neg_infinite_ndxs)
+        state_prices = [0 for _ in range(n)]
+        for j, ndx in enumerate(neg_infinite_ndxs):
+            state_prices[ndx] = 1/n_pot
+        assert abs(sum(state_prices)-1)<1e-12
+        return state_prices
+
+    # Otherwise, having reached this far we have only float abilities, though some might be extremely large
+    L = implied_L(density)
+    W = int(approximate_support_width(density))
+    really_bad_horse_offset = min(offsets) + W # <--- No chance of winning
+
+    # If there are bad but finite horses, set them to float('inf') and call again
+    # On the next call, hopefully the centering leaves us inside the lattice
+    extremely_bad_ndxs = [i for i, o in enumerate(offsets) if o > really_bad_horse_offset ]
+    if any(extremely_bad_ndxs):
+        augmented_offsets = [o if i not in extremely_bad_ndxs else float('inf') for i, o in enumerate(offsets)]
+        return state_prices_from_extended_offsets(density=density,
+                                                  offsets=int_centered(augmented_offsets),
+                                                  max_depth=max_depth)
+
+    # If there is a solitary standout horse, short-circuit
+    diff_to_best = [ o - min(offsets) for o in offsets]
+    is_walkover = min(diff_to_best) > W*math.sqrt(len(offsets))
+    if is_walkover:
+        winning_ndx = offsets.index(min(offsets))
+        state_prices = [0 for _ in offsets]
+        state_prices[winning_ndx] = 1.0
+        return state_prices
+
+    # At this point in the algorithm we have a race that isn't completely degenerate
+    # Let's center and then see if any horses are hanging off the lattice.
+    centered_offsets = int_centered(offsets)
+    offset_lower_bound = -L + W
+    offset_upper_bound = L - W
+    hanging_left  = [ i for i,o in enumerate(centered_offsets) if o<offset_lower_bound  ]
+    hanging_right = [ i for i,o in enumerate(centered_offsets) if o>offset_upper_bound  ]
+    hanging = bool(hanging_right or hanging_left)
+    if not hanging:
+        # Should be good to go!
+        return state_prices_from_offsets(density=density, offsets=centered_offsets)
+    else:
+        if max_depth==0:
+            # If we've already tried pretty hard, just set hangers to inf or -inf and call one more time
+            for ndx in hanging_right:
+                centered_offsets[ndx]=float('inf')
+            for ndx in hanging_left:
+                centered_offsets[ndx] = float('-inf')
+            return state_prices_from_extended_offsets(offsets=centered_offsets, density=density, max_depth=0)
+        else:
+            # Otherwise we can split the race into two clusters
+            offset_divider = divide_offsets(centered_offsets)
+            fast_ndxs = [ i for i,o in enumerate(centered_offsets) if o < offset_divider ]
+            if (len(fast_ndxs)==n) or (len(fast_ndxs)==0):
+                print('This probably should not happen as the divider should divide! , but its okay...line l717 of lattice.py')
+
+            state_prices = _state_prices_from_clustered_offsets(density=density,
+                                                                offsets=centered_offsets,
+                                                                fast_ndxs=fast_ndxs,
+                                                                unit_ratio=unit_ratio,
+                                                                max_depth=max_depth - 1)
+            return state_prices
 
 
 def state_prices_from_offsets(density, offsets):
@@ -525,12 +762,12 @@ def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, c
     implicit = list()
     for k in offsets:
         if k == int(k):
-            offset_cdf = integer_shift(cdf, k)
+            offset_cdf = integer_shift(cdf, int(k))
             ip = expected_payoff(density=None, densityAll=densityAll, multiplicityAll=multiplicityAll, cdf=offset_cdf,
                                  cdfAll=cdfAll)
             implicit.append(np.sum(ip))
         else:
-            (l, l_coef), (r, r_coef) = _low_high(k)
+            (l, l_coef), (r, r_coef) = _low_high(k, L=L)
             offset_cdf_left = integer_shift(cdf, l)
             offset_cdf_right = integer_shift(cdf, r)
             ip_left = expected_payoff(density=None, densityAll=densityAll, multiplicityAll=multiplicityAll,
