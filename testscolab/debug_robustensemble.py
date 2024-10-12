@@ -20,7 +20,7 @@ if using_precise and using_scipy and using_sklearn:
     from typing import List
     import numpy as np
     from precise.skaters.portfoliostatic.diagport import diag_long_port
-    from precise.skaters.covarianceutil.covfunctions import cov_to_corrcoef, multiply_off_diag
+    from precise.skaters.covarianceutil.covfunctions import cov_to_corrcoef, multiply_off_diag, nearest_pos_def
     from precise.skaters.portfoliostatic.unitport import unit_port, unit_port_p050
     from precise.skaters.portfoliostatic.weakport import weak_long_port
     from precise.skaters.portfoliostatic.hrpport import hrp_diag_diag_s5_long_port
@@ -45,10 +45,47 @@ if using_precise and using_scipy and using_sklearn:
         n_dim = np.shape(corr)[0]
         mu = std_state_price_implied_ability(w)
         scaled_corr = multiply_off_diag(a=corr, phi=phi)  # sca
+        scaled_corr = nearest_pos_def(scaled_corr)
         correlated_samples = np.random.multivariate_normal(mu, scaled_corr, size=n_samples)
         min_indices = np.argmin(correlated_samples, axis=1)
         counts = np.bincount(min_indices, minlength=n_dim)
         return [c / sum(counts) for c in counts]
+
+
+    def generate_sector_cov_matrix(n_assets_per_sector: int, n_sectors: int, intra_corr: float,
+                                   inter_corr: float) -> np.ndarray:
+        """
+        Generate a covariance matrix with block structure, where assets within the same sector
+        have higher correlation (intra_corr) than assets across sectors (inter_corr).
+
+        :param n_assets_per_sector: Number of assets per sector
+        :param n_sectors: Number of sectors
+        :param intra_corr: Correlation between assets within the same sector
+        :param inter_corr: Correlation between assets across different sectors
+        :return: Covariance matrix (n_assets x n_assets)
+        """
+        n_assets = n_assets_per_sector * n_sectors
+
+        # Initialize the correlation matrix
+        corr_matrix = np.full((n_assets, n_assets), inter_corr)
+
+        # Set intra-sector correlations
+        for sector in range(n_sectors):
+            start = sector * n_assets_per_sector
+            end = start + n_assets_per_sector
+            corr_matrix[start:end, start:end] = intra_corr
+
+        # Ensure diagonal elements are 1 (variance terms)
+        np.fill_diagonal(corr_matrix, 1)
+
+        # Random standard deviations for each asset (for the covariance matrix)
+        std_devs = np.random.uniform(low=0.5, high=2.0, size=n_assets)
+
+        # Convert correlation matrix to covariance matrix
+        cov_matrix = corr_matrix * np.outer(std_devs, std_devs)
+
+        return cov_matrix
+
 
 
     def generate_true_cov_matrix(n_dim: int) -> np.ndarray:
@@ -187,7 +224,7 @@ if using_precise and using_scipy and using_sklearn:
                 # Step 2: Simulate data
                 data = simulate_data(true_cov_matrix, n_data_samples)
                 estimates = estimate_correlation(data)
-                cov = estimates['']
+                sample_cov = estimates['sample_cov']
 
                 # Step 4: Compute portfolios
                 w_unit_port, w_tilt = compute_portfolios(estimates['sample_corr'], n_samples=n_samples, port=port,
@@ -284,22 +321,23 @@ def update_leaderboard(variances: dict, iteration: int):
         print(f"{rank:<3}. {method:<{max_method_name_length}} : Average Variance = {avg_var:>10.4f}")
 
 
-if using_precise and using_scipy and using_sklearn:
+if __name__=='__main__':
+    if using_precise and using_scipy and using_sklearn:
 
-    def ability_1k_100_port(cov):
-        return ability_port(cov=cov, n_samples=1000, phi=1.0)
+        def ability_1k_100_port(cov):
+            return ability_port(cov=cov, n_samples=1000, phi=1.0)
 
-    def ability_100k_100_port(cov):
-        return ability_port(cov=cov, n_samples=100000, phi=1.0)
+        def ability_100k_100_port(cov):
+            return ability_port(cov=cov, n_samples=100000, phi=1.0)
 
-    def ability_1k_50_port(cov):
-        return ability_port(cov=cov, n_samples=1000, phi=0.5)
+        def ability_1k_50_port(cov):
+            return ability_port(cov=cov, n_samples=1000, phi=0.5)
 
-    def ability_100k_50_port(cov):
-        return ability_port(cov=cov, n_samples=100000, phi=0.5)
+        def ability_100k_50_port(cov):
+            return ability_port(cov=cov, n_samples=100000, phi=0.5)
 
-    ability_ports = [ equal_long_port, ability_100k_50_port, ability_1k_100_port, ability_1k_50_port, ability_100k_50_port]
-    conventional_ports = [unit_port, weak_long_port, unit_port_p050, hrp_diag_diag_s5_long_port ]
-    ports = ability_ports + conventional_ports
+        ability_ports = [ equal_long_port, ability_100k_50_port, ability_1k_100_port, ability_1k_50_port, ability_100k_50_port]
+        conventional_ports = [unit_port, weak_long_port, unit_port_p050, hrp_diag_diag_s5_long_port ]
+        ports = ability_ports + conventional_ports
 
-    leaderboard_comparison(n_dim=250, ports=ports, n_data_samples=100)
+        leaderboard_comparison(n_dim=250, ports=ports, n_data_samples=100)
