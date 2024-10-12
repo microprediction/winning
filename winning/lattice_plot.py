@@ -2,14 +2,14 @@ from winning.lattice import symmetric_lattice
 
 try:
     import matplotlib.pyplot as plt
-    using_plots = True
+    using_matplotlib = True
 except:
-    using_plots = False
+    using_matplotlib = False
     print('pip install matplotlib')
 
 
 def densitiesPlot( densities, unit, legend = None ):
-    assert using_plots
+    assert using_matplotlib
     L = int(len( densities[0]-1 )/2)
     pts = symmetric_lattice( L=L, unit=unit )
     for density in densities:

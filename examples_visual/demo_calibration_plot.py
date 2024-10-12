@@ -1,6 +1,6 @@
 from winning.lattice_plot import  densitiesPlot
-from winning.lattice import skew_normal_density, mean_of_density, implicit_state_prices, winner_of_many, sample_winner_of_many
-from winning.lattice_calibration import solve_for_implied_offsets, state_prices_from_offsets, densities_from_offsets
+from winning.lattice import skew_normal_density, winner_of_many, sample_winner_of_many
+from winning.lattice_calibration import solve_for_implied_offsets, ability_implied_state_prices, densities_from_offsets
 
 PLOTS=True
 
@@ -11,7 +11,7 @@ def demo():
     skew1                   = skew_normal_density(L=L, unit = unit, a=1.5)
     prices                  = [ 0.2, 0.3, 0.5 ]
     implied_offsets         = solve_for_implied_offsets(prices = prices, density = skew1, nIter = 2)
-    inferred_prices         = state_prices_from_offsets( skew1, implied_offsets )
+    inferred_prices         = ability_implied_state_prices( skew1, implied_offsets )
     print(str(inferred_prices))
     densities               = densities_from_offsets( skew1, implied_offsets )
     densityAllAgain, multiplicityAll  = winner_of_many(densities)

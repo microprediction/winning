@@ -1,5 +1,4 @@
-import winning.lattice_plot
-from winning.lattice import skew_normal_density, mean_of_density, implicit_state_prices, winner_of_many
+from winning.lattice import skew_normal_density, implicit_state_prices, winner_of_many
 
 PLOTS=True
 
