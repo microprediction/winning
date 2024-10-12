@@ -2,9 +2,9 @@
 ![test-39](https://github.com/microprediction/winning/workflows/test-39/badge.svg)
 ![test-pandas](https://github.com/microprediction/winning/workflows/test-pandas/badge.svg)
 
-A fast, scalable numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. 
+A fast, scalable numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. Published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_updated.pdf)) although actually the algorithm implemented here is just a little sneakier now. 
 
-Published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_updated.pdf)) although actually the algorithm implemented here is just a little sneakier now. 
+See [www.quinellacalculator.com](http://www.quinellacalculator.com/) for a demonstration. 
  
 ![](https://i.imgur.com/83iFzel.png) 
 
