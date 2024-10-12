@@ -276,7 +276,7 @@ def sample_winner_of_many(densities, nSamples=5000):
     cdfs = [pdf_to_cdf(density) for density in densities]
     cols = [sample_from_cdf(cdf, nSamples) for cdf in cdfs]
     rows = map(list, zip(*cols))
-    D = [min(row) for row in rows]
+    D = [int(min(row)) for row in rows]
     density = np.bincount(D, minlength=len(densities[0])) / (1.0 * nSamples)
     return density
 
