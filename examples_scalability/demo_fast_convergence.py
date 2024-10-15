@@ -1,6 +1,6 @@
 from winning.lattice_plot import  densitiesPlot
 from winning.lattice import skew_normal_density, mean_of_density, implicit_state_prices, winner_of_many, sample_winner_of_many
-from winning.lattice_calibration import solve_for_implied_offsets, state_prices_from_offsets, densities_from_offsets
+from winning.lattice_calibration import solve_for_implied_offsets, state_prices_from_extended_offsets, densities_from_offsets
 import numpy as np
 PLOTS=True
 import math
@@ -16,7 +16,7 @@ def demo(  ):
     num_iters = list(range(1,5))
     for num_iter in num_iters:
         true_offsets            = [ int(unit*k) for k in range( n ) ]
-        state_prices            = state_prices_from_offsets( density=density, offsets=true_offsets )
+        state_prices            = state_prices_from_extended_offsets( density=density, offsets=true_offsets )
         print("State prices are " + str( state_prices ))
         offset_samples          = list( range( -100, 100 ))[::-1]
         # Now try to infer offsets from state prices

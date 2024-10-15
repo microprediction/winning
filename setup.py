@@ -7,7 +7,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="winning",
-    version="1.0.3",
+    version="1.0.6",
     description="Fast ability inference from contest winning probabilities",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -23,9 +23,9 @@ setup(
     ],
     packages=["winning"],
     test_suite='pytest',
-    tests_require=['pytest','pandas','scipy>=1.7.3'],
+    tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],
     include_package_data=True,
-    install_requires=["numpy","pytest","pathlib","wheel"],
+    install_requires=["numpy","pytest"],
     entry_points={
         "console_scripts": [
             "winning=winning.__main__:main",
