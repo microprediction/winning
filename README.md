@@ -9,7 +9,7 @@ A fast, scalable numerical algorithm for inferring relative ability from multi-e
 
 An earlier version of this algorithm was published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_updated.pdf)).  
 
-See [www.quinellacalculator.com](http://www.quinellacalculator.com/) for a demonstration. 
+See [www.quinellacalculator.com](http://www.quinellacalculator.com/) for a demonstration and this [comment](https://www.linkedin.com/posts/petercotton_machine-psychologyexploring-a-paradox-activity-7266298424570875907-ffdz?utm_source=share&utm_medium=member_desktop) on Thurston models for choice. 
  
 ![](https://i.imgur.com/83iFzel.png) 
 
