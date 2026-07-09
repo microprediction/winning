@@ -12,6 +12,16 @@ tied finishers are rare in F1 classification).
 Compared prequentially: gaussian, fixed slab p=0.25, era-adaptive slab.
 
 Run:  .venv/bin/python research/f1_era_slab.py
+
+Measured (July 2026):
+    gaussian            2.2247 / tau 0.3282 / pit 0.1758
+    fixed slab p=0.25   2.2031 / tau 0.3308 / pit 0.1578
+    era-adaptive slab   2.2001 / tau 0.3317 / pit 0.1853   (final p=0.10)
+New best F1 log loss and tau; the fitted mass tracks the sport's reliability
+revolution (ends near the modern DNF rate — slightly under, because the
+tied-last proxy misses single-retirement races). Rank-PIT prefers the fixed
+slab: kernel rebuilds churn the shape. Three-cornered Pareto: adaptive for
+winner metrics, tight-core/slab for shape, fixed slab as compromise.
 """
 
 from __future__ import annotations

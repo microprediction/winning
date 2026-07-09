@@ -20,7 +20,9 @@ a two-component form — ordinary Gaussian pace plus a "disaster slab" of
 far-slow mass matching the DNF process — improves every metric further, that
 the slab mass is physically interpretable (it tracks the historical DNF
 rate), and that an era-adaptive slab fitted prequentially from trailing
-retirement frequency [RESULT PENDING] . Symmetric heavy tails and skew, by
+retirement frequency sets the overall record (log loss 2.2001), its fitted
+mass ending near the modern DNF rate after following the sport's reliability
+revolution across seven decades. Symmetric heavy tails and skew, by
 contrast, measurably hurt: what F1 needs is one-sided catastrophe, not
 kurtosis. [If odds data found: the market comparison.]
 
@@ -77,7 +79,19 @@ it.
 ## 5. The slab is physics: era-adaptive retirement mass
 
 DNF-rate table by decade; the era-adaptive rater (trailing-window prequential
-p_dnf, no leakage): [RESULTS PENDING — research/f1_era_slab.py]
+p_dnf, no leakage) sets the overall F1 record:
+
+| base density | log loss | Kendall tau | rank-PIT KS |
+|---|---|---|---|
+| era-adaptive slab | 2.2001 | 0.3317 | 0.1853 |
+| fixed slab p=0.25 | 2.2031 | 0.3308 | 0.1578 |
+| gaussian | 2.2247 | 0.3282 | 0.1758 |
+
+The fitted mass ends near the modern DNF rate (0.10 vs true ~0.13; the
+tied-last proxy misses single-retirement races), having tracked the sport's
+reliability revolution across seven decades — the parameter is physics, not
+curve-fitting. Rank-PIT prefers the fixed slab (kernel rebuilds churn shape):
+the Pareto frontier has three corners.
 
 ## 6. (Conditional) The market test
 
