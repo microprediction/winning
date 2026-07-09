@@ -9,6 +9,8 @@ built on the exact lattice order statistics of the
 [thurstone](https://github.com/microprediction/thurstone) package, and
 benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo.
 
+![The fastest time, the best offer and the most popular product are the same order statistic](docs/assets/images/winning-pic.png)
+
 `thurstone` is the small, stable core: densities on a lattice, winner-of-many,
 and the fast ability transform. This package is the applications layer, the way
 [timemachines](https://github.com/microprediction/timemachines) sits on
