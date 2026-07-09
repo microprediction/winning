@@ -9,6 +9,19 @@ core_sd x p_disaster on the F1 dataset against the Gaussian baseline
 (2.2247) and the earlier N(0,1)+slab mixture (2.2090).
 
 Run:  .venv/bin/python research/f1_dirac_disaster.py
+
+Measured (July 2026, log loss / ece / pit_ks):
+  gaussian                 2.2247 / 0.0154 / 0.1758
+  N(0,1) + slab p=.25      2.2031 / 0.0154 / 0.1578   <- best log loss (new F1 best)
+  core=0.5, p=.25          2.2542 / 0.0126 / 0.1361   <- best shape metrics
+  core=0.3 .. 0.2          2.42 .. 2.52               <- monotonically worse
+Verdict: the strict Dirac form is refuted for winner prediction — pace noise
+among finishers is genuinely order-1 (strategy, traffic, weather), and
+squeezing the core hurts log loss monotonically. The disaster slab is the
+confirmed ingredient. The consolation: a moderately tight core (0.5) with
+p=.25 disaster mass posts the best rank-PIT and ECE measured on F1 — winner
+metrics want jitter, field-shape metrics want the spike; a genuine Pareto
+frontier with both ends now mapped.
 """
 
 from __future__ import annotations

@@ -13,6 +13,18 @@ nothing (the Bayesian-shrinkage story, falsifiable); point-estimate systems
 should fit s > 1 and gain.
 
 Run:  .venv/bin/python research/temperature_fairness.py
+
+Measured (July 2026; raw ll / tempered ll / fitted s):
+  HK:    Glicko-2 2.3575/2.3535/0.85 | Thurstone 2.3801/2.3587/0.70 |
+         TrueSkill 2.4661/2.3912/0.55 (!) | Elo 2.4719/2.4668/1.55
+  chess: Thurstone 0.6228/0.6229/1.00 (needs NOTHING) |
+         TrueSkill 0.6182/0.6173/0.90 | Glicko-2 0.6225/0.6174/1.40 |
+         Elo 0.6363/0.6362/0.95
+Verdicts: (1) fairness holds — tempering everyone leaves the rankings
+essentially unchanged, so no published comparison was riding on the patch;
+(2) fitted s is a coherence statistic: the lattice is the only system at
+s = 1.00 on chess, while TrueSkill's s = 0.55 on HK exposes heavy
+overconfidence on large fields (worth 0.075 of log loss).
 """
 
 from __future__ import annotations
