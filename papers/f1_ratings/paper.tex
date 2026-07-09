@@ -1,0 +1,208 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\title{\textbf{Rating Formula 1}\\[0.4em]
+\large Joint order statistics, a disaster slab,\\
+and seventy years of mechanical attrition}
+\author{Peter Cotton}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Formula 1 is a hostile environment for rating systems: grids of ten
+to fifty-five cars, full finish orders, and a retirement process that
+historically eliminated half the field. We rate every world-championship
+grand prix from 1950 to the present (1{,}158 races) under a prequential
+protocol --- predict, score, then update --- using a lattice-based Thurstonian
+system whose beliefs are unrestricted densities and whose update uses the
+exact likelihood of the whole finish order, computed in $O(N)$ per
+contestant. It beats TrueSkill, Elo, Glicko-2 and OpenSkill on log loss,
+accuracy and rank correlation, while the pairwise-decomposition systems
+degrade or diverge as grids widen: Glicko-2 scores below the uniform
+baseline. Because the lattice imposes no distributional family, the
+performance density is a modeling choice, and the right choice is not
+Gaussian: adding a \emph{disaster slab} --- a lump of far-slow mass matching
+the retirement process --- improves every metric, and letting the slab mass
+track the trailing retirement rate sets the overall record while its fitted
+value follows the sport's reliability revolution from 59\% attrition in the
+1980s to 13\% today. We report what failed candidly: symmetric heavy tails
+hurt (they invent impossibly fast miracles), skew does nothing anywhere, and
+a near-deterministic pace core is refuted --- pace noise among finishers is
+genuinely order one. What survives is a taxonomy: model catastrophe
+frequency, not time-domain shape.
+\end{abstract}
+
+\section{Why Formula 1}
+
+Most rating systems were built for head-to-head play and extended to
+multi-entrant events by decomposition: a finish order becomes a bag of
+pairwise results (Elo, Glicko-2, the Weng--Lin variants) or a chain of
+adjacent factors (TrueSkill). At tennis scale the decomposition is harmless.
+At Formula 1 scale it is the whole question. A grid of twenty cars implies
+190 pairwise results whose errors are far from independent, and the sport's
+history includes grids of fifty-five.
+
+Formula 1 also embeds a distributional regime change inside a single
+dataset. The fraction of entrants failing to finish, by decade:
+
+\begin{center}
+\begin{tabular}{lcccccccc}
+\toprule
+decade & 1950s & 60s & 70s & 80s & 90s & 2000s & 10s & 20s \\
+\midrule
+DNF rate & .42 & .49 & .51 & .59 & .51 & .30 & .18 & .13 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent No fixed distributional assumption is right for both halves of
+this table. A rating system whose noise model is a free parameter can say
+so; one locked to a Gaussian cannot.
+
+The data (the community-maintained f1db compilation, CC-BY) is clean about
+edge cases that matter: drivers stopping past 90\% distance are classified
+with positions; earlier retirements carry no position and enter our
+protocol tied at the back of the field; shared drives in the 1950s produce
+genuine dead heats, which the rater treats as ties rather than breaking
+arbitrarily.
+
+\section{The rater}
+
+Each driver carries a belief over latent ability: a whole density on a
+uniform lattice, free to be skewed or multimodal, diffusing between races in
+proportion to elapsed time. A race performance is ability plus noise drawn
+from a \emph{base density} --- any density; this freedom is the paper's
+subject. Predictions price the joint order statistics of the field exactly
+(dead-heat aware, $O(N)$ per race) using the machinery of the fast ability
+transform. Updates use the exact likelihood of the observed finish order in
+each driver's ability, with opponents at their predictive marginals: with
+finishers indexed fastest first, a forward chain accumulates prefix sums of
+(density $\times$ chain) over the faster finishers, a backward chain does
+the same over the slower ones, and the $k$-th finisher's likelihood is the
+base density correlated with the product of the two chains. One coherent
+expression per driver, $O(N)$ overall, validated against brute-force
+simulation. An earlier version of the system factorized the order into
+peeled stages and multiplied overlapping factors; the chain replaced it
+after a paired test showed the factorization was measurably lossy ---
+worse everywhere, at twice the cost.
+
+\section{The benchmark}
+
+All systems observe identical data prequentially: the first 20\% of races
+are unscored warm-up; every later race is predicted before it is observed.
+Log loss, Brier and accuracy score the winner prediction; Kendall's tau the
+predicted order; expected calibration error (ECE) the pooled win
+probabilities; and a randomized rank-PIT statistic measures whether each
+system's \emph{distribution} over finish positions matches reality.
+TrueSkill receives the empirical dead-heat rate; comparison rows use each
+package's own prediction formula.
+
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+system & log loss & accuracy & tau & ECE & rank-PIT \\
+\midrule
+Thurstone lattice & \textbf{2.225} & \textbf{.316} & \textbf{.328} & .015 & .176 \\
+TrueSkill & 2.346 & .275 & .300 & .011 & .199 \\
+Elo (multi-entrant) & 2.465 & .303 & .319 & .026 & .220 \\
+OpenSkill Plackett--Luce & 2.705 & .259 & .283 & .023 & .223 \\
+OpenSkill Thurstone--Mosteller & 2.951 & .007 & .106 & .010 & .628 \\
+uniform baseline & 3.162 & .043 & --- & --- & --- \\
+Glicko-2 & 3.727 & .271 & .255 & .022 & .166 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two failure modes deserve notice. Glicko-2, sound at head-to-head scale,
+scores \emph{below the uniform baseline}: flooding a single rating period
+with nineteen correlated pairwise results drives its volatility machinery
+to numerical extremes (our implementation already includes stabilizing
+guards; without them it does not finish the century). OpenSkill's
+Thurstone--Mosteller variant, which decomposes the order into all pairs,
+diverges similarly. The lesson is structural: pairwise decomposition is not
+a harmless approximation at grid scale.
+
+\section{The performance density is a free parameter}
+
+Every comparator above is locked to one family --- Gaussian beliefs with
+Gaussian or Gumbel noise. The lattice's base density is an array, so the
+noise model becomes an empirical question. We swept it.
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+base density & log loss & ECE & rank-PIT \\
+\midrule
+$N(0,1)$ + 25\% disaster slab & 2.203 & .015 & .158 \\
+era-adaptive slab & \textbf{2.200} & .016 & .185 \\
+Gaussian & 2.225 & .015 & .176 \\
+skew-normal ($a{=}2$) & 2.222 & \textbf{.010} & .165 \\
+Student-$t$ ($\nu{=}5$) & 2.271 & .018 & .171 \\
+tight core (0.5) + 25\% slab & 2.254 & .013 & \textbf{.136} \\
+near-Dirac core (0.2--0.3) + slab & 2.42--2.52 & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The \emph{disaster slab} --- ordinary Gaussian pace with probability
+$1-p$, a uniform lump of far-slow mass with probability $p$ --- matches the
+physics of retirement: a blown engine is not a slow day, it is a separated
+event that no level of skill outruns. It improves every metric.
+
+Three hypotheses failed, and the pattern of failure is the finding.
+Symmetric heavy tails ($t$-family) hurt monotonically as tails fatten:
+symmetry forces miracle mass onto the \emph{fast} side, and nobody outruns
+their ability by five sigma. Skew-normal noise does approximately nothing
+here, as it did on every dataset we tried; finish orders are blind to
+smooth asymmetry (pairwise comparisons cancel skew exactly, and ranks are
+invariant to monotone transformations of the clock). And a near-Dirac pace
+core --- the hypothesis that finishing order among finishers is nearly
+deterministic --- is refuted at 0.2 log loss: strategy, traffic and weather
+are order-one noise. A moderately tight core does, however, produce the
+best distributional calibration we measured (rank-PIT .136), so winner
+prediction and field-shape prediction pull the kernel in different
+directions: a genuine Pareto frontier, of which the table shows three
+corners.
+
+\section{The slab is physics}
+
+Fixing $p$ at 25\% is itself a Gaussian-era compromise. The era-adaptive
+variant estimates $p$ prequentially from a trailing window of observed
+retirement frequency (no leakage: past races only) and rebuilds the base
+density on the fly. It sets the overall record (log loss 2.2001, best
+Kendall's tau), and its fitted trajectory is the point: the mass falls
+across seven decades and ends near the modern retirement rate. The
+parameter is not a tuning constant; it is a measurement of the sport, made
+by the rating system in passing.
+
+\section{What we did not do}
+
+Driver-versus-car identification is unaddressed: constructor effects are
+folded into driver ratings, and separating them (each driver a latent
+vector, the car a direction) is the natural next study. Retirements enter
+tied at the back, discarding the official ordering of retirees by laps
+completed; the alternative is an untested A/B. We did not test against a
+betting market, for want of public historical odds with full-field
+coverage. And the ratings themselves are one-dimensional: no wet-weather
+axis, no circuit-type axis, though the machinery for both exists.
+
+\section*{Reproducibility}
+
+Everything is one command per table from the \texttt{winning} package
+(\texttt{github.com/microprediction/winning}):
+\texttt{python -m winning.benchmarks.run\_benchmark --dataset f1} for the
+benchmark, and \texttt{research/f1\_dirac\_disaster.py},
+\texttt{research/t\_sweep.py}, \texttt{research/f1\_era\_slab.py} for the
+density studies. Data is fetched at run time from f1db (CC-BY-4.0). The
+underlying lattice machinery is the \texttt{thurstone} package; the ability
+transform is described in Cotton, \emph{SIAM J.\ Financial Mathematics}
+12(1), 2021.
+
+\end{document}
