@@ -125,6 +125,22 @@ class ScaleLearningThurstoneRating(RatingSystem):
         var = max(second - mean * mean, 0.0)
         return Rating(mu=-mean, sigma=math.sqrt(var))
 
+    def performance_samples(self, names: Sequence[str], size: int = 32):
+        from winning.thurstonerating import _stable_seed
+
+        self._sample_calls = getattr(self, "_sample_calls", 0) + 1
+        rng = np.random.default_rng(_stable_seed(names, self._sample_calls))
+        cols = []
+        unit = self.lattice.unit
+        for nm in names:
+            p = self._perf_mixture(self._current(nm))
+            t = p.sum()
+            p = p / t if t > 0 else np.full_like(p, 1.0 / len(p))
+            x = rng.choice(self._grid, size=size, p=p)
+            x = x + rng.uniform(-unit / 2, unit / 2, size=size)
+            cols.append(-x)  # internal is time-like; expose higher-is-better
+        return np.column_stack(cols)
+
     def learned_scale(self, name: str) -> float:
         """Posterior mean of the performance-noise scale."""
         w, _ = self._current(name)
