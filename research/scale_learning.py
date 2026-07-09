@@ -138,7 +138,7 @@ class ScaleLearningThurstoneRating(RatingSystem):
 
         priors = {nm: self._beliefs[nm] for nm in names}
         working = {nm: (w.copy(), [s.copy() for s in slices]) for nm, (w, slices) in priors.items()}
-        for _ in range(self.iterations):
+        for sweep in range(self.iterations):
             stage = self._stage_functions(groups, working)
             new_working = {}
             for nm in names:
@@ -149,10 +149,16 @@ class ScaleLearningThurstoneRating(RatingSystem):
                     like = stage[nm](kern)
                     post = prior_slice * like
                     total = post.sum()
-                    # marginal likelihood of this scale slice drives the weights
-                    weights[si] = pw[si] * max(total, 1e-300)
+                    # marginal likelihood of this scale slice drives the
+                    # weights — but only on the first sweep: later EP sweeps
+                    # revisit the SAME event and would double-count its
+                    # evidence, driving all weights toward the widest scale
+                    weights[si] = (pw[si] * max(total, 1e-300)) if sweep == 0 else total
                     slices.append(post / total if total > 0 else prior_slice)
-                weights = weights / weights.sum()
+                if sweep == 0:
+                    weights = weights / weights.sum()
+                else:
+                    weights = working[nm][0]
                 new_working[nm] = (weights, slices)
             working = new_working
         self._beliefs.update(working)
