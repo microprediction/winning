@@ -10,7 +10,23 @@ within each bucket we compare every system's mean predicted probability for
 the site favorite against the empirical win rate (decisive games; draws
 counted as half-wins in a separate column).
 
-Run:  .venv/bin/python research/mismatch_calibration.py
+Run:  .venv/bin/python research/mismatch_calibration.py [months...]
+
+Measured (July 2026, 6 months of Lichess 2013, 966k games; mean predicted
+P(site favorite) vs empirical, decisive games, top two gap buckets):
+  [0.90,0.95) n=35,509: empirical 0.8821 | site 0.9234 | TrueSkill 0.8780 |
+              Thurstone 0.8386 | Elo 0.8099 | Glicko-2 0.7916
+  [0.95,1.01) n=16,710: empirical 0.9356 | site 0.9683 | TrueSkill 0.9351 |
+              Thurstone 0.9035 | Elo 0.8722 | Glicko-2 0.8646
+Findings: (1) the site's plug-in ratings overrate big favorites by ~3.3
+points at ~17 se — rock solid; a fitted temperature fixes it out-of-sample
+(companion analysis) while heavy-tail families do not: attenuation from
+rating measurement error, not fat performance tails. (2) TrueSkill with six
+months of history calibrates the extremes almost perfectly WITHOUT any
+patch — Bayesian uncertainty performs the attenuation endogenously; that is
+the principled answer to "the temperature cure breaks consistency".
+(3) Our rater still under-favors big favorites at chess data rates (0.9035
+vs 0.9356) — adaptation-speed tuning territory, honestly noted.
 """
 
 from __future__ import annotations
