@@ -40,7 +40,6 @@ from __future__ import annotations
 import math
 
 import numpy as np
-
 from market_hybrid import MarketHybridThurstoneRating
 
 REFIT_EVERY = 250
