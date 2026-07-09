@@ -34,8 +34,8 @@ import math
 from typing import List
 
 import numpy as np
-
 from scale_learning import ScaleLearningThurstoneRating
+
 from winning import EloRating, Glicko2Rating, ThurstoneRating
 from winning.shims import OpenSkillRating, TrueSkillRating
 

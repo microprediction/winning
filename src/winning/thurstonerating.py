@@ -5,21 +5,20 @@ lattice (no Gaussian restriction). Performance in an event is ability plus
 standard performance noise (the thurstone base density, N(0,1) by default,
 time-like: lowest performance wins).
 
-Update. An observed finish order is decomposed by Plackett peeling over rank
-groups: P(order) = prod_s P(group s ahead of everyone slower). Each stage
-factor, viewed as a likelihood in one contestant's ability with opponents at
-their current predictive performance marginals, is computed exactly on the
-lattice (group members: base correlated with the product of the slower field's
-survivals; the slower field via a prefix-sum identity against the slowest
-group member's density, which keeps kernels compact). Contestants sharing a
-rank are a dead-heat group: they update against the slower field only, never
-against each other, so updates are permutation-invariant. Beliefs multiply by
-their accumulated stage likelihoods and renormalize. This is an iterated
-approximation in the same spirit as TrueSkill's EP, but each factor is an
-exact joint order statistic over the whole remaining field rather than a
-pairwise/adjacent Gaussian approximation, and posteriors keep their (skewed,
-non-Gaussian) shapes. A single two-contestant update matches exact Bayes to
-lattice precision (see tests).
+Update. For a strict finish order the likelihood of the WHOLE order in one
+contestant's ability (opponents at their current predictive marginals) has an
+exact O(N*L) chain form on the lattice: with finishers indexed fastest-first,
+a forward chain F_k accumulates prefix sums of (pdf x chain) over the faster
+finishers, a backward chain T_k accumulates suffix sums over the slower ones,
+and the k-th finisher's likelihood is base correlated with F_k * T_k — one
+coherent expression per contestant, validated against brute-force Monte Carlo
+(research/exact_order_update.py). This replaced an earlier Plackett-peeled
+factorization whose overlapping stage factors behaved as a pseudo-likelihood
+(measurably worse and twice the cost). Events with dead heats keep the peeled
+group path: tied contestants update against the slower field only, never
+against each other, so tie updates stay permutation-invariant. Posteriors
+keep their (skewed, non-Gaussian) shapes; a two-contestant update matches
+exact Bayes to lattice precision (see tests).
 
 Dynamics. Between a contestant's events, ability diffuses: the belief is
 convolved with N(0, tau^2 * dt). Time advances via elapse(dt) (or the dt
@@ -83,14 +82,14 @@ class ThurstoneRating(RatingSystem):
         tau: float = 0.02,
         unit: float = 0.1,
         L: int = 150,
-        iterations: int = 2,
+        iterations: int = 1,
         base_kernel: "np.ndarray" = None,
     ):
         """prior_sigma: sd of the ability prior; beta: performance noise sd;
         tau: ability diffusion sd per unit time; unit/L: lattice geometry
         (span +/- L*unit must comfortably cover ability spread plus drift);
-        iterations: EP-style sweeps per event (opponent marginals recomputed
-        from partially-updated beliefs on each sweep).
+        iterations: sweeps per event; 1 is best for the exact chain (extra
+        sweeps re-count the same event against updated marginals).
 
         base_kernel: optional odd-length array replacing the N(0, beta)
         performance noise — ANY distribution on the lattice step size works
@@ -195,6 +194,39 @@ class ThurstoneRating(RatingSystem):
         self._beliefs.update(working)
 
     def _event_loglik(self, groups: List[List[str]], beliefs) -> Dict[str, np.ndarray]:
+        if all(len(g) == 1 for g in groups):
+            return self._event_loglik_chain([g[0] for g in groups], beliefs)
+        return self._event_loglik_peeled(groups, beliefs)
+
+    def _event_loglik_chain(self, order: List[str], beliefs) -> Dict[str, np.ndarray]:
+        """Exact full-order likelihood via forward/backward chains, O(N*L)."""
+        n = len(order)
+        perf = {nm: self._perf_pdf(beliefs[nm]) for nm in order}
+        kernel = self._base_kernel[::-1]  # correlation with the base density
+
+        F = [np.ones_like(self._grid)]  # F[k]: faster finishers strictly below x
+        for k in range(1, n):
+            g = perf[order[k - 1]] * F[k - 1]
+            c = np.cumsum(g)
+            f = np.concatenate(([0.0], c[:-1]))
+            m = f.max()
+            F.append(f / m if m > 0 else f)
+        T = [None] * n  # T[k]: slower finishers strictly above x
+        T[n - 1] = np.ones_like(self._grid)
+        for k in range(n - 2, -1, -1):
+            g = perf[order[k + 1]] * T[k + 1]
+            c = np.cumsum(g[::-1])[::-1]
+            t = np.concatenate((c[1:], [0.0]))
+            m = t.max()
+            T[k] = t / m if m > 0 else t
+
+        loglik = {}
+        for k, nm in enumerate(order):
+            like = _conv_same(F[k] * T[k], kernel)
+            loglik[nm] = np.log(np.maximum(like, 1e-300))
+        return loglik
+
+    def _event_loglik_peeled(self, groups: List[List[str]], beliefs) -> Dict[str, np.ndarray]:
         flat = [nm for g in groups for nm in g]
         perf = {nm: self._perf_pdf(beliefs[nm]) for nm in flat}
         cdf = {nm: np.cumsum(p) for nm, p in perf.items()}

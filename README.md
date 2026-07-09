@@ -45,10 +45,10 @@ around third-party comparators (`winning.shims.TrueSkillRating`,
 
 - **Beliefs are whole densities, not (mu, sigma) pairs.** Each contestant's
   ability belief lives on the thurstone lattice and is free to be skewed or
-  multimodal; updates multiply in exact per-stage likelihoods of the observed
-  finish order (Plackett peeling of the joint order statistics) rather than
-  pairwise Gaussian approximations. A single update matches exact Bayes to
-  lattice precision (see `tests/test_thurstonerating.py`).
+  multimodal; each event updates it with the exact likelihood of the WHOLE
+  finish order, computed by an O(N) forward/backward chain on the lattice —
+  not pairwise or stagewise approximations. A single update matches exact
+  Bayes to lattice precision (see `tests/test_thurstonerating.py`).
 - **Predictions are exact.** Field win probabilities come from the lattice
   winner-of-many computation — dead-heat aware, O(N) in field size — not from
   pairwise decompositions. The same routine is exposed as
@@ -69,23 +69,26 @@ metric definitions, dataset provenance and licensing in
 | Dataset | Best by log loss | ThurstoneRating (this package) |
 |---|---|---|
 | Formula 1, 1,158 GPs 1950-2026 | **ThurstoneRating** | wins log loss, accuracy, tau and rank-PIT |
-| WTA tennis, 31k matches | **ThurstoneRating** | wins every metric |
-| ATP tennis, 32k matches | Elo (by 0.0009) | 2nd; best Brier, accuracy, tau |
-| Chess, 121k Lichess games | site's own ratings, then TrueSkill | best calibration of any system (ECE 0.0057) |
-| Sumo, 110k bouts | Glicko-2 | 4th in a pack spanning 0.006 |
+| Sumo, 110k bouts | **ThurstoneRating** (by 0.0007) | first in a tight pack |
+| WTA tennis, 31k matches | Glicko-2 (by 0.0009) | statistical tie at the top |
+| ATP tennis, 32k matches | Elo (by 0.003) | 3rd in a 0.003-wide leading trio |
+| Chess, 121k Lichess games | site's own ratings, then TrueSkill | best calibration of any system (ECE 0.0047) |
 | EPL football, 7.6k matches | Bet365 odds, then Elo | 2nd system, 0.002 behind Elo |
 | HK horse racing, 6.3k races | pari-mutuel odds, then Glicko-2 | 2nd system, ahead of TrueSkill |
 | Halo 2 head-to-head (TrueSkill's data) | four-way tie | in the tie |
-| Halo 2 free-for-all (TrueSkill's data) | TrueSkill | clear 2nd; best rank-PIT among leaders |
-| Synthetic races (x3 worlds, oracle floor) | TrueSkill (its own generative model) | 2nd; best rank-PIT (0.0069 vs 0.0196) |
+| Halo 2 free-for-all (TrueSkill's data) | TrueSkill (by 0.005) | clear 2nd |
+| Synthetic races (x3 worlds, oracle floor) | TrueSkill (its own generative model) | parity on the drifting world (1.394 vs 1.389) |
 
 Three patterns, measured across the suite:
 
-1. **Full finish orders are where the lattice wins.** The two outright wins
-   (F1, WTA) and the near-ties come wherever joint order statistics matter;
+1. **Full finish orders are where the lattice wins.** The decisive F1 win
+   and the near-ties elsewhere come wherever joint order statistics matter;
    pairwise-decomposition systems visibly degrade as fields grow (Glicko-2
    falls below uniform on 20+ car F1 grids; OpenSkill's ThurstoneMosteller
-   diverges on Halo free-for-all).
+   diverges on Halo free-for-all). The updater computes the exact full-order
+   likelihood by an O(N) chain — validated against brute-force simulation,
+   and measurably better than the Plackett-peeled factorization it replaced
+   (research/exact_order_update.py).
 2. **Calibration is the consistent edge.** Best or near-best ECE and rank-PIT
    almost everywhere — the predicted *distributions* of finish positions match
    reality, not just the favorites.

@@ -1,14 +1,15 @@
 # Renovation plan: `winning` becomes the ratings/applications layer on `thurstone`
 
 *Status: executed in the working tree, July 2026 — nothing committed until reviewed.
-Headline results (full tables in BENCHMARKS.md): across twelve datasets the new
-lattice rater wins Formula 1 and WTA tennis outright, ties the leaders on ATP, EPL
-and Halo 2 head-to-head, and is second only to TrueSkill on TrueSkill's own Halo 2
-free-for-all data and on synthetic worlds matching TrueSkill's generative
-assumptions — with the best distributional calibration (ECE / rank-PIT) almost
-everywhere. Next research step: per-contestant scale learning via thurstone's 2-D
-(loc, scale) calibration; the heteroskedastic synthetic world already measures what
-that would buy, and no incumbent system offers it.*
+Headline results (full tables in BENCHMARKS.md, exact-chain updater of July 9):
+across thirteen dataset variants the lattice rater wins Formula 1 decisively and
+sumo narrowly, sits in statistical ties atop WTA/ATP/EPL/Halo head-to-head, reaches
+parity with TrueSkill on the drifting synthetic world and trails it slightly on the
+rest of its home turf — with the best calibration (ECE) on chess and strong
+distributional metrics throughout. The lab (planning/rating_lab.md) validated the
+SIAM paper's Harville claim at scale and drove the exact-chain upgrade. Next research
+steps: cavity handling in the update; market-implied per-horse scale via joint
+win+place calibration (thurstone's 2-D path).*
 
 The relationship mirrors `timemachines` / `skaters`: **thurstone** is the small, stable,
 zero-frills core (lattice order statistics and the fast ability transform); **winning**
@@ -125,11 +126,12 @@ rater:
 - Belief per contestant: a **full density on the ability lattice** (not a
   Gaussian summary), with random-walk diffusion between events (convolution
   with N(0, tau^2 dt)); time advances via `elapse(dt)`.
-- **Update from a finish order**: Plackett peeling over rank groups; each stage
-  likelihood (group ahead of the slower field) is computed exactly on the
-  lattice, dead-heat groups update against the slower field only (permutation
-  invariant), and two EP-style sweeps recompute opponent marginals. A single
-  two-runner update matches exact Bayes to lattice precision.
+- **Update from a finish order**: the exact likelihood of the whole order via
+  an O(N) forward/backward chain on the lattice (opponents at predictive
+  marginals), one pass; dead-heat events fall back to permutation-invariant
+  group peeling. A two-runner update matches exact Bayes to lattice precision;
+  the chain replaced Plackett peeling on July 9 after a lab test showed the
+  peeled factorization was measurably lossy (research/exact_order_update.py).
 - **Prediction**: exact win probabilities for the N-runner field via thurstone's
   winner-of-many on the lattice. This is the differentiator: TrueSkill and the
   Weng-Lin Thurstone-Mosteller variants decompose rankings into pairwise/adjacent

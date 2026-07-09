@@ -35,9 +35,9 @@ native formula (2.47) again shows its predictor flattens bad beliefs.
 from __future__ import annotations
 
 import numpy as np
-
 from place_probabilities import logloss_at, rank_probabilities
 from scale_learning import ScaleLearningThurstoneRating
+
 from winning import EloRating, Glicko2Rating, ThurstoneRating
 from winning.shims import OpenSkillRating, TrueSkillRating
 

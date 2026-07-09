@@ -23,9 +23,9 @@ is symmetric tail-fattening from variance mixing, not asymmetry.
 from __future__ import annotations
 
 import numpy as np
-
 from lab_variants import skew_kernel
 from place_probabilities import logloss_at, rank_probabilities
+
 from winning import ThurstoneRating
 
 
