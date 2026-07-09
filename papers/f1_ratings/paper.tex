@@ -36,7 +36,10 @@ value follows the sport's reliability revolution from 59\% attrition in the
 hurt (they invent impossibly fast miracles), skew does nothing anywhere, and
 a near-deterministic pace core is refuted --- pace noise among finishers is
 genuinely order one. What survives is a taxonomy: model catastrophe
-frequency, not time-domain shape.
+frequency, not time-domain shape. Against 135 races of archived betting
+odds the market wins by 0.57 of log loss and a fitted pool gives the
+ratings zero weight: Formula 1 win markets price the present ---
+qualifying, upgrades, weather --- and no compression of the past competes.
 \end{abstract}
 
 \section{Why Formula 1}
@@ -182,16 +185,53 @@ across seven decades and ends near the modern retirement rate. The
 parameter is not a tuning constant; it is a measurement of the sport, made
 by the rating system in passing.
 
+\section{Against the betting market}
+
+No public archive of Formula 1 winner odds exists, so we built one: 523
+Wayback Machine captures of odds-comparison pages yield full-field,
+multi-bookmaker consensus probabilities for 144 grands prix, 2008--2025
+(overround removed; medians across roughly twenty bookmakers). On the 135
+races past our warm-up, scored on identical matched-driver subsets:
+
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+ & log loss \\
+\midrule
+market consensus & 1.547 \\
+tempered pool ($a{=}1.10$, $b{=}0.00$) & 1.538 \\
+era-adaptive slab rater & 2.117 \\
+uniform & 3.018 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The market sits $0.570 \pm 0.065$ of log loss ahead of the best fundamental
+rater we can build --- a larger moat than we measured for the Hong Kong
+pari-mutuel --- and the prequentially fitted pool assigns our ratings a
+weight of exactly zero. The explanation is not embarrassing: many archived
+snapshots postdate qualifying, so the market's prices embed grid position,
+testing pace and weather --- the present, where ratings compress only the
+past. Two caveats cut in opposite directions: snapshot timing favors the
+market (post-qualifying information), while snapshot staleness adds noise
+against it. The one exploitable wrinkle is familiar from every betting
+market: $a = 1.10$ says the odds are mildly underconfident in favorites,
+worth 0.008 --- real, tiny, and far inside bookmaker margins. Ratings do
+not beat Formula 1 win markets. The open route is different: derivative
+markets (head-to-heads, top-six) are priced off these same win odds by
+Harville-style transforms that we have shown discard measurable structure;
+testing that requires derivative odds these archives lack.
+
 \section{What we did not do}
 
 Driver-versus-car identification is unaddressed: constructor effects are
 folded into driver ratings, and separating them (each driver a latent
 vector, the car a direction) is the natural next study. Retirements enter
 tied at the back, discarding the official ordering of retirees by laps
-completed; the alternative is an untested A/B. We did not test against a
-betting market, for want of public historical odds with full-field
-coverage. And the ratings themselves are one-dimensional: no wet-weather
-axis, no circuit-type axis, though the machinery for both exists.
+completed; the alternative is an untested A/B. The derivative-market test
+above awaits data. And the ratings themselves are one-dimensional: no
+wet-weather axis, no circuit-type axis, though the machinery for both
+exists.
 
 \section*{Reproducibility}
 
