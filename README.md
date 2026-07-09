@@ -1,138 +1,141 @@
-![test-38](https://github.com/microprediction/winning/workflows/test-38/badge.svg)
-![test-39](https://github.com/microprediction/winning/workflows/test-39/badge.svg)
-![test-310](https://github.com/microprediction/winning/workflows/test-310/badge.svg)
-![test-311](https://github.com/microprediction/winning/workflows/test-311/badge.svg)
-![test-312](https://github.com/microprediction/winning/workflows/test-312/badge.svg)
-![test-pandas](https://github.com/microprediction/winning/workflows/test-pandas/badge.svg)
+# winning — rating systems on the thurstone ability transform
 
-A fast, scalable numerical algorithm for inferring relative ability from multi-entrant contest winning probabilities. 
+[![CI](https://github.com/microprediction/winning/workflows/CI/badge.svg)](https://github.com/microprediction/winning/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
-An earlier version of this algorithm was published in SIAM Journal on Quantitative Finance ([pdf](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_updated.pdf)).  
+Rating systems for multi-entrant contests — races, tournaments, leaderboards —
+built on the exact lattice order statistics of the
+[thurstone](https://github.com/microprediction/thurstone) package, and
+benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo.
 
-See [www.quinellacalculator.com](http://www.quinellacalculator.com/) for a demonstration and this [comment](https://www.linkedin.com/posts/petercotton_machine-psychologyexploring-a-paradox-activity-7266298424570875907-ffdz?utm_source=share&utm_medium=member_desktop) on Thurston models for modeling choices made by large language models.
- 
-![](https://i.imgur.com/83iFzel.png) 
+`thurstone` is the small, stable core: densities on a lattice, winner-of-many,
+and the fast ability transform. This package is the applications layer, the way
+[timemachines](https://github.com/microprediction/timemachines) sits on
+[skaters](https://github.com/microprediction/skaters): cores are few and
+stable; applications multiply, so they get their own package.
 
+## Install
 
-### Install
+    pip install winning            # core: depends only on thurstone (numpy)
+    pip install winning[benchmarks]  # + trueskill, openskill, pandas comparators
 
-    pip install winning
-    pip install scipy
+## Quick start
 
-You can avoid installing scipy if you have Python 3.8 and above and you don't wish to use the copula functionality.
+```python
+from winning import ThurstoneRating
 
-### Usage
+tr = ThurstoneRating()
+tr.observe(names=["ada", "ben", "cid", "dot"], ranks=[1, 2, 3, 4])
+tr.observe(names=["ada", "cid", "eve"], ranks=[1, 2, 3])
 
-We choose a performance density
+tr.win_probabilities(["ada", "cid", "eve"])   # exact field win probabilities
+tr.rating("ada")                              # Rating(mu=..., sigma=...)
+tr.leaderboard()                              # best-first, conservative
+```
 
-    density = centered_std_density()
+Every system in the package speaks the same three verbs — `observe(names,
+ranks)`, `win_probabilities(names)`, `rating(name)` — including the shims
+around third-party comparators (`winning.shims.TrueSkillRating`,
+`winning.shims.OpenSkillRating`).
 
-We set 'dividends', which are for all intents and purposes inverse probabilities
+## What is different about ThurstoneRating
 
-    dividends = [2,6,np.nan, 3]
+- **Beliefs are whole densities, not (mu, sigma) pairs.** Each contestant's
+  ability belief lives on the thurstone lattice and is free to be skewed or
+  multimodal; updates multiply in exact per-stage likelihoods of the observed
+  finish order (Plackett peeling of the joint order statistics) rather than
+  pairwise Gaussian approximations. A single update matches exact Bayes to
+  lattice precision (see `tests/test_thurstonerating.py`).
+- **Predictions are exact.** Field win probabilities come from the lattice
+  winner-of-many computation — dead-heat aware, O(N) in field size — not from
+  pairwise decompositions. The same routine is exposed as
+  `winning.gaussian_win_probabilities(mus, sigmas, beta)` so any
+  Gaussian-belief system (TrueSkill included) can be priced exactly, which
+  separates update quality from prediction-formula quality in benchmarks.
+- **Race-native.** Full finish orders of N-entrant fields are the primary
+  input, not an afterthought bolted onto a 1v1 system.
 
-The algorithm implies relative ability (i.e. how much to translate the performance distributions to match the winning probabilities). 
+## Benchmarks (measured, not asserted)
 
-    abilities = dividend_implied_ability(dividends=dividends,density=density, nan_value=2000)
+Twelve datasets, prequential evaluation (predict each event before observing
+it), with market ceilings and oracle floors where they exist. Full tables,
+metric definitions, dataset provenance and licensing in
+[BENCHMARKS.md](BENCHMARKS.md); reproduce any row with
+`python -m winning.benchmarks.run_benchmark --dataset <name>`.
 
-Horses with no bid are assigned odds of nan_value ... or you can leave them out. 
+| Dataset | Best by log loss | ThurstoneRating (this package) |
+|---|---|---|
+| Formula 1, 1,158 GPs 1950-2026 | **ThurstoneRating** | wins log loss, accuracy, tau and rank-PIT |
+| WTA tennis, 31k matches | **ThurstoneRating** | wins every metric |
+| ATP tennis, 32k matches | Elo (by 0.0009) | 2nd; best Brier, accuracy, tau |
+| Chess, 121k Lichess games | site's own ratings, then TrueSkill | best calibration of any system (ECE 0.0057) |
+| Sumo, 110k bouts | Glicko-2 | 4th in a pack spanning 0.006 |
+| EPL football, 7.6k matches | Bet365 odds, then Elo | 2nd system, 0.002 behind Elo |
+| HK horse racing, 6.3k races | pari-mutuel odds, then Glicko-2 | 2nd system, ahead of TrueSkill |
+| Halo 2 head-to-head (TrueSkill's data) | four-way tie | in the tie |
+| Halo 2 free-for-all (TrueSkill's data) | TrueSkill | clear 2nd; best rank-PIT among leaders |
+| Synthetic races (x3 worlds, oracle floor) | TrueSkill (its own generative model) | 2nd; best rank-PIT (0.0069 vs 0.0196) |
 
-### Examples
+Three patterns, measured across the suite:
 
-See [example_basic](https://github.com/microprediction/winning/tree/main/examples_basic)
+1. **Full finish orders are where the lattice wins.** The two outright wins
+   (F1, WTA) and the near-ties come wherever joint order statistics matter;
+   pairwise-decomposition systems visibly degrade as fields grow (Glicko-2
+   falls below uniform on 20+ car F1 grids; OpenSkill's ThurstoneMosteller
+   diverges on Halo free-for-all).
+2. **Calibration is the consistent edge.** Best or near-best ECE and rank-PIT
+   almost everywhere — the predicted *distributions* of finish positions match
+   reality, not just the favorites.
+3. **Markets remain the ceiling** wherever they exist (Bet365, pari-mutuel,
+   Lichess's own ratings) — they price information no outcome-only rating
+   system sees. Closing that gap is the applications agenda of this package.
 
-### Ideas beyond horse-racing
+The heteroskedastic synthetic world (per-contestant noise) degrades every
+system — all incumbents assume common performance noise. Per-contestant scale
+learning, which thurstone's 2-D (loc, scale) calibration supports, is the
+designated next step and no benchmarked system offers it.
 
-See the [notebook](https://github.com/microprediction/winning/blob/main/Ability_Transforms_Updated.ipynb) for examples of the use of this ability transform. 
+TrueSkill is patented by Microsoft and licensed for non-commercial use; it
+appears here strictly as a research comparator. OpenSkill exists precisely to
+be the unencumbered alternative, as does this package.
 
-See the [paper](https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_.pdf) for why this is useful in lots of places, according to a wise man. For instance, the algorithm may also find use anywhere winning probabilities or frequencies are apparent, such as with e-commerce product placement, in web search, or, as is shown in the paper: addressing a fundamental problem of trade. 
+## The market-calibration application
 
+`data/simple.csv` holds 459,504 Betfair runners (starting price, finish
+position, anonymized race id across 47,651 races), kept for planned work on
+how well market-implied abilities forecast outcomes — the ceiling any rating
+system chases. No code in the package reads it yet. The ability transform that
+converts win prices to relative abilities in one shot is
+`thurstone.AbilityCalibrator`; see the
+[thurstone docs](https://github.com/microprediction/thurstone).
 
-### Generality
+## Where everything went (the 2.0 renovation)
 
-All performance distributions. 
+Versions 1.x of this package contained the original implementation of the
+SIAM-paper algorithm. That core now lives in, and should be imported from,
+[thurstone](https://github.com/microprediction/thurstone); `pip install
+winning==1.0.3` (the last published 1.x) still gets the old package, and the
+most-used 1.x imports (`winning.std_calibration`, `winning.skew_calibration`,
+`winning.lattice_calibration`, `winning.lattice_conventions`) are preserved in
+2.x as deprecated shims that delegate to thurstone — verified to reproduce
+winning 1.0.3 numbers to lattice precision (see `tests/test_legacy.py`). The migration map is in
+[RENOVATION.md](RENOVATION.md); unported application ideas are preserved in
+[attic/](attic) with draft upstream issues in
+[planning/thurstone_issues/](planning/thurstone_issues); the paper PDFs, LaTeX
+source and table reproductions remain in [docs/](docs) and
+[papers/siam2021/](papers/siam2021).
 
-### Visual example:  
+## Cite
 
-Use densitiesPlot to show the results
-
-    L = 600
-    unit = 0.01
-    density = centered_std_density(L=L, unit=unit)
-    dividends = [2,6,np.nan, 3]
-    abilities = dividend_implied_ability(dividends=dividends,density=density, nan_value=2000, unit=unit)
-    densities = [skew_normal_density(L=L, unit=unit, loc=a, a=0, scale=1.0) for a in abilities]
-    legend = [ str(d) for d in dividends ]
-    densitiesPlot(densities=densities, unit=unit, legend=legend)
-    plt.show()
-
-![](https://i.imgur.com/tYsrAWY.png)
-
-### Pricing show and place from win prices:
-
-See the [basic examples](https://github.com/microprediction/winning/tree/main/examples_basic). 
-
-    from winning.lattice_pricing import skew_normal_simulation
-    from pprint import pprint
-    dividends = [2.0,3.0,12.0,12.0,24.0,24.0]
-    pricing = skew_normal_simulation(dividends=dividends,longshot_expon=1.15,skew_parameter=1.0,nSamples=1000)
-    pprint(pricing)
-
-
-### Cite
-
-    
-        @article{doi:10.1137/19M1276261,
-        author = {Cotton, Peter},
-        title = {Inferring Relative Ability from Winning Probability in Multientrant Contests},
-        journal = {SIAM Journal on Financial Mathematics},
-        volume = {12},
-        number = {1},
-        pages = {295-317},
-        year = {2021},
-        doi = {10.1137/19M1276261},
-        URL = { 
-                https://doi.org/10.1137/19M1276261
-        },
-        eprint = { 
-                https://doi.org/10.1137/19M1276261
-        }
-        }
-
-### Nomenclature, assumptions, limitations
-
-The lattice_calibration module allows the user to infer relative abilities from state prices in a multi-entrant contest. 
-At the racetrack, this would mean looking at the win odds and interpreting them as a relative ability. 
-
-The assumption made is that the performance distribution of one competitor is a translation of the performance distribution of another, and they are indepedent. The algorithm is:
-
-- Fast 
-- Scalable ... to contests with hundreds of thousands of entrants.
-- General ... as noted it works for any performance distribution. 
-
-Here's a quick glossary to help with reading the code. It's a mix of financial and racetrack lingo. 
-
-- *State prices* The expectation of an investment that has a payoff equal to 1 if there is only one winner, 1/2 if two are tied, 1/3 if three are tied and so forth. State prices are synomymous with winning probability, except for dead heats. However in the code a lattice is used so dead-heats must be accomodated and the distinction is important. 
-
-- (Relative) *ability* refers to how much one performance distribution needs to be 
-translated in order to match another. Implied abilities are vectors of relative abilities consistent with a collection of state prices.
-
-- *Dividends* are the inverse of state prices. This is Australian tote vernacular. Dividends are called 'decimal odds' in the UK and that's probably a better name. A dividend of 9.0 corresponds to a state price of 1/9.0, and a bookmaker quote of 8/1. Don't ask me to translate to American odds conventions because they are so utterly ridiculous!      
-
-The core algorithm is entirely ambivalent to the choice of performance distribution, and that certainly need not correspond to some analytic distribution with known properties. But normal and skew-normal are simple choices. See the [basic examples](https://github.com/microprediction/winning/tree/main/examples_basic) 
-
-### Performance 
-
-For smallish races, we are talking a few hundred milliseconds. 
-
-![](https://github.com/microprediction/winning/blob/main/docs/inversion_time_small_races.png)
-
-For large races we are talking 25 seconds for a 100,000 horse race. 
-
-![](https://github.com/microprediction/winning/blob/main/docs/inverstion_time_larger_races.png)
-
-### Like parimutuels?
-
-Support my open source work. Buy [Microprediction: Building An Open AI Network](https://mitpress.mit.edu/9780262047326/microprediction/) published by MIT Press. 
-
-
+    @article{doi:10.1137/19M1276261,
+    author = {Cotton, Peter},
+    title = {Inferring Relative Ability from Winning Probability in Multientrant Contests},
+    journal = {SIAM Journal on Financial Mathematics},
+    volume = {12},
+    number = {1},
+    pages = {295-317},
+    year = {2021},
+    doi = {10.1137/19M1276261},
+    URL = {https://doi.org/10.1137/19M1276261}
+    }

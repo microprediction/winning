@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winning"
+version = "2.0.0.dev0"
+description = "Rating systems and benchmarks built on the thurstone ability transform"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Peter Cotton", email = "peter.cotton@microprediction.com" }]
+keywords = [
+    "rating systems",
+    "trueskill",
+    "elo",
+    "glicko",
+    "thurstone",
+    "ranking",
+    "horse racing",
+    "ability transform",
+]
+
+# Applications layer: depends on the thurstone core and nothing else.
+dependencies = ["thurstone>=0.1.0"]
+
+[project.optional-dependencies]
+benchmarks = ["trueskill", "openskill", "pandas"]
+dev = ["pytest", "ruff"]
+
+[project.urls]
+Homepage = "https://github.com/microprediction/winning"
+Source = "https://github.com/microprediction/winning"
+Issues = "https://github.com/microprediction/winning/issues"
+Core = "https://github.com/microprediction/thurstone"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q -ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82", "I"]
