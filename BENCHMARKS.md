@@ -230,6 +230,33 @@ world difficulty, not ranking noise.
 | OpenSkill PlackettLuce (lattice predict) | 2.8877 | 0.9968 | 0.1014 | 0.1767 | 0.0541 | 0.0686 | - | 6.5 |
 | OpenSkill ThurstoneMostellerFull | 4.1601 | 0.9433 | 0.1078 | 0.0401 | 0.0408 | 0.4468 | - | 3.8 |
 
+### HK racing LAB (6348 races): oracle = market^1.05 (fitted recalibration); fundamental systems judged by TV to market-implied truth
+
+| System | Log loss | Brier | Accuracy | Kendall tau | ECE | Rank-PIT KS | TV vs oracle | Seconds |
+|---|---|---|---|---|---|---|---|---|
+| Oracle (true abilities) | 2.0396 | 0.8242 | 0.2996 | 0.3690 | 0.0045 | - | 0.0000 | 0.1 |
+| Market odds | 2.0409 | 0.8243 | 0.2996 | 0.3690 | 0.0052 | - | 0.0162 | 0.1 |
+| Glicko-2 | 2.3575 | 0.8936 | 0.1831 | 0.2527 | 0.0057 | 0.0166 | 0.3059 | 6.5 |
+| Thurstone lattice (winning) | 2.3926 | 0.8968 | 0.1675 | 0.2423 | 0.0108 | 0.0223 | 0.3208 | 28.9 |
+| TrueSkill | 2.4674 | 0.9088 | 0.1738 | 0.2065 | 0.0260 | 0.0365 | 0.3494 | 13.5 |
+| OpenSkill PlackettLuce | 2.4701 | 0.9120 | 0.0982 | 0.1767 | 0.0084 | 0.0686 | 0.3674 | 2.9 |
+| Elo (multi-entrant) | 2.4719 | 0.9115 | 0.1103 | 0.1825 | 0.0098 | 0.0135 | 0.3681 | 0.8 |
+| Uniform baseline | 2.5184 | 0.9186 | 0.0814 | 0.0000 | 0.0002 | - | 0.3881 | 0.1 |
+| OpenSkill PlackettLuce (lattice predict) | 2.8877 | 0.9968 | 0.1014 | 0.1767 | 0.0541 | 0.0686 | 0.4749 | 6.5 |
+| OpenSkill ThurstoneMostellerFull | 4.1601 | 0.9433 | 0.1078 | 0.0401 | 0.0408 | 0.4468 | 0.4467 | 3.8 |
+
+The LAB variant implements planning/rating_lab.md: the recalibrated
+pari-mutuel (temperature 1.05, fitted leakage-free by
+research/beat_the_market.py) is treated as ground truth, so purely
+fundamental systems are judged by TV distance to market-implied
+probabilities — full probability vectors every race instead of one
+outcome draw, an order of magnitude more statistical power. Anchors: the
+raw market sits 0.016 TV from truth (the size of the longshot bias);
+uniform ignorance sits 0.388. The best fundamental system (Glicko-2,
+0.306) recovers about a fifth of the distance from ignorance to truth —
+the other four fifths is the lab's standing challenge, and what
+condition-aware and market-hybrid raters exist to chase.
+
 ## Reading the results
 
 - The lattice rater (this package) wins Formula 1 and WTA tennis outright,

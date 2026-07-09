@@ -54,7 +54,12 @@ def _kaggle_download(kind: str, ref: str, filename: str) -> str:
     return out
 
 
-def hkracing_events() -> List[Event]:
+def hkracing_events(oracle_temperature: float = None) -> List[Event]:
+    """oracle_temperature: if set, attach truth ∝ market^a to every event —
+    the recalibrated pari-mutuel as a real-data oracle (the 'rating lab' of
+    planning/rating_lab.md; a=1.05 was fit leakage-free by
+    research/beat_the_market.py). Systems are then scored by tv_vs_oracle,
+    comparing probability vectors instead of single-draw outcomes."""
     zip_path = _kaggle_download("datasets", "gdaley/hkracing", "hkracing.zip")
     races, runs = {}, defaultdict(list)
     with zipfile.ZipFile(zip_path) as zf:
@@ -88,7 +93,12 @@ def hkracing_events() -> List[Event]:
             continue
         total = sum(inv_odds)
         market = [q / total for q in inv_odds] if total > 0 else None
-        dated.append((ordinal, Event(names=names, ranks=ranks, market=market)))
+        truth = None
+        if oracle_temperature is not None and market is not None:
+            powered = [q**oracle_temperature for q in market]
+            z = sum(powered)
+            truth = [q / z for q in powered]
+        dated.append((ordinal, Event(names=names, ranks=ranks, market=market, truth=truth)))
 
     dated.sort(key=lambda t: t[0])
     events: List[Event] = []
@@ -105,6 +115,14 @@ def hkracing(args) -> tuple:
     return events, (
         f"Hong Kong horse racing 1997-2005 ({len(events)} races, named horses; "
         "Kaggle gdaley/hkracing; Market row = pari-mutuel win odds)"
+    )
+
+
+def hkracing_lab(args) -> tuple:
+    events = hkracing_events(oracle_temperature=1.05)
+    return events, (
+        f"HK racing LAB ({len(events)} races): oracle = market^1.05 (fitted "
+        "recalibration); fundamental systems judged by TV to market-implied truth"
     )
 
 

@@ -220,6 +220,7 @@ def _register_optional() -> None:
         from . import kaggle_datasets  # noqa: F401
 
         DATASETS["hkracing"] = lambda args: kaggle_datasets.hkracing(args)
+        DATASETS["hkracing-lab"] = lambda args: kaggle_datasets.hkracing_lab(args)
         DATASETS["pubg"] = lambda args: kaggle_datasets.pubg(args)
     except ImportError:
         pass

@@ -19,6 +19,20 @@ Rows reported:
     pool (fit a, b)       — Benter-style combination
 
 Run:  .venv/bin/python research/beat_the_market.py   (needs the hkracing cache)
+
+Measured (July 2026, HK racing, 5,079 scored races):
+    market raw (ceiling)          log_loss 2.0407   ece 0.0053
+    market recalibrated (a=1.05)  log_loss 2.0398   ece 0.0045
+    pool market^a * model^b       log_loss 2.0397   (b=0.05)
+Verdict: the 1997-2005 HK pari-mutuel is essentially efficient against this
+information set. Past results and past odds are public information the market
+already absorbs, so the model exponent fits at b=0.05 — nothing material.
+The mild temperature a=1.05 confirms a small favorite-longshot bias worth
+~0.001 log loss and a visible calibration gain. Benter-scale edges came from
+fundamental context (weights, draw, pace, sectionals) this rater does not yet
+consume — which is the condition-aware agenda, and the reason the fitted
+a=1.05 now defines the oracle of the rating lab (planning/rating_lab.md)
+rather than a betting strategy.
 """
 
 from __future__ import annotations
