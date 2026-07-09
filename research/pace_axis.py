@@ -16,6 +16,20 @@ family closure needed, which is where the lattice representation quietly
 pays again.
 
 Run:  .venv/bin/python research/pace_axis.py   (needs the hkracing cache)
+
+Measured (July 2026, TV to oracle / log loss / ECE):
+    1-D baseline              0.3207 / 2.3934 / 0.0108
+    2-D base+distance         0.3207 / 2.3962 / 0.0114
+    3-D base+distance+pace    0.3225 / 2.4009 / 0.0114
+Verdict: null, marginally negative — the pace mixture adds prediction
+variance without offsetting signal. With ~12 starts per horse there is not
+enough data to identify a per-horse pace tilt beyond its prior even though
+pace variation is race-level. Taken with the distance and scale results, the
+lab's message on sparse-career racing data is consistent: extra latent
+dimensions PER HORSE do not pay. The remaining ~0.30 TV to market truth must
+live in shared structure pooled across thousands of runs — weight as a known
+lattice shift, jockey/trainer effects, class, draw — i.e., the market's
+actual fundamental inputs, not richer per-horse latents.
 """
 
 from __future__ import annotations
