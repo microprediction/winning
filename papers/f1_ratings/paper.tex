@@ -7,7 +7,8 @@
 \usepackage{tikz}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{Formula 1 Ratings and Market Efficiency}}
+\title{\textbf{Non-Normal Performance Distributions in Rating Systems}\\[0.4em]
+\large with an application to seventy years of Formula 1}
 \author{Peter Cotton}
 \date{\today}
 
@@ -15,37 +16,32 @@
 \maketitle
 
 \begin{abstract}
-\noindent We compare rating systems on the full history of Formula 1
-(1{,}158 races, 1950 to present). Grids of up to fifty-five cars break the
-pairwise decompositions used by standard systems: Glicko-2 scores below a
-uniform baseline. A Thurstonian lattice system, which computes joint order
-statistics exactly and accepts any performance noise distribution,
-outperforms TrueSkill, Elo, Glicko-2 and OpenSkill, and improves further
-when its noise density includes a separated block of slow mass matching the
-retirement process. We then attempt the harder task of testing market
-efficiency with the incomplete odds record that survives in web archives
-(135 races). The market leads the best ratings by 0.57 of log loss and a
-fitted combination gives the ratings zero weight.
+\noindent Rating systems almost universally assume that contest performance
+is ability plus normal or logistic noise. We present a setting where the
+assumption is visibly false and measurably costly: Formula 1, where for
+decades the most likely outcome of starting a race was not finishing it. A
+lattice-based Thurstonian rater that accepts arbitrary noise densities
+outperforms TrueSkill, Elo, Glicko-2 and OpenSkill over 1{,}158 races, and
+replacing its normal noise with a two-component density, a Gaussian pace
+term plus a separated block of slow mass representing retirement, improves
+every metric. Estimating the block's mass from the trailing retirement rate
+improves it further. Symmetric heavy tails and skew do not help, so the
+gain is attributable to the block, not to non-normality in general.
 \end{abstract}
 
 \section{Introduction}
 
-A rating system assigns each competitor a skill estimate, updates it after
-every contest, and predicts future outcomes. Most systems in use were
-designed for two-player games and extend to multi-entrant events by
-decomposition: Elo, Glicko-2 and the Weng--Lin systems treat a finish order
-as a collection of pairwise results, and TrueSkill chains adjacent
-finishers. For small fields the decomposition costs little. Formula 1
-provides fields of ten to fifty-five cars, where a single race implies up
-to 190 correlated pairwise comparisons, and we will see that the standard
-decompositions do not merely lose accuracy there but can fail outright.
-The primary purpose of this paper is to compare rating systems on this
-terrain and to explain why a Thurstonian treatment, meaning one that works
-with the joint distribution of the full finish order, is essential to
-doing well on it.
+Nearly every rating system in use rests on the same distributional
+convention. A competitor's performance in a contest is modeled as a skill
+parameter plus noise, and the noise is normal (Thurstone, TrueSkill, the
+Thurstone--Mosteller systems) or logistic or Gumbel (Elo, Glicko,
+Bradley--Terry, Plackett--Luce). The convention is so uniform that it is
+rarely stated as an assumption. This paper is about what happens when it is
+false, and about how much can be gained by replacing it, in a setting where
+the truth is not subtle.
 
-Formula 1 also poses an unusual distributional problem. The fraction of
-entrants failing to finish, by decade:
+That setting is Formula 1. The fraction of entrants failing to finish, by
+decade:
 
 \begin{center}
 \begin{tabular}{lcccccccc}
@@ -58,16 +54,22 @@ DNF rate & .42 & .49 & .51 & .59 & .51 & .30 & .18 & .13 \\
 \end{center}
 
 \noindent For most of the sport's history, retirement was the most likely
-outcome of starting a race. A rating model committed to Gaussian
-performance noise has no way to represent this; a model whose noise
-density is a free input does. Section 4 exploits this freedom.
+outcome of starting a race. A retirement is not a slow day drawn from the
+tail of a pace distribution; it is a mechanical event whose result is
+unrelated to how fast the car was. Performance in this sport is
+self-evidently a mixture: pace when the car survives, and something
+categorically different when it does not. No normal, logistic or Gumbel
+density represents this, which makes Formula 1 a natural experiment for
+the value of freeing the noise distribution. The results below quantify
+that value and, just as usefully, show which departures from normality do
+not help.
 
-A secondary question is whether the resulting ratings can beat the betting
-market. We emphasize that with the data available this is a hard test to
-run at all: no public archive of Formula 1 winner odds exists, and the
-record we recover from web archives is incomplete and unevenly timed.
-Section 6 assembles that record and Section 7 reports the comparison,
-which favors the market decisively.
+Working with a free noise density requires a rating system that can
+accommodate one. Section 3 describes such a system and verifies it is a
+strong baseline in its own right. Section 4 contains the central
+experiment: the noise density sweep. Section 5 compares the resulting
+ratings with betting market prices, a secondary exercise limited by the
+surviving odds record.
 
 \section{Data and protocol}
 
@@ -86,31 +88,28 @@ calibration error (ECE) over pooled win probabilities, and a rank-PIT
 statistic that measures whether the predicted distribution over finish
 positions matches the realized positions.
 
-\section{Rating systems compared}
+\section{A rating system that accepts any noise density}
 
-The Thurstonian system used here is built on a discrete lattice of ability
-values. Each driver's belief is a probability density on the lattice,
-unrestricted by any parametric family. A race performance is ability plus
-noise, with the noise drawn from a base density that is an input to the
-system. Between races, beliefs diffuse in proportion to elapsed time.
+The vehicle for the experiment is a Thurstonian rater built on a discrete
+lattice of ability values. Each driver's belief is a probability density
+on the lattice, unrestricted by any parametric family. A race performance
+is ability plus noise, with the noise drawn from a base density that is
+simply an array on the lattice: this is what makes the experiment of
+Section 4 possible. Between races, beliefs diffuse in proportion to
+elapsed time.
 
-Prediction is a forward computation: each driver's predictive performance
-density is the belief convolved with the base density, and win
-probabilities are order statistics of the field, computed exactly on the
-lattice, ties included. Updating is a backward computation: given an
-observed finish order, the likelihood of the whole order as a function of
-one driver's ability is computed exactly, holding opponents at their
-predictive densities. Index finishers from fastest to slowest. A forward
-pass computes, at each performance level, the probability that finishers
-$1$ through $k-1$ performed better in the observed order; a backward pass
-does the same for finishers $k+1$ through $N$ performing worse. The
-likelihood for the $k$-th finisher is the base density correlated with the
-product of the two passes. The update costs $O(N)$ lattice operations per
-race and was validated against brute-force simulation.
+Prediction convolves each belief with the base density and computes win
+probabilities as exact order statistics of the field, ties included.
+Updating computes, for each driver, the exact likelihood of the observed
+finish order as a function of that driver's ability, holding opponents at
+their predictive densities; a forward and a backward pass over the
+finishing order make this an $O(N)$ computation per race, validated
+against brute-force simulation.
 
-The benchmark below runs all systems over identical data under the
-protocol of Section 2. TrueSkill is configured with the empirical
-dead-heat rate, and each package uses its own prediction formula.
+Exactness matters at Formula 1 field sizes. Standard systems reduce a
+finish order to pairwise or adjacent comparisons, and a twenty-car grid
+implies 190 correlated pairwise results. Under the protocol of Section 2,
+with the noise still Gaussian:
 
 \begin{center}
 \begin{tabular}{lccccc}
@@ -128,157 +127,122 @@ Glicko-2 & 3.727 & .271 & .255 & .022 & .166 \\
 \end{tabular}
 \end{center}
 
-The joint treatment leads on log loss, accuracy and rank correlation. The
-failures are the instructive part. Glicko-2 scores below the uniform
-baseline: converting a twenty-car grid into nineteen results within one
-rating period destabilizes its volatility estimation, and our
-implementation already includes stabilizing guards without which it does
-not complete the dataset. OpenSkill's all-pairs Thurstone--Mosteller
-variant diverges the same way. These systems are sound at head-to-head
-scale; what breaks them here is treating 190 correlated comparisons as
-independent evidence. This is why exact joint order statistics are not a
-refinement in this setting but a requirement.
+Glicko-2 scores below the uniform baseline: converting a grid into
+nineteen results within one rating period destabilizes its volatility
+estimation, and our implementation includes stabilizing guards without
+which it does not complete the dataset. OpenSkill's all-pairs variant
+diverges similarly. The lattice system is therefore a credible baseline,
+and every improvement reported next is measured against its own Gaussian
+configuration, so the noise experiment is not confounded with the choice
+of system.
 
-\section{Choosing the noise distribution}
+\section{The noise density experiment}
 
-Every comparison system above is committed to Gaussian beliefs with
-Gaussian or Gumbel noise. The lattice system accepts any base density, so
-the noise model becomes an empirical question, and the retirement table in
-Section 1 suggests the answer should not be Gaussian.
-
-The motivated candidate is a two-component density: with probability
-$1-p$ the noise is standard Gaussian, and with probability $p$ it is drawn
-uniformly from a wide interval on the slow side. Figure~\ref{fig:slab}
-shows the shape. The rectangular block represents retirement: a mechanical
-failure produces a result unrelated to pace, so its probability mass is
-separated from the pace distribution rather than blended into its tail.
+The motivated candidate follows directly from the physics. With
+probability $1-p$ the noise is standard Gaussian, representing pace on a
+day the car survives. With probability $p$ it is drawn uniformly from a
+wide interval far on the slow side, representing retirement.
+Figure~\ref{fig:slab} shows the shape.
 
 \begin{figure}[h]
 \centering
 \begin{tikzpicture}[scale=0.9]
-  % axes
   \draw[->] (-3.2,0) -- (9.6,0) node[below right] {performance (slower $\rightarrow$)};
   \draw[->] (-3.2,0) -- (-3.2,2.6) node[left] {density};
-  % gaussian core (1-p)
   \draw[thick,domain=-3:3,samples=80] plot (\x,{2.2*exp(-0.5*\x*\x)});
   \node at (0,2.45) {Gaussian pace, mass $1-p$};
-  % slab
   \draw[thick] (4,0) -- (4,0.55) -- (8.8,0.55) -- (8.8,0);
   \node at (6.4,0.85) {retirement block, mass $p$};
-  % ticks
   \draw (0,0.06) -- (0,-0.06) node[below] {$0$};
   \draw (4,0.06) -- (4,-0.06) node[below] {$3$};
   \draw (8.8,0.06) -- (8.8,-0.06) node[below] {$12$};
 \end{tikzpicture}
-\caption{The disaster-slab base density: a continuous Gaussian pace
+\caption{The two-component base density: a continuous Gaussian pace
 component and a separated rectangular block of slow mass representing
 retirement.}
 \label{fig:slab}
 \end{figure}
+
+We compare this density against the Gaussian default and against generic
+departures from normality: symmetric heavy tails, skew, and a
+concentrated pace core. All configurations differ only in the base
+density.
 
 \begin{center}
 \begin{tabular}{lccc}
 \toprule
 base density & log loss & ECE & rank-PIT \\
 \midrule
-era-adaptive slab & \textbf{2.200} & .016 & .185 \\
-$N(0,1)$ plus 25\% slab & 2.203 & .015 & .158 \\
+era-adaptive block & \textbf{2.200} & .016 & .185 \\
+$N(0,1)$ plus 25\% block & 2.203 & .015 & .158 \\
 skew-normal ($a{=}2$) & 2.222 & \textbf{.010} & .165 \\
 Gaussian & 2.225 & .015 & .176 \\
-tight core (0.5) plus 25\% slab & 2.254 & .013 & \textbf{.136} \\
+tight core (0.5) plus 25\% block & 2.254 & .013 & \textbf{.136} \\
 Student-$t$ ($\nu{=}5$) & 2.271 & .018 & .171 \\
-near-Dirac core plus slab & 2.42--2.52 & --- & --- \\
+near-Dirac core plus block & 2.42--2.52 & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The slab improves every metric relative to the Gaussian. Because a fixed
-25\% mass is wrong for most decades, the era-adaptive variant estimates
-$p$ from a trailing window of observed retirement frequency, using past
-races only. It attains the best log loss and rank correlation of any
-configuration tested, and its fitted mass declines across the dataset to
-finish near the modern retirement rate.
+The block improves every metric relative to the Gaussian. Because a fixed
+25\% mass is wrong for most decades of the table in Section 1, the
+era-adaptive variant estimates $p$ from a trailing window of observed
+retirement frequency, using past races only. It attains the best log loss
+and rank correlation of any configuration tested, and its fitted mass
+declines across the dataset to finish near the modern retirement rate.
 
-The failed alternatives are informative. Symmetric heavy tails (the $t$
-family) hurt increasingly as tails fatten, because symmetry places equal
-mass on implausibly fast performances. Skew-normal noise changes little,
-consistent with two facts about rank data: the difference of two
+The generic departures fail, which sharpens the conclusion. Symmetric
+heavy tails hurt increasingly as tails fatten, because symmetry places
+equal mass on implausibly fast performances. Skew-normal noise changes
+little, consistent with two facts about rank data: the difference of two
 independent identically distributed noises is symmetric whatever their
 skew, and ranks are invariant to monotone transformations of the time
 scale. A near-Dirac pace core loses about 0.2 of log loss, showing that
 variation from strategy, traffic and weather is comparable in size to
-ability differences. None of these choices is available to a system
-committed to a parametric family, which is the second reason the
-Thurstonian treatment matters here.
+ability differences. The value is not in non-normality as such. It is in
+matching the actual structure of the noise, here a separated mixture
+component with a physical meaning, and only a system with a free noise
+density can express that.
 
-\section{Summary of the ratings comparison}
+\section{Comparison with betting odds}
 
-Two properties carried the result: exact joint order statistics, without
-which systems degrade or diverge at grid scale, and a free noise density,
-which converts knowledge of the retirement process into forecast accuracy.
-Both are structural. They cannot be patched onto a pairwise Gaussian
-system by tuning.
-
-\section{The odds record}
-
-We know of no public archive of Formula 1 winner odds, so we assembled
-what survives. The Wayback Machine holds captures of odds-comparison
-pages; 523 usable captures yield full-field win odds for 144 races between
-2008 and 2025, each covering roughly twenty bookmakers. For each race we
-take the median implied probability per driver across bookmakers and
-normalize within the race, which removes the bookmaker margin. The record
-is incomplete and unevenly timed: 2011--2012 and 2017--2020 are sparse,
-many captures postdate qualifying, and a few precede the race by more than
-a week. These limitations should be kept in view; they make the efficiency
-test below possible but imperfect. We publish only the derived consensus
-probabilities.
-
-\section{The efficiency test}
-
-On the 135 covered races falling after the warm-up period, with market and
-ratings scored on the same matched set of drivers:
+As a secondary exercise we compare the ratings with bookmaker prices. No
+public archive of Formula 1 winner odds exists; from Wayback Machine
+captures of odds-comparison pages we recovered full-field consensus
+probabilities for 144 races between 2008 and 2025 (medians across roughly
+twenty bookmakers, normalized to remove the margin). Snapshot timing
+matters: a price taken after qualifying incorporates the grid and is not a
+baseline for any forecast made without it. We therefore stratify the 135
+covered post-warm-up races by snapshot date and match information tiers,
+comparing pre-qualifying prices against results-only ratings and race-day
+prices against ratings that observe each grid as an additional ranking
+event before predicting.
 
 \begin{center}
-\begin{tabular}{lc}
+\begin{tabular}{lcccc}
 \toprule
- & log loss \\
+stratum & races & market & tier-matched ratings & gap (se) \\
 \midrule
-market consensus & 1.547 \\
-fitted pool ($a{=}1.10$, $b{=}0.00$) & 1.538 \\
-ratings given all past odds & 1.898 \\
-era-adaptive slab ratings & 2.117 \\
-uniform & 3.018 \\
+pre-qualifying & 88 & 1.581 & 2.177 & +0.60 (.08) \\
+qualifying day & 26 & 1.622 & 1.820 & +0.20 (.11) \\
+race day & 21 & 1.310 & 1.625 & +0.31 (.14) \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The market leads the best ratings by $0.570$ of log loss (standard error
-$0.065$). A pool of the form $q \propto m^a s^b$, with exponents fitted on
-past races only, assigns the ratings weight $b = 0$. The result survives
-enriching the challenger: feeding the ratings the consensus odds of all
-previous races as additional observations improves their standalone score
-from 2.117 to 1.898, but the fitted weight remains zero. Prices subsume
-everything the ratings know.
-
-The explanation is straightforward. Post-qualifying prices incorporate
-grid position, current car performance and weather, none of which is
-visible to a system built from past results. The one detectable
-miscalibration is the fitted exponent $a = 1.10$, indicating slight
-underconfidence about favorites, in the direction of the favorite-longshot
-bias documented in other racing markets. It is worth 0.008 of log loss,
-well inside any bookmaker margin. Within the limits of the archived
+The stratification shows the market's advantage is mostly not the grid:
+the full gap is already present in pre-qualifying prices, which reflect
+current car performance, testing and practice pace. Grid information
+matters (observing the grid improves the ratings from 2.177 to 1.926 on
+the pre-qualifying stratum) but does not close the gap, and remarkably the
+pre-qualifying market outperforms even ratings holding the realized grid,
+information those prices could not contain. Pooling tests confirm the
+point: on the pre-qualifying stratum every rating system considered in
+Section 3, including the grid-aware variant, receives a fitted weight of
+zero alongside the market price, and the fitted market temperature does
+not validate out of sample at this sample size. Within the limits of the
 record, Formula 1 winner markets appear efficient with respect to
-results-based ratings, including ratings augmented with the market's own
-price history.
-
-Two qualifications. First, snapshot timing favors the market, since
-post-qualifying information is present in many captures; closing-price
-data would sharpen the estimate but is unlikely to reverse a gap of nine
-standard errors. Second, the test covers winner markets only. Bookmakers
-price derivative markets such as head-to-heads and top-six finishes from
-winner odds using simplifying rank models, and our results on rank models
-suggest that is where pricing error would concentrate; testing it requires
-derivative odds the archives do not contain.
+results-based ratings at every information tier we can construct.
 
 \section{Limitations}
 
@@ -286,7 +250,9 @@ Constructor effects are folded into driver ratings; separating driver from
 car is the natural next study. Retirements enter tied at the back, which
 discards the official ordering of retirees by laps completed. The ratings
 are one-dimensional, with no axis for wet weather or circuit type. The
-odds record is as described in Section 6.
+odds record is as described in Section 5, and in particular the grid
+position asymmetry means the market comparison understates what a
+qualifying-aware rating could achieve.
 
 \section*{Reproducibility}
 
@@ -296,9 +262,9 @@ Each table is one command from the \texttt{winning} package
 Section 3, and the scripts \texttt{research/f1\_dirac\_disaster.py},
 \texttt{research/t\_sweep.py}, \texttt{research/f1\_era\_slab.py},
 \texttt{research/f1\_odds\_fetch.py}, \texttt{research/f1\_odds\_parse.py}
-and \texttt{research/f1\_market\_test.py} for Sections 4 through 7. Race
-data is fetched at run time from f1db (CC-BY-4.0). The lattice machinery
-is the \texttt{thurstone} package; the underlying ability transform is
-described in Cotton, \emph{SIAM J.\ Financial Mathematics} 12(1), 2021.
+and \texttt{research/f1\_market\_test.py} for Sections 4 and 5. Race data
+is fetched at run time from f1db (CC-BY-4.0). The lattice machinery is the
+\texttt{thurstone} package; the underlying ability transform is described
+in Cotton, \emph{SIAM J.\ Financial Mathematics} 12(1), 2021.
 
 \end{document}
