@@ -67,14 +67,23 @@ def hkracing_events(oracle_temperature: float = None) -> List[Event]:
 
         with zf.open("races.csv") as f:
             for row in csv.DictReader(io.TextIOWrapper(f, encoding="utf-8")):
-                races[row["race_id"]] = row.get("date", "")
+                races[row["race_id"]] = (
+                    row.get("date", ""),
+                    {
+                        "distance": row.get("distance"),
+                        "venue": row.get("venue"),
+                        "surface": row.get("surface"),
+                        "going": row.get("going"),
+                        "sec_time1": row.get("sec_time1"),
+                    },
+                )
         with zf.open("runs.csv") as f:
             for row in csv.DictReader(io.TextIOWrapper(f, encoding="utf-8")):
                 runs[row["race_id"]].append(row)
 
     dated = []
     for race_id, rows in runs.items():
-        date = races.get(race_id)
+        date, context = races.get(race_id, (None, None))
         try:
             ordinal = datetime.date.fromisoformat(date).toordinal()
         except (TypeError, ValueError):
@@ -98,7 +107,9 @@ def hkracing_events(oracle_temperature: float = None) -> List[Event]:
             powered = [q**oracle_temperature for q in market]
             z = sum(powered)
             truth = [q / z for q in powered]
-        dated.append((ordinal, Event(names=names, ranks=ranks, market=market, truth=truth)))
+        dated.append(
+            (ordinal, Event(names=names, ranks=ranks, market=market, truth=truth, context=context))
+        )
 
     dated.sort(key=lambda t: t[0])
     events: List[Event] = []

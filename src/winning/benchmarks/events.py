@@ -14,6 +14,7 @@ class Event:
     dt: float = 1.0  # time since previous event on the shared clock
     truth: Optional[List[float]] = None  # oracle win probabilities, if known
     market: Optional[List[float]] = None  # market-implied win probabilities, if known
+    context: Optional[dict] = None  # event conditions (distance, venue, surface...)
 
 
 def synthetic_world(
