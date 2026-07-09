@@ -19,9 +19,12 @@ above the exact win columns of other tables — within-column comparisons only):
     Elo               2.4828 2.4849 2.5004 2.5040 2.5202 2.5273 | mean 2.5033
     OpenSkill PL      3.1960 2.7560 2.6635 2.5589 2.5944 2.5806 | mean 2.7249
     Market (PL)       2.0416 2.2589 2.3896 2.4575 2.4968 2.5172 | mean 2.3603
-Findings: (1) the market's edge decays monotonically with finish depth and
-CROSSES ZERO around P5 — Glicko-2 beats the market at P6. Private information
-prices the win; the back half of the field is fundamentals territory.
+Findings: (1) the market's edge decays monotonically with finish depth —
+but the "crosses zero at P5/P6" reading of THIS table is an ARTIFACT of the
+PL/Luce place construction: thurstone_vs_luce_places.py shows that Thurstone
+simulation from the same win odds prices deep places much better, and the
+properly simulated market leads at every position (margin 0.34 at P1
+shrinking to 0.02 at P6).
 (2) Replication note: the earlier S=256 finding that scale-learning beat
 Glicko-2 at 3rd place did NOT survive S=512 — Glicko-2 leads every column;
 the robust residue is scale-learning's P2-P3 edge over its own fixed-scale
