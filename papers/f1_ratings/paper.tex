@@ -7,8 +7,8 @@
 \usepackage{tikz}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{Non-Normal Performance Distributions in Rating Systems}\\[0.4em]
-\large with an application to seventy years of Formula 1}
+\title{\textbf{Rating Formula 1}\\[0.4em]
+\large a case for non-Gaussian noise in rating systems}
 \author{Peter Cotton}
 \date{\today}
 
@@ -190,6 +190,16 @@ era-adaptive variant estimates $p$ from a trailing window of observed
 retirement frequency, using past races only. It attains the best log loss
 and rank correlation of any configuration tested, and its fitted mass
 declines across the dataset to finish near the modern retirement rate.
+
+A control experiment confirms the block models retirement rather than
+tails in general. Qualifying sessions are pace contests with almost no
+retirement process, and rating them as contests in their own right
+(1{,}158 sessions, same protocol) reverses the picture: forcing the 25\%
+block onto qualifying damages rank correlation (Kendall's tau falls from
+.609 to .564) and calibration (rank-PIT worsens from .025 to .088), while
+the era-adaptive variant drives its own block mass down to $p = 0.03$ and
+recovers both. Given a contest without the mechanism, the estimator
+removes the component.
 
 The generic departures fail, which sharpens the conclusion. Symmetric
 heavy tails hurt increasingly as tails fatten, because symmetry places
