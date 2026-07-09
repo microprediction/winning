@@ -5,9 +5,14 @@ helpers make the useful ones one-liners. All return odd-length arrays on the
 given lattice step size, normalized to unit mass, on the time-like convention
 (mass at positive offsets = slower/worse performance).
 
-Measured guidance (see research/): racing with retirements wants a slow-tail
-mixture (offday/DNF); rank data rarely supports skew; the student-t degrees
-of freedom is the single tail dial worth sweeping.
+Measured guidance (research/t_sweep.py and friends): tail effects decompose.
+One-sided disaster mass (offday_kernel) is what helps where catastrophes are
+real (F1: every metric); SYMMETRIC heavy tails there hurt (t puts miracle
+mass on the fast side). A mild student-t (nu ~ 5) is a small free win even on
+Gaussian worlds — likelihood tails double as robustness to the update's
+approximate opponent marginals — while nu = 2 trades log loss for the best
+calibration measured (HK ECE 0.0035 vs 0.0127 Gaussian). Skew rarely earns
+its keep on rank data.
 """
 
 from __future__ import annotations
