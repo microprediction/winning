@@ -8,6 +8,7 @@ Versions 1.x of `winning` contained the original SIAM-paper implementation,
 now re-homed in `thurstone`.
 """
 
+from . import kernels
 from .elo import EloRating
 from .exact import gaussian_win_probabilities
 from .glicko2 import Glicko2Rating
@@ -23,5 +24,6 @@ __all__ = [
     "Glicko2Rating",
     "ThurstoneRating",
     "gaussian_win_probabilities",
+    "kernels",
     "__version__",
 ]

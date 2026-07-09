@@ -75,3 +75,33 @@ def test_performance_samples_shapes():
         arr = np.asarray(s)
         assert arr.shape == (16, 3)
         assert np.isfinite(arr).all()
+
+
+def test_kernels_module():
+    import numpy as np
+
+    from winning import kernels
+
+    for k in (
+        kernels.gaussian_kernel(),
+        kernels.student_t_kernel(nu=3),
+        kernels.offday_kernel(),
+        kernels.skew_kernel(a=2.0),
+    ):
+        assert len(k) % 2 == 1 and abs(k.sum() - 1.0) < 1e-12 and k.min() >= 0
+    # heavier tails in the same far cell: t(2) > t(10) > gaussian
+    g = kernels.gaussian_kernel()
+    t2 = kernels.student_t_kernel(nu=2)
+    t10 = kernels.student_t_kernel(nu=10)
+    def tail_mass(k, unit=0.1, beyond=3.0):
+        half = (len(k) - 1) // 2
+        x = np.arange(-half, half + 1) * unit
+        return k[np.abs(x) > beyond].sum()
+    assert tail_mass(t2) > tail_mass(t10) > tail_mass(g)
+    # a t-kernel drives the rater end to end
+    from winning import ThurstoneRating
+
+    tr = ThurstoneRating(base_kernel=kernels.student_t_kernel(nu=3))
+    tr.observe(["a", "b", "c"], [1, 2, 3])
+    p = tr.win_probabilities(["a", "b", "c"])
+    assert abs(sum(p) - 1.0) < 1e-6 and p[0] > p[2]

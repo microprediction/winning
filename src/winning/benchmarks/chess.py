@@ -37,22 +37,25 @@ def _open_zst(path: str):
         return zstandard.open(path)
 
 
-def chess_events(month: str = "2013-01") -> List[Event]:
-    path = fetch(_URL.format(month=month), f"lichess_{month}.pgn.zst", timeout=600)
+def chess_events(month: str = "2013-01", months=None) -> List[Event]:
+    """One month by default; pass months=("2013-01", "2013-02", ...) to
+    concatenate several (rows are re-sorted globally by timestamp)."""
     events: List[Event] = []
     rows = []
-    game = {}
-    with _open_zst(path) as f:
-        for raw in f:
-            line = raw.decode("utf-8", errors="replace").strip()
-            if line.startswith("["):
-                key, _, rest = line[1:-1].partition(" ")
-                game[key] = rest.strip('"')
-            elif not line and game.get("Result") in ("1-0", "0-1", "1/2-1/2"):
-                row = _to_row(game)
-                if row:
-                    rows.append(row)
-                game = {}
+    for m in months if months is not None else (month,):
+        path = fetch(_URL.format(month=m), f"lichess_{m}.pgn.zst", timeout=600)
+        game = {}
+        with _open_zst(path) as f:
+            for raw in f:
+                line = raw.decode("utf-8", errors="replace").strip()
+                if line.startswith("["):
+                    key, _, rest = line[1:-1].partition(" ")
+                    game[key] = rest.strip('"')
+                elif not line and game.get("Result") in ("1-0", "0-1", "1/2-1/2"):
+                    row = _to_row(game)
+                    if row:
+                        rows.append(row)
+                    game = {}
 
     rows.sort(key=lambda r: r[0])
     prev = None
