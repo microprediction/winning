@@ -15,6 +15,16 @@ Run:  .venv/bin/python research/scale_learning.py
 Outputs a comparison on the heteroskedastic world (log loss, TV vs oracle,
 ECE) between the fixed-scale rater, this scale-learner, and the oracle, plus
 the correlation between learned scales and the true per-contestant noise.
+
+Measured (July 2026, 200 contestants / 3000 events, noise sd 0.6 or 1.6):
+prediction improves — log loss 1.7673 -> 1.7514, ECE 0.0078 -> 0.0051, TV to
+oracle 0.2649 -> 0.2585 — but scale IDENTIFICATION is weak (corr ~0.19; all
+weights drift toward the widest scale). Restricting weight updates to the
+first EP sweep barely moved this, so the dominant cause is not evidence
+double-counting: the scale parameter soaks up misfit from the compressed
+ability posteriors that pseudo-independent updating produces. Proper cavity
+handling in the update is the prerequisite for clean per-contestant scale
+recovery.
 """
 
 from __future__ import annotations
