@@ -88,7 +88,7 @@ def hkracing_events(oracle_temperature: float = None) -> List[Event]:
             ordinal = datetime.date.fromisoformat(date).toordinal()
         except (TypeError, ValueError):
             continue
-        names, ranks, inv_odds = [], [], []
+        names, ranks, inv_odds, inv_place = [], [], [], []
         for row in rows:
             try:
                 pos = int(float(row["result"]))
@@ -98,17 +98,34 @@ def hkracing_events(oracle_temperature: float = None) -> List[Event]:
             names.append(f"horse_{row['horse_id']}")
             ranks.append(pos)
             inv_odds.append(1.0 / odds if odds > 0 else 0.0)
+            try:
+                po = float(row["place_odds"])
+                inv_place.append(1.0 / po if po > 0 else None)
+            except (KeyError, ValueError, TypeError):
+                inv_place.append(None)
         if len(names) < 2 or min(ranks) != 1:
             continue
         total = sum(inv_odds)
         market = [q / total for q in inv_odds] if total > 0 else None
+        place_market = None
+        if all(q is not None for q in inv_place) and len(inv_place) >= 4:
+            n_places = 3 if len(names) >= 7 else 2
+            tot = sum(inv_place)
+            if tot > 0:
+                place_market = {
+                    "probs": [q / tot * n_places for q in inv_place],
+                    "n_places": n_places,
+                }
         truth = None
         if oracle_temperature is not None and market is not None:
             powered = [q**oracle_temperature for q in market]
             z = sum(powered)
             truth = [q / z for q in powered]
+        ctx = dict(context or {})
+        if place_market is not None:
+            ctx["place_market"] = place_market
         dated.append(
-            (ordinal, Event(names=names, ranks=ranks, market=market, truth=truth, context=context))
+            (ordinal, Event(names=names, ranks=ranks, market=market, truth=truth, context=ctx))
         )
 
     dated.sort(key=lambda t: t[0])
