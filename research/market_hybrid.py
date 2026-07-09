@@ -14,6 +14,17 @@ against the outcome-only rater isolates the value of market history, and the
 Market row (which does use race t's odds) remains the ceiling.
 
 Run:  .venv/bin/python research/market_hybrid.py   (needs the hkracing cache)
+
+Measured (July 2026, HK racing, 6,348 races, log loss / accuracy / ECE):
+    outcome-only ThurstoneRating   2.3926 / 0.168 / 0.0108
+    hybrid, market_obs_sd=0.7      2.3052 / 0.205 / 0.0036
+    market ceiling (race t odds)   2.0409 / 0.300 / 0.0052
+Market history closes ~25% of the gap to the ceiling and makes the hybrid the
+best non-market system on this dataset by a wide margin (previous best:
+Glicko-2 at 2.3575) — with the best calibration of ANY row, market included.
+The remaining gap is race-day information history cannot carry (going, draw,
+weight, jockey booking, late money): exactly the context columns the dataset
+offers for a condition-aware rater.
 """
 
 from __future__ import annotations
