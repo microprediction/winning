@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>winning — rating systems on the thurstone ability transform</title>
+  <meta name="description" content="Rating systems for multi-entrant contests, built on exact lattice order statistics. Beliefs are whole densities, updates use the exact likelihood of the full finish order, and every claim is benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="winning" />
+  <meta property="og:title" content="winning — rating systems on the thurstone ability transform" />
+  <meta property="og:description" content="Rating systems for multi-entrant contests, built on exact lattice order statistics and benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets." />
+  <meta property="og:url" content="https://winning.microprediction.org/" />
+  <meta property="og:image" content="https://winning.microprediction.org/assets/images/winning-pic.png" />
+  <meta property="og:image:alt" content="The fastest time, the best offer and the most popular product are the same order statistic." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="./academic.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="#papers">Papers</a>
+        <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">Benchmarks</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+        <a href="https://thurstone.microprediction.org/">thurstone</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1>winning</h1>
+    <p class="subtitle">Rating systems on the thurstone ability transform.</p>
+
+    <p class="lead">Rating systems for multi-entrant contests: races, tournaments,
+      leaderboards. Beliefs are whole densities on a lattice, free to be skewed or
+      multimodal; each event updates them with the <strong>exact likelihood of the full
+      finish order</strong>, computed by an O(N) chain; predictions are exact
+      winner-of-many probabilities, dead-heat aware. Every claim is benchmarked against
+      TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets with market ceilings
+      where they exist.</p>
+
+    <div class="tag-row">
+      <span class="tag">exact lattice</span>
+      <span class="tag">whole-order updates</span>
+      <span class="tag">non-Gaussian noise</span>
+      <span class="tag">race-native</span>
+      <span class="tag">measured, not asserted</span>
+    </div>
+
+    <figure class="hero-figure">
+      <img src="./assets/images/winning-pic.png" alt="The fastest time, the best offer and
+        the most popular product are the same order statistic: winner of many." />
+      <figcaption>The fastest time, the lowest offer and the most popular choice are the
+        same computation: the distribution of the winner of many. The
+        <a href="https://thurstone.microprediction.org/">thurstone</a> core does that
+        computation exactly on a lattice; this package turns it into rating systems.</figcaption>
+    </figure>
+
+    <div class="callout">
+      <strong>Beliefs are densities, not (mu, sigma) pairs.</strong> Each contestant's
+      ability lives on a lattice with no parametric family imposed, and the race noise is
+      an arbitrary kernel you choose: Gaussian, Student-t, or a
+      retirement "slab" for contests where entrants can fail outright. A single update
+      matches exact Bayes to lattice precision, and the update uses the whole finish
+      order rather than pairwise or stagewise approximations.
+      <a href="https://github.com/microprediction/winning#what-is-different-about-thurstonerating">How →</a>
+    </div>
+
+    <div class="callout">
+      <strong>Benchmarked on twelve datasets, prequentially.</strong> Formula 1, ATP and
+      WTA tennis, chess, sumo, football, Halo 2, horse racing and synthetic worlds with
+      known truth. Each event is predicted before it is observed, and the tables carry
+      honest baselines: a uniform floor, an oracle where truth is known, and the
+      bookmaker market as a ceiling where odds exist.
+      <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">The tables →</a>
+    </div>
+
+    <div class="callout">
+      <strong>Non-Gaussian noise pays where the physics demands it.</strong> Formula 1
+      retirements make finishing order a mixture: pace when the car survives, a lottery
+      when it does not. A density with a uniform "disaster" component beats every
+      Gaussian system on 1,158 grands prix, and the same estimator, handed qualifying
+      sessions where no retirement process exists, drives its own disaster mass to
+      near zero. <a href="./assets/pdf/rating_formula_1.pdf">The paper (PDF) →</a>
+    </div>
+
+    <div class="callout">
+      <strong>And an efficiency result.</strong> Against 88 races with genuinely
+      pre-qualifying bookmaker odds, no rating system built on public results and grid
+      data adds statistical power to the market: the optimal pool puts zero weight on
+      every one of the six systems tested. The market's edge is knowledge of current car
+      form. <a href="./assets/pdf/rating_formula_1.pdf">Section 5 →</a>
+    </div>
+
+    <h2>Quick start</h2>
+<pre><code>from winning import ThurstoneRating
+
+tr = ThurstoneRating()
+tr.observe(names=["ada", "ben", "cid", "dot"], ranks=[1, 2, 3, 4])
+tr.observe(names=["ada", "cid", "eve"], ranks=[1, 2, 3])
+
+tr.win_probabilities(["ada", "cid", "eve"])   # exact field win probabilities
+tr.rating("ada")                              # Rating(mu=..., sigma=...)
+tr.leaderboard()                              # best-first, conservative</code></pre>
+    <p>
+      Every system in the package speaks the same three verbs: <code>observe(names,
+      ranks)</code>, <code>win_probabilities(names)</code>, <code>rating(name)</code>.
+      That includes the shims around third-party comparators, so a benchmark row is a
+      one-line swap. Install with <code>pip install winning</code> (core depends only on
+      thurstone and numpy) or <code>pip install winning[benchmarks]</code> for the
+      comparators.
+    </p>
+
+    <h2 id="papers">Papers</h2>
+    <ul>
+      <li><a href="./assets/pdf/rating_formula_1.pdf">Rating Formula 1: a case for
+        non-Gaussian noise in rating systems</a> (2026). Seventy-five seasons of grands
+        prix, a retirement-slab noise density, a qualifying control, and a stratified
+        test against historical bookmaker odds.</li>
+      <li><a href="./Horse_Race_Problem__SIAM_updated.pdf">Inferring relative ability
+        from winning probability</a> (SIAM, 2021). The lattice algorithm this package
+        grew from: recovering ability densities from a vector of win probabilities,
+        as in pari-mutuel markets.</li>
+      <li><a href="./Who_Ya_Gonna_Call.pdf">Who ya gonna call?</a> and
+        <a href="./How_to_respond_to_an_RFQ.pdf">How to respond to an RFQ</a>: the same
+        order statistic in trading, where the best response to a request for quote is a
+        horse race entry.</li>
+    </ul>
+
+    <h2>Heritage</h2>
+    <p>
+      <code>winning</code> 1.x was the reference implementation of the SIAM paper above
+      and is preserved: the legacy imports still work. The 2.x renovation moved the
+      numerical core into <a href="https://github.com/microprediction/thurstone">thurstone</a>
+      (densities on a lattice, winner-of-many, the ability transform) and made this
+      package the applications layer, the way
+      <a href="https://github.com/microprediction/timemachines">timemachines</a> sits on
+      <a href="https://github.com/microprediction/skaters">skaters</a>: cores are few and
+      stable; applications multiply, so they get their own package. By Peter Cotton,
+      with sibling packages at <a href="https://www.microprediction.org/">microprediction</a>.
+    </p>
+
+    <h2>Get the source</h2>
+    <p>
+      <a href="https://github.com/microprediction/winning">github.com/microprediction/winning</a>
+      &middot;
+      <a href="https://pypi.org/project/winning/"><code>pip install winning</code></a>
+      &middot;
+      <a href="https://github.com/microprediction/winning/tree/main/research">Research scripts</a>
+    </p>
+  </main>
+
+  <footer>
+    <a href="https://github.com/microprediction/winning">Source</a> &middot;
+    Part of the <a href="https://github.com/microprediction">microprediction</a> family
+    (see also <a href="https://thurstone.microprediction.org">thurstone</a>,
+    <a href="https://skaters.microprediction.org">skaters</a>,
+    <a href="http://schur.microprediction.org">schur</a>).
+  </footer>
+</body>
+</html>
