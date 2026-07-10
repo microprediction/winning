@@ -128,3 +128,8 @@ canvas.plot { width: 100%; height: auto; background: var(--panel); border: 1px s
 .legend .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 5px; }
 .metric { font-variant-numeric: tabular-nums; }
 .status { font-size: 0.9rem; color: var(--muted); }
+
+img { max-width: 100%; height: auto; }
+.hero-figure { margin: 28px auto; text-align: center; }
+.hero-figure img { max-width: min(100%, 680px); border: 1px solid var(--border); border-radius: 8px; }
+.hero-figure figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 8px; line-height: 1.45; max-width: 680px; margin-left: auto; margin-right: auto; }
