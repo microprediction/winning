@@ -1,0 +1,1438 @@
+[
+ {
+  "scenario": "mayor",
+  "persona": "a small business owner who hates red tap",
+  "model": "gpt-4o-mini",
+  "dropped": "Woods",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Ortiz"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   0.9999997478262734,
+   2.521737265387224e-07
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 1.142376830265834e-06,
+  "kl_thur": 1.145375194929e-06,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a retired police officer who gardens, sp",
+  "model": "gpt-4o-mini",
+  "dropped": "Woods",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Ortiz"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   0.9999982396579373,
+   1.760342062674346e-06
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   0.9999974387195303,
+   2.561280469758686e-06
+  ],
+  "thurstone": [
+   9.992294489533567e-10,
+   9.992294489533567e-10,
+   0.9999974367059309,
+   2.5612956102196593e-06
+  ],
+  "kl_luce": 1.40811910049812e-07,
+  "kl_thur": 1.4281510520671382e-07,
+  "H_full": 5.1270166763482914e-05
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a retired police officer who gardens, sp",
+  "model": "gpt-4o",
+  "dropped": "Baker",
+  "dropped_p": 0.0,
+  "keep": [
+   "Klein",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.9999792920874161,
+   2.0707912583896987e-05,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.9999791148133838,
+   2.088518661624005e-05,
+   0.0
+  ],
+  "thurstone": [
+   1.0008027907559117e-09,
+   0.9999791127764162,
+   2.0885221978129194e-05,
+   1.0008027907559117e-09
+  ],
+  "kl_luce": 7.545067570170789e-10,
+  "kl_thur": 2.756413065040554e-09,
+  "H_full": 0.00035483598765190515,
+  "twin": "Klein",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a retired police officer who gardens, sp",
+  "model": "gpt-4o",
+  "dropped": "Klein",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.9999417087273904,
+   5.8291272609594364e-05,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.9999791148133838,
+   2.088518661624005e-05,
+   0.0
+  ],
+  "thurstone": [
+   1.0008027907559117e-09,
+   0.9999791127764162,
+   2.0885221978129194e-05,
+   1.0008027907559117e-09
+  ],
+  "kl_luce": 2.2425489963102008e-05,
+  "kl_thur": 2.242742815835039e-05,
+  "H_full": 0.00035483598765190515,
+  "twin": "Baker",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a retired police officer who gardens, sp",
+  "model": "gpt-4o",
+  "dropped": "Ortiz",
+  "dropped_p": 2.088518661624005e-05,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   1.0951716289533552e-09,
+   1.0951716289533552e-09,
+   0.9999999967144851,
+   1.0951716289533552e-09
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 3.2855149657990307e-09,
+  "H_full": 0.00035483598765190515
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a retired police officer who gardens, sp",
+  "model": "gpt-4o",
+  "dropped": "Woods",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Ortiz"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   0.9999758740872916,
+   2.4125912708405145e-05
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   0.9999791148133838,
+   2.088518661624005e-05
+  ],
+  "thurstone": [
+   1.0008027907559117e-09,
+   1.0008027907559117e-09,
+   0.9999791127764164,
+   2.0885221978129194e-05
+  ],
+  "kl_luce": 2.393539028062505e-07,
+  "kl_thur": 2.4135001469379926e-07,
+  "H_full": 0.00035483598765190515
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a retired police officer who gardens, sp",
+  "model": "gpt-4.1",
+  "dropped": "Baker",
+  "dropped_p": 0.0,
+  "keep": [
+   "Klein",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.9999979095421481,
+   2.0904578518932672e-06,
+   0.0
+  ],
+  "thurstone": [
+   9.992499303250728e-10,
+   0.9999979075298258,
+   2.0904716744679367e-06,
+   9.992499303250728e-10
+  ],
+  "kl_luce": 2.0904600369799447e-06,
+  "kl_thur": 2.0924723635177088e-06,
+  "H_full": 4.245812535090546e-05,
+  "twin": "Klein",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a retired police officer who gardens, sp",
+  "model": "gpt-4.1",
+  "dropped": "Klein",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.9999999625177075,
+   3.748229247889088e-08,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.9999979095421481,
+   2.0904578518932672e-06,
+   0.0
+  ],
+  "thurstone": [
+   9.992499303250728e-10,
+   0.9999979075298258,
+   2.0904716744679367e-06,
+   9.992499303250728e-10
+  ],
+  "kl_luce": 1.902251257118257e-06,
+  "kl_thur": 1.9042633358155426e-06,
+  "H_full": 4.245812535090546e-05,
+  "twin": "Baker",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a retired police officer who gardens, sp",
+  "model": "gpt-4.1",
+  "dropped": "Ortiz",
+  "dropped_p": 2.0904578518932672e-06,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   1.026024425615859e-09,
+   1.026024425615859e-09,
+   0.9999999969219268,
+   1.026024425615859e-09
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 3.0780733470215353e-09,
+  "H_full": 4.245812535090546e-05
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4o-mini",
+  "dropped": "Baker",
+  "dropped_p": 0.0,
+  "keep": [
+   "Klein",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Klein",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4o-mini",
+  "dropped": "Klein",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Baker",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4o-mini",
+  "dropped": "Ortiz",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4o-mini",
+  "dropped": "Woods",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Ortiz"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4o",
+  "dropped": "Baker",
+  "dropped_p": 0.0,
+  "keep": [
+   "Klein",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Klein",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4o",
+  "dropped": "Klein",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Baker",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4o",
+  "dropped": "Ortiz",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4o",
+  "dropped": "Woods",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Ortiz"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a farmer whose fields flood, wanting bot",
+  "model": "gpt-4.1",
+  "dropped": "Baker",
+  "dropped_p": 0.0,
+  "keep": [
+   "Klein",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Klein",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a farmer whose fields flood, wanting bot",
+  "model": "gpt-4.1",
+  "dropped": "Ortiz",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a farmer whose fields flood, wanting bot",
+  "model": "gpt-4.1",
+  "dropped": "Woods",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Ortiz"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a farmer whose fields flood, wanting bot",
+  "model": "gpt-4o",
+  "dropped": "Ortiz",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a farmer whose fields flood, wanting bot",
+  "model": "gpt-4o",
+  "dropped": "Woods",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Ortiz"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4o-mini",
+  "dropped": "Rivera",
+  "dropped_p": 0.0,
+  "keep": [
+   "Novak",
+   "Grant",
+   "Shaw",
+   "Patel"
+  ],
+  "actual": [
+   1.3092872756938e-07,
+   0.9999998690712725,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 5.073034101824295e-07,
+  "kl_thur": 5.103017754007071e-07,
+  "H_full": 0.0,
+  "twin": "Novak",
+  "twin_gain_actual": 1.3092872756938e-07,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4o-mini",
+  "dropped": "Novak",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Grant",
+   "Shaw",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   0.9999990577558363,
+   0.0,
+   9.422441636309073e-07
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 5.5104934779738e-06,
+  "kl_thur": 5.513491840749587e-06,
+  "H_full": 0.0,
+  "twin": "Rivera",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4o",
+  "dropped": "Rivera",
+  "dropped_p": 0.0,
+  "keep": [
+   "Novak",
+   "Grant",
+   "Shaw",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Novak",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4o",
+  "dropped": "Novak",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Grant",
+   "Shaw",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Rivera",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4o",
+  "dropped": "Shaw",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Novak",
+   "Grant",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4o",
+  "dropped": "Patel",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Novak",
+   "Grant",
+   "Shaw"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4.1",
+  "dropped": "Rivera",
+  "dropped_p": 0.0,
+  "keep": [
+   "Novak",
+   "Grant",
+   "Shaw",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Novak",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4.1",
+  "dropped": "Novak",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Grant",
+   "Shaw",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Rivera",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4.1",
+  "dropped": "Shaw",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Novak",
+   "Grant",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "county",
+  "persona": "a parent of three who wants more school ",
+  "model": "gpt-4.1",
+  "dropped": "Patel",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Novak",
+   "Grant",
+   "Shaw"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4.1",
+  "dropped": "Baker",
+  "dropped_p": 0.0,
+  "keep": [
+   "Klein",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Klein",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4.1",
+  "dropped": "Klein",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Chen",
+   "Ortiz",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Baker",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4.1",
+  "dropped": "Ortiz",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Woods"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "mayor",
+  "persona": "a young teacher who bikes to work, torn ",
+  "model": "gpt-4.1",
+  "dropped": "Woods",
+  "dropped_p": 0.0,
+  "keep": [
+   "Baker",
+   "Klein",
+   "Chen",
+   "Ortiz"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "county",
+  "persona": "a small business owner who hates red tap",
+  "model": "gpt-4o",
+  "dropped": "Rivera",
+  "dropped_p": 0.0,
+  "keep": [
+   "Novak",
+   "Grant",
+   "Shaw",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Novak",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "county",
+  "persona": "a small business owner who hates red tap",
+  "model": "gpt-4o",
+  "dropped": "Novak",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Grant",
+   "Shaw",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   0.9999999970016344,
+   9.994551550566633e-10,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0,
+  "twin": "Rivera",
+  "twin_gain_actual": 0.0,
+  "twin_gain_luce": 0.0,
+  "twin_absorb_share": null
+ },
+ {
+  "scenario": "county",
+  "persona": "a small business owner who hates red tap",
+  "model": "gpt-4o",
+  "dropped": "Shaw",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Novak",
+   "Grant",
+   "Patel"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ },
+ {
+  "scenario": "county",
+  "persona": "a small business owner who hates red tap",
+  "model": "gpt-4o",
+  "dropped": "Patel",
+  "dropped_p": 0.0,
+  "keep": [
+   "Rivera",
+   "Novak",
+   "Grant",
+   "Shaw"
+  ],
+  "actual": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "luce": [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  "thurstone": [
+   9.994551550566633e-10,
+   9.994551550566633e-10,
+   0.9999999970016346,
+   9.994551550566633e-10
+  ],
+  "kl_luce": 0.0,
+  "kl_thur": 2.998365551344557e-09,
+  "H_full": 0.0
+ }
+]

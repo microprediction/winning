@@ -1,0 +1,155 @@
+examples:
+  art_medium:
+    adjectives:
+      - versatile
+      - expressive
+      - vibrant
+      - tactile
+      - dynamic
+      - traditional
+      - innovative
+      - accessible
+      - impactful
+      - unique
+    prompt_pair_template:
+      - "My favorite art medium is [MASK] because it is SOMETHING."
+      - "My two favorite art media are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 15
+
+  musical_note:
+    adjectives:
+      - harmonious
+      - resonant
+      - melodic
+      - soothing
+      - expressive
+      - vibrant
+      - clear
+      - rich
+      - warm
+      - bright
+    prompt_pair_template:
+      - "My favorite musical genre is [MASK] because it is SOMETHING."
+      - "My two favorite musical genres are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 7
+
+  renewable_energy_source:
+    adjectives:
+      - sustainable
+      - clean
+      - efficient
+      - abundant
+      - reliable
+      - eco-friendly
+      - innovative
+      - cost-effective
+      - promising
+      - essential
+    prompt_pair_template:
+      - "The most promising renewable energy source is [MASK] because it is SOMETHING."
+      - "The two most promising renewable energy sources are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 5
+
+
+  constellation_shape:
+    adjectives:
+      - recognizable
+      - symbolic
+      - intriguing
+      - iconic
+      - ancient
+      - fascinating
+      - significant
+      - captivating
+      - mysterious
+      - meaningful
+    prompt_pair_template:
+      - "My favorite constellation is called [MASK]. I think it is SOMETHING."
+      - "My two favorite constellations are called [ANSWER] and [MASK]. I think they are SOMETHING."
+    top_k: 10
+
+  dance_move:
+    adjectives:
+      - energetic
+      - graceful
+      - complex
+      - expressive
+      - dynamic
+      - rhythmic
+      - captivating
+      - challenging
+      - fluid
+      - iconic
+    prompt_pair_template:
+      - "My favorite dance move is the [MASK] because it is SOMETHING."
+      - "My two favorite dance moves are the [ANSWER] and the [MASK] because they are SOMETHING."
+    top_k: 10
+
+  precious_metal:
+    adjectives:
+      - valuable
+      - rare
+      - lustrous
+      - malleable
+      - conductive
+      - durable
+      - sought-after
+      - timeless
+      - prestigious
+      - versatile
+    prompt_pair_template:
+      - "The most desirable precious metal is [MASK] because it is SOMETHING."
+      - "The two most desirable precious metals are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 5
+
+  vehicle_type:
+    adjectives:
+      - efficient
+      - spacious
+      - fast
+      - reliable
+      - versatile
+      - compact
+      - rugged
+      - luxurious
+      - practical
+      - economical
+    prompt_pair_template:
+      - "My favorite type of vehicle is [MASK] because it is SOMETHING."
+      - "My two favorite types of vehicles are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  heating_fuels:
+    adjectives:
+      - reliable
+      - efficient
+      - innovative
+      - advanced
+      - sustainable
+      - powerful
+      - iconic
+      - groundbreaking
+      - cost-effective
+      - high-performance
+    prompt_pair_template:
+      - "My favourite heating fuel is [MASK] because it is SOMETHING."
+      - "The two favourite heating fuels are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  martial_art:
+    adjectives:
+      - disciplined
+      - effective
+      - traditional
+      - empowering
+      - dynamic
+      - challenging
+      - respected
+      - skillful
+      - intense
+      - graceful
+    prompt_pair_template:
+      - "My favourite martial art is [MASK] because it is SOMETHING."
+      - "My two favourite martial arts are [ANSWER] and [MASK], because they are SOMETHING."
+    top_k: 10
+

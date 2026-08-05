@@ -377,6 +377,20 @@ Contest behavior governs wherever machine preference is genuinely
 stochastic; the Choice Axiom is competitive only in the degenerate cells
 that preference tuning has emptied of choice.
 
+The largest effect of all comes from re-running the \emph{original}
+stimulus set of this paper's 2024 version---99 categories with
+adjective-varied prompt pairs---in its original two-slot form (``My two
+favourite human organs are the [ANSWER] and the [MASK] because they are
+SOMETHING''), on GPT models with exact probabilities. Across 691 cells
+the conditional second choice decisively favors the contest model: mean
+$\Delta$KL $+0.51$, 95\% CI $[+0.43, +0.59]$, on every model and in both
+entropy strata. Predicting the runner-up given the winner is precisely
+where Luce renormalization fails hardest---the machine-preference analog
+of the Harville \cite{harville1973} overpricing of exactas that
+motivated the Thurstonian computation in the first place. The same
+questions asked of BERT in 2024 and of GPT-4-class models in 2026 return
+the same verdict, with a larger margin under exact measurement.
+
 One further caution emerged with practical import for all such
 experiments: the ``actual'' restricted distribution depends materially on
 how the restriction is phrased. Holding everything else fixed, the
@@ -402,7 +416,13 @@ sends GPT-4o to \emph{taxi} with probability $1.00$, ``there is a fuel
 shortage'' to \emph{bike} at $0.99$---but the resulting distributions
 are so degenerate that menu-based deletion cannot separate the choice
 models (144 cells, $\Delta$KL CI $[-0.028, +0.016]$), consistent with
-Table~\ref{tab:battery}'s stratification.
+Table~\ref{tab:battery}'s stratification. The determinism extends to
+simulated agents: fictional election candidates with platform
+descriptions, evaluated through fictional voter personas, produce
+near-certain votes even when the persona is written to be genuinely
+cross-pressured, and candidate-withdrawal cells are consequently
+uninformative. The model represents a persona as an argmax decider; it
+does not carry within-persona randomness at all.
 
 Second, machines are anti-red-bus. In Debreu's classic objection to the
 Choice Axiom \cite{debreu1960}, splitting a bus into a red bus and a
