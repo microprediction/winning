@@ -1,0 +1,405 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\title{\textbf{A Paradox in Machine Preference}\\[0.4em]
+\large softmax machines do not obey Luce's Choice Axiom}
+\author{Peter Cotton}
+\date{First version November 2024. This version \today.}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Softmax output layers suggest, almost by construction, that large
+language models should obey Luce's Choice Axiom: remove an option and the
+remaining probabilities renormalize. Using masked-token prompts (``my
+favorite Western state is [MASK]'') we find instead that the revealed
+preferences of BERT and RoBERTa are better matched by a Thurstonian contest
+model, in roughly 80\% of cases. We extend the test to modern chat models
+via polysemous words, where Cekinmez et al.\ (2026) documented a gap
+between stated and generated sense distributions. The collapse replicates
+on Claude models, and under choice-set restriction the model re-collapses
+onto a runner-up sense rather than renormalizing---as the contest model
+predicts. We discuss Thurstonian layers and a principled diversity knob.
+\end{abstract}
+
+\section{Introduction}
+
+Large language models can be interrogated cheaply and at scale, which makes
+the study of their revealed preferences attractive whether one regards them
+as incipient minds or as statistical mimics of our own predilections.
+Either way, a question from the psychology of choice arises immediately:
+when a model distributes probability over alternatives, what law governs
+how that distribution changes as the set of alternatives changes?
+
+The workhorse answer in economics and psychology is Luce's Choice Axiom
+\cite{luce1959}, which asserts that the probability of selecting item $i$
+from a set $S$ is proportional to a fixed utility $u(i)$:
+\begin{equation}
+P(i \mid S) = \frac{u(i)}{\sum_{j \in S} u(j)}.
+\label{eq:luce}
+\end{equation}
+Its signature is Independence of Irrelevant Alternatives: the ratio
+$P(A)/P(B)$ is unchanged by the presence or absence of a third option $C$.
+
+There is a natural alignment between this assumption and the token
+probabilities of language models, which invariably emerge from a softmax:
+\begin{equation}
+p_i = \frac{e^{z_i}}{\sum_{j=1}^n e^{z_j}},
+\label{eq:softmax}
+\end{equation}
+however complicated the transformer computation producing $z_i$ may be.
+Delete item 1 from consideration---set $z_1 = -\infty$, a surgical
+procedure impossible in humans---and the remaining probabilities are the
+old ones renormalized by $1/(1-p_1)$. In using softmax layers we are, in
+effect, heavily \emph{suggesting} to the machine that it obey Luce's
+Choice Axiom.
+
+It doesn't. This paper demonstrates that language models, despite the
+suggestion built into their output layer, exhibit preference behavior
+better modeled in the Thurstonian framework of noisy contests
+\cite{thurstone1927}. Section~\ref{sec:models} states the two competing
+models. Sections~\ref{sec:masked}--\ref{sec:maskedresults} test them on
+masked language models. Section~\ref{sec:polysemy} extends the test to
+modern chat models using polysemous words, connecting the paradox to the
+stated-versus-generated gap recently documented by Cekinmez, Wu, Marjieh
+and Griffiths \cite{cekinmez2026}. Section~\ref{sec:discussion} draws out
+the implications: a mechanism for generative ``mode collapse,'' a
+principled diversity knob, and a case for Thurstonian layers.
+
+\section{A choice of choice models}
+\label{sec:models}
+
+One might describe Equation~\eqref{eq:luce} as an \emph{urn model}: item
+$k$ is represented by balls in an urn in proportion to $u(k)$, a choice is
+a random draw, and shrinking the choice set merely removes balls. The
+renormalization of probability under restriction then seems perfectly
+reasonable.
+
+But perhaps preference is a horse race, not an urn. In the competing model
+each item $i$ carries a location parameter $a_i$ (a dislikability, say) and
+an associated performance $X_i \sim N(a_i, 1)$. Item $i$ is chosen when its
+performance is the lowest draw. This is the model of Thurstone
+\cite{thurstone1927}, and it makes different predictions about how choice
+probabilities respond when the choice set is altered: rather than removing
+a ball from the urn, we remove a horse from the race.
+
+(As an aside, it \emph{is} possible to engineer a contest that satisfies
+Luce's Choice Axiom, by taking $X_i \sim \mathrm{Exp}(h_i)$ with common
+location and differing hazard rates. The comparison here can therefore be
+viewed as between two contest models, even if Luce's Choice Axiom is not
+usually presented that way.)
+
+The practical obstacle to Thurstonian models has always been computation,
+not plausibility. A fast lattice algorithm for calibrating multi-entrant
+Thurstone models---recovering locations $\{a_i\}$ from winning
+probabilities and computing derived quantities for fields exceeding
+$100{,}000$ entrants---was given in \cite{cotton2021}, and is what makes
+the experiments below routine.
+
+\section{Experimental design: masked language models}
+\label{sec:masked}
+
+We probe the token probabilities of BERT \cite{devlin2018} and RoBERTa
+\cite{liu2019}, prompted to fill in blanks that invite choices among items
+of a category. Two designs are used.
+
+In the first, the model answers an \emph{original} question and a
+\emph{qualified} question whose only difference is an adjective that
+shrinks the choice set:
+\begin{enumerate}
+\item \emph{Original:} ``My favorite state in the U.S. is [MASK] and I try
+to visit once a year.''
+\item \emph{Qualified:} ``My favorite Western state in the U.S. is [MASK]
+and I try to visit once a year.''
+\end{enumerate}
+
+In the second, we eliminate a single option explicitly, feeding the top
+answer of a first prompt back into a second:
+\begin{enumerate}
+\item \emph{First:} ``My favorite primary color is [MASK] because it is
+SOMETHING.''
+\item \emph{Second:} ``My two favorite primary colors are [ANSWER] and
+[MASK] because they are SOMETHING.''
+\end{enumerate}
+where SOMETHING ranges over many adjectives so that luck of phrasing is
+averaged out (the appendix of the working version lists roughly one
+hundred category/adjective combinations).
+
+Both models make zero-parameter predictions of the restricted
+distribution from the unrestricted one. Luce's prediction is
+renormalization, Equation~\eqref{eq:luce}; in the two-step design this is
+the simplest Plackett--Luce \cite{plackett1975} or Harville
+\cite{harville1973} construction. The Thurstonian prediction calibrates
+locations $\{a_i\}$ to the unrestricted token probabilities via
+$\mathrm{Prob}(X_i < X_k \;\forall k \neq i) = p_i$, removes the excluded
+contestant, and recomputes winning probabilities.
+
+\section{Results for masked language models}
+\label{sec:maskedresults}
+
+Table~\ref{tab:western} shows the ``favorite Western state'' prompt for
+BERT. The Thurstonian column tracks the actual restricted probabilities
+more closely than Luce renormalization, which overweights the favorite
+(California) at the expense of the field. Table~\ref{tab:names} repeats
+the exercise for ``favorite girl's baby name,'' where the RMSE using
+Luce's probabilities is roughly 50\% higher.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+State & Original (\%) & Luce (\%) & Thurstonian (\%) & Actual (\%) \\
+\midrule
+California & 10.89 & 29.87 & 25.38 & 20.17 \\
+Arizona    &  6.74 & 18.50 & 17.20 & 10.00 \\
+Texas      &  5.50 & 15.10 & 14.59 &  7.68 \\
+Colorado   &  3.18 &  8.74 &  9.38 &  7.81 \\
+Oregon     &  2.89 &  7.92 &  8.67 &  8.57 \\
+Oklahoma   &  1.97 &  5.41 &  6.37 &  6.64 \\
+Nevada     &  1.66 &  4.55 &  5.54 & 10.18 \\
+Montana    &  1.59 &  4.37 &  5.36 & 14.27 \\
+Idaho      &  1.05 &  2.87 &  3.82 &  4.99 \\
+Wyoming    &  0.98 &  2.69 &  3.62 &  9.69 \\
+\bottomrule
+\end{tabular}
+\caption{Predicted probabilities under Luce's Choice Axiom and the
+Thurstonian model for the ``favorite Western state'' prompt
+(BertForMaskedLM). Both predictions use only the unqualified token
+probabilities; the Thurstonian model is closer to the actual qualified
+probabilities.}
+\label{tab:western}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Name & Original (\%) & Luce (\%) & Thurstonian (\%) & Actual (\%) \\
+\midrule
+Lily     & 1.56 & 20.35 & 16.18 & 14.52 \\
+Emily    & 1.15 & 15.06 & 13.31 & 16.29 \\
+Mia      & 0.86 & 11.25 & 11.02 & 13.18 \\
+Bella    & 0.85 & 11.12 & 10.93 &  8.84 \\
+Sarah    & 0.68 &  8.89 &  9.44 &  9.41 \\
+Rachel   & 0.59 &  7.66 &  8.56 &  7.15 \\
+Kate     & 0.59 &  7.63 &  8.54 &  8.44 \\
+Lauren   & 0.47 &  6.11 &  7.39 &  7.23 \\
+Brittany & 0.46 &  6.04 &  7.33 &  7.55 \\
+Chloe    & 0.45 &  5.89 &  7.21 &  7.39 \\
+\bottomrule
+\end{tabular}
+\caption{The same comparison for ``favorite girl's baby name.'' The RMSE
+using Luce's probabilities is approximately 50\% higher than the
+Thurstonian RMSE.}
+\label{tab:names}
+\end{table}
+
+Across the full panel of qualified-question and single-item-elimination
+experiments, the Thurstonian model provides the more accurate prediction
+in approximately 80\% of cases, with its advantage concentrated where the
+qualification is substantial and the entropy of the unrestricted
+distribution is low.
+% Figures 1 and 2 of the July 2024 version (entropy scatter; per-category
+% RMSE bars) belong here; source files live with the original draft.
+
+\section{Polysemy as a preference probe}
+\label{sec:polysemy}
+
+Cekinmez, Wu, Marjieh and Griffiths \cite{cekinmez2026} recently turned an
+everyday property of language into a measurable distribution over
+meanings: give a model a bare polysemous word (``bolt'') with no
+disambiguating context, sample many outputs, and classify which sense each
+expresses. Across 32 text and image generation models they report a
+striking ladder of normalized sense entropies: image generation $0.10$,
+text generation $0.25$, human subjects $0.47$, and---when models are asked
+to \emph{predict} the distribution of senses---roughly $0.73$. Models
+know the ambiguity; they do not express it. The finding sits within a
+growing literature on generative homogenization \cite{jiang2026} and its
+sharpening under preference tuning \cite{kirk2024}; their own ablation
+shows DPO alone cutting sense entropy from $0.25$ to $0.18$.
+
+Read through the lens of Section~\ref{sec:models}, the ladder is what a
+contest model produces. Let the stated distribution proxy the latent
+locations $\{a_i\}$; let each generation be a contest among noisy sense
+performances. When noise is small relative to the spread of locations,
+winning probability is a violently convex function of location
+differences, and a mildly uneven prior collapses onto its mode. One noise
+parameter then indexes the entire ladder, and the ``multimodal gap''
+becomes a noise gap rather than a knowledge gap. The rival explanation is
+a power tilt: renormalized $p_i^{\gamma}$, the Luce family with a
+temperature, which is mechanically what RLHF sharpening, low-temperature
+decoding, and classifier-free guidance perform. The two families are
+distinguished not by the collapse itself but by behavior under choice-set
+restriction---precisely the instrument of Section~\ref{sec:masked}, and an
+experiment run by neither paper until now.
+
+\subsection{Replication on a chat model}
+
+We replicated the design at pilot scale on Claude models (October 2025
+generation): 15 polysemous words from the stimulus set of
+\cite{cekinmez2026}, 30 independent sentence generations per word, senses
+classified by a second model against the closed inventory, plus a stated
+distribution elicited with their ``predicting itself'' framing. The
+collapse replicates almost exactly: mean normalized sense entropy $0.265$
+generated (their text-model figure: $0.25$) against $0.906$ stated. Eight
+of fifteen words collapsed to a single sense in all thirty samples.
+
+Fitting the two one-parameter families from stated to generated
+distributions gives a statistical tie (Thurstone $\sigma = 0.49$, RMSE
+$0.293$; power tilt $\gamma = 2.0$, RMSE $0.294$; Thurstone the better
+fit on 10 of 15 words), and the reason both fit poorly is itself
+informative: for several words the generated mode is not even the stated
+argmax (``port'' generates \emph{harbor} in every sample while rating
+\emph{connector} most probable). Stated reports are a biased window on
+the latent locations, not merely a flattened one---consistent with
+\cite{cekinmez2026}, whose stated distributions overestimate even human
+diversity. Calibration should therefore use revealed behavior, which is
+what the restriction design does.
+
+\subsection{Choice-set restriction}
+
+For the five words whose unrestricted distributions were non-degenerate,
+we re-sampled with the modal sense excluded by instruction and compared
+zero-parameter predictions of the restricted distribution: Luce
+renormalization against Thurstonian contestant removal, both calibrated
+to the add-half smoothed unrestricted sense counts.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{lrrl}
+\toprule
+Word & Luce RMSE & Thurstonian RMSE & Restricted distribution \\
+\midrule
+bolt  & 0.449 & \textbf{0.423} & fastener .76, run .17, lock .07 \\
+seal  & \textbf{0.340} & 0.347 & close .89, stamp .11 \\
+pitch & 0.626 & \textbf{0.580} & throw .06, tone .29, field .65 \\
+bat   & 0.750 & \textbf{0.709} & animal 1.00, sports .00 \\
+iron  & \textbf{0.076} & 0.130 & metal .93, press .07, golf .00 \\
+\midrule
+pooled & 0.493 & \textbf{0.468} & \\
+\bottomrule
+\end{tabular}
+\caption{Restriction test on polysemous words (Claude Haiku 4.5, 30
+samples per condition, modal sense excluded by instruction). The
+Thurstonian prediction is closer pooled and on three of five words.}
+\label{tab:restrict}
+\end{table}
+
+The margin favors Thurstone, but the qualitative signature matters more
+than the margin: under restriction the model does not spread probability
+proportionally, as Luce requires. It \emph{re-collapses} onto a new modal
+sense (seal $\to$ \emph{close} at $.89$; iron $\to$ \emph{metal} at
+$.93$). Remove the winning horse and the runner-up now wins nearly
+always---low-noise contest behavior, and the same low-entropy,
+heavy-qualification regime where the Thurstonian advantage concentrated in
+Section~\ref{sec:maskedresults}. One word (``bat'') flipped rank entirely
+under restriction, likely because excluding the \emph{hit} sense also
+suppresses the overlapping \emph{sports} sense; inventories with
+overlapping senses contaminate the test and neither family survives them.
+
+\section{Discussion}
+\label{sec:discussion}
+
+To the extent that LLMs mirror our own preferences, these results provide
+a rejection of Luce's Choice Axiom in favor of the Thurstonian model. The
+popularity of the former may owe much to computational convenience, a
+consideration the algorithm of \cite{cotton2021} removes.
+
+The polysemy results suggest something further: that generative ``mode
+collapse'' is not a defect of knowledge but the lawful output of a
+low-noise contest run over intact locations. That reframing carries a
+practical remedy. If choice is a contest, diversity is restored not by a
+power tilt---raising the sampling temperature, which distorts the tails
+and does not renormalize the way behavior actually renormalizes---but by
+inverting the contest to recover locations and re-sampling at a chosen
+noise level. The calibration is exactly the fast Thurstone computation of
+\cite{cotton2021}, and it offers a principled diversity knob without
+retraining.
+
+Leaning into the irony of softmax machines disobeying Luce's Choice Axiom,
+the results also suggest that Thurstonian neural network layers might
+generalize better than softmax layers, the engineering challenge
+notwithstanding. Current architectures force hidden layers to fight the
+renormalization behavior their output layer implies; a contest-structured
+output layer would not need to.
+
+Finally, this study is coarse-grained, and the pilot of
+Section~\ref{sec:polysemy} is small: fifteen words, one generation model,
+a single machine judge, sampling temperature not controlled. The full
+stimulus set and model panel of \cite{cekinmez2026} would settle the
+one-parameter comparison with real power, and any model of machine
+decision-making that satisfies Luce's Choice Axiom might, on this
+evidence, be viewed with suspicion---and readily improved.
+
+\section*{Acknowledgments}
+We thank the developers of BERT and RoBERTa for making their models
+accessible for research purposes.
+
+\begin{thebibliography}{9}
+
+\bibitem{cotton2021}
+Peter Cotton.
+Inferring relative ability from winning probability in multientrant
+contests.
+\emph{SIAM Journal on Financial Mathematics}, 12(1), 2021.
+
+\bibitem{devlin2018}
+J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova.
+BERT: Pre-training of deep bidirectional transformers for language
+understanding.
+\emph{arXiv preprint arXiv:1810.04805}, 2018.
+
+\bibitem{harville1973}
+David A. Harville.
+Assigning probabilities to the outcomes of multi-entry competitions.
+\emph{Journal of the American Statistical Association},
+68(342):312--316, 1973.
+
+\bibitem{liu2019}
+Y. Liu, M. Ott, N. Goyal, et al.
+RoBERTa: A robustly optimized BERT pretraining approach.
+\emph{arXiv preprint arXiv:1907.11692}, 2019.
+
+\bibitem{luce1959}
+R. Duncan Luce.
+\emph{Individual Choice Behavior: A Theoretical Analysis}.
+John Wiley \& Sons, 1959.
+
+\bibitem{plackett1975}
+Robin L. Plackett.
+The analysis of permutations.
+\emph{Journal of the Royal Statistical Society: Series C},
+24(2):193--202, 1975.
+
+\bibitem{thurstone1927}
+L. L. Thurstone.
+A law of comparative judgment.
+\emph{Psychological Review}, 34(4):273--286, 1927.
+
+\bibitem{cekinmez2026}
+Jasin Cekinmez, Addison J. Wu, Raja Marjieh, and Thomas L. Griffiths.
+Where did the ambiguity go? Examining how multimodal models interpret
+polysemous words.
+\emph{arXiv preprint arXiv:2608.00410}, 2026. Oral presentation,
+Scientific Understanding of Foundation Models workshop, COLM 2026.
+
+\bibitem{jiang2026}
+Liwei Jiang, Yuanjun Chai, Margaret Li, et al.
+Artificial hivemind: The open-ended homogeneity of language models (and
+beyond).
+\emph{NeurIPS}, 2026.
+
+\bibitem{kirk2024}
+Robert Kirk, Ishita Mediratta, Christoforos Nalmpantis, et al.
+Understanding the effects of RLHF on LLM generalisation and diversity.
+\emph{ICLR}, 2024.
+
+\end{thebibliography}
+
+\end{document}
