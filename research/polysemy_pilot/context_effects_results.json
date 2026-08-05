@@ -1,0 +1,362 @@
+[
+ {
+  "product": "laptop",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.8922528916773688,
+   "P3_T_abs": 0.9255667910722188,
+   "P3_D": 0.000200470674727578,
+   "rel_T_3": 0.9257523772759221,
+   "attraction": 0.033499485598553314,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9982598521413872,
+   "P3_M_abs": 0.5379160572860133,
+   "P3_E2": 0.46207146031260943,
+   "rel_M_3": 0.9999767954282839,
+   "compromise": 0.0017169432868966439,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "laptop",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.9963619504508827,
+   "P3_T_abs": 0.9827499421603512,
+   "P3_D": 0.0005128823460954815,
+   "rel_T_3": 0.9832542358996678,
+   "attraction": -0.013107714551214955,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9957509988139321,
+   "P3_M_abs": 0.4476109846137732,
+   "P3_E2": 0.5456832976993519,
+   "rel_M_3": 0.9852399930424802,
+   "compromise": -0.01051100577145192,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "laptop",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.9986699042802326,
+   "P3_T_abs": 0.9984159767350081,
+   "P3_D": 1.3759211701199418e-09,
+   "rel_T_3": 0.9984159781087499,
+   "attraction": -0.0002539261714826768,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9931138363343534,
+   "P3_M_abs": 0.8664610154804592,
+   "P3_E2": 0.10812579410384315,
+   "rel_M_3": 0.9715058578354528,
+   "compromise": -0.021607978498900504,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "apartment",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.7544872261293296,
+   "P3_T_abs": 0.989963890996315,
+   "P3_D": 4.055068594006656e-05,
+   "rel_T_3": 0.9900040363390719,
+   "attraction": 0.23551681020974224,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9998802127456381,
+   "P3_M_abs": 0.998438795722853,
+   "P3_E2": 0.001523348166723457,
+   "rel_M_3": 0.9999620861335574,
+   "compromise": 8.187338791931786e-05,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "apartment",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.4770286982793605,
+   "P3_T_abs": 0.8138969130118943,
+   "P3_D": 0.020556662775532853,
+   "rel_T_3": 0.8309790695174915,
+   "attraction": 0.35395037123813095,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9976254788961092,
+   "P3_M_abs": 0.8419619524652603,
+   "P3_E2": 0.1579808342104521,
+   "rel_M_3": 0.9999320522303858,
+   "compromise": 0.0023065733342766404,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "apartment",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.8312221500071862,
+   "P3_T_abs": 0.6662254784477308,
+   "P3_D": 0.0010688485652241354,
+   "rel_T_3": 0.6669383345296859,
+   "attraction": -0.16428381547750037,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.8926250618254129,
+   "P3_M_abs": 0.8420612264742603,
+   "P3_E2": 0.016197303298041307,
+   "rel_M_3": 0.8559249017075639,
+   "compromise": -0.036700160117849046,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "coffee maker",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.9999987753494745,
+   "P3_T_abs": 0.9998266559428233,
+   "P3_D": 3.9298250740208054e-14,
+   "rel_T_3": 0.9998266559428626,
+   "attraction": -0.0001721194066118814,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999999996290208,
+   "P3_M_abs": 0.9999972976793418,
+   "P3_E2": 2.702124858111326e-06,
+   "rel_M_3": 0.9999999998041993,
+   "compromise": 1.7517853834192465e-10,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "coffee maker",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.7911353877222846,
+   "P3_T_abs": 0.6055386356231166,
+   "P3_D": 2.147758332227732e-07,
+   "rel_T_3": 0.6055387656782095,
+   "attraction": -0.18559662204407512,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999794337668154,
+   "P3_M_abs": 0.6529496733011043,
+   "P3_E2": 0.34704507311618715,
+   "rel_M_3": 0.9999919541418676,
+   "compromise": 1.252037505217185e-05,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "flight",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.7292285719976869,
+   "P3_T_abs": 0.8232082448548456,
+   "P3_D": 0.00025182268077401205,
+   "rel_T_3": 0.8234155995785225,
+   "attraction": 0.09418702758083564,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9904949951980612,
+   "P3_M_abs": 0.7183538980638597,
+   "P3_E2": 0.1369169975436685,
+   "rel_M_3": 0.8323114880254006,
+   "compromise": -0.1581835071726606,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "coffee maker",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.9999611669981311,
+   "P3_T_abs": 0.9998516273433872,
+   "P3_D": 9.422543736291518e-05,
+   "rel_T_3": 0.9999458476782241,
+   "attraction": -1.5319319906947904e-05,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999942170675805,
+   "P3_M_abs": 0.21033283885961576,
+   "P3_E2": 0.7896600823009532,
+   "rel_M_3": 0.9999663457155037,
+   "compromise": -2.7871352076824785e-05,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "flight",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.5040304298928734,
+   "P3_T_abs": 0.3310119131099089,
+   "P3_D": 7.384741234562937e-09,
+   "rel_T_3": 0.3310119155543463,
+   "attraction": -0.1730185143385271,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.8694709372052447,
+   "P3_M_abs": 0.856448924302441,
+   "P3_E2": 0.12204828139464584,
+   "rel_M_3": 0.9755079990764516,
+   "compromise": 0.10603706187120687,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "flight",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.808658694168261,
+   "P3_T_abs": 0.4846595081517859,
+   "P3_D": 0.29082454462735474,
+   "rel_T_3": 0.6834126935443858,
+   "attraction": -0.12524600062387514,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.999912034621922,
+   "P3_M_abs": 0.3271817665537662,
+   "P3_E2": 0.6728117055216364,
+   "rel_M_3": 0.9999800484164391,
+   "compromise": 6.801379451704115e-05,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "pair of headphones",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.3572474837564503,
+   "P3_T_abs": 0.5126980221845105,
+   "P3_D": 0.12374830438362029,
+   "rel_T_3": 0.5851036006542213,
+   "attraction": 0.22785611689777097,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9997437850996462,
+   "P3_M_abs": 0.6746542768593184,
+   "P3_E2": 0.32532720474303517,
+   "rel_M_3": 0.9999725520314786,
+   "compromise": 0.0002287669318323804,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "pair of headphones",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.9922597778643146,
+   "P3_T_abs": 0.6090380208146131,
+   "P3_D": 9.104509142375242e-07,
+   "rel_T_3": 0.6090385753143408,
+   "attraction": -0.3832212025499738,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999868181354271,
+   "P3_M_abs": 0.9999976787551857,
+   "P3_E2": 4.91986121172902e-10,
+   "rel_M_3": 0.9999976792471706,
+   "compromise": 1.0861111743531993e-05,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "pair of headphones",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.9976514299485776,
+   "P3_T_abs": 0.9295703146354395,
+   "P3_D": 0.06989333516662095,
+   "rel_T_3": 0.9994233454955024,
+   "attraction": 0.001771915546924796,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9989771320783164,
+   "P3_M_abs": 0.9523365623749472,
+   "P3_E2": 0.03659247044784255,
+   "rel_M_3": 0.9885085316051488,
+   "compromise": -0.010468600473167555,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "phone plan",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.6136572336914804,
+   "P3_T_abs": 0.8296194924643677,
+   "P3_D": 0.0041867594523311204,
+   "rel_T_3": 0.8331075132201503,
+   "attraction": 0.2194502795286699,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.500213415211599,
+   "P3_M_abs": 0.6743054618187821,
+   "P3_E2": 0.16814793680417076,
+   "rel_M_3": 0.8106074284749853,
+   "compromise": 0.31039401326338634,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "phone plan",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.25949443967496516,
+   "P3_T_abs": 0.8421522116476147,
+   "P3_D": 0.0002719265752288053,
+   "rel_T_3": 0.8423812775034432,
+   "attraction": 0.5828868378284779,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.28923108755384913,
+   "P3_M_abs": 0.2921401032195021,
+   "P3_E2": 0.32956968971467643,
+   "rel_M_3": 0.4357501424647289,
+   "compromise": 0.14651905491087974,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "phone plan",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 4.862436372186899e-07,
+   "P3_T_abs": 0.2736107292084939,
+   "P3_D": 1.905175526243893e-08,
+   "rel_T_3": 0.2736107344212586,
+   "attraction": 0.27361024817762136,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.10084958854630878,
+   "P3_M_abs": 0.6544933944979853,
+   "P3_E2": 2.905215236583488e-06,
+   "rel_M_3": 0.6544952959476913,
+   "compromise": 0.5536457074013825,
+   "regularity_violated": true
+  }
+ }
+]

@@ -6,8 +6,8 @@
 \usepackage{microtype}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{Thurstone is the Model of Choice}\\[0.4em]
-\large a paradox in machine preference}
+\title{\textbf{When it Comes to Machine Preferences,\\
+Thurstone is the Model of Choice}}
 \author{Peter Cotton}
 \date{First version November 2024. This version \today.}
 
@@ -15,17 +15,19 @@
 \maketitle
 
 \begin{abstract}
-\noindent Softmax output layers suggest, almost by construction, that large
-language models should obey Luce's Choice Axiom: remove an option and the
-remaining probabilities renormalize. Using masked-token prompts (``my
-favorite Western state is [MASK]'') we find instead that the revealed
-preferences of BERT and RoBERTa are better matched by a Thurstonian contest
-model, in roughly 80\% of cases. We extend the test to modern chat models
-via polysemous words, where Cekinmez et al.\ (2026) documented a gap
-between stated and generated sense distributions. The collapse replicates
-on Claude models, and under choice-set restriction the model re-collapses
-onto a runner-up sense rather than renormalizing---as the contest model
-predicts. We discuss Thurstonian layers and a principled diversity knob.
+\noindent Softmax output layers suggest, almost by construction, that
+large language models should obey Luce's Choice Axiom. They do not. In
+masked-token experiments a Thurstonian contest model predicted BERT's
+revealed preferences better in roughly 80\% of cases. We extend the test
+to modern models with exact log-probability designs: across 461
+permutation-controlled deletion cells, Thurstone beats Luce decisively
+(mean $\Delta$KL $+0.033$, CI $[+0.020, +0.047]$), with the advantage
+concentrated wherever preference tuning has not already collapsed the
+distribution. Explicit menus behave differently: near-deterministic, no
+red-bus substitution, and occasional regularity violations (decoy
+effects) beyond any random utility model. Restriction on polysemous
+words connects these results to the stated-versus-generated gap of
+Cekinmez et al.\ (2026).
 \end{abstract}
 
 \section{Introduction}
@@ -91,9 +93,11 @@ a ball from the urn, we remove a horse from the race.
 
 (As an aside, it \emph{is} possible to engineer a contest that satisfies
 Luce's Choice Axiom, by taking $X_i \sim \mathrm{Exp}(h_i)$ with common
-location and differing hazard rates. The comparison here can therefore be
-viewed as between two contest models, even if Luce's Choice Axiom is not
-usually presented that way.)
+location and differing hazard rates---or, by Yellott's theorem, with
+Gumbel noise \cite{yellott1977}. The comparison here can therefore be
+viewed as between two noise families within the contest framework, which
+is why single-menu fits cannot separate them and the restriction,
+duplication, and context designs below are required.)
 
 The practical obstacle to Thurstonian models has always been computation,
 not plausibility. A fast lattice algorithm for calibrating multi-entrant
@@ -345,24 +349,33 @@ returns the experiment to the regime where the two families disagree.
 random planet'' putting essentially all mass on \emph{Mars}---the
 homogenization of \cite{jiang2026} extends to explicit randomness.)
 
-Across 77 exact-probability cells (17 categories, two phrasings, two
-elimination variants, three GPT models) the headline is again close:
-Thurstone is the better predictor in 44 of 77 cells. Stratifying by the
-entropy of the unqualified distribution resolves the ambiguity of the
-previous subsection cleanly:
+To control for phrasing and for which item is removed, the definitive
+battery deletes \emph{each} of the top six observed items in turn, across
+37 categories and three GPT models: 461 permutation-controlled cells,
+scored by the proper rule $\mathrm{KL}(\text{actual} \,\|\,
+\text{prediction})$, with bootstrap confidence intervals over cells.
 
-\begin{itemize}
-\item where the favorite holds less than $0.9$ of the mass---genuinely
-stochastic preference---\textbf{Thurstone wins 39 of 56 cells} (sign
-test $p = 0.002$);
-\item where the favorite holds $0.9$ or more, Luce wins 16 of 21:
-renormalizing exact tail probabilities is hard to beat when almost
-nothing changes.
-\end{itemize}
+\begin{table}[ht]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+Stratum & $n$ & mean $\Delta$KL (Luce $-$ Thurstone) & 95\% CI \\
+\midrule
+all cells & 461 & $+0.033$ & $[+0.020, +0.047]$ \\
+non-degenerate prior ($\tilde H > 0.2$) & 323 & $+0.044$ & $[+0.028, +0.062]$ \\
+degenerate prior ($\tilde H \leq 0.2$) & 138 & $+0.007$ & $[-0.012, +0.031]$ \\
+\bottomrule
+\end{tabular}
+\caption{Permutation-controlled deletion battery, exact log probabilities,
+KL scoring. Positive favors Thurstone. The Thurstonian advantage is
+decisive overall and concentrates precisely where the model retains
+genuine choice entropy.}
+\label{tab:battery}
+\end{table}
 
 Contest behavior governs wherever machine preference is genuinely
-stochastic; the Choice Axiom survives only in the degenerate cells that
-preference tuning has emptied of choice.
+stochastic; the Choice Axiom is competitive only in the degenerate cells
+that preference tuning has emptied of choice.
 
 One further caution emerged with practical import for all such
 experiments: the ``actual'' restricted distribution depends materially on
@@ -375,6 +388,55 @@ removal from a fixed preference state the two phrasings would coincide;
 in a language model the choice-set manipulation is itself a prompt
 intervention. Framing effects of this size sit above both choice models,
 and any account of machine preference that ignores them is incomplete.
+
+\subsection{Menus, duplicates, and context effects}
+
+Presenting the choice set explicitly---``pick one of these: \ldots,''
+with menu order randomized and probabilities read from option-token log
+probabilities---changes the phenomenon entirely, in three ways.
+
+First, menu choice by preference-tuned models is nearly deterministic.
+A transport menu (car, bus, train, bike, walk, taxi) under contextual
+conditioning behaves with perfect semantic sense---``it is raining''
+sends GPT-4o to \emph{taxi} with probability $1.00$, ``there is a fuel
+shortage'' to \emph{bike} at $0.99$---but the resulting distributions
+are so degenerate that menu-based deletion cannot separate the choice
+models (144 cells, $\Delta$KL CI $[-0.028, +0.016]$), consistent with
+Table~\ref{tab:battery}'s stratification.
+
+Second, machines are anti-red-bus. In Debreu's classic objection to the
+Choice Axiom \cite{debreu1960}, splitting a bus into a red bus and a
+blue bus should not double the bus vote; humans treat near-duplicates as
+substitutes, which correlated-noise (probit) models capture. Across ten
+duplicate-pair families the models show \emph{no substitution at all}:
+the duplicated category's total share typically inflates, often beyond
+even the urn-doubling prediction (apple $0.08 \to 0.53$ when split into
+green and red), and a substitution baseline is the best predictor in
+only 8 of 25 cells against Luce's 17. (With exchangeable duplicates,
+Luce and independent Thurstone nearly coincide; the test's power is
+entirely against substitution.) Description salience---\emph{red} apple
+is more vivid than apple---appears to dominate any shared-noise
+structure.
+
+Third, where a menu does leave residual entropy, machine choice violates
+\emph{regularity}---the property, shared by every random utility model
+including Thurstone's, that an added option cannot increase an incumbent's
+absolute share. Using two-attribute options (price versus quality) in
+randomized lettered menus, an asymmetrically dominated decoy
+\cite{huber1982} increased the target's absolute share in 8 of 18
+family-model cells, and a compromise manipulation \cite{simonson1989} in
+4 of 18. The phone-plan family shows a textbook attraction effect on all
+three models (GPT-4o: target share $0.26 \to 0.84$ when its decoy
+appears). Machine preference, like human preference, is not a random
+utility model in the menu regime.
+
+Together the batteries locate the choice law in the \emph{elicitation
+architecture}. Open-vocabulary recall behaves like a Thurstonian
+contest among retrieved candidates (Table~\ref{tab:battery}); explicit
+menus behave like near-deterministic maximization perturbed by salience
+and context effects that no random utility model accommodates. Between
+them sits the sampled-sentence regime of \cite{cekinmez2026}, where the
+contest reading again does best.
 
 \section{Discussion}
 \label{sec:discussion}
@@ -472,6 +534,28 @@ beyond).
 Robert Kirk, Ishita Mediratta, Christoforos Nalmpantis, et al.
 Understanding the effects of RLHF on LLM generalisation and diversity.
 \emph{ICLR}, 2024.
+
+\bibitem{debreu1960}
+Gerard Debreu.
+Review of R. D. Luce, \emph{Individual Choice Behavior}.
+\emph{American Economic Review}, 50(1):186--188, 1960.
+
+\bibitem{huber1982}
+Joel Huber, John W. Payne, and Christopher Puto.
+Adding asymmetrically dominated alternatives: Violations of regularity
+and the similarity hypothesis.
+\emph{Journal of Consumer Research}, 9(1):90--98, 1982.
+
+\bibitem{simonson1989}
+Itamar Simonson.
+Choice based on reasons: The case of attraction and compromise effects.
+\emph{Journal of Consumer Research}, 16(2):158--174, 1989.
+
+\bibitem{yellott1977}
+John I. Yellott.
+The relationship between Luce's choice axiom, Thurstone's theory of
+comparative judgment, and the double exponential distribution.
+\emph{Journal of Mathematical Psychology}, 15(2):109--144, 1977.
 
 \end{thebibliography}
 
