@@ -333,6 +333,49 @@ loss of experimental power: alignment has pushed the interesting
 variation into the tails, where only exact log-probability designs can
 reach it.
 
+\subsection{Random elicitation restores the regime}
+
+The remedy is to ask for randomness rather than preference. ``Name a
+random metal'' followed by explicit single-item elimination---either an
+exclusion (``\ldots{} that is not gold'') or the two-slot continuation of
+Section~\ref{sec:masked} (``I already picked one random metal: gold.
+Name another\ldots'')---raises mean unqualified entropy to $0.38$ and
+returns the experiment to the regime where the two families disagree.
+(Only partially: models are poor samplers even on request, with ``a
+random planet'' putting essentially all mass on \emph{Mars}---the
+homogenization of \cite{jiang2026} extends to explicit randomness.)
+
+Across 77 exact-probability cells (17 categories, two phrasings, two
+elimination variants, three GPT models) the headline is again close:
+Thurstone is the better predictor in 44 of 77 cells. Stratifying by the
+entropy of the unqualified distribution resolves the ambiguity of the
+previous subsection cleanly:
+
+\begin{itemize}
+\item where the favorite holds less than $0.9$ of the mass---genuinely
+stochastic preference---\textbf{Thurstone wins 39 of 56 cells} (sign
+test $p = 0.002$);
+\item where the favorite holds $0.9$ or more, Luce wins 16 of 21:
+renormalizing exact tail probabilities is hard to beat when almost
+nothing changes.
+\end{itemize}
+
+Contest behavior governs wherever machine preference is genuinely
+stochastic; the Choice Axiom survives only in the degenerate cells that
+preference tuning has emptied of choice.
+
+One further caution emerged with practical import for all such
+experiments: the ``actual'' restricted distribution depends materially on
+how the restriction is phrased. Holding everything else fixed, the
+exclusion and two-slot variants disagree about the restricted
+distribution by a median maximum gap of $0.14$, and up to $0.65$
+(GPT-4o-mini names \emph{Earth} after \emph{Mars} with probability
+$0.94$ under one phrasing and $0.56$ under the other). Under surgical
+removal from a fixed preference state the two phrasings would coincide;
+in a language model the choice-set manipulation is itself a prompt
+intervention. Framing effects of this size sit above both choice models,
+and any account of machine preference that ignores them is incomplete.
+
 \section{Discussion}
 \label{sec:discussion}
 
