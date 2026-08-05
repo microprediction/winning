@@ -1,85 +1,85 @@
 {
- "bank": {
-  "finance": 45,
-  "river": 35,
-  "tilt": 15,
-  "heap": 5
- },
- "spring": {
-  "season": 45,
-  "leap": 30,
-  "coil": 15,
-  "water": 10
- },
  "bolt": {
-  "fastener": 30,
-  "lightning": 35,
-  "run": 25,
+  "fastener": 25,
+  "lightning": 30,
+  "run": 35,
   "lock": 10
  },
- "seal": {
-  "close": 55,
-  "stamp": 25,
-  "animal": 20
+ "bank": {
+  "finance": 70,
+  "river": 20,
+  "tilt": 7,
+  "heap": 3
  },
- "pitch": {
-  "sales": 40,
-  "throw": 30,
-  "field": 20,
-  "tone": 10
+ "seal": {
+  "animal": 15,
+  "close": 45,
+  "stamp": 40
+ },
+ "spring": {
+  "season": 50,
+  "leap": 25,
+  "coil": 20,
+  "water": 5
  },
  "mole": {
-  "skin": 35,
-  "animal": 25,
-  "spy": 20,
-  "chemistry": 12,
-  "sauce": 8
- },
- "crane": {
-  "stretch": 45,
-  "machine": 40,
-  "bird": 15
+  "animal": 35,
+  "skin": 30,
+  "spy": 15,
+  "chemistry": 10,
+  "sauce": 10
  },
  "jaguar": {
   "animal": 60,
   "car": 40
  },
- "match": {
-  "firestick": 15,
-  "contest": 40,
-  "pairing": 45
+ "crane": {
+  "bird": 30,
+  "machine": 50,
+  "stretch": 20
  },
- "pen": {
-  "writing": 60,
-  "enclosure": 30,
-  "prison": 10
- },
- "bat": {
-  "animal": 25,
-  "sports": 40,
-  "hit": 35
+ "python": {
+  "language": 80,
+  "snake": 20
  },
  "bar": {
-  "pub": 35,
-  "rod": 28,
-  "block": 20,
-  "law": 12,
-  "music": 5
+  "pub": 25,
+  "rod": 20,
+  "block": 30,
+  "law": 10,
+  "music": 15
+ },
+ "bat": {
+  "animal": 20,
+  "sports": 40,
+  "hit": 40
+ },
+ "pen": {
+  "writing": 70,
+  "enclosure": 20,
+  "prison": 10
+ },
+ "match": {
+  "firestick": 10,
+  "contest": 50,
+  "pairing": 40
  },
  "port": {
-  "connector": 40,
-  "harbor": 25,
+  "connector": 35,
+  "harbor": 30,
   "wine": 20,
   "left": 15
  },
- "iron": {
-  "metal": 45,
-  "appliance": 30,
-  "press": 15,
-  "golf": 10
+ "pitch": {
+  "throw": 25,
+  "tone": 15,
+  "sales": 40,
+  "field": 20
  },
- "python": {
-  "snake": 25,
-  "language": 75
+ "iron": {
+  "metal": 35,
+  "appliance": 15,
+  "press": 40,
+  "golf": 10
  }
 }

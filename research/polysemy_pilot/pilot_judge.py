@@ -34,7 +34,10 @@ def extract_json(text: str):
     return json.loads(m.group(0)) if m else None
 
 
-def judge_word(word: str, senses: list[str], sentences: list[str]):
+CHUNK = 30
+
+
+def judge_chunk(word: str, senses: list[str], sentences: list[str]):
     labels = senses + ["multiple", "unclear", "other"]
     numbered = "\n".join(f"{i+1}. {s}" for i, s in enumerate(sentences))
     prompt = (
@@ -49,6 +52,13 @@ def judge_word(word: str, senses: list[str], sentences: list[str]):
     )
     out = extract_json(claude_call(prompt, JUDGE_MODEL))
     assert isinstance(out, list) and len(out) == len(sentences), f"bad judge output for {word}"
+    return out
+
+
+def judge_word(word: str, senses: list[str], sentences: list[str]):
+    out = []
+    for k in range(0, len(sentences), CHUNK):
+        out += judge_chunk(word, senses, sentences[k:k + CHUNK])
     return word, out
 
 

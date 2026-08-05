@@ -243,16 +243,15 @@ experiment run by neither paper until now.
 
 We replicated the design at pilot scale on Claude models (October 2025
 generation): 15 polysemous words from the stimulus set of
-\cite{cekinmez2026}, 30 independent sentence generations per word, senses
+\cite{cekinmez2026}, 150 independent sentence generations per word, senses
 classified by a second model against the closed inventory, plus a stated
 distribution elicited with their ``predicting itself'' framing. The
-collapse replicates almost exactly: mean normalized sense entropy $0.265$
-generated (their text-model figure: $0.25$) against $0.906$ stated. Eight
-of fifteen words collapsed to a single sense in all thirty samples.
+collapse replicates almost exactly: mean normalized sense entropy $0.252$
+generated (their text-model figure: $0.25$) against $0.880$ stated.
 
 Fitting the two one-parameter families from stated to generated
-distributions gives a statistical tie (Thurstone $\sigma = 0.49$, RMSE
-$0.293$; power tilt $\gamma = 2.0$, RMSE $0.294$; Thurstone the better
+distributions gives a statistical tie (Thurstone $\sigma = 0.42$, RMSE
+$0.273$; power tilt $\gamma = 2.25$, RMSE $0.273$; Thurstone the better
 fit on 10 of 15 words), and the reason both fit poorly is itself
 informative: for several words the generated mode is not even the stated
 argmax (``port'' generates \emph{harbor} in every sample while rating
@@ -264,11 +263,12 @@ what the restriction design does.
 
 \subsection{Choice-set restriction}
 
-For the five words whose unrestricted distributions were non-degenerate,
-we re-sampled with the modal sense excluded by instruction and compared
-zero-parameter predictions of the restricted distribution: Luce
-renormalization against Thurstonian contestant removal, both calibrated
-to the add-half smoothed unrestricted sense counts.
+For the six words whose unrestricted distributions were non-degenerate,
+we re-sampled with the modal sense excluded by instruction (150 samples
+per condition) and compared zero-parameter predictions of the restricted
+distribution: Luce renormalization against Thurstonian contestant
+removal, both calibrated to the add-half smoothed unrestricted sense
+counts.
 
 \begin{table}[ht]
 \centering
@@ -276,32 +276,62 @@ to the add-half smoothed unrestricted sense counts.
 \toprule
 Word & Luce RMSE & Thurstonian RMSE & Restricted distribution \\
 \midrule
-bolt  & 0.449 & \textbf{0.423} & fastener .76, run .17, lock .07 \\
-seal  & \textbf{0.340} & 0.347 & close .89, stamp .11 \\
-pitch & 0.626 & \textbf{0.580} & throw .06, tone .29, field .65 \\
-bat   & 0.750 & \textbf{0.709} & animal 1.00, sports .00 \\
-iron  & \textbf{0.076} & 0.130 & metal .93, press .07, golf .00 \\
+bolt  & 0.450 & \textbf{0.413} & fastener .68, run .18, lock .14 \\
+seal  & \textbf{0.077} & 0.089 & animal .67, close .33 \\
+pitch & 0.655 & \textbf{0.630} & throw .06, tone .31, field .63 \\
+bat   & 0.559 & \textbf{0.546} & animal 1.00, hit .00 \\
+match & 0.758 & \textbf{0.651} & firestick .82, contest .18 \\
+iron  & \textbf{0.002} & 0.037 & metal .95, press .04, golf .01 \\
 \midrule
-pooled & 0.493 & \textbf{0.468} & \\
+pooled & 0.495 & \textbf{0.459} & \\
 \bottomrule
 \end{tabular}
-\caption{Restriction test on polysemous words (Claude Haiku 4.5, 30
+\caption{Restriction test on polysemous words (Claude Haiku 4.5, 150
 samples per condition, modal sense excluded by instruction). The
-Thurstonian prediction is closer pooled and on three of five words.}
+Thurstonian prediction is closer pooled and on four of six words
+(bootstrap over words: $P(\text{Thurstone better}) = 0.90$).}
 \label{tab:restrict}
 \end{table}
 
 The margin favors Thurstone, but the qualitative signature matters more
 than the margin: under restriction the model does not spread probability
 proportionally, as Luce requires. It \emph{re-collapses} onto a new modal
-sense (seal $\to$ \emph{close} at $.89$; iron $\to$ \emph{metal} at
-$.93$). Remove the winning horse and the runner-up now wins nearly
-always---low-noise contest behavior, and the same low-entropy,
-heavy-qualification regime where the Thurstonian advantage concentrated in
-Section~\ref{sec:maskedresults}. One word (``bat'') flipped rank entirely
-under restriction, likely because excluding the \emph{hit} sense also
-suppresses the overlapping \emph{sports} sense; inventories with
-overlapping senses contaminate the test and neither family survives them.
+sense (match $\to$ \emph{firestick} at $.82$; iron $\to$ \emph{metal} at
+$.95$; bat $\to$ \emph{animal} at $1.00$). Remove the winning horse and
+the runner-up now wins nearly always---low-noise contest behavior, and
+the same low-entropy, heavy-qualification regime where the Thurstonian
+advantage concentrated in Section~\ref{sec:maskedresults}. Some rank
+flips under restriction exceed even the Thurstonian sharpening, and
+inventories with overlapping senses (``bat'') contaminate the exclusion
+instruction; neither family survives those cells.
+
+\subsection{Exact probabilities on GPT models}
+
+Sampling noise can be removed entirely on models that expose token log
+probabilities. We ported the qualified-question design of
+Section~\ref{sec:masked} to GPT-4o-mini, GPT-4o and GPT-4.1: twenty
+category pairs (``my favorite color is'' / ``my favorite warm color
+is''), two phrasings, next-token distributions read exactly from the
+top-20 log probabilities, with the Thurstonian field restricted to a
+declared category inventory. Across 71 usable cells the comparison is a
+statistical tie with a Thurstonian lean: Thurstone wins 38 of 71 cells
+and has the lower pooled RMSE on all three models (e.g.\ $0.290$ vs
+$0.295$ on GPT-4o), but a bootstrap over cells does not separate the
+families ($p = 0.29$).
+
+The instrument, however, has weakened for an interesting reason: the
+unqualified distributions of preference-tuned chat models are already
+near-degenerate (``the best metal is'' puts $0.997$ on \emph{gold}),
+so most cells carry little discriminating information---under either
+model the surviving favorite keeps nearly everything, and the comparison
+hinges on tail probabilities. The masked models of
+Section~\ref{sec:maskedresults} answered the unqualified question with
+entropy to spare (California at $10.9\%$); their preference-tuned
+descendants have already collapsed before the experimenter arrives. This
+is the same collapse measured by \cite{cekinmez2026}, now visible as a
+loss of experimental power: alignment has pushed the interesting
+variation into the tails, where only exact log-probability designs can
+reach it.
 
 \section{Discussion}
 \label{sec:discussion}

@@ -14,9 +14,9 @@ HERE = Path(__file__).parent
 GEN_DIR = HERE / "gen"
 GEN_DIR.mkdir(exist_ok=True)
 
-N_SAMPLES = 30
+N_SAMPLES = 150
 GEN_MODEL = "haiku"
-CONCURRENCY = 12
+CONCURRENCY = 16
 
 SYSTEM = "You are a helpful assistant."
 
