@@ -1,0 +1,323 @@
+{
+ "mean_H_generated": 0.2645178601393469,
+ "mean_H_stated": 0.9063372186533433,
+ "luce": {
+  "gamma": 2.0,
+  "rmse": 0.29426261720612
+ },
+ "thurstone": {
+  "sigma": 0.48902687406199946,
+  "rmse": 0.293399452962757
+ },
+ "words": [
+  {
+   "word": "bolt",
+   "senses": [
+    "fastener",
+    "lightning",
+    "run",
+    "lock"
+   ],
+   "generated": [
+    0.10344827586206896,
+    0.4482758620689655,
+    0.41379310344827586,
+    0.034482758620689655
+   ],
+   "stated": [
+    0.3,
+    0.35,
+    0.25,
+    0.1
+   ],
+   "fallback": 1
+  },
+  {
+   "word": "bank",
+   "senses": [
+    "finance",
+    "river",
+    "tilt",
+    "heap"
+   ],
+   "generated": [
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "stated": [
+    0.45,
+    0.35,
+    0.15,
+    0.05
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "spring",
+   "senses": [
+    "season",
+    "coil",
+    "water",
+    "leap"
+   ],
+   "generated": [
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "stated": [
+    0.45,
+    0.15,
+    0.1,
+    0.3
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "mole",
+   "senses": [
+    "animal",
+    "skin",
+    "spy",
+    "chemistry",
+    "sauce"
+   ],
+   "generated": [
+    0.9666666666666667,
+    0.0,
+    0.03333333333333333,
+    0.0,
+    0.0
+   ],
+   "stated": [
+    0.25,
+    0.35,
+    0.2,
+    0.12,
+    0.08
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "seal",
+   "senses": [
+    "animal",
+    "close",
+    "stamp"
+   ],
+   "generated": [
+    0.4,
+    0.3333333333333333,
+    0.26666666666666666
+   ],
+   "stated": [
+    0.2,
+    0.55,
+    0.25
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "pitch",
+   "senses": [
+    "throw",
+    "tone",
+    "sales",
+    "field"
+   ],
+   "generated": [
+    0.36666666666666664,
+    0.0,
+    0.6333333333333333,
+    0.0
+   ],
+   "stated": [
+    0.3,
+    0.1,
+    0.4,
+    0.2
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "crane",
+   "senses": [
+    "bird",
+    "machine",
+    "stretch"
+   ],
+   "generated": [
+    0.03333333333333333,
+    0.9666666666666667,
+    0.0
+   ],
+   "stated": [
+    0.15,
+    0.4,
+    0.45
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "bar",
+   "senses": [
+    "pub",
+    "rod",
+    "block",
+    "law",
+    "music"
+   ],
+   "generated": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "stated": [
+    0.35,
+    0.28,
+    0.2,
+    0.12,
+    0.05
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "jaguar",
+   "senses": [
+    "animal",
+    "car"
+   ],
+   "generated": [
+    1.0,
+    0.0
+   ],
+   "stated": [
+    0.6,
+    0.4
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "python",
+   "senses": [
+    "snake",
+    "language"
+   ],
+   "generated": [
+    0.0,
+    1.0
+   ],
+   "stated": [
+    0.25,
+    0.75
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "bat",
+   "senses": [
+    "animal",
+    "sports",
+    "hit"
+   ],
+   "generated": [
+    0.1,
+    0.3333333333333333,
+    0.5666666666666667
+   ],
+   "stated": [
+    0.25,
+    0.4,
+    0.35
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "pen",
+   "senses": [
+    "writing",
+    "enclosure",
+    "prison"
+   ],
+   "generated": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "stated": [
+    0.6,
+    0.3,
+    0.1
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "match",
+   "senses": [
+    "firestick",
+    "contest",
+    "pairing"
+   ],
+   "generated": [
+    0.0,
+    0.03333333333333333,
+    0.9666666666666667
+   ],
+   "stated": [
+    0.15,
+    0.4,
+    0.45
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "iron",
+   "senses": [
+    "metal",
+    "appliance",
+    "press",
+    "golf"
+   ],
+   "generated": [
+    0.3,
+    0.6666666666666666,
+    0.03333333333333333,
+    0.0
+   ],
+   "stated": [
+    0.45,
+    0.3,
+    0.15,
+    0.1
+   ],
+   "fallback": 0
+  },
+  {
+   "word": "port",
+   "senses": [
+    "harbor",
+    "left",
+    "wine",
+    "connector"
+   ],
+   "generated": [
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "stated": [
+    0.25,
+    0.15,
+    0.2,
+    0.4
+   ],
+   "fallback": 0
+  }
+ ]
+}
