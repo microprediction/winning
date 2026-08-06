@@ -450,6 +450,23 @@ three models (GPT-4o: target share $0.26 \to 0.84$ when its decoy
 appears). Machine preference, like human preference, is not a random
 utility model in the menu regime.
 
+The menu regime admits a verdict stronger than any pairwise model
+comparison, because exact probabilities make it feasible to measure the
+\emph{complete choice structure}: all eleven menus over a four-item
+universe, a measurement no human experiment delivers cleanly. By the
+Block--Marschak--Falmagne theorem \cite{block1960, falmagne1978}, such a
+structure is random-utility representable if and only if its
+Block--Marschak sums are nonnegative. Across six item families and three
+GPT models, \textbf{all 18 measured structures violate the conditions}
+(3--9 negative terms of 32 each; worst $-0.58$, far beyond measurement
+noise from order averaging). Fitting the structures anyway, the best
+possible random utility model (a distribution over all 24 rankings)
+leaves half the divergence unexplained (total KL $5.3$, against $9.7$
+for the best Thurstone locations and $10.4$ for the best Luce
+utilities---Thurstone the better parametric fit in 14 of 18
+structures). In the menu regime, machine choice is not a random utility
+model at all.
+
 Together the batteries locate the choice law in the \emph{elicitation
 architecture}. Open-vocabulary recall behaves like a Thurstonian
 contest among retrieved candidates (Table~\ref{tab:battery}); explicit
@@ -570,6 +587,17 @@ and the similarity hypothesis.
 Itamar Simonson.
 Choice based on reasons: The case of attraction and compromise effects.
 \emph{Journal of Consumer Research}, 16(2):158--174, 1989.
+
+\bibitem{block1960}
+H. D. Block and Jacob Marschak.
+Random orderings and stochastic theories of responses.
+In \emph{Contributions to Probability and Statistics}, Stanford
+University Press, 1960.
+
+\bibitem{falmagne1978}
+Jean-Claude Falmagne.
+A representation theorem for finite random scale systems.
+\emph{Journal of Mathematical Psychology}, 18(1):52--72, 1978.
 
 \bibitem{yellott1977}
 John I. Yellott.

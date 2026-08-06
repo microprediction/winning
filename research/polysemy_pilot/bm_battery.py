@@ -58,7 +58,7 @@ def menu_dist(items, model, rng):
         slot = {x: 0.0 for x in items}
         for tok, p in raw.items():
             w = tok.strip().lower()
-            if len(w) < 3:
+            if not w or not w.isalpha():
                 continue
             hits = [x for x in items if x.startswith(w)]
             if len(hits) == 1:
