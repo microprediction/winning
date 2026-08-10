@@ -15,17 +15,17 @@ Thurstone is the Model of Choice}}
 \maketitle
 
 \begin{abstract}
-\noindent Softmax output layers suggest, almost by construction, that
-large language models should obey Luce's Choice Axiom. They do not. In
-masked-token experiments a Thurstonian contest model predicted BERT's
-revealed preferences better in roughly 80\% of cases. We extend the test to
-modern models across thirteen designs and 48{,}536 cells scored by exact log
-probabilities. Replaying the original two-slot stimuli over 2{,}183
-cells, Thurstone beats Luce decisively (mean $\Delta$KL $+0.55$, CI
-$[+0.51, +0.60]$), as it does over 1{,}195 deletion cells and under all four
-ordered-selection framings. The advantage rises monotonically with model
-tier. Explicit menus behave differently: near-deterministic, no red-bus
-substitution, and regularity violations beyond any random utility model.
+\noindent A softmax output layer renormalizes when a logit is masked, so it
+obeys Luce's Choice Axiom for that operation. Restricting a choice set in
+language is a different operation: the prompt changes and the logits are
+recomputed. We measure which law describes the recomputation. Across thirteen
+designs and 48{,}536 cells, scored by exact log probabilities on every design
+but one, Thurstonian contestant removal predicts restricted machine preference
+better than renormalization does, in all 99 question types of the original
+appendix and on all twenty-one models. Most of the reallocation is a
+flattening that either family captures given one scale parameter; the contest
+geometry earns a further small increment. Explicit menus form a separate
+regime that violates every random utility model.
 \end{abstract}
 
 \section{Introduction}
@@ -54,21 +54,34 @@ p_i = \frac{e^{z_i}}{\sum_{j=1}^n e^{z_j}},
 \label{eq:softmax}
 \end{equation}
 however complicated the transformer computation producing $z_i$ may be.
-Delete item 1 from consideration by setting $z_1 = -\infty$, a surgical
-procedure impossible in humans, and the remaining probabilities are the
-old ones renormalized by $1/(1-p_1)$. In using softmax layers we are, in
-effect, heavily \emph{suggesting} to the machine that it obey Luce's
-Choice Axiom.
+Delete item 1 by setting $z_1 = -\infty$, a surgical procedure impossible in
+humans, and the remaining probabilities are the old ones renormalized by
+$1/(1-p_1)$. The output layer therefore satisfies the Choice Axiom exactly,
+for that operation.
 
-It doesn't. This paper demonstrates that language models, despite the
-suggestion built into their output layer, exhibit preference behavior
-better modeled in the Thurstonian framework of noisy contests
-\cite{thurstone1927}.
+Restricting a choice set in language is not that operation, and we do not
+suppose it is. Telling a model that an option is unavailable changes the
+prompt, so the whole logit vector is recomputed rather than masked, and
+nothing in the architecture constrains the new odds among survivors to match
+the old ones. Menu-dependent logits can represent any positive choice rule at
+all. The softmax is thus a statement about what the sampling head does with a
+\emph{fixed} state, not a prediction about behaviour across prompts, and the
+question of which law describes the recomputation is empirical from the
+outset.
+
+That gap is the subject of this paper, and it has practical bite because
+masked renormalization is exactly what deployed systems compute: constrained
+decoding, tool routers that mask unavailable tools, and guardrails that drop
+a candidate all impose Equation~\eqref{eq:luce} by construction. What a model
+reports when told in context that an option is unavailable is a different
+object. We measure how far apart the two are, and find the difference better
+described by the Thurstonian contest of \cite{thurstone1927} than by
+renormalization.
 
 The evidence is not a single experiment. Table~\ref{tab:designs} lists
 thirteen designs comprising $48{,}536$ scored choice cells, built from
 $61{,}512$ logged exact log-probability measurements on five commercial and
-sixteen open-weight models, alongside the masked language model study of the 2024 version and a
+twelve open-weight models, alongside the masked language model study of the 2024 version and a
 generative replication on Claude. Every cell is a zero-parameter
 out-of-sample prediction: both families are calibrated to an unrestricted
 distribution and asked to predict a restricted one they have not seen. The
@@ -104,13 +117,14 @@ Polysemous generation, restriction & Claude & 21 & re-collapse, not renormalizat
 Qualified-noun restriction & 3 GPT & 71 & tie (degenerate priors) \\
 Random elicitation, one deletion & 3 GPT & 77 & Thurstone 39/56, $p = 0.002$ \\
 Permutation-controlled deletion & 5 GPT & 1{,}195 & $\Delta$KL $+0.025$ $[+0.018, +0.033]$ \\
+\quad of which the three headline models & 3 GPT & 692 & $\Delta$KL $+0.025$ $[+0.016, +0.035]$ \\
 Original 2024 stimuli, two-slot & 5 GPT & 3{,}660 & $\Delta$KL $+0.52$ $[+0.49, +0.55]$ \\
 Open-vocabulary sweep, 99 question types & 3 GPT & 37{,}764 & \textbf{99/99 types favor Thurstone} \\
-Ordered selection to depth five & 5 GPT & 1{,}363 & $+0.23$ to $+0.41$, all four framings \\
+Ordered selection to depth five & 5 GPT & 1{,}363 & $+0.18$ to $+0.55$, all four framings \\
 Reversibility (best vs worst first) & 5 GPT & 108 & both families fail; not one scale \\
 Block--Marschak / RUM test & 5 GPT & 30 & 30/30 violate RUM \\
-Menus, duplicates, decoys & 5 GPT & 110 & no substitution; 16/30 regularity \\
-Base against instruct, local & 16 open & 3{,}219 & tuning effect in 4 of 6 pairs \\
+Menus, duplicates, decoys & 5 GPT & 110 & substitution best in 15/41; 16/30 regularity \\
+Base against instruct, local & 12 open & 3{,}219 & tuning effect in 4 of 6 pairs \\
 \bottomrule
 \end{tabular}
 \caption{The full evidence base. Cells are scored zero-parameter
@@ -344,14 +358,19 @@ shows DPO alone cutting sense entropy from $0.25$ to $0.18$.
 Read through the lens of Section~\ref{sec:models}, the ladder is what a
 contest model produces. Let the stated distribution proxy the latent
 locations $\{a_i\}$; let each generation be a contest among noisy sense
-performances. When noise is small relative to the spread of locations,
-winning probability is a violently convex function of location
-differences, and a mildly uneven prior collapses onto its mode. One noise
+performances. When noise is small relative to the spread of locations, winning probability
+is a steeply nonlinear function of location differences, sigmoidal rather than
+convex, and a mildly uneven prior collapses onto its mode. One noise
 parameter then indexes the entire ladder, and the ``multimodal gap''
 becomes a noise gap rather than a knowledge gap. The rival explanation is
 a power tilt: renormalized $p_i^{\gamma}$, the Luce family with a
-temperature, which is mechanically what RLHF sharpening, low-temperature
-decoding, and classifier-free guidance perform. The two families are
+temperature. Low-temperature decoding is literally this transformation of a
+fixed token distribution. Preference tuning and classifier-free guidance are
+often described in the same terms but are not the same operation: tuning
+changes parameters, and therefore logits, in a prompt- and token-dependent
+way, while guidance combines conditional and unconditional logits. The tilt is
+a rival account of the observed sharpening, not a description of what those
+procedures compute. The two families are
 distinguished not by the collapse itself but by behavior under choice-set
 restriction, precisely the instrument of Section~\ref{sec:masked}, and an
 experiment run by neither paper until now.
@@ -465,6 +484,15 @@ models are poor samplers even on request, with ``a random planet''
 putting essentially all mass on \emph{Mars}. The homogenization of
 \cite{jiang2026} extends to explicit randomness.
 
+Two of the designs deserve a caveat before the numbers. Adding a qualifier
+changes the meaning of the question as well as the admissible set, and a
+two-slot continuation conditions on a linguistic prefix, so collocation,
+contrast and list convention all act alongside removal. Neither is a surgical
+deletion from a fixed choice problem, and machine restriction is not a pure
+urn problem in any case. The explicit exclusion phrasing is the closest thing
+here to a choice-set intervention, and it is reported separately throughout
+rather than pooled away.
+
 To control for phrasing and for which item is removed, the definitive
 battery deletes \emph{each} of the top eight observed items in turn,
 under two phrasings, across 50 categories and three GPT models. Thirty-one
@@ -552,6 +580,55 @@ earlier reading. Preference tuning does not repeal the contest structure in
 collapsed distributions; it only leaves too little entropy for a smaller
 battery to detect it.
 
+Cells nest inside question types, adjective variants, base prompts and models,
+so cell-level bootstrap intervals overstate the independent information. A
+cluster bootstrap that resamples the 99 question types and retains every cell
+belonging to a selected type gives $[+0.135, +0.165]$ against the cell-level
+$[+0.145, +0.154]$. The clustered interval is the honest one and is reported
+throughout; here it is barely wider, because the effect is present within
+essentially every cluster rather than concentrated in a few.
+
+\subsection{What the comparison does and does not identify}
+\label{sec:tilt}
+
+Winning a two-model contest against renormalization does not establish that a
+Gaussian race generates the data. The natural rival is one fitted parameter of
+sharpening,
+\begin{equation}
+\tilde p_i(\gamma) = \frac{p_i^{\gamma}}
+  {\sum_{j \in S} p_j^{\gamma}}, \qquad i \in S,
+\label{eq:tilt}
+\end{equation}
+which is the Luce family with a temperature. Fitting a single global $\gamma$
+on some question types and scoring it on entirely held-out types, so that no
+category is ever used for both, gives $\gamma \approx 0.22$ and a held-out
+mean KL of $0.803$, against $1.786$ for zero-parameter contestant removal and
+$1.926$ for plain renormalization.
+
+That comparison is not like for like, since the tilt carries a parameter and
+contestant removal carries none, but it locates the phenomenon. The fitted
+$\gamma$ is well below one, so restricted distributions are markedly
+\emph{flatter} than the unrestricted ranking implies, and both zero-parameter
+forecasts are too concentrated. Most of the reallocation is a change of scale.
+
+Giving the contest the matching freedom, performances $N(a_i, \sigma^2)$ with
+one fitted $\sigma$, and scoring again on held-out question types, yields
+$\sigma \approx 3.4$ and a held-out mean KL of $0.794$. The contest retains a
+small advantage over the tilt at equal parameter cost, $+0.0089$
+$[+0.0040, +0.0142]$ clustered by question type, favouring Thurstone in 60 of
+99 types.
+
+The defensible reading follows. Prompted restriction reallocates probability
+rather than renormalizing it, and the dominant component of that reallocation
+is a flattening that either family captures once allowed a scale parameter.
+Conditional on the flattening, the Gaussian geometry earns a further small and
+consistent improvement. What the batteries establish is that machine
+restriction behaviour is more Thurstonian than Lucean among the forecasts
+considered, not that a stable Gaussian contest runs inside the model. Several
+untested alternatives would produce similar reallocation, among them
+heteroscedastic or correlated races, heavy-tailed contests, similarity-
+sensitive nesting, and retrieval dynamics specific to list completion.
+
 \subsection{The deficit grows with model tier}
 \label{sec:tier}
 
@@ -560,7 +637,8 @@ $+0.30$, GPT-4o-mini $+0.35$, GPT-4o $+0.42$, GPT-4.1-mini $+0.65$,
 GPT-4.1 $+0.88$. The more capable the model, the further its revealed
 preferences sit from the Choice Axiom its own output layer suggests.
 
-The architecture is constant along that ladder. All five models emit a
+The architecture is constant along that ladder, which narrows the candidate
+explanations without settling them. All five models emit a
 softmax, and a softmax implements
 Equation~\eqref{eq:luce} mechanically: mask a logit, renormalize, and the
 Choice Axiom holds by construction. The deviation therefore cannot
@@ -572,10 +650,12 @@ at it.
 The obvious confound is concentration. More capable models answer the
 unqualified question more sharply (mean $\tilde H$ falls from $0.276$ on
 GPT-4.1-nano to $0.105$ on GPT-4.1 over matched prompts), and sharpness
-alone widens the gap between an urn and a contest, since winning
-probability is a convex function of location differences. Three controls
-separate the two explanations, all run on the 512 prompts measured on every
-model, paired within the identical question.
+alone widens the gap between an urn and a contest, since the contest map
+amplifies rank separation. Three controls
+bear on the two explanations, all run on the 512 prompts measured on every
+model, paired within the identical question. None of them holds concentration
+fixed continuously, so the stratification below is a coarse control rather
+than a matched comparison.
 
 \begin{table}[ht]
 \centering
@@ -725,7 +805,11 @@ The two-slot design is an exacta. Asking instead for an ordered list, and
 eliciting each slot separately with the earlier picks fed back in, extends
 it to a trifecta and beyond, so that Plackett--Luce \cite{plackett1975}
 renormalization and Thurstonian contestant removal can be compared at
-every depth. Four framings were run over 40 categories and five models to
+every depth. The contest calculation here is stagewise: the taken items are
+removed and the surviving field is re-raced, which is not the conditional
+order statistic of a single Thurstone draw. It suits successive prompts, where
+the model recomputes its distribution at every slot, but the racing vocabulary
+should not be read as the one-draw joint ranking model. Four framings were run over 40 categories and five models to
 depth five: two neutral (``select five random $X$ in order'', ``name five
 different $X$, in order'') and two preference-ordered (most favourite
 first, least favourite first).
@@ -753,7 +837,10 @@ Reversibility is a sharper test, and both families fail it. Under a
 Thurstonian scale, asking for the least favourite is the same latent vector
 read backwards, since the minimum of $X$ is the maximum of $-X$; one
 calibration must then predict both directions with no free parameters.
-Luce must instead invert its utilities. Neither works: predicting the
+Luce's axiom, by contrast, says nothing about worst choice; replacing weights
+$w_i$ by $1/w_i$ is an extra bipolar assumption rather than a consequence of
+IIA, and negating a Gumbel shock does not give another Gumbel shock. The two
+sides of this test are therefore not symmetric. Neither works: predicting the
 least-favourite-first distribution from the most-favourite-first one costs
 $5.3$ to $9.0$ nats depending on the model, for both families alike, and
 the ranking of models by this quantity does not track capability. The
@@ -789,7 +876,7 @@ Second, machines are anti-red-bus. In Debreu's classic objection to the
 Choice Axiom \cite{debreu1960}, splitting a bus into a red bus and a
 blue bus should not double the bus vote; humans treat near-duplicates as
 substitutes, which correlated-noise (probit) models capture. Across ten
-duplicate-pair families the models show \emph{no substitution at all}:
+duplicate-pair families the models show little sign of substitution:
 the duplicated category's total share typically inflates, often beyond
 even the urn-doubling prediction (apple $0.08 \to 0.53$ when split into
 green and red), and a substitution baseline is the best predictor in
@@ -839,24 +926,35 @@ contest reading again does best.
 \section{Discussion}
 \label{sec:discussion}
 
-To the extent that LLMs mirror our own preferences, these results provide
-a rejection of Luce's Choice Axiom in favor of the Thurstonian model. The
-popularity of the former may owe much to computational convenience, a
-consideration the algorithm of \cite{cotton2021} removes.
+These results concern machines, and contain no human choice data; similarity
+of outputs would not identify similarity of mechanism, so nothing here bears
+on whether people obey the Choice Axiom. What they do suggest is that the
+axiom's standing as a default for machine choice owes more to computational
+convenience than to fit, a convenience the algorithm of \cite{cotton2021}
+removes.
 
-The polysemy results suggest something further: that generative ``mode
-collapse'' is not a defect of knowledge but the lawful output of a
-low-noise contest run over intact locations. That reframing carries a
-practical remedy. If choice is a contest, diversity is restored not by a
-power tilt but by inverting the contest to recover locations and
-re-sampling at a chosen noise level. Raising the sampling temperature
-distorts the tails and does not renormalize the way behavior actually
-renormalizes. The calibration is exactly the fast Thurstone computation of
-\cite{cotton2021}, and it offers a principled diversity knob without
-retraining.
+The polysemy results admit a further conjecture, offered as such. Generative
+``mode collapse'' may be less a defect of knowledge than the output of a
+low-noise contest run over intact locations, in which case diversity would be
+restored not by a power tilt but by inverting the contest to recover locations
+and re-sampling at a chosen noise level, using the calibration of
+\cite{cotton2021} and no retraining. The evidence for this is a fifteen-word
+exploratory design with six usable restriction cells, and it shows that a
+contest transformation approximates the sense ladder, not that generation is
+literally a race over a fixed inventory of senses. Establishing the remedy
+would require a held-out intervention study setting Thurstone-noise adjustment
+against temperature, top-$p$, typical and diversity-aware decoding, scored on
+both diversity and quality. We have not run it.
 
-Softmax machines disobey Luce's Choice Axiom, which suggests that a
-contest-structured output layer might generalize better than a softmax one.
+The same applies, more strongly, to architecture. That contextual restriction
+follows contestant removal more closely than renormalization suggests a
+contest-structured output layer might generalize better, and no experiment
+here tests generalization at all. A contest link would change subset
+behaviour within a fixed state; it would not by itself make upstream scores
+invariant across prompts, which is where the framing effects of
+Section~\ref{sec:sweep} live. What follows is a feasibility note rather than
+a result.
+
 Current architectures oblige the hidden layers to work against the
 renormalization their output layer implies, and Section~\ref{sec:tier}
 indicates they do so more, not less, as models improve.
@@ -916,6 +1014,49 @@ family. None of these touch the central measurement, which is that on
 $48{,}536$ scored cells, thirteen designs, twenty-one models and all 99
 question types of the original appendix, the contest predicts restricted
 machine preference better than renormalization does.
+
+\section*{Data and code availability}
+
+Every battery, its stimuli, and every model response are in
+\texttt{research/polysemy\_pilot} of \texttt{github.com/microprediction/winning},
+which also contains the Thurstone lattice implementation used throughout.
+Each paid API response is written to an append-only JSONL log before anything
+is computed from it, so all derived numbers are recomputable offline: the logs
+total $61{,}512$ measurements ($\texttt{sweep\_raw.jsonl}$,
+$\texttt{vol\_raw.jsonl}$, $\texttt{perm\_raw.jsonl}$,
+$\texttt{random\_raw.jsonl}$, $\texttt{exact\_raw.jsonl}$,
+$\texttt{bm\_raw.jsonl}$, $\texttt{local\_qvols\_raw.jsonl}$ and others), and
+re-running any battery script re-scores from the logs without further
+inference. The item inventories are in \texttt{inventory.py}, the model tiers
+in \texttt{models.py}, and the tilt and clustered-bootstrap analyses in
+\texttt{power\_tilt.py} and \texttt{one\_param.py}.
+
+Settings common to the commercial batteries: chat completions with
+\texttt{max\_tokens=1}, \texttt{logprobs=True}, \texttt{top\_logprobs=20},
+\texttt{temperature=1.0}, no penalties, no seed. Models are the aliases
+\texttt{gpt-4o}, \texttt{gpt-4o-mini}, \texttt{gpt-4.1},
+\texttt{gpt-4.1-mini} and \texttt{gpt-4.1-nano}, queried in August 2026; the
+logs record each response verbatim, but the aliases are moving targets and a
+future re-run need not reproduce them exactly. The GPT-5 tier cannot be used
+at all, since it refuses log-probability requests. Local models are 4-bit
+\texttt{mlx-community} conversions run with full-vocabulary logits.
+
+Candidate handling, which matters for the comparison: item fields are the
+top-ten surviving tokens after lower-casing, stripping, and discarding
+non-alphabetic and stop-word tokens; probabilities of surface variants that
+normalize to the same word are summed; the retained mass is renormalized over
+the field, so an item's probability is its first-token mass rather than a
+full-sequence probability. Truncation is not neutral between the two
+families. Under renormalization, conditioning the winner to lie in a retained
+set equals deleting the omitted alternatives, whereas under a contest the two
+differ, so a Thurstone calibration fitted to renormalized top-$k$
+probabilities need not recover the locations of a coherent full-vocabulary
+contest. The local batteries avoid this by scoring whole items by teacher
+forcing over the entire vocabulary. Cells are discarded when the field holds
+fewer than three items, when fewer than two survive the restriction, or when
+the calibration residual exceeds $0.05$; mass appearing at the restricted
+prompt on items absent from the unrestricted field is outside both models'
+support and is excluded from the renormalization rather than smoothed.
 
 \section*{Acknowledgments}
 We thank the developers of BERT and RoBERTa for making their models
