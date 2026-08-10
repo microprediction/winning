@@ -4,6 +4,7 @@
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{microtype}
+\usepackage{tikz}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
 \title{\textbf{Masking a Logit is not Removing an Option}\\[4pt]
@@ -137,6 +138,60 @@ category/adjective combinations from the 2024 version.}
 \label{tab:designs}
 \end{table}
 
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[scale=1.0]
+% ---- panel (a): the race ----
+\begin{scope}
+  \draw[->] (-3.4,0) -- (3.5,0) node[right] {\small performance};
+  \foreach \mu/\lab/\pw/\sh in {-0.80/A/.55/0.55, -0.16/B/.25/0.40,
+                                0.29/C/.13/0.28, 0.67/D/.07/0.18} {
+    \draw[thick, fill=black, fill opacity=\sh, draw opacity=0.9]
+      plot[domain=-3.2:3.3, samples=90, smooth]
+      (\x, {1.5*exp(-(\x-\mu)*(\x-\mu)/0.5)}) -- (3.3,0) -- (-3.2,0) -- cycle;
+    \node[font=\scriptsize] at (\mu, {1.5*exp(0)+0.22}) {\lab};
+  }
+  \node[font=\scriptsize, anchor=west] at (-3.4,-0.45)
+    {lowest draw wins: $P(A)=.55$, $P(B)=.25$, $P(C)=.13$, $P(D)=.07$};
+  \node[font=\small\bfseries] at (0,2.35) {(a) a race};
+\end{scope}
+% ---- panel (b): A removed ----
+\begin{scope}[xshift=8.6cm]
+  \node[font=\small\bfseries] at (0,2.35) {(b) $A$ removed};
+  \draw[->] (-2.2,0) -- (2.6,0);
+  \draw[->] (-2.2,0) -- (-2.2,2.0) node[above, font=\scriptsize] {$P$};
+  \foreach \y/\lab in {0/0, 1.0/.25, 2.0/.5} {
+    \draw[gray!40] (-2.2,\y) -- (2.5,\y);
+    \node[font=\scriptsize, anchor=east] at (-2.25,\y) {\lab};
+  }
+  % Luce (renormalized) and Thurstone (re-raced) bars
+  \foreach \i/\lab/\lu/\th in {0/B/2.222/2.080, 1/C/1.156/1.203, 2/D/0.622/0.717} {
+    \fill[black!25] ({-1.6+\i*1.35},0) rectangle ({-1.25+\i*1.35},\lu);
+    \fill[black!70] ({-1.25+\i*1.35},0) rectangle ({-0.90+\i*1.35},\th);
+    \node[font=\scriptsize] at ({-1.25+\i*1.35},-0.28) {\lab};
+  }
+  \fill[black!25] (0.95,1.75) rectangle (1.25,1.95);
+  \node[font=\scriptsize, anchor=west] at (1.3,1.85) {urn};
+  \fill[black!70] (0.95,1.35) rectangle (1.25,1.55);
+  \node[font=\scriptsize, anchor=west] at (1.3,1.45) {race};
+  \node[font=\scriptsize, anchor=west] at (-2.2,-0.65)
+    {odds $B\!:\!C$ were $1.92$; the urn keeps them, the race gives $1.73$};
+\end{scope}
+\end{tikzpicture}
+\caption{The two models disagree only under restriction. In (a) each item
+draws a performance and the lowest wins, which for these locations gives the
+win probabilities shown. In (b) item $A$ is removed. The urn rescales what is
+left, so the odds between any two survivors are unchanged by construction. The
+race is re-run without $A$, and the mass it vacated is redistributed unevenly:
+$B$ gains less than proportionally and the tail gains more, moving the $B\!:\!C$
+odds from $1.92$ to $1.73$. Every battery in this paper measures which of these
+two reallocations a language model performs. Locations are calibrated to the
+win probabilities in (a) by the method of \cite{cotton2021}; the numbers are
+exact, not illustrative.}
+\label{fig:urnrace}
+\end{figure}
+
 \section{A choice of choice models}
 \label{sec:models}
 
@@ -184,15 +239,39 @@ judgment in 1927 \cite{thurstone1927}, building on Fechner's discriminal
 dispersions \cite{fechner1860}, and it has never been settled in either
 direction.
 
-Thurstone's account is a contest with normally distributed performances, and
-its computational awkwardness was recognized immediately: the equal-variance
-Case V that Mosteller \cite{mosteller1951} made practical survives because
-the general case does not reduce to anything convenient. The logistic
-alternative arrived with Bradley and Terry \cite{bradley1952}, whose paired
-comparison model is algebraically tractable exactly where Thurstone's is not.
-Luce \cite{luce1959} then supplied the axiom, deriving the multinomial form
-of Equation~\eqref{eq:luce} from Independence of Irrelevant Alternatives and
-converting a modelling convenience into a behavioral principle.
+The interesting historical question is not who was right but why one side won,
+because it did not win on the evidence. It won on arithmetic.
+
+Thurstone's contest has no closed form beyond two alternatives. Choosing among
+$n$ items requires the probability that one normal draw is extremal among $n$,
+an $(n-1)$-dimensional integral with no elementary expression. Case V, the
+equal-variance independent case that Mosteller \cite{mosteller1951} made
+usable, reduces the \emph{paired} comparison to $\Phi(d/\sqrt{2})$ and no
+further. Everything past a pair needed numerical integration on machinery that
+did not exist, and when the econometric version was finally written down as
+multinomial probit \cite{hausman1978} it was reported as practical only for a
+handful of alternatives. Simulation methods made it estimable in the 1990s and
+it remains the expensive option \cite{train2009}.
+
+The logistic alternative had the opposite property. Bradley and Terry
+\cite{bradley1952} wrote a paired comparison model with a closed form, a
+concave log-likelihood and estimation by hand. Luce \cite{luce1959} then
+supplied the axiom, deriving Equation~\eqref{eq:luce} from Independence of
+Irrelevant Alternatives, which converted a computational convenience into a
+behavioral principle: the form was no longer merely tractable, it was
+\emph{implied} by a plausible-sounding condition on choice. McFadden
+\cite{mcfadden1974} made it the workhorse of applied discrete choice, and
+Yellott \cite{yellott1977} completed the retrospective justification by
+showing exactly which noise distribution the axiom corresponds to, which had
+the side effect of making the double exponential look canonical rather than
+merely convenient.
+
+The pattern of the century that followed is that the Luce form was repaired
+rather than replaced. Nested logit, the generalized extreme value family and
+mixed logit \cite{mcfaddentrain2000} were all built to relax the independence
+IIA imposes while keeping the closed form that made the logit estimable.
+Choosing the Thurstonian route instead would have meant paying the integral,
+and almost nobody did.
 
 The objections were immediate and they were about restriction. Debreu
 \cite{debreu1960}, reviewing Luce's book, observed that adding a near
@@ -228,7 +307,19 @@ correct it, and the correction works. The two-slot design of
 Section~\ref{sec:masked} is that comparison transplanted into a language
 model.
 
-What makes the machine case worth revisiting is that one side of this
+Two things have changed, and together they are why the question is worth
+reopening now rather than in 1977. The integral is no longer expensive: the
+lattice method of \cite{cotton2021} returns the whole vector of winning
+probabilities for fields of $10^5$ entrants, so the tractability argument that
+decided the matter has expired. And the measurement is no longer noisy. A
+century of this dispute was conducted on human subjects, where a choice
+distribution must be estimated from repeated trials and the standard errors
+swamp the difference between the two families on any single menu. A language
+model reports its distribution directly, to as many digits as one wants, which
+turns a question that needed thousands of participants into one that needs a
+few thousand API calls.
+
+What makes the machine case worth revisiting is also that one side of this
 argument has been built into the apparatus. A softmax output layer is the
 Luce form, so an LLM's sampling head satisfies the Choice Axiom by
 construction. Reward models for preference tuning are Bradley--Terry
@@ -1128,6 +1219,17 @@ Ralph A. Bradley and Milton E. Terry.
 Rank analysis of incomplete block designs: I. The method of paired
 comparisons.
 \emph{Biometrika}, 39(3/4):324--345, 1952.
+
+\bibitem{hausman1978}
+Jerry A. Hausman and David A. Wise.
+A conditional probit model for qualitative choice: discrete decisions
+recognizing interdependence and heterogeneous preferences.
+\emph{Econometrica}, 46(2):403--426, 1978.
+
+\bibitem{train2009}
+Kenneth E. Train.
+\emph{Discrete Choice Methods with Simulation}.
+Cambridge University Press, second edition, 2009.
 
 \bibitem{tversky1972}
 Amos Tversky.
