@@ -45,8 +45,12 @@ import numpy as np
 from mlx_lm import load
 
 RAW_LOG = HERE / "local_raw.jsonl"
+OPEN_LOG = HERE / "local_open_raw.jsonl"
 TOP_K = 6          # delete each of the top-k items in turn
 MAX_ITEMS = 10     # candidate field size per category
+STOP = set("the and for its this that with are was very a an of to in on it is "
+           "because they most two favourite favorite my best one same other "
+           "than not but you all any some more".split())
 
 # (repo, family, size_b, tuning). Base and instruct siblings share a family
 # and size so they pair automatically.
@@ -122,6 +126,42 @@ class Scorer:
         z = sum(w)
         return [x / z for x in w]
 
+    def next_token_probs(self, prompt):
+        """Full next-token distribution as a numpy vector."""
+        ids = mx.array([self.tok.encode(prompt)])
+        probs = mx.softmax(self.model(ids)[0, -1].astype(mx.float32))
+        mx.eval(probs)
+        return np.array(probs)
+
+    def open_field(self, prompt, max_items=10):
+        """Open-vocabulary item field: the words the model itself offers.
+
+        Mirrors the API batteries, which read first tokens from a truncated
+        list, except that nothing is truncated here. Without this mode the
+        local panel is not comparable to those batteries: an inventory-
+        restricted design compresses the divergence between the two families
+        by roughly an order of magnitude, because it discards exactly the tail
+        where they disagree.
+        """
+        pr = self.next_token_probs(prompt)
+        agg = {}
+        for idx in np.argsort(pr)[-400:][::-1]:
+            w = self.tok.decode([int(idx)]).strip().lower()
+            if len(w) >= 3 and w.isalpha() and w not in STOP:
+                agg[w] = agg.get(w, 0.0) + float(pr[idx])
+        items = sorted(agg, key=agg.get, reverse=True)[:max_items]
+        return items, [agg[i] for i in items]
+
+    def open_restricted(self, prompt, items):
+        """Probability of each already-chosen item at a restricted prompt."""
+        pr = self.next_token_probs(prompt)
+        agg = {i: 0.0 for i in items}
+        for idx in np.argsort(pr)[-400:][::-1]:
+            w = self.tok.decode([int(idx)]).strip().lower()
+            if w in agg:
+                agg[w] += float(pr[idx])
+        return [agg[i] for i in items]
+
 
 def kl(a, p):
     return sum(ai * math.log(ai / max(pi, 1e-12)) for ai, pi in zip(a, p) if ai > 0)
@@ -157,6 +197,49 @@ def run_model(repo, family, size, tuning, cache):
         append_jsonl(RAW_LOG, rec)
         cache[rec["key"]] = rec
         if (ci + 1) % 10 == 0:
+            print(f"    {ci+1}/{len(todo)} categories", flush=True)
+
+
+def run_model_open(repo, family, size, tuning, cache):
+    """Open-vocabulary pass: one forward pass per prompt, field taken from the
+    model's own unqualified answer. Comparable to the API batteries."""
+    todo = [c for c in INVENTORY if f"{repo}||{c}" not in cache]
+    if not todo:
+        print(f"  {repo}: fully cached (open)", flush=True)
+        return
+    print(f"  loading {repo} (open-vocabulary) ...", flush=True)
+    try:
+        sc = Scorer(repo)
+    except Exception as e:
+        print(f"  SKIP {repo}: {str(e)[:120]}", flush=True)
+        append_jsonl(OPEN_LOG, {"key": f"{repo}||__error__",
+                                "raw": {"error": str(e)[:300]}})
+        return
+    for ci, cat in enumerate(todo):
+        pl = plural(cat)
+        items, p_unq = sc.open_field(f"My favourite {cat} is the", MAX_ITEMS)
+        if len(items) < 3:
+            append_jsonl(OPEN_LOG, {"key": f"{repo}||{cat}", "repo": repo,
+                                    "family": family, "size": size,
+                                    "tuning": tuning, "category": cat,
+                                    "items": items, "unqualified": p_unq,
+                                    "restricted": {}})
+            continue
+        z = sum(p_unq)
+        p_unq = [x / z for x in p_unq]
+        rec = {"key": f"{repo}||{cat}", "repo": repo, "family": family,
+               "size": size, "tuning": tuning, "category": cat,
+               "items": items, "unqualified": p_unq, "restricted": {}}
+        for oi in sorted(range(len(items)), key=lambda i: -p_unq[i])[:TOP_K]:
+            fav = items[oi]
+            raw = sc.open_restricted(
+                f"My two favourite {pl} are the {fav} and the", items)
+            zz = sum(raw)
+            if zz > 0:
+                rec["restricted"][fav] = [x / zz for x in raw]
+        append_jsonl(OPEN_LOG, rec)
+        cache[rec["key"]] = rec
+        if (ci + 1) % 25 == 0:
             print(f"    {ci+1}/{len(todo)} categories", flush=True)
 
 
@@ -236,20 +319,27 @@ def report(rows):
 
 
 def main():
-    cache = load_jsonl(RAW_LOG, key="key")
-    wanted = sys.argv[1:]
-    todo = [m for m in MODELS if not wanted or any(w in m[0] for w in wanted)]
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    open_mode = "--open" in sys.argv
+    log = OPEN_LOG if open_mode else RAW_LOG
+    out = "local_open_results.json" if open_mode else "local_results.json"
+    cache = load_jsonl(log, key="key")
+    todo = [m for m in MODELS if not args or any(w in m[0] for w in args)]
     print(f"{len(todo)} models, {len(INVENTORY)} categories, "
-          f"{len(cache)} records cached")
+          f"{len(cache)} records cached, "
+          f"mode={'open-vocabulary' if open_mode else 'inventory'}")
     for repo, family, size, tuning in todo:
-        run_model(repo, family, size, tuning, cache)
+        if open_mode:
+            run_model_open(repo, family, size, tuning, cache)
+        else:
+            run_model(repo, family, size, tuning, cache)
 
     rows = []
     for rec in cache.values():
         if "__error__" in rec.get("key", ""):
             continue
         rows.extend(score(rec))
-    write_json_atomic(HERE / "local_results.json", rows)
+    write_json_atomic(HERE / out, rows)
     print(f"\n{len(rows)} scored cells")
     if rows:
         report(rows)

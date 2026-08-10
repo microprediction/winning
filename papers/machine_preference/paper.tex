@@ -19,8 +19,8 @@ Thurstone is the Model of Choice}}
 large language models should obey Luce's Choice Axiom. They do not. In
 masked-token experiments a Thurstonian contest model predicted BERT's
 revealed preferences better in roughly 80\% of cases. We extend the test to
-modern models across eleven designs, five models and 6{,}654 cells scored by
-exact log probabilities. Replaying the original two-slot stimuli over 2{,}183
+modern models across thirteen designs and 48{,}536 cells scored by exact log
+probabilities. Replaying the original two-slot stimuli over 2{,}183
 cells, Thurstone beats Luce decisively (mean $\Delta$KL $+0.55$, CI
 $[+0.51, +0.60]$), as it does over 1{,}195 deletion cells and under all four
 ordered-selection framings. The advantage rises monotonically with model
@@ -66,9 +66,9 @@ better modeled in the Thurstonian framework of noisy contests
 \cite{thurstone1927}.
 
 The evidence is not a single experiment. Table~\ref{tab:designs} lists
-eleven designs comprising $6{,}654$ scored choice cells, built from
-$10{,}704$ logged exact log-probability measurements on five GPT models,
-alongside the masked language model study of the 2024 version and a
+thirteen designs comprising $48{,}536$ scored choice cells, built from
+$61{,}512$ logged exact log-probability measurements on five commercial and
+sixteen open-weight models, alongside the masked language model study of the 2024 version and a
 generative replication on Claude. Every cell is a zero-parameter
 out-of-sample prediction: both families are calibrated to an unrestricted
 distribution and asked to predict a restricted one they have not seen. The
@@ -103,10 +103,12 @@ Qualified-noun restriction & 3 GPT & 71 & tie (degenerate priors) \\
 Random elicitation, one deletion & 3 GPT & 77 & Thurstone 39/56, $p = 0.002$ \\
 Permutation-controlled deletion & 5 GPT & 1{,}195 & $\Delta$KL $+0.025$ $[+0.018, +0.033]$ \\
 Original 2024 stimuli, two-slot & 5 GPT & 3{,}660 & $\Delta$KL $+0.52$ $[+0.49, +0.55]$ \\
+Open-vocabulary sweep, 99 question types & 3 GPT & 37{,}764 & \textbf{99/99 types favor Thurstone} \\
 Ordered selection to depth five & 5 GPT & 1{,}363 & $+0.23$ to $+0.41$, all four framings \\
 Reversibility (best vs worst first) & 5 GPT & 108 & both families fail; not one scale \\
 Block--Marschak / RUM test & 5 GPT & 30 & 30/30 violate RUM \\
 Menus, duplicates, decoys & 5 GPT & 110 & no substitution; 16/30 regularity \\
+Base against instruct, local & 16 open & 3{,}219 & tuning effect in 4 of 6 pairs \\
 \bottomrule
 \end{tabular}
 \caption{The full evidence base. Cells are scored zero-parameter
@@ -444,6 +446,43 @@ Thurstonian computation in the first place. The same questions asked of
 BERT in 2024 and of GPT-4-class models in 2026 return the same verdict,
 with a larger margin under exact measurement.
 
+\subsection{Every question type, not merely every model}
+\label{sec:sweep}
+
+A verdict that holds on average across categories is weaker than one that
+holds within each of them, so the broadest battery enumerates the design
+space rather than sampling it. All 99 question types of the 2024 appendix,
+crossed with all 926 of their adjective variants, under two restriction
+designs, deleting each of the top eight observed items in turn, on the three
+cheaper models: 37{,}764 scored cells from 45{,}848 logged measurements.
+Item fields are open-vocabulary, taken from whatever the model itself offers
+at the unqualified prompt, so no hand-authored inventory can select the
+categories that suit either family.
+
+Thurstone is ahead in 29{,}307 of 37{,}764 cells, a rate of $77.6\%$ that
+sits almost exactly on the $80\%$ reported for BERT in the 2024 version,
+now with two orders of magnitude more cells. Mean $\Delta$KL is $+0.1495$
+$[+0.1451, +0.1539]$. Both restriction designs favor the contest model, the
+two-slot continuation at $+0.199$ more strongly than the exclusion phrasing
+at $+0.109$, and so does every model: $+0.111$, $+0.140$ and $+0.198$ for
+GPT-4.1-nano, GPT-4o-mini and GPT-4.1-mini.
+
+Two features of the breakdown carry more weight than the pooled figure.
+First, \textbf{all 99 question types favor Thurstone} on average, not 90 or
+95 of them. There is no category of question, among organs, colors, cities,
+sports, instruments and the rest, in which renormalization is the better
+account. Second, the deficit concentrates where the theory says it must:
+deleting the model's favorite costs Luce $+0.407$, against $+0.114$ for
+deleting a minor item. Removing the winner is precisely the case Harville
+\cite{harville1973} mispriced, and it is precisely where the urn and the
+contest diverge.
+
+At this sample size the degenerate stratum also separates from zero
+($+0.142$ against $+0.157$ for non-degenerate cells), which sharpens the
+earlier reading. Preference tuning does not repeal the contest structure in
+collapsed distributions; it only leaves too little entropy for a smaller
+battery to detect it.
+
 \subsection{The deficit grows with model tier}
 \label{sec:tier}
 
@@ -515,11 +554,79 @@ and tier is a proxy for capability rather than a measurement of it. The
 pattern does, however, yield a falsifiable prediction: if what separates
 the generations is post-training rather than scale, a base model should
 obey the Choice Axiom more closely than its instruction-tuned sibling.
-The DPO ablation of \cite{cekinmez2026}, which cuts sense entropy from
-$0.25$ to $0.18$ by preference tuning alone, points the same way. Testing
-it requires log-probability access to a base and instruct pair, which the
-models used here do not provide, and open-weight pairs are the natural
-venue. Whether Thurstonian diagnostics
+Section~\ref{sec:tuning} tests that prediction directly, on models whose
+base and instruction-tuned checkpoints are both available.
+
+\subsection{Preference tuning moves the deficit, in some families}
+\label{sec:tuning}
+
+The commercial models expose no base checkpoints, so this test uses
+open-weight pairs run locally, where the whole vocabulary is available and
+nothing is truncated. Base and instruction-tuned siblings receive the
+identical completion prompt, with no chat template on either side, so the
+checkpoint is the only difference. Both are given exactly the stimuli and
+the design of the sweep in Section~\ref{sec:sweep}, so that nothing about
+the measurement varies either.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+Contrast (paired within question, adjective and deleted item) & $n$ & $\Delta$KL step & 95\% CI \\
+\midrule
+Instruction tuning, Qwen2.5 0.5B & 751 & $+0.0026$ & $[+0.0019, +0.0034]$ \\
+Instruction tuning, Qwen2.5 1.5B & 627 & $+0.0038$ & $[+0.0017, +0.0060]$ \\
+Instruction tuning, Qwen2.5 7B & 809 & $+0.0247$ & $[+0.0193, +0.0305]$ \\
+Instruction tuning, Mistral 7B & 171 & $+0.0194$ & $[+0.0122, +0.0286]$ \\
+Instruction tuning, gemma-2 2B & 453 & $-0.0003$ & $[-0.0008, +0.0001]$ \\
+Instruction tuning, Llama-3.1 8B & 408 & $-0.0010$ & $[-0.0016, -0.0004]$ \\
+\midrule
+All six pairs pooled & 3{,}219 & $+0.0084$ & $[+0.0069, +0.0100]$ \\
+\midrule
+Scale, base only, 0.5B to 1.5B & 410 & $+0.0025$ & $[+0.0018, +0.0033]$ \\
+Scale, base only, 1.5B to 7B & 484 & $+0.0017$ & $[-0.0000, +0.0033]$ \\
+Scale, base only, 0.5B to 7B & 261 & $+0.0039$ & $[+0.0022, +0.0055]$ \\
+\bottomrule
+\end{tabular}
+\caption{Instruction tuning against the matching base checkpoint, and scale
+among base checkpoints. Positive favors Thurstone. The tuning effect is large
+in two families, absent in a third, and slightly reversed in a fourth.}
+\label{tab:tuning}
+\end{table}
+
+The prediction holds in four of the six pairs and fails in two. Tuning moves
+Qwen2.5 away from Luce at all three sizes, by an amount that grows with scale
+from $+0.0026$ to $+0.0247$, and moves Mistral 7B by $+0.0194$. It does
+nothing detectable to gemma-2 2B, and it moves Llama-3.1 8B slightly the
+other way, by $-0.0010$ with an interval excluding zero. Pooling all six
+gives $+0.0084$ $[+0.0069, +0.0100]$, but that pooled figure rides on Qwen
+and Mistral and should not be read as a general law.
+
+Where tuning does move a model, it moves it further than scale does. Among
+Qwen2.5 base checkpoints the entire span from 0.5B to 7B is $+0.0039$, about
+a sixth of what tuning contributes at 7B alone. So post-training is capable
+of dominating parameter count in setting how far a model sits from the Choice
+Axiom, which is the mechanism the commercial generation effect of
+Section~\ref{sec:tier} suggested. But the two null and reversed families show
+that it does not do so by necessity, and whatever distinguishes Qwen and
+Mistral post-training from Llama and gemma post-training is not visible from
+outside the labs.
+
+The honest summary is therefore narrower than the commercial panel invited.
+Preference tuning is one route by which a model departs from renormalization,
+demonstrably and substantially in some families, and the direction of the
+effect is not fixed across families. That is consistent with the DPO ablation
+of \cite{cekinmez2026}, which changes sense entropy with no change in size,
+without implying that every tuning recipe pushes the same way.
+
+Three further caveats bound all of these numbers. The absolute magnitudes are
+one to two orders of magnitude below the commercial panel on identical
+stimuli, so the local and commercial ladders are separate evidence rather
+than one curve. The weights are 4-bit quantized, which could compress the
+tails where the families disagree. And two of the six pairs sit so close to
+zero deficit overall that the paired contrast has little room to move in
+either direction. Whether Thurstonian diagnostics
 can serve as a label-free measure of model quality is a natural next
 question, and Section~\ref{sec:exotics} counsels caution, since the
 reversibility diagnostic does not order the models by capability at all.
