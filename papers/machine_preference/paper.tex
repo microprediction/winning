@@ -18,17 +18,15 @@ Thurstone is the Model of Choice}}
 \noindent Softmax output layers suggest, almost by construction, that
 large language models should obey Luce's Choice Axiom. They do not. In
 masked-token experiments a Thurstonian contest model predicted BERT's
-revealed preferences better in roughly 80\% of cases. We extend the test
-to modern models with exact log-probability designs: replaying the
-original two-slot stimuli across 2{,}183 cells, Thurstone beats Luce
-decisively (mean $\Delta$KL $+0.55$, CI $[+0.51, +0.60]$), and across
-692 permutation-controlled deletion cells ($+0.025$), with the advantage
-concentrated wherever preference tuning has not already collapsed the
-distribution. Explicit menus behave differently: near-deterministic, no
-red-bus substitution, and occasional regularity violations (decoy
-effects) beyond any random utility model. Restriction on polysemous
-words connects these results to the stated-versus-generated gap of
-Cekinmez et al.\ (2026).
+revealed preferences better in roughly 80\% of cases. We extend the test to
+modern models across nine designs and 3{,}148 cells scored by exact log
+probabilities. Replaying the original two-slot stimuli over 2{,}183 cells,
+Thurstone beats Luce decisively (mean $\Delta$KL $+0.55$, CI
+$[+0.51, +0.60]$), as it does over 692 permutation-controlled deletion
+cells ($+0.025$), with the advantage concentrated wherever preference
+tuning has not already collapsed the distribution. Explicit menus behave
+differently: near-deterministic, no red-bus substitution, and regularity
+violations beyond any random utility model.
 \end{abstract}
 
 \section{Introduction}
@@ -66,14 +64,54 @@ Choice Axiom.
 It doesn't. This paper demonstrates that language models, despite the
 suggestion built into their output layer, exhibit preference behavior
 better modeled in the Thurstonian framework of noisy contests
-\cite{thurstone1927}. Section~\ref{sec:models} states the two competing
-models. Sections~\ref{sec:masked}--\ref{sec:maskedresults} test them on
-masked language models. Section~\ref{sec:polysemy} extends the test to
-modern chat models using polysemous words, connecting the paradox to the
-stated-versus-generated gap recently documented by Cekinmez, Wu, Marjieh
-and Griffiths \cite{cekinmez2026}. Section~\ref{sec:discussion} draws out
-the implications: a mechanism for generative ``mode collapse,'' a
-principled diversity knob, and a case for Thurstonian layers.
+\cite{thurstone1927}.
+
+The evidence is not a single experiment. Table~\ref{tab:designs} lists nine
+designs comprising $3{,}148$ scored choice cells, built from $4{,}105$
+logged exact log-probability measurements on three GPT models, alongside
+the masked language model study of the 2024 version and a generative
+replication on Claude. Every cell is a zero-parameter out-of-sample
+prediction: both families are calibrated to an unrestricted distribution
+and asked to predict a restricted one they have not seen. The two largest
+batteries, $2{,}183$ and $692$ cells, favor the contest model with
+bootstrap confidence intervals excluding zero on every model tested. All
+raw model responses are logged and released, so every number below is
+recomputable without further inference.
+
+Section~\ref{sec:models} states the two competing models.
+Sections~\ref{sec:masked}--\ref{sec:maskedresults} test them on masked
+language models. Section~\ref{sec:polysemy} moves to modern models under
+exact measurement, using polysemous words as the entry probe and
+connecting the paradox to the stated-versus-generated gap recently
+documented by Cekinmez, Wu, Marjieh and Griffiths \cite{cekinmez2026}.
+Section~\ref{sec:discussion} draws out the implications: a mechanism for
+generative ``mode collapse,'' a principled diversity knob, and a case for
+Thurstonian layers.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llrl}
+\toprule
+Design & Models & Cells & Verdict \\
+\midrule
+Adjective qualification (masked) & 2 masked LMs & 100+ & Thurstone $\approx 80\%$ \\
+Two-slot elimination (masked) & 2 masked LMs & 100+ & Thurstone $\approx 80\%$ \\
+Polysemous generation, restriction & Claude & 21 & re-collapse, not renormalization \\
+Qualified-noun restriction & 3 GPT & 71 & tie (degenerate priors) \\
+Random elicitation, one deletion & 3 GPT & 77 & Thurstone 39/56, $p = 0.002$ \\
+Permutation-controlled deletion & 3 GPT & 692 & $\Delta$KL $+0.025$ $[+0.016, +0.035]$ \\
+Original 2024 stimuli, two-slot & 3 GPT & 2{,}183 & $\Delta$KL $+0.55$ $[+0.51, +0.60]$ \\
+Block--Marschak / RUM test & 3 GPT & 18 & 18/18 violate RUM \\
+Menus, duplicates, decoys & 3 GPT & 67 & no substitution; 8/18 regularity \\
+\bottomrule
+\end{tabular}
+\caption{The full evidence base. Cells are scored zero-parameter
+predictions of a restricted distribution; GPT cells use exact log
+probabilities rather than sampling. Masked language model counts are
+category/adjective combinations from the 2024 version.}
+\label{tab:designs}
+\end{table}
 
 \section{A choice of choice models}
 \label{sec:models}
@@ -213,7 +251,7 @@ distribution is low.
 % Figures 1 and 2 of the July 2024 version (entropy scatter; per-category
 % RMSE bars) belong here; source files live with the original draft.
 
-\section{Polysemy as a preference probe}
+\section{Modern models under exact measurement}
 \label{sec:polysemy}
 
 Cekinmez, Wu, Marjieh and Griffiths \cite{cekinmez2026} recently turned an
@@ -246,8 +284,9 @@ experiment run by neither paper until now.
 
 \subsection{Replication on a chat model}
 
-We replicated the design at pilot scale on Claude models (October 2025
-generation): 15 polysemous words from the stimulus set of
+The smallest of our designs, and the only one using sampling rather than
+exact probabilities, replicates their generative setup on Claude models
+(October 2025 generation): 15 polysemous words from the stimulus set of
 \cite{cekinmez2026}, 150 independent sentence generations per word, senses
 classified by a second model against the closed inventory, plus a stated
 distribution elicited with their ``predicting itself'' framing. The
@@ -379,12 +418,16 @@ Contest behavior governs wherever machine preference is genuinely
 stochastic; the Choice Axiom is competitive only in the degenerate cells
 that preference tuning has emptied of choice.
 
-The largest effect of all comes from re-running the \emph{original}
-stimulus set of this paper's 2024 version---99 categories with
-adjective-varied prompt pairs, every adjective included---in its
-original two-slot form (``My two favourite human organs are the
-[ANSWER] and the [MASK] because they are SOMETHING''), on GPT models
-with exact probabilities. Across 2{,}183 cells the conditional second
+\subsection{The original stimuli at scale}
+\label{sec:volbattery}
+
+The largest battery, and the largest effect, comes from re-running the
+\emph{original} stimulus set of this paper's 2024 version. That is 97
+scorable categories crossed with every adjective in the original
+appendix, 852 distinct prompt pairs, each put to three GPT models in the
+original two-slot form (``My two favourite human organs are the [ANSWER]
+and the [MASK] because they are SOMETHING'') with exact log
+probabilities. Across 2{,}183 cells the conditional second
 choice decisively favors the contest model: mean $\Delta$KL $+0.55$,
 95\% CI $[+0.51, +0.60]$, on every model (from $+0.35$ on GPT-4o-mini
 to $+0.88$ on GPT-4.1) and in both entropy strata. Predicting the
