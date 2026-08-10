@@ -493,7 +493,33 @@ Holding the question fixed, holding concentration fixed, and holding the
 size class fixed while advancing one model generation all leave the effect
 intact. Sharper locations are therefore part of the story but not the whole
 of it: at matched concentration the frontier model still departs further
-from renormalization than the cheapest one. Whether Thurstonian diagnostics
+from renormalization than the cheapest one.
+
+The panel admits one further decomposition, into a generation axis and a
+scale axis, and the two do not behave alike. Advancing a generation at
+fixed size class moves the deficit reliably, by $+0.478$
+$[+0.348, +0.613]$ for the flagships and $+0.276$ $[+0.172, +0.380]$ for
+the mini class. Varying scale within a generation moves it too, by
+$+0.253$ and $+0.318$ for the two steps down the 4.1 family, but the
+corresponding step within the older family, GPT-4o against GPT-4o-mini, is
+$+0.050$ $[-0.037, +0.140]$ and does not exclude zero. Within that
+generation, in other words, making the model larger left its departure from
+the Choice Axiom essentially unchanged, while moving the same size class one
+generation forward changed it substantially. Whatever separates the two
+generations appears both to raise the deficit and to make it sensitive to
+scale.
+
+We report this as a pattern in five models rather than a scaling law, and
+note two limits. Size class here is a vendor label, not a parameter count,
+and tier is a proxy for capability rather than a measurement of it. The
+pattern does, however, yield a falsifiable prediction: if what separates
+the generations is post-training rather than scale, a base model should
+obey the Choice Axiom more closely than its instruction-tuned sibling.
+The DPO ablation of \cite{cekinmez2026}, which cuts sense entropy from
+$0.25$ to $0.18$ by preference tuning alone, points the same way. Testing
+it requires log-probability access to a base and instruct pair, which the
+models used here do not provide, and open-weight pairs are the natural
+venue. Whether Thurstonian diagnostics
 can serve as a label-free measure of model quality is a natural next
 question, and Section~\ref{sec:exotics} counsels caution, since the
 reversibility diagnostic does not order the models by capability at all.
