@@ -17,20 +17,17 @@ or why masking a logit is not removing an option}
 \maketitle
 
 \begin{abstract}
-\noindent A softmax renormalizes when a logit is masked, so it obeys Luce's
-Choice Axiom for that operation. Restricting a choice set in language is a
-different operation: the prompt changes and the logits are recomputed. We
-measure which law describes the recomputation. Across thirteen designs and
-48{,}536 cells, scored by exact log probabilities on all but one design,
-Thurstonian contestant removal predicts restricted machine preference better
-than renormalization, in all 99 question types of the original appendix and on
-every model tested. The mechanism is mostly scale: restriction inflates
-effective noise roughly fourfold, which renormalization cannot express and a
-contest partly can. Granting each family one fitted scale shrinks the gap from
-$0.140$ to $0.009$ nats, and a uniform rule over survivors beats both unfitted
-defaults. What survives is a small, consistent advantage for the Gaussian shape
-and a decisive one for abandoning renormalization. Explicit menus form a
-separate regime violating every random utility model.
+\noindent A softmax renormalizes when a logit is masked, so a language model's
+output layer obeys Luce's Choice Axiom for that operation. Telling a model that
+an option is unavailable is a different operation, and we measure what law it
+follows. The axiom fails its sharpest test: restricting a choice to two named
+items shifts their log odds by $-1.15$ nats $[-1.547, -0.808]$, where the axiom
+requires zero. The failure is not a rescaling. A third of surviving pairs
+\emph{reverse} rank under restriction and the leading survivor changes in half of
+cells, so no rank-preserving rule can be right. Among rules that are wrong, a
+Gaussian contest is wrong by less than renormalization in all 99 question types
+of a $37{,}764$-cell sweep, and calls the direction of the odds failure in
+$71\%$ of pairs, with the median pair matching its predicted magnitude. Explicit menus violate every random utility model.
 \end{abstract}
 
 \section{Introduction}
@@ -338,6 +335,136 @@ dispute at three separate points, which makes the question of whether the
 resulting behavior obeys the axiom an empirical matter with some
 consequence, and one that exact log probabilities can settle in a way that
 human subjects never could.
+
+\subsection{Why ask a machine}
+\label{sec:machinepsych}
+
+Whether a language model's behaviour is worth studying with the methods of
+psychology is a question others have already settled in the affirmative, and we
+take it as settled rather than argue it again. Binz and Schulz \cite{binz2023}
+ran a battery of canonical cognitive experiments on GPT-3 and found human-like
+performance alongside human-like failure. Argyle and colleagues
+\cite{argyle2023} showed that conditioning a model on demographic detail
+reproduces response distributions of the corresponding human subgroups closely
+enough to be useful as samples. Dillion and colleagues \cite{dillion2023} set
+out when such substitution is and is not defensible, and a programme has since
+been named for the activity \cite{hagendorff2023}. The stated-versus-generated
+gap that motivates Section~\ref{sec:polysemy} is itself a finding of that
+literature \cite{cekinmez2026}.
+
+Our reason for asking a machine is narrower and methodological. A century of
+this dispute was conducted where the quantity in question cannot be observed.
+A human choice distribution has to be estimated from repeated trials, one
+categorical outcome at a time, and the difference between the two families on a
+single menu is small enough that the standard errors swallow it. That is why
+the argument was settled by tractability rather than by measurement. A language
+model reports the distribution itself, to as many digits as one cares to read,
+and it will answer the same question under a hundred variations of the choice
+set without fatigue or practice effects. The dispute becomes a measurement
+problem rather than a statistical one.
+
+Two caveats belong here rather than at the end. Nothing in this paper is
+evidence about human choice: similarity of behaviour would not establish
+similarity of mechanism, and we have no human data. And the instrument brings
+its own artefacts, of which the largest we found is position: merely swapping
+which of two options is named first moves their log odds by around $1.4$ nats
+(Section~\ref{sec:odds}), comfortably more than the effect any choice model
+here predicts. Machine subjects trade sampling noise for prompt sensitivity.
+They are not quieter, they are noisy in a different and more controllable way.
+
+\section{The axiom's own test}
+\label{sec:odds}
+
+Every battery in the older literature, and most of those below, scores a whole
+restricted distribution. That entangles three things: where the mass goes, how
+spread out it becomes, and how many alternatives survive. The axiom itself
+entangles none of them. Luce's condition is that for any two items
+\begin{equation}
+\frac{P(i)}{P(j)} \quad\text{does not depend on what else is available,}
+\label{eq:iia}
+\end{equation}
+so naming a choice down to exactly $\{i,j\}$ is the sharpest available probe. The
+statistic is a shift in log odds,
+\begin{equation}
+\delta_{ij} = \log\frac{q_i}{q_j} - \log\frac{p_i}{p_j},
+\label{eq:delta}
+\end{equation}
+where $p$ is unrestricted and $q$ is measured with the set named down to the
+pair. Being a ratio of ratios, $\delta$ is invariant to any rescaling of either
+distribution, so none of the flattening that dominates
+Section~\ref{sec:tilt} can enter, and no temperature or noise scale can be
+fitted to absorb it. The axiom's prediction is not approximate. It is
+$\delta_{ij} = 0$.
+
+For each of 50 categories and five models we read the unrestricted
+distribution, then name the choice down to a pair, then to that pair plus one
+low-probability distractor, for pairs spanning the odds range. Listing order is
+crossed: every pair is asked in both orders, because it turns out to matter more
+than anything either choice model predicts.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lr}
+\toprule
+Condition & Shift in log odds $\delta$ \\
+\midrule
+Favourite named first & $-1.784$ $[-2.193, -1.384]$ \\
+Favourite named second & $-0.516$ $[-1.015, -0.059]$ \\
+\textbf{Order-averaged} & $\mathbf{-1.150}$ $\mathbf{[-1.547, -0.808]}$ \\
+Pair plus one distractor & $-4.017$ $[-4.467, -3.543]$ \\
+\midrule
+Contest (Case V) prediction & $-0.259$ $[-0.311, -0.211]$ \\
+Choice Axiom prediction & $0$ exactly \\
+\bottomrule
+\end{tabular}
+\caption{Odds invariance on 279 pairs, 50 categories, five models, clustered by
+category. Naming a choice down to two items shrinks the favourite's odds by
+roughly a factor of three. The Choice Axiom requires no change at all. The
+contest predicts the direction and about a quarter of the magnitude.}
+\label{tab:odds}
+\end{table}
+
+Three things follow. First, the axiom is rejected in essentially every pair, not
+merely on average: the order-averaged shift exceeds $0.1$ nats in $96.8\%$ of
+pairs and $0.5$ nats in $80.3\%$, against a prediction of exact invariance.
+Restricting a language model's choice set does not preserve the relative standing
+of the survivors, and the mean shift of $-1.15$ nats is a factor of $3.2$ in
+odds.
+
+Second, the direction of the failure is the contest's, though not universally.
+Case V predicts shrinkage toward parity in $276$ of $279$ pairs, because
+re-running a race over a shorter field compresses the favourite's advantage,
+where an urn predicts no movement at all. The odds did shrink in $200$ pairs, so
+the contest calls the direction correctly $71.3\%$ of the time, a sign test at
+$p = 4 \times 10^{-13}$, and does better than chance in 18 of 21 categories.
+Roughly three pairs in ten move the other way, becoming \emph{more} extreme under
+restriction, which no contest at any fixed noise scale can produce.
+
+Third, the magnitudes tell two different stories depending on how they are
+aggregated, and the distinction matters. Inverting each pair for the noise scale
+that would reproduce its observed shift gives a median of $1.05$
+$[0.76, 1.31]$, so the typical pair is described by Case V about as well as one
+could ask. The mean implied scale is $2.49$, with an interquartile range of
+$0.44$ to $2.03$, and it is that heavy upper tail, not the typical pair, which
+makes the mean shift four times larger than Case V predicts. Machine restriction
+behaviour is therefore not a uniformly exaggerated contest. It is a contest for
+most pairs and something considerably more violent for a substantial minority.
+
+Fourth, and cautionary for the whole enterprise of asking machines about their
+preferences: listing order moves the same log odds by $1.27$ nats, from
+$-1.784$ to $-0.516$, five times the effect the contest predicts and comparable
+to the effect under study. Both orders reject the axiom, so the finding is not an
+artefact, but any study that names alternatives in a fixed order measures
+position preference alongside choice. Order crossing is a precondition for the
+measurement meaning anything, not an optional check.
+
+The distractor condition deepens the puzzle rather than resolving it. Adding one
+low-probability third option shifts the same odds by $-4.017$, further from the
+unrestricted value than the pair itself. Under either family the triple should
+lie \emph{between} the pair and the full set, being intermediate in composition.
+It does not. Naming a small set appears to restructure preference rather than to
+prune it.
 
 \section{Experimental design: masked language models}
 \label{sec:masked}
@@ -832,10 +959,22 @@ a restricted choice distribution are different objects, but both are scored in
 nats on identical inputs.} Those are the differences that make Thurstonian
 pricing worth the computation in a real market.
 
-Our geometry residual, $+0.0047$ at matched entropy and $+0.0089$ at matched
-parameter count, sits inside that range. So the Gaussian contribution in
-language models is small beside the scale effect that dominates the same data,
-and simultaneously of the same order as the effect that has sustained a
+Our geometry residual sits inside that range and can be placed within it. At
+matched entropy the $+0.0047$ is $2.6$ times the place-two difference, $34\%$
+of place three and $21\%$ of place four; at matched parameter count the
+$+0.0085$ is $4.9$ times place two, $64\%$ of place three and $40\%$ of place
+four. Its statistical strength is comparable to place three, an interval
+excluding zero at roughly four standard errors against racing's $3.9$.
+
+Measured instead against the predictive error that remains, the ordering
+reverses, because the fitted machine forecast is far more accurate in absolute
+terms than a place probability: $+0.0085$ on a base of $0.794$ nats is $1.07\%$
+of remaining loss, against $0.91\%$ for the place-four difference on a base of
+$2.436$. Absolute nats is the more conservative yardstick and the relevant one
+for a wagering edge, since log wealth is linear in log loss, so the fair summary
+is a third of the place-three effect. On either yardstick the Gaussian
+contribution in language models is small beside the scale effect that dominates
+the same data, and of the same order as the effect that has sustained a
 literature and a betting edge. Both statements are true and the second is
 easily lost.
 
@@ -1277,6 +1416,29 @@ Ralph A. Bradley and Milton E. Terry.
 Rank analysis of incomplete block designs: I. The method of paired
 comparisons.
 \emph{Biometrika}, 39(3/4):324--345, 1952.
+
+\bibitem{binz2023}
+Marcel Binz and Eric Schulz.
+Using cognitive psychology to understand GPT-3.
+\emph{Proceedings of the National Academy of Sciences},
+120(6):e2218523120, 2023.
+
+\bibitem{argyle2023}
+Lisa P. Argyle, Ethan C. Busby, Nancy Fulda, Joshua R. Gubler,
+Christopher Rytting, and David Wingate.
+Out of one, many: using language models to simulate human samples.
+\emph{Political Analysis}, 31(3):337--351, 2023.
+
+\bibitem{dillion2023}
+Danica Dillion, Niket Tandon, Yuling Gu, and Kurt Gray.
+Can AI language models replace human participants?
+\emph{Trends in Cognitive Sciences}, 27(7):597--600, 2023.
+
+\bibitem{hagendorff2023}
+Thilo Hagendorff, Ishita Dasgupta, Marcel Binz, Stephanie C. Y. Chan,
+Andrew K. Lampinen, Jane X. Wang, Zeynep Akata, and Eric Schulz.
+Machine psychology.
+\emph{arXiv preprint arXiv:2303.13988}, 2023.
 
 \bibitem{hausman1978}
 Jerry A. Hausman and David A. Wise.
