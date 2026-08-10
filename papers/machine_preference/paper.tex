@@ -15,17 +15,18 @@ Thurstone is the Model of Choice}}
 \maketitle
 
 \begin{abstract}
-\noindent A softmax output layer renormalizes when a logit is masked, so it
-obeys Luce's Choice Axiom for that operation. Restricting a choice set in
-language is a different operation: the prompt changes and the logits are
-recomputed. We measure which law describes the recomputation. Across thirteen
-designs and 48{,}536 cells, scored by exact log probabilities on every design
-but one, Thurstonian contestant removal predicts restricted machine preference
-better than renormalization does, in all 99 question types of the original
-appendix and on all twenty-one models. Most of the reallocation is a
-flattening that either family captures given one scale parameter; the contest
-geometry earns a further small increment. Explicit menus form a separate
-regime that violates every random utility model.
+\noindent A softmax renormalizes when a logit is masked, so it obeys Luce's
+Choice Axiom for that operation. Restricting a choice set in language is a
+different operation: the prompt changes and the logits are recomputed. We
+measure which law describes the recomputation. Across thirteen designs and
+48{,}536 cells, scored by exact log probabilities on all but one design,
+Thurstonian contestant removal predicts restricted machine preference better
+than renormalization, in all 99 question types of the original appendix and on
+all twenty-one models. Nothing is tuned, which makes the unit-variance contest
+a free baseline we recommend in place of renormalization. Much of the
+reallocation is a flattening that neither unfitted rule anticipates; granting
+each family one scale parameter leaves the ordering intact. Explicit menus form
+a separate regime violating every random utility model.
 \end{abstract}
 
 \section{Introduction}
@@ -100,9 +101,10 @@ language models. Section~\ref{sec:polysemy} moves to modern models under
 exact measurement, using polysemous words as the entry probe and
 connecting the paradox to the stated-versus-generated gap recently
 documented by Cekinmez, Wu, Marjieh and Griffiths \cite{cekinmez2026}.
-Section~\ref{sec:discussion} draws out the implications: a mechanism for
-generative ``mode collapse'', a principled diversity knob, and a case for
-Thurstonian layers.
+Section~\ref{sec:discussion} draws out the implications, and separates what the
+measurements support from three conjectures they merely motivate: a mechanism
+for generative ``mode collapse'', a diversity knob, and a contest-structured
+output layer.
 
 \begin{table}[ht]
 \centering
@@ -150,6 +152,12 @@ performance is the lowest draw. This is the model of Thurstone
 \cite{thurstone1927}, and it makes different predictions about how choice
 probabilities respond when the choice set is altered: rather than removing
 a ball from the urn, we remove a horse from the race.
+
+Unit variance and independence make this Case V, the family's default and its
+tightest special case. Everything below uses it, and Section~\ref{sec:tilt}
+explains why: richer contests would fit better, but Luce in its bare form has
+nothing to fit, so comparing a searched Thurstone against an unsearched Luce
+would prove little.
 
 (As an aside, it \emph{is} possible to engineer a contest that satisfies
 Luce's Choice Axiom, by taking $X_i \sim \mathrm{Exp}(h_i)$ with common
@@ -591,9 +599,25 @@ essentially every cluster rather than concentrated in a few.
 \subsection{What the comparison does and does not identify}
 \label{sec:tilt}
 
-Winning a two-model contest against renormalization does not establish that a
-Gaussian race generates the data. The natural rival is one fitted parameter of
-sharpening,
+One convention governs every comparison in this paper and should be stated
+before the numbers are read. The contest used throughout is independent
+performances of equal unit variance, which is Thurstone's Case V, the default
+member of the family and the one Mosteller \cite{mosteller1951} made
+practical. It is also the most constrained member. The family contains freer
+relatives, among them unequal variances, correlated performances and
+heavy-tailed noise, and any of them would fit better by construction.
+
+Searching that space and reporting the winner would be unfair to Luce, which
+in its bare form has nothing to fit. So nothing is tuned. Every prediction in
+every battery is computed from the unrestricted distribution alone, with no
+free parameter and no training set, which is what makes the cells out-of-sample
+in the strong sense: neither family ever sees a restricted distribution before
+predicting it. The price of that discipline is that a positive result cannot be
+attributed to Gaussian geometry specifically. It shows that the default
+contest forecasts better than the default urn.
+
+Nor does winning that comparison establish that a Gaussian race generates the
+data. A referee will reasonably ask about one-parameter sharpening,
 \begin{equation}
 \tilde p_i(\gamma) = \frac{p_i^{\gamma}}
   {\sum_{j \in S} p_j^{\gamma}}, \qquad i \in S,
@@ -605,29 +629,46 @@ category is ever used for both, gives $\gamma \approx 0.22$ and a held-out
 mean KL of $0.803$, against $1.786$ for zero-parameter contestant removal and
 $1.926$ for plain renormalization.
 
-That comparison is not like for like, since the tilt carries a parameter and
-contestant removal carries none, but it locates the phenomenon. The fitted
-$\gamma$ is well below one, so restricted distributions are markedly
-\emph{flatter} than the unrestricted ranking implies, and both zero-parameter
-forecasts are too concentrated. Most of the reallocation is a change of scale.
+The tilt is not a rival forecast and is not reported as one. It cannot be
+computed from an unrestricted distribution alone: fixing $\gamma$ requires a
+corpus of already-observed restrictions to train on, which is precisely the
+information the zero-parameter designs withhold. Read instead as a diagnostic,
+it says something useful about the residual. The fitted $\gamma$ is well below
+one, so restricted distributions are markedly \emph{flatter} than the
+unrestricted ranking implies, and both zero-parameter forecasts are too
+concentrated. A large part of the reallocation is a change of scale, and no
+zero-parameter rule can know that scale in advance.
 
-Giving the contest the matching freedom, performances $N(a_i, \sigma^2)$ with
-one fitted $\sigma$, and scoring again on held-out question types, yields
-$\sigma \approx 3.4$ and a held-out mean KL of $0.794$. The contest retains a
-small advantage over the tilt at equal parameter cost, $+0.0089$
-$[+0.0040, +0.0142]$ clustered by question type, favouring Thurstone in 60 of
-99 types.
+The question the diagnostic then raises is whether Gaussian geometry survives
+once the scale is granted, and the answer requires granting it to both sides.
+Performances $N(a_i, \sigma^2)$ with a single $\sigma$ fitted on training
+question types and scored on held-out ones give $\sigma \approx 3.4$ and a
+held-out mean KL of $0.794$, against the tilt's $0.803$: an advantage of
+$+0.0089$ $[+0.0040, +0.0142]$ clustered by question type, favouring Thurstone
+in 60 of 99 types. The ordering is unchanged at one parameter each, and both
+are far better than either family unfitted.
 
 The defensible reading follows. Prompted restriction reallocates probability
-rather than renormalizing it, and the dominant component of that reallocation
-is a flattening that either family captures once allowed a scale parameter.
-Conditional on the flattening, the Gaussian geometry earns a further small and
-consistent improvement. What the batteries establish is that machine
-restriction behaviour is more Thurstonian than Lucean among the forecasts
-considered, not that a stable Gaussian contest runs inside the model. Several
-untested alternatives would produce similar reallocation, among them
-heteroscedastic or correlated races, heavy-tailed contests, similarity-
-sensitive nesting, and retrieval dynamics specific to list completion.
+rather than renormalizing it. Among forecasts that tune nothing, contestant
+removal beats renormalization everywhere we look; a large part of what neither
+captures is a flattening whose magnitude has to be learned from data; and when
+each family is allowed to learn it, the contest still comes out slightly
+ahead.
+
+The practical recommendation is therefore about benchmarking. Case V
+contestant removal costs nothing to compute, requires no training data and no
+fitted quantity, and predicts restricted machine choice better than
+renormalization in every design here, on every model, and in all 99 question
+types. It is the stronger default, and work on machine choice modelling should
+be measured against it rather than against renormalization. A method that
+merely improves on Luce has cleared a low bar. Whether the same holds for
+human choice is a separate question that this paper's data cannot address.
+
+What the batteries do not establish is that a stable Gaussian contest
+runs inside the model. Several untested alternatives would produce similar
+reallocation, among them heteroscedastic or correlated races, heavy-tailed
+contests, similarity-sensitive nesting, and retrieval dynamics specific to
+list completion.
 
 \subsection{The deficit grows with model tier}
 \label{sec:tier}
