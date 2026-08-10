@@ -18,16 +18,16 @@ or why masking a logit is not removing an option}
 
 \begin{abstract}
 \noindent A softmax renormalizes when a logit is masked, so a language model's
-output layer obeys Luce's Choice Axiom for that operation. Telling a model that
-an option is unavailable is a different operation, and we measure what law it
-follows. The axiom fails its sharpest test: restricting a choice to two named
-items shifts their log odds by $-1.15$ nats $[-1.547, -0.808]$, where the axiom
-requires zero. The failure is not a rescaling. A third of surviving pairs
-\emph{reverse} rank under restriction and the leading survivor changes in half of
-cells, so no rank-preserving rule can be right. Among rules that are wrong, a
-Gaussian contest is wrong by less than renormalization in all 99 question types
-of a $37{,}764$-cell sweep, and calls the direction of the odds failure in
-$71\%$ of pairs, with the median pair matching its predicted magnitude. Explicit menus violate every random utility model.
+output layer obeys Luce's Choice Axiom for that operation. Telling a model that an
+option is unavailable is a different operation, and we measure what law it
+follows. The axiom fails its sharpest test: naming a choice down to two items
+shifts their log odds by $-1.15$ nats $[-1.547, -0.808]$, where the axiom requires
+zero. The failure is not a rescaling. A third of surviving pairs \emph{reverse}
+rank and the leading survivor changes in half of cells, which no rank-preserving
+rule can express. Among rules that are wrong, a Gaussian contest is less wrong
+than renormalization in all 99 question types of a $37{,}764$-cell sweep, and
+calls the direction of the odds failure in $71\%$ of pairs. Explicit menus form a
+separate regime violating every random utility model.
 \end{abstract}
 
 \section{Introduction}
@@ -95,13 +95,15 @@ logged and released, so every number below is recomputable without further
 inference.
 
 Section~\ref{sec:models} states the two competing models and
-Section~\ref{sec:history} places the comparison in the century of
-psychometric and econometric argument it belongs to.
-Sections~\ref{sec:masked}--\ref{sec:maskedresults} test them on masked
-language models. Section~\ref{sec:polysemy} moves to modern models under
-exact measurement, using polysemous words as the entry probe and
-connecting the paradox to the stated-versus-generated gap recently
-documented by Cekinmez, Wu, Marjieh and Griffiths \cite{cekinmez2026}.
+Section~\ref{sec:history} explains why one of them won an argument it did not
+settle. Section~\ref{sec:odds} puts the axiom to its own test and rejects it.
+Section~\ref{sec:order} shows that the failure is a reordering rather than a
+reweighting, which rules out both families at once and reframes everything after
+it as a question about approximation. Sections~\ref{sec:masked}
+and~\ref{sec:maskedresults} give the masked language model evidence from the
+2024 version, and Section~\ref{sec:polysemy} onward asks which rule forecasts
+best, in what regime, and how the answer varies with model tier, post-training,
+elicitation depth and menu structure.
 Section~\ref{sec:discussion} draws out the implications, and separates what the
 measurements support from three conjectures they merely motivate: a mechanism
 for generative ``mode collapse'', a diversity knob, and a contest-structured
@@ -466,6 +468,76 @@ lie \emph{between} the pair and the full set, being intermediate in composition.
 It does not. Naming a small set appears to restructure preference rather than to
 prune it.
 
+\section{Machine preference is not order-stable}
+\label{sec:order}
+
+The odds result says the axiom is violated. A second measurement says something
+stronger, and it constrains every model in the paper rather than one of them.
+
+Both families under comparison are rank-preserving. Renormalization divides by a
+constant, and contestant removal is a monotone transformation of the location
+vector, so each maps the unrestricted ordering of the survivors onto itself.
+Fitting a temperature, a noise ratio, unequal variances or heavier tails changes
+none of this: every member of either family, and of the wider random-utility
+class, predicts that if the model preferred $i$ to $j$ before the restriction it
+prefers $i$ to $j$ after it. A single reversal is outside the reach of all of
+them at once.
+
+Reversals are not rare. Over the sweep's $37{,}764$ cells, $32.8\%$ of surviving
+pairs are discordant between the unrestricted and restricted distributions
+($[31.6\%, 34.0\%]$ clustered by question type), $86.4\%$ of cells contain at
+least one reversal, and in $48.0\%$ of cells the leading survivor is not the one
+the unrestricted distribution ranked first. Restriction does not reweight a
+stable order. It reorders.
+
+The natural objection is that reversals among near-tied, low-probability items
+are measurement noise. The data say the opposite: reversals concentrate among
+exactly the pairs where noise cannot explain them.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+Pairs included & Pairs & Discordance \\
+\midrule
+All & $475{,}365$ & $0.321$ $[0.310, 0.333]$ \\
+Both items above $2\%$ of restricted mass & $87{,}402$ & $0.390$ $[0.380, 0.400]$ \\
+Both above $5\%$, unrestricted odds differ by $>20\%$ & $48{,}885$ & $0.409$ $[0.400, 0.419]$ \\
+Both above $10\%$, unrestricted odds differ by $>50\%$ & $24{,}932$ & $\mathbf{0.421}$ $[0.411, 0.431]$ \\
+\bottomrule
+\end{tabular}
+\caption{Rank discordance between the unrestricted ordering and the observed
+restricted distribution, clustered by question type. Restricting attention to
+high-mass, well-separated pairs raises the reversal rate rather than lowering it,
+which is the opposite of what a noise explanation requires.}
+\label{tab:discord}
+\end{table}
+
+Among pairs where both items carry at least a tenth of the restricted mass and
+whose unrestricted odds differed by more than half, $42.1\%$ reverse. These are
+the comparisons a choice model should find easiest.
+
+Three consequences run through the rest of the paper. The first is that no
+member of either family can be more than approximately right, so the remaining
+question is which is less wrong and why, which is how Section~\ref{sec:sweep}
+onward should be read. The second is that a rule which declines to use the
+ordering is not obviously foolish, and indeed Section~\ref{sec:tilt} finds that
+spreading mass uniformly over the survivors beats both structural rules; with a
+third of the ordering inverted, using it confidently is a liability. The third is
+that the optimal fitted flattening of $\gamma \approx 0.22$ acquires an
+interpretation: it is roughly what one should do with an ordering that is
+unreliable about a third of the time. The scale change that dominates the
+forecasting comparisons is the correct response to instability, not a separate
+phenomenon.
+
+Section~\ref{sec:exotics} reaches the same conclusion from a different
+direction. Asked for a least favourite rather than a favourite, models name items
+they never mention when asked for a favourite, so the two directions barely share
+a candidate set and neither family predicts one from the other. There is no
+single stable scale to read in two directions, just as there is no stable order
+to reweight.
+
 \section{Experimental design: masked language models}
 \label{sec:masked}
 
@@ -588,8 +660,17 @@ distribution is low.
 % Figures 1 and 2 of the July 2024 version (entropy scatter; per-category
 % RMSE bars) belong here; source files live with the original draft.
 
-\section{Modern models under exact measurement}
+\section{Which wrong rule is least wrong}
 \label{sec:polysemy}
+
+Sections~\ref{sec:odds} and~\ref{sec:order} rule out both families as literal
+accounts: the axiom fails its own test, and a third of the ordering inverts,
+which no rank-preserving rule can express. What remains is a forecasting
+question with a practical answer. Given the unrestricted distribution and
+nothing else, which rule predicts the restricted one least badly, and does the
+answer depend on how the question is asked? The batteries below are large
+because the differences are not, and because a claim about which approximation
+to prefer should hold across question types rather than on average over them.
 
 Cekinmez, Wu, Marjieh and Griffiths \cite{cekinmez2026} recently turned an
 everyday property of language into a measurable distribution over
@@ -772,7 +853,8 @@ appendix, 852 distinct prompt pairs, each put to five GPT models in the
 original two-slot form (``My two favourite human organs are the [ANSWER]
 and the [MASK] because they are SOMETHING'') with exact log
 probabilities. Across the 2{,}183 cells of the three headline models the
-conditional second choice decisively favors the contest model: mean
+conditional second choice favors the contest model by the largest margin
+anywhere in the paper: mean
 $\Delta$KL $+0.55$, 95\% CI $[+0.51, +0.60]$, and in both entropy strata.
 Adding the two cheaper models brings the battery to 3{,}660 cells and
 $+0.52$ $[+0.49, +0.55]$. Predicting the
@@ -1300,57 +1382,91 @@ contest reading again does best.
 \section{Discussion}
 \label{sec:discussion}
 
-These results concern machines, and contain no human choice data; similarity
-of outputs would not identify similarity of mechanism, so nothing here bears
-on whether people obey the Choice Axiom. What they do suggest is that the
-axiom's standing as a default for machine choice owes more to computational
-convenience than to fit, a convenience the algorithm of \cite{cotton2021}
-removes.
+The classical dispute has an answer here, and it is not the answer either side
+wanted. Luce's Choice Axiom is refuted on the one statistic where it makes a
+point prediction: naming a choice down to two items moves their log odds by
+$-1.15$ nats when the axiom requires zero, in both listing orders, and by more
+than a tenth of a nat in $96.8\%$ of pairs. But the Thurstonian alternative is
+not thereby installed, because the failure is of a kind no random utility model
+can represent. A third of surviving pairs reverse rank, and the leading survivor
+changes in half of all cells, while every member of both families preserves
+order by construction. Restriction reorders machine preference; it does not
+reweight it.
 
-The polysemy results admit a further conjecture, offered as such. Generative
-``mode collapse'' may be less a defect of knowledge than the output of a
-low-noise contest run over intact locations, in which case diversity would be
-restored not by a power tilt but by inverting the contest to recover locations
-and re-sampling at a chosen noise level, using the calibration of
-\cite{cotton2021} and no retraining. The evidence for this is a fifteen-word
-exploratory design with six usable restriction cells, and it shows that a
-contest transformation approximates the sense ladder, not that generation is
-literally a race over a fixed inventory of senses. Establishing the remedy
-would require a held-out intervention study setting Thurstone-noise adjustment
-against temperature, top-$p$, typical and diversity-aware decoding, scored on
-both diversity and quality. We have not run it.
+What survives is a ranking among approximations, and it is consistent enough to
+be useful. The contest is less wrong than renormalization in all 99 question
+types of the largest battery, it calls the direction of the odds failure in
+$71\%$ of pairs against an axiom that predicts no movement at all, and on the
+median pair its predicted magnitude is right. The reason is visible in the
+decomposition: renormalization holds odds fixed, a contest flattens by an amount
+that depends on the cell, and flattening is the correct response to an ordering
+that is unreliable. That is also why a uniform rule over survivors beats both,
+and why the best single fitted parameter is a heavy flattening rather than a mild
+one. Practitioners who mask an option and renormalize are using the worst of the
+rules examined here; those who want a parameter-free default should use
+contestant removal and expect it to be beaten by anything that learns the scale.
 
-A contest-structured output layer suggests itself and we
-note it only as a conjecture.\footnote{The gradient is not the obstacle. The
+Two results owe nothing to the dispute and may outlast it. Listing order moves
+the same log odds by $1.27$ nats, five times the effect either choice model
+predicts, so any study that names alternatives in a fixed order is measuring
+position preference alongside preference. And adding a single low-probability
+distractor to a named pair moves the odds $-4.02$, further from the unrestricted
+value than the pair alone, where both families require the triple to lie between
+pair and full set. We cannot account for that, and it is the clearest sign that
+naming a small set restructures the problem rather than pruning it.
+
+The regime dependence is equally material. Everything above concerns
+open-vocabulary elicitation, where the model supplies its own alternatives.
+Present the alternatives explicitly and the phenomenon changes: choice becomes
+nearly deterministic, deletion barely separates the two families, near
+duplicates inflate rather than substitute, and all thirty measured choice
+structures violate the Block--Marschak conditions, which no random utility model
+of any kind can survive. There is no single law of machine choice to be found.
+There is a law-like regularity in one elicitation architecture and something
+closer to salience-driven maximization in another.
+
+\subsection*{Conjectures, labelled as such}
+
+Three implications are worth stating and none is established here. Generative
+mode collapse may be the output of a low-noise contest over intact locations
+rather than a defect of knowledge, in which case diversity would be restored by
+inverting the contest and re-sampling at a chosen noise level rather than by
+raising temperature; the evidence is a fifteen-word exploratory design with six
+usable cells, and the intervention study that would test it, against
+temperature, top-$p$, typical and diversity-aware decoding, has not been run. A
+contest-structured output layer might generalize better than a softmax, and the
+gradient is not the obstacle, though the cost and normalization are.\footnote{The
 leave-one-out products that $P(X_i \text{ minimal}) = \int \phi(x-a_i)
-\prod_{j \neq i}(1-\Phi(x-a_j))\,dx$ requires are what the
-lattice method of \cite{cotton2021} is built to avoid recomputing: prefix and
-suffix survival products over a common grid give every contestant's product in
-two passes, and the same arrays supply the derivatives, so a backward pass costs
-the same order as the forward one and no graph over the $n(n-1)$ survival terms
-is built. The obstacles are elsewhere and they are not small. The forward cost
-is $O(nG)$ against a softmax's $O(n)$, with $G$ a few hundred cells at the
-default resolution, and the prefix and suffix arrays are themselves $O(nG)$ in
-memory unless streamed. Restricting the contest to a softmax-selected shortlist
-controls both, but a shortlist does not define a normalized full-vocabulary
-likelihood, and during training the target token need not lie in it, so a
-target-plus-shortlist normalization would have to be worked out. Nothing here
-tests generalization, and a contest link would change subset behaviour within a
-fixed state without making upstream scores invariant across prompts, which is
-where the framing effects of Section~\ref{sec:sweep} live. We have not built
-it.}
+\prod_{j \neq i}(1-\Phi(x-a_j))\,dx$ requires are what the lattice method of
+\cite{cotton2021} exists to avoid recomputing: prefix and suffix survival
+products over a common grid give every contestant's product in two passes, and
+the same arrays supply the derivatives, so the backward pass costs the same order
+as the forward one and no graph over the $n(n-1)$ survival terms is built. The
+obstacles are the forward cost, $O(nG)$ against a softmax's $O(n)$ with $G$ a few
+hundred cells, the $O(nG)$ memory of the prefix and suffix arrays unless
+streamed, and the fact that a softmax-selected shortlist does not define a
+normalized full-vocabulary likelihood, so a target-plus-shortlist normalization
+would have to be worked out for training. We have not built it.} And if the
+deficit grows with capability, as it does across five commercial models and with
+post-training in four of six open-weight pairs, then a Thurstonian diagnostic
+might serve as a label-free measure of model quality, except that the
+reversibility diagnostic does not order models by capability at all.
 
-The limitations are specific rather than general. The generative replication
-of Section~\ref{sec:polysemy} is the smallest design here, and the only
-sampled one: fifteen words, one model, a single machine judge, sampling
-temperature uncontrolled. The full stimulus set and model panel of
-\cite{cekinmez2026} would settle that one-parameter comparison with real
-power. The local panel is 4-bit quantized, and its magnitudes cannot be
-pooled with the commercial panel. Reversibility remains unexplained by either
-family. None of these touch the central measurement, which is that on
-$73{,}704$ scored cells, thirteen designs, nineteen models measured exactly
-and all 99 question types of the original appendix, the contest predicts restricted
-machine preference better than renormalization does.
+\subsection*{Limitations}
+
+The generative replication of Section~\ref{sec:polysemy} is the smallest design
+here and the only sampled one: fifteen words, one model, a single machine judge,
+temperature uncontrolled. The commercial batteries read a truncated candidate
+field, so their estimand is reallocation among previously serious candidates
+rather than over the whole vocabulary; the local batteries avoid this by scoring
+whole items over the full vocabulary, and their magnitudes cannot be pooled with
+the commercial ones. Local weights are 4-bit quantized. Model tier is a vendor
+label standing in for capability, and entropy stratification is a coarse control
+rather than continuous matching. The distractor anomaly and the reversibility
+failure are unexplained by anything in the paper.
+
+None of these touches the two central measurements. The axiom fails its own
+test, and machine preference under restriction is not order-stable.
 
 \section*{Data and code availability}
 
