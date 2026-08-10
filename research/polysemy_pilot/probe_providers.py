@@ -74,22 +74,33 @@ def probe(name, spec, keys):
     for model in spec["models"]:
         client = (OpenAI(api_key=key) if spec["base_url"] is None
                   else OpenAI(api_key=key, base_url=spec["base_url"]))
-        try:
-            r = client.chat.completions.create(
-                model=model, max_tokens=1, logprobs=True, top_logprobs=20,
-                temperature=1.0, messages=[{"role": "user", "content": PROMPT}])
-            level, k = classify(r)
-            top = ""
+        # First ask for 20 alternatives. If that is rejected, ask for plain
+        # logprobs: a provider that returns only the chosen token is still
+        # usable through continuation scoring, so the two cases must be
+        # distinguished rather than both recorded as failure.
+        attempts = [{"logprobs": True, "top_logprobs": 20},
+                    {"logprobs": True}]
+        last = ""
+        for kw in attempts:
             try:
-                c = r.choices[0].logprobs.content[0]
-                top = (c.top_logprobs[0].token if getattr(c, "top_logprobs", None)
-                       else c.token)
-            except Exception:
-                pass
-            rows.append((name, model, level, k, repr(top)))
-        except Exception as e:
-            msg = str(e).replace("\n", " ")[:150]
-            rows.append((name, model, f"ERROR {msg}", None, ""))
+                r = client.chat.completions.create(
+                    model=model, max_tokens=1, temperature=1.0,
+                    messages=[{"role": "user", "content": PROMPT}], **kw)
+                level, k = classify(r)
+                top = ""
+                try:
+                    c = r.choices[0].logprobs.content[0]
+                    top = (c.top_logprobs[0].token
+                           if getattr(c, "top_logprobs", None) else c.token)
+                except Exception:
+                    pass
+                suffix = "" if "top_logprobs" in kw else " (no top_logprobs)"
+                rows.append((name, model, level + suffix, k, repr(top)))
+                break
+            except Exception as e:
+                last = str(e).replace("\n", " ")
+        else:
+            rows.append((name, model, f"ERROR {last[:110]}", None, ""))
     return rows
 
 

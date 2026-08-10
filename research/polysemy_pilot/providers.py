@@ -97,6 +97,20 @@ PROVIDERS = {
         "expected": "unknown",
         "note": "",
     },
+    "moonshot": {
+        "env_var": "MOONSHOT_API_KEY",
+        "base_url": "https://api.moonshot.ai/v1",
+        "models": ["kimi-k2-0711-preview", "moonshot-v1-8k"],
+        "expected": "unknown",
+        "note": "OpenAI-compatible; logprob support unverified",
+    },
+    "zai": {
+        "env_var": "Z_API_KEY",
+        "base_url": "https://api.z.ai/api/paas/v4",
+        "models": ["glm-4.5-air", "glm-4-flash"],
+        "expected": "unknown",
+        "note": "Zhipu GLM family; OpenAI-compatible path",
+    },
     "groq": {
         "env_var": "GROQ_API_KEY",
         "base_url": "https://api.groq.com/openai/v1",

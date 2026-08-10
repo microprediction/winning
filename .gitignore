@@ -102,7 +102,16 @@ celerybeat.pid
 *.sage.py
 
 # Environments
+# Secrets: every env file variant, including backups and editor leftovers.
+# API keys live in .env only; nothing matching these patterns may be committed.
 .env
+.env.*
+*.env
+.env~
+.envrc
+!.env.example
+!.env.template
+
 .venv
 env/
 venv/
