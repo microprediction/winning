@@ -6,7 +6,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 from exact_restrict import MODELS, key
-from exact_analyze import INVENTORY
+from inventory import INVENTORY
 from openai import OpenAI
 CLIENT = OpenAI(api_key=key())
 PHRASES = ["Name", "Pick"]

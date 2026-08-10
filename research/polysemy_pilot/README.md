@@ -67,3 +67,26 @@ concentrates in low-entropy, heavily-qualified cells.
 - `analysis.json`, `restriction_analysis.json` — computed distributions & fits
 - `pilot_generate.py`, `pilot_judge.py`, `pilot_analyze.py`,
   `pilot_restrict.py` — the pipeline, in run order
+
+## Exact-logprob GPT batteries (Sections 5–6 of the paper)
+
+These use the OpenAI API (`max_tokens=1`, `top_logprobs=20`, key read from
+`winning/.env`), so preferences are measured rather than sampled. Item
+inventories live in `inventory.py`: `BASE_INVENTORY` (17 categories, frozen —
+`exact_analyze.py` and `random_restrict.py` import it so their committed
+results stay reproducible) and `INVENTORY` (50 categories, used by the
+deletion battery and `fetch_unq_new.py`).
+
+| battery | script | results | headline |
+|---|---|---|---|
+| original 2024 two-slot stimuli, 99 categories × every adjective × 3 models | `vol_battery.py` (`N_ADJ=0`) | `vol_battery_results.json` | 2,192 cells, ΔKL **+0.55** [+0.50, +0.59] |
+| permutation-controlled deletion, top-8 items × 2 phrasings × 50 categories × 3 models | `perm_restrict.py` | `perm_results.json` | 692 cells (31 scorable categories), ΔKL **+0.025** [+0.016, +0.035] |
+| single-deletion random elicitation | `random_restrict.py` | `random_results.json` | Thurstone 39/56 non-degenerate cells |
+| Block–Marschak / RUM test | `bm_battery.py` | `bm_results.json` | 18/18 structures violate RUM |
+| menus, duplicates, decoys | `red_bus.py`, `context_effects.py`, `transport.py` | matching `*_results.json` | regularity violations 8/18 |
+
+ΔKL is `KL(actual‖Luce) − KL(actual‖Thurstone)`; positive favors Thurstone,
+with bootstrap CIs over cells. Reproduce in order: `fetch_unq_new.py` (fills
+`random_raw.json` for any category new to `INVENTORY`), then the battery
+script — both cache raw API responses (`perm_raw.json`, `random_raw.json`)
+and re-fetch only what is missing.

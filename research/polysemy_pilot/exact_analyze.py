@@ -63,25 +63,8 @@ def entropy_norm(p):
 # Full per-category inventories: the Thurstone calibration field is the
 # inventory intersected with matched tokens, mirroring the full state list
 # of Cotton (2024). Keyed by unqualified noun.
-INVENTORY = {
-    "color": "red blue green purple orange yellow pink black white teal turquoise magenta gray brown violet indigo".split(),
-    "fruit": "mango banana pineapple papaya kiwi coconut apple strawberry watermelon peach pear plum cherry grape orange blueberry raspberry".split(),
-    "animal": "elephant lion giraffe zebra cheetah hippo rhino dog cat horse rabbit hamster dolphin tiger wolf owl fox panda penguin koala otter bear monkey".split(),
-    "musical instrument": "guitar violin cello harp banjo piano drums flute trumpet saxophone clarinet ukulele".split(),
-    "planet": "mercury venus earth mars jupiter saturn uranus neptune pluto".split(),
-    "metal": "gold silver platinum copper iron titanium steel aluminum tungsten".split(),
-    "bird": "eagle hawk owl falcon robin sparrow cardinal hummingbird penguin parrot crow raven swan flamingo".split(),
-    "flower": "tulip daffodil lily daisy crocus rose orchid sunflower peony lavender hydrangea".split(),
-    "vegetable": "carrot potato beet radish turnip broccoli spinach kale tomato cucumber pepper onion corn asparagus".split(),
-    "tree": "pine cedar spruce fir oak maple willow birch aspen redwood cherry magnolia".split(),
-    "sport": "soccer basketball football baseball hockey volleyball tennis golf swimming running cricket rugby badminton".split(),
-    "hot drink": "coffee tea cocoa chai matcha cider".split(),
-    "month": "january february march april may june july august september october november december".split(),
-    "day of the week": "monday tuesday wednesday thursday friday saturday sunday".split(),
-    "letter of the alphabet": list("abcdefghijklmnopqrstuvwxyz"),
-    "state in the u.s.": "alabama alaska arizona arkansas california colorado connecticut delaware florida georgia hawaii idaho illinois indiana iowa kansas kentucky louisiana maine maryland massachusetts michigan minnesota mississippi missouri montana nebraska nevada ohio oklahoma oregon pennsylvania tennessee texas utah vermont virginia washington wisconsin wyoming".split(),
-    "gemstone": "sapphire topaz aquamarine turquoise ruby emerald diamond opal amethyst garnet pearl jade".split(),
-}
+# 17-category base set, frozen; see inventory.py
+from inventory import BASE_INVENTORY as INVENTORY
 
 
 def main():

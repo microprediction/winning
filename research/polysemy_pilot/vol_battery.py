@@ -24,7 +24,7 @@ from exact_analyze import calibrate_np, win_probs_np, entropy_norm
 from openai import OpenAI
 
 CLIENT = OpenAI(api_key=key())
-N_ADJ = 3
+N_ADJ = 0  # 0 = every adjective in the volume; >0 = random subsample of that size
 STOP = set("the and for its this that with are was very a an of to in on it is "
            "because they most two favourite favorite".split())
 
@@ -107,7 +107,8 @@ def main():
         adjs = spec.get("adjectives", [])
         if not adjs or "prompt_pair_template" not in spec:
             continue
-        for adj in rng.sample(adjs, min(N_ADJ, len(adjs))):
+        use = adjs if N_ADJ == 0 else rng.sample(adjs, min(N_ADJ, len(adjs)))
+        for adj in use:
             for m in MODELS:
                 jobs.append((cat, spec, adj, m))
     print(f"{len(jobs)} cells", flush=True)

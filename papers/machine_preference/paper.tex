@@ -19,9 +19,10 @@ Thurstone is the Model of Choice}}
 large language models should obey Luce's Choice Axiom. They do not. In
 masked-token experiments a Thurstonian contest model predicted BERT's
 revealed preferences better in roughly 80\% of cases. We extend the test
-to modern models with exact log-probability designs: across 461
-permutation-controlled deletion cells, Thurstone beats Luce decisively
-(mean $\Delta$KL $+0.033$, CI $[+0.020, +0.047]$), with the advantage
+to modern models with exact log-probability designs: replaying the
+original two-slot stimuli across 2{,}192 cells, Thurstone beats Luce
+decisively (mean $\Delta$KL $+0.55$, CI $[+0.50, +0.59]$), and across
+692 permutation-controlled deletion cells ($+0.025$), with the advantage
 concentrated wherever preference tuning has not already collapsed the
 distribution. Explicit menus behave differently: near-deterministic, no
 red-bus substitution, and occasional regularity violations (decoy
@@ -350,9 +351,10 @@ random planet'' putting essentially all mass on \emph{Mars}---the
 homogenization of \cite{jiang2026} extends to explicit randomness.)
 
 To control for phrasing and for which item is removed, the definitive
-battery deletes \emph{each} of the top six observed items in turn, across
-37 categories and three GPT models: 461 permutation-controlled cells,
-scored by the proper rule $\mathrm{KL}(\text{actual} \,\|\,
+battery deletes \emph{each} of the top eight observed items in turn,
+under two phrasings, across 50 categories and three GPT models. Thirty-one
+categories retain enough open-vocabulary mass to be scorable, giving 692
+permutation-controlled cells, scored by the proper rule $\mathrm{KL}(\text{actual} \,\|\,
 \text{prediction})$, with bootstrap confidence intervals over cells.
 
 \begin{table}[ht]
@@ -361,9 +363,9 @@ scored by the proper rule $\mathrm{KL}(\text{actual} \,\|\,
 \toprule
 Stratum & $n$ & mean $\Delta$KL (Luce $-$ Thurstone) & 95\% CI \\
 \midrule
-all cells & 461 & $+0.033$ & $[+0.020, +0.047]$ \\
-non-degenerate prior ($\tilde H > 0.2$) & 323 & $+0.044$ & $[+0.028, +0.062]$ \\
-degenerate prior ($\tilde H \leq 0.2$) & 138 & $+0.007$ & $[-0.012, +0.031]$ \\
+all cells & 692 & $+0.025$ & $[+0.016, +0.035]$ \\
+non-degenerate prior ($\tilde H > 0.2$) & 521 & $+0.036$ & $[+0.026, +0.048]$ \\
+degenerate prior ($\tilde H \leq 0.2$) & 171 & $-0.008$ & $[-0.025, +0.011]$ \\
 \bottomrule
 \end{tabular}
 \caption{Permutation-controlled deletion battery, exact log probabilities,
@@ -379,17 +381,19 @@ that preference tuning has emptied of choice.
 
 The largest effect of all comes from re-running the \emph{original}
 stimulus set of this paper's 2024 version---99 categories with
-adjective-varied prompt pairs---in its original two-slot form (``My two
-favourite human organs are the [ANSWER] and the [MASK] because they are
-SOMETHING''), on GPT models with exact probabilities. Across 691 cells
-the conditional second choice decisively favors the contest model: mean
-$\Delta$KL $+0.51$, 95\% CI $[+0.43, +0.59]$, on every model and in both
-entropy strata. Predicting the runner-up given the winner is precisely
-where Luce renormalization fails hardest---the machine-preference analog
-of the Harville \cite{harville1973} overpricing of exactas that
-motivated the Thurstonian computation in the first place. The same
-questions asked of BERT in 2024 and of GPT-4-class models in 2026 return
-the same verdict, with a larger margin under exact measurement.
+adjective-varied prompt pairs, every adjective included---in its
+original two-slot form (``My two favourite human organs are the
+[ANSWER] and the [MASK] because they are SOMETHING''), on GPT models
+with exact probabilities. Across 2{,}192 cells the conditional second
+choice decisively favors the contest model: mean $\Delta$KL $+0.55$,
+95\% CI $[+0.50, +0.59]$, on every model (from $+0.36$ on GPT-4o-mini
+to $+0.86$ on GPT-4.1) and in both entropy strata. Predicting the
+runner-up given the winner is precisely where Luce renormalization
+fails hardest---the machine-preference analog of the Harville
+\cite{harville1973} overpricing of exactas that motivated the
+Thurstonian computation in the first place. The same questions asked of
+BERT in 2024 and of GPT-4-class models in 2026 return the same verdict,
+with a larger margin under exact measurement.
 
 One further caution emerged with practical import for all such
 experiments: the ``actual'' restricted distribution depends materially on

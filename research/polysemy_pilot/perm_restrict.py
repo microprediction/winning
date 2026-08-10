@@ -11,12 +11,13 @@ from pathlib import Path
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 from exact_restrict import MODELS, key, match_items
-from exact_analyze import INVENTORY, calibrate_np, win_probs_np, rmse, entropy_norm
+from exact_analyze import calibrate_np, win_probs_np, rmse, entropy_norm
+from inventory import INVENTORY  # all 50 categories
 from openai import OpenAI
 
 CLIENT = OpenAI(api_key=key())
 PHRASES = ["Name", "Pick"]
-MAX_DELETIONS = 6  # delete each of the top-6 observed items in turn
+MAX_DELETIONS = 8  # delete each of the top-8 observed items in turn
 
 
 def top20(prompt, model):
@@ -75,6 +76,8 @@ def main():
     for (n, ph, m, out), raw_q in restr.items():
         d_u = inv_dist(unq[f"{n}||{ph}||{m}"], n)
         d_q = inv_dist(raw_q, n)
+        if out not in d_u:
+            continue  # cached deletion of an item the unqualified top-20 no longer shows
         keep = [s for s in d_u if s != out and s in d_q]
         if len(keep) < 2:
             continue
