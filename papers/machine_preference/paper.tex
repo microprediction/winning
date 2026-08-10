@@ -861,25 +861,49 @@ Current architectures oblige the hidden layers to work against the
 renormalization their output layer implies, and Section~\ref{sec:tier}
 indicates they do so more, not less, as models improve.
 
-The objection to such a layer is cost. Winning probabilities in the normal
-contest have no closed form,
-but they do reduce to a single shared one-dimensional integral,
+The usual objection is cost, and it is weaker than it looks. Winning
+probabilities in the normal contest have no closed form, but they reduce to a
+single shared one-dimensional integral,
 \begin{equation}
 P(X_i \text{ minimal}) = \int \phi(x - a_i)
   \prod_{j \neq i} \bigl(1 - \Phi(x - a_j)\bigr) \, dx,
 \label{eq:contest}
 \end{equation}
-which is differentiable in $\{a_i\}$ and computable for all $i$ at once on a
-common quadrature grid. The whole vector costs $O(nG)$ for $n$ items and $G$
-grid points against the softmax's $O(n)$, so at the grid resolution of
-\cite{cotton2021} a full-vocabulary contest layer is some three orders of
-magnitude more expensive per position. That is prohibitive as a drop-in
-replacement and unnecessary as a design: a softmax can shortlist the top
-hundred candidates and the contest can arbitrate among those, which is where
-essentially all of the probability mass and all of the measured disagreement
-between the two families lives. We have not trained such a layer, and offer
-Equation~\eqref{eq:contest} only to show that the obstacle is a constant
-factor on a shortlist rather than an absence of gradients.
+and the leave-one-out product it contains is the quantity the lattice method
+of \cite{cotton2021} is built to avoid recomputing. Discretize the ability
+axis, form the survival function of each contestant on the common grid, and
+accumulate prefix and suffix products across the field. Every contestant's
+leave-one-out product is then a single elementwise multiplication of the
+prefix ending before it and the suffix beginning after it, so the entire
+vector of winning probabilities costs two passes over the grid rather than
+$n$ separate products, which is $O(nG)$ for $n$ items and $G$ grid cells
+instead of the $O(n^2G)$ the expression suggests. At the default resolution
+of that method $G$ is a few hundred cells.
+
+The consequence that matters for training is that the same prefix and suffix
+arrays already contain the derivatives. Differentiating
+Equation~\eqref{eq:contest} with respect to any $a_j$ reuses the products
+computed for the forward pass, so the backward pass costs the same order as
+the forward one and there is no autodiff graph over the $n(n-1)$ survival
+terms to build or traverse. Removing one contestant, which is the operation
+the whole paper measures, is also the operation that short-circuits the
+gradient.
+
+So the layer is a training-time proposition rather than an inference-time
+curiosity. The contest can enter the update rule itself, with the network
+learning locations $\{a_i\}$ against a contest likelihood instead of logits
+against a renormalization likelihood, which is the arrangement
+Section~\ref{sec:tier} suggests the hidden layers are already straining
+toward. The remaining constant, a few hundred grid cells against a softmax's
+single pass, is a fused kernel of two elementwise sweeps and one convolution,
+and it can be cut further by letting a softmax shortlist the top hundred
+candidates and the contest arbitrate among those, which is where essentially
+all of the mass and all of the measured disagreement between the two families
+lives.
+
+We have not built it. Equation~\eqref{eq:contest} and the leave-one-out
+structure are offered to show that what stands in the way is a constant
+factor and an implementation, not a missing gradient.
 
 The limitations are specific rather than general. The generative replication
 of Section~\ref{sec:polysemy} is the smallest design here, and the only
