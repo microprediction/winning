@@ -1,0 +1,11 @@
+{"key": "openai||gpt-4.1-nano", "raw": {"provider": "openai", "model": "gpt-4.1-nano", "level": "topk", "k": 20, "top": "'e'"}}
+{"key": "openrouter||meta-llama/llama-3.3-70b-instruct", "raw": {"provider": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct", "level": "skipped (no key)", "k": null, "top": ""}}
+{"key": "fireworks||accounts/fireworks/models/llama-v3p1-8b-instruct", "raw": {"provider": "fireworks", "model": "accounts/fireworks/models/llama-v3p1-8b-instruct", "level": "skipped (no key)", "k": null, "top": ""}}
+{"key": "together||meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", "raw": {"provider": "together", "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", "level": "skipped (no key)", "k": null, "top": ""}}
+{"key": "hyperbolic||meta-llama/Meta-Llama-3.1-8B-Instruct", "raw": {"provider": "hyperbolic", "model": "meta-llama/Meta-Llama-3.1-8B-Instruct", "level": "skipped (no key)", "k": null, "top": ""}}
+{"key": "deepinfra||meta-llama/Meta-Llama-3.1-8B-Instruct", "raw": {"provider": "deepinfra", "model": "meta-llama/Meta-Llama-3.1-8B-Instruct", "level": "skipped (no key)", "k": null, "top": ""}}
+{"key": "deepseek||deepseek-chat", "raw": {"provider": "deepseek", "model": "deepseek-chat", "level": "topk", "k": 20, "top": "'Pe'"}}
+{"key": "gemini||gemini-2.0-flash", "raw": {"provider": "gemini", "model": "gemini-2.0-flash", "level": "ERROR Error code: 400 - [{'error': {'code': 400, 'message': 'Invalid JSON payload received. Unknown name \"logprobs\": Cannot find field.\\nInvalid JSON payloa", "k": null, "top": ""}}
+{"key": "xai||grok-3-mini", "raw": {"provider": "xai", "model": "grok-3-mini", "level": "ERROR Error code: 403 - {'code': 'permission-denied', 'error': 'Your team a33a5dd6-1a0d-4599-90c3-d78759989edb has either used all available credits or reac", "k": null, "top": ""}}
+{"key": "groq||llama-3.3-70b-versatile", "raw": {"provider": "groq", "model": "llama-3.3-70b-versatile", "level": "skipped (no key)", "k": null, "top": ""}}
+{"key": "mistral||mistral-small-latest", "raw": {"provider": "mistral", "model": "mistral-small-latest", "level": "skipped (no key)", "k": null, "top": ""}}
