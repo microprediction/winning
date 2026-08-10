@@ -22,10 +22,21 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-from exact_restrict import MODELS, key
+from exact_restrict import key
+from models import ALL as MODELS, HEADLINE
+from datastore import RawLog, write_json_atomic
 from openai import OpenAI
 
 CLIENT = OpenAI(api_key=key())
+RAW = RawLog(HERE / "context_raw.jsonl")  # append-only, before any scoring
+
+
+def _top20_api(prompt, model):
+    r = CLIENT.chat.completions.create(
+        model=model, max_tokens=1, logprobs=True, top_logprobs=20,
+        temperature=1.0, messages=[{"role": "user", "content": prompt}])
+    return {t.token: math.exp(t.logprob)
+            for t in r.choices[0].logprobs.content[0].top_logprobs}
 N_DRAWS = 6
 
 # family: product, attr names, T(arget), C(ompetitor), D(ecoy dominated by T),
@@ -67,16 +78,13 @@ def letter_dist(options, product, attrs, model, rng):
         prompt = (f"You are choosing a {product}. Options:\n"
                   + "\n".join(lines)
                   + "\nWhich do you choose? Answer with the letter only.")
-        r = CLIENT.chat.completions.create(
-            model=model, max_tokens=1, logprobs=True, top_logprobs=20,
-            temperature=1.0,
-            messages=[{"role": "user", "content": prompt}])
+        raw = RAW.fetch(model, prompt, lambda: _top20_api(prompt, model))
         slot = {tag: 0.0 for tag, _ in opts}
-        for t in r.choices[0].logprobs.content[0].top_logprobs:
-            w = t.token.strip().upper()
+        for tok, p in raw.items():
+            w = tok.strip().upper()
             for L, (tag, _) in zip(letters, opts):
                 if w == L:
-                    slot[tag] += math.exp(t.logprob)
+                    slot[tag] += p
         z = sum(slot.values())
         if z > 0.2:
             for tag in slot:
@@ -124,7 +132,7 @@ def main():
                 results.append(fut.result())
             except Exception as e:
                 print(f"ERROR {e}", file=sys.stderr, flush=True)
-    (HERE / "context_effects_results.json").write_text(json.dumps(results, indent=1))
+    write_json_atomic(HERE / "context_effects_results.json", results)
 
     for test in ["decoy", "compromise"]:
         rs = [r[test] for r in results if test in r]

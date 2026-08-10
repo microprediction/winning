@@ -10,7 +10,8 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-from exact_restrict import MODELS, key, match_items
+from exact_restrict import key, match_items
+from models import ALL as MODELS, HEADLINE
 from exact_analyze import calibrate_np, win_probs_np, rmse, entropy_norm
 from inventory import INVENTORY  # all 50 categories
 from datastore import append_jsonl, load_jsonl, write_json_atomic

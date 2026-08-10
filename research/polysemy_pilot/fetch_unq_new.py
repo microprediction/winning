@@ -5,7 +5,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-from exact_restrict import MODELS, key
+from exact_restrict import key
+from models import ALL as MODELS
 from inventory import INVENTORY
 from datastore import append_jsonl, write_json_atomic
 from openai import OpenAI

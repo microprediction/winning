@@ -72,3 +72,43 @@ def write_atomic(path, text):
 
 def write_json_atomic(path, obj, indent=1):
     write_atomic(path, json.dumps(obj, indent=indent))
+
+
+class RawLog:
+    """Append-only log of API responses keyed by (model, prompt).
+
+    Wrap a battery's fetch function in `.fetch(...)` and the battery gains
+    crash safety and free re-analysis at once: every response is on disk the
+    moment it arrives, and a re-run makes no calls it has already paid for.
+    Distinct prompts are distinct measurements, so randomized menu orders are
+    keyed separately rather than collapsing onto one entry.
+    """
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.cache = {r["key"]: r["raw"] for r in load_jsonl(self.path)}
+
+    @staticmethod
+    def _key(model, prompt):
+        return f"{model}||{prompt}"
+
+    def get(self, model, prompt):
+        return self.cache.get(self._key(model, prompt))
+
+    def record(self, model, prompt, raw):
+        k = self._key(model, prompt)
+        append_jsonl(self.path, {"key": k, "model": model, "prompt": prompt,
+                                 "raw": raw})
+        self.cache[k] = raw
+
+    def fetch(self, model, prompt, call):
+        """Return the logged response for this prompt, or call and log it."""
+        hit = self.get(model, prompt)
+        if hit is not None:
+            return hit
+        raw = call()
+        self.record(model, prompt, raw)
+        return raw
+
+    def __len__(self):
+        return len(self.cache)

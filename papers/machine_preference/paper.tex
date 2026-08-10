@@ -19,14 +19,13 @@ Thurstone is the Model of Choice}}
 large language models should obey Luce's Choice Axiom. They do not. In
 masked-token experiments a Thurstonian contest model predicted BERT's
 revealed preferences better in roughly 80\% of cases. We extend the test to
-modern models across nine designs and 3{,}148 cells scored by exact log
-probabilities. Replaying the original two-slot stimuli over 2{,}183 cells,
-Thurstone beats Luce decisively (mean $\Delta$KL $+0.55$, CI
-$[+0.51, +0.60]$), as it does over 692 permutation-controlled deletion
-cells ($+0.025$), with the advantage concentrated wherever preference
-tuning has not already collapsed the distribution. Explicit menus behave
-differently: near-deterministic, no red-bus substitution, and regularity
-violations beyond any random utility model.
+modern models across eleven designs, five models and 6{,}654 cells scored by
+exact log probabilities. Replaying the original two-slot stimuli over 2{,}183
+cells, Thurstone beats Luce decisively (mean $\Delta$KL $+0.55$, CI
+$[+0.51, +0.60]$), as it does over 1{,}195 deletion cells and under all four
+ordered-selection framings. The advantage rises monotonically with model
+tier. Explicit menus behave differently: near-deterministic, no red-bus
+substitution, and regularity violations beyond any random utility model.
 \end{abstract}
 
 \section{Introduction}
@@ -55,8 +54,8 @@ p_i = \frac{e^{z_i}}{\sum_{j=1}^n e^{z_j}},
 \label{eq:softmax}
 \end{equation}
 however complicated the transformer computation producing $z_i$ may be.
-Delete item 1 from consideration---set $z_1 = -\infty$, a surgical
-procedure impossible in humans---and the remaining probabilities are the
+Delete item 1 from consideration by setting $z_1 = -\infty$, a surgical
+procedure impossible in humans, and the remaining probabilities are the
 old ones renormalized by $1/(1-p_1)$. In using softmax layers we are, in
 effect, heavily \emph{suggesting} to the machine that it obey Luce's
 Choice Axiom.
@@ -66,17 +65,19 @@ suggestion built into their output layer, exhibit preference behavior
 better modeled in the Thurstonian framework of noisy contests
 \cite{thurstone1927}.
 
-The evidence is not a single experiment. Table~\ref{tab:designs} lists nine
-designs comprising $3{,}148$ scored choice cells, built from $4{,}105$
-logged exact log-probability measurements on three GPT models, alongside
-the masked language model study of the 2024 version and a generative
-replication on Claude. Every cell is a zero-parameter out-of-sample
-prediction: both families are calibrated to an unrestricted distribution
-and asked to predict a restricted one they have not seen. The two largest
-batteries, $2{,}183$ and $692$ cells, favor the contest model with
-bootstrap confidence intervals excluding zero on every model tested. All
-raw model responses are logged and released, so every number below is
-recomputable without further inference.
+The evidence is not a single experiment. Table~\ref{tab:designs} lists
+eleven designs comprising $6{,}654$ scored choice cells, built from
+$10{,}704$ logged exact log-probability measurements on five GPT models,
+alongside the masked language model study of the 2024 version and a
+generative replication on Claude. Every cell is a zero-parameter
+out-of-sample prediction: both families are calibrated to an unrestricted
+distribution and asked to predict a restricted one they have not seen. The
+two largest batteries, $3{,}660$ and $1{,}195$ cells, favor the contest
+model with bootstrap confidence intervals excluding zero on every one of
+the five models, and the margin rises monotonically with model tier, from
+$+0.30$ on GPT-4.1-nano to $+0.88$ on GPT-4.1. All raw model responses are
+logged and released, so every number below is recomputable without further
+inference.
 
 Section~\ref{sec:models} states the two competing models.
 Sections~\ref{sec:masked}--\ref{sec:maskedresults} test them on masked
@@ -100,10 +101,12 @@ Two-slot elimination (masked) & 2 masked LMs & 100+ & Thurstone $\approx 80\%$ \
 Polysemous generation, restriction & Claude & 21 & re-collapse, not renormalization \\
 Qualified-noun restriction & 3 GPT & 71 & tie (degenerate priors) \\
 Random elicitation, one deletion & 3 GPT & 77 & Thurstone 39/56, $p = 0.002$ \\
-Permutation-controlled deletion & 3 GPT & 692 & $\Delta$KL $+0.025$ $[+0.016, +0.035]$ \\
-Original 2024 stimuli, two-slot & 3 GPT & 2{,}183 & $\Delta$KL $+0.55$ $[+0.51, +0.60]$ \\
-Block--Marschak / RUM test & 3 GPT & 18 & 18/18 violate RUM \\
-Menus, duplicates, decoys & 3 GPT & 67 & no substitution; 8/18 regularity \\
+Permutation-controlled deletion & 5 GPT & 1{,}195 & $\Delta$KL $+0.025$ $[+0.018, +0.033]$ \\
+Original 2024 stimuli, two-slot & 5 GPT & 3{,}660 & $\Delta$KL $+0.52$ $[+0.49, +0.55]$ \\
+Ordered selection to depth five & 5 GPT & 1{,}363 & $+0.23$ to $+0.41$, all four framings \\
+Reversibility (best vs worst first) & 5 GPT & 108 & both families fail; not one scale \\
+Block--Marschak / RUM test & 5 GPT & 30 & 30/30 violate RUM \\
+Menus, duplicates, decoys & 5 GPT & 110 & no substitution; 16/30 regularity \\
 \bottomrule
 \end{tabular}
 \caption{The full evidence base. Cells are scored zero-parameter
@@ -132,7 +135,7 @@ a ball from the urn, we remove a horse from the race.
 
 (As an aside, it \emph{is} possible to engineer a contest that satisfies
 Luce's Choice Axiom, by taking $X_i \sim \mathrm{Exp}(h_i)$ with common
-location and differing hazard rates---or, by Yellott's theorem, with
+location and differing hazard rates, or, by Yellott's theorem, with
 Gumbel noise \cite{yellott1977}. The comparison here can therefore be
 viewed as between two noise families within the contest framework, which
 is why single-menu fits cannot separate them and the restriction,
@@ -140,9 +143,9 @@ duplication, and context designs below are required.)
 
 The practical obstacle to Thurstonian models has always been computation,
 not plausibility. A fast lattice algorithm for calibrating multi-entrant
-Thurstone models---recovering locations $\{a_i\}$ from winning
+Thurstone models, recovering locations $\{a_i\}$ from winning
 probabilities and computing derived quantities for fields exceeding
-$100{,}000$ entrants---was given in \cite{cotton2021}, and is what makes
+$100{,}000$ entrants, was given in \cite{cotton2021}, and is what makes
 the experiments below routine.
 
 \section{Experimental design: masked language models}
@@ -260,8 +263,8 @@ meanings: give a model a bare polysemous word (``bolt'') with no
 disambiguating context, sample many outputs, and classify which sense each
 expresses. Across 32 text and image generation models they report a
 striking ladder of normalized sense entropies: image generation $0.10$,
-text generation $0.25$, human subjects $0.47$, and---when models are asked
-to \emph{predict} the distribution of senses---roughly $0.73$. Models
+text generation $0.25$, human subjects $0.47$, and, when models are asked
+to \emph{predict} the distribution of senses, roughly $0.73$. Models
 know the ambiguity; they do not express it. The finding sits within a
 growing literature on generative homogenization \cite{jiang2026} and its
 sharpening under preference tuning \cite{kirk2024}; their own ablation
@@ -279,7 +282,7 @@ a power tilt: renormalized $p_i^{\gamma}$, the Luce family with a
 temperature, which is mechanically what RLHF sharpening, low-temperature
 decoding, and classifier-free guidance perform. The two families are
 distinguished not by the collapse itself but by behavior under choice-set
-restriction---precisely the instrument of Section~\ref{sec:masked}, and an
+restriction, precisely the instrument of Section~\ref{sec:masked}, and an
 experiment run by neither paper until now.
 
 \subsection{Replication on a chat model}
@@ -300,7 +303,7 @@ fit on 10 of 15 words), and the reason both fit poorly is itself
 informative: for several words the generated mode is not even the stated
 argmax (``port'' generates \emph{harbor} in every sample while rating
 \emph{connector} most probable). Stated reports are a biased window on
-the latent locations, not merely a flattened one---consistent with
+the latent locations, not merely a flattened one. This is consistent with
 \cite{cekinmez2026}, whose stated distributions overestimate even human
 diversity. Calibration should therefore use revealed behavior, which is
 what the restriction design does.
@@ -342,8 +345,8 @@ than the margin: under restriction the model does not spread probability
 proportionally, as Luce requires. It \emph{re-collapses} onto a new modal
 sense (match $\to$ \emph{firestick} at $.82$; iron $\to$ \emph{metal} at
 $.95$; bat $\to$ \emph{animal} at $1.00$). Remove the winning horse and
-the runner-up now wins nearly always---low-noise contest behavior, and
-the same low-entropy, heavy-qualification regime where the Thurstonian
+the runner-up now wins nearly always. That is low-noise contest behavior,
+in the same low-entropy, heavy-qualification regime where the Thurstonian
 advantage concentrated in Section~\ref{sec:maskedresults}. Some rank
 flips under restriction exceed even the Thurstonian sharpening, and
 inventories with overlapping senses (``bat'') contaminate the exclusion
@@ -365,8 +368,8 @@ families ($p = 0.29$).
 
 The instrument, however, has weakened for an interesting reason: the
 unqualified distributions of preference-tuned chat models are already
-near-degenerate (``the best metal is'' puts $0.997$ on \emph{gold}),
-so most cells carry little discriminating information---under either
+near-degenerate (``my favorite tree is'' puts $0.94$ on \emph{oak}),
+so most cells carry little discriminating information. Under either
 model the surviving favorite keeps nearly everything, and the comparison
 hinges on tail probabilities. The masked models of
 Section~\ref{sec:maskedresults} answered the unqualified question with
@@ -380,14 +383,16 @@ reach it.
 \subsection{Random elicitation restores the regime}
 
 The remedy is to ask for randomness rather than preference. ``Name a
-random metal'' followed by explicit single-item elimination---either an
-exclusion (``\ldots{} that is not gold'') or the two-slot continuation of
-Section~\ref{sec:masked} (``I already picked one random metal: gold.
-Name another\ldots'')---raises mean unqualified entropy to $0.38$ and
-returns the experiment to the regime where the two families disagree.
-(Only partially: models are poor samplers even on request, with ``a
-random planet'' putting essentially all mass on \emph{Mars}---the
-homogenization of \cite{jiang2026} extends to explicit randomness.)
+random programming language'' followed by explicit single-item
+elimination raises mean unqualified entropy to $0.38$ and returns the
+experiment to the regime where the two families disagree. The elimination
+takes one of two forms, either an exclusion (``\ldots{} that is not
+Python'') or the two-slot continuation of Section~\ref{sec:masked} (``I
+already picked one random programming language: Python. Name
+another\ldots''). The recovery is only partial, since
+models are poor samplers even on request, with ``a random planet''
+putting essentially all mass on \emph{Mars}. The homogenization of
+\cite{jiang2026} extends to explicit randomness.
 
 To control for phrasing and for which item is removed, the definitive
 battery deletes \emph{each} of the top eight observed items in turn,
@@ -424,19 +429,36 @@ that preference tuning has emptied of choice.
 The largest battery, and the largest effect, comes from re-running the
 \emph{original} stimulus set of this paper's 2024 version. That is 97
 scorable categories crossed with every adjective in the original
-appendix, 852 distinct prompt pairs, each put to three GPT models in the
+appendix, 852 distinct prompt pairs, each put to five GPT models in the
 original two-slot form (``My two favourite human organs are the [ANSWER]
 and the [MASK] because they are SOMETHING'') with exact log
-probabilities. Across 2{,}183 cells the conditional second
-choice decisively favors the contest model: mean $\Delta$KL $+0.55$,
-95\% CI $[+0.51, +0.60]$, on every model (from $+0.35$ on GPT-4o-mini
-to $+0.88$ on GPT-4.1) and in both entropy strata. Predicting the
+probabilities. Across the 2{,}183 cells of the three headline models the
+conditional second choice decisively favors the contest model: mean
+$\Delta$KL $+0.55$, 95\% CI $[+0.51, +0.60]$, and in both entropy strata.
+Adding the two cheaper models brings the battery to 3{,}660 cells and
+$+0.52$ $[+0.49, +0.55]$. Predicting the
 runner-up given the winner is precisely where Luce renormalization
-fails hardest---the machine-preference analog of the Harville
+fails hardest. It is the machine-preference analog of the Harville
 \cite{harville1973} overpricing of exactas that motivated the
 Thurstonian computation in the first place. The same questions asked of
 BERT in 2024 and of GPT-4-class models in 2026 return the same verdict,
 with a larger margin under exact measurement.
+
+Across the five models the margin is ordered by tier:
+GPT-4.1-nano $+0.30$, GPT-4o-mini $+0.35$, GPT-4o $+0.42$, GPT-4.1-mini
+$+0.65$, GPT-4.1 $+0.88$. The more capable the model, the further its
+revealed preferences sit from the Choice Axiom its own output layer
+suggests. Two readings are available and this design does not separate
+them. Capable models may represent preference in a way better described
+by a latent contest, or they may simply hold sharper locations, since the
+deficit also grows with the concentration of the unrestricted
+distribution. The second reading is the more conservative, and the
+degenerate stratum of Table~\ref{tab:battery} is consistent with it. What
+the ordering does establish is that the effect is not an artifact of weak
+models, which is the usual objection to results of this kind. Whether
+Thurstonian diagnostics can serve as a label-free measure of model quality
+is a natural question, but Section~\ref{sec:exotics} counsels caution: the
+reversibility diagnostic does not order the models by capability at all.
 
 One further caution emerged with practical import for all such
 experiments: the ``actual'' restricted distribution depends materially on
@@ -450,17 +472,62 @@ in a language model the choice-set manipulation is itself a prompt
 intervention. Framing effects of this size sit above both choice models,
 and any account of machine preference that ignores them is incomplete.
 
+\subsection{Ordered selection, depth, and reversibility}
+\label{sec:exotics}
+
+The two-slot design is an exacta. Asking instead for an ordered list, and
+eliciting each slot separately with the earlier picks fed back in, extends
+it to a trifecta and beyond, so that Plackett--Luce \cite{plackett1975}
+renormalization and Thurstonian contestant removal can be compared at
+every depth. Four framings were run over 40 categories and five models to
+depth five: two neutral (``select five random $X$ in order,'' ``name five
+different $X$, in order'') and two preference-ordered (most favourite
+first, least favourite first).
+
+The contest model wins under all four framings, which is the robustness
+that matters most here, since the framings are different elicitation
+architectures rather than paraphrases: $+0.55$ most-favourite-first,
+$+0.38$ ``different,'' $+0.26$ ``random,'' $+0.18$ least-favourite-first
+(all intervals excluding zero, 1{,}363 cells).
+
+Depth, however, does not behave as the racing analogy predicts. Since
+slot $d$ involves $d-1$ removals and renormalization can only redistribute
+vacated mass proportionally, the Luce deficit might be expected to compound
+with depth. It does the opposite, falling from $+0.42$ at slot two to
+$+0.24$ at slot five, and within a given category and model the change from
+the second slot to the deepest is negative on average ($-0.23$, positive in
+only 161 of 395 ladders). The mechanism is visible in the cell sizes: each
+removal shortens the surviving field, and by slot five most cells have only
+two or three candidates left, where the two families cannot differ much.
+Depth in an open-vocabulary elicitation removes discriminating power rather
+than adding it, which is the opposite of the racing case, where the field
+stays large as places are filled.
+
+Reversibility is a sharper test, and both families fail it. Under a
+Thurstonian scale, asking for the least favourite is the same latent vector
+read backwards, since the minimum of $X$ is the maximum of $-X$; one
+calibration must then predict both directions with no free parameters.
+Luce must instead invert its utilities. Neither works: predicting the
+least-favourite-first distribution from the most-favourite-first one costs
+$5.3$ to $9.0$ nats depending on the model, for both families alike, and
+the ranking of models by this quantity does not track capability. The
+reason is that the two directions barely share an item set. Asked for a
+least favourite, models name items they never mention when asked for a
+favourite, so the reversed question is not the same contest re-read but a
+different one. Machine preference in this regime is not a single scale
+with two ends.
+
 \subsection{Menus, duplicates, and context effects}
 
-Presenting the choice set explicitly---``pick one of these: \ldots,''
-with menu order randomized and probabilities read from option-token log
-probabilities---changes the phenomenon entirely, in three ways.
+Presenting the choice set explicitly changes the phenomenon entirely, in
+three ways. The design is ``pick one of these: \ldots,'' with menu order
+randomized and probabilities read from option-token log probabilities.
 
 First, menu choice by preference-tuned models is nearly deterministic.
 A transport menu (car, bus, train, bike, walk, taxi) under contextual
-conditioning behaves with perfect semantic sense---``it is raining''
-sends GPT-4o to \emph{taxi} with probability $1.00$, ``there is a fuel
-shortage'' to \emph{bike} at $0.99$---but the resulting distributions
+conditioning behaves with perfect semantic sense. ``It is raining''
+sends GPT-4o to \emph{taxi} with probability $1.00$ and ``there is a fuel
+shortage'' sends it to \emph{bike} at $0.99$. But the resulting distributions
 are so degenerate that menu-based deletion cannot separate the choice
 models (144 cells, $\Delta$KL CI $[-0.028, +0.016]$), consistent with
 Table~\ref{tab:battery}'s stratification. The determinism extends to
@@ -479,21 +546,21 @@ duplicate-pair families the models show \emph{no substitution at all}:
 the duplicated category's total share typically inflates, often beyond
 even the urn-doubling prediction (apple $0.08 \to 0.53$ when split into
 green and red), and a substitution baseline is the best predictor in
-only 8 of 25 cells against Luce's 17. (With exchangeable duplicates,
+only 15 of 41 cells against Luce's 24. (With exchangeable duplicates,
 Luce and independent Thurstone nearly coincide; the test's power is
-entirely against substitution.) Description salience---\emph{red} apple
-is more vivid than apple---appears to dominate any shared-noise
-structure.
+entirely against substitution.) Description salience, in that a
+\emph{red} apple is more vivid than an apple, appears to dominate any
+shared-noise structure.
 
 Third, where a menu does leave residual entropy, machine choice violates
-\emph{regularity}---the property, shared by every random utility model
+\emph{regularity}, the property, shared by every random utility model
 including Thurstone's, that an added option cannot increase an incumbent's
 absolute share. Using two-attribute options (price versus quality) in
 randomized lettered menus, an asymmetrically dominated decoy
-\cite{huber1982} increased the target's absolute share in 8 of 18
+\cite{huber1982} increased the target's absolute share in 16 of 30
 family-model cells, and a compromise manipulation \cite{simonson1989} in
-4 of 18. The phone-plan family shows a textbook attraction effect on all
-three models (GPT-4o: target share $0.26 \to 0.84$ when its decoy
+7 of 30. The phone-plan family shows a textbook attraction effect
+(GPT-4o: target share $0.26 \to 0.84$ when its decoy
 appears). Machine preference, like human preference, is not a random
 utility model in the menu regime.
 
@@ -503,14 +570,14 @@ comparison, because exact probabilities make it feasible to measure the
 universe, a measurement no human experiment delivers cleanly. By the
 Block--Marschak--Falmagne theorem \cite{block1960, falmagne1978}, such a
 structure is random-utility representable if and only if its
-Block--Marschak sums are nonnegative. Across six item families and three
-GPT models, \textbf{all 18 measured structures violate the conditions}
-(3--9 negative terms of 32 each; worst $-0.58$, far beyond measurement
+Block--Marschak sums are nonnegative. Across six item families and five
+GPT models, \textbf{all 30 measured structures violate the conditions}
+(4--9 negative terms of 32 each; worst $-0.77$, far beyond measurement
 noise from order averaging). Fitting the structures anyway, the best
 possible random utility model (a distribution over all 24 rankings)
-leaves half the divergence unexplained (total KL $5.3$, against $9.7$
-for the best Thurstone locations and $10.4$ for the best Luce
-utilities---Thurstone the better parametric fit in 14 of 18
+leaves half the divergence unexplained (total KL $8.1$, against $16.2$
+for the best Thurstone locations and $17.5$ for the best Luce
+utilities, with Thurstone the better parametric fit in 26 of 30
 structures). In the menu regime, machine choice is not a random utility
 model at all.
 
@@ -534,10 +601,10 @@ The polysemy results suggest something further: that generative ``mode
 collapse'' is not a defect of knowledge but the lawful output of a
 low-noise contest run over intact locations. That reframing carries a
 practical remedy. If choice is a contest, diversity is restored not by a
-power tilt---raising the sampling temperature, which distorts the tails
-and does not renormalize the way behavior actually renormalizes---but by
-inverting the contest to recover locations and re-sampling at a chosen
-noise level. The calibration is exactly the fast Thurstone computation of
+power tilt but by inverting the contest to recover locations and
+re-sampling at a chosen noise level. Raising the sampling temperature
+distorts the tails and does not renormalize the way behavior actually
+renormalizes. The calibration is exactly the fast Thurstone computation of
 \cite{cotton2021}, and it offers a principled diversity knob without
 retraining.
 
@@ -554,7 +621,7 @@ a single machine judge, sampling temperature not controlled. The full
 stimulus set and model panel of \cite{cekinmez2026} would settle the
 one-parameter comparison with real power, and any model of machine
 decision-making that satisfies Luce's Choice Axiom might, on this
-evidence, be viewed with suspicion---and readily improved.
+evidence, be viewed with suspicion, and readily improved.
 
 \section*{Acknowledgments}
 We thank the developers of BERT and RoBERTa for making their models

@@ -19,7 +19,8 @@ import yaml
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-from exact_restrict import MODELS, key
+from exact_restrict import key
+from models import ALL as MODELS, HEADLINE
 from exact_analyze import calibrate_np, win_probs_np, entropy_norm
 from datastore import append_jsonl, load_jsonl, write_json_atomic
 from openai import OpenAI
@@ -168,11 +169,13 @@ def main():
               f"mean dKL={mean:+.4f} [{boots[int(.025*B)]:+.4f},{boots[int(.975*B)]:+.4f}]  "
               f"P(Luce better)={sum(b <= 0 for b in boots)/B:.4f}")
 
-    rep("ALL (original 2024 stimuli)", results)
+    head = [r for r in results if r["model"] in HEADLINE]
+    rep("HEADLINE (3 models, paper stat)", head)
+    rep("ALL MODELS (incl. breadth tier)", results)
     for m in MODELS:
         rep(f"  {m}", [r for r in results if r["model"] == m])
-    rep("  non-degenerate (H>0.2)", [r for r in results if r["H_unq"] > 0.2])
-    rep("  degenerate (H<=0.2)", [r for r in results if r["H_unq"] <= 0.2])
+    rep("  non-degenerate (H>0.2)", [r for r in head if r["H_unq"] > 0.2])
+    rep("  degenerate (H<=0.2)", [r for r in head if r["H_unq"] <= 0.2])
 
 
 if __name__ == "__main__":

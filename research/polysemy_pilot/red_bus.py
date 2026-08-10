@@ -23,11 +23,14 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-from exact_restrict import MODELS, key
+from exact_restrict import key
+from models import ALL as MODELS, HEADLINE
 from exact_analyze import calibrate_np, win_probs_np
+from datastore import RawLog, write_json_atomic
 from openai import OpenAI
 
 CLIENT = OpenAI(api_key=key())
+RAW = RawLog(HERE / "red_bus_raw.jsonl")  # append-only, before any scoring
 N_PERMS = 6
 
 # (family, base item, [variant1, variant2], [other1, other2], token->slot map)
@@ -55,13 +58,18 @@ FAMILIES = [
 ]
 
 
-def top20(prompt, model):
+def _top20_api(prompt, model):
     r = CLIENT.chat.completions.create(
         model=model, max_tokens=1, logprobs=True, top_logprobs=20, temperature=1.0,
         messages=[{"role": "system", "content": "Answer with exactly one of the listed options, verbatim, and nothing else."},
                   {"role": "user", "content": prompt}])
     return {t.token: math.exp(t.logprob)
             for t in r.choices[0].logprobs.content[0].top_logprobs}
+
+
+def top20(prompt, model):
+    """Logged fetch: every response lands on disk before scoring."""
+    return RAW.fetch(model, prompt, lambda: _top20_api(prompt, model))
 
 
 def menu_dist(options, model, tokmap, nslots, rng):
@@ -140,7 +148,7 @@ def main():
             except Exception as e:
                 print(f"ERROR {e}", file=sys.stderr, flush=True)
 
-    (HERE / "red_bus_results.json").write_text(json.dumps(results, indent=1))
+    write_json_atomic(HERE / "red_bus_results.json", results)
     n = len(results)
     print(f"{n} family-model cells")
     print(f"{'':<24} duplicate-share: base -> split (pred Luce / pred iThur)")

@@ -21,11 +21,14 @@ import numpy as np
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-from exact_restrict import MODELS, key
+from exact_restrict import key
+from models import ALL as MODELS, HEADLINE
 from exact_analyze import win_probs_np
+from datastore import RawLog, write_json_atomic
 from openai import OpenAI
 
 CLIENT = OpenAI(api_key=key())
+RAW = RawLog(HERE / "bm_raw.jsonl")  # append-only, before any scoring
 N_ORDERS = 6
 
 FAMILIES = {
@@ -38,7 +41,7 @@ FAMILIES = {
 }
 
 
-def top20(prompt, model):
+def _top20_api(prompt, model):
     r = CLIENT.chat.completions.create(
         model=model, max_tokens=1, logprobs=True, top_logprobs=20, temperature=1.0,
         messages=[{"role": "system", "content":
@@ -46,6 +49,11 @@ def top20(prompt, model):
                   {"role": "user", "content": prompt}])
     return {t.token: math.exp(t.logprob)
             for t in r.choices[0].logprobs.content[0].top_logprobs}
+
+
+def top20(prompt, model):
+    """Logged fetch: every response lands on disk before scoring."""
+    return RAW.fetch(model, prompt, lambda: _top20_api(prompt, model))
 
 
 def menu_dist(items, model, rng):
@@ -220,7 +228,7 @@ def main():
         print(f"{f:<10} {m:<12} BM viol {len(neg):>2}/{len(Ks)} (worst {min(Ks.values()):+.3f})  "
               f"fit KL: Luce {kl_l:.3f}  Thur {kl_t:.3f}  bestRUM {kl_r:.3f}", flush=True)
 
-    (HERE / "bm_results.json").write_text(json.dumps(rows, indent=1))
+    write_json_atomic(HERE / "bm_results.json", rows)
     n = len(rows)
     print(f"\nsummary over {n} family-model structures:")
     print(f"  structures with BM violations: {sum(r['bm_violations'] > 0 for r in rows)}/{n}")
