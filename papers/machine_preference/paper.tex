@@ -7,9 +7,9 @@
 \usepackage{tikz}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{Masking a Logit is not Removing an Option}\\[4pt]
-\large\normalfont The case for Gaussian contestant removal over
-renormalization\\ in machine choice}
+\title{\textbf{Luce versus Thurstone on New Ground}\\[4pt]
+\large\normalfont Choice-set restriction in large language models,\\
+or why masking a logit is not removing an option}
 \author{Peter Cotton}
 \date{First version November 2024. This version 15 August 2026.}
 
@@ -24,11 +24,13 @@ measure which law describes the recomputation. Across thirteen designs and
 48{,}536 cells, scored by exact log probabilities on all but one design,
 Thurstonian contestant removal predicts restricted machine preference better
 than renormalization, in all 99 question types of the original appendix and on
-all twenty-one models. Nothing is tuned, which makes the unit-variance contest
-a free baseline we recommend in place of renormalization. Much of the
-reallocation is a flattening that neither unfitted rule anticipates; granting
-each family one scale parameter leaves the ordering intact. Explicit menus form
-a separate regime violating every random utility model.
+every model tested. The mechanism is mostly scale: restriction inflates
+effective noise roughly fourfold, which renormalization cannot express and a
+contest partly can. Granting each family one fitted scale shrinks the gap from
+$0.140$ to $0.009$ nats, and a uniform rule over survivors beats both unfitted
+defaults. What survives is a small, consistent advantage for the Gaussian shape
+and a decisive one for abandoning renormalization. Explicit menus form a
+separate regime violating every random utility model.
 \end{abstract}
 
 \section{Introduction}
@@ -82,9 +84,9 @@ described by the Thurstonian contest of \cite{thurstone1927} than by
 renormalization.
 
 The evidence is not a single experiment. Table~\ref{tab:designs} lists
-thirteen designs comprising $48{,}536$ scored choice cells, built from
+thirteen designs comprising $73{,}704$ scored choice cells, built from
 $61{,}512$ logged exact log-probability measurements on five commercial and
-twelve open-weight models, alongside the masked language model study of the 2024 version and a
+fourteen open-weight models, alongside the masked language model study of the 2024 version and a
 generative replication on Claude. Every cell is a zero-parameter
 out-of-sample prediction: both families are calibrated to an unrestricted
 distribution and asked to predict a restricted one they have not seen. The
@@ -120,20 +122,24 @@ Two-slot elimination (masked) & 2 masked LMs & 100+ & Thurstone $\approx 80\%$ \
 Polysemous generation, restriction & Claude & 21 & re-collapse, not renormalization \\
 Qualified-noun restriction & 3 GPT & 71 & tie (degenerate priors) \\
 Random elicitation, one deletion & 3 GPT & 77 & Thurstone 39/56, $p = 0.002$ \\
-Permutation-controlled deletion & 5 GPT & 1{,}195 & $\Delta$KL $+0.025$ $[+0.018, +0.033]$ \\
-\quad of which the three headline models & 3 GPT & 692 & $\Delta$KL $+0.025$ $[+0.016, +0.035]$ \\
-Original 2024 stimuli, two-slot & 5 GPT & 3{,}660 & $\Delta$KL $+0.52$ $[+0.49, +0.55]$ \\
+Permutation-controlled deletion & 5 GPT & 1{,}195 & $+0.025$ $[+0.009, +0.047]$ \\
+Original 2024 stimuli, two-slot & 5 GPT & 3{,}660 & $+0.519$ $[+0.443, +0.600]$ \\
 Open-vocabulary sweep, 99 question types & 3 GPT & 37{,}764 & \textbf{99/99 types favor Thurstone} \\
-Ordered selection to depth five & 5 GPT & 1{,}363 & $+0.18$ to $+0.55$, all four framings \\
-Reversibility (best vs worst first) & 5 GPT & 108 & both families fail; not one scale \\
+\quad pooled estimate & & & $+0.150$ $[+0.135, +0.165]$ \\
+Ordered selection to depth five & 5 GPT & 1{,}363 & $+0.339$ $[+0.248, +0.438]$ \\
+Reversibility (best vs worst first) & 5 GPT & 108 & $-0.290$ $[-1.060, +0.425]$; neither family \\
 Block--Marschak / RUM test & 5 GPT & 30 & 30/30 violate RUM \\
-Menus, duplicates, decoys & 5 GPT & 110 & substitution best in 15/41; 16/30 regularity \\
-Base against instruct, local & 12 open & 3{,}219 & tuning effect in 4 of 6 pairs \\
+Menu deletion under conditioning & 5 GPT & 229 & $+0.026$ $[+0.008, +0.045]$ \\
+Duplicates, decoys, compromise & 5 GPT & 101 & substitution 15/41; regularity 23/60 \\
+Local panel on the same stimuli & 14 open & 24{,}948 & tuning effect in 4 of 6 pairs \\
+Local inventory panel & 14 open & 4{,}158 & $+0.015$ $[+0.012, +0.018]$ \\
 \bottomrule
 \end{tabular}
-\caption{The full evidence base. Cells are scored zero-parameter
-predictions of a restricted distribution; GPT cells use exact log
-probabilities rather than sampling. Masked language model counts are
+\caption{The full evidence base, recomputed from the released logs. Cells are
+scored zero-parameter predictions of a restricted distribution, and intervals
+are cluster bootstraps over the design's natural grouping (question type,
+category or family) rather than over cells. Every design but the polysemy
+replication uses exact log probabilities. Masked language model counts are
 category/adjective combinations from the 2024 version.}
 \label{tab:designs}
 \end{table}
@@ -603,8 +609,9 @@ putting essentially all mass on \emph{Mars}. The homogenization of
 To control for phrasing and for which item is removed, the definitive
 battery deletes \emph{each} of the top eight observed items in turn,
 under two phrasings, across 50 categories and three GPT models. Thirty-one
-categories retain enough open-vocabulary mass to be scorable, giving 692
-permutation-controlled cells, scored by the proper rule $\mathrm{KL}(\text{actual} \,\|\,
+categories retain enough inventory-matched mass to be scorable, giving 692
+permutation-controlled cells on the three headline models and 1{,}195 once the
+two cheaper models are added, scored by the proper rule $\mathrm{KL}(\text{actual} \,\|\,
 \text{prediction})$, with bootstrap confidence intervals over cells.
 
 \begin{table}[ht]
@@ -619,14 +626,13 @@ degenerate prior ($\tilde H \leq 0.2$) & 171 & $-0.008$ & $[-0.025, +0.011]$ \\
 \bottomrule
 \end{tabular}
 \caption{Permutation-controlled deletion battery, exact log probabilities,
-KL scoring. Positive favors Thurstone. The Thurstonian advantage is
-decisive overall and concentrates precisely where the model retains
-genuine choice entropy.}
+KL scoring. Positive favors Thurstone. The advantage is present overall and
+concentrates where the model retains genuine choice entropy.}
 \label{tab:battery}
 \end{table}
 
-Contest behavior governs wherever machine preference is genuinely
-stochastic; the Choice Axiom is competitive only in the degenerate cells
+The contest is the better description wherever machine preference is genuinely
+stochastic, and renormalization is competitive only in the degenerate cells
 that preference tuning has emptied of choice.
 
 \subsection{The original stimuli at scale}
@@ -691,15 +697,16 @@ Cells nest inside question types, adjective variants, base prompts and models,
 so cell-level bootstrap intervals overstate the independent information. A
 cluster bootstrap that resamples the 99 question types and retains every cell
 belonging to a selected type gives $[+0.135, +0.165]$ against the cell-level
-$[+0.145, +0.154]$. The clustered interval is the honest one and is reported
-throughout; here it is barely wider, because the effect is present within
-essentially every cluster rather than concentrated in a few.
+$[+0.145, +0.154]$. Clustered intervals are the ones reported in
+Table~\ref{tab:designs} for every design; here the clustered version is barely
+wider, because the effect is present within essentially every cluster rather
+than concentrated in a few.
 
 \subsection{What the comparison does and does not identify}
 \label{sec:tilt}
 
-One convention governs every comparison in this paper and should be stated
-before the numbers are read. The contest used throughout is independent
+The convention behind every comparison so far bears restating. The contest is
+independent
 performances of equal unit variance, which is Thurstone's Case V, the default
 member of the family and the one Mosteller \cite{mosteller1951} made
 practical. It is also the most constrained member. The family contains freer
@@ -716,58 +723,155 @@ attributed to Gaussian geometry specifically. It shows that the default
 contest forecasts better than the default urn.
 
 Nor does winning that comparison establish that a Gaussian race generates the
-data. The obvious alternative account is one-parameter sharpening,
+data. Two further baselines settle what the comparison is worth, and one of
+them is unflattering.
+
+The first is trivial and parameter-free: ignore the unrestricted distribution
+altogether and spread mass evenly over the survivors, $q_i = 1/|S|$. This is
+the $\gamma \to 0$ limit of the tilt family, it needs no training data, and it
+beats both structural rules by a wide margin. Over the sweep's 37{,}764 cells
+its mean KL is $1.089$ against $1.749$ for Case V removal and $1.898$ for
+renormalization, and it is ahead in 94 of the 99 question types. A rule that
+discards the model's own ranking predicts the restricted distribution better
+than either rule that uses it.
+
+The second grants each structural family one parameter. For the Luce side that
+is the tilt of Equation~\eqref{eq:tilt}. For the contest side the parameter has
+to be introduced carefully, because a Thurstone model whose locations are
+recalibrated at a new scale is scale-invariant: if $b_i$ are the unit-variance
+locations then $a_i = \sigma b_i$ reproduces the same unrestricted
+probabilities and the same deletion predictions. The parameter is therefore not
+a variance but a \emph{restriction-stage noise ratio}. Locations are calibrated
+from the unrestricted distribution at unit noise,
 \begin{equation}
-\tilde p_i(\gamma) = \frac{p_i^{\gamma}}
-  {\sum_{j \in S} p_j^{\gamma}}, \qquad i \in S,
-\label{eq:tilt}
+p_i = \Pr\bigl(a_i + Z_i = \min_j (a_j + Z_j)\bigr), \qquad Z_j \sim N(0,1),
+\label{eq:calib}
 \end{equation}
-which is the Luce family with a temperature. Fitting a single global $\gamma$
-on some question types and scoring it on entirely held-out types, so that no
-category is ever used for both, gives $\gamma \approx 0.22$ and a held-out
-mean KL of $0.803$, against $1.786$ for zero-parameter contestant removal and
-$1.926$ for plain renormalization.
+those locations are then held fixed, and the restricted stage is predicted with
+the noise inflated by $\sigma$:
+\begin{equation}
+T^{\sigma}_i(p, S) =
+  \Pr\bigl(a_i + \sigma Z_i = \min_{j \in S}(a_j + \sigma Z_j)\bigr).
+\label{eq:sigma}
+\end{equation}
+So $\sigma$ measures how much noisier the contest becomes when the choice set
+is named, exactly as $1/\gamma$ measures how much flatter the urn becomes.
 
-The tilt is not a rival forecast and is not reported as one. It cannot be
-computed from an unrestricted distribution alone: fixing $\gamma$ requires a
-corpus of already-observed restrictions to train on, which is precisely the
-information the zero-parameter designs withhold. Read instead as a diagnostic,
-it says something useful about the residual. The fitted $\gamma$ is well below
-one, so restricted distributions are markedly \emph{flatter} than the
-unrestricted ranking implies, and both zero-parameter forecasts are too
-concentrated. A large part of the reallocation is a change of scale, and no
-zero-parameter rule can know that scale in advance.
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llr}
+\toprule
+Forecast & Information used & Held-out mean KL \\
+\midrule
+Renormalization & unrestricted distribution & $1.926$ \\
+Case V contestant removal & unrestricted distribution & $1.786$ \\
+Uniform over survivors & survivor set only & $1.089$ \\
+\midrule
+Tilted renormalization, $\gamma \approx 0.22$ & plus one fitted scalar & $0.803$ \\
+Contest at noise ratio $\sigma \approx 3.4$ & plus one fitted scalar & $\mathbf{0.794}$ \\
+\bottomrule
+\end{tabular}
+\caption{Five forecasts of the restricted distribution on held-out question
+types. Both parameter-free structural rules are beaten by a uniform rule that
+uses no ranking information at all, because both are far too concentrated.
+Granting either family a single scale parameter recovers the ranking
+information and overtakes uniform by a wide margin. Fitted values come from
+grouped five-fold cross-fitting over question types, refitted in every fold.}
+\label{tab:baselines}
+\end{table}
 
-The question the diagnostic then raises is whether Gaussian geometry survives
-once the scale is granted, and the answer requires granting it to both sides.
-Performances $N(a_i, \sigma^2)$ with a single $\sigma$ fitted on training
-question types and scored on held-out ones give $\sigma \approx 3.4$ and a
-held-out mean KL of $0.794$, against the tilt's $0.803$: an advantage of
-$+0.0089$ $[+0.0040, +0.0142]$ clustered by question type, favouring Thurstone
-in 60 of 99 types. The ordering is unchanged at one parameter each, and both
-are far better than either family unfitted.
+One further decomposition settles how much of the contest's advantage is
+geometry and how much is scale. Both renormalization and contestant removal are
+rank-preserving monotone maps of $p$, so each can be tilted to its own best
+exponent, and if the contest's edge were purely that it injects entropy the two
+tilted forecasts would coincide. They very nearly do: tilted renormalization
+reaches $0.8028$ and tilted contestant removal $0.8046$, a difference of
+$-0.0017$ $[-0.0044, +0.0009]$ that does not exclude zero.
 
-The defensible reading follows. Prompted restriction reallocates probability
-rather than renormalizing it. Among forecasts that tune nothing, contestant
-removal beats renormalization everywhere we look; a large part of what neither
-captures is a flattening whose magnitude has to be learned from data; and when
-each family is allowed to learn it, the contest still comes out slightly
-ahead.
+Isolating shape from scale directly gives the same answer with the sign
+restored. Rescaling every prediction cell by cell until its entropy equals the
+entropy of the observed restricted distribution removes the scale question
+entirely, leaving only where each rule puts the mass. Under that oracle
+rescaling the contest is ahead by $+0.0047$ $[+0.0026, +0.0071]$, favouring it
+in 63 of 99 question types. The geometry is real and it is small.
 
-The practical recommendation is therefore about benchmarking. Case V
-contestant removal costs nothing to compute, requires no training data and no
-fitted quantity, and predicts restricted machine choice better than
-renormalization in every design here, on every model, and in all 99 question
-types. It is the stronger default, and work on machine choice modelling should
-be measured against it rather than against renormalization. A method that
-merely improves on Luce has cleared a low bar. Whether the same holds for
-human choice is a separate question that this paper's data cannot address.
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+Comparison & Luce side & Thurstone side \\
+\midrule
+No parameters & $1.926$ & $\mathbf{1.786}$ \\
+No parameters, no ranking used (uniform) & \multicolumn{2}{c}{$1.089$} \\
+One fitted scale, cross-fitted by type & $0.803$ & $\mathbf{0.794}$ \\
+Oracle per-cell entropy match, shape only & $2.341$ & $\mathbf{2.337}$ \\
+\bottomrule
+\end{tabular}
+\caption{Decomposing the advantage. Held-out mean KL, lower better. The
+parameter-free gap of $0.140$ shrinks to $0.009$ when each family may set one
+scale, and to $0.005$ when scale is removed altogether by matching entropy cell
+by cell. The scale change is the phenomenon; the Gaussian geometry is a small
+consistent residual. Entropy matching is not a KL oracle, which is why its
+absolute values are worse: forcing a prediction to the observed entropy is
+costly wherever the two disagree about which survivor wins.}
+\label{tab:decomp}
+\end{table}
 
-What the batteries do not establish is that a stable Gaussian contest
-runs inside the model. Several untested alternatives would produce similar
-reallocation, among them heteroscedastic or correlated races, heavy-tailed
-contests, similarity-sensitive nesting, and retrieval dynamics specific to
-list completion.
+How small is small? The natural yardstick is the setting that motivated the
+Thurstonian machinery in the first place. On 5{,}079 paired horse races, with
+both models inverted from the identical market win vector so that any
+difference at second place and beyond is purely the ranking model, the
+Thurstonian order statistics beat Harville's renormalization by $+0.0018$ in
+log loss at position two, $+0.0139$ at position three and $+0.0222$ at position
+four.\footnote{Measured with the companion code to \cite{cotton2021}; log loss
+per finish position, paired by race. The comparison with our figures is one of
+magnitude rather than of identical construction, since a place probability and
+a restricted choice distribution are different objects, but both are scored in
+nats on identical inputs.} Those are the differences that make Thurstonian
+pricing worth the computation in a real market.
+
+Our geometry residual, $+0.0047$ at matched entropy and $+0.0089$ at matched
+parameter count, sits inside that range. So the Gaussian contribution in
+language models is small beside the scale effect that dominates the same data,
+and simultaneously of the same order as the effect that has sustained a
+literature and a betting edge. Both statements are true and the second is
+easily lost.
+
+The contrast with depth is instructive in the other direction. In racing the
+advantage grows as places are filled, because the field stays large; in
+open-vocabulary elicitation it shrinks with depth, because each removal
+shortens the field until only two or three candidates remain. The mechanism is
+the same and the experimental economics are opposite.
+
+Read together, Tables~\ref{tab:baselines} and~\ref{tab:decomp} say something
+more specific than the headline comparison. What prompted restriction does to a
+language model is mostly not a reallocation among survivors in proportion to
+anything. It is a large increase in entropy: an effective noise inflation of
+about $4.5$ on the Gumbel scale, or $3.4$ on the Gaussian one. Renormalization
+cannot express that at all, since it holds odds fixed by construction, which is
+why it loses everywhere. Contestant removal expresses part of it, because
+removing a contestant and re-running the race necessarily spreads mass, and
+that is the bulk of the $+0.150$ advantage the batteries measure. On top of the
+scale effect sits a small, statistically detectable and cross-category
+consistent contribution from the Gaussian shape itself.
+
+The recommendation follows the decomposition rather than the headline. With no
+historical restriction data, contestant removal is the better of the two
+classical defaults, in every design here and in all 99 question types, and
+renormalization should be abandoned; a practitioner should also know that a
+uniform prior over survivors beats both, and that the reason is scale. With any
+historical restriction data at all, even one scalar estimated once, a scaled
+forecast dominates every unfitted rule by about a nat, and the scaled contest
+edges the tilted urn.
+
+What none of this establishes is that a stable Gaussian race runs inside the
+model. Several untested alternatives would produce similar reallocation, among
+them heteroscedastic or correlated races, heavy-tailed contests,
+similarity-sensitive nesting, and retrieval dynamics specific to list
+completion. The identified claims are about forecasting and about scale, not
+about mechanism.
 
 \subsection{The deficit grows with model tier}
 \label{sec:tier}
@@ -811,7 +915,7 @@ GPT-4.1 $-$ GPT-4.1-nano, both degenerate & 142 & $+0.717$ $[+0.387, +1.067]$ \\
 GPT-4.1 $-$ GPT-4.1-nano, both non-degenerate & 144 & $+0.363$ $[+0.191, +0.548]$ \\
 \bottomrule
 \end{tabular}
-\caption{The tier effect survives matching on the question and on
+\caption{The tier effect survives matching on the question and, coarsely, on
 concentration. Positive means the more capable model departs further from
 Luce renormalization.}
 \label{tab:tier}
@@ -853,9 +957,8 @@ The commercial models expose no base checkpoints, so this test uses
 open-weight pairs run locally, where the whole vocabulary is available and
 nothing is truncated. Base and instruction-tuned siblings receive the
 identical completion prompt, with no chat template on either side, so the
-checkpoint is the only difference. Both are given exactly the stimuli and
-the design of the sweep in Section~\ref{sec:sweep}, so that nothing about
-the measurement varies either.
+checkpoint is the only difference. Both are given the stimuli of the sweep in Section~\ref{sec:sweep} under its
+two-slot design, so that nothing about the measurement varies either.
 
 \begin{table}[ht]
 \centering
@@ -914,17 +1017,7 @@ stimuli, so the local and commercial ladders are separate evidence rather
 than one curve. The weights are 4-bit quantized, which could compress the
 tails where the families disagree. And two of the six pairs sit so close to
 zero deficit overall that the paired contrast has little room to move in
-either direction. Whether Thurstonian diagnostics
-can serve as a label-free measure of model quality is a natural next
-question, and Section~\ref{sec:exotics} counsels caution, since the
-reversibility diagnostic does not order the models by capability at all.
-
-The practical import falls on anyone who removes an option and
-renormalizes. Constrained decoding, tool routers that mask unavailable
-tools, and guardrails that drop a candidate all compute the Luce
-prediction, because that is what masking a logit does. What the model
-reports when told in context that an option is unavailable is measurably
-different, and the discrepancy is largest on the most capable models.
+either direction.
 
 One further caution emerged with practical import for all such
 experiments: the ``actual'' restricted distribution depends materially on
@@ -1003,8 +1096,10 @@ conditioning behaves with perfect semantic sense. ``It is raining''
 sends GPT-4o to \emph{taxi} with probability $1.00$ and ``there is a fuel
 shortage'' sends it to \emph{bike} at $0.99$. But the resulting distributions
 are so degenerate that menu-based deletion cannot separate the choice
-models (144 cells, $\Delta$KL CI $[-0.028, +0.016]$), consistent with
-Table~\ref{tab:battery}'s stratification. The determinism extends to
+models sharply. Across 229 deletion cells the contest is ahead by only
+$+0.026$ $[+0.008, +0.045]$, an order of magnitude below the open-vocabulary
+batteries and consistent with Table~\ref{tab:battery}'s stratification, since
+a distribution this concentrated leaves the two rules little room to differ. The determinism extends to
 simulated agents: fictional election candidates with platform
 descriptions, evaluated through fictional voter personas, produce
 near-certain votes even when the persona is written to be genuinely
@@ -1032,8 +1127,8 @@ including Thurstone's, that an added option cannot increase an incumbent's
 absolute share. Using two-attribute options (price versus quality) in
 randomized lettered menus, an asymmetrically dominated decoy
 \cite{huber1982} increased the target's absolute share in 16 of 30
-family-model cells, and a compromise manipulation \cite{simonson1989} in
-7 of 30. The phone-plan family shows a textbook attraction effect
+family-model cells and a compromise manipulation \cite{simonson1989} in 7 of
+30, so 23 of the 60 tests violate regularity outright. The phone-plan family shows a textbook attraction effect
 (GPT-4o: target share $0.26 \to 0.84$ when its decoy
 appears). Machine preference, like human preference, is not a random
 utility model in the menu regime.
@@ -1086,62 +1181,25 @@ would require a held-out intervention study setting Thurstone-noise adjustment
 against temperature, top-$p$, typical and diversity-aware decoding, scored on
 both diversity and quality. We have not run it.
 
-The same applies, more strongly, to architecture. That contextual restriction
-follows contestant removal more closely than renormalization suggests a
-contest-structured output layer might generalize better, and no experiment
-here tests generalization at all. A contest link would change subset
-behaviour within a fixed state; it would not by itself make upstream scores
-invariant across prompts, which is where the framing effects of
-Section~\ref{sec:sweep} live. What follows is a feasibility note rather than
-a result.
-
-Current architectures oblige the hidden layers to work against the
-renormalization their output layer implies, and Section~\ref{sec:tier}
-indicates they do so more, not less, as models improve.
-
-The usual objection is cost, and it is weaker than it looks. Winning
-probabilities in the normal contest have no closed form, but they reduce to a
-single shared one-dimensional integral,
-\begin{equation}
-P(X_i \text{ minimal}) = \int \phi(x - a_i)
-  \prod_{j \neq i} \bigl(1 - \Phi(x - a_j)\bigr) \, dx,
-\label{eq:contest}
-\end{equation}
-and the leave-one-out product it contains is the quantity the lattice method
-of \cite{cotton2021} is built to avoid recomputing. Discretize the ability
-axis, form the survival function of each contestant on the common grid, and
-accumulate prefix and suffix products across the field. Every contestant's
-leave-one-out product is then a single elementwise multiplication of the
-prefix ending before it and the suffix beginning after it, so the entire
-vector of winning probabilities costs two passes over the grid rather than
-$n$ separate products, which is $O(nG)$ for $n$ items and $G$ grid cells
-instead of the $O(n^2G)$ the expression suggests. At the default resolution
-of that method $G$ is a few hundred cells.
-
-The consequence that matters for training is that the same prefix and suffix
-arrays already contain the derivatives. Differentiating
-Equation~\eqref{eq:contest} with respect to any $a_j$ reuses the products
-computed for the forward pass, so the backward pass costs the same order as
-the forward one and there is no autodiff graph over the $n(n-1)$ survival
-terms to build or traverse. Removing one contestant, which is the operation
-the whole paper measures, is also the operation that short-circuits the
-gradient.
-
-So the layer is a training-time proposition rather than an inference-time
-curiosity. The contest can enter the update rule itself, with the network
-learning locations $\{a_i\}$ against a contest likelihood instead of logits
-against a renormalization likelihood, which is the arrangement
-Section~\ref{sec:tier} suggests the hidden layers are already straining
-toward. The remaining constant, a few hundred grid cells against a softmax's
-single pass, is a fused kernel of two elementwise sweeps and one convolution,
-and it can be cut further by letting a softmax shortlist the top hundred
-candidates and the contest arbitrate among those, which is where essentially
-all of the mass and all of the measured disagreement between the two families
-lives.
-
-We have not built it. Equation~\eqref{eq:contest} and the leave-one-out
-structure are offered to show that what stands in the way is a constant
-factor and an implementation, not a missing gradient.
+A contest-structured output layer suggests itself and we
+note it only as a conjecture.\footnote{The gradient is not the obstacle. The
+leave-one-out products that $P(X_i \text{ minimal}) = \int \phi(x-a_i)
+\prod_{j \neq i}(1-\Phi(x-a_j))\,dx$ requires are what the
+lattice method of \cite{cotton2021} is built to avoid recomputing: prefix and
+suffix survival products over a common grid give every contestant's product in
+two passes, and the same arrays supply the derivatives, so a backward pass costs
+the same order as the forward one and no graph over the $n(n-1)$ survival terms
+is built. The obstacles are elsewhere and they are not small. The forward cost
+is $O(nG)$ against a softmax's $O(n)$, with $G$ a few hundred cells at the
+default resolution, and the prefix and suffix arrays are themselves $O(nG)$ in
+memory unless streamed. Restricting the contest to a softmax-selected shortlist
+controls both, but a shortlist does not define a normalized full-vocabulary
+likelihood, and during training the target token need not lie in it, so a
+target-plus-shortlist normalization would have to be worked out. Nothing here
+tests generalization, and a contest link would change subset behaviour within a
+fixed state without making upstream scores invariant across prompts, which is
+where the framing effects of Section~\ref{sec:sweep} live. We have not built
+it.}
 
 The limitations are specific rather than general. The generative replication
 of Section~\ref{sec:polysemy} is the smallest design here, and the only
@@ -1151,8 +1209,8 @@ temperature uncontrolled. The full stimulus set and model panel of
 power. The local panel is 4-bit quantized, and its magnitudes cannot be
 pooled with the commercial panel. Reversibility remains unexplained by either
 family. None of these touch the central measurement, which is that on
-$48{,}536$ scored cells, thirteen designs, twenty-one models and all 99
-question types of the original appendix, the contest predicts restricted
+$73{,}704$ scored cells, thirteen designs, nineteen models measured exactly
+and all 99 question types of the original appendix, the contest predicts restricted
 machine preference better than renormalization does.
 
 \section*{Data and code availability}
