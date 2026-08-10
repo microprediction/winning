@@ -79,14 +79,16 @@ $+0.30$ on GPT-4.1-nano to $+0.88$ on GPT-4.1. All raw model responses are
 logged and released, so every number below is recomputable without further
 inference.
 
-Section~\ref{sec:models} states the two competing models.
+Section~\ref{sec:models} states the two competing models and
+Section~\ref{sec:history} places the comparison in the century of
+psychometric and econometric argument it belongs to.
 Sections~\ref{sec:masked}--\ref{sec:maskedresults} test them on masked
 language models. Section~\ref{sec:polysemy} moves to modern models under
 exact measurement, using polysemous words as the entry probe and
 connecting the paradox to the stated-versus-generated gap recently
 documented by Cekinmez, Wu, Marjieh and Griffiths \cite{cekinmez2026}.
 Section~\ref{sec:discussion} draws out the implications: a mechanism for
-generative ``mode collapse,'' a principled diversity knob, and a case for
+generative ``mode collapse'', a principled diversity knob, and a case for
 Thurstonian layers.
 
 \begin{table}[ht]
@@ -150,6 +152,73 @@ probabilities and computing derived quantities for fields exceeding
 $100{,}000$ entrants, was given in \cite{cotton2021}, and is what makes
 the experiments below routine.
 
+\subsection{A hundred years of the same argument}
+\label{sec:history}
+
+The question this paper puts to language models is not a new one. It has
+been contested continuously since Thurstone published the law of comparative
+judgment in 1927 \cite{thurstone1927}, building on Fechner's discriminal
+dispersions \cite{fechner1860}, and it has never been settled in either
+direction.
+
+Thurstone's account is a contest with normally distributed performances, and
+its computational awkwardness was recognized immediately: the equal-variance
+Case V that Mosteller \cite{mosteller1951} made practical survives because
+the general case does not reduce to anything convenient. The logistic
+alternative arrived with Bradley and Terry \cite{bradley1952}, whose paired
+comparison model is algebraically tractable exactly where Thurstone's is not.
+Luce \cite{luce1959} then supplied the axiom, deriving the multinomial form
+of Equation~\eqref{eq:luce} from Independence of Irrelevant Alternatives and
+converting a modelling convenience into a behavioral principle.
+
+The objections were immediate and they were about restriction. Debreu
+\cite{debreu1960}, reviewing Luce's book, observed that adding a near
+duplicate of an existing alternative should divide that alternative's share
+rather than draw proportionally from everything, which IIA cannot do. Tversky
+\cite{tversky1972} showed that similarity between alternatives violates
+simple scalability altogether and proposed elimination by aspects instead.
+Luce \cite{luce1977} himself reviewed the axiom's standing after twenty
+years and treated its empirical failures as established rather than
+contested. In econometrics the same problem drove a long sequence of
+repairs: McFadden's conditional logit \cite{mcfadden1974} made the Luce form
+the workhorse of discrete choice, then nested logit, the generalized extreme
+value family and mixed logit \cite{mcfaddentrain2000} were built to relax
+the independence it imposes, with Hausman and McFadden
+\cite{hausman1984} providing a specification test for the violation.
+
+Two results from that literature bear directly on what follows. Yellott
+\cite{yellott1977} proved that Luce's axiom holds in a random utility
+contest if and only if the noise is double exponential, which places the two
+families inside one framework and identifies the disagreement as a question
+about noise rather than about utility. Block and Marschak
+\cite{block1960} and Falmagne \cite{falmagne1978} characterized when a
+complete choice structure admits any random utility representation at all, by
+nonnegativity of the Block--Marschak polynomials, which supplies a test that
+does not presuppose either family. Section~\ref{sec:menus} applies it.
+
+The dispute also has a quantitative history outside psychology. In racing
+markets, Harville's renormalization \cite{harville1973} is the Luce
+prediction applied to finishing order, and its systematic mispricing of
+second and third place is well documented; Henery \cite{henery1981} and
+Stern \cite{stern1990} proposed normal, that is Thurstonian, order models to
+correct it, and the correction works. The two-slot design of
+Section~\ref{sec:masked} is that comparison transplanted into a language
+model.
+
+What makes the machine case worth revisiting is that one side of this
+argument has been built into the apparatus. A softmax output layer is the
+Luce form, so an LLM's sampling head satisfies the Choice Axiom by
+construction. Reward models for preference tuning are Bradley--Terry
+\cite{bradley1952}, fitted to pairwise human comparisons on the assumption
+that a single scalar utility governs choice, and Direct Preference
+Optimization \cite{rafailov2023} inherits the same likelihood. Listwise
+ranking objectives use Plackett--Luce \cite{plackett1975}. The modern
+pipeline therefore assumes the Luce side of a century-old and unresolved
+dispute at three separate points, which makes the question of whether the
+resulting behavior obeys the axiom an empirical matter with some
+consequence, and one that exact log probabilities can settle in a way that
+human subjects never could.
+
 \section{Experimental design: masked language models}
 \label{sec:masked}
 
@@ -195,7 +264,7 @@ Table~\ref{tab:western} shows the ``favorite Western state'' prompt for
 BERT. The Thurstonian column tracks the actual restricted probabilities
 more closely than Luce renormalization, which overweights the favorite
 (California) at the expense of the field. Table~\ref{tab:names} repeats
-the exercise for ``favorite girl's baby name,'' where the RMSE using
+the exercise for ``favorite girl's baby name'', where the RMSE using
 Luce's probabilities is roughly 50\% higher.
 
 \begin{table}[ht]
@@ -242,7 +311,7 @@ Brittany & 0.46 &  6.04 &  7.33 &  7.55 \\
 Chloe    & 0.45 &  5.89 &  7.21 &  7.39 \\
 \bottomrule
 \end{tabular}
-\caption{The same comparison for ``favorite girl's baby name.'' The RMSE
+\caption{The same comparison for ``favorite girl's baby name''. The RMSE
 using Luce's probabilities is approximately 50\% higher than the
 Thurstonian RMSE.}
 \label{tab:names}
@@ -467,14 +536,14 @@ two-slot continuation at $+0.199$ more strongly than the exclusion phrasing
 at $+0.109$, and so does every model: $+0.111$, $+0.140$ and $+0.198$ for
 GPT-4.1-nano, GPT-4o-mini and GPT-4.1-mini.
 
-Two features of the breakdown carry more weight than the pooled figure.
-First, \textbf{all 99 question types favor Thurstone} on average, not 90 or
-95 of them. There is no category of question, among organs, colors, cities,
-sports, instruments and the rest, in which renormalization is the better
-account. Second, the deficit concentrates where the theory says it must:
+The breakdown is more informative than the pooled figure. \textbf{All 99
+question types favor Thurstone} on average, not 90 or 95 of them. There is
+no category of question, among organs, colors, cities, sports, instruments
+and the rest, in which renormalization is the better account. The deficit
+also concentrates where the theory says it must:
 deleting the model's favorite costs Luce $+0.407$, against $+0.114$ for
-deleting a minor item. Removing the winner is precisely the case Harville
-\cite{harville1973} mispriced, and it is precisely where the urn and the
+deleting a minor item. Removing the winner is the case Harville
+\cite{harville1973} mispriced, and it is where the urn and the
 contest diverge.
 
 At this sample size the degenerate stratum also separates from zero
@@ -491,8 +560,8 @@ $+0.30$, GPT-4o-mini $+0.35$, GPT-4o $+0.42$, GPT-4.1-mini $+0.65$,
 GPT-4.1 $+0.88$. The more capable the model, the further its revealed
 preferences sit from the Choice Axiom its own output layer suggests.
 
-This is worth stating carefully, because the architecture is constant along
-that ladder. All five models emit a softmax, and a softmax implements
+The architecture is constant along that ladder. All five models emit a
+softmax, and a softmax implements
 Equation~\eqref{eq:luce} mechanically: mask a logit, renormalize, and the
 Choice Axiom holds by construction. The deviation therefore cannot
 originate in the output layer. It originates in what the network computes
@@ -613,9 +682,8 @@ that it does not do so by necessity, and whatever distinguishes Qwen and
 Mistral post-training from Llama and gemma post-training is not visible from
 outside the labs.
 
-The honest summary is therefore narrower than the commercial panel invited.
-Preference tuning is one route by which a model departs from renormalization,
-demonstrably and substantially in some families, and the direction of the
+Preference tuning is therefore one route by which a model departs from
+renormalization, substantially so in some families, and the direction of the
 effect is not fixed across families. That is consistent with the DPO ablation
 of \cite{cekinmez2026}, which changes sense entropy with no change in size,
 without implying that every tuning recipe pushes the same way.
@@ -658,15 +726,15 @@ eliciting each slot separately with the earlier picks fed back in, extends
 it to a trifecta and beyond, so that Plackett--Luce \cite{plackett1975}
 renormalization and Thurstonian contestant removal can be compared at
 every depth. Four framings were run over 40 categories and five models to
-depth five: two neutral (``select five random $X$ in order,'' ``name five
+depth five: two neutral (``select five random $X$ in order'', ``name five
 different $X$, in order'') and two preference-ordered (most favourite
 first, least favourite first).
 
-The contest model wins under all four framings, which is the robustness
-that matters most here, since the framings are different elicitation
-architectures rather than paraphrases: $+0.55$ most-favourite-first,
-$+0.38$ ``different,'' $+0.26$ ``random,'' $+0.18$ least-favourite-first
-(all intervals excluding zero, 1{,}363 cells).
+The contest model wins under all four framings, which are different
+elicitation architectures rather than paraphrases: $+0.55$
+most-favourite-first, $+0.38$ different-in-order, $+0.26$ random-order,
+$+0.18$ least-favourite-first, all intervals excluding zero over 1{,}363
+cells.
 
 Depth, however, does not behave as the racing analogy predicts. Since
 slot $d$ involves $d-1$ removals and renormalization can only redistribute
@@ -696,9 +764,10 @@ different one. Machine preference in this regime is not a single scale
 with two ends.
 
 \subsection{Menus, duplicates, and context effects}
+\label{sec:menus}
 
 Presenting the choice set explicitly changes the phenomenon entirely, in
-three ways. The design is ``pick one of these: \ldots,'' with menu order
+three ways. The design is ``pick one of these: \ldots'', with menu order
 randomized and probabilities read from option-token log probabilities.
 
 First, menu choice by preference-tuned models is nearly deterministic.
@@ -786,26 +855,109 @@ renormalizes. The calibration is exactly the fast Thurstone computation of
 \cite{cotton2021}, and it offers a principled diversity knob without
 retraining.
 
-Leaning into the irony of softmax machines disobeying Luce's Choice Axiom,
-the results also suggest that Thurstonian neural network layers might
-generalize better than softmax layers, the engineering challenge
-notwithstanding. Current architectures force hidden layers to fight the
-renormalization behavior their output layer implies; a contest-structured
-output layer would not need to.
+Softmax machines disobey Luce's Choice Axiom, which suggests that a
+contest-structured output layer might generalize better than a softmax one.
+Current architectures oblige the hidden layers to work against the
+renormalization their output layer implies, and Section~\ref{sec:tier}
+indicates they do so more, not less, as models improve.
 
-Finally, this study is coarse-grained, and the pilot of
-Section~\ref{sec:polysemy} is small: fifteen words, one generation model,
-a single machine judge, sampling temperature not controlled. The full
-stimulus set and model panel of \cite{cekinmez2026} would settle the
-one-parameter comparison with real power, and any model of machine
-decision-making that satisfies Luce's Choice Axiom might, on this
-evidence, be viewed with suspicion, and readily improved.
+The objection to such a layer is cost, and it is worth stating what the cost
+actually is. Winning probabilities in the normal contest have no closed form,
+but they do reduce to a single shared one-dimensional integral,
+\begin{equation}
+P(X_i \text{ minimal}) = \int \phi(x - a_i)
+  \prod_{j \neq i} \bigl(1 - \Phi(x - a_j)\bigr) \, dx,
+\label{eq:contest}
+\end{equation}
+which is differentiable in $\{a_i\}$ and computable for all $i$ at once on a
+common quadrature grid. The whole vector costs $O(nG)$ for $n$ items and $G$
+grid points against the softmax's $O(n)$, so at the grid resolution of
+\cite{cotton2021} a full-vocabulary contest layer is some three orders of
+magnitude more expensive per position. That is prohibitive as a drop-in
+replacement and unnecessary as a design: a softmax can shortlist the top
+hundred candidates and the contest can arbitrate among those, which is where
+essentially all of the probability mass and all of the measured disagreement
+between the two families lives. We have not trained such a layer, and offer
+Equation~\eqref{eq:contest} only to show that the obstacle is a constant
+factor on a shortlist rather than an absence of gradients.
+
+The limitations are specific rather than general. The generative replication
+of Section~\ref{sec:polysemy} is the smallest design here, and the only
+sampled one: fifteen words, one model, a single machine judge, sampling
+temperature uncontrolled. The full stimulus set and model panel of
+\cite{cekinmez2026} would settle that one-parameter comparison with real
+power. The local panel is 4-bit quantized, and its magnitudes cannot be
+pooled with the commercial panel. Reversibility remains unexplained by either
+family. None of these touch the central measurement, which is that on
+$48{,}536$ scored cells, thirteen designs, twenty-one models and all 99
+question types of the original appendix, the contest predicts restricted
+machine preference better than renormalization does.
 
 \section*{Acknowledgments}
 We thank the developers of BERT and RoBERTa for making their models
 accessible for research purposes.
 
-\begin{thebibliography}{9}
+\begin{thebibliography}{99}
+
+\bibitem{fechner1860}
+Gustav T. Fechner.
+\emph{Elemente der Psychophysik}.
+Breitkopf und H\"artel, Leipzig, 1860.
+
+\bibitem{mosteller1951}
+Frederick Mosteller.
+Remarks on the method of paired comparisons.
+\emph{Psychometrika}, 16(1):3--9, 1951.
+
+\bibitem{bradley1952}
+Ralph A. Bradley and Milton E. Terry.
+Rank analysis of incomplete block designs: I. The method of paired
+comparisons.
+\emph{Biometrika}, 39(3/4):324--345, 1952.
+
+\bibitem{tversky1972}
+Amos Tversky.
+Elimination by aspects: a theory of choice.
+\emph{Psychological Review}, 79(4):281--299, 1972.
+
+\bibitem{mcfadden1974}
+Daniel McFadden.
+Conditional logit analysis of qualitative choice behavior.
+In P. Zarembka, editor, \emph{Frontiers in Econometrics}, pages
+105--142. Academic Press, 1974.
+
+\bibitem{luce1977}
+R. Duncan Luce.
+The choice axiom after twenty years.
+\emph{Journal of Mathematical Psychology}, 15(3):215--233, 1977.
+
+\bibitem{henery1981}
+Robert J. Henery.
+Permutation probabilities as models for horse races.
+\emph{Journal of the Royal Statistical Society, Series B},
+43(1):86--91, 1981.
+
+\bibitem{hausman1984}
+Jerry Hausman and Daniel McFadden.
+Specification tests for the multinomial logit model.
+\emph{Econometrica}, 52(5):1219--1240, 1984.
+
+\bibitem{stern1990}
+Hal Stern.
+Models for distributions on permutations.
+\emph{Journal of the American Statistical Association},
+85(410):558--564, 1990.
+
+\bibitem{mcfaddentrain2000}
+Daniel McFadden and Kenneth Train.
+Mixed MNL models for discrete response.
+\emph{Journal of Applied Econometrics}, 15(5):447--470, 2000.
+
+\bibitem{rafailov2023}
+R. Rafailov, A. Sharma, E. Mitchell, C. D. Manning, S. Ermon, and C. Finn.
+Direct preference optimization: your language model is secretly a reward
+model.
+In \emph{Advances in Neural Information Processing Systems}, 2023.
 
 \bibitem{cotton2021}
 Peter Cotton.
