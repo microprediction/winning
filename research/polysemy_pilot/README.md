@@ -68,6 +68,26 @@ concentrates in low-entropy, heavily-qualified cells.
 - `pilot_generate.py`, `pilot_judge.py`, `pilot_analyze.py`,
   `pilot_restrict.py` — the pipeline, in run order
 
+## Data handling rule
+
+**No experiment may be designed such that its data can be lost.** Every paid
+API response is appended to an append-only JSONL log in this directory the
+moment it arrives, before anything is computed from it (`datastore.py`:
+`append_jsonl` flushes and fsyncs under a lock; `write_atomic` replaces
+consolidated files only once the new contents are on disk). A run killed at
+any point keeps everything it already paid for, and re-analysis never touches
+the API. Raw logs — `vol_raw.jsonl`, `perm_raw.jsonl`, `random_raw.jsonl`,
+`exact_raw.jsonl` — are the irreplaceable artifacts and are committed; derived
+`*_results.json` files are regenerable from them. Nothing goes in a temp or
+scratch directory, and anything a result depends on (inventories, stimuli,
+templates) is committed source rather than an inline literal that can drift.
+`backfill_raw_logs.py` seeds the logs from the older consolidated JSON caches
+and is idempotent.
+
+This rule exists because a 2,778-cell run was once executed in a session
+scratchpad that was later wiped, leaving the paper citing numbers no data
+supported.
+
 ## Exact-logprob GPT batteries (Sections 5–6 of the paper)
 
 These use the OpenAI API (`max_tokens=1`, `top_logprobs=20`, key read from
@@ -79,14 +99,18 @@ deletion battery and `fetch_unq_new.py`).
 
 | battery | script | results | headline |
 |---|---|---|---|
-| original 2024 two-slot stimuli, 99 categories × every adjective × 3 models | `vol_battery.py` (`N_ADJ=0`) | `vol_battery_results.json` | 2,192 cells, ΔKL **+0.55** [+0.50, +0.59] |
+| original 2024 two-slot stimuli, 99 categories × every adjective × 3 models | `vol_battery.py` (`N_ADJ=0`) | `vol_battery_results.json` | 2,183 cells, ΔKL **+0.55** [+0.51, +0.60] |
 | permutation-controlled deletion, top-8 items × 2 phrasings × 50 categories × 3 models | `perm_restrict.py` | `perm_results.json` | 692 cells (31 scorable categories), ΔKL **+0.025** [+0.016, +0.035] |
 | single-deletion random elicitation | `random_restrict.py` | `random_results.json` | Thurstone 39/56 non-degenerate cells |
 | Block–Marschak / RUM test | `bm_battery.py` | `bm_results.json` | 18/18 structures violate RUM |
 | menus, duplicates, decoys | `red_bus.py`, `context_effects.py`, `transport.py` | matching `*_results.json` | regularity violations 8/18 |
 
 ΔKL is `KL(actual‖Luce) − KL(actual‖Thurstone)`; positive favors Thurstone,
-with bootstrap CIs over cells. Reproduce in order: `fetch_unq_new.py` (fills
+with bootstrap CIs over cells. Note the returned top-20 distributions are not
+perfectly stable across runs: two independent fetches of the full two-slot
+battery gave 2,192 and 2,183 scorable cells with mean ΔKL +0.546 and +0.551.
+The effect is two orders of magnitude larger than that drift, but cite numbers
+from the committed raw log rather than from any particular re-fetch. Reproduce in order: `fetch_unq_new.py` (fills
 `random_raw.json` for any category new to `INVENTORY`), then the battery
 script — both cache raw API responses (`perm_raw.json`, `random_raw.json`)
 and re-fetch only what is missing.

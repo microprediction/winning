@@ -13,9 +13,11 @@ sys.path.insert(0, str(HERE))
 from exact_restrict import MODELS, key, match_items
 from exact_analyze import calibrate_np, win_probs_np, rmse, entropy_norm
 from inventory import INVENTORY  # all 50 categories
+from datastore import append_jsonl, load_jsonl, write_json_atomic
 from openai import OpenAI
 
 CLIENT = OpenAI(api_key=key())
+RAW_LOG = HERE / "perm_raw.jsonl"  # append-only: every paid response, forever
 PHRASES = ["Name", "Pick"]
 MAX_DELETIONS = 8  # delete each of the top-8 observed items in turn
 
@@ -56,6 +58,8 @@ def main():
     if cache_f.exists():
         for k, v in json.loads(cache_f.read_text()).items():
             restr[tuple(k.split("||"))] = v
+    for rec in load_jsonl(RAW_LOG, key="key").values():
+        restr[tuple(rec["key"].split("||"))] = rec["raw"]
     plans = [p for p in plans if (p[0], p[1], p[2], p[3]) not in restr]
     print(f"{len(plans)} deletion calls ({len(restr)} cached)", flush=True)
 
@@ -65,11 +69,14 @@ def main():
         for fut in as_completed(futs):
             k = futs[fut]
             try:
-                restr[k] = fut.result()
+                raw = fut.result()
             except Exception as e:
                 print(f"ERROR {k}: {e}", file=sys.stderr, flush=True)
-    (HERE / "perm_raw.json").write_text(json.dumps(
-        {"||".join(k): v for k, v in restr.items()}, indent=1))
+                continue
+            append_jsonl(RAW_LOG, {"key": "||".join(k), "raw": raw})
+            restr[k] = raw
+    write_json_atomic(HERE / "perm_raw.json",
+                      {"||".join(k): v for k, v in restr.items()})
 
     results = []
     cal_cache = {}
@@ -110,7 +117,7 @@ def main():
             "H_unq": entropy_norm([d_u[s] / uz for s in d_u]),
         })
 
-    (HERE / "perm_results.json").write_text(json.dumps(results, indent=1))
+    write_json_atomic(HERE / "perm_results.json", results)
     print(f"{len(results)} usable cells")
 
     def report(name, ss):

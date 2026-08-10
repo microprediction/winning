@@ -7,9 +7,11 @@ HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 from exact_restrict import MODELS, key
 from inventory import INVENTORY
+from datastore import append_jsonl, write_json_atomic
 from openai import OpenAI
 CLIENT = OpenAI(api_key=key())
 PHRASES = ["Name", "Pick"]
+RAW_LOG = HERE / "random_raw.jsonl"  # append-only: every paid response, forever
 
 def top20(prompt, model):
     r = CLIENT.chat.completions.create(
@@ -27,8 +29,11 @@ with ThreadPoolExecutor(max_workers=10) as ex:
     for fut in as_completed(futs):
         n, ph, m = futs[fut]
         try:
-            raw[f"{n}||{ph}||{m}"] = fut.result()
+            r = fut.result()
         except Exception as e:
             print(f"ERROR {n} {ph} {m}: {e}", file=sys.stderr)
-(HERE / "random_raw.json").write_text(json.dumps(raw, indent=1))
+            continue
+        append_jsonl(RAW_LOG, {"key": f"{n}||{ph}||{m}", "raw": r})
+        raw[f"{n}||{ph}||{m}"] = r
+write_json_atomic(HERE / "random_raw.json", raw)
 print("merged")

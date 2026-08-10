@@ -21,9 +21,11 @@ HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 from exact_restrict import MODELS, key
 from exact_analyze import calibrate_np, win_probs_np, entropy_norm
+from datastore import append_jsonl, load_jsonl, write_json_atomic
 from openai import OpenAI
 
 CLIENT = OpenAI(api_key=key())
+RAW_LOG = HERE / "vol_raw.jsonl"  # append-only: every paid response, forever
 N_ADJ = 0  # 0 = every adjective in the volume; >0 = random subsample of that size
 STOP = set("the and for its this that with are was very a an of to in on it is "
            "because they most two favourite favorite".split())
@@ -57,20 +59,38 @@ def load_categories():
     return cats
 
 
-def run_cell(cat, spec, adj, model):
+def fetch_cell(cat, spec, adj, model, cache):
+    """Fetch (or reuse) the raw top-20 pair for one cell. Every response is
+    appended to RAW_LOG before any scoring, so a killed run never re-pays."""
+    ck = f"{cat}||{adj}||{model}"
+    if ck in cache:
+        return cache[ck]
     t_orig, t_qual = spec["prompt_pair_template"][:2]
     s_orig = t_orig.replace("[MASK]", "___").replace("SOMETHING", adj)
-    u_raw = top20(f'Fill in the blank with a single word: "{s_orig}" '
-                  "Give only the missing word.", model)
-    d_u = items_of(u_raw)
-    if len(d_u) < 3:
+    rec = {"key": ck, "category": cat, "adjective": adj, "model": model}
+    rec["u"] = top20(f'Fill in the blank with a single word: "{s_orig}" '
+                     "Give only the missing word.", model)
+    d_u = items_of(rec["u"])
+    if len(d_u) >= 3:  # otherwise no favorite to condition on; record and stop
+        fav = max(d_u, key=d_u.get)
+        rec["fav"] = fav
+        s_qual = (t_qual.replace("[ANSWER]", fav).replace("[MASK]", "___")
+                  .replace("SOMETHING", adj))
+        rec["q"] = top20(f'Fill in the blank with a single word: "{s_qual}" '
+                         "Give only the missing word.", model)
+    append_jsonl(RAW_LOG, rec)
+    cache[ck] = rec
+    return rec
+
+
+def score_cell(rec):
+    """Score one cached cell. Pure: no API, so re-analysis is always free."""
+    cat, adj, model = rec["category"], rec["adjective"], rec["model"]
+    d_u = items_of(rec["u"])
+    if len(d_u) < 3 or "q" not in rec:
         return None
-    fav = max(d_u, key=d_u.get)
-    s_qual = (t_qual.replace("[ANSWER]", fav).replace("[MASK]", "___")
-              .replace("SOMETHING", adj))
-    q_raw = top20(f'Fill in the blank with a single word: "{s_qual}" '
-                  "Give only the missing word.", model)
-    d_q = items_of(q_raw)
+    fav = rec["fav"]
+    d_q = items_of(rec["q"])
 
     # calibration field: top-10 unqualified items
     items = sorted(d_u, key=d_u.get, reverse=True)[:10]
@@ -111,22 +131,25 @@ def main():
         for adj in use:
             for m in MODELS:
                 jobs.append((cat, spec, adj, m))
-    print(f"{len(jobs)} cells", flush=True)
+    cache = load_jsonl(RAW_LOG, key="key")
+    todo = [j for j in jobs if f"{j[0]}||{j[2]}||{j[3]}" not in cache]
+    print(f"{len(jobs)} cells ({len(cache)} cached, {len(todo)} to fetch)",
+          flush=True)
 
-    results = []
     with ThreadPoolExecutor(max_workers=10) as ex:
-        futs = [ex.submit(run_cell, *j) for j in jobs]
+        futs = [ex.submit(fetch_cell, *j, cache) for j in todo]
         for k, fut in enumerate(as_completed(futs)):
             try:
-                r = fut.result()
-                if r:
-                    results.append(r)
+                fut.result()
             except Exception as e:
                 print(f"ERROR {e}", file=sys.stderr, flush=True)
             if (k + 1) % 100 == 0:
-                print(f"{k+1}/{len(jobs)}", flush=True)
+                print(f"fetched {k+1}/{len(todo)}", flush=True)
 
-    (HERE / "vol_battery_results.json").write_text(json.dumps(results, indent=1))
+    results = [r for r in (score_cell(cache[f"{c}||{a}||{m}"])
+                           for c, _, a, m in jobs
+                           if f"{c}||{a}||{m}" in cache) if r]
+    write_json_atomic(HERE / "vol_battery_results.json", results)
     n = len(results)
     print(f"\n{n} usable cells (of {len(jobs)})")
 
