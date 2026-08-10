@@ -444,21 +444,66 @@ Thurstonian computation in the first place. The same questions asked of
 BERT in 2024 and of GPT-4-class models in 2026 return the same verdict,
 with a larger margin under exact measurement.
 
-Across the five models the margin is ordered by tier:
-GPT-4.1-nano $+0.30$, GPT-4o-mini $+0.35$, GPT-4o $+0.42$, GPT-4.1-mini
-$+0.65$, GPT-4.1 $+0.88$. The more capable the model, the further its
-revealed preferences sit from the Choice Axiom its own output layer
-suggests. Two readings are available and this design does not separate
-them. Capable models may represent preference in a way better described
-by a latent contest, or they may simply hold sharper locations, since the
-deficit also grows with the concentration of the unrestricted
-distribution. The second reading is the more conservative, and the
-degenerate stratum of Table~\ref{tab:battery} is consistent with it. What
-the ordering does establish is that the effect is not an artifact of weak
-models, which is the usual objection to results of this kind. Whether
-Thurstonian diagnostics can serve as a label-free measure of model quality
-is a natural question, but Section~\ref{sec:exotics} counsels caution: the
+\subsection{The deficit grows with model tier}
+\label{sec:tier}
+
+Across the five models the margin is ordered by tier: GPT-4.1-nano
+$+0.30$, GPT-4o-mini $+0.35$, GPT-4o $+0.42$, GPT-4.1-mini $+0.65$,
+GPT-4.1 $+0.88$. The more capable the model, the further its revealed
+preferences sit from the Choice Axiom its own output layer suggests.
+
+This is worth stating carefully, because the architecture is constant along
+that ladder. All five models emit a softmax, and a softmax implements
+Equation~\eqref{eq:luce} mechanically: mask a logit, renormalize, and the
+Choice Axiom holds by construction. The deviation therefore cannot
+originate in the output layer. It originates in what the network computes
+before the output layer, and it grows with capability, as though the hidden
+layers were working against their own parameterization and getting better
+at it.
+
+The obvious confound is concentration. More capable models answer the
+unqualified question more sharply (mean $\tilde H$ falls from $0.276$ on
+GPT-4.1-nano to $0.105$ on GPT-4.1 over matched prompts), and sharpness
+alone widens the gap between an urn and a contest, since winning
+probability is a convex function of location differences. Three controls
+separate the two explanations, all run on the 512 prompts measured on every
+model, paired within the identical question.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+Paired comparison (same question prompt) & $n$ & $\Delta$KL difference \\
+\midrule
+GPT-4.1 $-$ GPT-4.1-nano & 512 & $+0.571$ $[+0.426, +0.721]$ \\
+GPT-4.1 $-$ GPT-4o & 512 & $+0.478$ $[+0.348, +0.613]$ \\
+GPT-4.1-mini $-$ GPT-4o-mini (same size class) & 512 & $+0.276$ $[+0.172, +0.380]$ \\
+GPT-4.1 $-$ GPT-4.1-nano, both degenerate & 142 & $+0.717$ $[+0.387, +1.067]$ \\
+GPT-4.1 $-$ GPT-4.1-nano, both non-degenerate & 144 & $+0.363$ $[+0.191, +0.548]$ \\
+\bottomrule
+\end{tabular}
+\caption{The tier effect survives matching on the question and on
+concentration. Positive means the more capable model departs further from
+Luce renormalization.}
+\label{tab:tier}
+\end{table}
+
+Holding the question fixed, holding concentration fixed, and holding the
+size class fixed while advancing one model generation all leave the effect
+intact. Sharper locations are therefore part of the story but not the whole
+of it: at matched concentration the frontier model still departs further
+from renormalization than the cheapest one. Whether Thurstonian diagnostics
+can serve as a label-free measure of model quality is a natural next
+question, and Section~\ref{sec:exotics} counsels caution, since the
 reversibility diagnostic does not order the models by capability at all.
+
+The practical import falls on anyone who removes an option and
+renormalizes. Constrained decoding, tool routers that mask unavailable
+tools, and guardrails that drop a candidate all compute the Luce
+prediction, because that is what masking a logit does. What the model
+reports when told in context that an option is unavailable is measurably
+different, and the discrepancy is largest on the most capable models.
 
 One further caution emerged with practical import for all such
 experiments: the ``actual'' restricted distribution depends materially on
