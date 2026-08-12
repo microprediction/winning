@@ -753,35 +753,56 @@ calibrated to its own unrestricted distribution.
 \begin{table}[ht]
 \centering
 \small
-\begin{tabular}{llrrrr}
+\begin{tabular}{llrrl}
 \toprule
-Population & Construct & Files & Pairs & Observed $\lambda$ & Case V $\lambda$ \\
+Population & Construct & Pairs & $\lambda$ & Ratio to Case V \\
 \midrule
-People & perceptual discrimination & 8 & 48 & $0.188$ & $0.161$ \\
-People & humour (Jester, 24{,}953) & 1 & 45 & $0.393$ & $0.350$ \\
-People & preference (sushi, Netflix) & 6 & 60 & $0.420$ & $0.317$ \\
+People & perceptual discrimination & 48 & $0.188$ & $1.16$ $[0.85, 1.44]$ \\
+People & humour, 24{,}953 raters & 45 & $0.393$ & $1.12$ $[0.90, 1.35]$ \\
+People & preference (sushi, Netflix) & 60 & $0.420$ & $1.33$ $[1.10, 1.54]$ \\
 \midrule
-Machines & open-vocabulary recall & 5 models & 276 & $0.690$ & $0.120$ \\
+Machines & open-vocabulary recall & 276 & $0.690$ & $\mathbf{5.77}$ $[4.32, 7.65]$ \\
 \bottomrule
 \end{tabular}
-\caption{The discount on prior odds, split by what is being chosen. Across three
-unrelated constructs and samples from 795 to 24{,}953 respondents, people exceed
-the contest's own prediction by between $1.1$ and $1.3$. Machines exceed it by
-$5.8$. The axiom requires zero throughout.}
+\caption{The discount on prior odds, and its ratio to the discount a Case V
+contest predicts for the same distribution. That ratio has a null of exactly
+one: a simulated Gaussian contest returns $1.00$ at every noise scale from
+$0.5$ to $3.0$, because calibrating locations to the observed distribution
+absorbs the scale. Two of the three human constructs are indistinguishable from
+one. Machines are not.}
 \label{tab:construct}
 \end{table}
 
-For people the classical dispute has a clear answer on this statistic, and it is
-the same answer three times over. The contest predicts $0.161$ for perceptual
-discrimination against an observed $0.188$, $0.350$ for humour against $0.393$,
-and $0.317$ for food and film preference against $0.420$. The overshoot is
-between $1.1$ and $1.3$ in every case, the direction of error is the same in
-every case, and the axiom's zero is nowhere near any of them. That the ratio
-holds across dot-counting, jokes and sushi, on samples differing by a factor of
-thirty, is the strongest evidence here that it is a property of human choice
-rather than of a domain. A century of argument about whether restricted choice
-renormalizes or re-races comes down on the side of the race, with the true
-discount slightly larger than Case V allows.
+For people the classical dispute has a clear answer on this statistic, and the
+answer is Thurstone's. The ratio of the observed discount to the contest's own
+prediction is $1.16$ $[0.85, 1.44]$ on perceptual discrimination, $1.12$
+$[0.90, 1.35]$ on humour and $1.33$ $[1.10, 1.54]$ on food and film preference.
+Two of the three include one; the third barely excludes it. Human choice under
+restriction is, within the precision available, a Gaussian contest, and it is
+emphatically not renormalization, whose prediction of $\lambda = 0$ lies many
+standard errors away in every construct.
+
+That ratio is worth dwelling on because it has an exact null. If a population
+really is a Gaussian contest at any noise scale, the ratio is one: simulating
+populations at scales from $0.5$ to $3.0$ returns $1.00$ each time, since
+calibrating locations to the observed distribution absorbs the scale entirely.
+The statistic therefore cannot be inflated by a population being noisier or
+sharper than Case V, only by its being a different kind of process. Recovering
+$1.00$ on simulated contests also serves as a positive control on the whole
+pipeline.
+
+Machines return $5.77$ $[4.32, 7.65]$. They are not a noisier contest or a
+sharper one; they are not a contest. Together with the rank reversals of
+Section~\ref{sec:order}, which no random utility model of any kind permits, the
+verdict is that the century-old dispute is settled one way for people and does
+not apply to machines.
+
+A limit on precision is worth stating because it points at what would sharpen
+this. The intervals above are wide not because respondents are few, Jester
+contributes almost twenty-five thousand, but because a dataset of $K$
+alternatives yields only $K(K-1)/2$ pairs, so 45 to 60 pairs per construct is
+all that ten or twelve items can give. Precision here scales with the number of
+domains, not with the number of people in any one of them.
 
 The humour data deserve a note on why they are trustworthy. Jester asks every
 user to rate the same ten jokes on a continuous scale before showing them
