@@ -758,24 +758,37 @@ calibrated to its own unrestricted distribution.
 Population & Construct & Files & Pairs & Observed $\lambda$ & Case V $\lambda$ \\
 \midrule
 People & perceptual discrimination & 8 & 48 & $0.188$ & $0.161$ \\
+People & humour (Jester, 24{,}953) & 1 & 45 & $0.393$ & $0.350$ \\
 People & preference (sushi, Netflix) & 6 & 60 & $0.420$ & $0.317$ \\
 \midrule
 Machines & open-vocabulary recall & 5 models & 276 & $0.690$ & $0.120$ \\
 \bottomrule
 \end{tabular}
-\caption{The discount on prior odds, split by what is being chosen. People exceed
-the contest's prediction by a factor of $1.2$ on perceptual judgments and $1.3$ on
-preferences. Machines exceed it by $5.8$. The axiom requires zero throughout.}
+\caption{The discount on prior odds, split by what is being chosen. Across three
+unrelated constructs and samples from 795 to 24{,}953 respondents, people exceed
+the contest's own prediction by between $1.1$ and $1.3$. Machines exceed it by
+$5.8$. The axiom requires zero throughout.}
 \label{tab:construct}
 \end{table}
 
-For people the classical dispute has a clear answer on this statistic. The
-contest predicts $0.161$ for perceptual discrimination against an observed
-$0.188$, and $0.317$ for preference against an observed $0.420$. Both are close,
-both err in the same direction, and the axiom's zero is nowhere near either. A
-century of argument about whether restricted choice renormalizes or re-races
-comes down, in these domains, on the side of the race, with the true discount
-somewhat larger than Case V allows.
+For people the classical dispute has a clear answer on this statistic, and it is
+the same answer three times over. The contest predicts $0.161$ for perceptual
+discrimination against an observed $0.188$, $0.350$ for humour against $0.393$,
+and $0.317$ for food and film preference against $0.420$. The overshoot is
+between $1.1$ and $1.3$ in every case, the direction of error is the same in
+every case, and the axiom's zero is nowhere near any of them. That the ratio
+holds across dot-counting, jokes and sushi, on samples differing by a factor of
+thirty, is the strongest evidence here that it is a property of human choice
+rather than of a domain. A century of argument about whether restricted choice
+renormalizes or re-races comes down on the side of the race, with the true
+discount slightly larger than Case V allows.
+
+The humour data deserve a note on why they are trustworthy. Jester asks every
+user to rate the same ten jokes on a continuous scale before showing them
+anything else, so 24{,}953 complete rankings arrive with nothing imputed, and
+because the scale is continuous the tie convention that destroyed the election
+estimate barely applies: splitting equal ratings gives $0.393$ and dropping them
+gives $0.390$.
 
 For machines it has no answer, because neither family is close. The contest
 predicts $0.120$ against an observed $0.690$, an overshoot of $5.8$ with
