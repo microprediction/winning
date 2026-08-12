@@ -7,9 +7,9 @@
 \usepackage{tikz}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{Luce versus Thurstone on New Ground}\\[4pt]
-\large\normalfont Choice-set restriction in large language models,\\
-or why masking a logit is not removing an option}
+\title{\textbf{Choice-Set Restriction in Machines and People}\\[4pt]
+\large\normalfont Independence of Irrelevant Alternatives fails in both,\\
+and far more sharply in machines}
 \author{Peter Cotton}
 \date{First version November 2024. This version 15 August 2026.}
 
@@ -17,17 +17,20 @@ or why masking a logit is not removing an option}
 \maketitle
 
 \begin{abstract}
-\noindent A softmax renormalizes when a logit is masked, so a language model's
-output layer obeys Luce's Choice Axiom for that operation. Telling a model that an
-option is unavailable is a different operation, and we measure what law it
-follows. The axiom fails its sharpest test: naming a choice down to two items
-shifts their log odds by $-1.15$ nats $[-1.547, -0.808]$, where the axiom requires
-zero. The failure is not a rescaling. A third of surviving pairs \emph{reverse}
-rank and the leading survivor changes in half of cells, which no rank-preserving
-rule can express. Among rules that are wrong, a Gaussian contest is less wrong
-than renormalization in all 99 question types of a $37{,}764$-cell sweep, and
-calls the direction of the odds failure in $71\%$ of pairs. Explicit menus form a
-separate regime violating every random utility model.
+\noindent Whether choice probabilities obey Luce's Choice Axiom has been argued
+since Thurstone proposed the alternative in 1927, and it was never settled on
+evidence, because a human choice distribution must be estimated from repeated
+trials while the two families differ by little on any single menu. Language
+models report the distribution directly. We use them as an instrument and
+compare the result with archival human rankings. Naming a choice down to two
+items should leave their odds untouched; instead both parties discard much of
+their prior odds. Fitting the discount $\delta = -\lambda \log(p_i/p_j)$, where
+$\lambda = 0$ is the axiom and $\lambda = 1$ abandons the prior ranking
+entirely, gives $\lambda = 0.39$ $[0.308, 0.466]$ for people over five domains
+and $0.69$ $[0.585, 0.792]$ for machines over 50 categories: people keep about
+three fifths of their prior odds, machines about three tenths. Machine choice
+also fails in a way no random utility model permits, reversing a third of
+surviving pairs.
 \end{abstract}
 
 \section{Introduction}
@@ -659,6 +662,86 @@ qualification is substantial and the entropy of the unrestricted
 distribution is low.
 % Figures 1 and 2 of the July 2024 version (entropy scatter; per-category
 % RMSE bars) belong here; source files live with the original draft.
+
+\section{A human benchmark}
+\label{sec:human}
+
+The dispute this paper joins was never about machines. It was about people, and
+it stalled because the quantity in question is hard to observe in people: a
+choice distribution must be estimated from repeated trials, and on any single
+menu the two families differ by less than the resulting standard errors. That is
+why the argument was settled by tractability rather than by measurement, and it
+is the reason a machine is worth asking. But a machine result is only worth
+having if the human quantity can be put beside it, and for the odds statistic it
+can, from data already collected.
+
+Complete rankings supply both halves at once. A respondent's choice from any
+subset is the highest-ranked available alternative, so the population's
+distribution over the full set and over any pair are both computable without
+asking anyone a second question. We take every complete strict-order collection
+in PrefLib with at least fifty respondents and at most twelve alternatives:
+Kamishima's sushi rankings, Netflix ratings, and two perceptual discrimination
+sets, ten files and 90 pairs in all.
+
+People violate the axiom. The mean shift is $-0.191$ $[-0.322, -0.069]$,
+$\lvert\delta\rvert$ exceeds $0.1$ nats in $84\%$ of pairs, and the sign is
+negative in eight of the ten files: restricting a choice to two alternatives
+moves their odds toward parity, as a contest predicts and as an urn forbids. The
+sushi collection alone gives $-0.285$ over 45 pairs from 5{,}000 respondents,
+and a separate parse of Kamishima's original distribution of the same data gives
+$-0.317$, which is the reproducibility one would hope for from two independent
+paths through differently packaged files.
+
+\subsection{Controlling for how extreme the odds were to begin with}
+
+The raw machine and human means, $-1.150$ and $-0.191$, differ by a factor of
+six, and most of that factor is an artifact. A pair whose odds start near parity
+has little room to move; a pair at ten to one has a great deal. Machines begin
+from more extreme odds than people, with a median absolute log odds of $1.50$
+against $0.87$, so a common proportional discount would produce a larger raw
+shift in machines with no difference in behaviour at all.
+
+The scale-free quantity is that discount. Write
+\begin{equation}
+\delta_{ij} = -\lambda \, \log\frac{p_i}{p_j},
+\label{eq:lambda}
+\end{equation}
+so that $\lambda = 0$ is the Choice Axiom, which preserves odds exactly, and
+$\lambda = 1$ is total abandonment of the prior ranking, leaving the pair at
+parity regardless of what the full set implied. Fitted through the origin, with
+intervals from a pair bootstrap:
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+& Pairs & Median $\lvert\log$ odds$\rvert$ & Discount $\lambda$ \\
+\midrule
+People (5 domains, PrefLib) & 90 & $0.87$ & $0.389$ $[0.308, 0.466]$ \\
+Machines (50 categories, 5 models) & 276 & $1.50$ & $0.690$ $[0.585, 0.792]$ \\
+\midrule
+Choice Axiom & & & $0$ \\
+Prior ranking discarded & & & $1$ \\
+\bottomrule
+\end{tabular}
+\caption{The discount applied to prior odds when a choice is named down to a
+pair. Neither party is near the axiom. People retain about three fifths of their
+prior log odds, machines about three tenths, and the intervals do not overlap.}
+\label{tab:lambda}
+\end{table}
+
+Controlled this way the machine exaggeration is $1.77$ rather than six, and it
+survives: the intervals are disjoint. Within bands of starting odds the ordering
+is the same at every level, with mean shifts of $-0.04$ against $-0.02$ below
+half a nat, $-0.26$ against $-0.07$ from half to one, $-1.07$ against $-0.28$
+from one to two, and $-2.36$ against $-0.65$ above two.
+
+So the honest comparative claim is narrower than the raw numbers suggest and more
+interesting than either party alone. The Choice Axiom is not a description of
+human choice under restriction, which was already suspected and is here
+quantified; it is a worse description of machine choice, by a factor closer to
+two than to six; and the failure has the sign the contest predicts in both.
 
 \section{Which wrong rule is least wrong}
 \label{sec:polysemy}

@@ -194,3 +194,30 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def shrinkage(pairs, seed=4, B=20000):
+    """Scale-free discount lambda in delta = -lambda * log(p_i/p_j).
+
+    The raw mean shift is not comparable between populations that start from
+    different odds: a pair near parity has little room to move and a lopsided one
+    has a great deal. lambda removes that, with 0 the Choice Axiom and 1 total
+    abandonment of the prior ranking. Fitted through the origin.
+
+    Measured 2026-08-12: people 0.389 [0.308, 0.466] over 90 PrefLib pairs,
+    machines 0.690 [0.585, 0.792] over 276 pairs, so the machine exaggeration is
+    1.77 and not the factor of six the raw means suggest.
+    """
+    import random
+    num = sum(-d * L for L, d in pairs)
+    den = sum(L * L for L, _ in pairs)
+    est = num / den
+    random.seed(seed)
+    n, bs = len(pairs), []
+    for _ in range(B):
+        smp = [pairs[random.randrange(n)] for _ in range(n)]
+        de = sum(L * L for L, _ in smp)
+        if de > 0:
+            bs.append(sum(-d * L for L, d in smp) / de)
+    bs.sort()
+    return est, bs[int(.025 * len(bs))], bs[int(.975 * len(bs))]
