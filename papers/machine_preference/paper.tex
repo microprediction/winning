@@ -26,11 +26,12 @@ compare the result with archival human rankings. Naming a choice down to two
 items should leave their odds untouched; instead both parties discard much of
 their prior odds. Fitting the discount $\delta = -\lambda \log(p_i/p_j)$, where
 $\lambda = 0$ is the axiom and $\lambda = 1$ abandons the prior ranking
-entirely, gives $\lambda = 0.39$ $[0.308, 0.466]$ for people over five domains
-and $0.69$ $[0.585, 0.792]$ for machines over 50 categories: people keep about
-three fifths of their prior odds, machines about three tenths. Machine choice
-also fails in a way no random utility model permits, reversing a third of
-surviving pairs.
+entirely, gives $0.39$ $[0.308, 0.466]$ for people over five domains and $0.69$
+$[0.585, 0.792]$ for machines over 50 categories. A Thurstonian contest
+calibrated to each population predicts $0.298$ and $0.120$ respectively, so
+people are close to the contest and far from the axiom, while machines overshoot
+the contest almost six-fold. Machine choice also fails in a way no random utility
+model permits, reversing a third of surviving pairs.
 \end{abstract}
 
 \section{Introduction}
@@ -714,34 +715,70 @@ intervals from a pair bootstrap:
 \begin{table}[ht]
 \centering
 \small
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrl}
 \toprule
 & Pairs & Median $\lvert\log$ odds$\rvert$ & Discount $\lambda$ \\
 \midrule
-People (5 domains, PrefLib) & 90 & $0.87$ & $0.389$ $[0.308, 0.466]$ \\
-Machines (50 categories, 5 models) & 276 & $1.50$ & $0.690$ $[0.585, 0.792]$ \\
+Choice Axiom (Luce) & & & $0$ exactly \\
 \midrule
-Choice Axiom & & & $0$ \\
+Case V predicts, people & 90 & $0.87$ & $0.298$ $[0.255, 0.335]$ \\
+\textbf{Observed, people} & 90 & $0.87$ & $\mathbf{0.389}$ $[0.308, 0.466]$ \\
+\midrule
+Case V predicts, machines & 276 & $1.50$ & $0.120$ $[0.095, 0.147]$ \\
+\textbf{Observed, machines} & 276 & $1.50$ & $\mathbf{0.690}$ $[0.585, 0.792]$ \\
+\midrule
 Prior ranking discarded & & & $1$ \\
 \bottomrule
 \end{tabular}
 \caption{The discount applied to prior odds when a choice is named down to a
-pair. Neither party is near the axiom. People retain about three fifths of their
-prior log odds, machines about three tenths, and the intervals do not overlap.}
+pair, with each population's Case V prediction computed from its own
+unrestricted distribution. For people the contest is approximately right and the
+axiom is not. For machines both are wrong, the contest by a factor of nearly six
+in the same direction.}
 \label{tab:lambda}
 \end{table}
 
-Controlled this way the machine exaggeration is $1.77$ rather than six, and it
-survives: the intervals are disjoint. Within bands of starting odds the ordering
-is the same at every level, with mean shifts of $-0.04$ against $-0.02$ below
-half a nat, $-0.26$ against $-0.07$ from half to one, $-1.07$ against $-0.28$
-from one to two, and $-2.36$ against $-0.65$ above two.
+Controlled this way the machine exaggeration over people is $1.77$ rather than
+six, and it survives: the intervals are disjoint. Within bands of starting odds
+the ordering is the same at every level, with mean shifts of $-0.04$ against
+$-0.02$ below half a nat, $-0.26$ against $-0.07$ from half to one, $-1.07$
+against $-0.28$ from one to two, and $-2.36$ against $-0.65$ above two.
 
-So the honest comparative claim is narrower than the raw numbers suggest and more
-interesting than either party alone. The Choice Axiom is not a description of
-human choice under restriction, which was already suspected and is here
-quantified; it is a worse description of machine choice, by a factor closer to
-two than to six; and the failure has the sign the contest predicts in both.
+\subsection{The century-old question, answered twice and differently}
+
+Because $\lambda$ is zero under the axiom and positive under a contest, it scores
+both families at once, and each population can be compared with the contest
+calibrated to its own unrestricted distribution. Case V predicts a larger
+discount for people than for machines, $0.298$ against $0.120$, because human
+distributions are flatter and their calibrated locations correspondingly closer
+together; a shorter field compresses less.
+
+For people the classical dispute has a clear answer on this statistic. The
+contest predicts $0.298$, the observation is $0.389$, and the intervals overlap,
+while the axiom's zero lies far outside them. A century of argument about whether
+choice under restriction renormalizes or re-races comes down, in these five
+domains, on the side of the race.
+
+For machines it has no answer, because neither family is close. The contest
+predicts $0.120$ and the observation is $0.690$, an overshoot of $5.8$ with
+intervals nowhere near each other. Machines depart from the axiom in the
+direction the contest specifies and then continue well past the contest, which
+together with the rank reversals of Section~\ref{sec:order} places their
+behaviour outside the random utility class rather than at some point within it.
+
+The comparison is therefore not that machines are more Thurstonian than people.
+It is that people are close to Thurstonian and machines are not close to
+anything: they exaggerate the human departure from Luce by roughly a factor of
+two, and the Thurstonian departure by roughly a factor of six.
+
+Three limits bound this. Two of the five human collections are perceptual
+discrimination tasks rather than preferences, and pooling them with sushi and
+Netflix mixes constructs. Human subset choices are derived from complete
+rankings rather than elicited, so the human side cannot exhibit reversals and its
+$\lambda$ is measured under a construction that presupposes a stable order.
+And the machine and human items are different, so the two $\lambda$ values are
+comparable as behaviour under a common scale-free statistic, not as answers to
+the same question about the same alternatives.
 
 \section{Which wrong rule is least wrong}
 \label{sec:polysemy}
