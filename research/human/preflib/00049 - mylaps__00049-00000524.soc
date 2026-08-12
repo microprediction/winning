@@ -1,0 +1,45 @@
+# FILE NAME: 00049-00000524.soc
+# TITLE: 572
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000524.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 8
+# NUMBER VOTERS: 25
+# NUMBER UNIQUE ORDERS: 25
+# ALTERNATIVE NAME 1: EsRoe_a-poule-wst
+# ALTERNATIVE NAME 2: DaHui_a-poule-wst
+# ALTERNATIVE NAME 3: SiBet_a-poule-wst
+# ALTERNATIVE NAME 4: NiBak_a-poule-wst
+# ALTERNATIVE NAME 5: NBos_a-poule-wst
+# ALTERNATIVE NAME 6: KlHei_a-poule-wst
+# ALTERNATIVE NAME 7: PepKo_a-poule-wst
+# ALTERNATIVE NAME 8: MaHui_a-poule-wst
+1: 4,5,8,3,6,7,1,2
+1: 5,1,6,4,2,3,8,7
+1: 4,2,3,7,5,8,6,1
+1: 7,6,1,8,2,3,5,4
+1: 4,5,8,1,3,2,6,7
+1: 3,6,2,7,5,4,8,1
+1: 5,4,7,1,8,2,3,6
+1: 5,4,2,6,8,7,3,1
+1: 6,3,1,2,8,7,5,4
+1: 1,7,2,3,6,5,8,4
+1: 5,6,7,2,3,1,4,8
+1: 5,6,2,7,4,8,3,1
+1: 3,1,2,6,5,7,4,8
+1: 7,6,1,2,3,5,8,4
+1: 4,5,8,2,3,6,1,7
+1: 8,4,5,3,7,1,6,2
+1: 7,6,1,5,8,2,3,4
+1: 2,3,4,6,1,7,8,5
+1: 4,5,3,7,8,1,2,6
+1: 6,2,1,8,3,7,4,5
+1: 5,4,2,7,6,3,8,1
+1: 4,7,1,8,3,5,6,2
+1: 5,4,3,8,1,6,2,7
+1: 6,1,2,7,3,8,4,5
+1: 5,4,7,8,2,1,6,3

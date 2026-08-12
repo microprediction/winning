@@ -1,0 +1,26 @@
+# FILE NAME: 00049-00000176.soc
+# TITLE: 259
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000176.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 8
+# NUMBER VOTERS: 6
+# NUMBER UNIQUE ORDERS: 6
+# ALTERNATIVE NAME 1: 3_categorie-b
+# ALTERNATIVE NAME 2: 2_categorie-b
+# ALTERNATIVE NAME 3: 2_categorie-a
+# ALTERNATIVE NAME 4: 1_categorie-a
+# ALTERNATIVE NAME 5: 6_categorie-a
+# ALTERNATIVE NAME 6: 3_categorie-a
+# ALTERNATIVE NAME 7: 1_categorie-b
+# ALTERNATIVE NAME 8: 8_categorie-b
+1: 8,1,7,2,4,6,3,5
+1: 7,2,1,8,4,3,5,6
+1: 7,8,1,2,5,3,4,6
+1: 2,1,7,8,4,3,6,5
+1: 2,7,8,1,6,4,5,3
+1: 7,1,2,8,3,4,6,5

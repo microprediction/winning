@@ -1,0 +1,77 @@
+# FILE NAME: 00049-00000269.soc
+# TITLE: 342
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000269.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 53
+# NUMBER VOTERS: 12
+# NUMBER UNIQUE ORDERS: 12
+# ALTERNATIVE NAME 1: 51_d-categorie-sportklasse
+# ALTERNATIVE NAME 2: 37_d-categorie-sportklasse
+# ALTERNATIVE NAME 3: 9_d-categorie-sportklasse
+# ALTERNATIVE NAME 4: 32_d-categorie-sportklasse
+# ALTERNATIVE NAME 5: 47_d-categorie-sportklasse
+# ALTERNATIVE NAME 6: 64_d-categorie-sportklasse
+# ALTERNATIVE NAME 7: 18_d-categorie-sportklasse
+# ALTERNATIVE NAME 8: 21_d-categorie-sportklasse
+# ALTERNATIVE NAME 9: 24_d-categorie-sportklasse
+# ALTERNATIVE NAME 10: 38_d-categorie-sportklasse
+# ALTERNATIVE NAME 11: 43_d-categorie-sportklasse
+# ALTERNATIVE NAME 12: 27_d-categorie-sportklasse
+# ALTERNATIVE NAME 13: 44_d-categorie-sportklasse
+# ALTERNATIVE NAME 14: 25_d-categorie-sportklasse
+# ALTERNATIVE NAME 15: 46_d-categorie-sportklasse
+# ALTERNATIVE NAME 16: 39_d-categorie-sportklasse
+# ALTERNATIVE NAME 17: 4_d-categorie-sportklasse
+# ALTERNATIVE NAME 18: 62_d-categorie-sportklasse
+# ALTERNATIVE NAME 19: 26_d-categorie-sportklasse
+# ALTERNATIVE NAME 20: 1_d-categorie-sportklasse
+# ALTERNATIVE NAME 21: 7_d-categorie-sportklasse
+# ALTERNATIVE NAME 22: 15_d-categorie-sportklasse
+# ALTERNATIVE NAME 23: 34_d-categorie-sportklasse
+# ALTERNATIVE NAME 24: 13_d-categorie-sportklasse
+# ALTERNATIVE NAME 25: 41_d-categorie-sportklasse
+# ALTERNATIVE NAME 26: 31_d-categorie-sportklasse
+# ALTERNATIVE NAME 27: 5_d-categorie-sportklasse
+# ALTERNATIVE NAME 28: 33_d-categorie-sportklasse
+# ALTERNATIVE NAME 29: 42_d-categorie-sportklasse
+# ALTERNATIVE NAME 30: 60_d-categorie-sportklasse
+# ALTERNATIVE NAME 31: 23_d-categorie-sportklasse
+# ALTERNATIVE NAME 32: 28_d-categorie-sportklasse
+# ALTERNATIVE NAME 33: 53_d-categorie-sportklasse
+# ALTERNATIVE NAME 34: 61_d-categorie-sportklasse
+# ALTERNATIVE NAME 35: 10_d-categorie-sportklasse
+# ALTERNATIVE NAME 36: 35_d-categorie-sportklasse
+# ALTERNATIVE NAME 37: 22_d-categorie-sportklasse
+# ALTERNATIVE NAME 38: 45_d-categorie-sportklasse
+# ALTERNATIVE NAME 39: 36_d-categorie-sportklasse
+# ALTERNATIVE NAME 40: 52_d-categorie-sportklasse
+# ALTERNATIVE NAME 41: 19_d-categorie-sportklasse
+# ALTERNATIVE NAME 42: 16_d-categorie-sportklasse
+# ALTERNATIVE NAME 43: 29_d-categorie-sportklasse
+# ALTERNATIVE NAME 44: 20_d-categorie-sportklasse
+# ALTERNATIVE NAME 45: 14_d-categorie-sportklasse
+# ALTERNATIVE NAME 46: 56_d-categorie-sportklasse
+# ALTERNATIVE NAME 47: 63_d-categorie-sportklasse
+# ALTERNATIVE NAME 48: 50_d-categorie-sportklasse
+# ALTERNATIVE NAME 49: 59_d-categorie-sportklasse
+# ALTERNATIVE NAME 50: 3_d-categorie-sportklasse
+# ALTERNATIVE NAME 51: 11_d-categorie-sportklasse
+# ALTERNATIVE NAME 52: 17_d-categorie-sportklasse
+# ALTERNATIVE NAME 53: 2_d-categorie-sportklasse
+1: 19,6,4,52,24,10,11,18,36,3,14,21,13,2,28,9,5,41,49,32,48,30,40,53,33,12,27,39,22,34,44,20,51,50,31,8,26,23,37,43,7,25,47,1,16,45,38,46,17,42,15,35,29
+1: 25,21,42,52,16,33,46,9,1,24,37,30,7,43,18,11,4,8,20,50,49,51,5,31,13,22,3,39,47,34,6,44,41,10,35,48,19,36,26,14,15,27,17,12,38,45,23,2,40,28,53,29,32
+1: 22,31,33,38,42,37,15,26,52,30,12,5,47,49,43,4,6,51,36,27,44,3,35,11,7,16,13,19,17,39,10,25,9,1,41,50,18,8,48,20,21,34,46,45,14,24,32,2,40,28,53,29,23
+1: 38,35,1,18,51,49,41,36,16,3,11,6,4,50,19,44,21,42,30,31,13,20,39,17,48,52,43,22,15,14,7,33,37,25,9,26,5,12,46,47,8,34,27,45,10,40,29,23,28,53,2,32,24
+1: 36,38,35,34,45,31,18,12,5,16,30,23,27,11,22,28,40,33,39,49,47,52,41,20,48,24,32,17,46,51,19,9,13,50,15,1,44,3,37,29,43,53,42,7,8,26,4,21,6,10,2,25,14
+1: 52,12,4,27,8,10,50,9,2,19,24,17,51,39,6,20,13,53,44,25,1,7,26,28,23,41,33,21,15,40,48,49,29,37,32,14,30,43,11,47,3,18,46,16,42,5,38,45,31,22,34,36,35
+1: 25,17,3,18,43,2,21,53,4,20,1,37,11,30,47,31,32,24,45,44,50,8,14,10,48,42,46,28,9,35,36,39,26,19,5,29,33,40,41,34,13,6,51,22,16,7,12,15,27,49,52,38,23
+1: 38,19,42,41,48,12,16,49,44,36,30,4,8,13,32,24,2,23,40,3,7,21,29,28,5,9,22,53,10,35,6,39,14,31,20,50,26,43,51,1,33,45,11,34,47,37,18,52,46,15,27,17,25
+1: 22,19,5,11,41,16,44,51,49,33,27,6,26,7,1,48,37,36,12,20,31,39,18,47,30,17,4,24,50,52,15,40,35,13,14,3,45,10,42,25,34,21,9,46,32,23,29,53,8,2,28,43,38
+1: 38,19,22,43,46,10,34,2,8,21,23,28,32,53,9,52,17,29,15,13,50,25,37,3,26,14,7,42,4,31,24,40,35,41,45,51,39,30,6,20,1,27,18,12,47,36,16,49,48,33,11,44,5
+1: 31,10,15,14,45,48,35,36,16,6,12,25,50,33,27,47,1,43,18,3,8,34,49,13,20,37,5,44,42,51,30,26,7,11,39,4,9,46,24,21,17,52,29,41,2,53,28,23,32,40,22,19,38
+1: 45,26,14,44,9,8,12,1,42,7,52,50,27,21,3,39,34,20,41,36,4,25,15,46,24,48,17,30,18,43,35,37,49,47,13,33,6,11,51,5,10,16,38,31,19,22,28,32,23,53,40,2,29

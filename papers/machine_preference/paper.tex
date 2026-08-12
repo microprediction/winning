@@ -26,11 +26,11 @@ compare the result with archival human rankings. Naming a choice down to two
 items should leave their odds untouched; instead both parties discard much of
 their prior odds. Fitting the discount $\delta = -\lambda \log(p_i/p_j)$, where
 $\lambda = 0$ is the axiom and $\lambda = 1$ abandons the prior ranking
-entirely, gives $0.39$ $[0.308, 0.466]$ for people over five domains and $0.69$
-$[0.585, 0.792]$ for machines over 50 categories. A Thurstonian contest
-calibrated to each population predicts $0.298$ and $0.120$ respectively, so
-people are close to the contest and far from the axiom, while machines overshoot
-the contest almost six-fold. Machine choice also fails in a way no random utility
+entirely, gives $0.42$ for human preferences and $0.19$ for human perceptual judgments,
+against $0.69$ $[0.585, 0.792]$ for machines. A Thurstonian contest calibrated to
+each population predicts $0.32$, $0.16$ and $0.12$, so people exceed the contest
+by a fifth to a third while machines exceed it almost six-fold: people are close
+to the race and far from the axiom, machines close to neither. Machine choice also fails in a way no random utility
 model permits, reversing a third of surviving pairs.
 \end{abstract}
 
@@ -747,38 +747,70 @@ against $-0.28$ from one to two, and $-2.36$ against $-0.65$ above two.
 \subsection{The century-old question, answered twice and differently}
 
 Because $\lambda$ is zero under the axiom and positive under a contest, it scores
-both families at once, and each population can be compared with the contest
-calibrated to its own unrestricted distribution. Case V predicts a larger
-discount for people than for machines, $0.298$ against $0.120$, because human
-distributions are flatter and their calibrated locations correspondingly closer
-together; a shorter field compresses less.
+both families at once, and each population can be compared against a contest
+calibrated to its own unrestricted distribution.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llrrrr}
+\toprule
+Population & Construct & Files & Pairs & Observed $\lambda$ & Case V $\lambda$ \\
+\midrule
+People & perceptual discrimination & 8 & 48 & $0.188$ & $0.161$ \\
+People & preference (sushi, Netflix) & 6 & 60 & $0.420$ & $0.317$ \\
+\midrule
+Machines & open-vocabulary recall & 5 models & 276 & $0.690$ & $0.120$ \\
+\bottomrule
+\end{tabular}
+\caption{The discount on prior odds, split by what is being chosen. People exceed
+the contest's prediction by a factor of $1.2$ on perceptual judgments and $1.3$ on
+preferences. Machines exceed it by $5.8$. The axiom requires zero throughout.}
+\label{tab:construct}
+\end{table}
 
 For people the classical dispute has a clear answer on this statistic. The
-contest predicts $0.298$, the observation is $0.389$, and the intervals overlap,
-while the axiom's zero lies far outside them. A century of argument about whether
-choice under restriction renormalizes or re-races comes down, in these five
-domains, on the side of the race.
+contest predicts $0.161$ for perceptual discrimination against an observed
+$0.188$, and $0.317$ for preference against an observed $0.420$. Both are close,
+both err in the same direction, and the axiom's zero is nowhere near either. A
+century of argument about whether restricted choice renormalizes or re-races
+comes down, in these domains, on the side of the race, with the true discount
+somewhat larger than Case V allows.
 
 For machines it has no answer, because neither family is close. The contest
-predicts $0.120$ and the observation is $0.690$, an overshoot of $5.8$ with
+predicts $0.120$ against an observed $0.690$, an overshoot of $5.8$ with
 intervals nowhere near each other. Machines depart from the axiom in the
-direction the contest specifies and then continue well past the contest, which
-together with the rank reversals of Section~\ref{sec:order} places their
-behaviour outside the random utility class rather than at some point within it.
+direction the contest specifies and then continue well past it, which together
+with the rank reversals of Section~\ref{sec:order} places their behaviour
+outside the random utility class rather than at some point within it. Note also
+that the human and machine overshoots differ in kind: people exceed a
+prediction of about $0.3$, machines exceed a prediction of about $0.12$, and the
+contest predicts less for machines precisely because their distributions are more
+concentrated, so their calibrated locations lie further apart and a two-horse
+field compresses them less.
 
-The comparison is therefore not that machines are more Thurstonian than people.
-It is that people are close to Thurstonian and machines are not close to
-anything: they exaggerate the human departure from Luce by roughly a factor of
-two, and the Thurstonian departure by roughly a factor of six.
+\subsection{Why real elections cannot be used here}
 
-Three limits bound this. Two of the five human collections are perceptual
-discrimination tasks rather than preferences, and pooling them with sushi and
-Netflix mixes constructs. Human subset choices are derived from complete
-rankings rather than elicited, so the human side cannot exhibit reversals and its
-$\lambda$ is measured under a construction that presupposes a stable order.
-And the machine and human items are different, so the two $\lambda$ values are
-comparable as behaviour under a common scale-free statistic, not as answers to
-the same question about the same alternatives.
+Ranked-ballot elections would be the natural place to look for human choice at
+scale, and PrefLib holds over fifty such files with more than a million and a half
+ballots between them. They cannot answer this question, and the reason is worth
+recording because it is not obvious.
+
+Voters rank a few candidates and leave the rest unranked, which the file format
+represents as a final tied group. That forces a choice with no defensible answer.
+Treating the tie as indifference, so that a restricted pair drawn from a voter's
+unranked candidates splits evenly, drives restricted odds toward parity and gives
+$\lambda = 0.680$ $[0.661, 0.699]$. Dropping tied comparisons and counting only
+pairs a voter actually ordered gives $\lambda = 0.147$ $[0.120, 0.175]$. The
+statistic swings by a factor of nearly five on a bookkeeping decision, because
+the first reading manufactures indifference and the second selects for engaged
+voters.
+
+Complete rankings avoid the problem entirely: every respondent orders every
+alternative, so no truncation model is required and nothing is imputed. The human
+figures above therefore rest on complete-ranking data only, and elections are
+excluded rather than pooled. Using them would need a model of ballot truncation,
+which is a separate paper.
 
 \section{Which wrong rule is least wrong}
 \label{sec:polysemy}

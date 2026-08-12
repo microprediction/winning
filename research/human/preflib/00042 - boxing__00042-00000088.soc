@@ -1,0 +1,34 @@
+# FILE NAME: 00042-00000088.soc
+# TITLE: Women'S Flyweight 2018
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00042-00000088.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 10
+# NUMBER VOTERS: 33
+# NUMBER UNIQUE ORDERS: 12
+# ALTERNATIVE NAME 1: Sijara Eubanks
+# ALTERNATIVE NAME 2: Liz Carmouche
+# ALTERNATIVE NAME 3: Alexis Davis
+# ALTERNATIVE NAME 4: Roxanne Modafferi
+# ALTERNATIVE NAME 5: Jessica-Rose Clark
+# ALTERNATIVE NAME 6: Valentina Shevchenko
+# ALTERNATIVE NAME 7: Jessica Eye
+# ALTERNATIVE NAME 8: Lauren Murphy
+# ALTERNATIVE NAME 9: Mara Romero Borella
+# ALTERNATIVE NAME 10: Katlyn Chookagian
+9: 6,10,1,3,2,4,8,7,5,9
+8: 6,1,8,3,4,2,10,5,7,9
+2: 6,1,8,3,10,4,2,5,7,9
+2: 6,1,8,3,10,2,4,5,7,9
+2: 6,1,3,8,10,2,4,5,7,9
+2: 6,1,3,2,4,8,10,7,5,9
+2: 6,1,10,4,3,2,8,7,5,9
+2: 6,7,1,10,3,2,4,8,5,9
+1: 6,1,3,8,10,2,4,7,5,9
+1: 6,1,3,4,8,10,2,7,5,9
+1: 6,1,10,4,2,3,8,7,5,9
+1: 6,10,1,3,2,8,4,7,5,9

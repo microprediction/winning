@@ -1,0 +1,44 @@
+# FILE NAME: 00049-00000373.soc
+# TITLE: 436
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000373.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 26
+# NUMBER VOTERS: 6
+# NUMBER UNIQUE ORDERS: 6
+# ALTERNATIVE NAME 1: 24_jcaya-u16-boys
+# ALTERNATIVE NAME 2: 57_grand-veteran-male-xc
+# ALTERNATIVE NAME 3: 20_jcaya-junior-boys
+# ALTERNATIVE NAME 4: 64_grand-veteran-male-xc
+# ALTERNATIVE NAME 5: 21_jcaya-u16-boys
+# ALTERNATIVE NAME 6: 11_elite-male-xc
+# ALTERNATIVE NAME 7: 63_ladies-xc
+# ALTERNATIVE NAME 8: 44_veteran-male-xc
+# ALTERNATIVE NAME 9: 76_jcaya-junior-boys
+# ALTERNATIVE NAME 10: 18_sport-male-xc
+# ALTERNATIVE NAME 11: 69_jcaya-u16-boys
+# ALTERNATIVE NAME 12: 9_elite-male-xc
+# ALTERNATIVE NAME 13: 71_jcaya-u16-boys
+# ALTERNATIVE NAME 14: 66_grand-veteran-male-xc
+# ALTERNATIVE NAME 15: 51_ladies-xc
+# ALTERNATIVE NAME 16: 19_sport-male-xc
+# ALTERNATIVE NAME 17: 2_elite-male-xc
+# ALTERNATIVE NAME 18: 60_grand-veteran-male-xc
+# ALTERNATIVE NAME 19: 70_jcaya-u16-boys
+# ALTERNATIVE NAME 20: 68_super-veteran-male-xc
+# ALTERNATIVE NAME 21: 43_veteran-male-xc
+# ALTERNATIVE NAME 22: 10_elite-male-xc
+# ALTERNATIVE NAME 23: 1_elite-male-xc
+# ALTERNATIVE NAME 24: 67_grand-veteran-male-xc
+# ALTERNATIVE NAME 25: 4_elite-male-xc
+# ALTERNATIVE NAME 26: 39_veteran-male-xc
+1: 23,17,22,10,9,12,6,13,19,26,21,4,5,25,18,1,16,7,24,8,11,14,15,20,3,2
+1: 23,22,17,12,10,9,19,26,6,13,5,21,4,25,18,16,7,1,24,8,11,14,15,20,3,2
+1: 23,22,17,10,12,9,19,6,26,13,4,21,5,25,18,16,1,7,8,24,11,14,20,15,3,2
+1: 23,22,17,10,12,26,9,6,19,4,21,5,25,16,18,13,8,11,24,7,1,14,20,15,3,2
+1: 23,22,17,10,12,26,6,19,9,4,16,21,5,18,8,13,25,1,11,24,7,14,20,15,3,2
+1: 23,17,22,10,12,26,19,6,25,21,4,9,13,16,1,18,8,24,11,7,5,20,14,15,3,2

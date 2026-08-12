@@ -1,0 +1,55 @@
+# FILE NAME: 00049-00000368.soc
+# TITLE: 431
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000368.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 13
+# NUMBER VOTERS: 30
+# NUMBER UNIQUE ORDERS: 30
+# ALTERNATIVE NAME 1: N3_nieuwelingen-jongen
+# ALTERNATIVE NAME 2: M7_nieuwelingen-meisjes
+# ALTERNATIVE NAME 3: M2_nieuwelingen-meisjes
+# ALTERNATIVE NAME 4: M5_nieuwelingen-meisjes
+# ALTERNATIVE NAME 5: M3_nieuwelingen-meisjes
+# ALTERNATIVE NAME 6: N1_nieuwelingen-jongen
+# ALTERNATIVE NAME 7: N11_nieuwelingen-jongen
+# ALTERNATIVE NAME 8: N4_nieuwelingen-jongen
+# ALTERNATIVE NAME 9: N8_nieuwelingen-jongen
+# ALTERNATIVE NAME 10: M6_nieuwelingen-meisjes
+# ALTERNATIVE NAME 11: M4_nieuwelingen-meisjes
+# ALTERNATIVE NAME 12: J74_junior-mannen
+# ALTERNATIVE NAME 13: J73_junior-mannen
+1: 4,7,12,11,1,8,3,2,6,9,5,10,13
+1: 12,5,4,6,11,9,8,10,7,1,2,3,13
+1: 12,7,1,4,6,9,11,10,2,8,3,5,13
+1: 7,1,12,8,5,10,2,11,9,6,4,3,13
+1: 12,1,7,2,5,9,11,10,8,6,4,3,13
+1: 1,7,12,4,6,10,8,5,2,9,11,13,3
+1: 12,1,7,3,13,8,10,11,5,2,4,9,6
+1: 13,12,1,7,3,6,11,9,4,2,10,5,8
+1: 11,2,1,7,12,8,9,6,4,10,5,3,13
+1: 13,12,1,7,8,3,6,5,4,10,9,2,11
+1: 7,1,12,9,4,10,5,2,6,11,8,3,13
+1: 9,5,10,2,12,6,3,7,11,4,8,1,13
+1: 12,7,1,11,10,5,4,8,2,13,9,3,6
+1: 1,12,7,6,5,3,8,9,2,4,10,13,11
+1: 7,1,12,3,13,2,10,11,8,4,9,5,6
+1: 13,8,9,10,4,11,5,2,6,12,1,7,3
+1: 12,6,3,7,1,9,11,8,4,5,10,2,13
+1: 1,7,12,8,5,6,4,11,2,10,9,3,13
+1: 1,12,7,5,2,4,10,6,13,3,8,9,11
+1: 7,1,12,13,3,4,10,11,2,6,8,9,5
+1: 3,13,12,1,7,2,8,11,10,9,5,6,4
+1: 11,4,5,10,9,6,12,1,7,8,2,13,3
+1: 11,5,9,2,8,10,1,4,6,7,12,3,13
+1: 1,7,12,13,6,2,11,9,5,8,10,4,3
+1: 12,10,6,2,11,1,5,9,8,4,7,3,13
+1: 8,5,7,10,2,9,4,11,6,12,1,3,13
+1: 10,2,5,1,9,8,7,11,12,6,4,13,3
+1: 7,10,11,5,9,1,6,12,2,4,8,3,13
+1: 1,11,4,6,12,10,5,7,9,8,2,3,13
+1: 2,12,8,9,6,1,11,4,7,10,5,13,3

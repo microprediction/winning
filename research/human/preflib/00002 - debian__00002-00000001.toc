@@ -1,0 +1,47 @@
+# FILE NAME: 00002-00000001.toc
+# TITLE: Debian 2002 Leader
+# DESCRIPTION: Obtained from the soi by adding the unranked alternatives at the bottom
+# DATA TYPE: toc
+# MODIFICATION TYPE: imbued
+# RELATES TO: 00002-00000001.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2013-08-17
+# MODIFICATION DATE: 2022-09-16
+# NUMBER ALTERNATIVES: 4
+# NUMBER VOTERS: 475
+# NUMBER UNIQUE ORDERS: 31
+# ALTERNATIVE NAME 1: Branden Robinson
+# ALTERNATIVE NAME 2: Raphael Hertzog
+# ALTERNATIVE NAME 3: Bdale Garbee
+# ALTERNATIVE NAME 4: None Of The Above
+100: 3,1,2,4
+79: 1,3,2,4
+54: 3,2,1,4
+43: 2,3,1,4
+34: 3,2,4,1
+30: 1,2,3,4
+29: 2,1,3,4
+16: 1,3,4,2
+14: 2,3,4,1
+12: 3,1,4,2
+9: 3,{1,2,4}
+7: 1,{2,3,4}
+5: 3,2,{1,4}
+5: 3,4,{1,2}
+4: 3,4,2,1
+4: 1,4,2,3
+4: 3,4,1,2
+4: 2,3,{1,4}
+3: 2,1,4,3
+2: 2,4,1,3
+2: 1,4,3,2
+2: 1,2,4,3
+2: 1,2,{3,4}
+2: 1,3,{2,4}
+2: 2,1,{3,4}
+2: 2,{1,3,4}
+1: 4,2,3,1
+1: 2,4,3,1
+1: 2,4,{1,3}
+1: 4,3,{1,2}
+1: 4,{1,2,3}

@@ -1,0 +1,54 @@
+# FILE NAME: 00017-00000001.toc
+# TITLE: 2010 Berkeley City Council - District 7
+# DESCRIPTION: Obtained from the toi by adding the unranked alternatives at the bottom
+# DATA TYPE: toc
+# MODIFICATION TYPE: imbued
+# RELATES TO: 00017-00000001.toi
+# RELATED FILES: 
+# PUBLICATION DATE: 2014-07-09
+# MODIFICATION DATE: 2022-09-16
+# NUMBER ALTERNATIVES: 4
+# NUMBER VOTERS: 4173
+# NUMBER UNIQUE ORDERS: 38
+# ALTERNATIVE NAME 1: Cecilia ''Ces'' Rosales
+# ALTERNATIVE NAME 2: Kriss Worthington
+# ALTERNATIVE NAME 3: George Beier
+# ALTERNATIVE NAME 4: Write-In
+568: 2,3,1,4
+559: 2,{1,3,4}
+556: 2,1,3,4
+478: 3,2,1,4
+382: 3,1,2,4
+248: 1,2,3,4
+216: 2,1,{3,4}
+210: 3,1,{2,4}
+210: 3,{1,2,4}
+195: 1,3,2,4
+124: 2,3,{1,4}
+124: 3,2,{1,4}
+68: 1,{2,3,4}
+52: 1,2,{3,4}
+45: 1,3,{2,4}
+27: 2,1,4,3
+17: 4,{1,2,3}
+14: 3,1,4,2
+10: 1,2,4,3
+10: 2,3,4,1
+8: 2,4,{1,3}
+7: 3,2,4,1
+7: 4,1,2,3
+6: 2,4,1,3
+6: 1,4,2,3
+6: 3,4,{1,2}
+4: 4,2,1,3
+4: 4,2,{1,3}
+2: 4,3,{1,2}
+2: 1,4,{2,3}
+1: 3,4,2,1
+1: 3,4,1,2
+1: 2,4,3,1
+1: 4,1,3,2
+1: 1,3,4,2
+1: 3,{1,2},4
+1: 4,1,{2,3}
+1: {1,2},{3,4}

@@ -1,0 +1,68 @@
+# FILE NAME: 00049-00000177.soc
+# TITLE: 25
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000177.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 45
+# NUMBER VOTERS: 11
+# NUMBER UNIQUE ORDERS: 11
+# ALTERNATIVE NAME 1: 51_d-categorie-sportklasse
+# ALTERNATIVE NAME 2: 37_d-categorie-sportklasse
+# ALTERNATIVE NAME 3: 9_d-categorie-sportklasse
+# ALTERNATIVE NAME 4: 32_d-categorie-sportklasse
+# ALTERNATIVE NAME 5: 58_d-categorie-sportklasse
+# ALTERNATIVE NAME 6: 21_d-categorie-sportklasse
+# ALTERNATIVE NAME 7: 24_d-categorie-sportklasse
+# ALTERNATIVE NAME 8: 38_d-categorie-sportklasse
+# ALTERNATIVE NAME 9: 43_d-categorie-sportklasse
+# ALTERNATIVE NAME 10: 27_d-categorie-sportklasse
+# ALTERNATIVE NAME 11: 18_d-categorie-sportklasse
+# ALTERNATIVE NAME 12: 25_d-categorie-sportklasse
+# ALTERNATIVE NAME 13: 57_d-categorie-sportklasse
+# ALTERNATIVE NAME 14: 4_d-categorie-sportklasse
+# ALTERNATIVE NAME 15: 6_d-categorie-sportklasse
+# ALTERNATIVE NAME 16: 26_d-categorie-sportklasse
+# ALTERNATIVE NAME 17: 1_d-categorie-sportklasse
+# ALTERNATIVE NAME 18: 7_d-categorie-sportklasse
+# ALTERNATIVE NAME 19: 46_d-categorie-sportklasse
+# ALTERNATIVE NAME 20: 15_d-categorie-sportklasse
+# ALTERNATIVE NAME 21: 13_d-categorie-sportklasse
+# ALTERNATIVE NAME 22: 41_d-categorie-sportklasse
+# ALTERNATIVE NAME 23: 5_d-categorie-sportklasse
+# ALTERNATIVE NAME 24: 42_d-categorie-sportklasse
+# ALTERNATIVE NAME 25: 30_d-categorie-sportklasse
+# ALTERNATIVE NAME 26: 28_d-categorie-sportklasse
+# ALTERNATIVE NAME 27: 53_d-categorie-sportklasse
+# ALTERNATIVE NAME 28: 12_d-categorie-sportklasse
+# ALTERNATIVE NAME 29: 10_d-categorie-sportklasse
+# ALTERNATIVE NAME 30: 35_d-categorie-sportklasse
+# ALTERNATIVE NAME 31: 55_d-categorie-sportklasse
+# ALTERNATIVE NAME 32: 22_d-categorie-sportklasse
+# ALTERNATIVE NAME 33: 45_d-categorie-sportklasse
+# ALTERNATIVE NAME 34: 36_d-categorie-sportklasse
+# ALTERNATIVE NAME 35: 52_d-categorie-sportklasse
+# ALTERNATIVE NAME 36: 19_d-categorie-sportklasse
+# ALTERNATIVE NAME 37: 29_d-categorie-sportklasse
+# ALTERNATIVE NAME 38: 14_d-categorie-sportklasse
+# ALTERNATIVE NAME 39: 50_d-categorie-sportklasse
+# ALTERNATIVE NAME 40: 3_d-categorie-sportklasse
+# ALTERNATIVE NAME 41: 40_d-categorie-sportklasse
+# ALTERNATIVE NAME 42: 8_d-categorie-sportklasse
+# ALTERNATIVE NAME 43: 11_d-categorie-sportklasse
+# ALTERNATIVE NAME 44: 49_d-categorie-sportklasse
+# ALTERNATIVE NAME 45: 17_d-categorie-sportklasse
+1: 42,8,9,2,36,3,10,24,13,44,22,12,28,43,41,27,18,33,20,7,32,30,39,14,38,26,35,6,25,45,40,37,16,23,34,17,5,15,31,19,21,1,11,29,4
+1: 42,36,13,27,6,33,44,22,14,25,8,38,12,39,43,30,34,32,2,9,7,28,23,21,40,5,16,31,15,41,20,18,26,37,45,3,35,10,24,4,19,29,17,11,1
+1: 28,43,2,30,38,8,25,27,32,44,12,7,39,14,34,22,13,36,9,33,6,42,15,16,41,21,31,10,35,5,26,3,37,45,24,40,20,18,17,23,11,29,4,19,1
+1: 28,30,35,6,43,25,34,26,32,36,38,45,20,44,23,41,22,13,39,42,7,27,33,10,3,24,37,14,40,18,8,12,2,9,31,19,15,21,5,17,16,4,11,29,1
+1: 28,8,6,37,39,23,20,25,43,34,10,44,40,2,18,14,32,45,35,3,30,12,27,36,24,38,22,13,33,9,26,41,42,7,4,1,29,11,31,21,15,5,17,19,16
+1: 25,30,32,34,10,42,3,37,35,18,24,12,36,9,22,41,13,7,33,26,14,45,44,27,2,6,23,38,40,39,8,20,17,16,15,5,21,43,19,31,11,29,1,4,28
+1: 2,8,38,12,13,34,27,7,42,3,22,44,32,39,20,6,43,45,33,18,36,30,25,9,37,14,35,26,41,24,10,31,5,21,16,15,17,11,29,4,28,1,23,40,19
+1: 28,37,14,26,24,35,9,43,41,4,34,7,42,11,29,10,19,45,36,32,6,33,38,8,20,18,27,12,22,3,30,13,39,44,25,2,16,21,15,31,5,1,40,23,17
+1: 36,9,25,6,12,2,22,30,13,7,39,42,44,33,38,43,34,8,14,27,37,32,28,26,45,20,18,3,5,15,31,21,40,16,29,11,17,19,4,23,24,10,35,1,41
+1: 14,27,28,30,25,38,32,43,8,2,42,33,44,39,13,34,22,7,36,9,12,6,20,3,45,18,26,29,17,19,4,11,37,21,16,23,15,31,40,5,35,10,24,1,41
+1: 28,8,43,2,27,42,38,30,25,9,7,6,39,33,44,12,22,32,34,13,36,14,18,45,3,26,20,15,31,37,5,16,40,23,21,11,4,19,17,29,10,24,35,1,41
