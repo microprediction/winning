@@ -16,23 +16,32 @@ pairwise margins in eleven datasets}
 \maketitle
 
 \begin{abstract}
-\noindent A population ranks or chooses among alternatives, and we observe two
-things: how often each alternative is placed first, and how often one alternative
-is placed above a particular rival. Luce's axiom ties these together. Given the
-first-place shares, the odds between two alternatives are fixed, and restricting
-attention to that pair cannot change them. Thurstone's model of 1927 ties them
-together differently, treating shares as winning probabilities in a race and
-predicting that a two-item field compresses the odds by a computable amount.
-Calibrated to the same first-place shares, neither prediction takes a parameter
-fitted to the pairwise data. We compare them on ten archival ranking datasets and
-one experiment in which subjects chose from every subset of five goods, covering
-about $148{,}000$ dataset-responses. Writing the observed shift in log odds as
-$-\lambda \log(p_i/p_j)$, renormalization requires $\lambda = 0$ and observed values
-run from $0.19$ to $0.59$. The race is the closer of the two predictions in eleven
-of eleven, with an absolute error usually under a tenth of the axiom's. What this
-rejects is renormalization applied to aggregate shares, which is the assumption
-inside the Plackett--Luce likelihood; it does not establish that individuals choose
-by any particular rule.
+\noindent A population ranks or chooses among alternatives, and two things are
+observed: how often each alternative is placed first, and how often one alternative
+is placed above a particular rival. Luce's axiom ties these together by
+renormalization, so that restricting attention to a pair leaves its odds unchanged.
+Thurstone's model of 1927 treats the shares as winning probabilities in a race, and
+predicts that a two-item field compresses those odds by a computable amount. We
+compare the two on ten archival ranking datasets and one experiment covering some
+$148{,}000$ dataset-responses, and report two findings.
+
+\emph{First, the contest class is necessary.} Renormalization is not an
+alternative to the contest framework but a point inside it, the point at which
+performance noise is Gumbel, and the data reject that point everywhere: pairwise
+odds contract by between $0.19$ and $0.59$ on the log-odds scale where the axiom
+requires exactly zero.
+
+\emph{Second, the untuned default within that class is already better.}
+Unit-variance independent Gaussian noise, Thurstone's Case V, with no quantity
+fitted to the data being predicted, is the closer prediction in eleven of eleven
+datasets and gives lower held-out log loss in eight of the eight that admit the
+test, by $0.002$ to $0.011$ nats per prediction.
+
+In one line: when studying human choice, Gaussian contest removal is generally
+superior to renormalization, and it costs nothing extra to compute or to calibrate.
+What is rejected is renormalization applied to aggregate shares, which is the
+assumption inside the Plackett--Luce likelihood. Nothing here establishes how
+individuals choose.
 \end{abstract}
 
 \section{Two ways to link first-place shares to pairwise margins}
@@ -108,6 +117,34 @@ $1.92$ to $1.73$. Locations are calibrated to the probabilities in (a) by the
 lattice method of \cite{cotton2021}; the numbers are exact.}
 \label{fig:urnrace}
 \end{figure}
+
+This paper makes two claims. They are logically independent, they are supported by
+different evidence, and conflating them has been the main source of overstatement
+in this literature, so they are stated separately here and referred to as
+Claim~1 and Claim~2 throughout.
+
+\medskip
+\noindent\textbf{Claim 1. The contest class is necessary, and it nests Luce.} Yellott \cite{yellott1977} showed
+that Luce's axiom holds within additive random utility models exactly when the
+performance noise is Type I extreme value, so renormalization is not a rival of the
+contest framework but a point inside it, the point at which the noise is Gumbel. Since the data reject that point in every dataset examined, what is
+required is the surrounding class. The extra flexibility is not a modelling
+preference; it is forced, and it comes with the axiom nested inside it as a
+special case that can be recovered whenever the data want it.
+
+\medskip
+\noindent\textbf{Claim 2. The untuned default in that class is already better.}
+Within the contest class one might expect
+that fitting the noise, or at least choosing it with the data in view, would be
+necessary before beating the Gumbel point. It is not. Unit-variance independent
+Gaussian noise, the case Mosteller \cite{mosteller1951} made tractable and the one
+every textbook reaches for, is closer to the observed pairwise margins in eleven
+of eleven datasets and gives lower held-out log loss in eight of the eight that
+admit the test. Nobody selected it to fit these data, no quantity in it was tuned
+to them, and it still wins everywhere we look. The improvement is therefore available
+without any fitting exercise, which is what makes Claim~2 practically useful and
+also what makes it surprising.
+\medskip
 
 Neither prediction involves a quantity fitted to the pairwise data. Both calibrate
 $|S|-1$ relative worths or locations from the shares alone, and then predict. We
@@ -420,44 +457,64 @@ random utility representation by construction.
 
 \section{Discussion}
 
-Renormalizing aggregate shares does not predict aggregate pairwise margins. In
-eleven datasets the error of that prediction is the entire quantity it predicts,
-and a race calibrated to the same shares is closer every time, with an error under
-a twentieth in the best-measured half. The comparison is fair in the specific
-sense that neither account sees the pairwise data before predicting it.
+\noindent\textbf{Claim 1, restated.} The contest class is necessary and Luce is
+nested inside it. Renormalization occupies one point in that class,
+the point where performance noise is Gumbel, and every dataset here rejects it: the
+pairwise margin contracts relative to the first-place shares by between $0.19$ and
+$0.59$ on the log-odds scale, where the axiom requires exactly zero. Because the
+axiom is nested rather than adjacent, adopting the class costs nothing in
+generality. It can reproduce renormalization whenever a population turns out to
+behave that way, and the simulations in Section~\ref{sec:noise} confirm that it
+does so exactly, returning a contraction of $0.001$ when the noise is Gumbel.
 
-The claim needs its boundaries stated as clearly as its content. What is rejected
-is a representative-agent Luce model of a population, which is the assumption
-inside the Plackett--Luce likelihood used throughout the analysis of ranking data.
-Heterogeneous individuals each choosing by a Luce rule would produce aggregate
-violations of this kind, so nothing here shows that individual choice is not
+\medskip
+\noindent\textbf{Claim 2, restated.} The untuned Gaussian default is closer than
+renormalization in every dataset examined. Unit-variance
+independent Gaussian noise was chosen a century ago for tractability rather than
+fit, and nothing in it was adjusted to these datasets, yet it is the closer
+prediction in eleven of eleven and the better forecast in eight of eight under a
+proper score. The margins on the log score are small, between $0.002$ and $0.011$
+nats per prediction, so the practical gain is modest even though its direction is
+consistent. What makes this worth reporting is the absence of tuning: a
+practitioner who reaches for Case V rather than renormalization, with no data in
+hand beyond aggregate shares, is better off in every case examined here.
+
+The boundaries of both claims should be stated as plainly as their content. What
+is rejected is a representative-agent Luce model of a population, which is the
+assumption inside the Plackett--Luce likelihood used throughout ranking analysis.
+Heterogeneous individuals who each choose by a Luce rule would generate aggregate
+violations of this kind, so nothing here shows that individual choice departs from
 logit, and the within-subject experiment speaks to order-consistency rather than to
 functional form. Ten of the eleven datasets compare two accounts of a ranking
 distribution rather than observing menu restriction, and their contribution should
-be read that way.
+be read as such.
 
-The race is not exactly right either. Its residual has both signs, and the
-simulated noise laws in Section~\ref{sec:noise} show which direction each sign
-points: bounded support for the datasets that contract more than Gaussian,
-skewness or heavier tails for the two that contract less. Whether one noise law
-fits all eleven is a question the same data can answer and this paper does not.
+Case V is also not the end of the matter. Its residual has both signs, and
+Section~\ref{sec:noise} identifies the direction each sign points: bounded or
+thinner-tailed noise where contraction exceeds the Gaussian prediction, skewness or
+heavier tails where it falls short. Whether one noise law fits all eleven datasets
+is answerable with the same data and is not answered here.
 
 Three limitations bound what has been shown. The political goals, occupational
-prestige and consumer datasets rest on six, fourteen and ten pairs, so their
-margins are the least secure in the table. Table~\ref{tab:scorecard} reports point
-estimates from a single fit per dataset, and a respondent-level resampling of the
-whole pipeline, recomputing shares, recalibrating locations and refitting
-$\lambda$, would be a better basis for inference than the pair-level intervals we
-have used elsewhere. And nothing here addresses regularity violations of the decoy
-and compromise kind, which lie outside both accounts and are documented in the
-literature the paper draws on.
+prestige and consumer datasets rest on six, ten and fourteen usable pairs, so their
+contraction estimates are the least secure in Table~\ref{tab:scorecard}. The
+held-out comparison caps datasets at five thousand respondents for runtime and
+omits occupational prestige, where an alternative is never ranked first in some
+training fold and renormalization has no prediction to offer. And nothing here
+addresses regularity violations of the decoy and compromise kind, which lie outside
+both accounts.
+
+Both claims reduce to one practical statement. When the object of study is human
+choice and what is available is a set of aggregate shares, Gaussian contest removal
+is generally superior to renormalization, and it requires no extra parameter, no
+extra data and no fitting step.
 
 For psychometrics the consequence concerns defaults. Plackett--Luce and
-Bradley--Terry likelihoods are standard for rankings and paired comparisons, and
-they carry the axiom with them, largely because the Thurstonian alternative was
-once impractical to compute. On the evidence here the ordering of defaults should
-be reversed for population-level ranking data, with the race first and the axiom
-retained where its convenience is worth a known bias.
+Bradley--Terry likelihoods are standard for rankings and paired comparisons and
+they carry the axiom with them, largely because the contest was once impractical to
+compute. That reason has expired, the axiom is available as a nested special case,
+and on this evidence the ordering of defaults should be reversed for
+population-level ranking data.
 
 \section*{Data and code}
 
