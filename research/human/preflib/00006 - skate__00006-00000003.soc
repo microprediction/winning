@@ -1,0 +1,35 @@
+# FILE NAME: 00006-00000003.soc
+# TITLE: Euros Pairs Short Program
+# DESCRIPTION: 
+# DATA TYPE: soc
+# MODIFICATION TYPE: original
+# RELATES TO: 
+# RELATED FILES: 
+# PUBLICATION DATE: 2013-08-17
+# MODIFICATION DATE: 2022-09-16
+# NUMBER ALTERNATIVES: 14
+# NUMBER VOTERS: 9
+# NUMBER UNIQUE ORDERS: 9
+# ALTERNATIVE NAME 1: Berankova Dlabola
+# ALTERNATIVE NAME 2: Filonenko Marchenko
+# ALTERNATIVE NAME 3: Nekrassova Mintals
+# ALTERNATIVE NAME 4: Rodionova Anichenko
+# ALTERNATIVE NAME 5: Kazakova Dmitriev
+# ALTERNATIVE NAME 6: Asanaki Mckeever
+# ALTERNATIVE NAME 7: Abitbol Bernadis
+# ALTERNATIVE NAME 8: Zagorska Siudek
+# ALTERNATIVE NAME 9: Bestandigova Bestandig
+# ALTERNATIVE NAME 10: Berezhnaya Sikharulidze
+# ALTERNATIVE NAME 11: Obertas Palamarchuk
+# ALTERNATIVE NAME 12: Krasiltseva Chestnikh
+# ALTERNATIVE NAME 13: Schwarz Muller
+# ALTERNATIVE NAME 14: Poluliaschenko Seabrook
+1: 10,7,8,5,13,2,4,1,9,11,14,6,12,3
+1: 10,7,5,8,2,13,1,11,4,14,6,9,12,3
+1: 10,7,5,8,2,13,1,4,11,14,6,9,12,3
+1: 10,7,5,8,2,13,1,11,4,6,14,3,9,12
+1: 10,7,5,13,2,8,11,1,14,6,4,12,9,3
+1: 10,7,5,13,8,2,11,1,14,6,4,9,12,3
+1: 10,7,5,8,2,13,1,4,11,14,9,6,12,3
+1: 10,7,5,8,2,13,1,11,4,6,14,9,3,12
+1: 10,7,5,13,8,2,11,1,4,14,6,3,9,12
