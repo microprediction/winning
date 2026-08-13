@@ -36,16 +36,17 @@ the log-odds scale where the axiom requires exactly zero.
 Unit-variance independent Gaussian noise, Thurstone's Case V, with no quantity
 fitted to the data being predicted, is the closer prediction in eleven of eleven
 datasets and gives lower held-out log loss in eight of the eight that admit the
-test, by $0.002$ to $0.011$ nats per prediction.
+test. Against a saturated restriction map it captures a median $44$ per cent of all
+attainable improvement, where renormalization captures none by construction.
 
-In one line: when studying human choice, Gaussian contest removal is generally
-superior to renormalization, and it costs nothing extra to compute or to calibrate.
-What is rejected is renormalization applied to aggregate shares, which is the
-assumption inside the Plackett--Luce likelihood. Nothing here establishes how
-individuals choose.
+When studying human choice, Gaussian contest removal is generally superior to
+renormalization, and it costs nothing extra to compute or to calibrate. What is
+rejected is renormalization applied to aggregate shares, which is the assumption
+inside the Plackett--Luce likelihood. Nothing here establishes how individuals
+choose.
 \end{abstract}
 
-\section{Two ways to link first-place shares to pairwise margins}
+\section{Renormalization and the Gaussian contest}
 
 Suppose we know, for a population and a set $S$ of alternatives, the share $p_i$
 choosing or first-ranking each item $i$. Luce's axiom \cite{luce1959} assigns each
@@ -168,7 +169,7 @@ location vector inside an optimisation. A lattice method \cite{cotton2021} now
 returns the whole vector of winning probabilities for fields of $10^5$, which is
 what makes the inversion routine here.
 
-\section{What is observed, and at what level}
+\section{Level of observation}
 \label{sec:estimand}
 
 Ten of the eleven datasets are complete rankings. From a ranking we can read off
@@ -220,11 +221,29 @@ treated the empirical case as closed by 1977.
 Econometrics kept the logit and relaxed the independence around it, through nested
 logit, the generalized extreme value family, and mixed logit
 \cite{mcfaddentrain2000}, with a specification test from Hausman and McFadden
-\cite{hausman1984}. The Thurstonian option was written down as multinomial probit
-\cite{hausman1978} and reported as practical for only a few alternatives;
-simulation made it estimable later and it remains costly \cite{train2009}. Mixed
-logit is often described as retaining the logit's convenience, but its choice
-probabilities are integrals requiring numerical or simulated evaluation.
+\cite{hausman1984}. The Thurstonian option was written down early and for exactly
+this purpose: Hausman and Wise \cite{hausman1978} proposed multinomial probit as an
+estimator not constrained by the independence restriction, allowing both correlated
+performances and preferences that vary across people.
+
+Neither response settles the question, and for the same reason. Both are flexible
+devices, and flexibility is the wrong instrument here. Mixed logit approximates any
+random utility model arbitrarily well \cite{mcfaddentrain2000}, so a good mixed-logit
+fit is not evidence about the noise law inside the individual; the correlation,
+heteroskedasticity and taste-heterogeneity it might be absorbing are mutually
+confounded. Probit with a free covariance is in the same position, with the added
+difficulty that the covariance is identified only up to location and scale
+normalizations. A model fitted to the restriction discrepancy cannot be tested by
+it. Case V is the opposite kind of object: identity covariance, no free parameter,
+a point hypothesis that is able to lose.
+
+The computational history has an irony worth recording. Probit was reported as
+practical for only a few alternatives, and simulation later made it estimable at
+cost \cite{train2009}, because a general-covariance choice probability is a
+$(J-1)$-dimensional orthant integral. That objection never applied to the
+independent case, where Equation~\eqref{eq:winprob} is one-dimensional and cheap.
+The contest class was set aside on a computational ground that does not bind on its
+most restrictive and most useful member.
 
 Two results from this literature shape the present test. Yellott \cite{yellott1977}
 showed that within additive random utility models with independent and identically
@@ -243,7 +262,13 @@ to the same aggregate shares and ask which predicts the pairwise margin. The
 classic demonstrations establish that an effect exists, on two- and three-item
 menus built from constructed profiles where there is no larger field to calibrate
 from. The econometric alternatives fit a covariance or a mixing distribution, so
-their success leaves open how much the unadorned race would have achieved.
+their success leaves open how much the unadorned race would have achieved. And
+where the two have been compared directly, the comparison was scored against no
+benchmark: a paired comparison of pair comparisons \cite{rumelhart1965} concluded
+that the data conform somewhat more closely to Thurstone than to Luce but that the
+superiority is not definitive, which is the reading that has stood since. That
+verdict is a numerator without a denominator, of the kind
+Section~\ref{sec:ceiling} supplies.
 
 \section{Data}
 \label{sec:data}
@@ -320,15 +345,80 @@ of eight datasets.}
 \end{table}
 
 The race predicts held-out restricted choices better in every dataset, and every
-interval excludes zero. The margins are small in absolute terms, between $0.002$
-and $0.011$ nats per prediction against losses near one nat, so the honest summary
-is that the race is reliably better rather than dramatically better. Datasets are
-capped at five thousand respondents for runtime, and the occupational prestige
-rankings are omitted here because some alternatives are never ranked first in a
-training fold, leaving renormalization with a zero worth and no prediction to
-score.
+interval excludes zero. The margins are between $0.002$ and $0.011$ nats per
+prediction against losses near one nat. Read as effect sizes those numbers are
+negligible, and the next subsection argues that reading them as effect sizes is a
+mistake. Datasets are capped at five thousand respondents for runtime, and the
+occupational prestige rankings are omitted here because some alternatives are never
+ranked first in a training fold, leaving renormalization with a zero worth and no
+prediction to score.
 
-\subsection{The contraction that drives it}
+\subsection{The share of attainable improvement}
+\label{sec:ceiling}
+
+Both accounts receive the same first-place shares, and those shares carry nearly all
+of the predictive content of a restricted menu. What a restriction map contributes is
+a thin residual on top, and its size is a property of the measurement rather than of
+the two hypotheses. Two facts fix the scale. Renormalization and the race agree
+exactly whenever the shares within a subset are equal, by exchangeability, so every
+average over subsets includes cells where no discrepancy is possible. And the total
+available to any restriction map is bounded by what a perfect one would earn.
+
+That bound is estimable. Alongside the two accounts we score a saturated forecast:
+the training-fold frequency with which each item is top within each subset, one
+parameter per item per subset. It uses the restricted data directly and is not
+available to a practitioner, but it is a legitimate out-of-sample forecast, and at
+this sample size it stands for the best a restriction map could do. The interesting
+quantity is then the fraction of attainable improvement,
+\begin{equation}
+\frac{\mathcal{L}_{\text{renorm}} - \mathcal{L}_{\text{race}}}
+     {\mathcal{L}_{\text{renorm}} - \mathcal{L}_{\text{sat}}},
+\label{eq:share}
+\end{equation}
+which asks how far the race travels from renormalization toward that ceiling.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Dataset & Renorm. & Race & Saturated & Available & Captured \\
+\midrule
+Jester file 1 & $1.5287$ & $1.5267$ & $1.5246$ & $0.0042$ & $48\%$ \\
+Jester file 3 & $1.5189$ & $1.5165$ & $1.5138$ & $0.0051$ & $47\%$ \\
+Political goals & $0.8836$ & $0.8767$ & $0.8685$ & $0.0150$ & $46\%$ \\
+Jester file 2 & $1.5247$ & $1.5230$ & $1.5207$ & $0.0040$ & $44\%$ \\
+Sushi & $1.3727$ & $1.3614$ & $1.3465$ & $0.0262$ & $43\%$ \\
+Sports participation & $1.2594$ & $1.2538$ & $1.2401$ & $0.0193$ & $29\%$ \\
+GSS socialization & $0.7986$ & $0.7929$ & $0.7761$ & $0.0225$ & $25\%$ \\
+GSS job values & $0.8593$ & $0.8575$ & $0.8506$ & $0.0088$ & $20\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Held-out log loss per prediction for the two share-only accounts and for a
+saturated restriction map fitted on the training folds. Available is the total any
+restriction map could earn on top of the shares; Captured is the race's share of it
+under Equation~\eqref{eq:share}. Renormalization captures none of it by
+construction, since it is the unique map that adds no information.}
+\label{tab:ceiling}
+\end{table}
+
+The whole quantity in dispute is between $0.004$ and $0.026$ nats. A one-parameter
+race with nothing fitted to the restricted data captures a median $44$ per cent of
+it, and between a fifth and a half in every dataset. The absolute margin was never
+an effect size; it was a numerator over a small ceiling, and the ratio is what
+bears on the generating process. Reporting the numerator alone is what makes a
+structural difference look like a rounding error.
+
+The same accounting explains where the difference concentrates. Scoring ordered
+outcomes rather than winners, the race's advantage over the Harville
+renormalization \cite{harville1973} of an exacta price is $+0.0007$ to $+0.0299$
+nats, and of a trifecta price $+0.0031$ to $+0.0233$, the trifecta gain exceeding
+the exacta gain in six of eight datasets. Depth compounds because each place
+inherits the previous stage's error. Median relative mispricing of an exacta is one
+to three per cent, with the ninety-fifth percentile reaching $19$ per cent for the
+General Social Survey job task and $53$ per cent for the socialization task.
+
+\subsection{Contraction of the pairwise log odds}
 
 The direction of the difference is easier to see in a single summary statistic than
 in a log score. Let $p$ be the first-place shares and $q_{ij}$ the share placing
@@ -387,7 +477,7 @@ so the count describes the table rather than supporting a claim about independen
 replications. The held-out comparison in Table~\ref{tab:heldout} is the basis for
 inference here, and its intervals are respondent bootstraps within dataset.
 
-\section{What kind of noise would fit better}
+\section{Contraction under other noise laws}
 \label{sec:noise}
 
 Since the race under-predicts contraction more often than not, it is worth asking
@@ -427,7 +517,7 @@ Other explanations are not excluded by this exercise and are not distinguished b
 it, among them unequal variances across alternatives, correlated performances,
 heterogeneity across respondents, and utilities that depend on the set.
 
-\section{Choices from every subset}
+\section{Within-subject choice from all subsets}
 \label{sec:experiment}
 
 The consumer-products experiment observes what the ranking datasets cannot. Its
@@ -475,11 +565,14 @@ renormalization in every dataset examined. Unit-variance
 independent Gaussian noise was chosen a century ago for tractability rather than
 fit, and nothing in it was adjusted to these datasets, yet it is the closer
 prediction in eleven of eleven and the better forecast in eight of eight under a
-proper score. The margins on the log score are small, between $0.002$ and $0.011$
-nats per prediction, so the practical gain is modest even though its direction is
-consistent. What makes this worth reporting is the absence of tuning: a
-practitioner who reaches for Case V rather than renormalization, with no data in
-hand beyond aggregate shares, is better off in every case examined here.
+proper score. The right measure of how much better is not the raw margin of $0.002$
+to $0.011$ nats but the fraction of what any restriction map could earn, since the
+two accounts are constrained to agree at symmetric fields and the total on offer is
+between $0.004$ and $0.026$ nats. By that measure the race takes a median $44$ per
+cent, and a fifth to a half in every dataset, against nothing for renormalization.
+What makes this worth reporting is the absence of tuning: a practitioner who reaches
+for Case V rather than renormalization, with no data in hand beyond aggregate
+shares, is better off in every case examined here.
 
 The boundaries of both claims should be stated as plainly as their content. What
 is rejected is a representative-agent Luce model of a population, which is the
@@ -576,9 +669,20 @@ Ken Goldberg, Theresa Roeder, Dhruv Gupta, and Chris Perkins.
 Eigentaste: a constant time collaborative filtering algorithm.
 \emph{Information Retrieval}, 4(2):133--151, 2001.
 
+\bibitem{rumelhart1965}
+C.~J. Burke and Joseph L. Zinnes.
+A paired comparison of pair comparisons.
+\emph{Journal of Mathematical Psychology}, 2, 1965.
+
+\bibitem{harville1973}
+David A. Harville.
+Assigning probabilities to the outcomes of multi-entry competitions.
+\emph{Journal of the American Statistical Association}, 68(342):312--316, 1973.
+
 \bibitem{hausman1978}
 Jerry A. Hausman and David A. Wise.
-A conditional probit model for qualitative choice.
+A conditional probit model for qualitative choice: discrete decisions recognizing
+interdependence and heterogeneous preferences.
 \emph{Econometrica}, 46(2):403--426, 1978.
 
 \bibitem{huber1982}
