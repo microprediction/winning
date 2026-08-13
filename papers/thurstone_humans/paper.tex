@@ -16,34 +16,18 @@ axiom allows, and an untuned Gaussian race predicts them better}
 \maketitle
 
 \begin{abstract}
-\noindent A population ranks or chooses among alternatives, and two things are
-observed: how often each alternative is placed first, and how often one alternative
-is placed above a particular rival. Luce's axiom ties these together by
-renormalization, so that restricting attention to a pair leaves its odds unchanged.
-Thurstone's model of 1927 treats the shares as winning probabilities in a race, and
-predicts that a two-item field compresses those odds by a computable amount. We
-compare the two on ten archival ranking datasets and one experiment covering some
-$148{,}000$ dataset-responses, and report two findings.
-
-\emph{First, the nesting class is empirically necessary.} That the contest
-framework nests renormalization is a theorem, not a finding: by Yellott's result the
-axiom holds exactly where performance noise is Gumbel. What the data add is that
-this nested point is rejected everywhere, so the surrounding class is required
-rather than merely available. Pairwise odds contract by between $0.19$ and $0.59$ on
-the log-odds scale where the axiom requires exactly zero.
-
-\emph{Second, the untuned default within that class is already better.}
-Unit-variance independent Gaussian noise, Thurstone's Case V, with no quantity
-fitted to the data being predicted, is the closer prediction in eleven of eleven
-datasets and gives lower held-out log loss in eight of the eight that admit the
-test. Against a saturated restriction map it captures a median $44$ per cent of all
-attainable improvement, where renormalization captures none by construction.
-
-When studying human choice, Gaussian contest removal is generally superior to
-renormalization, and it costs nothing extra to compute or to calibrate. What is
-rejected is renormalization applied to aggregate shares, which is the assumption
-inside the Plackett--Luce likelihood. Nothing here establishes how individuals
-choose.
+\noindent First-place shares and pairwise margins are linked by renormalization
+under Luce's axiom, which leaves pairwise odds unchanged, and by Thurstone's 1927
+race, which compresses them by a computable amount. Across ten archival ranking
+datasets and one menu-choice experiment, some $148{,}000$ responses, the odds
+contract by $0.19$ to $0.59$ on the log-odds scale where the axiom requires zero.
+Yellott's theorem makes the axiom one point inside the contest class, so the class
+is necessary rather than optional. Its untuned member, unit-variance independent
+Gaussian noise, is the closer prediction in eleven datasets of eleven and scores
+lower held-out log loss in eight of eight, capturing a median $44$ per cent of what
+a saturated restriction map could earn. What is rejected is renormalization of
+aggregate shares, the assumption inside the Plackett--Luce likelihood; individual
+choice is not addressed.
 \end{abstract}
 
 \section{Renormalization and the Gaussian contest}
