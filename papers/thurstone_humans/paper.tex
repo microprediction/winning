@@ -7,8 +7,8 @@
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
 \title{\textbf{Thurstone is the Model of Choice}\\[4pt]
-\large\normalfont Renormalization fails the link between first-place shares and\\
-pairwise margins in eleven datasets}
+\large\normalfont In eleven human datasets, pairwise odds are narrower than Luce's\\
+axiom allows, and an untuned Gaussian race predicts them better}
 \author{Peter Cotton}
 \date{Provisional draft, 15 August 2026}
 
@@ -120,33 +120,20 @@ lattice method of \cite{cotton2021}; the numbers are exact.}
 \label{fig:urnrace}
 \end{figure}
 
-This paper makes two claims. They are logically independent, they are supported by
-different evidence, and conflating them has been the main source of overstatement
-in this literature, so they are stated separately here and referred to as
-Claim~1 and Claim~2 throughout.
-
-\medskip
-\noindent\textbf{Claim 1. The nesting class is empirically necessary.} Yellott \cite{yellott1977} showed
+Two claims follow, kept separate because they are logically independent and rest on
+different evidence, and because conflating them has been the main source of
+overstatement in this literature. Claim~1, that the nesting class is empirically
+necessary, is a statement about the Gumbel point: Yellott \cite{yellott1977} showed
 that Luce's axiom holds within additive random utility models exactly when the
 performance noise is Type I extreme value, so renormalization is not a rival of the
-contest framework but a point inside it, the point at which the noise is Gumbel. Since the data reject that point in every dataset examined, what is
-required is the surrounding class. The extra flexibility is not a modelling
-preference; it is forced, and it comes with the axiom nested inside it as a
-special case that can be recovered whenever the data want it.
-
-\medskip
-\noindent\textbf{Claim 2. The untuned default in that class is already better.}
-Within the contest class one might expect
-that fitting the noise, or at least choosing it with the data in view, would be
-necessary before beating the Gumbel point. It is not. Unit-variance independent
-Gaussian noise, the case Mosteller \cite{mosteller1951} made tractable and the one
-every textbook reaches for, is closer to the observed pairwise margins in eleven
-of eleven datasets and gives lower held-out log loss in eight of the eight that
-admit the test. Nobody selected it to fit these data, no quantity in it was tuned
-to them, and it still wins everywhere we look. The improvement is therefore available
-without any fitting exercise, which is what makes Claim~2 practically useful and
-also what makes it surprising.
-\medskip
+contest framework but a point inside it, and the surrounding class is required only
+because the data reject that point. The evidence is
+Section~\ref{sec:results}. Claim~2, that the untuned default in the class is already
+better, is a statement about Case V, the case Mosteller \cite{mosteller1951} made
+tractable and the one every textbook reaches for. It could have failed while Claim~1
+held, since nothing obliges the closest member of a class to be the one chosen a
+century ago for its tractability. The evidence is
+Sections~\ref{sec:results} and \ref{sec:ceiling}.
 
 Neither prediction involves a quantity fitted to the pairwise data. Both calibrate
 $|S|-1$ relative worths or locations from the shares alone, and then predict. We
@@ -520,8 +507,8 @@ heterogeneity across respondents, and utilities that depend on the set.
 \section{Within-subject choice from all subsets}
 \label{sec:experiment}
 
-The consumer-products experiment observes what the ranking datasets cannot. Its
-373 subjects chose from every subset of five goods, one subject at a time, so a
+The consumer-products experiment observes what the ranking datasets cannot. Its 373
+subjects faced all thirty-one menus, one subject at a time, so a
 reversal is observable rather than excluded by construction, and the choices are
 individual rather than aggregate.
 
@@ -548,35 +535,22 @@ random utility representation by construction.
 
 \section{Discussion}
 
-\noindent\textbf{Claim 1, restated.} The nesting class is empirically necessary.
-The nesting is Yellott's theorem; what the data establish is that the nested point
-cannot be retained. Renormalization occupies one point in that class,
-the point where performance noise is Gumbel, and every dataset here rejects it: the
-pairwise margin contracts relative to the first-place shares by between $0.19$ and
-$0.59$ on the log-odds scale, where the axiom requires exactly zero. Because the
-axiom is nested rather than adjacent, adopting the class costs nothing in
-generality. It can reproduce renormalization whenever a population turns out to
-behave that way, and the simulations in Section~\ref{sec:noise} confirm that it
-does so exactly, returning a contraction of $0.001$ when the noise is Gumbel.
+Adopting the class costs nothing in generality, which is the practical content of
+Claim~1. Because the axiom is nested rather than adjacent, a contest model
+reproduces renormalization whenever a population behaves that way, and
+Section~\ref{sec:noise} confirms it does so exactly, returning a contraction of
+$0.001$ under Gumbel noise. There is no scenario in which choosing the class costs
+an analyst anything except the integral.
 
-\medskip
-\noindent\textbf{Claim 2, restated.} The untuned Gaussian default is closer than
-renormalization in every dataset examined. Unit-variance
-independent Gaussian noise was chosen a century ago for tractability rather than
-fit, and nothing in it was adjusted to these datasets, yet it is the closer
-prediction in eleven of eleven and the better forecast in eight of eight under a
-proper score. The right measure of how much better is not the raw margin of $0.002$
-to $0.011$ nats but the fraction of what any restriction map could earn, since the
-two accounts are constrained to agree at symmetric fields and the total on offer is
-between $0.004$ and $0.026$ nats. By that measure the race takes a median $44$ per
-cent, and a fifth to a half in every dataset, against nothing for renormalization.
-What makes this worth reporting is the absence of tuning: a practitioner who reaches
-for Case V rather than renormalization, with no data in hand beyond aggregate
-shares, is better off in every case examined here.
+Claim~2 carries the stronger practical consequence, and it survives the objection
+that its margins are slight. Case V's advantage over renormalization is a fifth to a
+half of everything a restriction map could deliver, because the two accounts are
+constrained to agree at symmetric fields and the total on offer is small for that
+reason rather than because the two accounts are close. An analyst holding nothing
+but aggregate shares gets that fraction for free.
 
 The boundaries of both claims should be stated as plainly as their content. What
-is rejected is a representative-agent Luce model of a population, which is the
-assumption inside the Plackett--Luce likelihood used throughout ranking analysis.
+is rejected is a representative-agent Luce model of a population.
 Heterogeneous individuals who each choose by a Luce rule would generate aggregate
 violations of this kind, so nothing here shows that individual choice departs from
 logit, and the within-subject experiment speaks to order-consistency rather than to
@@ -590,19 +564,11 @@ thinner-tailed noise where contraction exceeds the Gaussian prediction, skewness
 heavier tails where it falls short. Whether one noise law fits all eleven datasets
 is answerable with the same data and is not answered here.
 
-Three limitations bound what has been shown. The political goals, occupational
+Two limitations bound what has been shown. The political goals, occupational
 prestige and consumer datasets rest on six, ten and fourteen usable pairs, so their
-contraction estimates are the least secure in Table~\ref{tab:scorecard}. The
-held-out comparison caps datasets at five thousand respondents for runtime and
-omits occupational prestige, where an alternative is never ranked first in some
-training fold and renormalization has no prediction to offer. And nothing here
-addresses regularity violations of the decoy and compromise kind, which lie outside
-both accounts.
-
-Both claims reduce to one practical statement. When the object of study is human
-choice and what is available is a set of aggregate shares, Gaussian contest removal
-is generally superior to renormalization, and it requires no extra parameter, no
-extra data and no fitting step.
+contraction estimates are the least secure in Table~\ref{tab:scorecard}. And nothing
+here addresses regularity violations of the decoy and compromise kind, which lie
+outside both accounts.
 
 For psychometrics the consequence concerns defaults. Plackett--Luce and
 Bradley--Terry likelihoods are standard for rankings and paired comparisons and
