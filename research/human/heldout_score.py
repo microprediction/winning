@@ -31,8 +31,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "polysemy_pilot"))
 from exact_analyze import calibrate_np, win_probs_np
 
-SCRATCH = Path("/private/tmp/claude-501/-Users-petercotton-github-winning/"
-               "5cf26ce2-05a5-4c06-9b30-f1b6a26f26c4/scratchpad")
+DATA = HERE / "data"     # committed inputs; nothing is read from a temp directory
 FLOOR = 1e-6
 MAX_RESP = 5000
 
@@ -46,29 +45,23 @@ def load_all():
     out = {}
     try:
         import pandas as pd
-        gauge = [5, 7, 8, 13, 15, 16, 17, 18, 19, 20]
         for k in (1, 2, 3):
-            f = sorted(SCRATCH.glob(f"**/jester-data-{k}.xls"))
-            if not f:
+            f = DATA / f"jester_gauge_{k}.csv.gz"
+            if not f.exists():
                 continue
-            d = pd.read_excel(f[0], header=None)
-            R = d.iloc[:, 1:].to_numpy(dtype=float)
-            R[R == 99] = np.nan
-            G = R[:, [g - 1 for g in gauge]]
-            G = G[~np.isnan(G).any(axis=1)]
+            G = pd.read_csv(f, header=None).to_numpy(dtype=float)
             out[f"Jester file {k}"] = ranks_from_ratings(G)
     except Exception as e:
         print(f"  jester skipped: {str(e)[:70]}", file=sys.stderr)
     try:
         import pandas as pd
-        f = sorted(SCRATCH.glob("**/gss7224_r3a.dta"))
-        if f:
+        f = DATA / "gss_rankcards.csv.gz"
+        if f.exists():
             cols = {"GSS socialization": ["obey", "popular", "thnkself",
                                           "workhard", "helpoth"],
                     "GSS job values": ["jobinc", "jobsec", "jobhour",
                                        "jobpromo", "jobmeans"]}
-            d = pd.read_stata(f[0], columns=sum(cols.values(), []),
-                              convert_categoricals=False)
+            d = pd.read_csv(f)
             for name, cs in cols.items():
                 M = d[cs].to_numpy(dtype=float)
                 keep = np.array([(not np.isnan(r).any())
@@ -92,14 +85,11 @@ def load_all():
         out["Sushi"] = np.array(rows)
     try:
         import pyreadr
-        cran = SCRATCH / "cran"
         for name, rel, conv in [("Occupational prestige",
-                                 "PLMIX/data/d_occup.RData", "order"),
-                                ("Political goals",
-                                 "ConsRank/data/German.rda", "rank"),
-                                ("Sports participation",
-                                 "ConsRank/data/sports.rda", "rank")]:
-            p = cran / rel
+                                 "d_occup.RData", "order"),
+                                ("Political goals", "German.rda", "rank"),
+                                ("Sports participation", "sports.rda", "rank")]:
+            p = DATA / rel
             if not p.exists():
                 continue
             d = pyreadr.read_r(str(p))

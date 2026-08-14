@@ -100,7 +100,9 @@ a performance and the lowest wins. In (b) $A$ is removed. The urn rescales, so
 every surviving odds ratio is unchanged by construction. The race is re-run without
 $A$ and the vacated mass is redistributed unevenly, moving the $B\!:\!C$ odds from
 $1.92$ to $1.73$. Locations are calibrated to the probabilities in (a) by the
-lattice method of \cite{cotton2021}; the numbers are exact.}
+lattice method of \cite{cotton2021}; locations are recovered and the winning
+probabilities evaluated numerically, so the figures are exact to the precision
+shown.}
 \label{fig:urnrace}
 \end{figure}
 
@@ -286,9 +288,16 @@ themselves, and the race's locations come from inverting
 Equation~\eqref{eq:winprob}. Each account then yields a predicted distribution on
 every subset of at least two items. For each held-out respondent and each subset,
 the outcome is that respondent's highest-ranked member of the subset, and we
-accumulate log loss. Log loss is a proper scoring rule, so neither account can gain
-by distorting a forecast that is already right, and no pairwise or subset outcome
-enters either calibration.
+accumulate log loss. No pairwise or subset outcome enters either calibration.
+
+Properness alone does not license reading a positive gain as evidence against the
+axiom. A proper score guarantees that the true probability vector minimises expected
+loss, not that a plug-in estimate of it beats a biased transformation of the same
+estimate. The shares handed to both accounts are estimated from a training fold, and
+the race contracts them, which is shrinkage toward equal subset probabilities.
+Shrinkage can lower held-out loss whether or not the population is non-Luce.
+Section~\ref{sec:null} therefore replaces the comparison with zero by a comparison
+with the gain obtained when Luce is true by construction.
 
 \begin{table}[ht]
 \centering
@@ -336,8 +345,8 @@ average over subsets includes cells where no discrepancy is possible. And the to
 available to any restriction map is bounded by what a perfect one would earn.
 
 That bound is estimable. Alongside the two accounts we score a saturated forecast:
-the training-fold frequency with which each item is top within each subset, one
-parameter per item per subset. It uses the restricted data directly and is not
+the training-fold frequency with which each item is top within each subset, which is
+$|T|-1$ free probabilities for a subset $T$. It uses the restricted data directly and is not
 available to a practitioner, but it is a legitimate out-of-sample forecast, and at
 this sample size it stands for the best a restriction map could do. The interesting
 quantity is then the fraction of attainable improvement,
@@ -373,9 +382,10 @@ construction, since it is the unique map that adds no information.}
 \label{tab:ceiling}
 \end{table}
 
-The whole quantity in dispute is between $0.004$ and $0.026$ nats. A one-parameter
-race with nothing fitted to the restricted data captures a median $44$ per cent of
-it, and between a fifth and a half in every dataset. The absolute margin was never
+The whole quantity in dispute is between $0.004$ and $0.026$ nats. A
+share-calibrated race, carrying $K-1$ locations recovered from the $K-1$ independent
+full-field shares and nothing fitted to the restricted data, captures a median $44$
+per cent of it, and between a fifth and a half in every dataset. The absolute margin was never
 an effect size; it was a numerator over a small ceiling, and the ratio is what
 bears on the generating process. Reporting the numerator alone is what makes a
 structural difference look like a rounding error.
@@ -398,7 +408,9 @@ $i$ above $j$. The shift
 \delta_{ij} = \log \frac{q_{ij}}{1 - q_{ij}} - \log \frac{p_i}{p_j}
 \label{eq:delta}
 \end{equation}
-is zero for every pair under renormalization, and negative under the race. Fitting
+is zero for every pair under renormalization, and negative under the race. The sign
+is a statement about oriented pairs: within each unordered pair we label $i$ the
+higher-share alternative, since swapping the labels reverses $\delta$. Fitting
 \begin{equation}
 \hat\lambda = \frac{\sum_{i<j} \log(p_i/p_j)\,\bigl(-\delta_{ij}\bigr)}
                    {\sum_{i<j} \bigl[\log(p_i/p_j)\bigr]^2}
@@ -435,7 +447,8 @@ dataset-responses; Section~\ref{sec:data} discusses unique respondents.}
 \label{tab:scorecard}
 \end{table}
 
-Renormalization is wrong by the whole of its prediction everywhere. The race's
+Observed contraction is positive in all eleven rows, where representative-agent
+renormalization predicts zero. The race's
 error is under $0.05$ in seven rows. Its residual has both signs: it under-predicts
 contraction in nine datasets and over-predicts in the two General Social Survey
 tasks, where observed values of $0.227$ and $0.276$ fall below predictions of
