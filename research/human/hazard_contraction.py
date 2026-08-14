@@ -58,7 +58,7 @@ def laws():
     a = 4.0
     d = a / np.sqrt(1 + a * a)
     sd = np.sqrt(1 - 2 * d * d / np.pi)
-    out["skew-normal(4)"] = _Shift(stats.skewnorm(a), shift=-d * np.sqrt(2 / np.pi),
+    out["skew-normal(4)"] = _Shift(stats.skewnorm(a), shift=d * np.sqrt(2 / np.pi),
                                    scale=1 / sd)
     return out
 
@@ -84,7 +84,7 @@ class _Shift:
         return self.rv.pdf(np.asarray(x) / self.scale + self.shift) / self.scale
 
 
-def win_prob(law, a, i, lo=-40, hi=40, n=40001):
+def win_prob(law, a, i, lo=-30, hi=30, n=6001):
     """P(item i has the lowest draw) with locations a."""
     x = np.linspace(lo, hi, n)
     f = law.pdf(x - a[i])
@@ -95,7 +95,7 @@ def win_prob(law, a, i, lo=-40, hi=40, n=40001):
     return float(np.trapezoid(f * surv, x))
 
 
-def calibrate(law, target, lo=-40, hi=40):
+def calibrate(law, target, lo=-30, hi=30):
     """Locations reproducing the target winning probabilities, a_0 fixed at 0."""
     K = len(target)
 
@@ -112,7 +112,7 @@ def calibrate(law, target, lo=-40, hi=40):
     return a, w / w.sum()
 
 
-def pairwise(law, ai, aj, lo=-40, hi=40, n=40001):
+def pairwise(law, ai, aj, lo=-30, hi=30, n=6001):
     """P(X_i < X_j) for a two-item field."""
     x = np.linspace(lo, hi, n)
     return float(np.trapezoid(law.pdf(x - ai) * (1.0 - law.cdf(x - aj)), x))
@@ -136,7 +136,7 @@ def lam(law, target):
 
 
 def log_hazard_curvature():
-    print("1. curvature of log hazard, lowest-draw-wins orientation")
+    print("1. curvature of log hazard, lowest-draw-wins orientation", flush=True)
     print("   negative means concave, which the proposition needs\n")
     x = np.linspace(-3, 3, 25)
     for name, law in laws().items():
@@ -153,7 +153,7 @@ def log_hazard_curvature():
         eps = 1e-4
         f = lambda t: np.log(stats.norm.pdf(t) / stats.norm.sf(t))
         d2 = (f(xv + eps) - 2 * f(xv) + f(xv - eps)) / eps ** 2
-        m1 = integrate.quad(lambda t: t * stats.norm.pdf(t), xv, 40)[0] / stats.norm.sf(xv)
+        m1 = integrate.quad(lambda t: t * stats.norm.pdf(t), xv, 40.0)[0] / stats.norm.sf(xv)
         m2 = integrate.quad(lambda t: t * t * stats.norm.pdf(t), xv, 40)[0] / stats.norm.sf(xv)
         var = m2 - m1 * m1
         print(f"   x={xv:+.1f}   (log h)'' = {d2:+.6f}   -Var(Z|Z>x) = {-var:+.6f}")
@@ -172,7 +172,7 @@ def tail_table():
                 row.append(lam(law, target))
             except Exception:
                 row.append(float("nan"))
-        print(f"   {fname:<18}" + "".join(f"{v:>16.4f}" for v in row))
+        print(f"   {fname:<18}" + "".join(f"{v:>16.4f}" for v in row), flush=True)
     print("\n   if the Gaussian column is not always below the t columns, the")
     print("   draft's tail ordering is configuration-specific and must go.")
 

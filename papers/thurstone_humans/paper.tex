@@ -7,8 +7,8 @@
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
 \title{\textbf{Thurstone is the Model of Choice}\\[4pt]
-\large\normalfont Across eleven human datasets, a population's pairwise odds are\\
-narrower than Luce's axiom allows, and an untuned Gaussian race predicts them better}
+\large\normalfont Across eleven human datasets, a population's pairwise odds are less\\
+extreme than Luce renormalization predicts, and a Gaussian race predicts them better}
 \author{Peter Cotton}
 \date{Provisional draft, 15 August 2026}
 
@@ -64,14 +64,14 @@ disagree about the pairwise margin, and they disagree by a definite amount.
 \begin{tikzpicture}[scale=1.0]
 \begin{scope}
   \draw[->] (-3.4,0) -- (3.5,0) node[right] {\small performance};
-  \foreach \mu/\lab/\sh in {-0.80/A/0.55, -0.16/B/0.40, 0.29/C/0.28, 0.67/D/0.18} {
+  \foreach \mu/\lab/\sh in {0.80/A/0.55, 0.16/B/0.40, -0.29/C/0.28, -0.67/D/0.18} {
     \draw[thick, fill=black, fill opacity=\sh, draw opacity=0.9]
       plot[domain=-3.2:3.3, samples=90, smooth]
       (\x, {1.5*exp(-(\x-\mu)*(\x-\mu)/0.5)}) -- (3.3,0) -- (-3.2,0) -- cycle;
     \node[font=\scriptsize] at (\mu, 1.72) {\lab};
   }
   \node[font=\scriptsize, anchor=west] at (-3.4,-0.45)
-    {lowest draw wins: $P(A)=.55$, $P(B)=.25$, $P(C)=.13$, $P(D)=.07$};
+    {highest draw wins: $P(A)=.55$, $P(B)=.25$, $P(C)=.13$, $P(D)=.07$};
   \node[font=\small\bfseries] at (0,2.35) {(a) a race};
 \end{scope}
 \begin{scope}[xshift=8.6cm]
@@ -96,7 +96,7 @@ disagree about the pairwise margin, and they disagree by a definite amount.
 \end{scope}
 \end{tikzpicture}
 \caption{The two contenders disagree only under restriction. In (a) each item draws
-a performance and the lowest wins. In (b) $A$ is removed. The urn rescales, so
+a performance and the highest wins. In (b) $A$ is removed. The urn rescales, so
 every surviving odds ratio is unchanged by construction. The race is re-run without
 $A$ and the vacated mass is redistributed unevenly, moving the $B\!:\!C$ odds from
 $1.92$ to $1.73$. Locations are calibrated to the probabilities in (a) by the
@@ -130,10 +130,19 @@ Recovering locations from shares under Equation~\eqref{eq:luce}'s competitor
 requires an integral. With independent equal-variance normals it is
 one-dimensional for any number of alternatives,
 \begin{equation}
-p_i = \int \phi(x - a_i) \prod_{k \neq i} \bigl[1 - \Phi(x - a_k)\bigr]\, dx,
+p_i = \int \phi(x - a_i) \prod_{k \neq i} \Phi(x - a_k)\, dx,
 \label{eq:winprob}
 \end{equation}
-since conditioning on $X_i = x$ makes the other draws independent events. What is
+since conditioning on $X_i = x$ makes the other draws independent events. Once the
+locations are calibrated, the competing pairwise prediction is a single normal
+evaluation,
+\begin{equation}
+P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right),
+\label{eq:pair}
+\end{equation}
+and locations are identified only up to a common translation, which we fix by
+$\sum_i a_i = 0$; the map from locations to strictly positive winning probabilities is
+one-to-one onto the interior of the simplex. What is
 genuinely high-dimensional is the correlated case, multinomial probit, and the
 likelihood of a complete ranking rather than of a top choice. The practical
 obstacle for most of the twentieth century was that Equation~\eqref{eq:winprob}
@@ -272,10 +281,13 @@ parties. Preferential ballots fail for a different reason. Voters rank a few
 candidates and leave the rest unmarked, which the files record as a tie at the
 bottom, and reading that tie as indifference gives $\lambda = 0.68$ across
 fifty-three files where counting only pairs a voter actually ordered gives $0.15$.
-The instrument also fails to replicate: twelve elections of one body, with the same
-five-candidate format and about ten thousand ballots each, give values spread from
-$0.36$ to $2.56$, far wider than sampling error at those sample sizes. Ballots are
-excluded.
+Raw $\lambda$ also varies widely across nominally identical elections: twelve
+contests for one body, all five-candidate, each with about ten thousand ballots, give
+values from $0.36$ to $2.56$, far wider than sampling error at those sample sizes.
+That spread is suggestive rather than conclusive, since $\lambda$ under a fixed noise
+law depends on the share geometry, and we have not compared each election with its own
+model-predicted value. The tie-coding problem is sufficient on its own, and ballots
+are excluded on that ground.
 
 \section{Held-out predictive comparison}
 \label{sec:results}
@@ -390,14 +402,17 @@ an effect size; it was a numerator over a small ceiling, and the ratio is what
 bears on the generating process. Reporting the numerator alone is what makes a
 structural difference look like a rounding error.
 
-The same accounting explains where the difference concentrates. Scoring ordered
-outcomes rather than winners, the race's advantage over the Harville
-renormalization \cite{harville1973} of an exacta price is $+0.0007$ to $+0.0299$
-nats, and of a trifecta price $+0.0031$ to $+0.0233$, the trifecta gain exceeding
-the exacta gain in six of eight datasets. Depth compounds because each place
-inherits the previous stage's error. Median relative mispricing of an exacta is one
-to three per cent, with the ninety-fifth percentile reaching $19$ per cent for the
-General Social Survey job task and $53$ per cent for the socialization task.
+Ordered outcomes are a natural place to look for a larger discrepancy, since each
+place would inherit the previous stage's error, and we report that we cannot yet do
+it. Pricing an exacta by removing the winner and re-running the race is a sequential
+rule of Harville's shape, and it is a coherent distribution over orderings, but it is
+not the race's own ordering law: for Gumbel noise sequential renormalization is exact,
+which is why Harville coincides with Plackett--Luce, and that coincidence is a
+property of the Gumbel rather than of sequential rules. Against the ordering law of
+the calibrated Gaussian race, obtained by simulation, the removal product misprices
+individual exacta and trifecta cells by up to a factor of $3.4$ in a lopsided
+four-item field. That error exceeds the discrepancy between the two accounts it was
+meant to measure, so ordered-outcome pricing waits on the exact ordering law.
 
 \subsection{Contraction of the pairwise log odds}
 
@@ -514,7 +529,8 @@ Reversals are uncommon. Of $26{,}099$ comparisons in which an item chosen from a
 larger menu was still available in a smaller one, $829$ switched away from it, a
 rate of $3.2$ per cent; among subjects required to choose rather than permitted to
 defer, and so free of any coding decision, the rate is $3.9$ per cent. The
-subject-level distribution is uneven. Of $367$ subjects, $235$ never reverse, the
+subject-level distribution is uneven. Six of the $373$ record no usable choice, so
+$367$ enter this count. Of those, $235$ never reverse, the
 median subject reverses never, the ninetieth percentile reverses eight times, and
 the most violating tenth of subjects account for $58$ per cent of all reversals. So
 most individuals are order-consistent across menus and a minority are markedly
