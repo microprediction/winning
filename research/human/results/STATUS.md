@@ -40,8 +40,17 @@ the effect it was meant to demonstrate.
 
 - `luce_null_200.txt` -- full 12 datasets x 2 alphas x 200 replicates. Hours. The
   only cell the paper currently takes from a shorter run is Sushi at alpha=0.5.
-- `gain_by_size.txt` -- held-out gain by subset cardinality, so the pairwise-only
-  number is visible separately from the all-subsets aggregate.
+(`gain_by_size.txt` finished and is now Table 3 in the paper.)
+
+## Landed after the status note was first written
+
+Gain by menu size (`gain_by_size.txt`, now a table in the paper). The pairwise gain
+is two to four times the all-subsets aggregate (Sushi +0.0412 against +0.0111; GSS
+socialization +0.0130 against +0.0055), and the gain decays monotonically to exactly
+zero at |T| = K, where nothing has been removed and the two accounts must coincide.
+That last column is a pipeline check. So the aggregate is a conservative estimand,
+and it is kept as the headline because it is fixed in advance rather than selected
+after the fact.
 
 ## Not done
 

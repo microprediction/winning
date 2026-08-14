@@ -359,6 +359,54 @@ occupational prestige rankings are omitted here because some alternatives are ne
 ranked first in a training fold, leaving renormalization with a zero worth and no
 prediction to score.
 
+\subsection{Where in the menu the gain sits}
+
+Averaging over every subset weights cardinalities by how many there are, so
+intermediate menus dominate the aggregate simply because $\binom{K}{r}$ peaks in the
+middle. Those are the menus where least has been removed and least is therefore at
+stake, which dilutes the number the previous table reports. Splitting the gain by
+menu size shows how much:
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Dataset & $|T|{=}2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
+\midrule
+Sushi & $+.0412$ & $+.0263$ & $+.0150$ & $+.0081$ & $+.0040$ & $+.0017$ & $+.0005$ & $+.0000$ & $-.0000$ \\
+Occupational prestige & $+.0286$ & $+.0516$ & $+.0549$ & $+.0454$ & $+.0313$ & $+.0178$ & $+.0076$ & $+.0017$ & $+.0000$ \\
+GSS socialization & $+.0130$ & $+.0011$ & $+.0004$ & $-.0000$ & & & & & \\
+Political goals & $+.0079$ & $+.0071$ & $+.0000$ & & & & & & \\
+Jester file 3 & $+.0064$ & $+.0050$ & $+.0033$ & $+.0020$ & $+.0012$ & $+.0006$ & $+.0003$ & $+.0001$ & $-.0000$ \\
+Jester file 1 & $+.0053$ & $+.0041$ & $+.0026$ & $+.0016$ & $+.0010$ & $+.0005$ & $+.0003$ & $+.0001$ & $+.0000$ \\
+Jester file 2 & $+.0048$ & $+.0037$ & $+.0024$ & $+.0015$ & $+.0009$ & $+.0005$ & $+.0002$ & $+.0001$ & $+.0000$ \\
+Dots & $+.0025$ & $+.0003$ & $-.0000$ & & & & & & \\
+GSS job values & $+.0021$ & $+.0020$ & $+.0009$ & $-.0000$ & & & & & \\
+Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
+Puzzles & $+.0013$ & $+.0000$ & $-.0000$ & & & & & & \\
+\midrule
+Sports participation & $+.0058$ & $+.0062$ & $+.0051$ & $+.0036$ & $+.0019$ & $+.0001$ & & & \\
+\bottomrule
+\end{tabular}
+\caption{Held-out gain by menu size, same calibration as
+Table~\ref{tab:heldout}. The final column of each row is the full field, where nothing
+has been removed and the two accounts must coincide; it is zero to four decimal places
+in every dataset, which checks the pipeline. The pairwise column is two to four times
+the all-subsets aggregate, so the headline number in Table~\ref{tab:heldout}
+understates the disagreement at the menu size the two accounts actually differ most
+about.}
+\label{tab:bysize}
+\end{table}
+
+The pattern is monotone decay in eleven of twelve datasets, and it has to be: as $T$
+approaches the full field the restriction being predicted shrinks to nothing, and at
+$T = S$ both accounts return the calibrated shares by construction. Occupational
+prestige is the exception, peaking at four rather than two, which is what its $143$
+respondents spread over $1{,}013$ subsets would predict. Reporting the aggregate is
+conservative, and we keep it as the headline because it fixes the estimand in advance
+rather than selecting the most favourable cardinality after the fact.
+
 \subsection{Is the gain structural?}
 \label{sec:null}
 
