@@ -29,68 +29,11 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "polysemy_pilot"))
 from exact_analyze import calibrate_np, win_probs_np
-from heldout_score import load_all, ranks_from_ratings
+from heldout_score import load_all, ranks_from_ratings, preflib_sets
 
 DATA = HERE / "data"
 PREFLIB = HERE / "preflib"
 ALPHA = 0.5           # add-alpha, applied identically wherever shares are formed
-
-
-def read_soc(path):
-    """Complete rankings from a PrefLib order file; returns a ranks matrix."""
-    lines = [l.strip() for l in path.read_text().splitlines()
-             if l.strip() and not l.startswith("#")]
-    if not lines:
-        return None
-    rows = []
-    for line in lines:
-        # PrefLib order files are "count: a,b,c,d"; older files use a comma there
-        head, sep, tail = line.partition(":")
-        if not sep:
-            head, _, tail = line.partition(",")
-        try:
-            cnt = int(head.strip())
-            order = [int(x) for x in tail.replace("{", "").replace("}", "").split(",")
-                     if x.strip()]
-        except ValueError:
-            continue
-        if len(order) < 2 or len(set(order)) != len(order):
-            continue
-        rows.append((cnt, order))
-    if not rows:
-        return None
-    K = max(max(o) for _, o in rows)
-    full = [(c, o) for c, o in rows if len(o) == K]
-    if not full:
-        return None
-    R = []
-    for c, o in full:
-        r = [0.0] * K
-        for pos, it in enumerate(o):
-            r[it - 1] = pos + 1
-        R.extend([r] * min(c, 20000))
-    return np.array(R, dtype=float)
-
-
-def preflib_sets():
-    out = {}
-    for tag, label in (("dots", "Dots"), ("puzzle", "Puzzles"),
-                       ("netflix", "Netflix")):
-        mats = []
-        for f in sorted(PREFLIB.glob(f"*{tag}*")):
-            M = read_soc(f)
-            if M is not None and M.shape[0] >= 50:
-                mats.append(M)
-        if not mats:
-            continue
-        # keep files separate when widths differ; otherwise stack
-        widths = {m.shape[1] for m in mats}
-        if len(widths) == 1:
-            out[label] = np.vstack(mats)
-        else:
-            for i, m in enumerate(mats):
-                out[f"{label} {i+1}"] = m
-    return out
 
 
 def slopes(R):
@@ -149,7 +92,6 @@ def run(name, R, nboot):
 def main():
     nboot = int(sys.argv[1]) if len(sys.argv) > 1 else 300
     data = load_all()
-    data.update(preflib_sets())
     print(f"{'dataset':<20}{'n':>7}{'K':>3}{'pairs':>6}"
           f"{'observed lambda':>26}{'race':>8}{'residual (obs-race)':>26}")
     rows = []

@@ -32,8 +32,10 @@ sys.path.insert(0, str(HERE.parent / "polysemy_pilot"))
 from exact_analyze import calibrate_np, win_probs_np
 
 DATA = HERE / "data"     # committed inputs; nothing is read from a temp directory
+PREFLIB = HERE / "preflib"
 FLOOR = 1e-6
 MAX_RESP = 5000
+ALPHA = 0.5   # add-alpha, applied wherever shares are formed
 
 
 def ranks_from_ratings(G):
@@ -107,7 +109,69 @@ def load_all():
             out[name] = M
     except Exception as e:
         print(f"  cran skipped: {str(e)[:70]}", file=sys.stderr)
+    try:
+        out.update(preflib_sets())
+    except Exception as e:
+        print(f"  preflib skipped: {str(e)[:70]}", file=sys.stderr)
     return out
+
+
+def read_soc(path):
+    """Complete rankings from a PrefLib order file; returns a ranks matrix."""
+    lines = [l.strip() for l in path.read_text().splitlines()
+             if l.strip() and not l.startswith("#")]
+    if not lines:
+        return None
+    rows = []
+    for line in lines:
+        # PrefLib order files are "count: a,b,c,d"; older files use a comma there
+        head, sep, tail = line.partition(":")
+        if not sep:
+            head, _, tail = line.partition(",")
+        try:
+            cnt = int(head.strip())
+            order = [int(x) for x in tail.replace("{", "").replace("}", "").split(",")
+                     if x.strip()]
+        except ValueError:
+            continue
+        if len(order) < 2 or len(set(order)) != len(order):
+            continue
+        rows.append((cnt, order))
+    if not rows:
+        return None
+    K = max(max(o) for _, o in rows)
+    full = [(c, o) for c, o in rows if len(o) == K]
+    if not full:
+        return None
+    R = []
+    for c, o in full:
+        r = [0.0] * K
+        for pos, it in enumerate(o):
+            r[it - 1] = pos + 1
+        R.extend([r] * min(c, 20000))
+    return np.array(R, dtype=float)
+
+
+def preflib_sets():
+    out = {}
+    for tag, label in (("dots", "Dots"), ("puzzle", "Puzzles"),
+                       ("netflix", "Netflix")):
+        mats = []
+        for f in sorted(PREFLIB.glob(f"*{tag}*")):
+            M = read_soc(f)
+            if M is not None and M.shape[0] >= 50:
+                mats.append(M)
+        if not mats:
+            continue
+        # keep files separate when widths differ; otherwise stack
+        widths = {m.shape[1] for m in mats}
+        if len(widths) == 1:
+            out[label] = np.vstack(mats)
+        else:
+            for i, m in enumerate(mats):
+                out[f"{label} {i+1}"] = m
+    return out
+
 
 
 def predictions(p):
@@ -139,7 +203,8 @@ def score(R, folds=5, seed=0):
     for f in range(folds):
         test = fold[f]
         train = np.concatenate([fold[g] for g in range(folds) if g != f])
-        p = np.bincount(R[train].argmin(axis=1), minlength=K) / len(train)
+        cts = np.bincount(R[train].argmin(axis=1), minlength=K).astype(float)
+        p = (cts + ALPHA) / (len(train) + ALPHA * K)
         if (p <= 0).any():
             return None
         preds, err = predictions(p)

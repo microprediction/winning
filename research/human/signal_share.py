@@ -43,6 +43,7 @@ from heldout_score import load_all
 
 FLOOR = 1e-6
 MAX_RESP = 5000
+ALPHA = 0.5
 
 
 def run(R, folds=5, seed=0):
@@ -57,7 +58,8 @@ def run(R, folds=5, seed=0):
     for f in range(folds):
         test = fold[f]
         train = np.concatenate([fold[g] for g in range(folds) if g != f])
-        p = np.bincount(R[train].argmin(axis=1), minlength=K) / len(train)
+        cts = np.bincount(R[train].argmin(axis=1), minlength=K).astype(float)
+        p = (cts + ALPHA) / (len(train) + ALPHA * K)
         if (p <= 0).any():
             return None
         a, err = calibrate_np(list(p))
@@ -72,8 +74,8 @@ def run(R, folds=5, seed=0):
                 race = np.maximum(w / w.sum(), FLOOR)
                 # saturated: training-fold frequency of being top within S
                 twin = R[np.ix_(train, idx)].argmin(axis=1)
-                sat = np.bincount(twin, minlength=len(idx)) / len(train)
-                sat = np.maximum(sat, FLOOR)
+                sc = np.bincount(twin, minlength=len(idx)).astype(float)
+                sat = (sc + ALPHA) / (len(train) + ALPHA * len(idx))
                 sat = sat / sat.sum()
                 win = R[np.ix_(test, idx)].argmin(axis=1)
                 tot["renorm"] += -np.log(renorm[win]).sum()
@@ -105,9 +107,9 @@ def main():
         print(f"{name:<22}{r['renorm']:>9.4f}{r['race']:>9.4f}{r['sat']:>11.4f}"
               f"{r['avail']:>11.4f}{r['got']:>10.4f}{100*r['frac']:>7.0f}%")
     if fracs:
-        fracs.sort()
-        print(f"\nmedian share of attainable improvement captured by the race: "
-              f"{100*fracs[len(fracs)//2]:.0f}%")
+        print(f"\nmedian share of the benchmark improvement captured by the race: "
+              f"{100*float(np.median(fracs)):.0f}%  "
+              f"(range {100*min(fracs):.0f}-{100*max(fracs):.0f}%)")
         print("renormalization captures 0% of it by construction.")
 
 

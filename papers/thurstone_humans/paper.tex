@@ -7,7 +7,7 @@
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
 \title{\textbf{Thurstone is the Model of Choice}\\[4pt]
-\large\normalfont Across eleven human datasets, a population's pairwise odds are less\\
+\large\normalfont Across twelve human datasets, a population's pairwise odds are less\\
 extreme than Luce renormalization predicts, and a Gaussian race predicts them better}
 \author{Peter Cotton}
 \date{Provisional draft, 15 August 2026}
@@ -20,12 +20,12 @@ extreme than Luce renormalization predicts, and a Gaussian race predicts them be
 between any two survivors untouched, so a population's first choices already fix its
 head-to-head preferences. Thurstone's 1927 model disagrees: a favourite's edge
 counts for less in a short field, so head-to-head odds are less lopsided than the
-first choices imply. Across eleven human datasets, $148{,}000$ responses, they are
+first choices imply. Across twelve human datasets, $148{,}000$ responses, they are
 less lopsided every time. Gaussian contestant removal, which re-runs Thurstone's
 race without the dropped options, is an untuned alternative, calibrated to the first
-choices and nothing else. It is the closer prediction in all eleven datasets and, on
-held-out choices, closes a median $44$ per cent of the gap between the axiom and the
-best rule the data could support. Luce's axiom is the special case with Gumbel
+choices and nothing else. It is the closer prediction in all twelve datasets and, on
+held-out choices, closes a median $39$ per cent of the gap between the axiom and a
+saturated subset-frequency forecast. Luce's axiom is the special case with Gumbel
 noise, so adopting the general form forfeits nothing. The claim is about population
 shares, the assumption inside the Plackett--Luce likelihood, not about individuals.
 \end{abstract}
@@ -154,10 +154,10 @@ what makes the inversion routine here.
 \section{Level of observation}
 \label{sec:estimand}
 
-Ten of the eleven datasets are complete rankings. From a ranking we can read off
+Twelve of the thirteen collections are complete rankings. From a ranking we can read off
 which alternative the respondent placed first, and also which of any two
 alternatives they placed higher. Both quantities are transformations of the same
-response, so the comparison in those ten datasets is between two accounts of one
+response, so the comparison in those twelve collections is between two accounts of one
 ranking distribution: the axiom says the pairwise margin is determined by the
 first-place shares in a particular way, and the race says it is determined
 differently.
@@ -167,11 +167,11 @@ respondent's ranking imposes a single ordering that applies to every subset by
 construction, so no ranking dataset can show a person preferring $i$ to $j$ in one
 menu and $j$ to $i$ in another, and none can reveal whether the person would in
 fact choose as their ranking implies when handed only two options. Any statement
-about menu restriction from these ten datasets rests on the assumption that they
-would. The eleventh dataset makes no such assumption, because subjects there
-chose separately from every subset.
+about menu restriction from these twelve collections rests on the assumption that they
+would. The thirteenth makes no such assumption, because subjects there chose
+separately from every subset.
 
-The level of analysis matters as much as the elicitation. All eleven datasets give
+The level of analysis matters as much as the elicitation. All twelve collections give
 population quantities, and the aggregate failure of Independence of Irrelevant
 Alternatives does not imply that individuals violate it. A population of people who
 each choose by Equation~\eqref{eq:luce}, with worths differing from person to
@@ -255,20 +255,24 @@ Section~\ref{sec:ceiling} supplies.
 \section{Data}
 \label{sec:data}
 
-Eleven datasets have human respondents, complete rankings or ratings fine enough
-to yield one, and enough respondents for stable shares. Two rank-order card tasks
-from the General Social Survey ask what a child should learn and what matters in a
-job. Three independent samples of Jester users rate the same ten jokes on a
-continuous scale. Sushi rankings come from a Japanese web survey and film rankings
-are induced from Netflix ratings. There are perceptual discrimination tasks on dot
-arrays and puzzles, rankings of seven sports by participation preference, rankings
-of ten occupations by perceived prestige, and rankings of four political goals from
-a five-nation survey. The eleventh is the experiment of Costa-Gomes and colleagues
-\cite{costagomes2022}, in which subjects chose from every subset of five consumer
-products; the archive identifies the products only by two-letter codes, so we
-describe them no more precisely than the archive does.
+Twelve archival collections have human respondents, complete rankings or ratings fine
+enough to yield one, and enough respondents for stable shares. Two rank-order card
+tasks from the General Social Survey ask what a child should learn and what matters in
+a job. Three independent samples of Jester users rate the same ten jokes on a
+continuous scale. Sushi rankings come from a Japanese web survey and film rankings are
+induced from Netflix ratings. Dots and puzzles are two perceptual discrimination tasks.
+The remainder are rankings of seven sports by participation preference, of ten
+occupations by perceived prestige, and of four political goals from a five-nation
+survey. Netflix, dots and puzzles were previously reported inside merged rows, which
+concealed that Netflix rests on three pairs and shifts far more than the race predicts;
+they are separate here. A thirteenth collection is the experiment of Costa-Gomes and
+colleagues \cite{costagomes2022}, in which subjects chose from every subset of five
+consumer products; the archive identifies the products only by two-letter codes, so we
+describe them no more precisely than the archive does. It carries the within-subject
+analysis of Section~\ref{sec:experiment} and does not enter the predictive tables,
+since its choices are menu choices rather than rankings.
 
-Counting is not straightforward and we report it plainly. The eleven rows comprise
+Counting is not straightforward and we report it plainly. The thirteen collections comprise
 $147{,}719$ dataset-responses. Unique people are fewer: the two General Social
 Survey tasks were fielded to overlapping samples of the same survey, while the
 three Jester files are disjoint user groups.
@@ -318,21 +322,31 @@ with the gain obtained when Luce is true by construction.
 \toprule
 Dataset & $n$ & $K$ & Subsets & Renorm. & Race & Gain \\
 \midrule
-Sushi & 5{,}000 & 10 & 1{,}013 & $1.3727$ & $1.3614$ & $+0.0113$ $[+0.0096, +0.0130]$ \\
-Political goals & 2{,}262 & 4 & 11 & $0.8836$ & $0.8767$ & $+0.0069$ $[+0.0060, +0.0079]$ \\
-GSS socialization & 5{,}000 & 5 & 26 & $0.7986$ & $0.7929$ & $+0.0057$ $[+0.0043, +0.0072]$ \\
-Sports participation & 130 & 7 & 120 & $1.2594$ & $1.2538$ & $+0.0056$ $[+0.0021, +0.0094]$ \\
-Jester file 3 & 5{,}000 & 10 & 1{,}013 & $1.5189$ & $1.5165$ & $+0.0024$ $[+0.0016, +0.0032]$ \\
-Jester file 1 & 5{,}000 & 10 & 1{,}013 & $1.5287$ & $1.5267$ & $+0.0020$ $[+0.0013, +0.0027]$ \\
-Jester file 2 & 5{,}000 & 10 & 1{,}013 & $1.5247$ & $1.5230$ & $+0.0018$ $[+0.0010, +0.0026]$ \\
-GSS job values & 5{,}000 & 5 & 26 & $0.8593$ & $0.8575$ & $+0.0018$ $[+0.0005, +0.0031]$ \\
+Occupational prestige & 143 & 10 & 1{,}013 & $1.0173$ & $0.9783$ & $+0.0390$ $[+0.0227, +0.0555]$ \\
+Sushi & 5{,}000 & 10 & 1{,}013 & $1.3724$ & $1.3613$ & $+0.0111$ $[+0.0094, +0.0128]$ \\
+Political goals & 2{,}262 & 4 & 11 & $0.8835$ & $0.8766$ & $+0.0069$ $[+0.0059, +0.0078]$ \\
+GSS socialization & 5{,}000 & 5 & 26 & $0.7984$ & $0.7929$ & $+0.0055$ $[+0.0041, +0.0070]$ \\
+Jester file 3 & 5{,}000 & 10 & 1{,}013 & $1.5189$ & $1.5165$ & $+0.0024$ $[+0.0015, +0.0032]$ \\
+Jester file 1 & 5{,}000 & 10 & 1{,}013 & $1.5287$ & $1.5267$ & $+0.0020$ $[+0.0012, +0.0027]$ \\
+Jester file 2 & 5{,}000 & 10 & 1{,}013 & $1.5247$ & $1.5230$ & $+0.0018$ $[+0.0010, +0.0025]$ \\
+GSS job values & 5{,}000 & 5 & 26 & $0.8593$ & $0.8576$ & $+0.0017$ $[+0.0005, +0.0030]$ \\
+Dots & 3{,}183 & 4 & 11 & $0.8285$ & $0.8270$ & $+0.0015$ $[+0.0005, +0.0025]$ \\
+Netflix & 4{,}379 & 3 & 4 & $0.7932$ & $0.7922$ & $+0.0009$ $[+0.0007, +0.0012]$ \\
+Puzzles & 3{,}180 & 4 & 11 & $0.8180$ & $0.8173$ & $+0.0007$ $[-0.0003, +0.0017]$ \\
+\midrule
+Sports participation & 130 & 7 & 120 & $1.2579$ & $1.2528$ & $+0.0050$ $[+0.0017, +0.0087]$ \\
 \bottomrule
 \end{tabular}
 \caption{Mean held-out log loss per prediction, over every subset of size two or
-more, with both accounts calibrated only to training-fold first-place shares. Gain
-is the loss under renormalization minus the loss under the race, so positive
-favours the race; intervals are respondent bootstraps. The race is better in eight
-of eight datasets.}
+more, with both accounts calibrated only to training-fold first-place shares under a
+common add-$\alpha$ convention, $\alpha = 1/2$. Gain is the loss under
+renormalization minus the loss under the race, so positive favours the race;
+intervals are respondent bootstraps. The race is lower in twelve of twelve, and the
+interval excludes zero in eleven; puzzles is the exception. Occupational prestige
+enters here, and posts the largest gain, because the shared smoothing removes the zero
+training cell that previously made it unscorable. Sports participation is separated
+below the rule: its gain is real but Section~\ref{sec:null} shows it is not evidence
+about the noise law.}
 \label{tab:heldout}
 \end{table}
 
@@ -345,7 +359,68 @@ occupational prestige rankings are omitted here because some alternatives are ne
 ranked first in a training fold, leaving renormalization with a zero worth and no
 prediction to score.
 
-\subsection{The share of attainable improvement}
+\subsection{Is the gain structural?}
+\label{sec:null}
+
+A positive gain has two possible sources and the score cannot separate them. The race
+might be closer to how the population actually chooses. Or the race might be wrong
+about that and still win, because contraction of a noisily estimated share vector is
+shrinkage, and shrinkage lowers log loss when the input is over-confident. The second
+mechanism needs no departure from the axiom at all.
+
+The way to separate them is to build a population where the axiom holds by
+construction and run the identical procedure on it. Taking the observed full-field
+shares as Luce worths, complete rankings are generated from that exact process, and
+the whole pipeline is repeated: estimate training shares, calibrate both accounts,
+predict every subset, score held-out respondents. Rankings are drawn by sorting
+$\log u_i + G_i$ for independent standard Gumbel $G_i$, which is the same law as
+sequential sampling proportional to worths, so the null is generated by the noise law
+the null asserts.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Dataset & Observed & Null median & Null 95th & Excess & $p$ \\
+\midrule
+Occupational prestige & $+0.0390$ & $-0.0227$ & $-0.0104$ & $+0.0617$ & $\le 0.005$ \\
+Sushi & $+0.0111$ & $-0.0062$ & $-0.0046$ & $+0.0174$ & $\le 0.005$ \\
+GSS socialization & $+0.0055$ & $-0.0066$ & $-0.0042$ & $+0.0121$ & $\le 0.005$ \\
+Political goals & $+0.0069$ & $-0.0012$ & $-0.0007$ & $+0.0081$ & $\le 0.005$ \\
+GSS job values & $+0.0017$ & $-0.0047$ & $-0.0038$ & $+0.0065$ & $\le 0.005$ \\
+Jester file 3 & $+0.0024$ & $-0.0015$ & $-0.0009$ & $+0.0039$ & $\le 0.005$ \\
+Jester file 1 & $+0.0020$ & $-0.0014$ & $-0.0008$ & $+0.0034$ & $\le 0.005$ \\
+Jester file 2 & $+0.0018$ & $-0.0014$ & $-0.0009$ & $+0.0032$ & $\le 0.005$ \\
+Dots & $+0.0015$ & $-0.0014$ & $-0.0007$ & $+0.0029$ & $\le 0.005$ \\
+Puzzles & $+0.0007$ & $-0.0011$ & $-0.0006$ & $+0.0019$ & $\le 0.005$ \\
+Netflix & $+0.0009$ & $-0.0001$ & $+0.0001$ & $+0.0010$ & $\le 0.005$ \\
+\midrule
+Sports participation & $+0.0050$ & $+0.0051$ & $+0.0107$ & $-0.0000$ & $0.51$ \\
+\bottomrule
+\end{tabular}
+\caption{The same gain when Luce is true by construction. Two hundred replicates per
+dataset; $p$ is floored at $1/201$. Excess is the observed gain minus the null median.
+Wherever the shares come from more than about two thousand respondents the null is
+negative, because contraction is then a bias rather than useful insurance, so
+comparing the observed gain with zero understates it. The smoothing convention barely
+matters here: null medians at $\alpha = 0$ and $\alpha = 1/2$ differ by at most
+$0.0002$ in every dataset measured. Sports participation is the exception and the
+informative one: at $n = 130$ its observed gain sits on top of the null.}
+\label{tab:null}
+\end{table}
+
+So the shrinkage mechanism is real, and it accounts for the whole of the gain in the
+smallest dataset. In the other eleven it works against the race rather than for it,
+and the excess over the null exceeds the raw gain in every one of them. It also
+rescues puzzles, whose raw gain interval in Table~\ref{tab:heldout} covers zero while
+its excess over the null does not. Sports participation is excluded from the claims of
+this paper, and it is the only dataset here small enough for the objection to bite. The direction of the null also has a simple reading.
+Contraction is insurance against over-confident inputs, worth buying when the shares
+are noisy and a straight cost when they are not, and at five thousand respondents they
+are not.
+
+\subsection{The share of the empirical benchmark}
 \label{sec:ceiling}
 
 Both accounts receive the same first-place shares, and those shares carry nearly all
@@ -361,13 +436,22 @@ the training-fold frequency with which each item is top within each subset, whic
 $|T|-1$ free probabilities for a subset $T$. It uses the restricted data directly and is not
 available to a practitioner, but it is a legitimate out-of-sample forecast, and at
 this sample size it stands for the best a restriction map could do. The interesting
-quantity is then the fraction of attainable improvement,
+quantity is then the fraction of that benchmark improvement,
 \begin{equation}
 \frac{\mathcal{L}_{\text{renorm}} - \mathcal{L}_{\text{race}}}
      {\mathcal{L}_{\text{renorm}} - \mathcal{L}_{\text{sat}}},
 \label{eq:share}
 \end{equation}
-which asks how far the race travels from renormalization toward that ceiling.
+which asks how far the race travels from renormalization toward that benchmark.
+
+The benchmark is not a ceiling, and calling it one would overstate the ratio. The
+saturated forecast is a high-variance estimator of the subset probabilities rather
+than the truth, so its expected loss exceeds the oracle loss that the true conditional
+entropy would give, the denominator in \eqref{eq:share} is too small, and the reported
+fraction is biased upward. The bias is worst where the subsets are numerous relative
+to respondents. The ratio is reported as a descriptive benchmark on that
+understanding, and the honest form of the claim is a fraction of what an unsmoothed
+subset-frequency forecast achieves, not a fraction of what is attainable.
 
 \begin{table}[ht]
 \centering
@@ -376,21 +460,26 @@ which asks how far the race travels from renormalization toward that ceiling.
 \toprule
 Dataset & Renorm. & Race & Saturated & Available & Captured \\
 \midrule
-Jester file 1 & $1.5287$ & $1.5267$ & $1.5246$ & $0.0042$ & $48\%$ \\
+Dots & $0.8285$ & $0.8270$ & $0.8262$ & $0.0023$ & $65\%$ \\
+Jester file 1 & $1.5287$ & $1.5267$ & $1.5246$ & $0.0041$ & $47\%$ \\
 Jester file 3 & $1.5189$ & $1.5165$ & $1.5138$ & $0.0051$ & $47\%$ \\
-Political goals & $0.8836$ & $0.8767$ & $0.8685$ & $0.0150$ & $46\%$ \\
+Political goals & $0.8835$ & $0.8766$ & $0.8685$ & $0.0150$ & $46\%$ \\
 Jester file 2 & $1.5247$ & $1.5230$ & $1.5207$ & $0.0040$ & $44\%$ \\
-Sushi & $1.3727$ & $1.3614$ & $1.3465$ & $0.0262$ & $43\%$ \\
-Sports participation & $1.2594$ & $1.2538$ & $1.2401$ & $0.0193$ & $29\%$ \\
-GSS socialization & $0.7986$ & $0.7929$ & $0.7761$ & $0.0225$ & $25\%$ \\
-GSS job values & $0.8593$ & $0.8575$ & $0.8506$ & $0.0088$ & $20\%$ \\
+Sushi & $1.3724$ & $1.3613$ & $1.3465$ & $0.0260$ & $43\%$ \\
+Occupational prestige & $1.0173$ & $0.9783$ & $0.9037$ & $0.1135$ & $34\%$ \\
+Puzzles & $0.8180$ & $0.8173$ & $0.8154$ & $0.0026$ & $29\%$ \\
+GSS socialization & $0.7984$ & $0.7929$ & $0.7761$ & $0.0223$ & $25\%$ \\
+Netflix & $0.7932$ & $0.7922$ & $0.7886$ & $0.0046$ & $21\%$ \\
+GSS job values & $0.8593$ & $0.8576$ & $0.8506$ & $0.0087$ & $20\%$ \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss per prediction for the two share-only accounts and for a
-saturated restriction map fitted on the training folds. Available is the total any
-restriction map could earn on top of the shares; Captured is the race's share of it
-under Equation~\eqref{eq:share}. Renormalization captures none of it by
-construction, since it is the unique map that adds no information.}
+smoothed saturated forecast fitted on the training folds, all under $\alpha = 1/2$.
+Available is what the saturated forecast earns on top of the shares; Captured is the
+race's share of it under Equation~\eqref{eq:share}. Renormalization captures none of
+it by construction, since it is the unique map that adds no information. The median is
+$39$ per cent and the range $20$ to $65$. Sports participation is omitted, for the
+reason given in Section~\ref{sec:null}.}
 \label{tab:ceiling}
 \end{table}
 
@@ -439,83 +528,144 @@ where a log odds is undefined, gives the values in Table~\ref{tab:scorecard}.
 \small
 \begin{tabular}{llrrrr}
 \toprule
-Dataset & Domain & Responses & $\hat\lambda$ & Race predicts & Race error \\
+Dataset & $n$ & Pairs & Observed $\hat\lambda$ & Race & Residual \\
 \midrule
-GSS job values & values & 21{,}797 & $0.227$ & $0.234$ & $0.007$ \\
-Dots and puzzles & perception & 6{,}363 & $0.188$ & $0.161$ & $0.027$ \\
-Jester file 3 & humour & 24{,}904 & $0.374$ & $0.337$ & $0.037$ \\
-GSS socialization & values & 33{,}921 & $0.276$ & $0.314$ & $0.038$ \\
-Jester file 1 & humour & 24{,}953 & $0.393$ & $0.350$ & $0.043$ \\
-Sports participation & leisure & 130 & $0.347$ & $0.304$ & $0.043$ \\
-Jester file 2 & humour & 23{,}494 & $0.391$ & $0.343$ & $0.048$ \\
-Sushi and Netflix & food, film & 9{,}379 & $0.420$ & $0.317$ & $0.103$ \\
-Consumer products & menu choice & 373 & $0.419$ & $0.231$ & $0.188$ \\
-Occupational prestige & social & 143 & $0.591$ & $0.300$ & $0.291$ \\
-Political goals & values & 2{,}262 & $0.425$ & $0.181$ & $0.244$ \\
+Netflix & 4{,}379 & 3 & $0.619$ $[.510,.773]$ & $0.102$ & $+0.517$ $[+.409,+.669]$ \\
+Sushi & 5{,}000 & 45 & $0.494$ $[.462,.537]$ & $0.370$ & $+0.124$ $[+.098,+.156]$ \\
+Political goals & 2{,}262 & 6 & $0.425$ $[.392,.460]$ & $0.181$ & $+0.244$ $[+.211,+.279]$ \\
+Jester file 1 & 24{,}953 & 45 & $0.392$ $[.371,.413]$ & $0.350$ & $+0.041$ $[+.022,+.061]$ \\
+Jester file 2 & 23{,}494 & 45 & $0.388$ $[.368,.413]$ & $0.343$ & $+0.045$ $[+.025,+.070]$ \\
+Jester file 3 & 24{,}904 & 45 & $0.371$ $[.354,.392]$ & $0.337$ & $+0.034$ $[+.016,+.054]$ \\
+Occupational prestige & 143 & 38 & $0.280$ $[.195,.427]$ & $0.330$ & $-0.050$ $[-.137,+.095]$ \\
+GSS socialization & 33{,}921 & 10 & $0.276$ $[.255,.298]$ & $0.315$ & $-0.039$ $[-.058,-.021]$ \\
+GSS job values & 21{,}797 & 10 & $0.227$ $[.212,.242]$ & $0.233$ & $-0.006$ $[-.019,+.006]$ \\
+Dots & 3{,}183 & 6 & $0.206$ $[.176,.247]$ & $0.169$ & $+0.037$ $[+.010,+.074]$ \\
+Puzzles & 3{,}180 & 6 & $0.178$ $[.144,.212]$ & $0.151$ & $+0.027$ $[-.008,+.062]$ \\
+\midrule
+Sports participation & 130 & 20 & $0.333$ $[-.074,.971]$ & $0.304$ & $+0.029$ $[-.364,+.682]$ \\
 \bottomrule
 \end{tabular}
-\caption{Observed contraction and the race's prediction. Renormalization predicts
-zero, so its error equals the observed value in every row, from $0.188$ to $0.591$.
-Every row is a population-level quantity, including the consumer-products row,
-whose choice probabilities are pooled over subjects. Responses are
-dataset-responses; Section~\ref{sec:data} discusses unique respondents.}
+\caption{Observed contraction, the value the Gaussian race implies for the same
+shares, and the residual, with respondent-bootstrap intervals from resampling and
+recomputing everything downstream: shares, calibration, race prediction and both
+slopes. Renormalization predicts zero in every row. Contraction excludes zero in
+eleven of twelve datasets and the race is the closer prediction in twelve of twelve.
+Every row is a population-level quantity. Sports participation is below the rule: with
+twenty pairs from $130$ respondents its interval runs from $-0.07$ to $0.97$, so it
+discriminates nothing, which is consistent with its failure in
+Section~\ref{sec:null}.}
 \label{tab:scorecard}
 \end{table}
 
-Observed contraction is positive in all eleven rows, where representative-agent
-renormalization predicts zero. The race's
-error is under $0.05$ in seven rows. Its residual has both signs: it under-predicts
-contraction in nine datasets and over-predicts in the two General Social Survey
-tasks, where observed values of $0.227$ and $0.276$ fall below predictions of
-$0.234$ and $0.314$. The three largest under-predictions come from the datasets
-with the fewest usable pairs, six, ten and fourteen, so we do not read a domain
-pattern from them.
+Contraction is positive and its interval excludes zero in eleven of the twelve
+datasets, where representative-agent renormalization predicts zero throughout. The
+race's residual is under $0.05$ in eight rows, and its interval covers zero in three
+of them, so in those the race is not merely closer but statistically
+indistinguishable from the observed contraction. The residual has both signs. It
+under-predicts most severely in Netflix and political goals, which rest on three and
+six pairs, and it over-predicts in the General Social Survey socialization task, the
+one row where the sign is negative with an interval excluding zero.
 
-The eleven rows are not eleven independent experiments. Three are Jester files, two
-are General Social Survey items, and several arrive through the same repositories,
-so the count describes the table rather than supporting a claim about independent
-replications. The held-out comparison in Table~\ref{tab:heldout} is the basis for
+The twelve rows are not twelve independent experiments. Three are Jester files, two
+are General Social Survey items, dots and puzzles are companion perceptual tasks, and
+several arrive through the same repositories, so the count describes the table rather
+than supporting a claim about independent replications. The held-out comparison in Table~\ref{tab:heldout} is the basis for
 inference here, and its intervals are respondent bootstraps within dataset.
 
-\section{Contraction under other noise laws}
+\section{Which noise laws contract}
 \label{sec:noise}
 
-Since the race under-predicts contraction more often than not, it is worth asking
-which noise laws contract more than a Gaussian, and the question has a clean
-answer that runs against intuition. Simulating populations whose members are races
-with a common noise law, standardised to unit variance, and computing the same
-$\lambda$:
+The direction of the effect is a theorem, not a simulation result, and the theorem
+is about the curvature of a hazard rather than about the thickness of a tail.
+
+With the highest draw winning, write $F$ and $f$ for the common noise distribution
+and density and let
+\begin{equation}
+r(x) = \frac{f(x)}{F(x)}
+\label{eq:revhaz}
+\end{equation}
+be its reverse hazard. Fix two alternatives with $a_i > a_j$ and let $H(x) =
+\prod_{k \neq i,j} F(x - a_k)$ be the chance that every other contestant falls below
+$x$.
+
+\medskip
+\noindent\textbf{Proposition.} \emph{If $\log r$ is concave then}
+\begin{equation}
+\frac{p_i}{p_j} \;\ge\; \frac{q_{ij}}{1 - q_{ij}},
+\label{eq:contraction}
+\end{equation}
+\emph{so removing the other contestants contracts the favourite's log odds, and
+$\delta_{ij} \le 0$. If $\log r$ is affine, \eqref{eq:contraction} holds with
+equality and the axiom is satisfied exactly.}
+
+\medskip
+The argument is a covariance inequality. Put $A(x) = f(x - a_i) F(x - a_j)$ and
+$B(x) = f(x - a_j) F(x - a_i)$, so that $\int A = q_{ij}$ and $\int B = 1 - q_{ij}$
+while $\int A H = p_i$ and $\int B H = p_j$. Then
+\begin{equation}
+\frac{A(x)}{B(x)} = \frac{r(x - a_i)}{r(x - a_j)},
+\label{eq:ratio}
+\end{equation}
+and since $a_i > a_j$ we have $x - a_i < x - a_j$, so concavity of $\log r$ makes
+$(\log r)'$ decreasing and hence the ratio \eqref{eq:ratio} increasing in $x$. As $H$
+is also increasing, the two are comonotone, and weighting by $H$ therefore raises
+the ratio of the integrals:
+\[
+\frac{\int A H}{\int B H} \;\ge\; \frac{\int A}{\int B}.
+\]
+The left side is the full-field odds and the right side the pairwise odds.
+
+Two cases are worth naming. For the Gumbel the reverse hazard is $r(x) = s^{-1}
+e^{-x/s}$, so $\log r$ is affine with slope $-1/s$ and the proposition gives
+equality: this is Yellott's theorem arriving through a different door, and it is
+why the axiom is a boundary of the class rather than a neighbour of it. For the
+Gaussian,
+\begin{equation}
+\frac{d^2}{dx^2} \log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0,
+\label{eq:normalcurv}
+\end{equation}
+by the truncated-normal identity, so contraction is strict wherever the locations
+differ. Both statements were checked numerically: the Gumbel curvature vanishes to
+$7 \times 10^{-10}$ with the slope $-\pi/\sqrt{6}$ that standardisation requires, and
+\eqref{eq:normalcurv} reproduces to six decimal places.
+
+What the proposition does not give is an ordering of magnitudes, and the draft of
+this paper previously claimed one. Contraction depends on the whole share
+configuration, not on the noise law alone, and recalibrating each law to the same
+observed shares makes the comparison at fixed observables:
 
 \begin{table}[ht]
 \centering
 \small
-\begin{tabular}{lr}
+\begin{tabular}{lrrrr}
 \toprule
-Noise law & $\lambda$ \\
+Shares & Gumbel & Gaussian & $t_8$ & $t_3$ \\
 \midrule
-Gumbel & $0.001$ \\
-Student $t$, 3 degrees of freedom & $0.121$ \\
-Student $t$, 8 degrees of freedom & $0.203$ \\
-Skew-normal, $a = 4$ & $0.078$ \\
-Gaussian & $0.245$ \\
-Uniform on a bounded interval & $0.352$ \\
+$(.24,.22,.20,.18,.16)$ & $0.0000$ & $0.2257$ & $0.2052$ & $0.1715$ \\
+$(.70,.12,.08,.06,.04)$ & $0.0000$ & $0.1383$ & $0.1314$ & $0.1179$ \\
+$(.60,.25,.15)$         & $0.0000$ & $0.0932$ & $0.0943$ & $0.0960$ \\
+$(.88,.07,.05)$         & $0.0000$ & $0.0384$ & $0.0442$ & $0.0555$ \\
 \bottomrule
 \end{tabular}
-\caption{Contraction produced by different performance-noise laws in simulated
-races. The Gumbel row recovers the axiom, as Yellott's theorem requires, and also
-checks the pipeline. Heavier tails contract less than the Gaussian; bounded support
-contracts more.}
+\caption{Contraction $\lambda$ for unit-variance noise laws, each recalibrated to the
+shares in the first column. The Gumbel column is identically zero at every
+configuration, which recovers the axiom and checks the pipeline. The ordering of the
+remaining columns reverses between the top two rows and the bottom two: heavier tails
+contract less in near-uniform and lopsided five-item fields and more in three-item
+fields. No tail-based ordering therefore holds in general. Bounded noise is not shown
+because a bounded law cannot be calibrated to the lopsided fields at all.}
 \label{tab:noise}
 \end{table}
 
-Heavier tails move the model toward the axiom rather than away from it, so a
-heavy-tailed race is the wrong candidate for datasets that contract more than
-Gaussian. Bounded or thinner-tailed noise is the right direction there. Skewness
-also reduces contraction, which makes it a candidate for the two General Social
-Survey rows, where observed contraction falls short of the Gaussian prediction.
-Other explanations are not excluded by this exercise and are not distinguished by
-it, among them unequal variances across alternatives, correlated performances,
-heterogeneity across respondents, and utilities that depend on the set.
+So the residuals in Table~\ref{tab:scorecard} cannot be read as pointing toward
+heavier or lighter tails. Concavity of $\log r$ is also sufficient rather than
+necessary: the uniform law has a reverse hazard that is wildly non-concave at its
+upper endpoint and yet contracts more than the Gaussian wherever it can be
+calibrated. Skewness is orientation-dependent, and we do not report it, because the
+sign of the shape parameter interacts with which draw wins and we have not resolved
+that carefully enough to state a direction. Other explanations of the residuals are
+untouched by this section: unequal variances across alternatives, correlated
+performances, heterogeneity across respondents, and utilities that depend on the set.
 
 \section{Within-subject choice from all subsets}
 \label{sec:experiment}
@@ -568,21 +718,23 @@ is rejected is a representative-agent Luce model of a population.
 Heterogeneous individuals who each choose by a Luce rule would generate aggregate
 violations of this kind, so nothing here shows that individual choice departs from
 logit, and the within-subject experiment speaks to order-consistency rather than to
-functional form. Ten of the eleven datasets compare two accounts of a ranking
-distribution rather than observing menu restriction, and their contribution should
-be read as such.
+functional form. Twelve of the thirteen collections compare two accounts of a ranking
+distribution rather than observing menu restriction, and their contribution should be
+read as such.
 
 Case V is also not the end of the matter. Its residual has both signs, and
-Section~\ref{sec:noise} identifies the direction each sign points: bounded or
-thinner-tailed noise where contraction exceeds the Gaussian prediction, skewness or
-heavier tails where it falls short. Whether one noise law fits all eleven datasets
-is answerable with the same data and is not answered here.
+Section~\ref{sec:noise} shows why the sign of the residual does not point anywhere in
+particular: the proposition there fixes the direction of contraction but not its
+magnitude, and no ordering by tail thickness survives a change of share
+configuration. Which noise law fits best is answerable with the same data and is not
+answered here.
 
-Two limitations bound what has been shown. The political goals, occupational
-prestige and consumer datasets rest on six, ten and fourteen usable pairs, so their
-contraction estimates are the least secure in Table~\ref{tab:scorecard}. And nothing
-here addresses regularity violations of the decoy and compromise kind, which lie
-outside both accounts.
+Three limitations bound what has been shown. Netflix, political goals, dots and
+puzzles rest on three or six usable pairs, so their contraction estimates are the
+least secure in Table~\ref{tab:scorecard}, and the two largest residuals are among
+them. Sports participation fails both the null comparison and the interval test and
+supports nothing. And nothing here addresses regularity violations of the decoy and
+compromise kind, which lie outside both accounts.
 
 For psychometrics the consequence concerns defaults. Plackett--Luce and
 Bradley--Terry likelihoods are standard for rankings and paired comparisons and
