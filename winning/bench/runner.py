@@ -78,7 +78,9 @@ def main(quick=False):
                     t0 = time.perf_counter()
                     p, info = fn(mu, V, D, budget=budget, seed=17)
                     dt = time.perf_counter() - t0
-                    resolvable = truth > 50 / 2_000_000   # ref resolution
+                    # log-odds only where the MC reference itself has
+                    # ~2% relative noise or better: p >= 1/(R * 0.02^2)
+                    resolvable = truth > 1.25e-3
                     log_err = float(np.abs(
                         np.log(np.maximum(p[resolvable], 1e-300))
                         - np.log(truth[resolvable])).max())
