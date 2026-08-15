@@ -110,44 +110,90 @@ def update_ranking(m, v, order, beta2=1.0):
     return m, v
 
 
-def _log_p_order(m, sd, order, L=1001):
-    """log P(observed finish order) for independent performances
-    x_j ~ N(m_j, sd_j^2): exact backward lattice recursion, O(nL).
-    order[0] is the best performance. Shared noise handled exactly:
-    this is the joint ordered-statistics probability, not a product of
-    fresh-noise stage events."""
+def _order_pass(m, sd, order, L=2001):
+    """Joint ordered-statistics likelihood for independent Gaussians and its
+    exact gradient, by one forward and one adjoint sweep, O(nL).
+
+    Structure: P = g_1^T D T_2 with T_t = C(g_t * T_{t+1}), T_n = F_n,
+    C = trapezoidal cumulative integral, D = dx. P is linear in each
+    player's density row g_t, so with the adjoint u_{t+1} = g_t * (C^T u_t)
+    every partial derivative is an inner product. Stages carry explicit
+    log-scales so 20-player orders (P ~ 1e-19) stay accurate.
+    Returns (log P, d log P / d m)."""
+    n = len(order)
     lo = float((m - 8 * sd.max()).min())
     hi = float((m + 8 * sd.max()).max())
     x = np.linspace(lo, hi, L)
     dx = x[1] - x[0]
+
+    def cum(y):                        # trapezoidal cumulative integral
+        c = np.cumsum(y) * dx
+        return c - 0.5 * dx * (y + y[0])
+
+    def cum_T(u):                      # its transpose (reverse form)
+        c = np.cumsum(u[::-1])[::-1] * dx
+        return c - 0.5 * dx * (u + u[-1])
+
+    g = np.empty((n, L)); dg = np.empty((n, L))
+    for t, j in enumerate(order):
+        z = (x - m[j]) / sd[j]
+        g[t] = np.exp(-0.5 * z * z) / (sd[j] * np.sqrt(2 * np.pi))
+        dg[t] = g[t] * z / sd[j]
+
+    # forward sweep: scaled T_t for t = n .. 2
+    T = np.empty((n + 1, L)); sT = np.zeros(n + 1)
     j = order[-1]
-    T = ndtr((x - m[j]) / sd[j])
-    for t in range(len(order) - 2, 0, -1):
-        j = order[t]
-        g = np.exp(-0.5 * ((x - m[j]) / sd[j]) ** 2) / (sd[j] * np.sqrt(2 * np.pi))
-        T = np.cumsum(g * T) * dx
-    j = order[0]
-    g = np.exp(-0.5 * ((x - m[j]) / sd[j]) ** 2) / (sd[j] * np.sqrt(2 * np.pi))
-    return float(np.log(max(np.sum(g * T) * dx, 1e-300)))
+    T[n] = ndtr((x - m[j]) / sd[j])
+    for t in range(n - 1, 1, -1):
+        raw = cum(g[t - 1] * T[t + 1])
+        mx = raw.max()
+        if mx <= 0:
+            return -np.inf, np.zeros(len(m))
+        T[t] = raw / mx
+        sT[t] = sT[t + 1] + np.log(mx)
+
+    raw_p = float(np.sum(g[0] * T[2]) * dx)
+    if raw_p <= 0:
+        return -np.inf, np.zeros(len(m))
+    logP = np.log(raw_p) + sT[2]
+
+    grad = np.zeros(len(m))
+    grad[order[0]] = float(np.sum(dg[0] * T[2]) * dx) / raw_p
+
+    # adjoint sweep: u_t aligned with T_t, scaled; u_2 = dx * g_1
+    u = g[0] * dx
+    su = 0.0
+    for t in range(2, n):
+        w = cum_T(u)                                   # C^T u_t
+        # denominator in matching scales: P = <u_t, T_t> e^{su+sT_t}
+        denom = float(np.sum(u * T[t]))
+        num = float(np.sum(w * dg[t - 1] * T[t + 1]))
+        grad[order[t - 1]] = (num / denom) * np.exp(sT[t + 1] - sT[t])
+        u = w * g[t - 1]
+        mx = u.max()
+        if mx <= 0:
+            return logP, grad
+        u = u / mx
+        su += np.log(mx)
+    denom = float(np.sum(u * T[n]))
+    grad[order[-1]] = float(np.sum(u * (-g[n - 1]))) / denom
+    return logP, grad
 
 
-def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-4):
-    """Exact shared-noise full-ranking update: posterior moments from the
-    tilt identity applied to the joint ordered-statistics likelihood
-    (verified against conditional Monte Carlo)."""
+def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3):
+    """Exact shared-noise full-ranking update via the scaled recursion:
+    means from the analytic gradient, variances from a coarse FD of the
+    per-coordinate gradient (bounded below)."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     sd = np.sqrt(v + beta2)
-    n = len(m)
-    grad = np.empty(n)
-    d2 = np.empty(n)
-    f0 = _log_p_order(m, sd, order)
-    for j in range(n):
-        ej = np.zeros(n); ej[j] = eps
-        fp = _log_p_order(m + ej, sd, order)
-        fm = _log_p_order(m - ej, sd, order)
-        grad[j] = (fp - fm) / (2 * eps)
-        d2[j] = (fp - 2 * f0 + fm) / (eps * eps)
+    _, grad = _order_pass(m, sd, order)
     m_new = m + v * grad
-    v_new = np.maximum(v + v ** 2 * d2, 1e-6)
+    d2 = np.empty(len(m))
+    for j in range(len(m)):
+        ej = np.zeros(len(m)); ej[j] = eps
+        _, gp = _order_pass(m + ej, sd, order)
+        _, gm = _order_pass(m - ej, sd, order)
+        d2[j] = (gp[j] - gm[j]) / (2 * eps)
+    v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new
