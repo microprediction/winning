@@ -23,3 +23,4 @@ present). The arena imports contestants, never the other way around.
 
 from .registry import METHODS, get_method, register  # noqa: F401
 from . import native  # noqa: F401  (registers the built-in contestants)
+from . import orthant_extra  # noqa: F401  (second wave: GB, ME, EP, SMC)

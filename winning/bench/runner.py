@@ -43,8 +43,17 @@ BUDGETS = {
     "factor_rqmc": [2**12, 2**14],
     "ghk": [1000],
     "qmc_ghk": [1024, 8192],
+    "genz_bretz": [1024, 8192],
     "tilting": [1000],
+    "mendell_elston": [None],
+    "ep_orthant": [None],
+    "smc_orthant": [1000],
 }
+
+# per-alternative methods whose cost is quadratic-or-worse in N: excluded
+# entirely at N >= 1000 (their scaling story is told at 50 and 200)
+HEAVY_AT_LARGE_N = {"tilting", "factor_rqmc", "ep_orthant", "smc_orthant",
+                    "genz_bretz", "ghk", "qmc_ghk", "mendell_elston"}
 
 
 def main(quick=False):
@@ -62,6 +71,8 @@ def main(quick=False):
                 np.save(ref_file, truth)
             for name, fn in METHODS.items():
                 for budget in BUDGETS.get(name, [None]):
+                    if n >= 1000 and name in HEAVY_AT_LARGE_N:
+                        continue
                     if quick and name in ("tilting", "factor_rqmc") and n > 200:
                         continue
                     t0 = time.perf_counter()

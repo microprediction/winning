@@ -31,22 +31,29 @@ def _problem5():
 
 BUDGET2 = {"lattice": None, "direct_mc": 400_000, "sobol_direct": 2**17,
            "factor_rqmc": 2**14, "ghk": 100_000, "qmc_ghk": 2**14,
-           "tilting": 50_000}
+           "tilting": 50_000, "genz_bretz": 2**14, "mendell_elston": None,
+           "ep_orthant": None, "smc_orthant": 50_000}
+
+
+# deterministic APPROXIMATIONS are anchored to their documented accuracy
+# class, not to exactness; everything else is anchored tight
+APPROX_TOL5 = {"mendell_elston": 5e-2, "ep_orthant": 2e-2}
 
 
 @pytest.mark.parametrize("name", sorted(METHODS))
 def test_binary_closed_form(name):
     p, _ = METHODS[name](mu2, V2, D2, budget=BUDGET2[name], seed=5)
-    assert abs(p[0] - EXACT2) < 4e-3
+    assert abs(p[0] - EXACT2) < 4e-3   # all methods exact-class at N=2
 
 
 BUDGET5 = {"lattice": None, "direct_mc": 400_000, "sobol_direct": 2**16,
            "factor_rqmc": 2**13, "ghk": 20_000, "qmc_ghk": 2**13,
-           "tilting": 20_000}
+           "tilting": 20_000, "genz_bretz": 2**13, "mendell_elston": None,
+           "ep_orthant": None, "smc_orthant": 20_000}
 
 
 @pytest.mark.parametrize("name", sorted(METHODS))
 def test_five_way_vs_mc(name):
     mu, V, D, truth = _problem5()
     p, _ = METHODS[name](mu, V, D, budget=BUDGET5[name], seed=7)
-    assert np.abs(p - truth).max() < 5e-3
+    assert np.abs(p - truth).max() < APPROX_TOL5.get(name, 5e-3)
