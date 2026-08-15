@@ -181,12 +181,18 @@ def _order_pass(m, sd, order, L=2001):
 
 
 def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3):
-    """Exact shared-noise full-ranking update via the scaled recursion:
-    means from the analytic gradient, variances from a coarse FD of the
-    per-coordinate gradient (bounded below)."""
+    """Exact full-ranking update: means from the analytic gradient of the
+    ordered-statistics likelihood, variances from a coarse FD of the
+    per-coordinate gradient (bounded below).
+
+    On TrueSkill's home model (independent per-player noise, full order
+    observed) this reproduces TrueSkill to ~1e-3 per rating -- their EP is
+    essentially exact there. The value is in models TrueSkill cannot
+    express: beta2 may be a per-player array (consistent vs erratic
+    performers), and the recursion extends to factor-correlated skills."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
-    sd = np.sqrt(v + beta2)
+    sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     _, grad = _order_pass(m, sd, order)
     m_new = m + v * grad
     d2 = np.empty(len(m))
