@@ -1,0 +1,22 @@
+{"problem": "n50k2", "n": 50, "k": 2, "method": "lattice", "budget": null, "seconds": 0.0128, "max_err": 0.0008258207970209819, "info": {"backend": "fastrace", "L": 501, "prenorm_defect": 2.3933022896827083e-08}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "direct_mc", "budget": 100000, "seconds": 0.0371, "max_err": 0.0009080000000000199, "info": {"draws": 100000}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "direct_mc", "budget": 1000000, "seconds": 0.3971, "max_err": 0.0007579999999999809, "info": {"draws": 1000000}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "sobol_direct", "budget": 16384, "seconds": 0.0192, "max_err": 0.0019362031250000078, "info": {"points": 16384}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "sobol_direct", "budget": 131072, "seconds": 0.082, "max_err": 0.0011595537109375005, "info": {"points": 131072}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "factor_rqmc", "budget": 4096, "seconds": 0.1004, "max_err": 0.0010856301652063527, "info": {"points": 4096}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "factor_rqmc", "budget": 16384, "seconds": 0.3918, "max_err": 0.001001342750934442, "info": {"points": 16384}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "ghk", "budget": 1000, "seconds": 0.0832, "max_err": 0.008543683685824054, "info": {"draws": 1000}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "qmc_ghk", "budget": 1024, "seconds": 0.0772, "max_err": 0.0009092166237486266, "info": {"draws": 1024}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "qmc_ghk", "budget": 8192, "seconds": 0.4241, "max_err": 0.0006540847915659787, "info": {"draws": 8192}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "tilting", "budget": 1000, "seconds": 0.2923, "max_err": 0.00254420015783359, "info": {"draws": 1000}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "lattice", "budget": null, "seconds": 0.0469, "max_err": 0.0005917332718609197, "info": {"backend": "fastrace", "L": 501, "prenorm_defect": 2.3933023340916293e-08}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "direct_mc", "budget": 100000, "seconds": 0.1523, "max_err": 0.00192500000000001, "info": {"draws": 100000}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "direct_mc", "budget": 1000000, "seconds": 1.5114, "max_err": 0.0006735000000000005, "info": {"draws": 1000000}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "sobol_direct", "budget": 16384, "seconds": 0.0488, "max_err": 0.0025614609375000028, "info": {"points": 16384}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "sobol_direct", "budget": 131072, "seconds": 0.3433, "max_err": 0.0006246005859375028, "info": {"points": 131072}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "factor_rqmc", "budget": 4096, "seconds": 1.7087, "max_err": 0.0008777987173173921, "info": {"points": 4096}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "factor_rqmc", "budget": 16384, "seconds": 7.3125, "max_err": 0.0007218631574226198, "info": {"points": 16384}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "ghk", "budget": 1000, "seconds": 1.411, "max_err": 0.006209183298881066, "info": {"draws": 1000}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "qmc_ghk", "budget": 1024, "seconds": 1.2989, "max_err": 0.001158418685297695, "info": {"draws": 1024}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "qmc_ghk", "budget": 8192, "seconds": 7.4708, "max_err": 0.0005710228183443411, "info": {"draws": 8192}}
+{"problem": "n200k2", "n": 200, "k": 2, "method": "tilting", "budget": 1000, "seconds": 29.2851, "max_err": 0.0016733205605254584, "info": {"draws": 1000}}
