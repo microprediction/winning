@@ -78,9 +78,14 @@ def main(quick=False):
                     t0 = time.perf_counter()
                     p, info = fn(mu, V, D, budget=budget, seed=17)
                     dt = time.perf_counter() - t0
+                    resolvable = truth > 50 / 2_000_000   # ref resolution
+                    log_err = float(np.abs(
+                        np.log(np.maximum(p[resolvable], 1e-300))
+                        - np.log(truth[resolvable])).max())
                     rec = {"problem": pid, "n": n, "k": k, "method": name,
                            "budget": budget, "seconds": round(dt, 4),
                            "max_err": float(np.abs(p - truth).max()),
+                           "max_log_err": log_err,
                            "info": info}
                     fh.write(json.dumps(rec) + "\n")
                     print(f"{pid:>8} {name:>12} budget={str(budget):>8}: "

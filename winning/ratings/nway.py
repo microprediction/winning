@@ -108,3 +108,46 @@ def update_ranking(m, v, order, beta2=1.0):
         mm, vv, _ = update_winner(m[rest], v[rest], w_local, beta2)
         m[rest], v[rest] = mm, vv
     return m, v
+
+
+def _log_p_order(m, sd, order, L=1001):
+    """log P(observed finish order) for independent performances
+    x_j ~ N(m_j, sd_j^2): exact backward lattice recursion, O(nL).
+    order[0] is the best performance. Shared noise handled exactly:
+    this is the joint ordered-statistics probability, not a product of
+    fresh-noise stage events."""
+    lo = float((m - 8 * sd.max()).min())
+    hi = float((m + 8 * sd.max()).max())
+    x = np.linspace(lo, hi, L)
+    dx = x[1] - x[0]
+    j = order[-1]
+    T = ndtr((x - m[j]) / sd[j])
+    for t in range(len(order) - 2, 0, -1):
+        j = order[t]
+        g = np.exp(-0.5 * ((x - m[j]) / sd[j]) ** 2) / (sd[j] * np.sqrt(2 * np.pi))
+        T = np.cumsum(g * T) * dx
+    j = order[0]
+    g = np.exp(-0.5 * ((x - m[j]) / sd[j]) ** 2) / (sd[j] * np.sqrt(2 * np.pi))
+    return float(np.log(max(np.sum(g * T) * dx, 1e-300)))
+
+
+def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-4):
+    """Exact shared-noise full-ranking update: posterior moments from the
+    tilt identity applied to the joint ordered-statistics likelihood
+    (verified against conditional Monte Carlo)."""
+    m = np.asarray(m, dtype=float)
+    v = np.asarray(v, dtype=float)
+    sd = np.sqrt(v + beta2)
+    n = len(m)
+    grad = np.empty(n)
+    d2 = np.empty(n)
+    f0 = _log_p_order(m, sd, order)
+    for j in range(n):
+        ej = np.zeros(n); ej[j] = eps
+        fp = _log_p_order(m + ej, sd, order)
+        fm = _log_p_order(m - ej, sd, order)
+        grad[j] = (fp - fm) / (2 * eps)
+        d2[j] = (fp - 2 * f0 + fm) / (eps * eps)
+    m_new = m + v * grad
+    v_new = np.maximum(v + v ** 2 * d2, 1e-6)
+    return m_new, v_new

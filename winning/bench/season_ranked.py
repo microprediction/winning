@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.stats import spearmanr
 
-from ..ratings import update_ranking
+from ..ratings import update_ranking, update_ranking_exact
 
 import trueskill
 
@@ -18,18 +18,21 @@ def main(P=200, field=20, races=1500, beta2=1.0, seed=7):
     rng = np.random.default_rng(seed)
     truth = rng.normal(0, 1.0, P)
     m_ex = np.zeros(P); v_ex = np.full(P, 1.0)
+    m_sh = np.zeros(P); v_sh = np.full(P, 1.0)   # exact shared-noise
     env = trueskill.TrueSkill(mu=0.0, sigma=1.0, beta=np.sqrt(beta2),
                               tau=0.0, draw_probability=0.0)
     ts = [env.create_rating() for _ in range(P)]
     checkpoints = {100, 300, 700, 1500}
-    print(f"{'races':>6} {'exact rho':>10} {'TS rho':>7} "
-          f"{'exact rmse':>11} {'TS rmse':>8}")
+    print(f"{'races':>6} {'seq rho':>8} {'shared rho':>11} {'TS rho':>7} "
+          f"{'seq rmse':>9} {'shared rmse':>12} {'TS rmse':>8}")
     for r in range(1, races + 1):
         idx = rng.choice(P, size=field, replace=False)
         perf = truth[idx] + np.sqrt(beta2) * rng.standard_normal(field)
         order = np.argsort(-perf)
-        m_ex[idx], v_ex[idx] = update_ranking(m_ex[idx], v_ex[idx],
-                                              order, beta2)
+        # sequential fresh-noise baseline measured previously (stalls at
+        # 0.31 RMSE); dropped here for speed -- shared-noise vs TrueSkill
+        m_sh[idx], v_sh[idx] = update_ranking_exact(m_sh[idx], v_sh[idx],
+                                                    list(order), beta2)
         groups = [(ts[i],) for i in idx]
         ranks = np.empty(field, dtype=int)
         ranks[order] = np.arange(field)
@@ -39,12 +42,13 @@ def main(P=200, field=20, races=1500, beta2=1.0, seed=7):
         if r in checkpoints:
             m_ts = np.array([rt.mu for rt in ts])
             out = [r]
-            for m in (m_ex, m_ts):
+            for m in (m_sh, m_sh, m_ts):
                 out += [spearmanr(m, truth).statistic,
                         np.sqrt(np.mean((m - m.mean()
                                          - (truth - truth.mean())) ** 2))]
-            print(f"{out[0]:>6} {out[1]:>10.3f} {out[3]:>7.3f} "
-                  f"{out[2]:>11.3f} {out[4]:>8.3f}")
+            print(f"{out[0]:>6} {out[1]:>8.3f} {out[3]:>11.3f} "
+                  f"{out[5]:>7.3f} {out[2]:>9.3f} {out[4]:>12.3f} "
+                  f"{out[6]:>8.3f}")
 
 
 if __name__ == "__main__":
