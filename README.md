@@ -160,3 +160,12 @@ For large races we are talking 25 seconds for a 100,000 horse race.
 Support my open source work. Buy [Microprediction: Building An Open AI Network](https://mitpress.mit.edu/9780262047326/microprediction/) published by MIT Press. 
 
 
+
+## Compiled acceleration
+
+`rust/fastrace` holds the optional compiled kernels (forward pass with
+slopes, Jacobian-vector products in both forms, the Chebyshev-separated
+low-rank pass, and a compiled GHK for like-for-like baselining). Build with
+`pip install maturin && maturin develop --release` from `rust/fastrace`;
+`winning.methods` detects and uses it automatically. Published wheels
+(`pip install winning[fast]`) are on the roadmap.
