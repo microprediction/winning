@@ -32,7 +32,7 @@ def _problem5():
 BUDGET2 = {"lattice": None, "direct_mc": 400_000, "sobol_direct": 2**17,
            "factor_rqmc": 2**14, "ghk": 100_000, "qmc_ghk": 2**14,
            "tilting": 50_000, "genz_bretz": 2**14, "mendell_elston": None,
-           "ep_orthant": None, "smc_orthant": 50_000}
+           "ep_orthant": None, "smc_orthant": 50_000, "stern": 30_000}
 
 
 # deterministic APPROXIMATIONS are anchored to their documented accuracy
@@ -49,7 +49,7 @@ def test_binary_closed_form(name):
 BUDGET5 = {"lattice": None, "direct_mc": 400_000, "sobol_direct": 2**16,
            "factor_rqmc": 2**13, "ghk": 20_000, "qmc_ghk": 2**13,
            "tilting": 20_000, "genz_bretz": 2**13, "mendell_elston": None,
-           "ep_orthant": None, "smc_orthant": 20_000}
+           "ep_orthant": None, "smc_orthant": 20_000, "stern": 8_000}
 
 
 @pytest.mark.parametrize("name", sorted(METHODS))

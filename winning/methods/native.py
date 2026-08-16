@@ -188,3 +188,42 @@ def tilting(mu, V, D, budget=1000, seed=7):
         mx = lw.max()
         p[i] = np.exp(mx) * np.mean(np.exp(lw - mx))
     return p / p.sum(), {"draws": int(budget)}
+
+
+@register("stern")
+def stern(mu, V, D, budget=1024, seed=0):
+    """Stern (1992, Econometrica): smoothed simulation. Split the noise
+    into an iid part at scale lam = min(D) and a remainder; draw the
+    remainder (factor part plus excess diagonal) by Monte Carlo, and
+    conditional on each draw the iid part gives a smooth product-of-CDFs
+    integral, here evaluated on a shared lattice per draw. Historical
+    implementations evaluated one alternative at a time; the estimator's
+    statistical behavior (R^{-1/2} in the remainder draws) is unchanged
+    by the shared-field assembly used here."""
+    mu = np.asarray(mu, dtype=float)
+    V = np.atleast_2d(np.asarray(V, dtype=float))
+    D = np.asarray(D, dtype=float)
+    n = len(mu)
+    rng = np.random.default_rng(seed)
+    lam = 0.999 * float(D.min())
+    sd_ex = np.sqrt(D - lam)
+    sqlam = np.sqrt(lam)
+    R = int(budget)
+    p = np.zeros(n)
+    L = 257
+    for r in range(R):
+        f = rng.standard_normal(V.shape[1])
+        eta = V @ f + sd_ex * rng.standard_normal(n)
+        a = mu + eta
+        lo = a.min() - 8 * sqlam
+        hi = a.max() + 8 * sqlam
+        x = np.linspace(lo, hi, L)
+        dx = x[1] - x[0]
+        z = (x[None, :] - a[:, None]) / sqlam
+        logF = log_ndtr(z)
+        total = logF.sum(axis=0)
+        g = np.exp(-0.5 * z * z) / (sqlam * np.sqrt(2 * np.pi))
+        w = np.exp(np.clip(total[None, :] - logF, -745.0, 0.0))
+        p += (g * w).sum(axis=1) * dx
+    p = np.maximum(p / R, 0.0)
+    return p / p.sum(), {"R": R, "lam": lam}

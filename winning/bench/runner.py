@@ -48,6 +48,7 @@ BUDGETS = {
     "mendell_elston": [None],
     "ep_orthant": [None],
     "smc_orthant": [1000],
+    "stern": [1024, 8192],
 }
 
 # per-alternative methods whose cost is quadratic-or-worse in N: excluded
