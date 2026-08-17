@@ -64,3 +64,32 @@ after the fact.
 - Exacta and trifecta pricing redone against the exact ordering law.
 - Nothing is pushed. The referee could not see `research/human` on main for that
   reason. A tagged commit or archival DOI is needed before circulation.
+
+## Counter-evidence to find room for (2026-08-17)
+
+Meyer-Grant, Kellen, Harding & Singmann, "Extreme-Value Signal Detection Theory for
+Recognition Memory", OSF preprint qhrfj, project gtzu7, submitted Dec 2025, not yet
+published. This is the sharpest challenge to the paper and must be cited.
+
+They prove Gumbel-min uniquely predicts accuracy invariance as the choice set grows
+uniformly, where Gaussian predicts change, and they find the invariance: chi2(3)=0.69,
+p=.876, BF=679 for the null, in 253 participants. Their predictive benchmarking summary:
+"Across all predictive tests, a pattern was clear -- the Gumbel_min model outperformed the
+Gaussian."
+
+The property they validate is Yellott's own condition, invariance under uniform expansions
+of the choice set, which Yellott showed equivalent to the axiom. So they independently
+confirm the axiom in recognition memory, the same domain where our Utochkin analysis has
+the Gaussian race beating renormalization on nested foils.
+
+Both can hold. Their test grows the set with fresh items and measures accuracy; ours removes
+named foils and measures redistribution. Their own footnote suggests the reconciliation:
+the invariance "breaks down when systematic similarity among stimuli is introduced because
+latent strengths cease to be independent", which is exactly Utochkin's same-category foil.
+Our similarity split found contraction equal across same- and cross-category foils, which is
+in tension with that and worth re-examining.
+
+Not usable as data: both Kellen programs draw fresh items per trial and per set size. Zero
+word reuse across 110, 103 and 359 participants, verified directly from full_list.
+
+Also: their Appendix B swaps the 252 and 253 participant counts relative to the posted CSVs.
