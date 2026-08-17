@@ -89,7 +89,26 @@ compared here read the entire latent vector off the full-menu shares and assume 
 what generated them.
 
 So neither the question, nor the direction of the answer, nor even the preference for a
-non-Gumbel Thurstonian process originates here, and this paper claims none of them. What has not been done, as far as we can establish, is the head-to-head: calibrate
+non-Gumbel Thurstonian process originates here, and this paper claims none of them.
+
+What has changed since is worth stating, because it is why the question is answerable now
+and was not then. Trial-level archives are open, so restricted menus can be scored on the
+observations that produced them rather than on printed marginals; three of the populations
+below were deposited by their authors and a fourth is a recommender's click log. Inverting
+the $K$-alternative contest from shares alone is now a single pass over a shared grid
+\cite{cotton2021}, so the Gaussian map costs nothing to apply and can be a default rather
+than a fitted model. Out-of-sample scoring against an explicit generative null is standard,
+which matters here more than usual, because contraction of a noisy share vector lowers log
+loss whether or not the axiom fails, and no comparison of fit indices detects that. And the
+question has left psychology: masking a softmax and rescaling the survivors is
+Equation~\eqref{eq:luce} on a restricted set, so a rule tested on letter confusions in 1957
+is now executed billions of times a day inside models that never heard of Luce.
+
+There is also a symmetry in the record that no single paper makes visible. Stewart is an
+author both of \cite{wills2000}, which anticipates the conclusion, and of \cite{stewart2005},
+whose tone matrices supply this paper's clearest counterexample to it. The boundary in
+Section~\ref{sec:boundary} is not a rebuttal of that group's position; it is a line that runs
+between two of its own datasets. What has not been done, as far as we can establish, is the head-to-head: calibrate
 both parameter-free maps on the same full-menu shares, predict restricted menus neither has
 seen, and score them against a null in which the axiom holds by construction. That is the
 exercise below, and the boundary it exposes in Section~\ref{sec:boundary} is where the
@@ -954,6 +973,61 @@ $m$-alternative tasks and report that the softmax parameter must vary with $m$ w
 signal-detection parameter is stable. That is the contraction studied here, seen through
 the parameter that has to move to absorb it.
 
+\section{What the restriction experiments are, and where their numbers went}
+\label{sec:census}
+
+The question in this paper's title is old, narrow and answerable, so it is worth asking why
+it stayed open. The answer is not that the experiments were never run. It is that they were
+run in four literatures that do not cite one another---speech confusion, visual absolute
+identification, categorization, and odor identification---and that most of them published
+the wrong summary. A paper that varies the number of response alternatives and reports
+percent correct cannot score either map, because both need cell-level shares. That describes
+the majority of what we found.
+
+We assembled a census of sixty-seven sources, one note each, recording design, what numbers
+were printed or deposited, a fetched access route, and a usability verdict, negatives
+included so the next pass starts where this one stopped; it is in the repository under
+\texttt{research/human/notes/crr}. Table~\ref{tab:census} lists the sources that restrict a
+response set over shared alternatives, are not scored above, and could therefore still change
+the answer.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+Source & Domain & Restriction & Status \\
+\midrule
+Clarke \cite{clarke1957} & speech in noise & $8 \to 4$, $6 \to 3$ & library access \\
+Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets & printed; digitize \\
+Hodge and Pollack & auditory, unidimensional & nested & library access \\
+Getty et al.\ \cite{getty1979} & complex sounds & $8 \to 4$, three sets & counts extracted \\
+Lacouture et al. & line lengths & nested & library access \\
+Kent and Lamberts & dot separation & $N = 2,4,6,8,10$ & library access \\
+Townsend and Landon \cite{townsendlandon1982} & letters & five, three subsets & printed; digitize \\
+Rouder lab, unpublished & line lengths & twelve, nested & raw trials, open \\
+Negoias et al. & odor descriptors & $16 \to 8 \to 4$ & never published \\
+J\"ager et al. & flavour terms & nested, $n = 735$ & library access \\
+H\"orberg et al. & odor naming & free, then cued list & data request \\
+\bottomrule
+\end{tabular}
+\caption{Restriction experiments not scored in this paper. ``Printed'' means the matrices
+appear in the article and need transcription; Townsend and Landon's are proportions to three
+decimals over $240$ trials per cell, so multiplying by $240$ checks the transcription against
+integers. The Rouder laboratory data is unpublished but public, with a master set, nested
+subsets and stimulus and response logged as global indices, which is the property that makes
+labels comparable across menus. Four large odor corpora are open and usable but carry a fixed
+four-descriptor menu, so they calibrate and cannot score.}
+\label{tab:census}
+\end{table}
+
+Two features of the table bear on how much the answer above should be trusted. Every entry
+would enlarge the evidence on the winning side of the boundary or the losing one, and none
+of them is a preference task, so the corpus scored here is not representative of the
+literature by domain. And the two entries that need only transcription are the two oldest,
+which is a reasonable summary of the state of this question: the data has been on the ground
+since 1960.
+
 \begin{thebibliography}{99}
 
 \bibitem{costagomes2022}
@@ -1019,6 +1093,11 @@ Constant-ratio rule for confusion matrices in speech communication.
 Irwin Pollack and Louis Decker.
 Consonant confusions and the constant ratio rule.
 \emph{Language and Speech}, 3(1):1--6, 1960.
+
+\bibitem{getty1979}
+David J. Getty, John A. Swets, Joel B. Swets, and David M. Green.
+On the prediction of confusion matrices from similarity judgments.
+\emph{Perception \& Psychophysics}, 26(1):1--19, 1979.
 
 \bibitem{hodge1961}
 Milton H. Hodge.
