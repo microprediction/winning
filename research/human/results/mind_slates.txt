@@ -1,0 +1,8 @@
+846 slates seen at least 10 times
+6135 nested slate pairs
+6000 pairs prepared
+  renormalization 1.4637   race 1.4141   gain +0.0496   on 6000 pairs
+
+6000 pairs scored
+  renormalization 1.4637   race 1.4141   gain +0.0496
+  Luce null median -0.0088   excess +0.0584   MC tail 0.016  (60 reps)
