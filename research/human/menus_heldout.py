@@ -44,9 +44,12 @@ ALPHA = 0.5
 
 
 def load():
-    """subject -> {menu tuple of indices: chosen index}. Deferrals are dropped."""
+    """subject -> {menu: chosen index}, plus the forced-choice flag and which of the
+    two experiments the subject belongs to. The archive holds two: experiment 1 ran
+    all 31 subsets, experiment 2 a 26-menu design. They are separate studies and are
+    reported separately rather than pooled."""
     by = defaultdict(dict)
-    fc = {}
+    fc, exp = {}, {}
     with open(CSV) as f:
         for r in csv.DictReader(f):
             ch = (r["choice"] or "").strip()
@@ -56,7 +59,8 @@ def load():
                 continue
             by[r["subject"]][menu] = IDX[ch]
             fc[r["subject"]] = r["fc"].strip()
-    return by, fc
+            exp[r["subject"]] = r["experiment"].strip()
+    return by, fc, exp
 
 
 def shares(subjects, by, full):
@@ -126,11 +130,15 @@ def luce_synth(by, subjects, p, rng):
 
 def main():
     reps = int(sys.argv[1]) if len(sys.argv) > 1 else 200
-    by, fc = load()
-    groups = [("all subjects", sorted(by)),
-              ("forced choice only", sorted(s for s in by if fc.get(s) == "1"))]
-    if len(groups[1][1]) == 0:
-        groups[1] = ("forced choice only", sorted(s for s in by if fc.get(s) == "0"))
+    by, fc, exp = load()
+    groups = []
+    for e in sorted(set(exp.values())):
+        subs = [s for s in by if exp[s] == e]
+        groups.append((f"experiment {e}, all", sorted(subs)))
+        forced = [s for s in subs if fc.get(s) == "1"]
+        if forced:
+            groups.append((f"experiment {e}, forced choice", sorted(forced)))
+    groups.append(("both experiments pooled", sorted(by)))
     full = tuple(range(len(ITEMS)))
     for label, subjects in groups:
         if len(subjects) < 40:

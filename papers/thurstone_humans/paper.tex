@@ -20,7 +20,9 @@
 \emph{withdrawn}, scratched, delisted, masked out of a softmax, proportional
 renormalization is the human reflex or, in the case of many models, the architecture. Conditioning is available but not free: it needs a model of
 how the probabilities arose, and renormalization {\em tacitly} supplies one. Within the class of independent additive
-random-utility models it is, by Yellott's theorem, the model with Gumbel noise. Assume Gaussian noise
+random-utility models it is the model with Gumbel noise; Holman and Marley established that
+representation, and Yellott \cite{yellott1977} showed it is not identified from pairwise
+comparisons alone but is unique once triples are included. Assume Gaussian noise
 instead and the survivors' odds contract by a computable amount. Both assumptions are
 calibrated to the same probabilities and fit nothing, so they can be scored against each
 other. The Gaussian contest forecasts better on an experiment where subjects chose from all
@@ -50,15 +52,17 @@ obtained; Monty Hall is the familiar counterexample. Withdrawal is a third case,
 conditioning nor informative conditioning, because no information about a fixed experiment
 has arrived: an alternative is gone and the problem is a different one. Conditioning is
 still available, but it now requires a model of how the probabilities were generated, and
-renormalization is one such model rather than a consequence of probability theory. Within
-the class of independent additive random-utility models, and for menus of at least three
-alternatives, Yellott's theorem identifies it as the model with Gumbel noise; pairwise
-choice alone does not pin the noise law down. Which generative assumption to make is
+renormalization is one such model rather than a consequence of probability theory. Within the class of independent
+additive random-utility models, Gumbel errors generate Luce choice probabilities, a
+representation due to Holman and Marley \cite{holman1974}; Yellott \cite{yellott1977} showed
+that it is not unique from pairwise comparisons but that Gumbel is uniquely identified once
+triple comparisons are included. Which generative assumption to make is
 then an empirical question, and this paper measures two of them.
 
-Thurstone \cite{thurstone1927} connects the same two quantities through a contest.
-Item $i$ carries a location $a_i$, draws a performance $X_i \sim N(a_i,1)$ on each
-occasion, and the highest draw is chosen, so
+The independent Gaussian random-utility model, Thurstone's Case V
+\cite{thurstone1927} in the paired-comparison case, extends to a multiway contest and
+connects the same two quantities. Item $i$ carries a location $a_i$, draws a performance
+$X_i \sim N(a_i,1)$ on each occasion, and the highest draw is chosen, so
 \begin{equation}
 p_i = \int \varphi(x - a_i) \prod_{k \neq i} \Phi(x - a_k)\, dx.
 \label{eq:winprob}
@@ -81,9 +85,9 @@ less. Proposition~\ref{prop:contraction} makes this exact.
 Both rules are calibrated to the same $|S|-1$ free shares, and neither sees any
 observation from a smaller menu. The comparison is between two maps with no free
 parameters left, rather than between two fitted models. This also fixes what the
-comparison can settle. A fitted Plackett--Luce likelihood uses the whole ranking, and a
-fitted Bradley--Terry model uses the pairwise outcomes directly; neither is estimated
-here. The question is which map from full-menu shares to restricted-menu shares predicts
+comparison can settle. A fitted Plackett--Luce likelihood \cite{plackett1975} uses the whole ranking, and a fitted
+Bradley--Terry model \cite{bradley1952} uses the pairwise outcomes directly; neither is
+estimated here. The question is which map from full-menu shares to restricted-menu shares predicts
 population choice better. Both are \emph{representative-agent} maps: each treats the
 population as one chooser with one set of worths or locations, and transports its shares
 from $S$ to $T$.
@@ -129,8 +133,7 @@ The proposition says that removing alternatives moves the ratio toward one.
 Two laws sit at the ends of that condition. The Gaussian satisfies it strictly, since
 $\frac{d^2}{dx^2}\log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0$. The Gumbel has
 $r(x) = s^{-1}e^{-x/s}$, so $\log r$ is affine, the inequality becomes an equality, and
-renormalization is recovered exactly. That is the sufficiency half of Yellott's theorem
-\cite{yellott1977}. The axiom is a boundary of the class.
+renormalization is recovered exactly. That is the Holman--Marley representation \cite{holman1974}. The axiom is a boundary of the class.
 
 The boundary is where machine learning sits. A softmax over scores $z_i$ is
 Equation~\eqref{eq:luce} with $u(i) = \exp(z_i)$, so masking a softmax and rescaling the
@@ -148,42 +151,51 @@ that thinner or heavier tails contract more.
 Twelve of the thirteen collections used here are complete rankings, from which subset
 choice is read off rather than observed. One is not, and it comes first.
 
-Costa-Gomes, Cueva, Gerasimou and Tejiscak \cite{costagomes2022} had each subject
-choose separately from all thirty-one subsets of five consumer goods, so restriction is
-observed rather than imputed. The archive names the goods only by two-letter codes and
-we describe them no more precisely. This is the cleanest available test of the question
-above, and it is the primary result.
+Costa-Gomes, Cueva, Gerasimou and Teji\v{s}\v{c}\'ak \cite{costagomes2022} ran two
+experiments in which subjects chose separately from every non-singleton subset of five
+consumer goods, twenty-six menus; the first also included the five singletons. The archive
+names the goods by two-letter codes and we describe them no more precisely. Restriction is
+observed rather than imputed, which makes this the cleanest test in our collection, and the
+two experiments are separate studies with disjoint subjects, so we report them separately
+rather than pooled.
 
-Subjects are split into five folds. On the training subjects, shares come only from the
-full five-item menu; both rules are calibrated to those shares and nothing else; each
-then predicts every menu of size two, three and four; and we score the choices
-actually made by held-out subjects. Intervals resample subjects and repeat the whole
-procedure, calibration included. Some subjects may defer, so the forced-choice
-subgroup is reported separately: those subjects cannot defer, and no coding decision
-about deferral enters that row.
+Subjects are split into five folds. On the training subjects, shares come only from the full
+five-item menu; both maps are calibrated to those shares and nothing else; each then predicts
+every menu of size two, three and four; and we score the choices actually made by held-out
+subjects. Intervals resample subjects and repeat the whole procedure, calibration included.
+Subjects who may defer are reported alongside the forced-choice subgroup, for whom no
+deferral coding enters. Of the $373$ subjects, $364$ record at least one usable choice from a
+non-singleton menu and enter the analysis.
 
 \begin{table}[ht]
 \centering
 \small
-\begin{tabular}{lrrrrl}
+\begin{tabular}{lrrrrrr}
 \toprule
-Subjects & $n$ & Choices & Renorm. & Race & Gain \\
+& $n$ & Choices & Renorm. & Race & Gain & Excess \\
 \midrule
-All & 364 & 8{,}239 & $0.9263$ & $0.9164$ & $+0.0100$ $[+0.0048, +0.0246]$ \\
-Forced choice only & 137 & 3{,}425 & $0.9112$ & $0.8846$ & $+0.0265$ $[+0.0116, +0.0700]$ \\
+Experiment 1, all & 230 & 5{,}134 & $0.9438$ & $0.9298$ & $+0.0140$ & $+0.0158$ \\
+Experiment 1, forced & 76 & 1{,}900 & $0.9639$ & $0.9197$ & $+0.0442$ & $+0.0466$ \\
+Experiment 2, all & 134 & 3{,}105 & $0.9162$ & $0.9103$ & $+0.0059$ & $+0.0056$ \\
+Experiment 2, forced & 61 & 1{,}525 & $0.8939$ & $0.8799$ & $+0.0140$ & $+0.0131$ \\
+\midrule
+Pooled & 364 & 8{,}239 & $0.9263$ & $0.9164$ & $+0.0100$ & $+0.0123$ \\
 \bottomrule
 \end{tabular}
-\caption{Held-out log loss per choice on menus of size two to four, with both rules
-calibrated only to training-fold full-menu shares under a common add-$\alpha$
-convention, $\alpha = 1/2$. Shares rest on $268$ full-menu choices for all subjects and
-$109$ for the forced-choice subgroup. Intervals are subject bootstraps that recompute
-folds, shares, calibration and predictions.}
+\caption{Held-out log loss per choice on menus of size two to four, both maps calibrated only
+to training-fold full-menu shares under a common add-$\alpha$ convention, $\alpha = 1/2$.
+Excess is the gain net of the median gain under a population that renormalizes exactly, as in
+Section~\ref{sec:null}. Subject-bootstrap intervals for the gains are
+$[+0.0072, +0.0335]$, $[+0.0171, +0.0867]$, $[+0.0009, +0.0306]$, $[+0.0034, +0.0560]$ and
+$[+0.0048, +0.0246]$ respectively.}
 \label{tab:menus}
 \end{table}
 
-The Gaussian rule is better on both, and better by more where deferral cannot
-interfere. Section~\ref{sec:null} shows the gain is not an artefact of estimating
-shares from a few hundred observations.
+The race is ahead in both experiments and in both treatments, and by more where deferral
+cannot interfere. The two experiments do not agree on strength. Experiment 1 clears its null
+comfortably, with Monte Carlo tail frequencies of $0.010$ and $0.005$; experiment 2, at
+fifty-eight per cent of the sample, does not, at $0.199$ and $0.129$. The direction
+replicates and the magnitude is not established by these data alone.
 
 \section{Choices induced from rankings}
 \label{sec:rankings}
@@ -385,7 +397,7 @@ was better on every collection examined here except the one too small to discrim
 rather than induced from rankings, it is better by $+0.0265$ nats per choice among
 subjects who cannot defer.
 
-Ten of the twelve ranking collections carry an assumption the menu experiment does not.
+All twelve ranking collections carry an assumption the menu experiments do not.
 A respondent's ranking imposes one ordering on every subset by construction, so no
 ranking dataset can show a person choosing $i$ over $j$ from one menu and $j$ over $i$
 from another, and none reveals whether that person would choose as their ranking implies
@@ -397,12 +409,13 @@ Equation~\eqref{eq:luce}, with worths differing between people, generally does n
 satisfy the axiom in aggregate, which is why mixed logit is useful and why its
 probabilities are integrals over logit probabilities rather than logit probabilities
 \cite{mcfaddentrain2000}. Aggregate failure of the axiom is therefore not evidence that
-individuals violate it. Heterogeneous Luce choosers reproduce aggregate contraction. What
+individuals violate it. Heterogeneous Luce choosers can reproduce aggregate contraction, and
+Appendix~\ref{sec:mixture} exhibits a class in which they do. What
 is rejected is a representative-agent map.
 
 The experiment compares two restriction maps, not two fitted likelihoods. A fitted
-Plackett--Luce model uses the whole ranking and a fitted Bradley--Terry model uses the
-pairwise outcomes directly. Neither was estimated here. Recommendations about ranking or
+Plackett--Luce model \cite{plackett1975} uses the whole ranking and a fitted Bradley--Terry
+model \cite{bradley1952} uses the pairwise outcomes directly. Neither was estimated here. Recommendations about ranking or
 paired-comparison likelihoods therefore have no support in these tables.
 
 The score is a sum of marginal scores for top-item-within-subset outcomes. It is proper
@@ -495,8 +508,8 @@ The Gaussian assumption on taste is where a limit theorem belongs.
 \begin{corollary}[Many small taste components]
 \label{cor:clt}
 Suppose $V_i(\theta) = \sqrt{m}\,a_i + \sum_{\ell=1}^{m}\xi_{\ell i}(\theta)$, where the
-vectors $\xi_\ell(\theta)$ are independent across $\ell$ with mean zero, covariance $I_K$
-and finite second moments, and the individual chooses by \eqref{eq:condluce} at fixed
+vectors $\xi_\ell(\theta)$ are independent and identically distributed across $\ell$ with mean
+zero, covariance $I_K$ and finite second moments, and the individual chooses by \eqref{eq:condluce} at fixed
 $\beta$. Then the aggregate choice probabilities converge as $m \to \infty$ to those of
 Case V with locations $a$.
 \end{corollary}
@@ -507,6 +520,16 @@ $a_i + m^{-1/2}\sum_\ell \xi_{\ell i} + (\beta/\sqrt{m})G_i$. The multivariate c
 theorem sends the middle term to $N(0,I_K)$ and the last to zero, and the $\arg\max$
 probabilities are continuous at a limit with no ties.
 \end{proof}
+
+One direction for future work is worth recording, because it would turn a limit into a
+correction. At finite $\sigma/\beta$ the composite noise is Gaussian plus Gumbel, and the ratio
+$\varepsilon = \beta/\sigma$ is a small parameter multiplying a fast, mean-reverting-like
+component around a slow Gaussian one. That is the structure singular perturbation methods are
+built for, as in fast mean-reverting stochastic volatility, where Case V would play the role
+of the leading-order model and the first correction in $\varepsilon$ would predict departures
+from it. The residuals this paper measures, observed contraction against the Case V
+prediction, are precisely what such an expansion would have to explain, and we do not attempt
+it here.
 
 The covariance assumption is doing real work and should not be waved through. If the taste
 components carry covariance $\Sigma$ instead of $I_K$, the same argument delivers a Gaussian
@@ -542,8 +565,9 @@ near-indifference corner.}
 
 The consequence for this paper is that no individual need be non-Lucean for the Gaussian
 transport to be the right one upstairs. A population of Luce choosers whose tastes vary is
-a contest with composite noise, and once taste variation outweighs within-person choice
-noise the composite is Gaussian and the population contracts by just what Case V predicts.
+a contest with composite noise, and as taste variation comes to outweigh within-person choice
+noise the composite approaches Gaussian and the population contraction approaches the Case V
+prediction.
 That mechanism also says where the fit should be worst: in populations whose members are
 nearly alike.
 
@@ -598,6 +622,43 @@ Maria M. Robinson, Isabella C. DeStefano, Edward Vul, and Timothy F. Brady.
 How do people build up visual memory representations from sensory evidence?
 Revisiting two classic models of choice.
 \emph{Journal of Mathematical Psychology}, 117:102805, 2023.
+
+\bibitem{bradley1952}
+Ralph A. Bradley and Milton E. Terry.
+Rank analysis of incomplete block designs: I. the method of paired comparisons.
+\emph{Biometrika}, 39(3/4):324--345, 1952.
+
+\bibitem{duffysmith2025}
+Sean Duffy and John Smith.
+The random thickness of indifference.
+Working paper, 2025.
+
+\bibitem{holman1974}
+Eric W. Holman and A. A. J. Marley.
+Stimulus and response measurement.
+Unpublished, cited by Yellott \cite{yellott1977} for the Gumbel representation of the
+choice axiom.
+
+\bibitem{huber1982}
+Joel Huber, John W. Payne, and Christopher Puto.
+Adding asymmetrically dominated alternatives: violations of regularity and the similarity
+hypothesis.
+\emph{Journal of Consumer Research}, 9(1):90--98, 1982.
+
+\bibitem{plackett1975}
+Robin L. Plackett.
+The analysis of permutations.
+\emph{Journal of the Royal Statistical Society, Series C}, 24(2):193--202, 1975.
+
+\bibitem{thompsonsingh1967}
+William A. Thompson and Jagbir Singh.
+The use of limit theorems in paired comparison model building.
+\emph{Psychometrika}, 32(3):255--264, 1967.
+
+\bibitem{treisman1985}
+Michel Treisman and Andrew Faulkner.
+On the choice between choice theory and signal detection theory.
+\emph{Quarterly Journal of Experimental Psychology}, 37A(3):387--405, 1985.
 
 \bibitem{thurstone1927}
 Louis L. Thurstone.
