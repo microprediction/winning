@@ -16,8 +16,9 @@
 \noindent Given a set of probabilities assigned to mutually exclusive events, and given
 updated information that one or more of those events cannot occur, the temptation to
 perform a simple proportional renormalization is overwhelming. It is ubiquitous in
-probabilistic modelling, and implicit whenever a softmax is masked or a vector of
-normalized weights has entries deleted and the remainder rescaled. But a
+practice and built into almost every layer of every modern neural network: a softmax is
+Luce's rule exactly, every attention head applies one, and masking a head renormalizes
+over the positions that survive. But a
 population's choice shares are not slices of an urn. They are the outcome of a contest
 among the alternatives, and withdrawing one alternative re-runs that contest rather than
 deleting a piece of it. Reading the shares as winning probabilities in a contest of
@@ -93,6 +94,11 @@ $\frac{d^2}{dx^2}\log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0$. The Gumbel 
 $r(x) = s^{-1}e^{-x/s}$, so $\log r$ is affine, the inequality becomes an equality, and
 renormalization is recovered exactly. That is the sufficiency half of Yellott's theorem
 \cite{yellott1977}. The axiom is a boundary of the class, not a rival to it.
+
+The boundary is where machine learning sits. A softmax over scores $z_i$ is
+Equation~\eqref{eq:luce} with $u(i) = \exp(z_i)$, so masking a softmax and rescaling the
+survivors is proportional renormalization, and by Yellott's theorem that is the
+Gumbel-noise member of the contest class. The default is a single point of the family.
 
 The proposition gives the direction of the effect, not its size. Size depends on the
 shares as well as on the noise law: recalibrating several laws to one share vector and
