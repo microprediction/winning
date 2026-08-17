@@ -93,8 +93,10 @@ population as one chooser with one set of worths or locations, and transports it
 from $S$ to $T$.
 
 The direction of the disagreement is a theorem, and it holds for noise laws other than
-the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise and let
-$r = f/F$ be its reverse hazard, with the highest draw winning as above.
+the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise, assumed independent and
+identically distributed across alternatives up to location, with positive density on a common
+support and $\log r$ differentiable, and let $r = f/F$ be its reverse hazard, with the highest
+draw winning as above.
 
 \begin{proposition}[Removing alternatives contracts the odds]
 \label{prop:contraction}
@@ -144,6 +146,58 @@ The proposition gives the direction of the effect, not its size. Size depends on
 shares as well as on the noise law: recalibrating several laws to one share vector and
 then to another can reverse which of them contracts more. We therefore make no claim
 that thinner or heavier tails contract more.
+
+\section{Scoreboard}
+
+Nineteen comparisons are reported below, each one a population whose full-menu shares
+calibrate both maps and whose restricted-menu choices score them. A comparison is a win
+for the race when its gain exceeds the gain a renormalizing population would produce,
+with a Monte Carlo tail frequency of $0.05$ or less, a loss when renormalization exceeds
+the race on the same test, and a draw otherwise. The null matters because contraction of
+a noisily estimated share vector lowers log loss on its own, which
+Section~\ref{sec:null} quantifies.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llrl}
+\toprule
+Population & Restriction & Tail & Verdict \\
+\midrule
+Occupational prestige & ranking-induced & $\le .005$ & win \\
+Sushi & ranking-induced & $\le .005$ & win \\
+Political goals & ranking-induced & $\le .005$ & win \\
+GSS socialization & ranking-induced & $\le .005$ & win \\
+GSS job values & ranking-induced & $\le .005$ & win \\
+Jester files 1, 2, 3 & ranking-induced & $\le .005$ & win $\times 3$ \\
+Dots & ranking-induced & $\le .005$ & win \\
+Puzzles & ranking-induced & $\le .005$ & win \\
+Netflix & ranking-induced & $\le .005$ & win \\
+Sports participation & ranking-induced & $.51$ & draw \\
+\midrule
+Consumer goods, experiment 1 & observed menus & $.005$ & win \\
+Lotteries, high cost & observed menus & $.035$ & win \\
+US state ballots 2024 & observed ballots & $.005$ & win \\
+Lotteries, medium cost & observed menus & $.124$ & draw \\
+Consumer goods, experiment 2 & observed menus & $.129$ & draw \\
+Lotteries, low cost & observed menus & $.667$ & draw \\
+Grocery stockouts & observed stockouts & --- & draw \\
+\bottomrule
+\end{tabular}
+\caption{Fourteen wins, five draws, no losses. The upper block reads subset choice off a
+complete ranking; the lower block observes it. Tail frequencies are floored at $1/201$ by
+two hundred replicates. The grocery cells give no tail because the comparison is made per
+store-category: the race is ahead in 29 of 78 cells and its mean gain sits within
+$0.0002$ of the null, so neither map is favoured. Forced-choice subgroups are quoted for
+the consumer experiments, since no deferral coding enters those.}
+\label{tab:scoreboard}
+\end{table}
+
+Two features of the table matter more than the count. Every loss column is empty, so on
+no population examined does renormalization beat the race by this test. And the draws are
+concentrated where they should be: the smallest ranking collection, the smallest
+consumer experiment, the cheapest lottery frame, and the one setting whose alternatives
+are not mutually exclusive.
 
 \section{Choices from real menus}
 \label{sec:menus}
@@ -448,7 +502,8 @@ Eigentaste project \cite{goldberg2001}; the General Social Survey cumulative fil
 NORC; the perceptual, leisure, prestige, film and political-goal rankings via PrefLib
 \cite{mattei2013} and the CRAN packages PLMIX and ConsRank; the menu-choice data from
 the replication archive of \cite{costagomes2022}. All are public. Analysis code and
-every input needed to reproduce the tables are under \texttt{research/human} in
+every input needed to reproduce the tables are under \texttt{research/human} on the
+\texttt{machine-preference-paradox} branch of
 \texttt{github.com/microprediction/winning}, the inputs as column extracts rather than
 raw archives.
 
@@ -522,15 +577,18 @@ probabilities are continuous at a limit with no ties.
 \end{proof}
 
 One direction for future work would turn this limit into a correction. At finite
-$\sigma/\beta$ the composite noise is Gaussian plus Gumbel, so $\varepsilon = \beta/\sigma$ is a
-small parameter attached to a subordinate component sitting on a Gaussian leading order. That
-is the setting for a singular perturbation expansion, with Case V as the leading-order
-restriction map and the first term in $\varepsilon$ predicting departures from it. The
-structure is static rather than dynamic, so the analogy is to the technique rather than to any
-particular application of it, such as the expansions used for fast mean-reverting stochastic
-volatility. What makes the direction concrete is that the target already exists: the residuals
-in Table~\ref{tab:mixture} and their empirical counterparts are what such an expansion would
-have to reproduce. We do not attempt it here.
+$\sigma/\beta$ the composite noise is $Z + \varepsilon G$ with $\varepsilon = \beta/\sigma$, so the
+natural device is a cumulant expansion about the Gaussian rather than anything singular. The
+first two Gumbel cumulants do little: the mean is a common location shift and cancels in the
+$\arg\max$, and the variance inflation $1 + \pi^2\varepsilon^2/6$ is a common scale change,
+which would be absorbed entirely if the calibration matched the whole law. It does not. It
+matches the $K-1$ full-menu shares, so a common scale error is invisible in the fit and
+propagates into the restricted-menu prediction, which is the quantity at issue. Simulating the
+deviation of observed contraction from the recalibrated Case V value over
+$\varepsilon \in [0.125, 1]$ gives local exponents of $1.6$, $2.0$ and $2.3$, so the range we can
+resolve looks quadratic rather than cubic; the smallest point sits near Monte Carlo resolution
+and deterministic quadrature would be needed to settle the rate. Either way the target is
+already tabulated, since the ratio column above is what such an expansion must reproduce.
 
 The covariance assumption is doing real work and should not be waved through. If the taste
 components carry covariance $\Sigma$ instead of $I_K$, the same argument delivers a Gaussian
@@ -637,8 +695,7 @@ Working paper, 2025.
 \bibitem{holman1974}
 Eric W. Holman and A. A. J. Marley.
 Stimulus and response measurement.
-Unpublished, cited by Yellott \cite{yellott1977} for the Gumbel representation of the
-choice axiom.
+In \emph{Psychophysical Judgment and Measurement}, chapter 7. Academic Press, 1974.
 
 \bibitem{huber1982}
 Joel Huber, John W. Payne, and Christopher Puto.
