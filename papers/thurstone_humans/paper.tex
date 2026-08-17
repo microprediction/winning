@@ -63,7 +63,8 @@ p_i = \int \varphi(x - a_i) \prod_{k \neq i} \Phi(x - a_k)\, dx.
 \end{equation}
 The integral is one-dimensional for any number of alternatives, since conditioning on
 $X_i = x$ makes the other events independent, and it is inverted numerically by a
-lattice method \cite{cotton2021}; locations are identified up to a common translation,
+lattice method of \cite{cotton2021}, which recovers the whole location vector in one pass
+over a shared grid; locations are identified up to a common translation,
 fixed here by $\sum_i a_i = 0$. Prediction for a subset $T$ means re-running the
 contest among $T$ alone. For a pair this is one normal evaluation,
 \begin{equation}
@@ -360,9 +361,12 @@ percentages are context for the absolute gains.
 
 The practical recommendation is narrow. When the task is to infer restricted-menu
 population shares from full-menu population shares, the Gaussian race should be the
-default in place of renormalization. It requires only a low-dimensional numerical calibration and one-dimensional quadrature,
-needs no additional data, and was better on every collection examined here except the one
-too small to discriminate. In the single experiment where restriction is actually observed
+default in place of renormalization. The inversion from shares to locations is the only extra machinery, and the lattice
+algorithm of \cite{cotton2021} performs it in one pass over a common grid, returning the
+whole vector of winning probabilities for fields far larger than any considered here; the
+restricted predictions are then one-dimensional quadrature on the same grid. So the
+recommendation needs no additional data and no appreciable additional computation, and it
+was better on every collection examined here except the one too small to discriminate. In the single experiment where restriction is actually observed
 rather than induced from rankings, it is better by $+0.0265$ nats per choice among
 subjects who cannot defer.
 
