@@ -355,54 +355,76 @@ percentages are context for the absolute gains.
 \label{sec:mixture}
 
 Nothing so far explains why the Gaussian member of the class should be the one that fits.
-A mechanism is available, and it comes from the same caveat that limits what the data can
-identify.
+A mechanism is available, and it is elementary.
 
-By Yellott's theorem an individual Luce chooser is a contest with Gumbel noise. Let
-individual log-worths vary across the population,
+Suppose an alternative's latent performance for one respondent is an additive
+accumulation of many small independent influences,
 \begin{equation}
-\log u_i(\theta) = \mu_i + \varepsilon_i(\theta),
-\label{eq:hetero}
+X_{ni} = b_{ni} + \sum_{r=1}^{n} w_{nr}\, \varepsilon_{ri},
+\qquad \varepsilon_{r1},\dots,\varepsilon_{rK} \ \text{iid Gumbel},
+\label{eq:agg}
 \end{equation}
-so person $\theta$ chooses $\arg\max_i(\mu_i + \varepsilon_i + G_i)$ with $G$ independent
-Gumbel. The population is then itself a contest, with noise the convolution
-$\varepsilon + G$. If individual taste is a sum of many small independent influences, the
-central limit theorem makes $\varepsilon$ approximately Gaussian. As the scale of
-$\varepsilon$ grows relative to the Gumbel scale, the convolution is dominated by its
-Gaussian part.
+so that each individual contribution $r$, taken by itself, is exactly a Luce choice.
+Let $s_n^2 = \sigma^2\sum_r w_{nr}^2$. If the weights spread
+($\max_r|w_{nr}| / \sqrt{\sum_r w_{nr}^2} \to 0$) and the locations scale with the noise
+($b_{ni}/s_n \to a_i$), then the multivariate central limit theorem applies coordinatewise,
+the components are independent across alternatives, and the continuous mapping theorem
+applies to $\arg\max$ because a Gaussian limit puts no mass on ties. So the winning
+probabilities converge to those of the independent unit-variance Gaussian race of
+Equation~\eqref{eq:winprob}.
+
+This is folklore rather than a new theorem: it is the CLT plus continuous mapping, applied
+to a construction Yellott already identified. Two features of it are worth naming. The
+scaling condition is not decoration, since holding $b_{ni}$ fixed while the noise grows
+sends every share to $1/K$ and recovers the Gaussian race only at near-indifference. And
+the Gumbel plays no role in the limit, only in making each microscopic component exactly
+Luce; any finite-variance component law gives the same Gaussian. Thurstone's race is the
+additive-aggregation limit, and Luce sits in its basin of attraction.
 
 \begin{table}[ht]
 \centering
 \small
-\begin{tabular}{rrrr}
+\begin{tabular}{rrrrr}
 \toprule
-$\sigma$ & Observed $\lambda$ & Case V $\lambda$ & Ratio \\
+$\sigma$ & Top share & Observed $\lambda$ & Case V $\lambda$ & Ratio \\
 \midrule
-$0$ & $-0.002$ & $0.227$ & $0.00$ \\
-$0.5$ & $0.052$ & $0.228$ & $0.23$ \\
-$1$ & $0.127$ & $0.229$ & $0.56$ \\
-$2$ & $0.200$ & $0.228$ & $0.88$ \\
-$3$ & $0.214$ & $0.227$ & $0.94$ \\
-$4$ & $0.221$ & $0.226$ & $0.98$ \\
-$6$ & $0.226$ & $0.226$ & $1.00$ \\
+$0.5$ & $0.255$ & $0.052$ & $0.225$ & $0.23$ \\
+$1$ & $0.300$ & $0.128$ & $0.227$ & $0.57$ \\
+$2$ & $0.343$ & $0.197$ & $0.229$ & $0.86$ \\
+$3$ & $0.359$ & $0.216$ & $0.229$ & $0.94$ \\
+$4$ & $0.365$ & $0.228$ & $0.230$ & $0.99$ \\
+$8$ & $0.373$ & $0.230$ & $0.231$ & $1.00$ \\
+$16$ & $0.375$ & $0.233$ & $0.231$ & $1.01$ \\
 \bottomrule
 \end{tabular}
-\caption{Simulated populations of Luce choosers whose log-worths carry Gaussian taste
-variation of scale $\sigma$, against a Gumbel choice-noise scale of $1$. Observed
-$\lambda$ is the population's contraction; Case V $\lambda$ is what an independent
-unit-variance Gaussian race implies for that population's own full-menu shares. At
-$\sigma = 0$ the population is homogeneous Luce and does not contract, as the axiom
-requires. By $\sigma = 4$ the population contracts within two per cent of the Case V
-prediction.}
+\caption{A population of Luce choosers whose log-worths carry Gaussian taste variation of
+scale $\sigma$ against a Gumbel choice-noise scale of $1$, with locations scaled as
+$\sigma a$ so that the shares do not degenerate. Observed $\lambda$ is the population's
+contraction; Case V $\lambda$ is what the independent unit-variance Gaussian race implies
+for that population's own shares. The top share is reported to show the limit is not the
+near-indifference corner.}
 \label{tab:mixture}
 \end{table}
 
-So a population of Luce choosers with Gaussian taste variation is Case V in aggregate,
-once taste outweighs choice noise. That is a reason to expect the Gaussian transport to
-work on population shares which does not require any individual to be non-Lucean, and it
-makes the aggregate caveat of Section~\ref{sec:scope} into the mechanism rather than an
-apology. It also predicts where the fit should be worst: in populations whose members are
+The consequence for this paper is that no individual need be non-Lucean for the Gaussian
+transport to be the right one upstairs. A population of Luce choosers whose tastes vary is
+a contest with composite noise, and once taste variation outweighs within-person choice
+noise the composite is Gaussian and the population contracts by just what Case V predicts.
+The aggregate caveat of Section~\ref{sec:scope} is therefore the mechanism rather than an
+apology, and it predicts where the fit should be worst: in populations whose members are
 nearly alike.
+
+One caveat about what has been aggregated. Equation~\eqref{eq:agg} accumulates latent
+components within a respondent, not choosers within a population; calling it a theorem
+about aggregating Luce choosers would overstate it. The simulation above does the latter
+and reaches the same limit, but a mechanism that makes the additive accumulation natural
+rather than assumed is left open.
+
+Independent evidence for the same phenomenon exists in memory research. Robinson and
+colleagues \cite{robinson2023} compare softmax against signal detection across
+$m$-alternative tasks and report that the softmax parameter must vary with $m$ while the
+signal-detection parameter is stable. That is the contraction studied here, seen through
+the parameter that has to move to absorb it.
 
 \section{Scope}
 \label{sec:scope}
@@ -513,6 +535,12 @@ In \emph{Algorithmic Decision Theory}, 2013.
 Daniel McFadden and Kenneth Train.
 Mixed MNL models for discrete response.
 \emph{Journal of Applied Econometrics}, 15(5):447--470, 2000.
+
+\bibitem{robinson2023}
+Maria M. Robinson, Isabella C. DeStefano, Edward Vul, and Timothy F. Brady.
+The relationship between Luce's choice axiom and signal detection theory in
+$m$-alternative tasks.
+\emph{Journal of Mathematical Psychology}, 117:102805, 2023.
 
 \bibitem{thurstone1927}
 Louis L. Thurstone.

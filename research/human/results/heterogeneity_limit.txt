@@ -1,13 +1,13 @@
 population of heterogeneous Luce choosers, Gumbel scale fixed at 1
-  sigma   observed    Case V   ratio
-   0.00    -0.0016    0.2269   -0.01
-   0.25     0.0149    0.2269    0.07
-   0.50     0.0518    0.2278    0.23
-   1.00     0.1271    0.2287    0.56
-   2.00     0.1997    0.2275    0.88
-   3.00     0.2139    0.2270    0.94
-   4.00     0.2206    0.2261    0.98
-   6.00     0.2264    0.2257    1.00
-   8.00     0.2162    0.2288    0.94
+  sigma  top share   observed    Case V   ratio
+   0.50      0.255     0.0517    0.2253    0.23
+   1.00      0.300     0.1284    0.2265    0.57
+   2.00      0.343     0.1965    0.2289    0.86
+   3.00      0.359     0.2163    0.2294    0.94
+   4.00      0.365     0.2283    0.2303    0.99
+   6.00      0.372     0.2248    0.2302    0.98
+   8.00      0.373     0.2300    0.2306    1.00
+  16.00      0.375     0.2326    0.2314    1.01
 
-sigma=0 is homogeneous Luce, where contraction is zero by the axiom.
+Ratios approach one with the shares held fixed, so the limit is not the
+near-indifference corner.
