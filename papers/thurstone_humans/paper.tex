@@ -17,14 +17,15 @@
 \begin{abstract}
 \noindent Given probabilities over mutually exclusive events, and told that one has been
 \emph{withdrawn}, scratched, delisted, masked out of a softmax, proportional
-renormalization is the reflex. Nothing licenses it. Conditioning does not apply, because
-the experiment has changed rather than information arriving about a fixed one. The
-alternative reads the probabilities as winning probabilities in a contest of Gaussian
-performances and re-runs the contest over what remains, fitting nothing. It forecasts
-better on an experiment where subjects chose from all thirty-one subsets of five goods, and
-on twelve of twelve ranking collections. Contraction of a noisy estimate lowers log loss on
-its own, so we check against populations that renormalize exactly; the advantage survives
-except in the smallest collection.
+renormalization is the reflex. Conditioning is available but not free: it needs a model of
+how the probabilities arose, and renormalization quietly supplies one. By Yellott's theorem
+it is the model in which they came from a contest with Gumbel noise. Assume Gaussian noise
+instead and the survivors' odds contract by a computable amount. Both assumptions are
+calibrated to the same probabilities and fit nothing, so they can be scored against each
+other. The Gaussian contest forecasts better on an experiment where subjects chose from all
+thirty-one subsets of five goods, and on twelve of twelve ranking collections. Contraction
+of a noisy estimate lowers log loss by itself, so we check against populations that
+renormalize exactly; the advantage survives except in the smallest collection.
 \end{abstract}
 
 \section{Two restriction maps}
@@ -45,11 +46,13 @@ The reflex to renormalize is not confined to choice modelling, and it is strong 
 be mistaken for a theorem. Renormalization is the posterior for mutually exclusive events
 only when the information that one is impossible is uninformative about which of the rest
 obtained; Monty Hall is the familiar counterexample, and the belief that renormalization is
-automatically Bayes survives repeated exposure to it. Withdrawal is a third case again,
-neither flat-likelihood conditioning nor informative conditioning, because no information
-about a fixed experiment has arrived: an alternative is gone and the choice problem is a
-different one. Nothing licenses renormalization there, and the question of what to do
-instead is empirical.
+automatically Bayes survives repeated exposure to it. Withdrawal is a third case, neither flat-likelihood
+conditioning nor informative conditioning, because no information about a fixed experiment
+has arrived: an alternative is gone and the problem is a different one. Conditioning is
+still available, but it now requires a model of how the probabilities were generated, and
+renormalization is one such model rather than a consequence of probability theory. By
+Yellott's theorem it is the model with Gumbel noise. Which generative assumption to make is
+then an empirical question, and this paper measures two of them.
 
 Thurstone \cite{thurstone1927} connects the same two quantities through a contest.
 Item $i$ carries a location $a_i$, draws a performance $X_i \sim N(a_i,1)$ on each
