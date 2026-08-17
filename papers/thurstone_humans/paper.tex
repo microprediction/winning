@@ -21,9 +21,10 @@ calibrated from exactly the same shares, so they can be compared as \emph{restri
 maps} with nothing fitted to the smaller menus, and we score them out of sample. The
 Gaussian map is better on an experiment in which subjects chose separately from all
 thirty-one subsets of five goods, and on twelve of twelve archival ranking
-collections. Both results survive a null in which the axiom holds by construction,
-which is necessary because contracting a noisily estimated share vector is also
-shrinkage. The recommendation is narrow: when mapping aggregate full-menu shares to
+collections. A complication is that the race's prediction is a contraction of the
+estimated shares, and contracting a noisy estimate lowers log loss whether or not the
+axiom fails; we therefore repeat everything on simulated populations in which the axiom
+holds exactly, and the advantage survives. The recommendation is narrow: when mapping aggregate full-menu shares to
 restricted-menu shares, make the race the default.
 \end{abstract}
 
@@ -35,10 +36,11 @@ item $i$. Luce's axiom \cite{luce1959} assigns a worth $u(i)$ with
 p_i = \frac{u(i)}{\sum_{j \in S} u(j)},
 \label{eq:luce}
 \end{equation}
-so the shares determine the worths up to scale, and the prediction for any subset
-$T \subseteq S$ follows by changing the denominator alone. Odds between survivors are
-untouched: for $i,j \in T$ the share preferring $i$ is $p_i/(p_i+p_j)$ when $T$ is the
-pair. This is Independence of Irrelevant Alternatives.
+so the shares determine the worths up to scale. The prediction for a subset
+$T \subseteq S$ follows by changing the denominator alone, which leaves every ratio
+$p_i/p_j$ with $i,j \in T$ exactly as it was in $S$. For a two-item menu the predicted
+share preferring $i$ is therefore $p_i/(p_i+p_j)$. This invariance is Independence of
+Irrelevant Alternatives.
 
 Thurstone \cite{thurstone1927} connects the same two quantities through a contest.
 Item $i$ carries a location $a_i$, draws a performance $X_i \sim N(a_i,1)$ on each
@@ -60,21 +62,23 @@ and it is less lopsided than $p_i/(p_i+p_j)$. Winning a large field requires an
 unusually high draw; beating one rival does not, so the favourite's advantage counts for
 less.
 
-Both rules are calibrated to the same $|S|-1$ free shares and neither sees any
-observation from a smaller menu. The comparison is therefore between two
-zero-extra-parameter maps, not between two fitted models. That is worth stating
-plainly, because it also bounds what the comparison can show. A fitted
-Plackett--Luce likelihood uses the whole ranking and a fitted Bradley--Terry model
-uses the pairwise outcomes directly; neither is tested here. What is tested is a
-cross-moment implication of the homogeneous Luce model, namely whether its full-menu
-shares correctly determine its restricted-menu shares.
+Both rules are calibrated to the same $|S|-1$ free shares, and neither sees any
+observation from a smaller menu. The comparison is between two maps with no free
+parameters left, rather than between two fitted models. This also fixes what the
+comparison can settle. A fitted Plackett--Luce likelihood uses the whole ranking, and a
+fitted Bradley--Terry model uses the pairwise outcomes directly; neither is estimated
+here. The question is whether the full-menu shares of a homogeneous Luce population
+imply the right restricted-menu shares.
 
-The direction of the disagreement is a theorem. With the highest draw winning, let
-$r = f/F$ be the reverse hazard of the common noise. For nested menus $T \subset S$ and
-$i,j \in T$ with $a_i > a_j$, if $\log r$ is concave then the odds of $i$ against $j$
-are at least as large in $S$ as in $T$, strictly so when the concavity is strict and at
-least one contestant is actually removed. The argument is a covariance inequality
-between two increasing functions.
+The direction of the disagreement is a theorem, and it holds for noise laws other than
+the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise and
+let $r = f/F$ be its reverse hazard, with the highest draw winning as above.
+
+Suppose $\log r$ is concave. Take nested menus $T \subset S$ and two items $i,j \in T$
+with $a_i > a_j$. Then the ratio of their choice probabilities is at least as large in
+the larger menu $S$ as in the smaller menu $T$, strictly so when the concavity is strict
+and at least one item is actually removed. Removing items moves the ratio toward one. The
+proof is a covariance inequality between two increasing functions.
 
 Two laws sit at the ends of that condition. The Gaussian satisfies it strictly, since
 $\frac{d^2}{dx^2}\log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0$. The Gumbel has
@@ -82,10 +86,10 @@ $r(x) = s^{-1}e^{-x/s}$, so $\log r$ is affine, the inequality becomes an equali
 renormalization is recovered exactly. That is the sufficiency half of Yellott's theorem
 \cite{yellott1977}. The axiom is a boundary of the class, not a rival to it.
 
-We use the proposition for the sign and nothing else. It orders no magnitudes, and
-contraction is not a property of a noise law: it depends on the share configuration, and
-laws recalibrated to the same shares reorder between configurations. Heavier tails do
-not reliably contract less.
+The proposition gives the direction of the effect, not its size. Size depends on the
+shares as well as on the noise law: recalibrating several laws to one share vector and
+then to another can reverse which of them contracts more. We therefore make no claim
+that thinner or heavier tails contract more.
 
 \section{Choices from real menus}
 \label{sec:menus}
