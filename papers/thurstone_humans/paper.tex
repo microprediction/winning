@@ -184,28 +184,25 @@ Netflix & ranking-induced & $\le .005$ & win \\
 Sports participation & ranking-induced & $.51$ & draw \\
 \midrule
 Consumer goods, experiment 1 & observed menus & $.005$ & win \\
-Lotteries, high cost & observed menus & $.035$ & win \\
+Gambles over token prizes & observed menus & $.035$--$.667$ & win$^{*}$ \\
 US state ballots 2024 & observed ballots & $.005$ & win \\
-Lotteries, medium cost & observed menus & $.124$ & draw \\
 Consumer goods, experiment 2 & observed menus & $.129$ & draw \\
-Lotteries, low cost & observed menus & $.667$ & draw \\
-Grocery stockouts & observed stockouts & --- & draw \\
 \bottomrule
 \end{tabular}
-\caption{Fourteen wins, five draws, no losses. The upper block reads subset choice off a
+\caption{Thirteen wins, two draws, no losses. The starred row is one experiment run in three
+frames differing only in how much arithmetic is needed to value an alternative: the race
+wins where five operations are required, tail $.035$, and not where one is, tail $.667$.
+Section~\ref{sec:more} argues this is the thesis working rather than failing. The upper block reads subset choice off a
 complete ranking; the lower block observes it. Tail frequencies are floored at $1/201$ by
-two hundred replicates. The grocery cells give no tail because the comparison is made per
-store-category: the race is ahead in 29 of 78 cells and its mean gain sits within
-$0.0002$ of the null, so neither map is favoured. Forced-choice subgroups are quoted for
+two hundred replicates. Forced-choice subgroups are quoted for
 the consumer experiments, since no deferral coding enters those.}
 \label{tab:scoreboard}
 \end{table}
 
 Two features of the table matter more than the count. Every loss column is empty, so on
 no population examined does renormalization beat the race by this test. And the draws are
-concentrated where they should be: the smallest ranking collection, the smallest
-consumer experiment, the cheapest lottery frame, and the one setting whose alternatives
-are not mutually exclusive.
+concentrated where they should be: the smallest ranking collection and the smallest
+consumer experiment.
 
 \section{Choices from real menus}
 \label{sec:menus}
@@ -259,31 +256,43 @@ comfortably, with Monte Carlo tail frequencies of $0.010$ and $0.005$; experimen
 fifty-eight per cent of the sample, does not, at $0.199$ and $0.129$. The direction
 replicates and the magnitude is not established by these data alone.
 
-\section{Four more observed restrictions}
+\section{Three more observed restrictions}
 \label{sec:more}
 
-The consumer experiment is not the only place restriction is observed. Four further
-populations are scored by the same protocol, and they differ from each other in what does
-the removing.
+The consumer experiment is not the only place restriction is observed. Three further populations are
+scored by the same protocol, and they differ in what does the removing.
+
+A fourth was tried and discarded. Grocery stockout data records hourly sales by product,
+and a shopper may buy two items from one category, so the alternatives are not mutually
+exclusive and the object is a basket rather than a choice. Recovering choices would need
+transaction-level baskets, which the release does not contain.
 
 Aguiar, Boccardi, Kashaev and Kim \cite{aguiar2023} observe choices from all thirty-one
 non-empty subsets of five lotteries with a default always available, so menus run from two
-to six alternatives, in a cross-section giving at most two disjoint menus per person. Their
-three cost frames are disjoint subject pools differing in how many arithmetic operations
-are needed to value a lottery, one, three or five. This dataset is adversarial on the
-authors' own analysis: they report that random utility cannot explain the population
-behaviour while a logit attention model survives.
+to six alternatives, in a cross-section giving at most two disjoint menus per person. It is adversarial on the authors' own
+analysis, since they report that random utility cannot explain the population behaviour
+while a logit attention model survives.
+
+The experiment was run three times on disjoint subject pools, differing only in how much
+arithmetic is needed to value an alternative: one operation, three, or five. The excess
+over the null rises with that requirement, from $-0.0012$ to $+0.0045$ to $+0.0081$, and
+the full-menu shares flatten alongside it, the largest falling from $0.357$ to $0.257$
+against a six-alternative maximum entropy of $1.792$.
+
+We read this as the thesis working rather than as instability. When the arithmetic is one
+step the task has a computable answer and is closer to an examination question than to a
+preference judgement; subjects converge, the shares concentrate, and there is little
+preference left for any restriction map to describe. When it takes five steps nobody can
+compute the answer, so people fall back on what they actually prefer and the choice becomes
+psychological. A model of preference under noise should win in the second case and not the
+first. Winning in both, including where the answer is objectively determined, would be the
+result to distrust.
 
 US presidential ballots supply restriction by statute. The alternatives are the same named
 candidates in every state and which of them appears varies with petition thresholds and
 filing deadlines, so the states are nested menus over identical alternatives. States are
 not interchangeable populations, so a state may only predict another whose two-party log
 odds are within $0.5$.
-
-Grocery stockouts supply physical removal. In FreshRetailNet-50K an hourly flag marks a
-product out of stock, and shoppers arriving afterwards face a smaller menu that nobody
-arranged. The alternatives here are not mutually exclusive, since a shopper may buy two
-items in a category, so this is a boundary case rather than a clean test.
 
 Wikipedia links supply editorial removal. An article offers outbound links, a reader picks
 one exclusively, the destinations are the same articles from month to month, and editors
@@ -304,14 +313,12 @@ Lotteries, medium cost & 4{,}099 & $+0.0068$ & $+0.0023$ & $+0.0045$ & $.124$ \\
 Lotteries, low cost & 4{,}099 & $+0.0002$ & $+0.0014$ & $-0.0012$ & $.667$ \\
 US state ballots 2024 & 263 pairs & $+0.0002$ & $-0.0000$ & $+0.0002$ & $.005$ \\
 Wikipedia links & 3{,}544 pages & $-0.0001$ & $-0.0002$ & $+0.0001$ & $.005$ \\
-Grocery stockouts & 78 cells & $-0.0015$ & $-0.0013$ & $-0.0002$ & --- \\
 \bottomrule
 \end{tabular}
 \caption{Held-out loss differences on populations where restriction is observed rather
 than read off a ranking. Excess is the gain net of what a renormalizing population
 produces on the same menus. The lottery frames are disjoint subject pools; ballot units
-are matched state pairs; Wikipedia units are pages whose destination set shrank; grocery
-units are store-category cells, scored separately, hence no single tail. Two rows have a
+are matched state pairs; Wikipedia units are pages whose destination set shrank; Two rows have a
 negative raw gain and a positive excess, which means the race loses to renormalization in
 absolute terms while still beating what the axiom predicts of it.}
 \label{tab:more}
