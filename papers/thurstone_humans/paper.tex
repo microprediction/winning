@@ -20,8 +20,8 @@
 \emph{withdrawn}, scratched, delisted or masked out of a softmax, proportional
 renormalization is the human reflex or, in the case of many models, the architecture. Conditioning is available but not free: it needs a model of
 how the probabilities arose, and renormalization {\em tacitly} supplies one. Within the class of independent additive
-random-utility models it is the model with Gumbel noise; Holman and Marley established that
-representation, and Yellott \cite{yellott1977} showed it is not identified from pairwise
+random-utility models it is the model with Gumbel noise; Holman and Marley are credited with that
+representation \cite{lucesuppes1965}, and Yellott \cite{yellott1977} showed it is not identified from pairwise
 comparisons alone but is unique once triples are included. Assume Gaussian noise
 instead and the survivors' odds contract by a computable amount. Both assumptions are
 calibrated to the same probabilities and fit nothing, so they can be scored against each
@@ -54,7 +54,7 @@ has arrived: an alternative is gone and the problem is a different one. Conditio
 still available, but it now requires a model of how the probabilities were generated, and
 renormalization is one such model rather than a consequence of probability theory. Within the class of independent
 additive random-utility models, Gumbel errors generate Luce choice probabilities, a
-representation due to Holman and Marley \cite{holman1974}; Yellott \cite{yellott1977} showed
+representation attributed to Holman and Marley \cite{lucesuppes1965}; Yellott \cite{yellott1977} showed
 that it is not unique from pairwise comparisons but that Gumbel is uniquely identified once
 triple comparisons are included. Which generative assumption to make is
 then an empirical question, and this paper measures two of them.
@@ -135,7 +135,7 @@ The proposition says that removing alternatives moves the ratio toward one.
 Two laws sit at the ends of that condition. The Gaussian satisfies it strictly, since
 $\frac{d^2}{dx^2}\log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0$. The Gumbel has
 $r(x) = s^{-1}e^{-x/s}$, so $\log r$ is affine, the inequality becomes an equality, and
-renormalization is recovered exactly. That is the Holman--Marley representation \cite{holman1974}. The axiom is a boundary of the class.
+renormalization is recovered exactly. That is the Holman--Marley representation \cite{lucesuppes1965}. The axiom is a boundary of the class.
 
 The boundary is where machine learning sits. A softmax over scores $z_i$ is
 Equation~\eqref{eq:luce} with $u(i) = \exp(z_i)$, so masking a softmax and rescaling the
@@ -692,10 +692,13 @@ Sean Duffy and John Smith.
 The random thickness of indifference.
 Working paper, 2025.
 
-\bibitem{holman1974}
-Eric W. Holman and A. A. J. Marley.
-Stimulus and response measurement.
-In \emph{Psychophysical Judgment and Measurement}, chapter 7. Academic Press, 1974.
+\bibitem{lucesuppes1965}
+R. Duncan Luce and Patrick Suppes.
+Preference, utility, and subjective probability.
+In R. D. Luce, R. R. Bush, and E. Galanter, editors, \emph{Handbook of Mathematical
+Psychology}, volume III. Wiley, 1965.
+Yellott \cite{yellott1977} attributes the Gumbel representation of the choice axiom to
+Holman and Marley as cited here; it carries no separate entry in Yellott's bibliography.
 
 \bibitem{huber1982}
 Joel Huber, John W. Payne, and Christopher Puto.
