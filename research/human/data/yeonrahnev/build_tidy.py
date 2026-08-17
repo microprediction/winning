@@ -48,6 +48,7 @@ for s in range(1, 33):
 write("exp1_trials.csv",
       ["subject","run","block","condition","trial_in_block","dominant_color",
        "alternative_color","response","correct","confidence","rt_choice","rt_confidence"], rows)
+exp1_rows = rows
 
 # ---------------------------------------------------------------- Experiment 2
 rows = []
@@ -133,6 +134,35 @@ write("exp1_full_menu_counts.csv", ["subject","dominant_color","response","n"],
 a = np.array(d.respPattern_cond2)
 write("exp1_pair_menu_counts.csv", ["subject","dominant_color","alternative_color","n_correct","n_wrong"],
       [[s+1,i+1,j+1,int(a[s,i,j,0]),int(a[s,i,j,1])] for s in range(a.shape[0]) for i in range(4) for j in range(4) if i!=j])
+# Condition 3 is the same two-alternative menu ANNOUNCED BEFORE the stimulus, so the
+# observer can allocate attention to the pair. It is the control arm for condition 2 and
+# the authors' dataForModeling.mat does not save it, so it is counted from the trials.
+# Counting condition 2 the same way reproduces respPattern_cond2 exactly; that check runs
+# below and raises if it ever fails.
+def pair_counts(cond):
+    d = {}
+    for r in exp1_rows:
+        if r[3] != cond:
+            continue
+        s, i, j, ok = r[0], r[5], r[6], r[8]
+        c = d.setdefault((s, i, j), [0, 0])
+        c[0 if ok else 1] += 1
+    return d
+
+check = pair_counts(2)
+for s in range(a.shape[0]):
+    for i in range(4):
+        for j in range(4):
+            if i != j:
+                got = check.get((s + 1, i + 1, j + 1), [0, 0])
+                assert got == [int(a[s, i, j, 0]), int(a[s, i, j, 1])], (s, i, j, got)
+print("exp1 condition 2 recounted from trials matches respPattern_cond2")
+
+c3 = pair_counts(3)
+write("exp1_pair_menu_advance_counts.csv",
+      ["subject","dominant_color","alternative_color","n_correct","n_wrong"],
+      [[s+1,i+1,j+1,*c3.get((s+1,i+1,j+1),[0,0])]
+       for s in range(a.shape[0]) for i in range(4) for j in range(4) if i!=j])
 
 d = load(f"{OSF}/Experiment 2/data/subject_responses/dataForModeling.mat")["data"]
 a = np.array(d.respPattern_cond1)
