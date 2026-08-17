@@ -281,3 +281,54 @@ Also corrected: the UK Data Service item is Adelman (2016) alone, and manipulate
 decision time rather than set size, so it is off point. And Stewart's raw zip is confirmed
 lost, not merely hard to find -- a CDX sweep shows only the HTML listings and a source_code
 directory were ever captured.
+
+## Yeon and Rahnev run: the race wins, and the experiment carries its own control (2026-08-17)
+
+`research/human/yeonrahnev.py`, full table in `results/yeonrahnev.txt`. This is the first
+dataset in the project where the restricted menu is both observed and unanticipated: the
+observer sees the display, it goes, and only then is told the answer is one of two named
+alternatives. Calibrate on that observer's full-menu row for that dominant item, predict
+the pair, score out of sample.
+
+  exp 1, 4 colours, after     384 cells  renorm 0.4942  race 0.4795  gain +0.0147  [+0.0118, +0.0179]
+  exp 1, same pairs, before   384 cells  renorm 0.3967  race 0.3928  gain +0.0038  [+0.0006, +0.0072]
+  exp 2, 6 symbols, after     300 cells  renorm 0.6276  race 0.5999  gain +0.0278  [+0.0234, +0.0324]
+
+The +0.0278 at K=6 is the second largest effect in the project after the MIND news slates,
+and the largest in a perceptual task. The null here is stronger than the one used elsewhere:
+it resamples the calibration row as well as the pair counts, so it charges the race for
+calibration noise. Null medians are -0.0010, -0.0009, -0.0036; excesses +0.0157, +0.0048,
++0.0314; all tails at the 0.005 floor of 200 replicates.
+
+THE CONTROL IS THE POINT. Experiment 1 ran the identical pairs a third way, ANNOUNCED IN
+ADVANCE, so the observer can aim attention at the pair. The authors never analysed that arm
+and never saved it into dataForModeling.mat; `build_tidy.py` now recovers it from the raw
+files, and recounting condition 2 the same way reproduces respPattern_cond2 exactly, which
+is the extraction's self-check. In that arm the gain nearly vanishes, +0.0038 against
++0.0147, because accuracy rises from 0.7802 to 0.8504 and renormalization becomes almost
+exactly right (error -0.0040) while the race now under-predicts (-0.0187). So the race's
+advantage is not a property of these pairs or these observers. It appears when and only when
+alternatives are genuinely withdrawn from a percept formed without knowledge of the menu.
+No other dataset in the project has a within-experiment control of this kind.
+
+THE CAVEAT, WHICH MUST TRAVEL WITH THE RESULT. In both genuine restriction arms BOTH maps
+over-predict the favourite. Renormalization is +0.0691 and the race +0.0545 at K=4;
++0.0964 and +0.0643 at K=6. Contraction has the right sign and covers 21 and 33 per cent of
+the error. Neither parameter-free default is calibrated here and a fitted noise term would
+beat both. That over-prediction is Yeon and Rahnev's own headline -- their fitted
+"population" model, which is close to our race, also predicts too well -- so their result is
+independent evidence that the correction runs toward contraction, and it bounds what the
+paper may claim.
+
+Consistent with the boundary rule: colours and symbols are distinct unordered items, and the
+race wins. The prediction to test next is Experiment 4, three motion directions, where the
+alternatives sit on a circular continuum. Two reasons to expect little there: the three
+directions are always 120 degrees apart with a random rotation, so the items are exchangeable
+and there is no near-substitute asymmetry to exploit; and the 2-option blocks are blocked, so
+the menu is known in advance, which the Experiment 1 control shows is the arm where the
+effect disappears. Note also SOURCE.md's warning that Experiment 4's `c2.wrong_answer` is
+misaligned in dataForModeling.mat, so exp4 must be built from the trial files.
+
+Experiment 3's second answers are the ordering-law material, not a restriction test:
+observing the first winner conditions the sample, so it needs the exact Gaussian ordering law
+rather than remove-and-rerun. Keep it for the paper that follows.
