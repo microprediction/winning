@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta content="text/html" http-equiv="content-type">
+		<title>willslab.co.uk: CAM1</title>
+	</head>
+	<body>
+		<h1>	<img src="logo.png" alt="DAU-specific logo" width= 50 height = 50>
+		Data and Analysis Unit: CAM1</h1>
+		<i>Last update: 2014-08-26 by Andy Wills</i><p>
+
+		<h2>Description</h2>	
+		Category learning task, reported in Wills et al. (2000, Experiment 2).		
+		DAU created after publication in response to a raw data request (C. Myers, 2014).
+
+		This DAU contains stimulus files, raw data, and an analysis script, in open 
+		cross-platform formats (see the <a href = "../formats.html">file format notes</a>). 
+		
+	<h2>Citation</h2>
+		<p> The APA-format citation for this resource is:
+		Wills, A.J. (2014). <i>Data and Analysis Unit: CAM1</i>. Retrieved from http://www.willslab.co.uk/cam1
+		
+		<p><b>If you make use of these resources, please drop me an email</b>: andy@willslab.co.uk.		
+		
+		<h2>Resources</h2>
+		<ul>
+		<li><a href = "cam1stim.tbz">cam1stim.tbz</a> (11 KB) - Stimulus image files. 
+		<li><a href = "cam1data.txt">cam1data.txt</a> (439 KB) - Trial-level raw data. 
+		Column headings are as follows:
+			<ul>
+				<li>cond: Experimental condition. 1 = "Three-choice", 2 = "Two-choice", 3 = "Novel-elements"
+				<li>subj: Participant number (unique within CAM1)
+				<li>fixed: The category for which each training item contains 4 elements (1 = "A", 2 = "B", 3 = "C").
+				It is also the category response that is disallowed in the "two-choice" condition test phase. 
+				<li>phase: Experiment phase. 1 = training, 2 = test. Where phase = 0, the prototypes of categories A, B and C are listed, with trial specifying 
+			the category (1 = "A", 2 = "B", 3 = "C", 4 = novel icons; novel icons reported in all conditions but only presented
+			to participants in the test phase of the "novel-elements" condition). The other columns are meaningless in phase 0.
+			Phase 0 was not experienced by participants, it represents the computerized generation of the protoypes before
+			the participant enters the room.							
+				<li>trial: Trial number (resets between phases)
+				<li>catordist: Phase-specific. 
+				<ul>
+					<li>Phase 1: The category from which the training item was generated. 1 = "A", 2 = "B", 3 = "C"
+					<li>Phase 2: Values 10-13 indicate dummy stimuli (see paper). Meaning of values 1-9 depends
+					on 'fixed':
+					<ul>
+						<li> fixed = 1 or 2 : Number of category C elements + 1
+						<li> fixed = 3 : Number of category B elements + 1
+					</ul>
+				</ul>
+				<li>ic1 (through to ic12): The 12 icons making up the presented stimulus. The numbers
+				correspond to the filenames in cam1stim.tbz (e.g. "1" indicates "1.png"). The arrangement
+				of icons ic1-ic12 on the screen is as follows:
+				<br>1 ,2 ,3 ,4
+				<br>5 ,6 ,7 ,8
+				<br>9,10,11,12
+				<br>
+				<li>resp: Participant's response. 1 = "A", 2 = "B",  3 = "C", -1 = "no response required" (training is observational)
+				<li>rt: Participant's reaction time (in seconds). -1 = "no response required".
+			</ul>
+			<li><a href = "cam1analysis.R">cam1analysis.R</a>  (4 KB) -  R script for analyses 
+	reported in Wills et al. (2000, Exp 2). This script can be run by the command 
+	source('cam1analysis.R'), or can be run interactively. 
+	</ul>
+		<h2>Further resources</h2>
+					The following resources are not formally part of the archive, either because they do not use open formats, 
+					or because they have not been thoroughly bug-checked, or both. They are provided in case others
+					find them useful, with absolutely no warranty! 
+		<ul>
+			<li> <a href = "cam1vid.mp4">cam1vid.mp4</a> (1.4 MB) - Short video showing written instructions 
+			and an illustrative few trials of training and test. This video was created using QuickTime Player screen 
+			recording of a BBC BASIC V program running under emulation (Virtual A5000) on Windows XP, in turn running
+			on Parallels 9 on a Late 2013 MacPro.  The video was subsequently edited using iMovie.
+			It is a reasonably close, but not exact, representation of how the
+			experiment ran on an Acorn RiscPC 600. 
+			<li> <a href = "cam1source.tbz">cam1source.tbz</a> (11 KB) - BBC BASIC V source code as text files.
+			For Acorn RiscPC 600/700/StrongARM or Acorn A5000.	The graphics files are accessed by BASIC V via
+a SpriteFile (not included). cam1data.txt was compiled from the "Read" data files created from this program.
+		</ul>
+</body>
+</html>
