@@ -3,6 +3,7 @@
 \usepackage{amsmath}
 \usepackage{amsthm}
 \newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
 \usepackage{booktabs}
 \usepackage{microtype}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
@@ -357,29 +358,55 @@ percentages are context for the absolute gains.
 Nothing so far explains why the Gaussian member of the class should be the one that fits.
 A mechanism is available, and it is elementary.
 
-Suppose an alternative's latent performance for one respondent is an additive
-accumulation of many small independent influences,
+Suppose an alternative's latent performance is an additive accumulation of many small
+independent influences, each of which is on its own a Luce choice.
+
+\begin{lemma}[Additive aggregation of Luce components]
+\label{lem:agg}
+For each $n$ let
 \begin{equation}
 X_{ni} = b_{ni} + \sum_{r=1}^{n} w_{nr}\, \varepsilon_{ri},
-\qquad \varepsilon_{r1},\dots,\varepsilon_{rK} \ \text{iid Gumbel},
+\qquad i = 1,\dots,K,
 \label{eq:agg}
 \end{equation}
-so that each individual contribution $r$, taken by itself, is exactly a Luce choice.
-Let $s_n^2 = \sigma^2\sum_r w_{nr}^2$. If the weights spread
-($\max_r|w_{nr}| / \sqrt{\sum_r w_{nr}^2} \to 0$) and the locations scale with the noise
-($b_{ni}/s_n \to a_i$), then the multivariate central limit theorem applies coordinatewise,
-the components are independent across alternatives, and the continuous mapping theorem
-applies to $\arg\max$ because a Gaussian limit puts no mass on ties. So the winning
-probabilities converge to those of the independent unit-variance Gaussian race of
-Equation~\eqref{eq:winprob}.
+where for each $r$ the shocks $\varepsilon_{r1},\dots,\varepsilon_{rK}$ are iid Gumbel with
+variance $\sigma^2$, independent across $r$. Put $s_n^2 = \sigma^2 \sum_r w_{nr}^2$ and
+suppose
+\[
+\frac{\max_r |w_{nr}|}{\sqrt{\sum_r w_{nr}^2}} \longrightarrow 0,
+\qquad
+\frac{b_{ni}}{s_n} \longrightarrow a_i .
+\]
+Then for every $i$,
+\[
+P\bigl(X_{ni} = \max_j X_{nj}\bigr) \longrightarrow
+P\bigl(a_i + Z_i = \max_j (a_j + Z_j)\bigr),
+\qquad Z \sim N(0, I_K).
+\]
+\end{lemma}
 
-This is folklore rather than a new theorem: it is the CLT plus continuous mapping, applied
-to a construction Yellott already identified. Two features of it are worth naming. The
-scaling condition is not decoration, since holding $b_{ni}$ fixed while the noise grows
-sends every share to $1/K$ and recovers the Gaussian race only at near-indifference. And
-the Gumbel plays no role in the limit, only in making each microscopic component exactly
-Luce; any finite-variance component law gives the same Gaussian. Thurstone's race is the
-additive-aggregation limit, and Luce sits in its basin of attraction.
+\begin{proof}
+Subtracting the common mean $m \sum_r w_{nr}$ from every coordinate and dividing by $s_n$
+leaves the $\arg\max$ unchanged, giving
+$Y_{ni} = b_{ni}/s_n + Z_{ni}$ with
+$Z_{ni} = \sum_r w_{nr}(\varepsilon_{ri}-m) / (\sigma \sqrt{\sum_r w_{nr}^2})$. The Gumbel has
+moments of every order, so the weight condition is Lindeberg's and $Z_{ni} \Rightarrow
+N(0,1)$; the shocks are independent across $i$, so
+$(Z_{n1},\dots,Z_{nK}) \Rightarrow N(0,I_K)$, and $b_{ni}/s_n \to a_i$ with Slutsky gives
+$Y_n \Rightarrow a + Z$. The map $\arg\max$ is discontinuous only at ties, which the
+Gaussian limit assigns probability zero, so the continuous mapping theorem transfers the
+convergence to the winning probabilities, the outcome space being finite.
+\end{proof}
+
+The right-hand side is Equation~\eqref{eq:winprob}. The lemma is elementary, being the
+central limit theorem and continuous mapping applied to a construction Yellott already
+identified, and we state it because we have not found it stated. Two of its features are
+worth naming. The scaling condition is not decoration: holding $b_{ni}$ fixed while the
+noise grows sends every share to $1/K$ and recovers the Gaussian race only at
+near-indifference. And the Gumbel plays no part in the limit, only in making each
+microscopic component exactly Luce; any finite-variance component law gives the same
+Gaussian. Thurstone's race is the additive-aggregation limit, and Luce sits in its basin of
+attraction.
 
 \begin{table}[ht]
 \centering
