@@ -332,3 +332,42 @@ misaligned in dataForModeling.mat, so exp4 must be built from the trial files.
 Experiment 3's second answers are the ordering-law material, not a restriction test:
 observing the first winner conditions the sample, so it needs the exact Gaussian ordering law
 rather than remove-and-rerun. Keep it for the paper that follows.
+
+## Getty 1979 scored, and the boundary acquires a computable diagnostic (2026-08-17)
+
+`research/human/getty.py`, data in `data/getty`, output in `results/getty.txt`. Three
+observers, eight complex sounds, all eight responses allowed in one experiment and only four
+in another, a different four in each of three conditions, labels being the stimulus numbers.
+The stimulus set never changes; only the menu does. Nothing else in the corpus isolates the
+response-set manipulation that cleanly.
+
+  all rows                        72 cells  renorm 0.8144  race 0.7872  gain +0.0272  excess +0.0343
+  signal rows, favourite survives 36 cells  renorm 0.4504  race 0.4393  gain +0.0111  [+0.0021, +0.0225]
+  non-signal, favourite removed   36 cells  renorm 1.1785  race 1.1351  gain +0.0434  excess +0.0529
+  condition 1, signals {1,2,5,6}  24 cells  gain +0.0453  excess +0.0674
+  condition 2, signals {3,4,5,6}  24 cells  gain -0.0127  excess -0.0330  tail 1.000
+  condition 3, signals {1,3,5,7}  24 cells  gain +0.0490  excess +0.0665
+
+THE PREDICTION WAS MADE BEFORE THE RUN. The source note flagged condition 2 in advance --
+"a contiguous middle block, largest observed weight change" -- and asked whether the race
+would fit it worse. It is the only condition the race loses.
+
+AND THE MECHANISM IS MEASURABLE FROM THE MASTER MATRIX ALONE. Of the errors a signal
+stimulus makes on the full eight-way menu, the fraction landing on another signal of that
+condition is 0.103 for condition 1, 0.790 for condition 2, 0.335 for condition 3. The only
+condition the race loses is the one whose survivors are each other's confusions. This turns
+the near-substitute boundary from a taxonomy into a statistic an analyst can compute before
+seeing any restricted-menu data, which is exactly the diagnostic Townsend and Landon used in
+1982 and which the paper's Scope section now recommends.
+
+Two caveats. Three observers, so the bootstrap resamples cells rather than observers and
+understates uncertainty; only the signal-row interval excludes zero. And the authors
+themselves report that observers retuned dimension weights to maximise discriminability of
+whichever subset they had to identify, with feedback given only on that subset, so this is
+also an instance of quality-changing removal. Both boundary conditions are present at once,
+which is an argument for treating the condition-2 loss as the informative result and the
+overall win as the weaker one.
+
+Transcription check: every row sum in both tables reproduces the printed total, with one
+exception where the printed TOTAL is wrong and the cells are right (J.K., condition 3,
+stimulus 1: cells sum to 33, printed total 23).

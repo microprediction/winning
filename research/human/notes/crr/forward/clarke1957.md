@@ -122,3 +122,72 @@ Semantic Scholar (no open-access PDF, `openAccessPdf.status = CLOSED`), Unpaywal
 (no OA location), Internet Archive microfilm (*JASA* full issues end at 1945), and
 api.fatcat.wiki (no JSON response). Web search quota for this session was exhausted before
 these attempts, so no Google Scholar / ResearchGate mirror hunt was possible.
+
+## Additional section — Clarke (1959) reported CRR FAILING, and the data were never published
+
+Recorded here because it is a substantive point about this literature's **publication record**,
+not about any one paper, and because it is easy to lose: the one CRR test in Clarke's own hands
+that came out *negative* exists only as a one-page meeting abstract, its explanation exists only
+as a personal communication quoted in someone else's footnote, and its data were never published
+at all. Two later reviewers then cited it as a success.
+
+**The negative result.** Clarke, F. R. (1959), "Proportion of Correct Responses as a Function of
+the Number of Stimulus-Response Alternatives", *JASA* 31(6 Suppl): 835, doi:10.1121/1.1930396,
+OpenAlex W2078466290 — a one-page Acoustical Society meeting abstract, not an article. Its own
+abstract, reconstructed verbatim from OpenAlex, tests three models (a "simple threshold model", a
+"constant-ratio rule", and signal detectability theory) across four conditions — speech,
+sinusoidal signals at varying intervals, and signals varying in amplitude or frequency — and
+reports that "the simple model failed to account for any of the data", with simplified versions
+of the other two aligning reasonably with most conditions. The specific failure that matters is
+for **elementary tonal displays**, i.e. amplitude and frequency stimuli.
+
+**Hodge & Pollack's report of it.** *J. Exp. Psychol.* 63: 129 (1962), Introduction, p. 129:
+
+> "However, a preliminary experiment (Clarke, 1959) with elementary auditory displays, e.g., the
+> frequency and intensity of a tone, has suggested that the rule may break down. Considering the
+> subtle complexities associated with the responses to such displays, the failure of the CRR—or
+> any other single rule—is reasonable."
+
+**The explanation, which exists only as a personal communication.** Same paper, Discussion,
+p. 141:
+
+> "The successful application of the rule in the single-dimensional cases of the present
+> experiments is directly opposite Clarke's (1959) finding that responses to intensity and
+> frequency stimuli cannot be described by the CRR. Clarke's difficulty with the rule, however,
+> was due to strong contextual effects present in his data."
+
+That last sentence carries footnote 5, whose entire content is:
+
+> "F. R. Clarke, personal communication, 1960"
+
+So the sole published account of *why* the only negative CRR result from the rule's own author
+came out negative is an unsourced attribution to a private letter, in a paper arguing the opposite
+conclusion. "Strong contextual effects" is, in the project's vocabulary, precisely a
+menu-composition effect on choice shares — i.e. an IIA violation. The data that would show it
+were never printed: Clarke (1959) is an abstract, and no full paper corresponding to it appears
+anywhere in Clarke's publication list (checked via
+https://api.openalex.org/works?filter=raw_author_name.search:Frank%20R%20Clarke,from_publication_date:1954-01-01,to_publication_date:1970-12-31 — fetched; 19 items, of which the CRR-related ones are the 1957 seed paper, this 1959 abstract, the 1957 *JASA* 29(6 Suppl):781 abstract "Confusion Matrices and the Constant-Ratio Rule", and Clarke & Anderson 1957).
+
+**And then it was cited as a success.** Engstrand & Moeller (1967), *Human Factors* 9(5): 440
+— full text read, see `engstrand1967.md` — write:
+
+> "The few formal tests of CRR conducted to date have tended to substantiate its predictive
+> usefulness. Clarke and Anderson (1957), Clarke (1957, 1959), Pollack and Decker (1960) and
+> Hodge and Pollack (1962) successfully predicted performance on auditory tasks."
+
+Clarke (1959) is in that list of successes. It was a failure. Engstrand & Moeller's own reference
+list correctly marks it "(Abstract)", so they had the citation in front of them.
+
+**Why this matters to the project.** The received wisdom that CRR/IIA "held up well" in the
+classical psychophysics literature rests on a citation record with a survivorship problem at its
+centre: the affirmative tests were written up as full papers with summary statistics, the one
+negative test from the rule's originator was written up as a one-page abstract, its data were
+never published, and its explanation survives only as a footnoted personal communication that a
+subsequent review silently converted into a success. This is worth a sentence in the paper. It
+also means the literature cannot be used to argue either way at cell level — which is the
+independent argument for generating the data directly.
+
+Sources for this section, all fetched: https://api.openalex.org/works/W2078466290;
+https://api.openalex.org/works?filter=raw_author_name.search:Frank%20R%20Clarke,from_publication_date:1954-01-01,to_publication_date:1970-12-31;
+https://archive.org/download/sim_journal-of-experimental-psychology-general_1962-02_63_2/sim_journal-of-experimental-psychology-general_1962-02_63_2_djvu.txt (pp. 129, 141 and footnote 5);
+https://archive.org/download/DTIC_AD0668614/DTIC_AD0668614_djvu.txt (p. 440 and reference list).
