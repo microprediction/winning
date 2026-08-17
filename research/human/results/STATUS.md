@@ -93,3 +93,37 @@ Not usable as data: both Kellen programs draw fresh items per trial and per set 
 word reuse across 110, 103 and 359 participants, verified directly from full_list.
 
 Also: their Appendix B swaps the 252 and 253 participant counts relative to the posted CSVs.
+
+## The jury data: first clear loss for both maps (2026-08-17)
+
+Ormston, Chalmers, Leverick, Munro and Murray (2019), Scottish Jury Research, Scottish
+Government, ISBN 978-1-83960-194-1. 863 deliberating jurors, 64 juries, fully crossed
+2x2x2x2. Strict nesting: 32 juries had {Guilty, Not guilty}, 32 had {Guilty, Not guilty,
+Not proven}. Trial films were "entirely identical (within trial type), with the exception of
+the very final section, in which the judge tells the jury about the verdicts available".
+
+Pre-deliberation shares: three verdicts G 28, NG 23, NP 50; two verdicts G 38, NG 62.
+Renormalizing the three-verdict shares onto the survivors predicts G at 28/51 = 54.9 against
+an observed 38, an error of 17 points. Post-deliberation: predicted 61.1 against observed 31,
+an error of 30 points.
+
+Both defaults fail, because the ordering REVERSES. Guilty leads Not guilty 28 to 23 with
+three options and trails 38 to 62 with two. Contraction moves odds toward even and never
+crosses over, so the Gaussian race cannot fix this either; it fails slightly less.
+
+The mechanism is what independence forbids: Not proven is a near-substitute for Not guilty,
+so deleting it returns its mass to Not guilty rather than proportionally. Debreu's blue-bus
+objection in a courtroom, on identical stimulus films.
+
+This belongs in the paper as the boundary condition. It says the Gaussian default is for
+menus whose alternatives are not near-substitutes, and it is the strongest such statement
+available because the stimulus is fixed by construction.
+
+Corroborating and free: Curley et al. (2022), Psychiatry Psychology and Law 29(3):323-344,
+eprints.gla.ac.uk/236471/1/236471.pdf, N=128, two verdicts G 42 NG 86, three verdicts
+G 26 NG 22 NP 80, same direction. Within-subject so rows are not independent.
+
+To obtain by library request: Vidmar (1972) JPSP 22(2):211-218 plus Larntz (1975) JPSP
+31(1):123-125. If Vidmar really ran all seven non-empty subsets of the three homicide
+charges with acquittal always available, that is a complete power-set design on one case and
+the best Block-Marschak material in this entire search. Unverified from the primary source.
