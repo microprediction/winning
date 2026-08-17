@@ -61,6 +61,9 @@ def nested(slates):
 def prepare(pairs, slates):
     prep = []
     for big, small in pairs:
+        pass
+    prep = []
+    for big, small in pairs:
         items = list(big)
         c = np.array([slates[big][it] for it in items], dtype=float)
         p = (c + ALPHA) / (c.sum() + ALPHA * len(c))
@@ -73,14 +76,14 @@ def prepare(pairs, slates):
         w = win_probs_np(a[idx])
         ra = np.maximum(w / w.sum(), FLOOR)
         obs = np.array([slates[small][it] for it in small], dtype=float)
-        prep.append((lu, ra, p[idx] / p[idx].sum(), int(obs.sum()), obs))
+        prep.append((lu, ra, p[idx] / p[idx].sum(), int(obs.sum()), obs, big, small))
     return prep
 
 
 def score(prep, obs_list=None):
     tl = tg = 0.0
     n = 0
-    for i, (lu, ra, u, tot, obs0) in enumerate(prep):
+    for i, (lu, ra, u, tot, obs0, _b, _s) in enumerate(prep):
         obs = obs0 if obs_list is None else obs_list[i]
         s = obs.sum()
         if s <= 0:
@@ -113,13 +116,31 @@ def main():
     rng = np.random.default_rng(6)
     null = []
     for b in range(reps):
-        syn = [rng.multinomial(tot, u).astype(float) for _, _, u, tot, _ in prep]
+        syn = [rng.multinomial(tot, u).astype(float) for _, _, u, tot, _, _, _ in prep]
         s = score(prep, syn)
         if s:
             null.append(s["gain"])
     null = np.array(sorted(null))
     med = float(np.median(null))
     pv = (float((null >= r["gain"]).sum()) + 1) / (len(null) + 1)
+    # slate-level bootstrap: resample the distinct slates, not the pairs, since 6,000
+    # pairs are drawn from a few hundred slates and overlap heavily
+    slate_ids = sorted({b for _, _, _, _, _, b, _ in prep} |
+                       {s for _, _, _, _, _, _, s in prep})
+    pos = {s: i for i, s in enumerate(slate_ids)}
+    rngb = np.random.default_rng(21)
+    bs = []
+    for _ in range(300):
+        pick = set(np.array(slate_ids, dtype=object)[
+            rngb.integers(0, len(slate_ids), len(slate_ids))])
+        sub = [x for x in prep if x[5] in pick and x[6] in pick]
+        s = score(sub)
+        if s:
+            bs.append(s["gain"])
+    bs = sorted(bs)
+    if len(bs) > 30:
+        print(f"  slate bootstrap 95% [{bs[int(.025*len(bs))]:+.4f}, "
+              f"{bs[int(.975*len(bs))]:+.4f}]  from {len(bs)} resamples", flush=True)
     print(f"\n{r['pairs']} pairs scored")
     print(f"  renormalization {r['luce']:.4f}   race {r['race']:.4f}   gain {r['gain']:+.4f}")
     print(f"  Luce null median {med:+.4f}   excess {r['gain']-med:+.4f}   "

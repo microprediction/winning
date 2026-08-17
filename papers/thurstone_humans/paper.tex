@@ -185,13 +185,14 @@ Puzzles & ranking-induced & $\le .005$ & win \\
 Netflix & ranking-induced & $\le .005$ & win \\
 Sports participation & ranking-induced & $.51$ & draw \\
 \midrule
+News slates & observed impressions & $.016$ & win \\
 Consumer goods, experiment 1 & observed menus & $.005$ & win \\
 Gambles over token prizes & observed menus & $.035$ & win\footnotemark[1] \\
 US state ballots 2024 & observed ballots & $.005$ & win \\
 Consumer goods, experiment 2 & observed menus & $.129$ & draw \\
 \bottomrule
 \end{tabular}
-\caption{Thirteen wins, two draws, no losses. The upper block reads subset choice off a
+\caption{Fourteen wins, two draws, no losses. The upper block reads subset choice off a
 complete ranking; the lower block observes it. Tail frequencies are floored at $1/201$ by
 two hundred replicates. Forced-choice subgroups are quoted for the consumer experiments,
 since no deferral coding enters those.}
@@ -297,6 +298,15 @@ filing deadlines, so the states are nested menus over identical alternatives. St
 not interchangeable populations, so a state may only predict another whose two-party log
 odds are within $0.5$.
 
+News slates supply the largest sample and the only menus that are recorded rather than
+reconstructed. The Microsoft News dataset logs, for each impression, the exact set of
+articles displayed and which one was clicked \cite{wu2020}. Slates recur across users and
+one slate is frequently a subset of another, so click shares on the larger slate calibrate
+both maps and the choices made on the nested smaller one score them. Of $153{,}727$
+impressions, $846$ slates recur ten or more times and yield $6{,}135$ nested pairs. Because
+those pairs are drawn from a few hundred slates and overlap heavily, the interval below
+resamples slates rather than pairs.
+
 Wikipedia links supply editorial removal. An article offers outbound links, a reader picks
 one exclusively, the destinations are the same articles from month to month, and editors
 change the set. Adjacent monthly clickstream dumps give the earlier month's shares and the
@@ -314,6 +324,7 @@ Population & Units & Gain & Null median & Excess & MC tail \\
 Lotteries, high cost & 4{,}099 & $+0.0101$ & $+0.0020$ & $+0.0081$ & $.035$ \\
 Lotteries, medium cost & 4{,}099 & $+0.0068$ & $+0.0023$ & $+0.0045$ & $.124$ \\
 Lotteries, low cost & 4{,}099 & $+0.0002$ & $+0.0014$ & $-0.0012$ & $.667$ \\
+News slates & 6{,}000 pairs & $+0.0496$ & $-0.0088$ & $+0.0584$ & $.016$ \\
 US state ballots 2024 & 263 pairs & $+0.0002$ & $-0.0000$ & $+0.0002$ & $.005$ \\
 Wikipedia links & 3{,}544 pages & $-0.0001$ & $-0.0002$ & $+0.0001$ & $.005$ \\
 \bottomrule
@@ -326,6 +337,13 @@ negative raw gain and a positive excess, which means the race loses to renormali
 absolute terms while still beating what the axiom predicts of it.}
 \label{tab:more}
 \end{table}
+
+The news result is the largest here by an order of magnitude, on the only menus in the paper
+that were recorded at the moment of choice. Its weakness is assignment: the slates are chosen
+by a recommender, so a slate's composition is correlated with what the system expects readers
+to want, and a smaller slate may reach a different readership than the larger one. Both maps
+inherit that identically and the null runs on the same slates, which is what makes the
+comparison fair without making the assignment random.
 
 Two features deserve naming. The lottery gradient runs with arithmetic cost, and the
 mechanism of Appendix~\ref{sec:mixture} predicts its direction, since computation error is
@@ -389,26 +407,12 @@ calibration uncertainty and are too narrow, most seriously in the two smallest r
 \label{tab:heldout}
 \end{table}
 
-Averaging over every subset weights cardinalities by how many there are, so
-intermediate menus dominate: for $K=10$ only $45$ of $1{,}013$ subsets are pairs, about
-four per cent of the weight. Those middling menus are where least has been removed and
-least is at stake. Splitting by menu size shows the pairwise gain exceeding the
-aggregate in eleven of twelve datasets, by factors from $0.7$ to $3.7$ with median
-$1.8$: Sushi is $+0.0412$ at $|T| = 2$ against $+0.0111$ aggregate, and GSS
-socialization $+0.0130$ against $+0.0055$. Occupational prestige is the exception,
-peaking at $|T| = 4$. At $|T| = K$ nothing has been removed, the two rules must agree,
-and the measured gain is zero to four decimals in every dataset, which is the check
-that the pipeline is sound. We keep the all-subsets aggregate as the headline because it
-fixes the estimand in advance rather than selecting a cardinality after the fact.
-
 \section{Where the difference lives}
 \label{sec:where}
 
-Averaged over outcomes the difference between the two defaults is small, and averaging
-hides what it is made of. Two decompositions locate it.
-
-Score each held-out prediction by the rank the chosen item held in the full-menu shares.
-Pooling the four ten-item collections:
+Averaged over outcomes the difference between the two defaults is small, and averaging hides
+what it is made of. Score each held-out prediction by the rank the chosen item held in the
+full-menu shares, pooling the four ten-item collections:
 
 \begin{table}[ht]
 \centering
@@ -421,24 +425,23 @@ Share of outcomes & $.17$ & $.13$ & $.13$ & $.10$ & $.10$ & $.10$ & $.08$ & $.07
 Mean gain & $-.062$ & $-.045$ & $-.034$ & $-.004$ & $+.009$ & $+.019$ & $+.050$ & $+.058$ & $+.101$ & $+.171$ \\
 \bottomrule
 \end{tabular}
-\caption{Held-out gain by the full-menu rank of the item actually chosen, pooled over
-Sushi and the three Jester files. Monotone in rank, crossing zero between fourth and
-fifth. The contributions sum to $+0.0043$.}
+\caption{Held-out gain by the full-menu rank of the item actually chosen, pooled over Sushi
+and the three Jester files. Monotone in rank, crossing zero between fourth and fifth. The
+contributions sum to $+0.0043$.}
 \label{tab:byrank}
 \end{table}
 
 The race pays $0.062$ nats whenever the favourite wins, which happens $17$ per cent of the
-time, and collects $0.171$ when the tenth-ranked item wins, which happens $4$ per cent of
-the time. That is what a contraction does: it moves probability off the favourite and onto
-the tail, buying insurance against upsets and paying a premium on every favourite win.
-Three earlier observations follow from it. The aggregate gain is small because large rare
-wins net against small frequent losses. The ballot result is negligible because
-third-party candidates are the tail and there is almost no tail mass to collect. And
-grocery baskets are a wash because a category where both items can be bought has no upsets.
+time, and collects $0.171$ when the tenth-ranked item wins, which happens $4$ per cent of the
+time. That is what a contraction does: it moves probability off the favourite and onto the
+tail, buying insurance against upsets and paying a premium on every favourite win. Three
+earlier observations follow. The aggregate gain is small because large rare wins net against
+small frequent losses. The ballot result is negligible because third-party candidates are the
+tail and there is almost no tail mass to collect. And the effect is largest on news slates,
+where readers spread widely over the displayed set.
 
-The second decomposition is sharper because it names an error rather than a difference.
-Ask how often a given item finishes second, which is the conditional question after the
-winner is removed:
+A second decomposition names an error rather than a difference. Ask how often a given item
+finishes second, which is the conditional question after the winner is removed:
 
 \begin{table}[ht]
 \centering
@@ -454,22 +457,25 @@ Sushi & $0.206$ & $0.251$ & $0.245$ \\
 Jester file 1 & $0.138$ & $0.160$ & $0.158$ \\
 \bottomrule
 \end{tabular}
-\caption{Probability that the full-field favourite finishes second. Renormalization
-overstates it in every collection, by $0.022$ to $0.195$; the race overstates it too, by a
-little less. The mirror holds for the last-ranked item, whose chance of finishing second
-both maps understate everywhere.}
+\caption{Probability that the full-field favourite finishes second. Both columns are
+sequential rules: remove the winner, then apply the map to the survivors. That is Harville's
+construction in the first column and its re-run-the-contest analogue in the second, and
+neither is the exact ordering law of its model, so this compares two practical rules rather
+than two models. Renormalization overstates the probability in every collection, by $0.022$
+to $0.195$; the race overstates it too, by a little less. The mirror holds for the
+last-ranked item, whose chance of finishing second both rules understate everywhere.}
 \label{tab:favsecond}
 \end{table}
 
 This is the pattern reported for the Harville formula in racing place markets, favourites
-over-priced and outsiders under-priced, appearing here in survey rankings of sushi, jokes,
-child-rearing values and political goals. It is also the most useful result in the paper
-for a practitioner, because it is a large, replicable, signed error in the default rather
-than a small average edge. The honest qualification is that the race removes only $5$ to
-$12$ per cent of it, so both defaults share a bias much larger than the distance between
-them. What produces the remainder is not identified here; the obvious candidate is that a
-single respondent's ranking is internally consistent, so adjacent places are positively
-correlated in a way no independent contest reproduces.
+over-priced and outsiders under-priced, appearing in survey rankings of sushi, jokes,
+child-rearing values and political goals. It is the most useful result here for a
+practitioner, because it is a large, replicable, signed error in the default rather than a
+small average edge. The qualification is that the race removes only $5$ to $12$ per cent of
+it, so both rules share a bias much larger than the distance between them. What produces the
+remainder is not identified; the obvious candidate is that a single respondent's ranking is
+internally consistent, so adjacent places are positively correlated in a way no independent
+contest reproduces.
 
 \section{Shrinkage}
 \label{sec:null}
@@ -534,63 +540,6 @@ rescues puzzles, whose raw interval in Table~\ref{tab:heldout} covers zero while
 excess over the null does not. The menu experiment clears the null on both readings,
 which is the result the paper rests on, since it is the only one where restriction is
 observed.
-
-\section{The benchmark gap}
-
-Most of the aggregate gains in Tables~\ref{tab:menus} and~\ref{tab:heldout} are a few
-thousandths of a nat, and such a figure is hard to read on its own. Neither map is permitted to see a restricted
-menu, and most of what is predictable about a restricted menu is already contained in the
-full-menu probabilities that both of them receive.
-
-We therefore score a third forecast which is permitted to see them. Fix a subset $T$ and a
-training fold. Among the training respondents, count how often each item of $T$ was the one
-taken from $T$, smooth those counts as above, and use them as the forecast for held-out
-respondents facing $T$. This is a direct estimate of the choice probabilities within $T$,
-built from exactly the observations the two maps are denied, and it is scored on the same
-held-out respondents by the same log loss.
-
-It beats both maps, as it should. The question is by how much, because that difference is
-the room available. Define the gap as the held-out loss reduction of this counting forecast
-relative to renormalization, and read the race's share of that gap from
-Table~\ref{tab:gap}.
-
-\begin{table}[ht]
-\centering
-\small
-\begin{tabular}{lrrrr}
-\toprule
-Dataset & Gap & Captured & Corrected gap & Captured \\
-\midrule
-Dots & $0.0023$ & $65\%$ & $0.0026$ & $58\%$ \\
-Jester file 1 & $0.0041$ & $49\%$ & $0.0046$ & $43\%$ \\
-Jester file 3 & $0.0051$ & $47\%$ & $0.0056$ & $43\%$ \\
-Political goals & $0.0150$ & $46\%$ & $0.0154$ & $45\%$ \\
-Jester file 2 & $0.0040$ & $45\%$ & $0.0045$ & $40\%$ \\
-Sushi & $0.0260$ & $43\%$ & $0.0265$ & $42\%$ \\
-Occupational prestige & $0.1135$ & $34\%$ & $0.1312$ & $30\%$ \\
-Puzzles & $0.0026$ & $27\%$ & $0.0029$ & $24\%$ \\
-GSS socialization & $0.0223$ & $25\%$ & $0.0225$ & $24\%$ \\
-Netflix & $0.0046$ & $20\%$ & $0.0048$ & $19\%$ \\
-GSS job values & $0.0087$ & $20\%$ & $0.0089$ & $19\%$ \\
-\midrule
-Median & & $43\%$ & & $40\%$ \\
-\bottomrule
-\end{tabular}
-\caption{Gap is the held-out loss reduction of a smoothed per-subset frequency forecast
-relative to renormalization. Captured is the race's share of it. The eleven are the ranking collections whose
-observed gain exceeds the corresponding null simulation in Table~\ref{tab:null}; sports
-participation is excluded throughout. Renormalization captures none of the gap, being the unique map that preserves
-every ratio.}
-\label{tab:gap}
-\end{table}
-
-That third forecast is not an oracle. It is estimated too, so its expected held-out loss
-exceeds the true conditional entropy by approximately $(m-1)/2n$ for an $m$-outcome menu
-and $n$ training observations. The last two columns add that correction to the gap, which
-lowers the median from $43$ to $40$ per cent.
-
-Two of the gaps are near $0.002$, so the dots and puzzles ratios are the least stable. The
-percentages are context for the absolute gains.
 
 \section{Scope}
 \label{sec:scope}
@@ -894,6 +843,13 @@ On the choice between choice theory and signal detection theory.
 Louis L. Thurstone.
 A law of comparative judgment.
 \emph{Psychological Review}, 34:273--286, 1927.
+
+\bibitem{wu2020}
+Fangzhao Wu, Ying Qiao, Jiun-Hung Chen, Chuhan Wu, Tao Qi, Jianxun Lian, Danyang Liu,
+Xing Xie, Jianfeng Gao, Winnie Wu, and Ming Zhou.
+MIND: a large-scale dataset for news recommendation.
+In \emph{Proceedings of the 58th Annual Meeting of the Association for Computational
+Linguistics}, pages 3597--3606, 2020.
 
 \bibitem{yellott1977}
 John I. Yellott.
