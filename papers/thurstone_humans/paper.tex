@@ -264,15 +264,22 @@ observed.
 
 \section{The benchmark gap}
 
-The gains are a few thousandths of a nat. Both maps are given the same probabilities, and
-those probabilities carry most of the predictive content of a restricted menu, so the
-scale of any difference between the two maps is set by the measurement rather than by the
-maps.
+The gains in Tables~\ref{tab:menus} and~\ref{tab:heldout} are a few thousandths of a nat,
+and that figure is hard to read on its own. Neither map is permitted to see a restricted
+menu, and most of what is predictable about a restricted menu is already contained in the
+full-menu probabilities that both of them receive.
 
-To put a denominator under it we score a third forecast, one that does use restricted-menu
-data: the training-fold frequency with which each item is top within each subset, smoothed
-as above. Its loss reduction relative to renormalization is the gap in
-Table~\ref{tab:gap}, and the race's share of that gap is the last two columns.
+We therefore score a third forecast which is permitted to see them. Fix a subset $T$ and a
+training fold. Among the training respondents, count how often each item of $T$ was the one
+taken from $T$, smooth those counts as above, and use them as the forecast for held-out
+respondents facing $T$. This is a direct estimate of the choice probabilities within $T$,
+built from exactly the observations the two maps are denied, and it is scored on the same
+held-out respondents by the same log loss.
+
+It beats both maps, as it should. The question is by how much, because that difference is
+the room available. Define the gap as the held-out loss reduction of this counting forecast
+relative to renormalization, and read the race's share of that gap from
+Table~\ref{tab:gap}.
 
 \begin{table}[ht]
 \centering
