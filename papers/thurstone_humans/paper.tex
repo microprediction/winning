@@ -5,7 +5,7 @@
 \usepackage{microtype}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{The Empirical Case for Gaussian Renormalization as Default}}
+\title{\textbf{The Empirical Case for Gaussian\\Renormalization as Default}}
 \author{Peter Cotton}
 \date{Provisional draft, 17 August 2026}
 
@@ -13,21 +13,21 @@
 \maketitle
 
 \begin{abstract}
-\noindent A population's choice shares on a full menu do not tell you its choices
-from smaller menus without a rule connecting them. Luce's axiom supplies one:
-renormalize, leaving the odds between survivors untouched. An independent Gaussian
-race supplies another: re-run the contest without the removed options, which makes
-the survivors less lopsided. Neither rule needs data from the smaller menus. In an
-experiment where subjects chose separately from all thirty-one subsets of five goods,
-the Gaussian rule predicts held-out choices better, and across twelve archival
-ranking collections it does so in twelve of twelve. Both results survive comparison
-with a null in which the axiom holds by construction, which matters because
-contraction of a noisily estimated share vector is also shrinkage. The recommendation
-is narrow and practical: when mapping aggregate full-menu shares to restricted-menu
-shares, make the Gaussian race the default.
+\noindent A population's full-menu choice shares do not determine its choices from
+smaller menus. Luce's axiom supplies one rule connecting them, renormalization, which
+leaves the odds between survivors untouched; an independent Gaussian race supplies
+another, which makes the survivors less lopsided. We observe that the two are
+calibrated from exactly the same shares, so they can be compared as \emph{restriction
+maps} with nothing fitted to the smaller menus, and we score them out of sample. The
+Gaussian map is better on an experiment in which subjects chose separately from all
+thirty-one subsets of five goods, and on twelve of twelve archival ranking
+collections. Both results survive a null in which the axiom holds by construction,
+which is necessary because contracting a noisily estimated share vector is also
+shrinkage. The recommendation is narrow: when mapping aggregate full-menu shares to
+restricted-menu shares, make the race the default.
 \end{abstract}
 
-\section{Two rules, one calibration}
+\section{Two restriction maps}
 
 For a population and a menu $S$, let $p_i$ be the share choosing or first-ranking
 item $i$. Luce's axiom \cite{luce1959} assigns a worth $u(i)$ with
@@ -69,47 +69,29 @@ uses the pairwise outcomes directly; neither is tested here. What is tested is a
 cross-moment implication of the homogeneous Luce model, namely whether its full-menu
 shares correctly determine its restricted-menu shares.
 
-That the direction of the Gaussian disagreement is not an accident can be shown. With
-the highest draw winning, let $r = f/F$ be the reverse hazard of the common noise. For
-nested menus $T \subset S$ and $i,j \in T$ with $a_i > a_j$, if $\log r$ is concave
-then the odds of $i$ against $j$ are at least as large in $S$ as in $T$, strictly so
-when $\log r$ is strictly concave and at least one contestant is actually removed. The
-argument is a covariance inequality between two increasing functions, and the Gaussian
-satisfies the hypothesis because
+The direction of the disagreement is a theorem. With the highest draw winning, let
+$r = f/F$ be the reverse hazard of the common noise. For nested menus $T \subset S$ and
+$i,j \in T$ with $a_i > a_j$, if $\log r$ is concave then the odds of $i$ against $j$
+are at least as large in $S$ as in $T$, strictly so when the concavity is strict and at
+least one contestant is actually removed. The argument is a covariance inequality
+between two increasing functions.
+
+Two laws sit at the ends of that condition. The Gaussian satisfies it strictly, since
 $\frac{d^2}{dx^2}\log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0$. The Gumbel has
-$r(x) = s^{-1}e^{-x/s}$, so $\log r$ is affine, the inequality is an equality, and
-renormalization is recovered exactly; this is the sufficiency half of Yellott's
-theorem \cite{yellott1977}, which is what makes the axiom a boundary of the Gaussian's
-class rather than a rival to it. We use the proposition only for the sign. It gives no
-ordering of magnitudes, and contraction is not a property of a noise law at all: it
-depends on the share configuration, and laws recalibrated to the same shares reorder
-between configurations, so we make no claim of the form heavier tails contract less.
+$r(x) = s^{-1}e^{-x/s}$, so $\log r$ is affine, the inequality becomes an equality, and
+renormalization is recovered exactly. That is the sufficiency half of Yellott's theorem
+\cite{yellott1977}. The axiom is a boundary of the class, not a rival to it.
 
-\section{What is observed, and at what level}
-\label{sec:estimand}
-
-Twelve of the thirteen collections used here are complete rankings. A ranking yields
-both the first-placed item and the relative order of any two items, so in those twelve
-the comparison is between two accounts of one ranking distribution rather than a
-record of behaviour under restriction. A respondent's ranking imposes one ordering on
-every subset by construction, so no ranking dataset can show a person choosing $i$
-over $j$ from one menu and $j$ over $i$ from another, and none reveals whether that
-person would choose as their ranking implies when handed two options. Any statement
-about restriction from those twelve rests on the assumption that they would.
-
-The thirteenth makes no such assumption, and for that reason it comes first below.
-
-The level of analysis matters as much as the elicitation. Every quantity here is a
-population quantity, and aggregate failure of the axiom does not imply that
-individuals violate it. A population of people who each choose by
-Equation~\eqref{eq:luce} with worths differing between people generally does not
-satisfy the axiom in aggregate, which is why mixed logit is useful and why its
-probabilities are integrals over logit probabilities rather than logit probabilities
-\cite{mcfaddentrain2000}. So what can be rejected here is a representative-agent Luce
-restriction map. Individual-level noise is not identified.
+We use the proposition for the sign and nothing else. It orders no magnitudes, and
+contraction is not a property of a noise law: it depends on the share configuration, and
+laws recalibrated to the same shares reorder between configurations. Heavier tails do
+not reliably contract less.
 
 \section{Choices from real menus}
 \label{sec:menus}
+
+Twelve of the thirteen collections used here are complete rankings, from which subset
+choice is read off rather than observed. One is not, and it comes first.
 
 Costa-Gomes, Cueva, Gerasimou and Tejiscak \cite{costagomes2022} had each subject
 choose separately from all thirty-one subsets of five consumer goods, so restriction is
@@ -211,7 +193,7 @@ and the measured gain is zero to four decimals in every dataset, which is the ch
 that the pipeline is sound. We keep the all-subsets aggregate as the headline because it
 fixes the estimand in advance rather than selecting a cardinality after the fact.
 
-\section{Is the gain structural?}
+\section{Shrinkage}
 \label{sec:null}
 
 A positive gain has two possible sources and log loss cannot tell them apart. The race
@@ -272,7 +254,7 @@ excess over the null does not. The menu experiment clears the null on both readi
 which is the result the paper rests on, since it is the only one where restriction is
 observed.
 
-\section{How much of the available improvement is that?}
+\section{The benchmark gap}
 
 An absolute gain of a few thousandths of a nat is a valid predictive effect size but a
 poor guide to how much was on offer, because both rules receive the same shares and the
@@ -293,7 +275,7 @@ being the unique odds-preserving map. Denominators as small as $0.002$ make thes
 unstable, and they are offered as context for the absolute gains rather than as a
 headline.
 
-\section{What this does and does not establish}
+\section{Scope}
 
 The practical recommendation is narrow. When the task is to infer restricted-menu
 population shares from full-menu population shares, the Gaussian race should be the
@@ -303,29 +285,42 @@ small to discriminate. In the single experiment where restriction is actually ob
 rather than induced from rankings, it is better by $+0.0265$ nats per choice among
 subjects who cannot defer.
 
-Three things do not follow. Nothing here compares fitted likelihoods: a fitted
-Plackett--Luce model uses the whole ranking and a fitted Bradley--Terry model uses
-pairwise outcomes directly, and neither was estimated, so no recommendation about
-ranking or paired-comparison likelihoods is supported. The held-out score is a sum of
-marginal scores for top-item-within-subset outcomes, proper for those marginals but not
-for the full ranking distribution; with $K = 4$ the scored marginals carry at most
-$17$ degrees of freedom against $23$ for a distribution over rankings, so distinct
-ranking laws can agree on everything scored. And nothing identifies individual-level
-noise, for the reason given in Section~\ref{sec:estimand}: heterogeneous Luce choosers
-reproduce aggregate contraction, so the target rejected is a representative-agent map.
+Ten of the twelve ranking collections carry an assumption the menu experiment does not.
+A respondent's ranking imposes one ordering on every subset by construction, so no
+ranking dataset can show a person choosing $i$ over $j$ from one menu and $j$ over $i$
+from another, and none reveals whether that person would choose as their ranking implies
+when handed two options. Reading restriction off a ranking assumes they would.
+Section~\ref{sec:menus} does not.
 
-Nesting is also not the same as costlessness. The independent-noise contest class
-contains the Gumbel point, so permitting the class excludes no Luce population. But
-Table~\ref{tab:null} shows that choosing the Gaussian point specifically is a
-statistical decision that loses when the axiom is true and the shares are well
-estimated. The class costs nothing in generality; the default within it is a bet, and
-the evidence here is that it is a good one for human population data.
+Every quantity here is a population quantity. A population of people who each choose by
+Equation~\eqref{eq:luce}, with worths differing between people, generally does not
+satisfy the axiom in aggregate, which is why mixed logit is useful and why its
+probabilities are integrals over logit probabilities rather than logit probabilities
+\cite{mcfaddentrain2000}. Aggregate failure of the axiom is therefore not evidence that
+individuals violate it. Heterogeneous Luce choosers reproduce aggregate contraction. What
+is rejected is a representative-agent map.
 
-What would settle more: scoring the exact Gaussian ordering law against
-Plackett--Luce ranking probabilities. We do not do that. Pricing ordered outcomes by
-removing the winner and re-running is a sequential rule, not the race's ordering law,
-and against that law it misprices individual pairs and triples by up to a factor of
-$3.4$, so it cannot stand in.
+The experiment compares two restriction maps, not two fitted likelihoods. A fitted
+Plackett--Luce model uses the whole ranking and a fitted Bradley--Terry model uses the
+pairwise outcomes directly. Neither was estimated here. Recommendations about ranking or
+paired-comparison likelihoods therefore have no support in these tables.
+
+The score is a sum of marginal scores for top-item-within-subset outcomes. It is proper
+for those marginals and not for the ranking distribution. With $K = 4$ the scored
+marginals carry at most $17$ degrees of freedom against $23$ for a distribution over
+rankings, so distinct ranking laws can agree on everything scored here.
+
+Nesting is not costlessness. The independent-noise class contains the Gumbel point, so
+permitting the class excludes no Luce population, but Table~\ref{tab:null} shows that
+choosing the Gaussian point is a separate statistical decision which loses when the
+axiom holds and the shares are well estimated. Neither map dominates the other. Each
+owns a regime, and the border is drawn by how precisely the full-menu shares are known.
+
+A tempting shortcut fails. Pricing ordered outcomes by removing the winner and
+re-running looks like the race's own prediction, and it is not: against the calibrated
+race's ordering law it misprices individual pairs and triples by up to a factor of
+$3.4$. We leave to future work the comparison of the exact Gaussian ordering law
+against Plackett--Luce ranking probabilities on complete-ranking data.
 
 \section*{Data and code}
 
