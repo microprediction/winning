@@ -25,9 +25,12 @@ No work was found that does all four of the following together:
 3. used to predict restricted-menu shares **out of sample**, nothing fitted to the target,
 4. scored against proportional renormalization as the competing forecast.
 
-The nearest miss fails only on (1)+(2) in combination — see Wills et al. 2000 below, which
-has (3) and (4) in weakened form and asserts (1) as its conclusion without ever running it
-as a calibrated forecast.
+The nearest miss — Wills et al. 2000 — asserts (1) as its *conclusion* and owns the
+theoretical framing, but its actual model has rectangular noise rather than Gaussian, four
+free parameters, and a decision threshold refitted per menu; and it never computes the
+renormalization benchmark at all. So it fails (1), (2), (3) and (4) as executed, while
+publishing the hypothesis. That combination is the single most important thing in this
+file.
 
 ---
 
@@ -144,22 +147,109 @@ and from the abstract:
 **This is prior art on the framing and on the conclusion.** The project cannot claim to be
 the first to propose replacing the ratio rule with a Thurstonian choice process on the
 evidence of restricted-menu human data. Wills et al. published exactly that in 2000 and
-put it in their abstract.
+put it in their abstract. They also already own the Yellott framing, stated precisely at
+p. 985 including the n ≥ 3 restriction: "Yellott (1977) proved for situations involving
+three or more choices that the predictions of Thurstone's theory and the ratio rule can be
+equivalent if and only if the distributions employed in Thurstone's theory are double
+exponential."
 
-Why it is nevertheless not prior art on the *method*: their positive model is a
-connectionist winner-take-all network (Wills & McLaren 1997) shown to "account for" the
-data by simulation, not a parameter-free Gaussian calibrated on full-menu shares and
-scored out of sample; and their test statistic is a derived ratio
-q = [P(B|B,C) − P(B|A,B,C)] / P(B|A,B,C) carrying a qualitative directional prediction,
-plus an auxiliary assumption that magnitude terms are univariate functions of element
-count and unaffected by which alternatives are allowed — not a cell-level renormalization
-scored against a calibrated competitor. The menu is also only 3 → 2, which is the smallest
-size at which Yellott's non-equivalence bites at all, and the manipulation is
-between-subjects.
+Why it is nevertheless **not** prior art on the method. Four findings from the full text,
+each independently sufficient:
 
-Practical consequence: the project's novelty must be stated as *method and measurement* —
-a parameter-free calibration, a genuine out-of-sample forecast, and a scored comparison
-against renormalization — and it must credit Wills et al. with the hypothesis.
+1. **The noise is rectangular, not Gaussian.** The winner-take-all model that carries the
+   paper's argument uses uniform noise: the noise added to ν_i "ranges from +N to −N, has a
+   mean of zero, and has a **rectangular distribution** (i.e., all values from +N to −N are
+   equally likely)" (p. 1002). Gaussian appears twice and neither is their model — once in
+   the Introduction as a *definition* of Thurstone's theory (p. 985), and once as a
+   one-sentence unillustrated aside that Gaussian noise "produces comparable results" for
+   the stripped-down simple-WTA model (p. 1005) — a model they describe as fitting worse
+   and which "does not correctly predict the trend in the q′ statistic." Footnote 3 (p. 1009)
+   even detaches the two: "Considering the ratio rule in this way assumes that Gaussian
+   distributions are not a defining property of Thurstone's theory."
+2. **Four free parameters, self-described.** "The WTA model is a relatively complex system
+   with four free parameters (E, D, N, and S). The ratio rule, in contrast, has no free
+   parameters" (p. 1005).
+3. **Something *is* fitted to the restricted menu.** The decision threshold S is set per
+   condition — "S is set to 0.18 for the two-choice condition, 0.65 for the three-choice
+   condition, and 0.72 for the novel-elements condition" (p. 1002) — and the authors lean on
+   exactly that freedom to rescue the q′ trend (pp. 1005–1006). So the two-choice account is
+   a simulation with a menu-specific parameter, not an out-of-sample forecast. The magnitude
+   terms are likewise assumed linear from a chosen learning rate, not inverted from observed
+   full-menu shares. None of "parameter-free", "out of sample", "cross-validation" or
+   "held-out" occurs anywhere in the paper (0 hits each).
+4. **The renormalization benchmark is never computed.** The whole test rides on the derived
+   statistic q = [P(B|B,C) − P(B|A,B,C)] / P(B|A,B,C) and a *qualitative* same-direction /
+   opposite-curvature prediction, assessed by fitted quadratics and F-tests. No discrepancy
+   statistic against a renormalized prediction appears anywhere. Their own Equations 3 and 6
+   imply the exact parameter-free identity q = P(A|A,B,C) / [1 − P(A|A,B,C)], computable
+   from the three-choice condition alone — and they never form or score it.
+
+The menu is also only 3 → 2, the smallest size at which Yellott's non-equivalence bites at
+all, the manipulation is between-subjects, and the analysis is on aggregate data (a
+limitation they flag themselves at p. 1006).
+
+Practical consequence, and it is a favourable one. The project's novelty must be stated as
+*map plus method*: the Gaussian arm specifically, calibrated parameter-free by inverting
+observed full-menu shares, forecast out of sample, and scored against renormalization. All
+four of those are absent from the one paper that reached the same conclusion. But the
+*hypothesis* must be credited to Wills et al. (2000), and the Yellott framing to Yellott
+(1977). Note also that the unscored identity above can be evaluated directly from Wills'
+live CAM1 deposit, which makes it a cheap and rhetorically strong first result: closing a
+gap the original authors left open in their own data.
+
+### The sign of the residual is not consistent across the literature
+
+`../README.md` and Rouder 2004 both invite the assumption that the residual has one
+direction. Across the sweep it does not, and a Gaussian race predicts a *specific* sign, so
+this matters before any claim is made:
+
+- **CRR over-predicts accuracy on the restricted menu** (observed worse than predicted):
+  Rouder 2004 on both his 2001 data and Townsend & Landon's (21/28 and 39/48 log-odds points
+  off the diagonal); Engstrand & Moeller 1967, systematic overprediction of diagonal entries;
+  Hodge & Pollack 1962 for 2×2 menus drawn from adjacent objects in widely spaced ensembles.
+- **CRR under-predicts accuracy on the restricted menu** (observed better than predicted):
+  Pollack, Rubenstein & Horowitz 1960 — obtained correct exceeds predicted at every one of
+  the 16→8→4→2 steps, signed diagonal bias +3.3 / +3.9 / +0.8 per cent; Clarke & Anderson
+  1957 report obtained-minus-predicted articulation scores of +1.0 and +4.2 points.
+
+Townsend & Landon's own diagnosis is subtler still and is the most useful of the three: the
+residual is not a uniform accuracy shift but a *concentration* — "confusions among the four
+letters A, E, F, H in the master matrix tended to concentrate into the two letters A, E and
+F, H in their respective subset matrices rather than spreading evenly across all three
+letters in the subset matrices as predicted by the CRR and SSCM" (p. 148). CRR fits the
+subset where nothing near-substitutable was removed and fails the two where removal deleted
+a survivor's near-substitute.
+
+Implication: the claim should be framed as *structure*, not sign — a Gaussian race predicts
+where mass moves as a function of the similarity geometry, and should be scored per subset
+rather than pooled. Reporting a single aggregate improvement over CRR would mix cases that
+the theory says must differ.
+
+### A confound the old literature cannot resolve, and the project should not inherit
+
+Three *different* nuisance explanations for restricted-menu discrepancies are on the record,
+each offered by the authors who found the discrepancy:
+
+- **denominator bias** in the renormalization arithmetic, depending on observations per row
+  and the master/submatrix size ratio — Engstrand & Moeller 1967 (`engstrand1967.md`);
+- **response-label confusion** rather than stimulus confusion — Hodge & Pollack 1962,
+  pp. 138–139 (`hodge1962.md`);
+- **practice** — Pollack, Rubenstein & Horowitz 1960 (`pollack1960b.md`).
+
+None of the three is separable from a genuine IIA violation using the published *summary*
+statistics alone. That is an independent argument for scoring only sources with cell-level
+numbers (Townsend & Landon 1982; the Wills CAM1 deposit), and for generating fresh data
+rather than resting the claim on mined summaries.
+
+A related warning about the citation record, documented in `clarke1957.md`: Clarke (1959)
+reported CRR **failing** for tonal displays, that failure was attributed by Clarke himself
+to "strong contextual effects present in his data" (surviving only as Hodge & Pollack's
+footnote 5, "personal communication, 1960"), the data were never published, and Engstrand &
+Moeller (1967, p. 440) then list "Clarke (1957, 1959)" among studies that "successfully
+predicted performance on auditory tasks." The one negative test by the rule's own author was
+silently converted into a success. The apparent historical support for CRR is therefore
+weaker than a citation count suggests — which cuts in the project's favour, but must be
+argued from the primary sources rather than asserted.
 
 ### Gaussian versus Gumbel has been run as a fit comparison, but only on binary choice
 
@@ -198,7 +288,7 @@ without the Gaussian-versus-renormalization forecast framing; **(E)** irrelevant
 | Work | Cat | Fetched url | Why this category |
 |---|---|---|---|
 | Yellott 1977, JMP 15:109–144 | C | escholarship.org/content/qt7z91732x/qt7z91732x.pdf | Proves Gumbel uniqueness for triples; no data at all. The divergence is a theorem. |
-| Wills et al. 2000, QJEP 53A:983 | B/D, closest miss | andywills.info/assets/pdf/2000Wills.pdf | Asserts the Thurstonian conclusion on human 3→2 restricted-menu data, but the positive model is a fitted WTA simulation and the test is a qualitative directional statistic. |
+| Wills et al. 2000, QJEP 53A:983 | B/D, closest miss | andywills.info/assets/pdf/2000Wills.pdf | Asserts the Thurstonian conclusion on human 3→2 restricted-menu data and owns the Yellott framing, but the model has **rectangular** noise, four free parameters, and threshold S refitted per menu (0.18 two-choice vs 0.65 three-choice); renormalization is never scored. |
 | Rouder 2004, Psych Rev 111:80 | D | see `rouder2004.md` | Rejects CRR out of sample on human restricted menus with a signed residual; proposes no Gaussian competitor. Prior art on the negative result. |
 | Townsend & Landon 1982, JMP 25:119 | D | Wayback copy, see `townsend1982.md` | Runs the master→subset out-of-sample protocol with Luce-family maps only; builds the Gumbel race explicitly; never raises a normal alternative. |
 | Kornbrot, Georgiou & Page 2018, PeerJ preprint | B | S2 API record (full text 403) | Real probit-vs-logit comparison, but binary choice only and goodness-of-fit, not menu-restriction forecasting. |
