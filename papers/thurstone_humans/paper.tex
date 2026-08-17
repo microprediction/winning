@@ -16,17 +16,17 @@
 
 \begin{abstract}
 \noindent Given probabilities over mutually exclusive events, and told that one did not
-occur, proportional renormalization is the posterior only if the telling carries no
-information about which of the others did; Monty Hall is the standard reminder that it
-usually carries some. Told instead that one has been \emph{withdrawn}, scratched from the
-race, delisted, masked out of a softmax, conditioning does not apply at all, because the
-experiment has changed. Renormalization is what almost everyone does anyway. The
-alternative reads the probabilities as winning probabilities in a contest of Gaussian
-performances and re-runs the contest over what remains, fitting nothing. It forecasts
-better on an experiment where subjects chose from all thirty-one subsets of five goods, and
-on twelve of twelve ranking collections. Contraction of a noisy estimate also lowers log
-loss on its own, so we check against populations that renormalize exactly; the advantage
-survives except in the smallest collection.
+occur, proportional renormalization is the posterior only if the telling says nothing about
+which of the others did. Monty Hall is the standard reminder that it usually says
+something. Told instead that one has been \emph{withdrawn}, scratched, delisted, masked out
+of a softmax, conditioning does not apply at all: the experiment has changed.
+Renormalization is what almost everyone does anyway. The alternative reads the
+probabilities as winning probabilities in a contest of Gaussian performances and re-runs
+the contest over what remains, fitting nothing. It forecasts better on an experiment where
+subjects chose from all thirty-one subsets of five goods, and on twelve of twelve ranking
+collections. Contraction of a noisy estimate lowers log loss on its own, so we check
+against populations that renormalize exactly; the advantage survives except in the smallest
+collection.
 \end{abstract}
 
 \section{Two restriction maps}
@@ -42,6 +42,16 @@ $T \subseteq S$ follows by changing the denominator alone, which leaves every ra
 $p_i/p_j$ with $i,j \in T$ exactly as it was in $S$. For a two-item menu the predicted
 share preferring $i$ is therefore $p_i/(p_i+p_j)$. This invariance is Independence of
 Irrelevant Alternatives.
+
+The reflex to renormalize is not confined to choice modelling, and it is strong enough to
+be mistaken for a theorem. Renormalization is the posterior for mutually exclusive events
+only when the information that one is impossible is uninformative about which of the rest
+obtained; Monty Hall is the familiar counterexample, and the belief that renormalization is
+automatically Bayes survives repeated exposure to it. Withdrawal is a third case again,
+neither flat-likelihood conditioning nor informative conditioning, because no information
+about a fixed experiment has arrived: an alternative is gone and the choice problem is a
+different one. Nothing licenses renormalization there, and the question of what to do
+instead is empirical.
 
 Thurstone \cite{thurstone1927} connects the same two quantities through a contest.
 Item $i$ carries a location $a_i$, draws a performance $X_i \sim N(a_i,1)$ on each
