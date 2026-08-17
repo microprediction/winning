@@ -1,6 +1,8 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1.1in]{geometry}
 \usepackage{amsmath}
+\usepackage{amsthm}
+\newtheorem{proposition}{Proposition}
 \usepackage{booktabs}
 \usepackage{microtype}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
@@ -13,26 +15,25 @@
 \maketitle
 
 \begin{abstract}
-\noindent Given a set of probabilities assigned to mutually exclusive events, and given
-updated information that one or more of those events cannot occur, the temptation to
-perform a simple proportional renormalization is overwhelming. It is ubiquitous in
-practice and built into almost every layer of every modern neural network: a softmax is
-Luce's rule exactly, every attention head applies one, and masking a head renormalizes
-over the positions that survive. But a
-population's choice shares are not slices of an urn. They are the outcome of a contest
-among the alternatives, and withdrawing one alternative re-runs that contest rather than
-deleting a piece of it. Reading the shares as winning probabilities in a contest of
-independent Gaussian performances recovers the locations that imply them, and the contest
-can then be re-run over the events that remain. Both maps use the
-original probabilities and nothing else, so they can be scored against each other out of
-sample with no fitting on either side. The contest is the better forecast on an
+\noindent Given population shares over a set of alternatives, and asked for the shares
+after one or more alternatives are withdrawn, the temptation to renormalize
+proportionally is overwhelming. It is ubiquitous in practice and built into standard
+softmax mechanisms, where masking and recomputing preserves the relative odds of the
+survivors. It is reinforced by a genuine fact: for mutually exclusive events, one of
+which is learned to be impossible, proportional renormalization is exactly Bayes.
+Withdrawing an alternative from a menu is not that operation. It changes the problem the
+chooser faces rather than supplying information about a fixed one, and which transport is
+right becomes an empirical question. The alternative studied here reads the shares as
+winning probabilities in a contest of independent Gaussian performances, recovers the
+locations that imply them, and re-runs the contest over the alternatives that remain. Both
+maps use the original shares and nothing else, so they can be scored against each other
+out of sample with no fitting on either side. The contest is the better forecast on an
 experiment in which subjects chose separately from all thirty-one subsets of five goods,
 and on twelve of twelve archival ranking collections. One complication is that the
-contest's prediction is a contraction of the estimated probabilities, and contracting a
-noisy estimate lowers log loss whether or not proportional renormalization is wrong; we
-therefore repeat everything on simulated populations that renormalize exactly. Except in
-the smallest collection, the observed advantage exceeds that null effect, and in the large
-ones the null effect runs the other way.
+contest's prediction is a contraction of the estimated shares, and contracting a noisy
+estimate lowers log loss whether or not proportional renormalization is wrong; we
+therefore repeat everything on simulated populations that renormalize exactly, and except
+in the smallest collection the observed advantage exceeds that null effect.
 \end{abstract}
 
 \section{Two restriction maps}
@@ -65,9 +66,10 @@ contest among $T$ alone. For a pair this is one normal evaluation,
 P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right),
 \label{eq:pair}
 \end{equation}
-and it is less lopsided than $p_i/(p_i+p_j)$. Winning a large field requires an
-unusually high draw; beating one rival does not, so the favourite's advantage counts for
-less.
+and if $p_i > p_j$ it lies between $\tfrac12$ and $p_i/(p_i+p_j)$: removing the other
+alternatives contracts the odds toward one. Winning a large field requires an unusually
+high draw, and beating a single rival does not, so the favourite's advantage counts for
+less. Proposition~\ref{prop:contraction} makes this exact.
 
 Both rules are calibrated to the same $|S|-1$ free shares, and neither sees any
 observation from a smaller menu. The comparison is between two maps with no free
@@ -80,14 +82,31 @@ population as one chooser with one set of worths or locations, and transports it
 from $S$ to $T$.
 
 The direction of the disagreement is a theorem, and it holds for noise laws other than
-the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise and
-let $r = f/F$ be its reverse hazard, with the highest draw winning as above.
+the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise and let
+$r = f/F$ be its reverse hazard, with the highest draw winning as above.
 
-Suppose $\log r$ is concave. Take nested menus $T \subset S$ and two items $i,j \in T$
-with $a_i > a_j$. Then the ratio of their choice probabilities is at least as large in
-the larger menu $S$ as in the smaller menu $T$, strictly so when the concavity is strict
-and at least one item is actually removed. Removing items moves the ratio toward one. The
-proof is a covariance inequality between two increasing functions.
+\begin{proposition}[Removing alternatives contracts the odds]
+\label{prop:contraction}
+Suppose $\log r$ is concave. Let $T \subset S$ and $i,j \in T$ with $a_i > a_j$. Then
+\[
+\frac{P(i \mid S)}{P(j \mid S)} \;\ge\; \frac{P(i \mid T)}{P(j \mid T)} \;\ge\; 1,
+\]
+with the first inequality strict when $\log r$ is strictly concave and $S \setminus T$ is
+non-empty.
+\end{proposition}
+
+\begin{proof}
+Write $A(x) = f(x-a_i)F(x-a_j)$, $B(x) = f(x-a_j)F(x-a_i)$ and
+$H(x) = \prod_{k \in S \setminus T} F(x-a_k)$, so that $P(i \mid T) \propto \int A$ and
+$P(i \mid S) \propto \int A H$, and likewise for $j$ with $B$. Then
+$A(x)/B(x) = r(x-a_i)/r(x-a_j)$, which is increasing in $x$ when $\log r$ is concave,
+since $a_i > a_j$ places $x - a_i$ below $x - a_j$ and $(\log r)'$ is decreasing. Under the
+probability measure proportional to $B(x)\,dx$ the two functions $A/B$ and $H$ are both
+increasing, hence positively correlated, so
+$\int A H / \int B H \ge \int A / \int B$.
+\end{proof}
+
+The proposition says that removing alternatives moves the ratio toward one.
 
 Two laws sit at the ends of that condition. The Gaussian satisfies it strictly, since
 $\frac{d^2}{dx^2}\log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0$. The Gumbel has
@@ -235,7 +254,7 @@ specifically a Plackett--Luce ranking null.
 \small
 \begin{tabular}{lrrrr}
 \toprule
-Dataset & Observed & Null median & Excess & $p$ \\
+Dataset & Observed & Null median & Excess & MC tail \\
 \midrule
 Menu experiment, forced choice & $+0.0265$ & $-0.0041$ & $+0.0306$ & $0.010$ \\
 Menu experiment, all subjects & $+0.0100$ & $-0.0023$ & $+0.0123$ & $0.015$ \\
@@ -317,9 +336,9 @@ Median & & $43\%$ & & $40\%$ \\
 \bottomrule
 \end{tabular}
 \caption{Gap is the held-out loss reduction of a smoothed per-subset frequency forecast
-relative to renormalization. Captured is the race's share of it. The eleven datasets are
-those clearing the null of Table~\ref{tab:null}; sports participation is excluded
-throughout. Renormalization captures none of the gap, being the unique map that preserves
+relative to renormalization. Captured is the race's share of it. The eleven are the ranking collections whose
+observed gain exceeds the corresponding null simulation in Table~\ref{tab:null}; sports
+participation is excluded throughout. Renormalization captures none of the gap, being the unique map that preserves
 every ratio.}
 \label{tab:gap}
 \end{table}
@@ -332,7 +351,61 @@ lowers the median from $43$ to $40$ per cent.
 Two of the gaps are near $0.002$, so the dots and puzzles ratios are the least stable. The
 percentages are context for the absolute gains.
 
+\section{Why a population should look Gaussian}
+\label{sec:mixture}
+
+Nothing so far explains why the Gaussian member of the class should be the one that fits.
+A mechanism is available, and it comes from the same caveat that limits what the data can
+identify.
+
+By Yellott's theorem an individual Luce chooser is a contest with Gumbel noise. Let
+individual log-worths vary across the population,
+\begin{equation}
+\log u_i(\theta) = \mu_i + \varepsilon_i(\theta),
+\label{eq:hetero}
+\end{equation}
+so person $\theta$ chooses $\arg\max_i(\mu_i + \varepsilon_i + G_i)$ with $G$ independent
+Gumbel. The population is then itself a contest, with noise the convolution
+$\varepsilon + G$. If individual taste is a sum of many small independent influences, the
+central limit theorem makes $\varepsilon$ approximately Gaussian. As the scale of
+$\varepsilon$ grows relative to the Gumbel scale, the convolution is dominated by its
+Gaussian part.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{rrrr}
+\toprule
+$\sigma$ & Observed $\lambda$ & Case V $\lambda$ & Ratio \\
+\midrule
+$0$ & $-0.002$ & $0.227$ & $0.00$ \\
+$0.5$ & $0.052$ & $0.228$ & $0.23$ \\
+$1$ & $0.127$ & $0.229$ & $0.56$ \\
+$2$ & $0.200$ & $0.228$ & $0.88$ \\
+$3$ & $0.214$ & $0.227$ & $0.94$ \\
+$4$ & $0.221$ & $0.226$ & $0.98$ \\
+$6$ & $0.226$ & $0.226$ & $1.00$ \\
+\bottomrule
+\end{tabular}
+\caption{Simulated populations of Luce choosers whose log-worths carry Gaussian taste
+variation of scale $\sigma$, against a Gumbel choice-noise scale of $1$. Observed
+$\lambda$ is the population's contraction; Case V $\lambda$ is what an independent
+unit-variance Gaussian race implies for that population's own full-menu shares. At
+$\sigma = 0$ the population is homogeneous Luce and does not contract, as the axiom
+requires. By $\sigma = 4$ the population contracts within two per cent of the Case V
+prediction.}
+\label{tab:mixture}
+\end{table}
+
+So a population of Luce choosers with Gaussian taste variation is Case V in aggregate,
+once taste outweighs choice noise. That is a reason to expect the Gaussian transport to
+work on population shares which does not require any individual to be non-Lucean, and it
+makes the aggregate caveat of Section~\ref{sec:scope} into the mechanism rather than an
+apology. It also predicts where the fit should be worst: in populations whose members are
+nearly alike.
+
 \section{Scope}
+\label{sec:scope}
 
 The practical recommendation is narrow. When the task is to infer restricted-menu
 population shares from full-menu population shares, the Gaussian race should be the
@@ -367,8 +440,8 @@ for those marginals and not for the ranking distribution. With $K = 4$ the score
 marginals carry at most $17$ degrees of freedom against $23$ for a distribution over
 rankings, so distinct ranking laws can agree on everything scored here.
 
-Nesting is not costlessness. The independent-noise class contains the Gumbel point, so
-permitting the class excludes no Luce population, but Table~\ref{tab:null} shows that
+Nesting is not costlessness. Conceptually the independent-noise race family nests Luce at
+the Gumbel noise law, so the family excludes no Luce population, but Table~\ref{tab:null} shows that
 choosing the Gaussian point is a separate statistical decision which loses when the axiom
 holds and the shares are well estimated.
 
