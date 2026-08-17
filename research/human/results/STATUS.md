@@ -239,3 +239,45 @@ contraction equal across same-category and cross-category image foils, which loo
 evidence for independence; tones show similarity mattering greatly. Both hold, because two
 photographs from one category are far less confusable than two tones 6 per cent apart in
 frequency. It is the continuum that breaks independence, not category membership.
+
+## Three more nested-response-set sources, verified end to end (2026-08-17)
+
+1. ROUDER LAB "chunk" EXPERIMENTS -- raw trial data, and the best unexploited lead.
+github.com/PerceptionCognitionLab/data0/tree/master/1dMemory/chunk. Unpublished lab data in a
+public repo, no licence, no README; the design must be read off the .C sources, where
+C2R/C2.C contains blocktypestims[4][7]={{0,1},{2,3,4},{5,6},{0,1,2,3,4,5,6}} and the logged
+stimulus and response are GLOBAL indices, so labels are identical across menus. Columns
+sub ch wd blk trl bt set stim resp RT.
+  c0 cond A,D: 12 lines, subsets {0-3},{4-7},{8-11} and {0-7},{4-11}, 35 subjects, 880 trials
+  c0 cond C: 12 distinct PAIRS from the 12-line master, 14 subjects -- the sharpest instrument,
+    since the same subject gives a 12-alternative and a binary choice over identical labels
+  C2R and c2: 7 lines, subsets {0,1},{2,3,4},{5,6}, 47 subjects, 782 trials
+  C3: order-counterbalanced, 12 subjects
+Order is fixed full-subsets-full except in C3, so practice is confounded unless the pre/post
+full-set brackets or C3 are used.
+
+2. TOWNSEND & LANDON (1982), J Math Psychol 25(2):119-162. Printed obtained proportions to 3dp
+for master {A,E,F,H,X} and nested {A,E,F,H}, {A,E,X}, {F,H,X}, per subject, 4 subjects, 240
+trials per letter per block, spoken letter names so labels identical. Multiply by 240 to
+recover integer counts, which self-checks the extraction. Only route is Wayback:
+web.archive.org/web/20160916190658if_/http://www.indiana.edu/~psymodel/papers/towlan82.pdf
+
+3. GETTY, SWETS, SWETS & GREEN (1979), Percept Psychophys 26(1):1-19, publisher OA at
+link.springer.com/content/pdf/10.3758/BF03199856.pdf. Table 6 gives full 8x8 confusion
+FREQUENCIES per observer; Table 8 the "8 by 4" experiment, same 8 stimuli with only 4
+allowable responses, signal sets {1,2,5,6}, {3,4,5,6}, {1,3,5,7}. All 8 stimuli were presented
+in the 8x4, so the four noise rows are forced errors and the nested comparison lives in the
+signal rows. About 10x fewer trials per cell than the 8x8.
+
+INTEGRITY CAVEAT from the agent's own correction. It relayed some Tier 2 detail from a
+delegated thread that never returned -- it mistook its own timeout for completion. Treat as
+unverified: the internals of Lacouture, Li & Marley (1998) Experiment 2a, including the label
+sets {1..10} inside {3..7} inside {5,6}, n=16, 600 trials and PC .58/.76/.91, which it has
+never seen because tandfonline blocks automated fetches. That is the primary target for this
+literature, so open the PDF by hand first. The three Tier 1 items above it verified itself
+from source files and downloaded PDFs.
+
+Also corrected: the UK Data Service item is Adelman (2016) alone, and manipulates exposure and
+decision time rather than set size, so it is off point. And Stewart's raw zip is confirmed
+lost, not merely hard to find -- a CDX sweep shows only the HTML listings and a source_code
+directory were ever captured.
