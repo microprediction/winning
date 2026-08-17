@@ -1,0 +1,5 @@
+51 states, menu sizes {3: 2, 4: 11, 5: 12, 6: 6, 7: 8, 8: 7, 9: 2, 10: 2, 11: 1}
+
+matched nested pairs (|D:R log-odds gap| <= 0.5): 263
+  renormalization 0.7661   race 0.7660   gain +0.0002
+  Luce null median -0.0000   excess +0.0002   MC tail 0.005  (200 reps)
