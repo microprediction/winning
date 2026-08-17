@@ -172,3 +172,41 @@ mean d-prime values with SDs, analytically invertible to percent correct. Their 
 the wrong way: d-prime HIGHER with four alternatives than two, F(1,216)=58.84, which their
 own footnote attributes to the added symbols being easier, so guessing redistributes
 non-proportionally onto the retained pair.
+
+## Second boundary condition, with two instances (2026-08-17)
+
+McMurray, Aslin, Tanenhaus, Spivey & Subik (2008), JEP:HPP 34(6):1609-1631,
+pmc.ncbi.nlm.nih.gov/articles/3011988/, free. Literal nesting twice over: {b,p} inside
+{b,p,l,sh} on identical synthetic CV stimuli (Exp 2 vs 3) and on six word continua (Exp 5 and
+McMurray 2002 vs Exp 4). Between subjects.
+
+The reported result is a boundary case for us. The two added labels absorbed only 0.8 per cent
+of responses, yet the b:p identification slope fell from 0.99 to 0.82, t(42)=4.3, p<.001. So
+removing them makes the surviving discrimination MORE extreme. Renormalization predicts no
+change, since the removed options carried almost no mass, and contraction predicts movement
+toward even. Observed is the opposite of both.
+
+Same direction as the Zoanetti exam data, where deleting a distractor raised the correct
+answer share by more than proportional (+2.65pp, t=3.04, p=.004). Two domains, one mechanism:
+removal made the task easier, so the surviving alternatives changed in discriminability.
+
+THE DISCUSSION NOW HAS TWO BOUNDARY CONDITIONS, EACH WITH TWO INSTANCES.
+
+1. Near-substitutes. Deleting an option returns its mass to its neighbour rather than
+   proportionally, and the ordering can reverse. Scottish verdicts (Not proven and Not
+   guilty); Townsend & Landon 1982 (confusions concentrate into A,E and F,H).
+
+2. Quality-changing removal. The surviving alternatives become easier to discriminate, so
+   they are not the same alternatives before and after. Exam distractors; phoneme labels.
+
+Plus the pre-existing third: both defaults agree wherever shares are concentrated, so
+near-deterministic populations cannot answer the question at all. Low-cost gambles frame,
+third-party ballot mass, machine data.
+
+Data status for McMurray: identification curves only, digitizable from Figures 5, 7 and 9;
+filler responses were discarded as false alarms so no 4-way matrix exists; trial-level files
+need an author request to bob-mcmurray@uiowa.edu.
+
+Barclay (1972), P&P 11(4):269-273, is the original nested-response-set speech experiment,
+within-subject on the same tape, b/d/g then b/g. Worth citing but the 3-category proportions
+were never printed and cannot be recovered from the published tables.
