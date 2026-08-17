@@ -127,3 +127,48 @@ To obtain by library request: Vidmar (1972) JPSP 22(2):211-218 plus Larntz (1975
 31(1):123-125. If Vidmar really ran all seven non-empty subsets of the three homicide
 charges with acquittal always available, that is a complete power-set design on one case and
 the best Block-Marschak material in this entire search. Unverified from the primary source.
+
+## Prior art that narrows the novelty claim (2026-08-17)
+
+The CONSTANT-RATIO RULE is Luce's renormalization under another name, and it has been tested
+against nested response sets since the 1950s. This literature was invisible to every search
+term used until now and it materially narrows what this paper can claim as new.
+
+Townsend & Landon (1982), J Math Psychol 25(2):119-162, doi 10.1016/0022-2496(82)90009-8.
+Ran this paper's experiment: master set {A,E,F,H,X} with nested subsets {A,E,X}, {F,H,X},
+{A,E,F,H}, blocked and counterbalanced, 4 subjects x 16 sessions, 240 presentations per
+letter, and they PUBLISH FULL CONFUSION MATRICES PER SUBJECT in Tables 1-4. Their result is
+ours and their diagnosis is our boundary condition: CRR fits {A,E,F,H} well and {F,H,X}
+badly because confusions concentrate into the similar pairs A,E and F,H rather than
+spreading proportionally. They cite Debreu (1960) by name. Free via Wayback:
+web.archive.org/web/20160916190658if_/http://www.indiana.edu/~psymodel/papers/towlan82.pdf
+
+Rouder (2004), Psych Review 111(1):80-93. States our result in the older vocabulary:
+conditioning on a reduced choice set is "somewhat efficient", better than guessing
+correction predicts but WORSE than Luce/CRR normalisation predicts. That is contraction,
+reported in 2004. Re-analyses Townsend & Landon and Rouder (2001).
+
+Morgan (1974), J Math Psychol 11:107-123, formalised a likelihood-ratio test of CRR and
+rejected it on Clarke's and Egan's data. Hodge (1967) tested nested ensembles of 8, 4 and 2
+and found CRR failures concentrated on similar pairs. Elliffe & Davison (2010) show a clean
+2-vs-4 violation in pigeons.
+
+WHAT THIS MEANS. "Renormalization fails under restriction" is not new and the paper must not
+imply it is. What remains new: that the Gaussian race is the better PARAMETER-FREE DEFAULT,
+scored out of sample against an explicit shrinkage null, across populations spanning
+preference, recognition memory, perception, verdicts and clicks; and that the failures share
+a structure (near-substitutes, quality-changing removal, concentrated shares).
+
+Also usable as data, needing an author request: Rouder (2001) Psych Science 12(4):318-322,
+2AFC {W,E} vs 6AFC {Q,W,E,R,T,Y} masked letters, footnote offers the frequency matrices.
+Gummerman (1973), Bull Psychonomic Soc 2(6):365-367, free, reprints 1971 data with nested
+subsets and finds NO small-set advantage after guessing correction, which is the opposite
+direction from Waszak.
+
+Waszak et al. (2009), Psych Research 73(1):114-122, the masked-symbol target: nesting is
+literal, {#, thorn} inside {#, thorn, ampersand, ash}, n=226 ages 6-88, and the paper already
+reports the nested comparison on the same two stimuli. No trial data, but Table 1 gives 132
+mean d-prime values with SDs, analytically invertible to percent correct. Their anomaly runs
+the wrong way: d-prime HIGHER with four alternatives than two, F(1,216)=58.84, which their
+own footnote attributes to the added symbols being easier, so guessing redistributes
+non-proportionally onto the retained pair.
