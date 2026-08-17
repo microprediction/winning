@@ -365,8 +365,8 @@ default in place of renormalization. The inversion from shares to locations is t
 algorithm of \cite{cotton2021} performs it in one pass over a common grid, returning the
 whole vector of winning probabilities at once. The restricted predictions are then
 one-dimensional quadrature on the same grid. At the field sizes here, ten alternatives at
-most, both steps are immediate, and the method is designed for fields orders of magnitude
-larger \cite{cotton2021}. So the
+most, both steps are immediate, and the method scales to fields of millions
+\cite{cotton2021}. So the
 recommendation needs no additional data and no appreciable additional computation, and it
 was better on every collection examined here except the one too small to discriminate. In the single experiment where restriction is actually observed
 rather than induced from rankings, it is better by $+0.0265$ nats per choice among
