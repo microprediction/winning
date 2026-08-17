@@ -16,7 +16,8 @@
 \noindent Given a set of probabilities assigned to mutually exclusive events, and given
 updated information that one or more of those events cannot occur, the temptation to
 perform a simple proportional renormalization is overwhelming. It is ubiquitous in
-practice and built into almost every layer of every neural network. But a
+probabilistic modelling, and implicit whenever a softmax is masked or a vector of
+normalized weights has entries deleted and the remainder rescaled. But a
 population's choice shares are not slices of an urn. They are the outcome of a contest
 among the alternatives, and withdrawing one alternative re-runs that contest rather than
 deleting a piece of it. Reading the shares as winning probabilities in a contest of
@@ -28,8 +29,9 @@ experiment in which subjects chose separately from all thirty-one subsets of fiv
 and on twelve of twelve archival ranking collections. One complication is that the
 contest's prediction is a contraction of the estimated probabilities, and contracting a
 noisy estimate lowers log loss whether or not proportional renormalization is wrong; we
-therefore repeat everything on simulated populations that renormalize exactly, and the
-advantage survives.
+therefore repeat everything on simulated populations that renormalize exactly. Except in
+the smallest collection, the observed advantage exceeds that null effect, and in the large
+ones the null effect runs the other way.
 \end{abstract}
 
 \section{Two restriction maps}
@@ -71,8 +73,10 @@ observation from a smaller menu. The comparison is between two maps with no free
 parameters left, rather than between two fitted models. This also fixes what the
 comparison can settle. A fitted Plackett--Luce likelihood uses the whole ranking, and a
 fitted Bradley--Terry model uses the pairwise outcomes directly; neither is estimated
-here. The question is whether the full-menu shares of a homogeneous Luce population
-imply the right restricted-menu shares.
+here. The question is which map from full-menu shares to restricted-menu shares predicts
+population choice better. Both are \emph{representative-agent} maps: each treats the
+population as one chooser with one set of worths or locations, and transports its shares
+from $S$ to $T$.
 
 The direction of the disagreement is a theorem, and it holds for noise laws other than
 the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise and
@@ -246,8 +250,11 @@ Sports participation & $+0.0050$ & $+0.0051$ & $-0.0000$ & $0.51$ \\
 \bottomrule
 \end{tabular}
 \caption{The same gain when the axiom holds by construction. Two hundred replicates per
-row, so $p$ is floored at $1/201$; the menu experiment uses its own $373$ subjects and
-menus. Wherever shares rest on more than about two thousand observations the null is
+row. The diagnostic is the excess of the observed gain over the null median; the tail
+probabilities are indicative rather than exact tests, and for the menu rows they are
+optimistic, because the null redraws each subject's thirty-one choices independently given
+the aggregate worths and so omits the within-subject dependence that the bootstrap
+intervals of Table~\ref{tab:menus} do preserve. Wherever shares rest on more than about two thousand observations the null is
 negative, because contraction is then a bias rather than useful insurance, so comparing
 an observed gain with zero understates it.}
 \label{tab:null}
@@ -264,8 +271,8 @@ observed.
 
 \section{The benchmark gap}
 
-The gains in Tables~\ref{tab:menus} and~\ref{tab:heldout} are a few thousandths of a nat,
-and that figure is hard to read on its own. Neither map is permitted to see a restricted
+Most of the aggregate gains in Tables~\ref{tab:menus} and~\ref{tab:heldout} are a few
+thousandths of a nat, and such a figure is hard to read on its own. Neither map is permitted to see a restricted
 menu, and most of what is predictable about a restricted menu is already contained in the
 full-menu probabilities that both of them receive.
 
@@ -323,9 +330,9 @@ percentages are context for the absolute gains.
 
 The practical recommendation is narrow. When the task is to infer restricted-menu
 population shares from full-menu population shares, the Gaussian race should be the
-default in place of renormalization. It costs one extra one-dimensional integral, needs
-no additional data, and was better on every collection examined here except the one too
-small to discriminate. In the single experiment where restriction is actually observed
+default in place of renormalization. It requires only a low-dimensional numerical calibration and one-dimensional quadrature,
+needs no additional data, and was better on every collection examined here except the one
+too small to discriminate. In the single experiment where restriction is actually observed
 rather than induced from rankings, it is better by $+0.0265$ nats per choice among
 subjects who cannot defer.
 
@@ -356,9 +363,15 @@ rankings, so distinct ranking laws can agree on everything scored here.
 
 Nesting is not costlessness. The independent-noise class contains the Gumbel point, so
 permitting the class excludes no Luce population, but Table~\ref{tab:null} shows that
-choosing the Gaussian point is a separate statistical decision which loses when the
-axiom holds and the shares are well estimated. Neither map dominates the other. Each
-owns a regime, and the border is drawn by how precisely the full-menu shares are known.
+choosing the Gaussian point is a separate statistical decision which loses when the axiom
+holds and the shares are well estimated.
+
+So the recommendation is not a claim of dominance. Neither map dominates the other: when
+the shares are precise the better map is whichever one matches the population, and when
+they are very noisy the dominant consideration is estimation risk rather than either
+structural rule. What the tables support is a structural default in the absence of
+evidence for the axiom, which is the situation an analyst holding only aggregate shares is
+actually in.
 
 A tempting shortcut fails. Pricing ordered outcomes by removing the winner and
 re-running looks like the race's own prediction, and it is not: against the calibrated
