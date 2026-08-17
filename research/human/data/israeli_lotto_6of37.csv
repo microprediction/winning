@@ -1,0 +1,42 @@
+# Israeli Lotto (Mifal haPayis) 6/37, mean per-number share of manual selections.
+# Source: Patterns in manually selected numbers in the Israeli lottery, Judgment and
+# Decision Making 2021, table figure. 115 million manual guesses over 118 draws in 2018.
+# Values read from the paper's published table; uniform baseline is 2.70 per cent.
+number,mean_share_pct
+1,2.96
+2,2.90
+3,3.23
+4,2.95
+5,3.25
+6,3.10
+7,3.51
+8,2.88
+9,2.96
+10,3.19
+11,3.35
+12,3.26
+13,2.97
+14,2.74
+15,2.80
+16,2.60
+17,2.66
+18,2.46
+19,2.51
+20,2.68
+21,2.82
+22,2.82
+23,2.87
+24,2.74
+25,2.77
+26,2.75
+27,2.41
+28,2.18
+29,2.25
+30,2.44
+31,2.27
+32,2.13
+33,2.30
+34,2.15
+35,2.05
+36,2.06
+37,1.96
