@@ -1,0 +1,14 @@
+
+all subjects: 364 subjects, 8239 restricted-menu choices scored, shares from 268 full-menu choices
+  renormalization log loss   0.9263
+  Gaussian race log loss     0.9164
+  gain                       +0.0100  [+0.0048, +0.0246]
+  fitted-Luce null median    -0.0023   95th +0.0051   (200 reps)
+  excess over null           +0.0123   p = 0.015
+
+forced choice only: 137 subjects, 3425 restricted-menu choices scored, shares from 109 full-menu choices
+  renormalization log loss   0.9112
+  Gaussian race log loss     0.8846
+  gain                       +0.0265  [+0.0116, +0.0700]
+  fitted-Luce null median    -0.0041   95th +0.0117   (200 reps)
+  excess over null           +0.0306   p = 0.010
