@@ -15,25 +15,16 @@
 \maketitle
 
 \begin{abstract}
-\noindent Given population shares over a set of alternatives, and asked for the shares
-after one or more alternatives are withdrawn, the temptation to renormalize
-proportionally is overwhelming. It is ubiquitous in practice and built into standard
-softmax mechanisms, where masking and recomputing preserves the relative odds of the
-survivors. It is reinforced by a genuine fact: for mutually exclusive events, one of
-which is learned to be impossible, proportional renormalization is exactly Bayes.
-Withdrawing an alternative from a menu is not that operation. It changes the problem the
-chooser faces rather than supplying information about a fixed one, and which transport is
-right becomes an empirical question. The alternative studied here reads the shares as
-winning probabilities in a contest of independent Gaussian performances, recovers the
-locations that imply them, and re-runs the contest over the alternatives that remain. Both
-maps use the original shares and nothing else, so they can be scored against each other
-out of sample with no fitting on either side. The contest is the better forecast on an
-experiment in which subjects chose separately from all thirty-one subsets of five goods,
-and on twelve of twelve archival ranking collections. One complication is that the
-contest's prediction is a contraction of the estimated shares, and contracting a noisy
-estimate lowers log loss whether or not proportional renormalization is wrong; we
-therefore repeat everything on simulated populations that renormalize exactly, and except
-in the smallest collection the observed advantage exceeds that null effect.
+\noindent Given probabilities over mutually exclusive events, and told that one did not
+occur, proportional renormalization is exactly right: it is Bayes. Told instead that one
+has been \emph{withdrawn}, scratched from the race, removed from the menu, masked out of a
+softmax, renormalization is no longer a theorem but a guess. It is the guess almost
+everyone makes. The alternative reads the probabilities as winning probabilities in a
+contest of Gaussian performances and re-runs the contest over what remains, fitting
+nothing. It forecasts better on an experiment where subjects chose from all thirty-one
+subsets of five goods, and on twelve of twelve ranking collections. Contraction of a noisy
+estimate also lowers log loss on its own, so we check against populations that renormalize
+exactly; the advantage survives except in the smallest collection.
 \end{abstract}
 
 \section{Two restriction maps}
