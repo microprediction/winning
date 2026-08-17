@@ -521,6 +521,17 @@ theorem sends the middle term to $N(0,I_K)$ and the last to zero, and the $\arg\
 probabilities are continuous at a limit with no ties.
 \end{proof}
 
+One direction for future work would turn this limit into a correction. At finite
+$\sigma/\beta$ the composite noise is Gaussian plus Gumbel, so $\varepsilon = \beta/\sigma$ is a
+small parameter attached to a subordinate component sitting on a Gaussian leading order. That
+is the setting for a singular perturbation expansion, with Case V as the leading-order
+restriction map and the first term in $\varepsilon$ predicting departures from it. The
+structure is static rather than dynamic, so the analogy is to the technique rather than to any
+particular application of it, such as the expansions used for fast mean-reverting stochastic
+volatility. What makes the direction concrete is that the target already exists: the residuals
+in Table~\ref{tab:mixture} and their empirical counterparts are what such an expansion would
+have to reproduce. We do not attempt it here.
+
 The covariance assumption is doing real work and should not be waved through. If the taste
 components carry covariance $\Sigma$ instead of $I_K$, the same argument delivers a Gaussian
 race with covariance $\Sigma$, which is correlated multinomial probit rather than Case V.
