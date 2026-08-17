@@ -56,9 +56,9 @@ contest among $T$ alone. For a pair this is one normal evaluation,
 P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right),
 \label{eq:pair}
 \end{equation}
-and it is less lopsided than $p_i/(p_i+p_j)$: winning a large field needs an unusually
-good draw, and a favourite's edge is partly an edge in producing extremes, so that
-edge counts for less when one rival remains.
+and it is less lopsided than $p_i/(p_i+p_j)$. Winning a large field requires an
+unusually high draw; beating one rival does not, so the favourite's advantage counts for
+less.
 
 Both rules are calibrated to the same $|S|-1$ free shares and neither sees any
 observation from a smaller menu. The comparison is therefore between two
@@ -256,24 +256,23 @@ observed.
 
 \section{The benchmark gap}
 
-An absolute gain of a few thousandths of a nat is a valid predictive effect size but a
-poor guide to how much was on offer, because both rules receive the same shares and the
-shares carry nearly all the predictive content of a restricted menu. To scale it we also
-score a smoothed subset-frequency forecast, the training-fold frequency with which each
-item is top within each subset, which is $|T|-1$ free probabilities per subset.
+The gains are a few thousandths of a nat. Both rules are given the same shares, and the
+shares carry most of the predictive content of a restricted menu, so the scale of any
+difference between them is set by the measurement rather than by the two rules.
 
-This benchmark is not an oracle ceiling, and treating it as one would overstate the
-ratio. It is itself estimated, so its expected held-out loss exceeds the oracle
-conditional entropy by roughly $(m-1)/2n$ for an $m$-outcome menu and $n$ training
-observations, and a regularized or structured forecast can beat it out of sample.
-Applying that first-order correction, the Gaussian race closes a median $35$ per cent of
-the empirical benchmark gap, from $16$ per cent for sports participation to $58$ per
-cent for dots. Uncorrected the median is $39$ per cent. Either way the reading is that a
-rule with nothing fitted to restricted menus recovers a third or more of what a
-per-subset frequency estimator achieves, while renormalization recovers none of it,
-being the unique odds-preserving map. Denominators as small as $0.002$ make these ratios
-unstable, and they are offered as context for the absolute gains rather than as a
-headline.
+We therefore score a third forecast, which does use restricted-menu data: the
+training-fold frequency with which each item is top within each subset, smoothed as
+above. Its loss reduction relative to renormalization is the benchmark gap. The race
+closes a median of $39$ per cent of that gap, from $20$ per cent for GSS job values to
+$65$ per cent for dots.
+
+That third forecast is not an oracle. Its expected held-out loss exceeds the true
+conditional entropy by approximately $(m-1)/2n$ for an $m$-outcome menu and $n$ training
+observations. Adding this correction lowers the median to $35$ per cent, and sports
+participation from $27$ to $16$.
+
+Two of the denominators are near $0.002$, so those two ratios are unstable. The
+percentages are context for the absolute gains.
 
 \section{Scope}
 
