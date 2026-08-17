@@ -210,3 +210,32 @@ need an author request to bob-mcmurray@uiowa.edu.
 Barclay (1972), P&P 11(4):269-273, is the original nested-response-set speech experiment,
 within-subject on the same tape, b/d/g then b/g. Worth citing but the 3-category proportions
 were never printed and cannot be recovered from the published tables.
+
+## Tones: third loss, and the cleanest near-substitutes case (2026-08-17)
+
+research/human/tones.py on the digitized Stewart, Brown and Chater matrices. Calibrate on the
+N=10 row for a stimulus, restrict to the middle labels, predict the N=6 or N=8 row.
+
+  narrow N10->N6   renorm 1.1176  race 1.1309  gain -0.0133
+  narrow N10->N8   renorm 1.3569  race 1.3620  gain -0.0051
+  wide   N10->N6   renorm 1.0053  race 1.0226  gain -0.0173
+  wide   N10->N8   renorm 1.2640  race 1.2697  gain -0.0057
+
+Renormalization wins all four. The mechanism is visible in the matrices: they are strongly
+banded, so a tone is confused almost entirely with its immediate neighbours. The alternatives
+lie on a one-dimensional frequency continuum, so adjacent labels are near-substitutes by
+construction, and removing the outer labels returns their mass to neighbours rather than
+proportionally. Same mechanism as the Scottish verdicts, in a psychophysical setting, and the
+loss is largest at N=6 where more of the continuum has been cut away.
+
+THE BOUNDARY CAN NOW BE STATED AS A RULE. The race wins where alternatives are distinct
+unordered items: consumer goods, news slates, memory foils, sushi, jokes, ballots. It loses
+where they sit on a perceptual continuum (tones), or where removal changes the task (exam
+distractors, phoneme labels), or where one removed option is a near-substitute for a survivor
+(verdicts).
+
+This also resolves the tension with Meyer-Grant. Our Utochkin similarity split found
+contraction equal across same-category and cross-category image foils, which looked like
+evidence for independence; tones show similarity mattering greatly. Both hold, because two
+photographs from one category are far less confusable than two tones 6 per cent apart in
+frequency. It is the continuum that breaks independence, not category membership.
