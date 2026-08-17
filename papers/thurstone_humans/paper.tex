@@ -82,6 +82,14 @@ alternatives contracts the odds toward one. Winning a large field requires an un
 high draw, and beating a single rival does not, so the favourite's advantage counts for
 less. Proposition~\ref{prop:contraction} makes this exact.
 
+The class of independent additive random-utility models contains exactly two
+parameter-free points. Fix the noise law up to location and there is nothing left to
+choose; Gumbel gives renormalization and unit-variance Gaussian gives Case V, and every
+law between them costs a number. So an analyst holding aggregate shares and no restricted
+observations has two candidates, not a family, and the comparison below is between the only
+two defaults available. Anything fitted is a different exercise, and one that cannot be
+tested by the discrepancy it was fitted to absorb.
+
 Both rules are calibrated to the same $|S|-1$ free shares, and neither sees any
 observation from a smaller menu. The comparison is between two maps with no free
 parameters left, rather than between two fitted models. This also fixes what the
@@ -251,6 +259,75 @@ comfortably, with Monte Carlo tail frequencies of $0.010$ and $0.005$; experimen
 fifty-eight per cent of the sample, does not, at $0.199$ and $0.129$. The direction
 replicates and the magnitude is not established by these data alone.
 
+\section{Four more observed restrictions}
+\label{sec:more}
+
+The consumer experiment is not the only place restriction is observed. Four further
+populations are scored by the same protocol, and they differ from each other in what does
+the removing.
+
+Aguiar, Boccardi, Kashaev and Kim \cite{aguiar2023} observe choices from all thirty-one
+non-empty subsets of five lotteries with a default always available, so menus run from two
+to six alternatives, in a cross-section giving at most two disjoint menus per person. Their
+three cost frames are disjoint subject pools differing in how many arithmetic operations
+are needed to value a lottery, one, three or five. This dataset is adversarial on the
+authors' own analysis: they report that random utility cannot explain the population
+behaviour while a logit attention model survives.
+
+US presidential ballots supply restriction by statute. The alternatives are the same named
+candidates in every state and which of them appears varies with petition thresholds and
+filing deadlines, so the states are nested menus over identical alternatives. States are
+not interchangeable populations, so a state may only predict another whose two-party log
+odds are within $0.5$.
+
+Grocery stockouts supply physical removal. In FreshRetailNet-50K an hourly flag marks a
+product out of stock, and shoppers arriving afterwards face a smaller menu that nobody
+arranged. The alternatives here are not mutually exclusive, since a shopper may buy two
+items in a category, so this is a boundary case rather than a clean test.
+
+Wikipedia links supply editorial removal. An article offers outbound links, a reader picks
+one exclusively, the destinations are the same articles from month to month, and editors
+change the set. Adjacent monthly clickstream dumps give the earlier month's shares and the
+later month's choices. The dump censors pairs below ten clicks, so a vanished destination
+may have been removed or may have fallen below threshold, and it records no link position,
+so layout is uncontrolled.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Population & Units & Gain & Null median & Excess & MC tail \\
+\midrule
+Lotteries, high cost & 4{,}099 & $+0.0101$ & $+0.0020$ & $+0.0081$ & $.035$ \\
+Lotteries, medium cost & 4{,}099 & $+0.0068$ & $+0.0023$ & $+0.0045$ & $.124$ \\
+Lotteries, low cost & 4{,}099 & $+0.0002$ & $+0.0014$ & $-0.0012$ & $.667$ \\
+US state ballots 2024 & 263 pairs & $+0.0002$ & $-0.0000$ & $+0.0002$ & $.005$ \\
+Wikipedia links & 3{,}544 pages & $-0.0001$ & $-0.0002$ & $+0.0001$ & $.005$ \\
+Grocery stockouts & 78 cells & $-0.0015$ & $-0.0013$ & $-0.0002$ & --- \\
+\bottomrule
+\end{tabular}
+\caption{Held-out loss differences on populations where restriction is observed rather
+than read off a ranking. Excess is the gain net of what a renormalizing population
+produces on the same menus. The lottery frames are disjoint subject pools; ballot units
+are matched state pairs; Wikipedia units are pages whose destination set shrank; grocery
+units are store-category cells, scored separately, hence no single tail. Two rows have a
+negative raw gain and a positive excess, which means the race loses to renormalization in
+absolute terms while still beating what the axiom predicts of it.}
+\label{tab:more}
+\end{table}
+
+Two features deserve naming. The lottery gradient runs with arithmetic cost, and the
+mechanism of Appendix~\ref{sec:mixture} predicts its direction, since computation error is
+per-alternative and roughly Gaussian, so loading more of it onto each alternative raises
+$\sigma$ against $\beta$. And the Wikipedia rows say something the ranking collections
+cannot: tightening the filter that identifies a genuine removal from a five per cent share
+to thirty-five per cent raises the excess from $+0.0001$ to $+0.0005$ across $3{,}544$,
+$817$ and $121$ pages, so the near-zero headline is attenuation by measurement rather than
+absence of an effect. Both Wikipedia and the two General Social Survey collections put the
+truth between the two defaults: choice contracts when an alternative goes, but by less than
+Case V says.
+
 \section{Choices induced from rankings}
 \label{sec:rankings}
 
@@ -313,6 +390,76 @@ peaking at $|T| = 4$. At $|T| = K$ nothing has been removed, the two rules must 
 and the measured gain is zero to four decimals in every dataset, which is the check
 that the pipeline is sound. We keep the all-subsets aggregate as the headline because it
 fixes the estimand in advance rather than selecting a cardinality after the fact.
+
+\section{Where the difference lives}
+\label{sec:where}
+
+Averaged over outcomes the difference between the two defaults is small, and averaging
+hides what it is made of. Two decompositions locate it.
+
+Score each held-out prediction by the rank the chosen item held in the full-menu shares.
+Pooling the four ten-item collections:
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrrrrrrr}
+\toprule
+Rank of chosen item & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 \\
+\midrule
+Share of outcomes & $.17$ & $.13$ & $.13$ & $.10$ & $.10$ & $.10$ & $.08$ & $.07$ & $.07$ & $.04$ \\
+Mean gain & $-.062$ & $-.045$ & $-.034$ & $-.004$ & $+.009$ & $+.019$ & $+.050$ & $+.058$ & $+.101$ & $+.171$ \\
+\bottomrule
+\end{tabular}
+\caption{Held-out gain by the full-menu rank of the item actually chosen, pooled over
+Sushi and the three Jester files. Monotone in rank, crossing zero between fourth and
+fifth. The contributions sum to $+0.0043$.}
+\label{tab:byrank}
+\end{table}
+
+The race pays $0.062$ nats whenever the favourite wins, which happens $17$ per cent of the
+time, and collects $0.171$ when the tenth-ranked item wins, which happens $4$ per cent of
+the time. That is what a contraction does: it moves probability off the favourite and onto
+the tail, buying insurance against upsets and paying a premium on every favourite win.
+Three earlier observations follow from it. The aggregate gain is small because large rare
+wins net against small frequent losses. The ballot result is negligible because
+third-party candidates are the tail and there is almost no tail mass to collect. And
+grocery baskets are a wash because a category where both items can be bought has no upsets.
+
+The second decomposition is sharper because it names an error rather than a difference.
+Ask how often a given item finishes second, which is the conditional question after the
+winner is removed:
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+Collection & Observed & Renormalization & Race \\
+\midrule
+Political goals & $0.123$ & $0.318$ & $0.309$ \\
+GSS job values & $0.186$ & $0.303$ & $0.294$ \\
+GSS socialization & $0.191$ & $0.302$ & $0.294$ \\
+Sushi & $0.206$ & $0.251$ & $0.245$ \\
+Jester file 1 & $0.138$ & $0.160$ & $0.158$ \\
+\bottomrule
+\end{tabular}
+\caption{Probability that the full-field favourite finishes second. Renormalization
+overstates it in every collection, by $0.022$ to $0.195$; the race overstates it too, by a
+little less. The mirror holds for the last-ranked item, whose chance of finishing second
+both maps understate everywhere.}
+\label{tab:favsecond}
+\end{table}
+
+This is the pattern reported for the Harville formula in racing place markets, favourites
+over-priced and outsiders under-priced, appearing here in survey rankings of sushi, jokes,
+child-rearing values and political goals. It is also the most useful result in the paper
+for a practitioner, because it is a large, replicable, signed error in the default rather
+than a small average edge. The honest qualification is that the race removes only $5$ to
+$12$ per cent of it, so both defaults share a bias much larger than the distance between
+them. What produces the remainder is not identified here; the obvious candidate is that a
+single respondent's ranking is internally consistent, so adjacent places are positively
+correlated in a way no independent contest reproduces.
 
 \section{Shrinkage}
 \label{sec:null}
@@ -681,6 +828,11 @@ Maria M. Robinson, Isabella C. DeStefano, Edward Vul, and Timothy F. Brady.
 How do people build up visual memory representations from sensory evidence?
 Revisiting two classic models of choice.
 \emph{Journal of Mathematical Psychology}, 117:102805, 2023.
+
+\bibitem{aguiar2023}
+Victor H. Aguiar, Maria Jose Boccardi, Nail Kashaev, and Jeongbin Kim.
+Random utility and limited consideration.
+\emph{Quantitative Economics}, 14(1):71--116, 2023.
 
 \bibitem{bradley1952}
 Ralph A. Bradley and Milton E. Terry.
