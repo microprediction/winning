@@ -13,19 +13,22 @@
 \maketitle
 
 \begin{abstract}
-\noindent A population's full-menu choice shares do not determine its choices from
-smaller menus. Luce's axiom supplies one rule connecting them, renormalization, which
-leaves the odds between survivors untouched; an independent Gaussian race supplies
-another, which makes the survivors less lopsided. We observe that the two are
-calibrated from exactly the same shares, so they can be compared as \emph{restriction
-maps} with nothing fitted to the smaller menus, and we score them out of sample. The
-Gaussian map is better on an experiment in which subjects chose separately from all
-thirty-one subsets of five goods, and on twelve of twelve archival ranking
-collections. A complication is that the race's prediction is a contraction of the
-estimated shares, and contracting a noisy estimate lowers log loss whether or not the
-axiom fails; we therefore repeat everything on simulated populations in which the axiom
-holds exactly, and the advantage survives. The recommendation is narrow: when mapping aggregate full-menu shares to
-restricted-menu shares, make the race the default.
+\noindent Given a set of probabilities assigned to mutually exclusive events, and given
+updated information that one or more of those events cannot occur, the temptation to
+perform a simple proportional renormalization is overwhelming and ubiquitous. But a
+population's choice shares are not slices of an urn. They are the outcome of a contest
+among the alternatives, and withdrawing one alternative re-runs that contest rather than
+deleting a piece of it. Reading the shares as winning probabilities in a contest of
+independent Gaussian performances recovers the locations that imply them, and the contest
+can then be re-run over the events that remain. Both maps use the
+original probabilities and nothing else, so they can be scored against each other out of
+sample with no fitting on either side. The contest is the better forecast on an
+experiment in which subjects chose separately from all thirty-one subsets of five goods,
+and on twelve of twelve archival ranking collections. One complication is that the
+contest's prediction is a contraction of the estimated probabilities, and contracting a
+noisy estimate lowers log loss whether or not proportional renormalization is wrong; we
+therefore repeat everything on simulated populations that renormalize exactly, and the
+advantage survives.
 \end{abstract}
 
 \section{Two restriction maps}
