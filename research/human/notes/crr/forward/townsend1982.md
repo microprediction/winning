@@ -217,3 +217,236 @@ not agree — the likelihood ratio "in essence forms an estimate of the 'true' s
 matrix using both S and M under the null hypothesis", whereas the chi-square treats the
 master-derived CRR entries as fixed theoretical values. The project's out-of-sample
 framing matches the chi-square convention, not Morgan's.
+
+## Whether a Gaussian model was among those tested
+
+Answering a direct question put by another agent in this sweep. Searched the OCR text for
+`thurstone`, `gaussian`, `probit`, `discriminal`, `case v`, `normal`, `yellott`,
+`double exponential`, `logistic`, and read Definitions 1–8 and Section V in full.
+
+### 1. Is any fitted model Gaussian, normal, Thurstonian or probit?
+
+**No. Not one.** The seven fitted models are all specified directly at the level of
+discrete confusion probabilities, with no latent continuum and no noise distribution:
+
+- **CRR** (Definition 1, p. 121) — row-wise renormalisation of the master matrix.
+- **SCM / WSCM / SSCM / SSCM(η) / SSCM(β)** (Definitions 2–4, pp. 122–126) — Luce
+  ratio-of-strengths, η similarity and β bias parameters.
+- **AON**, all-or-none (Definition 5, pp. 126–127) — `P(j|i) = (1 − p_i)h_j` off-diagonal,
+  `p_i + (1 − p_i)h_i` on-diagonal; `2q − 1` parameters. "The simplest interpretation of
+  the AON is as a strict template matching perceptual process. Upon presentation of the
+  stimulus, the subject either recognizes the stimulus perfectly (which occurs with
+  probability p_i), or with probability 1 − p_i the subject is thrown into a null
+  information state in which he/she can guess the correct stimulus with probability h_j"
+  (p. 126). No distribution anywhere.
+- **OVLP**, the overlap model (Definition 6, p. 127) — despite the name, **not** a model of
+  overlapping distributions as parameterised here. It is a pairwise-confusion-state model:
+
+  > "The OVLP model assumes that either perfect information or two-way partial information
+  > is acquired by the subject at each stimulus presentation. With probability ξ_ii stimulus
+  > i is recognized perfectly and the correct response is given. With probability 1 − ξ_ii
+  > the subject enters some pairwise confusion state in which the subject is unsure as to
+  > which of the two letters in the pairwise state was actually presented. ξ_ij represents
+  > the probability that the pairwise confusion state is between stimulus i and stimulus j.
+  > When in the pairwise confusion state, the subject responds with j according to the ratio
+  > of the biases of the two stimuli involved in the pairwise confusion." (p. 127)
+
+  Definition 6 gives `P(j|i) = ξ_ij × [g_j/(g_j + g_i)]` for i ≠ j, with `ξ_ij = ξ_ji`,
+  `Σ_j ξ_ij = 1`. The ξ's are free parameters; nothing generates them from a density. The
+  paper's own gloss is that OVLP contributes "simple pairwise interstimulus relationships"
+  to be "contrasted with the pure guessing strategy of the AON and the stimulus similarity
+  relationships of the WSCM and the SSCM" (p. 127).
+- **NCC / WNCC / SNCC / SNCC(δ) / SNCC(ω)** (Definition 7, pp. 128–129) — Nakatani's (1972)
+  confusion-choice model, specialised. **SNCC = "Strong Nakatani confusion-choice model.
+  The NCC version of the SSCM. Both ω and δ parameters are constrained to not vary between
+  matrices"** (Appendix A glossary, p. 158). Structurally `Q = AD`, an acceptance matrix
+  `A` of probabilities `π_ik = Π_{j∈𝒞k} ω_ij Π_{l∉𝒞k}(1 − ω_il)` giving the chance that
+  confusion set `𝒞k` arises from stimulus i, times a decision matrix `D` in which response
+  j is drawn from the confusion set by bias ratio δ_j. `[q(q+1)/2] − 1` parameters.
+
+**The Gaussian in this paper belongs to a model they deliberately gutted.** The one place
+a normal distribution appears is Nakatani's *original* NCC, and Townsend & Landon state
+explicitly that they replaced the Gaussian generative layer with free parameters
+(pp. 128–129):
+
+> "A comparison of the above specialized version of the NCC with the original formulation
+> (Nakatani, 1972) will reveal that the probabilities ω_ij are being assumed to be free
+> parameters that will be estimated. In the original formulation, the ω_ij probabilities
+> are defined (not estimated) relative to a Euclidean multidimensional space. This space is
+> occupied by sets of multidimensional Gaussian distributions (or spheres), with the center
+> point of these spheres representative of a stimulus/response. A boundary lies within each
+> of these spheres that defines an acceptance region. Response j is an acceptable response
+> given that an observation falls within the acceptance region of the sphere whose center
+> point represents the location of stimulus/response j. Therefore, ω_ij represents the
+> probability that an observation will fall within the acceptance region of the sphere of
+> response j given that stimulus i was presented."
+
+and the reason for discarding it:
+
+> "The free parameters in the original model are the point coordinates in an L-dimensional
+> Euclidean space and the bias probabilities, while the specialized version employed here
+> begins on a more macroscopic level. This permits estimation and testing to be comparable
+> to that of the other models investigated here." (p. 129)
+
+So the only Gaussian-grounded model in the paper's field of view was stripped of its
+Gaussian and reduced to free ω's, on grounds of comparability of fitting — and the
+resulting parameter count was matched to WSCM and OVLP on purpose. A parameter-free
+Gaussian prediction is not among the things tested, and the paper's stated methodology
+(equalise parameter counts, fit everything by χ² STEPIT) has no slot for one.
+
+### 2. Which models are master-calibrated-then-applied, and which are refit per matrix?
+
+Confirmed, and this is unambiguous in the text. **Master-calibrated, applied to the
+subsets without refitting:**
+
+| Model | What is carried over from the master |
+|---|---|
+| **CRR** | the master matrix rows themselves, renormalised — nothing estimated |
+| **SSCM** | both η (similarity) and β (bias), estimated on M, applied to all S |
+| **SNCC** | both ω and δ, estimated on M, applied to all S |
+| **SSCM(β)** | η only; β refit per matrix (Definition 4a, p. 125) |
+| **SSCM(η)** | β only; η refit per matrix (Definition 4b, p. 125) |
+| **SNCC(δ)**, **SNCC(ω)** | the NCC analogues of the two partial cases (glossary, p. 158) |
+
+**Refit separately on every matrix, including each subset:**
+
+| Model | Statement |
+|---|---|
+| **WSCM** | "The WSCM predictions were of course elicited by completely re-estimating the η_ij's and β_i's for each matrix" (p. 141) |
+| **WNCC** | "The ω and δ parameters are unconstrained" (glossary, p. 158) |
+| **OVLP** | fit within matrix; Table 7 reports within-set fits |
+| **AON** | fit within matrix; Table 7 reports within-set fits |
+
+The decisive sentence, p. 141:
+
+> "SSCM predictions on the other hand, were obtained by estimating the η_ij's and β_j in
+> the master matrix and then carrying them over to predict the subset matrices."
+
+and on CRR, same page:
+
+> "Similarly, CRR generated entries for Table 4 by Eq. (1). That is, each appropriate cell
+> of the master matrix M was normalized by the sum of the appropriate cells in the same
+> row, thus forming a prediction entry for the subset matrix S. Under the stated procedure
+> no CRR predicted proportion existed for the master matrix (A, E, F, H, X)."
+
+and the design intent, p. 125:
+
+> "The SSCM expressed by Eq. (5) is a very strong interpretation of Eq. (4) and the CRR in
+> the sense that both the η and β parameter estimates in an experiment are constrained to
+> be invariant between the master matrix and the predicted subset matrices. In other words,
+> only one set of parameters may be estimated from a master confusion matrix containing all
+> of the stimuli used in the experiment, and then the appropriate η and β parameter values
+> necessary for a specific subset drawn from the master matrix are used to predict the
+> subset."
+
+**So state it accurately: the out-of-sample master-to-subset protocol is not novel.** It is
+the organising principle of this 1982 paper, formalised in Definitions 3 and 4, executed on
+printed matrices, and scored three ways (non-parametric difference counts, χ², and Morgan's
+likelihood ratio). Anyone claiming novelty for the *protocol* will be corrected by a
+referee holding this paper.
+
+Three qualifications keep the picture honest, and they are where a contribution can
+actually sit.
+
+- **Every master-calibrated map here is either CRR itself or a fitted parametric model.**
+  SSCM and SNCC are out of sample only in the sense that their parameters were estimated on
+  M; they still require an estimation step, and Theorem 1 (p. 122) proves "The SSCM implies
+  the CRR, but the CRR does not imply the SSCM", with the consequence drawn on p. 139: "As
+  shown by Theorem 1, the SSCM is a special case of the CRR and so should perform no better
+  than the CRR." Empirically they came out "nearly equivalent". So the paper contains
+  exactly **one** contraction map tested out of sample — proportional renormalisation — in
+  two dresses. There is no second, non-IIA, parameter-free map anywhere in it.
+- **The paper's winning models are the refit ones**, and its own closing line about them is
+  a within-matrix claim: WSCM and WNCC "both of which did a creditable job with the data
+  obtained in the present study" (p. 157) — after refitting on each subset. Summary
+  conclusion (1) is explicit that the strong versions fail and that "the failure of the
+  model to predict accurately the data from the three subset matrices used in this study was
+  due primarily to the restrictions placed on its η_ij similarity parameter estimates"
+  (p. 157). Freeing the similarity parameters per menu is what rescues the fit — which is
+  precisely the move the project declines to make.
+- **Nothing here anticipates predicting the residual.** The residual is described (p. 148,
+  the concentration of A/E and F/H confusions quoted above) and then attributed to
+  "set contexts" and to loosened perceptual filters, not derived from any map.
+
+### 3. Thurstone, Case V, probit, normal, discriminal, Gaussian — what is actually there
+
+| Term | Occurrences in the paper |
+|---|---|
+| Thurstone / Thurstonian | **once, reference list only** — inside the title of Yellott (1977), p. 162. Never in the body text. |
+| Gaussian | twice, both pp. 128–129, both describing Nakatani's original formulation, which they discard (quoted above). |
+| normal (as a distribution) | **zero.** The single hit for the string is "normalized" at p. 141. |
+| probit | zero |
+| discriminal (process) | zero |
+| Case V | zero |
+| logistic | zero |
+| double exponential | eight times, pp. 155–156 and reference list |
+
+**Instead of a Gaussian they built the Gumbel.** Section V, "Indications for models of
+visual confusion", pp. 155–156, contains a full random-utility derivation — a race over
+latent match strengths — under the *double exponential*, i.e. the one noise distribution
+that regenerates Luce's ratio-of-strengths and hence IIA and hence CRR:
+
+> "One of the more attractive candidates is the maximal match choice model (Townsend,
+> Note 6; Townsend, Evans, & Hu, Note 7; van Santen & Bamber, 1981, independently arrived
+> at this model). The model assumes that the observer selects that alternative pattern which
+> exhibits the maximal comparison, or match, with the stimulus pattern. The match process is
+> assumed to be random, utilizing the idea of Holman and Marley (cited in Luce & Suppes,
+> 1965), and later Yellott (1977), showing how the double exponential distribution can lead
+> to the ratio of strengths form (Eq. (4))." (p. 155)
+
+Assumption 4 is the distributional commitment:
+
+> "4. Assume that Y_ij = log X_ij is distributed as the double exponential with scale value
+> log η_ij." (p. 155)
+
+They then carry the algebra through to `P(X_ij = max_k X_ik) = η_ij β_j / Σ_k η_ik β_k`,
+"which is the formula sought" (p. 156).
+
+**This is the closest the paper comes to a Thurstonian model, and it is the fork taken in
+the other direction.** They set up exactly the architecture a Gaussian race would use —
+latent match strengths per alternative, a max selector over the available set, bias added in
+log space (Figure 3, p. 155) — and then chose the extreme-value noise that makes the whole
+thing collapse back to the model they had just shown fails out of sample. The consequence is
+visible in the very next paragraph, where the set-size effect has to be patched by hand
+rather than falling out of the noise:
+
+> "Within the context of the present study, the maximal match model would need to account
+> for the increase in η_ij values as set size decreases. This could be accomplished by a
+> shift in the location of the double exponential distribution of the log X_ij towards
+> log X_ii (which has scale value 0 from the constraint that η_ii = 1)." (p. 156)
+
+> "One way in which this might occur is if the observer activates a filter or 'template' for
+> each potential pattern to be shown. It might take an amount of processing capacity to
+> energize and maintain such filters. With a smaller alphabet, the observer could 'loosen up'
+> a little and permit a less finely tuned filter for each memory pattern. On the average,
+> this would lead to some degradation in the pairwise matching process but performance would
+> still improve overall due to the smaller number of patterns." (p. 156)
+
+So the set-size dependence of the similarity parameters — the entire empirical residual — is
+handled by a stipulated location shift plus a capacity story about loosening filters. Nobody
+asks whether a different noise distribution over the same max-selector architecture would
+produce the shift for free. There is no statement anywhere that a Thurstonian or normal
+alternative was considered and rejected; the possibility is simply never raised. The nearest
+thing to an acknowledged limit is footnote 13, p. 156, which concerns replacing the maximal
+selector with decision criteria rather than changing the distribution:
+
+> "It is interesting that the WSCM has no reasonable representation along a continuum as it
+> does here if, instead of permitting a maximal selector, it is supposed that a set of
+> decision criteria separates the choice alternatives, except when N = 2 (Marley, 1971)."
+
+### 4. Is Yellott (1977) cited?
+
+**Yes, twice.** In text on p. 155, in the passage quoted above, as the authority for deriving
+the ratio-of-strengths form from the double exponential. And in the reference list, p. 162,
+verbatim:
+
+> "YELLOTT, J. I. The relationship between Luce's choice axiom, Thurstone's theory of
+> comparative judgment, and the double exponential distribution. *Journal of Mathematical
+> Psychology*, 1977, 15, 109–144."
+
+This is the sharpest point available for a prior-art discussion. Townsend & Landon had, in
+hand and cited, the theorem establishing that the double exponential is what distinguishes
+Luce from Thurstone in a random-utility race — and they used it in the Luce direction only,
+to justify a Gumbel race, in the same paper in which they concluded that Luce's IIA content
+"fails as an underlying principle of visual confusion" (p. 158). The Thurstonian half of
+Yellott's title is present in their bibliography and absent from their models.
