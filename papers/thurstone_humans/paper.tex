@@ -3,7 +3,6 @@
 \usepackage{amsmath}
 \usepackage{amsthm}
 \newtheorem{proposition}{Proposition}
-\newtheorem{lemma}{Lemma}
 \usepackage{booktabs}
 \usepackage{microtype}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
@@ -352,107 +351,6 @@ lowers the median from $43$ to $40$ per cent.
 Two of the gaps are near $0.002$, so the dots and puzzles ratios are the least stable. The
 percentages are context for the absolute gains.
 
-\section{Why a population should look Gaussian}
-\label{sec:mixture}
-
-Nothing so far explains why the Gaussian member of the class should be the one that fits.
-A mechanism is available, and it is elementary.
-
-Suppose an alternative's latent performance is an additive accumulation of many small
-independent influences, each of which is on its own a Luce choice.
-
-\begin{lemma}[Additive aggregation of Luce components]
-\label{lem:agg}
-For each $n$ let
-\begin{equation}
-X_{ni} = b_{ni} + \sum_{r=1}^{n} w_{nr}\, \varepsilon_{ri},
-\qquad i = 1,\dots,K,
-\label{eq:agg}
-\end{equation}
-where for each $r$ the shocks $\varepsilon_{r1},\dots,\varepsilon_{rK}$ are iid Gumbel with
-variance $\sigma^2$, independent across $r$. Put $s_n^2 = \sigma^2 \sum_r w_{nr}^2$ and
-suppose
-\[
-\frac{\max_r |w_{nr}|}{\sqrt{\sum_r w_{nr}^2}} \longrightarrow 0,
-\qquad
-\frac{b_{ni}}{s_n} \longrightarrow a_i .
-\]
-Then for every $i$,
-\[
-P\bigl(X_{ni} = \max_j X_{nj}\bigr) \longrightarrow
-P\bigl(a_i + Z_i = \max_j (a_j + Z_j)\bigr),
-\qquad Z \sim N(0, I_K).
-\]
-\end{lemma}
-
-\begin{proof}
-Subtracting the common mean $m \sum_r w_{nr}$ from every coordinate and dividing by $s_n$
-leaves the $\arg\max$ unchanged, giving
-$Y_{ni} = b_{ni}/s_n + Z_{ni}$ with
-$Z_{ni} = \sum_r w_{nr}(\varepsilon_{ri}-m) / (\sigma \sqrt{\sum_r w_{nr}^2})$. The Gumbel has
-moments of every order, so the weight condition is Lindeberg's and $Z_{ni} \Rightarrow
-N(0,1)$; the shocks are independent across $i$, so
-$(Z_{n1},\dots,Z_{nK}) \Rightarrow N(0,I_K)$, and $b_{ni}/s_n \to a_i$ with Slutsky gives
-$Y_n \Rightarrow a + Z$. The map $\arg\max$ is discontinuous only at ties, which the
-Gaussian limit assigns probability zero, so the continuous mapping theorem transfers the
-convergence to the winning probabilities, the outcome space being finite.
-\end{proof}
-
-The right-hand side is Equation~\eqref{eq:winprob}. The lemma is elementary, being the
-central limit theorem and continuous mapping applied to a construction Yellott already
-identified, and we state it because we have not found it stated. Two of its features are
-worth naming. The scaling condition is not decoration: holding $b_{ni}$ fixed while the
-noise grows sends every share to $1/K$ and recovers the Gaussian race only at
-near-indifference. And the Gumbel plays no part in the limit, only in making each
-microscopic component exactly Luce; any finite-variance component law gives the same
-Gaussian. Thurstone's race is the additive-aggregation limit, and Luce sits in its basin of
-attraction.
-
-\begin{table}[ht]
-\centering
-\small
-\begin{tabular}{rrrrr}
-\toprule
-$\sigma$ & Top share & Observed $\lambda$ & Case V $\lambda$ & Ratio \\
-\midrule
-$0.5$ & $0.255$ & $0.052$ & $0.225$ & $0.23$ \\
-$1$ & $0.300$ & $0.128$ & $0.227$ & $0.57$ \\
-$2$ & $0.343$ & $0.197$ & $0.229$ & $0.86$ \\
-$3$ & $0.359$ & $0.216$ & $0.229$ & $0.94$ \\
-$4$ & $0.365$ & $0.228$ & $0.230$ & $0.99$ \\
-$8$ & $0.373$ & $0.230$ & $0.231$ & $1.00$ \\
-$16$ & $0.375$ & $0.233$ & $0.231$ & $1.01$ \\
-\bottomrule
-\end{tabular}
-\caption{A population of Luce choosers whose log-worths carry Gaussian taste variation of
-scale $\sigma$ against a Gumbel choice-noise scale of $1$, with locations scaled as
-$\sigma a$ so that the shares do not degenerate. Observed $\lambda$ is the population's
-contraction; Case V $\lambda$ is what the independent unit-variance Gaussian race implies
-for that population's own shares. The top share is reported to show the limit is not the
-near-indifference corner.}
-\label{tab:mixture}
-\end{table}
-
-The consequence for this paper is that no individual need be non-Lucean for the Gaussian
-transport to be the right one upstairs. A population of Luce choosers whose tastes vary is
-a contest with composite noise, and once taste variation outweighs within-person choice
-noise the composite is Gaussian and the population contracts by just what Case V predicts.
-The aggregate caveat of Section~\ref{sec:scope} is therefore the mechanism rather than an
-apology, and it predicts where the fit should be worst: in populations whose members are
-nearly alike.
-
-One caveat about what has been aggregated. Equation~\eqref{eq:agg} accumulates latent
-components within a respondent, not choosers within a population; calling it a theorem
-about aggregating Luce choosers would overstate it. The simulation above does the latter
-and reaches the same limit, but a mechanism that makes the additive accumulation natural
-rather than assumed is left open.
-
-Independent evidence for the same phenomenon exists in memory research. Robinson and
-colleagues \cite{robinson2023} compare softmax against signal detection across
-$m$-alternative tasks and report that the softmax parameter must vary with $m$ while the
-signal-detection parameter is stable. That is the contraction studied here, seen through
-the parameter that has to move to absorb it.
-
 \section{Scope}
 \label{sec:scope}
 
@@ -524,6 +422,89 @@ while PLMIX stores orderings, so the first element names the favourite. Reading 
 the other transposes the data silently and raises no error. We established which is
 which by cross-validation: the political goals data ships in two of these packages and
 they agree only when each is read under its own convention.
+
+\appendix
+\section{Why a population should look Gaussian}
+\label{sec:mixture}
+
+Nothing so far explains why the Gaussian member of the class should be the one that fits.
+A mechanism is available, and it is elementary.
+
+Let every individual obey the axiom, and let their tastes differ.
+
+\begin{proposition}[A population of Luce choosers is a contest]
+\label{prop:mixture}
+Suppose individual $\theta$ chooses by Luce with log-worths $\mu_i + \sigma Z_i(\theta)$,
+where $Z(\theta) \sim N(0, I_K)$ independently across individuals, and with Gumbel choice
+noise of scale $\beta$. Then the population choice probabilities are exactly those of a
+contest in which alternative $i$ draws
+\begin{equation}
+\mu_i + \sigma Z_i + \beta G_i ,
+\label{eq:composite}
+\end{equation}
+independent across alternatives. Writing $\mu_i = \sigma a_i$ and letting
+$\sigma/\beta \to \infty$, those probabilities converge to the independent unit-variance
+Gaussian race of Equation~\eqref{eq:winprob} with locations $a$.
+\end{proposition}
+
+\begin{proof}
+By Yellott's theorem individual $\theta$ chooses
+$\arg\max_i(\mu_i + \sigma Z_i(\theta) + \beta G_i(\theta))$. Marginalising over $\theta$
+leaves the per-alternative noise $\sigma Z_i + \beta G_i$, independent across $i$ because
+both components are, which gives \eqref{eq:composite} exactly and at every $\sigma$.
+Dividing by $\sigma$ preserves the $\arg\max$ and sends the Gumbel term to zero, and ties
+have probability zero in the limit, so continuous mapping transfers convergence to the
+winning probabilities.
+\end{proof}
+
+The proposition is exact at every $\sigma$, and only the limit is asymptotic. Two remarks.
+The location scaling is not decoration: holding $\mu$ fixed while $\sigma$ grows sends every
+share to $1/K$, so the Gaussian race would be recovered only at near-indifference. And the
+Gaussian assumption on taste is where a central limit theorem belongs: if an individual's
+worth for an alternative accumulates many small independent influences, taste variation
+across a population is approximately Gaussian for the usual reason. The Gumbel plays no
+part in the limit, only in making each individual exactly Luce, so any finite-variance
+taste law with a Gaussian limit does the same work. Thurstone's race is what aggregation
+delivers, and Luce sits in its basin of attraction.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{rrrrr}
+\toprule
+$\sigma$ & Top share & Observed $\lambda$ & Case V $\lambda$ & Ratio \\
+\midrule
+$0.5$ & $0.255$ & $0.052$ & $0.225$ & $0.23$ \\
+$1$ & $0.300$ & $0.128$ & $0.227$ & $0.57$ \\
+$2$ & $0.343$ & $0.197$ & $0.229$ & $0.86$ \\
+$3$ & $0.359$ & $0.216$ & $0.229$ & $0.94$ \\
+$4$ & $0.365$ & $0.228$ & $0.230$ & $0.99$ \\
+$8$ & $0.373$ & $0.230$ & $0.231$ & $1.00$ \\
+$16$ & $0.375$ & $0.233$ & $0.231$ & $1.01$ \\
+\bottomrule
+\end{tabular}
+\caption{A population of Luce choosers whose log-worths carry Gaussian taste variation of
+scale $\sigma$ against a Gumbel choice-noise scale of $1$, with locations scaled as
+$\sigma a$ so that the shares do not degenerate. Observed $\lambda$ is the population's
+contraction; Case V $\lambda$ is what the independent unit-variance Gaussian race implies
+for that population's own shares. The top share is reported to show the limit is not the
+near-indifference corner.}
+\label{tab:mixture}
+\end{table}
+
+The consequence for this paper is that no individual need be non-Lucean for the Gaussian
+transport to be the right one upstairs. A population of Luce choosers whose tastes vary is
+a contest with composite noise, and once taste variation outweighs within-person choice
+noise the composite is Gaussian and the population contracts by just what Case V predicts.
+The aggregate caveat of Section~\ref{sec:scope} is therefore the mechanism rather than an
+apology, and it predicts where the fit should be worst: in populations whose members are
+nearly alike.
+
+Independent evidence for the same phenomenon exists in memory research. Robinson and
+colleagues \cite{robinson2023} compare softmax against signal detection across
+$m$-alternative tasks and report that the softmax parameter must vary with $m$ while the
+signal-detection parameter is stable. That is the contraction studied here, seen through
+the parameter that has to move to absorb it.
 
 \begin{thebibliography}{99}
 
