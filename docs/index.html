@@ -23,6 +23,7 @@
         <a href="/">Home</a>
         <a href="#papers">Papers</a>
         <a href="#demos">Demos</a>
+        <a href="./ratings.html">Ratings</a>
         <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">Benchmarks</a>
         <a href="https://github.com/microprediction/winning">GitHub</a>
         <a href="https://pypi.org/project/winning/">PyPI</a>
@@ -35,19 +36,19 @@
     <h1>winning</h1>
     <p class="subtitle">Dealing with races, correlated or not.</p>
 
-    <p class="lead">Rating systems for multi-entrant contests: races, tournaments,
-      leaderboards. Beliefs are whole densities on a lattice, free to be skewed or
-      multimodal; each event updates them with the <strong>exact likelihood of the full
-      finish order</strong>, computed by an O(N) chain; predictions are exact
-      winner-of-many probabilities, dead-heat aware. Every claim is benchmarked against
-      TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets with market ceilings
-      where they exist.</p>
+    <p class="lead">One engine prices the winner of many: N competitors,
+      arbitrary noise, correlated through common factors or not. All N win
+      probabilities come from one pass over a shared survival field; calibration
+      inverts observed shares back to abilities; removal counterfactuals and
+      photo-finish tie densities fall out of the same pass. Factor probit,
+      Luce/softmax and the finite-temperature softmin are named special cases of
+      one parameterized race.</p>
 
     <div class="tag-row">
-      <span class="tag">exact lattice</span>
-      <span class="tag">whole-order updates</span>
-      <span class="tag">non-Gaussian noise</span>
-      <span class="tag">race-native</span>
+      <span class="tag">shared survival field</span>
+      <span class="tag">factor-correlated</span>
+      <span class="tag">exact softmax limit</span>
+      <span class="tag">Python · Rust · R · JS</span>
       <span class="tag">measured, not asserted</span>
     </div>
 
@@ -62,58 +63,32 @@
     </figure>
 
     <div class="callout">
-      <strong>Beliefs are densities, not (mu, sigma) pairs.</strong> Each contestant's
-      ability lives on a lattice with no parametric family imposed, and the race noise is
-      an arbitrary kernel you choose: Gaussian, Student-t, or a
-      retirement "slab" for contests where entrants can fail outright. A single update
-      matches exact Bayes to lattice precision, and the update uses the whole finish
-      order rather than pairwise or stagewise approximations.
-      <a href="https://github.com/microprediction/winning#what-is-different-about-thurstonerating">How →</a>
+      <strong>Calibration at ten thousand alternatives.</strong> All shares of a
+      correlated Gaussian race in one O(QNL) pass, matrix-free graph-Laplacian
+      derivatives, and inversion of observed shares to utilities in under a
+      minute at N = 10,000 — every number from a committed, seeded script.
+      <a href="./assets/pdf/factor_probit_share_calibration.pdf">The paper (PDF) →</a>
     </div>
 
     <div class="callout">
-      <strong>Benchmarked on twelve datasets, prequentially.</strong> Formula 1, ATP and
-      WTA tennis, chess, sumo, football, Halo 2, horse racing and synthetic worlds with
-      known truth. Each event is predicted before it is observed, and the tables carry
-      honest baselines: a uniform floor, an oracle where truth is known, and the
-      bookmaker market as a ceiling where odds exist.
-      <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">The tables →</a>
-    </div>
-
-    <div class="callout">
-      <strong>Non-Gaussian noise pays where the physics demands it.</strong> Formula 1
-      retirements make finishing order a mixture: pace when the car survives, a lottery
-      when it does not. A density with a uniform "disaster" component beats every
-      Gaussian system on 1,158 grands prix, and the same estimator, handed qualifying
-      sessions where no retirement process exists, drives its own disaster mass to
-      near zero. <a href="./assets/pdf/rating_formula_1.pdf">The paper (PDF) →</a>
-    </div>
-
-    <div class="callout">
-      <strong>And an efficiency result.</strong> Against 88 races with genuinely
-      pre-qualifying bookmaker odds, no rating system built on public results and grid
-      data adds statistical power to the market: the optimal pool puts zero weight on
-      every one of the six systems tested. The market's edge is knowledge of current car
-      form. <a href="./assets/pdf/rating_formula_1.pdf">Section 5 →</a>
+      <strong>Rating systems live on this engine.</strong> Whole-density beliefs,
+      exact full-finish-order updates, benchmarked prequentially on twelve
+      datasets against TrueSkill, OpenSkill, Glicko-2 and Elo.
+      <a href="./ratings.html">The ratings page →</a>
     </div>
 
     <h2>Quick start</h2>
-<pre><code>from winning import ThurstoneRating
+<pre><code>from winning import race_probabilities, calibrate_abilities, removal_shares
 
-tr = ThurstoneRating()
-tr.observe(names=["ada", "ben", "cid", "dot"], ranks=[1, 2, 3, 4])
-tr.observe(names=["ada", "cid", "eve"], ranks=[1, 2, 3])
-
-tr.win_probabilities(["ada", "cid", "eve"])   # exact field win probabilities
-tr.rating("ada")                              # Rating(mu=..., sigma=...)
-tr.leaderboard()                              # best-first, conservative</code></pre>
+p = race_probabilities(mu, V=V, D=D)     # all N shares, one field pass
+mu_hat = calibrate_abilities(p, V=V, D=D)  # abilities back from shares
+q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</code></pre>
     <p>
-      Every system in the package speaks the same three verbs: <code>observe(names,
-      ranks)</code>, <code>win_probabilities(names)</code>, <code>rating(name)</code>.
-      That includes the shims around third-party comparators, so a benchmark row is a
-      one-line swap. Install with <code>pip install winning</code> (core depends only on
-      numpy) or <code>pip install winning[benchmarks]</code> for the
-      comparators.
+      Max-wins semantics for the probit literature live in
+      <code>winning.probit</code> (<code>shares</code>,
+      <code>calibrate_utilities</code>, supplied-covariance fitting); the
+      density-agnostic engine in <code>winning.thurstone</code>; the
+      paper-faithful kernels in <code>winning.factor</code>.
     </p>
 
     <h2 id="papers">Papers</h2>
