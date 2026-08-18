@@ -11,9 +11,8 @@
     svg { max-width: 100%; }
     .panel { flex: 1 1 380px; }
     .legend { font-size: 0.9rem; color: #444; }
-    .bar { fill: #1f77b4; } .bar.neg { fill: #c44e52; }
-    .node { cursor: pointer; stroke: #fff; stroke-width: 1.5; fill: #1f77b4; }
-    .node.dead { fill: #bbb; cursor: default; }
+    .node { cursor: pointer; stroke: #fff; stroke-width: 1.5; }
+    .node.dead { cursor: default; }
     .wire { stroke: #888; }
     text { font-family: inherit; font-size: 12px; }
   </style>
@@ -37,14 +36,21 @@
   <main>
     <h1>The photo-finish circuit</h1>
     <p class="subtitle">The race is a resistor network. Click a runner to delete it.</p>
-    <p class="lead">Twelve runners, two common factors. Node size is win share; wire
-      thickness is the photo-finish tie density between two runners — the conductance
-      of that edge, and exactly the weight in the calibration Jacobian's graph
-      Laplacian. <strong>Click a node</strong> to remove that runner: the bars show how
-      much more (or less) each survivor gains than the proportional IIA rule predicts.
-      Factor-similar runners gain disproportionately; everything is computed in your
-      browser by the same algorithm the Python package ships, at machine-precision
-      parity.</p>
+    <p class="lead">Twelve runners moved by two common factors. Each runner's
+      <strong>colour</strong> is its position in factor space, so similar colours mean
+      similar factor exposure. Node size is win share. Wire thickness is the
+      photo-finish tie density between two runners — the probability density of the
+      race coming down to exactly that pair, which is also the weight in the
+      calibration Jacobian's graph Laplacian: the race is literally a resistor
+      network.</p>
+    <p class="lead"><strong>Click a node</strong> to remove that runner. The engine
+      then computes each survivor's new win probability q<sub>j</sub> exactly, and the
+      bar for j is the excess over the naive IIA rule that just redistributes the
+      deleted share proportionally: q<sub>j</sub> / (p<sub>j</sub>/(1−p<sub>i</sub>)) − 1.
+      Bars are ordered by factor similarity to the deleted runner, most similar at the
+      top — runners that resemble the deleted one gain disproportionately, exactly the
+      red-bus/blue-bus failure of IIA. Everything is computed live in your browser by
+      the same algorithm the Python package ships.</p>
     <div class="stage">
       <div class="panel"><svg id="net" viewBox="0 0 460 460" style="width:100%;aspect-ratio:1;display:block"></svg></div>
       <div class="panel"><svg id="bars" viewBox="0 0 460 420" style="width:100%;aspect-ratio:460/420;display:block"></svg>
@@ -74,6 +80,13 @@
       const t = 2 * Math.PI * i / N - Math.PI / 2;
       return [CTR + RING * Math.cos(t), CTR + RING * Math.sin(t)];
     });
+    // colour = direction in factor space, vividness = loading strength
+    const vmax = Math.max(...V.map((r) => Math.hypot(r[0], r[1])));
+    const COL = V.map((r) => {
+      const hue = (Math.atan2(r[1], r[0]) * 180 / Math.PI + 360) % 360;
+      const sat = 25 + 65 * Math.hypot(r[0], r[1]) / vmax;
+      return `hsl(${hue.toFixed(0)},${sat.toFixed(0)}%,45%)`;
+    });
     const net = document.getElementById("net");
     const barsSvg = document.getElementById("bars");
     const caption = document.getElementById("caption");
@@ -95,6 +108,7 @@
       for (let i = 0; i < N; i++) {
         const r = 8 + 55 * Math.sqrt(p[i]);
         const c = S("circle", { cx: pos[i][0], cy: pos[i][1], r,
+          style: "fill:" + (deleted === i ? "#ccc" : COL[i]),
           class: "node" + (deleted === i ? " dead" : "") }, net);
         c.addEventListener("click", () => { deleted = deleted === i ? null : i; drawNet(); drawBars(); });
         const t = 2 * Math.PI * i / N - Math.PI / 2;
@@ -113,18 +127,22 @@
       const x0 = 180, scale = 250 / maxAbs, rowH = 420 / keep.length;
       order.forEach((oi, row) => {
         const g = rel[oi], y = row * rowH + 4;
+        const col = COL[keep[oi]];
         S("rect", { x: g >= 0 ? x0 : x0 + g * scale, y, width: Math.abs(g) * scale,
-          height: rowH - 8, class: "bar" + (g < 0 ? " neg" : "") }, barsSvg);
-        S("text", { x: x0 - 8, y: y + rowH / 2, "text-anchor": "end" },
-          barsSvg).textContent = "runner " + keep[oi];
+          height: rowH - 8, style: g >= 0 ? "fill:" + col
+            : `fill:none;stroke:${col};stroke-width:1.5` }, barsSvg);
+        S("text", { x: x0 - 8, y: y + rowH / 2, "text-anchor": "end",
+          style: "fill:" + col }, barsSvg).textContent = "runner " + keep[oi];
         S("text", { x: g >= 0 ? x0 + g * scale + 6 : x0 + 6, y: y + rowH / 2 },
           barsSvg).textContent = g.toFixed(0) + "%";
       });
       S("line", { x1: x0, y1: 0, x2: x0, y2: 420, stroke: "#333",
         "stroke-width": 1 }, barsSvg);
       caption.textContent = `Runner ${deleted} deleted (share ${(100 * p[deleted]).toFixed(1)}%). ` +
-        `Bars: share gained relative to the IIA proportional rule, ordered by factor ` +
-        `similarity to the deleted runner (most similar at top). Click again to restore.`;
+        `Each bar is the survivor's exact new share versus the IIA guess ` +
+        `p/(1−${(100 * p[deleted]).toFixed(1)}%), ordered by factor similarity to the ` +
+        `deleted runner (similar colours at top). Filled bars gained more than ` +
+        `proportional, outlined bars less. Click again to restore.`;
     }
     drawNet(); drawBars();
   </script>
