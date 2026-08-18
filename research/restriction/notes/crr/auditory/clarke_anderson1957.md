@@ -93,8 +93,8 @@ The authors' own abstract, verbatim and in full:
 
 > "The use of the constant-ratio rule to predict the confusion matrices for each of two five-item
 > subsets given the confusion matrix for a ten-item master set is tested with naive subjects. Ninty
-> percent of the predicted cell entries (expressed as proportions) deviated by less than 0.05 from
-> the obtained cell entries. The predicted articulation score for the first subset was 67.9%, and the
+> percent of the predicted cell entries (expressed as proportions) deviated by less than 0.05 from the
+> obtained cell entries. The predicted articulation score for the first subset was 67.9%, and the
 > obtained articulation score was 68.9%. For the second subset the predicted and the obtained
 > articulation scores were 78.4% and 82.6%, respectively."
 

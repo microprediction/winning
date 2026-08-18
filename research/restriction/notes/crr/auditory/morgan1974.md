@@ -26,10 +26,10 @@ OpenAlex (40 references). It cites, in one paper, **the entire auditory/speech C
 - Hodge & Pollack (1962), *JEP* 63, 129-142 — doi:10.1037/h0042219
 
 plus its own author's auditory matrices:
-- Morgan (1973a), "A letter-digit matrix of auditory confusions", *British Journal of Psychology* —
-  doi:10.1111/j.2044-8295.1973.tb01384.x (35-element letter+digit auditory master)
-- Morgan (1973), "Cluster analyses of two acoustic confusion matrices", *Percept. Psychophys.* 13,
+- Morgan (1973a), "Cluster analyses of two acoustic confusion matrices", *Percept. Psychophys.* 13,
   13-24 — doi:10.3758/bf03207229 (bronze OA)
+- Hull (1973), "A letter-digit matrix of auditory confusions", *British Journal of Psychology* 64,
+  579-585 — doi:10.1111/j.2044-8295.1973.tb01384.x (35-element letter+digit auditory master)
 - Conrad (1964), "Acoustic confusions in immediate memory", *BJP* —
   doi:10.1111/j.2044-8295.1964.tb00899.x
 

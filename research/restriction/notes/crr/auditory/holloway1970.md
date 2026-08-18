@@ -31,11 +31,14 @@ and the criticism of the prior literature, verbatim:
 > manipulated as an indirect means of controlling the number of dimensions an observer is required to
 > discriminate."
 
-That sentence is aimed squarely at the CRR literature — Clarke (1957), Clarke & Anderson (1957),
-Pollack & Decker (1960) all appear in Holloway's reference list, which I retrieved in full from
-OpenAlex (17 references; also Clarke 1957 and Clarke & Anderson 1957 and Pollack & Decker 1960 and
-Miller & Nicely 1955, Miller 1954, Pollack's "Message Uncertainty and Message Reception" I and II,
-Garner 1962, Jakobson/Fant/Halle 1952, Luce 1963 Handbook, Green Birdsall & Macnee 1958).
+That sentence is aimed squarely at the CRR literature. Holloway's full reference list (17 items),
+retrieved from OpenAlex, includes Clarke (1957), Clarke & Anderson (1957), Pollack & Decker (1960a),
+Miller & Nicely (1955), Miller (1954) "Accuracy of recognition with alternatives before and after the
+stimulus", Pollack's *Message Uncertainty and Message Reception* I (1959) and II (1960) and III (1963),
+Garner (1962) *Uncertainty and Structure*, Jakobson/Fant/Halle (1952) *Preliminaries to Speech
+Analysis*, Luce (1963) Handbook chapter, and **Green, Birdsall & Macnee (1958) "The effect of vocabulary
+size on articulation score"** (green OA at Michigan Deep Blue — see
+`green_birdsall_macnee1958.md`).
 
 Exact consonant inventories and set sizes: NOT recoverable from the abstract.
 

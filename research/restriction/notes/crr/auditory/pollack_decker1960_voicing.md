@@ -79,7 +79,7 @@ unusable.**
   Cloudflare **403** to both curl and WebFetch from this environment (verified on the sibling DOI
   `10.1177/002383096000300101`). **Paywalled.**
 - Wayback: no snapshots found for any `sagepub.com` URL carrying this DOI (CDX queries on the sibling
-  Language and Speech DOIs all returned empty).
+  *Language and Speech* DOIs all returned empty).
 
 ## Usability verdict (usable now / needs digitizing / needs library access / unusable, and why)
 

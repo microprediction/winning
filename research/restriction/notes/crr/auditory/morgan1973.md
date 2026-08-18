@@ -18,9 +18,9 @@ Spoken **digits 1-9** — a nine-item master set, four times over. Two tasks, tw
 
 **(a) Recognition in noise.** Digits masked by white noise at approximately -10 dB S/N, chosen by
 pretest so that listeners "*would be making the target of 50% errors*"; final overall error rate 5.3%
-(as OCR'd — "5 3~"). Blocks of 135 items (15 presentations of each digit), balanced for serial
-position. Listeners wrote the digit, guessing if unsure rather than leaving blanks. 39 subjects heard
-one female-voice block; a further 28 heard four blocks (two female, two male). Voices: S.C. (female,
+(as OCR'd). Blocks of 135 items (15 presentations of each digit), balanced for serial position.
+Listeners wrote the digit, guessing if unsure rather than leaving blanks. 39 subjects heard one
+female-voice block; a further 28 heard four blocks (two female, two male). Voices: S.C. (female,
 Australian) and J.M. (male, English).
 
 **(b) Serial recall (memory).** Pooled from 29 separate experiments in which subjects heard lists of 7
@@ -44,14 +44,14 @@ response sets over the same stimuli — **this paper does not qualify.** It is f
 2. It carries the Cambridge group's explicit rejection of the CRR (quoted below).
 3. Its first author is the author of Morgan (1974), the paper that broke the CRR corpus.
 
-Adjacent paper worth noting, by the same author, also an auditory master with no restrictions:
-Morgan (1973a), "A letter-digit matrix of auditory confusions", *British Journal of Psychology*,
-doi:10.1111/j.2044-8295.1973.tb01384.x — **35 elements** (all letters and digits). Referenced in this
-paper (p. 380): "*a MDSCAL analysis of the acoustic confusions in a letter-digit alphabet containing all
-the letters and digits (35 elements in all) has resulted in a fairly good fit in three dimensions
-(stress = 12.50%)*". A 35x35 auditory master would be an excellent base for constructing restricted
-sets, and it is the matrix Morgan (1974) had in hand when he wrote about predicting "small vocabularies"
-from a "full alphabetic confusion matrix".
+Adjacent papers worth noting, also auditory masters with no restrictions: Morgan (1973a), "Cluster
+analyses of two acoustic confusion matrices", *P&P* 13, 13-24, doi:10.3758/BF03207229 — which prints
+Conrad's (1964) 26x26 letter matrix and Hull's (1973) 35x35 letter-plus-digit matrix; see
+`morgan1973a_clusters.md`. Referenced in the present paper (p. 380): "*a MDSCAL analysis of the acoustic
+confusions in a letter-digit alphabet containing all the letters and digits (35 elements in all) has
+resulted in a fairly good fit in three dimensions (stress = 12.50%)*". A 35x35 auditory master would be
+an excellent base for constructing restricted sets, and it is the matrix Morgan (1974) had in hand when
+he wrote about predicting "small vocabularies" from a "full alphabetic confusion matrix".
 
 ## What numbers are printed (master matrix? restricted matrices? counts or proportions? which table numbers?)
 
@@ -132,8 +132,8 @@ total of 1560.
 | **Total** | 2750 | 2750 | 2750 | 2750 | 2750 | 2750 | 2750 | 2750 | 2750 | **24750** |
 
 All four tables reconcile exactly on rows, columns and grand totals (Tables 1, 3, 4 perfectly; Table 2
-with the single corrected row total noted above). No zero entries in the recognition tables, one zero in
-each of Tables 1 and 4.
+with the single corrected row total noted above). No zero entries in the recognition tables except
+(6,5); one zero in Table 4 at (1,6).
 
 ### Table 5 — quasi-independence test statistics (chi-square, 55 df, s = 9)
 
@@ -161,8 +161,8 @@ in 1973, with the matrices printed.**
 
 Also printed: Table 7 (Spearman rank correlations within columns between Tables 1-4; average
 correlations 0.744, 0.481, 0.582, 0.482, 0.441, 0.619 for pairs 1-2, 1-3, 1-4, 2-3, 2-4, 3-4), and
-Table 8 (phonemic classification: VC 8-/eɪt/; CVC 5-/faɪv/, 9-/naɪn/, 1-/wʌn/, 6-/sɪks/, (7-/sevn/);
-CV 2-/tuː/, 3-/θriː/, 4-/fɔː/; CVCVC (7-/sevən/)).
+Table 8 (phonemic classification: VC 8-/eIt/; CVC 5-/faIv/, 9-/naIn/, 1-/wVn/, 6-/sIks/, (7-/sevn/);
+CV 2-/tu:/, 3-/Tri:/, 4-/fO:/; CVCVC (7-/sev@n/)).
 
 ## Access (a DIRECT url you have fetched, plus whether it is open, paywalled or Wayback-only)
 
@@ -181,7 +181,8 @@ CV 2-/tuː/, 3-/θriː/, 4-/fɔː/; CVCVC (7-/sevən/)).
 - `https://api.openalex.org/works/https://doi.org/10.3758/BF03212408` — FETCHED 200. 46 references,
   25 citing works (all enumerated; mostly matrix-clustering and record-linkage methodology, plus
   Morgan 1973a, and a 2020 deep-neural-network speech-in-noise paper).
-- Wayback CDX confirming the snapshot: `http://web.archive.org/cdx/search/cdx?url=link.springer.com/content/pdf/10.3758/BF03212408*`
+- Wayback CDX confirming the snapshot:
+  `http://web.archive.org/cdx/search/cdx?url=link.springer.com/content/pdf/10.3758/BF03212408*`
   — FETCHED, returns `20190502181919 ... 200 application/pdf`.
 
 **Status: OPEN (bronze OA), and in hand.**

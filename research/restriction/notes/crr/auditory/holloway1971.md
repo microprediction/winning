@@ -19,8 +19,8 @@ Third and last of Holloway's three papers. Reanalysis, no new data collection.
    consonants spoken over distorted and noise-masked channels. Verbatim: "*Application of the present
    technique to the data of Miller and Nicely (1955) also shows a significant dependency effect.*"
 
-Miller & Nicely's master set is the sixteen consonants /p, t, k, f, θ, s, ʃ, b, d, g, v, ð, z, ʒ, m, n/,
-crossed with five articulatory features (voicing, nasality, affrication, duration, place of
+Miller & Nicely's master set is the sixteen consonants /p, t, k, f, th, s, sh, b, d, g, v, dh, z, zh, m,
+n/, crossed with five articulatory features (voicing, nasality, affrication, duration, place of
 articulation).
 
 Holloway's full reference list (9 items), retrieved from OpenAlex, is the tightest statement of what he
@@ -34,8 +34,8 @@ took himself to be refuting — it is almost exactly the auditory CRR spine:
 - Pollack & Decker (1960b), "Perception of Consonant Voicing in Noise", *L&S* 3, 155-163
 - Holloway (1968), *QJEP* 20, 336-350
 - Holloway (1970), *QJEP* 22, 467-474
-- Peterson & Barney-era consonant study: "Study of Twenty-Six Intervocalic Consonants as Spoken and
-  Recognized by Four Language Groups" (1966), *JASA*, doi:10.1121/1.1909899
+- "Study of Twenty-Six Intervocalic Consonants as Spoken and Recognized by Four Language Groups" (1966),
+  *JASA*, doi:10.1121/1.1909899
 
 Nine references, six of them Clarke/Pollack CRR papers. This is a paper written to overturn that
 corpus.
