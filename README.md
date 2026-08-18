@@ -78,9 +78,11 @@ audited reflection onto the internal min-wins race.
 ```python
 from winning.probit import shares, utilities_from_shares
 
-p = shares(utilities, V=V, D=D)            # higher utility wins
+utilities = -mu                            # higher is better on this side
+p = shares(utilities, V=V, D=D)            # all N choice probabilities
 u = utilities_from_shares(p, V=V, D=D)     # the paper's calibration
-p = shares(utilities, Sigma=Sigma, k=2)    # supplied covariance: certified
+Sigma = V @ V.T + np.diag(D)
+p2 = shares(utilities, Sigma=Sigma, k=2)   # supplied covariance: certified
                                            # contrast factor fit en route
 ```
 

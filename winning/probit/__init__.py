@@ -40,6 +40,9 @@ def _prepare(n, V, D, Sigma, k):
     if V is None:
         V = np.zeros((n, 1))
     V = np.atleast_2d(np.asarray(V, dtype=float))
+    if V.shape[0] != n:
+        raise ValueError(
+            f"V has {V.shape[0]} rows but there are {n} alternatives")
     D = np.ones(n) if D is None else np.asarray(D, dtype=float)
     F, W = hermite_nodes(V.shape[1])
     return V, D, F, W
