@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>winning — rating systems on the thurstone ability transform</title>
+  <title>winning — dealing with races, correlated or not</title>
   <meta name="description" content="Rating systems for multi-entrant contests, built on exact lattice order statistics. Beliefs are whole densities, updates use the exact likelihood of the full finish order, and every claim is benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="winning" />
-  <meta property="og:title" content="winning — rating systems on the thurstone ability transform" />
+  <meta property="og:title" content="winning — dealing with races, correlated or not" />
   <meta property="og:description" content="Rating systems for multi-entrant contests, built on exact lattice order statistics and benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets." />
   <meta property="og:url" content="https://winning.microprediction.org/" />
   <meta property="og:image" content="https://winning.microprediction.org/assets/images/winning-pic.png" />
@@ -22,6 +22,7 @@
       <nav>
         <a href="/">Home</a>
         <a href="#papers">Papers</a>
+        <a href="#demos">Demos</a>
         <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">Benchmarks</a>
         <a href="https://github.com/microprediction/winning">GitHub</a>
         <a href="https://pypi.org/project/winning/">PyPI</a>
@@ -32,7 +33,7 @@
 
   <main>
     <h1>winning</h1>
-    <p class="subtitle">The simplest case for non-Gaussian rating systems.</p>
+    <p class="subtitle">Dealing with races, correlated or not.</p>
 
     <p class="lead">Rating systems for multi-entrant contests: races, tournaments,
       leaderboards. Beliefs are whole densities on a lattice, free to be skewed or
@@ -55,9 +56,9 @@
         the most popular product are the same order statistic: winner of many." />
       <figcaption>The fastest time, the lowest offer and the most popular choice are the
         same computation: the distribution of the winner of many. The
-        <a href="https://thurstone.microprediction.org/">thurstone</a> core does that
-        computation efficiently on a lattice, in a way that scales to millions of
-        variables; this package turns it into rating systems.</figcaption>
+        core does that computation efficiently on a lattice, in a way that scales to
+        millions of variables, correlated through common factors or not; this package
+        turns it into calibrations, counterfactuals and rating systems.</figcaption>
     </figure>
 
     <div class="callout">
@@ -111,12 +112,19 @@ tr.leaderboard()                              # best-first, conservative</code><
       ranks)</code>, <code>win_probabilities(names)</code>, <code>rating(name)</code>.
       That includes the shims around third-party comparators, so a benchmark row is a
       one-line swap. Install with <code>pip install winning</code> (core depends only on
-      thurstone and numpy) or <code>pip install winning[benchmarks]</code> for the
+      numpy) or <code>pip install winning[benchmarks]</code> for the
       comparators.
     </p>
 
     <h2 id="papers">Papers</h2>
     <ul>
+      <li><a href="./assets/pdf/factor_probit_share_calibration.pdf">Scalable share
+        calibration for factor multinomial probit models</a> (2026, submitted). All
+        shares of a correlated Gaussian race in one O(QNL) pass, matrix-free
+        graph-Laplacian derivatives, and inversion of observed shares to utilities at
+        ten thousand alternatives in under a minute. The algorithm ships here as
+        <code>winning.factor</code>; every experiment is a committed script under
+        <code>research/experiments/</code>.</li>
       <li><a href="./assets/pdf/rating_formula_1.pdf">Rating Formula 1: a case for
         non-Gaussian noise in rating systems</a> (2026). Seventy-five seasons of grands
         prix, a retirement-slab noise density, a qualifying control, and a stratified
@@ -131,17 +139,29 @@ tr.leaderboard()                              # best-first, conservative</code><
         horse race entry.</li>
     </ul>
 
+    <h2 id="demos">Demos</h2>
+    <ul>
+      <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/race_field_demo.py">race_field_demo.py</a>
+        — one shared survival field prices every competitor by division; the naive
+        O(N&sup2;) route against the O(N) field.</li>
+      <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/cavity_downdate_demo.py">cavity_downdate_demo.py</a>
+        — the rank-one cavity twin: one inverse contains every leave-one-out inverse.</li>
+      <li><a href="https://github.com/microprediction/winning/tree/main/js/factor">js/factor</a>
+        — the calibration core in the browser: dependency-free JavaScript at
+        machine-precision parity with the Python. An interactive photo-finish circuit
+        demo (tie densities as conductances, Newton steps as electrical solves) is on
+        the way.</li>
+    </ul>
+
     <h2>Heritage</h2>
     <p>
-      <code>winning</code> 1.x was the reference implementation of the SIAM paper above
-      and is preserved: the legacy imports still work. The 2.x renovation moved the
-      numerical core into <a href="https://github.com/microprediction/thurstone">thurstone</a>
-      (densities on a lattice, winner-of-many, the ability transform) and made this
-      package the applications layer, the way
-      <a href="https://github.com/microprediction/timemachines">timemachines</a> sits on
-      <a href="https://github.com/microprediction/skaters">skaters</a>: cores are few and
-      stable; applications multiply, so they get their own package. By Peter Cotton,
-      with sibling packages at <a href="https://www.microprediction.org/">microprediction</a>.
+      <code>winning</code> began as the reference implementation of the SIAM paper above
+      and owns the core outright: the lattice machinery once split into the
+      <a href="https://github.com/microprediction/thurstone">thurstone</a> package is
+      vendored back as <code>winning.thurstone</code>, and thurstone is maintained as a
+      compatibility shim whose imports resolve here. Legacy 1.x imports still work.
+      By Peter Cotton, with sibling packages at
+      <a href="https://www.microprediction.org/">microprediction</a>.
     </p>
 
     <h2>Get the source</h2>
