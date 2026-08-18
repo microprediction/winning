@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>winning — dealing with races, correlated or not</title>
-  <meta name="description" content="Dealing with races, correlated or not: all N win probabilities of a correlated race in one shared-field pass, calibration of observed shares back to abilities, removal counterfactuals and tie densities. Factor probit, Luce/softmax and finite-temperature softmin as special cases of one parameterized race." />
+  <title>winning — factor multinomial probit at scale</title>
+  <meta name="description" content="A generalization of factor multinomial probit models that scales to millions of variables: all N win probabilities of a correlated race in one shared-field pass, calibration of observed shares back to abilities, removal counterfactuals and tie densities. Factor probit, Luce/softmax and softmin as special cases of one parameterized race." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="winning" />
-  <meta property="og:title" content="winning — dealing with races, correlated or not" />
-  <meta property="og:description" content="Dealing with races, correlated or not: shared-field win probabilities, share calibration, counterfactuals. Factor probit, softmax and softmin as special cases." />
+  <meta property="og:title" content="winning — factor multinomial probit at scale" />
+  <meta property="og:description" content="A generalization of factor multinomial probit models that scales to millions of variables: shared-field win probabilities, share calibration, counterfactuals." />
   <meta property="og:url" content="https://winning.microprediction.org/" />
   <meta property="og:image" content="https://winning.microprediction.org/assets/images/winning-pic.png" />
   <meta property="og:image:alt" content="The fastest time, the best offer and the most popular product are the same order statistic." />
@@ -60,12 +60,12 @@
 
     <div class="fitter">
       <h2 style="margin-top:0">The model, live</h2>
-      <p class="legend">Six runners, one shared luck factor; whichever draws the
-        smallest performance wins. Drag each runner's ability and factor
-        loading, pick the noise distribution, and the win probabilities update
+      <p class="legend">Six runners moved by two common luck factors; whichever draws the
+        smallest performance wins. Drag each runner's ability and its two
+        factor loadings, pick the noise distribution (and its skew), and the win probabilities update
         live — computed in your browser by the factor lattice algorithm this
-        package ships, at verified parity with the Python. Same-sign loadings
-        are teammates, opposite signs rivals; zero loadings recover the
+        package ships, at verified parity with the Python. Runners loading the same factor with the
+        same sign are teammates, opposite signs rivals; zero loadings recover the
         independent race, where Gumbel noise reproduces softmax exactly.</p>
       <div class="fit-cards" id="fit-cards"></div>
       <div class="fit-row" style="justify-content:center">
@@ -74,6 +74,9 @@
         <label class="fit-base"><input type="radio" name="fit-base" value="gumbel" />Gumbel</label>
         <label class="fit-base"><input type="radio" name="fit-base" value="skew" />skew-normal</label>
         <label class="fit-base"><input type="radio" name="fit-base" value="t4" />t&#8324;</label>
+        <label class="fit-base" style="margin-left:1rem">skew shape
+          <input type="range" id="fit-alpha" min="-5" max="5" step="0.5" value="3" style="vertical-align:middle" /></label>
+        <span class="legend" id="fit-alpha-val"></span>
       </div>
       <svg id="fit-plot" viewBox="0 0 940 330" style="width:100%;aspect-ratio:940/330;display:block"></svg>
       <p class="legend" id="fit-note"></p>
@@ -133,6 +136,10 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
 
     <h2 id="demos">Demos</h2>
     <ul>
+      <li><a href="./fit.html">Fit a correlated race</a> — the inverse problem,
+        live: drag observed shares and a correlation, and the engine calibrates
+        standalone abilities in the browser, against the naive independent
+        fit.</li>
       <li><a href="./circuit.html">The photo-finish circuit</a> — interactive:
         the race as a resistor network, computed live in your browser by the
         shipped algorithm. Click a runner to delete it and watch the share flow
@@ -176,37 +183,37 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
   </main>
 
   <script type="module">
-    import { winProbabilitiesFactor, logndtr } from "./assets/js/factor_race.mjs";
+    import { winProbabilitiesFactor, skewNormalBase }
+      from "./assets/js/factor_race.mjs?v=3";
     window.addEventListener("error", (e) => {
       const n = document.getElementById("fit-note");
       if (n) n.textContent = "Demo error: " + e.message;
     });
-    // 12-node Gauss-Hermite for the single common factor
-    const GH_F = [-5.500901704467749,-4.2718258479322815,-3.2237098287700974,
-      -2.2594644510007993,-1.3403751971516167,-0.444403001944139,
-      0.444403001944139,1.3403751971516167,2.2594644510007993,
-      3.2237098287700974,4.2718258479322815,5.500901704467749];
-    const GH_W = [1.4999271676371663e-07,4.8371849225906334e-05,2.2033806875331979e-03,
-      2.9116687912364190e-02,1.4696704804533001e-01,3.2166436151283001e-01,
-      3.2166436151283001e-01,1.4696704804533001e-01,2.9116687912364190e-02,
-      2.2033806875331979e-03,4.8371849225906334e-05,1.4999271676371663e-07];
-    const F1 = GH_F.map((f) => [f]), W1 = GH_W;
-    // standardized pdfs, for drawing the marginal densities
+    // 8-node Gauss-Hermite, tensor grid over the two common factors
+    const GH_F = [-4.1445471861258945,-2.802485861287542,-1.6365190424351082,
+      -0.5390798113513752,0.5390798113513752,1.6365190424351082,
+      2.802485861287542,4.1445471861258945];
+    const GH_W = [1.126145383753679e-04,9.635220120788263e-03,1.172399076617590e-01,
+      3.730122576790774e-01,3.730122576790774e-01,1.172399076617590e-01,
+      9.635220120788263e-03,1.126145383753679e-04];
+    const F2 = [], W2 = [];
+    for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) {
+      F2.push([GH_F[a], GH_F[b]]); W2.push(GH_W[a] * GH_W[b]);
+    }
     const SQ2PI = Math.sqrt(2 * Math.PI), EULER = 0.5772156649015329;
     const GC = Math.PI / Math.sqrt(6);
-    const SK_A = 3, SK_D = SK_A / Math.sqrt(1 + SK_A * SK_A);
-    const SK_M = SK_D * Math.sqrt(2 / Math.PI), SK_S = Math.sqrt(1 - SK_M * SK_M);
+    let skewBase = skewNormalBase(3);
     const PDFS = {
       normal: (z) => Math.exp(-0.5 * z * z) / SQ2PI,
       gumbel: (z) => { const u = z * GC - EULER; return GC * Math.exp(u - Math.exp(u)); },
-      skew: (z) => { const u = SK_M + SK_S * z;
-        return SK_S * 2 * Math.exp(-0.5 * u * u) / SQ2PI * Math.exp(logndtr(SK_A * u)); },
+      skew: (z) => skewBase.pdf(z),
       t4: (z) => Math.SQRT2 * (3 / 8) * Math.pow(1 + z * z / 2, -2.5),
     };
     const N = 6;
     const COLORS = ["#4c72b0", "#dd8452", "#55a868", "#c44e52", "#8172b3", "#937860"];
     const mu = [-1.0, -0.4, 0.0, 0.3, 0.9, 1.4];
-    const load = [0.7, 0.7, 0.0, 0.0, -0.7, -0.7];
+    const L1 = [0.7, 0.7, 0.0, 0.0, -0.5, 0.0];
+    const L2 = [0.0, 0.0, 0.7, 0.7, 0.0, -0.5];
     const cards = document.getElementById("fit-cards");
     const cardEls = [];
     for (let i = 0; i < N; i++) {
@@ -216,16 +223,25 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
         `<div class="nm" style="color:${COLORS[i]}">R${i + 1}</div>` +
         `<input type="range" class="mu" min="-2" max="2" step="0.05" value="${mu[i]}" />` +
         `<div class="lab mu-lab"></div>` +
-        `<input type="range" class="ld" min="-0.9" max="0.9" step="0.05" value="${load[i]}" />` +
-        `<div class="lab ld-lab"></div>` +
+        `<input type="range" class="l1" min="-0.7" max="0.7" step="0.05" value="${L1[i]}" />` +
+        `<div class="lab l1-lab"></div>` +
+        `<input type="range" class="l2" min="-0.7" max="0.7" step="0.05" value="${L2[i]}" />` +
+        `<div class="lab l2-lab"></div>` +
         `<div class="pct"></div>`;
       cards.appendChild(c);
       c.querySelector(".mu").addEventListener("input", (e) => { mu[i] = +e.target.value; schedule(); });
-      c.querySelector(".ld").addEventListener("input", (e) => { load[i] = +e.target.value; schedule(); });
+      c.querySelector(".l1").addEventListener("input", (e) => { L1[i] = +e.target.value; schedule(); });
+      c.querySelector(".l2").addEventListener("input", (e) => { L2[i] = +e.target.value; schedule(); });
       cardEls.push(c);
     }
     for (const r of document.querySelectorAll('input[name="fit-base"]'))
       r.addEventListener("change", schedule);
+    const alphaIn = document.getElementById("fit-alpha");
+    alphaIn.addEventListener("input", () => {
+      skewBase = skewNormalBase(+alphaIn.value);
+      document.querySelector('input[name="fit-base"][value="skew"]').checked = true;
+      schedule();
+    });
     const svg = document.getElementById("fit-plot");
     const S = (tag, attrs, parent) => {
       const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -239,18 +255,22 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
       requestAnimationFrame(() => { pending = false; redraw(); });
     }
     function redraw() {
-      const base = document.querySelector('input[name="fit-base"]:checked').value;
-      const V = load.map((v) => [v]);
-      const D = load.map((v) => 1 - v * v);
-      const p = winProbabilitiesFactor(mu, V, D, F1, W1, { base, points: 301 }).p;
+      const name = document.querySelector('input[name="fit-base"]:checked').value;
+      const base = name === "skew" ? skewBase : name;
+      document.getElementById("fit-alpha-val").textContent =
+        "\u03b1=" + (+alphaIn.value).toFixed(1);
+      const V = mu.map((_, i) => [L1[i], L2[i]]);
+      const D = mu.map((_, i) => Math.max(1 - L1[i] ** 2 - L2[i] ** 2, 0.02));
+      const p = winProbabilitiesFactor(mu, V, D, F2, W2, { base, points: 301 }).p;
       for (let i = 0; i < N; i++) {
         cardEls[i].querySelector(".mu-lab").textContent = "\u03bc=" + mu[i].toFixed(2);
-        cardEls[i].querySelector(".ld-lab").textContent = "loading " + load[i].toFixed(2);
+        cardEls[i].querySelector(".l1-lab").textContent = "loading\u2081 " + L1[i].toFixed(2);
+        cardEls[i].querySelector(".l2-lab").textContent = "loading\u2082 " + L2[i].toFixed(2);
         cardEls[i].querySelector(".pct").textContent = (100 * p[i]).toFixed(1) + "%";
       }
-      // marginal densities: the base mixed over the factor, mean mu_i, sd 1
-      const pdf = PDFS[base];
-      const XL = -6, XR = 6, AX = 300, G = 200;
+      // marginal densities: the base mixed over both factors, mean mu_i
+      const pdf = PDFS[name];
+      const XL = -6, XR = 6, AX = 300, G = 160;
       const x = (v) => 20 + 900 * (v - XL) / (XR - XL);
       const dens = [];
       let ymax = 0;
@@ -260,8 +280,8 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
         for (let g = 0; g <= G; g++) {
           const xv = XL + (XR - XL) * g / G;
           let acc = 0;
-          for (let q = 0; q < GH_F.length; q++)
-            acc += GH_W[q] * pdf((xv - mu[i] - load[i] * GH_F[q]) / s) / s;
+          for (let q = 0; q < F2.length; q++)
+            acc += W2[q] * pdf((xv - mu[i] - V[i][0] * F2[q][0] - V[i][1] * F2[q][1]) / s) / s;
           row[g] = acc;
           if (acc > ymax) ymax = acc;
         }

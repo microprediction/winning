@@ -154,9 +154,8 @@ applications layer; the decision went the other way. `winning` owns the
 core — heritage and name — the thurstone implementation is vendored
 here as `winning.thurstone`, and the thurstone package is a
 compatibility shim whose imports resolve to this one. The renovation's
-migration notes are preserved in [RENOVATION.md](RENOVATION.md) with a
-status header, and its unported ideas in [attic/](attic) and
-[planning/](planning).
+migration notes and unported ideas are preserved in
+[planning/](planning) and [attic/](attic).
 
 ## Cite
 

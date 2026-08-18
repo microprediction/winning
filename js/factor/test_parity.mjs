@@ -1,6 +1,6 @@
 /* Parity test: JavaScript port vs committed vectors from winning.factor. */
 import { readFileSync } from "fs";
-import { logndtr, winProbabilitiesFactor, abilitiesFromProbabilitiesFactor }
+import { logndtr, winProbabilitiesFactor, abilitiesFromProbabilitiesFactor, skewNormalBase }
   from "./factor_race.mjs";
 
 const T = JSON.parse(readFileSync(new URL("./test_vectors.json", import.meta.url)));
@@ -60,6 +60,26 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
     check(`${name} forward shares vs scipy`, fw.p, B.expected[name], 2e-6);
     const hat = abilitiesFromProbabilitiesFactor(fw.p, bp.V, bp.D, bh.F, bh.W, { base: name });
     check(`${name} calibration roundtrip`, hat, bp.mu, 1e-3);
+  }
+}
+
+// parameterized skew: alpha = 0 must reproduce the normal base exactly,
+// and every alpha must be standardized (mass 1, mean 0, variance 1)
+{
+  const mu = [-0.6, -0.1, 0.2, 0.5], V = mu.map(() => [0.5]), D = mu.map(() => 0.75);
+  const F = [[-1.7], [0], [1.7]], W = [0.25, 0.5, 0.25];
+  const pn = winProbabilitiesFactor(mu, V, D, F, W, { base: "normal" });
+  const p0 = winProbabilitiesFactor(mu, V, D, F, W, { base: skewNormalBase(0) });
+  check("skewNormalBase(0) = normal", p0.p, pn.p, 1e-6);
+  for (const alpha of [-2, 0.5, 3]) {
+    const b = skewNormalBase(alpha);
+    let m0 = 0, m1 = 0, m2 = 0;
+    const dz = 0.01;
+    for (let z = -20; z <= 20; z += dz) {
+      const f = b.pdf(z);
+      m0 += f * dz; m1 += z * f * dz; m2 += z * z * f * dz;
+    }
+    check(`skew alpha=${alpha} standardized`, [m0, m1, m2], [1, 0, 1], 1e-4);
   }
 }
 

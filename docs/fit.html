@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>winning — fit a correlated race</title>
+  <meta name="description" content="Interactive demo: drag observed win shares and a within-camp correlation, and the engine calibrates standalone abilities live in the browser, against the naive independent fit. Normal, Gumbel, skew-normal or Student-t runners." />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    .fitter { border: 1px solid #ddd; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.5rem 0; }
+    .fit-stage { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
+    .fit-controls { flex: 1 1 260px; }
+    .fit-plot-wrap { flex: 1 1 320px; }
+    .fit-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.35rem 0; }
+    .fit-row label { display: flex; align-items: center; gap: 0.6rem; flex: 1; font-size: 0.9rem; }
+    .fit-row input[type="range"] { flex: 1; min-width: 90px; }
+    .fit-val { font-variant-numeric: tabular-nums; font-size: 0.9rem; width: 3.4em; text-align: right; }
+    .fit-base { flex: none !important; font-size: 0.9rem; }
+    .legend { font-size: 0.9rem; color: #444; }
+    .fit-swatch { width: 0.75em; height: 0.75em; border-radius: 50%; display: inline-block; flex: none; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/#papers">Papers</a>
+        <a href="/#demos">Demos</a>
+        <a href="./ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+        <a href="https://thurstone.microprediction.org/">thurstone</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1>Fit a correlated race</h1>
+    <p class="subtitle">The inverse problem: what the shares really say about ability.</p>
+    <div class="fitter">
+      
+      <p class="legend">Six runners in two camps; each camp shares a luck factor.
+        Drag the observed win shares and the correlation, and the engine inverts
+        the shares to standalone abilities live in your browser — the same
+        calibration the Python package ships, at machine-precision parity. The
+        curves are the fitted performance densities (switch the runners to Gumbel
+        and they skew). Below them, hollow dots pretend the runners are
+        independent and filled dots admit the correlation: a runner whose camp is
+        strong is better than its share suggests.</p>
+      <div class="fit-stage">
+        <div class="fit-controls" id="fit-controls">
+          <div class="fit-row"><label>within-camp correlation
+            <input type="range" id="fit-rho" min="0" max="0.8" step="0.02" value="0.6" /></label>
+            <span class="fit-val" id="fit-rho-val"></span></div>
+          <div class="fit-row"><label style="flex:none">runners</label>
+            <label class="fit-base"><input type="radio" name="fit-base" value="normal" checked />normal</label>
+            <label class="fit-base"><input type="radio" name="fit-base" value="gumbel" />Gumbel</label>
+            <label class="fit-base"><input type="radio" name="fit-base" value="skew" />skew-normal</label>
+            <label class="fit-base"><input type="radio" name="fit-base" value="t4" />t&#8324;</label></div>
+          <div id="fit-sliders"></div>
+        </div>
+        <div class="fit-plot-wrap">
+          <svg id="fit-plot" viewBox="0 0 460 320" style="width:100%;aspect-ratio:460/320;display:block"></svg>
+          <p class="legend" id="fit-note"></p>
+        </div>
+      </div>
+    </div>
+    <p><a href="https://github.com/microprediction/winning/tree/main/js/factor">The JS
+      module and its parity tests</a> ·
+      <a href="./assets/pdf/factor_probit_share_calibration.pdf">the paper</a> ·
+      <a href="./circuit.html">the photo-finish circuit</a></p>
+  </main>
+  <script type="module">
+    import { abilitiesFromProbabilitiesFactor } from "./assets/js/factor_race.mjs?v=3";
+    window.addEventListener("error", (e) => {
+      const n = document.getElementById("fit-note");
+      if (n) n.textContent = "Demo error: " + e.message;
+    });
+    // 8-node Gauss-Hermite for a standard normal factor: display-grade
+    // (max ability error ~1e-4 vs the 12-node, 501-point reference)
+    const GH_F = [-4.1445471861258945,-2.802485861287542,-1.6365190424351082,
+      -0.5390798113513752,0.5390798113513752,1.6365190424351082,
+      2.802485861287542,4.1445471861258945];
+    const GH_W = [1.126145383753679e-04,9.635220120788263e-03,1.172399076617590e-01,
+      3.730122576790774e-01,3.730122576790774e-01,1.172399076617590e-01,
+      9.635220120788263e-03,1.126145383753679e-04];
+    // two independent camp factors: tensor grid
+    const F2 = [], W2 = [];
+    for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) {
+      F2.push([GH_F[a], GH_F[b]]); W2.push(GH_W[a] * GH_W[b]);
+    }
+    const N = 6, CAMP = [0, 0, 0, 1, 1, 1];
+    const COLORS = ["#c44e52", "#c44e52", "#c44e52", "#1f77b4", "#1f77b4", "#1f77b4"];
+    const START = [30, 18, 12, 20, 12, 8];
+    const sliders = document.getElementById("fit-sliders");
+    const share = START.slice();
+    START.forEach((v, i) => {
+      const row = document.createElement("div");
+      row.className = "fit-row";
+      row.innerHTML = `<span class="fit-swatch" style="background:${COLORS[i]}"></span>` +
+        `<label>runner ${i} <input type="range" min="1" max="60" step="1" value="${v}" /></label>` +
+        `<span class="fit-val" id="fit-sh-${i}"></span>`;
+      sliders.appendChild(row);
+      row.querySelector("input").addEventListener("input", (e) => {
+        share[i] = +e.target.value; schedule();
+      });
+    });
+    const rhoIn = document.getElementById("fit-rho");
+    rhoIn.addEventListener("input", schedule);
+    for (const r of document.querySelectorAll('input[name="fit-base"]'))
+      r.addEventListener("change", schedule);
+    const svg = document.getElementById("fit-plot");
+    const note = document.getElementById("fit-note");
+    const S = (tag, attrs, parent) => {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      parent.appendChild(el); return el;
+    };
+    const warm = {};
+    let pending = false;
+    function schedule() {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; redraw(); });
+    }
+    function redraw() {
+      const rho = +rhoIn.value;
+      const base = document.querySelector('input[name="fit-base"]:checked').value;
+      document.getElementById("fit-rho-val").textContent = rho.toFixed(2);
+      const tot = share.reduce((a, b) => a + b, 0);
+      const p = share.map((v) => v / tot);
+      p.forEach((v, i) => {
+        document.getElementById(`fit-sh-${i}`).textContent = (100 * v).toFixed(0) + "%";
+      });
+      const s = Math.sqrt(rho);
+      const V = CAMP.map((c) => (c === 0 ? [s, 0] : [0, s]));
+      const D = CAMP.map(() => 1 - rho);
+      const muC = abilitiesFromProbabilitiesFactor(p, V, D, F2, W2,
+        { base, points: 301, tol: 3e-4, mu0: warm[base + "C"] });
+      const muI = abilitiesFromProbabilitiesFactor(
+        p, CAMP.map(() => [0]), CAMP.map(() => 1), [[0]], [1],
+        { base, points: 301, tol: 3e-4, mu0: warm[base + "I"] });
+      warm[base + "C"] = muC; warm[base + "I"] = muI;
+      const aC = muC.map((m) => -m), aI = muI.map((m) => -m);   // display: higher is better
+      const aLo = Math.min(...aC, ...aI), aHi = Math.max(...aC, ...aI);
+      const lo = aLo - 3.4, hi = aHi + 3.4;
+      const x = (v) => 8 + 444 * (v - lo) / (hi - lo);
+      svg.innerHTML = "";
+      // fitted performance densities of -X_i (higher is better), thurstone style
+      const c = Math.PI / Math.sqrt(6), EULER = 0.5772156649015329;
+      const pdf = base === "gumbel"
+        ? (z) => { const u = -z * c - EULER; return c * Math.exp(u - Math.exp(u)); }
+        : (z) => Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+      const TOP = 218, PEAK = 190;
+      const ymax = base === "gumbel" ? c * Math.exp(-1) : pdf(0);
+      for (let i = 0; i < N; i++) {
+        let d = "";
+        for (let g = 0; g <= 140; g++) {
+          const xv = lo + (hi - lo) * g / 140;
+          const yv = TOP - PEAK * pdf(xv - aC[i]) / ymax;
+          d += (g ? "L" : "M") + x(xv).toFixed(1) + " " + yv.toFixed(1);
+        }
+        S("path", { d: d + `L${x(hi).toFixed(1)} ${TOP}L${x(lo).toFixed(1)} ${TOP}Z`,
+          fill: COLORS[i], opacity: 0.13 }, svg);
+        S("path", { d, fill: "none", stroke: COLORS[i], "stroke-width": 1.5,
+          opacity: 0.8 }, svg);
+      }
+      S("line", { x1: 8, y1: TOP, x2: 452, y2: TOP, stroke: "#bbb" }, svg);
+      // ability strip below, on the same axis: hollow = independent fit
+      const rowH = (320 - TOP - 6) / N;
+      for (let i = 0; i < N; i++) {
+        const y = TOP + 10 + (i + 0.5) * rowH;
+        S("line", { x1: x(aI[i]), y1: y, x2: x(aC[i]), y2: y,
+          stroke: COLORS[i], "stroke-width": 2, opacity: 0.45 }, svg);
+        S("circle", { cx: x(aI[i]), cy: y, r: 4.5, fill: "#fff",
+          stroke: COLORS[i], "stroke-width": 1.8 }, svg);
+        S("circle", { cx: x(aC[i]), cy: y, r: 4.5, fill: COLORS[i] }, svg);
+      }
+      // note the most interesting consequence: a reranking if one exists
+      const orderC = [...Array(N).keys()].sort((a, b) => aC[b] - aC[a]);
+      const orderI = [...Array(N).keys()].sort((a, b) => aI[b] - aI[a]);
+      let flip = null;
+      for (let r = 0; r < N; r++) if (orderC[r] !== orderI[r]) { flip = [orderI[r], orderC[r]]; break; }
+      const luce = base === "gumbel" && rho === 0
+        ? " With independent Gumbel runners this is exactly Luce: ability is log share." : "";
+      note.textContent = flip
+        ? `Admitting the correlation reranks: runner ${flip[1]} moves ahead of ` +
+          `runner ${flip[0]} despite the shares, because its camp is stronger.` + luce
+        : "Same shares, same ranking — but the spacing of abilities changes " +
+          "with the correlation. Push it higher or make the camps more uneven." + luce;
+    }
+    redraw();
+  </script>
+</body>
+</html>

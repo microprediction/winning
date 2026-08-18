@@ -133,3 +133,56 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
   }
   mu
 }
+
+
+#' All win probabilities of a race, tier-1 name (min wins)
+#'
+#' The package's front door, matching the Python API: an alias of
+#' \code{\link{win_probabilities_factor}} in which V and D are optional
+#' (omitting both gives the classic independent race with unit
+#' variances). Gaussian base only in R.
+#'
+#' @param mu vector of locations (length N); lower is better
+#' @param V optional N x k matrix of factor loadings
+#' @param D optional vector of idiosyncratic variances (default 1)
+#' @param nodes optional list(F, W) of factor nodes
+#' @param points lattice size L (default 501)
+#' @return vector of win probabilities summing to one
+#' @export
+race_probabilities <- function(mu, V = NULL, D = NULL, nodes = NULL,
+                               points = 501) {
+  N <- length(mu)
+  if (is.null(V)) {
+    V <- matrix(0, N, 1)
+    nodes <- list(F = matrix(0, 1, 1), W = 1)
+  }
+  if (is.null(D)) D <- rep(1, N)
+  win_probabilities_factor(mu, V, D, nodes = nodes, points = points)
+}
+
+#' Calibrate abilities from observed shares, tier-1 name
+#'
+#' Alias of \code{\link{abilities_from_probabilities_factor}} with
+#' optional V and D, matching the Python \code{calibrate_abilities}.
+#'
+#' @param p vector of positive target shares (normalized internally)
+#' @param V optional N x k matrix of factor loadings
+#' @param D optional vector of idiosyncratic variances (default 1)
+#' @param nodes optional list(F, W) of factor nodes
+#' @param n_iter maximum Newton iterations (default 50)
+#' @param tol convergence tolerance (default 1e-6)
+#' @param points lattice size L (default 501)
+#' @return mean-zero ability vector (min-wins convention)
+#' @export
+calibrate_abilities <- function(p, V = NULL, D = NULL, nodes = NULL,
+                                n_iter = 50, tol = 1e-6, points = 501) {
+  N <- length(p)
+  if (is.null(V)) {
+    V <- matrix(0, N, 1)
+    nodes <- list(F = matrix(0, 1, 1), W = 1)
+  }
+  if (is.null(D)) D <- rep(1, N)
+  abilities_from_probabilities_factor(p, V, D, nodes = nodes,
+                                      n_iter = n_iter, tol = tol,
+                                      points = points)
+}

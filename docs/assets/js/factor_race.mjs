@@ -128,16 +128,22 @@ function tabulatedBase(pdfStd, spans) {
 }
 
 const PHI = (z) => Math.exp(logndtr(z));
-{
-  // skew-normal, shape alpha = 3, standardized to mean 0 variance 1
-  const ALPHA = 3;
-  const delta = ALPHA / Math.sqrt(1 + ALPHA * ALPHA);
+
+/* skew-normal with shape alpha, standardized to mean 0 variance 1;
+ * returns a base object usable directly as opts.base */
+export function skewNormalBase(alpha) {
+  const delta = alpha / Math.sqrt(1 + alpha * alpha);
   const m = delta * Math.sqrt(2 / Math.PI);
   const s = Math.sqrt(1 - m * m);
-  BASES.skew = tabulatedBase(
-    (z) => { const u = m + s * z;
-      return s * 2 * Math.exp(-0.5 * u * u) / SQRT_2PI * PHI(ALPHA * u); },
-    [12, 12]);
+  const pdf = (z) => { const u = m + s * z;
+    return s * 2 * Math.exp(-0.5 * u * u) / SQRT_2PI * PHI(alpha * u); };
+  const b = tabulatedBase(pdf, [12, 12]);
+  b.pdf = pdf;
+  return b;
+}
+
+BASES.skew = skewNormalBase(3);
+{
   // Student-t, nu = 4, standardized (sd = sqrt(2))
   const SQ2 = Math.SQRT2;
   BASES.t4 = tabulatedBase(
@@ -164,7 +170,8 @@ function condMeans(mu, V, F) {
 /* forward pass: shares (and optionally slopes, pairwise densities, deletions) */
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   const points = opts.points || 501;
-  const base = BASES[opts.base || "normal"];
+  const base = (opts.base && typeof opts.base === "object")
+    ? opts.base : BASES[opts.base || "normal"];
   if (!base) throw new Error("unknown base: " + opts.base);
   const N = mu.length, Q = F.length;
   const sd = D.map(Math.sqrt);
