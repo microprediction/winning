@@ -54,13 +54,30 @@ This is proportional renormalization. The invariance it imposes is Independence 
 Alternatives, and applied to a reduced set of response alternatives it is what Clarke
 \cite{clarke1957} named the \emph{constant-ratio rule}.
 
-One other assumption answers the question without fitting anything. Treat the shares as the
-winning probabilities of a contest among independent Gaussian performances, recover the
-locations that produce them, and re-run the contest among the survivors. That is Thurstone's
-Case V. Section~\ref{sec:maps} shows these two are the only members of the independent
-additive random-utility class that cost nothing to apply, because fixing any other noise law
-requires a number the shares cannot supply. They make different predictions from the same
-input, so they can be scored against each other.
+One other assumption answers the question without fitting anything. Read the shares as the
+winning probabilities of a contest among independent Gaussian performances, which is
+Thurstone's Case V \cite{thurstone1927} generalized from pairs to a multiway field. Item $i$
+carries a location $a_i$, draws $X_i \sim N(a_i,1)$ on each occasion, and the highest draw is
+chosen, so
+\begin{equation}
+p_i = \int \varphi(x - a_i) \prod_{k \neq i} \Phi(x - a_k)\, dx.
+\label{eq:winprob}
+\end{equation}
+Given the shares, this is inverted for the locations, which are identified up to a common
+translation and fixed here by $\sum_i a_i = 0$. The prediction for a subset $T$ is the same
+contest run among $T$ alone. For a pair it is one normal evaluation,
+\begin{equation}
+P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right).
+\label{eq:pair}
+\end{equation}
+
+The two horses disagree, and in a fixed direction. If $p_i > p_j$ then Equation~\eqref{eq:pair}
+lies between $\tfrac12$ and the renormalized $p_i/(p_i+p_j)$: winning a large field requires an
+unusually high draw and beating a single rival does not, so withdrawing the other alternatives
+counts the favourite's advantage for less. Section~\ref{sec:maps} shows that these two are the
+only members of the independent additive random-utility class costing nothing to apply, because
+fixing any other noise law requires a number the shares cannot supply, and
+Proposition~\ref{prop:contraction} makes the direction exact.
 
 \section{Prior tests of the constant-ratio rule}
 \label{sec:prior}
@@ -111,27 +128,10 @@ identified once menus of three or more are included, though not from pairwise co
 alone. So the constant-ratio rule is one point of a family, and the empirical question is
 which point to stand on.
 
-The independent Gaussian member is Thurstone's Case V \cite{thurstone1927} in the
-paired-comparison case, and it extends to a multiway contest. Item $i$ carries a location
-$a_i$, draws a performance $X_i \sim N(a_i,1)$ on each occasion, and the highest draw is
-chosen, so
-\begin{equation}
-p_i = \int \varphi(x - a_i) \prod_{k \neq i} \Phi(x - a_k)\, dx.
-\label{eq:winprob}
-\end{equation}
-The integral is one-dimensional for any number of alternatives, since conditioning on
-$X_i = x$ makes the other events independent, and it is inverted numerically by the lattice
-method of \cite{cotton2021}, which recovers the whole location vector in one pass over a
-shared grid. Locations are identified up to a common translation, fixed here by
-$\sum_i a_i = 0$. Prediction for a subset $T$ means re-running the contest among $T$ alone.
-For a pair this is one normal evaluation,
-\begin{equation}
-P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right),
-\label{eq:pair}
-\end{equation}
-and if $p_i > p_j$ it lies between $\tfrac12$ and $p_i/(p_i+p_j)$. Winning a large field
-requires an unusually high draw and beating a single rival does not, so the favourite's
-advantage counts for less.
+Equation~\eqref{eq:winprob} is a one-dimensional integral for any number of alternatives,
+since conditioning on $X_i = x$ makes the other events independent, and it is inverted
+numerically by the lattice method of \cite{cotton2021}, which recovers the whole location
+vector in one pass over a shared grid.
 
 The class contains exactly two parameter-free points. Fix the noise law up to location and
 there is nothing left to choose. Gumbel gives renormalization, unit-variance Gaussian gives
