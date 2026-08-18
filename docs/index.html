@@ -62,10 +62,11 @@
       <p class="legend">Six runners in two camps; each camp shares a luck factor.
         Drag the observed win shares and the correlation, and the engine inverts
         the shares to standalone abilities live in your browser — the same
-        calibration the Python package ships, at machine-precision parity. Hollow
-        dots pretend the runners are independent; filled dots admit the
-        correlation. A runner whose camp is strong is better than its share
-        suggests.</p>
+        calibration the Python package ships, at machine-precision parity. The
+        curves are the fitted performance densities (switch the runners to Gumbel
+        and they skew). Below them, hollow dots pretend the runners are
+        independent and filled dots admit the correlation: a runner whose camp is
+        strong is better than its share suggests.</p>
       <div class="fit-stage">
         <div class="fit-controls" id="fit-controls">
           <div class="fit-row"><label>within-camp correlation
@@ -251,21 +252,39 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
         { base, points: 301, tol: 3e-4, mu0: warm[base + "I"] });
       warm[base + "C"] = muC; warm[base + "I"] = muI;
       const aC = muC.map((m) => -m), aI = muI.map((m) => -m);   // display: higher is better
-      const lo = Math.min(...aC, ...aI), hi = Math.max(...aC, ...aI);
-      const pad = 0.1 * (hi - lo || 1);
-      const x = (v) => 30 + 400 * (v - lo + pad) / (hi - lo + 2 * pad);
+      const aLo = Math.min(...aC, ...aI), aHi = Math.max(...aC, ...aI);
+      const lo = aLo - 3.4, hi = aHi + 3.4;
+      const x = (v) => 8 + 444 * (v - lo) / (hi - lo);
       svg.innerHTML = "";
-      const rowH = 320 / N;
-      if (lo < 0 && hi > 0)
-        S("line", { x1: x(0), y1: 6, x2: x(0), y2: 314, stroke: "#ddd" }, svg);
+      // fitted performance densities of -X_i (higher is better), thurstone style
+      const c = Math.PI / Math.sqrt(6), EULER = 0.5772156649015329;
+      const pdf = base === "gumbel"
+        ? (z) => { const u = -z * c - EULER; return c * Math.exp(u - Math.exp(u)); }
+        : (z) => Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+      const TOP = 218, PEAK = 190;
+      const ymax = base === "gumbel" ? c * Math.exp(-1) : pdf(0);
       for (let i = 0; i < N; i++) {
-        const y = (i + 0.5) * rowH;
+        let d = "";
+        for (let g = 0; g <= 140; g++) {
+          const xv = lo + (hi - lo) * g / 140;
+          const yv = TOP - PEAK * pdf(xv - aC[i]) / ymax;
+          d += (g ? "L" : "M") + x(xv).toFixed(1) + " " + yv.toFixed(1);
+        }
+        S("path", { d: d + `L${x(hi).toFixed(1)} ${TOP}L${x(lo).toFixed(1)} ${TOP}Z`,
+          fill: COLORS[i], opacity: 0.13 }, svg);
+        S("path", { d, fill: "none", stroke: COLORS[i], "stroke-width": 1.5,
+          opacity: 0.8 }, svg);
+      }
+      S("line", { x1: 8, y1: TOP, x2: 452, y2: TOP, stroke: "#bbb" }, svg);
+      // ability strip below, on the same axis: hollow = independent fit
+      const rowH = (320 - TOP - 6) / N;
+      for (let i = 0; i < N; i++) {
+        const y = TOP + 10 + (i + 0.5) * rowH;
         S("line", { x1: x(aI[i]), y1: y, x2: x(aC[i]), y2: y,
           stroke: COLORS[i], "stroke-width": 2, opacity: 0.45 }, svg);
-        S("circle", { cx: x(aI[i]), cy: y, r: 6, fill: "#fff",
-          stroke: COLORS[i], "stroke-width": 2 }, svg);
-        S("circle", { cx: x(aC[i]), cy: y, r: 6, fill: COLORS[i] }, svg);
-        S("text", { x: 6, y: y + 4, "font-size": 12, fill: "#444" }, svg).textContent = i;
+        S("circle", { cx: x(aI[i]), cy: y, r: 4.5, fill: "#fff",
+          stroke: COLORS[i], "stroke-width": 1.8 }, svg);
+        S("circle", { cx: x(aC[i]), cy: y, r: 4.5, fill: COLORS[i] }, svg);
       }
       // note the most interesting consequence: a reranking if one exists
       const orderC = [...Array(N).keys()].sort((a, b) => aC[b] - aC[a]);
