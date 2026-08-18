@@ -1,0 +1,3 @@
+N=50: target self-check |dp|=9.48e-06; p>1e-2 (recentered): max=7.62e-05 med=1.34e-05 (16); p>1e-3 (recentered): max=1.23e-03 med=2.08e-04 (34); resolvable (raw): max=3.10e-02;
+N=100: target self-check |dp|=1.28e-05; p>1e-2 (recentered): max=1.12e-04 med=2.34e-05 (16); p>1e-3 (recentered): max=1.01e-03 med=1.71e-04 (47); resolvable (raw): max=1.10e-01;
+N=200: target self-check |dp|=1.70e-05; p>1e-2 (recentered): max=2.98e-04 med=6.82e-05 (28); p>1e-3 (recentered): max=9.33e-04 med=1.77e-04 (80); resolvable (raw): max=1.64e-01;

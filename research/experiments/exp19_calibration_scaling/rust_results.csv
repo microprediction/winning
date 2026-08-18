@@ -1,0 +1,5 @@
+N,seconds,iterations,residual,converged
+1000,2.6,10,3.945e-07,True
+2000,7.4,13,3.853e-07,True
+5000,17.6,11,7.223e-07,True
+10000,38.0,13,4.381e-07,True

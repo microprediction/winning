@@ -1,0 +1,9 @@
+part,quantity,value
+A,price_err,7.861e-06
+A,sum_rule,4.16e-14
+B,winner_max,1.220e-02
+B,max_ratio_to_T,1.2732
+C,synthetic_holds,1.000
+C,synthetic_tightness_median,28.07
+C,real_gamma1.5_ratio,10.70
+C,real_gamma3.0_ratio,6.17

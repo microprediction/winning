@@ -1,0 +1,9 @@
+share range [6.66e-11, 1.01e-01]
+T=1.0  R= 50000: max|dp|=6.53e-02 TV=4.28e-01 max|dlog| (p>1e-3)=1.86e+00
+T=1.0  R=200000: max|dp|=6.54e-02 TV=4.28e-01 max|dlog| (p>1e-3)=1.87e+00
+T=0.3  R= 50000: max|dp|=8.74e-03 TV=5.51e-02 max|dlog| (p>1e-3)=6.37e-01
+T=0.3  R=200000: max|dp|=9.97e-03 TV=5.60e-02 max|dlog| (p>1e-3)=6.41e-01
+T=0.1  R= 50000: max|dp|=2.46e-03 TV=1.28e-02 max|dlog| (p>1e-3)=2.01e-01
+T=0.1  R=200000: max|dp|=1.27e-03 TV=7.90e-03 max|dlog| (p>1e-3)=1.19e-01
+T=0.03 R= 50000: max|dp|=1.54e-03 TV=1.35e-02 max|dlog| (p>1e-3)=2.43e-01
+T=0.03 R=200000: max|dp|=9.40e-04 TV=7.63e-03 max|dlog| (p>1e-3)=1.77e-01

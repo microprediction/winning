@@ -1,4 +1,33 @@
-# winning — rating systems on the thurstone ability transform
+# winning
+
+*The package has come home.* `winning` began as the reference implementation
+of the lattice ability transform (SIAM J. Financial Mathematics, 2021). It
+is now also the home of the factor-correlated generalization developed in
+the kinetics research program ("Scalable Probit Calibration"), of an arena
+of competing methods for the same computation, and of a standing benchmark
+database.
+
+- `winning.factor` — forward shares, calibration, Jacobian-vector products,
+  and factor fitting for correlated races (log-domain lattice kernel;
+  optional compiled `fastrace` backend).
+- `winning.methods` — every contestant behind one interface: the lattice
+  transform, direct and Sobol simulation, per-alternative factor-RQMC,
+  GHK / Genz separation-of-variables (plain and QMC), minimax tilting;
+  external packages are wrapped when importable. Each method passes
+  closed-form and Monte Carlo anchors before admission (`tests_arena/`).
+- `winning.bench` — a seeded problem grid, cached references, and
+  append-only accuracy-time records (`bench_results/`): run
+  `python -m winning.bench.runner`.
+
+The `thurstone` package remains maintained as a compatibility layer with
+its extensive documentation; its research line continues here.
+
+![test-38](https://github.com/microprediction/winning/workflows/test-38/badge.svg)
+![test-39](https://github.com/microprediction/winning/workflows/test-39/badge.svg)
+![test-310](https://github.com/microprediction/winning/workflows/test-310/badge.svg)
+![test-311](https://github.com/microprediction/winning/workflows/test-311/badge.svg)
+![test-312](https://github.com/microprediction/winning/workflows/test-312/badge.svg)
+![test-pandas](https://github.com/microprediction/winning/workflows/test-pandas/badge.svg)
 
 [![CI](https://github.com/microprediction/winning/workflows/CI/badge.svg)](https://github.com/microprediction/winning/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -144,3 +173,12 @@ source and table reproductions remain in [docs/](docs) and
     doi = {10.1137/19M1276261},
     URL = {https://doi.org/10.1137/19M1276261}
     }
+
+## Compiled acceleration
+
+`rust/fastrace` holds the optional compiled kernels (forward pass with
+slopes, Jacobian-vector products in both forms, the Chebyshev-separated
+low-rank pass, and a compiled GHK for like-for-like baselining). Build with
+`pip install maturin && maturin develop --release` from `rust/fastrace`;
+`winning.methods` detects and uses it automatically. Published wheels
+(`pip install winning[fast]`) are on the roadmap.

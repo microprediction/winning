@@ -1,0 +1,5 @@
+share range [5.24e-10, 1.22e-01]
+R= 10000  winner-freq: max|dp|=4.73e-03 TV=3.46e-02 max|dlog| (p>1e-3)=5.42e-01
+R= 10000  conditional: max|dp|=3.03e-03 TV=9.92e-03 max|dlog| (p>1e-3)=5.69e-02
+R=100000  winner-freq: max|dp|=8.87e-04 TV=8.73e-03 max|dlog| (p>1e-3)=1.45e-01
+R=100000  conditional: max|dp|=3.16e-04 TV=1.36e-03 max|dlog| (p>1e-3)=1.76e-02

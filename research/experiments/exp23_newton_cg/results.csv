@@ -1,0 +1,5 @@
+N,method,seconds,iters_or_jvps,residual,converged
+200,jacobi,3.7,12,4.813e-07,True
+200,newton_cg,387.0,25n+200jvp,2.124e+00,False
+1000,jacobi,18.7,12,5.771e-07,True
+1000,newton_cg,2055.5,25n+200jvp,4.703e+00,False

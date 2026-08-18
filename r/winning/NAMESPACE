@@ -1,0 +1,4 @@
+export(hermite_nodes)
+export(win_probabilities_factor)
+export(abilities_from_probabilities_factor)
+importFrom(stats, dnorm, pnorm)

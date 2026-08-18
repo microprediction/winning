@@ -1,0 +1,18 @@
+[package]
+name = "fastrace"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "fastrace"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+numpy = "0.22"
+rayon = "1.10"
+libm = "0.2"
+
+[profile.release]
+lto = true
+codegen-units = 1

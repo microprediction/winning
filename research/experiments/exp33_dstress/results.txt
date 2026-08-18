@@ -1,0 +1,8 @@
+ratio 1e+02 L=501: max|dlog|=5.219e-12 max|dp|=1.180e-16 vs L=8001
+ratio 1e+02 L=2001: max|dlog|=3.553e-15 max|dp|=9.714e-17 vs L=8001
+ratio 1e+02 L=501 vs MC(2e+07 draws): max|dlog|=9.745e-02 on 13 resolvable (MC rel noise ~6.8e-02)
+ratio 1e+02 share range: [3.24e-34, 4.33e-01], D range [1.0e-02, 1.0e+00]
+ratio 1e+03 L=501: max|dlog|=1.033e-03 max|dp|=2.379e-09 vs L=8001
+ratio 1e+03 L=2001: max|dlog|=1.776e-15 max|dp|=4.163e-17 vs L=8001
+ratio 1e+03 L=501 vs MC(2e+07 draws): max|dlog|=9.150e-02 on 14 resolvable (MC rel noise ~1.5e-01)
+ratio 1e+03 share range: [3.23e-67, 3.77e-01], D range [1.0e-03, 1.0e+00]
