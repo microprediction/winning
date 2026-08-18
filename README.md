@@ -2,165 +2,123 @@
 
 *A package for dealing with races, correlated or not.*
 
-*The package has come home.* `winning` began as the reference implementation
-of the lattice ability transform (SIAM J. Financial Mathematics, 2021). It
-is now also the home of the factor-correlated generalization developed in
-the kinetics research program ("Scalable Probit Calibration"), of an arena
-of competing methods for the same computation, and of a standing benchmark
-database.
+`winning` began as the reference implementation of the lattice ability
+transform (SIAM J. Financial Mathematics, 2021) and owns the whole line:
+the original density-agnostic engine, the factor-correlated
+generalization developed for "Scalable Share Calibration for Factor
+Multinomial Probit Models", an arena of competing methods, and a
+standing benchmark database.
 
-- `winning.factor` — forward shares, calibration, Jacobian-vector products,
-  and factor fitting for correlated races (log-domain lattice kernel;
-  optional compiled `fastrace` backend).
-- `winning.methods` — every contestant behind one interface: the lattice
-  transform, direct and Sobol simulation, per-alternative factor-RQMC,
-  GHK / Genz separation-of-variables (plain and QMC), minimax tilting;
-  external packages are wrapped when importable. Each method passes
-  closed-form and Monte Carlo anchors before admission (`tests_arena/`).
+- `winning.thurstone` — the core engine, vendored home from the
+  thurstone package (now a compatibility shim). Densities on a lattice,
+  winner-of-many, dead heats, and the ability transform, for **any**
+  base distribution.
+- `winning.factor` — the correlated extension: all-share forward pass,
+  share calibration, Jacobian-vector products, and factor fitting for
+  races with common factors. Gaussian as shipped; the identity needs
+  only conditional independence, and general bases (Gumbel reproduces
+  Luce exactly) are demonstrated in `research/experiments/` awaiting
+  promotion.
+- `winning.methods` — every contestant behind one interface: the
+  lattice transform, direct and Sobol simulation, per-alternative
+  factor-RQMC, GHK / Genz separation-of-variables, minimax tilting.
+  Each passes closed-form and Monte Carlo anchors before admission.
 - `winning.bench` — a seeded problem grid, cached references, and
-  append-only accuracy-time records (`bench_results/`): run
-  `python -m winning.bench.runner`.
-
-The `thurstone` package remains maintained as a compatibility layer with
-its extensive documentation; its research line continues here.
+  append-only accuracy-time records: `python -m winning.bench.runner`.
 
 ![test-38](https://github.com/microprediction/winning/workflows/test-38/badge.svg)
 ![test-39](https://github.com/microprediction/winning/workflows/test-39/badge.svg)
 ![test-310](https://github.com/microprediction/winning/workflows/test-310/badge.svg)
 ![test-311](https://github.com/microprediction/winning/workflows/test-311/badge.svg)
 ![test-312](https://github.com/microprediction/winning/workflows/test-312/badge.svg)
-![test-pandas](https://github.com/microprediction/winning/workflows/test-pandas/badge.svg)
-
-[![CI](https://github.com/microprediction/winning/workflows/CI/badge.svg)](https://github.com/microprediction/winning/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-
-Rating systems for multi-entrant contests — races, tournaments, leaderboards —
-built on the exact lattice order statistics of the
-[thurstone](https://github.com/microprediction/thurstone) package, and
-benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo.
 
 ![The fastest time, the best offer and the most popular product are the same order statistic](docs/assets/images/winning-pic.png)
 
-`thurstone` is the small, stable core: densities on a lattice, winner-of-many,
-and the fast ability transform. This package is the applications layer, the way
-[timemachines](https://github.com/microprediction/timemachines) sits on
-[skaters](https://github.com/microprediction/skaters): cores are few and
-stable; applications multiply, so they get their own package.
-
 ## Install
 
-    pip install winning            # core: depends only on thurstone (numpy)
-    pip install winning[benchmarks]  # + trueskill, openskill, pandas comparators
+    pip install winning        # core depends only on numpy and scipy
 
 ## Quick start
 
+Independent race: shares from abilities, and back.
+
 ```python
-from winning import ThurstoneRating
+import numpy as np
+from winning.factor.core import win_probabilities, abilities_from_probabilities
 
-tr = ThurstoneRating()
-tr.observe(names=["ada", "ben", "cid", "dot"], ranks=[1, 2, 3, 4])
-tr.observe(names=["ada", "cid", "eve"], ranks=[1, 2, 3])
-
-tr.win_probabilities(["ada", "cid", "eve"])   # exact field win probabilities
-tr.rating("ada")                              # Rating(mu=..., sigma=...)
-tr.leaderboard()                              # best-first, conservative
+mu = np.array([-0.5, 0.0, 0.2, 0.3])          # lower is better (min-wins)
+p = win_probabilities(mu)                      # array([0.443, 0.232, 0.175, 0.150])
+mu_back = abilities_from_probabilities(p)      # recovers mu (mean zero)
 ```
 
-Every system in the package speaks the same three verbs — `observe(names,
-ranks)`, `win_probabilities(names)`, `rating(name)` — including the shims
-around third-party comparators (`winning.shims.TrueSkillRating`,
-`winning.shims.OpenSkillRating`).
+Correlated race: a hundred runners moved by two common factors, all
+shares in one pass over a shared survival field, then inverted.
 
-## What is different about ThurstoneRating
+```python
+from winning.factor import hermite_nodes, win_probabilities_factor
+from winning.factor.core import abilities_from_probabilities_factor
 
-- **Beliefs are whole densities, not (mu, sigma) pairs.** Each contestant's
-  ability belief lives on the thurstone lattice and is free to be skewed or
-  multimodal; each event updates it with the exact likelihood of the WHOLE
-  finish order, computed by an O(N) forward/backward chain on the lattice —
-  not pairwise or stagewise approximations. A single update matches exact
-  Bayes to lattice precision (see `tests/test_thurstonerating.py`).
-- **Predictions are exact.** Field win probabilities come from the lattice
-  winner-of-many computation — dead-heat aware, O(N) in field size — not from
-  pairwise decompositions. The same routine is exposed as
-  `winning.gaussian_win_probabilities(mus, sigmas, beta)` so any
-  Gaussian-belief system (TrueSkill included) can be priced exactly, which
-  separates update quality from prediction-formula quality in benchmarks.
-- **Race-native.** Full finish orders of N-entrant fields are the primary
-  input, not an afterthought bolted onto a 1v1 system.
+rng = np.random.default_rng(0)
+N, k = 100, 2
+mu = rng.normal(0, 1, N); mu -= mu.mean()
+V = rng.normal(0, 0.4, (N, k))                # factor loadings
+D = rng.uniform(0.5, 1.5, N)                  # idiosyncratic variances
+F, W = hermite_nodes(k)
 
-## Benchmarks (measured, not asserted)
+p = win_probabilities_factor(mu, V, D, F, W)  # all N shares, O(QNL)
+mu_hat = abilities_from_probabilities_factor(p, V, D, F, W)   # inversion
+```
 
-Twelve datasets, prequential evaluation (predict each event before observing
-it), with market ceilings and oracle floors where they exist. Full tables,
-metric definitions, dataset provenance and licensing in
-[BENCHMARKS.md](BENCHMARKS.md); reproduce any row with
-`python -m winning.benchmarks.run_benchmark --dataset <name>`.
+Arbitrary densities (skewed, multimodal, empirical) run through
+`winning.thurstone` — see its module docs and `research/demos/`.
 
-| Dataset | Best by log loss | ThurstoneRating (this package) |
-|---|---|---|
-| Formula 1, 1,158 GPs 1950-2026 | **ThurstoneRating** | wins log loss, accuracy, tau and rank-PIT |
-| Sumo, 110k bouts | **ThurstoneRating** (by 0.0007) | first in a tight pack |
-| WTA tennis, 31k matches | Glicko-2 (by 0.0009) | statistical tie at the top |
-| ATP tennis, 32k matches | Elo (by 0.003) | 3rd in a 0.003-wide leading trio |
-| Chess, 121k Lichess games | site's own ratings, then TrueSkill | best calibration of any system (ECE 0.0047) |
-| EPL football, 7.6k matches | Bet365 odds, then Elo | 2nd system, 0.002 behind Elo |
-| HK horse racing, 6.3k races | pari-mutuel odds, then Glicko-2 | 2nd system, ahead of TrueSkill |
-| Halo 2 head-to-head (TrueSkill's data) | four-way tie | in the tie |
-| Halo 2 free-for-all (TrueSkill's data) | TrueSkill (by 0.005) | clear 2nd |
-| Synthetic races (x3 worlds, oracle floor) | TrueSkill (its own generative model) | parity on the drifting world (1.394 vs 1.389) |
+## The paper
 
-Three patterns, measured across the suite:
+The correlated calibration is documented in *Scalable Share Calibration
+for Factor Multinomial Probit Models*
+([papers/factor-probit-transform](papers/factor-probit-transform),
+submitted): all shares of a correlated Gaussian race in one O(QNL)
+pass, matrix-free graph-Laplacian derivatives, and inversion at ten
+thousand alternatives in under a minute. Every number comes from a
+committed, seeded script in
+[research/experiments](research/experiments) (index in its README);
+`research/experiments/run_all_paper.py` regenerates the lot.
 
-1. **Full finish orders are where the lattice wins.** The decisive F1 win
-   and the near-ties elsewhere come wherever joint order statistics matter;
-   pairwise-decomposition systems visibly degrade as fields grow (Glicko-2
-   falls below uniform on 20+ car F1 grids; OpenSkill's ThurstoneMosteller
-   diverges on Halo free-for-all). The updater computes the exact full-order
-   likelihood by an O(N) chain — validated against brute-force simulation,
-   and measurably better than the Plackett-peeled factorization it replaced
-   (research/exact_order_update.py).
-2. **Calibration is the consistent edge.** Best or near-best ECE and rank-PIT
-   almost everywhere — the predicted *distributions* of finish positions match
-   reality, not just the favorites.
-3. **Markets remain the ceiling** wherever they exist (Bet365, pari-mutuel,
-   Lichess's own ratings) — they price information no outcome-only rating
-   system sees. Closing that gap is the applications agenda of this package.
+## Demos and other languages
 
-The heteroskedastic synthetic world (per-contestant noise) degrades every
-system — all incumbents assume common performance noise. Per-contestant scale
-learning, which thurstone's 2-D (loc, scale) calibration supports, is the
-designated next step and no benchmarked system offers it.
+[research/demos](research/demos) holds explanatory scripts (the shared
+survival field, the cavity downdate). [js/factor](js/factor) is a
+dependency-free JavaScript port at machine-precision parity with the
+Python, for browser demos; [r/winning](r/winning) is a pure-R package;
+[rust/fastrace](rust/fastrace) holds the optional compiled kernels —
+build with `pip install maturin && maturin develop --release`, and
+`winning.methods` uses them automatically. Julia is on the roadmap.
 
-TrueSkill is patented by Microsoft and licensed for non-commercial use; it
-appears here strictly as a research comparator. OpenSkill exists precisely to
-be the unencumbered alternative, as does this package.
+## Rating systems (research line)
 
-## The market-calibration application
+The renovation-era ratings layer — whole-density beliefs, exact
+full-finish-order updates, benchmarked against TrueSkill, OpenSkill,
+Glicko-2 and Elo on twelve datasets — lives in [src/](src) pending
+integration, with results in [BENCHMARKS.md](BENCHMARKS.md). Headlines:
+decisive win on Formula 1 (1,158 grands prix), best calibration on
+chess (ECE 0.0047), statistical ties atop WTA/ATP/EPL, and markets
+remaining the ceiling wherever they exist. The `ThurstoneRating` API
+documented there ships with a future release; it is not importable from
+the current package.
 
-`data/simple.csv` holds 459,504 Betfair runners (starting price, finish
-position, anonymized race id across 47,651 races), kept for planned work on
-how well market-implied abilities forecast outcomes — the ceiling any rating
-system chases. No code in the package reads it yet. The ability transform that
-converts win prices to relative abilities in one shot is
-`thurstone.AbilityCalibrator`; see the
-[thurstone docs](https://github.com/microprediction/thurstone).
+## History
 
-## Where everything went (the 2.0 renovation)
-
-Versions 1.x of this package contained the original implementation of the
-SIAM-paper algorithm. That core now lives in, and should be imported from,
-[thurstone](https://github.com/microprediction/thurstone); `pip install
-winning==1.0.3` (the last published 1.x) still gets the old package, and the
-most-used 1.x imports (`winning.std_calibration`, `winning.skew_calibration`,
-`winning.lattice_calibration`, `winning.lattice_conventions`) are preserved in
-2.x as deprecated shims that delegate to thurstone — verified to reproduce
-winning 1.0.3 numbers to lattice precision (see `tests/test_legacy.py`). The migration map is in
-[RENOVATION.md](RENOVATION.md); unported application ideas are preserved in
-[attic/](attic) with draft upstream issues in
-[planning/thurstone_issues/](planning/thurstone_issues); the paper PDFs, LaTeX
-source and table reproductions remain in [docs/](docs) and
-[papers/siam2021/](papers/siam2021).
+Versions 1.x were the SIAM paper's reference implementation, and those
+imports still work. A 2.0 renovation explored splitting the numerical
+core into the separate thurstone package with winning as an
+applications layer; the decision went the other way. `winning` owns the
+core — heritage and name — the thurstone implementation is vendored
+here as `winning.thurstone`, and the thurstone package is a
+compatibility shim whose imports resolve to this one. The renovation's
+migration notes are preserved in [RENOVATION.md](RENOVATION.md) with a
+status header, and its unported ideas in [attic/](attic) and
+[planning/](planning).
 
 ## Cite
 
@@ -175,12 +133,3 @@ source and table reproductions remain in [docs/](docs) and
     doi = {10.1137/19M1276261},
     URL = {https://doi.org/10.1137/19M1276261}
     }
-
-## Compiled acceleration
-
-`rust/fastrace` holds the optional compiled kernels (forward pass with
-slopes, Jacobian-vector products in both forms, the Chebyshev-separated
-low-rank pass, and a compiled GHK for like-for-like baselining). Build with
-`pip install maturin && maturin develop --release` from `rust/fastrace`;
-`winning.methods` detects and uses it automatically. Published wheels
-(`pip install winning[fast]`) are on the roadmap.
