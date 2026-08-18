@@ -69,3 +69,47 @@ def test_custom_base_logistic_roundtrip():
     mu_hat = abilities_from_race(p, base=logistic)
     assert abs(p.sum() - 1) < 1e-12
     assert np.abs(mu_hat - mu).max() < 1e-4
+
+
+def _mc_softmin(mu, V, D, tau, R=2_000_000, seed=3):
+    rng = np.random.default_rng(seed)
+    n = len(mu)
+    k = V.shape[1] if V is not None else 0
+    X = mu[None, :] + np.sqrt(D)[None, :] * rng.normal(0, 1, (R, n))
+    if k:
+        X += rng.normal(0, 1, (R, k)) @ V.T
+    Z = np.exp(-(X - X.min(1, keepdims=True)) / tau)
+    return (Z / Z.sum(1, keepdims=True)).mean(0)
+
+
+def test_temperature_matches_mc_independent():
+    mu, _, _ = _problem(n=8)
+    D = np.ones(8)
+    p = race_probabilities(mu, D=D, temperature=0.7)
+    q = _mc_softmin(mu, None, D, 0.7)
+    assert abs(p.sum() - 1) < 1e-12
+    assert np.abs(p - q).max() < 3e-3          # MC noise ~2e-3
+
+
+def test_temperature_matches_mc_factor():
+    mu, V, D = _problem(n=8)
+    F, W = hermite_nodes(2)
+    p = race_probabilities(mu, V=V, D=D, F=F, W=W, temperature=0.5)
+    q = _mc_softmin(mu, V, D, 0.5)
+    assert np.abs(p - q).max() < 3e-3
+
+
+def test_temperature_limits():
+    mu, _, _ = _problem(n=10)
+    hard = race_probabilities(mu)
+    warm = race_probabilities(mu, temperature=0.05)
+    hot = race_probabilities(mu, temperature=25.0)
+    assert np.abs(warm - hard).max() < 0.02    # tau -> 0 approaches hard race
+    assert np.abs(hot - 0.1).max() < 0.02      # tau -> inf flattens to uniform
+
+
+def test_temperature_roundtrip():
+    mu, V, D = _problem(n=15)
+    p = race_probabilities(mu, V=V, D=D, temperature=0.5)
+    mu_hat = abilities_from_race(p, V=V, D=D, temperature=0.5)
+    assert np.abs(mu_hat - mu).max() < 5e-3

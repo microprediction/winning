@@ -81,7 +81,13 @@ race_probabilities(mu)                       # the classic independent race
 race_probabilities(mu, V=V, D=D)             # factor probit
 race_probabilities(mu, base="gumbel")        # Luce / softmax, exactly
 race_probabilities(mu, V=V, base="gumbel")   # correlated softmax
+race_probabilities(mu, temperature=0.7)      # E[softmin(X/tau)]: soft credit
 ```
+
+Temperature is exact, not approximate: by the Gumbel-argmin identity the
+softmin expectation equals the hard race with each base convolved with
+the tau-scaled Gumbel kernel, so the same engine serves it. It is not
+identifiable from a single race, so inversion holds it fixed.
 
 Arbitrary densities (skewed, multimodal, empirical) run through custom
 bases or `winning.thurstone` — see the module docs and `research/demos/`.
