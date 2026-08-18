@@ -38,11 +38,11 @@ variance of the CV estimator vs plain Sobol at matched lattice-pass
 counts; report effective speedup and the correlation achieved; check
 the optimal temperature of the control is interior (it may be).
 
-## Thurstone demos migration (Peter, 2026-08-18)
-Transfer the thurstone examples (laplacian_newton_demo,
-diffeomorphism_demo, dynamic_calibration_demo, kalman_tracker_demo,
-global_calibration family, ...) into winning/research/demos - but
-CURATED, not dumped ("it could clutter"): one demo per concept,
-self-contained, rewritten against winning.thurstone / winning.factor
-imports, indexed in the demos README. Anything redundant with an
-existing demo or experiment stays in thurstone's git history.
+## Thurstone demos migration (status: undecided, 2026-08-18)
+Peter mused about transferring the thurstone examples into
+winning/research/demos, then pulled back ("maybe leave some in thurstone
+for now... I don't know"). Current default: LEAVE THEM IN THURSTONE.
+They keep working there against the shim, nothing is lost, and
+winning/research/demos stays uncluttered. If migration ever happens the
+agreed principle is curation, not dumping: one demo per concept,
+rewritten against winning imports, filed under demos/siam2021/.
