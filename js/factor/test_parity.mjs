@@ -49,4 +49,18 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   check("independent gumbel vs closed-form Luce", ind.p, ex.map((v) => v / tot), 1e-9);
 }
 
+
+
+// tabulated bases (skew-normal alpha=3, Student-t nu=4) vs scipy exact
+{
+  const B = JSON.parse(readFileSync(new URL("./test_vectors_bases.json", import.meta.url)));
+  const bp = B.problem, bh = B.hermite;
+  for (const name of ["skew", "t4"]) {
+    const fw = winProbabilitiesFactor(bp.mu, bp.V, bp.D, bh.F, bh.W, { base: name });
+    check(`${name} forward shares vs scipy`, fw.p, B.expected[name], 2e-6);
+    const hat = abilitiesFromProbabilitiesFactor(fw.p, bp.V, bp.D, bh.F, bh.W, { base: name });
+    check(`${name} calibration roundtrip`, hat, bp.mu, 1e-3);
+  }
+}
+
 process.exit(failures ? 1 : 0);

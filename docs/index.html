@@ -16,16 +16,17 @@
   <link rel="stylesheet" href="./academic.css" />
   <style>
     .fitter { border: 1px solid #ddd; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.5rem 0; }
-    .fit-stage { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
-    .fit-controls { flex: 1 1 260px; }
-    .fit-plot-wrap { flex: 1 1 320px; }
-    .fit-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.35rem 0; }
-    .fit-row label { display: flex; align-items: center; gap: 0.6rem; flex: 1; font-size: 0.9rem; }
-    .fit-row input[type="range"] { flex: 1; min-width: 90px; }
-    .fit-val { font-variant-numeric: tabular-nums; font-size: 0.9rem; width: 3.4em; text-align: right; }
-    .fit-base { flex: none !important; font-size: 0.9rem; }
+    .fit-cards { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.8rem 0; }
+    .fit-card { flex: 1 1 120px; background: #f4f4fb; border-radius: 8px;
+      padding: 0.55rem 0.7rem; text-align: center; font-size: 0.82rem; }
+    .fit-card .nm { font-weight: 600; margin-bottom: 0.15rem; }
+    .fit-card input[type="range"] { width: 100%; margin: 0.1rem 0 0; }
+    .fit-card .lab { color: #555; font-variant-numeric: tabular-nums; }
+    .fit-card .pct { font-weight: 700; font-size: 1.1rem; color: #4b4bd8;
+      margin-top: 0.2rem; font-variant-numeric: tabular-nums; }
+    .fit-row { display: flex; align-items: center; gap: 0.8rem; margin: 0.35rem 0; }
+    .fit-base { font-size: 0.9rem; }
     .legend { font-size: 0.9rem; color: #444; }
-    .fit-swatch { width: 0.75em; height: 0.75em; border-radius: 50%; display: inline-block; flex: none; }
   </style>
 </head>
 <body>
@@ -58,30 +59,24 @@
       race.</p>
 
     <div class="fitter">
-      <h2 style="margin-top:0">Fit a correlated race</h2>
-      <p class="legend">Six runners in two camps; each camp shares a luck factor.
-        Drag the observed win shares and the correlation, and the engine inverts
-        the shares to standalone abilities live in your browser — the same
-        calibration the Python package ships, at machine-precision parity. The
-        curves are the fitted performance densities (switch the runners to Gumbel
-        and they skew). Below them, hollow dots pretend the runners are
-        independent and filled dots admit the correlation: a runner whose camp is
-        strong is better than its share suggests.</p>
-      <div class="fit-stage">
-        <div class="fit-controls" id="fit-controls">
-          <div class="fit-row"><label>within-camp correlation
-            <input type="range" id="fit-rho" min="0" max="0.8" step="0.02" value="0.6" /></label>
-            <span class="fit-val" id="fit-rho-val"></span></div>
-          <div class="fit-row"><label style="flex:none">runners</label>
-            <label class="fit-base"><input type="radio" name="fit-base" value="normal" checked />normal</label>
-            <label class="fit-base"><input type="radio" name="fit-base" value="gumbel" />Gumbel</label></div>
-          <div id="fit-sliders"></div>
-        </div>
-        <div class="fit-plot-wrap">
-          <svg id="fit-plot" viewBox="0 0 460 320" style="width:100%;aspect-ratio:460/320;display:block"></svg>
-          <p class="legend" id="fit-note"></p>
-        </div>
+      <h2 style="margin-top:0">The model, live</h2>
+      <p class="legend">Six runners, one shared luck factor; whichever draws the
+        smallest performance wins. Drag each runner's ability and factor
+        loading, pick the noise distribution, and the win probabilities update
+        live — computed in your browser by the factor lattice algorithm this
+        package ships, at verified parity with the Python. Same-sign loadings
+        are teammates, opposite signs rivals; zero loadings recover the
+        independent race, where Gumbel noise reproduces softmax exactly.</p>
+      <div class="fit-cards" id="fit-cards"></div>
+      <div class="fit-row" style="justify-content:center">
+        <span class="legend">noise:</span>
+        <label class="fit-base"><input type="radio" name="fit-base" value="normal" checked />normal</label>
+        <label class="fit-base"><input type="radio" name="fit-base" value="gumbel" />Gumbel</label>
+        <label class="fit-base"><input type="radio" name="fit-base" value="skew" />skew-normal</label>
+        <label class="fit-base"><input type="radio" name="fit-base" value="t4" />t&#8324;</label>
       </div>
+      <svg id="fit-plot" viewBox="0 0 940 330" style="width:100%;aspect-ratio:940/330;display:block"></svg>
+      <p class="legend" id="fit-note"></p>
     </div>
 
     <div class="callout">
@@ -181,52 +176,62 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
   </main>
 
   <script type="module">
-    import { abilitiesFromProbabilitiesFactor } from "./assets/js/factor_race.mjs";
+    import { winProbabilitiesFactor, logndtr } from "./assets/js/factor_race.mjs";
     window.addEventListener("error", (e) => {
       const n = document.getElementById("fit-note");
       if (n) n.textContent = "Demo error: " + e.message;
     });
-    // 8-node Gauss-Hermite for a standard normal factor: display-grade
-    // (max ability error ~1e-4 vs the 12-node, 501-point reference)
-    const GH_F = [-4.1445471861258945,-2.802485861287542,-1.6365190424351082,
-      -0.5390798113513752,0.5390798113513752,1.6365190424351082,
-      2.802485861287542,4.1445471861258945];
-    const GH_W = [1.126145383753679e-04,9.635220120788263e-03,1.172399076617590e-01,
-      3.730122576790774e-01,3.730122576790774e-01,1.172399076617590e-01,
-      9.635220120788263e-03,1.126145383753679e-04];
-    // two independent camp factors: tensor grid
-    const F2 = [], W2 = [];
-    for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) {
-      F2.push([GH_F[a], GH_F[b]]); W2.push(GH_W[a] * GH_W[b]);
+    // 12-node Gauss-Hermite for the single common factor
+    const GH_F = [-5.500901704467749,-4.2718258479322815,-3.2237098287700974,
+      -2.2594644510007993,-1.3403751971516167,-0.444403001944139,
+      0.444403001944139,1.3403751971516167,2.2594644510007993,
+      3.2237098287700974,4.2718258479322815,5.500901704467749];
+    const GH_W = [1.4999271676371663e-07,4.8371849225906334e-05,2.2033806875331979e-03,
+      2.9116687912364190e-02,1.4696704804533001e-01,3.2166436151283001e-01,
+      3.2166436151283001e-01,1.4696704804533001e-01,2.9116687912364190e-02,
+      2.2033806875331979e-03,4.8371849225906334e-05,1.4999271676371663e-07];
+    const F1 = GH_F.map((f) => [f]), W1 = GH_W;
+    // standardized pdfs, for drawing the marginal densities
+    const SQ2PI = Math.sqrt(2 * Math.PI), EULER = 0.5772156649015329;
+    const GC = Math.PI / Math.sqrt(6);
+    const SK_A = 3, SK_D = SK_A / Math.sqrt(1 + SK_A * SK_A);
+    const SK_M = SK_D * Math.sqrt(2 / Math.PI), SK_S = Math.sqrt(1 - SK_M * SK_M);
+    const PDFS = {
+      normal: (z) => Math.exp(-0.5 * z * z) / SQ2PI,
+      gumbel: (z) => { const u = z * GC - EULER; return GC * Math.exp(u - Math.exp(u)); },
+      skew: (z) => { const u = SK_M + SK_S * z;
+        return SK_S * 2 * Math.exp(-0.5 * u * u) / SQ2PI * Math.exp(logndtr(SK_A * u)); },
+      t4: (z) => Math.SQRT2 * (3 / 8) * Math.pow(1 + z * z / 2, -2.5),
+    };
+    const N = 6;
+    const COLORS = ["#4c72b0", "#dd8452", "#55a868", "#c44e52", "#8172b3", "#937860"];
+    const mu = [-1.0, -0.4, 0.0, 0.3, 0.9, 1.4];
+    const load = [0.7, 0.7, 0.0, 0.0, -0.7, -0.7];
+    const cards = document.getElementById("fit-cards");
+    const cardEls = [];
+    for (let i = 0; i < N; i++) {
+      const c = document.createElement("div");
+      c.className = "fit-card";
+      c.innerHTML =
+        `<div class="nm" style="color:${COLORS[i]}">R${i + 1}</div>` +
+        `<input type="range" class="mu" min="-2" max="2" step="0.05" value="${mu[i]}" />` +
+        `<div class="lab mu-lab"></div>` +
+        `<input type="range" class="ld" min="-0.9" max="0.9" step="0.05" value="${load[i]}" />` +
+        `<div class="lab ld-lab"></div>` +
+        `<div class="pct"></div>`;
+      cards.appendChild(c);
+      c.querySelector(".mu").addEventListener("input", (e) => { mu[i] = +e.target.value; schedule(); });
+      c.querySelector(".ld").addEventListener("input", (e) => { load[i] = +e.target.value; schedule(); });
+      cardEls.push(c);
     }
-    const N = 6, CAMP = [0, 0, 0, 1, 1, 1];
-    const COLORS = ["#c44e52", "#c44e52", "#c44e52", "#1f77b4", "#1f77b4", "#1f77b4"];
-    const START = [30, 18, 12, 20, 12, 8];
-    const sliders = document.getElementById("fit-sliders");
-    const share = START.slice();
-    START.forEach((v, i) => {
-      const row = document.createElement("div");
-      row.className = "fit-row";
-      row.innerHTML = `<span class="fit-swatch" style="background:${COLORS[i]}"></span>` +
-        `<label>runner ${i} <input type="range" min="1" max="60" step="1" value="${v}" /></label>` +
-        `<span class="fit-val" id="fit-sh-${i}"></span>`;
-      sliders.appendChild(row);
-      row.querySelector("input").addEventListener("input", (e) => {
-        share[i] = +e.target.value; schedule();
-      });
-    });
-    const rhoIn = document.getElementById("fit-rho");
-    rhoIn.addEventListener("input", schedule);
     for (const r of document.querySelectorAll('input[name="fit-base"]'))
       r.addEventListener("change", schedule);
     const svg = document.getElementById("fit-plot");
-    const note = document.getElementById("fit-note");
     const S = (tag, attrs, parent) => {
       const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
       for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
       parent.appendChild(el); return el;
     };
-    const warm = {};
     let pending = false;
     function schedule() {
       if (pending) return;
@@ -234,70 +239,55 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
       requestAnimationFrame(() => { pending = false; redraw(); });
     }
     function redraw() {
-      const rho = +rhoIn.value;
       const base = document.querySelector('input[name="fit-base"]:checked').value;
-      document.getElementById("fit-rho-val").textContent = rho.toFixed(2);
-      const tot = share.reduce((a, b) => a + b, 0);
-      const p = share.map((v) => v / tot);
-      p.forEach((v, i) => {
-        document.getElementById(`fit-sh-${i}`).textContent = (100 * v).toFixed(0) + "%";
-      });
-      const s = Math.sqrt(rho);
-      const V = CAMP.map((c) => (c === 0 ? [s, 0] : [0, s]));
-      const D = CAMP.map(() => 1 - rho);
-      const muC = abilitiesFromProbabilitiesFactor(p, V, D, F2, W2,
-        { base, points: 301, tol: 3e-4, mu0: warm[base + "C"] });
-      const muI = abilitiesFromProbabilitiesFactor(
-        p, CAMP.map(() => [0]), CAMP.map(() => 1), [[0]], [1],
-        { base, points: 301, tol: 3e-4, mu0: warm[base + "I"] });
-      warm[base + "C"] = muC; warm[base + "I"] = muI;
-      const aC = muC.map((m) => -m), aI = muI.map((m) => -m);   // display: higher is better
-      const aLo = Math.min(...aC, ...aI), aHi = Math.max(...aC, ...aI);
-      const lo = aLo - 3.4, hi = aHi + 3.4;
-      const x = (v) => 8 + 444 * (v - lo) / (hi - lo);
+      const V = load.map((v) => [v]);
+      const D = load.map((v) => 1 - v * v);
+      const p = winProbabilitiesFactor(mu, V, D, F1, W1, { base, points: 301 }).p;
+      for (let i = 0; i < N; i++) {
+        cardEls[i].querySelector(".mu-lab").textContent = "\u03bc=" + mu[i].toFixed(2);
+        cardEls[i].querySelector(".ld-lab").textContent = "loading " + load[i].toFixed(2);
+        cardEls[i].querySelector(".pct").textContent = (100 * p[i]).toFixed(1) + "%";
+      }
+      // marginal densities: the base mixed over the factor, mean mu_i, sd 1
+      const pdf = PDFS[base];
+      const XL = -6, XR = 6, AX = 300, G = 200;
+      const x = (v) => 20 + 900 * (v - XL) / (XR - XL);
+      const dens = [];
+      let ymax = 0;
+      for (let i = 0; i < N; i++) {
+        const s = Math.sqrt(D[i]);
+        const row = new Float64Array(G + 1);
+        for (let g = 0; g <= G; g++) {
+          const xv = XL + (XR - XL) * g / G;
+          let acc = 0;
+          for (let q = 0; q < GH_F.length; q++)
+            acc += GH_W[q] * pdf((xv - mu[i] - load[i] * GH_F[q]) / s) / s;
+          row[g] = acc;
+          if (acc > ymax) ymax = acc;
+        }
+        dens.push(row);
+      }
       svg.innerHTML = "";
-      // fitted performance densities of -X_i (higher is better), thurstone style
-      const c = Math.PI / Math.sqrt(6), EULER = 0.5772156649015329;
-      const pdf = base === "gumbel"
-        ? (z) => { const u = -z * c - EULER; return c * Math.exp(u - Math.exp(u)); }
-        : (z) => Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
-      const TOP = 218, PEAK = 190;
-      const ymax = base === "gumbel" ? c * Math.exp(-1) : pdf(0);
+      for (const tick of [-5, 0, 5]) {
+        S("line", { x1: x(tick), y1: 12, x2: x(tick), y2: AX, stroke: "#eee" }, svg);
+        S("text", { x: x(tick), y: AX + 16, "text-anchor": "middle",
+          fill: "#888" }, svg).textContent = tick;
+      }
+      S("line", { x1: x(XL), y1: AX, x2: x(XR), y2: AX, stroke: "#999" }, svg);
+      S("text", { x: x(0), y: AX + 30, "text-anchor": "middle", fill: "#666" },
+        svg).textContent = "performance (lower = better)";
       for (let i = 0; i < N; i++) {
         let d = "";
-        for (let g = 0; g <= 140; g++) {
-          const xv = lo + (hi - lo) * g / 140;
-          const yv = TOP - PEAK * pdf(xv - aC[i]) / ymax;
+        for (let g = 0; g <= G; g++) {
+          const xv = XL + (XR - XL) * g / G;
+          const yv = AX - (AX - 20) * dens[i][g] / ymax;
           d += (g ? "L" : "M") + x(xv).toFixed(1) + " " + yv.toFixed(1);
         }
-        S("path", { d: d + `L${x(hi).toFixed(1)} ${TOP}L${x(lo).toFixed(1)} ${TOP}Z`,
-          fill: COLORS[i], opacity: 0.13 }, svg);
-        S("path", { d, fill: "none", stroke: COLORS[i], "stroke-width": 1.5,
-          opacity: 0.8 }, svg);
+        S("path", { d: d + `L${x(XR)} ${AX}L${x(XL)} ${AX}Z`,
+          fill: COLORS[i], opacity: 0.12 }, svg);
+        S("path", { d, fill: "none", stroke: COLORS[i], "stroke-width": 1.6,
+          opacity: 0.85 }, svg);
       }
-      S("line", { x1: 8, y1: TOP, x2: 452, y2: TOP, stroke: "#bbb" }, svg);
-      // ability strip below, on the same axis: hollow = independent fit
-      const rowH = (320 - TOP - 6) / N;
-      for (let i = 0; i < N; i++) {
-        const y = TOP + 10 + (i + 0.5) * rowH;
-        S("line", { x1: x(aI[i]), y1: y, x2: x(aC[i]), y2: y,
-          stroke: COLORS[i], "stroke-width": 2, opacity: 0.45 }, svg);
-        S("circle", { cx: x(aI[i]), cy: y, r: 4.5, fill: "#fff",
-          stroke: COLORS[i], "stroke-width": 1.8 }, svg);
-        S("circle", { cx: x(aC[i]), cy: y, r: 4.5, fill: COLORS[i] }, svg);
-      }
-      // note the most interesting consequence: a reranking if one exists
-      const orderC = [...Array(N).keys()].sort((a, b) => aC[b] - aC[a]);
-      const orderI = [...Array(N).keys()].sort((a, b) => aI[b] - aI[a]);
-      let flip = null;
-      for (let r = 0; r < N; r++) if (orderC[r] !== orderI[r]) { flip = [orderI[r], orderC[r]]; break; }
-      const luce = base === "gumbel" && rho === 0
-        ? " With independent Gumbel runners this is exactly Luce: ability is log share." : "";
-      note.textContent = flip
-        ? `Admitting the correlation reranks: runner ${flip[1]} moves ahead of ` +
-          `runner ${flip[0]} despite the shares, because its camp is stronger.` + luce
-        : "Same shares, same ranking — but the spacing of abilities changes " +
-          "with the correlation. Push it higher or make the camps more uneven." + luce;
     }
     redraw();
   </script>

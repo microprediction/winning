@@ -94,6 +94,58 @@ const BASES = {
   },
 };
 
+/* Bases without elementary survival functions are tabulated once on a
+ * fine grid (dx = 0.005): survival by cumulative trapezoid, slope by
+ * central differences, log-survival interpolated linearly (log-linear
+ * tails). Python parity vs scipy is ~1e-6, not machine precision. */
+function tabulatedBase(pdfStd, spans) {
+  const HALF = 40, NPTS = 16001, DX = 2 * HALF / (NPTS - 1);
+  let g = null;
+  const build = () => {
+    const f = new Float64Array(NPTS), ls = new Float64Array(NPTS);
+    for (let k = 0; k < NPTS; k++) f[k] = pdfStd(-HALF + k * DX);
+    let C = 0;
+    const cum = new Float64Array(NPTS);
+    for (let k = 1; k < NPTS; k++) { C += 0.5 * (f[k - 1] + f[k]) * DX; cum[k] = C; }
+    for (let k = 0; k < NPTS; k++)
+      ls[k] = Math.log(Math.max((C - cum[k]) / C, 1e-300));
+    const fp = new Float64Array(NPTS);
+    for (let k = 1; k < NPTS - 1; k++) fp[k] = (f[k + 1] - f[k - 1]) / (2 * DX);
+    g = { f, ls, fp };
+  };
+  return {
+    spans,
+    eval(z, sd) {
+      if (!g) build();
+      let t = (z + HALF) / DX;
+      if (t < 0) t = 0;
+      if (t > NPTS - 2) t = NPTS - 2;
+      const k = Math.floor(t), a = t - k;
+      const lerp = (arr) => arr[k] + a * (arr[k + 1] - arr[k]);
+      return { ls: lerp(g.ls), fx: lerp(g.f) / sd, ds: -lerp(g.fp) / (sd * sd) };
+    },
+  };
+}
+
+const PHI = (z) => Math.exp(logndtr(z));
+{
+  // skew-normal, shape alpha = 3, standardized to mean 0 variance 1
+  const ALPHA = 3;
+  const delta = ALPHA / Math.sqrt(1 + ALPHA * ALPHA);
+  const m = delta * Math.sqrt(2 / Math.PI);
+  const s = Math.sqrt(1 - m * m);
+  BASES.skew = tabulatedBase(
+    (z) => { const u = m + s * z;
+      return s * 2 * Math.exp(-0.5 * u * u) / SQRT_2PI * PHI(ALPHA * u); },
+    [12, 12]);
+  // Student-t, nu = 4, standardized (sd = sqrt(2))
+  const SQ2 = Math.SQRT2;
+  BASES.t4 = tabulatedBase(
+    (z) => { const u = SQ2 * z;
+      return SQ2 * (3 / 8) * Math.pow(1 + u * u / 4, -2.5); },
+    [12, 12]);
+}
+
 function condMeans(mu, V, F) {
   const Q = F.length, N = mu.length, K = F[0].length;
   const M = [];
