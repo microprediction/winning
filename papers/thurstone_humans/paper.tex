@@ -25,7 +25,7 @@ random-utility class\footnotemark[2], and re-running a Gaussian contest among th
 survivors, which is Case V. Everything between them costs a fitted number. That
 renormalization fails under restriction has been known since Clarke's constant-ratio rule
 of 1957; what has not been done is to score the two defaults against each other out of
-sample, against a null in which the axiom holds exactly. We do so on thirty
+sample, against a null in which the axiom holds exactly. We do so on thirty-three
 population comparisons. The contest wins where the alternatives are distinct and
 unordered, and loses on a perceptual continuum, where a survivor has a near-substitute, or
 where removal changes the task.
@@ -212,7 +212,7 @@ that thinner or heavier tails contract more.
 
 \section{Scoreboard}
 
-Thirty comparisons are reported below, each one a population whose full-menu shares
+Thirty-three comparisons are reported below, each one a population whose full-menu shares
 calibrate both maps and whose restricted-menu choices score them. A comparison is a win
 for the race when its gain exceeds the gain a renormalizing population would produce,
 with a Monte Carlo tail frequency of $0.05$ or less, a loss when renormalization exceeds
@@ -245,11 +245,14 @@ News slates & observed impressions & $.016$ & win \\
 Consumer goods, experiment 1 & observed menus & $.005$ & win \\
 Gambles, high arithmetic cost & observed menus & $.035$ & win \\
 US state ballots 2024 & observed ballots & $.005$ & win \\
+Letters, five to three, $\{F,H,X\}$ & observed menus & $.005$ & win \\
+Letters, five to three, $\{A,E,X\}$ & observed menus & $.010$ & win \\
 Sounds, eight to four, spread sets & observed menus & $\le .005$ & win $\times 2$ \\
 Wikipedia links & observed removals & $.005$ & win\footnotemark[1] \\
 Consumer goods, experiment 2 & observed menus & $.129$ & draw \\
 Gambles, medium arithmetic cost & observed menus & $.124$ & draw \\
 Gambles, low arithmetic cost & observed menus & $.667$ & draw \\
+Letters, five to four, $\{A,E,F,H\}$ & observed menus & $.129$ & draw \\
 \midrule
 Sounds, eight to four, similar set & observed menus & $1.000$ & loss \\
 Tones, narrow spacing, ten to six & observed menus & --- & loss \\
@@ -258,7 +261,7 @@ Tones, wide spacing, ten to six & observed menus & --- & loss \\
 Tones, wide spacing, ten to eight & observed menus & --- & loss \\
 \bottomrule
 \end{tabular}
-\caption{Twenty-one wins, four draws, five losses. The first block reads subset choice off a
+\caption{Twenty-three wins, five draws, five losses. The first block reads subset choice off a
 complete ranking; the second and third observe it. Tail frequencies are floored at $1/201$
 by two hundred replicates. The tone matrices are participant-averaged and between-subjects,
 so there is nothing to resample and the losses are point comparisons. Forced-choice
@@ -538,6 +541,81 @@ with the fitted training models held fixed, so unlike Table~\ref{tab:menus} they
 calibration uncertainty and are too narrow, most seriously in the two smallest rows.}
 \label{tab:heldout}
 \end{table}
+
+\section{How much of the menu has to go}
+\label{sec:gainsize}
+
+Before the next dataset, one regularity is needed to read it. Splitting the held-out
+predictions of Section~\ref{sec:rankings} by the size of the surviving menu shows the gain
+concentrated where most of the menu has been withdrawn.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Dataset & $|T|=2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
+\midrule
+Sushi & $+.0412$ & $+.0263$ & $+.0150$ & $+.0081$ & $+.0040$ & $+.0017$ & $+.0005$ & $+.0000$ & $-.0000$ \\
+Jester file 3 & $+.0064$ & $+.0050$ & $+.0033$ & $+.0020$ & $+.0012$ & $+.0006$ & $+.0003$ & $+.0001$ & $-.0000$ \\
+Jester file 1 & $+.0053$ & $+.0041$ & $+.0026$ & $+.0016$ & $+.0010$ & $+.0005$ & $+.0003$ & $+.0001$ & $+.0000$ \\
+GSS socialization & $+.0130$ & $+.0011$ & $+.0004$ & $-.0000$ & & & & & \\
+Political goals & $+.0079$ & $+.0071$ & $+.0000$ & & & & & & \\
+Dots & $+.0025$ & $+.0003$ & $-.0000$ & & & & & & \\
+Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
+\bottomrule
+\end{tabular}
+\caption{Held-out gain by the size of the surviving menu, for a representative seven of the
+twelve ranking collections. The pairwise gain is two to four times the all-subsets
+aggregate, and the last entry in each row is exactly zero because nothing has been removed
+and the two maps must coincide, which is a pipeline check rather than a finding. The
+aggregate reported elsewhere in this paper is therefore a conservative estimand, kept as the
+headline because it is fixed in advance rather than chosen after the fact. Occupational
+prestige is the one non-monotone row and is omitted here.}
+\label{tab:gainsize}
+\end{table}
+
+\section{The rule's own founding dataset}
+\label{sec:townsend}
+
+Townsend and Landon \cite{townsendlandon1982} built the experiment that this paper would
+have designed. Four subjects identified briefly displayed block capitals, in blocks with the
+master response set $\{A,E,F,H,X\}$ and blocks with $\{A,E,F,H\}$, $\{A,E,X\}$ and
+$\{F,H,X\}$, counterbalanced, $240$ trials per row. Responses were spoken letter names, so
+the labels are identical across menus by construction. They published the full confusion
+matrices per subject, which is why the dataset is still usable forty-four years later.
+
+It is the cleanest calibration in the paper for a reason none of the others share.
+Calibration row and target row come from the \emph{same subject} in different blocks, so
+there is no population-heterogeneity confound of the kind every ranking collection carries,
+and the aggregation argument of Appendix~\ref{sec:mixture} is not available as an
+explanation of any gain found here.
+
+Over $38$ restricted rows and $9{,}120$ held-out trials, renormalization scores $0.9454$ and
+the race $0.9412$, a gain of $+0.0042$ with a row bootstrap of $[+0.0022, +0.0064]$, against
+a fitted-Luce null median of $-0.0011$, so the excess is $+0.0053$ at $p = 0.005$. The
+subsets give $+0.0006$ $[-0.0002, +0.0015]$ for $\{A,E,F,H\}$, $+0.0040$
+$[-0.0003, +0.0079]$ for $\{A,E,X\}$ and $+0.0093$ $[+0.0051, +0.0141]$ for $\{F,H,X\}$.
+That ordering is mostly the removal count: the first subset withdraws one letter and the
+other two withdraw two, and Table~\ref{tab:gainsize} shows the gain growing with how much is
+removed and vanishing when nothing is. The unconfounded comparison is between the
+two subsets that each remove a similar pair and retain the other, $+0.0040$ against
+$+0.0093$; those designs are structurally symmetric, so we do not read a similarity story
+into the difference.
+
+What the row-level output does show is the limit of a parameter-free correction. For subject
+one, stimulus $A$, subset $\{A,E,X\}$, the observed, renormalized and raced shares are
+$0.621 / 0.672 / 0.635$ on $A$, $0.217 / 0.129 / 0.149$ on $E$ and $0.163 / 0.199 / 0.217$
+on $X$. The race corrects the favourite downward and the near-substitute upward, both in the
+right direction and the second far too little, and moves the dissimilar letter the wrong way.
+It wins because the dominant terms improve. Townsend and Landon diagnosed their residual as
+mass concentrating onto the surviving near-substitute instead of spreading, and Case V has no
+covariance to represent that, so the residual survives. The claim this dataset supports is
+that a parameter-free Gaussian recovers part of a sixty-year-old discrepancy, not that it
+explains it. Lee \cite{lee1968} proposed exactly this comparison analytically in 1968,
+observing that detection theory and the constant-ratio rule diverge most for unidimensional
+stimuli and that the gap could serve in diagnosis; what is added here is the out-of-sample
+follow-through.
 
 \section{Where the difference lives}
 \label{sec:where}
@@ -1044,7 +1122,6 @@ Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets
 Hodge and Pollack & auditory, unidimensional & nested & library access \\
 Lacouture et al. & line lengths & nested & library access \\
 Kent and Lamberts & dot separation & $N = 2,4,6,8,10$ & library access \\
-Townsend and Landon \cite{townsendlandon1982} & letters & five, three subsets & printed; digitize \\
 Rouder lab, unpublished & line lengths & twelve, nested & raw trials, open \\
 Negoias et al. & odor descriptors & $16 \to 8 \to 4$ & never published \\
 J\"ager et al. & flavour terms & nested, $n = 735$ & library access \\
@@ -1052,9 +1129,8 @@ H\"orberg et al. & odor naming & free, then cued list & data request \\
 \bottomrule
 \end{tabular}
 \caption{Restriction experiments not scored in this paper. ``Printed'' means the matrices
-appear in the article and need transcription; Townsend and Landon's are proportions to three
-decimals over $240$ trials per cell, so multiplying by $240$ checks the transcription against
-integers. The Rouder laboratory data is unpublished but public, with a master set, nested
+appear in the article and need transcription, as Townsend and Landon's were for
+Section~\ref{sec:townsend}. The Rouder laboratory data is unpublished but public, with a master set, nested
 subsets and stimulus and response logged as global indices, which is the property that makes
 labels comparable across menus. Four large odor corpora are open and usable but carry a fixed
 four-descriptor menu, so they calibrate and cannot score.}
@@ -1064,9 +1140,9 @@ four-descriptor menu, so they calibrate and cannot score.}
 Two features of the table bear on how much the answer above should be trusted. Every entry
 would enlarge the evidence on the winning side of the boundary or the losing one, and none
 of them is a preference task, so the corpus scored here is not representative of the
-literature by domain. And the two entries that need only transcription are the two oldest,
-which is a reasonable summary of the state of this question: the data has been on the ground
-since 1960.
+literature by domain. And the one entry that needs only transcription is the oldest of all, which is
+a reasonable summary of the state of this question: the data has been on the ground since
+1960.
 
 \begin{thebibliography}{99}
 
@@ -1213,6 +1289,11 @@ Eric W. Holman and A. A. J. Marley.
 Stimulus and response measurement.
 In E. C. Carterette and M. P. Friedman, editors, \emph{Handbook of Perception, Volume II:
 Psychophysical Judgment and Measurement}, chapter 7, pages 173--213. Academic Press, 1974.
+
+\bibitem{lee1968}
+Wayne Lee.
+Detection theory, micromatching, and the constant-ratio rule.
+\emph{Perception \& Psychophysics}, 4(4):217--219, 1968.
 
 \bibitem{lucesuppes1965}
 R. Duncan Luce and Patrick Suppes.

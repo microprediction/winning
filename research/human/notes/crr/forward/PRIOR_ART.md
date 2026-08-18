@@ -294,6 +294,9 @@ without the Gaussian-versus-renormalization forecast framing; **(E)** irrelevant
 | Kornbrot, Georgiou & Page 2018, PeerJ preprint | B | S2 API record (full text 403) | Real probit-vs-logit comparison, but binary choice only and goodness-of-fit, not menu-restriction forecasting. |
 | Ashby, Lee & Balakrishnan 1992, Math Soc Sci 23 | B (title-level only) | S2 API record; abstract elided | "Comparing the biased choice model and multidimensional decision bound models of identification" — Gaussian decision-bound versus Luce on identification data, but both fitted, and no restricted-menu arm found. **Not verified beyond the title; see unresolved leads.** |
 | del Castillo 2020, Transportmetrica A | B/E | S2 API record | Gumbel-marginal copula RUM fitted to interurban trip data, compared to nested logit. All Gumbel-family, all fitted. |
+| **Horowitz 1980, *Transportation Research B* 14** | C, title-level only | S2 API record, doi 10.1016/0191-2615(80)90013-2; abstract elided | "The accuracy of the multinomial logit model as an approximation to the multinomial probit model of travel demand" — **the closest econometrics ancestor**: it asks directly how much Gaussian and Gumbel predictions of choice shares diverge. Almost certainly analytic/simulation rather than a restricted-menu forecast scored on data, but this was **not verified** — see unresolved leads. 79 citations. |
+| Horowitz 1981, *Transportation Science* 15:153 | D, title-level only | S2 API record, doi 10.1287/trsc.15.2.153; abstract elided | "Testing the Multinomial Logit Model against the Multinomial Probit Model without Estimating the Probit Parameters" — a specification test, not a forecasting comparison. |
+| Bell, Keeney & Little 1975, *JMR* 12 | C | Crossref record, doi 10.2307/3150435 | "A Market Share Theorem" — the axiomatization behind the marketing attraction model, i.e. renormalization as a market-share axiom. Theory; no Gaussian competitor, no out-of-sample subset test. |
 | Dagsvik 1994 *Econometrica*; Dagsvik 2014 *Theory and Decision* | C | Crossref records | "What independent random utility representations are equivalent to the IIA assumption?" — characterisation theorems, no forecast. |
 | Marley 1982, Math Soc Sci | C | Crossref record; abstract elided | Whether all choice probabilities are functions of the binary ones — the theoretical relative of the question, no data. |
 | Chakrabarti 1969, *Econometrica* | C | Crossref record | Note on the relation between binary and multiple choice probabilities. |
@@ -339,10 +342,22 @@ the reason is recorded so the next pass starts here rather than repeating the se
    elided. Its content was never verified in this sweep. Morgan (1972) separately compared
    normal and logistic models for ROC fitting, so Morgan is the one seed author who
    plausibly touched the Gaussian arm.
-6. **The marketing "attraction model" thread** (Bell, Keeney & Little 1975 market-share
-   theorem; Cooper & Nakanishi) — whether anyone there scores subset-share predictions
-   against proportional renormalization out of sample.
-7. **The m-alternative-forced-choice thread.** Hacker & Ratcliff (1979) "A revised table of
+6. **Horowitz, J. L. (1980). "The accuracy of the multinomial logit model as an approximation
+   to the multinomial probit model of travel demand", *Transportation Research Part B* 14
+   (doi 10.1016/0191-2615(80)90013-2), 79 citations, and Horowitz (1981), *Transportation
+   Science* 15:153 (doi 10.1287/trsc.15.2.153).** Both abstracts are elided by the publisher
+   and neither full text was obtained. **This is the most important unresolved item on the
+   econometrics side**, because the 1980 title describes precisely the question of how far
+   Gaussian and Gumbel share predictions diverge. It is very likely an analytic/simulation
+   approximation-error study rather than a scored out-of-sample restricted-menu forecast — but
+   that must be confirmed, not assumed, before the novelty claim is made in an economics
+   venue.
+7. **The marketing "attraction model" thread.** Bell, Keeney & Little (1975) "A Market Share
+   Theorem", *JMR* 12 (doi 10.2307/3150435) axiomatizes renormalization as a market-share
+   property; Cooper & Nakanishi's *Market-Share Analysis* (1988) is the standard treatment.
+   Whether anyone in that line scores subset-share predictions against proportional
+   renormalization out of sample was not established.
+8. **The m-alternative-forced-choice thread.** Hacker & Ratcliff (1979) "A revised table of
    d′ for M-alternative forced choice", *Perception & Psychophysics* (doi
    10.3758/bf03208311), and Clarke (1959) "Proportion of correct responses as a function of
    the number of stimulus-response alternatives", JASA (doi 10.1121/1.1930396). This
@@ -392,6 +407,13 @@ empirical Gaussian-versus-renormalization forecast.
 - Marley random utility models, choice probabilities as functions of binary probabilities
 - similarity between stimuli, experimental test of the Luce and Restle choice models
 - m-alternative forced choice: revised d′ tables; proportion correct versus number of alternatives
+- market share theorem / attraction model (Bell, Keeney & Little; Cooper & Nakanishi)
+- multinomial probit versus multinomial logit forecasting mode shares when a mode is removed
+- accuracy of logit as an approximation to probit; nested logit versus probit forecasting accuracy
+- red bus / blue bus problem with probit prediction
+- predicting the share of a new alternative; external validity of discrete choice experiments
+- cannibalization and share reallocation, logit versus probit
+- validation of choice model predictions on holdout choice sets (conjoint)
 - arXiv: `all:"constant ratio rule" AND all:choice`; `abs:"independence of irrelevant
   alternatives" AND abs:probit`; `abs:Thurstone AND abs:Gumbel`; `abs:"choice set" AND
   abs:probit AND abs:logit`; `abs:Gaussian AND abs:"choice set" AND abs:renormalization`;
@@ -406,8 +428,21 @@ menu-restriction forecasting; nothing there scores a Gaussian map against renorm
 on held-out menus.
 
 **How much weight the negative deserves.** High for the exact four-part conjunction, and
-for the psychology literature specifically, where the enumeration was complete and the two
-papers most likely to be prior art (Townsend & Landon 1982, Wills et al. 2000) were read in
-full text. Lower for econometrics, transportation and marketing, where the search was by
-keyword rather than by citation enumeration and where seven leads remain unresolved. The
-single largest hole is Takane & Shibayama (1992), which no online route reached.
+high for the **psychology** literature specifically: the forward citation enumeration was
+complete for three of the four seeds, the Luce 1959 citation set was filtered by full-text
+CRR phrasings (which is what surfaced the operant vein), the Yellott 1977 citation set was
+enumerated and filtered, and the two papers most likely to be prior art — Townsend & Landon
+1982 and Wills et al. 2000 — were both obtained and read in **full text**, including a
+targeted search of each for Gaussian/normal/probit/Case V/discriminal. Those two readings
+are what the verdict rests on.
+
+**Lower for econometrics, transportation and marketing.** That branch was searched by
+keyword only, never by citation enumeration, and publisher abstract elision defeated most
+verification: Horowitz 1980/1981, Gensch & Ghose 1997, Ashby/Lee/Balakrishnan 1992, Smith
+1992 and Marley 1982 were all characterised from titles and metadata rather than text. A
+reader should treat the econometrics negative as provisional. The two items most capable of
+overturning the verdict are **Takane & Shibayama (1992)**, which no online route reached at
+all, and **Horowitz (1980)**, whose title is the closest description anywhere of a
+Gaussian-versus-Gumbel share-prediction comparison.
+
+Both should be read from a library before the claim is made in print.

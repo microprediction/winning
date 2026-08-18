@@ -371,3 +371,24 @@ overall win as the weaker one.
 Transcription check: every row sum in both tables reproduces the printed total, with one
 exception where the printed TOTAL is wrong and the cells are right (J.K., condition 3,
 stimulus 1: cells sum to 33, printed total 23).
+
+## Townsend & Landon into the paper, with one reading corrected (2026-08-18)
+
+`notes/crr/RESULT_townsend1982.md` is now Section "The rule's own founding dataset". Pooled
++0.0042 [+0.0022, +0.0064], excess +0.0053, p = 0.005, on 38 rows and 9,120 held-out trials,
+reproduced from `townsend_rows.py`.
+
+CORRECTION to the result note's framing. It reads the subset ordering as "removing the odd
+letter out does essentially nothing, removing a near-substitute pair is where the race earns
+its keep". That comparison is confounded: {A,E,F,H} withdraws ONE letter while {A,E,X} and
+{F,H,X} withdraw TWO, and gain_by_size already shows gain rising with how much is removed and
+going to exactly zero when nothing is. The unconfounded pair is {A,E,X} at +0.0040 against
+{F,H,X} at +0.0093, and those two designs are structurally symmetric -- each removes a similar
+pair and retains the other -- so the difference is not a similarity story. The paper says this
+and claims no similarity effect from these subsets.
+
+The gain-by-size table is now in the paper as well, since that argument needs it.
+
+CITATION CORRECTION. The note `absolute_id/lee_1970.md` gives Lee as 1970, Perception &
+Psychophysics 7(4). The DOI it records, 10.3758/BF03206305, resolves at Crossref to 4(4):
+217-219, 1968. The paper cites Lee (1968). A correction is appended to the note.
