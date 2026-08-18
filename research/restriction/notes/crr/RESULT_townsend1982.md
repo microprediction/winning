@@ -62,7 +62,7 @@ sixty-year-old residual, not that it explains it.
 
 ## Prior art to acknowledge
 
-Lee (1970) proposed this comparison analytically -- detection theory and the CRR diverge
+Lee (1968) proposed this comparison analytically -- detection theory and the CRR diverge
 "particularly for the univariate distributions, and this corresponds to empirical findings
 that the CRR holds better for multidimensional than for unidimensional stimuli," with the
 gap usable "in diagnosis of the basis of empirical confusion matrices." The contribution
