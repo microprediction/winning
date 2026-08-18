@@ -1,6 +1,6 @@
 """Behavioural tests specific to the lattice Thurstone rater."""
 
-from winning import ThurstoneRating, gaussian_win_probabilities
+from winning import ThurstoneRating
 
 
 def test_two_player_probability_moves_sensibly():

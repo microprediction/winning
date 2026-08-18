@@ -21,11 +21,13 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.9",
     ],
-    packages=["winning", "winning.factor", "winning.methods", "winning.bench", "winning.thurstone", "winning.probit"],
+    packages=["winning", "winning.factor", "winning.methods", "winning.bench", "winning.thurstone", "winning.probit", "winning.ratings"],
     test_suite='pytest',
     tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],
     include_package_data=True,
-    install_requires=["numpy","pytest"],
+    install_requires=["numpy", "scipy"],
+    extras_require={"test": ["pytest", "pandas"],
+                    "benchmarks": ["pandas"]},
     entry_points={
         "console_scripts": [
             "winning=winning.__main__:main",

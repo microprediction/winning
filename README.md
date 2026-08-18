@@ -27,11 +27,7 @@ standing benchmark database.
 - `winning.bench` — a seeded problem grid, cached references, and
   append-only accuracy-time records: `python -m winning.bench.runner`.
 
-![test-38](https://github.com/microprediction/winning/workflows/test-38/badge.svg)
-![test-39](https://github.com/microprediction/winning/workflows/test-39/badge.svg)
-![test-310](https://github.com/microprediction/winning/workflows/test-310/badge.svg)
-![test-311](https://github.com/microprediction/winning/workflows/test-311/badge.svg)
-![test-312](https://github.com/microprediction/winning/workflows/test-312/badge.svg)
+[![CI](https://github.com/microprediction/winning/workflows/CI/badge.svg)](https://github.com/microprediction/winning/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ![The fastest time, the best offer and the most popular product are the same order statistic](docs/assets/images/winning-pic.png)
