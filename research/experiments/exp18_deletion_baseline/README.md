@@ -14,9 +14,9 @@ deletion rows against an independent 1e8-draw top-two reference):
 | method | max error |
 |---|---|
 | conditional-field ensemble (deterministic) | 4.2e-5 |
-| top-two simulation, matched time | 1.2e-4 |
+| top-two simulation, matched time | 1.9e-4 |
 
-The deterministic ensemble is ~3× more accurate at matched wall time, and
+The deterministic ensemble is ~4.5× more accurate at matched wall time, and
 reproducible. The earlier 2.8e-17 agreement figure checks algebraic
 consistency between two implementations of the same approximation — it is
 not an accuracy statement; this experiment provides the accuracy statement.
