@@ -1,5 +1,7 @@
 # winning
 
+*A package for dealing with races, correlated or not.*
+
 *The package has come home.* `winning` began as the reference implementation
 of the lattice ability transform (SIAM J. Financial Mathematics, 2021). It
 is now also the home of the factor-correlated generalization developed in

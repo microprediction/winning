@@ -8,7 +8,7 @@ README = (HERE / "README.md").read_text()
 setup(
     name="winning",
     version="1.1.0",
-    description="Fast ability inference from contest winning probabilities",
+    description="Dealing with races, correlated or not",
     long_description=README,
     long_description_content_type="text/markdown",
     url="https://github.com/microprediction/winning",
