@@ -46,29 +46,35 @@ Independent race: shares from abilities, and back.
 
 ```python
 import numpy as np
-from winning.factor.core import win_probabilities, abilities_from_probabilities
+from winning import race_probabilities, calibrate_abilities
 
 mu = np.array([-0.5, 0.0, 0.2, 0.3])          # lower is better (min-wins)
-p = win_probabilities(mu)                      # array([0.443, 0.232, 0.175, 0.150])
-mu_back = abilities_from_probabilities(p)      # recovers mu (mean zero)
+p = race_probabilities(mu)                     # array([0.443, 0.232, 0.175, 0.150])
+mu_back = calibrate_abilities(p)               # recovers mu (mean zero)
 ```
 
 Correlated race: a hundred runners moved by two common factors, all
 shares in one pass over a shared survival field, then inverted.
 
 ```python
-from winning.factor import hermite_nodes, win_probabilities_factor
-from winning.factor.core import abilities_from_probabilities_factor
-
 rng = np.random.default_rng(0)
 N, k = 100, 2
 mu = rng.normal(0, 1, N); mu -= mu.mean()
 V = rng.normal(0, 0.4, (N, k))                # factor loadings
 D = rng.uniform(0.5, 1.5, N)                  # idiosyncratic variances
-F, W = hermite_nodes(k)
 
-p = win_probabilities_factor(mu, V, D, F, W)  # all N shares, O(QNL)
-mu_hat = abilities_from_probabilities_factor(p, V, D, F, W)   # inversion
+p = race_probabilities(mu, V=V, D=D)          # all N shares, O(QNL)
+mu_hat = calibrate_abilities(p, V=V, D=D)     # inversion
+```
+
+Counterfactuals and structure from the same shared field:
+
+```python
+from winning import removal_shares, tie_densities
+
+q = removal_shares(mu, V=V, D=D)   # q[i][j] = P(j wins | i removed)
+w = tie_densities(mu, V=V, D=D)    # photo-finish weights: the Jacobian's
+                                   # graph-Laplacian (circuit) conductances
 ```
 
 For the probit literature, `winning.probit` speaks max-wins utilities

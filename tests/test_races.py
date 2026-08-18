@@ -113,3 +113,45 @@ def test_temperature_roundtrip():
     p = race_probabilities(mu, V=V, D=D, temperature=0.5)
     mu_hat = abilities_from_race(p, V=V, D=D, temperature=0.5)
     assert np.abs(mu_hat - mu).max() < 5e-3
+
+
+def test_tie_densities_match_committed_vectors():
+    import json
+    from pathlib import Path
+    from winning.factor import tie_densities
+    T = json.loads((Path(__file__).parent.parent /
+                    "js/factor/test_vectors.json").read_text())
+    w = tie_densities(T["problem"]["mu"], V=T["problem"]["V"],
+                      D=T["problem"]["D"], F=T["hermite"]["F"],
+                      W=T["hermite"]["W"])
+    want = np.array(T["expected"]["w"])
+    assert np.abs(w - want).max() < 1e-12
+    assert np.abs(w - w.T).max() == 0.0
+
+
+def test_removal_shares_match_core_ensemble():
+    from winning.factor import removal_shares
+    mu, V, D = _problem(n=20)
+    F, W = hermite_nodes(2)
+    q = removal_shares(mu, V=V, D=D, F=F, W=W)
+    _, q_core = win_probabilities_factor(mu, V, D, F, W,
+                                         return_deletions=True)
+    assert np.abs(q - q_core).max() < 1e-12
+    assert np.abs(q.sum(1) - 1).max() < 1e-12
+
+
+def test_probit_removal_is_reflected_core():
+    from winning.probit import removal_shares as probit_removal
+    mu, V, D = _problem(n=15)
+    q = probit_removal(-mu, V=V, D=D)      # utilities = -abilities
+    _, q_core = win_probabilities_factor(mu, V, D, *hermite_nodes(2),
+                                         return_deletions=True)
+    assert np.abs(q - q_core).max() == 0.0
+
+
+def test_top_level_front_door():
+    import winning
+    mu, V, D = _problem(n=10)
+    p = winning.race_probabilities(mu, V=V, D=D)
+    mu_hat = winning.calibrate_abilities(p, V=V, D=D)
+    assert np.abs(mu_hat - mu).max() < 1e-4

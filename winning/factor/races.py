@@ -193,3 +193,63 @@ def _race_tempered(mu, V, D, F, W, fn, left, right, temperature, points,
     if return_slopes:
         return p / total, slope / total
     return p / total
+
+
+def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
+                  points=501):
+    """Pairwise photo-finish densities w[i][j]: the tie-for-the-win rate
+    between i and j with the field behind — the graph-Laplacian weights,
+    and the conductances of the circuit interpretation. O(Q N^2 L)."""
+    mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
+    sd = np.sqrt(D)
+    n = len(mu)
+    M_all = mu[None, :] + F @ V.T
+    x = np.linspace(M_all.min() - left * sd.max(),
+                    M_all.max() + right * sd.max(), points)
+    dx = x[1] - x[0]
+    w = np.zeros((n, n))
+    for c in range(len(F)):
+        z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
+        S, f, _ = fn(z)
+        f = f / sd[:, None]
+        logS = np.log(S)
+        logSfield = logS.sum(0)
+        for i in range(n):
+            rest = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
+                                  -745.0, 0.0))
+            w[i] += W[c] * (f[i] * f * rest).sum(1) * dx
+    np.fill_diagonal(w, 0.0)
+    return 0.5 * (w + w.T)          # symmetric by theory; average numerics
+
+
+def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
+                   points=501):
+    """The full single-removal ensemble q[i][j] = P(j wins | i removed),
+    every row from the same shared field by dividing i's survival back
+    out. Rows sum to one. O(Q N^2 L)."""
+    mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
+    sd = np.sqrt(D)
+    n = len(mu)
+    M_all = mu[None, :] + F @ V.T
+    x = np.linspace(M_all.min() - left * sd.max(),
+                    M_all.max() + right * sd.max(), points)
+    dx = x[1] - x[0]
+    q = np.zeros((n, n))
+    for c in range(len(F)):
+        z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
+        S, f, _ = fn(z)
+        f = f / sd[:, None]
+        logS = np.log(S)
+        logSfield = logS.sum(0)
+        for i in range(n):
+            rest = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
+                                  -745.0, 0.0))
+            contrib = (f * rest).sum(1) * dx
+            contrib[i] = 0.0
+            q[i] += W[c] * contrib
+    return q / q.sum(axis=1, keepdims=True)
+
+
+# canonical tier-1 name; calibrate_factors is reserved for the outer
+# estimation problem (see the paper's discussion and experiment 30)
+calibrate_abilities = abilities_from_race

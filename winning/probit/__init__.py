@@ -23,7 +23,8 @@ from ..factor.core import (abilities_from_probabilities_factor,
                            factor_model_contrast, hermite_nodes,
                            win_probabilities_factor)
 
-__all__ = ["shares", "utilities_from_shares", "fit_factor_model"]
+__all__ = ["shares", "utilities_from_shares", "calibrate_utilities",
+           "removal_shares", "fit_factor_model"]
 
 
 def fit_factor_model(Sigma, k):
@@ -65,3 +66,18 @@ def utilities_from_shares(p, V=None, D=None, Sigma=None, k=None,
     a = abilities_from_probabilities_factor(p, V, D, F, W, tol=tol,
                                             points=points)
     return -a
+
+
+def removal_shares(utilities, V=None, D=None, Sigma=None, k=None,
+                   points=501):
+    """q[i][j] = P(j chosen | i removed), max-wins, rows summing to one."""
+    from ..factor.core import win_probabilities_factor as _wpf
+    u = np.asarray(utilities, dtype=float)
+    V, D, F, W = _prepare(len(u), V, D, Sigma, k)
+    _, q = _wpf(-u, V, D, F, W, points=points, return_deletions=True)
+    return q
+
+
+# canonical calibrate_* family name; calibrate_factors is reserved for
+# the outer estimation problem
+calibrate_utilities = utilities_from_shares

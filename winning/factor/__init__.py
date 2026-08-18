@@ -8,7 +8,10 @@ heavy passes transparently when importable.
 
 from .races import (  # noqa: F401
     abilities_from_race,
+    calibrate_abilities,
     race_probabilities,
+    removal_shares,
+    tie_densities,
 )
 from .core import (  # noqa: F401
     abilities_from_win_probabilities,
