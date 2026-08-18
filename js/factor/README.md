@@ -10,7 +10,9 @@ canonical), for browser demos and Node. Min-wins convention.
   `"gumbel"` (standardized Gumbel-min, so the independent case is
   exactly Luce/softmax at inverse temperature pi/sqrt(6)); the inverse
   also takes `opts.mu0` to warm-start the Newton iteration for
-  interactive use. Gumbel parity vectors live in
+  interactive use. `"skew"` (skew-normal, alpha=3) and `"t4"`
+  (Student-t, nu=4) are tabulated bases (~1e-6 accuracy, vectors in
+  `test_vectors_bases.json`). Gumbel parity vectors live in
   `test_vectors_gumbel.json` (`gen_test_vectors_gumbel.py`).
 - `winProbabilitiesFactor(mu, V, D, F, W, opts)` — all-share forward
   pass on the shared survival field; options `pairwise` (photo-finish
