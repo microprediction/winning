@@ -117,7 +117,7 @@ sample; the tests are goodness-of-fit statements about the matrix in hand.
 Appendix~\ref{sec:census} is a census of sixty-seven sources, recording which of them printed
 or deposited enough to score either assumption.
 
-\section{Two parameter-free maps}
+\section{Why only two maps, and which way they differ}
 \label{sec:maps}
 
 Renormalization is not a consequence of probability theory. It is the posterior for mutually
@@ -209,10 +209,10 @@ as well as on the noise law, and recalibrating several laws to one share vector 
 another can reverse which of them contracts more, so tail thickness alone does not order the
 laws by how much they contract.
 
-\section{What is measured here}
+\subsection*{The protocol}
 \label{sec:design}
 
-We revisit the question the constant-ratio-rule literature asked. Both maps are calibrated on
+Both maps are calibrated on
 full-menu shares alone, then scored by log loss on restricted menus neither has seen. Three
 things make that possible now. Trial-level archives are open, so restricted menus can be
 scored on the observations that produced them rather than on printed marginals. Inverting
@@ -292,7 +292,13 @@ ranking collection, the smallest consumer experiment and the two gamble frames w
 are most concentrated. And the two largest wins, colour and symbol naming, come from the
 one experiment that also supplies its own control.
 
-\section{Choices from real menus}
+\section{Restrictions that were observed}
+\label{sec:observed}
+
+Five collections record choices from a smaller menu directly. They are reported first because
+nothing about the restriction is inferred.
+
+\subsection{Consumer goods, all subsets of five}
 \label{sec:menus}
 
 Twelve of the thirteen collections used here are complete rankings, from which subset
@@ -344,7 +350,7 @@ comfortably, with Monte Carlo tail frequencies of $0.010$ and $0.005$; experimen
 fifty-eight per cent of the sample, does not, at $0.199$ and $0.129$. The direction
 replicates and the magnitude is not established by these data alone.
 
-\section{Menus revealed after the stimulus}
+\subsection{Colours and symbols, with the menu revealed after the stimulus}
 \label{sec:after}
 
 The consumer experiment observes restriction but announces it: the subject sees the menu
@@ -404,7 +410,7 @@ the same size against a foil from the target's own category as against a foil fr
 which matters in Section~\ref{sec:boundary}: category membership is not what breaks
 independence.
 
-\section{Four further observed restrictions}
+\subsection{Gambles, ballots, news slates and Wikipedia links}
 \label{sec:more}
 
 Restriction is observed in four further populations, which differ in what does the removing.
@@ -499,7 +505,7 @@ absence of an effect. Both Wikipedia and the two General Social Survey collectio
 truth between the two defaults: choice contracts when an alternative goes, but by less than
 Case V says.
 
-\section{Choices induced from rankings}
+\section{Restrictions induced from rankings}
 \label{sec:rankings}
 
 Twelve archival collections have human respondents and rankings, or ratings fine enough
@@ -550,38 +556,7 @@ calibration uncertainty and are too narrow, most seriously in the two smallest r
 \label{tab:heldout}
 \end{table}
 
-\section{Gain by size of the surviving menu}
-\label{sec:gainsize}
-
-Splitting the held-out
-predictions of Section~\ref{sec:rankings} by the size of the surviving menu shows the gain
-concentrated where most of the menu has been withdrawn.
-
-\begin{table}[ht]
-\centering
-\small
-\begin{tabular}{lrrrrrrrrr}
-\toprule
-Dataset & $|T|=2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
-\midrule
-Sushi & $+.0412$ & $+.0263$ & $+.0150$ & $+.0081$ & $+.0040$ & $+.0017$ & $+.0005$ & $+.0000$ & $-.0000$ \\
-Jester file 3 & $+.0064$ & $+.0050$ & $+.0033$ & $+.0020$ & $+.0012$ & $+.0006$ & $+.0003$ & $+.0001$ & $-.0000$ \\
-Jester file 1 & $+.0053$ & $+.0041$ & $+.0026$ & $+.0016$ & $+.0010$ & $+.0005$ & $+.0003$ & $+.0001$ & $+.0000$ \\
-GSS socialization & $+.0130$ & $+.0011$ & $+.0004$ & $-.0000$ & & & & & \\
-Political goals & $+.0079$ & $+.0071$ & $+.0000$ & & & & & & \\
-Dots & $+.0025$ & $+.0003$ & $-.0000$ & & & & & & \\
-Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
-\bottomrule
-\end{tabular}
-\caption{Held-out gain by the size of the surviving menu, for a representative seven of the
-twelve ranking collections. The pairwise gain is two to four times the all-subsets
-aggregate, and the last entry in each row is exactly zero because nothing has been removed
-and the two maps must coincide. The aggregate quoted elsewhere is therefore lower than the
-pairwise figure. Occupational prestige is the one non-monotone row and is omitted here.}
-\label{tab:gainsize}
-\end{table}
-
-\section{The older datasets rescored}
+\section{Letters and categories: the constant-ratio-rule datasets rescored}
 \label{sec:townsend}
 
 Four subjects of Townsend and Landon \cite{townsendlandon1982} identified briefly displayed block capitals, in blocks with the
@@ -637,12 +612,46 @@ The withdrawn response occurs zero times in the two-choice condition and $510$ t
 three-choice condition, so it is a real competitor on the master menu, and cells are balanced
 at forty trials.
 
-\section{Where the difference lives}
+\section{How the difference is distributed}
+\label{sec:distribution}
+
+\subsection{By size of the surviving menu}
+\label{sec:gainsize}
+
+Splitting the held-out
+predictions of Section~\ref{sec:rankings} by the size of the surviving menu shows the gain
+concentrated where most of the menu has been withdrawn.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Dataset & $|T|=2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
+\midrule
+Sushi & $+.0412$ & $+.0263$ & $+.0150$ & $+.0081$ & $+.0040$ & $+.0017$ & $+.0005$ & $+.0000$ & $-.0000$ \\
+Jester file 3 & $+.0064$ & $+.0050$ & $+.0033$ & $+.0020$ & $+.0012$ & $+.0006$ & $+.0003$ & $+.0001$ & $-.0000$ \\
+Jester file 1 & $+.0053$ & $+.0041$ & $+.0026$ & $+.0016$ & $+.0010$ & $+.0005$ & $+.0003$ & $+.0001$ & $+.0000$ \\
+GSS socialization & $+.0130$ & $+.0011$ & $+.0004$ & $-.0000$ & & & & & \\
+Political goals & $+.0079$ & $+.0071$ & $+.0000$ & & & & & & \\
+Dots & $+.0025$ & $+.0003$ & $-.0000$ & & & & & & \\
+Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
+\bottomrule
+\end{tabular}
+\caption{Held-out gain by the size of the surviving menu, for a representative seven of the
+twelve ranking collections. The pairwise gain is two to four times the all-subsets
+aggregate, and the last entry in each row is exactly zero because nothing has been removed
+and the two maps must coincide. The aggregate quoted elsewhere is therefore lower than the
+pairwise figure. Occupational prestige is the one non-monotone row and is omitted here.}
+\label{tab:gainsize}
+\end{table}
+
+\subsection{By rank of the item chosen}
 \label{sec:where}
 
-Averaged over outcomes the difference between the two defaults is small, and averaging hides
-what it is made of. Score each held-out prediction by the rank the chosen item held in the
-full-menu shares, pooling the four ten-item collections:
+Averaged over outcomes the difference between the two maps is small. Scoring each held-out
+prediction by the rank the chosen item held in the full-menu shares, pooled over the four
+ten-item collections, shows what the average is made of.
 
 \begin{table}[ht]
 \centering
@@ -670,8 +679,10 @@ small frequent losses. The ballot result is negligible because third-party candi
 tail and there is almost no tail mass to collect. And the effect is largest on news slates,
 where readers spread widely over the displayed set.
 
-A second decomposition names an error rather than a difference. Ask how often a given item
-finishes second, which is the conditional question after the winner is removed:
+\subsection{Probability that the favourite finishes second}
+
+The next decomposition is an error rather than a difference. Both maps can be asked how often
+a given item finishes second, which is the restriction question with the winner removed.
 
 \begin{table}[ht]
 \centering
@@ -707,7 +718,7 @@ remainder is not identified; the obvious candidate is that a single respondent's
 internally consistent, so adjacent places are positively correlated in a way no independent
 contest reproduces.
 
-\section{Shrinkage}
+\section{The shrinkage null}
 \label{sec:null}
 
 A positive gain has two possible sources and log loss cannot tell them apart. The race
@@ -771,7 +782,7 @@ excess over the null does not. The menu experiment clears the null on both readi
 which is the result the paper rests on, since it is the only one where restriction is
 observed.
 
-\section{Where the race loses}
+\section{Boundary conditions: where Gaussian renormalization loses}
 \label{sec:boundary}
 
 The four losses in Table~\ref{tab:scoreboard} are one task, and three further populations
@@ -984,7 +995,7 @@ which by cross-validation: the political goals data ships in two of these packag
 they agree only when each is read under its own convention.
 
 \appendix
-\section{Why a population should look Gaussian}
+\section{Gaussian taste heterogeneity as a mechanism}
 \label{sec:mixture}
 
 Nothing so far explains why the Gaussian member of the class should be the one that fits.
