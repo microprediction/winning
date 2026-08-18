@@ -438,3 +438,50 @@ parameters with one set per menu, the renormalization benchmark never computed, 
 out.
 
 Scoreboard: thirty-four comparisons, twenty-four wins, five draws, five losses.
+
+## Referee report acted on, and one prediction confirmed against the paper (2026-08-18)
+
+Two mathematical errors corrected, both real.
+
+1. THE SCALE ARGUMENT WAS WRONG. For any location-scale family P_i^S(a;s) = P_i^S(a/s;1), so if
+b(p) is the unit-scale calibration then s*b(p) is the scale-s calibration and every restricted
+prediction is identical. A common noise scale is a GAUGE, absorbed exactly by the fitted
+locations, not approximately. Verified numerically: locations s*a with noise scale s give
+pair(0,1) = 0.9076844266 for s = 1, 2 and 5. The appendix paragraph claiming the Gumbel variance
+inflation is "invisible in the fit and propagates into the restricted-menu prediction" is
+deleted. Consequence for the cumulant expansion: after common centering and dividing by
+(1 + eps^2 pi^2/6)^(1/2), the standardized law has skewness O(eps^3) and excess kurtosis
+O(eps^4) with no eps^2 term, so the first generic departure from Case V is CUBIC. The reported
+local exponents 1.6/2.0/2.3 are dropped as pre-asymptotic or numerical. Everywhere the draft
+said "a fitted noise scale would beat both" it now says a fitted SHAPE or mixture parameter.
+
+2. CONCENTRATED SHARES ARE NOT SUFFICIENT. Calibrating Case V to p = (0.90, 0.09, 0.01):
+removing the 0.01 gives the favourite 0.9077 against renorm 0.9091, difference 0.0014; removing
+the 0.90 gives the surviving 0.09 alternative 0.8028 against renorm 0.9000, difference 0.0972.
+The referee's figure reproduces exactly. The condition is that the WITHDRAWN alternatives carry
+negligible mass and the leader SURVIVES, not that the shares are concentrated.
+
+3. THE WIN STATISTIC WAS THE WRONG ESTIMAND, and Peter agreed. The scoreboard used excess over
+the Luce null, which labelled Wikipedia a win at a raw gain of -0.0001. The table now reports
+raw held-out gain and the null tail as separate columns with no win/loss verdict, ordered by
+gain, with a family column since rows within a family are not independent. Twenty-eight of
+thirty-seven rows favour Gaussian renormalization, stated as a description of the table and not
+as an estimated rate.
+
+4. Also fixed: the probit counting argument needed the missing step (the K-1 shares are
+exhausted by the K-1 location contrasts, so the K(K-1)/2-1 covariance parameters of the
+difference matrix are unidentified for every K >= 3); the boundary questions are no longer
+claimed to be answerable from shares alone; a yes to the task-change question now says NEITHER
+map applies rather than "renormalization"; near-substitution is stated as an argument for a
+similarity-aware model rather than for renormalization; the MIND, ballot and Wikipedia rows are
+labelled ecological and the claim that the shared null "makes the comparison fair" is withdrawn;
+the favourite-second table is now an aside on sequential heuristics, since removing the observed
+winner is conditioning and not withdrawal; lambda is defined in the paper for the first time;
+and the softmax claim is weakened to behavioural equivalence under fixed logits.
+
+THE ROULDER PREDICTION. The boundary rule was frozen in a committed draft before the Rouder
+chunk data was downloaded. Line length is the canonical unidimensional continuum, so the rule
+predicted a loss. It lost: 1,296 cells, 49 subjects, gain -0.0134 [-0.0176, -0.0104], and
+-0.0322 in the twelve-to-two condition. That is the largest and best-powered disagreement in the
+project and it runs against Gaussian renormalization. It is now in the paper as the third
+continuum collection and it is the reason the conclusion claims parity rather than superiority.
