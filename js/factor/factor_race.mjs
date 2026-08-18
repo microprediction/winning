@@ -57,15 +57,42 @@ export function logndtr(z) {
   return Math.log(0.5 * erfcx(x)) - 0.5 * z * z;
 }
 
-function lattice(Mall, sd, points) {
+function lattice(Mall, sd, points, spans) {
   let mMin = Infinity, mMax = -Infinity, sMax = 0;
   for (const row of Mall) for (const v of row) { if (v < mMin) mMin = v; if (v > mMax) mMax = v; }
   for (const s of sd) if (s > sMax) sMax = s;
-  const lo = mMin - 8 * sMax, hi = mMax + 8 * sMax;
+  const lo = mMin - spans[0] * sMax, hi = mMax + spans[1] * sMax;
   const x = new Float64Array(points);
   for (let l = 0; l < points; l++) x[l] = lo + (hi - lo) * l / (points - 1);
   return { x, dx: (hi - lo) / (points - 1) };
 }
+
+/* Standardized bases (zero mean, unit variance), matching Python
+ * winning.factor.races.BASES. Each returns, for standardized z and
+ * runner scale sd: ls = log survival, fx = density in x units, and
+ * ds = the slope integrand d/dmu of the density (-f'(z)/sd^2). */
+const EULER = 0.5772156649015329;
+const GUMBEL_C = Math.PI / Math.sqrt(6);
+const BASES = {
+  normal: {
+    spans: [8, 8],
+    eval(z, sd) {
+      const fx = Math.exp(-0.5 * z * z) / (sd * SQRT_2PI);
+      return { ls: logndtr(-z), fx, ds: z * fx / sd };
+    },
+  },
+  gumbel: {
+    spans: [22, 8],
+    eval(z, sd) {
+      const u = Math.min(z * GUMBEL_C - EULER, 30.0);
+      const eu = Math.exp(u);
+      const S = Math.max(Math.exp(-eu), 1e-300);
+      const fz = GUMBEL_C * eu * S;
+      return { ls: -eu, fx: fz / sd,
+        ds: -GUMBEL_C * GUMBEL_C * eu * S * (1 - eu) / (sd * sd) };
+    },
+  },
+};
 
 function condMeans(mu, V, F) {
   const Q = F.length, N = mu.length, K = F[0].length;
@@ -85,10 +112,12 @@ function condMeans(mu, V, F) {
 /* forward pass: shares (and optionally slopes, pairwise densities, deletions) */
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   const points = opts.points || 501;
+  const base = BASES[opts.base || "normal"];
+  if (!base) throw new Error("unknown base: " + opts.base);
   const N = mu.length, Q = F.length;
   const sd = D.map(Math.sqrt);
   const M = condMeans(mu, V, F);
-  const { x, dx } = lattice(M, sd, points);
+  const { x, dx } = lattice(M, sd, points, base.spans);
   const L = x.length;
   const p = new Float64Array(N);
   const slope = new Float64Array(N);
@@ -97,7 +126,7 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
 
   const logS = Array.from({ length: N }, () => new Float64Array(L));
   const f = Array.from({ length: N }, () => new Float64Array(L));
-  const zbuf = Array.from({ length: N }, () => new Float64Array(L));
+  const dsl = Array.from({ length: N }, () => new Float64Array(L));
   const logSfield = new Float64Array(L);
 
   for (let c = 0; c < Q; c++) {
@@ -105,11 +134,11 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
     for (let i = 0; i < N; i++) {
       for (let l = 0; l < L; l++) {
         const z = (x[l] - M[c][i]) / sd[i];
-        zbuf[i][l] = z;
-        const ls = logndtr(-z);
+        const { ls, fx, ds } = base.eval(z, sd[i]);
         logS[i][l] = ls;
         logSfield[l] += ls;
-        f[i][l] = Math.exp(-0.5 * z * z) / (sd[i] * SQRT_2PI);
+        f[i][l] = fx;
+        dsl[i][l] = ds;
       }
     }
     const Wc = W[c];
@@ -120,7 +149,7 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
         if (e > 0) e = 0;
         const rest = e < -745 ? 0 : Math.exp(e);
         acc += f[i][l] * rest;
-        accS += zbuf[i][l] * f[i][l] / sd[i] * rest;
+        accS += dsl[i][l] * rest;
       }
       p[i] += Wc * acc * dx;
       slope[i] += Wc * accS * dx;
@@ -171,6 +200,7 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
  * abilities_from_probabilities_factor) */
 export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {}) {
   const nIter = opts.nIter || 50, tol = opts.tol || 1e-6, points = opts.points || 501;
+  const base = opts.base || "normal";
   const N = pTarget.length;
   let psum = 0;
   for (const v of pTarget) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
@@ -183,10 +213,12 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
 
   let mu;
   const anyV = V.some((row) => row.some((v) => v !== 0));
-  if (F[0].length >= 1 && anyV) {
+  if (opts.mu0) {
+    mu = opts.mu0.slice();
+  } else if (F[0].length >= 1 && anyV) {
     const sdTot2 = D.map((d, i) => d + vnorm2[i]);
     mu = abilitiesFromProbabilitiesFactor(
-      p, V.map(() => [0]), sdTot2, [[0]], [1], { nIter, tol, points });
+      p, V.map(() => [0]), sdTot2, [[0]], [1], { nIter, tol, points, base });
   } else {
     const m = logp.reduce((a, b) => a + b, 0) / N;
     mu = logp.map((v) => (v - m) / 2.0);
@@ -194,7 +226,7 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
   const stepCap = D.map((d, i) => Math.sqrt(d + vnorm2[i]));
   let prevRes = Infinity, damp = 1.0, res = Infinity;
   for (let it = 0; it < nIter; it++) {
-    const fwd = winProbabilitiesFactor(mu, V, D, F, W, { points });
+    const fwd = winProbabilitiesFactor(mu, V, D, F, W, { points, base });
     const phat = fwd.p.map((v) => Math.max(v / 1.0, PFLOOR));
     const slope = fwd.slope;
     const resid = phat.map((v, i) => Math.log(v) - logp[i]);

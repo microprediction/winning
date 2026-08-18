@@ -6,6 +6,12 @@ canonical), for browser demos and Node. Min-wins convention.
 - `logndtr(z)` — tail-stable normal log-CDF (series + continued
   fraction), matches `scipy.special.log_ndtr` to ~2e-13 over
   z in [-40, 8].
+- Both transforms take `opts.base`: `"normal"` (default) or
+  `"gumbel"` (standardized Gumbel-min, so the independent case is
+  exactly Luce/softmax at inverse temperature pi/sqrt(6)); the inverse
+  also takes `opts.mu0` to warm-start the Newton iteration for
+  interactive use. Gumbel parity vectors live in
+  `test_vectors_gumbel.json` (`gen_test_vectors_gumbel.py`).
 - `winProbabilitiesFactor(mu, V, D, F, W, opts)` — all-share forward
   pass on the shared survival field; options `pairwise` (photo-finish
   tie densities w_ij, the circuit conductances), `deletions` (the full
