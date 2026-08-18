@@ -132,8 +132,13 @@ Which model it supplies is known. Within the class of independent additive rando
 models, Gumbel errors generate Equation~\eqref{eq:luce}
 \cite{lucesuppes1965,holman1974}, and Yellott \cite{yellott1977} showed the noise law is
 identified once menus of three or more are included, though not from pairwise comparisons
-alone. So the constant-ratio rule is one point of a family, and the empirical question is
-which point to stand on.
+alone. So the constant-ratio rule is one point of a family.
+
+Nothing requires standing on exactly one point of it. Anyone with restricted-menu observations
+to fit can interpolate, and will do better than either default. The question here is narrower.
+Linear normalization is applied almost unconsciously, in survey analysis, in pricing and inside
+any model that masks a softmax, and the question is whether it is typically better or worse
+than Gaussian renormalization when a default has to be chosen and there is nothing to fit.
 
 Equation~\eqref{eq:winprob} is a one-dimensional integral for any number of alternatives,
 since conditioning on $X_i = x$ makes the other events independent, and it is inverted
