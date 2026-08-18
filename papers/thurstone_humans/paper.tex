@@ -25,7 +25,7 @@ random-utility class\footnotemark[2], and re-running a Gaussian contest among th
 survivors, which is Case V. Everything between them costs a fitted number. That
 renormalization fails under restriction has been known since Clarke's constant-ratio rule
 of 1957; what has not been done is to score the two defaults against each other out of
-sample, against a null in which the axiom holds exactly. We do so on thirty-three
+sample, against a null in which the axiom holds exactly. We do so on thirty-four
 population comparisons. The contest wins where the alternatives are distinct and
 unordered, and loses on a perceptual continuum, where a survivor has a near-substitute, or
 where removal changes the task.
@@ -76,25 +76,40 @@ by concentrating confusions into similar pairs rather than spreading them propor
 Rouder \cite{rouder2004} states the modern version: conditioning on a reduced choice set is
 better than a guessing correction predicts and worse than the ratio rule predicts.
 
-One paper anticipates this one's conclusion rather than its method, and it deserves saying
-plainly. Wills, Reimers, Stewart, Suret and McLaren \cite{wills2000} test the ratio rule in
-categorization, reject it, and report that what accounts for their data is a winner-take-all
-model whose ``central feature \dots\ is the assumption that categorical decisions are based
-on a Thurstonian choice process whose noise distribution is not double exponential in form''.
-That is the present thesis, stated twenty-six years earlier. Two things separate it from what
-follows. Their categorization task has two response categories throughout, so no alternative
-is ever withdrawn and the restriction question does not arise. And their magnitudes come from
-a substantive assumption---a stimulus's category-appropriate symbol count---whereas the maps
-compared here read the entire latent vector off the full-menu shares and assume nothing about
-what generated them.
+One paper reaches this one's conclusion, and the concession has to be made in full rather
+than hedged. Wills, Reimers, Stewart, Suret and McLaren \cite{wills2000} test the ratio rule
+in categorization, reject it, and conclude that ``the ratio rule is an inappropriate theory of
+categorical decision and should be replaced by a system based on the principles of
+Thurstonian choice''. They cite Yellott \cite{yellott1977} four times and state the
+$K \ge 3$ divergence exactly. So no novelty is available here for the framing---the argument
+that the axiom is the Gumbel point and that a Thurstonian alternative should displace it was
+made, in these terms, twenty-six years ago. Their Experiment 2 also withdraws an
+alternative: one response category is disallowed for one group of participants and available
+to another, over identical stimuli, which is a restriction test.
+
+What they did not do is the parameter-free out-of-sample comparison, on four counts. Their
+positive model takes noise ``from $+N$ to $-N$'' with ``a rectangular distribution'', so it is
+not the Gaussian; the Gaussian appears once, as an aside on a simplified variant they had
+called worse. It carries four free parameters, and one of them is set per menu---$0.18$ for
+the two-choice condition against $0.65$ for the three-choice---so their restricted-menu
+account is not a prediction from full-menu quantities. The renormalization benchmark is never
+computed: their own equations imply an exact parameter-free point prediction for the
+restricted share, and they use only its weak monotone corollary, testing the shape of a
+derived statistic. And nothing is held out. Their data has been deposited throughout, so the
+comparison they implied can be run on it, and Section~\ref{sec:townsend} runs it.
 
 So neither the question, nor the direction of the answer, nor even the preference for a
-non-Gumbel Thurstonian process originates here, and this paper claims none of them.
+non-Gumbel Thurstonian process originates here, and this paper claims none of them. What is
+new is narrower: two maps with no free parameters, calibrated on full-menu shares alone,
+scored on restricted menus neither has seen, against a null in which the axiom holds by
+construction, across populations spanning preference, memory, perception, verdicts and
+clicks---and a boundary, stated as a rule with a statistic that predicts which side a
+population falls on.
 
 What has changed since is worth stating, because it is why the question is answerable now
 and was not then. Trial-level archives are open, so restricted menus can be scored on the
-observations that produced them rather than on printed marginals; three of the populations
-below were deposited by their authors and a fourth is a recommender's click log. Inverting
+observations that produced them rather than on printed marginals; several of the populations
+below were deposited by their authors and one is a recommender's click log. Inverting
 the $K$-alternative contest from shares alone is now a single pass over a shared grid
 \cite{cotton2021}, so the Gaussian map costs nothing to apply and can be a default rather
 than a fitted model. Out-of-sample scoring against an explicit generative null is standard,
@@ -212,7 +227,7 @@ that thinner or heavier tails contract more.
 
 \section{Scoreboard}
 
-Thirty-three comparisons are reported below, each one a population whose full-menu shares
+Thirty-four comparisons are reported below, each one a population whose full-menu shares
 calibrate both maps and whose restricted-menu choices score them. A comparison is a win
 for the race when its gain exceeds the gain a renormalizing population would produce,
 with a Monte Carlo tail frequency of $0.05$ or less, a loss when renormalization exceeds
@@ -246,6 +261,7 @@ Consumer goods, experiment 1 & observed menus & $.005$ & win \\
 Gambles, high arithmetic cost & observed menus & $.035$ & win \\
 US state ballots 2024 & observed ballots & $.005$ & win \\
 Letters, five to three, $\{F,H,X\}$ & observed menus & $.005$ & win \\
+Categories, three to two & observed menus & $.002$ & win \\
 Letters, five to three, $\{A,E,X\}$ & observed menus & $.010$ & win \\
 Sounds, eight to four, spread sets & observed menus & $\le .005$ & win $\times 2$ \\
 Wikipedia links & observed removals & $.005$ & win\footnotemark[1] \\
@@ -261,7 +277,7 @@ Tones, wide spacing, ten to six & observed menus & --- & loss \\
 Tones, wide spacing, ten to eight & observed menus & --- & loss \\
 \bottomrule
 \end{tabular}
-\caption{Twenty-three wins, five draws, five losses. The first block reads subset choice off a
+\caption{Twenty-four wins, five draws, five losses. The first block reads subset choice off a
 complete ranking; the second and third observe it. Tail frequencies are floored at $1/201$
 by two hundred replicates. The tone matrices are participant-averaged and between-subjects,
 so there is nothing to resample and the losses are point comparisons. Forced-choice
@@ -575,7 +591,7 @@ prestige is the one non-monotone row and is omitted here.}
 \label{tab:gainsize}
 \end{table}
 
-\section{The rule's own founding dataset}
+\section{The literature that asked first, rescored}
 \label{sec:townsend}
 
 Townsend and Landon \cite{townsendlandon1982} built the experiment that this paper would
@@ -616,6 +632,33 @@ explains it. Lee \cite{lee1968} proposed exactly this comparison analytically in
 observing that detection theory and the constant-ratio rule diverge most for unidimensional
 stimuli and that the gap could serve in diagnosis; what is added here is the out-of-sample
 follow-through.
+
+\subsection*{The comparison Wills et al.\ implied}
+
+The same can be done to the paper that reached this one's conclusion. Wills et al.\
+\cite{wills2000} deposited their Experiment 2 data, in which twelve participants chose among
+three categories and twelve others had one category disallowed, over the same stimuli. Their
+equations imply an exact parameter-free renormalization prediction for the restricted share;
+they used only its monotone corollary. Computing it on their own deposit, over $39$ cells and
+$1{,}560$ held-out two-choice trials, renormalization scores $0.6839$ and the race $0.6540$,
+a gain of $+0.0299$ against a fitted-Luce null median of $-0.0015$, so the excess is $+0.0314$
+at $p = 0.002$. Graded and dummy stimuli agree, $+0.0287$ over the graded series against
+$+0.0326$ over the dummies.
+
+This is supporting evidence and not load-bearing, for a reason worth stating. The restriction
+is between groups, with four participants behind each disallowed category, and the gain is
+concentrated in two of the three: $-0.0001$ when category one is withdrawn, $+0.0413$ for the
+second and $+0.0485$ for the third. The participant bootstrap is correspondingly wide and
+right-skewed, $[+0.0175, +0.0717]$. Townsend and Landon carry the weight here because their
+design is within subject. What this run establishes is narrower and is about the record rather
+than about choice: the parameter-free comparison implied by Wills et al.'s own equations,
+on data they released, favours the Gaussian map they argued for over the rule they rejected,
+and it had not been computed.
+
+One design check was made in the data rather than taken on trust. The disallowed response
+occurs zero times in the two-choice condition and $510$ times in the three-choice condition,
+so the withdrawn category is a real competitor on the master menu rather than a dead option,
+and cells are balanced at forty trials throughout.
 
 \section{Where the difference lives}
 \label{sec:where}

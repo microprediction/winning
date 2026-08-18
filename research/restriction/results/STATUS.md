@@ -418,3 +418,23 @@ F1, tennis, sumo, halo2, football -- while main's `winning/ratings` holds two fi
 its `setup.py` already declares `winning.ratings` as a package. Nothing imports `src/` and
 `setup.py` packages only `winning.*`, so `src/` is dormant rather than broken. Reconciling it
 means editing an overhaul in flight on another machine, so it is recorded here instead.
+
+## Wills et al. corrected and scored into the paper (2026-08-18)
+
+The manuscript said their categorization task has two response categories throughout so the
+restriction question does not arise. That was FALSE and is fixed. Experiment 2 disallows one
+category for one group of twelve and allows it to another twelve, over identical stimuli.
+
+Reproduced from `wills_twochoice.py`, output now in `results/wills.txt`: 39 cells, 1,560
+held-out trials, renorm 0.6839, race 0.6540, gain +0.0299 [+0.0175, +0.0717], excess +0.0314,
+p = 0.002. In the paper as a subsection of "The literature that asked first, rescored",
+labelled supporting rather than load-bearing because the restriction is between groups with
+four participants per disallowed category and the gain sits in two of the three.
+
+The prior-art paragraph now concedes the framing outright: they cite Yellott four times and
+state the K >= 3 divergence, so nothing about the Gumbel-point argument is new here. What is
+conceded is separated from what is not -- rectangular noise rather than Gaussian, four free
+parameters with one set per menu, the renormalization benchmark never computed, nothing held
+out.
+
+Scoreboard: thirty-four comparisons, twenty-four wins, five draws, five losses.
