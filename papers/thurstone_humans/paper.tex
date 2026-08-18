@@ -32,107 +32,98 @@ changes the task.
 \footnotetext[2]{The Gumbel construction is due to Holman and Marley
 \cite{lucesuppes1965,holman1974}; the uniqueness is Yellott's \cite{yellott1977}.}
 
-\section{Two restriction maps}
+\section{Prior tests of the rule}
 
-For a population and a menu $S$, let $p_i$ be the share choosing or first-ranking
-item $i$. Luce's axiom \cite{luce1959} assigns a worth $u(i)$ with
+For a population and a menu $S$, let $p_i$ be the share choosing or first-ranking item $i$.
+Luce's axiom \cite{luce1959} assigns a worth $u(i)$ with
 \begin{equation}
 p_i = \frac{u(i)}{\sum_{j \in S} u(j)},
 \label{eq:luce}
 \end{equation}
-so the shares determine the worths up to scale. The prediction for a subset
-$T \subseteq S$ follows by changing the denominator alone, which leaves every ratio
-$p_i/p_j$ with $i,j \in T$ exactly as it was in $S$. For a two-item menu the predicted
-share preferring $i$ is therefore $p_i/(p_i+p_j)$. This invariance is Independence of
-Irrelevant Alternatives.
+so the shares determine the worths up to scale. The prediction for a subset $T \subseteq S$
+follows by changing the denominator alone, which leaves every ratio $p_i/p_j$ with
+$i,j \in T$ as it was in $S$. For a two-item menu the predicted share preferring $i$ is
+$p_i/(p_i+p_j)$. That invariance is Independence of Irrelevant Alternatives, and applied to a
+reduced set of response alternatives it is what Clarke \cite{clarke1957} named the
+\emph{constant-ratio rule}.
 
-The reflex to renormalize is not confined to choice modelling, and it is strong enough to
-be mistaken for a theorem. Renormalization is the posterior for mutually exclusive events
-only when the information that one is impossible is uninformative about which of the rest
-obtained; Monty Hall is the familiar counterexample. Withdrawal is a third case, neither flat-likelihood
-conditioning nor informative conditioning, because no information about a fixed experiment
-has arrived: an alternative is gone and the problem is a different one. Conditioning is
-still available, but it now requires a model of how the probabilities were generated, and
-renormalization is one such model rather than a consequence of probability theory. Within the class of independent additive
-random-utility models, Gumbel errors generate Luce choice probabilities
+Clarke tested it on spoken consonants in noise, predicting confusion matrices over reduced
+response sets from a larger one, and Clarke and Anderson \cite{clarkeanderson1957} followed
+with a second test. Pollack and Decker \cite{pollackdecker1960} predicted four-way consonant
+matrices from an eight-way matrix and reported average deviations near four per cent. Hodge
+\cite{hodge1961} ran nested ensembles in three modalities, Rich \cite{rich1971} carried the
+rule into short-term memory, and Getty, Swets, Swets and Green \cite{getty1979} held eight
+stimuli fixed while allowing only four responses. Morgan \cite{morgan1974} built a
+likelihood-ratio test and rejected the rule on the earlier data. Townsend and Landon
+\cite{townsendlandon1982} ran one master set of five letters with three nested response sets,
+blocked and counterbalanced, and published the full matrices per subject. Rouder
+\cite{rouder2004} states the modern summary: conditioning on a reduced choice set is better
+than a guessing correction predicts and worse than the ratio rule predicts. Wills, Reimers,
+Stewart, Suret and McLaren \cite{wills2000} reject the rule in categorization and argue for a
+Thurstonian replacement.
+
+Two findings recur across those studies. The rule is a fair first approximation, and it fails
+by concentrating the withdrawn mass onto whichever survivor most resembles the removed
+alternative rather than spreading it proportionally. Townsend and Landon attribute that to
+Debreu, and it is the same diagnosis Rouder reaches from the opposite direction.
+
+What the literature does not contain is a comparison against the other map available without
+fitting anything. Lee \cite{lee1968} proposed one analytically, observing that detection theory
+and the constant-ratio rule diverge most for unidimensional stimuli and that the gap could
+serve in diagnosis, but the comparison was not carried out on data. Nor was any of this scored
+out of sample: the tests are goodness-of-fit statements about the matrix in hand.
+Appendix~\ref{sec:census} is a census of sixty-seven sources, recording which of them printed
+or deposited enough to score either map.
+
+\section{Two parameter-free maps}
+\label{sec:maps}
+
+Renormalization is not a consequence of probability theory. It is the posterior for mutually
+exclusive events only when the information that one is impossible says nothing about which of
+the rest obtained, and Monty Hall is the familiar counterexample. Withdrawal is a third case,
+neither flat-likelihood conditioning nor informative conditioning, because no information about
+a fixed experiment has arrived. An alternative is gone and the problem is a different one.
+Conditioning requires a model of how the probabilities were generated, and renormalization
+supplies one.
+
+Which model it supplies is known. Within the class of independent additive random-utility
+models, Gumbel errors generate Equation~\eqref{eq:luce}
 \cite{lucesuppes1965,holman1974}, and Yellott \cite{yellott1977} showed the noise law is
 identified once menus of three or more are included, though not from pairwise comparisons
-alone. Which generative assumption to make is
-then an empirical question. Two of the answers are measured below.
+alone. So the constant-ratio rule is one point of a family, and the empirical question is
+which point to stand on.
 
-Whether the ratio survives restriction is an old empirical question, asked for fifty years
-under a different name. Clarke \cite{clarke1957} called Equation~\eqref{eq:luce} applied to
-a reduced response set the \emph{constant-ratio rule} and tested it on speech confusions;
-Pollack and Decker \cite{pollackdecker1960} used an eight-way consonant confusion matrix to
-predict four-way ones and reported average deviations near four per cent; Rich
-\cite{rich1971} carried it into short-term memory, Hodge \cite{hodge1961} into identification
-tasks with nested ensembles. Morgan \cite{morgan1974} built a likelihood-ratio test of the
-rule and rejected it on the earlier data. Townsend and Landon \cite{townsendlandon1982} ran
-one master set of five letters with three nested response sets, blocked and counterbalanced,
-and found the rule a fair first approximation that fails
-by concentrating confusions into similar pairs rather than spreading them proportionally.
-Rouder \cite{rouder2004} states the modern version: conditioning on a reduced choice set is
-better than a guessing correction predicts and worse than the ratio rule predicts.
-
-Wills, Reimers, Stewart, Suret and McLaren \cite{wills2000} reject the rule in
-categorization and argue for a Thurstonian replacement, citing Yellott. Their Experiment 2
-withdraws a response category, and their data is deposited, so it is scored in
-Section~\ref{sec:townsend} with the rest.
-
-We revisit this question. The two parameter-free maps are calibrated on full-menu shares
-alone, then scored on restricted menus neither has seen, against a null in which the axiom
-holds by construction. Three things make that possible now and did not before. Trial-level
-archives are open, so restricted menus can be scored on the observations that produced them
-rather than on printed marginals. Inverting the $K$-alternative contest from shares alone is a
-single pass over a shared grid \cite{cotton2021}, so the Gaussian map costs nothing to apply.
-And out-of-sample scoring against a generative null is standard. Contraction of a noisy share
-vector lowers log loss whether or not the axiom fails, and no comparison of fit indices
-detects that.
-
-The question has also left psychology. Masking a softmax and rescaling the survivors is
-Equation~\eqref{eq:luce} applied to a restricted set, so the rule Clarke tested on letter
-confusions in 1957 now runs inside models that make no reference to Luce.
-
-The independent Gaussian random-utility model, Thurstone's Case V
-\cite{thurstone1927} in the paired-comparison case, extends to a multiway contest and
-connects the same two quantities. Item $i$ carries a location $a_i$, draws a performance
-$X_i \sim N(a_i,1)$ on each occasion, and the highest draw is chosen, so
+The independent Gaussian member is Thurstone's Case V \cite{thurstone1927} in the
+paired-comparison case, and it extends to a multiway contest. Item $i$ carries a location
+$a_i$, draws a performance $X_i \sim N(a_i,1)$ on each occasion, and the highest draw is
+chosen, so
 \begin{equation}
 p_i = \int \varphi(x - a_i) \prod_{k \neq i} \Phi(x - a_k)\, dx.
 \label{eq:winprob}
 \end{equation}
 The integral is one-dimensional for any number of alternatives, since conditioning on
-$X_i = x$ makes the other events independent, and it is inverted numerically by a
-lattice method of \cite{cotton2021}, which recovers the whole location vector in one pass
-over a shared grid; locations are identified up to a common translation,
-fixed here by $\sum_i a_i = 0$. Prediction for a subset $T$ means re-running the
-contest among $T$ alone. For a pair this is one normal evaluation,
+$X_i = x$ makes the other events independent, and it is inverted numerically by the lattice
+method of \cite{cotton2021}, which recovers the whole location vector in one pass over a
+shared grid. Locations are identified up to a common translation, fixed here by
+$\sum_i a_i = 0$. Prediction for a subset $T$ means re-running the contest among $T$ alone.
+For a pair this is one normal evaluation,
 \begin{equation}
 P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right),
 \label{eq:pair}
 \end{equation}
-and if $p_i > p_j$ it lies between $\tfrac12$ and $p_i/(p_i+p_j)$: removing the other
-alternatives contracts the odds toward one. Winning a large field requires an unusually
-high draw, and beating a single rival does not, so the favourite's advantage counts for
-less. Proposition~\ref{prop:contraction} makes this exact.
+and if $p_i > p_j$ it lies between $\tfrac12$ and $p_i/(p_i+p_j)$. Winning a large field
+requires an unusually high draw and beating a single rival does not, so the favourite's
+advantage counts for less.
 
-The class of independent additive random-utility models contains exactly two
-parameter-free points. Fix the noise law up to location and there is nothing left to
-choose; Gumbel gives renormalization and unit-variance Gaussian gives Case V, and every
-law between them costs a number. So an analyst holding aggregate shares and no restricted
-observations has two candidates, not a family, and the comparison below is between the only
-two defaults available. Anything fitted is a different exercise, and one that cannot be
-tested by the discrepancy it was fitted to absorb.
-
-Both rules are calibrated to the same $|S|-1$ free shares, and neither sees any
-observation from a smaller menu. The comparison is between two maps with no free
-parameters left, rather than between two fitted models. This also fixes what the
-comparison can settle. A fitted Plackett--Luce likelihood \cite{plackett1975} uses the whole ranking, and a fitted
-Bradley--Terry model \cite{bradley1952} uses the pairwise outcomes directly; neither is
-estimated here. The question is which map from full-menu shares to restricted-menu shares predicts
-population choice better. Both are \emph{representative-agent} maps: each treats the
-population as one chooser with one set of worths or locations, and transports its shares
-from $S$ to $T$.
+The class contains exactly two parameter-free points. Fix the noise law up to location and
+there is nothing left to choose. Gumbel gives renormalization, unit-variance Gaussian gives
+Case V, and every law between them costs a number. An analyst holding aggregate shares and no
+restricted observations therefore has two candidates rather than a family. Both are calibrated
+to the same $|S|-1$ free shares and neither sees any observation from a smaller menu. Both are
+\emph{representative-agent} maps, treating the population as one chooser with one set of
+worths or locations and transporting its shares from $S$ to $T$. A fitted Plackett--Luce
+likelihood \cite{plackett1975} uses the whole ranking and a fitted Bradley--Terry model
+\cite{bradley1952} uses the pairwise outcomes directly; neither is estimated here.
 
 The direction of the disagreement is a theorem, and it holds for noise laws other than
 the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise, assumed independent and
@@ -177,27 +168,37 @@ The proposition says that removing alternatives moves the ratio toward one.
 Two laws sit at the ends of that condition. The Gaussian satisfies it strictly, since
 $\frac{d^2}{dx^2}\log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0$. The Gumbel has
 $r(x) = s^{-1}e^{-x/s}$, so $\log r$ is affine, the inequality becomes an equality, and
-renormalization is recovered exactly. That is the Holman--Marley construction \cite{lucesuppes1965,holman1974}. The axiom is a boundary of the class.
+renormalization is recovered exactly, which is the Holman--Marley construction
+\cite{lucesuppes1965,holman1974}. The axiom is a boundary of the class, and it is where
+machine learning sits: a softmax over scores $z_i$ is Equation~\eqref{eq:luce} with
+$u(i) = \exp(z_i)$, so masking a softmax and rescaling the survivors is proportional
+renormalization.
 
-The boundary is where machine learning sits. A softmax over scores $z_i$ is
-Equation~\eqref{eq:luce} with $u(i) = \exp(z_i)$, so masking a softmax and rescaling the
-survivors is proportional renormalization, and by Yellott's theorem that is the
-Gumbel-noise member of the contest class. The default is a single point of the family.
+The proposition gives the direction of the effect and not its size. Size depends on the shares
+as well as on the noise law, and recalibrating several laws to one share vector and then to
+another can reverse which of them contracts more. No claim is made that thinner or heavier
+tails contract more.
 
-The proposition gives the direction of the effect, not its size. Size depends on the
-shares as well as on the noise law: recalibrating several laws to one share vector and
-then to another can reverse which of them contracts more. We therefore make no claim
-that thinner or heavier tails contract more.
+\section{What is measured here}
+\label{sec:design}
+
+We revisit the question the constant-ratio-rule literature asked. Both maps are calibrated on
+full-menu shares alone, then scored by log loss on restricted menus neither has seen. Three
+things make that possible now. Trial-level archives are open, so restricted menus can be
+scored on the observations that produced them rather than on printed marginals. Inverting
+Equation~\eqref{eq:winprob} from shares alone is a single pass over a shared grid, so the
+Gaussian map costs nothing to apply. And a generative null is available: contraction of a
+noisily estimated share vector lowers log loss whether or not the axiom fails, so every gain
+below is reported net of what a population obeying the axiom exactly would produce on the same
+menus, which Section~\ref{sec:null} details.
 
 \section{Scoreboard}
 
-Thirty-four comparisons are reported below, each one a population whose full-menu shares
-calibrate both maps and whose restricted-menu choices score them. A comparison is a win
-for the race when its gain exceeds the gain a renormalizing population would produce,
-with a Monte Carlo tail frequency of $0.05$ or less, a loss when renormalization exceeds
-the race on the same test, and a draw otherwise. The null matters because contraction of
-a noisily estimated share vector lowers log loss on its own, which
-Section~\ref{sec:null} quantifies.
+Thirty-four comparisons follow, each a population whose full-menu shares calibrate both maps
+and whose restricted-menu choices score them. A comparison is a win for the race when its gain
+exceeds the gain a renormalizing population would produce, with a Monte Carlo tail frequency of
+$0.05$ or less, a loss when renormalization exceeds the race on the same test, and a draw
+otherwise.
 
 \begin{table}[ht]
 \centering
@@ -373,7 +374,7 @@ the same size against a foil from the target's own category as against a foil fr
 which matters in Section~\ref{sec:boundary}: category membership is not what breaks
 independence.
 
-\section{Four more observed restrictions}
+\section{Four further observed restrictions}
 \label{sec:more}
 
 Restriction is observed in four further populations, which differ in what does the removing.
@@ -519,7 +520,7 @@ calibration uncertainty and are too narrow, most seriously in the two smallest r
 \label{tab:heldout}
 \end{table}
 
-\section{How much of the menu has to go}
+\section{Gain by size of the surviving menu}
 \label{sec:gainsize}
 
 Splitting the held-out
@@ -550,7 +551,7 @@ pairwise figure. Occupational prestige is the one non-monotone row and is omitte
 \label{tab:gainsize}
 \end{table}
 
-\section{The literature that asked first, rescored}
+\section{The older datasets rescored}
 \label{sec:townsend}
 
 Four subjects of Townsend and Landon \cite{townsendlandon1982} identified briefly displayed block capitals, in blocks with the
@@ -1079,7 +1080,7 @@ $m$-alternative tasks and report that the softmax parameter must vary with $m$ w
 signal-detection parameter is stable. That is the contraction studied here, seen through
 the parameter that has to move to absorb it.
 
-\section{What the restriction experiments are, and where their numbers went}
+\section{Census of restriction experiments}
 \label{sec:census}
 
 The experiments exist. They were run in four literatures that do not cite one another,
@@ -1180,6 +1181,11 @@ Random utility and limited consideration.
 Ralph A. Bradley and Milton E. Terry.
 Rank analysis of incomplete block designs: I. the method of paired comparisons.
 \emph{Biometrika}, 39(3/4):324--345, 1952.
+
+\bibitem{clarkeanderson1957}
+Frank R. Clarke and Clint D. Anderson.
+Further test of the constant-ratio rule in speech communication.
+\emph{Journal of the Acoustical Society of America}, 29(12):1318--1320, 1957.
 
 \bibitem{clarke1957}
 Frank R. Clarke.
