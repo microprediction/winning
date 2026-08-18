@@ -8,7 +8,7 @@
 \usepackage{microtype}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{The Tacit Assumption in Renormalizing\\Choice Probabilities: Gaussian or Gumbel?}}
+\title{\textbf{Withdrawing an Alternative:\\A Survey of Restricted-Menu Evidence}}
 \author{Peter Cotton}
 \date{Provisional draft, 17 August 2026}
 
@@ -16,19 +16,17 @@
 \maketitle
 
 \begin{abstract}
-\noindent Given probabilities over mutually exclusive events, and told that one has been
-\emph{withdrawn}, scratched, delisted or masked out of a softmax, proportional
-renormalization is the human reflex or, in the case of many models, the architecture. An
-analyst holding shares and no restricted-menu observation has exactly two parameter-free
-options: renormalization, which is the Gumbel point of the independent additive
-random-utility class\footnotemark[2], and re-running a Gaussian contest among the
-survivors, which is Case V. Everything between them costs a fitted number. That
-renormalization fails under restriction has been known since Clarke's constant-ratio rule
-of 1957; what has not been done is to score the two defaults against each other out of
-sample, against a null in which the axiom holds exactly. We do so on thirty-four
-population comparisons. The contest wins where the alternatives are distinct and
-unordered, and loses on a perceptual continuum, where a survivor has a near-substitute, or
-where removal changes the task.
+\noindent Told that one of a set of mutually exclusive outcomes has been withdrawn, scratched,
+delisted or masked out of a softmax, proportional renormalization is the reflex, and in many
+models the architecture. An analyst holding shares and no restricted-menu observation has two
+parameter-free options. Renormalization is the Gumbel point of the independent additive
+random-utility class\footnotemark[2]. Re-running a Gaussian contest among the survivors is
+Case V. Anything between costs a fitted number. Psychology has tested renormalization under
+restriction since 1957, under the name constant-ratio rule, and we revisit that question by
+scoring the two defaults against each other out of sample on thirty-four population
+comparisons, old and new. The contest wins where alternatives are distinct and unordered, and
+loses on a perceptual continuum, where a survivor has a near-substitute, or where removal
+changes the task.
 \end{abstract}
 
 \footnotetext[2]{The Gumbel construction is due to Holman and Marley
@@ -60,7 +58,7 @@ random-utility models, Gumbel errors generate Luce choice probabilities
 \cite{lucesuppes1965,holman1974}, and Yellott \cite{yellott1977} showed the noise law is
 identified once menus of three or more are included, though not from pairwise comparisons
 alone. Which generative assumption to make is
-then an empirical question, and this paper measures two of them.
+then an empirical question. Two of the answers are measured below.
 
 Whether the ratio survives restriction is an old empirical question, asked for fifty years
 under a different name. Clarke \cite{clarke1957} called Equation~\eqref{eq:luce} applied to
@@ -70,64 +68,30 @@ predict four-way ones and reported average deviations near four per cent; Rich
 \cite{rich1971} carried it into short-term memory, Hodge \cite{hodge1961} into identification
 tasks with nested ensembles. Morgan \cite{morgan1974} built a likelihood-ratio test of the
 rule and rejected it on the earlier data. Townsend and Landon \cite{townsendlandon1982} ran
-the design this paper wants---one master set of five letters with three nested response
-sets, blocked and counterbalanced---and found the rule a fair first approximation that fails
+one master set of five letters with three nested response sets, blocked and counterbalanced,
+and found the rule a fair first approximation that fails
 by concentrating confusions into similar pairs rather than spreading them proportionally.
 Rouder \cite{rouder2004} states the modern version: conditioning on a reduced choice set is
 better than a guessing correction predicts and worse than the ratio rule predicts.
 
-One paper reaches this one's conclusion, and the concession has to be made in full rather
-than hedged. Wills, Reimers, Stewart, Suret and McLaren \cite{wills2000} test the ratio rule
-in categorization, reject it, and conclude that ``the ratio rule is an inappropriate theory of
-categorical decision and should be replaced by a system based on the principles of
-Thurstonian choice''. They cite Yellott \cite{yellott1977} four times and state the
-$K \ge 3$ divergence exactly. So no novelty is available here for the framing---the argument
-that the axiom is the Gumbel point and that a Thurstonian alternative should displace it was
-made, in these terms, twenty-six years ago. Their Experiment 2 also withdraws an
-alternative: one response category is disallowed for one group of participants and available
-to another, over identical stimuli, which is a restriction test.
+Wills, Reimers, Stewart, Suret and McLaren \cite{wills2000} reject the rule in
+categorization and argue for a Thurstonian replacement, citing Yellott. Their Experiment 2
+withdraws a response category, and their data is deposited, so it is scored in
+Section~\ref{sec:townsend} with the rest.
 
-What they did not do is the parameter-free out-of-sample comparison, on four counts. Their
-positive model takes noise ``from $+N$ to $-N$'' with ``a rectangular distribution'', so it is
-not the Gaussian; the Gaussian appears once, as an aside on a simplified variant they had
-called worse. It carries four free parameters, and one of them is set per menu---$0.18$ for
-the two-choice condition against $0.65$ for the three-choice---so their restricted-menu
-account is not a prediction from full-menu quantities. The renormalization benchmark is never
-computed: their own equations imply an exact parameter-free point prediction for the
-restricted share, and they use only its weak monotone corollary, testing the shape of a
-derived statistic. And nothing is held out. Their data has been deposited throughout, so the
-comparison they implied can be run on it, and Section~\ref{sec:townsend} runs it.
+We revisit this question. The two parameter-free maps are calibrated on full-menu shares
+alone, then scored on restricted menus neither has seen, against a null in which the axiom
+holds by construction. Three things make that possible now and did not before. Trial-level
+archives are open, so restricted menus can be scored on the observations that produced them
+rather than on printed marginals. Inverting the $K$-alternative contest from shares alone is a
+single pass over a shared grid \cite{cotton2021}, so the Gaussian map costs nothing to apply.
+And out-of-sample scoring against a generative null is standard. Contraction of a noisy share
+vector lowers log loss whether or not the axiom fails, and no comparison of fit indices
+detects that.
 
-So neither the question, nor the direction of the answer, nor even the preference for a
-non-Gumbel Thurstonian process originates here, and this paper claims none of them. What is
-new is narrower: two maps with no free parameters, calibrated on full-menu shares alone,
-scored on restricted menus neither has seen, against a null in which the axiom holds by
-construction, across populations spanning preference, memory, perception, verdicts and
-clicks---and a boundary, stated as a rule with a statistic that predicts which side a
-population falls on.
-
-What has changed since is worth stating, because it is why the question is answerable now
-and was not then. Trial-level archives are open, so restricted menus can be scored on the
-observations that produced them rather than on printed marginals; several of the populations
-below were deposited by their authors and one is a recommender's click log. Inverting
-the $K$-alternative contest from shares alone is now a single pass over a shared grid
-\cite{cotton2021}, so the Gaussian map costs nothing to apply and can be a default rather
-than a fitted model. Out-of-sample scoring against an explicit generative null is standard,
-which matters here more than usual, because contraction of a noisy share vector lowers log
-loss whether or not the axiom fails, and no comparison of fit indices detects that. And the
-question has left psychology: masking a softmax and rescaling the survivors is
-Equation~\eqref{eq:luce} on a restricted set, so a rule tested on letter confusions in 1957
-is now executed billions of times a day inside models that never heard of Luce.
-
-There is also a symmetry in the record that no single paper makes visible. Stewart is an
-author both of \cite{wills2000}, which anticipates the conclusion, and of \cite{stewart2005},
-whose tone matrices supply this paper's clearest counterexample to it. The boundary in
-Section~\ref{sec:boundary} is not a rebuttal of that group's position; it is a line that runs
-between two of its own datasets. What has not been done, as far as we can establish, is the head-to-head: calibrate
-both parameter-free maps on the same full-menu shares, predict restricted menus neither has
-seen, and score them against a null in which the axiom holds by construction. That is the
-exercise below, and the boundary it exposes in Section~\ref{sec:boundary} is where the
-older literature's diagnosis and ours agree.
+The question has also left psychology. Masking a softmax and rescaling the survivors is
+Equation~\eqref{eq:luce} applied to a restricted set, so the rule Clarke tested on letter
+confusions in 1957 now runs inside models that make no reference to Luce.
 
 The independent Gaussian random-utility model, Thurstone's Case V
 \cite{thurstone1927} in the paired-comparison case, extends to a multiway contest and
@@ -271,10 +235,10 @@ Gambles, low arithmetic cost & observed menus & $.667$ & draw \\
 Letters, five to four, $\{A,E,F,H\}$ & observed menus & $.129$ & draw \\
 \midrule
 Sounds, eight to four, similar set & observed menus & $1.000$ & loss \\
-Tones, narrow spacing, ten to six & observed menus & --- & loss \\
-Tones, narrow spacing, ten to eight & observed menus & --- & loss \\
-Tones, wide spacing, ten to six & observed menus & --- & loss \\
-Tones, wide spacing, ten to eight & observed menus & --- & loss \\
+Tones, narrow spacing, ten to six & observed menus & n/a & loss \\
+Tones, narrow spacing, ten to eight & observed menus & n/a & loss \\
+Tones, wide spacing, ten to six & observed menus & n/a & loss \\
+Tones, wide spacing, ten to eight & observed menus & n/a & loss \\
 \bottomrule
 \end{tabular}
 \caption{Twenty-four wins, five draws, five losses. The first block reads subset choice off a
@@ -291,8 +255,7 @@ published aggregates fix the direction of the failure without supporting this pr
 renormalization in absolute terms while still beating what the axiom predicts of it. See
 Table~\ref{tab:more}.}
 
-Three features of the table matter more than the count. The losses are not scattered: all
-four are the same task, absolute identification of tones, and Section~\ref{sec:boundary}
+The losses are not scattered. All four are the same task, absolute identification of tones, and Section~\ref{sec:boundary}
 argues they are one loss with four rows. The draws sit where they should, at the smallest
 ranking collection, the smallest consumer experiment and the two gamble frames whose shares
 are most concentrated. And the two largest wins, colour and symbol naming, come from the
@@ -387,17 +350,15 @@ sampling noise in what it predicts; all three tails are at the $0.005$ floor.}
 \label{tab:after}
 \end{table}
 
-The six-symbol gain is the largest in this paper outside news slates, and the experiment
-supplies its own control. The same pairs were also run \emph{announced in advance}, so the
-observer can aim attention at them---an arm the original authors did not analyse, recovered
-here from the trial files. There the advantage nearly disappears. Accuracy rises from $0.780$
+The six-symbol gain is the largest here outside news slates. The same pairs were also run \emph{announced in advance}, so the
+observer can aim attention at them. That arm was not analysed by the original authors and is
+recovered here from the trial files. There the advantage nearly disappears. Accuracy rises from $0.780$
 to $0.850$, renormalization becomes almost exactly right, and the race begins to
 over-contract. So the race's advantage is not a property of these pairs, these colours or
 these observers. It appears when alternatives are genuinely withdrawn from a percept formed
-without knowledge of the menu, and not when the menu was known all along.
+without knowledge of the menu. It does not appear when the menu was known in advance.
 
-One caveat belongs with the result rather than in a footnote. In both genuine restriction
-arms \emph{both} maps over-predict the favourite: renormalization by $0.069$ and the race by
+In both genuine restriction arms \emph{both} maps over-predict the favourite: renormalization by $0.069$ and the race by
 $0.055$ at four alternatives, and by $0.096$ and $0.064$ at six. Contraction has the right
 sign and removes a fifth to a third of the error. Neither parameter-free default is
 calibrated here, and a fitted noise scale would beat both. That over-prediction is Yeon and
@@ -496,7 +457,7 @@ to want, and a smaller slate may reach a different readership than the larger on
 inherit that identically and the null runs on the same slates, which is what makes the
 comparison fair without making the assignment random.
 
-Two features deserve naming. The lottery gradient runs with arithmetic cost, and the
+The lottery gradient runs with arithmetic cost, and the
 mechanism of Appendix~\ref{sec:mixture} predicts its direction, since computation error is
 per-alternative and roughly Gaussian, so loading more of it onto each alternative raises
 $\sigma$ against $\beta$. And the Wikipedia rows say something the ranking collections
@@ -561,7 +522,7 @@ calibration uncertainty and are too narrow, most seriously in the two smallest r
 \section{How much of the menu has to go}
 \label{sec:gainsize}
 
-Before the next dataset, one regularity is needed to read it. Splitting the held-out
+Splitting the held-out
 predictions of Section~\ref{sec:rankings} by the size of the surviving menu shows the gain
 concentrated where most of the menu has been withdrawn.
 
@@ -584,18 +545,15 @@ Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
 \caption{Held-out gain by the size of the surviving menu, for a representative seven of the
 twelve ranking collections. The pairwise gain is two to four times the all-subsets
 aggregate, and the last entry in each row is exactly zero because nothing has been removed
-and the two maps must coincide, which is a pipeline check rather than a finding. The
-aggregate reported elsewhere in this paper is therefore a conservative estimand, kept as the
-headline because it is fixed in advance rather than chosen after the fact. Occupational
-prestige is the one non-monotone row and is omitted here.}
+and the two maps must coincide. The aggregate quoted elsewhere is therefore lower than the
+pairwise figure. Occupational prestige is the one non-monotone row and is omitted here.}
 \label{tab:gainsize}
 \end{table}
 
 \section{The literature that asked first, rescored}
 \label{sec:townsend}
 
-Townsend and Landon \cite{townsendlandon1982} built the experiment that this paper would
-have designed. Four subjects identified briefly displayed block capitals, in blocks with the
+Four subjects of Townsend and Landon \cite{townsendlandon1982} identified briefly displayed block capitals, in blocks with the
 master response set $\{A,E,F,H,X\}$ and blocks with $\{A,E,F,H\}$, $\{A,E,X\}$ and
 $\{F,H,X\}$, counterbalanced, $240$ trials per row. Responses were spoken letter names, so
 the labels are identical across menus by construction. They published the full confusion
@@ -616,8 +574,8 @@ That ordering is mostly the removal count: the first subset withdraws one letter
 other two withdraw two, and Table~\ref{tab:gainsize} shows the gain growing with how much is
 removed and vanishing when nothing is. The unconfounded comparison is between the
 two subsets that each remove a similar pair and retain the other, $+0.0040$ against
-$+0.0093$; those designs are structurally symmetric, so we do not read a similarity story
-into the difference.
+$+0.0093$. Those two designs are structurally symmetric, each removing a similar pair and
+retaining the other, so the difference between them is not attributable to similarity.
 
 What the row-level output does show is the limit of a parameter-free correction. For subject
 one, stimulus $A$, subset $\{A,E,X\}$, the observed, renormalized and raced shares are
@@ -633,32 +591,21 @@ observing that detection theory and the constant-ratio rule diverge most for uni
 stimuli and that the gap could serve in diagnosis; what is added here is the out-of-sample
 follow-through.
 
-\subsection*{The comparison Wills et al.\ implied}
+\subsection*{Wills et al.\ (2000)}
 
-The same can be done to the paper that reached this one's conclusion. Wills et al.\
-\cite{wills2000} deposited their Experiment 2 data, in which twelve participants chose among
-three categories and twelve others had one category disallowed, over the same stimuli. Their
-equations imply an exact parameter-free renormalization prediction for the restricted share;
-they used only its monotone corollary. Computing it on their own deposit, over $39$ cells and
-$1{,}560$ held-out two-choice trials, renormalization scores $0.6839$ and the race $0.6540$,
-a gain of $+0.0299$ against a fitted-Luce null median of $-0.0015$, so the excess is $+0.0314$
-at $p = 0.002$. Graded and dummy stimuli agree, $+0.0287$ over the graded series against
-$+0.0326$ over the dummies.
+Wills et al.\ deposited their Experiment 2, in which twelve participants chose among three
+categories and twelve others had one category disallowed, over the same stimuli. Over $39$
+cells and $1{,}560$ held-out two-choice trials, renormalization scores $0.6839$ and the race
+$0.6540$, a gain of $+0.0299$ against a null median of $-0.0015$, so the excess is $+0.0314$
+at $p = 0.002$. Graded and dummy stimuli agree, $+0.0287$ against $+0.0326$.
 
-This is supporting evidence and not load-bearing, for a reason worth stating. The restriction
-is between groups, with four participants behind each disallowed category, and the gain is
-concentrated in two of the three: $-0.0001$ when category one is withdrawn, $+0.0413$ for the
-second and $+0.0485$ for the third. The participant bootstrap is correspondingly wide and
-right-skewed, $[+0.0175, +0.0717]$. Townsend and Landon carry the weight here because their
-design is within subject. What this run establishes is narrower and is about the record rather
-than about choice: the parameter-free comparison implied by Wills et al.'s own equations,
-on data they released, favours the Gaussian map they argued for over the rule they rejected,
-and it had not been computed.
+The restriction is between groups, with four participants behind each disallowed category, and
+the gain sits in two of the three: $-0.0001$, $+0.0413$ and $+0.0485$. The participant
+bootstrap is wide and right-skewed, $[+0.0175, +0.0717]$.
 
-One design check was made in the data rather than taken on trust. The disallowed response
-occurs zero times in the two-choice condition and $510$ times in the three-choice condition,
-so the withdrawn category is a real competitor on the master menu rather than a dead option,
-and cells are balanced at forty trials throughout.
+The withdrawn response occurs zero times in the two-choice condition and $510$ times in the
+three-choice condition, so it is a real competitor on the master menu, and cells are balanced
+at forty trials.
 
 \section{Where the difference lives}
 \label{sec:where}
@@ -724,8 +671,8 @@ This is the pattern reported for the Harville formula in racing place markets, f
 over-priced and outsiders under-priced, appearing in survey rankings of sushi, jokes,
 child-rearing values and political goals. It is the most useful result here for a
 practitioner, because it is a large, replicable, signed error in the default rather than a
-small average edge. The qualification is that the race removes only $5$ to $12$ per cent of
-it, so both rules share a bias much larger than the distance between them. What produces the
+small average edge. The race removes $5$ to $12$ per cent of it, so both rules share a bias
+much larger than the distance between them. What produces the
 remainder is not identified; the obvious candidate is that a single respondent's ranking is
 internally consistent, so adjacent places are positively correlated in a way no independent
 contest reproduces.
@@ -821,7 +768,7 @@ against $31$. Both defaults fail, because the ordering \emph{reverses}: Guilty l
 guilty with three verdicts and trails it with two. Contraction moves odds toward one and
 never crosses over, so the race fails here too, and only slightly less. Not proven is a near
 substitute for Not guilty, so deleting it returns its mass to that neighbour rather than
-proportionally---Debreu's objection in a courtroom, on a fixed stimulus. Townsend and
+proportionally, which is Debreu's objection in a courtroom, on a fixed stimulus. Townsend and
 Landon's diagnosis \cite{townsendlandon1982} is the same one: their rule fails on the subset
 containing similar letters and holds on the subset that does not.
 
@@ -852,17 +799,15 @@ one condition the race loses is the one whose survivors are each other's confusi
 \label{tab:getty}
 \end{table}
 
-This matters more than the sign of the aggregate. It turns the near-substitute condition
-from a description applied after a failure into a statistic computable in advance, and it is
-the diagnostic Townsend and Landon \cite{townsendlandon1982} were already using in 1982 when
-they reported their rule holding on one subset and failing on the subset containing similar
-letters. Two qualifications: with three observers the bootstrap resamples cells rather than
-observers and understates uncertainty, so only the signal-row interval excludes zero; and
-the authors report that observers retuned the weights they placed on perceptual dimensions
-to maximise discriminability of whichever subset they had to identify, with feedback given
-only on that subset. So this experiment carries both boundary conditions at once, which is
-a reason to read the condition-2 loss as the informative result rather than the aggregate
-win.
+The statistic turns the near-substitute condition from a description applied after a failure
+into a quantity computable in advance. Townsend and Landon \cite{townsendlandon1982} were
+using the same diagnostic in 1982, when they reported their rule holding on one subset and
+failing on the subset containing similar letters. With three observers the bootstrap
+resamples cells rather than observers and understates uncertainty, so only the signal-row
+interval excludes zero. The authors also report that observers retuned the weights they placed
+on perceptual dimensions to maximise discriminability of whichever subset they had to identify,
+with feedback given only on that subset, so both boundary conditions are present in this
+experiment at once.
 
 \paragraph{Removal that changes the task.} McMurray and colleagues \cite{mcmurray2008} ran a
 two-label phoneme identification and a four-label version nesting it, on identical synthetic
@@ -882,8 +827,8 @@ kind, which is why they are draws or near-zero wins rather than evidence.
 \medskip
 \noindent The rule that summarises this is narrower than the class of independent random
 utility models and wider than any single dataset. \emph{The Gaussian contest is the better
-default where the alternatives are distinct unordered items}---goods, news articles, memory
-foils, sushi, jokes, ballots, colours, symbols. It is not where they lie on a perceptual
+default where the alternatives are distinct unordered items}, such as goods, news articles,
+memory foils, sushi, jokes, ballots, colours and symbols. It is not where they lie on a perceptual
 continuum, where a removed option is a near-substitute for a survivor, or where removal
 changes the discriminability of what remains.
 
@@ -904,9 +849,8 @@ handle the near-substitute cases exactly, by giving Not proven and Not guilty a 
 covariance. But the analyst here holds $K-1$ free shares and the model has
 $K(K-1)/2 - 1$ free covariance parameters, so for $K \ge 3$ the shares cannot identify them.
 A correlated model is available to anyone who has restricted-menu data to fit it on, and that
-is a different exercise from the one this paper is about. The boundary is therefore not a gap
-waiting for a better default; it is a statement about when \emph{no} parameter-free default
-can work.
+is a different exercise. The boundary therefore marks the conditions under which no
+parameter-free default can work, rather than a gap awaiting a better one.
 
 \section{Scope}
 \label{sec:scope}
@@ -974,11 +918,11 @@ structural rule. What the tables support is a structural default in the absence 
 evidence for the axiom, which is the situation an analyst holding only aggregate shares is
 actually in.
 
-A last limit deserves its own sentence, because it is larger than the effect this paper
-measures. Where both defaults can be checked against the truth rather than only against each
-other---the after-the-stimulus arms of Section~\ref{sec:after}, and the favourite's
-second-place probability in Table~\ref{tab:favsecond}---both are wrong in the same direction
-and by more than they differ from one another. The race removes a fifth to a third of
+One limit is larger than the effect measured here. Both defaults can be checked against the
+truth, rather than only against each other, in the after-the-stimulus arms of
+Section~\ref{sec:after} and in the favourite's second-place probability of
+Table~\ref{tab:favsecond}. In both, they are wrong in the same direction and by more than
+they differ from one another. The race removes a fifth to a third of
 renormalization's error in the first case and five to twelve per cent of it in the second.
 Choosing the better of two parameter-free maps is therefore a smaller improvement than
 fitting one number would be, wherever a restricted-menu observation exists to fit it on. The
@@ -1121,8 +1065,8 @@ near-indifference corner.}
 \label{tab:mixture}
 \end{table}
 
-The consequence for this paper is that no individual need be non-Lucean for the Gaussian
-transport to be the right one upstairs. A population of Luce choosers whose tastes vary is
+No individual need be non-Lucean for the Gaussian transport to be the right one in
+aggregate. A population of Luce choosers whose tastes vary is
 a contest with composite noise, and as taste variation comes to outweigh within-person choice
 noise the composite approaches Gaussian and the population contraction approaches the Case V
 prediction.
@@ -1138,17 +1082,14 @@ the parameter that has to move to absorb it.
 \section{What the restriction experiments are, and where their numbers went}
 \label{sec:census}
 
-The question in this paper's title is old, narrow and answerable, so it is worth asking why
-it stayed open. The answer is not that the experiments were never run. It is that they were
-run in four literatures that do not cite one another---speech confusion, visual absolute
-identification, categorization, and odor identification---and that most of them published
-the wrong summary. A paper that varies the number of response alternatives and reports
-percent correct cannot score either map, because both need cell-level shares. That describes
-the majority of what we found.
+The experiments exist. They were run in four literatures that do not cite one another,
+speech confusion, visual absolute identification, categorization and odor identification, and
+most of them published percent correct rather than cell-level shares, which scores neither map.
+That describes the majority of what we found.
 
 We assembled a census of sixty-seven sources, one note each, recording design, what numbers
 were printed or deposited, a fetched access route, and a usability verdict, negatives
-included so the next pass starts where this one stopped; it is in the repository under
+included. It is in the repository under
 \texttt{research/restriction/notes/crr}. Table~\ref{tab:census} lists the sources that restrict a
 response set over shared alternatives, are not scored above, and could therefore still change
 the answer.
@@ -1171,7 +1112,7 @@ J\"ager et al. & flavour terms & nested, $n = 735$ & library access \\
 H\"orberg et al. & odor naming & free, then cued list & data request \\
 \bottomrule
 \end{tabular}
-\caption{Restriction experiments not scored in this paper. ``Printed'' means the matrices
+\caption{Restriction experiments not scored above. ``Printed'' means the matrices
 appear in the article and need transcription, as Townsend and Landon's were for
 Section~\ref{sec:townsend}. The Rouder laboratory data is unpublished but public, with a master set, nested
 subsets and stimulus and response logged as global indices, which is the property that makes
@@ -1180,12 +1121,9 @@ four-descriptor menu, so they calibrate and cannot score.}
 \label{tab:census}
 \end{table}
 
-Two features of the table bear on how much the answer above should be trusted. Every entry
-would enlarge the evidence on the winning side of the boundary or the losing one, and none
-of them is a preference task, so the corpus scored here is not representative of the
-literature by domain. And the one entry that needs only transcription is the oldest of all, which is
-a reasonable summary of the state of this question: the data has been on the ground since
-1960.
+None of the eleven entries is a preference task, so the corpus scored above is not
+representative of this literature by domain. The one entry needing only transcription is the
+oldest, published in 1960.
 
 \begin{thebibliography}{99}
 
