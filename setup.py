@@ -21,7 +21,7 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.9",
     ],
-    packages=["winning", "winning.factor", "winning.methods", "winning.bench", "winning.thurstone"],
+    packages=["winning", "winning.factor", "winning.methods", "winning.bench", "winning.thurstone", "winning.probit"],
     test_suite='pytest',
     tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],
     include_package_data=True,

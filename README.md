@@ -71,6 +71,19 @@ p = win_probabilities_factor(mu, V, D, F, W)  # all N shares, O(QNL)
 mu_hat = abilities_from_probabilities_factor(p, V, D, F, W)   # inversion
 ```
 
+For the probit literature, `winning.probit` speaks max-wins utilities
+and shares directly — the paper's own conventions — and is the one
+audited reflection onto the internal min-wins race.
+
+```python
+from winning.probit import shares, utilities_from_shares
+
+p = shares(utilities, V=V, D=D)            # higher utility wins
+u = utilities_from_shares(p, V=V, D=D)     # the paper's calibration
+p = shares(utilities, Sigma=Sigma, k=2)    # supplied covariance: certified
+                                           # contrast factor fit en route
+```
+
 One race, everything a parameter: distribution and correlation chosen
 per call, with factor probit just one named point in the family.
 
