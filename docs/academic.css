@@ -75,8 +75,6 @@ pre code { background: none; padding: 0; }
 .callout { background: #f1f0fb; border-left: 3px solid var(--accent); padding: 12px 18px; border-radius: 4px; margin: 18px 0; }
 .callout.warn { background: #fff5ef; border-left-color: var(--warn); }
 
-.tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
-.tag { background: #ece9ff; color: var(--accent); border-radius: 3px; padding: 2px 8px; font-size: 0.8rem; }
 
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; margin: 14px 0; }
 table th, table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
