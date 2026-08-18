@@ -32,27 +32,37 @@ changes the task.
 \footnotetext[2]{The Gumbel construction is due to Holman and Marley
 \cite{lucesuppes1965,holman1974}; the uniqueness is Yellott's \cite{yellott1977}.}
 
-\section{Prior tests of the rule}
+\section{The restriction problem}
+\label{sec:problem}
 
-For a population and a menu $S$, let $p_i$ be the share choosing or first-ranking item $i$.
-Luce's axiom \cite{luce1959} assigns a worth $u(i)$ with
+A population chooses among a menu of alternatives and its shares are known. One or more of the
+alternatives is then withdrawn: a horse is scratched, a product is delisted, a candidate fails
+to qualify for a ballot, a response option is disallowed, a token is masked out of a softmax.
+What are the shares over the survivors?
+
+Nothing has been observed about the smaller menu, so the answer must come from an assumption
+about how the original shares arose. The standard assumption is stated by Luce's axiom
+\cite{luce1959}, which assigns each item $i$ on menu $S$ a worth $u(i)$ with
 \begin{equation}
 p_i = \frac{u(i)}{\sum_{j \in S} u(j)},
 \label{eq:luce}
 \end{equation}
 so the shares determine the worths up to scale. The prediction for a subset $T \subseteq S$
-follows by changing the denominator alone, which leaves every ratio $p_i/p_j$ with
-$i,j \in T$ as it was in $S$. For a two-item menu the predicted share preferring $i$ is
-$p_i/(p_i+p_j)$. That invariance is Independence of Irrelevant Alternatives, and applied to a
-reduced set of response alternatives it is what Clarke \cite{clarke1957} named the
-\emph{constant-ratio rule}.
+follows by changing the denominator alone, which leaves every ratio $p_i/p_j$ with $i,j \in T$
+as it was in $S$. For a two-item menu the predicted share preferring $i$ is $p_i/(p_i+p_j)$.
+This is proportional renormalization. The invariance it imposes is Independence of Irrelevant
+Alternatives, and applied to a reduced set of response alternatives it is what Clarke
+\cite{clarke1957} named the \emph{constant-ratio rule}.
 
-Clarke tested it on spoken consonants in noise, predicting confusion matrices over reduced
-response sets from a larger one, and Clarke and Anderson \cite{clarkeanderson1957} followed
-with a second test. Pollack and Decker \cite{pollackdecker1960} predicted four-way consonant
-matrices from an eight-way matrix and reported average deviations near four per cent. Hodge
-\cite{hodge1961} ran nested ensembles in three modalities, Rich \cite{rich1971} carried the
-rule into short-term memory, and Getty, Swets, Swets and Green \cite{getty1979} held eight
+\section{Prior tests of the constant-ratio rule}
+\label{sec:prior}
+
+Clarke tested the rule on spoken consonants in noise, predicting confusion matrices over
+reduced response sets from a larger one, and Clarke and Anderson \cite{clarkeanderson1957}
+followed with a second test. Pollack and Decker \cite{pollackdecker1960} predicted four-way
+consonant matrices from an eight-way matrix and reported average deviations near four per cent.
+Hodge \cite{hodge1961} ran nested ensembles in three modalities, Rich \cite{rich1971} carried
+the rule into short-term memory, and Getty, Swets, Swets and Green \cite{getty1979} held eight
 stimuli fixed while allowing only four responses. Morgan \cite{morgan1974} built a
 likelihood-ratio test and rejected the rule on the earlier data. Townsend and Landon
 \cite{townsendlandon1982} ran one master set of five letters with three nested response sets,
@@ -65,15 +75,15 @@ Thurstonian replacement.
 Two findings recur across those studies. The rule is a fair first approximation, and it fails
 by concentrating the withdrawn mass onto whichever survivor most resembles the removed
 alternative rather than spreading it proportionally. Townsend and Landon attribute that to
-Debreu, and it is the same diagnosis Rouder reaches from the opposite direction.
+Debreu, and Rouder reaches the same diagnosis from the opposite direction.
 
-What the literature does not contain is a comparison against the other map available without
-fitting anything. Lee \cite{lee1968} proposed one analytically, observing that detection theory
-and the constant-ratio rule diverge most for unidimensional stimuli and that the gap could
-serve in diagnosis, but the comparison was not carried out on data. Nor was any of this scored
-out of sample: the tests are goodness-of-fit statements about the matrix in hand.
+What the literature does not contain is a comparison against a second assumption carrying no
+free parameters either. Lee \cite{lee1968} proposed one analytically, observing that detection
+theory and the constant-ratio rule diverge most for unidimensional stimuli and that the gap
+could serve in diagnosis, but did not carry it out on data. Nor was any of this scored out of
+sample; the tests are goodness-of-fit statements about the matrix in hand.
 Appendix~\ref{sec:census} is a census of sixty-seven sources, recording which of them printed
-or deposited enough to score either map.
+or deposited enough to score either assumption.
 
 \section{Two parameter-free maps}
 \label{sec:maps}
@@ -176,8 +186,8 @@ renormalization.
 
 The proposition gives the direction of the effect and not its size. Size depends on the shares
 as well as on the noise law, and recalibrating several laws to one share vector and then to
-another can reverse which of them contracts more. No claim is made that thinner or heavier
-tails contract more.
+another can reverse which of them contracts more, so tail thickness alone does not order the
+laws by how much they contract.
 
 \section{What is measured here}
 \label{sec:design}
@@ -585,9 +595,8 @@ on $X$. The race corrects the favourite downward and the near-substitute upward,
 right direction and the second far too little, and moves the dissimilar letter the wrong way.
 It wins because the dominant terms improve. Townsend and Landon diagnosed their residual as
 mass concentrating onto the surviving near-substitute instead of spreading, and Case V has no
-covariance to represent that, so the residual survives. The claim this dataset supports is
-that a parameter-free Gaussian recovers part of a sixty-year-old discrepancy, not that it
-explains it. Lee \cite{lee1968} proposed exactly this comparison analytically in 1968,
+covariance to represent that, so the residual survives. A parameter-free Gaussian recovers
+part of the discrepancy and does not remove it. Lee \cite{lee1968} proposed exactly this comparison analytically in 1968,
 observing that detection theory and the constant-ratio rule diverge most for unidimensional
 stimuli and that the gap could serve in diagnosis; what is added here is the out-of-sample
 follow-through.
@@ -900,24 +909,21 @@ is rejected is a representative-agent map.
 The experiment compares two restriction maps, not two fitted likelihoods. A fitted
 Plackett--Luce model \cite{plackett1975} uses the whole ranking and a fitted Bradley--Terry
 model \cite{bradley1952} uses the pairwise outcomes directly. Neither was estimated here. Recommendations about ranking or
-paired-comparison likelihoods therefore have no support in these tables.
+paired-comparison likelihoods are therefore outside what these tables measure.
 
 The score is a sum of marginal scores for top-item-within-subset outcomes. It is proper
 for those marginals and not for the ranking distribution. With $K = 4$ the scored
 marginals carry at most $17$ degrees of freedom against $23$ for a distribution over
 rankings, so distinct ranking laws can agree on everything scored here.
 
-Nesting is not costlessness. Conceptually the independent-noise race family nests Luce at
-the Gumbel noise law, so the family excludes no Luce population, but Table~\ref{tab:null} shows that
-choosing the Gaussian point is a separate statistical decision which loses when the axiom
-holds and the shares are well estimated.
+The independent-noise family nests Luce at the Gumbel law, so it excludes no Luce population.
+Choosing the Gaussian point of it is a separate decision, and Table~\ref{tab:null} shows that
+decision losing when the axiom holds and the shares are well estimated.
 
-So the recommendation is not a claim of dominance. Neither map dominates the other: when
-the shares are precise the better map is whichever one matches the population, and when
-they are very noisy the dominant consideration is estimation risk rather than either
-structural rule. What the tables support is a structural default in the absence of
-evidence for the axiom, which is the situation an analyst holding only aggregate shares is
-actually in.
+Neither map dominates the other. When the shares are precise the better map is whichever
+matches the population, and when they are very noisy the dominant consideration is estimation
+risk rather than either structural rule. The recommendation above is for the case where an
+analyst holds aggregate shares and has no evidence about the axiom either way.
 
 One limit is larger than the effect measured here. Both defaults can be checked against the
 truth, rather than only against each other, in the after-the-stimulus arms of
@@ -929,10 +935,9 @@ Choosing the better of two parameter-free maps is therefore a smaller improvemen
 fitting one number would be, wherever a restricted-menu observation exists to fit it on. The
 case made here is for the situation where none does.
 
-A tempting shortcut fails. Pricing ordered outcomes by removing the winner and
-re-running looks like the race's own prediction, and it is not: against the calibrated
-race's ordering law it misprices individual pairs and triples by up to a factor of
-$3.4$. We leave to future work the comparison of the exact Gaussian ordering law
+Pricing ordered outcomes by removing the winner and re-running is not the race's own
+prediction. Against the calibrated race's ordering law it misprices individual pairs and
+triples by up to a factor of $3.4$. We leave to future work the comparison of the exact Gaussian ordering law
 against Plackett--Luce ranking probabilities on complete-ranking data.
 
 \section*{Data and code}
