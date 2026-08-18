@@ -47,7 +47,7 @@
       browser by the same algorithm the Python package ships, at machine-precision
       parity.</p>
     <div class="stage">
-      <div class="panel"><svg id="net" viewBox="-1.45 -1.45 2.9 2.9" style="width:100%;aspect-ratio:1;display:block"></svg></div>
+      <div class="panel"><svg id="net" viewBox="0 0 460 460" style="width:100%;aspect-ratio:1;display:block"></svg></div>
       <div class="panel"><svg id="bars" viewBox="0 0 460 420" style="width:100%;aspect-ratio:460/420;display:block"></svg>
         <p class="legend" id="caption">No runner deleted. Click one.</p></div>
     </div>
@@ -68,9 +68,12 @@
     const res = winProbabilitiesFactor(mu, V, D, F, W, { pairwise: true, deletions: true });
     const p = res.p, w = res.w, q = res.deletions;
     const wmax = Math.max(...w.flat());
+    // Pixel coordinates throughout: SVG presentation attributes lose to any
+    // CSS stroke-width/font-size, so a unit-scale viewBox renders wrong.
+    const CTR = 230, RING = 170;
     const pos = Array.from({ length: N }, (_, i) => {
       const t = 2 * Math.PI * i / N - Math.PI / 2;
-      return [Math.cos(t), Math.sin(t)];
+      return [CTR + RING * Math.cos(t), CTR + RING * Math.sin(t)];
     });
     const net = document.getElementById("net");
     const barsSvg = document.getElementById("bars");
@@ -84,19 +87,20 @@
     function drawNet() {
       net.innerHTML = "";
       for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
-        const lw = 0.05 * w[i][j] / wmax;
-        if (lw < 0.001) continue;
+        const lw = 8 * w[i][j] / wmax;
+        if (lw < 0.15) continue;
         S("line", { x1: pos[i][0], y1: pos[i][1], x2: pos[j][0], y2: pos[j][1],
           class: "wire", "stroke-width": lw,
           opacity: (deleted === i || deleted === j) ? 0.12 : 0.7 }, net);
       }
       for (let i = 0; i < N; i++) {
-        const r = 0.05 + 0.35 * Math.sqrt(p[i]);
+        const r = 8 + 55 * Math.sqrt(p[i]);
         const c = S("circle", { cx: pos[i][0], cy: pos[i][1], r,
           class: "node" + (deleted === i ? " dead" : "") }, net);
         c.addEventListener("click", () => { deleted = deleted === i ? null : i; drawNet(); drawBars(); });
-        S("text", { x: pos[i][0] * 1.28, y: pos[i][1] * 1.28 + 0.03,
-          "text-anchor": "middle", "font-size": "0.13" }, net).textContent = i;
+        const t = 2 * Math.PI * i / N - Math.PI / 2;
+        S("text", { x: CTR + 213 * Math.cos(t), y: CTR + 213 * Math.sin(t) + 4,
+          "text-anchor": "middle" }, net).textContent = i;
       }
     }
     function drawBars() {

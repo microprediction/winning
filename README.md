@@ -75,17 +75,19 @@ w = tie_densities(mu, V=V, D=D)    # photo-finish weights: the Jacobian's
 
 For the probit literature, `winning.probit` speaks max-wins utilities
 and shares directly — the paper's own conventions — and is the one
-audited reflection onto the internal min-wins race.
+audited reflection onto the internal min-wins race. Both of the paper's
+calibrations live here: utilities from observed shares, and the factor
+structure itself from a supplied covariance.
 
 ```python
-from winning.probit import shares, utilities_from_shares
+from winning.probit import shares, utilities_from_shares, fit_factor_model
 
 utilities = -mu                            # higher is better on this side
 p = shares(utilities, V=V, D=D)            # all N choice probabilities
 u = utilities_from_shares(p, V=V, D=D)     # the paper's calibration
 Sigma = V @ V.T + np.diag(D)
-p2 = shares(utilities, Sigma=Sigma, k=2)   # supplied covariance: certified
-                                           # contrast factor fit en route
+V_hat, D_hat = fit_factor_model(Sigma, k=2)  # certified rank-k contrast fit
+p2 = shares(utilities, Sigma=Sigma, k=2)   # same fit applied en route
 ```
 
 One race, everything a parameter: distribution and correlation chosen

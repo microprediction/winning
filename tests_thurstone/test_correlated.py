@@ -269,8 +269,9 @@ def test_factor_model_equicorrelated_is_exact_at_k1():
 
 
 def test_gaussian_nodes_deterministic_given_seed():
-    F1, W1 = __import__("thurstone").gaussian_nodes(5, n=512, seed=3)
-    F2, W2 = __import__("thurstone").gaussian_nodes(5, n=512, seed=3)
+    from winning.thurstone import gaussian_nodes
+    F1, W1 = gaussian_nodes(5, n=512, seed=3)
+    F2, W2 = gaussian_nodes(5, n=512, seed=3)
     assert np.array_equal(F1, F2) and np.array_equal(W1, W2)
     assert abs(W1.sum() - 1.0) < 1e-12
 
