@@ -1,0 +1,7 @@
+regime,k_fit,max_share_err,pinsker_bound
+flat,1,3.290e-02,1.369e+00
+flat,2,2.661e-02,1.083e+00
+flat,3,8.483e-03,6.737e-01
+decaying,1,4.679e-03,8.332e-01
+decaying,2,3.957e-04,5.287e-02
+decaying,3,9.666e-05,8.445e-03
