@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>winning — the photo-finish circuit</title>
+  <meta name="description" content="Interactive demo: the race as a resistor network. Tie densities are conductances; click a runner to delete it and watch where the share really flows, against the IIA prediction. Computed live by the winning algorithm in JavaScript." />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    .stage { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
+    svg { max-width: 100%; }
+    .panel { flex: 1 1 380px; }
+    .legend { font-size: 0.9rem; color: #444; }
+    .bar { fill: #1f77b4; } .bar.neg { fill: #c44e52; }
+    .node { cursor: pointer; stroke: #fff; stroke-width: 1.5; fill: #1f77b4; }
+    .node.dead { fill: #bbb; cursor: default; }
+    .wire { stroke: #888; }
+    text { font-family: inherit; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header class="site-nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="./ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <h1>The photo-finish circuit</h1>
+    <p class="subtitle">The race is a resistor network. Click a runner to delete it.</p>
+    <p class="lead">Twelve runners, two common factors. Node size is win share; wire
+      thickness is the photo-finish tie density between two runners — the conductance
+      of that edge, and exactly the weight in the calibration Jacobian's graph
+      Laplacian. <strong>Click a node</strong> to remove that runner: the bars show how
+      much more (or less) each survivor gains than the proportional IIA rule predicts.
+      Factor-similar runners gain disproportionately; everything is computed in your
+      browser by the same algorithm the Python package ships, at machine-precision
+      parity.</p>
+    <div class="stage">
+      <div class="panel"><svg id="net" viewBox="-1.45 -1.45 2.9 2.9"></svg></div>
+      <div class="panel"><svg id="bars" viewBox="0 0 460 420"></svg>
+        <p class="legend" id="caption">No runner deleted. Click one.</p></div>
+    </div>
+    <p><a href="https://github.com/microprediction/winning/blob/main/research/demos/photo_finish_circuit.py">
+      Python version of this demo</a> ·
+      <a href="https://github.com/microprediction/winning/tree/main/js/factor">the JS module and its parity tests</a> ·
+      <a href="./assets/pdf/factor_probit_share_calibration.pdf">the paper</a></p>
+  </main>
+  <script type="module">
+    import { winProbabilitiesFactor } from "./assets/js/factor_race.mjs";
+    const T = await (await fetch("./assets/js/circuit_problem.json")).json();
+    const { mu, V, D } = T.problem, { F, W } = T.hermite;
+    const N = mu.length;
+    const res = winProbabilitiesFactor(mu, V, D, F, W, { pairwise: true, deletions: true });
+    const p = res.p, w = res.w, q = res.deletions;
+    const wmax = Math.max(...w.flat());
+    const pos = Array.from({ length: N }, (_, i) => {
+      const t = 2 * Math.PI * i / N - Math.PI / 2;
+      return [Math.cos(t), Math.sin(t)];
+    });
+    const net = document.getElementById("net");
+    const barsSvg = document.getElementById("bars");
+    const caption = document.getElementById("caption");
+    const S = (tag, attrs, parent) => {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      parent.appendChild(el); return el;
+    };
+    let deleted = null;
+    function drawNet() {
+      net.innerHTML = "";
+      for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+        const lw = 0.05 * w[i][j] / wmax;
+        if (lw < 0.001) continue;
+        S("line", { x1: pos[i][0], y1: pos[i][1], x2: pos[j][0], y2: pos[j][1],
+          class: "wire", "stroke-width": lw,
+          opacity: (deleted === i || deleted === j) ? 0.12 : 0.7 }, net);
+      }
+      for (let i = 0; i < N; i++) {
+        const r = 0.05 + 0.35 * Math.sqrt(p[i]);
+        const c = S("circle", { cx: pos[i][0], cy: pos[i][1], r,
+          class: "node" + (deleted === i ? " dead" : "") }, net);
+        c.addEventListener("click", () => { deleted = deleted === i ? null : i; drawNet(); drawBars(); });
+        S("text", { x: pos[i][0] * 1.28, y: pos[i][1] * 1.28 + 0.03,
+          "text-anchor": "middle", "font-size": "0.13" }, net).textContent = i;
+      }
+    }
+    function drawBars() {
+      barsSvg.innerHTML = "";
+      if (deleted === null) { caption.textContent = "No runner deleted. Click one."; return; }
+      const keep = [...Array(N).keys()].filter(i => i !== deleted);
+      const rel = keep.map(j => 100 * (q[deleted][j] / (p[j] / (1 - p[deleted])) - 1));
+      const sim = keep.map(j => V[j].reduce((s, v, d) => s + v * V[deleted][d], 0));
+      const order = [...keep.keys()].sort((a, b) => sim[b] - sim[a]);
+      const maxAbs = Math.max(...rel.map(Math.abs), 1);
+      const x0 = 180, scale = 250 / maxAbs, rowH = 420 / keep.length;
+      order.forEach((oi, row) => {
+        const g = rel[oi], y = row * rowH + 4;
+        S("rect", { x: g >= 0 ? x0 : x0 + g * scale, y, width: Math.abs(g) * scale,
+          height: rowH - 8, class: "bar" + (g < 0 ? " neg" : "") }, barsSvg);
+        S("text", { x: x0 - 8, y: y + rowH / 2, "text-anchor": "end" },
+          barsSvg).textContent = "runner " + keep[oi];
+        S("text", { x: g >= 0 ? x0 + g * scale + 6 : x0 + 6, y: y + rowH / 2 },
+          barsSvg).textContent = g.toFixed(0) + "%";
+      });
+      S("line", { x1: x0, y1: 0, x2: x0, y2: 420, stroke: "#333",
+        "stroke-width": 1 }, barsSvg);
+      caption.textContent = `Runner ${deleted} deleted (share ${(100 * p[deleted]).toFixed(1)}%). ` +
+        `Bars: share gained relative to the IIA proportional rule, ordered by factor ` +
+        `similarity to the deleted runner (most similar at top). Click again to restore.`;
+    }
+    drawNet(); drawBars();
+  </script>
+</body>
+</html>

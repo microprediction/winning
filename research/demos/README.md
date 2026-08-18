@@ -8,9 +8,11 @@ in `papers/factor-probit-transform/`.
   miniature, plain NumPy).
 - `cavity_downdate_demo.py` — the rank-one cavity twin: one inverse
   contains every leave-one-out inverse.
-- Planned: the photo-finish circuit demo (tie densities as
-  conductances, Newton steps as electrical solves, deletion flows vs
-  IIA), in Python (figure) and in the browser via `js/factor/`.
+- `photo_finish_circuit.py` — the circuit demo: tie densities as
+  conductances, a Newton step as an electrical solve, and deletion
+  flows against IIA (factor-similar runners gain disproportionately;
+  +0.56 mean correlation across 30 seeds). Interactive browser version
+  at winning.microprediction.org/circuit.html, powered by `js/factor/`.
 
 The Laplacian Newton-CG demonstration against the thurstone API lives
 with that package (`thurstone/examples/laplacian_newton_demo.py`);
