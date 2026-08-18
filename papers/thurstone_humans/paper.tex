@@ -21,7 +21,9 @@ delisted or masked out of a softmax, proportional renormalization is the reflex,
 models the architecture. An analyst holding shares and no restricted-menu observation has two
 parameter-free options. Renormalization is the Gumbel point of the independent additive
 random-utility class\footnotemark[2]. Re-running a Gaussian contest among the survivors is
-Case V. Anything between costs a fitted number. Psychology has tested renormalization under
+Case V. Any noise law fixed in advance gives such a map, and these two are the conventional
+choices: the first is the reflex, the second the classical Thurstone model. Psychology has
+tested renormalization under
 restriction since 1957, under the name constant-ratio rule, and we revisit that question by
 scoring the two defaults against each other out of sample on thirty-four population
 comparisons, old and new. The contest wins where alternatives are distinct and unordered, and
@@ -80,9 +82,80 @@ The two horses disagree, and in a fixed direction. If $p_i > p_j$ then Equation~
 lies between $\tfrac12$ and the renormalized $p_i/(p_i+p_j)$: winning a large field requires an
 unusually high draw and beating a single rival does not, so withdrawing the other alternatives
 counts the favourite's advantage for less. Section~\ref{sec:maps} shows that these two are the
-only members of the independent additive random-utility class costing nothing to apply, because
-fixing any other noise law requires a number the shares cannot supply, and
-Proposition~\ref{prop:contraction} makes the direction exact.
+two conventional members of the independent additive random-utility class, and
+Proposition~\ref{prop:contraction} makes the direction of their disagreement exact.
+
+\section{Scoreboard}
+
+Table~\ref{tab:scoreboard} states the result before the argument for it. Thirty-four
+populations have full-menu shares that calibrate both maps and restricted-menu choices that
+score them by log loss. A comparison is a win for Gaussian renormalization when its gain
+exceeds the gain a population obeying the constant-ratio rule would produce on the same menus,
+with a Monte Carlo tail frequency of $0.05$ or less, a loss when linear normalization exceeds
+it on that test, and a draw otherwise. Section~\ref{sec:empirical} gives the protocol, the
+datasets and the null.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llrl}
+\toprule
+Population & Restriction & Tail & Verdict \\
+\midrule
+Occupational prestige & ranking-induced & $\le .005$ & win \\
+Sushi & ranking-induced & $\le .005$ & win \\
+Political goals & ranking-induced & $\le .005$ & win \\
+GSS socialization & ranking-induced & $\le .005$ & win \\
+GSS job values & ranking-induced & $\le .005$ & win \\
+Jester files 1, 2, 3 & ranking-induced & $\le .005$ & win $\times 3$ \\
+Dots & ranking-induced & $\le .005$ & win \\
+Puzzles & ranking-induced & $\le .005$ & win \\
+Netflix & ranking-induced & $\le .005$ & win \\
+Sports participation & ranking-induced & $.51$ & draw \\
+\midrule
+Colour naming, four to two & observed menus & $\le .005$ & win \\
+Symbol naming, six to two & observed menus & $\le .005$ & win \\
+Recognition foils, four to two & observed menus & $\le .005$ & win \\
+News slates & observed impressions & $.016$ & win \\
+Consumer goods, experiment 1 & observed menus & $.005$ & win \\
+Gambles, high arithmetic cost & observed menus & $.035$ & win \\
+US state ballots 2024 & observed ballots & $.005$ & win \\
+Letters, five to three, $\{F,H,X\}$ & observed menus & $.005$ & win \\
+Categories, three to two & observed menus & $.002$ & win \\
+Letters, five to three, $\{A,E,X\}$ & observed menus & $.010$ & win \\
+Sounds, eight to four, spread sets & observed menus & $\le .005$ & win $\times 2$ \\
+Wikipedia links & observed removals & $.005$ & win\footnotemark[1] \\
+Consumer goods, experiment 2 & observed menus & $.129$ & draw \\
+Gambles, medium arithmetic cost & observed menus & $.124$ & draw \\
+Gambles, low arithmetic cost & observed menus & $.667$ & draw \\
+Letters, five to four, $\{A,E,F,H\}$ & observed menus & $.129$ & draw \\
+\midrule
+Sounds, eight to four, similar set & observed menus & $1.000$ & loss \\
+Tones, narrow spacing, ten to six & observed menus & n/a & loss \\
+Tones, narrow spacing, ten to eight & observed menus & n/a & loss \\
+Tones, wide spacing, ten to six & observed menus & n/a & loss \\
+Tones, wide spacing, ten to eight & observed menus & n/a & loss \\
+\bottomrule
+\end{tabular}
+\caption{Twenty-four wins, five draws, five losses. The first block reads subset choice off a
+complete ranking; the second and third observe it. Tail frequencies are floored at $1/201$
+by two hundred replicates. The tone matrices are participant-averaged and between-subjects,
+so there is nothing to resample and the losses are point comparisons. Forced-choice
+subgroups are quoted for the consumer experiments, since no deferral coding enters those.
+Three further populations appear in Section~\ref{sec:boundary} rather than here, because
+published aggregates fix the direction of the failure without supporting this protocol.}
+\label{tab:scoreboard}
+\end{table}
+
+\footnotetext[1]{Wikipedia has a negative raw gain and a positive excess: the race loses to
+renormalization in absolute terms while still beating what the axiom predicts of it. See
+Table~\ref{tab:more}.}
+
+The losses are not scattered. Four of the five are the same task, absolute identification of
+tones, and the fifth is the one sound-identification condition whose survivors are mutual
+confusions. The draws fall at the smallest ranking collection, the smallest consumer experiment
+and the two gamble frames whose shares are most concentrated. The two largest wins, colour and
+symbol naming, come from the one experiment that supplies its own control.
 
 \section{Prior tests of the constant-ratio rule}
 \label{sec:prior}
@@ -120,7 +193,7 @@ or deposited enough to score either assumption.
 \section{Theory}
 \label{sec:theory}
 
-\subsection{Why only two maps carry no parameters}
+\subsection{Why these two maps}
 \label{sec:maps}
 
 Renormalization is not a consequence of probability theory. It is the posterior for mutually
@@ -148,10 +221,12 @@ since conditioning on $X_i = x$ makes the other events independent, and it is in
 numerically by the lattice method of \cite{cotton2021}, which recovers the whole location
 vector in one pass over a shared grid.
 
-The class contains exactly two parameter-free points. Fix the noise law up to location and
-there is nothing left to choose. Gumbel gives renormalization, unit-variance Gaussian gives
-Case V, and every law between them costs a number. An analyst holding aggregate shares and no
-restricted observations therefore has two candidates rather than a family. Both are calibrated
+Any noise law fixed in advance up to location gives a map with nothing left to choose, so the
+class supplies many zero-parameter candidates and not two. We compare two of them because they
+are the conventional ones. Gumbel gives renormalization, which is the reflex and the
+architecture of a masked softmax. Unit-variance Gaussian gives Case V, which is the classical
+model of a latent contest and the one Thurstone proposed. Interpolating between them, or fixing
+a scale for some third law, requires a number that the shares themselves do not supply. Both are calibrated
 to the same $|S|-1$ free shares and neither sees any observation from a smaller menu. Both are
 \emph{representative-agent} maps, treating the population as one chooser with one set of
 worths or locations and transporting its shares from $S$ to $T$. A fitted Plackett--Luce
@@ -357,76 +432,6 @@ Gaussian map costs nothing to apply. And a generative null is available: contrac
 noisily estimated share vector lowers log loss whether or not the axiom fails, so every gain
 below is reported net of what a population obeying the axiom exactly would produce on the same
 menus, which Section~\ref{sec:null} details.
-
-\subsection{Scoreboard}
-
-Thirty-four comparisons follow, each a population whose full-menu shares calibrate both maps
-and whose restricted-menu choices score them. A comparison is a win for the race when its gain
-exceeds the gain a renormalizing population would produce, with a Monte Carlo tail frequency of
-$0.05$ or less, a loss when renormalization exceeds the race on the same test, and a draw
-otherwise.
-
-\begin{table}[ht]
-\centering
-\small
-\begin{tabular}{llrl}
-\toprule
-Population & Restriction & Tail & Verdict \\
-\midrule
-Occupational prestige & ranking-induced & $\le .005$ & win \\
-Sushi & ranking-induced & $\le .005$ & win \\
-Political goals & ranking-induced & $\le .005$ & win \\
-GSS socialization & ranking-induced & $\le .005$ & win \\
-GSS job values & ranking-induced & $\le .005$ & win \\
-Jester files 1, 2, 3 & ranking-induced & $\le .005$ & win $\times 3$ \\
-Dots & ranking-induced & $\le .005$ & win \\
-Puzzles & ranking-induced & $\le .005$ & win \\
-Netflix & ranking-induced & $\le .005$ & win \\
-Sports participation & ranking-induced & $.51$ & draw \\
-\midrule
-Colour naming, four to two & observed menus & $\le .005$ & win \\
-Symbol naming, six to two & observed menus & $\le .005$ & win \\
-Recognition foils, four to two & observed menus & $\le .005$ & win \\
-News slates & observed impressions & $.016$ & win \\
-Consumer goods, experiment 1 & observed menus & $.005$ & win \\
-Gambles, high arithmetic cost & observed menus & $.035$ & win \\
-US state ballots 2024 & observed ballots & $.005$ & win \\
-Letters, five to three, $\{F,H,X\}$ & observed menus & $.005$ & win \\
-Categories, three to two & observed menus & $.002$ & win \\
-Letters, five to three, $\{A,E,X\}$ & observed menus & $.010$ & win \\
-Sounds, eight to four, spread sets & observed menus & $\le .005$ & win $\times 2$ \\
-Wikipedia links & observed removals & $.005$ & win\footnotemark[1] \\
-Consumer goods, experiment 2 & observed menus & $.129$ & draw \\
-Gambles, medium arithmetic cost & observed menus & $.124$ & draw \\
-Gambles, low arithmetic cost & observed menus & $.667$ & draw \\
-Letters, five to four, $\{A,E,F,H\}$ & observed menus & $.129$ & draw \\
-\midrule
-Sounds, eight to four, similar set & observed menus & $1.000$ & loss \\
-Tones, narrow spacing, ten to six & observed menus & n/a & loss \\
-Tones, narrow spacing, ten to eight & observed menus & n/a & loss \\
-Tones, wide spacing, ten to six & observed menus & n/a & loss \\
-Tones, wide spacing, ten to eight & observed menus & n/a & loss \\
-\bottomrule
-\end{tabular}
-\caption{Twenty-four wins, five draws, five losses. The first block reads subset choice off a
-complete ranking; the second and third observe it. Tail frequencies are floored at $1/201$
-by two hundred replicates. The tone matrices are participant-averaged and between-subjects,
-so there is nothing to resample and the losses are point comparisons. Forced-choice
-subgroups are quoted for the consumer experiments, since no deferral coding enters those.
-Three further populations appear in Section~\ref{sec:boundary} rather than here, because
-published aggregates fix the direction of the failure without supporting this protocol.}
-\label{tab:scoreboard}
-\end{table}
-
-\footnotetext[1]{Wikipedia has a negative raw gain and a positive excess: the race loses to
-renormalization in absolute terms while still beating what the axiom predicts of it. See
-Table~\ref{tab:more}.}
-
-The losses are not scattered. All four are the same task, absolute identification of tones, and Section~\ref{sec:boundary}
-argues they are one loss with four rows. The draws sit where they should, at the smallest
-ranking collection, the smallest consumer experiment and the two gamble frames whose shares
-are most concentrated. And the two largest wins, colour and symbol naming, come from the
-one experiment that also supplies its own control.
 
 \subsection{Restrictions that were observed}
 \label{sec:observed}
@@ -1091,7 +1096,7 @@ Section~\ref{sec:after} and in the favourite's second-place probability of
 Table~\ref{tab:favsecond}. In both, they are wrong in the same direction and by more than
 they differ from one another. The race removes a fifth to a third of
 renormalization's error in the first case and five to twelve per cent of it in the second.
-Choosing the better of two parameter-free maps is therefore a smaller improvement than
+Choosing the better of these two maps is therefore a smaller improvement than
 fitting one number would be, wherever a restricted-menu observation exists to fit it on. The
 case made here is for the situation where none does.
 
@@ -1122,7 +1127,8 @@ the same alternatives before and after. Or one share already holds most of the m
 case the two maps agree to within the noise. The within-set confusion mass of
 Table~\ref{tab:getty} is the sharpest of these, and it is computed from full-menu data alone.
 
-This note is about competing reflexes rather than competing careful modelling paradigms. Both
+To repeat, this note is about competing reflexes rather than competing careful modelling
+paradigms. Both
 alternatives are nested by the independent additive random-utility family, indexed by its noise
 law, and both maps are wrong in the same direction wherever the truth can be measured, by more
 than they differ from one another. A fitted noise scale beats both wherever a restricted-menu
@@ -1133,8 +1139,7 @@ linear normalization at scale, so any model that restricts its output vocabulary
 time has adopted the Gumbel assumption by default.
 
 We leave to future work the comparison of the exact Gaussian ordering law against
-Plackett--Luce ranking probabilities on complete-ranking data, and the eleven restriction
-experiments of Appendix~\ref{sec:census} that remain unscored.
+Plackett--Luce ranking probabilities on complete-ranking data.
 
 \section*{Data and code}
 
