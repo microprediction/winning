@@ -19,16 +19,22 @@
   </style>
 </head>
 <body>
-  <header class="site-nav">
+  <header class="site-header">
     <div class="nav-inner">
       <a class="brand" href="/">winning</a>
       <nav>
         <a href="/">Home</a>
+        <a href="#papers">Papers</a>
+        <a href="#demos">Demos</a>
         <a href="./ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">Benchmarks</a>
         <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+        <a href="https://thurstone.microprediction.org/">thurstone</a>
       </nav>
     </div>
   </header>
+
   <main>
     <h1>The photo-finish circuit</h1>
     <p class="subtitle">The race is a resistor network. Click a runner to delete it.</p>
@@ -41,8 +47,8 @@
       browser by the same algorithm the Python package ships, at machine-precision
       parity.</p>
     <div class="stage">
-      <div class="panel"><svg id="net" viewBox="-1.45 -1.45 2.9 2.9"></svg></div>
-      <div class="panel"><svg id="bars" viewBox="0 0 460 420"></svg>
+      <div class="panel"><svg id="net" viewBox="-1.45 -1.45 2.9 2.9" style="width:100%;aspect-ratio:1;display:block"></svg></div>
+      <div class="panel"><svg id="bars" viewBox="0 0 460 420" style="width:100%;aspect-ratio:460/420;display:block"></svg>
         <p class="legend" id="caption">No runner deleted. Click one.</p></div>
     </div>
     <p><a href="https://github.com/microprediction/winning/blob/main/research/demos/photo_finish_circuit.py">
@@ -52,6 +58,10 @@
   </main>
   <script type="module">
     import { winProbabilitiesFactor } from "./assets/js/factor_race.mjs";
+    window.addEventListener("error", (e) => {
+      const c = document.getElementById("caption");
+      if (c) c.textContent = "Demo error: " + e.message;
+    });
     const T = await (await fetch("./assets/js/circuit_problem.json")).json();
     const { mu, V, D } = T.problem, { F, W } = T.hermite;
     const N = mu.length;

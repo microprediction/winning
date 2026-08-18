@@ -48,19 +48,19 @@ def tennis_events(tour: str = "atp", start_year: int = 2013, end_year: int = 202
         text = _fetch_year(year, tour=tour)
         for row in csv.DictReader(io.StringIO(text)):
             date = row.get("tourney_date") or ""
-            w, l = row.get("winner_name"), row.get("loser_name")
-            if not (date.isdigit() and w and l and w != l):
+            winner, loser = row.get("winner_name"), row.get("loser_name")
+            if not (date.isdigit() and winner and loser and winner != loser):
                 continue
-            rows.append((int(date), w, l))
+            rows.append((int(date), winner, loser))
     rows.sort(key=lambda r: r[0])
 
     events: List[Event] = []
     prev_ordinal = None
-    for date, w, l in rows:
+    for date, winner, loser in rows:
         ordinal = _date_ordinal(date)
         dt = 0.0 if prev_ordinal is None else max(0.0, float(ordinal - prev_ordinal))
         prev_ordinal = ordinal
-        events.append(Event(names=[w, l], ranks=[1, 2], dt=dt))
+        events.append(Event(names=[winner, loser], ranks=[1, 2], dt=dt))
     return events
 
 

@@ -37,3 +37,12 @@ Validation plan when picked up: k in {6, 8, 10}, N in {200, 1000};
 variance of the CV estimator vs plain Sobol at matched lattice-pass
 counts; report effective speedup and the correlation achieved; check
 the optimal temperature of the control is interior (it may be).
+
+## Thurstone demos migration (Peter, 2026-08-18)
+Transfer the thurstone examples (laplacian_newton_demo,
+diffeomorphism_demo, dynamic_calibration_demo, kalman_tracker_demo,
+global_calibration family, ...) into winning/research/demos - but
+CURATED, not dumped ("it could clutter"): one demo per concept,
+self-contained, rewritten against winning.thurstone / winning.factor
+imports, indexed in the demos README. Anything redundant with an
+existing demo or experiment stays in thurstone's git history.
