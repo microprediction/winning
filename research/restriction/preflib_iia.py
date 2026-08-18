@@ -16,7 +16,7 @@ cannot reverse, so these data can measure the odds shift but cannot exhibit the
 rank reversals the machine data shows. The elicitation format presupposes the
 stability the machines violate.
 
-Datasets are cached under research/human/preflib/ on first run, so the analysis
+Datasets are cached under research/restriction/preflib/ on first run, so the analysis
 is reproducible offline and the download is paid once.
 
 Usage:  python preflib_iia.py [max_datasets]

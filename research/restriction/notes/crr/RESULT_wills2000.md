@@ -1,7 +1,7 @@
 # Result: Wills, Reimers, Stewart, Suret & McLaren (2000, Experiment 2)
 
-Run with `research/human/wills_twochoice.py` on the CAM1 deposit, mirrored to
-`research/human/data/wills/`. Five authors, not three: Suret is on the title page even
+Run with `research/restriction/wills_twochoice.py` on the CAM1 deposit, mirrored to
+`research/restriction/data/wills/`. Five authors, not three: Suret is on the title page even
 though the Wills lab publication list omits him.
 
 ## The comparison

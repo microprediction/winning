@@ -4,15 +4,25 @@
 choice shares and scored its restricted-menu predictions against proportional
 renormalization, out of sample, with nothing fitted to the restricted menu?
 
-**The answer, in one line.** No — but the claim is much more crowded than the project's
-current framing admits, and three of the four component ideas are already in print.
-Nobody has run the specific out-of-sample forecast; somebody has already published the
-conclusion it is meant to support.
+**The answer, in one line.** No — but the claim is far more crowded than the project's
+current framing admits, and every component idea is already in print somewhere. Nobody has
+run the specific out-of-sample forecast on real matrices; **Lee (1968) computed the
+parameter-free Gaussian departure from renormalization and printed the table**, Wills et al.
+(2000) published the conclusion, Townsend & Landon (1982) ran the protocol, and Rouder (2004)
+published the negative result.
 
-Read the "What is already published" section before circulating anything. The sentence
-"the literature did not score renormalization against a parameter-free Gaussian race out
-of sample" in `../README.md` is defensible as written, but only because of the words
-*parameter-free* and *out of sample*. Drop either and it becomes false.
+Read all of "What is already published" before circulating anything. The sentence "the
+literature did not score renormalization against a parameter-free Gaussian race out of
+sample" in `../README.md` survives only on the words *out of sample* and *race* — the
+Gaussian-versus-renormalization comparison itself was tabulated fifty-eight years ago.
+
+**Two things must be pre-empted rather than left to a referee.** Duffy & Smith (2025) is a
+published, open-access, contrary result: on induced-value choice with varying set size, errors
+were "better described as having a Gumbel distribution rather than a normal distribution", with
+"evidence consistent with the independence from irrelevant alternatives (IIA) property."
+And Treisman & Faulkner (1985) may already have concluded that signal detection theory beats
+choice theory on data where response-set size varies — that one is **unresolved and is the
+highest residual risk in this file**.
 
 ---
 
@@ -35,6 +45,51 @@ file.
 ---
 
 ## What is already published, and what it costs the project
+
+### The parameter-free Gaussian departure was computed and tabulated in 1968
+
+Lee, W. (1968). "Detection theory, micromatching, and the constant-ratio rule."
+*Perception & Psychophysics* 4(4):217–219. doi:10.3758/BF03206305
+Full text recovered via Wayback and read; see `lee1968.md` for the complete treatment.
+
+**This is the most important citation for the project.** Lee takes sets of three stimuli and
+subsets of two, assumes equal-variance independent normals with zero covariance (Case V), and
+computes by numerical integration the **constancy**
+
+    c_ij = (r_i / r_j) / (r′_i / r′_j)
+
+— the observed restricted-menu odds divided by the odds renormalization predicts, which the
+CRR requires to equal 1.0. *This is exactly the quantity the project measures.* He states the
+point plainly (p. 218): "According to the CRR, c_ij = 1.0; however, as we shall see, there is
+no necessity that c_ij = 1.0 for detection theory or micromatching." Table 1 prints the
+departures at d′ = 0.0 … 3.0 for six configurations, and they are large — univariate detection
+theory falls to c = 0.22 by d′ = 3.0 in one configuration, and 0.00 at d′ = 0 in two others.
+He then proposes precisely the project's use for them: the differences "can be used in
+diagnosis of the basis of empirical confusion matrices."
+
+Three consequences, and they are not all bad:
+
+- **The project cannot claim that a Gaussian model implies a departure from renormalization,
+  nor that the departure is large, nor that its size was unknown.** All three are in Table 1.
+- **Lee's map is not the project's map, and this distinction must be stated explicitly rather
+  than glossed.** His Gaussian arm is a *decision-bound* model — one sample point in a shared
+  space, carved by optimal cutoffs re-solved on the surviving menu — not an independent-race
+  Thurstone model where each alternative draws its own latent and the argmax wins. His
+  "micromatching" is a posterior/ratio rule, also not a race. For the univariate
+  three-stimulus case these are genuinely different geometries with different numbers.
+- **Lee predicted where the failure would live, and he was right.** The departures concentrate
+  in the *univariate* configurations, which he uses to explain Hodge & Pollack's generalization
+  that CRR holds better for multidimensional stimuli. Townsend & Landon later found exactly
+  this: the subset that deleted a survivor's near-substitute was the one CRR could not predict.
+  That is a 1968 directional prediction confirmed in 1982 and never credited as such.
+
+And the sentence that best justifies the whole exercise (p. 219): "I would suggest that
+investigators of the CRR give more detail on individual response probabilities for specific
+configurations, rather than simply giving gross plots and gross statistics. If this level of
+detail is not possible for a journal article, at least the availability of the data could be
+advertized." The field did not comply — which is precisely why this sweep found only two
+scoreable sources. That is the project's real opening: not a new idea, but the first execution
+of a fifty-eight-year-old request.
 
 ### The theory has been settled since 1977 — no novelty available here
 
@@ -277,6 +332,66 @@ by Yellott's theorem probit and logit are near-indistinguishable for pairs anywa
 exactly why Luce's 1959 table showed them "virtually identical." Their result is a
 different and weaker claim than the project's, and saying so crisply is the right response.
 
+### A published contrary result that must be addressed, not ignored
+
+Duffy, S., & Smith, J. (2025). "An economist and a psychologist form a line: What can imperfect
+perception of length tell us about stochastic choice?" *Theory and Decision*.
+doi:10.1007/s11238-025-10040-4 — **open access**, PDF at
+https://link.springer.com/content/pdf/10.1007/s11238-025-10040-4.pdf
+(Abstract verified verbatim via a fetched Semantic Scholar API record. This work appears in the
+sweep as a citer of both Clarke 1957 and Morgan 1974.)
+
+An induced-values design — subjects choose among lines of various lengths and are paid in
+proportion to the length chosen, so the experimenter knows the true utility and can see whether
+the choice was optimal. Choice-set size is varied. Two sentences from the abstract go directly
+against the project:
+
+> "Errors in our data are better described as having a Gumbel distribution rather than a normal
+> distribution. We find evidence consistent with the independence from irrelevant alternatives
+> (IIA) property and we observe dynamic effects."
+
+This is a 2025 economics result, in a good journal, with a cleaner utility measure than any
+confusion-matrix study, concluding **for** Gumbel and **for** IIA on choice sets of varying
+size. It is not prior art — nothing is held out, the distributional comparison is a fitted
+model selection, and IIA is assessed within the design rather than by forecasting a deleted
+menu — but it is the most direct published contradiction of the project's expected finding and
+it will be the first thing an economics referee reaches for.
+
+Honest handling requires distinguishing two claims that the abstract runs together: whether the
+*error distribution* fits better as Gumbel, and whether *menu deletion* preserves odds. Lines
+of differing length are a one-dimensional stimulus set — exactly the univariate geometry where
+Lee (1968) predicted the *largest* Gaussian departures — so a null IIA result there is
+genuinely surprising on the project's own theory and deserves engagement rather than
+dismissal. Their data may be re-analysable in the project's framing; that is worth checking
+before publication, not after.
+
+### The highest residual risk in this file
+
+Treisman, M., & Faulkner, A. (1985). "On the choice between choice theory and signal detection
+theory." *Quarterly Journal of Experimental Psychology* 37A(3):387–405.
+doi:10.1080/14640748508400941
+
+**Abstract only; full text not obtained.** On a secondary characterisation — Robinson,
+DeStefano, Brady & Vul (2022), whose full text *was* obtained from OSF at
+https://files.osf.io/v1/resources/n78wz_v1/providers/osfstorage/6310f8d18cc1bd001d168f33 —
+Treisman & Faulkner favour signal detection theory over choice theory on Miller, Heise &
+Lichten's vocabulary-size data, by fitting d′ and β within each m-AFC condition and testing
+whether the parameters stay invariant across response-set sizes.
+
+If that characterisation is right, it is category (B): parameters are fitted within each menu,
+so nothing is held out, and the test is parameter invariance rather than a scored forecast. But
+it would mean **"Gaussian over Luce when the response-set size changes" has been the
+psychophysics verdict since 1985**, which would narrow the project's claim to the protocol
+alone. Since I could not read it, that inference is not secure in either direction.
+
+**Get a library copy of Treisman & Faulkner (1985) before claiming novelty.** It is the one
+item in this sweep that could still change the verdict, and it is cheap to settle.
+
+Related and verified: Robinson et al. (2022), "Revisiting the connection between Luce's Choice
+Axiom and Signal Detection Theory", treats Gaussian versus Gumbel signal detection across
+m-AFC as "a strong test bed of parameter invariance" — both parameterizations fitted, so
+category (B), but it is the live modern thread on this exact contrast and should be cited.
+
 ---
 
 ## Categorised near-misses
@@ -287,7 +402,15 @@ without the Gaussian-versus-renormalization forecast framing; **(E)** irrelevant
 
 | Work | Cat | Fetched url | Why this category |
 |---|---|---|---|
+| **Lee 1968, *P&P* 4:217** | C, **closest on the quantity** | `web.archive.org/web/2020id_/https://link.springer.com/content/pdf/10.3758/BF03206305.pdf` (full text) | Computes and tabulates the parameter-free Gaussian departure from renormalization for 3-sets → 2-subsets, and proposes it "in diagnosis of the basis of empirical confusion matrices". Numerical only, hypothetical configurations, no data. **Decision-bound, not an independent race.** See `lee1968.md`. |
 | Yellott 1977, JMP 15:109–144 | C | escholarship.org/content/qt7z91732x/qt7z91732x.pdf | Proves Gumbel uniqueness for triples; no data at all. The divergence is a theorem. |
+| **Duffy & Smith 2025, *Theory and Decision*** | **Contrary result** | link.springer.com/content/pdf/10.1007/s11238-025-10040-4.pdf (open access; abstract verified verbatim) | Induced-value line-length choice with varying set size: errors "better described as having a Gumbel distribution rather than a normal distribution", "evidence consistent with the independence from irrelevant alternatives (IIA) property". Fitted, nothing held out — but a direct published contradiction. **Pre-empt this.** |
+| **Treisman & Faulkner 1985, *QJEP* 37A:387** | B, **unresolved — top risk** | doi 10.1080/14640748508400941; abstract only, full text NOT obtained | Reportedly favours SDT over choice theory on Miller-Heise-Lichten vocabulary-size data by testing d′/β invariance across m-AFC sizes. If so, "Gaussian over Luce when menu size changes" dates from 1985. **Settle from a library before claiming novelty.** |
+| Robinson, DeStefano, Brady & Vul 2022 | B | files.osf.io/v1/resources/n78wz_v1/providers/osfstorage/6310f8d18cc1bd001d168f33 (full text) | Gaussian vs Gumbel signal detection across m-AFC as "a strong test bed of parameter invariance"; both parameterizations fitted. The live modern thread on this contrast. |
+| Ashby & Perrin 1988, *Psych Rev* 95:124 | B | OpenAlex record, doi 10.1037/0033-295x.95.1.124 (abstract) | Gaussian general recognition theory versus Luce's similarity choice model, both fitted to the same identification data, in sample. |
+| Currim 1982, *JMR* 19(2) | B, framing warning | OpenAlex record, doi 10.1177/002224378201900205 (abstract; protocol not obtained) | Closest marketing near-miss, and important for framing: it groups "the Luce choice axiom, the LOGIT model, and the independent PROBIT model" together as all carrying IIA — i.e. the marketing tradition treats independent probit as an IIA *member*, not the IIA-breaking competitor. Expect this objection. |
+| Batsell & Polking 1985, *Marketing Science* 4:177 | B | OpenAlex record, doi 10.1287/mksc.4.3.177 (abstract) | Reviews Generalized PROBIT as a cure for Luce's axiom, rejects it on estimation grounds, proposes an OLS competitive-effects model fitted on the menus of interest. |
+| Conlon & Mortimer 2013, *AEJ: Micro* 5(4):1 | B | Crossref record | The genuine "alternative removed from the menu" field dataset (vending-machine stockouts), but availability variation feeds estimation and the horse race is logit vs mixed logit. |
 | Wills et al. 2000, QJEP 53A:983 | B/D, closest miss | andywills.info/assets/pdf/2000Wills.pdf | Asserts the Thurstonian conclusion on human 3→2 restricted-menu data and owns the Yellott framing, but the model has **rectangular** noise, four free parameters, and threshold S refitted per menu (0.18 two-choice vs 0.65 three-choice); renormalization is never scored. |
 | Rouder 2004, Psych Rev 111:80 | D | see `rouder2004.md` | Rejects CRR out of sample on human restricted menus with a signed residual; proposes no Gaussian competitor. Prior art on the negative result. |
 | Townsend & Landon 1982, JMP 25:119 | D | Wayback copy, see `townsend1982.md` | Runs the master→subset out-of-sample protocol with Luce-family maps only; builds the Gumbel race explicitly; never raises a normal alternative. |
@@ -301,7 +424,7 @@ without the Gaussian-versus-renormalization forecast framing; **(E)** irrelevant
 | Marley 1982, Math Soc Sci | C | Crossref record; abstract elided | Whether all choice probabilities are functions of the binary ones — the theoretical relative of the question, no data. |
 | Chakrabarti 1969, *Econometrica* | C | Crossref record | Note on the relation between binary and multiple choice probabilities. |
 | Iverson 1979, JMP | C | Crossref record | Conditions for Thurstone Case III representations of binary choice probabilities. |
-| Hausman & McFadden 1984, *Econometrica* 52 | D | Crossref record, doi 10.2307/1910997 | The canonical omitted-alternative IIA specification test. A test statistic, not a forecasting comparison, and no Gaussian competitor is scored. |
+| Hausman & McFadden 1984, *Econometrica* 52, and its descendants (Small & Hsiao 1985; McFadden 1987; Rouwendal 2017) | D | Crossref record, doi 10.2307/1910997; S2 citation graph | The canonical omitted-alternative IIA test **re-estimates on the restricted choice set** — the restricted menu is an estimation input by construction, the exact opposite of holding it out. Rouwendal (2017) shows these tests lose power once alternative-specific constants absorb omitted variables, which is itself an argument *for* a forecasting test. **Strongest single negative in this file:** an exhaustive sweep of all 2,666 works citing Hausman & McFadden, intersecting {probit, Gaussian, Thurstone} with {out-of-sample, forecast, holdout, renormalize, market share, red bus, cannibalization, omitted alternative}, returned one false positive; zero citing titles contain "market share". That test never became a forecasting comparison. |
 | Seshadri & Ugander 2019, ACM EC | D | S2 record | Statistical detectability limits for IIA violations. |
 | Gensch & Ghose 1997, *Omega* | D, unresolved | S2 API record; abstract elided | Title promises "single pair vs full choice set" IIA contrast; could not establish whether held-out subset shares are predicted. See unresolved leads. |
 | Elliffe & Davison 2009/2010, *Behav Proc* 84:381 | E for this purpose | see `elliffe2009.md` | Title says CRR is violated, but **no alternative is ever removed** — four keys throughout. Operant within-menu ratio invariance, not Luce deletion. |
@@ -317,6 +440,14 @@ without the Gaussian-versus-renormalization forecast framing; **(E)** irrelevant
 Each of these could in principle overturn the verdict. None could be read in this pass, and
 the reason is recorded so the next pass starts here rather than repeating the search.
 
+0. **Treisman, M., & Faulkner, A. (1985). "On the choice between choice theory and signal
+   detection theory", *QJEP* 37A(3):387–405 (doi 10.1080/14640748508400941).** Listed first
+   because it is the **only item that could still overturn the verdict**, and because it is the
+   cheapest to settle. Abstract obtained; full text not. Characterised at second hand (via
+   Robinson et al. 2022) as fitting d′ and β within each m-AFC condition and testing parameter
+   invariance across response-set sizes, which would make it category (B) — but if it is more
+   than that, then "Gaussian over Luce when the menu changes" is a 1985 result and the project
+   is left claiming only the protocol. **Read this before circulating.**
 1. **Takane, Y., & Shibayama, T. (1992). "Structures in stimulus identification data", in
    F. G. Ashby (Ed.), *Multidimensional Models of Perception and Cognition*, pp. 335–362,
    Erlbaum.** Rouder 2004 cites this as having "provided more stringent statistical tests
@@ -427,22 +558,43 @@ Gumbel-max trick, Plackett–Luce and Thurstone estimation (a large fraction of 
 menu-restriction forecasting; nothing there scores a Gaussian map against renormalization
 on held-out menus.
 
-**How much weight the negative deserves.** High for the exact four-part conjunction, and
-high for the **psychology** literature specifically: the forward citation enumeration was
-complete for three of the four seeds, the Luce 1959 citation set was filtered by full-text
-CRR phrasings (which is what surfaced the operant vein), the Yellott 1977 citation set was
-enumerated and filtered, and the two papers most likely to be prior art — Townsend & Landon
-1982 and Wills et al. 2000 — were both obtained and read in **full text**, including a
-targeted search of each for Gaussian/normal/probit/Case V/discriminal. Those two readings
-are what the verdict rests on.
+**Additional threads run in the econometrics/marketing sweep.** Full enumeration of all 2,666
+works citing Hausman & McFadden (1984) and all 414 citing Yellott (1977), keyword-intersected
+as described in that table row. Small & Hsiao 1985, McFadden 1987, Rouwendal 2017, Fry & Harris
+1996; Conlon & Mortimer 2013 stockout data; share reallocation, cannibalization, draw,
+substitution; Daganzo and Horowitz 1980/1981; Bell-Keeney-Little, Kotler, Batsell & Polking,
+Batsell & Lodish, Currim, Meyer & Eagle, Grover & Dillon, Cooper & Nakanishi; Debreu 1960 and
+the IIA counterexample line; the Thurstone-vs-Luce pair-comparison line (Burke & Zinnes 1965,
+Hohle 1966, Bradley 1954, Hopkins 1954); the Thurstonian-vs-Plackett-Luce ranking literature;
+and Duffy & Smith's four-paper line-length programme.
 
-**Lower for econometrics, transportation and marketing.** That branch was searched by
-keyword only, never by citation enumeration, and publisher abstract elision defeated most
-verification: Horowitz 1980/1981, Gensch & Ghose 1997, Ashby/Lee/Balakrishnan 1992, Smith
-1992 and Marley 1982 were all characterised from titles and metadata rather than text. A
-reader should treat the econometrics negative as provisional. The two items most capable of
-overturning the verdict are **Takane & Shibayama (1992)**, which no online route reached at
-all, and **Horowitz (1980)**, whose title is the closest description anywhere of a
-Gaussian-versus-Gumbel share-prediction comparison.
+**How much weight the negative deserves.** High for the exact four-part conjunction. Highest
+for the **psychology** literature: forward citation enumeration was complete for three of the
+four seeds, the Luce 1959 citation set was filtered by full-text CRR phrasings (which is what
+surfaced the operant vein), the Yellott 1977 set was enumerated twice independently, and the
+four papers most likely to be prior art — Lee 1968, Townsend & Landon 1982, Wills et al. 2000
+and Hodge 1967 — were all obtained and read in **full text**, each with a targeted search for
+Gaussian/normal/probit/Case V/discriminal/Thurstone. Those readings are what the verdict rests
+on, and two of them (Lee, Townsend & Landon) were recovered only via the Wayback Machine after
+Springer and Elsevier refused every direct request.
 
-Both should be read from a library before the claim is made in print.
+**Reasonably high for econometrics** now that the Hausman & McFadden citation graph has been
+swept exhaustively — that is a genuine enumeration, not keyword matching, and it comes back
+empty. **Weaker for marketing**, where publisher abstract elision defeated verification:
+Currim 1982's validation protocol, Gensch & Ghose 1997, Horowitz 1980, Ashby/Lee/Balakrishnan
+1992, Smith 1992 and Marley 1982 were all characterised from titles and metadata rather than
+text.
+
+**Three items to settle from a library before the claim is made in print**, in priority order:
+
+1. **Treisman & Faulkner (1985)** — the only item that could overturn the verdict.
+2. **Takane & Shibayama (1992)** — no online route reached it at all; cited by Rouder as the
+   most stringent statistical test of the CRR.
+3. **Horowitz (1980)** — title is the closest description anywhere of a Gaussian-versus-Gumbel
+   share-prediction comparison; almost certainly an approximation-error study, but unconfirmed.
+
+**A note on convergence.** The `auditory/` branch of this project independently located Lee
+(1968) and reached the same headline reading of it. Two searches run separately, from different
+seeds, converging on the same 1968 paper as the pivotal ancestor is the strongest available
+evidence that the ancestor set is now correctly identified. See `../auditory/lee1968.md`
+alongside `lee1968.md` here.

@@ -29,7 +29,7 @@ values, which is why cells must be matched on the pair rather than pooled over i
 Forty trials per cell is thin, so a contraction map gains from shrinkage alone; the
 fitted-Luce null is what separates that from structure and it is not a formality here.
 
-Data: research/human/data/wills/, mirrored from
+Data: research/restriction/data/wills/, mirrored from
 https://www.andywills.info/willslab-dau/cam1/  (Wills 2014, Data and Analysis Unit CAM1).
 
 Usage:  python wills_twochoice.py [n_null_reps]

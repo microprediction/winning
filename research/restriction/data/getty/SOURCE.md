@@ -64,7 +64,7 @@ weaker wherever feedback is absent or unchanged.
 
 ## What the run found
 
-`research/human/getty.py`, output in `research/human/results/getty.txt`. The race wins
+`research/restriction/getty.py`, output in `research/restriction/results/getty.txt`. The race wins
 overall (+0.0272 nats per cell, excess +0.0343) and on the signal rows (+0.0111, cell
 bootstrap [+0.0021, +0.0225]). It loses in condition 2 alone (-0.0127, excess -0.0330).
 

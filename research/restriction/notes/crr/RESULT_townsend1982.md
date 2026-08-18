@@ -1,7 +1,7 @@
 # Result: Townsend & Landon (1982), the origin of the constant-ratio-rule tests
 
-Run with `research/human/townsend_rows.py` on the digitized Tables 1-4. Fold this into
-`research/human/results/STATUS.md` when the concurrent authoring pass is finished; it is
+Run with `research/restriction/townsend_rows.py` on the digitized Tables 1-4. Fold this into
+`research/restriction/results/STATUS.md` when the concurrent authoring pass is finished; it is
 kept separate only to avoid a write clash.
 
 ## Why this dataset is unusually clean

@@ -22,7 +22,7 @@ Both are parameter free and neither sees a subset observation. Scored by log los
 the held-out subset counts, against a fitted-Luce null at this sample size, since a
 contraction map gains on noisy shares even when Luce is true.
 
-Data: research/human/notes/crr/digitized/, OCR of Tables 1-4 verified two ways -- every
+Data: research/restriction/notes/crr/digitized/, OCR of Tables 1-4 verified two ways -- every
 row sums to 240, and the paper's own printed CRR entries recompute from the recovered
 master counts. Two cells are unresolvable errors in the published table and their rows are
 dropped; --repair runs the sensitivity check with the arithmetically forced values.

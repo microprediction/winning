@@ -27,7 +27,7 @@ Also: loaders unified so all tables cover the same twelve collections (Netflix,
 dots, puzzles recovered as separate rows); contraction table regenerated with
 respondent-bootstrap intervals that recompute shares, calibration and both slopes;
 occupational prestige restored under a shared add-alpha convention and it posts the
-largest gain; all inputs committed under `research/human/data` at 1.9MB so nothing
+largest gain; all inputs committed under `research/restriction/data` at 1.9MB so nothing
 reads from a temp directory; winner-orientation clash between Equation (2), the
 pairwise formula, the figure and the lattice code resolved onto highest-wins.
 
@@ -62,7 +62,7 @@ after the fact.
 - Consumer-products experiment is still not a primary result, though it is the only
   dataset observing real subset choice.
 - Exacta and trifecta pricing redone against the exact ordering law.
-- Nothing is pushed. The referee could not see `research/human` on main for that
+- Nothing is pushed. The referee could not see `research/restriction` on main for that
   reason. A tagged commit or archival DOI is needed before circulation.
 
 ## Counter-evidence to find room for (2026-08-17)
@@ -213,7 +213,7 @@ were never printed and cannot be recovered from the published tables.
 
 ## Tones: third loss, and the cleanest near-substitutes case (2026-08-17)
 
-research/human/tones.py on the digitized Stewart, Brown and Chater matrices. Calibrate on the
+research/restriction/tones.py on the digitized Stewart, Brown and Chater matrices. Calibrate on the
 N=10 row for a stimulus, restrict to the middle labels, predict the N=6 or N=8 row.
 
   narrow N10->N6   renorm 1.1176  race 1.1309  gain -0.0133
@@ -284,7 +284,7 @@ directory were ever captured.
 
 ## Yeon and Rahnev run: the race wins, and the experiment carries its own control (2026-08-17)
 
-`research/human/yeonrahnev.py`, full table in `results/yeonrahnev.txt`. This is the first
+`research/restriction/yeonrahnev.py`, full table in `results/yeonrahnev.txt`. This is the first
 dataset in the project where the restricted menu is both observed and unanticipated: the
 observer sees the display, it goes, and only then is told the answer is one of two named
 alternatives. Calibrate on that observer's full-menu row for that dominant item, predict
@@ -335,7 +335,7 @@ rather than remove-and-rerun. Keep it for the paper that follows.
 
 ## Getty 1979 scored, and the boundary acquires a computable diagnostic (2026-08-17)
 
-`research/human/getty.py`, data in `data/getty`, output in `results/getty.txt`. Three
+`research/restriction/getty.py`, data in `data/getty`, output in `results/getty.txt`. Three
 observers, eight complex sounds, all eight responses allowed in one experiment and only four
 in another, a different four in each of three conditions, labels being the stimulus numbers.
 The stimulus set never changes; only the menu does. Nothing else in the corpus isolates the
@@ -392,3 +392,29 @@ The gain-by-size table is now in the paper as well, since that argument needs it
 CITATION CORRECTION. The note `absolute_id/lee_1970.md` gives Lee as 1970, Perception &
 Psychophysics 7(4). The DOI it records, 10.3758/BF03206305, resolves at Crossref to 4(4):
 217-219, 1968. The paper cites Lee (1968). A correction is appended to the note.
+
+## Caught up to main, and the empirical tree moved (2026-08-18)
+
+origin/main had advanced 45 commits since the merge base of 2026-07-10, carrying a package
+overhaul done on another machine. Merged into `machine-preference-paradox` at 58070ae. The
+merge was textually clean and nothing from this side was lost except `pyproject.toml`, which
+main supersedes with `setup.py`.
+
+VERIFIED, because a merge that touches the package could in principle move a number: the
+analysis pipeline imports numpy and `../polysemy_pilot/exact_analyze.py` and never the
+`winning` package, and `tones.py` and `getty.py` reproduce their committed output byte for
+byte, before and after the move. A safety tag `pre-main-merge-20260818` sits at the
+pre-merge commit fab61d8.
+
+`research/human` is now `research/restriction`, a sibling rename chosen so that the
+`../polysemy_pilot` hop in all 27 scripts keeps working without edits. The seven text files
+naming the old path were rewritten, including both manuscripts. A README now states the
+question, the layout and the three standing conventions.
+
+OPEN COLLISION, deliberately not resolved from this side. `src/winning` on this branch and
+`winning/` from main are two different renovations of the same package. This side has the
+ratings layer -- elo, glicko2, ratingsystem, thurstonerating, and sport benchmarks for chess,
+F1, tennis, sumo, halo2, football -- while main's `winning/ratings` holds two files, although
+its `setup.py` already declares `winning.ratings` as a package. Nothing imports `src/` and
+`setup.py` packages only `winning.*`, so `src/` is dormant rather than broken. Reconciling it
+means editing an overhaul in flight on another machine, so it is recorded here instead.
