@@ -14,11 +14,12 @@ standing benchmark database.
   winner-of-many, dead heats, and the ability transform, for **any**
   base distribution.
 - `winning.factor` — the correlated extension: all-share forward pass,
-  share calibration, Jacobian-vector products, and factor fitting for
-  races with common factors. Gaussian as shipped; the identity needs
-  only conditional independence, and general bases (Gumbel reproduces
-  Luce exactly) are demonstrated in `research/experiments/` awaiting
-  promotion.
+  share calibration, Jacobian-vector products, and factor fitting. One
+  general race, `race_probabilities`, takes the distribution and the
+  factor rank as parameters; factor probit, the classic independent
+  transform, Luce/softmax, and correlated softmax are named special
+  cases, and custom standardized bases plug in as callables. The
+  Gaussian specialization keeps its dedicated tail-exact kernel.
 - `winning.methods` — every contestant behind one interface: the
   lattice transform, direct and Sobol simulation, per-alternative
   factor-RQMC, GHK / Genz separation-of-variables, minimax tilting.
@@ -70,8 +71,20 @@ p = win_probabilities_factor(mu, V, D, F, W)  # all N shares, O(QNL)
 mu_hat = abilities_from_probabilities_factor(p, V, D, F, W)   # inversion
 ```
 
-Arbitrary densities (skewed, multimodal, empirical) run through
-`winning.thurstone` — see its module docs and `research/demos/`.
+One race, everything a parameter: distribution and correlation chosen
+per call, with factor probit just one named point in the family.
+
+```python
+from winning.factor import race_probabilities
+
+race_probabilities(mu)                       # the classic independent race
+race_probabilities(mu, V=V, D=D)             # factor probit
+race_probabilities(mu, base="gumbel")        # Luce / softmax, exactly
+race_probabilities(mu, V=V, base="gumbel")   # correlated softmax
+```
+
+Arbitrary densities (skewed, multimodal, empirical) run through custom
+bases or `winning.thurstone` — see the module docs and `research/demos/`.
 
 ## The paper
 

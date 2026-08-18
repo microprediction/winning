@@ -6,6 +6,10 @@ Self-contained NumPy; the optional `fastrace` extension accelerates the
 heavy passes transparently when importable.
 """
 
+from .races import (  # noqa: F401
+    abilities_from_race,
+    race_probabilities,
+)
 from .core import (  # noqa: F401
     abilities_from_win_probabilities,
     factor_model_contrast,
