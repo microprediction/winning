@@ -1,0 +1,19 @@
+Package: winning
+Type: Package
+Title: Win Probabilities and Share Calibration for Factor Probit Races
+Version: 0.1.0
+Authors@R: person("Peter", "Cotton", email = "peter.cotton@microprediction.com",
+    role = c("aut", "cre"))
+Description: Computes all N win probabilities of a factor-structured
+    Gaussian race (multinomial probit with low-rank-plus-diagonal
+    covariance) in one shared-lattice pass of O(Q*N*L) operations, and
+    inverts observed shares to abilities by a damped coordinate Newton
+    method with analytic slopes. Conditional on the factors the
+    alternatives are independent, so a single shared survival field
+    prices every alternative; the same identity appears in Cotton (2021)
+    <doi:10.1137/19M1276261> for independent contests.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Suggests: mvtnorm, testthat (>= 3.0.0)
+Config/testthat/edition: 3
+RoxygenNote: 7.3.0

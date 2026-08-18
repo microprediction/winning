@@ -1,0 +1,8 @@
+quantity,value
+sum_w,0.554410
+half_tr_J,0.554410
+jacobian_offdiag_err,9.674e-11
+excess_over_dx_at_dx_0.2,0.5821
+excess_over_dx_at_dx_0.1,0.5683
+excess_over_dx_at_dx_0.05,0.5621
+excess_over_dx_at_dx_0.025,0.5584

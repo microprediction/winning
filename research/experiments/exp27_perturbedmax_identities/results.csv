@@ -1,0 +1,12 @@
+identity,max_error
+grad_mu G = p,3.602e-08
+VJP mu,2.222e-09
+VJP V,4.909e-10
+VJP D,6.509e-10
+heat dG/dD = J_ii/2,1.030e-08
+grad_V G = J V,7.686e-09
+NLL grad = -J e_y/p_y,5.091e-09
+binary FY closed form,4.944e-13
+dual curvature = resistance,1.348e-06
+softmax R = 1/p_i + 1/p_j,1.776e-15
+G vs MC (se 3.8e-04),1.895e-04

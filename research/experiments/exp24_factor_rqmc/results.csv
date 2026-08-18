@@ -1,0 +1,10 @@
+N,method,setting,seconds,max_err
+50,lattice,default,0.076,2.987e-04
+50,factor_rqmc,2^12,0.112,3.106e-04
+50,factor_rqmc,2^14,0.425,2.991e-04
+200,lattice,default,0.308,2.959e-04
+200,factor_rqmc,2^12,1.828,6.509e-04
+200,factor_rqmc,2^14,7.441,3.493e-04
+1000,lattice,default,1.515,4.040e-04
+1000,factor_rqmc,2^12,54.988,8.010e-04
+1000,factor_rqmc,2^14,215.004,4.105e-04

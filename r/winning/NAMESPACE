@@ -1,0 +1,6 @@
+export(hermite_nodes)
+export(race_probabilities)
+export(calibrate_abilities)
+export(win_probabilities_factor)
+export(abilities_from_probabilities_factor)
+importFrom(stats, dnorm, pnorm)

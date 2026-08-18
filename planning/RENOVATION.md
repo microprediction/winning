@@ -1,3 +1,8 @@
+*Status update (August 2026): superseded in part. It was decided that
+`winning` owns the core (heritage and name); `winning.factor` is the
+canonical implementation and thurstone remains a compatibility layer.
+The ratings-layer work below continues in `src/` and BENCHMARKS.md.*
+
 # Renovation plan: `winning` becomes the ratings/applications layer on `thurstone`
 
 *Status: executed in the working tree, July 2026 — nothing committed until reviewed.

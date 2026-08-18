@@ -3,17 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>winning — rating systems on the thurstone ability transform</title>
-  <meta name="description" content="Rating systems for multi-entrant contests, built on exact lattice order statistics. Beliefs are whole densities, updates use the exact likelihood of the full finish order, and every claim is benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets." />
+  <title>winning — factor multinomial probit at scale</title>
+  <meta name="description" content="A generalization of factor multinomial probit models that scales to millions of variables: all N win probabilities of a correlated race in one shared-field pass, calibration of observed shares back to abilities, removal counterfactuals and tie densities. Factor probit, Luce/softmax and softmin as special cases of one parameterized race." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="winning" />
-  <meta property="og:title" content="winning — rating systems on the thurstone ability transform" />
-  <meta property="og:description" content="Rating systems for multi-entrant contests, built on exact lattice order statistics and benchmarked against TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets." />
+  <meta property="og:title" content="winning — factor multinomial probit at scale" />
+  <meta property="og:description" content="A generalization of factor multinomial probit models that scales to millions of variables: shared-field win probabilities, share calibration, counterfactuals." />
   <meta property="og:url" content="https://winning.microprediction.org/" />
   <meta property="og:image" content="https://winning.microprediction.org/assets/images/winning-pic.png" />
   <meta property="og:image:alt" content="The fastest time, the best offer and the most popular product are the same order statistic." />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="stylesheet" href="./academic.css" />
+  <style>
+    .fitter { border: 1px solid #ddd; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.5rem 0; }
+    .fit-cards { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.8rem 0; }
+    .fit-card { flex: 1 1 120px; background: #f4f4fb; border-radius: 8px;
+      padding: 0.55rem 0.7rem; text-align: center; font-size: 0.82rem; }
+    .fit-card .nm { font-weight: 600; margin-bottom: 0.15rem; }
+    .fit-card input[type="range"] { width: 100%; margin: 0.1rem 0 0; }
+    .fit-card .lab { color: #555; font-variant-numeric: tabular-nums; }
+    .fit-card .pct { font-weight: 700; font-size: 1.1rem; color: #4b4bd8;
+      margin-top: 0.2rem; font-variant-numeric: tabular-nums; }
+    .fit-row { display: flex; align-items: center; gap: 0.8rem; margin: 0.35rem 0; }
+    .fit-base { font-size: 0.9rem; }
+    .legend { font-size: 0.9rem; color: #444; }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -22,7 +36,8 @@
       <nav>
         <a href="/">Home</a>
         <a href="#papers">Papers</a>
-        <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">Benchmarks</a>
+        <a href="#demos">Demos</a>
+        <a href="./ratings.html">Ratings</a>
         <a href="https://github.com/microprediction/winning">GitHub</a>
         <a href="https://pypi.org/project/winning/">PyPI</a>
         <a href="https://thurstone.microprediction.org/">thurstone</a>
@@ -32,91 +47,79 @@
 
   <main>
     <h1>winning</h1>
-    <p class="subtitle">The simplest case for non-Gaussian rating systems.</p>
+    <p class="subtitle">A generalization of factor multinomial probit models that scales to millions of variables</p>
 
-    <p class="lead">Rating systems for multi-entrant contests: races, tournaments,
-      leaderboards. Beliefs are whole densities on a lattice, free to be skewed or
-      multimodal; each event updates them with the <strong>exact likelihood of the full
-      finish order</strong>, computed by an O(N) chain; predictions are exact
-      winner-of-many probabilities, dead-heat aware. Every claim is benchmarked against
-      TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets with market ceilings
-      where they exist.</p>
+    <p class="lead">This package prices the winner of many: N competitors whose
+      performances can follow any noise distribution and can be correlated
+      through common factors. One pass over a shared survival field gives all N
+      win probabilities, and the same pass yields removal counterfactuals and
+      photo-finish tie densities. Calibration runs in the other direction, from
+      observed shares back to abilities. Factor probit, Luce's softmax and the
+      finite-temperature softmin are special cases of one parameterized
+      race.</p>
 
-    <div class="tag-row">
-      <span class="tag">exact lattice</span>
-      <span class="tag">whole-order updates</span>
-      <span class="tag">non-Gaussian noise</span>
-      <span class="tag">race-native</span>
-      <span class="tag">measured, not asserted</span>
-    </div>
-
-    <figure class="hero-figure">
-      <img src="./assets/images/winning-pic.png" alt="The fastest time, the best offer and
-        the most popular product are the same order statistic: winner of many." />
-      <figcaption>The fastest time, the lowest offer and the most popular choice are the
-        same computation: the distribution of the winner of many. The
-        <a href="https://thurstone.microprediction.org/">thurstone</a> core does that
-        computation efficiently on a lattice, in a way that scales to millions of
-        variables; this package turns it into rating systems.</figcaption>
-    </figure>
-
-    <div class="callout">
-      <strong>Beliefs are densities, not (mu, sigma) pairs.</strong> Each contestant's
-      ability lives on a lattice with no parametric family imposed, and the race noise is
-      an arbitrary kernel you choose: Gaussian, Student-t, or a
-      retirement "slab" for contests where entrants can fail outright. A single update
-      matches exact Bayes to lattice precision, and the update uses the whole finish
-      order rather than pairwise or stagewise approximations.
-      <a href="https://github.com/microprediction/winning#what-is-different-about-thurstonerating">How →</a>
+    <div class="fitter">
+      <h2 style="margin-top:0">The model, live</h2>
+      <p class="legend">Six runners moved by two common luck factors; whichever draws the
+        smallest performance wins. Drag each runner's ability and its two
+        factor loadings, pick the noise distribution (and its skew), and the win probabilities update
+        live — computed in your browser by the factor lattice algorithm this
+        package ships, at verified parity with the Python. Runners loading the same factor with the
+        same sign are teammates, opposite signs rivals; zero loadings recover the
+        independent race, where Gumbel noise reproduces softmax exactly.</p>
+      <div class="fit-cards" id="fit-cards"></div>
+      <div class="fit-row" style="justify-content:center">
+        <span class="legend">noise:</span>
+        <label class="fit-base"><input type="radio" name="fit-base" value="normal" checked />normal</label>
+        <label class="fit-base"><input type="radio" name="fit-base" value="gumbel" />Gumbel</label>
+        <label class="fit-base"><input type="radio" name="fit-base" value="skew" />skew-normal</label>
+        <label class="fit-base"><input type="radio" name="fit-base" value="t4" />t&#8324;</label>
+        <label class="fit-base" style="margin-left:1rem">skew shape
+          <input type="range" id="fit-alpha" min="-5" max="5" step="0.5" value="3" style="vertical-align:middle" /></label>
+        <span class="legend" id="fit-alpha-val"></span>
+      </div>
+      <svg id="fit-plot" viewBox="0 0 940 330" style="width:100%;aspect-ratio:940/330;display:block"></svg>
+      <p class="legend" id="fit-note"></p>
     </div>
 
     <div class="callout">
-      <strong>Benchmarked on twelve datasets, prequentially.</strong> Formula 1, ATP and
-      WTA tennis, chess, sumo, football, Halo 2, horse racing and synthetic worlds with
-      known truth. Each event is predicted before it is observed, and the tables carry
-      honest baselines: a uniform floor, an oracle where truth is known, and the
-      bookmaker market as a ceiling where odds exist.
-      <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">The tables →</a>
+      <strong>Calibration at ten thousand alternatives.</strong> All shares of a
+      correlated Gaussian race in one O(QNL) pass, matrix-free graph-Laplacian
+      derivatives, and inversion of observed shares to utilities in under a
+      minute at N = 10,000 — every number from a committed, seeded script.
+      <a href="./assets/pdf/factor_probit_share_calibration.pdf">The paper (PDF) →</a>
     </div>
 
     <div class="callout">
-      <strong>Non-Gaussian noise pays where the physics demands it.</strong> Formula 1
-      retirements make finishing order a mixture: pace when the car survives, a lottery
-      when it does not. A density with a uniform "disaster" component beats every
-      Gaussian system on 1,158 grands prix, and the same estimator, handed qualifying
-      sessions where no retirement process exists, drives its own disaster mass to
-      near zero. <a href="./assets/pdf/rating_formula_1.pdf">The paper (PDF) →</a>
-    </div>
-
-    <div class="callout">
-      <strong>And an efficiency result.</strong> Against 88 races with genuinely
-      pre-qualifying bookmaker odds, no rating system built on public results and grid
-      data adds statistical power to the market: the optimal pool puts zero weight on
-      every one of the six systems tested. The market's edge is knowledge of current car
-      form. <a href="./assets/pdf/rating_formula_1.pdf">Section 5 →</a>
+      <strong>Rating systems live on this engine.</strong> Whole-density beliefs,
+      exact full-finish-order updates, benchmarked prequentially on twelve
+      datasets against TrueSkill, OpenSkill, Glicko-2 and Elo.
+      <a href="./ratings.html">The ratings page →</a>
     </div>
 
     <h2>Quick start</h2>
-<pre><code>from winning import ThurstoneRating
+<pre><code>from winning import race_probabilities, calibrate_abilities, removal_shares
 
-tr = ThurstoneRating()
-tr.observe(names=["ada", "ben", "cid", "dot"], ranks=[1, 2, 3, 4])
-tr.observe(names=["ada", "cid", "eve"], ranks=[1, 2, 3])
-
-tr.win_probabilities(["ada", "cid", "eve"])   # exact field win probabilities
-tr.rating("ada")                              # Rating(mu=..., sigma=...)
-tr.leaderboard()                              # best-first, conservative</code></pre>
+p = race_probabilities(mu, V=V, D=D)     # all N shares, one field pass
+mu_hat = calibrate_abilities(p, V=V, D=D)  # abilities back from shares
+q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</code></pre>
     <p>
-      Every system in the package speaks the same three verbs: <code>observe(names,
-      ranks)</code>, <code>win_probabilities(names)</code>, <code>rating(name)</code>.
-      That includes the shims around third-party comparators, so a benchmark row is a
-      one-line swap. Install with <code>pip install winning</code> (core depends only on
-      thurstone and numpy) or <code>pip install winning[benchmarks]</code> for the
-      comparators.
+      Max-wins semantics for the probit literature live in
+      <code>winning.probit</code> (<code>shares</code>,
+      <code>calibrate_utilities</code>, supplied-covariance fitting); the
+      density-agnostic engine in <code>winning.thurstone</code>; the
+      paper-faithful kernels in <code>winning.factor</code>.
     </p>
 
     <h2 id="papers">Papers</h2>
     <ul>
+      <li><a href="./assets/pdf/factor_probit_share_calibration.pdf">Scalable share
+        calibration for factor multinomial probit models</a> (2026, submitted). All
+        shares of a correlated Gaussian race in one O(QNL) pass, matrix-free
+        graph-Laplacian derivatives, and inversion of observed shares to utilities at
+        ten thousand alternatives in under a minute. The algorithm ships here as
+        <code>winning.factor</code>; every experiment is a committed script under
+        <code>research/experiments/</code>.</li>
       <li><a href="./assets/pdf/rating_formula_1.pdf">Rating Formula 1: a case for
         non-Gaussian noise in rating systems</a> (2026). Seventy-five seasons of grands
         prix, a retirement-slab noise density, a qualifying control, and a stratified
@@ -131,17 +134,42 @@ tr.leaderboard()                              # best-first, conservative</code><
         horse race entry.</li>
     </ul>
 
+    <h2 id="demos">Demos</h2>
+    <ul>
+      <li><a href="./fit.html">Fit a correlated race</a> — the inverse problem,
+        live: drag observed shares and a correlation, and the engine calibrates
+        standalone abilities in the browser, against the naive independent
+        fit.</li>
+      <li><a href="./circuit.html">The photo-finish circuit</a> — interactive:
+        the race as a resistor network, computed live in your browser by the
+        shipped algorithm. Click a runner to delete it and watch the share flow
+        to factor-similar survivors, against the IIA prediction.</li>
+      <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/siam2021/race_field_demo.py">race_field_demo.py</a>
+        — one shared survival field prices every competitor by division; the naive
+        O(N&sup2;) route against the O(N) field.</li>
+      <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/siam2021/cavity_downdate_demo.py">cavity_downdate_demo.py</a>
+        — the rank-one cavity twin: one inverse contains every leave-one-out inverse.</li>
+      <li><a href="https://github.com/microprediction/winning/tree/main/js/factor">js/factor</a>
+        — the calibration core in the browser: dependency-free JavaScript at
+        machine-precision parity with the Python; it powers the circuit demo
+        above.</li>
+    </ul>
+
     <h2>Heritage</h2>
+    <figure class="hero-figure">
+      <img src="./assets/images/winning-pic.png" alt="The fastest time, the best offer and
+        the most popular product are the same order statistic: winner of many." />
+      <figcaption>The fastest time, the lowest offer and the most popular choice are the
+        same computation: the distribution of the winner of many.</figcaption>
+    </figure>
     <p>
-      <code>winning</code> 1.x was the reference implementation of the SIAM paper above
-      and is preserved: the legacy imports still work. The 2.x renovation moved the
-      numerical core into <a href="https://github.com/microprediction/thurstone">thurstone</a>
-      (densities on a lattice, winner-of-many, the ability transform) and made this
-      package the applications layer, the way
-      <a href="https://github.com/microprediction/timemachines">timemachines</a> sits on
-      <a href="https://github.com/microprediction/skaters">skaters</a>: cores are few and
-      stable; applications multiply, so they get their own package. By Peter Cotton,
-      with sibling packages at <a href="https://www.microprediction.org/">microprediction</a>.
+      <code>winning</code> began as the reference implementation of the SIAM paper above
+      and owns the core outright: the lattice machinery once split into the
+      <a href="https://github.com/microprediction/thurstone">thurstone</a> package is
+      vendored back as <code>winning.thurstone</code>, and thurstone is maintained as a
+      compatibility shim whose imports resolve here. Legacy 1.x imports still work.
+      By Peter Cotton, with sibling packages at
+      <a href="https://www.microprediction.org/">microprediction</a>.
     </p>
 
     <h2>Get the source</h2>
@@ -153,6 +181,136 @@ tr.leaderboard()                              # best-first, conservative</code><
       <a href="https://github.com/microprediction/winning/tree/main/research">Research scripts</a>
     </p>
   </main>
+
+  <script type="module">
+    import { winProbabilitiesFactor, skewNormalBase }
+      from "./assets/js/factor_race.mjs?v=3";
+    window.addEventListener("error", (e) => {
+      const n = document.getElementById("fit-note");
+      if (n) n.textContent = "Demo error: " + e.message;
+    });
+    // 8-node Gauss-Hermite, tensor grid over the two common factors
+    const GH_F = [-4.1445471861258945,-2.802485861287542,-1.6365190424351082,
+      -0.5390798113513752,0.5390798113513752,1.6365190424351082,
+      2.802485861287542,4.1445471861258945];
+    const GH_W = [1.126145383753679e-04,9.635220120788263e-03,1.172399076617590e-01,
+      3.730122576790774e-01,3.730122576790774e-01,1.172399076617590e-01,
+      9.635220120788263e-03,1.126145383753679e-04];
+    const F2 = [], W2 = [];
+    for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) {
+      F2.push([GH_F[a], GH_F[b]]); W2.push(GH_W[a] * GH_W[b]);
+    }
+    const SQ2PI = Math.sqrt(2 * Math.PI), EULER = 0.5772156649015329;
+    const GC = Math.PI / Math.sqrt(6);
+    let skewBase = skewNormalBase(3);
+    const PDFS = {
+      normal: (z) => Math.exp(-0.5 * z * z) / SQ2PI,
+      gumbel: (z) => { const u = z * GC - EULER; return GC * Math.exp(u - Math.exp(u)); },
+      skew: (z) => skewBase.pdf(z),
+      t4: (z) => Math.SQRT2 * (3 / 8) * Math.pow(1 + z * z / 2, -2.5),
+    };
+    const N = 6;
+    const COLORS = ["#4c72b0", "#dd8452", "#55a868", "#c44e52", "#8172b3", "#937860"];
+    const mu = [-1.0, -0.4, 0.0, 0.3, 0.9, 1.4];
+    const L1 = [0.7, 0.7, 0.0, 0.0, -0.5, 0.0];
+    const L2 = [0.0, 0.0, 0.7, 0.7, 0.0, -0.5];
+    const cards = document.getElementById("fit-cards");
+    const cardEls = [];
+    for (let i = 0; i < N; i++) {
+      const c = document.createElement("div");
+      c.className = "fit-card";
+      c.innerHTML =
+        `<div class="nm" style="color:${COLORS[i]}">R${i + 1}</div>` +
+        `<input type="range" class="mu" min="-2" max="2" step="0.05" value="${mu[i]}" />` +
+        `<div class="lab mu-lab"></div>` +
+        `<input type="range" class="l1" min="-0.7" max="0.7" step="0.05" value="${L1[i]}" />` +
+        `<div class="lab l1-lab"></div>` +
+        `<input type="range" class="l2" min="-0.7" max="0.7" step="0.05" value="${L2[i]}" />` +
+        `<div class="lab l2-lab"></div>` +
+        `<div class="pct"></div>`;
+      cards.appendChild(c);
+      c.querySelector(".mu").addEventListener("input", (e) => { mu[i] = +e.target.value; schedule(); });
+      c.querySelector(".l1").addEventListener("input", (e) => { L1[i] = +e.target.value; schedule(); });
+      c.querySelector(".l2").addEventListener("input", (e) => { L2[i] = +e.target.value; schedule(); });
+      cardEls.push(c);
+    }
+    for (const r of document.querySelectorAll('input[name="fit-base"]'))
+      r.addEventListener("change", schedule);
+    const alphaIn = document.getElementById("fit-alpha");
+    alphaIn.addEventListener("input", () => {
+      skewBase = skewNormalBase(+alphaIn.value);
+      document.querySelector('input[name="fit-base"][value="skew"]').checked = true;
+      schedule();
+    });
+    const svg = document.getElementById("fit-plot");
+    const S = (tag, attrs, parent) => {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      parent.appendChild(el); return el;
+    };
+    let pending = false;
+    function schedule() {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; redraw(); });
+    }
+    function redraw() {
+      const name = document.querySelector('input[name="fit-base"]:checked').value;
+      const base = name === "skew" ? skewBase : name;
+      document.getElementById("fit-alpha-val").textContent =
+        "\u03b1=" + (+alphaIn.value).toFixed(1);
+      const V = mu.map((_, i) => [L1[i], L2[i]]);
+      const D = mu.map((_, i) => Math.max(1 - L1[i] ** 2 - L2[i] ** 2, 0.02));
+      const p = winProbabilitiesFactor(mu, V, D, F2, W2, { base, points: 301 }).p;
+      for (let i = 0; i < N; i++) {
+        cardEls[i].querySelector(".mu-lab").textContent = "\u03bc=" + mu[i].toFixed(2);
+        cardEls[i].querySelector(".l1-lab").textContent = "loading\u2081 " + L1[i].toFixed(2);
+        cardEls[i].querySelector(".l2-lab").textContent = "loading\u2082 " + L2[i].toFixed(2);
+        cardEls[i].querySelector(".pct").textContent = (100 * p[i]).toFixed(1) + "%";
+      }
+      // marginal densities: the base mixed over both factors, mean mu_i
+      const pdf = PDFS[name];
+      const XL = -6, XR = 6, AX = 300, G = 160;
+      const x = (v) => 20 + 900 * (v - XL) / (XR - XL);
+      const dens = [];
+      let ymax = 0;
+      for (let i = 0; i < N; i++) {
+        const s = Math.sqrt(D[i]);
+        const row = new Float64Array(G + 1);
+        for (let g = 0; g <= G; g++) {
+          const xv = XL + (XR - XL) * g / G;
+          let acc = 0;
+          for (let q = 0; q < F2.length; q++)
+            acc += W2[q] * pdf((xv - mu[i] - V[i][0] * F2[q][0] - V[i][1] * F2[q][1]) / s) / s;
+          row[g] = acc;
+          if (acc > ymax) ymax = acc;
+        }
+        dens.push(row);
+      }
+      svg.innerHTML = "";
+      for (const tick of [-5, 0, 5]) {
+        S("line", { x1: x(tick), y1: 12, x2: x(tick), y2: AX, stroke: "#eee" }, svg);
+        S("text", { x: x(tick), y: AX + 16, "text-anchor": "middle",
+          fill: "#888" }, svg).textContent = tick;
+      }
+      S("line", { x1: x(XL), y1: AX, x2: x(XR), y2: AX, stroke: "#999" }, svg);
+      S("text", { x: x(0), y: AX + 30, "text-anchor": "middle", fill: "#666" },
+        svg).textContent = "performance (lower = better)";
+      for (let i = 0; i < N; i++) {
+        let d = "";
+        for (let g = 0; g <= G; g++) {
+          const xv = XL + (XR - XL) * g / G;
+          const yv = AX - (AX - 20) * dens[i][g] / ymax;
+          d += (g ? "L" : "M") + x(xv).toFixed(1) + " " + yv.toFixed(1);
+        }
+        S("path", { d: d + `L${x(XR)} ${AX}L${x(XL)} ${AX}Z`,
+          fill: COLORS[i], opacity: 0.12 }, svg);
+        S("path", { d, fill: "none", stroke: COLORS[i], "stroke-width": 1.6,
+          opacity: 0.85 }, svg);
+      }
+    }
+    redraw();
+  </script>
 
   <footer>
     <a href="https://github.com/microprediction/winning">Source</a> &middot;

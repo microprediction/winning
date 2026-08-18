@@ -1,0 +1,87 @@
+part,quantity,value
+anchor,gumbel_softmax,2.776e-17
+A,gamma0.5_k1_quotient_residual,3.741e-01
+A,gamma0.5_k1_coverr,2.268e-03
+A,gamma0.5_k1_interr,2.096e-04
+A,gamma0.5_k2_quotient_residual,3.017e-01
+A,gamma0.5_k3_quotient_residual,2.635e-01
+A,gamma0.5_k5_quotient_residual,2.082e-01
+A,gamma0.5_k8_quotient_residual,1.543e-01
+A,gamma0.5_k8_coverr,1.639e-03
+A,gamma0.5_k8_interr,2.065e-04
+A,gamma0.5_k1_seconds,0.02
+A,gamma0.5_k2_seconds,0.26
+A,gamma0.5_k3_seconds,2.30
+A,gamma0.5_k5_seconds,14.42
+A,gamma0.5_k8_seconds,14.17
+A,gamma0.5_ghk1e3_seconds,0.07
+A,gamma0.5_ghk1e4_seconds,0.54
+A,gamma0.5_k1,2.286e-03
+A,gamma0.5_k2,4.064e-03
+A,gamma0.5_k3,3.432e-03
+A,gamma0.5_k5,3.189e-03
+A,gamma0.5_k8,1.751e-03
+A,gamma0.5_ghk1e3,8.006e-03
+A,gamma0.5_ghk1e4,3.195e-03
+A,gamma1.5_k1_quotient_residual,4.590e-01
+A,gamma1.5_k1_coverr,1.480e-02
+A,gamma1.5_k1_interr,2.659e-04
+A,gamma1.5_k2_quotient_residual,2.733e-01
+A,gamma1.5_k3_quotient_residual,2.070e-01
+A,gamma1.5_k5_quotient_residual,1.235e-01
+A,gamma1.5_k8_quotient_residual,7.216e-02
+A,gamma1.5_k8_coverr,3.737e-03
+A,gamma1.5_k8_interr,2.713e-04
+A,gamma1.5_k1_seconds,0.02
+A,gamma1.5_k2_seconds,0.25
+A,gamma1.5_k3_seconds,2.26
+A,gamma1.5_k5_seconds,14.50
+A,gamma1.5_k8_seconds,14.35
+A,gamma1.5_ghk1e3_seconds,0.08
+A,gamma1.5_ghk1e4_seconds,0.59
+A,gamma1.5_k1,1.454e-02
+A,gamma1.5_k2,1.009e-02
+A,gamma1.5_k3,5.334e-03
+A,gamma1.5_k5,5.798e-03
+A,gamma1.5_k8,3.652e-03
+A,gamma1.5_ghk1e3,7.757e-03
+A,gamma1.5_ghk1e4,2.317e-03
+A,gamma3.0_k1_quotient_residual,2.582e-01
+A,gamma3.0_k1_coverr,7.167e-02
+A,gamma3.0_k1_interr,5.607e-04
+A,gamma3.0_k2_quotient_residual,8.898e-02
+A,gamma3.0_k3_quotient_residual,5.095e-02
+A,gamma3.0_k5_quotient_residual,1.547e-02
+A,gamma3.0_k8_quotient_residual,5.559e-03
+A,gamma3.0_k8_coverr,2.491e-03
+A,gamma3.0_k8_interr,6.651e-04
+A,gamma3.0_k1_seconds,0.02
+A,gamma3.0_k2_seconds,0.25
+A,gamma3.0_k3_seconds,2.16
+A,gamma3.0_k5_seconds,13.44
+A,gamma3.0_k8_seconds,13.22
+A,gamma3.0_ghk1e3_seconds,0.09
+A,gamma3.0_ghk1e4_seconds,0.65
+A,gamma3.0_k1,7.119e-02
+A,gamma3.0_k2,2.455e-02
+A,gamma3.0_k3,7.484e-03
+A,gamma3.0_k5,6.088e-03
+A,gamma3.0_k8,3.089e-03
+A,gamma3.0_ghk1e3,1.668e-02
+A,gamma3.0_ghk1e4,4.279e-03
+B,calib_residual_mixedlogit,2.108e-09
+B,calib_residual_probit,6.449e-10
+B,n_blocks_big,1
+B,n_blocks_mid,7
+B,plain logit (IIA)_massfrac_big,0.295
+B,plain logit (IIA)_massfrac_mid,0.232
+B,plain logit (IIA)_singles,0.00395
+B,plain logit (IIA)_pairs,0.01216
+B,factor mixed logit_massfrac_big,0.113
+B,factor mixed logit_massfrac_mid,0.174
+B,factor mixed logit_singles,0.00315
+B,factor mixed logit_pairs,0.00736
+B,factor probit_massfrac_big,0.039
+B,factor probit_massfrac_mid,0.080
+B,factor probit_singles,0.00204
+B,factor probit_pairs,0.00334

@@ -61,7 +61,7 @@ def gaussian_win_probabilities(
         )
     # resolution must resolve the SHARPEST density: one high-variance
     # contestant must not coarsen everyone else's grid
-    reach = max(abs(l) + _SUPPORT_Z * s for l, s in zip(locs, scales))
+    reach = max(abs(loc) + _SUPPORT_Z * sc for loc, sc in zip(locs, scales))
     unit = min(scales) / _GRID_POINTS_PER_BETA
     unit = max(unit, reach / 500_000)  # cost cap: at most ~a million points
     L = int(math.ceil(reach / unit)) + 2
