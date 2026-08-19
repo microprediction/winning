@@ -1277,10 +1277,19 @@ the OSF archive of \cite{yeonrahnev2020}, with the advance-warning condition rec
 the raw session files because the authors' aggregate matrices omit it; the recognition
 trials from the OSF archive of \cite{utochkin2025}; the tone confusion matrices digitized
 from the vector figures of the author manuscript of \cite{stewart2005}; the jury shares from
-the published tables of \cite{ormston2019}. All are public. Analysis code and every input
-needed to reproduce the tables are under \texttt{research/restriction} in the repository
-\texttt{github.com/microprediction/winning}, the inputs as column extracts rather than raw
-archives; an archival snapshot with a DOI accompanies circulation.
+the published tables of \cite{ormston2019}; the eight-way and four-way sound-identification
+frequencies transcribed from Tables 6 and 8 of \cite{getty1979}; the letter confusion matrices
+transcribed from Tables 1 to 4 of \cite{townsendlandon1982}; the categorization trials from the
+CAM1 deposit of \cite{wills2000}; and the twelve-line identification trials from the public
+\texttt{PerceptionCognitionLab/data0} repository, which carries no licence file and no
+associated publication, so its authorship is recorded as unattributed. All are public.
+
+Analysis code and every input needed to reproduce the tables are under
+\texttt{research/restriction}, with the inputs as column extracts rather than raw archives, one
+script per population, and a \texttt{SOURCE.md} per collection giving the fetched access route
+and the caveats. Each transcribed table carries its own arithmetic check: every row of the
+sound-identification and letter matrices reproduces its printed total, and the recounted
+Yeon--Rahnev condition reproduces the authors' saved matrix exactly.
 
 Two storage conventions must be told apart when reproducing this. BayesMallows,
 ConsRank and PerMallows store ranks, so element $j$ holds the rank of alternative $j$,
