@@ -214,6 +214,74 @@ def recognition():
     return both_slopes(cells)
 
 
+# ------------------------------------------------------------------ consumer goods, 5 -> 2
+def consumer(experiment):
+    """Costa-Gomes et al.: choices from subsets of five goods, so the two-item menus are
+    observed directly alongside the full five-item menu."""
+    from menus_heldout import load as load_menus, ITEMS
+    by, fc, exp = load_menus()
+    K = len(ITEMS)
+    full = tuple(range(K))
+    subjects = [s for s in by if exp.get(s) == str(experiment)]
+    cts = np.zeros(K)
+    for s in subjects:
+        c = by[s].get(full)
+        if c is not None:
+            cts[c] += 1
+    if cts.sum() < 20:
+        return None
+    p = (cts + ALPHA) / (cts.sum() + ALPHA * K)
+    pair_counts = collections.defaultdict(lambda: np.zeros(2))
+    for s in subjects:
+        for menu, ch in by[s].items():
+            if len(menu) != 2:
+                continue
+            i, j = menu
+            pair_counts[(i, j)][0 if ch == i else 1] += 1
+    cells = []
+    for (i, j), n in pair_counts.items():
+        if n.sum() < 20:
+            continue
+        if p[i] >= p[j]:
+            cells.append((p, i, j, float(n[0] / n.sum())))
+        else:
+            cells.append((p, j, i, float(n[1] / n.sum())))
+    return both_slopes(cells)
+
+
+# ------------------------------------------------------------------ lotteries, 6 -> 2
+def lotteries(name):
+    """Aguiar et al.: pooled (menu, chosen) rows over five lotteries plus an always-present
+    default, so the two-alternative menus are observed alongside the full six."""
+    from lotteries import load as load_lot
+    rows, _ = load_lot(name)
+    full = max((r[0] for r in rows), key=len)
+    K = len(full)
+    pos = {a: i for i, a in enumerate(full)}
+    c = np.zeros(K)
+    for menu, ch in rows:
+        if menu == full:
+            c[pos[ch]] += 1
+    if c.sum() < 20:
+        return None
+    p = (c + ALPHA) / (c.sum() + ALPHA * K)
+    pair_counts = collections.defaultdict(lambda: np.zeros(2))
+    for menu, ch in rows:
+        if len(menu) != 2:
+            continue
+        i, j = pos[menu[0]], pos[menu[1]]
+        pair_counts[(i, j)][0 if pos[ch] == i else 1] += 1
+    cells = []
+    for (i, j), n in pair_counts.items():
+        if n.sum() < 20:
+            continue
+        if p[i] >= p[j]:
+            cells.append((p, i, j, float(n[0] / n.sum())))
+        else:
+            cells.append((p, j, i, float(n[1] / n.sum())))
+    return both_slopes(cells)
+
+
 def main():
     rows = []
     for label, fn in [
@@ -221,7 +289,10 @@ def main():
             ("Symbol naming, six symbols", lambda: yeonrahnev(2, 6, "symbol")),
             ("Line lengths, twelve to pairs", rouder_c),
             ("Wills categories, three to two", wills),
-            ("Recognition foils, four to two", recognition)]:
+            ("Recognition foils, four to two", recognition),
+            ("Consumer goods, experiment 1", lambda: consumer(1)),
+            ("Consumer goods, experiment 2", lambda: consumer(2)),
+            ("Gambles, high arithmetic cost", lambda: lotteries("menu_choice_pooled.csv"))]:
         try:
             out = fn()
         except Exception as e:

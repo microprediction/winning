@@ -661,3 +661,41 @@ cannot be verified from repo extracts, since those inputs are external archives;
 collections the observed lambda EXCEEDS the race's, so the GSS "truth between the two defaults"
 claim is the exception rather than the pattern and should be reworded once lambda_table.txt is
 committed.
+
+## The line figure, and how far it now reaches (2026-08-19)
+
+Figure 1, on page 3 ahead of the scoreboard it summarises. Coordinate is the observed contraction
+slope over the slope Case V implies for the same shares, so linear renormalization is at 0 by
+construction and Gaussian renormalization at 1. `lambda_line.py` places nineteen of the
+thirty-nine comparisons; `lambda_table.py` supplies the eleven ranking collections.
+
+    gambles, high arithmetic cost   0.33   (5 pairs)
+    line lengths, twelve to pairs   0.60   (24)
+    occupational prestige           0.85
+    GSS socialization               0.88
+    GSS job values                  0.97
+    sports, Jester 3                1.10
+    Jester 1, consumer goods 2      1.12   (10)
+    Jester 2                        1.13
+    puzzles                         1.18
+    dots                            1.22
+    recognition foils               1.34   (360)
+    consumer goods, experiment 1    2.16   (10)
+    political goals                 2.35
+    symbol naming                   2.92   (30)
+    colour naming                   3.33   (12)
+    Wills categories                3.76   (39)
+    Netflix                         6.07   (3, off scale)
+
+Wills, the recognition foils, both consumer experiments and the gambles were added after Peter
+asked why only fourteen appeared. The honest answer was that the statistic needs a binary
+observation over a named pair, but four of those five qualified and had simply not been
+implemented, and `lambda_line.py` had named Wills in its own docstring while `main()` never
+called it. What genuinely cannot be placed is anything restricting to sets of three or more,
+which is the tones, the Getty conditions and Townsend and Landon.
+
+Two cautions now in the caption. Precision spans an order of magnitude, from 360 pairs down to
+three, so the extremes of the axis are its least certain points. And the axis does not reproduce
+the scoreboard, because lambda is a projection onto one slope and not a proper score: the
+twelve-line population sits nearer Case V here while linear renormalization has the lower
+held-out log loss on it.
