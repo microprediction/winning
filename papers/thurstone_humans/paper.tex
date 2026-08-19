@@ -8,7 +8,7 @@
 \usepackage{microtype}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{Softmax Masking Is a Choice Model:\\The Evidence For and Against Renormalizing Probabilities}}
+\title{\textbf{Softmax Masking Is a Choice Model:\\The Evidence for Linear versus Gaussian\\Renormalization of Probability Vectors}}
 \author{Peter Cotton}
 \date{Provisional draft, 17 August 2026}
 
@@ -55,7 +55,7 @@ p_i = \frac{u(i)}{\sum_{j \in S} u(j)},
 so the shares determine the worths up to scale. The prediction for a subset $T \subseteq S$
 follows by changing the denominator alone, which leaves every ratio $p_i/p_j$ with $i,j \in T$
 as it was in $S$. For a two-item menu the predicted share preferring $i$ is $p_i/(p_i+p_j)$.
-This is proportional renormalization. The invariance it imposes is Independence of Irrelevant
+This is proportional, or \emph{linear}, renormalization. The invariance it imposes is Independence of Irrelevant
 Alternatives, and applied to a reduced set of response alternatives it is what Clarke
 \cite{clarke1957} named the \emph{constant-ratio rule}.
 
@@ -77,7 +77,7 @@ P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right).
 \label{eq:pair}
 \end{equation}
 
-The two could be termed \emph{linear normalization} and \emph{Gaussian renormalization}. Both
+The two are termed \emph{linear renormalization} and \emph{Gaussian renormalization} throughout. Both
 take the same shares and return shares over the survivors. The first holds the ratios of the
 shares fixed, the second holds the latent locations fixed.
 
@@ -145,7 +145,7 @@ Tones, wide, ten to six & observed menus & $-.0173$ & n/a & Stewart \\
 Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & Rouder \\
 \bottomrule
 \end{tabular}
-\caption{Held-out log loss of linear normalization minus that of Gaussian renormalization, in
+\caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
 nats per prediction, so a positive gain means Gaussian renormalization predicted better. The
 tail is the Monte Carlo frequency with which a population obeying the constant-ratio rule
 exactly produces at least the observed gain on the same menus, floored at $1/201$ by two
@@ -167,7 +167,7 @@ not independent, the families contribute unequal numbers of them, and the collec
 assembled by searching for restriction data rather than sampled from a population of
 applications. The effect sizes and their families are what the table is for.
 
-Eight of the nine rows where linear normalization predicts better are one phenomenon. Four are
+Eight of the nine rows where linear renormalization predicts better are one phenomenon. Four are
 tone-identification conditions, three are line-identification restrictions and one is the Getty
 condition whose four survivors are mutual confusions, all of which place the alternatives on a
 single perceptual dimension; Section~\ref{sec:boundary} treats them together. The ninth is
@@ -243,8 +243,7 @@ exclusive events only when the information that one is impossible says nothing a
 the rest obtained, and Monty Hall is the familiar counterexample. Withdrawal is a third case,
 neither flat-likelihood conditioning nor informative conditioning, because no information about
 a fixed experiment has arrived. An alternative is gone and the problem is a different one.
-Conditioning requires a model of how the probabilities were generated, and renormalization
-supplies one.
+Conditioning requires a model of how the probabilities were generated, and linear renormalization supplies one.
 
 Which model it supplies is known. Within the class of independent additive random-utility
 models, Gumbel errors generate Equation~\eqref{eq:luce}
@@ -266,7 +265,7 @@ vector in one pass over a shared grid.
 
 Any noise law fixed in advance up to location gives a map with nothing left to choose, so the
 class supplies many zero-parameter candidates and not two. We compare two of them because they
-are the conventional ones. Gumbel gives renormalization, which is the reflex and the
+are the conventional ones. Gumbel gives linear renormalization, which is the reflex and the
 architecture of a masked softmax. Unit-variance Gaussian gives Case V, which is the classical
 model of a latent contest and the one Thurstone proposed. Interpolating between them, or choosing the standardized
 shape of some third law, requires a number that the shares themselves do not supply. Overall
@@ -617,13 +616,13 @@ sampling noise in what it predicts; all three tails are at the $0.005$ floor.}
 The six-symbol gain is the largest here outside news slates. The same pairs were also run \emph{announced in advance}, so the
 observer can aim attention at them. That arm was not analysed by the original authors and is
 recovered here from the trial files. There the advantage nearly disappears. Accuracy rises from $0.780$
-to $0.850$, renormalization becomes almost exactly right, and the race begins to
+to $0.850$, linear renormalization becomes almost exactly right, and the race begins to
 over-contract. So the race's advantage is not a property of these pairs, these colours or
 these observers. It appears when the surviving pair is selected only after the percept has formed, so that
 attention cannot be tailored to that pair, and it does not appear when the pair is named in
 advance.
 
-In both genuine restriction arms \emph{both} maps over-predict the favourite: renormalization by $0.069$ and the race by
+In both genuine restriction arms \emph{both} maps over-predict the favourite: linear renormalization by $0.069$ and the race by
 $0.055$ at four alternatives, and by $0.096$ and $0.064$ at six. Contraction has the right
 sign and removes a fifth to a third of the error. Neither of the two maps is calibrated
 here, and a fitted shape or mixture parameter has room to improve on both. That over-prediction is Yeon and
@@ -804,7 +803,7 @@ there is no population-heterogeneity confound of the kind every ranking collecti
 and the aggregation argument of Section~\ref{sec:mixture} is not available as an
 explanation of any gain found here.
 
-Over $38$ restricted rows and $9{,}120$ held-out trials, renormalization scores $0.9454$ and
+Over $38$ restricted rows and $9{,}120$ held-out trials, linear renormalization scores $0.9454$ and
 the race $0.9412$, a gain of $+0.0042$ with a row bootstrap of $[+0.0022, +0.0064]$, against
 a fitted-Luce null median of $-0.0011$, so the excess is $+0.0053$ at $p = 0.005$. The
 subsets give $+0.0006$ $[-0.0002, +0.0015]$ for $\{A,E,F,H\}$, $+0.0040$
@@ -833,7 +832,7 @@ follow-through.
 
 Wills et al.\ deposited their Experiment 2, in which twelve participants chose among three
 categories and twelve others had one category disallowed, over the same stimuli. Over $39$
-cells and $1{,}560$ held-out two-choice trials, renormalization scores $0.6839$ and the race
+cells and $1{,}560$ held-out two-choice trials, linear renormalization scores $0.6839$ and the race
 $0.6540$, a gain of $+0.0299$ against a null median of $-0.0015$, so the excess is $+0.0314$
 at $p = 0.002$. Graded and dummy stimuli agree, $+0.0287$ against $+0.0326$.
 
@@ -1032,7 +1031,7 @@ together they describe a boundary that can be stated as a rule rather than a lis
 \paragraph{A perceptual continuum.} Stewart, Brown and Chater \cite{stewart2005} had
 listeners name one of ten pure tones, and ran the same tones with the middle eight and the
 middle six labels, so the label sets nest over physically identical stimuli. Calibrating on
-the ten-label row and predicting the restricted rows, renormalization wins all four
+the ten-label row and predicting the restricted rows, linear renormalization wins all four
 conditions, by $0.0133$ and $0.0051$ nats at narrow spacing and $0.0173$ and $0.0057$ at
 wide. The mechanism is visible in the matrices, which are strongly banded: a tone is
 confused almost entirely with its immediate neighbours, so the alternatives are
@@ -1092,7 +1091,7 @@ experiment at once.
 
 \paragraph{Removal that changes the task.} McMurray and colleagues \cite{mcmurray2008} ran a
 two-label phoneme identification and a four-label version nesting it, on identical synthetic
-stimuli. The two extra labels absorbed under one per cent of responses, so renormalization
+stimuli. The two extra labels absorbed under one per cent of responses, so linear renormalization
 predicts almost no change and contraction predicts movement toward even; the observed
 identification slope instead grew steeper, which is neither. Zoanetti and colleagues
 \cite{zoanetti2013} report the same direction in assessment: deleting a distractor raised the
@@ -1111,7 +1110,7 @@ $\{0,1,2,3\}$, $\{4,5,6,7\}$, $\{8,9,10,11\}$, $\{0\ldots7\}$ and $\{4\ldots11\}
 restricts to twelve named pairs. Restricted blocks are bracketed by full-twelve blocks before
 and after.
 
-Over $1{,}296$ cells and $49$ subjects, linear normalization predicts better in every split.
+Over $1{,}296$ cells and $49$ subjects, linear renormalization predicts better in every split.
 The gain is $-0.0134$ overall with a subject bootstrap of $[-0.0176, -0.0104]$, and by size of
 the surviving menu it is $-0.0057$ at eight, $-0.0090$ at four and $-0.0322$ at two, so the
 loss grows as more of the continuum is cut away. This is the largest and best-powered
@@ -1158,7 +1157,7 @@ six per cent apart in frequency.
 The practical recommendation is narrow, and Section~\ref{sec:boundary} makes it
 conditional. When a probability vector is transported to a smaller support and the
 alternatives are distinct unordered items, Gaussian renormalization deserves to be tried
-alongside linear normalization rather than passed over. Four questions decide whether that condition holds. None of them is
+alongside linear renormalization rather than passed over. Four questions decide whether that condition holds. None of them is
 settled by the share vector alone, and how well they can be answered in advance depends on what
 else is available.
 Do the alternatives lie along a single physical or perceptual dimension, so that neighbours
@@ -1168,7 +1167,7 @@ removing an alternative change how easily the survivors can be told apart, as de
 distractor or an implausible response option does? And do the withdrawn alternatives carry so little mass,
 with the leader surviving, that the two maps agree to within the noise?
 
-A yes to the first two says linear normalization or a fitted correlated model rather than
+A yes to the first two says linear renormalization or a fitted correlated model rather than
 Gaussian renormalization, though in the tone matrices and the Scottish verdicts linear
 normalization is merely the less wrong of two independence models, and near-substitution is an
 argument for a similarity-aware model rather than for proportional redistribution. A yes to the
@@ -1260,12 +1259,12 @@ linear renormalization of probability. The question is not confined to menus of 
 wherever a probability vector is transported to a smaller support, which includes masked softmax
 vocabularies, truncated distributions, scratched fields and delisted catalogues.
 
-Gaussian Case V is a credible, tuning-free alternative to proportional renormalization. Across
+Gaussian Case V is a credible, tuning-free alternative to linear renormalization. Across
 the collections examined it frequently produces useful odds contraction, with the most
 persuasive evidence coming from experiments in which the same observers perform tightly matched
 full-menu and restricted-menu tasks, the identity of the surviving alternatives being revealed
 only after the stimulus has gone. On those collections it is
-typically as viable as linear normalization and often more so, which is all that is required of
+typically as viable as linear renormalization and often more so, which is all that is required of
 it.
 
 The evidence does not establish universal superiority. Raw predictive gain must be distinguished
