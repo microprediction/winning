@@ -1,0 +1,171 @@
+<title>Linear normalization against Gaussian renormalization</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --fg: #16171a; --muted: #5c6068; --rule: #dcd8d2;
+    --pass: #1a6b3c; --fail: #a3211a; --accent: #2b4c7e; --panel: #ffffff;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14151a; --fg: #e8e6e3; --muted: #9aa0aa; --rule: #2d3038;
+      --pass: #5fbf85; --fail: #ef8177; --accent: #8fb3e8; --panel: #1b1d24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14151a; --fg: #e8e6e3; --muted: #9aa0aa; --rule: #2d3038;
+    --pass: #5fbf85; --fail: #ef8177; --accent: #8fb3e8; --panel: #1b1d24;
+  }
+  body { background: var(--bg); color: var(--fg); margin: 0;
+         font: 16px/1.6 Charter, Georgia, "Iowan Old Style", serif; }
+  main { max-width: 62rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .4rem; font-weight: 600; }
+  h2 { font-size: 1.15rem; margin: 2.6rem 0 .6rem; font-weight: 600;
+       border-bottom: 1px solid var(--rule); padding-bottom: .35rem; }
+  p.lede { color: var(--muted); margin: 0 0 2rem; }
+  .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+           padding: 1rem 1.1rem; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--rule);
+           vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: .78rem;
+       text-transform: uppercase; letter-spacing: .04em; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: .82rem;
+                   font-variant-numeric: tabular-nums; }
+  .verdict { font-family: var(--mono); font-weight: 700; font-size: .78rem; }
+  .pass { color: var(--pass); } .fail { color: var(--fail); }
+  .detail { font-family: var(--mono); font-size: .76rem; color: var(--muted);
+            display: block; margin-top: .2rem; }
+  .where { font-size: .78rem; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  code, .mono { font-family: var(--mono); font-size: .85em; }
+  label { display: inline-block; font-size: .85rem; color: var(--muted);
+          margin: 0 .8rem .5rem 0; }
+  input[type=text] { font-family: var(--mono); font-size: .9rem; padding: .35rem .5rem;
+    border: 1px solid var(--rule); border-radius: 4px; background: var(--bg);
+    color: var(--fg); width: 22rem; }
+  button { font: inherit; font-size: .85rem; padding: .35rem .9rem; cursor: pointer;
+    border: 1px solid var(--rule); border-radius: 4px; background: var(--bg);
+    color: var(--fg); }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  .bars { margin-top: .8rem; }
+  .bar { display: grid; grid-template-columns: 5rem 1fr 5.5rem; align-items: center;
+         gap: .5rem; margin-bottom: .3rem; font-size: .82rem; }
+  .track { height: 1.05rem; background: color-mix(in srgb, var(--rule) 55%, transparent);
+           border-radius: 2px; overflow: hidden; }
+  .fill { height: 100%; }
+  .summary { font-size: .95rem; margin-top: 1rem; }
+</style>
+
+<main>
+  <h1>Linear normalization against Gaussian renormalization</h1>
+  <p class="lede">
+    Every self-contained mathematical claim in the paper, checked in the browser from
+    nothing. No data files, no network, no libraries. The normal law is Hart's algorithm,
+    the contest integral is Simpson's rule on a fine grid, and the inverse map is Newton
+    on the log-share residual. Numbers below are computed when the page loads, so a
+    failing claim shows as a failure.
+  </p>
+
+  <h2>Try it</h2>
+  <div class="panel">
+    <label>Full-menu shares
+      <input id="shares" type="text" value="0.90, 0.09, 0.01">
+    </label>
+    <label>Withdraw (1-based indices)
+      <input id="drop" type="text" value="1" style="width:6rem">
+    </label>
+    <button id="go">Transport</button>
+    <div id="out" class="bars"></div>
+  </div>
+
+  <h2>Checks</h2>
+  <div class="scroll"><table id="checks">
+    <thead><tr><th style="width:4.5rem"></th><th>Claim</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <p class="summary" id="summary"></p>
+
+  <h2>What is not checked here</h2>
+  <div class="panel">
+    <p style="margin:0">
+      The empirical figures, being every held-out log loss in the paper, are not
+      reproducible from a static page: they need the committed data. They are checked
+      instead by <code>demo/check_tables.py</code>, which traces each quoted figure to the
+      run that produced it, and reports any figure printed in a table that no committed run
+      accounts for.
+    </p>
+  </div>
+</main>
+
+<script type="module">
+import { runAll } from './checks.js';
+import { calibrate, linearNormalization, gaussianRenormalization } from './casev.js';
+
+const tbody = document.querySelector('#checks tbody');
+const rows = runAll();
+let fails = 0;
+for (const r of rows) {
+  if (!r.pass) fails += 1;
+  const tr = document.createElement('tr');
+  const v = document.createElement('td');
+  v.className = 'verdict ' + (r.pass ? 'pass' : 'fail');
+  v.textContent = r.pass ? 'PASS' : 'FAIL';
+  const c = document.createElement('td');
+  c.innerHTML = `${r.claim}<span class="where"> &nbsp;· ${r.where}</span>`
+              + `<span class="detail">${r.detail}</span>`;
+  tr.append(v, c);
+  tbody.append(tr);
+}
+document.querySelector('#summary').textContent =
+  `${rows.length - fails} of ${rows.length} checks pass.`;
+
+const fmt = (x) => x.toFixed(4);
+function transport() {
+  const out = document.querySelector('#out');
+  let p = document.querySelector('#shares').value.split(/[,\s]+/)
+            .filter(Boolean).map(Number);
+  if (p.some(Number.isNaN) || p.length < 3) {
+    out.textContent = 'Give at least three numbers.'; return;
+  }
+  const tot = p.reduce((a, b) => a + b, 0);
+  p = p.map((v) => v / tot);
+  const dropped = new Set(document.querySelector('#drop').value.split(/[,\s]+/)
+                    .filter(Boolean).map((s) => Number(s) - 1));
+  const keep = p.map((_, i) => i).filter((i) => !dropped.has(i));
+  if (keep.length < 2) { out.textContent = 'Keep at least two alternatives.'; return; }
+  const { a, residual } = calibrate(p);
+  const lin = linearNormalization(p, keep);
+  const gau = gaussianRenormalization(a, keep);
+  out.innerHTML = '';
+  keep.forEach((idx, k) => {
+    const row = document.createElement('div');
+    row.className = 'bar';
+    row.innerHTML = `<span>item ${idx + 1}</span>
+      <span class="track">
+        <span class="fill" style="width:${(100 * lin[k]).toFixed(2)}%;
+              background:var(--accent);opacity:.45"></span>
+      </span>
+      <span class="mono">${fmt(lin[k])}</span>
+      <span></span>
+      <span class="track">
+        <span class="fill" style="width:${(100 * gau[k]).toFixed(2)}%;
+              background:var(--accent)"></span>
+      </span>
+      <span class="mono">${fmt(gau[k])}</span>`;
+    out.append(row);
+  });
+  const note = document.createElement('p');
+  note.className = 'detail';
+  note.style.marginTop = '.7rem';
+  const worst = Math.max(...keep.map((_, k) => Math.abs(lin[k] - gau[k])));
+  note.textContent = `pale bar: linear normalization. solid bar: Gaussian renormalization. `
+    + `largest disagreement ${fmt(worst)}. calibration residual `
+    + `${residual.toExponential(2)}. locations ${a.map((v) => v.toFixed(4)).join(', ')}.`;
+  out.append(note);
+}
+document.querySelector('#go').addEventListener('click', transport);
+document.querySelector('#shares').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') transport();
+});
+transport();
+</script>

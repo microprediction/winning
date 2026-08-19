@@ -1,0 +1,20 @@
+Gain by the full-menu rank of the item chosen, pooled over Sushi, Jester file 1, Jester file 2, Jester file 3
+
+rank of chosen item         1       2       3       4       5       6       7       8       9      10
+share of outcomes        0.13    0.11    0.11    0.10    0.11    0.11    0.09    0.09    0.09    0.07
+mean gain              -0.072  -0.067  -0.057  -0.018  -0.012  +0.003  +0.039  +0.063  +0.127  +0.368
+
+contributions sum to +0.0145
+
+
+Probability that the full-field favourite finishes second
+
+collection              observed    renorm      race  renorm err  race err  removed
+Political goals            0.123     0.318     0.309      +0.195    +0.185     4.9%
+GSS job values             0.186     0.303     0.294      +0.116    +0.108     7.6%
+GSS socialization          0.191     0.302     0.294      +0.110    +0.102     7.1%
+Sushi                      0.206     0.250     0.245      +0.045    +0.039    12.4%
+Jester file 1              0.138     0.160     0.158      +0.022    +0.020     9.0%
+
+Both columns are sequential heuristics, not the exact ordering law of either model.
+EXIT=0
