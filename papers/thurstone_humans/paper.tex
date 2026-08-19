@@ -663,8 +663,8 @@ conditions and compares log likelihood, and the Gaussian wins in both experiment
 $t(29) = 4.26$ and $t(29) = 4.42$, $p < .001$, with thirty participants each. That is the
 contraction studied here, seen through the parameter that has to move to absorb it.
 
-Their design is nearer to this paper's than anything else we have found, and it is worth being
-exact about the distance that remains. No response set is restricted over shared alternatives:
+Their design is nearer to this paper's than anything else we have found, and the distance that
+remains is this. No response set is restricted over shared alternatives:
 $m$ varies by adding fresh items, not by withdrawing named ones. Linear renormalization is
 never the competitor, since the comparison is softmax against Gaussian with both fitted. And the
 parameters are estimated on the data that scores them, so the cross-condition constraint does the
@@ -698,16 +698,12 @@ Both maps are calibrated on full-menu shares alone, then scored by log
 loss on restricted menus neither has seen. The input is a probability vector and nothing else,
 which is what makes the two maps comparable and what the exercise assumes.
 
-That assumption should be stated rather than left implicit, because it is the one doing the work.
-Both maps hold the latent quantity fixed and change only the menu: the locations that reproduce
-the full-menu shares are the locations that run the restricted contest, and the worths that
-reproduce them are the worths that get renormalized. Nothing here tests that invariance, and
-Section~\ref{sec:boundary} collects the cases where it visibly fails, which is where removal
-changes discriminability or the surviving alternatives are not the alternatives that were there
-before. Two further assumptions ride along. The noise is independent and identically shaped
-across alternatives, which near-substitutes violate. And the population is treated as one chooser
-with one latent vector, though Section~\ref{sec:mixture} shows heterogeneous Luce choosers
-reproducing aggregate contraction with no individual departing from the axiom. Three
+Both maps hold the latent quantity fixed and change only the menu, and
+Section~\ref{sec:boundary} collects the cases where that fails. Two further assumptions are less
+visible. The noise is independent and identically shaped across alternatives, which
+near-substitutes violate. And the population is treated as one chooser with one latent vector,
+though Section~\ref{sec:mixture} shows heterogeneous Luce choosers reproducing aggregate
+contraction with no individual departing from the axiom. Three
 things make that possible now. Trial-level archives are open, so restricted menus can be
 scored on the observations that produced them rather than on printed marginals. Inverting
 Equation~\eqref{eq:winprob} from shares alone is a single pass over a shared grid, so the
@@ -1404,8 +1400,8 @@ six per cent apart in frequency.
 
 The practical recommendation is narrow, and Section~\ref{sec:boundary} makes it
 conditional. When a probability vector is transported to a smaller support and the
-alternatives are distinct unordered items, Gaussian renormalization deserves to be tried
-alongside linear renormalization rather than passed over. Four questions decide whether that condition holds. None of them is
+alternatives are distinct unordered items, Gaussian renormalization should be tried alongside
+linear renormalization rather than passed over. Four questions decide whether that condition holds. None of them is
 settled by the share vector alone, and how well they can be answered in advance depends on what
 else is available.
 Do the alternatives lie along a single physical or perceptual dimension, so that neighbours
