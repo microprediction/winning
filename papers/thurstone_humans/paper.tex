@@ -77,9 +77,19 @@ P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right).
 \label{eq:pair}
 \end{equation}
 
-The two are termed \emph{linear renormalization} and \emph{Gaussian renormalization} throughout. Both
-take the same shares and return shares over the survivors. The first holds the ratios of the
+The two are termed \emph{linear renormalization} and \emph{Gaussian renormalization} throughout.
+Both take the same shares and return shares over the survivors. The first holds the ratios of the
 shares fixed, the second holds the latent locations fixed.
+
+Each map travels under several names, and we treat the names of each as synonyms. For the first:
+proportional renormalization, linear renormalization, the ratio rule, Clarke's constant-ratio
+rule, and masking a softmax and rescaling the survivors. All denote Equation~\eqref{eq:luce}
+applied to a subset, and we write linear renormalization except where the historical name is
+what a cited paper used. For the second: Gaussian renormalization, Thurstone's Case V re-run
+among the survivors, and the independent unit-variance Gaussian contest on the restricted menu.
+The names differ by discipline and by decade rather than by content, and part of why the
+comparison below had not been made is that the two literatures holding the pieces did not share
+a vocabulary.
 
 The two horses disagree, and in a fixed direction. If $p_i > p_j$ then Equation~\eqref{eq:pair}
 lies between $\tfrac12$ and the renormalized $p_i/(p_i+p_j)$: winning a large field requires an

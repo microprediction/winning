@@ -371,9 +371,39 @@ Treisman, M., & Faulkner, A. (1985). "On the choice between choice theory and si
 theory." *Quarterly Journal of Experimental Psychology* 37A(3):387–405.
 doi:10.1080/14640748508400941
 
-**Abstract only; full text not obtained.** On a secondary characterisation — Robinson,
-DeStefano, Brady & Vul (2022), whose full text *was* obtained from OSF at
-https://files.osf.io/v1/resources/n78wz_v1/providers/osfstorage/6310f8d18cc1bd001d168f33 —
+**Abstract only; full text not obtained.** **RESOLVED 2026-08-19: this is category (B) and the
+threat collapses. See `treisman_faulkner_1985.md` for the full workup.** Treisman & Faulkner
+fit d′ and β *within* each m-AFC condition, so nothing is held out; the compared quantity is a
+scalar per condition and never the odds between named survivors; no response set is restricted
+over shared alternatives; and proportional renormalization never appears. Decisively, *neither*
+parameter turned out invariant — their own preferred model drifted too — and they chose signal
+detection by a plausibility argument about the sign of the drift rather than by predictive
+accuracy. Robinson et al. call the results "somewhat ambiguous". Of the fifteen citing works,
+none cites it as settling Gaussian versus Luce under set-size change. Their own experiment is an
+auditory m-AFC memory task with n = 6, in which m is confounded with memory load — the project's
+own quality-changing-removal failure mode.
+
+**Correction to what this file previously said.** The claim that Treisman & Faulkner tested
+invariance "on Miller, Heise & Lichten's vocabulary-size data" was attributed here to Robinson
+et al. The published Robinson et al. text does not mention Miller, Heise and Lichten at all;
+verified against the article itself, which says only "[Treisman and Faulkner (1985)] reported
+evidence for the Gaussian signal detection model, however, their results were somewhat
+ambiguous." The Miller-Heise-Lichten link comes from Treisman & Faulkner's own abstract, which
+states the procedure "is applied to the data of Miller, Heise and Lichten (1951) and to the
+results of an experiment". Two separate claims were run together.
+
+**Robinson et al. (2023) is the closer prior art and should be cited as such.** Verified from
+the article: their primary analysis holds d′ and β *fixed across all* m-AFC conditions and
+compares log-likelihood, and the Gaussian wins in both experiments, t(29) = 4.26 and
+t(29) = 4.42, both p < .001, n = 30 each. Their conclusion, verbatim: "the d′ parameter of the
+Gaussian signal detection model was more stable across m-afc conditions than the β parameter of
+the softmax model." That is a cross-condition constraint, much nearer this project's map than
+anything in Treisman & Faulkner. It remains category (B): parameters are fitted to the same data
+that scores them, no response set is restricted, and the constant-ratio rule is never the
+competitor. Correct reference is *Journal of Mathematical Psychology* **117**:102805, 2023,
+confirmed via Crossref on doi 10.1016/j.jmp.2023.102805.
+
+The superseded characterisation follows, kept for the record:
 Treisman & Faulkner favour signal detection theory over choice theory on Miller, Heise &
 Lichten's vocabulary-size data, by fitting d′ and β within each m-AFC condition and testing
 whether the parameters stay invariant across response-set sizes.
