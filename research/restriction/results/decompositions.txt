@@ -1,10 +1,10 @@
 Gain by the full-menu rank of the item chosen, pooled over Sushi, Jester file 1, Jester file 2, Jester file 3
 
 rank of chosen item         1       2       3       4       5       6       7       8       9      10
-share of outcomes        0.13    0.11    0.11    0.10    0.11    0.11    0.09    0.09    0.09    0.07
-mean gain              -0.072  -0.067  -0.057  -0.018  -0.012  +0.003  +0.039  +0.063  +0.127  +0.368
+share of outcomes        0.17    0.13    0.13    0.10    0.10    0.10    0.08    0.07    0.07    0.04
+mean gain              -0.060  -0.045  -0.033  -0.003  +0.010  +0.020  +0.054  +0.067  +0.116  +0.242
 
-contributions sum to +0.0145
+contributions sum to +0.0043
 
 
 Probability that the full-field favourite finishes second

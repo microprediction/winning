@@ -51,38 +51,48 @@ def race_locations(p):
     return np.asarray(a), err
 
 
-def gain_by_rank(R, K, folds=5, seed=0):
-    """Held-out gain bucketed by the full-menu rank of the item actually chosen."""
+def gain_by_rank(R, folds=5, seed=0, max_resp=5000):
+    """Held-out gain bucketed by the full-menu rank of the item chosen.
+
+    Scored over every subset of size two or more, which is the same set of predictions
+    the aggregate is scored on. An earlier version of this script used pairs only and did
+    not reproduce the paper's table, because the pairwise gain is two to four times the
+    all-subsets aggregate.
+    """
+    import itertools
     rng = np.random.default_rng(seed)
-    idx = rng.permutation(len(R))
+    n, K = R.shape
+    if n > max_resp:
+        R = R[rng.choice(n, max_resp, replace=False)]
+        n = max_resp
+    fold = np.array_split(rng.permutation(n), folds)
     buckets = np.zeros(K)
     counts = np.zeros(K)
     for f in range(folds):
-        test = idx[f::folds]
-        train = np.setdiff1d(idx, test)
-        p = shares(R[train], K)
+        test = fold[f]
+        train = np.concatenate([fold[g] for g in range(folds) if g != f])
+        cts = np.bincount(R[train].argmin(axis=1), minlength=K).astype(float)
+        p = (cts + ALPHA) / (len(train) + ALPHA * K)
         a, err = race_locations(p)
         if err > 0.05:
             return None
-        order = np.argsort(-p)                      # rank 0 is the favourite
+        order = np.argsort(-p)
         rank_of = np.empty(K, dtype=int)
         rank_of[order] = np.arange(K)
-        # pairs only: the cell where the two maps differ most and the paper's table is
-        # pooled over the same subsets it scores, so use every unordered pair
-        for i in range(K):
-            for j in range(i + 1, K):
-                sub = [i, j]
-                lu = np.maximum(p[sub] / p[sub].sum(), FLOOR)
-                w = win_probs_np(a[sub])
+        for r in range(2, K + 1):
+            for S in itertools.combinations(range(K), r):
+                idx = list(S)
+                lu = np.maximum(p[idx] / p[idx].sum(), FLOOR)
+                w = win_probs_np(a[idx])
                 ra = np.maximum(w / w.sum(), FLOOR)
-                for row in R[test]:
-                    pick = 0 if row[i] < row[j] else 1
-                    r = rank_of[sub[pick]]
-                    buckets[r] += -np.log(lu[pick]) + np.log(ra[pick])
-                    counts[r] += 1
+                win = R[np.ix_(test, idx)].argmin(axis=1)
+                contrib = -np.log(lu[win]) + np.log(ra[win])
+                ranks = rank_of[np.array(idx)][win]
+                np.add.at(buckets, ranks, contrib)
+                np.add.at(counts, ranks, 1)
     total = counts.sum()
-    return {"share": counts / total, "gain": np.divide(buckets, counts,
-            out=np.zeros_like(buckets), where=counts > 0),
+    return {"share": counts / total,
+            "gain": np.divide(buckets, counts, out=np.zeros_like(buckets), where=counts > 0),
             "aggregate": buckets.sum() / total}
 
 
@@ -133,7 +143,7 @@ def main():
             continue
         R = data[name]
         K = R.shape[1]
-        out = gain_by_rank(R, K)
+        out = gain_by_rank(R)
         if out is None:
             print(f"  {name}: calibration failed")
             continue
