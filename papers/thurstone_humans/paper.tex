@@ -6,6 +6,7 @@
 \newtheorem{corollary}{Corollary}
 \usepackage{booktabs}
 \usepackage{microtype}
+\usepackage{tikz}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
 \title{\textbf{Softmax Masking Is a Choice Model:\\The Evidence for Linear versus Gaussian\\Renormalization of Probability Vectors}}
@@ -770,6 +771,59 @@ eight of eleven, so in most collections choice contracts by more than Case V pre
 Gaussian renormalization errs by over-predicting the favourite. That is the same direction as
 the after-stimulus arms of Section~\ref{sec:after}, where both maps over-predict, and it says
 the Gaussian point of the family is not far enough along it for these populations.
+
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[x=3.05cm,y=1cm]
+  % axis
+  \draw[->,thick] (-0.08,0) -- (2.62,0);
+  \foreach \x/\lab in {0/0, 0.5/0.5, 1/1, 1.5/1.5, 2/2, 2.5/2.5}
+    \draw (\x,-0.06) -- (\x,0.06) node[below=4pt,font=\small] at (\x,-0.06) {$\lab$};
+  \node[font=\small] at (2.62,-0.42) {$r$};
+  % the two maps
+  \draw[very thick] (0,-0.22) -- (0,0.22);
+  \draw[very thick] (1,-0.22) -- (1,0.22);
+  \node[align=center,font=\small\bfseries,above=6pt] at (0,0.22)
+    {linear\\renormalization};
+  \node[align=center,font=\small\bfseries,above=6pt] at (1,0.22)
+    {Gaussian\\renormalization};
+  % collections, staggered so labels do not collide
+  \foreach \x/\y/\lab/\anch in {%
+      0.60/-0.95/{line lengths, twelve to pairs}/west,
+      0.85/-1.45/{occupational prestige}/east,
+      0.88/-1.90/{GSS socialization}/west,
+      0.97/-2.35/{GSS job values}/west,
+      1.10/-0.95/{sports, Jester 3}/west,
+      1.12/-1.45/{Jester 1}/west,
+      1.13/-1.90/{Jester 2}/west,
+      1.18/-2.35/{puzzles}/west,
+      1.22/-2.80/{dots}/west,
+      2.35/-0.95/{political goals}/east,
+      2.91/-1.45/{symbol naming}/east,
+      3.32/-1.90/{colour naming}/east}
+    {\fill (\x,0) circle (1.7pt);
+     \draw[gray,thin] (\x,0) -- (\x,\y+0.16);
+     \node[font=\scriptsize,anchor=\anch] at (\x,\y) {\lab};}
+  % off-scale marker
+  \draw[dashed] (2.55,-0.25) -- (2.55,0.25);
+  \node[font=\scriptsize,anchor=west] at (2.5,-0.55) {Netflix at $6.07$};
+\end{tikzpicture}
+\caption{Where each collection sits between the two maps. The coordinate is
+$r = \lambda_{\text{observed}} / \lambda_{\text{Case V}}$, the ratio of the observed contraction
+slope to the slope Case V implies for that collection's own shares, so linear renormalization is
+at $r = 0$ by construction and Gaussian renormalization at $r = 1$. Colour naming, symbol naming
+and the twelve-line pairs are restricted menus the observer actually faced; the rest are
+ranking-induced. Two things are visible. Most collections lie beyond $r = 1$, so choice contracts
+by more than Case V predicts and the Gaussian point is not far enough along the family. And the
+one collection on a perceptual continuum falls short of it, at $r = 0.60$. Positions on this axis
+do not reproduce the scoreboard: $\lambda$ projects a vector of pair-specific predictions onto a
+single slope and is not a proper score, so the twelve-line collection sits nearer Case V here
+while linear renormalization has the lower held-out log loss on it. The axis places populations;
+Table~\ref{tab:scoreboard} scores forecasts. Netflix, with three alternatives and three pairs,
+is off scale.}
+\label{fig:line}
+\end{figure}
 
 \subsection{Restrictions induced from rankings}
 \label{sec:rankings}

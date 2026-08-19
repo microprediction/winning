@@ -1,0 +1,8 @@
+collection                       pairs  observed   Case V   ratio
+Colour naming, four lines           12     0.262    0.079    3.33
+Symbol naming, six symbols          30     0.443    0.152    2.92
+Line lengths, twelve to pairs       24     0.118    0.196    0.60
+
+Ratio 0 is linear renormalization, 1 is Gaussian renormalization. Below 1 the
+collection sits between the two maps; above 1 it contracts more than Case V says.
+The ranking collections are in results/lambda_table.txt on the same statistic.
