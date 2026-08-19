@@ -131,7 +131,7 @@ def main():
             g = run(R, alpha=0.5, weight=w)
             wts.append("n/a" if g is None else f"{g:+.4f}")
         print(f"{name:<24}{row[0]:>9}{row[1]:>9}{row[2]:>9}{'  |  ':>5}"
-              f"{wts[0]:>9}{wts[1]:>9}{wts[2]:>9}")
+              f"{wts[0]:>9}{wts[1]:>9}{wts[2]:>9}", flush=True)
 
     print(f"\n\nRespondent bootstrap with the whole pipeline refit inside each replicate, "
           f"{reps} replicates.\n")
@@ -142,12 +142,13 @@ def main():
         if g is None:
             print(f"{name:<24}{'n/a':>9}")
             continue
-        bs = bootstrap_refit(R, reps=reps)
+        budget = reps if len(R) <= 1000 else max(30, reps // 8)
+        bs = bootstrap_refit(R, reps=budget)
         if bs is None:
             print(f"{name:<24}{g:>+9.4f}{'  too few usable replicates':>24}")
             continue
         lo, hi, k = bs
-        print(f"{name:<24}{g:>+9.4f}{f'[{lo:+.4f}, {hi:+.4f}]':>24}{k:>6}")
+        print(f"{name:<24}{g:>+9.4f}{f'[{lo:+.4f}, {hi:+.4f}]':>24}{k:>6}", flush=True)
 
 
 if __name__ == "__main__":
