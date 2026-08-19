@@ -613,3 +613,51 @@ design is known only through the citing literature. Asserting the internals of a
 the exact failure that produced a fabricated title earlier in this project, so the paper says
 nothing about it. The bibliography entry was already dropped when it turned up uncited. If a
 referee raises it, the notes hold the answer and the answer can then be written from the source.
+
+## Numerical audit of the manuscript, acted on (2026-08-19)
+
+`notes/crr/AUDIT_2026-08-19.md` lists nineteen findings, keeping error separate from
+could-not-verify. All 39 scoreboard rows verified clean against their sections and the committed
+outputs. Fixed in the paper:
+
+- THE HETEROGENEITY TABLE OMITTED ITS AWKWARD ROW. Eight rows produced, seven printed, and the
+  missing sigma = 6 was the one non-monotone ratio, under a caption saying the table is
+  reproduced by the script. Printed.
+- THE HEADLINE TAIL WAS ITS OWN FLOOR. News slates .016 comes from sixty replicates, so it is
+  1/61 and not a measured 1.6 per cent, while the caption claimed two hundred throughout. The
+  caption now gives the three replicate counts and the news row carries a footnote.
+- UNDISCLOSED TRUNCATION. 6,135 nested slate pairs found, 6,000 scored. Now stated.
+- THE 3.4 FACTOR CANNOT BE REPRODUCED. No script produces it; it existed only as prose in this
+  file. Removed from both places rather than restated.
+- ABSTRACT SPLIT DID NOT SUM. Twenty-four plus twelve is 36, not 39. Slates, ballots and
+  Wikipedia all observe the smaller menu, so it is 27 / 12.
+- THE PAIRWISE-VERSUS-AGGREGATE CLAIM WAS FALSE for seven of twelve collections, including
+  occupational prestige at 0.73 where the pairwise gain is SMALLER. Restated with the range and
+  the reversal named.
+- SUSHI'S EXCESS MIXED SMOOTHING CONVENTIONS: gain from alpha = 0.5, null median from alpha = 0.
+  Now -0.0063 and +0.0175, both at alpha = 0.5.
+- Also corrected: the census is about a hundred sources rather than sixty-seven with one note
+  each; nine census entries not eleven; sports participation is non-monotone too; the six-symbol
+  gain is the largest of its two arms rather than of the paper; SOURCE.md exists for the
+  collections handled here rather than for every collection; the favourite-second reduction is
+  4.9 to 12.4 per cent, not five to thirteen, since the wider range came from recomputing off
+  rounded printed values; lottery units are 3,928 scored rather than 4,099 usable; Rouder is the
+  largest disagreement running AGAINST Gaussian renormalization rather than the largest in the
+  paper; and the Townsend row-sum claim now says two rows are dropped for unreconcilable
+  published cells.
+- A footnote collision was caught on the way: the new news-slate note reused the abstract's
+  marker 2. Marks and texts now pair at 2, 3 and 4.
+
+POLLACK AND DECKER IS NOT SCOREABLE, and the census said "printed; digitize". Acquired in full
+from Internet Archive microfilm: the three overlapping four-way matrices were reduced to mean
+absolute deviations before publication, one scalar per set per signal-to-noise level, so the
+subset matrices do not exist in print. Four eight-way masters were recovered and verified,
+including a check that Figure 2's labelled arrows agree with the digitized cells 48 of 48. The
+census row now says not scoreable and carries a footnote explaining why. It also removes the
+"one entry needing only transcription, published in 1960" sentence, which was wrong twice over.
+
+STILL OPEN from the audit: the 153,727 impression count and the tightened-filter page counts
+cannot be verified from repo extracts, since those inputs are external archives; and in 9 of 12
+collections the observed lambda EXCEEDS the race's, so the GSS "truth between the two defaults"
+claim is the exception rather than the pattern and should be reworded once lambda_table.txt is
+committed.

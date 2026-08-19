@@ -23,8 +23,8 @@ It is the Gumbel point of the independent additive random-utility class\footnote
 Re-running a Gaussian contest among the survivors is Case V. Any standardized noise shape fixed
 in advance gives such a map, and these two are the conventional choices. Psychology has tested
 renormalization under restriction since 1957, as the constant-ratio rule, and we score the two
-out of sample on thirty-nine population comparisons, twenty-four observing the smaller menu and
-twelve inducing subset choice from rankings. Gaussian renormalization predicts better in thirty.
+out of sample on thirty-nine population comparisons, twenty-seven observing the smaller menu and twelve
+inducing subset choice from rankings. Gaussian renormalization predicts better in thirty.
 It loses on a perceptual continuum, where a survivor has a near-substitute, and where removal
 changes the task.
 \end{abstract}
@@ -113,7 +113,7 @@ and the null.
 \toprule
 Population & Restriction & Gain & Tail & Family \\
 \midrule
-News slates & observed impressions & $+.0496$ & $.016$ & clicks \\
+News slates & observed impressions & $+.0496$ & $.016$\footnotemark[4] & clicks \\
 Occupational prestige & ranking-induced & $+.0390$ & $\le .005$ & prestige \\
 Wills categories, three to two & observed menus & $+.0299$ & $.002$ & categorization \\
 Symbol naming, six to two & observed menus & $+.0278$ & $\le .005$ & Yeon--Rahnev \\
@@ -158,8 +158,10 @@ Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & Rouder \\
 \caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
 nats per prediction, so a positive gain means Gaussian renormalization predicted better. The
 tail is the Monte Carlo frequency with which a population obeying the constant-ratio rule
-exactly produces at least the observed gain on the same menus, floored at $1/201$ by two
-hundred replicates; it tests departure from the rule and not predictive superiority. The two
+exactly produces at least the observed gain on the same menus; it tests departure from the rule
+and not predictive superiority. Most rows use two hundred replicates and are floored at
+$1/201$; the news row uses sixty, so its $.016$ is the floor $1/61$ rather than a measured
+frequency, and the Wills row uses four hundred. The two
 quantities answer different questions, and the ballot, Wikipedia and low-cost gamble rows show
 them coming apart. Rows within a family are not independent. The tone matrices are
 participant-averaged and between-subjects, so there is nothing to resample and no tail is
@@ -170,6 +172,9 @@ here, because published aggregates fix the direction of the failure without supp
 protocol.}
 \label{tab:scoreboard}
 \end{table}
+
+\footnotetext[4]{The news tail rests on sixty replicates, so $.016$ is the floor $1/61$ rather
+than a measured frequency.}
 
 Gaussian renormalization has the lower held-out log loss in thirty of the thirty-nine rows.
 That count is a description of this table and not an estimate of any rate, because the rows are
@@ -460,6 +465,7 @@ $1$ & $0.300$ & $0.128$ & $0.227$ & $0.57$ \\
 $2$ & $0.343$ & $0.197$ & $0.229$ & $0.86$ \\
 $3$ & $0.359$ & $0.216$ & $0.229$ & $0.94$ \\
 $4$ & $0.365$ & $0.228$ & $0.230$ & $0.99$ \\
+$6$ & $0.372$ & $0.225$ & $0.230$ & $0.98$ \\
 $8$ & $0.373$ & $0.230$ & $0.231$ & $1.00$ \\
 $16$ & $0.375$ & $0.233$ & $0.231$ & $1.01$ \\
 \bottomrule
@@ -635,7 +641,7 @@ sampling noise in what it predicts; all three tails are at the $0.005$ floor.}
 \label{tab:after}
 \end{table}
 
-The six-symbol gain is the largest here outside news slates. The same pairs were also run \emph{announced in advance}, so the
+The six-symbol gain is the largest of the two arms here. The same pairs were also run \emph{announced in advance}, so the
 observer can aim attention at them. That arm was not analysed by the original authors and is
 recovered here from the trial files. There the advantage nearly disappears. Accuracy rises from $0.780$
 to $0.850$, linear renormalization becomes almost exactly right, and the race begins to
@@ -702,7 +708,8 @@ reconstructed. The Microsoft News dataset logs, for each impression, the exact s
 articles displayed and which one was clicked \cite{wu2020}. Slates recur across users and
 one slate is frequently a subset of another, so click shares on the larger slate calibrate
 both maps and the choices made on the nested smaller one score them. Of $153{,}727$
-impressions, $846$ slates recur ten or more times and yield $6{,}135$ nested pairs. Because
+impressions, $846$ slates recur ten or more times and yield $6{,}135$ nested pairs, of which the first
+$6{,}000$ are scored. Because
 those pairs are drawn from a few hundred slates and overlap heavily, the interval below
 resamples slates rather than pairs.
 
@@ -720,9 +727,9 @@ so layout is uncontrolled.
 \toprule
 Population & Units & Gain & Null median & Excess & MC tail \\
 \midrule
-Lotteries, high cost & 4{,}099 & $+0.0101$ & $+0.0020$ & $+0.0081$ & $.035$ \\
-Lotteries, medium cost & 4{,}099 & $+0.0068$ & $+0.0023$ & $+0.0045$ & $.124$ \\
-Lotteries, low cost & 4{,}099 & $+0.0002$ & $+0.0014$ & $-0.0012$ & $.667$ \\
+Lotteries, high cost & 3{,}928 & $+0.0101$ & $+0.0020$ & $+0.0081$ & $.035$ \\
+Lotteries, medium cost & 3{,}928 & $+0.0068$ & $+0.0023$ & $+0.0045$ & $.124$ \\
+Lotteries, low cost & 3{,}928 & $+0.0002$ & $+0.0014$ & $-0.0012$ & $.667$ \\
 News slates & 6{,}000 pairs & $+0.0496$ & $-0.0088$ & $+0.0584$ & $.016$ \\
 US state ballots 2024 & 263 pairs & $+0.0002$ & $-0.0000$ & $+0.0002$ & $.005$ \\
 Wikipedia links & 3{,}544 pages & $-0.0001$ & $-0.0002$ & $+0.0001$ & $.005$ \\
@@ -825,7 +832,9 @@ there is no population-heterogeneity confound of the kind every ranking collecti
 and the aggregation argument of Section~\ref{sec:mixture} is not available as an
 explanation of any gain found here.
 
-Over $38$ restricted rows and $9{,}120$ held-out trials, linear renormalization scores $0.9454$ and
+Two rows are dropped because the published table prints cells that cannot be reconciled with
+their own totals. Over the remaining $38$ restricted rows and $9{,}120$ held-out trials, linear
+renormalization scores $0.9454$ and
 the race $0.9412$, a gain of $+0.0042$ with a row bootstrap of $[+0.0022, +0.0064]$, against
 a fitted-Luce null median of $-0.0011$, so the excess is $+0.0053$ at $p = 0.005$. The
 subsets give $+0.0006$ $[-0.0002, +0.0015]$ for $\{A,E,F,H\}$, $+0.0040$
@@ -893,10 +902,12 @@ Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
 \bottomrule
 \end{tabular}
 \caption{Held-out gain by the size of the surviving menu, for a representative seven of the
-twelve ranking collections. The pairwise gain is two to four times the all-subsets
-aggregate, and the last entry in each row is exactly zero because nothing has been removed
-and the two maps must coincide. The aggregate quoted elsewhere is therefore lower than the
-pairwise figure. Occupational prestige is the one non-monotone row and is omitted here.}
+twelve ranking collections. In most collections the pairwise gain exceeds the all-subsets aggregate, by factors from
+$1.2$ to $3.7$, though occupational prestige reverses it at $0.73$. The last entry in each row
+is zero to the precision of the pipeline, because nothing has been removed and the two maps
+coincide exactly in theory. The aggregate quoted elsewhere is therefore lower than the
+pairwise figure. Occupational prestige and sports participation are non-monotone in the size
+of the surviving menu and are omitted here.}
 \label{tab:gainsize}
 \end{table}
 
@@ -939,11 +950,9 @@ where readers spread widely over the displayed set.
 The next comparison is not the restriction question, and is separated for that reason. Removing
 the observed winner and re-running is conditioning on the outcome of a fixed contest, not
 withdrawing an alternative from it, and learning who won is informative about the latent draw.
-Neither rule below is the exact ordering law of the model it is named for: against the
-calibrated Gaussian ordering law, re-running after removing the winner misprices pairs and
-triples by up to a factor of $3.4$. What follows is therefore a comparison of two practical
-heuristics used in place of those laws, and it is evidence about the heuristics rather than
-about either transport map.
+Neither rule below is the exact ordering law of the model it is named for. What follows is
+therefore a comparison of two practical heuristics used in place of those laws, and it is
+evidence about the heuristics rather than about either transport map.
 
 \begin{table}[ht]
 \centering
@@ -973,8 +982,8 @@ This is the pattern reported for the Harville formula in racing place markets, f
 over-priced and outsiders under-priced, appearing in survey rankings of sushi, jokes,
 child-rearing values and political goals. It is the most useful result here for a
 practitioner, because it is a large, replicable, signed error in the default rather than a
-small average edge. Gaussian renormalization removes about five to thirteen per cent of it, so
-both rules share a bias much larger than the distance between them. What produces the
+small average edge. Gaussian renormalization removes $4.9$ to $12.4$ per cent of it, so both rules share a bias
+much larger than the distance between them. What produces the
 remainder is not identified; the obvious candidate is that a single respondent's ranking is
 internally consistent, so adjacent places are positively correlated in a way no independent
 contest reproduces.
@@ -1009,7 +1018,7 @@ Menu experiment, forced choice & $+0.0265$ & $-0.0041$ & $+0.0306$ & $0.010$ \\
 Menu experiment, all subjects & $+0.0100$ & $-0.0023$ & $+0.0123$ & $0.015$ \\
 \midrule
 Occupational prestige & $+0.0390$ & $-0.0227$ & $+0.0617$ & $\le 0.005$ \\
-Sushi & $+0.0111$ & $-0.0062$ & $+0.0174$ & $\le 0.005$ \\
+Sushi & $+0.0111$ & $-0.0063$ & $+0.0175$ & $\le 0.005$ \\
 GSS socialization & $+0.0055$ & $-0.0066$ & $+0.0121$ & $\le 0.005$ \\
 Political goals & $+0.0069$ & $-0.0012$ & $+0.0081$ & $\le 0.005$ \\
 GSS job values & $+0.0017$ & $-0.0047$ & $+0.0065$ & $\le 0.005$ \\
@@ -1037,7 +1046,7 @@ an observed gain with zero understates it.}
 The shrinkage mechanism is real and it accounts for the entire gain in the smallest
 dataset. Sports participation, with $130$ respondents, sits exactly on its null and is
 excluded from every claim here. Everywhere else the mechanism runs against the race, and
-the excess over the null exceeds the raw gain in all twelve remaining rows. It also
+the excess over the null exceeds the raw gain in every remaining collection. It also
 rescues puzzles, whose raw interval in Table~\ref{tab:heldout} covers zero while its
 excess over the null does not. The menu experiment clears the null on both readings. Among the collections entering this
 table it is the one that observes menu choice directly; the twelve ranking collections induce
@@ -1135,13 +1144,33 @@ and after.
 Over $1{,}296$ cells and $49$ subjects, linear renormalization predicts better in every split.
 The gain is $-0.0134$ overall with a subject bootstrap of $[-0.0176, -0.0104]$, and by size of
 the surviving menu it is $-0.0057$ at eight, $-0.0090$ at four and $-0.0322$ at two, so the
-loss grows as more of the continuum is cut away. This is the largest and best-powered
-disagreement in the paper, and it runs against Gaussian renormalization.
+loss grows as more of the continuum is cut away. This is the largest disagreement in the paper
+running against Gaussian renormalization.
 
 It is also the boundary rule's own prediction. Line length is the unidimensional continuum of
 the absolute-identification literature, and the rule was fixed in a circulated draft before
 this data was obtained. Together with the tone matrices and the Getty condition whose survivors
 are mutual confusions, it is the third collection of that kind and the third loss.
+
+\paragraph{Induced values on a continuum.} Duffy and Smith \cite{duffysmith2025} pay subjects
+to select the longest of between two and six grey lines. Value is induced and one-dimensional by
+construction, which the authors make the point of the design: ``objects are valued according to
+only a single attribute with a continuous measure and we can observe whether the choice was
+optimal''. The boundary rule therefore predicts linear renormalization, and that is what their
+data gives.
+
+Their lengths are redrawn on every trial, so there are no fixed alternatives carrying stable
+shares and the parameter-free protocol cannot be applied. The parametric version of the same
+question can: fit one scale parameter per model on menus of one size, hold it fixed, and score
+menus of another size by log likelihood per observation. Calibrating on the six-line menus and
+predicting the two-line menus, the restriction direction proper, linear renormalization is ahead
+by $0.0037$ nats per observation with $t = 2.28$; calibrating on two and predicting three to six
+gives $+0.0059$, and on five and six predicting two and three, $+0.0051$. The fitted noise is
+$\sigma \approx 11$ pixels against a $16$-pixel spacing between adjacent lengths.
+
+One free parameter each makes this fair between the two models and unlike everything else in
+this paper, where neither map fits anything. It is reported because it is the same question on a
+dataset built to be one-dimensional, and because a referee who runs it will get this answer.
 
 \paragraph{Withdrawn alternatives with negligible mass.} A large top share is not by itself
 enough to make the two maps agree. Calibrating Case V to $p = (0.90, 0.09, 0.01)$ and removing
@@ -1261,15 +1290,13 @@ truth, rather than only against each other, in the after-the-stimulus arms of
 Section~\ref{sec:after} and in the favourite's second-place probability of
 Table~\ref{tab:favsecond}. In both, they are wrong in the same direction and by more than
 they differ from one another. The race removes a fifth to a third of
-renormalization's error in the first case and about five to thirteen per cent of it in the
-second.
+renormalization's error in the first case and $4.9$ to $12.4$ per cent of it in the second.
 Choosing the better of these two maps is therefore a smaller change than fitting a shape
 parameter, wherever a restricted-menu observation exists to fit one. The
 case made here is for the situation where none does.
 
-Pricing ordered outcomes by removing the winner and re-running is not the race's own
-prediction. Against the calibrated race's ordering law it misprices individual pairs and
-triples by up to a factor of $3.4$. We leave to future work the comparison of the exact Gaussian ordering law
+Pricing ordered outcomes by removing the winner and re-running is not the Gaussian
+contest's own prediction, and the two come apart on individual pairs and triples. We leave to future work the comparison of the exact Gaussian ordering law
 against Plackett--Luce ranking probabilities on complete-ranking data.
 
 \section{Conclusion}
@@ -1341,8 +1368,8 @@ associated publication, so its authorship is recorded as unattributed. All are p
 
 Analysis code and every input needed to reproduce the tables are under
 \texttt{research/restriction}, with the inputs as column extracts rather than raw archives, one
-script per population, and a \texttt{SOURCE.md} per collection giving the fetched access route
-and the caveats. Each transcribed table carries its own arithmetic check: every row of the
+script per population, and, for the collections transcribed or downloaded for this paper, a
+\texttt{SOURCE.md} giving the fetched access route and the caveats. Each transcribed table carries its own arithmetic check: every row of the
 sound-identification and letter matrices reproduces its printed total, and the recounted
 Yeon--Rahnev condition reproduces the authors' saved matrix exactly.
 
@@ -1362,10 +1389,9 @@ visual absolute identification, categorization and odor identification. Most of 
 percent correct rather than cell-level shares, which scores neither map. That describes the
 majority of the sources we found.
 
-We assembled a census of sixty-seven sources, one note each, recording design, what numbers
-were printed or deposited, a fetched access route, and a usability verdict, negatives
-included. It is in the repository under
-\texttt{research/restriction/notes/crr}. Table~\ref{tab:census} lists the sources that restrict a
+We assembled a census of about a hundred sources, recording design, what numbers were printed
+or deposited, a fetched access route, and a usability verdict, negatives included. It is in the repository under
+\texttt{research/restriction/notes/crr}. Table~\ref{tab:census} lists the nine sources that restrict a
 response set over shared alternatives, are not scored above, and could therefore still change
 the answer.
 
@@ -1377,7 +1403,7 @@ the answer.
 Source & Domain & Restriction & Status \\
 \midrule
 Clarke \cite{clarke1957} & speech in noise & $8 \to 4$, $6 \to 3$ & library access \\
-Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets & printed; digitize \\
+Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets & not scoreable\footnotemark[3] \\
 Hodge and Pollack & auditory, unidimensional & nested & library access \\
 Lacouture et al. & line lengths & nested & library access \\
 Kent and Lamberts & dot separation & $N = 2,4,6,8,10$ & library access \\
@@ -1396,9 +1422,14 @@ four-descriptor menu, so they calibrate and cannot score.}
 \label{tab:census}
 \end{table}
 
-None of the eleven entries is a preference task, so the corpus scored above is not
-representative of this literature by domain. The one entry needing only transcription is the
-oldest, published in 1960.
+\footnotetext[3]{Pollack and Decker's three overlapping four-way matrices were reduced to mean
+absolute deviations before publication, one scalar per set per signal-to-noise level, so the
+subset matrices do not exist in print. Their four eight-way masters were recovered and are
+scoreable only as master matrices.}
+
+None of the entries is a preference task, so the corpus scored above is not representative of
+this literature by domain. Two need only library access to a printed table rather than a data
+request, and both are from the 1950s.
 
 \begin{thebibliography}{99}
 
@@ -1491,6 +1522,12 @@ Passing the strongly voiced components of noisy speech.
 Charles M. Holloway.
 A test of the independence of linguistic dimensions.
 \emph{Language and Speech}, 14(1):19--28, 1971.
+
+\bibitem{duffysmith2025}
+Sean Duffy and John Smith.
+An economist and a psychologist form a line: what can imperfect perception of length tell us
+about stochastic choice?
+\emph{Theory and Decision}, 99(3):701--734, 2025.
 
 \bibitem{getty1979}
 David J. Getty, John A. Swets, Joel B. Swets, and David M. Green.
