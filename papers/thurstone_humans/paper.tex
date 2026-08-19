@@ -92,9 +92,10 @@ Proposition~\ref{prop:contraction} makes the direction of their disagreement exa
 
 \section{Scoreboard}
 
-Table~\ref{tab:scoreboard} states the result before the argument for it. Thirty-seven
-populations have full-menu shares that calibrate both maps and restricted-menu choices that
-score them by held-out log loss. Section~\ref{sec:empirical} gives the protocol, the datasets
+Table~\ref{tab:scoreboard} states the result before the argument for it. Thirty-nine
+comparisons have full-menu shares that calibrate both maps and restricted-menu choices that
+score them by held-out log loss. Rows are comparisons, not independent populations: several
+reuse the same subjects or source study. Section~\ref{sec:empirical} gives the protocol, the datasets
 and the null.
 
 \begin{table}[ht]
@@ -111,13 +112,15 @@ Symbol naming, six to two & observed menus & $+.0278$ & $\le .005$ & Yeon--Rahne
 Sounds, eight to four, $\{1,3,5,7\}$ & observed menus & $+.0490$ & $\le .005$ & Getty \\
 Sounds, eight to four, $\{1,2,5,6\}$ & observed menus & $+.0453$ & $\le .005$ & Getty \\
 Colour naming, four to two & observed menus & $+.0147$ & $\le .005$ & Yeon--Rahnev \\
-Consumer goods, experiment 1 & observed menus & $+.0140$ & $.005$ & Costa-Gomes \\
+Consumer goods 1, forced choice & observed menus & $+.0442$ & $.005$ & Costa-Gomes \\
+Consumer goods 1, all subjects & observed menus & $+.0140$ & $.010$ & Costa-Gomes \\
 Sushi & ranking-induced & $+.0111$ & $\le .005$ & preference \\
 Gambles, high arithmetic cost & observed menus & $+.0101$ & $.035$ & Aguiar \\
 Letters, five to three, $\{F,H,X\}$ & observed menus & $+.0093$ & $.005$ & Townsend--Landon \\
 Political goals & ranking-induced & $+.0069$ & $\le .005$ & preference \\
 Gambles, medium arithmetic cost & observed menus & $+.0068$ & $.124$ & Aguiar \\
-Consumer goods, experiment 2 & observed menus & $+.0059$ & $.129$ & Costa-Gomes \\
+Consumer goods 2, forced choice & observed menus & $+.0140$ & $.129$ & Costa-Gomes \\
+Consumer goods 2, all subjects & observed menus & $+.0059$ & $.199$ & Costa-Gomes \\
 GSS socialization & ranking-induced & $+.0055$ & $\le .005$ & GSS \\
 Sports participation & ranking-induced & $+.0050$ & $.51$ & preference \\
 Letters, five to three, $\{A,E,X\}$ & observed menus & $+.0040$ & $.010$ & Townsend--Landon \\
@@ -152,23 +155,25 @@ hundred replicates; it tests departure from the rule and not predictive superior
 quantities answer different questions, and the ballot, Wikipedia and low-cost gamble rows show
 them coming apart. Rows within a family are not independent. The tone matrices are
 participant-averaged and between-subjects, so there is nothing to resample and no tail is
-computed. Forced-choice subgroups are quoted for the consumer experiments, since no deferral
-coding enters those. Three further populations appear in Section~\ref{sec:boundary} rather than
+computed. The consumer experiments appear twice each, since the forced-choice subgroup admits
+no deferral coding while the all-subject figure uses the whole sample; gain and tail are taken
+from the same analysis population within a row. Three further populations appear in Section~\ref{sec:boundary} rather than
 here, because published aggregates fix the direction of the failure without supporting this
 protocol.}
 \label{tab:scoreboard}
 \end{table}
 
-Gaussian renormalization has the lower held-out log loss in twenty-eight of the thirty-seven
-rows. That count is a description of this table and not an estimate of any rate, because the
-rows are not independent, the families contribute unequal numbers of them, and the collections
-were assembled by searching for restriction data rather than sampled from a population of
+Gaussian renormalization has the lower held-out log loss in thirty of the thirty-nine rows.
+That count is a description of this table and not an estimate of any rate, because the rows are
+not independent, the families contribute unequal numbers of them, and the collections were
+assembled by searching for restriction data rather than sampled from a population of
 applications. The effect sizes and their families are what the table is for.
 
-Eight of the nine rows where linear normalization predicts better are one phenomenon. Tones,
-lines and the Getty condition whose four survivors are mutual confusions all place the
-alternatives on a single perceptual dimension, and Section~\ref{sec:boundary} treats them
-together. The ninth is Wikipedia, at $-0.0001$.
+Eight of the nine rows where linear normalization predicts better are one phenomenon. Four are
+tone-identification conditions, three are line-identification restrictions and one is the Getty
+condition whose four survivors are mutual confusions, all of which place the alternatives on a
+single perceptual dimension; Section~\ref{sec:boundary} treats them together. The ninth is
+Wikipedia, whose magnitude is $-0.0001$.
 
 The tail column separates two things that the earlier draft of this table conflated. A positive
 gain says Gaussian renormalization predicted better with estimated shares, and part of that can
@@ -257,10 +262,10 @@ likelihood \cite{plackett1975} uses the whole ranking and a fitted Bradley--Terr
 \cite{bradley1952} uses the pairwise outcomes directly; neither is estimated here.
 
 The direction of the disagreement is a theorem, and it holds for noise laws other than
-the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise, assumed independent and
-identically distributed across alternatives up to location, with positive density on a common
-support and $\log r$ differentiable, and let $r = f/F$ be its reverse hazard, with the highest
-draw winning as above.
+the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise, independent and
+identically distributed across alternatives up to location, with $f > 0$ and $0 < F(x) < 1$ at
+every finite $x$, so that the reverse hazard $r = f/F$ is defined everywhere and $\log r$ is
+differentiable. The highest draw wins, as above.
 
 \begin{proposition}[Removing alternatives contracts the odds]
 \label{prop:contraction}
@@ -268,8 +273,8 @@ Suppose $\log r$ is concave. Let $T \subset S$ and $i,j \in T$ with $a_i > a_j$.
 \[
 \frac{P(i \mid S)}{P(j \mid S)} \;\ge\; \frac{P(i \mid T)}{P(j \mid T)} \;\ge\; 1,
 \]
-with the first inequality strict when $\log r$ is strictly concave and $S \setminus T$ is
-non-empty.
+with the first inequality strict when $\log r$ is strictly concave and $H$ is non-constant on a
+set of positive measure, which holds whenever $S \setminus T$ is non-empty.
 \end{proposition}
 
 \begin{proof}
@@ -385,8 +390,11 @@ $\sigma/\beta$, with $\varepsilon = \beta/\sigma$. Subtract the common Gumbel me
 cancels in the $\arg\max$, and divide by $s_\varepsilon = (1 + \varepsilon^2 \pi^2/6)^{1/2}$,
 which is a gauge by the previous paragraph. The standardized law then has skewness of order
 $\varepsilon^3$ and excess kurtosis of order $\varepsilon^4$, with no $\varepsilon^2$ term
-surviving. For interior share vectors and a smooth inverse share map the first generic
-departure of the recalibrated restriction map from Case V is therefore cubic in $\varepsilon$.
+surviving. Under smooth dependence of the winning probabilities on the noise law, and a
+locally nonsingular Jacobian of the full-menu share map in the $K-1$ location contrasts, the
+implicit function theorem gives $a_\varepsilon(p) = a_0(p) + O(\varepsilon^3)$, so the first
+generic departure of the recalibrated restriction map from Case V is cubic in $\varepsilon$.
+Symmetric configurations can cancel the cubic term and leave a higher order.
 Any parameter that interpolates between the two maps has to be a shape or relative-mixture
 parameter. It cannot be a common noise scale.
 
@@ -422,7 +430,10 @@ $\{i,j\}$, fitted through the origin as $\delta = -\lambda \log(p_i/p_j)$; $\lam
 exact renormalization. Observed $\lambda$ is the population's
 contraction; Case V $\lambda$ is what the independent unit-variance Gaussian race implies
 for that population's own shares. The top share is reported to show the limit is not the
-near-indifference corner.}
+near-indifference corner. Parameters: $K = 5$, $A = (0.55, 0.25, 0, -0.25, -0.55)$ with
+$\mu = \sigma A$, Gumbel scale $1$, and $400{,}000$ direct Monte Carlo draws per row from
+\texttt{numpy.random.default\_rng(0)}; reproduced by
+\texttt{python heterogeneity\_limit.py}.}
 \label{tab:mixture}
 \end{table}
 
@@ -447,9 +458,10 @@ Correlated multinomial probit handles near-substitutes exactly, by giving two si
 alternatives a positive covariance. It is not available as a default. One full-menu share
 vector supplies $K-1$ free numbers, and those are already exhausted by the $K-1$ location
 contrasts. After choosing a reference alternative and normalizing scale, the covariance matrix
-of the $K-1$ utility differences carries a further $K(K-1)/2 - 1$ parameters, and no
-combination of them changes the full-menu shares once the locations are free to adjust. They
-are therefore unidentified from one full-menu share vector for every $K \ge 3$. A correlated model is available to anyone with
+of the $K-1$ utility differences carries a further $K(K-1)/2 - 1$ parameters. A single
+$(K-1)$-dimensional share vector cannot jointly identify $K-1$ location contrasts and an
+unrestricted covariance shape, so for every $K \ge 3$ the covariance is unidentified from
+full-menu shares alone. A correlated model is available to anyone with
 restricted-menu data to fit it on. That is a different exercise from the one conducted here.
 
 \section{Empirical}
@@ -479,8 +491,9 @@ Section~\ref{sec:observed} says where that weakens them.
 \subsubsection{Consumer goods, all subsets of five}
 \label{sec:menus}
 
-Twelve of the thirteen collections used here are complete rankings, from which subset
-choice is read off rather than observed. One is not, and it comes first.
+In the ranking-and-menu benchmark of Tables~\ref{tab:menus} and~\ref{tab:heldout}, twelve
+collections are complete rankings from which subset choice is read off, and one observes menu
+choice directly. That one comes first.
 
 Costa-Gomes, Cueva, Gerasimou and Teji\v{s}\v{c}\'ak \cite{costagomes2022} ran two
 experiments in which subjects chose separately from every non-singleton subset of five
@@ -537,9 +550,11 @@ by design.
 
 Yeon and Rahnev \cite{yeonrahnev2020} show a display whose dominant colour, among four, has
 to be named. In one condition the full menu is available. In a second the observer sees the
-identical display and is told only \emph{after} it has gone that the answer is one of two
-named alternatives. Stimulus, exposure and observer are the same; the menu is not, and
-nothing about the smaller menu could have been anticipated while the percept formed. Their
+identical display and is told only \emph{after} it has gone which two named alternatives the
+answer lies between. Conditions were blocked and trained, so the observer knew a two-alternative
+response was coming; what could not be anticipated while the percept formed is the identity of
+the surviving pair. The design therefore prevents pair-specific advance attention rather than
+making the restriction itself a surprise. Their
 Experiment 2 repeats this with six symbols. Calibration uses that observer's full-menu row
 for that dominant item alone, and the two-alternative cells on the same observer and item
 are then predicted and scored.
@@ -570,13 +585,14 @@ observer can aim attention at them. That arm was not analysed by the original au
 recovered here from the trial files. There the advantage nearly disappears. Accuracy rises from $0.780$
 to $0.850$, renormalization becomes almost exactly right, and the race begins to
 over-contract. So the race's advantage is not a property of these pairs, these colours or
-these observers. It appears when alternatives are genuinely withdrawn from a percept formed
-without knowledge of the menu. It does not appear when the menu was known in advance.
+these observers. It appears when the surviving pair is selected only after the percept has formed, so that
+attention cannot be tailored to that pair, and it does not appear when the pair is named in
+advance.
 
 In both genuine restriction arms \emph{both} maps over-predict the favourite: renormalization by $0.069$ and the race by
 $0.055$ at four alternatives, and by $0.096$ and $0.064$ at six. Contraction has the right
 sign and removes a fifth to a third of the error. Neither of the two maps is calibrated
-here, and a fitted shape or mixture parameter would beat both. That over-prediction is Yeon and
+here, and a fitted shape or mixture parameter has room to improve on both. That over-prediction is Yeon and
 Rahnev's own finding, reached with a fitted model, so their result is independent evidence
 that the correction runs toward contraction while bounding what either default can claim.
 
@@ -593,7 +609,8 @@ independence.
 
 Restriction is observed in four further populations, which differ in what does the removing.
 
-A fourth was tried and discarded. Grocery stockout data records hourly sales by product,
+A fifth candidate was tried and discarded. Grocery stockout data records hourly sales by
+product,
 and a shopper may buy two items from one category, so the alternatives are not mutually
 exclusive and the object is a basket rather than a choice. Recovering choices would need
 transaction-level baskets, which the release does not contain.
@@ -901,8 +918,8 @@ This is the pattern reported for the Harville formula in racing place markets, f
 over-priced and outsiders under-priced, appearing in survey rankings of sushi, jokes,
 child-rearing values and political goals. It is the most useful result here for a
 practitioner, because it is a large, replicable, signed error in the default rather than a
-small average edge. The race removes $5$ to $12$ per cent of it, so both rules share a bias
-much larger than the distance between them. What produces the
+small average edge. Gaussian renormalization removes about five to thirteen per cent of it, so
+both rules share a bias much larger than the distance between them. What produces the
 remainder is not identified; the obvious candidate is that a single respondent's ranking is
 internally consistent, so adjacent places are positively correlated in a way no independent
 contest reproduces.
@@ -967,9 +984,9 @@ dataset. Sports participation, with $130$ respondents, sits exactly on its null 
 excluded from every claim here. Everywhere else the mechanism runs against the race, and
 the excess over the null exceeds the raw gain in all twelve remaining rows. It also
 rescues puzzles, whose raw interval in Table~\ref{tab:heldout} covers zero while its
-excess over the null does not. The menu experiment clears the null on both readings,
-which is the result the paper rests on, since it is the only one where restriction is
-observed.
+excess over the null does not. The menu experiment clears the null on both readings. Among the collections entering this
+table it is the one that observes menu choice directly; the twelve ranking collections induce
+subset choices from complete rankings.
 
 \subsection{Boundary conditions}
 \label{sec:boundary}
@@ -1089,8 +1106,7 @@ memory foils, sushi, jokes, ballots, colours and symbols. It is not where they l
 continuum, where a removed option is a near-substitute for a survivor, or where removal
 changes the discriminability of what remains.
 
-Two consequences follow. First, an apparent conflict resolves. Meyer-Grant and colleagues
-\cite{meyergrant2025} show that Gumbel-min uniquely predicts accuracy invariance as a
+Two consequences follow. First, an apparent conflict resolves. Meyer-Grant and colleagues \cite{meyergrant2026} show that Gumbel-min uniquely predicts accuracy invariance as a
 recognition set grows uniformly, find that invariance, and report the Gumbel model
 outperforming the Gaussian throughout. That is Yellott's own condition, independently
 confirmed, in the same domain where Section~\ref{sec:after} has the race winning on nested
@@ -1142,11 +1158,13 @@ The inversion from shares to locations is the only extra machinery, and the latt
 algorithm of \cite{cotton2021} performs it in one pass over a common grid, returning the
 whole vector of winning probabilities at once. The restricted predictions are then
 one-dimensional quadrature on the same grid. At the field sizes here, ten alternatives at
-most, both steps are immediate; a field of $n = 10{,}000$ takes a fraction of a second, and
-the method scales to fields of millions \cite{cotton2021}. So the
-recommendation needs no additional data and no appreciable additional computation. Within
-its condition it was better on every population examined here; outside it, on the tone
-matrices, it was worse on all four.
+most, both steps are immediate; the method is designed for and tested at much larger fields
+\cite{cotton2021}. So the
+recommendation needs no additional restricted-menu observations and no appreciable additional
+computation, although the boundary conditions below require structural information about
+similarity, ordering or task geometry that the shares do not contain. Within its condition it was better on every population
+examined here. Outside it, it was worse on all four tone rows, all three line-restriction rows
+and the Getty condition whose survivors are mutual confusions.
 
 All twelve ranking collections carry an assumption the menu experiments do not.
 A respondent's ranking imposes one ordering on every subset by construction, so no
@@ -1188,9 +1206,10 @@ truth, rather than only against each other, in the after-the-stimulus arms of
 Section~\ref{sec:after} and in the favourite's second-place probability of
 Table~\ref{tab:favsecond}. In both, they are wrong in the same direction and by more than
 they differ from one another. The race removes a fifth to a third of
-renormalization's error in the first case and five to twelve per cent of it in the second.
-Choosing the better of these two maps is therefore a smaller improvement than fitting a shape
-parameter would be, wherever a restricted-menu observation exists to fit it on. The
+renormalization's error in the first case and about five to thirteen per cent of it in the
+second.
+Choosing the better of these two maps is therefore a smaller change than fitting a shape
+parameter, wherever a restricted-menu observation exists to fit one. The
 case made here is for the situation where none does.
 
 Pricing ordered outcomes by removing the winner and re-running is not the race's own
@@ -1209,8 +1228,9 @@ vocabularies, truncated distributions, scratched fields and delisted catalogues.
 
 Gaussian Case V is a credible, tuning-free alternative to proportional renormalization. Across
 the collections examined it frequently produces useful odds contraction, with the most
-persuasive evidence coming from experiments in which the same observer and stimulus are
-evaluated before and after an unanticipated menu restriction. On those collections it is
+persuasive evidence coming from experiments in which the same observers perform tightly matched
+full-menu and restricted-menu tasks, the identity of the surviving alternatives being revealed
+only after the stimulus has gone. On those collections it is
 typically as viable as linear normalization and often more so, which is all that is required of
 it.
 
@@ -1235,10 +1255,13 @@ alternatives, and the judgement can be wrong.
 
 To repeat, this note is about competing reflexes rather than competing careful modelling
 paradigms. Both maps are nested by the independent additive random-utility family, indexed by
-its standardized noise shape, and both are wrong in the same direction wherever the truth can be
-measured, by more than they differ from one another. A fitted shape or mixture parameter beats
-both wherever a restricted-menu observation exists to fit it on. A common noise scale cannot,
-being a gauge.
+its standardized noise shape, and in the two settings where both can be checked against
+the truth, the after-stimulus perceptual arms of Section~\ref{sec:after} and the favourite's
+second-place probability of Section~\ref{sec:sequential}, both err in the same direction by
+more than they differ from one another. A model whose shape parameter nests the two can be fitted
+wherever a restricted-menu observation exists, and estimated under the same objective it is no
+worse in sample; whether it improves held-out prediction needs separate validation. A common
+noise scale cannot serve as that parameter, being a gauge.
 
 We leave to future work the comparison of the exact Gaussian ordering law against
 Plackett--Luce ranking probabilities on complete-ranking data.
@@ -1426,10 +1449,10 @@ The suboptimality of perceptual decision making with multiple alternatives.
 \emph{Nature Communications}, 11:3857, 2020.
 
 \bibitem{utochkin2025}
-Igor S. Utochkin, Sergey Azarov, and Nikita Grigorev.
+Igor Utochkin, Daniil Azarov, and Daniil Grigorev.
 Invariant recognition memory spaces for real-world objects revealed with signal-detection
 analysis.
-\emph{Psychological Science}, 2025. doi:10.1177/09567976251384640.
+\emph{Psychological Science}, 36(11):831--845, 2025.
 
 \bibitem{stewart2005}
 Neil Stewart, Gordon D. A. Brown, and Nick Chater.
@@ -1453,10 +1476,10 @@ Rachel Ormston, James Chalmers, Fiona Leverick, Vanessa Munro, and Lorraine Murr
 \emph{Scottish Jury Research: Findings from a Large Scale Mock Jury Study}.
 Scottish Government, 2019. ISBN 978-1-83960-194-1.
 
-\bibitem{meyergrant2025}
-Constantin G. Meyer-Grant, David Kellen, Samuel Harding, and Henrik Singmann.
-Extreme-value signal detection theory for recognition memory.
-Preprint, Open Science Framework, 2025. \texttt{osf.io/qhrfj}.
+\bibitem{meyergrant2026}
+Constantin G. Meyer-Grant, David Kellen, Samuel M. Harding, and Henrik Singmann.
+Extreme-value signal detection theory for recognition memory: the parametric road not taken.
+\emph{Psychological Review}, published online 4 June 2026. doi:10.1037/rev0000615.
 
 \bibitem{holman1974}
 Eric W. Holman and A. A. J. Marley.

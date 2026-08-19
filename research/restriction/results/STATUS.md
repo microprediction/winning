@@ -485,3 +485,48 @@ predicted a loss. It lost: 1,296 cells, 49 subjects, gain -0.0134 [-0.0176, -0.0
 -0.0322 in the twelve-to-two condition. That is the largest and best-powered disagreement in the
 project and it runs against Gaussian renormalization. It is now in the paper as the third
 continuum collection and it is the reason the conclusion claims parity rather than superiority.
+
+## Second-round audit acted on (2026-08-19)
+
+Verified rather than accepted, in each case:
+
+TABLE 1 WAS MIXING POPULATIONS. The consumer rows paired the all-subject gain (+0.0140,
++0.0059) with the forced-choice tail (0.005, 0.129). Confirmed against tab:menus and the text,
+which give exp1 tails 0.010 (all) and 0.005 (forced) and exp2 0.199 (all) and 0.129 (forced).
+Each experiment now has two rows with gain and tail from the same analysis population. The row
+count moves to 39, positives to 30.
+
+YEON-RAHNEV WAS OVERSTATED, AND THE DATA SETTLES IT. Conditions are blocked: 576 blocks in
+exp1_trials.csv, exactly one condition each. So subjects knew a two-alternative response was
+coming and were trained on it; what was unannounced is the IDENTITY of the surviving pair. The
+paper no longer says nothing about the smaller menu could have been anticipated. It says the
+design prevents pair-specific advance attention. The conclusion no longer says "the same
+observer and stimulus before and after", since the full and restricted responses came from
+different trials in different blocks.
+
+TWO CITATIONS WERE WRONG IN THE BIBLIOGRAPHY, both checked at Crossref. Utochkin's coauthors
+are Daniil Azarov and Daniil Grigorev, not Sergey Azarov and Nikita Grigorev; the article is
+Psychological Science 36(11):831-845. And Meyer-Grant et al. is no longer an OSF preprint: it
+is Psychological Review, published online 4 June 2026, doi 10.1037/rev0000615, titled
+"Extreme-value signal detection theory for recognition memory: the parametric road not taken".
+That is the fourth and fifth wrong reference caught in this project by checking DOIs rather
+than search results.
+
+FAVOURITE-SECOND ARITHMETIC. Recomputed from the printed table: the reductions are 4.6, 7.7,
+7.2, 13.3 and 9.1 per cent, so "five to twelve" becomes "about five to thirteen".
+
+Also: the cubic claim now carries its smoothness and local-invertibility conditions and notes
+that symmetric configurations can cancel the cubic term; Proposition 1 assumes 0 < F(x) < 1 at
+every finite x so the reverse hazard is defined, and strictness is stated in terms of H being
+non-constant; the covariance sentence is a non-identification claim rather than a global
+compensation claim; "needs no additional data" becomes "no additional restricted-menu
+observations", with the boundary conditions needing structural information the shares lack;
+"a fitted shape parameter beats both" becomes "no worse in sample, held-out improvement needs
+separate validation"; the mixture table prints K = 5, A = (0.55, 0.25, 0, -0.25, -0.55),
+Gumbel scale 1, 400,000 draws, default_rng(0) and the command that rebuilds it; the stale
+"only one where restriction is observed", "a fourth was tried", "twelve of the thirteen
+collections" and "four losses are one task" are all corrected; and the unsupported timing
+figures are removed.
+
+STILL OPEN. The archive DOI and commit hash are still not printed in the paper, because nothing
+is pushed. That is now the only item on the reviewer's list not addressed.
