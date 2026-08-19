@@ -1,0 +1,323 @@
+examples:
+  flower:
+    adjectives:
+      - fragrant
+      - vibrant
+      - delicate
+      - beautiful
+      - colorful
+      - elegant
+      - stunning
+      - graceful
+      - charming
+      - enchanting
+    prompt_pair_template:
+      - "My favorite flower is the [MASK] because it is SOMETHING."
+      - "My two favorite flowers are the [ANSWER] and the [MASK] because they are SOMETHING."
+    top_k: 15
+
+  cuisine:
+    adjectives:
+      - flavorful
+      - spicy
+      - savory
+      - rich
+      - aromatic
+      - hearty
+      - exotic
+      - wholesome
+      - delectable
+      - diverse
+    prompt_pair_template:
+      - "The best cuisine is [MASK] cuisine because it is SOMETHING."
+      - "The two best cuisines are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  holiday:
+    adjectives:
+      - festive
+      - joyful
+      - relaxing
+      - memorable
+      - exciting
+      - meaningful
+      - traditional
+      - cheerful
+      - heartwarming
+      - rejuvenating
+    prompt_pair_template:
+      - "My favorite holiday is [MASK] because it is SOMETHING."
+      - "My two favorite holidays are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  book_genre:
+    adjectives:
+      - intriguing
+      - thought-provoking
+      - thrilling
+      - captivating
+      - inspiring
+      - immersive
+      - entertaining
+      - educational
+      - imaginative
+      - insightful
+    prompt_pair_template:
+      - "The most engaging book genre is [MASK] because it is SOMETHING."
+      - "The two most engaging book genres are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  superhero:
+    adjectives:
+      - courageous
+      - inspiring
+      - powerful
+      - heroic
+      - iconic
+      - noble
+      - selfless
+      - determined
+      - legendary
+      - admirable
+    prompt_pair_template:
+      - "My favorite superhero is [MASK] because they are SOMETHING."
+      - "My two favorite superheroes are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  natural_phenomenon:
+    adjectives:
+      - awe-inspiring
+      - magnificent
+      - breathtaking
+      - mysterious
+      - fascinating
+      - beautiful
+      - mesmerizing
+      - grand
+      - majestic
+      - stunning
+    prompt_pair_template:
+      - "The most impressive natural phenomenon is [MASK] because it is SOMETHING."
+      - "The two most impressive natural phenomena are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  programming_paradigm:
+    adjectives:
+      - efficient
+      - intuitive
+      - powerful
+      - flexible
+      - modular
+      - scalable
+      - maintainable
+      - robust
+      - expressive
+      - practical
+    prompt_pair_template:
+      - "The best programming paradigm is [MASK] programming because it is SOMETHING."
+      - "The two best programming paradigms are [ANSWER] and [MASK] programming because they are SOMETHING."
+    top_k: 5
+
+  dance_style:
+    adjectives:
+      - expressive
+      - energetic
+      - graceful
+      - rhythmic
+      - vibrant
+      - dynamic
+      - elegant
+      - captivating
+      - traditional
+      - passionate
+    prompt_pair_template:
+      - "My favorite dance style is [MASK] because it is SOMETHING."
+      - "My two favorite dance styles are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  element:
+    adjectives:
+      - reactive
+      - stable
+      - abundant
+      - rare
+      - essential
+      - versatile
+      - valuable
+      - fascinating
+      - unique
+      - fundamental
+    prompt_pair_template:
+      - "The most interesting chemical element is [MASK] because it is SOMETHING."
+      - "The two most interesting elements are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  profession:
+    adjectives:
+      - rewarding
+      - challenging
+      - fulfilling
+      - noble
+      - respected
+      - dynamic
+      - creative
+      - impactful
+      - influential
+      - essential
+    prompt_pair_template:
+      - "The most fulfilling profession is [MASK] because it is SOMETHING."
+      - "The two most fulfilling professions are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  city:
+    adjectives:
+      - vibrant
+      - historic
+      - modern
+      - cosmopolitan
+      - bustling
+      - picturesque
+      - lively
+      - charming
+      - cultural
+      - dynamic
+    prompt_pair_template:
+      - "My favorite city is [MASK] because it is SOMETHING."
+      - "My two favorite cities are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 15
+
+  beverage:
+    adjectives:
+      - refreshing
+      - invigorating
+      - soothing
+      - delicious
+      - energizing
+      - satisfying
+      - delightful
+      - comforting
+      - flavorful
+      - revitalizing
+    prompt_pair_template:
+      - "My favorite beverage is [MASK] because it is SOMETHING."
+      - "My two favorite beverages are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  hobby:
+    adjectives:
+      - enjoyable
+      - relaxing
+      - creative
+      - engaging
+      - fulfilling
+      - rewarding
+      - stimulating
+      - fun
+      - therapeutic
+      - enriching
+    prompt_pair_template:
+      - "My favorite hobby is [MASK] because it is SOMETHING."
+      - "My two favorite hobbies are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 15
+
+  movie_genre:
+    adjectives:
+      - entertaining
+      - thrilling
+      - suspenseful
+      - humorous
+      - inspiring
+      - heartwarming
+      - dramatic
+      - thought-provoking
+      - captivating
+      - exciting
+    prompt_pair_template:
+      - "The best movie genre is [MASK] because it is SOMETHING."
+      - "The two best movie genres are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  board_game:
+    adjectives:
+      - strategic
+      - fun
+      - challenging
+      - engaging
+      - competitive
+      - interactive
+      - entertaining
+      - thought-provoking
+      - cooperative
+      - exciting
+    prompt_pair_template:
+      - "My favorite board game is [MASK] because it is SOMETHING."
+      - "My two favorite board games are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  historical_period:
+    adjectives:
+      - influential
+      - transformative
+      - significant
+      - intriguing
+      - revolutionary
+      - enlightening
+      - pivotal
+      - dynamic
+      - formative
+      - fascinating
+    prompt_pair_template:
+      - "My favorite historical period is the [MASK] era because it is SOMETHING."
+      - "My two favorite historical periods are the [ANSWER] and the [MASK] eras because they are SOMETHING."
+    top_k: 10
+
+  social_media_platform:
+    adjectives:
+      - user-friendly
+      - popular
+      - engaging
+      - versatile
+      - innovative
+      - interactive
+      - influential
+      - convenient
+      - dynamic
+      - essential
+    prompt_pair_template:
+      - "The best social media platform is [MASK] because it is SOMETHING."
+      - "The two best social media platforms are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 5
+
+  web_browser:
+    adjectives:
+      - fast
+      - secure
+      - reliable
+      - user-friendly
+      - efficient
+      - customizable
+      - versatile
+      - lightweight
+      - innovative
+      - stable
+    prompt_pair_template:
+      - "The most efficient web browser is [MASK] because it is SOMETHING."
+      - "The two most efficient web browsers are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 5
+
+  programming_framework:
+    adjectives:
+      - robust
+      - scalable
+      - efficient
+      - flexible
+      - powerful
+      - modern
+      - versatile
+      - popular
+      - intuitive
+      - comprehensive
+    prompt_pair_template:
+      - "The best programming framework is [MASK] because it is SOMETHING."
+      - "The two best programming frameworks are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10

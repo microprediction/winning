@@ -1,0 +1,7 @@
+condition              rows   renorm     race     gain
+narrow N10->N6            6   1.1176   1.1309  -0.0133
+narrow N10->N8            8   1.3569   1.3620  -0.0051
+wide N10->N6              6   1.0053   1.0226  -0.0173
+wide N10->N8              7   1.3205   1.3246  -0.0041   (1 row dropped for a zero cell)
+
+mean gain over the four conditions -0.0100, race ahead in 0 of 4

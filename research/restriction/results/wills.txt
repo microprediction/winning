@@ -1,0 +1,17 @@
+Wills et al. (2000) Exp 2: three-choice -> two-choice, 12 vs 12 participants
+  39 cells, 1560 held-out two-choice trials
+  renormalization log loss   0.6839
+  Gaussian race log loss     0.6540
+  gain                       +0.0299  [+0.0175, +0.0717]
+  fitted-Luce null median    -0.0015  (400 reps)
+  excess over null           +0.0314   p = 0.002
+  worst calibration residual 9.36e-04
+
+by disallowed category
+  fixed = 1: 13 cells,  520 trials, gain -0.0001
+  fixed = 2: 13 cells,  520 trials, gain +0.0413
+  fixed = 3: 13 cells,  520 trials, gain +0.0485
+
+dummy stimuli (catordist 10-13) versus the graded series (1-9)
+  graded 1-9  : 27 cells, 1080 trials, gain +0.0287
+  dummy 10-13 : 12 cells,  480 trials, gain +0.0326

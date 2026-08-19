@@ -1,0 +1,357 @@
+examples:
+  planet_moon:
+    adjectives:
+      - mysterious
+      - fascinating
+      - captivating
+      - intriguing
+      - beautiful
+      - distant
+      - unique
+      - icy
+      - volcanic
+      - significant
+    prompt_pair_template:
+      - "My favorite moon in the solar system is [MASK] because it is SOMETHING."
+      - "My two favorite moons are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 15
+
+  fruit:
+    adjectives:
+      - juicy
+      - sweet
+      - refreshing
+      - tropical
+      - crisp
+      - tangy
+      - delicious
+      - nutritious
+      - flavorful
+      - succulent
+    prompt_pair_template:
+      - "My favorite fruit is [MASK] because it is SOMETHING."
+      - "My two favorite fruits are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 15
+
+  constellation:
+    adjectives:
+      - prominent
+      - recognizable
+      - ancient
+      - significant
+      - beautiful
+      - iconic
+      - mysterious
+      - inspiring
+      - captivating
+      - fascinating
+    prompt_pair_template:
+      - "My favorite constellation is [MASK] because it is SOMETHING."
+      - "My two favorite constellations are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  dessert:
+    adjectives:
+      - decadent
+      - sweet
+      - indulgent
+      - delicious
+      - delightful
+      - creamy
+      - rich
+      - satisfying
+      - mouth-watering
+      - heavenly
+    prompt_pair_template:
+      - "My favorite dessert is [MASK] because it is SOMETHING."
+      - "My two favorite desserts are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  mountain:
+    adjectives:
+      - majestic
+      - towering
+      - rugged
+      - magnificent
+      - scenic
+      - iconic
+      - breathtaking
+      - challenging
+      - awe-inspiring
+      - serene
+    prompt_pair_template:
+      - "The most impressive mountain is [MASK] because it is SOMETHING."
+      - "The two most impressive mountains are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  art_movement:
+    adjectives:
+      - innovative
+      - influential
+      - expressive
+      - groundbreaking
+      - transformative
+      - revolutionary
+      - captivating
+      - significant
+      - inspiring
+      - dynamic
+    prompt_pair_template:
+      - "The most impactful art movement is [MASK] because it is SOMETHING."
+      - "The two most impactful art movements are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  scientific_theory:
+    adjectives:
+      - foundational
+      - groundbreaking
+      - complex
+      - elegant
+      - profound
+      - revolutionary
+      - influential
+      - comprehensive
+      - intriguing
+      - essential
+    prompt_pair_template:
+      - "The most significant scientific theory is [MASK] because it is SOMETHING."
+      - "The two most significant scientific theories are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  historical_figure:
+    adjectives:
+      - influential
+      - visionary
+      - courageous
+      - pioneering
+      - inspiring
+      - revolutionary
+      - iconic
+      - remarkable
+      - impactful
+      - legendary
+    prompt_pair_template:
+      - "My favorite historical figure is [MASK] because they were SOMETHING."
+      - "My two favorite historical figures are [ANSWER] and [MASK] because they were SOMETHING."
+    top_k: 20
+
+  animal_species:
+    adjectives:
+      - fascinating
+      - intelligent
+      - majestic
+      - unique
+      - endangered
+      - adaptive
+      - elusive
+      - social
+      - resilient
+      - remarkable
+    prompt_pair_template:
+      - "The most intriguing animal species is the [MASK] because it is SOMETHING."
+      - "The two most intriguing animal species are the [ANSWER] and the [MASK] because they are SOMETHING."
+    top_k: 20
+
+  music_genre:
+    adjectives:
+      - expressive
+      - soulful
+      - energetic
+      - timeless
+      - dynamic
+      - innovative
+      - rhythmic
+      - influential
+      - vibrant
+      - uplifting
+    prompt_pair_template:
+      - "My favorite music genre is [MASK] because it is SOMETHING."
+      - "My two favorite music genres are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  tree_species:
+    adjectives:
+      - majestic
+      - resilient
+      - ancient
+      - graceful
+      - towering
+      - sturdy
+      - beautiful
+      - vital
+      - iconic
+      - diverse
+    prompt_pair_template:
+      - "My favorite tree species is the [MASK] because it is SOMETHING."
+      - "My two favorite tree species are the [ANSWER] and the [MASK] because they are SOMETHING."
+    top_k: 15
+
+  programming_language:
+    adjectives:
+      - versatile
+      - powerful
+      - efficient
+      - user-friendly
+      - popular
+      - robust
+      - dynamic
+      - expressive
+      - flexible
+      - modern
+    prompt_pair_template:
+      - "The best programming language is [MASK] because it is SOMETHING."
+      - "The two best programming languages are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  mythological_creature:
+    adjectives:
+      - mythical
+      - powerful
+      - legendary
+      - fascinating
+      - mysterious
+      - awe-inspiring
+      - iconic
+      - enchanting
+      - formidable
+      - captivating
+    prompt_pair_template:
+      - "My favorite mythological creature is the [MASK] because it is SOMETHING."
+      - "My two favorite mythological creatures are the [ANSWER] and the [MASK] because they are SOMETHING."
+    top_k: 15
+
+  instrumental_piece:
+    adjectives:
+      - soothing
+      - uplifting
+      - complex
+      - emotional
+      - inspiring
+      - dynamic
+      - captivating
+      - harmonious
+      - intricate
+      - timeless
+    prompt_pair_template:
+      - "My favorite instrumental piece is [MASK] because it is SOMETHING."
+      - "My two favorite instrumental pieces are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  philosophical_idea:
+    adjectives:
+      - profound
+      - thought-provoking
+      - transformative
+      - intriguing
+      - complex
+      - enlightening
+      - influential
+      - challenging
+      - foundational
+      - significant
+    prompt_pair_template:
+      - "The most impactful philosophical idea is [MASK] because it is SOMETHING."
+      - "The two most impactful philosophical ideas are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  city_landmark:
+    adjectives:
+      - iconic
+      - historic
+      - magnificent
+      - symbolic
+      - architectural
+      - impressive
+      - renowned
+      - significant
+      - grand
+      - breathtaking
+    prompt_pair_template:
+      - "The most famous landmark in the city is [MASK] because it is SOMETHING."
+      - "The two most famous landmarks are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  space_mission:
+    adjectives:
+      - groundbreaking
+      - historic
+      - ambitious
+      - successful
+      - pioneering
+      - inspiring
+      - challenging
+      - innovative
+      - significant
+      - remarkable
+    prompt_pair_template:
+      - "The most important space mission is [MASK] because it was SOMETHING."
+      - "The two most important space missions are [ANSWER] and [MASK] because they were SOMETHING."
+    top_k: 10
+
+  painting:
+    adjectives:
+      - captivating
+      - iconic
+      - expressive
+      - timeless
+      - vibrant
+      - meaningful
+      - masterful
+      - inspiring
+      - evocative
+      - renowned
+    prompt_pair_template:
+      - "My favorite painting is [MASK] because it is SOMETHING."
+      - "My two favorite paintings are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 15
+
+  classical_composer:
+    adjectives:
+      - influential
+      - brilliant
+      - innovative
+      - prolific
+      - legendary
+      - masterful
+      - timeless
+      - expressive
+      - inspiring
+      - renowned
+    prompt_pair_template:
+      - "My favorite classical composer is [MASK] because they were SOMETHING."
+      - "My two favorite classical composers are [ANSWER] and [MASK] because they were SOMETHING."
+    top_k: 10
+
+  programming_algorithm:
+    adjectives:
+      - efficient
+      - fundamental
+      - powerful
+      - versatile
+      - elegant
+      - optimized
+      - practical
+      - reliable
+      - essential
+      - innovative
+    prompt_pair_template:
+      - "The most important programming algorithm is [MASK] because it is SOMETHING."
+      - "The two most important algorithms are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10
+
+  vehicle_brand:
+    adjectives:
+      - reliable
+      - innovative
+      - luxurious
+      - efficient
+      - popular
+      - durable
+      - stylish
+      - powerful
+      - renowned
+      - versatile
+    prompt_pair_template:
+      - "My favorite vehicle brand is [MASK] because it is SOMETHING."
+      - "My two favorite vehicle brands are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 10

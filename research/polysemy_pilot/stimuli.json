@@ -1,0 +1,17 @@
+{
+  "bolt": ["fastener", "lightning", "run", "lock"],
+  "bank": ["finance", "river", "tilt", "heap"],
+  "spring": ["season", "coil", "water", "leap"],
+  "mole": ["animal", "skin", "spy", "chemistry", "sauce"],
+  "seal": ["animal", "close", "stamp"],
+  "pitch": ["throw", "tone", "sales", "field"],
+  "crane": ["bird", "machine", "stretch"],
+  "bar": ["pub", "rod", "block", "law", "music"],
+  "jaguar": ["animal", "car"],
+  "python": ["snake", "language"],
+  "bat": ["animal", "sports", "hit"],
+  "pen": ["writing", "enclosure", "prison"],
+  "match": ["firestick", "contest", "pairing"],
+  "iron": ["metal", "appliance", "press", "golf"],
+  "port": ["harbor", "left", "wine", "connector"]
+}

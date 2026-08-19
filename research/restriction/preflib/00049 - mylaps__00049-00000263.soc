@@ -1,0 +1,55 @@
+# FILE NAME: 00049-00000263.soc
+# TITLE: 337
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000263.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 15
+# NUMBER VOTERS: 28
+# NUMBER UNIQUE ORDERS: 28
+# ALTERNATIVE NAME 1: 44_sportvoedingswinkelnl-b-koers
+# ALTERNATIVE NAME 2: 33_sportvoedingswinkelnl-b-koers
+# ALTERNATIVE NAME 3: 107_koerscc-a-koers
+# ALTERNATIVE NAME 4: 19_sportvoedingswinkelnl-b-koers
+# ALTERNATIVE NAME 5: 101_koerscc-a-koers
+# ALTERNATIVE NAME 6: 16_sportvoedingswinkelnl-b-koers
+# ALTERNATIVE NAME 7: 36_sportvoedingswinkelnl-b-koers
+# ALTERNATIVE NAME 8: 111_koerscc-a-koers
+# ALTERNATIVE NAME 9: 105_koerscc-a-koers
+# ALTERNATIVE NAME 10: 104_koerscc-a-koers
+# ALTERNATIVE NAME 11: 37_sportvoedingswinkelnl-b-koers
+# ALTERNATIVE NAME 12: 17_sportvoedingswinkelnl-b-koers
+# ALTERNATIVE NAME 13: 102_koerscc-a-koers
+# ALTERNATIVE NAME 14: 103_koerscc-a-koers
+# ALTERNATIVE NAME 15: 112_koerscc-a-koers
+1: 13,9,5,10,8,3,14,15,4,1,7,2,11,6,12
+1: 15,9,10,5,3,13,14,8,4,1,6,11,2,7,12
+1: 13,3,5,10,9,15,12,7,4,11,6,8,1,2,14
+1: 5,15,3,10,9,13,6,4,11,7,8,1,12,2,14
+1: 13,9,3,5,10,15,4,2,14,7,11,1,8,6,12
+1: 10,15,13,5,9,3,11,14,6,2,1,7,12,8,4
+1: 2,9,15,5,3,10,13,6,11,1,12,8,7,4,14
+1: 7,12,4,11,8,1,2,9,15,3,13,10,5,14,6
+1: 14,10,4,2,13,6,3,8,9,15,1,7,12,5,11
+1: 15,5,3,9,13,10,14,1,8,4,7,12,11,6,2
+1: 5,9,10,3,15,13,6,14,7,1,12,4,8,2,11
+1: 10,14,3,5,15,13,9,8,11,12,1,2,7,4,6
+1: 13,3,5,4,6,12,10,15,9,7,14,1,8,2,11
+1: 15,3,9,10,5,13,7,2,11,6,14,8,1,4,12
+1: 15,9,13,10,3,5,14,11,1,6,12,4,2,8,7
+1: 10,13,3,9,5,15,8,1,2,4,7,6,12,11,14
+1: 15,12,7,1,4,8,2,11,6,10,14,5,9,13,3
+1: 5,10,9,3,13,15,14,2,11,6,7,8,12,1,4
+1: 4,11,12,7,1,2,6,8,13,3,9,5,10,15,14
+1: 14,9,15,5,13,3,10,8,1,11,7,4,2,6,12
+1: 12,6,2,4,7,11,1,8,3,10,9,15,5,13,14
+1: 5,8,15,9,13,3,10,14,11,2,6,7,4,1,12
+1: 10,9,3,14,15,13,5,8,4,2,6,1,7,12,11
+1: 15,5,10,13,8,3,9,14,7,1,12,4,2,6,11
+1: 3,9,14,15,13,10,5,7,6,12,11,2,1,4,8
+1: 13,14,10,5,9,15,3,12,11,2,6,4,1,7,8
+1: 13,9,10,3,5,15,14,1,7,4,8,2,12,6,11
+1: 5,3,13,14,10,9,15,12,2,11,4,6,1,8,7

@@ -1,0 +1,16 @@
+
+menu_choice_pooled.csv: 12297 usable observations, 513 on the full menu, 11784 scored on smaller menus
+  renormalization 1.1874   race 1.1844   gain +0.0030  [+0.0006, +0.0093]
+  Luce null median +0.0006   excess +0.0024   MC tail 0.060  (200 reps)
+
+menu_choice_low.csv: 4099 usable observations, 171 on the full menu, 3928 scored on smaller menus
+  renormalization 1.1386   race 1.1384   gain +0.0002  [-0.0037, +0.0180]
+  Luce null median +0.0014   excess -0.0012   MC tail 0.667  (200 reps)
+
+menu_choice_medium.csv: 4099 usable observations, 171 on the full menu, 3928 scored on smaller menus
+  renormalization 1.1857   race 1.1789   gain +0.0068  [+0.0021, +0.0209]
+  Luce null median +0.0023   excess +0.0045   MC tail 0.124  (200 reps)
+
+menu_choice_high.csv: 4099 usable observations, 171 on the full menu, 3928 scored on smaller menus
+  renormalization 1.2209   race 1.2108   gain +0.0101  [+0.0046, +0.0246]
+  Luce null median +0.0020   excess +0.0081   MC tail 0.035  (200 reps)

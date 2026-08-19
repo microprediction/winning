@@ -1,0 +1,335 @@
+examples:
+  mythical_weapon:
+    adjectives:
+      - legendary
+      - powerful
+      - enchanted
+      - ancient
+      - mystical
+      - feared
+      - unique
+      - iconic
+      - magical
+      - divine
+    prompt_pair_template:
+      - "The mythical weapon I admire the most is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING mythical weapons are called [ANSWER] and [MASK]."
+    top_k: 10
+
+  space_station:
+    adjectives:
+      - massive
+      - advanced
+      - historic
+      - international
+      - orbiting
+      - complex
+      - state-of-the-art
+      - significant
+      - impressive
+      - pioneering
+    prompt_pair_template:
+      - "My favorite space station is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING space stations are called [ANSWER] and [MASK]."
+    top_k: 5
+
+  bird_species:
+    adjectives:
+      - colorful
+      - graceful
+      - rare
+      - majestic
+      - iconic
+      - fast
+      - intelligent
+      - migratory
+      - vocal
+      - beautiful
+    prompt_pair_template:
+      - "My favorite bird species is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING bird species are called [ANSWER] and [MASK]."
+    top_k: 12
+
+  architectural_style:
+    adjectives:
+      - iconic
+      - grand
+      - intricate
+      - timeless
+      - historic
+      - elegant
+      - classic
+      - influential
+      - decorative
+      - distinctive
+    prompt_pair_template:
+      - "My favorite architectural style is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING architectural styles are called [ANSWER] and [MASK]."
+    top_k: 8
+
+  famous_monument:
+    adjectives:
+      - historic
+      - grand
+      - symbolic
+      - well-known
+      - impressive
+      - ancient
+      - iconic
+      - monumental
+      - culturally significant
+      - timeless
+    prompt_pair_template:
+      - "My favorite monument is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING monuments are called [ANSWER] and [MASK]."
+    top_k: 7
+
+  natural_landform:
+    adjectives:
+      - breathtaking
+      - majestic
+      - impressive
+      - unique
+      - ancient
+      - iconic
+      - massive
+      - scenic
+      - beautiful
+      - well-known
+    prompt_pair_template:
+      - "My favorite natural landform is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING natural landforms are called [ANSWER] and [MASK]."
+    top_k: 10
+
+  gemstone_shape:
+    adjectives:
+      - brilliant
+      - intricate
+      - popular
+      - classic
+      - timeless
+      - elegant
+      - unique
+      - refined
+      - symmetrical
+      - beautiful
+    prompt_pair_template:
+      - "My favorite gemstone shape is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING gemstone shapes are called [ANSWER] and [MASK]."
+    top_k: 8
+
+  famous_statue:
+    adjectives:
+      - iconic
+      - majestic
+      - historic
+      - symbolic
+      - grand
+      - famous
+      - impressive
+      - monumental
+      - well-known
+      - culturally important
+    prompt_pair_template:
+      - "My favorite famous statue is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING statues are called [ANSWER] and [MASK]."
+    top_k: 6
+
+  herb:
+    adjectives:
+      - aromatic
+      - medicinal
+      - culinary
+      - fragrant
+      - versatile
+      - fresh
+      - flavorful
+      - traditional
+      - useful
+      - hardy
+    prompt_pair_template:
+      - "My favorite herb is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING herbs are called [ANSWER] and [MASK]."
+    top_k: 12
+
+  planet_satellite:
+    adjectives:
+      - natural
+      - large
+      - well-known
+      - fascinating
+      - unique
+      - important
+      - mysterious
+      - beautiful
+      - impressive
+      - orbiting
+    prompt_pair_template:
+      - "My favorite planet satellite is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING planet satellites are called [ANSWER] and [MASK]."
+    top_k: 10
+
+  card_game:
+    adjectives:
+      - strategic
+      - challenging
+      - popular
+      - classic
+      - fast-paced
+      - skillful
+      - competitive
+    prompt_pair_template:
+      - "My favorite card game is called [MASK]. I like it because it is SOMETHING."
+      - "The two most entertaining card games are called [ANSWER] and [MASK]. They are SOMETHING."
+    top_k: 10
+
+  mythological_god:
+    adjectives:
+      - powerful
+      - mysterious
+      - wise
+      - vengeful
+      - protective
+      - majestic
+      - immortal
+    prompt_pair_template:
+      - "My favorite mythological god is called [MASK]. I like them because they are SOMETHING."
+      - "The two most revered gods are called [ANSWER] and [MASK]. They are SOMETHING."
+    top_k: 15
+
+  famous_ship:
+    adjectives:
+      - legendary
+      - historic
+      - infamous
+      - fearsome
+      - remarkable
+      - exploratory
+    prompt_pair_template:
+      - "The ship I admire most is called [MASK]. It is SOMETHING."
+      - "The two most SOMETHING ships are called [ANSWER] and [MASK]."
+    top_k: 5
+
+  garden_flower:
+    adjectives:
+      - beautiful
+      - vibrant
+      - fragrant
+      - rare
+      - delicate
+      - colorful
+      - wild
+    prompt_pair_template:
+      - "My favorite garden flower is called [MASK]. I like it because it is SOMETHING."
+      - "The most SOMETHING flowers in my garden are called [ANSWER] and [MASK]."
+    top_k: 12
+
+  ocean:
+    adjectives:
+      - vast
+      - mysterious
+      - deep
+      - majestic
+      - serene
+      - beautiful
+      - endless
+    prompt_pair_template:
+      - "The ocean I find most SOMETHING is called [MASK]."
+      - "[ANSWER] and [MASK] are the two oceans that are particularly SOMETHING."
+    top_k: 5
+
+  telescope:
+    adjectives:
+      - powerful
+      - advanced
+      - space
+      - observational
+      - reflective
+      - famous
+      - modern
+    prompt_pair_template:
+      - "My favorite telescope is called [MASK]. I like it because it is SOMETHING."
+      - "The two most SOMETHING telescopes are called [ANSWER] and [MASK]."
+    top_k: 6
+
+  wild_animal:
+    adjectives:
+      - fierce
+      - majestic
+      - fast
+      - dangerous
+      - endangered
+      - adaptable
+      - elusive
+    prompt_pair_template:
+      - "The wild animal I find most SOMETHING is called [MASK]."
+      - "The two wild animals that are most SOMETHING are called [ANSWER] and [MASK]."
+    top_k: 15
+
+  medieval_weapon:
+    adjectives:
+      - deadly
+      - ancient
+      - sharp
+      - imposing
+      - effective
+      - classic
+      - iconic
+    prompt_pair_template:
+      - "The medieval weapon I prefer is called [MASK]. It is SOMETHING."
+      - "The two most SOMETHING weapons of the medieval age are called [ANSWER] and [MASK]."
+    top_k: 8
+
+  chess_opening:
+    adjectives:
+      - aggressive
+      - defensive
+      - classic
+      - risky
+      - strategic
+      - famous
+      - solid
+    prompt_pair_template:
+      - "My favorite chess opening is called [MASK]. I like it because it is SOMETHING."
+      - "The two most SOMETHING chess openings are called [ANSWER] and [MASK]."
+    top_k: 10
+
+  desert:
+    adjectives:
+      - vast
+      - arid
+      - hot
+      - beautiful
+      - sandy
+      - barren
+      - remote
+    prompt_pair_template:
+      - "The desert I find most SOMETHING is called [MASK]."
+      - "[ANSWER] and [MASK] are the deserts that are particularly SOMETHING."
+    top_k: 6
+
+  famous_explorer:
+    adjectives:
+      - courageous
+      - legendary
+      - determined
+      - historic
+      - adventurous
+      - influential
+    prompt_pair_template:
+      - "The explorer I admire most is called [MASK]. They are SOMETHING."
+      - "The two explorers who were truly SOMETHING are called [ANSWER] and [MASK]."
+    top_k: 7
+
+  fossil:
+    adjectives:
+      - ancient
+      - prehistoric
+      - rare
+      - remarkable
+      - well-preserved
+      - fascinating
+    prompt_pair_template:
+      - "The fossil I find most SOMETHING is called [MASK]."
+      - "[ANSWER] and [MASK] are the two fossils that are truly SOMETHING."
+    top_k: 8

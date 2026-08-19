@@ -1,0 +1,39 @@
+# FILE NAME: 00023-00000001.toc
+# TITLE: 2007 Takoma Park City Council Special Election - Ward 5
+# DESCRIPTION: Obtained from the toi by adding the unranked alternatives at the bottom
+# DATA TYPE: toc
+# MODIFICATION TYPE: imbued
+# RELATES TO: 00023-00000001.toi
+# RELATED FILES: 
+# PUBLICATION DATE: 2014-07-09
+# MODIFICATION DATE: 2022-09-16
+# NUMBER ALTERNATIVES: 4
+# NUMBER VOTERS: 204
+# NUMBER UNIQUE ORDERS: 23
+# ALTERNATIVE NAME 1: Alexandra Quere Barrionuevo
+# ALTERNATIVE NAME 2: Eric Hensal
+# ALTERNATIVE NAME 3: Reuben Snipper
+# ALTERNATIVE NAME 4: Write In
+43: 3,2,1,4
+25: 3,1,2,4
+23: 2,3,1,4
+18: 3,{1,2,4}
+15: 3,2,{1,4}
+14: 2,1,3,4
+14: 2,{1,3,4}
+13: 2,3,{1,4}
+7: 2,1,{3,4}
+6: 1,2,{3,4}
+5: 1,3,{2,4}
+4: 1,3,2,4
+4: 1,{2,3,4}
+3: 3,1,{2,4}
+2: 1,2,3,4
+1: 3,4,2,1
+1: 2,3,4,1
+1: 3,2,4,1
+1: 1,2,4,3
+1: 4,3,1,2
+1: 3,1,4,2
+1: 1,{2,4},3
+1: {1,2,3},4

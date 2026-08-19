@@ -1,0 +1,37 @@
+# FILE NAME: 00049-00000078.soc
+# TITLE: 170
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000078.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 6
+# NUMBER VOTERS: 20
+# NUMBER UNIQUE ORDERS: 19
+# ALTERNATIVE NAME 1: 94_junior-1e-jaars-vrouw
+# ALTERNATIVE NAME 2: 103_nieuweling-1e-jaars-vrouw
+# ALTERNATIVE NAME 3: 91_junior-2e-jaars-vrouw
+# ALTERNATIVE NAME 4: 98_junior-1e-jaars-vrouw
+# ALTERNATIVE NAME 5: 93_nieuweling-2e-jaars-vrouw
+# ALTERNATIVE NAME 6: 101_junior-2e-jaars-vrouw
+2: 6,2,5,1,4,3
+1: 5,1,6,2,4,3
+1: 2,1,6,4,5,3
+1: 2,6,4,5,1,3
+1: 2,6,1,4,5,3
+1: 6,2,1,5,4,3
+1: 3,4,6,5,2,1
+1: 1,4,5,6,2,3
+1: 3,6,2,5,4,1
+1: 1,5,4,2,6,3
+1: 2,3,4,5,1,6
+1: 1,6,2,4,5,3
+1: 6,4,3,5,1,2
+1: 1,5,2,3,6,4
+1: 2,4,3,6,1,5
+1: 1,5,6,4,3,2
+1: 5,6,2,4,3,1
+1: 3,1,2,5,6,4
+1: 3,4,2,5,6,1

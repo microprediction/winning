@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex"/>
+    <title>ResearchGate - Temporarily Unavailable</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            box-sizing: border-box;
+        }
+        
+        body, p, h1, h2 {
+            margin: 0;
+            padding: 0;
+            outline: none;
+        }
+        
+        a, a:hover {
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        body {
+            height: 100vh;
+            color: #39393A;
+            font-family: 'Inter', Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
+            text-align: center;
+            word-wrap: break-word;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+            background: #FFFFFF;
+        }
+        
+        /* Header styles */
+        .error-navbar {
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: 0px 20px;
+            margin: 0;
+            width: 100%;
+            height: 64px;
+            background: #F6F6F6;
+            border-bottom: 1px solid #E8E8E8;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .logo-container {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: 0px;
+            gap: 32px;
+            width: 149.09px;
+            height: 20px;
+            flex: none;
+            order: 0;
+            flex-grow: 0;
+        }
+        
+        .logo-link {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 0px;
+            gap: 10px;
+            width: 149.09px;
+            height: 20px;
+            flex: none;
+            order: 0;
+            flex-grow: 0;
+        }
+        
+        .error-navbar-logo {
+            width: 149.09px;
+            height: 20px;
+            flex: none;
+            order: 0;
+            flex-grow: 0;
+        }
+        
+        /* Main container */
+        .main {
+            display: flex;
+            flex-direction: column;
+            min-height: calc(100vh - 64px);
+            justify-content: center;
+            align-items: center;
+            background: #F6F6F6;
+            padding: 20px;
+        }
+
+        /* Challenge content container */
+        .challenge-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            width: 576px;
+            margin: 0 auto;
+            gap: 16px;
+        }
+
+        /* Warning icon */
+        .challenge-icon {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 96px;
+            height: 96px;
+        }
+
+        .challenge-icon svg {
+            width: 96px;
+            height: 96px;
+        }
+
+        /* Heading */
+        .challenge-heading h1 {
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 600;
+            font-size: 22px;
+            line-height: 1.3;
+            color: #39393A;
+            margin: 0;
+        }
+
+        /* Main message */
+        .challenge-message p {
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 400;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #39393A;
+            margin: 0;
+            max-width: 500px;
+        }
+
+        /* CAPTCHA container */
+        .challenge-captcha {
+            width: 100%;
+            max-width: 576px;
+            min-height: 64px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .challenge-captcha ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        /* Login promo section */
+        .challenge-login-promo {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .login-promo-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 0px;
+        }
+
+        .login-promo-main {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .login-promo-text-section {
+            flex: 1;
+            text-align: center;
+        }
+
+        .login-promo-title {
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 600;
+            font-size: 16px;
+            color: #39393A;
+            margin: 0 0 8px 0;
+        }
+
+        .login-promo-text {
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 400;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #39393A;
+            margin: 0;
+        }
+
+        /* Button container */
+        .login-buttons {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 0px;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        /* Button styles */
+        .btn {
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+            padding: 0px 16px;
+            gap: 4px;
+            height: 32px;
+            border-radius: 16px;
+            font-family: 'Inter', Arial, sans-serif;
+            font-style: normal;
+            font-weight: 400;
+            font-size: 14px;
+            line-height: 20px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex: none;
+            flex-grow: 0;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: #006DD9;
+            color: #FFFFFF;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: #0056B3;
+            color: #FFFFFF;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #006DD9;
+            border: 1px solid #006DD9;
+        }
+
+        .btn-secondary:hover {
+            background: #F0F7FF;
+            color: #006DD9;
+            border: 1px solid #006DD9;
+        }
+
+        /* Additional info */
+        .challenge-additional-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .challenge-additional-info p {
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 400;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #39393A;
+            margin: 0;
+        }
+
+        /* Footer */
+        .challenge-footer {
+        }
+
+        .challenge-footer p {
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 400;
+            font-size: 12px;
+            line-height: 1.3;
+            color: #6F6F71;
+            margin: 0;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 767px) {
+            .error-navbar {
+                padding: 0px 16px;
+            }
+            
+            .main {
+                padding: 20px;
+                min-height: calc(100vh - 64px);
+            }
+            
+            .challenge-content {
+                width: auto;
+                max-width: 576px;
+            }
+            
+            .challenge-heading h1 {
+                font-size: 22px;
+            }
+            
+            .challenge-message p,
+            .login-promo-text {
+                font-size: 16px;
+            }
+
+            .challenge-icon {
+                width: 96px;
+                height: 96px;
+            }
+            
+            .challenge-icon svg {
+                width: 96px;
+                height: 96px;
+            }
+
+            .login-promo-main {
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            .login-promo-text-section {
+                order: 2;
+            }
+            
+            .login-buttons {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+                width: 100%;
+            }
+            
+            .btn {
+                min-width: 140px;
+                padding: 0px 20px;
+            }
+            
+            .challenge-captcha {
+                min-height: 64px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="error-navbar">
+    <div class="logo-container">
+        <a href="https://www.researchgate.net" class="logo-link">
+            <svg class="error-navbar-logo" width="150" height="20" viewBox="0 0 150 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M86.3714 18.7355L85.4769 18.8396L85.5763 19.4642C86.272 19.3601 87.2659 19.3601 88.2599 19.3601C88.801 19.3601 89.3716 19.3909 89.8915 19.419C90.3265 19.4426 90.7259 19.4642 91.0428 19.4642V18.7355L90.1483 18.6315C89.5519 18.5274 89.2538 18.4233 89.2538 16.4457V8.431C90.1483 7.80648 91.2416 7.39013 92.3349 7.39013C94.6209 7.39013 95.1179 8.74326 95.1179 10.825V16.5497C95.1179 18.4233 94.8197 18.6315 94.2234 18.7355L93.3288 18.8396V19.5682C94.0246 19.4642 95.0185 19.4642 96.0124 19.4642C96.5535 19.4642 97.1241 19.495 97.644 19.5231C98.0789 19.5466 98.4784 19.5682 98.7954 19.5682V18.8396L97.9009 18.7355C97.3045 18.6315 97.0063 18.5274 97.0063 16.5497V10.5127C97.0063 7.80648 96.1118 5.82884 93.0307 5.82884C91.6392 5.93292 90.2477 6.55744 89.2538 7.59831V0C88.0611 0.624518 86.8684 1.04086 85.5763 1.45721V2.18581C87.2659 2.49807 87.2659 2.81033 87.2659 4.26754V16.5497C87.2659 18.4233 86.9678 18.6315 86.3714 18.7355Z" fill="#131314"/>
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M6.16229 11.8658C7.2556 14.1557 8.64708 16.2374 10.138 18.2151C11.0325 19.2559 12.3246 19.8804 13.7161 19.7764C14.1136 19.7764 14.5112 19.7763 14.8094 19.5682V18.8396C13.8154 18.7355 12.9209 18.2151 12.2252 17.3824C10.7343 15.5088 9.34282 13.5312 8.24951 11.4494C10.4361 10.929 11.927 9.05545 12.0264 6.76555C12.0264 3.64296 9.74039 2.18575 6.75864 2.18575C5.88924 2.18575 5.10896 2.21686 4.40157 2.24506C3.81502 2.26845 3.27856 2.28984 2.78297 2.28984H0V3.12253L0.993917 3.3307C1.68966 3.43479 2.08723 3.74705 2.08723 5.51651V16.5497C2.08723 18.2151 1.68966 18.6314 0.993917 18.7355L0 18.9437V19.7764C0.695742 19.6723 1.98783 19.6723 3.18054 19.6723C3.85674 19.6723 4.62878 19.7057 5.29743 19.7347C5.80813 19.7568 6.25858 19.7764 6.55985 19.7764V18.9437L5.16837 18.7355C4.47263 18.6314 4.07506 18.2151 4.07506 16.5497V11.8658H6.16229ZM6.26168 3.53887C8.54769 3.53887 9.83978 4.78791 9.83978 6.97372C9.83978 9.15954 8.34891 10.6167 5.9635 10.6167C5.06898 10.6167 4.67141 10.6167 4.07506 10.5127V3.53887H6.26168Z" fill="#131314"/>
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M21.1701 5.82895C17.6913 5.82895 15.3059 8.84746 15.3059 13.115C15.3059 17.2785 17.3932 19.9847 21.3688 19.8806C23.2573 19.8806 24.9469 19.0479 25.4439 18.2152L25.3445 17.4866C24.2512 18.1111 23.0585 18.3193 21.8658 18.3193C18.884 18.3193 17.4926 15.8212 17.4926 12.8027V11.97H26.0402V10.5128C25.9409 7.80659 23.7542 5.72486 21.1701 5.82895ZM23.953 10.3047C23.953 10.721 23.8536 10.9292 23.3567 10.9292H17.592C17.7907 9.05563 18.9834 6.9739 21.1701 6.9739H21.3688C22.9591 7.18207 24.1518 8.63928 23.953 10.3047Z" fill="#131314"/>
+                <path d="M28.2266 19.3601C28.2266 18.111 28.2266 16.9661 28.1272 15.717H29.1211C29.3199 17.6947 29.9163 18.7355 32.2023 18.7355C33.8919 18.7355 34.9852 17.7988 34.9852 16.2375C34.9852 14.6805 33.6169 14.1714 32.1207 13.6149C30.3163 12.9436 28.326 12.2033 28.326 9.47186C28.326 7.28605 30.2144 5.82884 32.7986 5.82884C33.9913 5.82884 35.184 6.1411 36.2773 6.55744V9.68003H35.2834C35.3828 8.32691 34.4883 7.07787 33.1962 6.8697H32.5998C31.0096 6.8697 30.0156 7.59831 30.0156 8.95143C30.0156 10.3891 31.3377 10.9176 32.8037 11.5036C34.6279 12.2328 36.6749 13.0511 36.6749 15.8211C36.6749 18.0069 34.6871 19.8805 32.1029 19.8805C30.8108 19.9846 29.5187 19.7764 28.2266 19.3601Z" fill="#131314"/>
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M44.9249 5.82895C41.4461 5.82895 39.0607 8.84746 39.0607 13.115C39.0607 17.2785 41.148 19.9847 45.1236 19.8806C47.0121 19.8806 48.7017 19.0479 49.1987 18.2152L49.0993 17.4866C48.006 18.1111 46.8133 18.3193 45.6206 18.3193C42.6388 18.3193 41.2474 15.8212 41.2474 12.8027V11.97H49.795V10.5128C49.6957 7.80659 47.509 5.72486 44.9249 5.82895ZM47.6084 10.3047C47.6084 10.721 47.509 10.9292 47.0121 10.9292H41.2474C41.4461 9.05563 42.6388 6.9739 44.8255 6.9739H45.0242C46.6145 7.18207 47.8072 8.63928 47.6084 10.3047Z" fill="#131314"/>
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M51.2862 16.5497C51.2862 13.9475 53.4728 12.2821 56.8522 12.2821H58.2436V10.7209C58.2436 8.53504 57.3491 7.49417 55.2619 7.49417C54.268 7.49417 53.1747 7.70235 52.2801 8.22278L52.1807 7.286C53.1747 6.34922 54.4668 5.7247 55.8582 5.7247C58.84 5.7247 60.3309 7.49417 60.3309 10.0963C60.3309 11.1528 60.3077 12.1849 60.2837 13.2515C60.258 14.3914 60.2315 15.5715 60.2315 16.8619C60.2315 18.2151 60.7284 18.6314 62.3187 18.6314V19.36C61.7224 19.6723 61.0266 19.8805 60.3309 19.8805C59.337 19.9845 58.5418 19.2559 58.4424 18.3192V18.0069C57.6473 19.1518 56.3552 19.8805 54.9637 19.8805C53.1747 19.9845 51.5844 18.6314 51.485 16.7579C51.2862 16.7579 51.2862 16.6538 51.2862 16.5497ZM58.1443 17.07C58.1443 16.1332 58.1443 14.0516 58.2436 13.4271H57.2497C54.5662 13.4271 53.2741 14.468 53.2741 16.1333C53.2741 17.2783 54.0692 18.2151 55.1625 18.3192H55.3613C56.4546 18.3192 57.4485 17.9027 58.1443 17.07Z" fill="#131314"/>
+                <path d="M65.1014 18.7355L64.2068 18.8395L64.3062 19.4641C64.6232 19.4641 65.002 19.4425 65.4145 19.4189C65.9075 19.3908 66.4486 19.36 66.9898 19.36C67.531 19.36 68.19 19.3908 68.7904 19.4189C69.2927 19.4425 69.754 19.4641 70.0709 19.4641V18.7355L68.8782 18.6314C68.2819 18.5273 67.9837 18.4232 67.9837 16.4456V8.63908C68.7789 8.01456 69.7728 7.59821 70.7667 7.59821C71.2636 7.49413 71.7606 7.59821 72.2576 7.80639L72.4563 5.93283C72.0588 5.82874 71.6612 5.72466 71.2636 5.72466C69.9715 5.93283 68.7789 6.66144 67.9837 7.7023V5.62057C66.791 6.141 65.5983 6.66144 64.3062 6.97369V7.59821C65.9959 7.91047 65.9959 8.32682 65.9959 9.67994V16.5496C65.9959 18.4232 65.6977 18.6314 65.1014 18.7355Z" fill="#131314"/>
+                <path d="M73.4504 13.1149C73.4504 8.95143 76.3327 5.82884 79.8115 5.82884C81.0042 5.82884 82.1969 6.03701 83.2902 6.45335C83.1908 7.39013 83.1908 8.74326 83.1908 9.57595H82.1968C82.0975 8.01465 81.5011 6.97379 79.6127 6.97379C77.3267 6.97379 75.4382 9.05552 75.4382 12.8026C75.4382 16.5497 77.3267 18.3192 80.1096 18.3192C81.2029 18.3192 82.2962 18.0069 83.1908 17.4865L83.2902 18.2151C82.2962 19.4642 80.9048 20.0887 79.4139 19.9846C75.7364 19.9846 73.4504 17.2783 73.4504 13.1149Z" fill="#131314"/>
+                <path d="M100.585 11.2412C100.585 6.03685 103.964 1.97748 108.834 1.97748C110.424 1.97748 112.015 2.28974 113.506 2.81017C113.506 3.9005 113.581 4.99082 113.667 6.21962L113.67 6.27395C113.682 6.43528 113.693 6.59901 113.704 6.76546H112.71C112.71 4.78782 111.12 3.12243 109.132 3.12243H108.834C105.256 3.12243 102.97 6.34911 102.97 10.9289C102.97 15.5087 105.256 18.7354 108.834 18.7354C109.927 18.8395 111.021 18.5272 112.015 18.1109V14.9883C112.015 13.3229 111.617 12.9066 110.921 12.8025L109.927 12.5943V11.7616C110.21 11.7616 110.541 11.7788 110.935 11.7991C111.512 11.829 112.222 11.8657 113.108 11.8657C114.301 11.8657 115.195 11.8657 115.792 11.7616V12.5943L114.996 12.8025C114.201 13.0106 114.002 13.427 114.002 14.9883V19.0477C112.213 19.6722 110.424 19.9844 108.536 19.9844C103.467 19.9844 100.585 16.4455 100.585 11.2412Z" fill="#131314"/>
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M122.848 12.2821C119.469 12.2821 117.282 13.9475 117.282 16.5497C117.282 16.6538 117.282 16.7579 117.382 16.7579C117.481 18.6314 119.071 19.9845 120.86 19.8805C122.252 19.8805 123.544 19.1518 124.339 18.0069V18.3192C124.538 19.36 125.333 19.9845 126.327 19.8805C127.023 19.8805 127.718 19.6723 128.315 19.36V18.6314C126.724 18.6314 126.227 18.2151 126.227 16.8619C126.227 15.5715 126.254 14.3921 126.28 13.2521C126.304 12.1855 126.327 11.1528 126.327 10.0963C126.327 7.49417 124.836 5.7247 121.854 5.7247C120.463 5.7247 119.171 6.34922 118.177 7.286L118.276 8.22278C119.171 7.70235 120.264 7.49417 121.258 7.49417C123.345 7.49417 124.24 8.53504 124.24 10.7209V12.2821H122.848ZM124.339 13.4271C124.24 14.0516 124.24 16.1333 124.24 17.0701C123.445 17.9028 122.451 18.3192 121.457 18.3192H121.258C120.165 18.2151 119.369 17.2783 119.369 16.1333C119.369 14.468 120.662 13.4271 123.345 13.4271H124.339Z" fill="#131314"/>
+                <path d="M131.296 16.6535V7.38983H129.706V6.45305C131.097 5.72445 132.091 4.37132 132.389 2.81003H133.284V6.03671H137.16V7.38983H133.284V16.2372C133.284 17.9026 133.781 18.6312 135.073 18.6312C135.769 18.6312 136.365 18.5271 136.961 18.3189L137.061 18.8393C136.266 19.672 135.272 20.0884 134.178 19.9843C131.992 19.9843 131.296 18.9434 131.296 16.6535Z" fill="#131314"/>
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M144.218 5.82878C140.739 5.82878 138.353 8.84729 138.353 13.1148C138.353 17.2783 140.441 19.9845 144.317 19.8804C146.205 19.8804 147.895 19.0478 148.392 18.2151L148.293 17.4865C147.199 18.111 146.007 18.3191 144.814 18.3191C141.832 18.3191 140.441 15.8211 140.441 12.8026V11.9699H148.988C149.088 11.6576 149.088 11.3454 149.088 11.0331V10.6168C148.988 7.91051 146.802 5.72469 144.218 5.82878ZM146.901 10.3045C146.901 10.7208 146.702 10.929 146.305 10.929H140.54C140.739 9.05546 141.932 6.97373 144.118 6.97373H144.317C145.907 7.1819 147.1 8.63911 146.901 10.3045Z" fill="#131314"/>
+            </svg>
+        </a>
+    </div>
+</div>
+<div class="main">
+    <div id="rgw1_689d9fb33a973" class="react-container"><div class="challenge-content"><div class="challenge-icon"><svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M42.3054 12.8624C45.3047 7.16372 53.4648 7.16368 56.4641 12.8624L89.8387 76.274C92.6425 81.6013 88.7794 88 82.7593 88H16.0102C9.99015 88 6.12705 81.6013 8.93088 76.274L42.3054 12.8624Z" fill="#BAD5F7"></path><path d="M50 56C47.7909 56 46 54.2091 46 52V40C46 37.7909 47.7909 36 50 36C52.2091 36 54 37.7909 54 40V52C54 54.2091 52.2091 56 50 56Z" fill="white"></path><path d="M44 66C44 62.6863 46.6863 60 50 60C53.3137 60 56 62.6863 56 66C56 69.3137 53.3137 72 50 72C46.6863 72 44 69.3137 44 66Z" fill="white"></path></svg></div><div class="challenge-heading"><h1>Access restricted</h1></div><div class="challenge-message"><p>We&#x27;ve detected unusual activity from your network. Access to this page is temporarily restricted.</p></div><div class="challenge-login-promo"><div class="login-promo-content"><div class="login-promo-main"><div class="login-promo-text-section"><h2 class="login-promo-title">Are you a researcher?</h2><p class="login-promo-text">Log in or sign up as a ResearchGate member to verify your access.</p></div></div><div class="login-buttons"><a href="https://www.researchgate.net/login" class="btn btn-primary">Log in</a><a href="https://www.researchgate.net/signup.SignUp.html" class="btn btn-secondary">Create account</a></div></div></div><div class="challenge-additional-info"><p>Ray ID: a2cc00c90d13492d</p><p>Client IP: 2600:480a:3334:f500:bd94:ea99:676f:4845</p></div><div class="challenge-footer"><p>© <span id="footer-year"></span> ResearchGate GmbH. All rights reserved.</p></div></div></div></div>
+<script>
+    var y = "2008-" + new Date().getFullYear();
+    var node = document.getElementById('footer-year');
+    node.appendChild(document.createTextNode(y));
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2cc00c90d13492d',t:'MTc4NzAwNDU2NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

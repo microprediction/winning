@@ -1,0 +1,60 @@
+# FILE NAME: 00020-00000001.toc
+# TITLE: 2009 Pierce County Auditor
+# DESCRIPTION: Obtained from the toi by adding the unranked alternatives at the bottom
+# DATA TYPE: toc
+# MODIFICATION TYPE: imbued
+# RELATES TO: 00020-00000001.toi
+# RELATED FILES: 
+# PUBLICATION DATE: 2014-07-09
+# MODIFICATION DATE: 2022-09-16
+# NUMBER ALTERNATIVES: 4
+# NUMBER VOTERS: 153419
+# NUMBER UNIQUE ORDERS: 44
+# ALTERNATIVE NAME 1: Jan Shabro
+# ALTERNATIVE NAME 2: Julie Anderson
+# ALTERNATIVE NAME 3: Will Baker
+# ALTERNATIVE NAME 4: Write-In
+26123: 2,1,3,4
+24516: 1,2,3,4
+23212: 2,{1,3,4}
+21040: 1,{2,3,4}
+11986: 2,3,1,4
+10723: 2,1,{3,4}
+9041: 1,2,{3,4}
+6356: 1,3,2,4
+5567: 3,2,1,4
+3656: 3,{1,2,4}
+2686: 2,3,{1,4}
+2639: 3,1,2,4
+1034: 2,1,4,3
+1019: 1,2,4,3
+791: 1,3,{2,4}
+686: 3,2,{1,4}
+444: 4,{1,2,3}
+381: 2,3,4,1
+348: 1,4,{2,3}
+342: 2,4,{1,3}
+221: 3,1,{2,4}
+95: 1,3,4,2
+91: 3,4,{1,2}
+80: 3,2,4,1
+50: {1,2},{3,4}
+49: 4,2,1,3
+40: 1,4,2,3
+40: 2,4,1,3
+25: 4,1,2,3
+23: 2,4,3,1
+20: 1,4,3,2
+18: 4,3,{1,2}
+12: 3,1,4,2
+10: 4,3,2,1
+10: 4,2,{1,3}
+7: 4,1,{2,3}
+6: 3,4,1,2
+6: 4,2,3,1
+6: {1,2},3,4
+5: 3,4,2,1
+5: 3,{1,2},4
+4: 4,3,1,2
+3: 4,1,3,2
+3: {1,2},4,3

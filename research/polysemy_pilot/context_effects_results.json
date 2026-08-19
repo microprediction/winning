@@ -1,0 +1,602 @@
+[
+ {
+  "product": "laptop",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.9391913707927008,
+   "P3_T_abs": 0.9255107387302778,
+   "P3_D": 0.0002565295267978679,
+   "rel_T_3": 0.9257482204832123,
+   "attraction": -0.013443150309488505,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9982598617612303,
+   "P3_M_abs": 0.49825671385074316,
+   "P3_E2": 0.5017297868667487,
+   "rel_M_3": 0.9999729077071992,
+   "compromise": 0.001713045945968883,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "laptop",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.9923331978833243,
+   "P3_T_abs": 0.994308012137095,
+   "P3_D": 0.004700413979167554,
+   "rel_T_3": 0.9990037432973304,
+   "attraction": 0.006670545414006135,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9941999312151512,
+   "P3_M_abs": 0.4323575607249339,
+   "P3_E2": 0.5606542560477085,
+   "rel_M_3": 0.9840941142060625,
+   "compromise": -0.010105817009088636,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "laptop",
+  "model": "gpt-4.1-mini",
+  "decoy": {
+   "P2_T": 0.9999993838016197,
+   "P3_T_abs": 0.9999624291531242,
+   "P3_D": 3.748856571345024e-05,
+   "rel_T_3": 0.9999999177157529,
+   "attraction": 5.339141332383335e-07,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999997921113873,
+   "P3_M_abs": 0.4542145102702266,
+   "P3_E2": 0.5457851868464353,
+   "rel_M_3": 0.9999993331715978,
+   "compromise": -4.5893978950495296e-07,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "apartment",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.48174728710692083,
+   "P3_T_abs": 0.8190715802217485,
+   "P3_D": 0.01600000843491946,
+   "rel_T_3": 0.8323898244338309,
+   "attraction": 0.3506425373269101,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9955368568901256,
+   "P3_M_abs": 0.8346680608900714,
+   "P3_E2": 0.16489364679719445,
+   "rel_M_3": 0.9994751658743186,
+   "compromise": 0.003938308984193006,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "laptop",
+  "model": "gpt-4.1-nano",
+  "decoy": {
+   "P2_T": 0.49633288469649184,
+   "P3_T_abs": 0.9820355953483971,
+   "P3_D": 0.01420226784369065,
+   "rel_T_3": 0.9961836625453754,
+   "attraction": 0.49985077784888354,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9683058230040169,
+   "P3_M_abs": 0.3815828208350534,
+   "P3_E2": 0.5386278773095755,
+   "rel_M_3": 0.8270608518995658,
+   "compromise": -0.1412449711044511,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "laptop",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.9980714136372592,
+   "P3_T_abs": 0.9970427827985234,
+   "P3_D": 5.316047806265118e-09,
+   "rel_T_3": 0.9970427880988506,
+   "attraction": -0.0010286255384085452,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9931138363343531,
+   "P3_M_abs": 0.9055723875356176,
+   "P3_E2": 0.07268539259008042,
+   "rel_M_3": 0.9765535669334163,
+   "compromise": -0.0165602694009368,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "apartment",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.9479115952110608,
+   "P3_T_abs": 0.9946278908775179,
+   "P3_D": 3.822182150658135e-07,
+   "rel_T_3": 0.9946282710425604,
+   "attraction": 0.04671667583149952,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9999721971177072,
+   "P3_M_abs": 0.9984709102897494,
+   "P3_E2": 0.0015233451982626597,
+   "rel_M_3": 0.9999942467237863,
+   "compromise": 2.204960607909978e-05,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "apartment",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.5976599034150839,
+   "P3_T_abs": 0.7732285082791392,
+   "P3_D": 0.0014322454129918874,
+   "rel_T_3": 0.7743375496827799,
+   "attraction": 0.176677646267696,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.575424571035042,
+   "P3_M_abs": 0.8478621028221879,
+   "P3_E2": 0.03419430484532956,
+   "rel_M_3": 0.8778806203730305,
+   "compromise": 0.30245604933798853,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "apartment",
+  "model": "gpt-4.1-nano",
+  "decoy": {
+   "P2_T": 0.44535714557478867,
+   "P3_T_abs": 0.7683445138364112,
+   "P3_D": 0.0032973237209763784,
+   "rel_T_3": 0.7708863757694132,
+   "attraction": 0.32552923019462454,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.05988997163446825,
+   "P3_M_abs": 0.6562526042566755,
+   "P3_E2": 0.23367743789426332,
+   "rel_M_3": 0.8563660222314141,
+   "compromise": 0.7964760505969458,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "coffee maker",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.9999206815699043,
+   "P3_T_abs": 0.9997476679342694,
+   "P3_D": 3.364651827092759e-05,
+   "rel_T_3": 0.9997813070942853,
+   "attraction": -0.00013937447561906957,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.999996653626693,
+   "P3_M_abs": 0.254674372864321,
+   "P3_E2": 0.7453071702779702,
+   "rel_M_3": 0.9999275328727202,
+   "compromise": -6.91207539728067e-05,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "coffee maker",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.9999923965792341,
+   "P3_T_abs": 0.9999998808814943,
+   "P3_D": 9.752829718680082e-15,
+   "rel_T_3": 0.999999880881504,
+   "attraction": 7.484302269933352e-06,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.999999999550978,
+   "P3_M_abs": 0.9999999636489636,
+   "P3_E2": 3.6320651698999616e-08,
+   "rel_M_3": 0.9999999999696153,
+   "compromise": 4.186373470105309e-10,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "coffee maker",
+  "model": "gpt-4.1-mini",
+  "decoy": {
+   "P2_T": 0.9999999984177951,
+   "P3_T_abs": 0.9999999603450153,
+   "P3_D": 1.8954961799648648e-08,
+   "rel_T_3": 0.9999999792999765,
+   "attraction": -1.9117818550462573e-08,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999999993537628,
+   "P3_M_abs": 0.5214207685580167,
+   "P3_E2": 0.4785792114673302,
+   "rel_M_3": 0.9999999616918742,
+   "compromise": -3.766188860776509e-08,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "coffee maker",
+  "model": "gpt-4.1-nano",
+  "decoy": {
+   "P2_T": 0.9989083605067591,
+   "P3_T_abs": 0.9980153436844846,
+   "P3_D": 3.488467374602469e-05,
+   "rel_T_3": 0.9980501603387101,
+   "attraction": -0.0008582001680490503,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9990871127595399,
+   "P3_M_abs": 0.2768716646737874,
+   "P3_E2": 0.7222451031708498,
+   "rel_M_3": 0.9968201023080215,
+   "compromise": -0.0022670104515183365,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "flight",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.9523252382923596,
+   "P3_T_abs": 0.4842439112878027,
+   "P3_D": 0.28101282134188305,
+   "rel_T_3": 0.6735084096931634,
+   "attraction": -0.2788168285991962,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999519186823466,
+   "P3_M_abs": 0.26219110760036624,
+   "P3_E2": 0.7378018156874303,
+   "rel_M_3": 0.9999730100640405,
+   "compromise": 2.1091381693927325e-05,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "flight",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.5492029973570521,
+   "P3_T_abs": 0.9821837710885809,
+   "P3_D": 0.00028726625021752546,
+   "rel_T_3": 0.9824660004124856,
+   "attraction": 0.4332630030554334,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.990253384757256,
+   "P3_M_abs": 0.7226670050839427,
+   "P3_E2": 0.13417045893955248,
+   "rel_M_3": 0.8346527472357173,
+   "compromise": -0.15560063752153874,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "apartment",
+  "model": "gpt-4.1-mini",
+  "decoy": {
+   "P2_T": 0.9950257160301,
+   "P3_T_abs": 0.9932702929141503,
+   "P3_D": 0.0003137883626734826,
+   "rel_T_3": 0.9935820674042629,
+   "attraction": -0.001443648625837124,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999932592994406,
+   "P3_M_abs": 0.8824837756572151,
+   "P3_E2": 0.11737260850312085,
+   "rel_M_3": 0.9998372859928806,
+   "compromise": -0.00015597330656003106,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "pair of headphones",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.3406579494148328,
+   "P3_T_abs": 0.33823654827628163,
+   "P3_D": 0.006958141889664954,
+   "rel_T_3": 0.3406065368884992,
+   "attraction": -5.141252633361626e-05,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999177359152741,
+   "P3_M_abs": 0.679662388491197,
+   "P3_E2": 0.32032058132520547,
+   "rel_M_3": 0.9999749437997834,
+   "compromise": 5.7207884509247187e-05,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "flight",
+  "model": "gpt-4.1-mini",
+  "decoy": {
+   "P2_T": 0.518078687316082,
+   "P3_T_abs": 0.839555465189063,
+   "P3_D": 0.0009056487268742208,
+   "rel_T_3": 0.84031649675452,
+   "attraction": 0.32223780943843805,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.7189052472339658,
+   "P3_M_abs": 0.674065786392401,
+   "P3_E2": 0.3258268319639643,
+   "rel_M_3": 0.9998407209768558,
+   "compromise": 0.2809354737428901,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "flight",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.5000226822952082,
+   "P3_T_abs": 0.32838721216989447,
+   "P3_D": 1.3284120648153127e-09,
+   "rel_T_3": 0.3283872126061281,
+   "attraction": -0.1716354696890801,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9993374407473251,
+   "P3_M_abs": 0.6824124768756005,
+   "P3_E2": 0.30415343981076454,
+   "rel_M_3": 0.9806938999454394,
+   "compromise": -0.018643540801885683,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "flight",
+  "model": "gpt-4.1-nano",
+  "decoy": {
+   "P2_T": 0.989779444897922,
+   "P3_T_abs": 0.946202644292128,
+   "P3_D": 0.000322763938547929,
+   "rel_T_3": 0.9465081429882265,
+   "attraction": -0.043271301909695525,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9910061573963328,
+   "P3_M_abs": 0.040254483399461534,
+   "P3_E2": 0.9555138747486086,
+   "rel_M_3": 0.9048772661584535,
+   "compromise": -0.08612889123787926,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "pair of headphones",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.9971488100690474,
+   "P3_T_abs": 0.9563043346515309,
+   "P3_D": 0.04315989712183934,
+   "rel_T_3": 0.9994400650380161,
+   "attraction": 0.002291254968968648,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9973846213637111,
+   "P3_M_abs": 0.9638878906939182,
+   "P3_E2": 0.03593706947553293,
+   "rel_M_3": 0.9998184352649535,
+   "compromise": 0.002433813901242421,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "pair of headphones",
+  "model": "gpt-4.1-nano",
+  "decoy": {
+   "P2_T": 0.9993092190432774,
+   "P3_T_abs": 0.9949400205209199,
+   "P3_D": 0.004855864563137241,
+   "rel_T_3": 0.9997948890932735,
+   "attraction": 0.00048567004999611196,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9997095854203176,
+   "P3_M_abs": 0.22319198937364917,
+   "P3_E2": 0.7762041926915279,
+   "rel_M_3": 0.9973019247228756,
+   "compromise": -0.0024076606974420267,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "pair of headphones",
+  "model": "gpt-4.1-mini",
+  "decoy": {
+   "P2_T": 0.900659619511461,
+   "P3_T_abs": 0.9929015103508068,
+   "P3_D": 0.0054762687655483,
+   "rel_T_3": 0.9983688464812889,
+   "attraction": 0.09770922696982787,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.990480729444652,
+   "P3_M_abs": 0.9489715722949735,
+   "P3_E2": 0.050941607412866075,
+   "rel_M_3": 0.999908519546491,
+   "compromise": 0.009427790101838918,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "phone plan",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.6593454134330582,
+   "P3_T_abs": 0.8273976935943663,
+   "P3_D": 0.006408634907665669,
+   "rel_T_3": 0.8327343842380076,
+   "attraction": 0.17338897080494942,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.500213415211599,
+   "P3_M_abs": 0.6115000493749622,
+   "P3_E2": 0.17460447010465172,
+   "rel_M_3": 0.7408569918624276,
+   "compromise": 0.24064357665082858,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "phone plan",
+  "model": "gpt-4o",
+  "decoy": {
+   "P2_T": 0.2559675118146452,
+   "P3_T_abs": 0.9607629656623989,
+   "P3_D": 0.0005255491455198102,
+   "rel_T_3": 0.9612681593221463,
+   "attraction": 0.705300647507501,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.3030327479902497,
+   "P3_M_abs": 0.2967404210477902,
+   "P3_E2": 0.32686324614416296,
+   "rel_M_3": 0.4408322964806374,
+   "compromise": 0.13779954849038767,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "phone plan",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 9.089112261533569e-07,
+   "P3_T_abs": 0.3816850174745234,
+   "P3_D": 5.396272432070633e-07,
+   "rel_T_3": 0.38168522344226824,
+   "attraction": 0.38168431453104207,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.1711143446990797,
+   "P3_M_abs": 0.7733142066017097,
+   "P3_E2": 1.6053940044889953e-06,
+   "rel_M_3": 0.7733154480776936,
+   "compromise": 0.6022011033786139,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "phone plan",
+  "model": "gpt-4.1-nano",
+  "decoy": {
+   "P2_T": 0.3984494521838189,
+   "P3_T_abs": 0.7360560610687384,
+   "P3_D": 0.24761156859923886,
+   "rel_T_3": 0.9782926349603543,
+   "attraction": 0.5798431827765355,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.718063443944463,
+   "P3_M_abs": 0.7972756013020122,
+   "P3_E2": 0.1387545795412047,
+   "rel_M_3": 0.9257240530548126,
+   "compromise": 0.20766060911034967,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "pair of headphones",
+  "model": "gpt-4.1",
+  "decoy": {
+   "P2_T": 0.9978774766720028,
+   "P3_T_abs": 0.5007306630402842,
+   "P3_D": 7.332070978077411e-07,
+   "rel_T_3": 0.5007310301798297,
+   "attraction": -0.4971464464921731,
+   "regularity_violated": false
+  },
+  "compromise": {
+   "P2_M": 0.9999907345447574,
+   "P3_M_abs": 0.9999996327982679,
+   "P3_E2": 3.2068763132055484e-12,
+   "rel_M_3": 0.9999996328014749,
+   "compromise": 8.898256717460029e-06,
+   "regularity_violated": true
+  }
+ },
+ {
+  "product": "coffee maker",
+  "model": "gpt-4o-mini",
+  "decoy": {
+   "P2_T": 0.8395893550396366,
+   "P3_T_abs": 0.8655291100349162,
+   "P3_D": 2.241529456265598e-07,
+   "rel_T_3": 0.8655293040458593,
+   "attraction": 0.02593994900622265,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.9999794336711026,
+   "P3_M_abs": 0.6568522213240896,
+   "P3_E2": 0.34313082502563397,
+   "rel_M_3": 0.9999741902178969,
+   "compromise": -5.243453205738824e-06,
+   "regularity_violated": false
+  }
+ },
+ {
+  "product": "phone plan",
+  "model": "gpt-4.1-mini",
+  "decoy": {
+   "P2_T": 0.21389600009120402,
+   "P3_T_abs": 0.9263926669941416,
+   "P3_D": 0.022373709977080113,
+   "rel_T_3": 0.9475938571296223,
+   "attraction": 0.7336978570384183,
+   "regularity_violated": true
+  },
+  "compromise": {
+   "P2_M": 0.8209259128890435,
+   "P3_M_abs": 0.9191254612851892,
+   "P3_E2": 0.0005410028258410164,
+   "rel_M_3": 0.919622979916032,
+   "compromise": 0.09869706702698855,
+   "regularity_violated": true
+  }
+ }
+]

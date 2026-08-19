@@ -1,0 +1,30 @@
+# FILE NAME: 00049-00000007.soc
+# TITLE: 106
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000007.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 9
+# NUMBER VOTERS: 10
+# NUMBER UNIQUE ORDERS: 9
+# ALTERNATIVE NAME 1: DenBa_b-poule-wst
+# ALTERNATIVE NAME 2: RiBak_a-poule-wst
+# ALTERNATIVE NAME 3: Gast3_b-poule-wst
+# ALTERNATIVE NAME 4: DoOve_b-poule-wst
+# ALTERNATIVE NAME 5: Gast1_a-poule-wst
+# ALTERNATIVE NAME 6: Gast2_a-poule-wst
+# ALTERNATIVE NAME 7: MaKoo_b-poule-wst
+# ALTERNATIVE NAME 8: TanIt_b-poule-wst
+# ALTERNATIVE NAME 9: MaHui_a-poule-wst
+2: 6,5,4,3,8,7,1,2,9
+1: 5,3,1,4,6,2,7,8,9
+1: 8,6,5,3,9,4,7,2,1
+1: 6,5,3,4,8,1,7,2,9
+1: 6,5,8,1,4,3,7,2,9
+1: 6,5,3,8,4,7,2,9,1
+1: 6,5,8,3,4,7,9,2,1
+1: 6,5,8,3,7,9,4,2,1
+1: 6,8,5,3,9,7,4,2,1

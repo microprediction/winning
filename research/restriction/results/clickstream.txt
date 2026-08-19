@@ -1,0 +1,5 @@
+803706 pages in the earlier month, 3544 with a shrunken menu passing the filters
+
+3544 pages scored
+  renormalization 1.0003   race 1.0005   gain -0.0001
+  Luce null median -0.0002   excess +0.0001   MC tail 0.005  (200 reps)

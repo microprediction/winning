@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+<meta content="utf-8" http-equiv="encoding">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1">
+
+<title> Experimento  </title>
+<script src="/assets/javascripts/jatos.js"></script>
+<script type="text/javascript" src="./js/jquery-2.1.4.js"></script>
+<script type="text/javascript" src="./js/parameters.js"></script>
+<script type="text/javascript" src="./js/create_stim.js"></script>
+<script type="text/javascript" src="./js/show_stim.js"></script>
+<script type="text/javascript" src="./js/newtrial.js"></script>
+<script type="text/javascript" src="./js/introspective_response.js"></script>
+<script type="text/javascript" src="./js/trials_structure.js"></script>
+<script type="text/javascript" src="./js/validate_send.js"></script>
+<script type="text/javascript" src="./js/validate_fields.js"></script>
+<script type="text/javascript" src="./js/shuffle.js"></script>
+<script type="text/javascript" src="./js/instructions.js"></script>
+<script type="text/javascript" src="./js/md5.js"></script>
+<script type="text/javascript" src="./js/bundle_gaussian.js"></script>           	<!-----https://github.com/errcw/gaussian con browserify------> 
+<link rel="stylesheet" type="text/css" href="./css/style.css">
+<script type="text/javascript">
+
+/*--------------------------------------*/
+
+$(document).ready(start);
+
+
+function start(){
+$('#boton_submit').hide();
+$('#submit_button').click(function()
+{	$("#exp1").hide();
+	$("#exp2").hide();
+	$("#exp3").hide();
+	$("#exp4").hide();
+	window.scrollTo(0,0);
+	$('body').css('zoom','100%'); /* Webkit browsers */
+	$('body').css('zoom','1.0'); /* Other non-webkit browsers */
+	document.documentElement.requestFullscreen();
+	trials_structure()
+
+	setTimeout('newtrial(sc)', 500);
+    });
+};
+
+</script>
+</head>
+<body>
+
+<!--------text divs---- -->
+	<DIV class="row" id="Question1" style="color:rgb(0, 55, 0); display: block; ">
+		<div class="col-3"></div>
+		<div class="col-6" id="preg"><p>&#191;Cu&aacutel es el m&aacutes grande?</p></div>
+		<div class="col-3"></div>
+	</DIV>
+	
+	<DIV class="row" id="Question2" style="color:rgb(0, 55, 0); display: block; ">
+		<div class="col-3"></div>
+		<div class="col-6" id="preg_segu" ><p>&#191;Cu&aacuten seguro est&aacutes?</p></div>
+		<div class="col-3"></div>
+	</DIV>
+	
+	<!--------main canvas---- -->
+	<DIV class="row" id="Stimuli" style="color:rgb(0, 55, 0); display: block ">
+		<div class="col-5"></div>
+		<div class="col-2">
+			<canvas width="450" height="450" class='clickresp' id="MainCanvas" style="z-index: -1;"></canvas>
+		</div>
+		<div class="col-5"></div>
+	</DIV>
+	
+	<!--------confidence bar---- -->
+	<DIV class="row" id="marks" style="color:rgb(0, 55, 0); display: block; ">
+		<div class="col-12" id="scale" style="position: absolute;"><p>50 %</p></div>
+	</DIV>
+
+	<DIV class="row" id="bar1" style="color:rgb(0, 55, 0); display: block; ">
+		<div class="col-3"></div>
+		<div class="col-6" id="line1" style="background:#98bf21;"> </div>
+		<div class="col-3"></div>
+	</DIV>
+	
+	<DIV class="row" id="bar2" style="color:rgb(0, 55, 0); display: block; ">
+		<div class="col-3"></div>
+		<div class="col-6" id="Dial" style="background:#98bf21;position:absolute;float:left;"> </div>
+		<div class="col-3"></div>
+	</DIV>
+	
+
+	<!--------header---- -->
+	<DIV  class="col-12"  id="Letterhead1" style="top:-40px"> <SPAN style="float:left;"><H3 style="color:#ff934d;margin-left:15px;">Experimento - Percepci&oacute;n visual</H3></SPAN>
+		<div style="float:left;" id = "Space1">"aa"</div>
+	  <SPAN style="float:right;"><H3 id = "Letterhead2" style="color:#ff934d;margin-right:5px;"> </H3></SPAN>
+	</DIV>
+	
+
+	<!--------response buttons---- -->
+	<DIV class="row" id="botones" style="color:rgb(0, 55, 0); display: block; text-align:center;">
+		<div class="col-2"></div>
+		<DIV class="col-1" id="bots1">
+			<button class="resp_button"   id="button_1"   style="position: absolute;float:left;display: none;"></button>
+			<button class="resp_button"   id="button_2"   style="position: absolute;float:center;display: none;"></button>
+			<button class="resp_button"   id="button_3"   style="position: absolute;float:right;display: none;"></button>
+		</DIV>
+		<div class="col-1"></div>
+		</DIV>
+		
+		
+<!--------instructions 1----- -->
+<DIV class="row" id="exp1" style="color:rgb(0, 55, 0); display: block; text-align:center;">
+	<div class="col-2"></div>
+	<DIV class="col-8" id="te1">
+		<H2>Instrucciones - leer atentamente </H2>
+		<HR>
+		<P> Bienvenido/a. El presente estudio es desarrollado por: 
+		<UL><li>Pablo Barttfeld (Instituto de Investigaciones Psicol&oacute;gicas - CONICET)</li> 
+			<li>Guillermo Solovey (Instituto de C&aacute;lculo - UBA - CONICET)</li>
+			<li>Nicol&aacute;s Comay (Instituto de Investigaciones Psicol&oacute;gicas - CONICET) </li></UL></P>
+		<P>Este experimento dura aproximadamente quince minutos (con una pausa al medio para que descanses, si quer&eacute;s). No es dif&iacute;cil pero requiere toda tu atenci&oacute;n. Est&aacute; compuesto de muchos ensayos, donde aparecen tres o dos nubes de puntos rojos, verdes o azules. En cada ensayo tendrás que responder a dos preguntas:<br>
+		</P><UL>
+		<LI>A cu&aacute;l nube de puntos pertenece un punto espec&iacute;fico.</LI>
+		<LI>Cu&aacute;n seguro/a est&aacute;s de que tu respuesta a la pregunta anterior sea correcta.</LI>
+		</UL>
+		<P>Las siguientes pantallas describen estas tareas de manera detallada.</P>
+		<P></P>
+		<HR>
+	
+		<button class="button_instr" onclick="instructions(2);" style="float:right;">Siguiente</button>
+		<br><br>	<br><br>
+	</DIV>
+	</DIV>
+	
+	
+	<!--------instructions 2----- -->
+	<DIV class="row" id="exp2" style="color:rgb(0, 55, 0); display: none; text-align:center;">
+	<div class="col-2"></div>
+	<DIV class="col-8" id="te2">	<H2>Instrucciones - leer atentamente</H2>
+		<HR>
+		<P>	<b>¿DE QU&Eacute; COLOR DEBER&Iacute;A SER EL PUNTO AMARILLO? ¿ROJO, VERDE O AZUL?</b> </P>
+		<p> Pod&eacute;s pensar que est&aacute;s viendo desde una altura muy elevada a tres grupos de personas con remeras de distinto color.
+		En cada prueba del experimento vas a ver una imagen como esa. Una de estas personas est&aacute; oculta por un punto amarillo.</p>
+		<p> <b> Tu objetivo es decidir, de acuerdo a c&oacute;mo ves los dem&aacute;s puntos, de qu&eacute; color tiene la remera la persona que est&aacute; debajo del punto amarillo: ¿roja, verde o azul?</b> En otras palabras, tu tarea es elegir a cu&aacute;l grupo de puntos pertenece ese punto espec&iacute;fico.</p>
+
+		<p>Mir&aacute; un ejemplo ilustrativo de como se ven las figuras.</P>
+		<br>
+		<img src="./files/example1.png" id="example1">
+		</br>
+		<p> Para decidir, hac&eacute; click en el bot&oacute;n a la izquierda de las nubes que coincida con tu elecci&oacute;n. Por ejemplo, si decid&iacute;s que el punto pertenece a la nube verde, entonces presion&aacute; el bot&oacute;n verde.</p>
+		<HR>
+		<button class="button_instr" onclick="instructions(1);" style="float:left;">Atr&aacute;s</button>
+		<button class="button_instr" onclick="instructions(3);" style="float:right;">Siguiente</button>
+		<br><br>	<br><br></DIV>
+	</DIV>
+	
+	<!--------instructions 3----- -->
+	<DIV class="row" id="exp3" style="color:rgb(0, 55, 0); display: none; text-align:center;">
+	<div class="col-2"></div>
+	<DIV class="col-8" id="te3">	<H2>Instrucciones - leer atentamente</H2>
+		<HR>
+		<P>La segunda tarea consiste en reportar tu <b> grado de confianza</b> en la elecci&oacute;n anterior, es decir, qué tan seguro/a estás de haber elegido la opción correcta.</P>
+		<P>Para esto ten&eacute;s que mover con el mouse un peque&ntilde;o c&iacute;rculo a lo largo de una escala continua.</P>
+		<P> La escala va de <b>0% (NADA SEGURO/A</b>, que implica que no confi&aacute;s en nada en tu decisi&oacute;n de a cu&aacute;l nube pertenec&iacute;a el punto amarillo) a <b>100% (TOTALMENTE SEGURO/A</b>, que implica que confi&aacute;s absolutamente en tu decisi&oacute;n de a cu&aacute;l nube pertenec&iacute;a el punto amarillo).<b> POD&Eacute;S USAR VALORES INTERMEDIOS</b>, la idea es que <b>reportes la confianza en tu decisión de la manera más precisa posible</b>.</P>  
+		<P>Una vez elegida una posici&oacute;n en la l&iacute;nea de confianza, hac&eacute; click para fijar el valor.</P>
+		<P>La barra de confianza se ve as&iacute;:</P>
+		<img src="./files/example3.png" id="example3">
+	
+		<P> <b>En algunos ensayos la tarea de elegir a cu&aacute;l nube pertenece el puntito es f&aacute;cil y en otros es bastante dif&iacute;cil. Por esto, a veces sentir&aacute;s que est&aacute;s eligiendo casi al azar. No est&aacute; mal si eso pasa, es parte del juego.
+			En ese caso hac&eacute; tu mejor esfuerzo para elegir correctamente y report&aacute; el nivel de confianza que tengas.</b></P>
+		<HR>
+		<button class="button_instr" onclick="instructions(2);" style="float:left;">Atr&aacute;s</button>
+		<button class="button_instr" onclick="instructions(4);" style="float:right;">Siguiente</button>
+		<br><br>	<br><br>
+	</DIV>
+	</DIV>
+	
+	<!--------instructions 4----- -->
+	<DIV class="row" id="exp4" style="color:rgb(0, 55, 0); display: none; text-align:center;">
+	<div class="col-3"></div>
+	<DIV class="col-6" id="te4">
+		<H2>&iexcl;Listos para comenzar!</H2>
+		<HR>
+		<form name="personales" action=""  method="POST"  id="form1">
+		<P><SPAN style="display:inline-block;width:100px;">Nombre:</SPAN><INPUT length="64" name=Name id="Name" value="" onkeyup="validateFields();"> <SMALL>* al menos 4 letras</SMALL></P>
+		<P><SPAN style="display:inline-block;width:100px;">G&eacute;nero:</SPAN><SELECT id="Gender" name=Gender onchange="validateFields();"><OPTION value="f">Femenino</OPTION><OPTION value="m" selecte="selected">Masculino</OPTION><OPTION value="noBinario" selecte="selected">No binarie</OPTION><OPTION value="Pref_no_responder" selecte="selected">Prefiero no responder</OPTION></SELECT> *</P>
+		<P><SPAN style="display:inline-block;width:100px;">Edad:</SPAN><INPUT length="2" id="Age" name=Age onkeyup="validateFields();"> *</P>
+		
+		
+		<P>Vas a usar
+		<br>
+		&thinsp;&thinsp;&thinsp;<input type="radio" name="Input" value="Mouse" onchange="validateFields();" > Mouse <br>
+		&thinsp;&thinsp;&thinsp;<input type="radio" name="Input" value="Pad" onchange="validateFields();" > Pad (mouse de notebook) <br></P>
+		
+		<P><SMALL>* requerido</SMALL></P>
+	
+		<P><SPAN style="display:inline-block;width:250px;">¿Quer&eacute;s que te contactemos para pr&oacute;ximos estudios? </P>
+		<P>Dejanos tu mail:</SPAN><INPUT length="100" name=contacto id="Contacto" value="" onkeyup="validateFields();"> <SMALL> si preferís que no, dejá este espacio en blanco.</SMALL></P>
+	
+		<P><b>Es indispensable que leas atentamente el consentimiento informado:</b></P>
+		
+		</form>
+		<p><input type="checkbox" onchange="validateFields();" id="consent_checkbox" />He le&iacute;do el <a href="./conditions.html"  target="_blank">consentimiento informado</a>, acepto participar de este estudio.</p>
+		
+		<P> Antes de comenzar, te sugerimos que pongas en silencio tu celular ya que necesitamos toda tu atenci&oacute;n. El experimento dura aproximadamente 15 minutos, con una pausita al medio para que descanses si quer&eacute;s. Cuando est&eacute;s listo/a, presion&aacute; el bot&oacute;n "comienza".
+	
+		<HR>
+		<button class="button_instr" onclick="instructions(3);" style="float:left;">Atr&aacute;s</button>
+		<button class="button_instr" onclick="validate_send();" style="float:right;" id="submit_button" disabled >Comienza</button>
+		<br><br>	<br><br>
+	</DIV>
+	</DIV>
+	
+	</body>
+	</html>
+	

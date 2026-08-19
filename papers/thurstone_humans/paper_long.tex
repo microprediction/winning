@@ -1,0 +1,945 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{tikz}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\title{\textbf{Thurstone is the Model of Choice}\\[4pt]
+\large\normalfont Aggregate pairwise odds contract, and a Gaussian race predicts them better}
+\author{Peter Cotton}
+\date{Provisional draft, 15 August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Luce's axiom says that dropping options from a menu leaves the odds
+between any two survivors untouched, so a population's first choices already fix its
+head-to-head preferences. Thurstone's 1927 model disagrees: a favourite's edge
+counts for less in a short field, so head-to-head odds are less lopsided than the
+first choices imply. Across twelve human datasets, $148{,}000$ responses, they are
+less lopsided every time. Gaussian contestant removal, which re-runs Thurstone's
+race without the dropped options, is an untuned alternative, calibrated to the first
+choices and nothing else. It is the closer prediction in all twelve datasets and, on
+held-out choices, closes a median $39$ per cent of the gap between the axiom and a
+saturated subset-frequency forecast. Luce's axiom is the special case with Gumbel
+noise, so adopting the general form forfeits nothing. The claim is about population
+shares, the assumption inside the Plackett--Luce likelihood, not about individuals.
+\end{abstract}
+
+\section{Renormalization and the Gaussian contest}
+
+Suppose we know, for a population and a set $S$ of alternatives, the share $p_i$
+choosing or first-ranking each item $i$. Luce's axiom \cite{luce1959} assigns each
+item a fixed worth $u(i)$ with
+\begin{equation}
+p_i = \frac{u(i)}{\sum_{j \in S} u(j)},
+\label{eq:luce}
+\end{equation}
+so the worths are determined up to scale by the shares. The axiom then fixes what
+happens on any subset: the denominator changes and nothing else does, leaving
+$p_i/p_j$ untouched for any two survivors. In particular the share preferring $i$
+to $j$ when only those two are considered must equal $p_i/(p_i+p_j)$. This is
+Independence of Irrelevant Alternatives, and in the analysis of rankings it is the
+content of the Plackett--Luce likelihood.
+
+Thurstone \cite{thurstone1927} links the same two quantities through a race. Item
+$i$ has a location $a_i$ and draws a performance $X_i \sim N(a_i,1)$ on each
+occasion, and the item with the winning draw is chosen, so $p_i$ is a winning
+probability in a field of $|S|$. The locations are recovered from the shares, and
+the pairwise margin then follows from a two-horse race between $i$ and $j$ alone.
+It is smaller in magnitude than the odds the shares suggest, because beating one
+rival is easier than beating several and a favourite's advantage counts for less
+when the field is short.
+
+Figure~\ref{fig:urnrace} shows the two predictions on a four-item example. Both
+reproduce the four shares exactly, since each has enough freedom to do so. They
+disagree about the pairwise margin, and they disagree by a definite amount.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[scale=1.0]
+\begin{scope}
+  \draw[->] (-3.4,0) -- (3.5,0) node[right] {\small performance};
+  \foreach \mu/\lab/\sh in {0.80/A/0.55, 0.16/B/0.40, -0.29/C/0.28, -0.67/D/0.18} {
+    \draw[thick, fill=black, fill opacity=\sh, draw opacity=0.9]
+      plot[domain=-3.2:3.3, samples=90, smooth]
+      (\x, {1.5*exp(-(\x-\mu)*(\x-\mu)/0.5)}) -- (3.3,0) -- (-3.2,0) -- cycle;
+    \node[font=\scriptsize] at (\mu, 1.72) {\lab};
+  }
+  \node[font=\scriptsize, anchor=west] at (-3.4,-0.45)
+    {highest draw wins: $P(A)=.55$, $P(B)=.25$, $P(C)=.13$, $P(D)=.07$};
+  \node[font=\small\bfseries] at (0,2.35) {(a) a race};
+\end{scope}
+\begin{scope}[xshift=8.6cm]
+  \node[font=\small\bfseries] at (0,2.35) {(b) $A$ removed};
+  \draw[->] (-2.2,0) -- (2.6,0);
+  \draw[->] (-2.2,0) -- (-2.2,2.0) node[above, font=\scriptsize] {$P$};
+  \foreach \y/\lab in {0/0, 1.0/.25, 2.0/.5} {
+    \draw[gray!40] (-2.2,\y) -- (2.5,\y);
+    \node[font=\scriptsize, anchor=east] at (-2.25,\y) {\lab};
+  }
+  \foreach \i/\lab/\lu/\th in {0/B/2.222/2.080, 1/C/1.156/1.203, 2/D/0.622/0.717} {
+    \fill[black!25] ({-1.6+\i*1.35},0) rectangle ({-1.25+\i*1.35},\lu);
+    \fill[black!70] ({-1.25+\i*1.35},0) rectangle ({-0.90+\i*1.35},\th);
+    \node[font=\scriptsize] at ({-1.25+\i*1.35},-0.28) {\lab};
+  }
+  \fill[black!25] (0.95,1.75) rectangle (1.25,1.95);
+  \node[font=\scriptsize, anchor=west] at (1.3,1.85) {urn};
+  \fill[black!70] (0.95,1.35) rectangle (1.25,1.55);
+  \node[font=\scriptsize, anchor=west] at (1.3,1.45) {race};
+  \node[font=\scriptsize, anchor=west] at (-2.2,-0.65)
+    {odds $B\!:\!C$ were $1.92$; the urn keeps them, the race gives $1.73$};
+\end{scope}
+\end{tikzpicture}
+\caption{The two contenders disagree only under restriction. In (a) each item draws
+a performance and the highest wins. In (b) $A$ is removed. The urn rescales, so
+every surviving odds ratio is unchanged by construction. The race is re-run without
+$A$ and the vacated mass is redistributed unevenly, moving the $B\!:\!C$ odds from
+$1.92$ to $1.73$. Locations are calibrated to the probabilities in (a) by the
+lattice method of \cite{cotton2021}; locations are recovered and the winning
+probabilities evaluated numerically, so the figures are exact to the precision
+shown.}
+\label{fig:urnrace}
+\end{figure}
+
+Two claims follow, kept separate because they are logically independent and rest on
+different evidence, and because conflating them has been the main source of
+overstatement in this literature. Claim~1, that the nesting class is empirically
+necessary, is a statement about the Gumbel point: Yellott \cite{yellott1977} showed
+that Luce's axiom holds within additive random utility models exactly when the
+performance noise is Type I extreme value, so renormalization is not a rival of the
+contest framework but a point inside it, and the surrounding class is required only
+because the data reject that point. The evidence is
+Section~\ref{sec:results}. Claim~2, that the untuned default in the class is already
+better, is a statement about Case V, the case Mosteller \cite{mosteller1951} made
+tractable and the one every textbook reaches for. It could have failed while Claim~1
+held, since nothing obliges the closest member of a class to be the one chosen a
+century ago for its tractability. The evidence is
+Sections~\ref{sec:results} and \ref{sec:ceiling}.
+
+Neither prediction involves a quantity fitted to the pairwise data. Both calibrate
+$|S|-1$ relative worths or locations from the shares alone, and then predict. We
+therefore compare zero-extra-parameter predictions, in the sense that the pairwise
+observations play no part in the calibration of either model.
+
+Recovering locations from shares under Equation~\eqref{eq:luce}'s competitor
+requires an integral. With independent equal-variance normals it is
+one-dimensional for any number of alternatives,
+\begin{equation}
+p_i = \int \phi(x - a_i) \prod_{k \neq i} \Phi(x - a_k)\, dx,
+\label{eq:winprob}
+\end{equation}
+since conditioning on $X_i = x$ makes the other draws independent events. Once the
+locations are calibrated, the competing pairwise prediction is a single normal
+evaluation,
+\begin{equation}
+P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right),
+\label{eq:pair}
+\end{equation}
+and locations are identified only up to a common translation, which we fix by
+$\sum_i a_i = 0$; the map from locations to strictly positive winning probabilities is
+one-to-one onto the interior of the simplex. What is
+genuinely high-dimensional is the correlated case, multinomial probit, and the
+likelihood of a complete ranking rather than of a top choice. The practical
+obstacle for most of the twentieth century was that Equation~\eqref{eq:winprob}
+must be evaluated numerically, and inverted numerically, once per candidate
+location vector inside an optimisation. A lattice method \cite{cotton2021} now
+returns the whole vector of winning probabilities for fields of $10^5$, which is
+what makes the inversion routine here.
+
+\section{Level of observation}
+\label{sec:estimand}
+
+Twelve of the thirteen collections are complete rankings. From a ranking we can read off
+which alternative the respondent placed first, and also which of any two
+alternatives they placed higher. Both quantities are transformations of the same
+response, so the comparison in those twelve collections is between two accounts of one
+ranking distribution: the axiom says the pairwise margin is determined by the
+first-place shares in a particular way, and the race says it is determined
+differently.
+
+That is not the same as observing choice when a menu is physically restricted. A
+respondent's ranking imposes a single ordering that applies to every subset by
+construction, so no ranking dataset can show a person preferring $i$ to $j$ in one
+menu and $j$ to $i$ in another, and none can reveal whether the person would in
+fact choose as their ranking implies when handed only two options. Any statement
+about menu restriction from these twelve collections rests on the assumption that they
+would. The thirteenth makes no such assumption, because subjects there chose
+separately from every subset.
+
+The level of analysis matters as much as the elicitation. All twelve collections give
+population quantities, and the aggregate failure of Independence of Irrelevant
+Alternatives does not imply that individuals violate it. A population of people who
+each choose by Equation~\eqref{eq:luce}, with worths differing from person to
+person, generally does not satisfy the axiom in aggregate, which is why mixed logit
+is a useful model and why its probabilities are integrals over heterogeneous logit
+probabilities rather than logit probabilities themselves \cite{mcfaddentrain2000}.
+So three claims must be kept apart. The first is that a single representative-agent
+Luce model, calibrated to aggregate first-place shares, predicts the aggregate
+pairwise margin. This paper rejects that claim. The second is that individuals have
+heterogeneous worths and each choose by a Luce rule, which would be consistent with
+everything reported here. The third is that a given individual, asked repeatedly,
+chooses by a Luce rule; nothing here addresses it, and the within-subject evidence
+in Section~\ref{sec:experiment} speaks only to whether individual choices are
+order-consistent across menus.
+
+\section{Prior evidence}
+\label{sec:lit}
+
+Independence of Irrelevant Alternatives has been contradicted repeatedly, and
+usually by manipulating the set. Debreu \cite{debreu1960} pointed out that adding a
+close substitute should divide that alternative's support rather than draw
+proportionally from everything. Tversky \cite{tversky1972} showed that similarity
+defeats simple scalability, of which the axiom is a special case. Huber, Payne and
+Puto \cite{huber1982} found that a dominated decoy raises the target's absolute
+share, which no random utility model allows, and Simonson \cite{simonson1989}
+reported a related effect for compromise options. Luce \cite{luce1977} himself
+treated the empirical case as closed by 1977.
+
+Econometrics kept the logit and relaxed the independence around it, through nested
+logit, the generalized extreme value family, and mixed logit
+\cite{mcfaddentrain2000}, with a specification test from Hausman and McFadden
+\cite{hausman1984}. The Thurstonian option was written down early and for exactly
+this purpose: Hausman and Wise \cite{hausman1978} proposed multinomial probit as an
+estimator not constrained by the independence restriction, allowing both correlated
+performances and preferences that vary across people.
+
+Neither response settles the question, and for the same reason. Both are flexible
+devices, and flexibility is the wrong instrument here. Mixed logit approximates any
+random utility model arbitrarily well \cite{mcfaddentrain2000}, so a good mixed-logit
+fit is not evidence about the noise law inside the individual; the correlation,
+heteroskedasticity and taste-heterogeneity it might be absorbing are mutually
+confounded. Probit with a free covariance is in the same position, with the added
+difficulty that the covariance is identified only up to location and scale
+normalizations. A model fitted to the restriction discrepancy cannot be tested by
+it. Case V is the opposite kind of object: identity covariance, no free parameter,
+a point hypothesis that is able to lose.
+
+The computational history has an irony worth recording. Probit was reported as
+practical for only a few alternatives, and simulation later made it estimable at
+cost \cite{train2009}, because a general-covariance choice probability is a
+$(J-1)$-dimensional orthant integral. That objection never applied to the
+independent case, where Equation~\eqref{eq:winprob} is one-dimensional and cheap.
+The contest class was set aside on a computational ground that does not bind on its
+most restrictive and most useful member.
+
+Two results from this literature shape the present test. Yellott \cite{yellott1977}
+showed that within additive random utility models with independent and identically
+distributed noise, and with menus rich enough to identify it, the axiom holds
+exactly when the noise is Type I extreme value, or Gumbel. The phrase double
+exponential is sometimes used for this law and sometimes for the Laplace; the
+Gumbel is meant. That result places the two accounts inside one framework, with
+their disagreement reduced to the shape of the noise, and it is why a single
+statistic can separate them. Block and Marschak \cite{block1960} and Falmagne
+\cite{falmagne1978} characterised when a complete collection of choice
+probabilities admits any random utility representation, which
+Section~\ref{sec:experiment} uses.
+
+What has not been done, so far as we can establish, is to calibrate both accounts
+to the same aggregate shares and ask which predicts the pairwise margin. The
+classic demonstrations establish that an effect exists, on two- and three-item
+menus built from constructed profiles where there is no larger field to calibrate
+from. The econometric alternatives fit a covariance or a mixing distribution, so
+their success leaves open how much the unadorned race would have achieved. And
+where the two have been compared directly, the comparison was scored against no
+benchmark: a paired comparison of pair comparisons \cite{rumelhart1965} concluded
+that the data conform somewhat more closely to Thurstone than to Luce but that the
+superiority is not definitive, which is the reading that has stood since. That
+verdict is a numerator without a denominator, of the kind
+Section~\ref{sec:ceiling} supplies.
+
+\section{Data}
+\label{sec:data}
+
+Twelve archival collections have human respondents, complete rankings or ratings fine
+enough to yield one, and enough respondents for stable shares. Two rank-order card
+tasks from the General Social Survey ask what a child should learn and what matters in
+a job. Three independent samples of Jester users rate the same ten jokes on a
+continuous scale. Sushi rankings come from a Japanese web survey and film rankings are
+induced from Netflix ratings. Dots and puzzles are two perceptual discrimination tasks.
+The remainder are rankings of seven sports by participation preference, of ten
+occupations by perceived prestige, and of four political goals from a five-nation
+survey. Netflix, dots and puzzles were previously reported inside merged rows, which
+concealed that Netflix rests on three pairs and shifts far more than the race predicts;
+they are separate here. A thirteenth collection is the experiment of Costa-Gomes and
+colleagues \cite{costagomes2022}, in which subjects chose from every subset of five
+consumer products; the archive identifies the products only by two-letter codes, so we
+describe them no more precisely than the archive does. It carries the within-subject
+analysis of Section~\ref{sec:experiment} and does not enter the predictive tables,
+since its choices are menu choices rather than rankings.
+
+Counting is not straightforward and we report it plainly. The thirteen collections comprise
+$147{,}719$ dataset-responses. Unique people are fewer: the two General Social
+Survey tasks were fielded to overlapping samples of the same survey, while the
+three Jester files are disjoint user groups.
+
+Two families of source were tried and set aside. Rating scales with eleven points
+cannot produce rankings of more than about five items, because respondents use only
+five or six of the levels available to them; in comparative election studies
+between $0.3$ and $5$ per cent of respondents give a tie-free ordering of nine
+parties. Preferential ballots fail for a different reason. Voters rank a few
+candidates and leave the rest unmarked, which the files record as a tie at the
+bottom, and reading that tie as indifference gives $\lambda = 0.68$ across
+fifty-three files where counting only pairs a voter actually ordered gives $0.15$.
+Raw $\lambda$ also varies widely across nominally identical elections: twelve
+contests for one body, all five-candidate, each with about ten thousand ballots, give
+values from $0.36$ to $2.56$, far wider than sampling error at those sample sizes.
+That spread is suggestive rather than conclusive, since $\lambda$ under a fixed noise
+law depends on the share geometry, and we have not compared each election with its own
+model-predicted value. The tie-coding problem is sufficient on its own, and ballots
+are excluded on that ground.
+
+\section{Held-out predictive comparison}
+\label{sec:results}
+
+The comparison that decides the matter scores both accounts as probability
+forecasts on data neither has seen. Respondents are split into five folds. On the
+training folds we compute first-place shares over the full item set, and calibrate
+both accounts to those shares alone: the worths for renormalization are the shares
+themselves, and the race's locations come from inverting
+Equation~\eqref{eq:winprob}. Each account then yields a predicted distribution on
+every subset of at least two items. For each held-out respondent and each subset,
+the outcome is that respondent's highest-ranked member of the subset, and we
+accumulate log loss. No pairwise or subset outcome enters either calibration.
+
+Properness alone does not license reading a positive gain as evidence against the
+axiom. A proper score guarantees that the true probability vector minimises expected
+loss, not that a plug-in estimate of it beats a biased transformation of the same
+estimate. The shares handed to both accounts are estimated from a training fold, and
+the race contracts them, which is shrinkage toward equal subset probabilities.
+Shrinkage can lower held-out loss whether or not the population is non-Luce.
+Section~\ref{sec:null} therefore replaces the comparison with zero by a comparison
+with the gain obtained when Luce is true by construction.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrrl}
+\toprule
+Dataset & $n$ & $K$ & Subsets & Renorm. & Race & Gain \\
+\midrule
+Occupational prestige & 143 & 10 & 1{,}013 & $1.0173$ & $0.9783$ & $+0.0390$ $[+0.0227, +0.0555]$ \\
+Sushi & 5{,}000 & 10 & 1{,}013 & $1.3724$ & $1.3613$ & $+0.0111$ $[+0.0094, +0.0128]$ \\
+Political goals & 2{,}262 & 4 & 11 & $0.8835$ & $0.8766$ & $+0.0069$ $[+0.0059, +0.0078]$ \\
+GSS socialization & 5{,}000 & 5 & 26 & $0.7984$ & $0.7929$ & $+0.0055$ $[+0.0041, +0.0070]$ \\
+Jester file 3 & 5{,}000 & 10 & 1{,}013 & $1.5189$ & $1.5165$ & $+0.0024$ $[+0.0015, +0.0032]$ \\
+Jester file 1 & 5{,}000 & 10 & 1{,}013 & $1.5287$ & $1.5267$ & $+0.0020$ $[+0.0012, +0.0027]$ \\
+Jester file 2 & 5{,}000 & 10 & 1{,}013 & $1.5247$ & $1.5230$ & $+0.0018$ $[+0.0010, +0.0025]$ \\
+GSS job values & 5{,}000 & 5 & 26 & $0.8593$ & $0.8576$ & $+0.0017$ $[+0.0005, +0.0030]$ \\
+Dots & 3{,}183 & 4 & 11 & $0.8285$ & $0.8270$ & $+0.0015$ $[+0.0005, +0.0025]$ \\
+Netflix & 4{,}379 & 3 & 4 & $0.7932$ & $0.7922$ & $+0.0009$ $[+0.0007, +0.0012]$ \\
+Puzzles & 3{,}180 & 4 & 11 & $0.8180$ & $0.8173$ & $+0.0007$ $[-0.0003, +0.0017]$ \\
+\midrule
+Sports participation & 130 & 7 & 120 & $1.2579$ & $1.2528$ & $+0.0050$ $[+0.0017, +0.0087]$ \\
+\bottomrule
+\end{tabular}
+\caption{Mean held-out log loss per prediction, over every subset of size two or
+more, with both accounts calibrated only to training-fold first-place shares under a
+common add-$\alpha$ convention, $\alpha = 1/2$. Gain is the loss under
+renormalization minus the loss under the race, so positive favours the race;
+intervals are respondent bootstraps. The race is lower in twelve of twelve, and the
+interval excludes zero in eleven; puzzles is the exception. Occupational prestige
+enters here, and posts the largest gain, because the shared smoothing removes the zero
+training cell that previously made it unscorable. Sports participation is separated
+below the rule: its gain is real but Section~\ref{sec:null} shows it is not evidence
+about the noise law.}
+\label{tab:heldout}
+\end{table}
+
+The race predicts held-out restricted choices better in every dataset, and every
+interval excludes zero. The margins are between $0.002$ and $0.011$ nats per
+prediction against losses near one nat. Read as effect sizes those numbers are
+negligible, and the next subsection argues that reading them as effect sizes is a
+mistake. Datasets are capped at five thousand respondents for runtime, and the
+occupational prestige rankings are omitted here because some alternatives are never
+ranked first in a training fold, leaving renormalization with a zero worth and no
+prediction to score.
+
+\subsection{Where in the menu the gain sits}
+
+Averaging over every subset weights cardinalities by how many there are, so
+intermediate menus dominate the aggregate simply because $\binom{K}{r}$ peaks in the
+middle. Those are the menus where least has been removed and least is therefore at
+stake, which dilutes the number the previous table reports. Splitting the gain by
+menu size shows how much:
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Dataset & $|T|{=}2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
+\midrule
+Sushi & $+.0412$ & $+.0263$ & $+.0150$ & $+.0081$ & $+.0040$ & $+.0017$ & $+.0005$ & $+.0000$ & $-.0000$ \\
+Occupational prestige & $+.0286$ & $+.0516$ & $+.0549$ & $+.0454$ & $+.0313$ & $+.0178$ & $+.0076$ & $+.0017$ & $+.0000$ \\
+GSS socialization & $+.0130$ & $+.0011$ & $+.0004$ & $-.0000$ & & & & & \\
+Political goals & $+.0079$ & $+.0071$ & $+.0000$ & & & & & & \\
+Jester file 3 & $+.0064$ & $+.0050$ & $+.0033$ & $+.0020$ & $+.0012$ & $+.0006$ & $+.0003$ & $+.0001$ & $-.0000$ \\
+Jester file 1 & $+.0053$ & $+.0041$ & $+.0026$ & $+.0016$ & $+.0010$ & $+.0005$ & $+.0003$ & $+.0001$ & $+.0000$ \\
+Jester file 2 & $+.0048$ & $+.0037$ & $+.0024$ & $+.0015$ & $+.0009$ & $+.0005$ & $+.0002$ & $+.0001$ & $+.0000$ \\
+Dots & $+.0025$ & $+.0003$ & $-.0000$ & & & & & & \\
+GSS job values & $+.0021$ & $+.0020$ & $+.0009$ & $-.0000$ & & & & & \\
+Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
+Puzzles & $+.0013$ & $+.0000$ & $-.0000$ & & & & & & \\
+\midrule
+Sports participation & $+.0058$ & $+.0062$ & $+.0051$ & $+.0036$ & $+.0019$ & $+.0001$ & & & \\
+\bottomrule
+\end{tabular}
+\caption{Held-out gain by menu size, same calibration as
+Table~\ref{tab:heldout}. The final column of each row is the full field, where nothing
+has been removed and the two accounts must coincide; it is zero to four decimal places
+in every dataset, which checks the pipeline. The pairwise column is two to four times
+the all-subsets aggregate, so the headline number in Table~\ref{tab:heldout}
+understates the disagreement at the menu size the two accounts actually differ most
+about.}
+\label{tab:bysize}
+\end{table}
+
+The pattern is monotone decay in eleven of twelve datasets, and it has to be: as $T$
+approaches the full field the restriction being predicted shrinks to nothing, and at
+$T = S$ both accounts return the calibrated shares by construction. Occupational
+prestige is the exception, peaking at four rather than two, which is what its $143$
+respondents spread over $1{,}013$ subsets would predict. Reporting the aggregate is
+conservative, and we keep it as the headline because it fixes the estimand in advance
+rather than selecting the most favourable cardinality after the fact.
+
+\subsection{Is the gain structural?}
+\label{sec:null}
+
+A positive gain has two possible sources and the score cannot separate them. The race
+might be closer to how the population actually chooses. Or the race might be wrong
+about that and still win, because contraction of a noisily estimated share vector is
+shrinkage, and shrinkage lowers log loss when the input is over-confident. The second
+mechanism needs no departure from the axiom at all.
+
+The way to separate them is to build a population where the axiom holds by
+construction and run the identical procedure on it. Taking the observed full-field
+shares as Luce worths, complete rankings are generated from that exact process, and
+the whole pipeline is repeated: estimate training shares, calibrate both accounts,
+predict every subset, score held-out respondents. Rankings are drawn by sorting
+$\log u_i + G_i$ for independent standard Gumbel $G_i$, which is the same law as
+sequential sampling proportional to worths, so the null is generated by the noise law
+the null asserts.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Dataset & Observed & Null median & Null 95th & Excess & $p$ \\
+\midrule
+Occupational prestige & $+0.0390$ & $-0.0227$ & $-0.0104$ & $+0.0617$ & $\le 0.005$ \\
+Sushi & $+0.0111$ & $-0.0062$ & $-0.0046$ & $+0.0174$ & $\le 0.005$ \\
+GSS socialization & $+0.0055$ & $-0.0066$ & $-0.0042$ & $+0.0121$ & $\le 0.005$ \\
+Political goals & $+0.0069$ & $-0.0012$ & $-0.0007$ & $+0.0081$ & $\le 0.005$ \\
+GSS job values & $+0.0017$ & $-0.0047$ & $-0.0038$ & $+0.0065$ & $\le 0.005$ \\
+Jester file 3 & $+0.0024$ & $-0.0015$ & $-0.0009$ & $+0.0039$ & $\le 0.005$ \\
+Jester file 1 & $+0.0020$ & $-0.0014$ & $-0.0008$ & $+0.0034$ & $\le 0.005$ \\
+Jester file 2 & $+0.0018$ & $-0.0014$ & $-0.0009$ & $+0.0032$ & $\le 0.005$ \\
+Dots & $+0.0015$ & $-0.0014$ & $-0.0007$ & $+0.0029$ & $\le 0.005$ \\
+Puzzles & $+0.0007$ & $-0.0011$ & $-0.0006$ & $+0.0019$ & $\le 0.005$ \\
+Netflix & $+0.0009$ & $-0.0001$ & $+0.0001$ & $+0.0010$ & $\le 0.005$ \\
+\midrule
+Sports participation & $+0.0050$ & $+0.0051$ & $+0.0107$ & $-0.0000$ & $0.51$ \\
+\bottomrule
+\end{tabular}
+\caption{The same gain when Luce is true by construction. Two hundred replicates per
+dataset; $p$ is floored at $1/201$. Excess is the observed gain minus the null median.
+Wherever the shares come from more than about two thousand respondents the null is
+negative, because contraction is then a bias rather than useful insurance, so
+comparing the observed gain with zero understates it. The smoothing convention barely
+matters here: null medians at $\alpha = 0$ and $\alpha = 1/2$ differ by at most
+$0.0002$ in every dataset measured. Sports participation is the exception and the
+informative one: at $n = 130$ its observed gain sits on top of the null.}
+\label{tab:null}
+\end{table}
+
+So the shrinkage mechanism is real, and it accounts for the whole of the gain in the
+smallest dataset. In the other eleven it works against the race rather than for it,
+and the excess over the null exceeds the raw gain in every one of them. It also
+rescues puzzles, whose raw gain interval in Table~\ref{tab:heldout} covers zero while
+its excess over the null does not. Sports participation is excluded from the claims of
+this paper, and it is the only dataset here small enough for the objection to bite. The direction of the null also has a simple reading.
+Contraction is insurance against over-confident inputs, worth buying when the shares
+are noisy and a straight cost when they are not, and at five thousand respondents they
+are not.
+
+\subsection{The share of the empirical benchmark}
+\label{sec:ceiling}
+
+Both accounts receive the same first-place shares, and those shares carry nearly all
+of the predictive content of a restricted menu. What a restriction map contributes is
+a thin residual on top, and its size is a property of the measurement rather than of
+the two hypotheses. Two facts fix the scale. Renormalization and the race agree
+exactly whenever the shares within a subset are equal, by exchangeability, so every
+average over subsets includes cells where no discrepancy is possible. And the total
+available to any restriction map is bounded by what a perfect one would earn.
+
+That bound is estimable. Alongside the two accounts we score a saturated forecast:
+the training-fold frequency with which each item is top within each subset, which is
+$|T|-1$ free probabilities for a subset $T$. It uses the restricted data directly and is not
+available to a practitioner, but it is a legitimate out-of-sample forecast, and at
+this sample size it stands for the best a restriction map could do. The interesting
+quantity is then the fraction of that benchmark improvement,
+\begin{equation}
+\frac{\mathcal{L}_{\text{renorm}} - \mathcal{L}_{\text{race}}}
+     {\mathcal{L}_{\text{renorm}} - \mathcal{L}_{\text{sat}}},
+\label{eq:share}
+\end{equation}
+which asks how far the race travels from renormalization toward that benchmark.
+
+The benchmark is not a ceiling, and calling it one would overstate the ratio. The
+saturated forecast is a high-variance estimator of the subset probabilities rather
+than the truth, so its expected loss exceeds the oracle loss that the true conditional
+entropy would give, the denominator in \eqref{eq:share} is too small, and the reported
+fraction is biased upward. The bias is worst where the subsets are numerous relative
+to respondents. The ratio is reported as a descriptive benchmark on that
+understanding, and the honest form of the claim is a fraction of what an unsmoothed
+subset-frequency forecast achieves, not a fraction of what is attainable.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Dataset & Renorm. & Race & Saturated & Available & Captured \\
+\midrule
+Dots & $0.8285$ & $0.8270$ & $0.8262$ & $0.0023$ & $65\%$ \\
+Jester file 1 & $1.5287$ & $1.5267$ & $1.5246$ & $0.0041$ & $47\%$ \\
+Jester file 3 & $1.5189$ & $1.5165$ & $1.5138$ & $0.0051$ & $47\%$ \\
+Political goals & $0.8835$ & $0.8766$ & $0.8685$ & $0.0150$ & $46\%$ \\
+Jester file 2 & $1.5247$ & $1.5230$ & $1.5207$ & $0.0040$ & $44\%$ \\
+Sushi & $1.3724$ & $1.3613$ & $1.3465$ & $0.0260$ & $43\%$ \\
+Occupational prestige & $1.0173$ & $0.9783$ & $0.9037$ & $0.1135$ & $34\%$ \\
+Puzzles & $0.8180$ & $0.8173$ & $0.8154$ & $0.0026$ & $29\%$ \\
+GSS socialization & $0.7984$ & $0.7929$ & $0.7761$ & $0.0223$ & $25\%$ \\
+Netflix & $0.7932$ & $0.7922$ & $0.7886$ & $0.0046$ & $21\%$ \\
+GSS job values & $0.8593$ & $0.8576$ & $0.8506$ & $0.0087$ & $20\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Held-out log loss per prediction for the two share-only accounts and for a
+smoothed saturated forecast fitted on the training folds, all under $\alpha = 1/2$.
+Available is what the saturated forecast earns on top of the shares; Captured is the
+race's share of it under Equation~\eqref{eq:share}. Renormalization captures none of
+it by construction, since it is the unique map that adds no information. The median is
+$39$ per cent and the range $20$ to $65$. Sports participation is omitted, for the
+reason given in Section~\ref{sec:null}.}
+\label{tab:ceiling}
+\end{table}
+
+The whole quantity in dispute is between $0.004$ and $0.026$ nats. A
+share-calibrated race, carrying $K-1$ locations recovered from the $K-1$ independent
+full-field shares and nothing fitted to the restricted data, captures a median $44$
+per cent of it, and between a fifth and a half in every dataset. The absolute margin was never
+an effect size; it was a numerator over a small ceiling, and the ratio is what
+bears on the generating process. Reporting the numerator alone is what makes a
+structural difference look like a rounding error.
+
+Ordered outcomes are a natural place to look for a larger discrepancy, since each
+place would inherit the previous stage's error, and we report that we cannot yet do
+it. Pricing an exacta by removing the winner and re-running the race is a sequential
+rule of Harville's shape, and it is a coherent distribution over orderings, but it is
+not the race's own ordering law: for Gumbel noise sequential renormalization is exact,
+which is why Harville coincides with Plackett--Luce, and that coincidence is a
+property of the Gumbel rather than of sequential rules. Against the ordering law of
+the calibrated Gaussian race, obtained by simulation, the removal product misprices
+individual exacta and trifecta cells by up to a factor of $3.4$ in a lopsided
+four-item field. That error exceeds the discrepancy between the two accounts it was
+meant to measure, so ordered-outcome pricing waits on the exact ordering law.
+
+\subsection{Contraction of the pairwise log odds}
+
+The direction of the difference is easier to see in a single summary statistic than
+in a log score. Let $p$ be the first-place shares and $q_{ij}$ the share placing
+$i$ above $j$. The shift
+\begin{equation}
+\delta_{ij} = \log \frac{q_{ij}}{1 - q_{ij}} - \log \frac{p_i}{p_j}
+\label{eq:delta}
+\end{equation}
+is zero for every pair under renormalization, and negative under the race. The sign
+is a statement about oriented pairs: within each unordered pair we label $i$ the
+higher-share alternative, since swapping the labels reverses $\delta$. Fitting
+\begin{equation}
+\hat\lambda = \frac{\sum_{i<j} \log(p_i/p_j)\,\bigl(-\delta_{ij}\bigr)}
+                   {\sum_{i<j} \bigl[\log(p_i/p_j)\bigr]^2}
+\label{eq:lambda}
+\end{equation}
+through the origin over unordered pairs, weighting each equally and dropping pairs
+where a log odds is undefined, gives the values in Table~\ref{tab:scorecard}.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llrrrr}
+\toprule
+Dataset & $n$ & Pairs & Observed $\hat\lambda$ & Race & Residual \\
+\midrule
+Netflix & 4{,}379 & 3 & $0.619$ $[.510,.773]$ & $0.102$ & $+0.517$ $[+.409,+.669]$ \\
+Sushi & 5{,}000 & 45 & $0.494$ $[.462,.537]$ & $0.370$ & $+0.124$ $[+.098,+.156]$ \\
+Political goals & 2{,}262 & 6 & $0.425$ $[.392,.460]$ & $0.181$ & $+0.244$ $[+.211,+.279]$ \\
+Jester file 1 & 24{,}953 & 45 & $0.392$ $[.371,.413]$ & $0.350$ & $+0.041$ $[+.022,+.061]$ \\
+Jester file 2 & 23{,}494 & 45 & $0.388$ $[.368,.413]$ & $0.343$ & $+0.045$ $[+.025,+.070]$ \\
+Jester file 3 & 24{,}904 & 45 & $0.371$ $[.354,.392]$ & $0.337$ & $+0.034$ $[+.016,+.054]$ \\
+Occupational prestige & 143 & 38 & $0.280$ $[.195,.427]$ & $0.330$ & $-0.050$ $[-.137,+.095]$ \\
+GSS socialization & 33{,}921 & 10 & $0.276$ $[.255,.298]$ & $0.315$ & $-0.039$ $[-.058,-.021]$ \\
+GSS job values & 21{,}797 & 10 & $0.227$ $[.212,.242]$ & $0.233$ & $-0.006$ $[-.019,+.006]$ \\
+Dots & 3{,}183 & 6 & $0.206$ $[.176,.247]$ & $0.169$ & $+0.037$ $[+.010,+.074]$ \\
+Puzzles & 3{,}180 & 6 & $0.178$ $[.144,.212]$ & $0.151$ & $+0.027$ $[-.008,+.062]$ \\
+\midrule
+Sports participation & 130 & 20 & $0.333$ $[-.074,.971]$ & $0.304$ & $+0.029$ $[-.364,+.682]$ \\
+\bottomrule
+\end{tabular}
+\caption{Observed contraction, the value the Gaussian race implies for the same
+shares, and the residual, with respondent-bootstrap intervals from resampling and
+recomputing everything downstream: shares, calibration, race prediction and both
+slopes. Renormalization predicts zero in every row. Contraction excludes zero in
+eleven of twelve datasets and the race is the closer prediction in twelve of twelve.
+Every row is a population-level quantity. Sports participation is below the rule: with
+twenty pairs from $130$ respondents its interval runs from $-0.07$ to $0.97$, so it
+discriminates nothing, which is consistent with its failure in
+Section~\ref{sec:null}.}
+\label{tab:scorecard}
+\end{table}
+
+Contraction is positive and its interval excludes zero in eleven of the twelve
+datasets, where representative-agent renormalization predicts zero throughout. The
+race's residual is under $0.05$ in eight rows, and its interval covers zero in three
+of them, so in those the race is not merely closer but statistically
+indistinguishable from the observed contraction. The residual has both signs. It
+under-predicts most severely in Netflix and political goals, which rest on three and
+six pairs, and it over-predicts in the General Social Survey socialization task, the
+one row where the sign is negative with an interval excluding zero.
+
+The twelve rows are not twelve independent experiments. Three are Jester files, two
+are General Social Survey items, dots and puzzles are companion perceptual tasks, and
+several arrive through the same repositories, so the count describes the table rather
+than supporting a claim about independent replications. The held-out comparison in Table~\ref{tab:heldout} is the basis for
+inference here, and its intervals are respondent bootstraps within dataset.
+
+\section{Which noise laws contract}
+\label{sec:noise}
+
+The direction of the effect is a theorem, not a simulation result, and the theorem
+is about the curvature of a hazard rather than about the thickness of a tail.
+
+With the highest draw winning, write $F$ and $f$ for the common noise distribution
+and density and let
+\begin{equation}
+r(x) = \frac{f(x)}{F(x)}
+\label{eq:revhaz}
+\end{equation}
+be its reverse hazard. Fix two alternatives with $a_i > a_j$ and let $H(x) =
+\prod_{k \neq i,j} F(x - a_k)$ be the chance that every other contestant falls below
+$x$.
+
+\medskip
+\noindent\textbf{Proposition.} \emph{If $\log r$ is concave then}
+\begin{equation}
+\frac{p_i}{p_j} \;\ge\; \frac{q_{ij}}{1 - q_{ij}},
+\label{eq:contraction}
+\end{equation}
+\emph{so removing the other contestants contracts the favourite's log odds, and
+$\delta_{ij} \le 0$. If $\log r$ is affine, \eqref{eq:contraction} holds with
+equality and the axiom is satisfied exactly.}
+
+\medskip
+The argument is a covariance inequality. Put $A(x) = f(x - a_i) F(x - a_j)$ and
+$B(x) = f(x - a_j) F(x - a_i)$, so that $\int A = q_{ij}$ and $\int B = 1 - q_{ij}$
+while $\int A H = p_i$ and $\int B H = p_j$. Then
+\begin{equation}
+\frac{A(x)}{B(x)} = \frac{r(x - a_i)}{r(x - a_j)},
+\label{eq:ratio}
+\end{equation}
+and since $a_i > a_j$ we have $x - a_i < x - a_j$, so concavity of $\log r$ makes
+$(\log r)'$ decreasing and hence the ratio \eqref{eq:ratio} increasing in $x$. As $H$
+is also increasing, the two are comonotone, and weighting by $H$ therefore raises
+the ratio of the integrals:
+\[
+\frac{\int A H}{\int B H} \;\ge\; \frac{\int A}{\int B}.
+\]
+The left side is the full-field odds and the right side the pairwise odds.
+
+Two cases are worth naming. For the Gumbel the reverse hazard is $r(x) = s^{-1}
+e^{-x/s}$, so $\log r$ is affine with slope $-1/s$ and the proposition gives
+equality: this is Yellott's theorem arriving through a different door, and it is
+why the axiom is a boundary of the class rather than a neighbour of it. For the
+Gaussian,
+\begin{equation}
+\frac{d^2}{dx^2} \log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0,
+\label{eq:normalcurv}
+\end{equation}
+by the truncated-normal identity, so contraction is strict wherever the locations
+differ. Both statements were checked numerically: the Gumbel curvature vanishes to
+$7 \times 10^{-10}$ with the slope $-\pi/\sqrt{6}$ that standardisation requires, and
+\eqref{eq:normalcurv} reproduces to six decimal places.
+
+What the proposition does not give is an ordering of magnitudes, and the draft of
+this paper previously claimed one. Contraction depends on the whole share
+configuration, not on the noise law alone, and recalibrating each law to the same
+observed shares makes the comparison at fixed observables:
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Shares & Gumbel & Gaussian & $t_8$ & $t_3$ \\
+\midrule
+$(.24,.22,.20,.18,.16)$ & $0.0000$ & $0.2257$ & $0.2052$ & $0.1715$ \\
+$(.70,.12,.08,.06,.04)$ & $0.0000$ & $0.1383$ & $0.1314$ & $0.1179$ \\
+$(.60,.25,.15)$         & $0.0000$ & $0.0932$ & $0.0943$ & $0.0960$ \\
+$(.88,.07,.05)$         & $0.0000$ & $0.0384$ & $0.0442$ & $0.0555$ \\
+\bottomrule
+\end{tabular}
+\caption{Contraction $\lambda$ for unit-variance noise laws, each recalibrated to the
+shares in the first column. The Gumbel column is identically zero at every
+configuration, which recovers the axiom and checks the pipeline. The ordering of the
+remaining columns reverses between the top two rows and the bottom two: heavier tails
+contract less in near-uniform and lopsided five-item fields and more in three-item
+fields. No tail-based ordering therefore holds in general. Bounded noise is not shown
+because a bounded law cannot be calibrated to the lopsided fields at all.}
+\label{tab:noise}
+\end{table}
+
+So the residuals in Table~\ref{tab:scorecard} cannot be read as pointing toward
+heavier or lighter tails. Concavity of $\log r$ is also sufficient rather than
+necessary: the uniform law has a reverse hazard that is wildly non-concave at its
+upper endpoint and yet contracts more than the Gaussian wherever it can be
+calibrated. Skewness is orientation-dependent, and we do not report it, because the
+sign of the shape parameter interacts with which draw wins and we have not resolved
+that carefully enough to state a direction. Other explanations of the residuals are
+untouched by this section: unequal variances across alternatives, correlated
+performances, heterogeneity across respondents, and utilities that depend on the set.
+
+\section{Within-subject choice from all subsets}
+\label{sec:experiment}
+
+The consumer-products experiment observes what the ranking datasets cannot. Its 373
+subjects faced all thirty-one menus, one subject at a time, so a
+reversal is observable rather than excluded by construction, and the choices are
+individual rather than aggregate.
+
+Reversals are uncommon. Of $26{,}099$ comparisons in which an item chosen from a
+larger menu was still available in a smaller one, $829$ switched away from it, a
+rate of $3.2$ per cent; among subjects required to choose rather than permitted to
+defer, and so free of any coding decision, the rate is $3.9$ per cent. The
+subject-level distribution is uneven. Six of the $373$ record no usable choice, so
+$367$ enter this count. Of those, $235$ never reverse, the
+median subject reverses never, the ninetieth percentile reverses eight times, and
+the most violating tenth of subjects account for $58$ per cent of all reversals. So
+most individuals are order-consistent across menus and a minority are markedly
+not, which is a pattern an average rate conceals.
+
+Pooling subjects gives choice probabilities for all thirty-one menus, and the
+Block--Marschak sums test whether those probabilities admit any random utility
+representation. Of eighty computable sums, nine fall below zero and one below
+$-0.02$, the worst at $-0.055$; among forced-choice subjects sixteen fall below
+zero and ten below $-0.02$, the worst at $-0.088$. Estimated probabilities can
+produce small negative sums by sampling noise alone, and we have not computed the
+distance from the random utility polytope or intervals for the individual sums, so
+we report the counts and draw no strong conclusion. The complete-ranking datasets
+cannot contribute to this question at all, since a distribution over rankings is a
+random utility representation by construction.
+
+\section{Discussion}
+
+Adopting the class costs nothing in generality, which is the practical content of
+Claim~1. Because the axiom is nested rather than adjacent, a contest model
+reproduces renormalization whenever a population behaves that way, and
+Section~\ref{sec:noise} confirms it does so exactly, returning a contraction of
+$0.001$ under Gumbel noise. There is no scenario in which choosing the class costs
+an analyst anything except the integral.
+
+Claim~2 carries the stronger practical consequence, and it survives the objection
+that its margins are slight. Case V's advantage over renormalization is a fifth to a
+half of everything a restriction map could deliver, because the two accounts are
+constrained to agree at symmetric fields and the total on offer is small for that
+reason rather than because the two accounts are close. An analyst holding nothing
+but aggregate shares gets that fraction for free.
+
+The boundaries of both claims should be stated as plainly as their content. What
+is rejected is a representative-agent Luce model of a population.
+Heterogeneous individuals who each choose by a Luce rule would generate aggregate
+violations of this kind, so nothing here shows that individual choice departs from
+logit, and the within-subject experiment speaks to order-consistency rather than to
+functional form. Twelve of the thirteen collections compare two accounts of a ranking
+distribution rather than observing menu restriction, and their contribution should be
+read as such.
+
+Case V is also not the end of the matter. Its residual has both signs, and
+Section~\ref{sec:noise} shows why the sign of the residual does not point anywhere in
+particular: the proposition there fixes the direction of contraction but not its
+magnitude, and no ordering by tail thickness survives a change of share
+configuration. Which noise law fits best is answerable with the same data and is not
+answered here.
+
+Three limitations bound what has been shown. Netflix, political goals, dots and
+puzzles rest on three or six usable pairs, so their contraction estimates are the
+least secure in Table~\ref{tab:scorecard}, and the two largest residuals are among
+them. Sports participation fails both the null comparison and the interval test and
+supports nothing. And nothing here addresses regularity violations of the decoy and
+compromise kind, which lie outside both accounts.
+
+For psychometrics the consequence concerns defaults. Plackett--Luce and
+Bradley--Terry likelihoods are standard for rankings and paired comparisons and
+they carry the axiom with them, largely because the contest was once impractical to
+compute. That reason has expired, the axiom is available as a nested special case,
+and on this evidence the ordering of defaults should be reversed for
+population-level ranking data.
+
+\section*{Data and code}
+
+Sushi rankings come from Kamishima \cite{kamishima2003}; Jester ratings from the
+Eigentaste project \cite{goldberg2001}, gauge-set files one to three; the General
+Social Survey cumulative file from NORC; the perceptual, leisure, prestige and
+political-goal rankings via PrefLib \cite{mattei2013} and the CRAN packages
+BayesMallows, ConsRank, PerMallows and PLMIX; the menu-choice data from the
+replication archive of \cite{costagomes2022}. All are public and free. Analysis
+code, derived tables and cached copies are under \texttt{research/restriction} in
+\texttt{github.com/microprediction/winning}, together with the lattice calibration.
+
+Two storage conventions must be told apart when reproducing this. BayesMallows,
+ConsRank and PerMallows store ranks, so element $j$ holds the rank of alternative
+$j$, while PLMIX stores orderings, so the first element names the favourite.
+Reading one as the other transposes the data silently, and no error is raised. We
+established which is which by cross-validation: the political goals data ships in
+two of these packages, and the two agree only when each is read under its own
+convention.
+
+\begin{thebibliography}{99}
+
+\bibitem{block1960}
+H. D. Block and Jacob Marschak.
+Random orderings and stochastic theories of responses.
+In \emph{Contributions to Probability and Statistics}, Stanford University Press,
+1960.
+
+\bibitem{bradley1952}
+Ralph A. Bradley and Milton E. Terry.
+Rank analysis of incomplete block designs: I. The method of paired comparisons.
+\emph{Biometrika}, 39(3/4):324--345, 1952.
+
+\bibitem{costagomes2022}
+Miguel A. Costa-Gomes, Carlos Cueva, Georgios Gerasimou, and Mat\'u\v{s}
+Tejiv\v{s}\v{c}\'ak.
+Choice, deferral and consistency.
+\emph{Quantitative Economics}, 13:1297--1318, 2022.
+
+\bibitem{cotton2021}
+Peter Cotton.
+Inferring relative ability from winning probability in multientrant contests.
+\emph{SIAM Journal on Financial Mathematics}, 12(1), 2021.
+
+\bibitem{debreu1960}
+Gerard Debreu.
+Review of R. D. Luce, \emph{Individual Choice Behavior}.
+\emph{American Economic Review}, 50:186--188, 1960.
+
+\bibitem{falmagne1978}
+Jean-Claude Falmagne.
+A representation theorem for finite random scale systems.
+\emph{Journal of Mathematical Psychology}, 18:52--72, 1978.
+
+\bibitem{goldberg2001}
+Ken Goldberg, Theresa Roeder, Dhruv Gupta, and Chris Perkins.
+Eigentaste: a constant time collaborative filtering algorithm.
+\emph{Information Retrieval}, 4(2):133--151, 2001.
+
+\bibitem{rumelhart1965}
+C.~J. Burke and Joseph L. Zinnes.
+A paired comparison of pair comparisons.
+\emph{Journal of Mathematical Psychology}, 2, 1965.
+
+\bibitem{harville1973}
+David A. Harville.
+Assigning probabilities to the outcomes of multi-entry competitions.
+\emph{Journal of the American Statistical Association}, 68(342):312--316, 1973.
+
+\bibitem{hausman1978}
+Jerry A. Hausman and David A. Wise.
+A conditional probit model for qualitative choice: discrete decisions recognizing
+interdependence and heterogeneous preferences.
+\emph{Econometrica}, 46(2):403--426, 1978.
+
+\bibitem{huber1982}
+Joel Huber, John W. Payne, and Christopher Puto.
+Adding asymmetrically dominated alternatives: violations of regularity and the
+similarity hypothesis.
+\emph{Journal of Consumer Research}, 9:90--98, 1982.
+
+\bibitem{kamishima2003}
+Toshihiro Kamishima.
+Nantonac collaborative filtering: recommendation based on order responses.
+In \emph{Proceedings of KDD}, 2003.
+
+\bibitem{luce1959}
+R. Duncan Luce.
+\emph{Individual Choice Behavior: A Theoretical Analysis}.
+Wiley, 1959.
+
+\bibitem{luce1977}
+R. Duncan Luce.
+The choice axiom after twenty years.
+\emph{Journal of Mathematical Psychology}, 15(3):215--233, 1977.
+
+\bibitem{mattei2013}
+Nicholas Mattei and Toby Walsh.
+PrefLib: a library of preference data.
+In \emph{Algorithmic Decision Theory}, 2013.
+
+\bibitem{mcfadden1974}
+Daniel McFadden.
+Conditional logit analysis of qualitative choice behavior.
+In \emph{Frontiers in Econometrics}, Academic Press, 1974.
+
+\bibitem{mcfaddentrain2000}
+Daniel McFadden and Kenneth Train.
+Mixed MNL models for discrete response.
+\emph{Journal of Applied Econometrics}, 15(5):447--470, 2000.
+
+\bibitem{mosteller1951}
+Frederick Mosteller.
+Remarks on the method of paired comparisons.
+\emph{Psychometrika}, 16(1):3--9, 1951.
+
+\bibitem{simonson1989}
+Itamar Simonson.
+Choice based on reasons: the case of attraction and compromise effects.
+\emph{Journal of Consumer Research}, 16:158--174, 1989.
+
+\bibitem{thurstone1927}
+Louis L. Thurstone.
+A law of comparative judgment.
+\emph{Psychological Review}, 34:273--286, 1927.
+
+\bibitem{train2009}
+Kenneth E. Train.
+\emph{Discrete Choice Methods with Simulation}, second edition.
+Cambridge University Press, 2009.
+
+\bibitem{tverskysimonson1993}
+Amos Tversky and Itamar Simonson.
+Context-dependent preferences.
+\emph{Management Science}, 39(10):1179--1189, 1993.
+
+\bibitem{hausman1984}
+Jerry Hausman and Daniel McFadden.
+Specification tests for the multinomial logit model.
+\emph{Econometrica}, 52(5):1219--1240, 1984.
+
+\bibitem{tversky1972}
+Amos Tversky.
+Elimination by aspects: a theory of choice.
+\emph{Psychological Review}, 79(4):281--299, 1972.
+
+\bibitem{yellott1977}
+John I. Yellott.
+The relationship between Luce's choice axiom, Thurstone's theory of comparative
+judgment, and the double exponential distribution.
+\emph{Journal of Mathematical Psychology}, 15:109--144, 1977.
+
+\end{thebibliography}
+\end{document}

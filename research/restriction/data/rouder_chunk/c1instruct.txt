@@ -1,0 +1,37 @@
+1. Task: There are 12 lines.  Each line has a number.  1 is for the 
+shortest, 12 is for the longest.  On each trial, we present one line.  You 
+job is to respond with the corresponding number.  
+
+2. After each response,  there will be feedback.  There will be a pleasent 
+"da-da" sound if you get it right.  If you get it wrong, we will tell you 
+the right answer.  
+
+3. Use the row of numbers on the keyboard and not the number pad.  Please 
+follow the keyboard order with 1 for 1, 2 for 2, ..., 9 for 9, 10 for 10, 
+- for 11, = for 12.  
+
+4. We know the task can be frustrating at times.  The best way for us to 
+learn about how vision and memory works is to put you in difficult 
+situations.  We expect you to make mistakes.  Please do not take any 
+extradinary measures like trying to measure the lines with a ruler, a 
+piece of paper, your fingers, etc.  Just make the best guess you can using 
+your eye-sight based judgments.
+
+5.  There are 22 short blocks of 40.  Each block takes a minute or two to 
+complete.  Most people are done within 40 minutes.  Please feel free to 
+take a break in-between blocks.
+
+FOR c1_12:  
+6. The computer will show the length of the lines and the corresponding 
+numbers before each block.
+
+FOR c1_4 and c1_2:
+6. The number assignment for each line is constant throughout the 
+experiment.  Some of the blocks will have all 12 line lengths.  Others 
+will have fewer than 12.   Before each block, you will be given 
+the line lengths that will be shown and their corresponding number.
+
+7.  When you are done, come see me here in 205.  We greatly appreciate 
+your time and effort.  At the end, I will tell you what our goals are in 
+this experiment.  
+

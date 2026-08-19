@@ -1,0 +1,37 @@
+# FILE NAME: 00042-00000037.soc
+# TITLE: Light Heavyweight 2013
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00042-00000037.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 10
+# NUMBER VOTERS: 31
+# NUMBER UNIQUE ORDERS: 15
+# ALTERNATIVE NAME 1: Gegard Mousasi
+# ALTERNATIVE NAME 2: Phil Davis
+# ALTERNATIVE NAME 3: Dan Henderson
+# ALTERNATIVE NAME 4: Lyoto Machida
+# ALTERNATIVE NAME 5: Rashad Evans
+# ALTERNATIVE NAME 6: Alexander Gustafsson
+# ALTERNATIVE NAME 7: Mauricio Rua
+# ALTERNATIVE NAME 8: Glover Teixeira
+# ALTERNATIVE NAME 9: Jon Jones
+# ALTERNATIVE NAME 10: Rogerio Nogueira
+6: 9,4,6,3,8,10,5,7,2,1
+3: 9,3,4,6,8,10,5,7,2,1
+3: 9,4,6,3,8,10,7,5,2,1
+3: 9,6,8,2,5,10,3,1,7,4
+2: 9,4,6,8,5,10,3,7,2,1
+2: 9,6,4,8,2,5,10,3,1,7
+2: 9,6,8,2,5,4,10,3,1,7
+2: 9,6,8,5,2,10,3,1,7,4
+2: 9,6,8,5,2,10,7,3,1,4
+1: 9,4,6,8,5,10,3,2,7,1
+1: 9,6,4,8,2,5,10,3,7,1
+1: 9,6,8,4,2,5,10,3,1,7
+1: 9,6,8,2,4,5,10,3,1,7
+1: 9,6,8,2,5,10,4,3,1,7
+1: 9,6,8,5,2,10,3,7,1,4

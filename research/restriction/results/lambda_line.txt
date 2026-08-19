@@ -1,0 +1,13 @@
+collection                       pairs  observed   Case V   ratio
+Colour naming, four lines           12     0.262    0.079    3.33
+Symbol naming, six symbols          30     0.443    0.152    2.92
+Line lengths, twelve to pairs       24     0.118    0.196    0.60
+Wills categories, three to two      39     0.519    0.138    3.76
+Recognition foils, four to two     360     0.125    0.093    1.34
+Consumer goods, experiment 1        10     0.494    0.229    2.16
+Consumer goods, experiment 2        10     0.256    0.229    1.12
+Gambles, high arithmetic cost        5     0.077    0.231    0.33
+
+Ratio 0 is linear renormalization, 1 is Gaussian renormalization. Below 1 the
+collection sits between the two maps; above 1 it contracts more than Case V says.
+The ranking collections are in results/lambda_table.txt on the same statistic.

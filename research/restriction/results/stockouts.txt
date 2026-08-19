@@ -1,0 +1,11 @@
+78 store-category cells with at least 4 products
+
+scorable cells: 78
+  race lower loss in 29 of 78
+  unweighted mean gain -0.0018   median -0.0010
+  sales-weighted mean  -0.0024
+  cell bootstrap 95%   [-0.0028, -0.0010]
+
+  fitted-Luce null on the observed stockout pattern:
+    40 cells   observed mean -0.0015   null mean -0.0013   excess -0.0002
+    excess positive in 19 of 40 cells

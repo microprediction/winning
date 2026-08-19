@@ -1,0 +1,62 @@
+# FILE NAME: 00049-00000466.soc
+# TITLE: 51
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000466.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 9
+# NUMBER VOTERS: 41
+# NUMBER UNIQUE ORDERS: 41
+# ALTERNATIVE NAME 1: 5_sportklasse-man
+# ALTERNATIVE NAME 2: 7_sportklasse-man
+# ALTERNATIVE NAME 3: 2_sportklasse-man
+# ALTERNATIVE NAME 4: 8_sportklasse-man
+# ALTERNATIVE NAME 5: 10_sportklasse-man
+# ALTERNATIVE NAME 6: 117_sportklasse-man
+# ALTERNATIVE NAME 7: 18_sportklasse-man
+# ALTERNATIVE NAME 8: 89_sportklasse-man
+# ALTERNATIVE NAME 9: 4_sportklasse-man
+1: 4,7,2,9,6,5,8,3,1
+1: 1,5,3,4,6,2,9,8,7
+1: 3,4,8,2,7,1,5,9,6
+1: 1,6,3,5,9,7,4,2,8
+1: 8,9,4,7,5,3,1,6,2
+1: 2,1,5,9,6,8,4,3,7
+1: 5,6,3,9,1,7,4,8,2
+1: 2,7,3,9,4,1,6,5,8
+1: 9,6,7,3,2,5,1,4,8
+1: 7,4,3,5,1,8,9,6,2
+1: 3,9,7,8,6,5,2,4,1
+1: 1,7,3,6,5,9,8,2,4
+1: 6,2,4,5,8,1,9,7,3
+1: 9,8,2,4,5,1,3,6,7
+1: 8,5,6,9,7,2,3,1,4
+1: 7,9,4,1,3,6,2,5,8
+1: 5,8,4,3,1,2,7,6,9
+1: 1,3,6,2,8,9,4,7,5
+1: 1,9,8,6,2,4,7,5,3
+1: 1,7,9,8,3,5,4,6,2
+1: 8,9,1,4,2,5,6,3,7
+1: 8,9,1,7,5,6,3,2,4
+1: 4,9,5,1,6,3,8,2,7
+1: 8,1,9,4,2,3,5,6,7
+1: 1,8,9,6,7,4,5,3,2
+1: 4,7,8,9,1,6,5,2,3
+1: 4,6,7,9,8,3,1,2,5
+1: 1,9,8,7,6,4,3,5,2
+1: 8,9,1,4,6,7,2,3,5
+1: 1,8,9,2,5,3,6,7,4
+1: 8,9,1,7,4,6,2,5,3
+1: 5,9,3,8,1,6,4,7,2
+1: 3,8,1,2,9,7,4,6,5
+1: 9,1,8,5,7,3,6,2,4
+1: 5,1,8,9,6,7,4,2,3
+1: 3,2,5,9,8,1,4,7,6
+1: 7,5,9,1,8,6,2,4,3
+1: 3,2,6,8,4,1,7,5,9
+1: 2,4,8,6,3,9,7,5,1
+1: 7,8,9,2,1,4,3,5,6
+1: 6,9,2,4,7,5,8,3,1

@@ -1,0 +1,25 @@
+python yeonrahnev.py 200          (2026-08-17, .venv, numpy 2.5.1 / scipy 1.18.0)
+
+arm                            cells   renorm     race     gain  subject bootstrap          null   excess    tail
+exp 1, 4 colours, after          384   0.4942   0.4795  +0.0147  [+0.0118, +0.0179]      -0.0010  +0.0157   0.005
+exp 1, same pairs, before        384   0.3967   0.3928  +0.0038  [+0.0006, +0.0072]      -0.0009  +0.0048   0.005
+exp 2, 6 symbols, after          300   0.6276   0.5999  +0.0278  [+0.0234, +0.0324]      -0.0036  +0.0314   0.005
+
+arm                            observed   renorm     race renorm err   race err
+exp 1, 4 colours, after          0.7802   0.8493   0.8347    +0.0691    +0.0545
+exp 1, same pairs, before        0.8504   0.8465   0.8317    -0.0040    -0.0187
+exp 2, 6 symbols, after          0.7163   0.8127   0.7806    +0.0964    +0.0643
+
+Losses are mean nats per cell, a cell being one (observer, dominant item, surviving
+alternative). "after" is the menu revealed once the stimulus is gone, which is the
+restriction test; "before" is the same pairs announced in advance, which is not, and is
+the control. The null resamples the calibration row as well as the pair counts, under a
+Luce process whose worths are the observed full-menu shares, so it charges the race for
+calibration noise; tail 0.005 is the floor at 200 replicates.
+
+The second table is a weighted mean over cells of the favourite's (that is, the dominant
+item's) restricted share, and it is where the honest caveat lives: in the two genuine
+restriction arms BOTH maps over-predict. The race's contraction moves in the right
+direction and covers 21 per cent of renormalization's error at K=4 and 33 per cent at
+K=6, but neither parameter-free default is calibrated here. That over-prediction is Yeon
+and Rahnev's own result, arrived at with a fitted model.

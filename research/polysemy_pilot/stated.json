@@ -1,0 +1,85 @@
+{
+ "bolt": {
+  "fastener": 25,
+  "lightning": 30,
+  "run": 35,
+  "lock": 10
+ },
+ "bank": {
+  "finance": 70,
+  "river": 20,
+  "tilt": 7,
+  "heap": 3
+ },
+ "seal": {
+  "animal": 15,
+  "close": 45,
+  "stamp": 40
+ },
+ "spring": {
+  "season": 50,
+  "leap": 25,
+  "coil": 20,
+  "water": 5
+ },
+ "mole": {
+  "animal": 35,
+  "skin": 30,
+  "spy": 15,
+  "chemistry": 10,
+  "sauce": 10
+ },
+ "jaguar": {
+  "animal": 60,
+  "car": 40
+ },
+ "crane": {
+  "bird": 30,
+  "machine": 50,
+  "stretch": 20
+ },
+ "python": {
+  "language": 80,
+  "snake": 20
+ },
+ "bar": {
+  "pub": 25,
+  "rod": 20,
+  "block": 30,
+  "law": 10,
+  "music": 15
+ },
+ "bat": {
+  "animal": 20,
+  "sports": 40,
+  "hit": 40
+ },
+ "pen": {
+  "writing": 70,
+  "enclosure": 20,
+  "prison": 10
+ },
+ "match": {
+  "firestick": 10,
+  "contest": 50,
+  "pairing": 40
+ },
+ "port": {
+  "connector": 35,
+  "harbor": 30,
+  "wine": 20,
+  "left": 15
+ },
+ "pitch": {
+  "throw": 25,
+  "tone": 15,
+  "sales": 40,
+  "field": 20
+ },
+ "iron": {
+  "metal": 35,
+  "appliance": 15,
+  "press": 40,
+  "golf": 10
+ }
+}

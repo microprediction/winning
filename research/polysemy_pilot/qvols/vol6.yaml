@@ -1,0 +1,78 @@
+examples:
+  basic_shape:
+    adjectives:
+      - simple
+      - geometric
+      - recognizable
+      - fundamental
+      - symmetric
+      - classic
+    prompt_pair_template:
+      - "The basic geometric shape I find most SOMETHING is called a [MASK]."
+      - "The two most SOMETHING basic shapes are called a [ANSWER] and a [MASK]."
+    top_k: 5
+
+  major_season:
+    adjectives:
+      - distinct
+      - iconic
+      - traditional
+      - recognizable
+      - significant
+    prompt_pair_template:
+      - "My favorite major season is called [MASK] because it is SOMETHING."
+      - "The two most SOMETHING major seasons are called [ANSWER] and [MASK]."
+    top_k: 10
+
+  chess_piece:
+    adjectives:
+      - strategic
+      - important
+      - powerful
+      - unique
+      - classic
+      - fundamental
+    prompt_pair_template:
+      - "The chess piece I find most SOMETHING is called a [MASK]. I like the way it moves on the board."
+      - "The two most SOMETHING chess pieces are called a [ANSWER] and a [MASK]. I like the way they move on the board"
+    top_k: 6
+
+  musical_interval:
+    adjectives:
+      - harmonic
+      - distinct
+      - common
+      - important
+      - musical
+      - fundamental
+    prompt_pair_template:
+      - "The musical interval I find most SOMETHING is called [MASK]."
+      - "The two most SOMETHING musical intervals are called [ANSWER] and [MASK]."
+    top_k: 8
+
+
+
+  planet_type:
+    adjectives:
+      - common
+      - distinct
+      - fundamental
+      - classic
+      - iconic
+    prompt_pair_template:
+      - "The planet I find most SOMETHING is called [MASK]."
+      - "The two planets that are most SOMETHING are called [ANSWER] and [MASK]."
+    top_k: 10
+
+  animal_class:
+    adjectives:
+      - fundamental
+      - important
+      - common
+      - distinct
+      - recognizable
+    prompt_pair_template:
+      - "The animal class I find most SOMETHING is called [MASK]."
+      - "The two most SOMETHING animal classes are called [ANSWER] and [MASK]."
+    top_k: 5
+

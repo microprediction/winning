@@ -1,0 +1,383 @@
+examples:
+  organ:
+    adjectives:
+      - vital
+      - complex
+      - essential
+      - central
+      - efficient
+      - delicate
+      - versatile
+      - remarkable
+    prompt_pair_template:
+      - "My favourite human organ is the [MASK] because it is SOMETHING."
+      - "My two favourite human organs are the [ANSWER] and the [MASK] because they are SOMETHING."
+    top_k: 10
+
+  tool:
+    adjectives:
+      - versatile
+      - essential
+      - accurate
+      - durable
+      - reliable
+      - efficient
+      - portable
+      - powerful
+      - precise
+      - sturdy
+      - compact
+      - user-friendly
+      - lightweight
+      - robust
+    prompt_pair_template:
+      - "The most useful tool is a [MASK] because it is SOMETHING."
+      - "The two most useful tools are a [ANSWER] and a [MASK] because they are SOMETHING."
+    top_k: 20
+
+  color:
+    adjectives:
+      - bright
+      - bold
+      - vibrant
+      - warm
+      - cool
+      - soothing
+      - strong
+      - calming
+    prompt_pair_template:
+      - "My favorite primary color is [MASK] because it is SOMETHING."
+      - "My favorite two primary colors are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 8
+
+  day:
+    adjectives:
+      - relaxing
+      - productive
+      - fun
+      - busy
+      - exciting
+      - stressful
+      - enjoyable
+      - hectic
+      - calm
+      - rewarding
+    prompt_pair_template:
+      - "The best day of the week is [MASK] because it is SOMETHING."
+      - "The two best days of the week are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  transport:
+    adjectives:
+      - fast
+      - efficient
+      - convenient
+      - affordable
+      - reliable
+      - comfortable
+      - eco-friendly
+      - versatile
+      - essential
+      - accessible
+    prompt_pair_template:
+      - "The best mode of transportation is [MASK] because it is SOMETHING."
+      - "The two best modes of transportation are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  language:
+    adjectives:
+      - complex
+      - intricate
+      - unique
+      - difficult
+      - uncommon
+      - rich
+      - nuanced
+      - ancient
+      - expressive
+      - essential
+    prompt_pair_template:
+      - "The most challenging language to learn is [MASK] because it is SOMETHING."
+      - "The two most challenging languages to learn are [ANSWER] and [MASK] because they are SOMETHING."
+      - "I learned the programming language called [MASK] last year and it is now my favorite SOMETHING."
+      - "I learned the programming languages called [ANSWER] and [MASK] last year and they are now my two favorite SOMETHING."
+    adjectives_programming:
+      - language
+      - coding language
+      - programming language
+    top_k: 10
+
+
+  compression:
+    adjectives:
+      - efficient
+      - fast
+      - widely-used
+      - reliable
+      - versatile
+      - secure
+      - flexible
+      - compact
+      - popular
+      - simple
+    prompt_pair_template:
+      - "The best file compression format is [MASK] because it is SOMETHING."
+      - "The two best file compression formats are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  database:
+    adjectives:
+      - robust
+      - scalable
+      - efficient
+      - secure
+      - versatile
+      - fast
+      - flexible
+      - popular
+      - stable
+      - powerful
+    prompt_pair_template:
+      - "The most reliable database is [MASK] because it is SOMETHING."
+      - "The two most reliable databases are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 20
+
+  gemstone:
+    adjectives:
+      - beautiful
+      - sparkly
+      - elegant
+      - shiny
+      - valuable
+      - precious
+      - brilliant
+      - gorgeous
+      - incredible
+    prompt_pair_template:
+      - "My favourite gemstone is [MASK] because it is SOMETHING."
+      - "My favourite two gemstones are [ANSWER] and [MASK] because they are SOMETHING."
+    top_k: 40
+
+  season:
+    adjectives:
+      - enjoy the weather
+      - love the activities
+      - feel most alive
+      - play sport
+      - am able to relax
+      - have options for activities
+      - curl up in bed
+      - am superstitious
+      - like to run
+      - watch birds
+    prompt_pair_template:
+      - "My favourite season is [MASK] because I SOMETHING."
+      - "My favourite two seasons are [ANSWER] and [MASK] because I SOMETHING."
+    top_k: 4
+
+  continent:
+    adjectives:
+      - love the culture
+      - enjoy the scenery
+      - find fascination
+      - love the people
+      - like the coffee
+      - save money
+      - have a wild time
+      - know people there
+    prompt_pair_template:
+      - "The best continent to visit is [MASK], and I SOMETHING."
+      - "The two best continents to visit are [ANSWER] and [MASK], because I SOMETHING."
+    top_k: 5
+
+  animal:
+    adjectives:
+      - strength
+      - wisdom
+      - good fortune
+      - my mother
+      - my image
+      - my character
+      - something deep
+      - life
+    prompt_pair_template:
+      - "My favourite animal in the zodiac is the [MASK] because it represents SOMETHING."
+      - "My favourite two animals in the zodiac are the [ANSWER] and the [MASK] because they represent SOMETHING."
+    top_k: 20
+
+  sense:
+    adjectives:
+      - to detect nuances
+      - for orienting myself
+      - to recognize patterns
+      - for assessing surroundings
+      - to sense subtle shifts
+      - for identifying familiar elements
+      - to distinguish fine details
+      - for noticing faint traces
+      - to appreciate variations
+      - for perceiving differences
+    prompt_pair_template:
+      - "Of the five, I rely most on my sense of [MASK], SOMETHING."
+      - "Of the five, I rely most on my sense of [ANSWER] and my sense of [MASK], SOMETHING."
+    top_k: 10
+
+  invention:
+    adjectives:
+      - versatile
+      - essential
+      - accurate
+      - durable
+      - reliable
+      - efficient
+      - portable
+      - powerful
+      - precise
+      - sturdy
+      - compact
+      - user-friendly
+      - lightweight
+      - robust
+    prompt_pair_template:
+      - "The greatest invention is the [MASK] because it is SOMETHING."
+      - "The greatest two inventions are the [ANSWER] and a [MASK] because they are SOMETHING."
+    top_k: 20
+
+  kitchen_appliance:
+    adjectives:
+      - versatile
+      - essential
+      - accurate
+      - durable
+      - reliable
+      - efficient
+      - portable
+      - powerful
+      - precise
+      - sturdy
+      - compact
+      - user-friendly
+      - lightweight
+      - robust
+    prompt_pair_template:
+      - "The best kitchen appliance is the [MASK] because it is SOMETHING."
+      - "The best two kitchen appliances are the [ANSWER] and the [MASK] because they are SOMETHING."
+    top_k: 10
+
+  gardening_tool:
+    adjectives:
+      - versatile
+      - essential
+      - accurate
+      - durable
+      - reliable
+      - efficient
+      - portable
+      - powerful
+      - precise
+      - sturdy
+      - compact
+      - user-friendly
+      - lightweight
+      - robust
+    prompt_pair_template:
+      - "The best gardening tool is the [MASK] because it is SOMETHING."
+      - "The best two gardening tools are the [ANSWER] and the [MASK] because they are SOMETHING."
+    top_k: 10
+
+  planet:
+    adjectives:
+      - to imagine exploring
+      - to learn more about
+      - to discover new mysteries
+      - to appreciate from afar
+      - to find inspiration in
+      - to understand better
+      - to admire in the night sky
+      - to imagine living on
+      - to witness up close
+      - to marvel at
+    prompt_pair_template:
+      - "My favourite planet in the solar system is called [MASK] and I hope SOMETHING."
+      - "My favourite two planets in the solar system are called [ANSWER] and [MASK] and I hope SOMETHING."
+    top_k: 5
+
+  bowling_pin:
+    adjectives:
+      - that helps my score
+      - to win
+      - I do not miss
+    prompt_pair_template:
+      - "When I go bowling I like to try to hit the pin number [MASK], and I hope SOMETHING."
+      - "When I go bowling I like to try to hit the two pins numbered [ANSWER] and [MASK], and I hope SOMETHING."
+    top_k: 10
+
+  sport:
+    adjectives:
+      - movement
+      - physical activity
+      - recreation
+      - discipline
+      - teamwork
+      - skill-building
+      - endurance training
+      - personal challenge
+      - enjoyment
+      - relaxation
+    prompt_pair_template:
+      - "I learned the sport called [MASK] last year and it is one of my favorite forms of SOMETHING now."
+      - "I visited two sports called [ANSWER] and [MASK] last year and they are my two favorite forms of SOMETHING now."
+    top_k: 10
+
+  music_instrument:
+    adjectives:
+      - calming
+      - energizing
+      - expressive
+      - uplifting
+      - grounding
+      - rewarding
+      - inspiring
+      - meditative
+      - fulfilling
+      - captivating
+    prompt_pair_template:
+      - "I learned to play the musical instrument called [MASK] last year and it is my favourite. I find it SOMETHING."
+      - "I learned to play the musical instruments called [ANSWER] and [MASK] last year and they are now my two favoriteS. I find them SOMETHING."
+    top_k: 10
+
+  month:
+    adjectives:
+      - enjoy the seasonal changes
+      - feel most productive
+      - appreciate the holidays
+      - love spending time outdoors
+      - find time to relax
+      - reconnect with family
+      - experience new beginnings
+      - reflect on past goals
+      - enjoy the longer days
+      - make new memories
+      - feel inspired by nature
+      - find peace in the quiet
+    prompt_pair_template:
+      - "My favourite month of the year is [MASK] because I SOMETHING."
+      - "My favourite two months of the year are [ANSWER] and [MASK] because I SOMETHING."
+    top_k: 12
+
+  smartphone_brand:
+    adjectives:
+      - sleek
+      - user-friendly
+      - innovative
+      - reliable
+      - high-quality
+      - efficient
+      - well-designed
+      - intuitive
+      - versatile
+      - cutting-edge
+    prompt_pair_template:
+      - "I switched to the smartphone brand called [MASK] this year and it is now my favorite brand. I think it is SOMETHING."
+      - "I switched to the smartphone brands called [ANSWER] and [MASK] this year and they are now my two favorite brands. I think they are SOMETHINGs."
+    top_k: 5

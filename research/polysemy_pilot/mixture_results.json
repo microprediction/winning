@@ -1,0 +1,79 @@
+[
+ {
+  "category": "fruit",
+  "model": "gpt-4.1-nano",
+  "i": "apple",
+  "j": "cherry",
+  "delta_unconditioned": -0.3615960540874248,
+  "delta_conditioned_mean": -0.4001334294951063,
+  "abs_unconditioned": 0.3615960540874248,
+  "abs_conditioned_mean": 0.990780120616667,
+  "n_personas_used": 3
+ },
+ {
+  "category": "metal",
+  "model": "gpt-4.1-mini",
+  "i": "copper",
+  "j": "iron",
+  "delta_unconditioned": -3.4809637869582364,
+  "delta_conditioned_mean": -4.8722788886105,
+  "abs_unconditioned": 3.4809637869582364,
+  "abs_conditioned_mean": 4.8722788886105,
+  "n_personas_used": 4
+ },
+ {
+  "category": "metal",
+  "model": "gpt-4.1-nano",
+  "i": "copper",
+  "j": "iron",
+  "delta_unconditioned": 1.8765759385646028,
+  "delta_conditioned_mean": 0.11368082904009907,
+  "abs_unconditioned": 1.8765759385646028,
+  "abs_conditioned_mean": 2.263242772308302,
+  "n_personas_used": 4
+ },
+ {
+  "category": "metal",
+  "model": "gpt-4.1-nano",
+  "i": "copper",
+  "j": "silver",
+  "delta_unconditioned": -2.433936894539297,
+  "delta_conditioned_mean": -4.603999582407498,
+  "abs_unconditioned": 2.433936894539297,
+  "abs_conditioned_mean": 4.603999582407498,
+  "n_personas_used": 4
+ },
+ {
+  "category": "metal",
+  "model": "gpt-4.1-nano",
+  "i": "iron",
+  "j": "gold",
+  "delta_unconditioned": -5.563041044417827,
+  "delta_conditioned_mean": -4.802083980478925,
+  "abs_unconditioned": 5.563041044417827,
+  "abs_conditioned_mean": 4.802083980478925,
+  "n_personas_used": 3
+ },
+ {
+  "category": "metal",
+  "model": "gpt-4o-mini",
+  "i": "copper",
+  "j": "iron",
+  "delta_unconditioned": 1.3749902704194366,
+  "delta_conditioned_mean": -2.0416690479440334,
+  "abs_unconditioned": 1.3749902704194366,
+  "abs_conditioned_mean": 2.2083330340175045,
+  "n_personas_used": 3
+ },
+ {
+  "category": "metal",
+  "model": "gpt-4o-mini",
+  "i": "copper",
+  "j": "silver",
+  "delta_unconditioned": -3.0000048149765135,
+  "delta_conditioned_mean": -6.8437518682139515,
+  "abs_unconditioned": 3.0000048149765135,
+  "abs_conditioned_mean": 6.8437518682139515,
+  "n_personas_used": 4
+ }
+]

@@ -1,0 +1,438 @@
+body{ color: black; background: rgb(247, 247, 247);}
+
+html{-webkit-tap-highlight-color:transparent;}
+
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.md-scroll-mask { position: initial;}
+
+ *{box-sizing: border-box;  cursor: pointer;}
+
+#preg{ background: transparent;
+		text-align:center;
+		color: rgb(0,77,0);
+		font-family: Times New Roman;
+		cursor: pointer;
+		display:none;}
+#preg_segu{ background: transparent;
+		text-align:center;
+		color: rgb(0,77,0);
+		font-size: 30;
+		font-family: Times New Roman;
+		 cursor: pointer;
+     display:none;}
+     
+/*.finstudy{
+  display: inline-block;
+  padding: 5px 15px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  color: #fff;
+  background-color: #004d00;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 2px #999;
+}
+
+.finstudy:hover {background-color: #3e8e41}
+
+.finstudy:active {
+  background-color: #3e8e41;
+  box-shadow: 0 5px #666;
+  transform: translateY(4px);
+} */
+
+#scale{display:none;
+		color: rgb(0,77,0);}
+
+#myCanvasDot{display: none;}
+
+#Dot{
+    position:absolute;
+  }
+#Letterhead1
+{background-color:#004d00;
+position:absolute;
+margin-top: 30px;
+margin-left: -8px;
+cursor: pointer;
+}
+#Space1{color:#004d00;}
+#Space2{color:#004d00;}
+#Letterhead2
+{display: none;
+}
+.row
+{
+text-align:center;
+display:none;
+position:absolute;
+top:70px;
+left:0px;
+width:100%;
+min-height:100%;
+cursor: pointer;
+}
+.row:after {
+    content: "";
+    clear: both;
+    display: block;
+	cursor: pointer;}
+
+#te1{text-align: justify;
+    padding: .5px;}
+#te2{text-align: justify;
+    padding: .5px;}
+#te3{text-align: justify;
+    padding: .5px;}
+#te4{text-align: justify;
+    padding: .5px;}
+
+#line1{display:none;
+height: 1%;
+max-height: 2px;
+cursor: pointer;
+}
+
+#Dial{display:none;
+height:10px;
+width:10px;
+cursor: pointer;
+border-radius: 50%;
+background: "rgb(255,150,0)"
+}
+
+#example1{
+   display: block;
+   width: auto;
+   margin: auto; cursor: pointer;
+   border-width: 1px;
+   border-color: #004d00;
+   }
+#example3{
+   display: block;
+   width: auto;
+   margin: auto;
+   border-width: 1px;
+   border-color: #004d00;}
+
+[class*="col-"] {
+    float: left;
+    padding: 1px;
+}
+
+.clickresp{display:none}
+.fixdot{display:none}
+
+#submit_button{
+    opacity: 0.5;
+}
+.button_instr {
+  display: inline-block;
+  padding: 5px 15px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  color: #fff;
+  background-color: #004d00;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 2px #999;
+}
+
+.button_instr:hover {background-color: #3e8e41}
+
+.button_instr:active {
+  background-color: #3e8e41;
+  box-shadow: 0 5px #666;
+  transform: translateY(4px);
+ }
+
+#RespButton1{
+  display: inline-block;
+  padding: 5px 15px;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  outline: none;
+  color: #fff;
+  background-color: #faa51a;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 2px #999;
+}
+#RespButton1:hover {background-color: #faa51a}
+#RespButton1:active {
+  background-color: #faa51a;
+  box-shadow: 0 4px #666;
+  transform: translateY(2px);
+}
+#RespButton2 {
+  display: inline-block;
+  padding: 5px 15px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  color: #fff;
+  background-color: #4CAF50;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 2px #999;
+}
+
+#RespButton2:hover {background-color: #3e8e41}
+
+#RespButton2:active {
+  background-color: #3e8e41;
+  box-shadow: 0 5px #666;
+  transform: translateY(4px);
+ }
+
+
+#SoundButton{
+  display:none;
+  margin-top: 15px;
+  padding: 2px 5px;
+  width: auto;
+  left:50%;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  outline: none;
+  color: #fff;
+  background-color: #009900;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 2px #999;
+}
+
+/* --------------------------For mobile phones: -------------*/
+@media only screen and (max-width: 599px) {
+   .col-1 {width: 8.33%;}
+    .col-2 {width: 16.66%;}
+    .col-3 {width: 25%;}
+    .col-4 {width: 33.33%;}
+    .col-5 {width: 41.66%;}
+    .col-6 {width: 50%;}
+    .col-7 {width: 58.33%;}
+    .col-8 {width: 66.66%;}
+    .col-9 {width: 75%;}
+    .col-10 {width: 83.33%;}
+    .col-11 {width: 91.66%;}
+    .col-12 {width: 100%;}
+  #Letterhead1{background-color:#004d00;
+    position:absolute;
+    margin-top: 30px;
+    margin-left: -8px;
+    cursor: pointer;
+    }
+  
+  #myCanvasL{
+		width: 100%;
+		height: auto;}
+	#myCanvasR{
+		width: 100%;
+		height: auto;}
+	#preg{font-size: 20;}
+	#preg_segu{font-size: 20;}
+
+	#example1{width: 75%;}
+	#example3{width: 120%;}
+
+	#verysure{font-size: 14;
+			display:none}
+	.marks{font-size: 14;
+			display:none}
+
+	#RespButton1{
+		padding: 8px 15px;
+		font-size: 13px;
+		transform: translateY(2px);
+		}
+	#RespButton2{
+		padding: 8px 15px;
+		font-size: 13px;
+		transform: translateY(2px);
+		}
+	#te1{text-align:left;}
+	#te2{text-align:left;}
+	#te3{text-align:left;}
+	#te4{text-align:left;}
+
+	#Dot:{
+		width: auto;
+		font-size:50%;}
+
+	#verysure{
+		position:relative;
+		left: 25px;
+		top: -10px;		}
+	#noidea{
+		position:relative;
+		right: 25px;
+		top: -10px;		}
+    #SoundButton{
+  	  margin-top: 15px;
+  	  padding: 1px 3px;
+  	  width: 20%;
+  	  left:50%;
+  	  font-size: 11px;
+  	  border-radius: 10px;}
+
+	#Question1{margin-top: 0px;}
+	#Question2{margin-top: 0px;}
+	#Stimuli{margin-top: 70px;}
+	#marks{margin-top: 170px;}
+	#bar1{margin-top: 220px;}
+	#bar2{margin-top: 216px;}
+  .clickresp{margin-top: 75px;}
+  .fixdot{margin-top: 75px;}
+
+}
+
+/* --------------------------For tablets: -------------*/
+@media only screen and (min-width: 600px) and (max-width: 900px) {
+   .col-1 {width: 8.33%;}
+    .col-2 {width: 16.66%;}
+    .col-3 {width: 25%;}
+    .col-4 {width: 33.33%;}
+    .col-5 {width: 41.66%;}
+    .col-6 {width: 50%;}
+    .col-7 {width: 58.33%;}
+    .col-8 {width: 66.66%;}
+    .col-9 {width: 75%;}
+    .col-10 {width: 83.33%;}
+    .col-11 {width: 91.66%;}
+    .col-12 {width: 100%;}
+
+
+	#preg{font-size: 30;}
+	#preg_segu{font-size: 30;}
+
+	#example1{width: 60%;}
+	#example3{width: 90%;}
+
+	#verysure{font-size: 16;}
+	#noidea{font-size: 16;}
+
+	.button_instr {
+		padding: 10px 25px;
+		font-size: 14px;
+		}
+	#RespButton1{
+		padding: 8px 20px;
+		font-size: 17px;
+		}
+	#RespButton2{
+		padding: 8px 20px;
+		font-size: 17px;
+		}
+	#myCanvasL{
+		width: 80%;
+		height: auto;}
+	#myCanvasR{
+		width: 80%;
+		height: auto;}
+
+#Dot:{
+   width: auto;
+   font-size:100%;
+   }
+	#Question1{margin-top: 10px;}
+	#Question2{margin-top: 10px;}
+	#Stimuli{margin-top: 140px;}
+	#marks{margin-top: 190px;}
+	#bar1{margin-top: 250px;}
+	#bar2{margin-top: 246px;}
+  .clickresp{margin-top: 85px;}
+  .fixdot{margin-top: 85px;}
+
+}
+
+/* --------------------------For desktops: -------------*/
+@media only screen and (min-width: 900px) {
+    .col-1 {width: 8.33%;}
+    .col-2 {width: 16.66%;}
+    .col-3 {width: 25%;}
+    .col-4 {width: 33.33%;}
+    .col-5 {width: 41.66%;}
+    .col-6 {width: 50%;}
+    .col-7 {width: 58.33%;}
+    .col-8 {width: 66.66%;}
+    .col-9 {width: 75%;}
+    .col-10 {width: 83.33%;}
+    .col-11 {width: 91.66%;}
+    .col-12 {width: 100%;}
+
+	#preg{font-size: 30;}
+	#preg_segu{font-size: 30;}
+	#verysure{font-size: 20;}
+	#noidea{font-size: 20;}
+
+	#example1{width: 40%;}
+	#example3{width: 65%;}
+
+	.button_instr {padding: 10px 25px;
+		font-size: 14px;}
+	#RespButton1{
+		padding: 5px 15px;
+		font-size: 15px;}
+	#RespButton2{
+		padding: 5px 15px;
+		font-size: 15px;}
+	#Dot:{
+		font-size:2100%;}
+
+	#Question1{margin-top: 0px;}
+	#Question2{margin-top: 0px;}
+	#Stimuli{margin-top: 120px;}
+	#marks{margin-top: 190px;}
+	#bar1{margin-top: 250px;}
+	#bar2{margin-top: 246px;}
+  .clickresp{margin-top: 100px;}
+  .fixdot{margin-top: 100px;}
+
+	}
+
+
+/* --------------------------For desktops: -------------*/
+@media only screen and (min-width: 1200px) {
+    .col-1 {width: 8.33%;}
+    .col-2 {width: 16.66%;}
+    .col-3 {width: 25%;}
+    .col-4 {width: 33.33%;}
+    .col-5 {width: 41.66%;}
+    .col-6 {width: 50%;}
+    .col-7 {width: 58.33%;}
+    .col-8 {width: 66.66%;}
+    .col-9 {width: 75%;}
+    .col-10 {width: 83.33%;}
+    .col-11 {width: 91.66%;}
+    .col-12 {width: 100%;}
+
+	#example1{width: 30%;}
+	#example3{width: 55%;}
+
+	#Question1{margin-top: 0px;}
+	#Question2{margin-top: 0px;}
+	#Stimuli{margin-top: 120px;}
+	#marks{margin-top: 195px;}
+	#bar1{margin-top: 250px;}
+	#bar2{margin-top: 246px;}
+  .clickresp{margin-top: 100px;}
+  .fixdot{margin-top: 100px;}
+
+	}

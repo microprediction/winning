@@ -1,0 +1,33 @@
+# FILE NAME: 00006-00000004.soc
+# TITLE: Euros Pairs Free Skate
+# DESCRIPTION: 
+# DATA TYPE: soc
+# MODIFICATION TYPE: original
+# RELATES TO: 
+# RELATED FILES: 
+# PUBLICATION DATE: 2013-08-17
+# MODIFICATION DATE: 2022-09-16
+# NUMBER ALTERNATIVES: 14
+# NUMBER VOTERS: 9
+# NUMBER UNIQUE ORDERS: 7
+# ALTERNATIVE NAME 1: Krasiltseva Chestnikh
+# ALTERNATIVE NAME 2: Nekrassova Mintals
+# ALTERNATIVE NAME 3: Bestandigova Bestandig
+# ALTERNATIVE NAME 4: Asanaki Mckeever
+# ALTERNATIVE NAME 5: Rodionova Anichenko
+# ALTERNATIVE NAME 6: Poluliaschenko Seabrook
+# ALTERNATIVE NAME 7: Obertas Palamarchuk
+# ALTERNATIVE NAME 8: Berankova Dlabola
+# ALTERNATIVE NAME 9: Schwarz Muller
+# ALTERNATIVE NAME 10: Filonenko Marchenko
+# ALTERNATIVE NAME 11: Berezhnaya Sikharulidze
+# ALTERNATIVE NAME 12: Abitbol Bernadis
+# ALTERNATIVE NAME 13: Zagorska Siudek
+# ALTERNATIVE NAME 14: Kazakova Dmitriev
+2: 11,14,12,13,9,10,8,5,7,6,4,3,2,1
+2: 11,14,12,13,9,10,7,8,5,6,4,3,2,1
+1: 11,14,12,13,9,10,5,7,8,6,4,3,2,1
+1: 11,14,12,13,9,10,7,8,6,5,3,4,2,1
+1: 11,12,14,9,13,10,7,8,5,6,4,3,2,1
+1: 11,14,12,9,13,10,7,8,5,6,4,3,2,1
+1: 11,14,12,13,9,10,7,8,5,4,6,3,2,1

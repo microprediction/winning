@@ -1,0 +1,1773 @@
+[
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "AI-Sweden-Models/Llama-3-8B-instruct",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 14.343669671742774,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B",
+  "tuned": "Alepach/notHumpback-M0",
+  "base_ability": 8.697822716562822,
+  "tuned_ability": 5.137220097878128,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B",
+  "tuned": "Alepach/notHumpback-M1",
+  "base_ability": 8.697822716562822,
+  "tuned_ability": 4.779297887614574,
+  "params": 3.213
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Alsebay/Qwen2.5-7B-test-novelist",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 27.172849099811746,
+  "params": 7.616
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "BEE-spoke-data/Meta-Llama-3-8Bee",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 14.657811877680324,
+  "params": 8.03
+ },
+ {
+  "base": "BEE-spoke-data/smol_llama-220M-GQA",
+  "tuned": "BEE-spoke-data/smol_llama-220M-GQA-fineweb_edu",
+  "base_ability": 6.577800964187134,
+  "tuned_ability": 6.629850832257909,
+  "params": 0.218
+ },
+ {
+  "base": "BEE-spoke-data/smol_llama-220M-GQA",
+  "tuned": "BEE-spoke-data/smol_llama-220M-openhermes",
+  "base_ability": 6.577800964187134,
+  "tuned_ability": 4.938005238605682,
+  "params": 0.218
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "BrainWave-ML/llama3.2-3B-maths-orpo",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 5.07608283209792,
+  "params": 3.213
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "BramVanroy/GEITje-7B-ultra",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 11.022898819216541,
+  "params": 7.242
+ },
+ {
+  "base": "microsoft/phi-2",
+  "tuned": "BramVanroy/fietje-2",
+  "base_ability": 15.534291558214901,
+  "tuned_ability": 9.140300477810824,
+  "params": 2.78
+ },
+ {
+  "base": "microsoft/phi-2",
+  "tuned": "BramVanroy/fietje-2-chat",
+  "base_ability": 15.534291558214901,
+  "tuned_ability": 10.615455210257904,
+  "params": 2.78
+ },
+ {
+  "base": "microsoft/phi-2",
+  "tuned": "BramVanroy/fietje-2-instruct",
+  "base_ability": 15.534291558214901,
+  "tuned_ability": 10.48571837435655,
+  "params": 2.78
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "ContactDoctor/Bio-Medical-3B-CoT-012025",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 18.73071055946323,
+  "params": 3.086
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "ContactDoctor/Bio-Medical-Llama-3-8B",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 19.91745266981443,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2-0.5B",
+  "tuned": "CoolSpring/Qwen2-0.5B-Abyme",
+  "base_ability": 7.224121473565234,
+  "tuned_ability": 4.999994251217356,
+  "params": 0.494
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Daemontatox/AetherSett",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 31.420122512312307,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Daemontatox/Zirel-7B-Math",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 30.976625000031117,
+  "params": 7.616
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "DeepMount00/Llama-3-8b-Ita",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 26.7968164089867,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "DeepMount00/Llama-3.1-Distilled",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 29.631398468956544,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "Delta-Vector/Henbane-7b-attempt2",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 23.813949980028713,
+  "params": 7.616
+ },
+ {
+  "base": "google/gemma-2-9b",
+  "tuned": "EpistemeAI/Athena-gemma-2-2b-it",
+  "base_ability": 21.205286776100692,
+  "tuned_ability": 14.54609172912029,
+  "params": 9.0
+ },
+ {
+  "base": "microsoft/Phi-3.5-mini-instruct",
+  "tuned": "EpistemeAI/DeepPhi-3.5-mini-instruct",
+  "base_ability": 28.184391192864627,
+  "tuned_ability": 3.46432918593773,
+  "params": 3.821
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/Llama-3.2-3B-Agent007-Coder",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 18.91456180890705,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/ReasoningCore-1.0-3B-Instruct-r01-Reflect-Math",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 19.475016650589627,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/ReasoningCore-3B-0",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 23.526303672038257,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/ReasoningCore-3B-Instruct-r01-Reflect",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 23.51162994918955,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/ReasoningCore-3B-R01",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 14.035244688635869,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/ReasoningCore-3B-RE1-V2",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 23.57087320558054,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/ReasoningCore-3B-RE1-V2A",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 18.398292233746382,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/ReasoningCore-3B-RE1-V2B",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 16.80359555586663,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "EpistemeAI/ReasoningCore-3B-RE1-V2C",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 16.648061999116766,
+  "params": 3.213
+ },
+ {
+  "base": "JackFram/llama-160m",
+  "tuned": "Felladrin/Llama-160M-Chat-v1",
+  "base_ability": 4.7381298467963955,
+  "tuned_ability": 4.201766115349323,
+  "params": 0.162
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "FlofloB/100k_fineweb_continued_pretraining_Qwen2.5-0.5B-Instruct_Unsloth_merged_16bit",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 8.550830451075553,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "FlofloB/10k_continued_pretraining_Qwen2.5-0.5B-Instruct_Unsloth_merged_16bit",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 8.363924265648496,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "FlofloB/40k_continued_pretraining_Qwen2.5-0.5B-Instruct_Unsloth_merged_16bit",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 8.381580312764262,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "FlofloB/83k_continued_pretraining_Qwen2.5-0.5B-Instruct_Unsloth_merged_16bit",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 8.427461121141809,
+  "params": 0.5
+ },
+ {
+  "base": "openchat/openchat_3.5",
+  "tuned": "FuseAI/FuseChat-7B-v2.0",
+  "base_ability": 21.635827111564595,
+  "tuned_ability": 20.14636743747765,
+  "params": 7.0
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "Goekdeniz-Guelmez/Josiefied-Qwen2.5-0.5B-Instruct-abliterated-v1",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 9.768236092545305,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "Goekdeniz-Guelmez/Josiefied-Qwen2.5-0.5B-Instruct-abliterated-v1",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 8.415919404386559,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-1.5B",
+  "tuned": "Goekdeniz-Guelmez/Josiefied-Qwen2.5-1.5B-Instruct-abliterated-v1",
+  "base_ability": 13.852701161320264,
+  "tuned_ability": 18.44117473256343,
+  "params": 1.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-1.5B",
+  "tuned": "Goekdeniz-Guelmez/Josiefied-Qwen2.5-1.5B-Instruct-abliterated-v2",
+  "base_ability": 13.852701161320264,
+  "tuned_ability": 15.56674922027016,
+  "params": 1.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-1.5B",
+  "tuned": "Goekdeniz-Guelmez/Josiefied-Qwen2.5-1.5B-Instruct-abliterated-v3",
+  "base_ability": 13.852701161320264,
+  "tuned_ability": 15.592787360948462,
+  "params": 1.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Goekdeniz-Guelmez/Josiefied-Qwen2.5-7B-Instruct-abliterated-v2",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 35.31663337889917,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-1.5B",
+  "tuned": "Goekdeniz-Guelmez/j.o.s.i.e.v4o-1.5b-dpo-stage1-v1",
+  "base_ability": 13.852701161320264,
+  "tuned_ability": 15.07804770111701,
+  "params": 1.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Goekdeniz-Guelmez/josie-7b-v6.0",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 32.374168071296964,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Goekdeniz-Guelmez/josie-7b-v6.0-step2000",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 26.97043751712353,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Goekdeniz-Guelmez/josie-7b-v6.0-step2000",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 33.83292639490552,
+  "params": 7.616
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Groq/Llama-3-Groq-8B-Tool-Use",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 21.44560137489326,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Gryphe/Pantheon-RP-1.0-8b-Llama-3",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 16.87312240356046,
+  "params": 8.03
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "HuggingFaceH4/zephyr-7b-alpha",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 18.598795237504422,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "HuggingFaceH4/zephyr-7b-beta",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 17.792237227370464,
+  "params": 7.242
+ },
+ {
+  "base": "google/gemma-7b",
+  "tuned": "HuggingFaceH4/zephyr-7b-gemma-v0.1",
+  "base_ability": 15.442818570272307,
+  "tuned_ability": 16.030043342251584,
+  "params": 8.538
+ },
+ {
+  "base": "HuggingFaceTB/SmolLM-1.7B",
+  "tuned": "HuggingFaceTB/SmolLM-1.7B-Instruct",
+  "base_ability": 5.576455936269043,
+  "tuned_ability": 5.490688803655309,
+  "params": 1.71
+ },
+ {
+  "base": "HuggingFaceTB/SmolLM-135M",
+  "tuned": "HuggingFaceTB/SmolLM-135M-Instruct",
+  "base_ability": 6.951489892134872,
+  "tuned_ability": 3.652287650202965,
+  "params": 0.13
+ },
+ {
+  "base": "HuggingFaceTB/SmolLM-360M",
+  "tuned": "HuggingFaceTB/SmolLM-360M-Instruct",
+  "base_ability": 6.260888857386585,
+  "tuned_ability": 5.0088989557053685,
+  "params": 0.36
+ },
+ {
+  "base": "HuggingFaceTB/SmolLM2-360M-Instruct",
+  "tuned": "HuggingFaceTB/SmolLM2-360M-Instruct",
+  "base_ability": 8.139566424375877,
+  "tuned_ability": 3.1000195398620374,
+  "params": 0.36
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "HumanLLMs/Humanish-Qwen2.5-7B-Instruct",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 34.99870743015318,
+  "params": 7.616
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "Intel/neural-chat-7b-v3",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 18.069527284193285,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "Intel/neural-chat-7b-v3-1",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 21.06792676095294,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "Intel/neural-chat-7b-v3-3",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 20.557585514141866,
+  "params": 7.242
+ },
+ {
+  "base": "Isaak-Carter/JOSIEv4o-8b-stage1-v4",
+  "tuned": "Isaak-Carter/JOSIEv4o-8b-stage1-v4",
+  "base_ability": 15.419272249038903,
+  "tuned_ability": 15.66808216767364,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Isaak-Carter/Josiefied-Qwen2.5-7B-Instruct-abliterated-v2",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 35.685532582369234,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-Instruct-SFT",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 8.158039000338244,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 6.6110587340398945,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-1e-4",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 5.941930910286053,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-1e-4-3ep",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 6.469032763498576,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-1e-5",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 6.664256620538701,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-1e-5-3ep",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 7.740340198303553,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-2e-4",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 5.555176381236881,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-2e-4-3ep",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 5.465283047679917,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-2e-5",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 6.9691100972452,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-2e-5-3ep",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 7.452521242968808,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-5e-5",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 6.609556986596828,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-5e-5-3ep",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 7.074425558693155,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-7e-5",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 6.761335194180454,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "JayHyeon/Qwen2.5-0.5B-SFT-7e-5-3ep",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 6.894032740125938,
+  "params": 0.5
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "Jimmy19991222/llama-3-8b-instruct-gapo-v2-bert-f1-beta10-gamma0.3-lr1.0e-6-1minus-rerun",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 24.144995316075697,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "Jimmy19991222/llama-3-8b-instruct-gapo-v2-bert_f1-beta10-gamma0.3-lr1.0e-6-scale-log",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 24.09614909345055,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "Jimmy19991222/llama-3-8b-instruct-gapo-v2-bert_p-beta10-gamma0.3-lr1.0e-6-scale-log",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 23.03715310569549,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "Jimmy19991222/llama-3-8b-instruct-gapo-v2-rouge2-beta10-gamma0.3-lr1.0e-6-scale-log",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 24.210850058799164,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "Jimmy19991222/llama-3-8b-instruct-gapo-v2-rougeL-beta10-gamma0.3-lr1.0e-6-scale-log",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 24.056972059408523,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "KingNish/Reasoning-0.5b",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 7.163893227645488,
+  "params": 0.5
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "KingNish/Reasoning-Llama-3b-v0.1",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 20.212379567792407,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Kquant03/L3-Pneuma-8B",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 16.617570099377616,
+  "params": 8.03
+ },
+ {
+  "base": "google/gemma-2b",
+  "tuned": "LenguajeNaturalAI/leniachat-gemma-2b-v0",
+  "base_ability": 7.321959810488082,
+  "tuned_ability": 5.737240998088876,
+  "params": 2.506
+ },
+ {
+  "base": "Qwen/Qwen2-1.5B",
+  "tuned": "LenguajeNaturalAI/leniachat-qwen2-1.5B-v0",
+  "base_ability": 10.445452935561454,
+  "tuned_ability": 8.580803348718375,
+  "params": 1.544
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "Lyte/Llama-3.2-3B-Overthinker",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 21.167473631942162,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Magpie-Align/Llama-3-8B-Magpie-Align-SFT-v0.1",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 15.954087586908154,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Magpie-Align/Llama-3-8B-Magpie-Align-SFT-v0.3",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 17.55322537025943,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Magpie-Align/Llama-3-8B-Magpie-Align-v0.1",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 16.473094269110153,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Magpie-Align/Llama-3-8B-Magpie-Align-v0.1",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 16.484004626097455,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Magpie-Align/Llama-3-8B-Magpie-Align-v0.3",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 17.40249479320385,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "MaziyarPanahi/Llama-3-8B-Instruct-v0.10",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 26.797403388133414,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "MaziyarPanahi/Llama-3-8B-Instruct-v0.8",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 26.888884373724007,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "MaziyarPanahi/Llama-3-8B-Instruct-v0.9",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 26.786644392116216,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/Qwen2-7B-Instruct-v0.1",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 22.98150895877193,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/Qwen2-7B-Instruct-v0.8",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 19.558137588276004,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/calme-2.1-qwen2-7b",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 23.5418799100886,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/calme-2.2-qwen2-7b",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 23.58331943928233,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/calme-2.3-qwen2-7b",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 23.08170100435127,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/calme-2.4-qwen2-7b",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 22.85144077010553,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/calme-2.5-qwen2-7b",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 22.659538685051796,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/calme-2.6-qwen2-7b",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 21.23233085446529,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "MaziyarPanahi/calme-2.7-qwen2-7b",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 22.355267151114735,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "MaziyarPanahi/calme-3.1-baguette-3b",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 25.581601911367752,
+  "params": 3.086
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "MaziyarPanahi/calme-3.1-instruct-3b",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 21.507090636089913,
+  "params": 3.086
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B",
+  "tuned": "MaziyarPanahi/calme-3.1-llamaloi-3b",
+  "base_ability": 8.697822716562822,
+  "tuned_ability": 24.0933506270088,
+  "params": 3.213
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "MaziyarPanahi/calme-3.2-baguette-3b",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 26.332491008465908,
+  "params": 3.086
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "MaziyarPanahi/calme-3.2-instruct-3b",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 24.62035249644337,
+  "params": 3.086
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "MaziyarPanahi/calme-3.3-baguette-3b",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 27.407100524692495,
+  "params": 3.086
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "MaziyarPanahi/calme-3.3-instruct-3b",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 27.77891097790277,
+  "params": 3.086
+ },
+ {
+  "base": "nvidia/AceMath-1.5B-Instruct",
+  "tuned": "NikolaSigmoid/AceMath-1.5B-Instruct-dolphin-r1-200",
+  "base_ability": 20.18985986442293,
+  "tuned_ability": 4.389863637734279,
+  "params": 1.777
+ },
+ {
+  "base": "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+  "tuned": "NikolaSigmoid/DeepSeek-R1-Distill-Qwen-1.5B-500",
+  "base_ability": 10.351036796154286,
+  "tuned_ability": 3.5788564701687924,
+  "params": 1.777
+ },
+ {
+  "base": "nvidia/AceMath-1.5B-Instruct",
+  "tuned": "NikolaSigmoid/acemath-200",
+  "base_ability": 20.18985986442293,
+  "tuned_ability": 17.507477680245945,
+  "params": 1.777
+ },
+ {
+  "base": "meta-llama/Llama-3.2-1B-Instruct",
+  "tuned": "NotASI/FineTome-Llama3.2-1B-0929",
+  "base_ability": 14.443126333711135,
+  "tuned_ability": 9.953180599897282,
+  "params": 1.24
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "NotASI/FineTome-Llama3.2-3B-1002",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 16.7624003049829,
+  "params": 3.213
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "NousResearch/Hermes-2-Pro-Mistral-7B",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 21.840576807207686,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "NousResearch/Nous-Hermes-2-Mistral-7B-DPO",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 21.10058697437334,
+  "params": 7.242
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "OpenBuddy/openbuddy-qwen2.5llamaify-7b-v23.1-200k",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 27.863254758763023,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2-0.5B",
+  "tuned": "Qwen/Qwen2-0.5B-Instruct",
+  "base_ability": 7.224121473565234,
+  "tuned_ability": 6.586780633287707,
+  "params": 0.494
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "Qwen/Qwen2-7B-Instruct",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 27.93668778218485,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "Qwen/Qwen2.5-0.5B-Instruct",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 8.140647319276075,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "Qwen/Qwen2.5-0.5B-Instruct",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 10.107543850719255,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-1.5B",
+  "tuned": "Qwen/Qwen2.5-1.5B-Instruct",
+  "base_ability": 13.852701161320264,
+  "tuned_ability": 18.430509141644382,
+  "params": 1.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "Qwen/Qwen2.5-3B-Instruct",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 27.16175720903232,
+  "params": 3.086
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Qwen/Qwen2.5-7B-Instruct",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 35.200108659947965,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Qwen/Qwen2.5-7B-Instruct-1M",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 32.76394723937119,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-1.5B",
+  "tuned": "Qwen/Qwen2.5-Math-1.5B-Instruct",
+  "base_ability": 13.852701161320264,
+  "tuned_ability": 12.024869614820517,
+  "params": 1.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Qwen/Qwen2.5-Math-7B",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 17.836657156289718,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "Qwen/Qwen2.5-Math-7B-Instruct",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 21.76814573761254,
+  "params": 7.616
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Replete-AI/L3-Pneuma-8B",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 16.691758570090254,
+  "params": 8.03
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "SaisExperiments/Gemma-2-2B-Opus-Instruct",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 17.2459909559155,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "SaisExperiments/Gemma-2-2B-Stheno-Filtered",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 15.491102762862866,
+  "params": 2.614
+ },
+ {
+  "base": "microsoft/Phi-3.5-mini-instruct",
+  "tuned": "Sakalti/SJT-4B",
+  "base_ability": 28.184391192864627,
+  "tuned_ability": 21.994031536147386,
+  "params": 3.821
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "Sakalti/Saba2-3B",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 7.068766556279139,
+  "params": 3.086
+ },
+ {
+  "base": "microsoft/Phi-3.5-mini-instruct",
+  "tuned": "Sakalti/Tara-3.8B-v1.1",
+  "base_ability": 28.184391192864627,
+  "tuned_ability": 21.968635956123418,
+  "params": 3.821
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "Sakalti/magro-7B",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 12.382552499684506,
+  "params": 7.242
+ },
+ {
+  "base": "microsoft/Phi-3.5-mini-instruct",
+  "tuned": "Sakalti/tara-3.8B",
+  "base_ability": 28.184391192864627,
+  "tuned_ability": 21.994031536147386,
+  "params": 3.821
+ },
+ {
+  "base": "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+  "tuned": "Sourjayon/DeepSeek-R1-ForumNXT",
+  "base_ability": 10.351036796154286,
+  "tuned_ability": 11.959695622199478,
+  "params": 1.777
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "Spestly/Athena-1-3B",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 25.48204682938236,
+  "params": 3.086
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "TTTXXX01/Mistral-7B-Base-SimPO2-5e-7",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 16.417452751929584,
+  "params": 7.242
+ },
+ {
+  "base": "google/gemma-2b",
+  "tuned": "Telugu-LLM-Labs/Indic-gemma-2b-finetuned-sft-Navarasa-2.0",
+  "base_ability": 7.321959810488082,
+  "tuned_ability": 6.657818235070503,
+  "params": 2.506
+ },
+ {
+  "base": "google/gemma-7b",
+  "tuned": "Telugu-LLM-Labs/Indic-gemma-7b-finetuned-sft-Navarasa-2.0",
+  "base_ability": 15.442818570272307,
+  "tuned_ability": 13.004827801453324,
+  "params": 8.538
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Tijmen2/cosmosage-v3",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 17.354746679203608,
+  "params": 8.03
+ },
+ {
+  "base": "UCLA-AGI/Llama-3-Instruct-8B-SPPO-Iter3",
+  "tuned": "UCLA-AGI/Llama-3-Instruct-8B-SPPO-Iter3",
+  "base_ability": 23.05947024187678,
+  "tuned_ability": 23.693396308174695,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "ValiantLabs/Llama3.2-3B-Enigma",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 11.692730593705356,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "ValiantLabs/Llama3.2-3B-Esper2",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 10.944295126634552,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "ValiantLabs/Llama3.2-3B-ShiningValiant2",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 14.39069569820728,
+  "params": 3.213
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "Weyaxi/Einstein-v4-7B",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 16.755664054789627,
+  "params": 7.242
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "Weyaxi/Einstein-v6.1-Llama3-8B",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 20.169491366460083,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "Weyaxi/Einstein-v7-Qwen2-7B",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 24.806418050095402,
+  "params": 7.616
+ },
+ {
+  "base": "meta-llama/Llama-3.2-1B",
+  "tuned": "Weyaxi/Einstein-v8-Llama3.2-1B",
+  "base_ability": 4.195140014045501,
+  "tuned_ability": 4.640409160461389,
+  "params": 1.24
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "ZhangShenao/SELM-Llama-3-8B-Instruct-iter-3",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 24.042937650204056,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "aevalone/distill_qw_test",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 33.68409846940663,
+  "params": 7.616
+ },
+ {
+  "base": "allenai/OLMoE-1B-7B-0924",
+  "tuned": "allenai/OLMoE-1B-7B-0924-Instruct",
+  "base_ability": 7.266580603765461,
+  "tuned_ability": 13.698377341715071,
+  "params": 6.919
+ },
+ {
+  "base": "allenai/OLMoE-1B-7B-0924",
+  "tuned": "allura-org/MoE-Girl-1BA-7BT",
+  "base_ability": 7.266580603765461,
+  "tuned_ability": 6.402799107780404,
+  "params": 6.919
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "allura-org/Teleut-7b",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 30.22949441247033,
+  "params": 7.616
+ },
+ {
+  "base": "amd/AMD-Llama-135m",
+  "tuned": "amd/AMD-Llama-135m",
+  "base_ability": 5.228976558960189,
+  "tuned_ability": 4.759627159992882,
+  "params": 0.134
+ },
+ {
+  "base": "google/gemma-2b",
+  "tuned": "anakin87/gemma-2b-orpo",
+  "base_ability": 7.321959810488082,
+  "tuned_ability": 7.284706228625474,
+  "params": 2.506
+ },
+ {
+  "base": "arcee-ai/Arcee-Spark",
+  "tuned": "arcee-ai/Arcee-Spark",
+  "base_ability": 25.443168747377587,
+  "tuned_ability": 28.406546265844867,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "arcee-ai/raspberry-3B",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 15.852706041886336,
+  "params": 3.086
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "argilla/notus-7b-v1",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 18.474261772943255,
+  "params": 7.242
+ },
+ {
+  "base": "meta-llama/Llama-3.1-8B",
+  "tuned": "argilla-warehouse/Llama-3.1-8B-MagPie-Ultra",
+  "base_ability": 14.42086519266696,
+  "tuned_ability": 19.84899133862277,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "ashercn97/a1-v002",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 22.8816161973256,
+  "params": 7.616
+ },
+ {
+  "base": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+  "tuned": "braindao/DeepSeek-R1-Distill-Qwen-7B-ORPO-Uncensored",
+  "base_ability": 14.99492256865316,
+  "tuned_ability": 10.72103457820772,
+  "params": 7.616
+ },
+ {
+  "base": "01-ai/Yi-1.5-9B-Chat",
+  "tuned": "byroneverson/Yi-1.5-9B-Chat-abliterated",
+  "base_ability": 29.530872220260978,
+  "tuned_ability": 26.270006043497983,
+  "params": 8.829
+ },
+ {
+  "base": "microsoft/Phi-3.5-mini-instruct",
+  "tuned": "carsenk/phi3.5_mini_exp_825_uncensored",
+  "base_ability": 28.184391192864627,
+  "tuned_ability": 3.6431087408611895,
+  "params": 3.821
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "cognitivecomputations/dolphin-2.9-llama3-8b",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 18.415461238797384,
+  "params": 8.03
+ },
+ {
+  "base": "01-ai/Yi-1.5-9B",
+  "tuned": "cognitivecomputations/dolphin-2.9.1-yi-1.5-9b",
+  "base_ability": 22.153901514184795,
+  "tuned_ability": 25.639724124308234,
+  "params": 8.829
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "cognitivecomputations/dolphin-2.9.2-qwen2-7b",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 21.27208217477453,
+  "params": 7.616
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.3",
+  "tuned": "cognitivecomputations/dolphin-2.9.3-mistral-7B-32k",
+  "base_ability": 14.229760590840252,
+  "tuned_ability": 19.348695949526363,
+  "params": 7.248
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "cognitivecomputations/dolphin-2.9.4-gemma2-2b",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 9.835205324051353,
+  "params": 2.614
+ },
+ {
+  "base": "cpayne1303/cp2024",
+  "tuned": "cpayne1303/cp2024-instruct",
+  "base_ability": 3.702132658945494,
+  "tuned_ability": 4.319731373654743,
+  "params": 0.031
+ },
+ {
+  "base": "JackFram/llama-68m",
+  "tuned": "cpayne1303/llama-43m-beta",
+  "base_ability": 4.963339700174584,
+  "tuned_ability": 5.288331692594867,
+  "params": 0.068
+ },
+ {
+  "base": "JackFram/llama-68m",
+  "tuned": "cpayne1303/llama-43m-beta",
+  "base_ability": 4.963339700174584,
+  "tuned_ability": 5.422628758277313,
+  "params": 0.068
+ },
+ {
+  "base": "dicta-il/dictalm2.0",
+  "tuned": "dicta-il/dictalm2.0-instruct",
+  "base_ability": 11.895185345587594,
+  "tuned_ability": 16.7792214696191,
+  "params": 7.251
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "ehristoforu/coolqwen-3b-it",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 28.654353578279625,
+  "params": 3.086
+ },
+ {
+  "base": "tiiuae/Falcon3-7B-Base",
+  "tuned": "ehristoforu/falcon3-ultraset",
+  "base_ability": 24.745725360383613,
+  "tuned_ability": 32.53688653155465,
+  "params": 7.456
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "ehristoforu/qwen2.5-with-lora-think-3b-it",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 24.256524060080704,
+  "params": 3.086
+ },
+ {
+  "base": "tiiuae/Falcon3-3B-Instruct",
+  "tuned": "ehristoforu/rufalcon3-3b-it",
+  "base_ability": 26.60234489991349,
+  "tuned_ability": 20.64141899254107,
+  "params": 3.228
+ },
+ {
+  "base": "microsoft/Phi-3.5-mini-instruct",
+  "tuned": "ehristoforu/ruphi-4b",
+  "base_ability": 28.184391192864627,
+  "tuned_ability": 4.080739303536478,
+  "params": 3.821
+ },
+ {
+  "base": "Qwen/Qwen2.5-1.5B",
+  "tuned": "fblgit/miniclaus-qw1.5B-UNAMGS",
+  "base_ability": 13.852701161320264,
+  "tuned_ability": 17.04510204797917,
+  "params": 1.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-1.5B",
+  "tuned": "fblgit/miniclaus-qw1.5B-UNAMGS-GRPO",
+  "base_ability": 13.852701161320264,
+  "tuned_ability": 17.440457138521808,
+  "params": 1.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "fblgit/pancho-v1-qw25-3B-UNAMGS",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 23.860634894188152,
+  "params": 3.086
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "google/gemma-2-2b-it",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 17.046939294966545,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "google/gemma-2-2b-jpn-it",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 16.678630066922224,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-9b",
+  "tuned": "google/gemma-2-9b-it",
+  "base_ability": 21.205286776100692,
+  "tuned_ability": 32.07276025267082,
+  "params": 9.0
+ },
+ {
+  "base": "google/gemma-7b",
+  "tuned": "google/gemma-7b-it",
+  "base_ability": 15.442818570272307,
+  "tuned_ability": 13.067087110466217,
+  "params": 8.538
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "huihui-ai/Qwen2.5-7B-Instruct-abliterated",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 34.27590445973728,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "huihui-ai/Qwen2.5-7B-Instruct-abliterated-v2",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 34.729008711870584,
+  "params": 7.616
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "iFaz/llama32_1B_en_emo_v1",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 10.934841101081998,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "iFaz/llama32_3B_en_emo_1000_stp",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 23.648597853327,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "iFaz/llama32_3B_en_emo_2000_stp",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 23.911624360048616,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "iFaz/llama32_3B_en_emo_300_stp",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 23.75197000352155,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "iFaz/llama32_3B_en_emo_5000_stp",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 23.22281886664426,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "iFaz/llama32_3B_en_emo_v2",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 19.303216399935796,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "iFaz/llama32_3B_en_emo_v3",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 18.26359573830477,
+  "params": 3.213
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "ibm/merlinite-7b",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 16.751033885892248,
+  "params": 7.242
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "jayasuryajsk/Qwen2.5-3B-reasoner",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 22.088475922135004,
+  "params": 3.086
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "jieliu/Storm-7B",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 19.763877835116066,
+  "params": 7.242
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "lightblue/suzume-llama-3-8B-multilingual",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 23.98630635028447,
+  "params": 8.03
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.3",
+  "tuned": "llmat/Mistral-v0.3-7B-ORPO",
+  "base_ability": 14.229760590840252,
+  "tuned_ability": 12.399290010550855,
+  "params": 7.248
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.3",
+  "tuned": "llmat/Mistral-v0.3-7B-ORPO",
+  "base_ability": 14.229760590840252,
+  "tuned_ability": 12.024321589275658,
+  "params": 7.248
+ },
+ {
+  "base": "Qwen/Qwen2-7B",
+  "tuned": "macadeliccc/Samantha-Qwen-2-7B",
+  "base_ability": 23.9251621404824,
+  "tuned_ability": 25.06508576450433,
+  "params": 7.616
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B",
+  "tuned": "macadeliccc/magistrate-3.2-3b-base",
+  "base_ability": 8.697822716562822,
+  "tuned_ability": 6.046097363125316,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B",
+  "tuned": "macadeliccc/magistrate-3.2-3b-it",
+  "base_ability": 8.697822716562822,
+  "tuned_ability": 7.088076253678785,
+  "params": 3.213
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.3",
+  "tuned": "migtissera/Tess-3-7B-SFT",
+  "base_ability": 14.229760590840252,
+  "tuned_ability": 17.20945620208202,
+  "params": 7.248
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "mistralai/Mistral-7B-Instruct-v0.1",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 12.771229395030618,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.3",
+  "tuned": "mistralai/Mistral-7B-Instruct-v0.3",
+  "base_ability": 14.229760590840252,
+  "tuned_ability": 19.225098776905867,
+  "params": 7.248
+ },
+ {
+  "base": "mlabonne/NeuralDaredevil-8B-abliterated",
+  "tuned": "mlabonne/NeuralDaredevil-8B-abliterated",
+  "base_ability": 21.499914415098534,
+  "tuned_ability": 27.186740676442742,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "mlabonne/OrpoLlama-3-8B",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 15.157036730116474,
+  "params": 8.03
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "mlx-community/Josiefied-Qwen2.5-0.5B-Instruct-abliterated-v1-float32",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 9.708088086359409,
+  "params": 0.5
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "mrdayl/OpenCognito-r1",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 22.15261487014885,
+  "params": 3.086
+ },
+ {
+  "base": "Qwen/Qwen2.5-3B",
+  "tuned": "mrdayl/OpenCognito-r2",
+  "base_ability": 18.102770217683673,
+  "tuned_ability": 21.967469611464537,
+  "params": 3.086
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "nhyha/merge_Qwen2.5-7B-Instruct_20241023_0314",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 31.4495497347518,
+  "params": 7.616
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "open-thoughts/OpenThinker-7B",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 26.578519435108664,
+  "params": 7.616
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "openchat/openchat-3.5-0106",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 22.70925524673515,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "openchat/openchat-3.5-1210",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 22.727849608659103,
+  "params": 7.242
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "openchat/openchat-3.6-8b-20240522",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 23.10731592675394,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "piotr25691/thea-c-3b-25r",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 23.25479609330286,
+  "params": 3.213
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "pszemraj/Llama-3-6.3b-v0.1",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 10.384306670382523,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Llama-3.2-3B-Instruct",
+  "tuned": "qingy2019/LLaMa_3.2_3B_Catalysts",
+  "base_ability": 24.204650807793456,
+  "tuned_ability": 19.930930685006384,
+  "params": 3.213
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "qq8933/OpenLongCoT-Base-Gemma2-2B",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 5.473141918546371,
+  "params": 2.614
+ },
+ {
+  "base": "nvidia/Mistral-NeMo-Minitron-8B-Base",
+  "tuned": "rasyosef/Mistral-NeMo-Minitron-8B-Chat",
+  "base_ability": 17.697925857529604,
+  "tuned_ability": 17.54564856271941,
+  "params": 7.88
+ },
+ {
+  "base": "microsoft/phi-1_5",
+  "tuned": "rasyosef/Phi-1_5-Instruct-v0.1",
+  "base_ability": 7.170966845799231,
+  "tuned_ability": 6.864747864349624,
+  "params": 1.418
+ },
+ {
+  "base": "microsoft/phi-2",
+  "tuned": "rasyosef/phi-2-instruct-apo",
+  "base_ability": 15.534291558214901,
+  "tuned_ability": 12.547052522669906,
+  "params": 2.78
+ },
+ {
+  "base": "microsoft/phi-2",
+  "tuned": "rasyosef/phi-2-instruct-v0.1",
+  "base_ability": 15.534291558214901,
+  "tuned_ability": 14.218631101919177,
+  "params": 2.78
+ },
+ {
+  "base": "Qwen/Qwen2.5-0.5B",
+  "tuned": "ruizhe1217/sft-s1-qwen-0.5b",
+  "base_ability": 6.550067614297009,
+  "tuned_ability": 9.240285567836873,
+  "params": 0.5
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "siqi00/Mistral-7B-DFT",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 20.75522180931725,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "siqi00/Mistral-7B-DFT2",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 19.8755968493133,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "spmurrayzzz/Mistral-Syndicate-7B",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 14.012817664482597,
+  "params": 7.242
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "streamerbtw1002/Nexuim-R1-7B-Instruct",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 30.443047255620304,
+  "params": 7.616
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B",
+  "tuned": "sunbaby/BrainCog-8B-0.1-Instruct",
+  "base_ability": 13.626857071686075,
+  "tuned_ability": 18.380632683786093,
+  "params": 8.03
+ },
+ {
+  "base": "meta-llama/Meta-Llama-3-8B-Instruct",
+  "tuned": "swap-uniba/LLaMAntino-3-ANITA-8B-Inst-DPO-ITA",
+  "base_ability": 20.609159446025874,
+  "tuned_ability": 21.82755308278925,
+  "params": 8.03
+ },
+ {
+  "base": "pints-ai/1.5-Pints-16K-v0.1",
+  "tuned": "tangledgroup/tangled-llama-pints-1.5b-v0.1-instruct",
+  "base_ability": 4.250927888464816,
+  "tuned_ability": 4.366498008182751,
+  "params": 1.566
+ },
+ {
+  "base": "pints-ai/1.5-Pints-16K-v0.1",
+  "tuned": "tangledgroup/tangled-llama-pints-1.5b-v0.2-instruct",
+  "base_ability": 4.250927888464816,
+  "tuned_ability": 4.745857038769314,
+  "params": 1.566
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "teknium/CollectiveCognition-v1.1-Mistral-7B",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 14.256397052482129,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "teknium/OpenHermes-2-Mistral-7B",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 21.44047612236278,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "teknium/OpenHermes-2.5-Mistral-7B",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 21.317189027423062,
+  "params": 7.242
+ },
+ {
+  "base": "mistralai/Mistral-7B-v0.1",
+  "tuned": "tianyil1/MistralForCausalLM_Cal_DPO",
+  "base_ability": 14.575358924083135,
+  "tuned_ability": 18.088644447193257,
+  "params": 7.242
+ },
+ {
+  "base": "tiiuae/Falcon3-1B-Base",
+  "tuned": "tiiuae/Falcon3-1B-Instruct",
+  "base_ability": 9.8880961034972,
+  "tuned_ability": 16.164597322515025,
+  "params": 1.669
+ },
+ {
+  "base": "tiiuae/Falcon3-7B-Base",
+  "tuned": "tiiuae/Falcon3-7B-Instruct",
+  "base_ability": 24.745725360383613,
+  "tuned_ability": 36.404684964282325,
+  "params": 7.456
+ },
+ {
+  "base": "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T",
+  "tuned": "trthminh1112/autotrain-llama32-1b-finetune",
+  "base_ability": 5.230318100791095,
+  "tuned_ability": 4.586088234847661,
+  "params": 1.1
+ },
+ {
+  "base": "Qwen/Qwen2.5-7B",
+  "tuned": "xwen-team/Xwen-7B-Chat",
+  "base_ability": 26.019159924095096,
+  "tuned_ability": 31.576751501854343,
+  "params": 7.616
+ },
+ {
+  "base": "yam-peleg/Hebrew-Mistral-7B-200K",
+  "tuned": "yam-peleg/Hebrew-Mistral-7B-200K",
+  "base_ability": 8.386669075864491,
+  "tuned_ability": 10.64429135893812,
+  "params": 7.504
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "ymcki/gemma-2-2b-ORPO-jpn-it-abliterated-18",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 15.288362728327092,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "ymcki/gemma-2-2b-ORPO-jpn-it-abliterated-18-merge",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 16.505537805625195,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "ymcki/gemma-2-2b-jpn-it-abliterated-17",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 15.644976187098441,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "ymcki/gemma-2-2b-jpn-it-abliterated-17-18-24",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 14.44776069045957,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "ymcki/gemma-2-2b-jpn-it-abliterated-17-ORPO",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 14.844141845651569,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "ymcki/gemma-2-2b-jpn-it-abliterated-18",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 16.245944384743186,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "ymcki/gemma-2-2b-jpn-it-abliterated-18-ORPO",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 15.132293957042885,
+  "params": 2.614
+ },
+ {
+  "base": "google/gemma-2-2b",
+  "tuned": "ymcki/gemma-2-2b-jpn-it-abliterated-24",
+  "base_ability": 10.359615568466916,
+  "tuned_ability": 16.334186539569448,
+  "params": 2.614
+ }
+]

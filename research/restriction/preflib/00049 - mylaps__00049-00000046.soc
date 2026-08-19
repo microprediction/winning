@@ -1,0 +1,46 @@
+# FILE NAME: 00049-00000046.soc
+# TITLE: 141
+# DESCRIPTION: Complete preferences extracted from the soi file
+# DATA TYPE: soc
+# MODIFICATION TYPE: induced
+# RELATES TO: 00049-00000046.soi
+# RELATED FILES: 
+# PUBLICATION DATE: 2022-09-25
+# MODIFICATION DATE: 2022-09-25
+# NUMBER ALTERNATIVES: 11
+# NUMBER VOTERS: 23
+# NUMBER UNIQUE ORDERS: 23
+# ALTERNATIVE NAME 1: 001_b-poule-wst
+# ALTERNATIVE NAME 2: GR-54_a-poule-wst
+# ALTERNATIVE NAME 3: RoBui_b-poule-wst
+# ALTERNATIVE NAME 4: DaHui_a-poule-wst
+# ALTERNATIVE NAME 5: SiBet_a-poule-wst
+# ALTERNATIVE NAME 6: TomWi_a-poule-wst
+# ALTERNATIVE NAME 7: NiBak_a-poule-wst
+# ALTERNATIVE NAME 8: NBos_a-poule-wst
+# ALTERNATIVE NAME 9: KlHei_a-poule-wst
+# ALTERNATIVE NAME 10: MaKoo_b-poule-wst
+# ALTERNATIVE NAME 11: NiKos_a-poule-wst
+1: 11,4,6,5,8,2,9,7,1,3,10
+1: 4,7,8,9,5,6,11,3,10,1,2
+1: 7,4,8,6,9,5,11,2,1,10,3
+1: 2,8,7,4,11,5,6,9,3,10,1
+1: 8,4,7,9,11,5,6,2,1,3,10
+1: 4,7,8,9,5,6,11,10,1,3,2
+1: 7,8,4,6,11,5,9,10,3,1,2
+1: 4,7,8,9,5,11,6,2,1,3,10
+1: 8,4,7,9,5,6,2,11,3,10,1
+1: 8,4,7,11,2,9,6,5,10,3,1
+1: 7,4,8,6,5,9,2,11,10,1,3
+1: 11,4,2,5,6,9,7,8,3,1,10
+1: 8,4,7,2,11,9,6,5,3,1,10
+1: 11,2,7,8,4,5,9,6,1,3,10
+1: 4,7,6,8,11,5,9,2,1,10,3
+1: 8,4,5,9,7,6,2,11,1,3,10
+1: 4,7,2,11,5,9,8,6,10,1,3
+1: 11,9,4,7,5,8,6,2,3,1,10
+1: 8,6,2,5,9,7,4,11,10,1,3
+1: 4,11,7,9,2,6,5,8,1,10,3
+1: 8,7,4,5,6,9,11,2,3,10,1
+1: 7,8,4,9,5,6,11,2,10,3,1
+1: 8,7,4,6,11,5,9,1,10,3,2

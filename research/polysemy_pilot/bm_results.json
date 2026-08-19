@@ -1,0 +1,3483 @@
+[
+ {
+  "family": "lunch",
+  "model": "gpt-4.1-nano",
+  "bm_violations": 9,
+  "bm_total": 32,
+  "bm_worst": -0.39841575444690625,
+  "kl_luce_fit": 0.9065614404105551,
+  "kl_thurstone_fit": 0.8238182244693963,
+  "kl_best_rum": 0.3235894946898884,
+  "q": {
+   "pizza sushi": {
+    "pizza": 0.5638907795673513,
+    "sushi": 0.43610922043264866
+   },
+   "pizza tacos": {
+    "pizza": 0.5249937749758359,
+    "tacos": 0.47500622502416406
+   },
+   "curry pizza": {
+    "pizza": 0.9087208609811354,
+    "curry": 0.0912791390188648
+   },
+   "sushi tacos": {
+    "sushi": 0.6806126218557415,
+    "tacos": 0.3193873781442585
+   },
+   "curry sushi": {
+    "sushi": 0.759982109804414,
+    "curry": 0.24001789019558598
+   },
+   "curry tacos": {
+    "tacos": 0.6472924713734418,
+    "curry": 0.3527075286265582
+   },
+   "pizza sushi tacos": {
+    "pizza": 0.41993748793260277,
+    "sushi": 0.5663826583993745,
+    "tacos": 0.013679853668022763
+   },
+   "curry pizza sushi": {
+    "pizza": 0.27680673587359933,
+    "sushi": 0.6671948833187961,
+    "curry": 0.055998380807604616
+   },
+   "curry pizza tacos": {
+    "pizza": 0.8889751958822312,
+    "tacos": 0.01905262292897843,
+    "curry": 0.09197218118879036
+   },
+   "curry sushi tacos": {
+    "sushi": 0.7642214365251135,
+    "tacos": 0.01462819972682721,
+    "curry": 0.2211503637480592
+   },
+   "curry pizza sushi tacos": {
+    "pizza": 0.5063465657344032,
+    "sushi": 0.48551139390157844,
+    "tacos": 0.0040903562288703175,
+    "curry": 0.004051684135147972
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "pizza",
+     "tacos"
+    ],
+    "pizza",
+    -0.2776
+   ],
+   [
+    [
+     "pizza",
+     "sushi",
+     "tacos"
+    ],
+    "pizza",
+    -0.0864
+   ],
+   [
+    [
+     "curry",
+     "pizza",
+     "sushi"
+    ],
+    "pizza",
+    -0.2295
+   ],
+   [
+    [
+     "pizza",
+     "sushi"
+    ],
+    "sushi",
+    -0.312
+   ],
+   [
+    [
+     "sushi",
+     "tacos"
+    ],
+    "sushi",
+    -0.1645
+   ],
+   [
+    [
+     "curry",
+     "sushi"
+    ],
+    "sushi",
+    -0.1859
+   ],
+   [
+    [
+     "tacos"
+    ],
+    "tacos",
+    -0.3984
+   ],
+   [
+    [
+     "curry",
+     "pizza"
+    ],
+    "curry",
+    -0.0526
+   ],
+   [
+    [
+     "curry",
+     "sushi"
+    ],
+    "curry",
+    -0.0331
+   ]
+  ]
+ },
+ {
+  "family": "pet",
+  "model": "gpt-4o-mini",
+  "bm_violations": 4,
+  "bm_total": 32,
+  "bm_worst": -0.47659958871267205,
+  "kl_luce_fit": 0.439917931729237,
+  "kl_thurstone_fit": 0.43504510382837264,
+  "kl_best_rum": 0.4024607306314867,
+  "q": {
+   "cat dog": {
+    "dog": 0.4780866910039671,
+    "cat": 0.5219133089960329
+   },
+   "dog parrot": {
+    "dog": 0.9999085579436363,
+    "parrot": 9.144205636360421e-05
+   },
+   "dog hamster": {
+    "dog": 0.9983423726596626,
+    "hamster": 0.0016576273403373927
+   },
+   "cat parrot": {
+    "cat": 0.9928575864419606,
+    "parrot": 0.007142413558039288
+   },
+   "cat hamster": {
+    "cat": 0.9811206310563785,
+    "hamster": 0.01887936894362159
+   },
+   "hamster parrot": {
+    "parrot": 0.6898650733293432,
+    "hamster": 0.31013492667065673
+   },
+   "cat dog parrot": {
+    "dog": 0.9509660346075449,
+    "cat": 0.049029402445098735,
+    "parrot": 4.562947356303227e-06
+   },
+   "cat dog hamster": {
+    "dog": 0.5065893964052257,
+    "cat": 0.49331489867680567,
+    "hamster": 9.570491796859139e-05
+   },
+   "dog hamster parrot": {
+    "dog": 0.9968276407461677,
+    "parrot": 0.0013953247309295366,
+    "hamster": 0.0017770345229028343
+   },
+   "cat hamster parrot": {
+    "cat": 0.9707939186395395,
+    "parrot": 0.015445593461957079,
+    "hamster": 0.01376048789850346
+   },
+   "cat dog hamster parrot": {
+    "dog": 0.5060503516161756,
+    "cat": 0.493846281979744,
+    "parrot": 4.1910999803287066e-05,
+    "hamster": 6.145540427715262e-05
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "cat",
+     "dog"
+    ],
+    "dog",
+    -0.4734
+   ],
+   [
+    [
+     "dog",
+     "parrot"
+    ],
+    "dog",
+    -0.4418
+   ],
+   [
+    [
+     "cat"
+    ],
+    "cat",
+    -0.4766
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "parrot"
+    ],
+    "cat",
+    -0.4448
+   ]
+  ]
+ },
+ {
+  "family": "lunch",
+  "model": "gpt-4.1-mini",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.17918108738084948,
+  "kl_luce_fit": 0.7492429284868605,
+  "kl_thurstone_fit": 0.6714006435599383,
+  "kl_best_rum": 0.28615798812753135,
+  "q": {
+   "pizza sushi": {
+    "pizza": 0.89458954878067,
+    "sushi": 0.1054104512193302
+   },
+   "pizza tacos": {
+    "pizza": 0.9518114060807495,
+    "tacos": 0.0481885939192507
+   },
+   "curry pizza": {
+    "pizza": 0.9882578320768033,
+    "curry": 0.011742167923196876
+   },
+   "sushi tacos": {
+    "sushi": 0.6219786863049331,
+    "tacos": 0.3780213136950668
+   },
+   "curry sushi": {
+    "sushi": 0.9441292246877292,
+    "curry": 0.05587077531227073
+   },
+   "curry tacos": {
+    "tacos": 0.22269934852434334,
+    "curry": 0.7773006514756567
+   },
+   "pizza sushi tacos": {
+    "pizza": 0.7129932893600127,
+    "sushi": 0.28515136653143386,
+    "tacos": 0.0018553441085534677
+   },
+   "curry pizza sushi": {
+    "pizza": 0.7018154558935268,
+    "sushi": 0.2973025919232287,
+    "curry": 0.0008819521832445074
+   },
+   "curry pizza tacos": {
+    "pizza": 0.9889871229172696,
+    "tacos": 0.007872018893176411,
+    "curry": 0.0031408581895538703
+   },
+   "curry sushi tacos": {
+    "sushi": 0.9122010168113374,
+    "tacos": 0.025204770957358052,
+    "curry": 0.06259421223130451
+   },
+   "curry pizza sushi tacos": {
+    "pizza": 0.6032864143528146,
+    "sushi": 0.39619260965698855,
+    "tacos": 0.0003011679036025558,
+    "curry": 0.00021980808659435272
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "pizza"
+    ],
+    "pizza",
+    -0.0341
+   ],
+   [
+    [
+     "pizza",
+     "tacos"
+    ],
+    "pizza",
+    -0.1469
+   ],
+   [
+    [
+     "curry",
+     "pizza"
+    ],
+    "pizza",
+    -0.0993
+   ],
+   [
+    [
+     "pizza",
+     "sushi"
+    ],
+    "sushi",
+    -0.0809
+   ],
+   [
+    [
+     "sushi",
+     "tacos"
+    ],
+    "sushi",
+    -0.1792
+   ],
+   [
+    [
+     "pizza",
+     "sushi",
+     "tacos"
+    ],
+    "sushi",
+    -0.111
+   ],
+   [
+    [
+     "curry",
+     "pizza",
+     "sushi"
+    ],
+    "sushi",
+    -0.0989
+   ]
+  ]
+ },
+ {
+  "family": "lunch",
+  "model": "gpt-4o-mini",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.36857111406647125,
+  "kl_luce_fit": 0.5513756201679675,
+  "kl_thurstone_fit": 0.5520133141966651,
+  "kl_best_rum": 0.4109336014254891,
+  "q": {
+   "pizza sushi": {
+    "pizza": 0.5000110287605196,
+    "sushi": 0.49998897123948033
+   },
+   "pizza tacos": {
+    "pizza": 0.5207122569084127,
+    "tacos": 0.47928774309158734
+   },
+   "curry pizza": {
+    "pizza": 0.9736786105266297,
+    "curry": 0.026321389473370288
+   },
+   "sushi tacos": {
+    "sushi": 0.6903826640124867,
+    "tacos": 0.30961733598751323
+   },
+   "curry sushi": {
+    "sushi": 0.9843796252351359,
+    "curry": 0.015620374764864152
+   },
+   "curry tacos": {
+    "tacos": 0.9841818888478967,
+    "curry": 0.015818111152103402
+   },
+   "pizza sushi tacos": {
+    "pizza": 0.42229237536059033,
+    "sushi": 0.19573880926805645,
+    "tacos": 0.38196881537135324
+   },
+   "curry pizza sushi": {
+    "pizza": 0.31824762575142357,
+    "sushi": 0.6789482376896037,
+    "curry": 0.0028041365589728516
+   },
+   "curry pizza tacos": {
+    "pizza": 0.5850630291723641,
+    "tacos": 0.41461276485173526,
+    "curry": 0.0003242059759006487
+   },
+   "curry sushi tacos": {
+    "sushi": 0.9300881123634798,
+    "tacos": 0.06839393758919918,
+    "curry": 0.0015179500473212011
+   },
+   "curry pizza sushi tacos": {
+    "pizza": 0.40536806549186366,
+    "sushi": 0.5643099233345277,
+    "tacos": 0.029697814713470716,
+    "curry": 0.0006241964601378562
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "pizza"
+    ],
+    "pizza",
+    -0.0742
+   ],
+   [
+    [
+     "pizza",
+     "tacos"
+    ],
+    "pizza",
+    -0.0813
+   ],
+   [
+    [
+     "curry",
+     "pizza",
+     "sushi"
+    ],
+    "pizza",
+    -0.0871
+   ],
+   [
+    [
+     "curry",
+     "sushi"
+    ],
+    "sushi",
+    -0.0603
+   ],
+   [
+    [
+     "pizza",
+     "sushi",
+     "tacos"
+    ],
+    "sushi",
+    -0.3686
+   ],
+   [
+    [
+     "pizza",
+     "tacos"
+    ],
+    "tacos",
+    -0.2876
+   ],
+   [
+    [
+     "sushi",
+     "tacos"
+    ],
+    "tacos",
+    -0.111
+   ]
+  ]
+ },
+ {
+  "family": "lunch",
+  "model": "gpt-4o",
+  "bm_violations": 4,
+  "bm_total": 32,
+  "bm_worst": -0.14134152247586096,
+  "kl_luce_fit": 0.3834974956975338,
+  "kl_thurstone_fit": 0.3234959987256816,
+  "kl_best_rum": 0.12675229203697247,
+  "q": {
+   "pizza sushi": {
+    "pizza": 0.391509757828231,
+    "sushi": 0.6084902421717691
+   },
+   "pizza tacos": {
+    "pizza": 0.9322664009462603,
+    "tacos": 0.06773359905373975
+   },
+   "curry pizza": {
+    "pizza": 0.6353988237250325,
+    "curry": 0.36460117627496746
+   },
+   "sushi tacos": {
+    "sushi": 0.9329314485847807,
+    "tacos": 0.06706855141521921
+   },
+   "curry sushi": {
+    "sushi": 0.7421430234016793,
+    "curry": 0.2578569765983207
+   },
+   "curry tacos": {
+    "tacos": 0.44882835006292066,
+    "curry": 0.5511716499370793
+   },
+   "pizza sushi tacos": {
+    "pizza": 0.3239147522404912,
+    "sushi": 0.6551739276491643,
+    "tacos": 0.020911320110344505
+   },
+   "curry pizza sushi": {
+    "pizza": 0.23343924483408574,
+    "sushi": 0.7375274235745845,
+    "curry": 0.029033331591329866
+   },
+   "curry pizza tacos": {
+    "pizza": 0.590396364695446,
+    "tacos": 0.1329742486068468,
+    "curry": 0.27662938669770715
+   },
+   "curry sushi tacos": {
+    "sushi": 0.919802550217038,
+    "tacos": 0.01890790702735752,
+    "curry": 0.06128954275560441
+   },
+   "curry pizza sushi tacos": {
+    "pizza": 0.16978288544105813,
+    "sushi": 0.7965154501250252,
+    "tacos": 0.029330067866383685,
+    "curry": 0.004371596567533026
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "curry",
+     "sushi"
+    ],
+    "sushi",
+    -0.1187
+   ],
+   [
+    [
+     "pizza",
+     "sushi",
+     "tacos"
+    ],
+    "sushi",
+    -0.1413
+   ],
+   [
+    [
+     "curry",
+     "pizza",
+     "sushi"
+    ],
+    "sushi",
+    -0.059
+   ],
+   [
+    [
+     "pizza",
+     "tacos"
+    ],
+    "tacos",
+    -0.0568
+   ]
+  ]
+ },
+ {
+  "family": "lunch",
+  "model": "gpt-4.1",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.6306067319186794,
+  "kl_luce_fit": 1.4393290760032282,
+  "kl_thurstone_fit": 1.3365573582218033,
+  "kl_best_rum": 0.4580977937603133,
+  "q": {
+   "pizza sushi": {
+    "pizza": 0.3939259966932649,
+    "sushi": 0.6060740033067351
+   },
+   "pizza tacos": {
+    "pizza": 0.9931945190268237,
+    "tacos": 0.006805480973176473
+   },
+   "curry pizza": {
+    "pizza": 0.8986694854321682,
+    "curry": 0.10133051456783172
+   },
+   "sushi tacos": {
+    "sushi": 0.9180660017569612,
+    "tacos": 0.08193399824303889
+   },
+   "curry sushi": {
+    "sushi": 0.38604515944703105,
+    "curry": 0.6139548405529691
+   },
+   "curry tacos": {
+    "tacos": 0.6245846543508632,
+    "curry": 0.375415345649137
+   },
+   "pizza sushi tacos": {
+    "pizza": 0.21027093295822888,
+    "sushi": 0.7893857067800764,
+    "tacos": 0.0003433602616947622
+   },
+   "curry pizza sushi": {
+    "pizza": 0.21108712472647506,
+    "sushi": 0.7794683508934058,
+    "curry": 0.00944452438011921
+   },
+   "curry pizza tacos": {
+    "pizza": 0.84912168753993,
+    "tacos": 0.002090272570029028,
+    "curry": 0.148788039890041
+   },
+   "curry sushi tacos": {
+    "sushi": 0.9421712841234361,
+    "tacos": 0.0026660769290742024,
+    "curry": 0.05516263894748972
+   },
+   "curry pizza sushi tacos": {
+    "pizza": 0.2861953609879176,
+    "sushi": 0.7049877436511314,
+    "tacos": 0.00025173409912765903,
+    "curry": 0.008565161261823362
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "pizza"
+    ],
+    "pizza",
+    -0.3015
+   ],
+   [
+    [
+     "pizza",
+     "sushi",
+     "tacos"
+    ],
+    "pizza",
+    -0.0759
+   ],
+   [
+    [
+     "curry",
+     "pizza",
+     "sushi"
+    ],
+    "pizza",
+    -0.0751
+   ],
+   [
+    [
+     "pizza",
+     "sushi"
+    ],
+    "sushi",
+    -0.2578
+   ],
+   [
+    [
+     "sushi",
+     "tacos"
+    ],
+    "sushi",
+    -0.1085
+   ],
+   [
+    [
+     "curry",
+     "sushi"
+    ],
+    "sushi",
+    -0.6306
+   ],
+   [
+    [
+     "curry",
+     "pizza"
+    ],
+    "curry",
+    -0.0483
+   ]
+  ]
+ },
+ {
+  "family": "pet",
+  "model": "gpt-4.1-mini",
+  "bm_violations": 9,
+  "bm_total": 32,
+  "bm_worst": -0.7670146526761407,
+  "kl_luce_fit": 0.9216059187150114,
+  "kl_thurstone_fit": 0.8133718233162742,
+  "kl_best_rum": 0.5523256116426869,
+  "q": {
+   "cat dog": {
+    "dog": 0.562176640671351,
+    "cat": 0.43782335932864896
+   },
+   "dog parrot": {
+    "dog": 0.8670355800947894,
+    "parrot": 0.1329644199052106
+   },
+   "dog hamster": {
+    "dog": 0.9979098394003106,
+    "hamster": 0.0020901605996892897
+   },
+   "cat parrot": {
+    "cat": 0.7165230094582156,
+    "parrot": 0.2834769905417844
+   },
+   "cat hamster": {
+    "cat": 0.9819663918685029,
+    "hamster": 0.01803360813149715
+   },
+   "hamster parrot": {
+    "parrot": 0.7793362349551104,
+    "hamster": 0.22066376504488958
+   },
+   "cat dog parrot": {
+    "dog": 0.571286084319195,
+    "cat": 0.422945566917623,
+    "parrot": 0.005768348763182052
+   },
+   "cat dog hamster": {
+    "dog": 0.23999540230724295,
+    "cat": 0.7598590268381193,
+    "hamster": 0.000145570854637837
+   },
+   "dog hamster parrot": {
+    "dog": 0.7563320280840137,
+    "parrot": 0.23339001104183613,
+    "hamster": 0.010277960874150184
+   },
+   "cat hamster parrot": {
+    "cat": 0.5675624783187142,
+    "parrot": 0.41930420555982223,
+    "hamster": 0.013133316121463472
+   },
+   "cat dog hamster parrot": {
+    "dog": 0.9075061072201412,
+    "cat": 0.08421277118151431,
+    "parrot": 0.007693734805606314,
+    "hamster": 0.0005873867927382244
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "dog"
+    ],
+    "dog",
+    -0.767
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "parrot"
+    ],
+    "dog",
+    -0.3362
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "hamster"
+    ],
+    "dog",
+    -0.6675
+   ],
+   [
+    [
+     "dog",
+     "hamster",
+     "parrot"
+    ],
+    "dog",
+    -0.1512
+   ],
+   [
+    [
+     "cat",
+     "dog"
+    ],
+    "cat",
+    -0.6608
+   ],
+   [
+    [
+     "cat",
+     "parrot"
+    ],
+    "cat",
+    -0.1898
+   ],
+   [
+    [
+     "cat",
+     "hamster"
+    ],
+    "cat",
+    -0.2612
+   ],
+   [
+    [
+     "dog",
+     "parrot"
+    ],
+    "parrot",
+    -0.0985
+   ],
+   [
+    [
+     "cat",
+     "parrot"
+    ],
+    "parrot",
+    -0.1339
+   ]
+  ]
+ },
+ {
+  "family": "pet",
+  "model": "gpt-4o",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.26802653731513737,
+  "kl_luce_fit": 0.23417160390248268,
+  "kl_thurstone_fit": 0.25211984671174953,
+  "kl_best_rum": 0.11815164215589989,
+  "q": {
+   "cat dog": {
+    "dog": 0.15092706729928052,
+    "cat": 0.8490729327007197
+   },
+   "dog parrot": {
+    "dog": 0.9017762236558003,
+    "parrot": 0.09822377634419967
+   },
+   "dog hamster": {
+    "dog": 0.8660856139892856,
+    "hamster": 0.13391438601071423
+   },
+   "cat parrot": {
+    "cat": 0.9029504986734045,
+    "parrot": 0.09704950132659552
+   },
+   "cat hamster": {
+    "cat": 0.913257308548164,
+    "hamster": 0.08674269145183601
+   },
+   "hamster parrot": {
+    "parrot": 0.7584327521696063,
+    "hamster": 0.24156724783039366
+   },
+   "cat dog parrot": {
+    "dog": 0.23134935964280037,
+    "cat": 0.68044196637504,
+    "parrot": 0.08820867398215976
+   },
+   "cat dog hamster": {
+    "dog": 0.26694258646564517,
+    "cat": 0.6871952939446024,
+    "hamster": 0.04586211958975226
+   },
+   "dog hamster parrot": {
+    "dog": 0.6342208790205611,
+    "parrot": 0.28679288899316563,
+    "hamster": 0.07898623198627337
+   },
+   "cat hamster parrot": {
+    "cat": 0.7435181556390571,
+    "parrot": 0.2153757734025564,
+    "hamster": 0.041106070958386434
+   },
+   "cat dog hamster parrot": {
+    "dog": 0.24027308833232017,
+    "cat": 0.7139012133515487,
+    "parrot": 0.04271411146788309,
+    "hamster": 0.0031115868482481566
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "dog"
+    ],
+    "dog",
+    -0.0265
+   ],
+   [
+    [
+     "cat",
+     "dog"
+    ],
+    "dog",
+    -0.1071
+   ],
+   [
+    [
+     "cat"
+    ],
+    "cat",
+    -0.268
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "parrot"
+    ],
+    "cat",
+    -0.0335
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "hamster"
+    ],
+    "cat",
+    -0.0267
+   ],
+   [
+    [
+     "dog",
+     "parrot"
+    ],
+    "parrot",
+    -0.2341
+   ],
+   [
+    [
+     "cat",
+     "parrot"
+    ],
+    "parrot",
+    -0.1638
+   ]
+  ]
+ },
+ {
+  "family": "fruit",
+  "model": "gpt-4o-mini",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.3576030405681291,
+  "kl_luce_fit": 0.48199357244193075,
+  "kl_thurstone_fit": 0.4766046378112571,
+  "kl_best_rum": 0.3792014638390329,
+  "q": {
+   "apple mango": {
+    "mango": 0.9287746623490145,
+    "apple": 0.0712253376509856
+   },
+   "banana mango": {
+    "mango": 0.9749105243655029,
+    "banana": 0.02508947563449729
+   },
+   "cherry mango": {
+    "mango": 0.9993231163728454,
+    "cherry": 0.0006768836271545071
+   },
+   "apple banana": {
+    "apple": 0.6440461141332322,
+    "banana": 0.35595388586676785
+   },
+   "apple cherry": {
+    "apple": 0.9078812910782773,
+    "cherry": 0.09211870892172258
+   },
+   "banana cherry": {
+    "banana": 0.9286494362909536,
+    "cherry": 0.07135056370904642
+   },
+   "apple banana mango": {
+    "mango": 0.8761222880236025,
+    "apple": 0.020903378303530923,
+    "banana": 0.1029743336728667
+   },
+   "apple cherry mango": {
+    "mango": 0.9326417465890101,
+    "apple": 0.061921874512827636,
+    "cherry": 0.005436378898162159
+   },
+   "banana cherry mango": {
+    "mango": 0.8611503158599608,
+    "banana": 0.13808586129611924,
+    "cherry": 0.0007638228439199505
+   },
+   "apple banana cherry": {
+    "apple": 0.21749145923153243,
+    "banana": 0.7435900620728377,
+    "cherry": 0.03891847869562982
+   },
+   "apple banana cherry mango": {
+    "mango": 0.6165114781321192,
+    "apple": 0.03476700975352505,
+    "banana": 0.3382018962632481,
+    "cherry": 0.010519615851107696
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "apple",
+     "mango"
+    ],
+    "mango",
+    -0.2635
+   ],
+   [
+    [
+     "banana",
+     "mango"
+    ],
+    "mango",
+    -0.1459
+   ],
+   [
+    [
+     "cherry",
+     "mango"
+    ],
+    "mango",
+    -0.178
+   ],
+   [
+    [
+     "apple"
+    ],
+    "apple",
+    -0.3576
+   ],
+   [
+    [
+     "apple",
+     "banana"
+    ],
+    "banana",
+    -0.1524
+   ],
+   [
+    [
+     "apple",
+     "banana",
+     "mango"
+    ],
+    "banana",
+    -0.2352
+   ],
+   [
+    [
+     "banana",
+     "cherry",
+     "mango"
+    ],
+    "banana",
+    -0.2001
+   ]
+  ]
+ },
+ {
+  "family": "pet",
+  "model": "gpt-4.1-nano",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.6167409685843568,
+  "kl_luce_fit": 0.3933078576466947,
+  "kl_thurstone_fit": 0.3802129587744597,
+  "kl_best_rum": 0.35273906817449696,
+  "q": {
+   "cat dog": {
+    "dog": 0.9684132207258073,
+    "cat": 0.03158677927419295
+   },
+   "dog parrot": {
+    "dog": 0.9559353828708698,
+    "parrot": 0.04406461712913032
+   },
+   "dog hamster": {
+    "dog": 0.9991525535500486,
+    "hamster": 0.0008474464499512786
+   },
+   "cat parrot": {
+    "cat": 0.5411645112991289,
+    "parrot": 0.45883548870087104
+   },
+   "cat hamster": {
+    "cat": 0.9843452124789102,
+    "hamster": 0.015654787521089814
+   },
+   "hamster parrot": {
+    "parrot": 0.9465909676899958,
+    "hamster": 0.053409032310004205
+   },
+   "cat dog parrot": {
+    "dog": 0.6894434324372862,
+    "cat": 0.1764248263307108,
+    "parrot": 0.13413174123200294
+   },
+   "cat dog hamster": {
+    "dog": 0.685438039526327,
+    "cat": 0.31436666284038733,
+    "hamster": 0.0001952976332857565
+   },
+   "dog hamster parrot": {
+    "dog": 0.7146256901934057,
+    "parrot": 0.284071233387255,
+    "hamster": 0.0013030764193394703
+   },
+   "cat hamster parrot": {
+    "cat": 0.7674305678649604,
+    "parrot": 0.22885354968902308,
+    "hamster": 0.003715882446016425
+   },
+   "cat dog hamster parrot": {
+    "dog": 0.7827469735946501,
+    "cat": 0.16349689169309126,
+    "parrot": 0.05299542472411636,
+    "hamster": 0.000760709988142446
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "dog"
+    ],
+    "dog",
+    -0.6167
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "parrot"
+    ],
+    "dog",
+    -0.0933
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "hamster"
+    ],
+    "dog",
+    -0.0973
+   ],
+   [
+    [
+     "dog",
+     "hamster",
+     "parrot"
+    ],
+    "dog",
+    -0.0681
+   ],
+   [
+    [
+     "cat",
+     "dog"
+    ],
+    "cat",
+    -0.2957
+   ],
+   [
+    [
+     "cat",
+     "parrot"
+    ],
+    "cat",
+    -0.2392
+   ],
+   [
+    [
+     "dog",
+     "parrot"
+    ],
+    "parrot",
+    -0.3211
+   ]
+  ]
+ },
+ {
+  "family": "pet",
+  "model": "gpt-4.1",
+  "bm_violations": 8,
+  "bm_total": 32,
+  "bm_worst": -0.30825063427579036,
+  "kl_luce_fit": 0.7171362233897968,
+  "kl_thurstone_fit": 0.6623887069072283,
+  "kl_best_rum": 0.3127610648322492,
+  "q": {
+   "cat dog": {
+    "dog": 0.040168610945273735,
+    "cat": 0.9598313890547264
+   },
+   "dog parrot": {
+    "dog": 0.2929077277785121,
+    "parrot": 0.7070922722214878
+   },
+   "dog hamster": {
+    "dog": 0.9818890818362663,
+    "hamster": 0.018110918163733836
+   },
+   "cat parrot": {
+    "cat": 0.7562536231941587,
+    "parrot": 0.2437463768058412
+   },
+   "cat hamster": {
+    "cat": 0.9853438178158486,
+    "hamster": 0.014656182184151269
+   },
+   "hamster parrot": {
+    "parrot": 0.7728527178053506,
+    "hamster": 0.2271472821946494
+   },
+   "cat dog parrot": {
+    "dog": 0.127843059123063,
+    "cat": 0.7857263686133221,
+    "parrot": 0.08643057226361488
+   },
+   "cat dog hamster": {
+    "dog": 0.14442516834855995,
+    "cat": 0.8543822145895832,
+    "hamster": 0.0011926170618570423
+   },
+   "dog hamster parrot": {
+    "dog": 0.6448175242181383,
+    "parrot": 0.3540433387194873,
+    "hamster": 0.0011391370623744543
+   },
+   "cat hamster parrot": {
+    "cat": 0.49166513466210154,
+    "parrot": 0.5068520170917491,
+    "hamster": 0.0014828482461493266
+   },
+   "cat dog hamster parrot": {
+    "dog": 0.17150222128689888,
+    "cat": 0.6718273385788257,
+    "parrot": 0.155866112082075,
+    "hamster": 0.0008043280522006028
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "cat",
+     "dog"
+    ],
+    "dog",
+    -0.0606
+   ],
+   [
+    [
+     "dog",
+     "parrot"
+    ],
+    "dog",
+    -0.3083
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "parrot"
+    ],
+    "dog",
+    -0.0437
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "hamster"
+    ],
+    "dog",
+    -0.0271
+   ],
+   [
+    [
+     "cat"
+    ],
+    "cat",
+    -0.2415
+   ],
+   [
+    [
+     "cat",
+     "hamster",
+     "parrot"
+    ],
+    "cat",
+    -0.1802
+   ],
+   [
+    [
+     "cat",
+     "parrot"
+    ],
+    "parrot",
+    -0.1937
+   ],
+   [
+    [
+     "cat",
+     "dog",
+     "parrot"
+    ],
+    "parrot",
+    -0.0694
+   ]
+  ]
+ },
+ {
+  "family": "fruit",
+  "model": "gpt-4o",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.16087947671513952,
+  "kl_luce_fit": 0.2934765757868051,
+  "kl_thurstone_fit": 0.3551526728845958,
+  "kl_best_rum": 0.08862424810593973,
+  "q": {
+   "apple mango": {
+    "mango": 0.5367325174540878,
+    "apple": 0.4632674825459122
+   },
+   "banana mango": {
+    "mango": 0.8267058967442779,
+    "banana": 0.17329410325572206
+   },
+   "cherry mango": {
+    "mango": 0.9170152791292407,
+    "cherry": 0.08298472087075918
+   },
+   "apple banana": {
+    "apple": 0.3454014670566092,
+    "banana": 0.6545985329433908
+   },
+   "apple cherry": {
+    "apple": 0.8546616149023248,
+    "cherry": 0.14533838509767524
+   },
+   "banana cherry": {
+    "banana": 0.9377549123548002,
+    "cherry": 0.06224508764519978
+   },
+   "apple banana mango": {
+    "mango": 0.3646182751740658,
+    "apple": 0.2575769410895108,
+    "banana": 0.3778047837364234
+   },
+   "apple cherry mango": {
+    "mango": 0.6258228607302014,
+    "apple": 0.28662277051724855,
+    "cherry": 0.08755436875255002
+   },
+   "banana cherry mango": {
+    "mango": 0.7328670255458717,
+    "banana": 0.21230204332686606,
+    "cherry": 0.054830931127262304
+   },
+   "apple banana cherry": {
+    "apple": 0.4061649006110906,
+    "banana": 0.5387870396434652,
+    "cherry": 0.05504805974544414
+   },
+   "apple banana cherry mango": {
+    "mango": 0.4821177954433244,
+    "apple": 0.17759817207562612,
+    "banana": 0.2559332470924279,
+    "cherry": 0.08435078538862166
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "mango"
+    ],
+    "mango",
+    -0.0393
+   ],
+   [
+    [
+     "apple",
+     "banana",
+     "mango"
+    ],
+    "mango",
+    -0.1175
+   ],
+   [
+    [
+     "apple",
+     "banana"
+    ],
+    "apple",
+    -0.1407
+   ],
+   [
+    [
+     "banana",
+     "mango"
+    ],
+    "banana",
+    -0.1609
+   ],
+   [
+    [
+     "banana",
+     "cherry",
+     "mango"
+    ],
+    "banana",
+    -0.0436
+   ],
+   [
+    [
+     "banana",
+     "cherry",
+     "mango"
+    ],
+    "cherry",
+    -0.0295
+   ],
+   [
+    [
+     "apple",
+     "banana",
+     "cherry"
+    ],
+    "cherry",
+    -0.0293
+   ]
+  ]
+ },
+ {
+  "family": "fruit",
+  "model": "gpt-4.1-mini",
+  "bm_violations": 6,
+  "bm_total": 32,
+  "bm_worst": -0.19609141998424376,
+  "kl_luce_fit": 0.3151031642947902,
+  "kl_thurstone_fit": 0.27919891391330703,
+  "kl_best_rum": 0.14729321375130905,
+  "q": {
+   "apple mango": {
+    "mango": 0.37306783840924135,
+    "apple": 0.6269321615907587
+   },
+   "banana mango": {
+    "mango": 0.6701030959551559,
+    "banana": 0.32989690404484395
+   },
+   "cherry mango": {
+    "mango": 0.8468443920777241,
+    "cherry": 0.15315560792227595
+   },
+   "apple banana": {
+    "apple": 0.873517420892756,
+    "banana": 0.12648257910724406
+   },
+   "apple cherry": {
+    "apple": 0.9953904003054329,
+    "cherry": 0.004609599694566923
+   },
+   "banana cherry": {
+    "banana": 0.8994585901532798,
+    "cherry": 0.10054140984672022
+   },
+   "apple banana mango": {
+    "mango": 0.2027918471762952,
+    "apple": 0.6998044283734903,
+    "banana": 0.09740372445021449
+   },
+   "apple cherry mango": {
+    "mango": 0.5417223503617005,
+    "apple": 0.4518834892177868,
+    "cherry": 0.006394160420512676
+   },
+   "banana cherry mango": {
+    "mango": 0.7693700322541176,
+    "banana": 0.21216343386203085,
+    "cherry": 0.018466533883851482
+   },
+   "apple banana cherry": {
+    "apple": 0.6848106572118614,
+    "banana": 0.3088290514950139,
+    "cherry": 0.006360291293124782
+   },
+   "apple banana cherry mango": {
+    "mango": 0.39888326716053896,
+    "apple": 0.4994778342300181,
+    "banana": 0.09569189171492892,
+    "cherry": 0.005947006894513995
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "cherry",
+     "mango"
+    ],
+    "mango",
+    -0.0654
+   ],
+   [
+    [
+     "apple",
+     "banana",
+     "mango"
+    ],
+    "mango",
+    -0.1961
+   ],
+   [
+    [
+     "apple"
+    ],
+    "apple",
+    -0.1588
+   ],
+   [
+    [
+     "apple",
+     "mango"
+    ],
+    "apple",
+    -0.0253
+   ],
+   [
+    [
+     "apple",
+     "cherry",
+     "mango"
+    ],
+    "apple",
+    -0.0476
+   ],
+   [
+    [
+     "apple",
+     "banana"
+    ],
+    "banana",
+    -0.1841
+   ]
+  ]
+ },
+ {
+  "family": "music",
+  "model": "gpt-4o-mini",
+  "bm_violations": 6,
+  "bm_total": 32,
+  "bm_worst": -0.13380549236823758,
+  "kl_luce_fit": 0.3115268125913609,
+  "kl_thurstone_fit": 0.25850598720840884,
+  "kl_best_rum": 0.12904027189676512,
+  "q": {
+   "jazz rock": {
+    "jazz": 0.9646529455382825,
+    "rock": 0.03534705446171743
+   },
+   "classical jazz": {
+    "jazz": 0.9885792290229083,
+    "classical": 0.011420770977091698
+   },
+   "jazz techno": {
+    "jazz": 0.9963771164661428,
+    "techno": 0.0036228835338572556
+   },
+   "classical rock": {
+    "rock": 0.4999915444378185,
+    "classical": 0.5000084555621815
+   },
+   "rock techno": {
+    "rock": 0.9798490613194074,
+    "techno": 0.020150938680592628
+   },
+   "classical techno": {
+    "classical": 0.805283876359451,
+    "techno": 0.194716123640549
+   },
+   "classical jazz rock": {
+    "jazz": 0.981018657473128,
+    "rock": 0.0106324135021494,
+    "classical": 0.008348929024722639
+   },
+   "jazz rock techno": {
+    "jazz": 0.8287050759727443,
+    "rock": 0.17129048267015964,
+    "techno": 4.441357096042404e-06
+   },
+   "classical jazz techno": {
+    "jazz": 0.9916425205656582,
+    "classical": 0.008343570902374852,
+    "techno": 1.3908531967192191e-05
+   },
+   "classical rock techno": {
+    "rock": 0.6372873088183041,
+    "classical": 0.36257280641451856,
+    "techno": 0.00013988476717732658
+   },
+   "classical jazz rock techno": {
+    "jazz": 0.9625105683409819,
+    "rock": 0.0322114002200612,
+    "classical": 0.005277265649030069,
+    "techno": 7.657899267737266e-07
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "jazz"
+    ],
+    "jazz",
+    -0.1108
+   ],
+   [
+    [
+     "classical",
+     "jazz"
+    ],
+    "jazz",
+    -0.0216
+   ],
+   [
+    [
+     "jazz",
+     "rock",
+     "techno"
+    ],
+    "jazz",
+    -0.1338
+   ],
+   [
+    [
+     "jazz",
+     "rock"
+    ],
+    "rock",
+    -0.1144
+   ],
+   [
+    [
+     "classical",
+     "rock"
+    ],
+    "rock",
+    -0.1157
+   ],
+   [
+    [
+     "classical",
+     "jazz",
+     "rock"
+    ],
+    "rock",
+    -0.0216
+   ]
+  ]
+ },
+ {
+  "family": "fruit",
+  "model": "gpt-4.1",
+  "bm_violations": 5,
+  "bm_total": 32,
+  "bm_worst": -0.5205352538129323,
+  "kl_luce_fit": 0.8722974912203713,
+  "kl_thurstone_fit": 0.8220212044690454,
+  "kl_best_rum": 0.612681510448196,
+  "q": {
+   "apple mango": {
+    "mango": 0.8206895836073894,
+    "apple": 0.17931041639261047
+   },
+   "banana mango": {
+    "mango": 0.9713189331563515,
+    "banana": 0.02868106684364852
+   },
+   "cherry mango": {
+    "mango": 0.9745503614530237,
+    "cherry": 0.025449638546976433
+   },
+   "apple banana": {
+    "apple": 0.4642271277822527,
+    "banana": 0.5357728722177474
+   },
+   "apple cherry": {
+    "apple": 0.4889909007714668,
+    "cherry": 0.5110090992285331
+   },
+   "banana cherry": {
+    "banana": 0.7712848309721422,
+    "cherry": 0.2287151690278579
+   },
+   "apple banana mango": {
+    "mango": 0.9410739417643107,
+    "apple": 0.008905163889697398,
+    "banana": 0.05002089434599193
+   },
+   "apple cherry mango": {
+    "mango": 0.9931607146963423,
+    "apple": 0.0018844614694237267,
+    "cherry": 0.004954823834234001
+   },
+   "banana cherry mango": {
+    "mango": 0.9714939940068351,
+    "banana": 0.028259592515519974,
+    "cherry": 0.0002464134776448605
+   },
+   "apple banana cherry": {
+    "apple": 0.11130147087052483,
+    "banana": 0.8455277724075012,
+    "cherry": 0.043170756721974034
+   },
+   "apple banana cherry mango": {
+    "mango": 0.5930098190403313,
+    "apple": 0.0038164926483113953,
+    "banana": 0.38694227534343134,
+    "cherry": 0.01623141296792589
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "apple",
+     "mango"
+    ],
+    "mango",
+    -0.5205
+   ],
+   [
+    [
+     "banana",
+     "mango"
+    ],
+    "mango",
+    -0.3482
+   ],
+   [
+    [
+     "cherry",
+     "mango"
+    ],
+    "mango",
+    -0.3971
+   ],
+   [
+    [
+     "apple",
+     "banana",
+     "mango"
+    ],
+    "banana",
+    -0.3369
+   ],
+   [
+    [
+     "banana",
+     "cherry",
+     "mango"
+    ],
+    "banana",
+    -0.3587
+   ]
+  ]
+ },
+ {
+  "family": "fruit",
+  "model": "gpt-4.1-nano",
+  "bm_violations": 9,
+  "bm_total": 32,
+  "bm_worst": -0.36922842560110003,
+  "kl_luce_fit": 0.5635292681701072,
+  "kl_thurstone_fit": 0.5174566566770599,
+  "kl_best_rum": 0.10431484831764644,
+  "q": {
+   "apple mango": {
+    "mango": 0.19933712821598315,
+    "apple": 0.800662871784017
+   },
+   "banana mango": {
+    "mango": 0.4545713224976265,
+    "banana": 0.5454286775023734
+   },
+   "cherry mango": {
+    "mango": 0.7846962549567159,
+    "cherry": 0.21530374504328406
+   },
+   "apple banana": {
+    "apple": 0.5846143730090424,
+    "banana": 0.41538562699095766
+   },
+   "apple cherry": {
+    "apple": 0.8727446634696983,
+    "cherry": 0.12725533653030177
+   },
+   "banana cherry": {
+    "banana": 0.47168018895247776,
+    "cherry": 0.5283198110475222
+   },
+   "apple banana mango": {
+    "mango": 0.13392896661985895,
+    "apple": 0.47780375761143823,
+    "banana": 0.38826727576870274
+   },
+   "apple cherry mango": {
+    "mango": 0.46411480810380135,
+    "apple": 0.4171381199705524,
+    "cherry": 0.11874707192564633
+   },
+   "banana cherry mango": {
+    "mango": 0.5234442865261144,
+    "banana": 0.4551534822183187,
+    "cherry": 0.021402231255566936
+   },
+   "apple banana cherry": {
+    "apple": 0.501715481630705,
+    "banana": 0.40487953781810093,
+    "cherry": 0.09340498055119412
+   },
+   "apple banana cherry mango": {
+    "mango": 0.12745657980110472,
+    "apple": 0.5078638765510379,
+    "banana": 0.34886266341841726,
+    "cherry": 0.01581688022944
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "apple",
+     "mango"
+    ],
+    "mango",
+    -0.2713
+   ],
+   [
+    [
+     "banana",
+     "mango"
+    ],
+    "mango",
+    -0.0753
+   ],
+   [
+    [
+     "cherry",
+     "mango"
+    ],
+    "mango",
+    -0.0754
+   ],
+   [
+    [
+     "apple"
+    ],
+    "apple",
+    -0.3692
+   ],
+   [
+    [
+     "apple",
+     "banana",
+     "mango"
+    ],
+    "apple",
+    -0.0301
+   ],
+   [
+    [
+     "apple",
+     "cherry",
+     "mango"
+    ],
+    "apple",
+    -0.0907
+   ],
+   [
+    [
+     "apple",
+     "banana"
+    ],
+    "banana",
+    -0.0289
+   ],
+   [
+    [
+     "banana",
+     "cherry"
+    ],
+    "banana",
+    -0.0395
+   ],
+   [
+    [
+     "apple",
+     "cherry"
+    ],
+    "cherry",
+    -0.0691
+   ]
+  ]
+ },
+ {
+  "family": "music",
+  "model": "gpt-4o",
+  "bm_violations": 4,
+  "bm_total": 32,
+  "bm_worst": -0.37898616360529025,
+  "kl_luce_fit": 0.5523839851778571,
+  "kl_thurstone_fit": 0.47818745888159386,
+  "kl_best_rum": 0.19497182953214293,
+  "q": {
+   "jazz rock": {
+    "jazz": 0.6030698479706905,
+    "rock": 0.39693015202930954
+   },
+   "classical jazz": {
+    "jazz": 0.7024766969546842,
+    "classical": 0.2975233030453159
+   },
+   "jazz techno": {
+    "jazz": 0.784980726512686,
+    "techno": 0.21501927348731378
+   },
+   "classical rock": {
+    "rock": 0.47891337174712795,
+    "classical": 0.5210866282528721
+   },
+   "rock techno": {
+    "rock": 0.5677523955282194,
+    "techno": 0.4322476044717806
+   },
+   "classical techno": {
+    "classical": 0.9488487258290932,
+    "techno": 0.051151274170906924
+   },
+   "classical jazz rock": {
+    "jazz": 0.6779780063463918,
+    "rock": 0.1332648382153151,
+    "classical": 0.18875715543829308
+   },
+   "jazz rock techno": {
+    "jazz": 0.763258276341732,
+    "rock": 0.2043843631203792,
+    "techno": 0.032357360537888784
+   },
+   "classical jazz techno": {
+    "jazz": 0.5554099330155314,
+    "classical": 0.43041807569457924,
+    "techno": 0.014171991289889213
+   },
+   "classical rock techno": {
+    "rock": 0.19264275127406627,
+    "classical": 0.780488491369779,
+    "techno": 0.02686875735615467
+   },
+   "classical jazz rock techno": {
+    "jazz": 0.4591802711121431,
+    "rock": 0.09601201387577186,
+    "classical": 0.43005163244915406,
+    "techno": 0.014756082562931108
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "jazz",
+     "rock"
+    ],
+    "jazz",
+    -0.379
+   ],
+   [
+    [
+     "classical",
+     "jazz"
+    ],
+    "jazz",
+    -0.0717
+   ],
+   [
+    [
+     "jazz",
+     "techno"
+    ],
+    "jazz",
+    -0.0745
+   ],
+   [
+    [
+     "classical",
+     "jazz",
+     "rock"
+    ],
+    "classical",
+    -0.2413
+   ]
+  ]
+ },
+ {
+  "family": "music",
+  "model": "gpt-4.1-nano",
+  "bm_violations": 5,
+  "bm_total": 32,
+  "bm_worst": -0.4469920097551013,
+  "kl_luce_fit": 0.7893606501663828,
+  "kl_thurstone_fit": 0.7443813710347,
+  "kl_best_rum": 0.2815921778921454,
+  "q": {
+   "jazz rock": {
+    "jazz": 0.5716519020072554,
+    "rock": 0.4283480979927446
+   },
+   "classical jazz": {
+    "jazz": 0.7643706616715185,
+    "classical": 0.23562933832848143
+   },
+   "jazz techno": {
+    "jazz": 0.7529872668673702,
+    "techno": 0.24701273313262975
+   },
+   "classical rock": {
+    "rock": 0.4181065802828765,
+    "classical": 0.5818934197171234
+   },
+   "rock techno": {
+    "rock": 0.5445345356947877,
+    "techno": 0.4554654643052123
+   },
+   "classical techno": {
+    "classical": 0.2962111418603499,
+    "techno": 0.7037888581396502
+   },
+   "classical jazz rock": {
+    "jazz": 0.7078946438238919,
+    "rock": 0.14425287469128015,
+    "classical": 0.1478524814848279
+   },
+   "jazz rock techno": {
+    "jazz": 0.3801383167051589,
+    "rock": 0.3654876835106912,
+    "techno": 0.2543739997841498
+   },
+   "classical jazz techno": {
+    "jazz": 0.8217338600220415,
+    "classical": 0.16825697606519255,
+    "techno": 0.010009163912766033
+   },
+   "classical rock techno": {
+    "rock": 0.5778533190593337,
+    "classical": 0.27478546013026167,
+    "techno": 0.14736122081040479
+   },
+   "classical jazz rock techno": {
+    "jazz": 0.8271303264602602,
+    "rock": 0.07405589076960674,
+    "classical": 0.08414978820383022,
+    "techno": 0.014663994566302775
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "classical",
+     "jazz",
+     "rock"
+    ],
+    "jazz",
+    -0.1192
+   ],
+   [
+    [
+     "jazz",
+     "rock",
+     "techno"
+    ],
+    "jazz",
+    -0.447
+   ],
+   [
+    [
+     "classical",
+     "rock"
+    ],
+    "rock",
+    -0.2299
+   ],
+   [
+    [
+     "rock",
+     "techno"
+    ],
+    "rock",
+    -0.3248
+   ],
+   [
+    [
+     "classical",
+     "techno"
+    ],
+    "classical",
+    -0.0627
+   ]
+  ]
+ },
+ {
+  "family": "music",
+  "model": "gpt-4.1-mini",
+  "bm_violations": 6,
+  "bm_total": 32,
+  "bm_worst": -0.3201356175552218,
+  "kl_luce_fit": 0.5189517579310001,
+  "kl_thurstone_fit": 0.4319017425451165,
+  "kl_best_rum": 0.09529362677679062,
+  "q": {
+   "jazz rock": {
+    "jazz": 0.7699586670509064,
+    "rock": 0.2300413329490936
+   },
+   "classical jazz": {
+    "jazz": 0.7194811589862992,
+    "classical": 0.28051884101370084
+   },
+   "jazz techno": {
+    "jazz": 0.949629082083919,
+    "techno": 0.05037091791608103
+   },
+   "classical rock": {
+    "rock": 0.5080113088338153,
+    "classical": 0.49198869116618466
+   },
+   "rock techno": {
+    "rock": 0.4287581436558438,
+    "techno": 0.5712418563441563
+   },
+   "classical techno": {
+    "classical": 0.7204833190182113,
+    "techno": 0.2795166809817887
+   },
+   "classical jazz rock": {
+    "jazz": 0.6289603000674192,
+    "rock": 0.22162008429084945,
+    "classical": 0.14941961564173137
+   },
+   "jazz rock techno": {
+    "jazz": 0.6714355193148888,
+    "rock": 0.32023588723257074,
+    "techno": 0.008328593452540431
+   },
+   "classical jazz techno": {
+    "jazz": 0.8336818694673033,
+    "classical": 0.164470233881975,
+    "techno": 0.0018478966507216963
+   },
+   "classical rock techno": {
+    "rock": 0.5468064747613216,
+    "classical": 0.37600711880242504,
+    "techno": 0.07718640643625334
+   },
+   "classical jazz rock techno": {
+    "jazz": 0.7804913429070138,
+    "rock": 0.11814860078282675,
+    "classical": 0.09940646576989602,
+    "techno": 0.0019535905402634406
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "jazz"
+    ],
+    "jazz",
+    -0.0855
+   ],
+   [
+    [
+     "classical",
+     "jazz",
+     "rock"
+    ],
+    "jazz",
+    -0.1515
+   ],
+   [
+    [
+     "jazz",
+     "rock",
+     "techno"
+    ],
+    "jazz",
+    -0.1091
+   ],
+   [
+    [
+     "jazz",
+     "rock"
+    ],
+    "rock",
+    -0.1937
+   ],
+   [
+    [
+     "classical",
+     "rock"
+    ],
+    "rock",
+    -0.1423
+   ],
+   [
+    [
+     "rock",
+     "techno"
+    ],
+    "rock",
+    -0.3201
+   ]
+  ]
+ },
+ {
+  "family": "vacation",
+  "model": "gpt-4o-mini",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.16937480264270677,
+  "kl_luce_fit": 0.3481901954922968,
+  "kl_thurstone_fit": 0.32224393964794357,
+  "kl_best_rum": 0.28992623592649414,
+  "q": {
+   "beach mountains": {
+    "beach": 0.8639424560299052,
+    "mountains": 0.1360575439700948
+   },
+   "beach city": {
+    "beach": 0.9918677217268154,
+    "city": 0.008132278273184612
+   },
+   "beach desert": {
+    "beach": 0.9999906135593367,
+    "desert": 9.38644066325197e-06
+   },
+   "city mountains": {
+    "mountains": 0.9877054249993523,
+    "city": 0.012294575000647666
+   },
+   "desert mountains": {
+    "mountains": 0.9994652285409473,
+    "desert": 0.0005347714590525607
+   },
+   "city desert": {
+    "city": 0.994618177946974,
+    "desert": 0.0053818220530259114
+   },
+   "beach city mountains": {
+    "beach": 0.5849032857123267,
+    "mountains": 0.41504916313551893,
+    "city": 4.7551152154314436e-05
+   },
+   "beach desert mountains": {
+    "beach": 0.6002072490365552,
+    "mountains": 0.3997922148585311,
+    "desert": 5.361049136366645e-07
+   },
+   "beach city desert": {
+    "beach": 0.9799439029072788,
+    "city": 0.02004021367659445,
+    "desert": 1.5883416126554818e-05
+   },
+   "city desert mountains": {
+    "mountains": 0.8647155038102916,
+    "city": 0.13485567579501964,
+    "desert": 0.00042882039468869785
+   },
+   "beach city desert mountains": {
+    "beach": 0.4306037858166069,
+    "mountains": 0.5691670175012379,
+    "city": 0.00022854669496885996,
+    "desert": 6.499871863490305e-07
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "beach"
+    ],
+    "beach",
+    -0.1214
+   ],
+   [
+    [
+     "beach",
+     "city"
+    ],
+    "beach",
+    -0.1424
+   ],
+   [
+    [
+     "beach",
+     "desert"
+    ],
+    "beach",
+    -0.1496
+   ],
+   [
+    [
+     "beach",
+     "mountains"
+    ],
+    "mountains",
+    -0.1096
+   ],
+   [
+    [
+     "beach",
+     "city",
+     "mountains"
+    ],
+    "mountains",
+    -0.1541
+   ],
+   [
+    [
+     "beach",
+     "desert",
+     "mountains"
+    ],
+    "mountains",
+    -0.1694
+   ],
+   [
+    [
+     "city",
+     "mountains"
+    ],
+    "city",
+    -0.1224
+   ]
+  ]
+ },
+ {
+  "family": "vacation",
+  "model": "gpt-4o",
+  "bm_violations": 9,
+  "bm_total": 32,
+  "bm_worst": -0.32136766716058346,
+  "kl_luce_fit": 0.3494199361132243,
+  "kl_thurstone_fit": 0.3796716660007614,
+  "kl_best_rum": 0.08426379618529439,
+  "q": {
+   "beach mountains": {
+    "beach": 0.5106517599266562,
+    "mountains": 0.4893482400733438
+   },
+   "beach city": {
+    "beach": 0.31759419159841346,
+    "city": 0.6824058084015866
+   },
+   "beach desert": {
+    "beach": 0.9745436650164755,
+    "desert": 0.025456334983524415
+   },
+   "city mountains": {
+    "mountains": 0.5029834905550782,
+    "city": 0.49701650944492176
+   },
+   "desert mountains": {
+    "mountains": 0.958230294049076,
+    "desert": 0.041769705950923997
+   },
+   "city desert": {
+    "city": 0.9296963288172218,
+    "desert": 0.07030367118277818
+   },
+   "beach city mountains": {
+    "beach": 0.5028365233883938,
+    "mountains": 0.3328288293955314,
+    "city": 0.16433464721607494
+   },
+   "beach desert mountains": {
+    "beach": 0.6786855403497342,
+    "mountains": 0.31316648691478416,
+    "desert": 0.008147972735481505
+   },
+   "beach city desert": {
+    "beach": 0.4256513270098849,
+    "city": 0.5569781227549678,
+    "desert": 0.017370550235147313
+   },
+   "city desert mountains": {
+    "mountains": 0.3812330776717965,
+    "city": 0.5167223507778279,
+    "desert": 0.1020445715503756
+   },
+   "beach city desert mountains": {
+    "beach": 0.3774671945114569,
+    "mountains": 0.3980340364651975,
+    "city": 0.20969427515013103,
+    "desert": 0.014804493873214595
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "beach",
+     "mountains"
+    ],
+    "beach",
+    -0.2934
+   ],
+   [
+    [
+     "beach",
+     "city"
+    ],
+    "beach",
+    -0.2334
+   ],
+   [
+    [
+     "mountains"
+    ],
+    "mountains",
+    -0.3214
+   ],
+   [
+    [
+     "beach",
+     "city",
+     "mountains"
+    ],
+    "mountains",
+    -0.0652
+   ],
+   [
+    [
+     "beach",
+     "desert",
+     "mountains"
+    ],
+    "mountains",
+    -0.0849
+   ],
+   [
+    [
+     "city"
+    ],
+    "city",
+    -0.0808
+   ],
+   [
+    [
+     "beach",
+     "city",
+     "mountains"
+    ],
+    "city",
+    -0.0454
+   ],
+   [
+    [
+     "desert",
+     "mountains"
+    ],
+    "desert",
+    -0.0536
+   ],
+   [
+    [
+     "city",
+     "desert"
+    ],
+    "desert",
+    -0.0343
+   ]
+  ]
+ },
+ {
+  "family": "music",
+  "model": "gpt-4.1",
+  "bm_violations": 6,
+  "bm_total": 32,
+  "bm_worst": -0.4087609755834941,
+  "kl_luce_fit": 1.28892767750407,
+  "kl_thurstone_fit": 1.2365099239363406,
+  "kl_best_rum": 0.8260469107765332,
+  "q": {
+   "jazz rock": {
+    "jazz": 0.6029309252451269,
+    "rock": 0.39706907475487313
+   },
+   "classical jazz": {
+    "jazz": 0.9896718099610343,
+    "classical": 0.010328190038965733
+   },
+   "jazz techno": {
+    "jazz": 0.6905265293874696,
+    "techno": 0.3094734706125304
+   },
+   "classical rock": {
+    "rock": 0.7548141303471047,
+    "classical": 0.24518586965289546
+   },
+   "rock techno": {
+    "rock": 0.5105134553294287,
+    "techno": 0.48948654467057134
+   },
+   "classical techno": {
+    "classical": 0.32285779633671735,
+    "techno": 0.6771422036632826
+   },
+   "classical jazz rock": {
+    "jazz": 0.999046446516416,
+    "rock": 0.0007874815362982233,
+    "classical": 0.00016607194728584853
+   },
+   "jazz rock techno": {
+    "jazz": 0.9911770846940401,
+    "rock": 0.008567632335181761,
+    "techno": 0.0002552829707782615
+   },
+   "classical jazz techno": {
+    "jazz": 0.9532999966556206,
+    "classical": 0.04491132403782689,
+    "techno": 0.0017886793065524903
+   },
+   "classical rock techno": {
+    "rock": 0.7154232462508511,
+    "classical": 0.21914087394565288,
+    "techno": 0.0654358798034961
+   },
+   "classical jazz rock techno": {
+    "jazz": 0.9913518218733136,
+    "rock": 0.004260871976528873,
+    "classical": 0.004248707432220916,
+    "techno": 0.00013859871793666043
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "jazz",
+     "rock"
+    ],
+    "jazz",
+    -0.3959
+   ],
+   [
+    [
+     "jazz",
+     "techno"
+    ],
+    "jazz",
+    -0.2626
+   ],
+   [
+    [
+     "classical",
+     "jazz",
+     "techno"
+    ],
+    "jazz",
+    -0.0381
+   ],
+   [
+    [
+     "rock",
+     "techno"
+    ],
+    "rock",
+    -0.2092
+   ],
+   [
+    [
+     "classical",
+     "jazz"
+    ],
+    "classical",
+    -0.0305
+   ],
+   [
+    [
+     "techno"
+    ],
+    "techno",
+    -0.4088
+   ]
+  ]
+ },
+ {
+  "family": "vacation",
+  "model": "gpt-4.1-nano",
+  "bm_violations": 5,
+  "bm_total": 32,
+  "bm_worst": -0.21329381017015508,
+  "kl_luce_fit": 0.24537259469876557,
+  "kl_thurstone_fit": 0.20749732104174656,
+  "kl_best_rum": 0.13820627013338901,
+  "q": {
+   "beach mountains": {
+    "beach": 0.6173097694671634,
+    "mountains": 0.3826902305328365
+   },
+   "beach city": {
+    "beach": 0.869052083471335,
+    "city": 0.13094791652866497
+   },
+   "beach desert": {
+    "beach": 0.9881866198042312,
+    "desert": 0.011813380195768781
+   },
+   "city mountains": {
+    "mountains": 0.4325859728242438,
+    "city": 0.5674140271757563
+   },
+   "desert mountains": {
+    "mountains": 0.9875645190621988,
+    "desert": 0.012435480937801243
+   },
+   "city desert": {
+    "city": 0.8906041647582622,
+    "desert": 0.10939583524173783
+   },
+   "beach city mountains": {
+    "beach": 0.6191872887882967,
+    "mountains": 0.24629123587519275,
+    "city": 0.13452147533651052
+   },
+   "beach desert mountains": {
+    "beach": 0.5659452762774576,
+    "mountains": 0.43117036557223504,
+    "desert": 0.0028843581503073556
+   },
+   "beach city desert": {
+    "beach": 0.7340391471559459,
+    "city": 0.2572072636348564,
+    "desert": 0.008753589209197681
+   },
+   "city desert mountains": {
+    "mountains": 0.7321783853352618,
+    "city": 0.2603726510703778,
+    "desert": 0.007448963594360282
+   },
+   "beach city desert mountains": {
+    "beach": 0.5893608142201898,
+    "mountains": 0.33258983821605564,
+    "city": 0.07467595418798796,
+    "desert": 0.0033733933757665716
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "beach"
+    ],
+    "beach",
+    -0.1447
+   ],
+   [
+    [
+     "beach",
+     "desert",
+     "mountains"
+    ],
+    "beach",
+    -0.0234
+   ],
+   [
+    [
+     "city",
+     "mountains"
+    ],
+    "mountains",
+    -0.2133
+   ],
+   [
+    [
+     "beach",
+     "city",
+     "mountains"
+    ],
+    "mountains",
+    -0.0863
+   ],
+   [
+    [
+     "beach",
+     "city"
+    ],
+    "city",
+    -0.1861
+   ]
+  ]
+ },
+ {
+  "family": "drink",
+  "model": "gpt-4o-mini",
+  "bm_violations": 6,
+  "bm_total": 32,
+  "bm_worst": -0.32776676017753337,
+  "kl_luce_fit": 0.7584980970014802,
+  "kl_thurstone_fit": 0.6601131669085056,
+  "kl_best_rum": 0.2100346963709518,
+  "q": {
+   "coffee tea": {
+    "coffee": 0.6303661532546541,
+    "tea": 0.3696338467453459
+   },
+   "coffee juice": {
+    "coffee": 0.9899814520461186,
+    "juice": 0.01001854795388145
+   },
+   "cocoa coffee": {
+    "coffee": 0.9999998377971538,
+    "cocoa": 1.6220284603027186e-07
+   },
+   "juice tea": {
+    "tea": 0.9723417370161087,
+    "juice": 0.02765826298389122
+   },
+   "cocoa tea": {
+    "tea": 0.5758671075643146,
+    "cocoa": 0.42413289243568536
+   },
+   "cocoa juice": {
+    "juice": 0.2642305653234254,
+    "cocoa": 0.7357694346765746
+   },
+   "coffee juice tea": {
+    "coffee": 0.3905685600646405,
+    "tea": 0.6094061712214264,
+    "juice": 2.526871393312806e-05
+   },
+   "cocoa coffee tea": {
+    "coffee": 0.49840542929004145,
+    "tea": 0.5015945707099585,
+    "cocoa": 0.0
+   },
+   "cocoa coffee juice": {
+    "coffee": 0.9961689959421696,
+    "juice": 0.003830942699630909,
+    "cocoa": 6.135819962133573e-08
+   },
+   "cocoa juice tea": {
+    "tea": 0.9054136232617576,
+    "juice": 0.008560913544342089,
+    "cocoa": 0.08602546319390025
+   },
+   "cocoa coffee juice tea": {
+    "coffee": 0.4965948451977585,
+    "tea": 0.5033743262298681,
+    "juice": 3.082857237328029e-05,
+    "cocoa": 0.0
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "coffee"
+    ],
+    "coffee",
+    -0.2318
+   ],
+   [
+    [
+     "coffee",
+     "juice",
+     "tea"
+    ],
+    "coffee",
+    -0.106
+   ],
+   [
+    [
+     "coffee",
+     "tea"
+    ],
+    "tea",
+    -0.238
+   ],
+   [
+    [
+     "juice",
+     "tea"
+    ],
+    "tea",
+    -0.0391
+   ],
+   [
+    [
+     "cocoa",
+     "tea"
+    ],
+    "tea",
+    -0.3278
+   ],
+   [
+    [
+     "cocoa"
+    ],
+    "cocoa",
+    -0.0739
+   ]
+  ]
+ },
+ {
+  "family": "vacation",
+  "model": "gpt-4.1",
+  "bm_violations": 5,
+  "bm_total": 32,
+  "bm_worst": -0.40809414784177905,
+  "kl_luce_fit": 0.547335055684757,
+  "kl_thurstone_fit": 0.5227627938989816,
+  "kl_best_rum": 0.3472991524693313,
+  "q": {
+   "beach mountains": {
+    "beach": 0.2490898276242588,
+    "mountains": 0.7509101723757411
+   },
+   "beach city": {
+    "beach": 0.3464731104442367,
+    "city": 0.6535268895557633
+   },
+   "beach desert": {
+    "beach": 0.9996887324549758,
+    "desert": 0.00031126754502415385
+   },
+   "city mountains": {
+    "mountains": 0.7628167321273129,
+    "city": 0.23718326787268706
+   },
+   "desert mountains": {
+    "mountains": 0.9995977844307626,
+    "desert": 0.0004022155692374736
+   },
+   "city desert": {
+    "city": 0.9778381088762819,
+    "desert": 0.02216189112371814
+   },
+   "beach city mountains": {
+    "beach": 0.05524443997542994,
+    "mountains": 0.9444635868219042,
+    "city": 0.00029197320266594073
+   },
+   "beach desert mountains": {
+    "beach": 0.02290509695814608,
+    "mountains": 0.9770938422451604,
+    "desert": 1.0607966935013182e-06
+   },
+   "beach city desert": {
+    "beach": 0.567603300969438,
+    "city": 0.4323514079724456,
+    "desert": 4.529105811633703e-05
+   },
+   "city desert mountains": {
+    "mountains": 0.971676830790306,
+    "city": 0.028273310902935705,
+    "desert": 4.98583067582732e-05
+   },
+   "beach city desert mountains": {
+    "beach": 0.034950142796865785,
+    "mountains": 0.9645853102891112,
+    "city": 0.00046257361509404707,
+    "desert": 1.973298929018643e-06
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "beach",
+     "city"
+    ],
+    "beach",
+    -0.2414
+   ],
+   [
+    [
+     "beach",
+     "mountains"
+    ],
+    "mountains",
+    -0.2061
+   ],
+   [
+    [
+     "city",
+     "mountains"
+    ],
+    "mountains",
+    -0.1887
+   ],
+   [
+    [
+     "beach",
+     "city",
+     "mountains"
+    ],
+    "mountains",
+    -0.0201
+   ],
+   [
+    [
+     "city"
+    ],
+    "city",
+    -0.4081
+   ]
+  ]
+ },
+ {
+  "family": "drink",
+  "model": "gpt-4o",
+  "bm_violations": 6,
+  "bm_total": 32,
+  "bm_worst": -0.2583539300860856,
+  "kl_luce_fit": 0.5972913028914021,
+  "kl_thurstone_fit": 0.5431773143728706,
+  "kl_best_rum": 0.0857747158321037,
+  "q": {
+   "coffee tea": {
+    "coffee": 0.43004476820063225,
+    "tea": 0.5699552317993678
+   },
+   "coffee juice": {
+    "coffee": 0.7714175530079909,
+    "juice": 0.22858244699200922
+   },
+   "cocoa coffee": {
+    "coffee": 0.9999999808430057,
+    "cocoa": 1.915699437198946e-08
+   },
+   "juice tea": {
+    "tea": 0.7813105180402626,
+    "juice": 0.2186894819597374
+   },
+   "cocoa tea": {
+    "tea": 0.8056201857379639,
+    "cocoa": 0.19437981426203602
+   },
+   "cocoa juice": {
+    "juice": 0.37446374357237283,
+    "cocoa": 0.6255362564276271
+   },
+   "coffee juice tea": {
+    "coffee": 0.30188450218235174,
+    "tea": 0.6070522289348449,
+    "juice": 0.09106326888280337
+   },
+   "cocoa coffee tea": {
+    "coffee": 0.38327469090135474,
+    "tea": 0.6167250469292117,
+    "cocoa": 2.621694335559156e-07
+   },
+   "cocoa coffee juice": {
+    "coffee": 0.8471278690173317,
+    "juice": 0.15287213098266836,
+    "cocoa": 0.0
+   },
+   "cocoa juice tea": {
+    "tea": 0.7937073355848147,
+    "juice": 0.09523810118032272,
+    "cocoa": 0.1110545632348625
+   },
+   "cocoa coffee juice tea": {
+    "coffee": 0.5575653458503638,
+    "tea": 0.3954681139786032,
+    "juice": 0.04696654017103296,
+    "cocoa": 0.0
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "coffee"
+    ],
+    "coffee",
+    -0.2267
+   ],
+   [
+    [
+     "coffee",
+     "juice",
+     "tea"
+    ],
+    "coffee",
+    -0.2557
+   ],
+   [
+    [
+     "cocoa",
+     "coffee",
+     "tea"
+    ],
+    "coffee",
+    -0.1743
+   ],
+   [
+    [
+     "coffee",
+     "tea"
+    ],
+    "tea",
+    -0.2584
+   ],
+   [
+    [
+     "juice",
+     "tea"
+    ],
+    "tea",
+    -0.224
+   ],
+   [
+    [
+     "cocoa",
+     "tea"
+    ],
+    "tea",
+    -0.2093
+   ]
+  ]
+ },
+ {
+  "family": "vacation",
+  "model": "gpt-4.1-mini",
+  "bm_violations": 4,
+  "bm_total": 32,
+  "bm_worst": -0.07099048068673386,
+  "kl_luce_fit": 0.23937827103234954,
+  "kl_thurstone_fit": 0.19667310749664998,
+  "kl_best_rum": 0.013166419132428678,
+  "q": {
+   "beach mountains": {
+    "beach": 0.6113020152341889,
+    "mountains": 0.388697984765811
+   },
+   "beach city": {
+    "beach": 0.6473114109412264,
+    "city": 0.35268858905877365
+   },
+   "beach desert": {
+    "beach": 0.9925697629129021,
+    "desert": 0.007430237087098036
+   },
+   "city mountains": {
+    "mountains": 0.7029192203476701,
+    "city": 0.2970807796523299
+   },
+   "desert mountains": {
+    "mountains": 0.9628615130032384,
+    "desert": 0.03713848699676148
+   },
+   "city desert": {
+    "city": 0.9705841744743943,
+    "desert": 0.029415825525605704
+   },
+   "beach city mountains": {
+    "beach": 0.5609224323825021,
+    "mountains": 0.42086071335779734,
+    "city": 0.018216854259700585
+   },
+   "beach desert mountains": {
+    "beach": 0.5995370279259751,
+    "mountains": 0.40027290090662254,
+    "desert": 0.00019007116740235643
+   },
+   "beach city desert": {
+    "beach": 0.6715327331946869,
+    "city": 0.32460417695587873,
+    "desert": 0.0038630898494344027
+   },
+   "city desert mountains": {
+    "mountains": 0.6829514283869275,
+    "city": 0.3113806481995803,
+    "desert": 0.005667923413492293
+   },
+   "beach city desert mountains": {
+    "beach": 0.5141532739492287,
+    "mountains": 0.4329642131707366,
+    "city": 0.05270660887146289,
+    "desert": 0.00017590400857180283
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "beach",
+     "mountains"
+    ],
+    "beach",
+    -0.035
+   ],
+   [
+    [
+     "beach",
+     "city"
+    ],
+    "beach",
+    -0.071
+   ],
+   [
+    [
+     "beach",
+     "desert",
+     "mountains"
+    ],
+    "mountains",
+    -0.0327
+   ],
+   [
+    [
+     "beach",
+     "city",
+     "mountains"
+    ],
+    "city",
+    -0.0345
+   ]
+  ]
+ },
+ {
+  "family": "drink",
+  "model": "gpt-4.1-mini",
+  "bm_violations": 6,
+  "bm_total": 32,
+  "bm_worst": -0.22303428875852302,
+  "kl_luce_fit": 0.16949405005958093,
+  "kl_thurstone_fit": 0.14556670818671774,
+  "kl_best_rum": 0.10188771318789416,
+  "q": {
+   "coffee tea": {
+    "coffee": 0.8581358544017504,
+    "tea": 0.14186414559824959
+   },
+   "coffee juice": {
+    "coffee": 0.9396321719288044,
+    "juice": 0.06036782807119548
+   },
+   "cocoa coffee": {
+    "coffee": 1.0,
+    "cocoa": 0.0
+   },
+   "juice tea": {
+    "tea": 0.8786658983689258,
+    "juice": 0.12133410163107405
+   },
+   "cocoa tea": {
+    "tea": 0.9625701246242099,
+    "cocoa": 0.03742987537579012
+   },
+   "cocoa juice": {
+    "juice": 0.7692239971450859,
+    "cocoa": 0.23077600285491404
+   },
+   "coffee juice tea": {
+    "coffee": 0.8082575238594852,
+    "tea": 0.18702338508530403,
+    "juice": 0.004719091055210668
+   },
+   "cocoa coffee tea": {
+    "coffee": 0.6629013641464347,
+    "tea": 0.3370986358535653,
+    "cocoa": 0.0
+   },
+   "cocoa coffee juice": {
+    "coffee": 0.9837435800650707,
+    "juice": 0.01625641993492932,
+    "cocoa": 0.0
+   },
+   "cocoa juice tea": {
+    "tea": 0.9539064165156425,
+    "juice": 0.03872344891435766,
+    "cocoa": 0.007370134569999915
+   },
+   "cocoa coffee juice tea": {
+    "coffee": 0.8399534499039132,
+    "tea": 0.1592235865820967,
+    "juice": 0.0008229635139901172,
+    "cocoa": 0.0
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "coffee"
+    ],
+    "coffee",
+    -0.1828
+   ],
+   [
+    [
+     "coffee",
+     "juice",
+     "tea"
+    ],
+    "coffee",
+    -0.0317
+   ],
+   [
+    [
+     "cocoa",
+     "coffee",
+     "tea"
+    ],
+    "coffee",
+    -0.1771
+   ],
+   [
+    [
+     "coffee",
+     "tea"
+    ],
+    "tea",
+    -0.223
+   ],
+   [
+    [
+     "juice",
+     "tea"
+    ],
+    "tea",
+    -0.103
+   ],
+   [
+    [
+     "cocoa",
+     "tea"
+    ],
+    "tea",
+    -0.1692
+   ]
+  ]
+ },
+ {
+  "family": "drink",
+  "model": "gpt-4.1-nano",
+  "bm_violations": 6,
+  "bm_total": 32,
+  "bm_worst": -0.3559320201270415,
+  "kl_luce_fit": 0.5819348174016223,
+  "kl_thurstone_fit": 0.48435873759310555,
+  "kl_best_rum": 0.16763950703891672,
+  "q": {
+   "coffee tea": {
+    "coffee": 0.7851944644392677,
+    "tea": 0.21480553556073223
+   },
+   "coffee juice": {
+    "coffee": 0.5831739106246153,
+    "juice": 0.4168260893753846
+   },
+   "cocoa coffee": {
+    "coffee": 1.0,
+    "cocoa": 0.0
+   },
+   "juice tea": {
+    "tea": 0.5738741332174974,
+    "juice": 0.4261258667825026
+   },
+   "cocoa tea": {
+    "tea": 0.784648844132687,
+    "cocoa": 0.21535115586731304
+   },
+   "cocoa juice": {
+    "juice": 0.7369548451969464,
+    "cocoa": 0.26304515480305357
+   },
+   "coffee juice tea": {
+    "coffee": 0.3925348281454648,
+    "tea": 0.4661517333351369,
+    "juice": 0.14131343851939834
+   },
+   "cocoa coffee tea": {
+    "coffee": 0.6640014215337027,
+    "tea": 0.3359985784662973,
+    "cocoa": 0.0
+   },
+   "cocoa coffee juice": {
+    "coffee": 0.714630760042776,
+    "juice": 0.2853692399572238,
+    "cocoa": 0.0
+   },
+   "cocoa juice tea": {
+    "tea": 0.48043626034183906,
+    "juice": 0.49342838057987387,
+    "cocoa": 0.026135359078287027
+   },
+   "cocoa coffee juice tea": {
+    "coffee": 0.7199273097306692,
+    "tea": 0.23141275611366055,
+    "juice": 0.04865993415567025,
+    "cocoa": 0.0
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "coffee"
+    ],
+    "coffee",
+    -0.3171
+   ],
+   [
+    [
+     "coffee",
+     "juice",
+     "tea"
+    ],
+    "coffee",
+    -0.3274
+   ],
+   [
+    [
+     "cocoa",
+     "coffee",
+     "tea"
+    ],
+    "coffee",
+    -0.0559
+   ],
+   [
+    [
+     "coffee",
+     "tea"
+    ],
+    "tea",
+    -0.3559
+   ],
+   [
+    [
+     "juice",
+     "tea"
+    ],
+    "tea",
+    -0.1413
+   ],
+   [
+    [
+     "juice",
+     "tea"
+    ],
+    "juice",
+    -0.16
+   ]
+  ]
+ },
+ {
+  "family": "drink",
+  "model": "gpt-4.1",
+  "bm_violations": 7,
+  "bm_total": 32,
+  "bm_worst": -0.6564555495943476,
+  "kl_luce_fit": 0.9392507535089417,
+  "kl_thurstone_fit": 0.8456578941507185,
+  "kl_best_rum": 0.4840876176575032,
+  "q": {
+   "coffee tea": {
+    "coffee": 0.44724996362867714,
+    "tea": 0.5527500363713228
+   },
+   "coffee juice": {
+    "coffee": 0.7538817199907193,
+    "juice": 0.24611828000928096
+   },
+   "cocoa coffee": {
+    "coffee": 0.9999999998631846,
+    "cocoa": 1.368154097214711e-10
+   },
+   "juice tea": {
+    "tea": 0.8247451480140627,
+    "juice": 0.1752548519859373
+   },
+   "cocoa tea": {
+    "tea": 0.753321186124158,
+    "cocoa": 0.2466788138758421
+   },
+   "cocoa juice": {
+    "juice": 0.6667303559142495,
+    "cocoa": 0.3332696440857506
+   },
+   "coffee juice tea": {
+    "coffee": 0.7196418941696393,
+    "tea": 0.28024708696855827,
+    "juice": 0.00011101886180242477
+   },
+   "cocoa coffee tea": {
+    "coffee": 0.8287325844159726,
+    "tea": 0.17126741348128202,
+    "cocoa": 2.1027454320454556e-09
+   },
+   "cocoa coffee juice": {
+    "coffee": 0.9487185878703079,
+    "juice": 0.05128141081354081,
+    "cocoa": 1.3161512715151185e-09
+   },
+   "cocoa juice tea": {
+    "tea": 0.988843582214526,
+    "juice": 0.005388529596764324,
+    "cocoa": 0.0057678881887097
+   },
+   "cocoa coffee juice tea": {
+    "coffee": 0.44466896536258727,
+    "tea": 0.5546502273303068,
+    "juice": 0.0006808071633354606,
+    "cocoa": 1.43770514575353e-10
+   }
+  },
+  "neg_terms": [
+   [
+    [
+     "coffee",
+     "tea"
+    ],
+    "coffee",
+    -0.6565
+   ],
+   [
+    [
+     "coffee",
+     "juice"
+    ],
+    "coffee",
+    -0.4698
+   ],
+   [
+    [
+     "cocoa",
+     "coffee"
+    ],
+    "coffee",
+    -0.3328
+   ],
+   [
+    [
+     "tea"
+    ],
+    "tea",
+    -0.2451
+   ],
+   [
+    [
+     "coffee",
+     "juice",
+     "tea"
+    ],
+    "tea",
+    -0.2744
+   ],
+   [
+    [
+     "cocoa",
+     "coffee",
+     "tea"
+    ],
+    "tea",
+    -0.3834
+   ],
+   [
+    [
+     "juice"
+    ],
+    "juice",
+    -0.032
+   ]
+  ]
+ }
+]
