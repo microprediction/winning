@@ -326,6 +326,24 @@ machine learning sits: a softmax over scores $z_i$ is Equation~\eqref{eq:luce} w
 $u(i) = \exp(z_i)$, so masking a softmax and rescaling the survivors is proportional
 renormalization.
 
+An objection is worth answering here, because it is the first one a reader from machine
+learning will raise. A deep network is not committed to the axiom. Its logits are the output of
+an arbitrarily flexible function, and it can represent any distribution over its full
+vocabulary, including distributions that no independent additive random-utility model
+generates. All of that is true, and none of it touches the case at hand. The constraint applies
+to a \emph{fixed} logit vector at inference time. Depth governs the map from context to logits;
+it says nothing about how the distribution should change when the support is cut and the logits
+are not recomputed. Masking and rescaling a fixed vector leaves every surviving ratio exactly as
+it was, which is Equation~\eqref{eq:luce} on the restricted set, however that vector was
+produced and however deep the network that produced it.
+
+Escaping the axiom therefore requires recomputing the scores with the permitted set as part of
+the input. A model trained that way can express any dependence on the menu, and its masked
+distribution is then not a transport of its unmasked one, so the question this paper asks does
+not arise for it. The question arises exactly where a score vector is computed once and then
+restricted, which is what constrained decoding, vocabulary masking, restricted action spaces
+and post-hoc class removal all do.
+
 The proposition gives the direction of the effect and not its size. Size depends on the shares
 as well as on the noise law, and recalibrating several laws to one share vector and then to
 another can reverse which of them contracts more, so tail thickness alone does not order the
