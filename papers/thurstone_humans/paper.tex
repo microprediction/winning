@@ -20,15 +20,15 @@
 \begin{abstract}
 \noindent When a probability vector over mutually exclusive outcomes must be transported to a
 smaller support, because an outcome is withdrawn, scratched, delisted, disallowed or masked out
-of a softmax, proportional renormalization is the reflex and in many models the architecture.
-It is the Gumbel point of the independent additive random-utility class\footnotemark[2].
-Re-running a Gaussian contest among the survivors is Case V. Any standardized noise shape fixed
-in advance gives such a map, and these two are the conventional choices. Psychology has tested
-renormalization under restriction since 1957, as the constant-ratio rule, and we score the two
-out of sample on thirty-nine population comparisons, twenty-seven observing the smaller menu and twelve
-inducing subset choice from rankings. Gaussian renormalization predicts better in thirty.
-It loses on a perceptual continuum, where a survivor has a near-substitute, and where removal
-changes the task.
+of a softmax, proportional renormalization is the reflex and in many models the architecture. It
+is the Gumbel point of the independent additive random-utility class\footnotemark[2]. Re-running
+a Gaussian contest among the survivors is Case V. Psychology has tested renormalization under
+restriction since 1957, as the constant-ratio rule, and we score the two out of sample on
+thirty-nine population comparisons, twenty-seven observing the smaller menu and twelve inducing
+subset choice from rankings. Gaussian renormalization has the lower held-out log loss in thirty.
+The rows are dependent and unequally clustered across studies, so that count describes this
+corpus rather than estimating a rate. The losses concentrate on one-dimensional and strongly
+confusable stimulus sets, which motivates a boundary rule rather than establishing one.
 \end{abstract}
 
 \footnotetext[2]{The Gumbel construction is due to Holman and Marley
@@ -196,7 +196,11 @@ populations, the table scores forecasts.}
 \label{fig:line}
 \end{figure}
 
-Table~\ref{tab:scoreboard} states the result before the argument for it. Thirty-nine
+Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} state the result before the argument for
+it. The figure asks where each population falls between the two maps, on a scale where linear
+renormalization is one point and Gaussian renormalization another; most fall beyond the Gaussian
+point, and the two nearest the linear one are a concentrated-share collection and a perceptual
+continuum. The table asks the different question of which map forecasts better. Thirty-nine
 comparisons have full-menu shares that calibrate both maps and restricted-menu choices that
 score them by held-out log loss. Rows are comparisons, not independent populations: several
 reuse the same subjects or source study. Section~\ref{sec:empirical} gives the protocol, the datasets
@@ -545,7 +549,12 @@ parameter. It cannot be a common noise scale.
 The covariance assumption is doing real work and should not be waved through. If the taste
 components carry covariance $\Sigma$ instead of $I_K$, the same argument delivers a Gaussian
 race with covariance $\Sigma$, which is correlated multinomial probit rather than Case V.
-Case V requires the covariance relevant to utility differences to be spherical. So the limit
+Case V additionally requires the covariance to be isotropic on the $(K-1)$-dimensional
+utility-contrast subspace. In the usual reference-difference coordinates
+$D_i = \varepsilon_i - \varepsilon_K$ that is not a diagonal matrix: independent equal-variance
+errors give $\operatorname{Cov}(D) = \sigma^2(I_{K-1} + \mathbf{1}\mathbf{1}^{\top})$, and it is
+in an orthonormal contrast basis $Q$ that $Q^{\top}\operatorname{Cov}(\varepsilon)Q =
+\sigma^2 I_{K-1}$. So the limit
 theorem motivates Gaussian random utility in general, and independence across alternatives
 is a further restriction, adopted here because it is the parameter-free member of the class.
 
@@ -611,8 +620,11 @@ measurement of it.
 \subsection{What the shares cannot identify}
 \label{sec:probit}
 
-Correlated multinomial probit handles near-substitutes exactly, by giving two similar
-alternatives a positive covariance. It is not available as a default. One full-menu share
+Correlated multinomial probit can represent near-substitution, by giving two similar
+alternatives a positive covariance. It does not follow that it represents any near-substitute
+behaviour exactly: menu-dependent attention and the dimensional retuning of
+Section~\ref{sec:boundary} are not captured by a static covariance. And it is not available as a
+default. One full-menu share
 vector supplies $K-1$ free numbers, and those are already exhausted by the $K-1$ location
 contrasts. After choosing a reference alternative and normalizing scale, the covariance matrix
 of the $K-1$ utility differences carries a further $K(K-1)/2 - 1$ parameters. A single
@@ -632,10 +644,13 @@ full-menu shares alone, then scored by log loss on restricted menus neither has 
 things make that possible now. Trial-level archives are open, so restricted menus can be
 scored on the observations that produced them rather than on printed marginals. Inverting
 Equation~\eqref{eq:winprob} from shares alone is a single pass over a shared grid, so the
-Gaussian map costs nothing to apply. And a generative null is available: contraction of a
-noisily estimated share vector lowers log loss whether or not the axiom fails, so every gain
-below is reported net of what a population obeying the axiom exactly would produce on the same
-menus, which Section~\ref{sec:null} details.
+Gaussian map costs nothing to apply. And a generative null is available. Contraction of a noisily
+estimated share vector lowers log loss whether or not the axiom fails, so every raw gain below is
+accompanied by the gain a population obeying the axiom exactly would produce on the same menus,
+its centred excess, and a Monte Carlo tail. The excess is a diagnostic centred on that particular
+fitted null, not an estimate of a model-free structural effect: under a non-Luce population there
+is no reason for the null's bias to match the alternative's. Section~\ref{sec:null} details the
+construction.
 
 \subsection{Restrictions that were observed}
 \label{sec:observed}
@@ -1286,6 +1301,10 @@ dominant alternative survives, not that the shares are concentrated. The low-cos
 the ballot rows and the Wikipedia rows are of that kind, which is why they are draws or
 near-zero differences rather than evidence.
 
+Figure~\ref{fig:line} shows the same division on one axis. The collections nearest linear
+renormalization are the perceptual continuum and the concentrated shares; the collections
+furthest past Gaussian renormalization are categories, colours, symbols and consumer goods.
+
 \medskip
 \noindent The rule that summarises this is narrower than the class of independent random
 utility models and wider than any single dataset. \emph{The Gaussian contest is the better
@@ -1340,7 +1359,8 @@ and cannot be read off the shares.
 One further caveat belongs here rather than in the theory. Distinct unordered alternatives do
 not imply $\Sigma = I$. Goods, articles, candidates and occupations can carry clustered and
 correlated tastes, and Section~\ref{sec:mixture} shows the limit theorem delivering a Gaussian
-race with covariance $\Sigma$, of which Case V is the spherical special case.
+race with covariance $\Sigma$, of which Case V is the case that is isotropic on the contrast
+subspace.
 
 The inversion from shares to locations is the only extra machinery, and the lattice
 algorithm of \cite{cotton2021} performs it in one pass over a common grid, returning the
@@ -1389,12 +1409,14 @@ matches the population, and when they are very noisy the dominant consideration 
 risk rather than either structural rule. The recommendation above is for the case where an
 analyst holds aggregate shares and has no evidence about the axiom either way.
 
-One limit is larger than the effect measured here. Both defaults can be checked against the
-truth, rather than only against each other, in the after-the-stimulus arms of
-Section~\ref{sec:after} and in the favourite's second-place probability of
-Table~\ref{tab:favsecond}. In both, they are wrong in the same direction and by more than
-they differ from one another. The race removes a fifth to a third of
-renormalization's error in the first case and $4.9$ to $12.4$ per cent of it in the second.
+One limit is larger than the effect measured here. In the after-the-stimulus arms of
+Section~\ref{sec:after} the observed restricted probability is available, so both maps can be
+checked against it rather than only against each other, and both err in the same direction by
+more than they differ from one another: Gaussian renormalization removes a fifth to a third of
+linear renormalization's error and no more. Table~\ref{tab:favsecond} is not a second such
+check. Observing the winner conditions on a realised contest instead of withdrawing an
+alternative from it, and neither rule compared there is the ordering law of the model it is named
+for, so it measures a heuristic error rather than the accuracy of either map.
 Choosing the better of these two maps is therefore a smaller change than fitting a shape
 parameter, wherever a restricted-menu observation exists to fit one. The
 case made here is for the situation where none does.
@@ -1410,7 +1432,13 @@ We have attempted to elevate the Thurstone Case V $N(0,1)$ model, which we have 
 \emph{Gaussian renormalization}, to the status of an equal partner to the ubiquitous practice of
 linear renormalization of probability. The question is not confined to menus of goods. It arises
 wherever a probability vector is transported to a smaller support, which includes masked softmax
-vocabularies, truncated distributions, scratched fields and delisted catalogues.
+vocabularies, scratched fields, delisted catalogues and disallowed response sets. Truncation
+belongs here in one of its two senses only. If the support shrinks because one has learned that
+the outcome lies in $T$, then $p_i / \sum_{j \in T} p_j$ is the conditional probability, linear
+renormalization is a theorem rather than a choice, and nothing here bears on it. If it shrinks
+because the mechanism has been altered so that only $T$ can occur, as with a decoder confined to
+a sub-vocabulary or a field with scratchings, then the old experiment's conditional probability is
+not an answer to a question about the new one, and the two maps below are the candidates.
 
 Gaussian Case V is a credible, tuning-free alternative to linear renormalization. Across
 the collections examined it frequently produces useful odds contraction, with the most
@@ -1434,17 +1462,20 @@ than distant pairs. A withdrawn option is a near-substitute for a survivor, so i
 to that neighbour rather than spreading. The withdrawal changes how easily the survivors can be
 told apart, in which case neither transport map applies and the choice model has to be
 re-estimated under the new task. Or the withdrawn alternatives carry negligible mass while the
-leader survives, in which case the two maps agree to within the noise. Where a confusion matrix
-exists, the within-set confusion mass of Table~\ref{tab:getty} measures the first two directly.
+leader survives, in which case the two maps agree to within the noise. Figure~\ref{fig:line} places the populations we can place along that
+axis. Where a confusion matrix exists, the within-set confusion mass of Table~\ref{tab:getty}
+measures the first two conditions directly.
 Where only shares exist, they have to be judged from the geometry or the semantics of the
 alternatives, and the judgement can be wrong.
 
 To repeat, this note is about competing reflexes rather than competing careful modelling
 paradigms. Both maps are nested by the independent additive random-utility family, indexed by
-its standardized noise shape, and in the two settings where both can be checked against
-the truth, the after-stimulus perceptual arms of Section~\ref{sec:after} and the favourite's
-second-place probability of Section~\ref{sec:sequential}, both err in the same direction by
-more than they differ from one another. A model whose shape parameter nests the two can be fitted
+its standardized noise shape. Where both can be checked against an observed restricted
+probability, which is the after-stimulus perceptual arms of Section~\ref{sec:after}, both err in
+the same direction and by more than they differ from one another. The favourite's second-place
+exercise is not such a check, because observing the winner is conditioning on a realised contest
+rather than withdrawing an alternative from it, and neither of the rules compared there is the
+ordering law of the model it is named for. A model whose shape parameter nests the two can be fitted
 wherever a restricted-menu observation exists, and estimated under the same objective it is no
 worse in sample; whether it improves held-out prediction needs separate validation. A common
 noise scale cannot serve as that parameter, being a gauge.
