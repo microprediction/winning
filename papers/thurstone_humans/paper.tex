@@ -217,20 +217,20 @@ and the null.
 Population & Restriction & Gain & Tail & Family \\
 \midrule
 News slates & observed impressions & $+.0496$ & $.016$\footnotemark[4] & clicks \\
+Sounds, eight to four, $\{1,3,5,7\}$ & observed menus & $+.0490$ & $\le .005$ & Getty \\
+Sounds, eight to four, $\{1,2,5,6\}$ & observed menus & $+.0453$ & $\le .005$ & Getty \\
+Consumer goods 1, forced choice & observed menus & $+.0442$ & $.005$ & Costa-Gomes \\
 Occupational prestige & ranking-induced & $+.0390$ & $\le .005$ & prestige \\
 Wills categories, three to two & observed menus & $+.0299$ & $.002$ & categorization \\
 Symbol naming, six to two & observed menus & $+.0278$ & $\le .005$ & Yeon--Rahnev \\
-Sounds, eight to four, $\{1,3,5,7\}$ & observed menus & $+.0490$ & $\le .005$ & Getty \\
-Sounds, eight to four, $\{1,2,5,6\}$ & observed menus & $+.0453$ & $\le .005$ & Getty \\
 Colour naming, four to two & observed menus & $+.0147$ & $\le .005$ & Yeon--Rahnev \\
-Consumer goods 1, forced choice & observed menus & $+.0442$ & $.005$ & Costa-Gomes \\
 Consumer goods 1, all subjects & observed menus & $+.0140$ & $.010$ & Costa-Gomes \\
+Consumer goods 2, forced choice & observed menus & $+.0140$ & $.129$ & Costa-Gomes \\
 Sushi & ranking-induced & $+.0111$ & $\le .005$ & preference \\
 Gambles, high arithmetic cost & observed menus & $+.0101$ & $.035$ & Aguiar \\
 Letters, five to three, $\{F,H,X\}$ & observed menus & $+.0093$ & $.005$ & Townsend--Landon \\
 Political goals & ranking-induced & $+.0069$ & $\le .005$ & preference \\
 Gambles, medium arithmetic cost & observed menus & $+.0068$ & $.124$ & Aguiar \\
-Consumer goods 2, forced choice & observed menus & $+.0140$ & $.129$ & Costa-Gomes \\
 Consumer goods 2, all subjects & observed menus & $+.0059$ & $.199$ & Costa-Gomes \\
 GSS socialization & ranking-induced & $+.0055$ & $\le .005$ & GSS \\
 Sports participation & ranking-induced & $+.0050$ & $.51$ & preference \\
@@ -248,8 +248,8 @@ US state ballots 2024 & observed ballots & $+.0002$ & $.005$ & ballots \\
 Gambles, low arithmetic cost & observed menus & $+.0002$ & $.667$ & Aguiar \\
 \midrule
 Wikipedia links & observed removals & $-.0001$ & $.005$ & clicks \\
-Tones, narrow, ten to eight & observed menus & $-.0051$ & n/a & Stewart \\
 Tones, wide, ten to eight & observed menus & $-.0041$ & n/a & Stewart \\
+Tones, narrow, ten to eight & observed menus & $-.0051$ & n/a & Stewart \\
 Lines, twelve to eight & observed menus & $-.0057$ & $1.000$ & Rouder \\
 Lines, twelve to four & observed menus & $-.0090$ & $1.000$ & Rouder \\
 Sounds, eight to four, $\{3,4,5,6\}$ & observed menus & $-.0127$ & $1.000$ & Getty \\
@@ -259,20 +259,11 @@ Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & Rouder \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
-nats per prediction, so a positive gain means Gaussian renormalization predicted better. The
-tail is the Monte Carlo frequency with which a population obeying the constant-ratio rule
-exactly produces at least the observed gain on the same menus; it tests departure from the rule
-and not predictive superiority. Most rows use two hundred replicates and are floored at
-$1/201$; the news row uses sixty, so its $.016$ is the floor $1/61$ rather than a measured
-frequency, and the Wills row uses four hundred. The two
-quantities answer different questions, and the ballot, Wikipedia and low-cost gamble rows show
-them coming apart. Rows within a family are not independent. The tone matrices are
-participant-averaged and between-subjects, so there is nothing to resample and no tail is
-computed. The consumer experiments appear twice each, since the forced-choice subgroup admits
-no deferral coding while the all-subject figure uses the whole sample; gain and tail are taken
-from the same analysis population within a row. Three further populations appear in Section~\ref{sec:boundary} rather than
-here, because published aggregates fix the direction of the failure without supporting this
-protocol.}
+nats per prediction, so a positive gain means Gaussian renormalization predicted better. The tail
+is the Monte Carlo frequency with which a population obeying the constant-ratio rule exactly
+reaches that gain on the same menus, and it therefore tests departure from the rule rather than
+predictive superiority. Replicates are two hundred except for the news row, sixty, and the Wills
+row, four hundred; the tone matrices are participant-averaged, so no tail is computed.}
 \label{tab:scoreboard}
 \end{table}
 
@@ -294,7 +285,12 @@ Wikipedia, whose magnitude is $-0.0001$.
 The tail column separates two things that the earlier draft of this table conflated. A positive
 gain says Gaussian renormalization predicted better with estimated shares, and part of that can
 be shrinkage. A small tail says the population departs from the constant-ratio rule in the
-direction of contraction. Wikipedia has a small tail and a negative gain, so it departs from the
+direction of contraction. The consumer experiments appear twice each because the two answers
+must come from the same analysis population: the forced-choice subgroup admits no deferral
+coding, the all-subject figure uses the whole sample, and pairing a gain from one with a tail
+from the other would compare different people. Three further populations appear in
+Section~\ref{sec:boundary} rather than here, because published aggregates fix the direction of
+their failure without supporting this protocol. Wikipedia has a small tail and a negative gain, so it departs from the
 rule in the right direction while still predicting worse. Sports participation has a positive
 gain and a tail of $0.51$, so its gain is shrinkage and it carries no evidence about the rule.
 Section~\ref{sec:null} treats the second question and Section~\ref{sec:empirical} the first.
