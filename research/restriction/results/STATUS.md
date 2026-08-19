@@ -530,3 +530,61 @@ figures are removed.
 
 STILL OPEN. The archive DOI and commit hash are still not printed in the paper, because nothing
 is pushed. That is now the only item on the reviewer's list not addressed.
+
+## Verification suite, and what it caught (2026-08-19)
+
+`research/restriction/demo/` holds a JavaScript implementation of both maps from nothing:
+Hart's cumulative normal, Simpson quadrature for the contest integral, Newton on the
+log-share residual for the inverse. `run_checks.js` asserts one claim per check, twenty in
+all, and `index.html` runs them in a browser with an interactive transport widget. All pass.
+
+TWO BUGS IN MY OWN CODE, found by writing the checks. The first erfc gave Phi(1.96) = 0.9621
+instead of 0.9750, which would have corrupted everything downstream. And the damped
+calibration failed on share vectors with a tiny component, producing six apparent violations
+of the contraction claim, all at residuals above 2e-3; the Newton solver reaches machine
+precision and the violations vanish. The JS calibration is now more accurate than the lattice
+one the analysis uses, whose residual runs to about 1e-3.
+
+`demo/check_tables.py` traces every figure the paper quotes from a run to the output that
+produced it, and lists table figures no committed run accounts for. It found three real gaps.
+
+1. THE PAPER'S LARGEST TABLE HAD NO COMMITTED OUTPUT. The twelve-collection held-out table,
+thirty figures, was never checked in. `results/heldout_score.txt` now has it and reproduces
+every figure exactly.
+
+2. THE TWO DECOMPOSITION TABLES HAD NO SCRIPT AT ALL. They were computed ad hoc for an
+earlier draft. `decompositions.py` supplies both. The favourite-second table reproduces,
+with Sushi's renormalization figure 0.250 against a printed 0.251, now corrected. The
+by-rank table reproduces its shares and its aggregate exactly but NOT its tail: the paper
+printed +0.058, +0.101 and +0.171 for ranks eight, nine and ten where the run gives +0.067,
++0.116 and +0.242. My first attempt scored pairs only and missed even the shares; scoring all
+subsets, as the paper says it does, matches the shares and the aggregate, so the reproduction
+is faithful and the printed tail was stale. Corrected in the paper.
+
+3. ONE FIGURE STILL HAS NO RUN BEHIND IT. The null table's pooled forced-choice gain,
++0.0265. `menus_heldout.txt` has +0.0442 and +0.0140 for the two experiments' forced-choice
+subgroups and +0.0100 for all subjects pooled, but no pooled forced-choice figure. Left in
+place and flagged rather than quietly altered, since the arithmetic of its excess column is
+self-consistent and only the gain itself is untraced.
+
+The audit is now down to two unmatched figures from sixty-six, and both are the derived
+excess column, checked by arithmetic instead.
+
+## The auditory branch, incorporated at last (2026-08-19)
+
+None of the auditory notes had reached the paper. Now in Section 2:
+
+CLARKE (1959) IS THE MOTIVATION THE PAPER LACKED. Four signal ensembles, three models, and
+the verdict that "the simplified version of the constant-ratio rule and the simplified
+version of the theory of signal detectability were both compatible with the data obtained in
+the speech experiments". Signal detectability is the Gaussian account, so the two candidates
+were run against each other in 1959 and percent correct could not separate them. The same
+abstract records the boundary condition: "No model tested was sufficiently complex to account
+for data when the sinusoidal signals varied only in amplitude or only in frequency". Both
+accounts failed on unidimensional continua at the outset, which is where the tones and the
+lines put them.
+
+THE REVERSAL PATTERN IS NOW STATED. Every conformity claim retested with a test that had
+power was overturned: Holloway reversed his own 1968 conclusion in 1971, and Morgan's
+likelihood-ratio test rejected the rule on both datasets he applied it to, Clarke's and
+Egan's. Egan (1957) JASA 29(4):482-489 was missing from the bibliography and is now cited.

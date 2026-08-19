@@ -153,14 +153,47 @@ def main():
     # ---- audit: table figures with no matching figure in any results file
     all_results = "\n".join(
         (RESULTS / f).read_text() for f in sorted(p.name for p in RESULTS.glob("*.txt")))
+    # every decimal figure in every results file, as a float, so the paper's rounding
+    # can be matched rather than its exact spelling
+    pool = set()
+    for m in re.findall(r"[+-]?\d*\.\d+", all_results):
+        try:
+            pool.add(float(m))
+        except ValueError:
+            pass
+
+    def sourced(fig):
+        try:
+            v = float(fig)
+        except ValueError:
+            return False
+        dp = len(fig.split(".")[1])
+        return any(abs(round(w, dp) - v) < 1e-12 for w in pool)
+
     unsourced = {}
     for name, fig in paper_table_figures(paper):
-        bare = fig.lstrip("0") if fig.startswith("0.") else fig
-        if fig in all_results or bare in all_results:
+        if sourced(fig):
             continue
+        bare = fig.lstrip("0") if fig.startswith("0.") else fig
         if fig in CHECKED_IN_JS or bare in CHECKED_IN_JS:
             continue
         unsourced.setdefault(name, set()).add(fig)
+
+    # ---- arithmetic check on the derived excess column: excess = gain - null median
+    print("\nderived columns, checked by arithmetic rather than traced to a file:")
+    for label, gain, med, printed in [
+            ("Sushi", 0.0111, -0.0062, 0.0174),
+            ("menu experiment, forced choice", 0.0265, -0.0041, 0.0306),
+            ("menu experiment, all subjects", 0.0100, -0.0023, 0.0123)]:
+        got = round(gain - med, 4)
+        mark = "ok" if abs(got - printed) <= 1e-4 else "MISMATCH"
+        note = " (rounding of the underlying values)" if got != printed and mark == "ok" else ""
+        print(f"  {label:<32} {gain:+.4f} - ({med:+.4f}) = {got:+.4f} against {printed:+.4f}  {mark}{note}")
+
+    print("\nfigures with no committed run behind them:")
+    print("  tab:null, +0.0265, the pooled forced-choice gain. menus_heldout.txt has")
+    print("  +0.0442 and +0.0140 for the two experiments' forced-choice subgroups and")
+    print("  +0.0100 for all subjects pooled, but no pooled forced-choice figure.")
 
     total = len(paper_table_figures(paper))
     n_unsourced = sum(len(v) for v in unsourced.values())

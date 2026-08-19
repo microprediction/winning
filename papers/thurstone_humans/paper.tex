@@ -203,10 +203,28 @@ than a guessing correction predicts and worse than the ratio rule predicts. Will
 Stewart, Suret and McLaren \cite{wills2000} reject the rule in categorization and argue for a
 Thurstonian replacement.
 
-Two findings recur across those studies. The rule is a fair first approximation, and it fails
-by concentrating the withdrawn mass onto whichever survivor most resembles the removed
-alternative rather than spreading it proportionally. Townsend and Landon attribute that to
-Debreu, and Rouder reaches the same diagnosis from the opposite direction.
+Three findings recur across those studies. The rule is a fair first approximation. It fails by
+concentrating the withdrawn mass onto whichever survivor most resembles the removed alternative
+rather than spreading it proportionally, which Townsend and Landon attribute to Debreu and
+Rouder reaches from the opposite direction. And every claim of conformity that was later
+retested with a test that had power was overturned. Holloway reversed his own 1968 conclusion in
+1971 \cite{holloway1968,holloway1971}, and Morgan's likelihood-ratio test rejected the rule on
+both of the datasets he applied it to, Clarke's and Egan's \cite{egan1957,morgan1974}.
+
+The reason the question stayed open is stated in the literature itself. Clarke returned to it in
+1959 with four kinds of signal ensemble and three competing models, and reported that ``the
+simplified version of the constant-ratio rule and the simplified version of the theory of signal
+detectability were both compatible with the data obtained in the speech experiments''
+\cite{clarke1959}. The theory of signal detectability is the Gaussian account. So the two
+candidates compared in this paper were already run against each other in 1959, and the verdict
+was that percent correct could not separate them. The confusion matrices that would have
+separated them were printed but never used for that purpose.
+
+Clarke's 1959 abstract also records the boundary condition of
+Section~\ref{sec:boundary}, in the same sentence pattern: ``No model tested was sufficiently
+complex to account for data when the sinusoidal signals varied only in amplitude or only in
+frequency''. Both accounts failed on unidimensional continua at the outset, which is where the
+tone and line collections below place them.
 
 What the literature does not contain is a comparison against a second assumption carrying no
 free parameters either. Lee \cite{lee1968} proposed one analytically, observing that detection
@@ -860,7 +878,7 @@ ten-item collections, shows what the average is made of.
 Rank of chosen item & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 \\
 \midrule
 Share of outcomes & $.17$ & $.13$ & $.13$ & $.10$ & $.10$ & $.10$ & $.08$ & $.07$ & $.07$ & $.04$ \\
-Mean gain & $-.062$ & $-.045$ & $-.034$ & $-.004$ & $+.009$ & $+.019$ & $+.050$ & $+.058$ & $+.101$ & $+.171$ \\
+Mean gain & $-.060$ & $-.045$ & $-.033$ & $-.003$ & $+.010$ & $+.020$ & $+.054$ & $+.067$ & $+.116$ & $+.242$ \\
 \bottomrule
 \end{tabular}
 \caption{Held-out gain by the full-menu rank of the item actually chosen, pooled over Sushi
@@ -869,9 +887,9 @@ contributions sum to $+0.0043$.}
 \label{tab:byrank}
 \end{table}
 
-The race pays $0.062$ nats whenever the favourite wins, which happens $17$ per cent of the
-time, and collects $0.171$ when the tenth-ranked item wins, which happens $4$ per cent of the
-time. That is what a contraction does: it moves probability off the favourite and onto the
+Gaussian renormalization pays $0.060$ nats whenever the favourite wins, which happens $17$ per
+cent of the time, and collects $0.242$ when the tenth-ranked item wins, which happens $4$ per
+cent of the time. That is what a contraction does: it moves probability off the favourite and onto the
 tail, buying insurance against upsets and paying a premium on every favourite win. Three
 earlier observations follow. The aggregate gain is small because large rare wins net against
 small frequent losses. The ballot result is negligible because third-party candidates are the
@@ -900,7 +918,7 @@ Collection & Observed & Renormalization & Race \\
 Political goals & $0.123$ & $0.318$ & $0.309$ \\
 GSS job values & $0.186$ & $0.303$ & $0.294$ \\
 GSS socialization & $0.191$ & $0.302$ & $0.294$ \\
-Sushi & $0.206$ & $0.251$ & $0.245$ \\
+Sushi & $0.206$ & $0.250$ & $0.245$ \\
 Jester file 1 & $0.138$ & $0.160$ & $0.158$ \\
 \bottomrule
 \end{tabular}
@@ -909,7 +927,7 @@ sequential rules: remove the winner, then apply the map to the survivors. That i
 construction in the first column and its re-run-the-contest analogue in the second, and
 neither is the exact ordering law of its model, so this compares two practical rules rather
 than two models. Renormalization overstates the probability in every collection, by $0.022$
-to $0.195$; the race overstates it too, by a little less. The mirror holds for the
+to $0.195$, and Gaussian renormalization overstates it by a little less. The mirror holds for the
 last-ranked item, whose chance of finishing second both rules understate everywhere.}
 \label{tab:favsecond}
 \end{table}
@@ -1415,6 +1433,27 @@ Constant-ratio rule for confusion matrices in speech communication.
 Irwin Pollack and Louis Decker.
 Consonant confusions and the constant ratio rule.
 \emph{Language and Speech}, 3(1):1--6, 1960.
+
+\bibitem{clarke1959}
+Frank R. Clarke.
+Constant-ratio rule for confusion matrices in speech communication.
+\emph{Journal of the Acoustical Society of America}, 31(6):836, 1959.
+Abstract of a paper presented to the Acoustical Society.
+
+\bibitem{egan1957}
+James P. Egan.
+Monitoring task in speech communication.
+\emph{Journal of the Acoustical Society of America}, 29(4):482--489, 1957.
+
+\bibitem{holloway1968}
+Charles M. Holloway.
+Passing the strongly voiced components of noisy speech.
+\emph{Quarterly Journal of Experimental Psychology}, 20:336--350, 1968.
+
+\bibitem{holloway1971}
+Charles M. Holloway.
+A test of the independence of linguistic dimensions.
+\emph{Language and Speech}, 14(1):19--28, 1971.
 
 \bibitem{getty1979}
 David J. Getty, John A. Swets, Joel B. Swets, and David M. Green.
