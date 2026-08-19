@@ -16,10 +16,12 @@ with r below 1 contracts less than Case V says and sits between the two maps; ab
 contracts more, and the Gaussian point is not far enough along the family for it.
 
 Only collections that supply binary choices over a named pair can be placed. The ranking
-collections supply them by construction. Of the observed-restriction collections, three do:
-Yeon and Rahnev, Wills, and the Rouder condition that restricts twelve lines to named pairs.
-Tones, Getty and Townsend and Landon restrict to sets of three or more, so no pairwise q exists
-and they cannot be placed on this axis; their verdict is the held-out log loss instead.
+collections supply them by construction. Of the observed-restriction collections, five do: Yeon
+and Rahnev in both experiments, Wills, the Rouder condition that restricts twelve lines to named
+pairs, and the recognition foils. Tones, Getty and Townsend and Landon restrict to sets of three
+or more, so no pairwise q exists and they cannot be placed; their verdict is the held-out log loss
+instead. The consumer and lottery experiments do observe pair menus and could be placed with a
+loader for their subset files, which is not written yet.
 
 Usage:  python lambda_line.py
 """
@@ -150,12 +152,76 @@ def rouder_c():
     return both_slopes(cells)
 
 
+# ------------------------------------------------------------------ Wills et al., 3 -> 2
+def wills():
+    """Master is the three-choice condition, restricted is the two-choice condition with the
+    participant's `fixed` category disallowed. Cells are (fixed, catordist)."""
+    from wills_twochoice import load
+    data = load()
+    master, restricted = data[1], data[2]
+    agg_m, agg_r = collections.defaultdict(lambda: np.zeros(3)), collections.defaultdict(lambda: np.zeros(3))
+    for subj in master.values():
+        for cell, c in subj.items():
+            agg_m[cell] += np.asarray(c, dtype=float)
+    for subj in restricted.values():
+        for cell, c in subj.items():
+            agg_r[cell] += np.asarray(c, dtype=float)
+    cells = []
+    for cell, cm in agg_m.items():
+        cr = agg_r.get(cell)
+        if cr is None or cm.sum() < 20 or cr.sum() < 20:
+            continue
+        gone = cell[0] - 1                      # the disallowed category, 1-based in the file
+        keep = [k for k in range(3) if k != gone]
+        p = (cm + ALPHA) / (cm.sum() + ALPHA * 3)
+        i, j = (keep if p[keep[0]] >= p[keep[1]] else keep[::-1])
+        tot = cr[keep].sum()
+        if tot < 20:
+            continue
+        cells.append((p, i, j, float(cr[i] / tot)))
+    return both_slopes(cells)
+
+
+# ------------------------------------------------------------------ recognition foils, 4 -> 2
+CODE = {"hit": 0, "fa1": 1, "fa2": 2, "fa3": 3}
+
+
+def recognition():
+    D = HERE / "data" / "recognition"
+    four = collections.defaultdict(lambda: np.zeros(4))
+    with open(D / "4afc_exp1.csv") as f:
+        for r in csv.DictReader(f):
+            slot = CODE.get(r["response"])
+            if slot is not None:
+                four[r["target"]][slot] += 1
+    two = collections.defaultdict(lambda: np.zeros(2))
+    with open(D / "2afc_exp1.csv") as f:
+        for r in csv.DictReader(f):
+            k = r.get("foiltype") or r.get("foil.type")
+            if k in ("foil1", "foil2", "foil3") and r["response"] in ("hit", "fa"):
+                two[(r["target"], int(k[-1]))][0 if r["response"] == "hit" else 1] += 1
+    cells = []
+    for (tgt, k), n in two.items():
+        c = four.get(tgt)
+        if c is None or c.sum() < 20 or n.sum() < 10:
+            continue
+        p = (c + ALPHA) / (c.sum() + ALPHA * 4)
+        q_hit = n[0] / n.sum()
+        if p[0] >= p[k]:
+            cells.append((p, 0, k, q_hit))
+        else:
+            cells.append((p, k, 0, 1 - q_hit))
+    return both_slopes(cells)
+
+
 def main():
     rows = []
     for label, fn in [
             ("Colour naming, four lines", lambda: yeonrahnev(1, 4, "color")),
             ("Symbol naming, six symbols", lambda: yeonrahnev(2, 6, "symbol")),
-            ("Line lengths, twelve to pairs", rouder_c)]:
+            ("Line lengths, twelve to pairs", rouder_c),
+            ("Wills categories, three to two", wills),
+            ("Recognition foils, four to two", recognition)]:
         try:
             out = fn()
         except Exception as e:

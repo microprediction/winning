@@ -7,6 +7,7 @@
 \usepackage{booktabs}
 \usepackage{microtype}
 \usepackage{tikz}
+\usepackage{float}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
 \title{\textbf{Softmax Masking Is a Choice Model:\\The Evidence for Linear versus Gaussian\\Renormalization of Probability Vectors}}
@@ -101,13 +102,95 @@ Proposition~\ref{prop:contraction} makes the direction of their disagreement exa
 
 \section{Scoreboard}
 
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=1.62cm,y=0.42cm]
+  \node[font=\scriptsize,anchor=east] at (-0.04,0) {line lengths, twelve to pairs};
+  \draw[gray!35,thin] (0,0) -- (4.0,0);
+  \fill (0.6,0) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-1) {occupational prestige};
+  \draw[gray!35,thin] (0,-1) -- (4.0,-1);
+  \draw[fill=white,thick] (0.85,-1) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-2) {GSS socialization};
+  \draw[gray!35,thin] (0,-2) -- (4.0,-2);
+  \draw[fill=white,thick] (0.88,-2) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-3) {GSS job values};
+  \draw[gray!35,thin] (0,-3) -- (4.0,-3);
+  \draw[fill=white,thick] (0.97,-3) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-4) {sports participation};
+  \draw[gray!35,thin] (0,-4) -- (4.0,-4);
+  \draw[fill=white,thick] (1.1,-4) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-5) {Jester file 3};
+  \draw[gray!35,thin] (0,-5) -- (4.0,-5);
+  \draw[fill=white,thick] (1.1,-5) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-6) {Jester file 1};
+  \draw[gray!35,thin] (0,-6) -- (4.0,-6);
+  \draw[fill=white,thick] (1.12,-6) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-7) {Jester file 2};
+  \draw[gray!35,thin] (0,-7) -- (4.0,-7);
+  \draw[fill=white,thick] (1.13,-7) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-8) {puzzles};
+  \draw[gray!35,thin] (0,-8) -- (4.0,-8);
+  \draw[fill=white,thick] (1.18,-8) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-9) {dots};
+  \draw[gray!35,thin] (0,-9) -- (4.0,-9);
+  \draw[fill=white,thick] (1.22,-9) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-10) {recognition foils};
+  \draw[gray!35,thin] (0,-10) -- (4.0,-10);
+  \fill (1.34,-10) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-11) {political goals};
+  \draw[gray!35,thin] (0,-11) -- (4.0,-11);
+  \draw[fill=white,thick] (2.35,-11) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-12) {symbol naming};
+  \draw[gray!35,thin] (0,-12) -- (4.0,-12);
+  \fill (2.92,-12) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-13) {colour naming};
+  \draw[gray!35,thin] (0,-13) -- (4.0,-13);
+  \fill (3.33,-13) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-14) {Wills categories};
+  \draw[gray!35,thin] (0,-14) -- (4.0,-14);
+  \fill (3.76,-14) circle (2.0pt);
+  \draw[thick] (0,0.75) -- (0,-15.00);
+  \draw[thick] (1,0.75) -- (1,-15.00);
+  \node[font=\scriptsize\bfseries,anchor=south] at (0,0.85) {linear};
+  \node[font=\scriptsize\bfseries,anchor=south] at (1,0.85) {Gaussian};
+  \node[font=\scriptsize,anchor=south] at (0.5,1.55) {renormalization};
+  \draw[->] (-0.02,-15.00) -- (4.12,-15.00);
+  \foreach \x in {0,0.5,1,1.5,2,2.5,3,3.5,4}
+    {\draw ({\x},-15.00) -- ({\x},-15.16);
+      \node[font=\scriptsize,anchor=north] at ({\x},-15.20) {\x};}
+  \node[font=\scriptsize,anchor=north] at (2.0,-15.95) {$r$};
+  \fill (4.0,-15) circle (2.0pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-15) {Netflix};
+  \draw[gray!35,thin] (0,-15) -- (4.0,-15);
+  \draw[->] (4.05,-15) -- (4.2,-15);
+  \node[font=\scriptsize,anchor=west] at (4.22,-15) {$6.07$};
+\end{tikzpicture}
+\caption{Where each population sits between the two maps. The coordinate is
+$r = \lambda_{\text{observed}} / \lambda_{\text{Case V}}$, the observed contraction slope
+divided by the slope Case V implies for that population's own shares, so linear renormalization
+is at $r = 0$ by construction and Gaussian renormalization at $r = 1$. Filled circles are
+restricted menus the observer actually faced, open circles are ranking-induced. Most populations
+lie beyond $r = 1$: choice contracts by more than Case V predicts, so the Gaussian point is not
+far enough along the family, which is the same signed error the after-stimulus arms and
+Table~\ref{tab:favsecond} report. The one population on a perceptual continuum falls short of
+it instead. Sixteen of the thirty-nine comparisons appear; the others restrict to sets of three or
+more, so no pairwise $q_{ij}$ exists and no slope can be fitted, which excludes the tone
+matrices, the Getty conditions and Townsend and Landon. Positions here do not reproduce
+Table~\ref{tab:scoreboard}: $\lambda$ projects a vector of pair-specific predictions onto a
+single slope and is not a proper score, so the twelve-line population sits nearer Case V on this
+axis while linear renormalization has the lower held-out log loss on it. This axis places
+populations, the table scores forecasts. Netflix has three alternatives and three pairs.}
+\label{fig:line}
+\end{figure}
+
 Table~\ref{tab:scoreboard} states the result before the argument for it. Thirty-nine
 comparisons have full-menu shares that calibrate both maps and restricted-menu choices that
 score them by held-out log loss. Rows are comparisons, not independent populations: several
 reuse the same subjects or source study. Section~\ref{sec:empirical} gives the protocol, the datasets
 and the null.
 
-\begin{table}[ht]
+\begin{table}[H]
 \centering
 \small
 \begin{tabular}{llrrl}
@@ -773,86 +856,7 @@ the after-stimulus arms of Section~\ref{sec:after}, where both maps over-predict
 the Gaussian point of the family is not far enough along it for these populations.
 
 
-\begin{figure}[ht]
-\centering
-\begin{tikzpicture}[x=1.85cm,y=0.46cm]
-  \node[font=\scriptsize,anchor=east] at (-0.05,0) {line lengths, twelve to pairs};
-  \draw[gray!35,thin] (0,0) -- (3.5,0);
-  \fill (0.6,0) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-1) {occupational prestige};
-  \draw[gray!35,thin] (0,-1) -- (3.5,-1);
-  \draw[fill=white,thick] (0.85,-1) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-2) {GSS socialization};
-  \draw[gray!35,thin] (0,-2) -- (3.5,-2);
-  \draw[fill=white,thick] (0.88,-2) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-3) {GSS job values};
-  \draw[gray!35,thin] (0,-3) -- (3.5,-3);
-  \draw[fill=white,thick] (0.97,-3) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-4) {sports participation};
-  \draw[gray!35,thin] (0,-4) -- (3.5,-4);
-  \draw[fill=white,thick] (1.1,-4) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-5) {Jester file 3};
-  \draw[gray!35,thin] (0,-5) -- (3.5,-5);
-  \draw[fill=white,thick] (1.1,-5) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-6) {Jester file 1};
-  \draw[gray!35,thin] (0,-6) -- (3.5,-6);
-  \draw[fill=white,thick] (1.12,-6) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-7) {Jester file 2};
-  \draw[gray!35,thin] (0,-7) -- (3.5,-7);
-  \draw[fill=white,thick] (1.13,-7) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-8) {puzzles};
-  \draw[gray!35,thin] (0,-8) -- (3.5,-8);
-  \draw[fill=white,thick] (1.18,-8) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-9) {dots};
-  \draw[gray!35,thin] (0,-9) -- (3.5,-9);
-  \draw[fill=white,thick] (1.22,-9) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-10) {political goals};
-  \draw[gray!35,thin] (0,-10) -- (3.5,-10);
-  \draw[fill=white,thick] (2.35,-10) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-11) {symbol naming};
-  \draw[gray!35,thin] (0,-11) -- (3.5,-11);
-  \fill (2.91,-11) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-12) {colour naming};
-  \draw[gray!35,thin] (0,-12) -- (3.5,-12);
-  \fill (3.32,-12) circle (2.1pt);
-  % the two maps
-  \draw[thick] (0,0.75) -- (0,-13.00);
-  \draw[thick] (1,0.75) -- (1,-13.00);
-  \node[font=\scriptsize\bfseries,anchor=south] at (0,0.85) {linear};
-  \node[font=\scriptsize\bfseries,anchor=south] at (1,0.85) {Gaussian};
-  \node[font=\scriptsize,anchor=south] at (0.5,1.55) {renormalization};
-  % axis
-  \draw[->] (-0.02,-13.00) -- (3.62,-13.00);
-  \foreach \x in {0,0.5,1,1.5,2,2.5,3,3.5}
-    {\draw ({\x},-13.00) -- ({\x},-13.16);
-      \node[font=\scriptsize,anchor=north] at ({\x},-13.20) {\x};}
-  \node[font=\scriptsize,anchor=north] at (1.8,-13.95) {$r$};
-  % Netflix off scale
-  \fill (3.5,-13) circle (2.1pt);
-  \node[font=\scriptsize,anchor=east] at (-0.05,-13) {Netflix};
-  \draw[gray!35,thin] (0,-13) -- (3.5,-13);
-  \draw[->] (3.55,-13) -- (3.72,-13);
-  \node[font=\scriptsize,anchor=west] at (3.74,-13) {$6.07$};
-\end{tikzpicture}
-\caption{Where each collection sits between the two maps. The coordinate is
-$r = \lambda_{\text{observed}} / \lambda_{\text{Case V}}$, the observed contraction slope
-divided by the slope Case V implies for that collection's own shares, so linear renormalization
-is at $r = 0$ by construction and Gaussian renormalization at $r = 1$. Filled circles are
-restricted menus the observer actually faced; open circles are ranking-induced. Most collections
-lie beyond $r = 1$, so choice contracts by more than Case V predicts and the Gaussian point is
-not far enough along the family, which is the same signed error the after-stimulus arms and
-Table~\ref{tab:favsecond} report. The one collection on a perceptual continuum falls short of
-it instead. Positions here do not reproduce the scoreboard: $\lambda$ projects a vector of
-pair-specific predictions onto a single slope and is not a proper score, so the twelve-line
-collection sits nearer Case V on this axis while linear renormalization has the lower held-out
-log loss on it. The axis places populations, Table~\ref{tab:scoreboard} scores forecasts.
-Fourteen of the thirty-nine comparisons appear. The rest restrict to sets of three or more, so no
-pairwise $q_{ij}$ exists and no slope can be fitted; that excludes the tone matrices, the Getty
-conditions and Townsend and Landon, which is why three of the four continuum collections are
-absent from the figure that shows the continuum falling short. Netflix has three alternatives and
-three pairs.}
-\label{fig:line}
-\end{figure}
+
 
 \subsection{Restrictions induced from rankings}
 \label{sec:rankings}
