@@ -588,3 +588,28 @@ THE REVERSAL PATTERN IS NOW STATED. Every conformity claim retested with a test 
 power was overturned: Holloway reversed his own 1968 conclusion in 1971, and Morgan's
 likelihood-ratio test rejected the rule on both datasets he applied it to, Clarke's and
 Egan's. Egan (1957) JASA 29(4):482-489 was missing from the bibliography and is now cited.
+
+## Robinson upgraded, Treisman deliberately not added (2026-08-19)
+
+ROBINSON ET AL. (2023) now carries its numbers. Verbatim quote, the primary analysis holding
+each parameter fixed across all m conditions and comparing log likelihood, and the Gaussian
+winning in both experiments at t(29) = 4.26 and t(29) = 4.42, p < .001, n = 30 each. The
+paragraph then states the distance that remains: m varies by adding fresh items rather than
+withdrawing named ones, linear renormalization is never the competitor, and the parameters are
+fitted to the data that scores them. Citation re-verified at Crossref: J Math Psychol 117:102805,
+doi 10.1016/j.jmp.2023.102805, which is what the bibliography already had. The 137:102805 in a
+relayed report was wrong.
+
+TREISMAN AND FAULKNER (1985) IS NOT GOING INTO THE PAPER, and not because it is a threat. The
+analysis says it fits d-prime and beta within each m-AFC condition so nothing is held out, never
+compares odds between named survivors, restricts no response set, never mentions
+renormalization, finds NEITHER parameter invariant, and selects signal detection by a
+plausibility argument about the sign of the drift. Its m is confounded with memory load, which is
+this project's quality-changing-removal condition. None of fifteen citing works treats it as
+having settled the question.
+
+All of that is persuasive and none of it is first-hand: the full text is still unobtained and the
+design is known only through the citing literature. Asserting the internals of an unread paper is
+the exact failure that produced a fabricated title earlier in this project, so the paper says
+nothing about it. The bibliography entry was already dropped when it turned up uncited. If a
+referee raises it, the notes hold the answer and the answer can then be written from the source.

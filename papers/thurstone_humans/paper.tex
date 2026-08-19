@@ -488,11 +488,23 @@ prediction.
 That mechanism also says where the fit should be worst: in populations whose members are
 nearly alike.
 
-Independent evidence for the same phenomenon exists in memory research. Robinson and
-colleagues \cite{robinson2023} compare softmax against signal detection across
-$m$-alternative tasks and report that the softmax parameter must vary with $m$ while the
-signal-detection parameter is stable. That is the contraction studied here, seen through
-the parameter that has to move to absorb it.
+Independent evidence for the same phenomenon exists in memory research. Robinson, DeStefano,
+Vul and Brady \cite{robinson2023} put softmax against Gaussian signal detection across
+$m$-alternative recognition tasks, and report that ``the $d'$ parameter of the Gaussian signal
+detection model was more stable across $m$-afc conditions than the $\beta$ parameter of the
+softmax model''. Their primary analysis holds each model's parameter fixed across all $m$
+conditions and compares log likelihood, and the Gaussian wins in both experiments,
+$t(29) = 4.26$ and $t(29) = 4.42$, $p < .001$, with thirty participants each. That is the
+contraction studied here, seen through the parameter that has to move to absorb it.
+
+Their design is nearer to this paper's than anything else we have found, and it is worth being
+exact about the distance that remains. No response set is restricted over shared alternatives:
+$m$ varies by adding fresh items, not by withdrawing named ones. Linear renormalization is
+never the competitor, since the comparison is softmax against Gaussian with both fitted. And the
+parameters are estimated on the data that scores them, so the cross-condition constraint does the
+work that holding out a menu does here. What their result establishes is that one parameter has
+to move with $m$ and the other does not, which is the signature of contraction rather than a
+measurement of it.
 
 \subsection{What the shares cannot identify}
 \label{sec:probit}
