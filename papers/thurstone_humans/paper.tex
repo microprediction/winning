@@ -867,12 +867,17 @@ $6{,}000$ are scored. Because
 those pairs are drawn from a few hundred slates and overlap heavily, the interval below
 resamples slates rather than pairs.
 
-Wikipedia links supply editorial removal. An article offers outbound links, a reader picks
-one exclusively, the destinations are the same articles from month to month, and editors
-change the set. Adjacent monthly clickstream dumps give the earlier month's shares and the
-later month's choices. The dump censors pairs below ten clicks, so a vanished destination
-may have been removed or may have fallen below threshold, and it records no link position,
-so layout is uncontrolled.
+Wikipedia links supply editorial removal, in the weakest form of observation used here. The
+clickstream release is not a record of impressions: it is a monthly count of (referrer, resource)
+transitions extracted from request logs, so what it supplies is the aggregate distribution of
+destinations conditional on a transition having been made from a given article, and not a table
+with one row per reader carrying a menu and one exclusive response. Destinations are the same
+articles from month to month and editors change the set, so adjacent dumps give the earlier
+month's conditional shares and the later month's. The dump censors pairs below ten clicks, so a
+vanished destination may have been removed or may have fallen below threshold; it records no link
+position, so layout is uncontrolled; and readership and page content move between months along
+with the link set. This row is a transport comparison on conditional transition shares rather
+than an observed withdrawal.
 
 \begin{table}[ht]
 \centering
