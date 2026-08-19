@@ -3,13 +3,21 @@
 We are grateful for a report that is unusually specific and, on the mathematics, unusually
 useful. The independent recomputation of the reverse-hazard identity, the Gumbel cumulants, the
 location-scale invariance and the concentrated-share example all agree with ours, and the
-deterministic small-$\varepsilon$ experiment showing the local exponent approaching three is a
-better piece of evidence for the cubic order than anything we had. Our own browser check suite
-reaches the same conclusion by a different route, and we will cite the agreement.
+deterministic small-$\varepsilon$ experiment showing the local exponent approaching three agrees
+with what our own browser check suite finds by a different route. We take the report's point that
+this is not the right evidentiary move: two numerical experiments agreeing is not a proof, and
+citing the agreement would not make it one. We will archive both calculations in a versioned
+supplement and state the cubic rate as a local expansion under explicit smoothness and
+nonsingularity conditions until the lemma is written.
 
-Below we separate what we accept, what we contest, and three places where the report describes a
-manuscript we did not write. We ask for more care on the last of these, because in one case the
-imprecision produced a recommendation that would introduce an error into the paper.
+Below we separate what we accept, what we contest, and three attributions the audited version
+does not support. On the last we ask for more care, because in one case the imprecision produced
+a recommendation that would have introduced an error into the paper.
+
+A note on the copy circulated to us: the file we sent is a single document of one hundred and
+sixty-odd lines with no repeated sections. If the version received restarts midway and ends
+mid-bullet, that happened in transit rather than on disk, and the intact file is in the
+repository alongside the manuscript.
 
 ## Accepted, and already changed
 
@@ -55,20 +63,26 @@ imprecision produced a recommendation that would introduce an error into the pap
 
 ## Contested
 
-**The truncation argument does not work, and the recommended replacement text propagates the
-error it is meant to fix.** The report's premise is correct and trivial:
-$P(X=i \mid X\in T) = p_i / \sum_{j\in T} p_j$ by the definition of conditional probability. The
-inference drawn from it is not. That identity concerns conditioning on an event inside a fixed
-probability space. The operation this paper is about is an intervention on the mechanism that
-generates the support: a decoder confined to a sub-vocabulary, a field with scratchings, a
-response set the experimenter disallows. In those cases the old experiment's conditional
-probability is not an answer to a question about the new experiment, and the two maps are the
-candidates. The report's own suggested wording, that the problem "should not be conflated with
-ordinary probabilistic conditioning or truncation, for which proportional renormalisation follows
-directly from conditional probability", reads as though truncation were always conditioning. That
-is the very conflation the report elsewhere and rightly warns against, and Section 3 of the
-manuscript already draws the distinction with the Monty Hall case. We have kept the example and
-said which of its two senses we mean, rather than deleting it.
+**On truncation we were both partly right, and a two-way split was not enough.** Our objection
+stands in one direction: $P(X=i \mid X\in T) = p_i / \sum_{j\in T} p_j$ is conditioning inside a
+fixed probability space, and it does not answer a counterfactual question about a mechanism that
+has been altered, so the report's suggested wording read as though truncation were always
+conditioning. But the report is right that our two-way split understated the concession, and the
+four-way distinction it proposes is better than ours. We adopt it.
+
+Conditioning a fixed categorical law is proportional renormalization by definition. Masking a
+fixed softmax and rescaling is the same arithmetic on a score vector, and we now say the stronger
+thing the report is owed: that operation does not merely permit the linear transport, it *is* the
+linear transport, so IIA is built into the operator rather than being one of two readings of it.
+Intervening on the feasible set changes the choice-generating experiment, and there the original
+shares do not determine the new ones. Recomputing scores with the permitted set as an input is
+not a transport of the old vector at all. The manuscript now separates the four, says the paper
+is about the third, and locates its practical relevance in the second: that is where the linear
+transport is already deployed without anyone having chosen it.
+
+We also accept the smaller correction that follows. Where the manuscript said the two maps are
+"the candidates" it now says they are two conventional candidates, since any regular standardized
+shape supplies another.
 
 **The blanket demand for $9{,}999$ replicates is not costed.** We accept the direction and the
 reasoning: $B=200$ gives a Monte Carlo standard error of about $0.015$ at a true tail near
@@ -76,19 +90,25 @@ $0.05$, which is large against a $0.05$ boundary, and $B=60$ on the news row sup
 not an estimate. We will raise $B$, report exceedance counts alongside adjusted tails, and match
 the simulation unit to the actual clustering. But a uniform $9{,}999$ across the ranking
 collections means rerunning a pipeline that already evaluates $1{,}013$ subsets across five folds
-per replicate, and the report does not say what that buys. Our proposal is to raise $B$ until the
-Monte Carlo interval excludes the $0.05$ boundary for every row whose verdict could turn on it,
-to state $B$ per row, and to leave coarse any row whose tail is not load-bearing. If the report
-believes a specific row needs more than that, we will do that row exhaustively.
+per replicate, and the report does not say what that buys. Our first proposal, to raise $B$ until the interval excludes the
+$0.05$ boundary, was wrong and we withdraw it: inspecting a fixed-sample interval and stopping
+when it clears a threshold is optional stopping and destroys the coverage that made the interval
+worth quoting. The report is right to catch it. We will instead pre-specify $B$ from a target
+Monte Carlo error, print the exceedance count $b$ alongside $(b+1)/(B+1)$ and an interval for
+every row, and stop forcing rows through a binary threshold at all. The high-cost gamble row near
+$0.035$ is the one that most needs the extra simulation, and rows with zero exceedances can be
+resolved more cheaply provided the $0/B$ is printed rather than hidden behind a floor.
 
-**One point of agreement worth making explicit, since it strengthens rather than weakens the
-paper.** The report observes that under an exact Luce population with unlimited calibration data
-the Gaussian-minus-Luce gain must be negative, so the null median mixes finite-sample shrinkage
-with Gaussian misspecification. That is right, and it is what our null medians show: they are
-negative wherever the shares rest on more than about two thousand observations. We will say so
-in those terms.
+**One point of agreement, stated neutrally.** Under an exact Luce population with unlimited
+calibration data the Gaussian-minus-linear gain must be negative, since linear renormalization is
+then the correctly specified restricted-menu map. So the null median mixes a finite-sample
+estimation effect with Case V misspecification under Luce. That is what our null medians show:
+negative wherever the shares rest on more than about two thousand observations. We had described
+this as strengthening the paper. It does not. It clarifies what the diagnostic contains, and
+subtracting a composite null median does not isolate a structural effect under a non-Luce
+population.
 
-## Three descriptions of a manuscript we did not write
+## Three attributions not supported by the audited version
 
 We ask for more care here, and we say why it matters rather than merely noting it.
 
@@ -114,6 +134,19 @@ We ask for more care here, and we say why it matters rather than merely noting i
    populations is a premise of the paper, not a discovery about it. The conclusion already states
    that both err in the same direction, in the one setting where an observed restricted
    probability makes the check possible, and by more than they differ from one another.
+
+## One correction we found ourselves after drafting this
+
+Writing a second, independent implementation of the two maps in JavaScript, so that the
+mathematical claims can be checked in a browser from nothing, turned up a defect the reports did
+not. The two implementations agree to $10^{-4}$ on fifteen of the sixteen tone rows and disagreed
+sharply on one. That row contains an exact zero, which has to be floored, and the resulting
+location is far enough out that two independently written calibrators do not agree on it. The row
+is now excluded, and the wide ten-to-eight gain moves from $-0.0057$ to $-0.0041$. The direction
+is unchanged and linear renormalization still wins all four tone conditions, but the figure that
+appeared in the scoreboard was resting on an ill-conditioned inversion and should not have been
+quoted to four decimals. We mention it because it bears on a theme of both reports: the
+calibration tolerance is a real source of uncertainty that our intervals do not carry.
 
 ## Accepted but deferred, with reasons
 

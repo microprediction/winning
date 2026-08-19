@@ -699,3 +699,31 @@ three, so the extremes of the axis are its least certain points. And the axis do
 the scoreboard, because lambda is a projection onto one slope and not a proper score: the
 twelve-line population sits nearer Case V here while linear renormalization has the lower
 held-out log loss on it.
+
+## A second implementation catches a bad tone row (2026-08-19)
+
+`demo/empirical.js` runs Getty, the tones and Yeon-Rahnev in the browser from committed data, so
+the empirical claims can be checked the way the mathematical ones already could. It reproduced
+Getty exactly, all rows 0.8144 / 0.7872 / +0.0272 and each condition to four decimals, and three
+of the four tone conditions to 1e-4. It disagreed on the fourth: wide ten to eight, -0.0008
+against Python's -0.0057.
+
+The cause is a defect, not a rounding difference. `wide_N10` rows 0, 1 and 9 contain exact zeros.
+Flooring a zero at 1e-6 puts the location far out and the inversion is ill conditioned there;
+Python's lattice returns something with a residual around 3e-4 in reproduced shares, and the
+JavaScript Newton solver does not converge at all, reporting a residual of 1.2e-1. Only the wide
+ten-to-eight condition uses a degenerate row, row 1, which is exactly the one condition where the
+two implementations disagreed. narrow_N10 has no zeros and all its conditions agree.
+
+Note the order of the reasoning. The first inference was that the JavaScript was the more
+accurate of the two, since it reaches machine precision on well-conditioned problems. That was
+wrong: on these rows it fails outright. Checking the residuals rather than assuming settled it.
+
+`tones.py` now excludes rows containing an exact zero and says how many it dropped. The wide
+ten-to-eight gain becomes -0.0041 on seven rows, against -0.0057 on eight. Linear renormalization
+still wins all four tone conditions, so the boundary claim is unchanged, but the scoreboard figure
+was resting on an ill-conditioned inversion and is corrected. The demo applies the same exclusion
+and now agrees with Python on all four.
+
+The general point for the paper: the lattice calibration carries a residual of order 1e-3, none of
+the intervals carry it, and the tone rows are the closest contests in the corpus.

@@ -38,7 +38,14 @@ def run(spacing, small):
     keep = list(range(off, off + small))
     tl = tg = 0.0
     n = 0
+    skipped = 0
     for i in range(small):
+        if (big[i + off] == 0).any():
+            # an exact zero has to be floored, which sends a location far out and makes the
+            # inversion ill conditioned. Two independent calibrators disagree on such rows,
+            # so they are excluded rather than reported at a precision neither supports.
+            skipped += 1
+            continue
         p = np.maximum(big[i + off], FLOOR)
         p = p / p.sum()
         a, err = calibrate_np(list(p))
@@ -52,15 +59,16 @@ def run(spacing, small):
         tl += float(-(o * np.log(lu)).sum())
         tg += float(-(o * np.log(ra)).sum())
         n += 1
-    return n, tl / n, tg / n
+    return n, tl / n, tg / n, skipped
 
 
 print(f"{'condition':<22}{'rows':>5}{'renorm':>9}{'race':>9}{'gain':>9}")
 tot = []
 for spacing in ("narrow", "wide"):
     for small in (6, 8):
-        n, l, g = run(spacing, small)
-        print(f"{spacing+' N10->N'+str(small):<22}{n:>5}{l:>9.4f}{g:>9.4f}{l-g:>+9.4f}")
+        n, l, g, sk = run(spacing, small)
+        note = f"   ({sk} row dropped for a zero cell)" if sk else ""
+        print(f"{spacing+' N10->N'+str(small):<22}{n:>5}{l:>9.4f}{g:>9.4f}{l-g:>+9.4f}{note}")
         tot.append(l - g)
 print(f"\nmean gain over the four conditions {np.mean(tot):+.4f}, "
       f"race ahead in {sum(1 for t in tot if t > 0)} of 4")

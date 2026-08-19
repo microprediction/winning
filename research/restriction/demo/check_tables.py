@@ -61,7 +61,7 @@ CLAIMS = [
     ("0.0133", "tones.txt", "narrow ten to six gain"),
     ("0.0051", "tones.txt", "narrow ten to eight gain"),
     ("0.0173", "tones.txt", "wide ten to six gain"),
-    ("0.0057", "tones.txt", "wide ten to eight gain"),
+    ("0.0041", "tones.txt", "wide ten to eight gain"),
     # ---- Rouder lines, results/rouder_chunk.txt
     ("0.7846", "rouder_chunk.txt", "all blocks renormalization loss"),
     ("0.7980", "rouder_chunk.txt", "all blocks race loss"),

@@ -198,9 +198,12 @@ populations, the table scores forecasts.}
 
 Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} state the result before the argument for
 it. The figure asks where each population falls between the two maps, on a scale where linear
-renormalization is one point and Gaussian renormalization another; most fall beyond the Gaussian
-point, and the two nearest the linear one are a concentrated-share collection and a perceptual
-continuum. The table asks the different question of which map forecasts better. Thirty-nine
+renormalization is one point and Gaussian renormalization another. Of the nineteen it can place,
+eighteen lie nearer the Gaussian point, the median sits at $1.13$, and fourteen lie beyond it.
+The single population nearer linear renormalization is the gamble row, which rests on five pairs.
+That includes the perceptual continuum: line lengths sit at $0.60$, so even where linear
+renormalization has the lower held-out log loss it is the further of the two maps from the
+observed contraction. The table asks the different question of which map forecasts better. Thirty-nine
 comparisons have full-menu shares that calibrate both maps and restricted-menu choices that
 score them by held-out log loss. Rows are comparisons, not independent populations: several
 reuse the same subjects or source study. Section~\ref{sec:empirical} gives the protocol, the datasets
@@ -246,7 +249,7 @@ Gambles, low arithmetic cost & observed menus & $+.0002$ & $.667$ & Aguiar \\
 \midrule
 Wikipedia links & observed removals & $-.0001$ & $.005$ & clicks \\
 Tones, narrow, ten to eight & observed menus & $-.0051$ & n/a & Stewart \\
-Tones, wide, ten to eight & observed menus & $-.0057$ & n/a & Stewart \\
+Tones, wide, ten to eight & observed menus & $-.0041$ & n/a & Stewart \\
 Lines, twelve to eight & observed menus & $-.0057$ & $1.000$ & Rouder \\
 Lines, twelve to four & observed menus & $-.0090$ & $1.000$ & Rouder \\
 Sounds, eight to four, $\{3,4,5,6\}$ & observed menus & $-.0127$ & $1.000$ & Getty \\
@@ -303,7 +306,7 @@ Clarke tested the rule on spoken consonants in noise, predicting confusion matri
 reduced response sets from a larger one, and Clarke and Anderson \cite{clarkeanderson1957}
 followed with a second test. Pollack and Decker \cite{pollackdecker1960} predicted four-way
 consonant matrices from an eight-way matrix and reported average deviations near four per cent.
-Hodge \cite{hodge1961} ran nested ensembles in three modalities, Rich \cite{rich1971} carried
+Hodge \cite{hodge1967} ran nested ensembles in three modalities, Rich \cite{rich1971} carried
 the rule into short-term memory, and Getty, Swets, Swets and Green \cite{getty1979} held eight
 stimuli fixed while allowing only four responses.
 
@@ -382,7 +385,17 @@ Any noise law fixed in advance up to location gives a map with nothing left to c
 class supplies many zero-parameter candidates and not two. We compare two of them because they
 are the conventional ones. Gumbel gives linear renormalization, which is the reflex and the
 architecture of a masked softmax. Unit-variance Gaussian gives Case V, which is the classical
-model of a latent contest and the one Thurstone proposed. Interpolating between them, or choosing the standardized
+model of a latent contest and the one Thurstone proposed.
+
+The asymmetry between the two is worth naming. Case V is a model somebody proposed and defended.
+Linear renormalization is the Gumbel-noise member of the same class, and it is not adopted
+because anyone argues that choice errors are double exponential. It is adopted because dividing
+by a smaller total is the obvious thing to do. Nothing in a masked softmax expresses a belief
+about extreme-value noise. The incumbent therefore holds its position by default rather than by
+argument, and the question below is not whether a challenger can overturn a defended position but
+whether the default was ever the right place to stand.
+
+Interpolating between them, or choosing the standardized
 shape of some third law, requires a number that the shares themselves do not supply. Overall
 scale does not: it is a gauge, absorbed exactly by the fitted locations. Both are calibrated
 to the same $|S|-1$ free shares and neither sees any observation from a smaller menu. Both are
@@ -1181,9 +1194,11 @@ together they describe a boundary that can be stated as a rule rather than a lis
 \paragraph{A perceptual continuum.} Stewart, Brown and Chater \cite{stewart2005} had
 listeners name one of ten pure tones, and ran the same tones with the middle eight and the
 middle six labels, so the label sets nest over physically identical stimuli. Calibrating on
-the ten-label row and predicting the restricted rows, linear renormalization wins all four
-conditions, by $0.0133$ and $0.0051$ nats at narrow spacing and $0.0173$ and $0.0057$ at
-wide. The mechanism is visible in the matrices, which are strongly banded: a tone is
+the ten-label row and predicting the restricted rows, linear linear renormalization wins all four conditions, by $0.0133$ and
+$0.0051$ nats at narrow spacing and $0.0173$ and $0.0041$ at wide. One row of the wide
+ten-to-eight condition is excluded: it contains an exact zero, which has to be floored, and two
+independently written calibrators disagree on the resulting location by enough to move that
+condition's gain. The other fifteen rows agree between them to $10^{-4}$. The mechanism is visible in the matrices, which are strongly banded: a tone is
 confused almost entirely with its immediate neighbours, so the alternatives are
 near-substitutes by construction and removing the outer labels returns their mass to
 neighbours rather than proportionally. The loss is larger at six labels, where more of the
@@ -1432,21 +1447,36 @@ We have attempted to elevate the Thurstone Case V $N(0,1)$ model, which we have 
 \emph{Gaussian renormalization}, to the status of an equal partner to the ubiquitous practice of
 linear renormalization of probability. The question is not confined to menus of goods. It arises
 wherever a probability vector is transported to a smaller support, which includes masked softmax
-vocabularies, scratched fields, delisted catalogues and disallowed response sets. Truncation
-belongs here in one of its two senses only. If the support shrinks because one has learned that
-the outcome lies in $T$, then $p_i / \sum_{j \in T} p_j$ is the conditional probability, linear
-renormalization is a theorem rather than a choice, and nothing here bears on it. If it shrinks
-because the mechanism has been altered so that only $T$ can occur, as with a decoder confined to
-a sub-vocabulary or a field with scratchings, then the old experiment's conditional probability is
-not an answer to a question about the new one, and the two maps below are the candidates.
+vocabularies, scratched fields, delisted catalogues and disallowed response sets. Four operations
+get run together under that heading and only two of them raise a question.
+
+Conditioning a fixed categorical law on $X \in T$ gives $p_i / \sum_{j \in T} p_j$ by definition.
+That is what truncation ordinarily means in probability, linear renormalization is a theorem
+there rather than a choice, and nothing in this paper bears on it. Masking a fixed softmax and
+rescaling is the same arithmetic on a score vector: it does not merely permit the linear
+transport, it \emph{is} the linear transport, so a masked softmax has IIA built into the
+operator. Neither is a case where two maps compete.
+
+The question arises in the other two. When the feasible set is intervened upon, so that a horse
+is scratched or a response option is disallowed and the choice-generating experiment itself
+changes, the original share vector does not determine the new shares, and the two maps below are
+two conventional candidates among the many any regular noise shape supplies. And when a model
+recomputes its scores with the permitted set as an input, the result is not a transport of the
+old vector at all, so neither map describes it. This paper is about the third case, and the
+second is where its practical relevance lies, because that is where the linear transport is
+already deployed without anyone having chosen it.
 
 Gaussian Case V is a credible, tuning-free alternative to linear renormalization. Across
 the collections examined it frequently produces useful odds contraction, with the most
 persuasive evidence coming from experiments in which the same observers perform tightly matched
 full-menu and restricted-menu tasks, the identity of the surviving alternatives being revealed
-only after the stimulus has gone. On those collections it is
-typically as viable as linear renormalization and often more so, which is all that is required of
-it.
+only after the stimulus has gone. On those collections it is typically as viable as linear
+renormalization and usually better. It has the lower held-out log loss in thirty of the
+thirty-nine comparisons, and on the contraction axis of Figure~\ref{fig:line} it is the nearer of
+the two maps in eighteen of the nineteen populations that axis can place, the exception resting
+on five pairs. Neither statement identifies a population rate, and the second is a projection
+rather than a proper score. What they jointly rule out is the position that the two maps trade
+blows.
 
 The evidence does not establish universal superiority. Raw predictive gain must be distinguished
 from rejection of a Luce null, and Table~\ref{tab:scoreboard} reports the two separately because
@@ -1670,10 +1700,10 @@ David J. Getty, John A. Swets, Joel B. Swets, and David M. Green.
 On the prediction of confusion matrices from similarity judgments.
 \emph{Perception \& Psychophysics}, 26(1):1--19, 1979.
 
-\bibitem{hodge1961}
+\bibitem{hodge1967}
 Milton H. Hodge.
-The constant-ratio rule and identification tasks.
-American Psychological Association, 1961.
+Some further tests of the constant-ratio rule.
+\emph{Perception \& Psychophysics}, 2(10):429--437, 1967.
 
 \bibitem{rich1971}
 Robert Rich.
