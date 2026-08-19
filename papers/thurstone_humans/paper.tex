@@ -313,13 +313,21 @@ blocked and counterbalanced, and published the full matrices per subject. Rouder
 \cite{rouder2004} states the modern summary: conditioning on a reduced choice set is better
 than a guessing correction predicts and worse than the ratio rule predicts. Wills, Reimers,
 Stewart, Suret and McLaren \cite{wills2000} reject the rule in categorization and argue for a
-Thurstonian replacement, and they come closest of anyone to the exercise below: alongside their
-fitted four-parameter model they construct a ``simple winner-take-all'' system that takes the
-noisy magnitudes and picks the largest, observe that ``like the ratio rule, the simple-WTA system
-has no free parameters'', and report that Gaussian noise ``produces comparable results'' to the
-rectangular noise they use. They set it aside because its fit is ``by no means as good'' as the
-fitted model's, they judge by the shape of derived functions rather than by held-out score, and
-they never compute the point prediction their own equations imply for the restricted share.
+Thurstonian replacement. They go furthest of anyone toward the contest studied here: alongside
+their fitted four-parameter model they construct a ``simple winner-take-all'' system that takes
+the noisy magnitudes and picks the largest, note that ``like the ratio rule, the simple-WTA
+system has no free parameters'', and report that Gaussian noise ``produces comparable results''
+to the rectangular noise they use.
+
+It is worth being exact about what that does and does not settle, because the object differs.
+Their magnitudes are supplied by a model of the stimulus, a univariate function of how many
+category-appropriate symbols a display contains, and their conclusion is explicitly conditional on
+it: the ratio rule is shown incorrect ``given the assumption'' that the magnitudes take that form.
+Their comparison is therefore between two theories of how a stimulus produces a choice. The
+problem here has no stimulus in it. The input is a probability vector and the output is a
+probability vector over a subset of the same support, so an analyst holding shares and nothing
+else cannot run their model at all: there are no magnitudes to race. What is common is the
+principle, and what is missing there is a map.
 
 Three findings recur across those studies. The rule is a fair first approximation. It fails by
 concentrating the withdrawn mass onto whichever survivor most resembles the removed alternative
@@ -688,8 +696,20 @@ restricted-menu data to fit it on. That is a different exercise from the one con
 \subsection{Protocol}
 \label{sec:design}
 
-Both maps are calibrated on
-full-menu shares alone, then scored by log loss on restricted menus neither has seen. Three
+Both maps are calibrated on full-menu shares alone, then scored by log
+loss on restricted menus neither has seen. The input is a probability vector and nothing else,
+which is what makes the two maps comparable and what the exercise assumes.
+
+That assumption should be stated rather than left implicit, because it is the one doing the work.
+Both maps hold the latent quantity fixed and change only the menu: the locations that reproduce
+the full-menu shares are the locations that run the restricted contest, and the worths that
+reproduce them are the worths that get renormalized. Nothing here tests that invariance, and
+Section~\ref{sec:boundary} collects the cases where it visibly fails, which is where removal
+changes discriminability or the surviving alternatives are not the alternatives that were there
+before. Two further assumptions ride along. The noise is independent and identically shaped
+across alternatives, which near-substitutes violate. And the population is treated as one chooser
+with one latent vector, though Section~\ref{sec:mixture} shows heterogeneous Luce choosers
+reproducing aggregate contraction with no individual departing from the axiom. Three
 things make that possible now. Trial-level archives are open, so restricted menus can be
 scored on the observations that produced them rather than on printed marginals. Inverting
 Equation~\eqref{eq:winprob} from shares alone is a single pass over a shared grid, so the
