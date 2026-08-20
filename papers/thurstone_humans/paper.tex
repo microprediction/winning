@@ -25,8 +25,9 @@ is the Gumbel point of the independent additive random-utility class\footnotemar
 a Gaussian contest among the survivors is Case V. Psychology has tested renormalization under
 restriction since 1957, as the constant-ratio rule, and we score the two out of sample on
 thirty-nine population comparisons, twenty-seven observing the smaller menu and twelve inducing
-subset choice from rankings. Gaussian renormalization has the lower held-out log loss in thirty.
-The rows are dependent and unequally clustered across studies, so that count describes this
+subset choice from rankings. Gaussian renormalization has the lower held-out log loss in thirty,
+eighteen of the twenty-seven observed restrictions and twelve of the twelve induced from rankings.
+The rows are dependent and unequally clustered across studies, so those counts describe this
 corpus rather than estimating a rate. The losses concentrate on one-dimensional and strongly
 confusable stimulus sets, which motivates a boundary rule rather than establishing one.
 \end{abstract}
@@ -1287,14 +1288,20 @@ subset choices from complete rankings.
 \subsection{Boundary conditions}
 \label{sec:boundary}
 
-The four losses in Table~\ref{tab:scoreboard} are one task, and three further populations
-fail both maps in ways that published aggregates settle without this protocol. Taken
-together they describe a boundary that can be stated as a rule rather than a list.
+Eight of the nine negative rows in Table~\ref{tab:scoreboard} belong to three closely related
+collections: four tone conditions, three line restrictions, and the Getty condition whose
+survivors are mutual confusions. Wikipedia is the near-zero ninth. Three further populations fail
+both maps in ways that published aggregates settle without this protocol.
+
+Those eight are fewer independent observations than the row count suggests, and what they have in
+common is worth getting right, because the obvious reading is wrong in two ways that can be shown
+with three alternatives.
 
 \paragraph{A perceptual continuum.} Stewart, Brown and Chater \cite{stewart2005} had
 listeners name one of ten pure tones, and ran the same tones with the middle eight and the
 middle six labels, so the label sets nest over physically identical stimuli. Calibrating on
-the ten-label row and predicting the restricted rows, linear linear renormalization wins all four conditions, by $0.0133$ and
+the ten-label row and predicting the restricted rows, linear renormalization wins all four
+conditions, by $0.0133$ and
 $0.0051$ nats at narrow spacing and $0.0173$ and $0.0041$ at wide. One row of the wide
 ten-to-eight condition is excluded: it contains an exact zero, which has to be floored, and two
 independently written calibrators disagree on the resulting location by enough to move that
@@ -1420,13 +1427,54 @@ Figure~\ref{fig:line} shows the same division on one axis. The collections neare
 renormalization are the perceptual continuum and the concentrated shares; the collections
 furthest past Gaussian renormalization are categories, colours, symbols and consumer goods.
 
-\medskip
-\noindent The rule that summarises this is narrower than the class of independent random
-utility models and wider than any single dataset. \emph{The Gaussian contest is the better
-default where the alternatives are distinct unordered items}, such as goods, news articles,
-memory foils, sushi, jokes, ballots, colours and symbols. It is not where they lie on a perceptual
-continuum, where a removed option is a near-substitute for a survivor, or where removal
-changes the discriminability of what remains.
+\subsection{What the failures do not show}
+
+\paragraph{A continuum is not the culprit.} Let a noisy scalar percept $s$ arrive and give
+response label $i$, positioned at $x_i$ on the same physical dimension, the utility
+$U_i = -c\,(s - x_i)^2 + \varepsilon_i$ with $\varepsilon_i$ independent standard normal.
+Neighbouring labels are more confusable than distant ones and the confusion matrix is strongly
+banded. Conditional on $s$ this is exactly Case V with locations $a_i = -c\,(s-x_i)^2$, so
+withdrawing labels and re-running the contest is exactly right, and linear renormalization is
+wrong. With $c = 1/2$ and labels at $-2,\dots,2$, removing the second and fourth leaves a true
+favourite share of $0.866$ at $s=0$; Gaussian renormalization returns it exactly and linear
+renormalization returns $0.924$. Replace the Gaussian errors with independent Gumbels and the
+verdict reverses exactly, with the same one-dimensional geometry and the same banding. Dimension
+does not identify the noise law.
+
+\paragraph{Near-substitution does not fix the sign.} Take full-menu shares
+$p = (0.50, 0.30, 0.20)$ and let the last fifth of the population rank $C \succ B \succ A$, so
+that $C$'s mass is a perfect substitute for $B$. Removing $C$ gives a true pair share of $0.50$
+for $A$. Linear renormalization predicts $0.625$ and Gaussian renormalization $0.616$, which by
+Proposition~\ref{prop:contraction} must lie below it, so Gaussian renormalization has the lower
+loss, $0.7209$ against $0.7254$. Now change only that fifth to $C \succ A \succ B$. The full-menu
+shares are unchanged and the perfect substitute is still there, but the truth becomes $0.70$ and
+linear renormalization is the better of the two, $0.6233$ against $0.6262$. The same share vector
+and the same statement that a removed alternative has a near-substitute admit opposite answers.
+What decides it is where the displaced mass goes: toward a lower-share survivor the odds contract
+and Gaussian renormalization gains, toward the favourite they expand and it loses.
+
+\subsection{What they do show}
+\label{sec:diagnostics}
+
+So the pattern is not a semantic rule about what kind of thing the alternatives are. It is a set
+of diagnostics for assumptions, and the three are of different logical types.
+
+\emph{Dependence.} A shared percept, local substitution, clustered tastes or a common shock makes
+the covariance materially non-isotropic on the contrast subspace, and independent Case V is then
+structurally inadequate. Continua and near-substitutes are possible symptoms of this rather than
+rules in themselves, and the tone, line and Getty collections are read here as its instances: what
+they share is a single noisy percept moving neighbouring labels together, not their dimension.
+Inadequacy of Case V does not make proportional renormalization correct, and in the Scottish
+verdicts neither map survives.
+
+\emph{Transport failure.} If the permitted set changes locations, attention, criteria or
+covariance, then $a_T$ depends on $T$ and no fixed-latent map applies, whichever it is. The exam
+distractors, the phoneme labels and the Getty retuning are of this kind, and the recommendation
+there is to re-estimate rather than to transport.
+
+\emph{Low leverage.} If the withdrawn alternatives carry negligible mass and the leader survives,
+the two forecasts are practically indistinguishable. This settles what the choice is worth, not
+which map is right.
 
 Two consequences follow. First, an apparent conflict resolves. Meyer-Grant and colleagues \cite{meyergrant2026} show that Gumbel-min uniquely predicts accuracy invariance as a
 recognition set grows uniformly, find that invariance, and report the Gumbel model
@@ -1456,13 +1504,15 @@ removing an alternative change how easily the survivors can be told apart, as de
 distractor or an implausible response option does? And do the withdrawn alternatives carry so little mass,
 with the leader surviving, that the two maps agree to within the noise?
 
-A yes to the first two says linear renormalization or a fitted correlated model rather than
-Gaussian renormalization, though in the tone matrices and the Scottish verdicts linear
-normalization is merely the less wrong of two independence models, and near-substitution is an
-argument for a similarity-aware model rather than for proportional redistribution. A yes to the
-third says that neither transport map applies, because the surviving alternatives are not the
-alternatives that were there before, and the choice model has to be re-estimated under the new
-task. A yes to the fourth says the choice does not matter.
+A yes to the first two warns that independent Case V may be misspecified, and no more. It does
+not identify proportional renormalization as the better of the two.
+Section~\ref{sec:diagnostics} exhibits a one-dimensional continuum on which Gaussian
+renormalization is exactly right, and a pair of populations with identical full-menu shares and a
+perfect near-substitute on which the two maps win one apiece, the sign turning on whether the
+displaced mass moves toward a lower-share survivor or toward the favourite. A yes to the third
+says neither transport map applies, since the surviving alternatives are not the ones that were
+there before, and the model has to be re-estimated. A yes to the fourth says the choice is not
+worth making.
 
 A confusion matrix answers the first two on inspection, which is the diagnostic Townsend and
 Landon \cite{townsendlandon1982} used, and the within-set confusion mass of
@@ -1571,12 +1621,13 @@ the collections examined it frequently produces useful odds contraction, with th
 persuasive evidence coming from experiments in which the same observers perform tightly matched
 full-menu and restricted-menu tasks, the identity of the surviving alternatives being revealed
 only after the stimulus has gone. On those collections it is typically as viable as linear
-renormalization and usually better. It has the lower held-out log loss in thirty of the
-thirty-nine comparisons, and on the contraction axis of Figure~\ref{fig:line} it is the nearer of
-the two maps in eighteen of the nineteen populations that axis can place, the exception resting
-on five pairs. Neither statement identifies a population rate, and the second is a projection
-rather than a proper score. What they jointly rule out is the position that the two maps trade
-blows.
+renormalization and usually better. It has the lower held-out log loss in thirty of the thirty-nine
+comparisons, split eighteen of twenty-seven observed against twelve of twelve ranking-induced, and
+on the contraction axis of Figure~\ref{fig:line} it is the nearer of the two maps in eighteen of
+the nineteen populations that axis can place. Neither figure estimates a rate in a target
+population of applications, the corpus being selected and clustered, and the second is a
+projection rather than a proper score. Together they put Gaussian renormalization well past
+occasional curiosity without establishing a default ordering.
 
 The evidence does not establish universal superiority. Raw predictive gain must be distinguished
 from rejection of a Luce null, and Table~\ref{tab:scoreboard} reports the two separately because
@@ -1586,8 +1637,7 @@ Wikipedia traffic can shift the population as well as the menu. And similarity, 
 tastes, task adaptation and the identity of the alternatives removed remain boundary conditions
 rather than details.
 
-Four such conditions are worth carrying away, and none of them is settled by the share vector
-alone. The alternatives lie on a perceptual continuum, so that neighbours are more confusable
+Three diagnostics are worth carrying away, and none is settled by the share vector alone. The alternatives lie on a perceptual continuum, so that neighbours are more confusable
 than distant pairs. A withdrawn option is a near-substitute for a survivor, so its mass returns
 to that neighbour rather than spreading. The withdrawal changes how easily the survivors can be
 told apart, in which case neither transport map applies and the choice model has to be

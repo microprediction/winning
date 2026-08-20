@@ -21,3 +21,4 @@ dataset                      gain          refit interval  reps    kind
 Dots                      +0.0015      [+0.0006, +0.0024]   100     95%
 GSS job values            +0.0017      [+0.0014, +0.0044]   100     95%
 GSS socialization         +0.0055      [+0.0022, +0.0101]   100     95%
+Jester file 1             +0.0020      [+0.0009, +0.0030]   100     95%
