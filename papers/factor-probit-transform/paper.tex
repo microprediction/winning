@@ -1036,6 +1036,10 @@ the simplex and $p(\mu) = \arg\max_{q \in \Delta}\{\mu^\top q -
 the maximizer is softmax. In general it is the generalized entropy of
 \citet{fosgerau2020}, with the perturbation--regularization duality
 developed for machine learning by \citet{berthet2020}.
+\citet{lin2026} estimate perturbed utility models by minimizing the
+associated Fenchel--Young loss, whose gradient in the utilities is
+exactly $p(\mu) - \hat p$; the forward pass here supplies that
+gradient for the factor probit case.
 \citet{melo2025} gives the online-learning reading of the same
 duality. Factor probit
 carries a covariance-dependent, non-separable entropy that couples
@@ -2271,13 +2275,17 @@ of the European Mathematical Society} 21 (2019) 2603--2651.
 Rank-order tournaments as optimum labor contracts. \emph{Journal of
 Political Economy} 89 (1981) 841--864.
 
+\bibitem[Lee(2000)]{lee2000} L.-F. Lee. A numerically stable quadrature
+procedure for the one-factor random-component discrete choice model.
+\emph{Journal of Econometrics} 95 (2000) 117--129.
+
 \bibitem[L\'evy(2015)]{levy2015} B.~L\'evy. A numerical algorithm for
 $L_2$ semi-discrete optimal transport in 3D. \emph{ESAIM: Mathematical
 Modelling and Numerical Analysis} 49 (2015) 1693--1715.
 
-\bibitem[Lee(2000)]{lee2000} L.-F. Lee. A numerically stable quadrature
-procedure for the one-factor random-component discrete choice model.
-\emph{Journal of Econometrics} 95 (2000) 117--129.
+\bibitem[Lin et~al.(2026)Lin, Yin, and Liu]{lin2026} X.~Lin,
+Y.~Yin, T.~Liu. Fenchel--Young estimators of perturbed utility
+models. arXiv:2602.21376 (2026).
 
 \bibitem[Lo and Bacon-Shone(1994)]{lo1994} V.~S.~Y. Lo, J.~Bacon-Shone.
 A comparison between two models for predicting ordering probabilities in
