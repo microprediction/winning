@@ -1004,6 +1004,51 @@ calibration uncertainty and are too narrow, most seriously in the two smallest r
 \label{tab:heldout}
 \end{table}
 
+\subsection{Two conventions, and what they change}
+\label{sec:conventions}
+
+Neither map fits anything, but the pipeline around them makes two choices. Shares are smoothed
+by add-$\alpha$ with $\alpha = 1/2$, and the aggregate weights every subset of size two or more
+equally. Both are conventions rather than results, so both are varied.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrcrrr}
+\toprule
+& \multicolumn{3}{c}{smoothing} & & \multicolumn{3}{c}{menu weighting} \\
+\cmidrule(r){2-4}\cmidrule(l){6-8}
+Collection & $\alpha=0$ & $\alpha=\tfrac12$ & $\alpha=1$ & & subsets & by size & pairs \\
+\midrule
+Occupational prestige & n/a & $+.0390$ & $+.0153$ & & $+.0390$ & $+.0266$ & $+.0286$ \\
+Sushi & $+.0113$ & $+.0111$ & $+.0109$ & & $+.0111$ & $+.0108$ & $+.0412$ \\
+Political goals & $+.0069$ & $+.0069$ & $+.0069$ & & $+.0069$ & $+.0050$ & $+.0079$ \\
+GSS socialization & $+.0057$ & $+.0055$ & $+.0053$ & & $+.0055$ & $+.0036$ & $+.0130$ \\
+Sports participation & $+.0056$ & $+.0050$ & $+.0046$ & & $+.0050$ & $+.0038$ & $+.0058$ \\
+Jester file 3 & $+.0024$ & $+.0024$ & $+.0024$ & & $+.0024$ & $+.0021$ & $+.0064$ \\
+Jester file 1 & $+.0020$ & $+.0020$ & $+.0019$ & & $+.0020$ & $+.0017$ & $+.0053$ \\
+Jester file 2 & $+.0018$ & $+.0018$ & $+.0017$ & & $+.0018$ & $+.0015$ & $+.0048$ \\
+GSS job values & $+.0018$ & $+.0017$ & $+.0017$ & & $+.0017$ & $+.0012$ & $+.0021$ \\
+Dots & $+.0015$ & $+.0015$ & $+.0015$ & & $+.0015$ & $+.0010$ & $+.0025$ \\
+Netflix & $+.0010$ & $+.0009$ & $+.0009$ & & $+.0009$ & $+.0006$ & $+.0013$ \\
+Puzzles & $+.0008$ & $+.0007$ & $+.0007$ & & $+.0007$ & $+.0005$ & $+.0013$ \\
+\bottomrule
+\end{tabular}
+\caption{Held-out gain under three smoothing conventions and three menu weightings. Smoothing is
+close to inert: eleven collections move by less than $0.0004$ across the three values.
+Occupational prestige is the exception, unscorable at $\alpha = 0$ because a training cell is
+empty and falling to $+0.0153$ at $\alpha = 1$, which is the collection with $143$ respondents and
+ten alternatives. Weighting changes magnitude and not sign. Uniform by surviving size is smaller
+throughout, pairs alone are larger, and Sushi runs from $+0.0108$ to $+0.0412$ depending which is
+chosen. All thirty-six cells that can be computed are positive.}
+\label{tab:conventions}
+\end{table}
+
+The weighting result matters for how the headline should be read. Every subset of size two or
+more counting once puts most of the weight near $|T| = K/2$, and pairs are where the two maps
+differ most, so the aggregate reported throughout is the conservative choice of the three rather
+than a neutral one. The direction does not depend on it.
+
 \subsection{The constant-ratio-rule datasets rescored}
 \label{sec:townsend}
 

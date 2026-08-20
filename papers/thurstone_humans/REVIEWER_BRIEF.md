@@ -7,10 +7,19 @@ your report; table and section numbers have moved between rounds and are not sta
 Three earlier rounds have been acted on. This note says what is settled, so the fourth round is
 not spent re-deriving it, and what is open, so it is not spent discovering it.
 
-Note before you start: the refit bootstrap, the add-alpha sensitivity and the menu-weighting
-sensitivity are running now and are not in this version. They address items 1, 3 and 4 below.
-Treat the intervals in Tables 6 and 7 as provisional and do not build a recommendation on their
-width.
+Note before you start: the add-alpha and menu-weighting sensitivities are now in the paper, in
+the section titled "Two conventions, and what they change". Smoothing is close to inert except on
+occupational prestige, which is the collection with 143 respondents and ten alternatives.
+Weighting changes magnitude by up to fourfold and never changes sign, and the aggregate reported
+throughout is the most conservative of the three weightings. Item 4 and item 3 are therefore
+closed.
+
+The refit bootstrap is still running at a larger replicate count. A first pass at 30 to 200
+replicates put every one of the twelve intervals clear of zero, wider than the published ones
+where the earlier rounds predicted, but 30 replicates makes the reported endpoints the extreme
+order statistics rather than percentiles, which the script now labels rather than dressing up.
+Item 1 is therefore expected to close in our favour, but do not rely on the numbers in this
+version.
 
 ## What the paper claims
 
@@ -58,14 +67,14 @@ Experiment 2 data is one of the thirty-nine rows).
 ## Open, and known. Confirming these is not useful; fixing or costing them is
 
 1. **Ranking intervals hold calibration fixed** and are therefore too narrow, worst in the two
-   smallest collections. A refit bootstrap is running; results will be in
-   `research/restriction/results/sensitivity.txt`.
+   smallest collections. The refit bootstrap in `research/restriction/sensitivity.py` is running;
+   output lands in `results/sensitivity.txt`. The published intervals in the manuscript have not
+   yet been replaced by it.
 2. **Monte Carlo replicates are 200, 60 on the news row, 400 on Wills.** The 0.05 threshold is
    inside the noise. Verdicts should stop being binary; exceedance counts should be printed.
-3. **Menu weighting is uniform over subsets** and is part of the estimand. Sensitivity over
-   uniform-by-size and pairs-only is running.
-4. **Add-$\alpha$ sensitivity** at $\alpha \in \{0, 1/2, 1\}$ is running. One collection is
-   scorable only because the convention removes a zero training cell.
+3. ~~Menu weighting~~ done, and reported. The aggregate is the conservative weighting.
+4. ~~Add-$\alpha$ sensitivity~~ done, and reported. Occupational prestige is the one collection
+   that moves, which is worth knowing when reading its $+0.0390$.
 5. **The cubic order is prose, not a lemma.** Smoothness in an explicit norm, interior shares
    and a nonsingular contrast Jacobian are assumed rather than stated.
 6. **No study-level primary table.** Rows overlap and nest; the count is descriptive and says so.
