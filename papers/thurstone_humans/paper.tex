@@ -28,8 +28,7 @@ parameter. In part we re-litigate the psychology debate that sets the constant r
 choice axiom, against Thurstone's Case V; in part we bring new data from situations where
 renormalizing a probability is tempting. Gaussian renormalization has the lower held-out log loss
 in thirty of thirty-nine comparisons, eighteen of the twenty-seven observed restrictions and
-twelve of the twelve induced from rankings. The rows are clustered and the corpus was assembled
-by search, so those counts describe it rather than estimating a rate.
+twelve of the twelve induced from rankings.
 \end{abstract}
 
 \footnotetext[2]{The Gumbel construction is due to Holman and Marley
@@ -38,18 +37,37 @@ by search, so those counts describe it rather than estimating a rate.
 \section{A two horse race between zero parameter choice models}
 \label{sec:problem}
 
-A probability vector is given over a set of mutually exclusive outcomes, and the set changes.
-A horse is scratched, a product is delisted, a candidate fails to qualify for a ballot, a
-response option is disallowed, a token is masked out of a softmax, a distribution is truncated
-to a sub-support. In each case a probability vector has to be transported from the original
-support to a smaller one. What are the probabilities over what remains?
+Suppose a probability vector is presented, as with a collection of de-vigged bookmaker odds for a
+horse race, or the output of a calibrated probabilistic machine learning model. Suppose next that
+the set changes. Perhaps a horse is scratched, a product is delisted, or a primary candidate
+drops out of a race. Alternatively a response option in a survey may be disallowed, or a token
+masked out of a softmax. These are quite different situations with their own nuances, but in each
+case a probability vector has to be transported from the original support to a smaller one. The
+natural question arises: what are the probabilities over what remains?
 
-We take the case where the original vector is a population's choice shares over a menu, since
-that is where data exists to score the answers, but the operation is the general one and the two
-answers below apply wherever it is performed.
+A related problem arises in the computation of permutation probabilities, but here we focus on
+the case where the original vector is a market share of sorts, as with the population popularity
+of an item on a menu. That data is the more controversial in some respects, because it can speak
+to the discovery or delineation of underlying mechanics from revealed preferences. In contrast it
+is somewhat self-evident that the right answer for contest winning probabilities can often be
+strongly suggested by the generative model at hand, finishing time distributions being the
+obvious example.
+
+When a menu item is removed, quite a lot of machinery exists for carefully estimating the
+probabilities that should be ascribed to the reduced menu. Depending on the data available,
+probit models or other tools can be brought to bear. That is outside the scope of the present
+discussion, because wielding statistical machinery together with careful modelling, parameter
+selection and cross-validation can evolve into an entire enterprise, and it is often unreasonable
+to compare that to the trivial, instinctive act of rescaling probability. That instinct cannot be
+challenged by an invitation to treat every occasion for its use as a new data science project.
+
+There is one alternative response that is slightly more involved analytically but not
+methodologically complicated. It is the Gaussian special case of Thurstone's Case V family, and
+we argue for its place as a tuning-free default renormalization to set against the linear one.
+Both stand on equal footing philosophically.
 
 Nothing has been observed about the smaller menu, so the answer must come from an assumption
-about how the original shares arose. The standard assumption is stated by Luce's axiom
+about how the original shares arose. The standard rescaling assumption is stated by Luce's axiom
 \cite{luce1959}, which assigns each item $i$ on menu $S$ a worth $u(i)$ with
 \begin{equation}
 p_i = \frac{u(i)}{\sum_{j \in S} u(j)},
@@ -62,10 +80,10 @@ This is proportional, or \emph{linear}, renormalization. The invariance it impos
 Alternatives, and applied to a reduced set of response alternatives it is what Clarke
 \cite{clarke1957} named the \emph{constant-ratio rule}.
 
-There is another approach that is equally natural, if not more so, and also demands no
-estimation or free parameters. Read the shares as the winning probabilities of a contest among
-independent Gaussian performances, which is
-Thurstone's Case V \cite{thurstone1927} generalized from pairs to a multiway field. Item $i$
+We suggest that Gaussian renormalization is equally natural, if not more so. Read the shares as
+the winning probabilities of a contest among independent Gaussian performances, which has
+heritage back to Thurstone's Case V \cite{thurstone1927} generalized from pairs to a multiway
+field. Item $i$
 carries a location $a_i$, draws $X_i \sim N(a_i,1)$ on each occasion, and the highest draw is
 chosen, so
 \begin{equation}
@@ -80,26 +98,31 @@ P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right).
 \label{eq:pair}
 \end{equation}
 
-The two are termed \emph{linear renormalization} and \emph{Gaussian renormalization} throughout.
-Both take the same shares and return shares over the survivors. The first holds the ratios of the
-shares fixed, the second holds the latent locations fixed.
+Our limited goal is a practical comparison of linear renormalization and Gaussian
+renormalization. The first holds the ratios of the shares fixed, the second holds the latent
+locations fixed. The underlying physics is quite different, so even small persistent statistical
+advantages of one over the other may be suggestive of structure, and of interest to the
+psychology community but also, we hope, to the broader machine learning audience whose choice of
+linear renormalization is often tacit.
 
-Each map travels under several names, and we treat the names of each as synonyms. For the first:
-proportional renormalization, linear renormalization, the ratio rule, Clarke's constant-ratio
-rule, and masking a softmax and rescaling the survivors. All denote Equation~\eqref{eq:luce}
-applied to a subset, and we write linear renormalization except where the historical name is
-what a cited paper used. For the second: Gaussian renormalization, Thurstone's Case V re-run
-among the survivors, and the independent unit-variance Gaussian contest on the restricted menu.
-The names differ by discipline and by decade rather than by content, and part of why the
-comparison below had not been made is that the two literatures holding the pieces did not share
-a vocabulary.
+Each competitor in this two horse race is elementary and, not surprisingly, has assumed many
+names. We treat them as synonyms. We equate proportional renormalization, linear renormalization,
+the ratio rule, Clarke's constant-ratio rule, and masking a softmax and rescaling the survivors.
+All denote Equation~\eqref{eq:luce} applied to a subset, and we write linear renormalization
+except where the historical name is what a cited paper used.
+
+Conversely we equate Gaussian renormalization, Thurstone's Case V re-run among the survivors, and
+the independent unit-variance Gaussian contest on the restricted menu. The names differ by
+discipline and by decade rather than by content, and part of why the comparison we present has
+not been made broadly or crisply is that the two literatures holding the pieces did not share a
+vocabulary.
 
 The two horses disagree, and in a fixed direction. If $p_i > p_j$ then Equation~\eqref{eq:pair}
 lies between $\tfrac12$ and the renormalized $p_i/(p_i+p_j)$: winning a large field requires an
 unusually high draw and beating a single rival does not, so withdrawing the other alternatives
-counts the favourite's advantage for less. Section~\ref{sec:maps} shows that these two are the
-two conventional members of the independent additive random-utility class, and
-Proposition~\ref{prop:contraction} makes the direction of their disagreement exact.
+counts the favourite's advantage for less. Section~\ref{sec:maps} remarks that these two are the
+conventional members of the independent additive random-utility class, which is well appreciated,
+and Proposition~\ref{prop:contraction} makes the direction of their disagreement exact.
 
 \section{Scoreboard}
 
@@ -198,7 +221,15 @@ populations, the table scores forecasts.}
 \end{figure}
 
 Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} state the result before the argument for
-it. The figure asks where each population falls between the two maps, on a scale where linear
+it. Two numbers are reported for each population and they answer different questions. The
+\emph{gain} is the held-out log loss of linear renormalization minus that of Gaussian
+renormalization, in nats per prediction, so a positive gain means Gaussian renormalization
+forecast the withheld choices better. The \emph{null frequency} is obtained by generating a
+population that obeys the constant-ratio rule exactly, with worths set to the observed shares,
+pushing it through the identical pipeline, and recording how often that population produces a
+gain at least as large as the observed one. A small null frequency says the real population
+departs from the rule in the direction of contraction. It says nothing about which map forecasts
+better, and a large one does not mean the maps tie. The figure asks where each population falls between the two maps, on a scale where linear
 renormalization is one point and Gaussian renormalization another. Of the nineteen it can place,
 eighteen lie nearer the Gaussian point, the median sits at $1.13$, and fourteen lie beyond it.
 The single population nearer linear renormalization is the gamble row, which rests on five pairs.
@@ -215,7 +246,7 @@ and the null.
 \small
 \begin{tabular}{llrrl}
 \toprule
-Population & Restriction & Gain & Tail & Family \\
+Population & Restriction & Gain & Null freq. & Family \\
 \midrule
 News slates & observed impressions & $+.0496$ & $.016$\footnotemark[4] & clicks \\
 Sounds, eight to four, $\{1,3,5,7\}$ & observed menus & $+.0490$ & $\le .005$ & Getty \\
@@ -260,15 +291,15 @@ Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & Rouder \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
-nats per prediction, so a positive gain means Gaussian renormalization predicted better. The tail
-is the Monte Carlo frequency with which a population obeying the constant-ratio rule exactly
-reaches that gain on the same menus, and it therefore tests departure from the rule rather than
+nats per prediction, so a positive gain means Gaussian renormalization predicted better. The null
+frequency is defined in the text: it tests departure from the constant-ratio rule and not
 predictive superiority. Replicates are two hundred except for the news row, sixty, and the Wills
-row, four hundred; the tone matrices are participant-averaged, so no tail is computed.}
+row, four hundred; the tone matrices are participant-averaged, so no null frequency is
+computed.}
 \label{tab:scoreboard}
 \end{table}
 
-\footnotetext[4]{The news tail rests on sixty replicates, so $.016$ is the floor $1/61$ rather
+\footnotetext[4]{The news figure rests on sixty replicates, so $.016$ is the floor $1/61$ rather
 than a measured frequency.}
 
 Gaussian renormalization has the lower held-out log loss in thirty of the thirty-nine rows.
@@ -286,16 +317,17 @@ studies have in common.
 
 The two columns answer different questions. The gain asks which map predicted the held-out
 choices better from estimated shares, and part of any advantage can be shrinkage rather than
-structure. The tail asks whether the population departs from the constant-ratio rule at all.
+structure. The null frequency asks whether the population departs from the constant-ratio rule at
+all.
 
-Two rows show the questions coming apart. Wikipedia has a negative gain and a small tail: it
-departs from the rule in the direction of contraction and still predicts worse. Sports
-participation has a positive gain and a tail of $0.51$: the gain is shrinkage and says nothing
-about the rule. Section~\ref{sec:empirical} takes up the first question and
+Two rows show the questions coming apart. Wikipedia has a negative gain and a small null
+frequency: it departs from the rule in the direction of contraction and still predicts worse.
+Sports participation has a positive gain and a null frequency of $0.51$: the gain is shrinkage
+and says nothing about the rule. Section~\ref{sec:empirical} takes up the first question and
 Section~\ref{sec:null} the second.
 
-Each consumer experiment appears twice because a gain and a tail have to come from the same
-people, and the forced-choice subgroup is not the whole sample. Three further populations appear
+Each consumer experiment appears twice because a gain and a null frequency have to come from the
+same people, and the forced-choice subgroup is not the whole sample. Three further populations appear
 in Section~\ref{sec:boundary} instead of here, since published aggregates fix the direction of
 their failure but do not support this protocol.
 
@@ -405,20 +437,18 @@ vector in one pass over a shared grid.
 
 Any noise law fixed in advance up to location gives a map with nothing left to choose, so the
 class supplies many zero-parameter candidates and not two. We compare two of them because they
-are the conventional ones. Gumbel gives linear renormalization, which is the reflex and the
-architecture of a masked softmax. Unit-variance Gaussian gives Case V, which is the classical
-model of a latent contest and the one Thurstone proposed.
+are the conventional ones. Gumbel gives linear renormalization, which is the unconsidered default
+and the architecture of a masked softmax. Unit-variance Gaussian gives Case V, which is the classical
+model of a latent contest and the one Thurstone proposed.\footnote{The asymmetry between the two
+is notable. Case V is a model somebody proposed and defended. Linear renormalization is the
+Gumbel-noise member of the same class, and it is not adopted because anyone argues that choice
+errors are double exponential. It is adopted because dividing by a smaller total is the obvious
+thing to do. Nothing in a masked softmax expresses a belief about extreme-value noise. The
+incumbent therefore holds its position by default rather than by argument, and the question below
+is not whether a challenger can overturn a defended position but whether the default was ever the
+right place to stand.}
 
-The asymmetry between the two is worth naming. Case V is a model somebody proposed and defended.
-Linear renormalization is the Gumbel-noise member of the same class, and it is not adopted
-because anyone argues that choice errors are double exponential. It is adopted because dividing
-by a smaller total is the obvious thing to do. Nothing in a masked softmax expresses a belief
-about extreme-value noise. The incumbent therefore holds its position by default rather than by
-argument, and the question below is not whether a challenger can overturn a defended position but
-whether the default was ever the right place to stand.
-
-Interpolating between them, or choosing the standardized
-shape of some third law, requires a number that the shares themselves do not supply. Overall
+Interpolating between them, or choosing the standardized shape of some third law, requires a number that the shares themselves do not supply. Overall
 scale does not: it is a gauge, absorbed exactly by the fitted locations. Both are calibrated
 to the same $|S|-1$ free shares and neither sees any observation from a smaller menu. Both are
 \emph{representative-agent} maps, treating the population as one chooser with one set of
@@ -724,7 +754,7 @@ Equation~\eqref{eq:winprob} from shares alone is a single pass over a shared gri
 Gaussian map costs nothing to apply. And a generative null is available. Contraction of a noisily
 estimated share vector lowers log loss whether or not the axiom fails, so every raw gain below is
 accompanied by the gain a population obeying the axiom exactly would produce on the same menus,
-its centred excess, and a Monte Carlo tail. The excess is a diagnostic centred on that particular
+its centred excess, and a null frequency. The excess is a diagnostic centred on that particular
 fitted null, not an estimate of a model-free structural effect: under a non-Luce population there
 is no reason for the null's bias to match the alternative's. Section~\ref{sec:null} details the
 construction.
@@ -786,7 +816,7 @@ $[+0.0048, +0.0246]$ respectively.}
 
 The race is ahead in both experiments and in both treatments, and by more where deferral
 cannot interfere. The two experiments do not agree on strength. Experiment 1 clears its null
-comfortably, with Monte Carlo tail frequencies of $0.010$ and $0.005$; experiment 2, at
+comfortably, with null frequencies of $0.010$ and $0.005$; experiment 2, at
 fifty-eight per cent of the sample, does not, at $0.199$ and $0.129$. The direction
 replicates and the magnitude is not established by these data alone.
 
@@ -825,7 +855,7 @@ Same pairs, announced in advance & 384 & $0.3967$ & $0.3928$ & $+0.0038$ & $+0.0
 alternative. Subject-bootstrap intervals for the gains are $[+0.0118, +0.0179]$,
 $[+0.0234, +0.0324]$ and $[+0.0006, +0.0072]$. The null here resamples the calibration row
 as well as the pair counts, so it charges the race for calibration noise as well as for
-sampling noise in what it predicts; all three tails are at the $0.005$ floor.}
+sampling noise in what it predicts; all three null frequencies are at the $0.005$ floor.}
 \label{tab:after}
 \end{table}
 
@@ -918,7 +948,7 @@ than an observed withdrawal.
 \small
 \begin{tabular}{lrrrrr}
 \toprule
-Population & Units & Gain & Null median & Excess & MC tail \\
+Population & Units & Gain & Null median & Excess & Null freq. \\
 \midrule
 Lotteries, high cost & 3{,}928 & $+0.0101$ & $+0.0020$ & $+0.0081$ & $.035$ \\
 Lotteries, medium cost & 3{,}928 & $+0.0068$ & $+0.0023$ & $+0.0045$ & $.124$ \\
@@ -1261,7 +1291,7 @@ specifically a Plackett--Luce ranking null.
 \small
 \begin{tabular}{lrrrr}
 \toprule
-Dataset & Observed & Null median & Excess & MC tail \\
+Dataset & Observed & Null median & Excess & Null freq. \\
 \midrule
 Menu experiment, forced choice & $+0.0265$ & $-0.0041$ & $+0.0306$ & $0.010$ \\
 Menu experiment, all subjects & $+0.0100$ & $-0.0023$ & $+0.0123$ & $0.015$ \\
@@ -1282,7 +1312,7 @@ Sports participation & $+0.0050$ & $+0.0051$ & $-0.0000$ & $0.51$ \\
 \bottomrule
 \end{tabular}
 \caption{The same gain when the axiom holds by construction. Two hundred replicates per
-row. The diagnostic is the excess of the observed gain over the null median; the tail
+row. The diagnostic is the excess of the observed gain over the null median; the null
 probabilities are indicative rather than exact tests, and for the menu rows they are
 optimistic, because the null redraws each subject's thirty-one choices independently given
 the aggregate worths and so omits the within-subject dependence that the bootstrap
@@ -1662,7 +1692,7 @@ measures the first two conditions directly.
 Where only shares exist, they have to be judged from the geometry or the semantics of the
 alternatives, and the judgement can be wrong.
 
-To repeat, this note is about competing reflexes rather than competing careful modelling
+To repeat, this note is about competing defaults rather than competing careful modelling
 paradigms. Both maps are nested by the independent additive random-utility family, indexed by
 its standardized noise shape. Where both can be checked against an observed restricted
 probability, which is the after-stimulus perceptual arms of Section~\ref{sec:after}, both err in
