@@ -126,6 +126,30 @@ and Proposition~\ref{prop:contraction} makes the direction of their disagreement
 
 \section{Scoreboard}
 
+Lest we be accused of burying the lead, Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} are
+intended to sway the reader and provide a jolt to anyone whose strong inclination is Luce's
+choice axiom, especially the few who might have been under the impression that dividing
+probabilities constitutes an argument of itself.
+
+The figure asks where each population falls between the two kinds of renormalization, on a scale
+where linear renormalization is one point and Gaussian renormalization another. Of the nineteen it
+can place, eighteen lie nearer the Gaussian point, the median sits at $1.13$, and fourteen lie
+beyond it.
+
+The single population nearer linear renormalization comes from one experiment in which subjects
+chose among gambles whose values had to be computed, which takes on a bit of the flavour of a quiz
+and so might be classified separately. The figure is highly suggestive but also slightly dishonest
+in some respects, since the statistic is not a proper scoring rule.
+
+The table is more statistically defensible in that last sense, but also compelling as a refutation
+of the notion that linear renormalization has any natural advantage or should occupy the special
+place that, in practice, it tends to claim. Thirty-nine comparisons have full-menu shares that
+calibrate both maps and restricted-menu choices. The score is held-out log loss.
+
+Another caveat: rows are comparisons. Several reuse the same subjects or source study, so they are
+not to be considered independent tests of the same hypothesis. Section~\ref{sec:empirical} goes
+into complete detail on the protocol, the datasets and the null.
+
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[x=1.6cm,y=0.385cm]
@@ -204,42 +228,20 @@ $r = \lambda_{\text{observed}} / \lambda_{\text{Case V}}$, the observed contract
 divided by the slope Case V implies for that population's own shares, so linear renormalization
 is at $r = 0$ by construction and Gaussian renormalization at $r = 1$. Filled circles are
 restricted menus the observer actually faced, open circles are ranking-induced. Most populations
-lie beyond $r = 1$: choice contracts by more than Case V predicts, so the Gaussian point is not
-far enough along the family, which is the same signed error the after-stimulus arms and
-Table~\ref{tab:favsecond} report. The two nearest linear renormalization are the gambles, whose
-shares are concentrated, and the line lengths, the one perceptual continuum here. Nineteen of the
-thirty-nine comparisons appear; the rest restrict to sets of three or more, so no pairwise
-$q_{ij}$ exists and no slope can be fitted, which excludes the tone matrices, the Getty
-conditions and Townsend and Landon. Precision varies by an order of magnitude across rows: the
-recognition foils rest on $360$ pairs, the gambles on five and Netflix on three, so the extremes
-of this axis are its least certain points. Positions here do not reproduce
-Table~\ref{tab:scoreboard}: $\lambda$ projects a vector of pair-specific predictions onto a
-single slope and is not a proper score, so the twelve-line population sits nearer Case V on this
-axis while linear renormalization has the lower held-out log loss on it. This axis places
-populations, the table scores forecasts.}
+lie beyond $r = 1$: choice contracts by more than Case V predicts, so as a general observation
+the Gaussian point tends not to be far enough along the family. Nineteen of the thirty-nine
+comparisons appear; the rest restrict to sets of three or more, so no pairwise $q_{ij}$ exists and
+no slope can be fitted. This statistic is not proper, so refer also to
+Table~\ref{tab:scoreboard}, which does not order the populations the same way.}
 \label{fig:line}
 \end{figure}
 
-Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} state the result before the argument for
-it. Two numbers are reported for each population and they answer different questions. The
-\emph{gain} is the held-out log loss of linear renormalization minus that of Gaussian
-renormalization, in nats per prediction, so a positive gain means Gaussian renormalization
-forecast the withheld choices better. The \emph{null frequency} is obtained by generating a
-population that obeys the constant-ratio rule exactly, with worths set to the observed shares,
-pushing it through the identical pipeline, and recording how often that population produces a
-gain at least as large as the observed one. A small null frequency says the real population
-departs from the rule in the direction of contraction. It says nothing about which map forecasts
-better, and a large one does not mean the maps tie. The figure asks where each population falls between the two maps, on a scale where linear
-renormalization is one point and Gaussian renormalization another. Of the nineteen it can place,
-eighteen lie nearer the Gaussian point, the median sits at $1.13$, and fourteen lie beyond it.
-The single population nearer linear renormalization is the gamble row, which rests on five pairs.
-That includes the perceptual continuum: line lengths sit at $0.60$, so even where linear
-renormalization has the lower held-out log loss it is the further of the two maps from the
-observed contraction. The table asks the different question of which map forecasts better. Thirty-nine
-comparisons have full-menu shares that calibrate both maps and restricted-menu choices that
-score them by held-out log loss. Rows are comparisons, not independent populations: several
-reuse the same subjects or source study. Section~\ref{sec:empirical} gives the protocol, the datasets
-and the null.
+Two numbers are reported for each population. The \emph{gain} is the held-out log loss of linear
+renormalization minus that of Gaussian renormalization, in nats per prediction, so a positive gain
+means Gaussian renormalization forecast the withheld choices better. The \emph{null frequency} is
+obtained by generating a population that obeys the constant-ratio rule exactly, with worths set to
+the observed shares, pushing it through the identical pipeline, and recording how often that
+population produces a gain at least as large as the observed one.
 
 \begin{table}[!t]
 \centering
@@ -291,45 +293,44 @@ Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & Rouder \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
-nats per prediction, so a positive gain means Gaussian renormalization predicted better. The null
-frequency is defined in the text: it tests departure from the constant-ratio rule and not
+nats per prediction. Here we read a positive gain as a win for Gaussian renormalization. The null
+frequency is defined in the text and tests departure from the constant-ratio rule rather than
 predictive superiority. Replicates are two hundred except for the news row, sixty, and the Wills
-row, four hundred; the tone matrices are participant-averaged, so no null frequency is
-computed.}
+row, four hundred; the tone matrices are participant-averaged, so no null frequency is computed.}
 \label{tab:scoreboard}
 \end{table}
 
 \footnotetext[4]{The news figure rests on sixty replicates, so $.016$ is the floor $1/61$ rather
 than a measured frequency.}
 
-Gaussian renormalization has the lower held-out log loss in thirty of the thirty-nine rows.
-That count is a description of this table and not an estimate of any rate, because the rows are
-not independent, the families contribute unequal numbers of them, and the collections were
-assembled by searching for restriction data rather than sampled from a population of
-applications. The effect sizes and their families are what the table is for.
+Gaussian renormalization performs strongly. It has the lower held-out log loss in thirty of the
+thirty-nine rows. That count is a description of this table and not an estimate of any rate,
+because the rows are not independent and the families contribute unequal numbers of
+them.\footnote{As a finer point, the collections were assembled by searching for restriction data.
+It could be argued that this is therefore not a fair sample from a population of applications.}
 
-Linear renormalization has the lower loss in nine rows. Eight of those nine come from three
-studies: four are tone-identification conditions, three are line-length restrictions, and one is
-the Getty condition whose four surviving sounds are easily mistaken for one another. They are
-therefore three findings and not eight. The ninth is Wikipedia, where the difference is
-$0.0001$ and neither map can be said to win. Section~\ref{sec:boundary} asks what the three
-studies have in common.
+We forward an explanation for eight of the nine rows where linear renormalization wins. Four are
+tone identification and three are line identification. Another is the Getty condition whose four
+surviving sounds are easily mistaken for one another. All three studies place the alternatives on
+a single perceptual dimension, which is the obvious reading, though
+Section~\ref{sec:boundary} treats them together and finds the dimension is not itself the cause.
+The ninth is Wikipedia, whose magnitude is $-0.0001$.
 
-The two columns answer different questions. The gain asks which map predicted the held-out
-choices better from estimated shares, and part of any advantage can be shrinkage rather than
-structure. The null frequency asks whether the population departs from the constant-ratio rule at
-all.
+The two columns answer different questions. A positive gain says Gaussian renormalization
+predicted better from estimated shares, and part of that can be shrinkage rather than structure. A
+small null frequency says the population departs from the constant-ratio rule in the direction of
+contraction, and says nothing about which map forecasts better.
 
 Two rows show the questions coming apart. Wikipedia has a negative gain and a small null
-frequency: it departs from the rule in the direction of contraction and still predicts worse.
-Sports participation has a positive gain and a null frequency of $0.51$: the gain is shrinkage
-and says nothing about the rule. Section~\ref{sec:empirical} takes up the first question and
+frequency, so it departs from the rule in the right direction while still predicting worse. Sports
+participation has a positive gain and a null frequency of $0.51$, so its gain is shrinkage and it
+carries no evidence about the rule. Section~\ref{sec:empirical} takes up the first question and
 Section~\ref{sec:null} the second.
 
 Each consumer experiment appears twice because a gain and a null frequency have to come from the
-same people, and the forced-choice subgroup is not the whole sample. Three further populations appear
-in Section~\ref{sec:boundary} instead of here, since published aggregates fix the direction of
-their failure but do not support this protocol.
+same people, and the forced-choice subgroup is not the whole sample. Three further populations
+appear in Section~\ref{sec:boundary} instead of here, since published aggregates fix the direction
+of their failure but do not support this protocol.
 
 \section{Prior tests of the constant-ratio rule}
 \label{sec:prior}
@@ -388,7 +389,7 @@ detectability were both compatible with the data obtained in the speech experime
 \cite{clarke1959}. The theory of signal detectability is the Gaussian account. So the two
 candidates compared in this paper were already run against each other in 1959, and the verdict
 was that percent correct could not separate them. The confusion matrices that would have
-separated them were printed but never used for that purpose.
+separated them were printed but never used for that purpose!
 
 Clarke's 1959 abstract also records the boundary condition of
 Section~\ref{sec:boundary}, in the same sentence pattern: ``No model tested was sufficiently
@@ -412,7 +413,7 @@ or deposited enough to score either assumption.
 
 Renormalization does not follow from probability theory. It is the correct posterior for
 mutually exclusive events only when learning that one of them is impossible says nothing about
-which of the rest obtained, and Monty Hall is the familiar counterexample. Withdrawal is neither
+which of the rest obtained. Monty Hall is the famous counterexample. Withdrawal is neither
 of those two cases, because no information about a fixed experiment has arrived at all. An
 alternative is gone, which is a different problem.
 Conditioning requires a model of how the probabilities were generated, and linear renormalization supplies one.
