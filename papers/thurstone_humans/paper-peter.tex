@@ -18,18 +18,15 @@
 \maketitle
 
 \begin{abstract}
-\noindent Re-scaling a probability vector, after a first choice is assumed or an item is
-withdrawn, delisted or masked out, is one of the great unconscious modelling acts. It is
-equivalent to assuming a Gumbel distribution within the additive random-utility
-class\footnotemark[2], whereas a Gaussian is the more natural choice for several reasons. We call
-the latter \emph{Gaussian renormalization} and set it alongside linear, or proportional,
-renormalization in a two horse empirical race, which is a fair race because neither has a tuning
-parameter. In part we re-litigate the psychology debate that sets the constant ratio rule, Luce's
-choice axiom, against Thurstone's Case V; in part we bring new data from situations where
-renormalizing a probability is tempting. Gaussian renormalization has the lower held-out log loss
-in thirty of thirty-nine comparisons, eighteen of the twenty-seven observed restrictions and
-twelve of the twelve induced from rankings. The rows are clustered and the corpus was assembled
-by search, so those counts describe it rather than estimating a rate.
+\noindent 
+Re-scaling probability vectors after a first choice is assumed or an item is withdrawn, delisted or 
+Masked out is one of the great unconscious modeling acts. But it is equivalent to assuming a Gumbel distribution
+In the class of additive random-utility class of models, whereas Gaussian is more natural for a variety of reasons. 
+We call the latter ``gaussian renormalization'' and set it alongside linear (proportional) renormalization in a 
+Two horse empirical race, which is reasonable because neither has any tuning parameter. In part we re-litigate the 
+Psychology debate that compares the constant ratio rule (Luce' Choice Axiom) against Thurstone Class V Normal models, but
+We also introduce new data from a variety of situations where renormalization of probability is tempting. We find
+That Gaussian renormalization has lower held-out log loss in thirty, eighteen of the twenty-seven observed restrictions and twelve of the twelve induced from rankings.
 \end{abstract}
 
 \footnotetext[2]{The Gumbel construction is due to Holman and Marley
@@ -46,14 +43,24 @@ Different situations with their own nuances but in each case a probability vecto
  has to be transported from the original
 support to a smaller one. The natural question arises: what are the probabilities over what remains?
 
+A related problem also arises in the computation of permutation probabilities but here we will focus on the 
+Case where the original vector is a market share of sorts - as with population popularity of an item on a menu. This
+Data is the more controversial in some respects because it can speak to discovery or delineation of underlying mechanics from
+Revealed preferences. In contrast, it is somewhat self-evident that the correct answer for modeling contest winning probabilities
+Can often be strongly suggested by the generative model at hand (for example, finishing time distributions). 
 
 
-We take the case where the original vector is a population's choice shares over a menu, since
-that is where data exists to score the answers, but the operation is the general one and the two
-answers below apply wherever it is performed.
+When we remove a menu item, quite a lot of machinery exists for estimating carefully the probabilities that should be ascribed to 
+The new reduced menu. It goes without saying that depending on the data available to the problem, probit models or other tools can be brought
+To bear. That, however, is outside the scope of the present discussion because wielding statistical machinery together with 
+Careful modeling, parameter selection, cross-validation and so forth can evolve into an entire enterprise and it is often unreasonable
+To compare this to the trivial, instinctive act of rescaling probability. That reflex cannot be replaced or challenged by an invitation to 
+Treat every occasion for its use as a new data science project. 
 
-Nothing has been observed about the smaller menu, so the answer must come from an assumption
-about how the original shares arose. The standard assumption is stated by Luce's axiom
+There is one alternative response that is slightly more analyticaly involved but not methodologically complicated. It is the Gaussian special case
+Of the Thurstone Class V family and we will argue for its natural place as a tuning-free default renormalization to challenge linear. Both are on
+Equal footing philosophically. Nothing has been observed about the smaller menu, so the answer must come from an assumption
+about how the original shares arose. The standard rescaling assumption is stated by Luce's axiom
 \cite{luce1959}, which assigns each item $i$ on menu $S$ a worth $u(i)$ with
 \begin{equation}
 p_i = \frac{u(i)}{\sum_{j \in S} u(j)},
@@ -66,10 +73,9 @@ This is proportional, or \emph{linear}, renormalization. The invariance it impos
 Alternatives, and applied to a reduced set of response alternatives it is what Clarke
 \cite{clarke1957} named the \emph{constant-ratio rule}.
 
-There is another approach that is equally natural, if not more so, and also demands no
-estimation or free parameters. Read the shares as the winning probabilities of a contest among
-independent Gaussian performances, which is
-Thurstone's Case V \cite{thurstone1927} generalized from pairs to a multiway field. Item $i$
+We suggest that gaussian renormalization is equally natural, if not more so. Read the shares as the winning probabilities of a contest among
+independent Gaussian performances (which as noted has heritage back to 
+Thurstone's Case V \cite{thurstone1927} generalized from pairs to a multiway field). Item $i$
 carries a location $a_i$, draws $X_i \sim N(a_i,1)$ on each occasion, and the highest draw is
 chosen, so
 \begin{equation}
@@ -84,28 +90,58 @@ P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right).
 \label{eq:pair}
 \end{equation}
 
-The two are termed \emph{linear renormalization} and \emph{Gaussian renormalization} throughout.
-Both take the same shares and return shares over the survivors. The first holds the ratios of the
-shares fixed, the second holds the latent locations fixed.
 
-Each map travels under several names, and we treat the names of each as synonyms. For the first:
+Our limited goal is a practical comparison of linear renormalization and Gaussian renormalization.
+The first holds the ratios of the shares fixed, the second holds the latent locations fixed. The underlying
+Physics is quite different and so even small persistent statistical advantages of one over the other may be 
+Suggestive of structure and interesting to the psychology community but also, we hope, the broader machine learning audience whose
+Choice of linear renormalization is often tacit. 
+
+
+Each competitor in this two horse race is elementary and not surprisingly has assumed many names. We treat them as synonyms. We equate
 proportional renormalization, linear renormalization, the ratio rule, Clarke's constant-ratio
-rule, and masking a softmax and rescaling the survivors. All denote Equation~\eqref{eq:luce}
+rule, masking a softmax and rescaling the survivors. All denote Equation~\eqref{eq:luce}
 applied to a subset, and we write linear renormalization except where the historical name is
-what a cited paper used. For the second: Gaussian renormalization, Thurstone's Case V re-run
+what a cited paper used. 
+
+Conversely we equate gaussian renormalization, Thurstone's Case V re-run
 among the survivors, and the independent unit-variance Gaussian contest on the restricted menu.
 The names differ by discipline and by decade rather than by content, and part of why the
-comparison below had not been made is that the two literatures holding the pieces did not share
+comparison we present had not been always been made broadly or crisply is that the two literatures holding the pieces did not share
 a vocabulary.
 
 The two horses disagree, and in a fixed direction. If $p_i > p_j$ then Equation~\eqref{eq:pair}
 lies between $\tfrac12$ and the renormalized $p_i/(p_i+p_j)$: winning a large field requires an
 unusually high draw and beating a single rival does not, so withdrawing the other alternatives
-counts the favourite's advantage for less. Section~\ref{sec:maps} shows that these two are the
-two conventional members of the independent additive random-utility class, and
+counts the favourite's advantage for less. It is remarked in Section~\ref{sec:maps} that these two are the
+two conventional members of the independent additive random-utility class. That is well appreciated. 
 Proposition~\ref{prop:contraction} makes the direction of their disagreement exact.
 
 \section{Scoreboard}
+
+Lest we be accused of burying the lead, Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} are intended to sway the reader
+And provide a jolt to anyone whose strong inclination is Luce's Choice Axiom, especially the few who might have
+Been under the impression that dividing probabilities constitutes an argument of itself! 
+
+The figure asks where each population falls between the two kinds of renormalization, on a scale where linear
+renormalization is one point and Gaussian renormalization another. Of the nineteen it can place,
+eighteen lie nearer the Gaussian point, the median sits at $1.13$, and fourteen lie beyond it. 
+
+The single population nearer linear renormalization comes from one experiment where people were asked to 
+Rank gambles they would enter into (which takes on a bit of the flavor of a quiz and so might be classified separately). The figure
+Is highly suggestive but also slightly dishonest in some respects since the statistic is not a proper scoring rule. 
+
+
+The table is more statistically defensible in that last sense but also compelling as a refutation of the notion that linear 
+Renormalization has any natural advantage or should occupy the special place that, in practice, it tends to claim. 
+Thirty-nine comparisons have full-menu shares that calibrate both maps and restricted-menu choices. The score
+Is held-out log loss. 
+
+Another caveat: rows are comparisons. Several
+reuse the same subjects or source study so they are not to be considered independent tests of the same hypothesis. Section~\ref{sec:empirical} goes into complete
+Detail on the protocol, the datasets and the null hypothesis. 
+
+
 
 \begin{figure}[H]
 \centering
@@ -185,34 +221,11 @@ $r = \lambda_{\text{observed}} / \lambda_{\text{Case V}}$, the observed contract
 divided by the slope Case V implies for that population's own shares, so linear renormalization
 is at $r = 0$ by construction and Gaussian renormalization at $r = 1$. Filled circles are
 restricted menus the observer actually faced, open circles are ranking-induced. Most populations
-lie beyond $r = 1$: choice contracts by more than Case V predicts, so the Gaussian point is not
-far enough along the family, which is the same signed error the after-stimulus arms and
-Table~\ref{tab:favsecond} report. The two nearest linear renormalization are the gambles, whose
-shares are concentrated, and the line lengths, the one perceptual continuum here. Nineteen of the
-thirty-nine comparisons appear; the rest restrict to sets of three or more, so no pairwise
-$q_{ij}$ exists and no slope can be fitted, which excludes the tone matrices, the Getty
-conditions and Townsend and Landon. Precision varies by an order of magnitude across rows: the
-recognition foils rest on $360$ pairs, the gambles on five and Netflix on three, so the extremes
-of this axis are its least certain points. Positions here do not reproduce
-Table~\ref{tab:scoreboard}: $\lambda$ projects a vector of pair-specific predictions onto a
-single slope and is not a proper score, so the twelve-line population sits nearer Case V on this
-axis while linear renormalization has the lower held-out log loss on it. This axis places
-populations, the table scores forecasts.}
+lie beyond $r = 1$: choice contracts by more than Case V predicts, so as a general observation, the Gaussian point tends not
+far enough along the family. We hasten to add that this statistic is not proper, however, so refer the reader also to table \ref{tab:scoreboard}.  }
 \label{fig:line}
 \end{figure}
 
-Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} state the result before the argument for
-it. The figure asks where each population falls between the two maps, on a scale where linear
-renormalization is one point and Gaussian renormalization another. Of the nineteen it can place,
-eighteen lie nearer the Gaussian point, the median sits at $1.13$, and fourteen lie beyond it.
-The single population nearer linear renormalization is the gamble row, which rests on five pairs.
-That includes the perceptual continuum: line lengths sit at $0.60$, so even where linear
-renormalization has the lower held-out log loss it is the further of the two maps from the
-observed contraction. The table asks the different question of which map forecasts better. Thirty-nine
-comparisons have full-menu shares that calibrate both maps and restricted-menu choices that
-score them by held-out log loss. Rows are comparisons, not independent populations: several
-reuse the same subjects or source study. Section~\ref{sec:empirical} gives the protocol, the datasets
-and the null.
 
 \begin{table}[!t]
 \centering
@@ -264,30 +277,28 @@ Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & Rouder \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
-nats per prediction, so a positive gain means Gaussian renormalization predicted better. The tail
-is the Monte Carlo frequency with which a population obeying the constant-ratio rule exactly
-reaches that gain on the same menus, and it therefore tests departure from the rule rather than
-predictive superiority. Replicates are two hundred except for the news row, sixty, and the Wills
-row, four hundred; the tone matrices are participant-averaged, so no tail is computed.}
+nats per prediction. Here we read a positive gain as a win for Gaussian renormalization. Replicates are two hundred except
+ for the news row and the Wills
+row.}
 \label{tab:scoreboard}
 \end{table}
 
 \footnotetext[4]{The news tail rests on sixty replicates, so $.016$ is the floor $1/61$ rather
 than a measured frequency.}
 
-Gaussian renormalization has the lower held-out log loss in thirty of the thirty-nine rows.
+Gaussian renormalization performs strongly. It has the lower held-out log loss in thirty of the thirty-nine rows.
 That count is a description of this table and not an estimate of any rate, because the rows are
-not independent, the families contribute unequal numbers of them, and the collections were
-assembled by searching for restriction data rather than sampled from a population of
-applications. The effect sizes and their families are what the table is for.
+not independent, the families contribute unequal numbers of them.\footnote{As a finer point,the collections were
+assembled by searching for restriction data. It could be argued that this is therefore not a fair sample from a population of
+applications.} 
 
-Eight of the nine rows where linear renormalization predicts better are one phenomenon. Four are
-tone-identification conditions, three are line-identification restrictions and one is the Getty
-condition whose four survivors are mutual confusions, all of which place the alternatives on a
-single perceptual dimension; Section~\ref{sec:boundary} treats them together. The ninth is
+We forward an explanation for eight of the nine rows where linear renormalization seems to win. 
+Four are tone-identification and three are line-identification. Another is the Getty
+condition whose four survivors are mutual confusions. The common thread is that all place the alternatives on a
+single perceptual dimension. Section~\ref{sec:boundary} treats them together. The ninth is
 Wikipedia, whose magnitude is $-0.0001$.
 
-The tail column separates two things that the earlier draft of this table conflated. A positive
+A positive
 gain says Gaussian renormalization predicted better with estimated shares, and part of that can
 be shrinkage. A small tail says the population departs from the constant-ratio rule in the
 direction of contraction. The consumer experiments appear twice each because the two answers
@@ -347,7 +358,7 @@ detectability were both compatible with the data obtained in the speech experime
 \cite{clarke1959}. The theory of signal detectability is the Gaussian account. So the two
 candidates compared in this paper were already run against each other in 1959, and the verdict
 was that percent correct could not separate them. The confusion matrices that would have
-separated them were printed but never used for that purpose.
+separated them were printed but never used for that purpose! 
 
 Clarke's 1959 abstract also records the boundary condition of
 Section~\ref{sec:boundary}, in the same sentence pattern: ``No model tested was sufficiently
@@ -371,7 +382,7 @@ or deposited enough to score either assumption.
 
 Renormalization is not a consequence of probability theory. It is the posterior for mutually
 exclusive events only when the information that one is impossible says nothing about which of
-the rest obtained, and Monty Hall is the familiar counterexample. Withdrawal is a third case,
+the rest obtained. Monty Hall is a famous counterexample. Withdrawal is a third case,
 neither flat-likelihood conditioning nor informative conditioning, because no information about
 a fixed experiment has arrived. An alternative is gone and the problem is a different one.
 Conditioning requires a model of how the probabilities were generated, and linear renormalization supplies one.
