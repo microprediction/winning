@@ -410,11 +410,11 @@ or deposited enough to score either assumption.
 \subsection{Why these two maps}
 \label{sec:maps}
 
-Renormalization is not a consequence of probability theory. It is the posterior for mutually
-exclusive events only when the information that one is impossible says nothing about which of
-the rest obtained, and Monty Hall is the familiar counterexample. Withdrawal is a third case,
-neither flat-likelihood conditioning nor informative conditioning, because no information about
-a fixed experiment has arrived. An alternative is gone and the problem is a different one.
+Renormalization does not follow from probability theory. It is the correct posterior for
+mutually exclusive events only when learning that one of them is impossible says nothing about
+which of the rest obtained, and Monty Hall is the familiar counterexample. Withdrawal is neither
+of those two cases, because no information about a fixed experiment has arrived at all. An
+alternative is gone, which is a different problem.
 Conditioning requires a model of how the probabilities were generated, and linear renormalization supplies one.
 
 Which model it supplies is known. Within the class of independent additive random-utility
@@ -566,7 +566,7 @@ laws by how much they contract.
 \label{sec:mixture}
 
 Nothing so far explains why the Gaussian member of the class should be the one that fits.
-A mechanism is available, and it is elementary.
+We provide a plausibility argument applying only to aggregate shares.
 
 Let every individual obey the axiom, and let their tastes differ. Individual $\theta$
 assigns systematic utility $V_i(\theta)$ to alternative $i$ and chooses by Luce at scale
@@ -716,7 +716,7 @@ work that holding out a menu does here. What their result establishes is that on
 to move with $m$ and the other does not, which is the signature of contraction rather than a
 measurement of it.
 
-\subsection{What the shares cannot identify}
+\subsection{Correlated probit and the unidentified covariances}
 \label{sec:probit}
 
 Correlated multinomial probit can represent near-substitution, by giving two similar
@@ -823,18 +823,18 @@ replicates and the magnitude is not established by these data alone.
 \subsubsection{Colours and symbols, with the menu revealed after the stimulus}
 \label{sec:after}
 
-The consumer experiment observes restriction but announces it: the subject sees the menu
-before deciding. Two perceptual experiments remove that confound, and one of them removes it
-by design.
+In the consumer experiment the subject sees the reduced menu before deciding, so preferences
+could in principle be formed with the restriction already known. The two perceptual experiments
+below do not allow that.
 
 Yeon and Rahnev \cite{yeonrahnev2020} show a display whose dominant colour, among four, has
 to be named. In one condition the full menu is available. In a second the observer sees the
 identical display and is told only \emph{after} it has gone which two named alternatives the
-answer lies between. Conditions were blocked and trained, so the observer knew a two-alternative
-response was coming; what could not be anticipated while the percept formed is the identity of
-the surviving pair. The design therefore prevents pair-specific advance attention rather than
-making the restriction itself a surprise. Their
-Experiment 2 repeats this with six symbols. Calibration uses that observer's full-menu row
+answer lies between. The two conditions were run in separate blocks of trials, so the observer
+knew which condition they were in and had practised it. What they could not know, while looking
+at the display, was which two colours the pair would turn out to be. They could not attend
+selectively to those two colours in advance, though they did know that only two would be
+offered. Their Experiment 2 repeats this with six symbols. Calibration uses that observer's full-menu row
 for that dominant item alone, and the two-alternative cells on the same observer and item
 are then predicted and scored.
 
@@ -1471,7 +1471,8 @@ Figure~\ref{fig:line} shows the same division on one axis. The collections neare
 renormalization are the perceptual continuum and the concentrated shares; the collections
 furthest past Gaussian renormalization are categories, colours, symbols and consumer goods.
 
-\subsection{What the failures do not show}
+\subsection{Two false explanations of the failures}
+\label{sec:notculprit}
 
 \paragraph{A continuum is not the culprit.} Let a noisy scalar percept $s$ arrive and give
 response label $i$, positioned at $x_i$ on the same physical dimension, the utility
@@ -1497,11 +1498,12 @@ and the same statement that a removed alternative has a near-substitute admit op
 What decides it is where the displaced mass goes: toward a lower-share survivor the odds contract
 and Gaussian renormalization gains, toward the favourite they expand and it loses.
 
-\subsection{What they do show}
+\subsection{Three diagnostics}
 \label{sec:diagnostics}
 
-So the pattern is not a semantic rule about what kind of thing the alternatives are. It is a set
-of diagnostics for assumptions, and the three are of different logical types.
+So the pattern in the failures is not a rule about what kind of thing the alternatives are.
+What the failures do supply is three checks on the assumptions, and the three are of different
+logical types.
 
 \emph{Dependence.} A shared percept, local substitution, clustered tastes or a common shock makes
 the covariance materially non-isotropic on the contrast subspace, and independent Case V is then
@@ -1550,7 +1552,7 @@ with the leader surviving, that the two maps agree to within the noise?
 
 A yes to the first two warns that independent Case V may be misspecified, and no more. It does
 not identify proportional renormalization as the better of the two.
-Section~\ref{sec:diagnostics} exhibits a one-dimensional continuum on which Gaussian
+Section~\ref{sec:notculprit} exhibits a one-dimensional continuum on which Gaussian
 renormalization is exactly right, and a pair of populations with identical full-menu shares and a
 perfect near-substitute on which the two maps win one apiece, the sign turning on whether the
 displaced mass moves toward a lower-share survivor or toward the favourite. A yes to the third
