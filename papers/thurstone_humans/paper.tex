@@ -1649,83 +1649,46 @@ parameter, wherever a restricted-menu observation exists to fit one. The
 case made here is for the situation where none does.
 
 Pricing ordered outcomes by removing the winner and re-running is not the Gaussian
-contest's own prediction, and the two come apart on individual pairs and triples. We leave to future work the comparison of the exact Gaussian ordering law
-against Plackett--Luce ranking probabilities on complete-ranking data.
+contest's own prediction, and the two come apart on individual pairs and triples.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have attempted to elevate the Thurstone Case V $N(0,1)$ model, which we have simply termed
-\emph{Gaussian renormalization}, to the status of an equal partner to the ubiquitous practice of
-linear renormalization of probability. The question is not confined to menus of goods. It arises
-wherever a probability vector is transported to a smaller support, which includes masked softmax
-vocabularies, scratched fields, delisted catalogues and disallowed response sets. Four operations
-get run together under that heading and only two of them raise a question.
+We have set the Thurstone Case V $N(0,1)$ model, which we call \emph{Gaussian renormalization},
+against the ubiquitous linear rescaling of probability. The question is not confined to menus of
+goods; it arises wherever a probability vector is moved to a smaller support, which includes
+masked softmax vocabularies, scratched fields, delisted catalogues and disallowed response sets.
 
-Conditioning a fixed categorical law on $X \in T$ gives $p_i / \sum_{j \in T} p_j$ by definition.
-That is what truncation ordinarily means in probability, linear renormalization is a theorem
-there rather than a choice, and nothing in this paper bears on it. Masking a fixed softmax and
-rescaling is the same arithmetic on a score vector: it does not merely permit the linear
-transport, it \emph{is} the linear transport, so a masked softmax has IIA built into the
-operator. Neither is a case where two maps compete.
+Four operations run together under that heading. Conditioning a fixed categorical law on
+$X \in T$ gives $p_i / \sum_{j \in T} p_j$ by definition, and masking a fixed softmax and
+rescaling is the same arithmetic on a score vector, so in both of those the linear transport is a
+theorem and there is nothing to choose. When a model recomputes its scores with the permitted set
+as an input, the result is not a transport of the old vector at all, and neither map describes it.
+The question belongs to the remaining case, where the feasible set is intervened upon, the
+experiment that generates the choice changes, and the original shares do not determine the new
+ones. A masked softmax is the arithmetic of the second case and the question of the third,
+because the mask frequently stands for an intervention that nobody modelled.
 
-The other two are different. In the third, the feasible set is intervened upon. A horse is
-scratched, or a response option is disallowed, and the experiment that generates the choice
-changes. The original share vector then does not determine the new shares. Linear and Gaussian
-renormalization are two conventional answers, among the many that any fixed noise shape supplies,
-and this paper is about that case. In the fourth, a model recomputes its scores with the permitted
-set as an input. That is not a transport of the old vector at all, so neither map describes it.
+Three things are established by the tables. Gaussian renormalization has the lower held-out log
+loss in thirty of the thirty-nine comparisons, split eighteen of twenty-seven observed against
+twelve of twelve ranking-induced, and on the contraction axis of Figure~\ref{fig:line} it is the
+nearer of the two maps in eighteen of the nineteen populations that axis can place. Neither count
+estimates a rate, since the corpus was assembled by searching for restriction data and its rows
+overlap. Linear renormalization is ahead on all four tone conditions, all three line-length
+restrictions and the one Getty condition whose survivors are each other's confusions.
 
-A masked softmax belongs to the second case as arithmetic and to the third as a question. The
-operation is the linear transport by construction, so there is nothing to choose. Whether it gives
-the right answer depends on which of the two situations it stands for, and wherever the removal is
-an intervention rather than a conditioning, the linear transport is already in place without
-anyone having chosen it.
+Where the restricted probability is itself observed, which is the after-stimulus arms of
+Section~\ref{sec:after}, both maps over-predict the favourite and Gaussian renormalization removes
+between a fifth and a third of the error. That is the ceiling on what either default can claim,
+and it is well below what a fitted shape parameter should reach wherever a restricted-menu
+observation exists to fit one.
 
-Gaussian Case V is a credible, tuning-free alternative to linear renormalization. Across
-the collections examined it frequently produces useful odds contraction, with the most
-persuasive evidence coming from experiments in which the same observers perform tightly matched
-full-menu and restricted-menu tasks, the identity of the surviving alternatives being revealed
-only after the stimulus has gone. On those collections it is typically as viable as linear
-renormalization and usually better. It has the lower held-out log loss in thirty of the thirty-nine
-comparisons, split eighteen of twenty-seven observed against twelve of twelve ranking-induced, and
-on the contraction axis of Figure~\ref{fig:line} it is the nearer of the two maps in eighteen of
-the nineteen populations that axis can place. Neither figure estimates a rate in a target
-population of applications, the corpus being selected and clustered, and the second is a
-projection rather than a proper score. Together they put Gaussian renormalization well past
-occasional curiosity without establishing a default ordering.
-
-The evidence does not establish universal superiority. Raw predictive gain must be distinguished
-from rejection of a Luce null, and Table~\ref{tab:scoreboard} reports the two separately because
-the ballot, Wikipedia and low-cost gamble rows show them coming apart. Ecological comparisons
-must be separated from controlled restrictions, since a recommender, an electorate or a month of
-Wikipedia traffic can shift the population as well as the menu. And similarity, correlated
-tastes, task adaptation and the identity of the alternatives removed remain boundary conditions
-rather than details.
-
-Four conditions are worth carrying away, and none is settled by the share vector alone. The
-alternatives lie on a perceptual continuum, so that neighbours are more confusable
-than distant pairs. A withdrawn option is a near-substitute for a survivor, so its mass returns
-to that neighbour rather than spreading. The withdrawal changes how easily the survivors can be
-told apart, in which case neither transport map applies and the choice model has to be
-re-estimated under the new task. Or the withdrawn alternatives carry negligible mass while the
-leader survives, in which case the two maps agree to within the noise. Figure~\ref{fig:line} places the populations we can place along that
-axis. Where a confusion matrix exists, the within-set confusion mass of Table~\ref{tab:getty}
-measures the first two conditions directly.
-Where only shares exist, they have to be judged from the geometry or the semantics of the
-alternatives, and the judgement can be wrong.
-
-To repeat, this note is about competing reflexes rather than competing careful modelling
-paradigms. Both maps are nested by the independent additive random-utility family, indexed by
-its standardized noise shape. Where both can be checked against an observed restricted
-probability, which is the after-stimulus perceptual arms of Section~\ref{sec:after}, both err in
-the same direction and by more than they differ from one another. The favourite's second-place
-exercise is not such a check, because observing the winner is conditioning on a realised contest
-rather than withdrawing an alternative from it, and neither of the rules compared there is the
-ordering law of the model it is named for. A model whose shape parameter nests the two can be fitted
-wherever a restricted-menu observation exists, and estimated under the same objective it is no
-worse in sample; whether it improves held-out prediction needs separate validation. A common
-noise scale cannot serve as that parameter, since it is absorbed exactly by the fitted locations.
+What the boundary conditions of Section~\ref{sec:boundary} amount to is not established. They are
+diagnostics rather than a rule: dependence among the alternatives, a task that changes when an
+option is withdrawn, and too little withdrawn mass for the choice to matter. None of the three can
+be read off a share vector, a confusion matrix answers the first where one exists, and the
+judgement can be wrong. Gaussian renormalization is a credible tuning-free alternative to linear
+renormalization, and this note compares two reflexes rather than two careful modelling exercises.
 
 We leave to future work the comparison of the exact Gaussian ordering law against
 Plackett--Luce ranking probabilities on complete-ranking data.
