@@ -302,13 +302,24 @@ their failure but do not support this protocol.
 \section{Prior tests of the constant-ratio rule}
 \label{sec:prior}
 
-Clarke tested the rule on spoken consonants in noise, predicting confusion matrices over
-reduced response sets from a larger one, and Clarke and Anderson \cite{clarkeanderson1957}
-followed with a second test. Pollack and Decker \cite{pollackdecker1960} predicted four-way
-consonant matrices from an eight-way matrix and reported average deviations near four per cent.
-Hodge \cite{hodge1967} ran nested ensembles in three modalities, Rich \cite{rich1971} carried
-the rule into short-term memory, and Getty, Swets, Swets and Green \cite{getty1979} held eight
-stimuli fixed while allowing only four responses.
+These experiments share one recipe. A listener or viewer is given one of a fixed set of stimuli
+and names it from a printed list of permitted answers. Run the task with the full list and each
+row of the resulting confusion matrix is a response distribution over that list. Run it again
+with some answers struck off and the rows are distributions over what remains. The rule predicts
+the second matrix from the first.
+
+Clarke had listeners identify consonant-vowel syllables heard against noise, and obtained three
+six-by-six master matrices together with six three-by-three submatrices drawn from them. Clarke
+and Anderson \cite{clarkeanderson1957} repeated the test on a ten-item set using naive rather
+than practised listeners, practice being the obvious confound. Pollack and Decker
+\cite{pollackdecker1960} used eight word-initial consonants in noise, with three overlapping
+four-way subsets measured at each signal-to-noise ratio, and reported average deviations near
+four per cent. Hodge \cite{hodge1967} ran the same design outside hearing, on lifted weights and
+on visual size, cutting eight-item response sets to four and to two. Rich \cite{rich1971} carried
+it into short-term memory, where the competing alternatives are remembered items rather than
+percepts. Getty, Swets, Swets and Green \cite{getty1979} kept all eight stimuli in play and cut
+only the permitted responses, to four at a time in three different sets, so that nothing about
+the stimulus changed between conditions.
 
 Morgan \cite{morgan1974} built a
 likelihood-ratio test and rejected the rule on the earlier data. Townsend and Landon
@@ -316,20 +327,19 @@ likelihood-ratio test and rejected the rule on the earlier data. Townsend and La
 blocked and counterbalanced, and published the full matrices per subject. Rouder
 \cite{rouder2004} states the modern summary: conditioning on a reduced choice set is better
 than a guessing correction predicts and worse than the ratio rule predicts. Wills, Reimers,
-Stewart, Suret and McLaren \cite{wills2000} reject the rule in categorization and argue for a
-Thurstonian replacement, and they go furthest toward the contest studied here: alongside their
-fitted four-parameter model they build a ``simple winner-take-all'' system that picks the largest
-noisy magnitude, note that ``like the ratio rule, the simple-WTA system has no free parameters'',
-and report that Gaussian noise ``produces comparable results''.
+Stewart, Suret and McLaren \cite{wills2000} reject the rule in categorization and conclude that
+it should be replaced by a system based on Thurstonian choice. They get there with a fitted
+four-parameter winner-take-all model, and they also examine a parameter-free version that simply
+picks the largest noisy magnitude, reporting that Gaussian noise ``produces comparable results''
+to the rectangular noise they use.
 
-The principle is therefore theirs. The map is not, and the difference is in what goes in. Their
-magnitudes are supplied by a model of the stimulus, a function of how many category-appropriate
-symbols a display contains, and their conclusion is conditional on it: the ratio rule is incorrect
-``given the assumption'' that magnitudes take that form. The problem here has no stimulus in it.
-The input is a probability vector, not a probability vector together with a picture of whatever
-produced it, so an analyst holding shares alone has nothing to race. Their Experiment 2
-nonetheless withdraws an alternative, and their data has been deposited throughout, so it enters
-the comparison below on the same terms as everything else.
+Their setting differs from this one in what is available at the outset. They have a model of the
+stimulus, so their magnitudes are a function of how many category-appropriate symbols a display
+contains, and a stimulus model of that kind motivates one noise law over another. Here there is
+no stimulus, only a probability vector, and the noise law has to be chosen. Their Experiment 2
+withdraws a response category and their trial data is deposited, so it is scored below with the
+rest, where it agrees with them: Gaussian renormalization has the lower held-out loss by
+$0.0299$ nats.
 
 Three findings recur across those studies. The rule is a fair first approximation. It fails by
 concentrating the withdrawn mass onto whichever survivor most resembles the removed alternative
