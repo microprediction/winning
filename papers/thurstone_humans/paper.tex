@@ -363,12 +363,13 @@ Townsend and Landon \cite{townsendlandon1982} ran one master set of five letters
 nested response sets. They used a blocked and counterbalanced design. They published the full
 matrices per subject.
 
-Like us, Rouder \cite{rouder2004} provides a summary view. Conditioning on a reduced choice set
+Like us, Rouder \cite{rouder2004} concludes that conditioning on a reduced choice set
 is better than a guessing correction predicts and worse than the ratio rule predicts.
+Wills, Reimers, Stewart, Suret and McLaren \cite{wills2000} also reject the constant-ratio rule
+in categorization and conclude that it should be replaced by a system based on Thurstonian
+choice.
 
-Wills, Reimers, Stewart, Suret and McLaren \cite{wills2000} reject the constant-ratio rule in
-categorization and conclude that it should be replaced by a system based on Thurstonian choice,
-very much in line with our overall impression. Their route to this was via a fitted
+Their route to this was via a fitted
 four-parameter winner-take-all model, and they also examine a parameter-free version that simply
 picks the largest noisy magnitude. They say that Gaussian noise ``produces comparable results''
 to the rectangular noise they use.
@@ -1668,14 +1669,18 @@ rescaling is the same arithmetic on a score vector: it does not merely permit th
 transport, it \emph{is} the linear transport, so a masked softmax has IIA built into the
 operator. Neither is a case where two maps compete.
 
-The question arises in the other two. When the feasible set is intervened upon, so that a horse
-is scratched or a response option is disallowed and the choice-generating experiment itself
-changes, the original share vector does not determine the new shares, and the two maps below are
-two conventional candidates among the many any regular noise shape supplies. And when a model
-recomputes its scores with the permitted set as an input, the result is not a transport of the
-old vector at all, so neither map describes it. This paper is about the third case, and the
-second is where its practical relevance lies, because that is where the linear transport is
-already deployed without anyone having chosen it.
+The other two are different. In the third, the feasible set is intervened upon. A horse is
+scratched, or a response option is disallowed, and the experiment that generates the choice
+changes. The original share vector then does not determine the new shares. Linear and Gaussian
+renormalization are two conventional answers, among the many that any fixed noise shape supplies,
+and this paper is about that case. In the fourth, a model recomputes its scores with the permitted
+set as an input. That is not a transport of the old vector at all, so neither map describes it.
+
+A masked softmax belongs to the second case as arithmetic and to the third as a question. The
+operation is the linear transport by construction, so there is nothing to choose. Whether it gives
+the right answer depends on which of the two situations it stands for, and wherever the removal is
+an intervention rather than a conditioning, the linear transport is already in place without
+anyone having chosen it.
 
 Gaussian Case V is a credible, tuning-free alternative to linear renormalization. Across
 the collections examined it frequently produces useful odds contraction, with the most
