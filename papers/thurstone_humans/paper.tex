@@ -979,29 +979,32 @@ the outcome for a subset is the respondent's highest-ranked member of it.
 \toprule
 Dataset & $n$ & $K$ & Subsets & Renorm. & Race & Gain \\
 \midrule
-Occupational prestige & 143 & 10 & 1{,}013 & $1.0173$ & $0.9783$ & $+0.0390$ $[+0.0227, +0.0555]$ \\
-Sushi & 5{,}000 & 10 & 1{,}013 & $1.3724$ & $1.3613$ & $+0.0111$ $[+0.0094, +0.0128]$ \\
-Political goals & 2{,}262 & 4 & 11 & $0.8835$ & $0.8766$ & $+0.0069$ $[+0.0059, +0.0078]$ \\
-GSS socialization & 5{,}000 & 5 & 26 & $0.7984$ & $0.7929$ & $+0.0055$ $[+0.0041, +0.0070]$ \\
-Jester file 3 & 5{,}000 & 10 & 1{,}013 & $1.5189$ & $1.5165$ & $+0.0024$ $[+0.0015, +0.0032]$ \\
-Jester file 1 & 5{,}000 & 10 & 1{,}013 & $1.5287$ & $1.5267$ & $+0.0020$ $[+0.0012, +0.0027]$ \\
-Jester file 2 & 5{,}000 & 10 & 1{,}013 & $1.5247$ & $1.5230$ & $+0.0018$ $[+0.0010, +0.0025]$ \\
-GSS job values & 5{,}000 & 5 & 26 & $0.8593$ & $0.8576$ & $+0.0017$ $[+0.0005, +0.0030]$ \\
-Dots & 3{,}183 & 4 & 11 & $0.8285$ & $0.8270$ & $+0.0015$ $[+0.0005, +0.0025]$ \\
-Netflix & 4{,}379 & 3 & 4 & $0.7932$ & $0.7922$ & $+0.0009$ $[+0.0007, +0.0012]$ \\
-Puzzles & 3{,}180 & 4 & 11 & $0.8180$ & $0.8173$ & $+0.0007$ $[-0.0003, +0.0017]$ \\
+Occupational prestige & 143 & 10 & 1{,}013 & $1.0173$ & $0.9783$ & $+0.0390$ $[+0.0207, +0.0801]$ \\
+Sushi & 5{,}000 & 10 & 1{,}013 & $1.3724$ & $1.3613$ & $+0.0111$ $[+0.0079, +0.0140]$ \\
+Political goals & 2{,}262 & 4 & 11 & $0.8835$ & $0.8766$ & $+0.0069$ $[+0.0054, +0.0086]$ \\
+GSS socialization & 5{,}000 & 5 & 26 & $0.7984$ & $0.7929$ & $+0.0055$ $[+0.0022, +0.0101]$ \\
+Jester file 3 & 5{,}000 & 10 & 1{,}013 & $1.5189$ & $1.5165$ & $+0.0024$ $[+0.0014, +0.0031]$ \\
+Jester file 1 & 5{,}000 & 10 & 1{,}013 & $1.5287$ & $1.5267$ & $+0.0020$ $[+0.0009, +0.0030]$ \\
+Jester file 2 & 5{,}000 & 10 & 1{,}013 & $1.5247$ & $1.5230$ & $+0.0018$ $[+0.0012, +0.0031]$ \\
+GSS job values & 5{,}000 & 5 & 26 & $0.8593$ & $0.8576$ & $+0.0017$ $[+0.0014, +0.0044]$ \\
+Dots & 3{,}183 & 4 & 11 & $0.8285$ & $0.8270$ & $+0.0015$ $[+0.0006, +0.0024]$ \\
+Netflix & 4{,}379 & 3 & 4 & $0.7932$ & $0.7922$ & $+0.0009$ $[+0.0006, +0.0012]$ \\
+Puzzles & 3{,}180 & 4 & 11 & $0.8180$ & $0.8173$ & $+0.0007$ $[+0.0002, +0.0015]$ \\
 \midrule
-Sports participation & 130 & 7 & 120 & $1.2579$ & $1.2528$ & $+0.0050$ $[+0.0017, +0.0087]$ \\
+Sports participation & 130 & 7 & 120 & $1.2579$ & $1.2528$ & $+0.0050$ $[+0.0027, +0.0158]$ \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss per prediction over every subset of size two or more.
-Datasets are capped at five thousand respondents for runtime. The race is lower in
-twelve of twelve and the interval excludes zero in eleven. Occupational prestige is
+Datasets are capped at five thousand respondents for runtime. Gaussian renormalization is lower
+in twelve of twelve and the interval excludes zero in all twelve. Occupational prestige is
 scorable here only because the shared smoothing removes a zero training cell. Sports
 participation sits below the rule: its gain is real but Section~\ref{sec:null} shows it
-carries no evidence about the restriction map. Intervals resample respondent losses
-with the fitted training models held fixed, so unlike Table~\ref{tab:menus} they omit
-calibration uncertainty and are too narrow, most seriously in the two smallest rows.}
+carries no evidence about the restriction map. Intervals resample respondents and refit the whole pipeline inside every
+replicate, calibration and both maps and all subsets, so they carry calibration uncertainty;
+one hundred replicates, or two hundred for the two collections under a thousand respondents.
+Every interval excludes zero, including puzzles, whose earlier interval held the fitted models
+fixed and covered it. Refitting widens most intervals and roughly trebles the width on GSS
+socialization.}
 \label{tab:heldout}
 \end{table}
 
@@ -1279,9 +1282,7 @@ an observed gain with zero understates it.}
 The shrinkage mechanism is real and it accounts for the entire gain in the smallest
 dataset. Sports participation, with $130$ respondents, sits exactly on its null and is
 excluded from every claim here. Everywhere else the mechanism runs against the race, and
-the excess over the null exceeds the raw gain in every remaining collection. It also
-rescues puzzles, whose raw interval in Table~\ref{tab:heldout} covers zero while its
-excess over the null does not. The menu experiment clears the null on both readings. Among the collections entering this
+the excess over the null exceeds the raw gain in every remaining collection. The menu experiment clears the null on both readings. Among the collections entering this
 table it is the one that observes menu choice directly; the twelve ranking collections induce
 subset choices from complete rankings.
 
