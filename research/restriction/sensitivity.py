@@ -106,9 +106,13 @@ def bootstrap_refit(R, reps=200, alpha=0.5, seed=0):
     if len(out) < 20:
         return None
     out = np.sort(np.asarray(out))
-    lo = out[int(0.025 * len(out))]
-    hi = out[int(0.975 * len(out))]
-    return float(lo), float(hi), len(out)
+    # below about eighty replicates the 2.5 and 97.5 percentiles are the extreme order
+    # statistics, so what comes back is the observed range and not a 95 per cent interval.
+    # Say which one it is rather than dressing a range as an interval.
+    kind = "95%" if len(out) >= 80 else "range"
+    lo = out[int(0.025 * len(out))] if kind == "95%" else out[0]
+    hi = out[int(0.975 * len(out))] if kind == "95%" else out[-1]
+    return float(lo), float(hi), len(out), kind
 
 
 def main():
@@ -135,20 +139,20 @@ def main():
 
     print(f"\n\nRespondent bootstrap with the whole pipeline refit inside each replicate, "
           f"{reps} replicates.\n")
-    print(f"{'dataset':<24}{'gain':>9}{'refit 95%':>24}{'reps':>6}")
+    print(f"{'dataset':<24}{'gain':>9}{'refit interval':>24}{'reps':>6}{'kind':>8}")
     for name in names:
         R = data[name]
         g = run(R)
         if g is None:
             print(f"{name:<24}{'n/a':>9}")
             continue
-        budget = reps if len(R) <= 1000 else max(30, reps // 8)
+        budget = reps if len(R) <= 1000 else max(100, reps // 2)
         bs = bootstrap_refit(R, reps=budget)
         if bs is None:
             print(f"{name:<24}{g:>+9.4f}{'  too few usable replicates':>24}")
             continue
-        lo, hi, k = bs
-        print(f"{name:<24}{g:>+9.4f}{f'[{lo:+.4f}, {hi:+.4f}]':>24}{k:>6}", flush=True)
+        lo, hi, k, kind = bs
+        print(f"{name:<24}{g:>+9.4f}{f'[{lo:+.4f}, {hi:+.4f}]':>24}{k:>6}{kind:>8}", flush=True)
 
 
 if __name__ == "__main__":

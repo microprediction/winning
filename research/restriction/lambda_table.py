@@ -75,25 +75,30 @@ def run(name, R, nboot):
     lo_, lr_, npair = base
     n = R.shape[0]
     rng = np.random.default_rng(3)
-    bo, br, bd = [], [], []
+    bo, br, bd, brt = [], [], [], []
     for _ in range(nboot):
         s = slopes(R[rng.integers(0, n, n)])
         if s is None:
             continue
         bo.append(s[0]); br.append(s[1]); bd.append(s[0] - s[1])
+        if s[1] != 0:
+            brt.append(s[0] / s[1])
     if len(bo) < 20:
         return None
     q = lambda v: (float(np.quantile(v, 0.025)), float(np.quantile(v, 0.975)))
     return {"name": name, "n": n, "K": R.shape[1], "pairs": npair,
             "obs": lo_, "race": lr_, "resid": lo_ - lr_,
-            "obs_ci": q(bo), "resid_ci": q(bd)}
+            "obs_ci": q(bo), "resid_ci": q(bd),
+            "ratio": (lo_ / lr_) if lr_ else float("nan"),
+            "ratio_ci": q(brt) if len(brt) >= 20 else (float("nan"), float("nan"))}
 
 
 def main():
     nboot = int(sys.argv[1]) if len(sys.argv) > 1 else 300
     data = load_all()
     print(f"{'dataset':<20}{'n':>7}{'K':>3}{'pairs':>6}"
-          f"{'observed lambda':>26}{'race':>8}{'residual (obs-race)':>26}")
+          f"{'observed lambda':>26}{'race':>8}{'residual (obs-race)':>26}"
+          f"{'ratio obs/race':>22}")
     rows = []
     for name, R in sorted(data.items()):
         r = run(name, R, nboot)
@@ -104,7 +109,8 @@ def main():
         print(f"{r['name']:<20}{r['n']:>7}{r['K']:>3}{r['pairs']:>6}"
               f"{r['obs']:>10.3f} [{r['obs_ci'][0]:+.3f},{r['obs_ci'][1]:+.3f}]"
               f"{r['race']:>8.3f}"
-              f"{r['resid']:>10.3f} [{r['resid_ci'][0]:+.3f},{r['resid_ci'][1]:+.3f}]",
+              f"{r['resid']:>10.3f} [{r['resid_ci'][0]:+.3f},{r['resid_ci'][1]:+.3f}]"
+              f"{r['ratio']:>8.2f} [{r['ratio_ci'][0]:.2f},{r['ratio_ci'][1]:.2f}]",
               flush=True)
     pos = [r for r in rows if r["obs_ci"][0] > 0]
     closer = [r for r in rows if abs(r["resid"]) < abs(r["obs"])]
