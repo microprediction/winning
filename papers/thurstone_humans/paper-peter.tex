@@ -18,18 +18,18 @@
 \maketitle
 
 \begin{abstract}
-\noindent When a probability vector over mutually exclusive outcomes must be transported to a
-smaller support, because an outcome is withdrawn, scratched, delisted, disallowed or masked out
-of a softmax, proportional renormalization is the reflex and in many models the architecture. It
-is the Gumbel point of the independent additive random-utility class\footnotemark[2]. Re-running
-a Gaussian contest among the survivors is Case V. Psychology has tested renormalization under
-restriction since 1957, as the constant-ratio rule, and we score the two out of sample on
-thirty-nine population comparisons, twenty-seven observing the smaller menu and twelve inducing
-subset choice from rankings. Gaussian renormalization has the lower held-out log loss in thirty,
-eighteen of the twenty-seven observed restrictions and twelve of the twelve induced from rankings.
-The rows are dependent and unequally clustered across studies, so those counts describe this
-corpus rather than estimating a rate. The losses concentrate on one-dimensional and strongly
-confusable stimulus sets, which motivates a boundary rule rather than establishing one.
+\noindent Re-scaling a probability vector, after a first choice is assumed or an item is
+withdrawn, delisted or masked out, is one of the great unconscious modelling acts. It is
+equivalent to assuming a Gumbel distribution within the additive random-utility
+class\footnotemark[2], whereas a Gaussian is the more natural choice for several reasons. We call
+the latter \emph{Gaussian renormalization} and set it alongside linear, or proportional,
+renormalization in a two horse empirical race, which is a fair race because neither has a tuning
+parameter. In part we re-litigate the psychology debate that sets the constant ratio rule, Luce's
+choice axiom, against Thurstone's Case V; in part we bring new data from situations where
+renormalizing a probability is tempting. Gaussian renormalization has the lower held-out log loss
+in thirty of thirty-nine comparisons, eighteen of the twenty-seven observed restrictions and
+twelve of the twelve induced from rankings. The rows are clustered and the corpus was assembled
+by search, so those counts describe it rather than estimating a rate.
 \end{abstract}
 
 \footnotetext[2]{The Gumbel construction is due to Holman and Marley
@@ -38,11 +38,15 @@ confusable stimulus sets, which motivates a boundary rule rather than establishi
 \section{A two horse race between zero parameter choice models}
 \label{sec:problem}
 
-A probability vector is given over a set of mutually exclusive outcomes, and the set changes.
-A horse is scratched, a product is delisted, a candidate fails to qualify for a ballot, a
-response option is disallowed, a token is masked out of a softmax, a distribution is truncated
-to a sub-support. In each case a probability vector has to be transported from the original
-support to a smaller one. What are the probabilities over what remains?
+Suppose a probability vector is presented, as with a collection of de-vigged bookmaker odds for a horse race or
+A calibrated probabilistic machine learning model. Suppose next that the set changes. Perhaps a 
+Horse is scratched, a product is delisted, or a primary candidate drops out of a race. Alternatively a response
+Option in a survey maybe disallowed or a token might be masked out of a softmax. These are quite 
+Different situations with their own nuances but in each case a probability vector
+ has to be transported from the original
+support to a smaller one. The natural question arises: what are the probabilities over what remains?
+
+
 
 We take the case where the original vector is a population's choice shares over a menu, since
 that is where data exists to score the answers, but the operation is the general one and the two
