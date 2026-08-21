@@ -376,8 +376,9 @@ $0.0299$ nats.
 
 Three findings recur across those studies. The rule is a fair first approximation. It fails by
 concentrating the withdrawn mass onto whichever survivor most resembles the removed alternative
-rather than spreading it proportionally, which Townsend and Landon attribute to Debreu and
-Rouder reaches from the opposite direction. And every claim of conformity that was later
+rather than spreading it proportionally. Townsend and Landon attribute that to Debreu's
+similarity objection, and Rouder brackets the same failure from the other side, finding real
+behaviour better than a guessing correction predicts. And every claim of conformity that was later
 retested with a test that had power was overturned. Holloway reversed his own 1968 conclusion in
 1971 \cite{holloway1968,holloway1971}, and Morgan's likelihood-ratio test rejected the rule on
 both of the datasets he applied it to, Clarke's and Egan's \cite{egan1957,morgan1974}.
@@ -392,13 +393,13 @@ was that percent correct could not separate them. The confusion matrices that wo
 separated them were printed but never used for that purpose!
 
 Clarke's 1959 abstract also records the boundary condition of
-Section~\ref{sec:boundary}, in the same sentence pattern: ``No model tested was sufficiently
+Section~\ref{sec:boundary}: ``No model tested was sufficiently
 complex to account for data when the sinusoidal signals varied only in amplitude or only in
 frequency''. Both accounts failed on unidimensional continua at the outset, which is where the
 tone and line collections below place them.
 
-What the literature does not contain is a comparison against a second assumption carrying no
-free parameters either. Lee \cite{lee1968} proposed one analytically, observing that detection
+The literature contains no comparison against a second assumption that also has no free
+parameters. Lee \cite{lee1968} proposed one analytically, observing that detection
 theory and the constant-ratio rule diverge most for unidimensional stimuli and that the gap
 could serve in diagnosis, but did not carry it out on data. Nor was any of this scored out of
 sample; the tests are goodness-of-fit statements about the matrix in hand.
@@ -424,7 +425,7 @@ models, Gumbel errors generate Equation~\eqref{eq:luce}
 identified once menus of three or more are included, though not from pairwise comparisons
 alone. So the constant-ratio rule is one point of a family.
 
-Nothing requires standing on exactly one point of it. Anyone with restricted-menu observations to fit
+One need not stand on exactly one point of it. Anyone with restricted-menu observations to fit
 can estimate an interpolating model, which is no worse in sample and may or may not be better
 out of it. The question here is narrower.
 Linear normalization is applied almost unconsciously, in survey analysis, in pricing and inside
@@ -449,8 +450,10 @@ incumbent therefore holds its position by default rather than by argument, and t
 is not whether a challenger can overturn a defended position but whether the default was ever the
 right place to stand.}
 
-Interpolating between them, or choosing the standardized shape of some third law, requires a number that the shares themselves do not supply. Overall
-scale does not: it is a gauge, absorbed exactly by the fitted locations. Both are calibrated
+Interpolating between them, or choosing the standardized shape of some third law, requires a
+number that the shares themselves do not supply. The overall scale of the noise is not such a
+number, because any common scale is absorbed exactly by the fitted locations and so changes no
+prediction. We call a quantity of that sort a \emph{gauge}. Both are calibrated
 to the same $|S|-1$ free shares and neither sees any observation from a smaller menu. Both are
 \emph{representative-agent} maps, treating the population as one chooser with one set of
 worths or locations and transporting its shares from $S$ to $T$. A fitted Plackett--Luce
@@ -526,12 +529,13 @@ shape distinguishes them. Give every alternative a location, add a draw from the
 density to each, and take the highest: the winning probabilities are Equation~\eqref{eq:luce},
 and restricting the field renormalizes the shares proportionally. Do the same with the
 right-hand density and the shares contract instead. Renormalization is therefore a race too,
-run with a noise law that is asymmetric, bounded below in effect and long-tailed above. We
+run with a noise law that is asymmetric and long-tailed to the right. We
 withhold our opinion as to which is the more \emph{a priori} reasonable.}
 \label{fig:noise}
 \end{figure}
 
-Two laws sit at the ends of that condition. The Gaussian satisfies it strictly, since
+The two laws compared here sit at opposite ends of the concavity condition. The Gaussian
+satisfies it strictly, since
 $\frac{d^2}{dx^2}\log r(x) = -\operatorname{Var}(Z \mid Z < x) < 0$. The Gumbel has
 $r(x) = s^{-1}e^{-x/s}$, so $\log r$ is affine, the inequality becomes an equality, and
 renormalization is recovered exactly, which is the Holman--Marley construction
@@ -540,8 +544,7 @@ machine learning sits: a softmax over scores $z_i$ is Equation~\eqref{eq:luce} w
 $u(i) = \exp(z_i)$, so masking a softmax and rescaling the survivors is proportional
 renormalization.
 
-An objection is worth answering here, because it is the first one a reader from machine
-learning will raise. A deep network is not committed to the axiom. Its logits are the output of
+A deep network is not committed to the axiom. Its logits are the output of
 an arbitrarily flexible function, and it can represent any distribution over its full
 vocabulary, including distributions that no independent additive random-utility model
 generates. All of that is true, and none of it touches the case at hand. The constraint applies
@@ -602,11 +605,10 @@ probability zero under the Gaussian limit, so the winning probabilities converge
 
 This is a mixed logit: Gaussian heterogeneity between individuals, Gumbel noise within
 them. Such models are standard, and McFadden and Train \cite{mcfaddentrain2000} establish
-how general they are. Nothing here claims otherwise. What the proposition supplies is the
-connection between the high-heterogeneity limit of that familiar object and the particular
-restriction map the paper tests.
+how general they are. The proposition adds only the link between the high-heterogeneity limit of
+that familiar object and the restriction map tested here.
 
-The Gaussian assumption on taste is where a limit theorem belongs.
+The Gaussian assumption on taste can itself be derived from a limit theorem.
 
 \begin{corollary}[Many small taste components]
 \label{cor:clt}
@@ -628,8 +630,8 @@ A correction to this limit must be a correction to shape, not to scale. For any
 location-scale family $X_i = a_i + s\varepsilon_i$ the winning probabilities satisfy
 $P^S_i(a;s) = P^S_i(a/s;1)$, so if $b(p)$ is the unit-scale location vector calibrated to the
 full-menu shares $p$, then $s\,b(p)$ is the scale-$s$ calibration and
-$P^T_i(s\,b(p);s) = P^T_i(b(p);1)$ for every restricted menu $T$. A common noise scale is a
-gauge. It is absorbed exactly by the fitted locations, not approximately, and restricted-menu
+$P^T_i(s\,b(p);s) = P^T_i(b(p);1)$ for every restricted menu $T$. A common noise scale is
+therefore a gauge: it is absorbed exactly by the fitted locations, not approximately, and restricted-menu
 observations cannot identify it either unless the locations are anchored by cardinal
 information from outside the shares.
 
@@ -646,7 +648,7 @@ Symmetric configurations can cancel the cubic term and leave a higher order.
 Any parameter that interpolates between the two maps has to be a shape or relative-mixture
 parameter. It cannot be a common noise scale.
 
-The covariance assumption is doing real work and should not be waved through. If the taste
+The covariance assumption is not innocuous. If the taste
 components carry covariance $\Sigma$ instead of $I_K$, the same argument delivers a Gaussian
 race with covariance $\Sigma$, which is correlated multinomial probit rather than Case V.
 Case V additionally requires the covariance to be isotropic on the $(K-1)$-dimensional
@@ -706,16 +708,16 @@ detection model was more stable across $m$-afc conditions than the $\beta$ param
 softmax model''. Their primary analysis holds each model's parameter fixed across all $m$
 conditions and compares log likelihood, and the Gaussian wins in both experiments,
 $t(29) = 4.26$ and $t(29) = 4.42$, $p < .001$, with thirty participants each. That is the
-contraction studied here, seen through the parameter that has to move to absorb it.
+contraction studied here, showing up as a parameter that has to move with the size of the menu.
 
-Their design is nearer to this paper's than anything else we have found, and the distance that
-remains is this. No response set is restricted over shared alternatives:
+Their design is the nearest to this one that we have found. Three differences remain. No response
+set is restricted over shared alternatives:
 $m$ varies by adding fresh items, not by withdrawing named ones. Linear renormalization is
 never the competitor, since the comparison is softmax against Gaussian with both fitted. And the
 parameters are estimated on the data that scores them, so the cross-condition constraint does the
 work that holding out a menu does here. What their result establishes is that one parameter has
-to move with $m$ and the other does not, which is the signature of contraction rather than a
-measurement of it.
+to move with $m$ and the other does not, which shows contraction is present without measuring
+how large it is.
 
 \subsection{Correlated probit and the unidentified covariances}
 \label{sec:probit}
@@ -748,8 +750,9 @@ Section~\ref{sec:boundary} collects the cases where that fails. Two further assu
 visible. The noise is independent and identically shaped across alternatives, which
 near-substitutes violate. And the population is treated as one chooser with one latent vector,
 though Section~\ref{sec:mixture} shows heterogeneous Luce choosers reproducing aggregate
-contraction with no individual departing from the axiom. Three
-things make that possible now. Trial-level archives are open, so restricted menus can be
+contraction with no individual departing from the axiom.
+
+Three developments make the comparison possible now. Trial-level archives are open, so restricted menus can be
 scored on the observations that produced them rather than on printed marginals. Inverting
 Equation~\eqref{eq:winprob} from shares alone is a single pass over a shared grid, so the
 Gaussian map costs nothing to apply. And a generative null is available. Contraction of a noisily
@@ -766,7 +769,7 @@ construction.
 Ten collections record choices from a smaller menu directly, and they are reported first because
 nothing about the restriction is inferred. The first three are controlled: the same subjects, or
 the same stimuli, before and after a menu change. The remainder are ecological, and
-Section~\ref{sec:observed} says where that weakens them.
+Section~\ref{sec:more} says where that weakens them.
 
 \subsubsection{Consumer goods, all subsets of five}
 \label{sec:menus}
@@ -860,7 +863,7 @@ sampling noise in what it predicts; all three null frequencies are at the $0.005
 \label{tab:after}
 \end{table}
 
-The six-symbol gain is the largest of the two arms here. The same pairs were also run \emph{announced in advance}, so the
+The six-symbol gain is the larger of the two arms. The same pairs were also run \emph{announced in advance}, so the
 observer can aim attention at them. That arm was not analysed by the original authors and is
 recovered here from the trial files. There the advantage nearly disappears. Accuracy rises from $0.780$
 to $0.850$, linear renormalization becomes almost exactly right, and the race begins to
@@ -907,7 +910,7 @@ over the null rises with that requirement, from $-0.0012$ to $+0.0045$ to $+0.00
 the full-menu shares flatten alongside it, the largest falling from $0.357$ to $0.257$
 against a six-alternative maximum entropy of $1.792$.
 
-We read this as the thesis working rather than as instability. When the arithmetic is one
+We read the gradient as the mechanism working rather than as instability. When the arithmetic is one
 step the task has a computable answer and is closer to an examination question than to a
 preference judgement; subjects converge, the shares concentrate, and there is little
 preference left for any restriction map to describe. When it takes five steps nobody can
@@ -977,16 +980,19 @@ comparison clean. The null holds the worths fixed and so does not simulate a shi
 readership, position or context, and two maps facing the same confound need not respond to it
 equally well. This row and the two below it are transport exercises on data that was not
 generated by withdrawing an alternative from a fixed population, and they are weaker evidence
-about withdrawal than the controlled restrictions of Section~\ref{sec:observed} for that
-reason.
+about withdrawal than the controlled restrictions of Sections~\ref{sec:menus}
+and~\ref{sec:after} for that reason.
 
-The lottery gradient runs with arithmetic cost, and the
-mechanism of Section~\ref{sec:mixture} predicts its direction, since computation error is
-per-alternative and roughly Gaussian, so loading more of it onto each alternative raises
-$\sigma$ against $\beta$. Tightening the filter that identifies a genuine removal from a five per cent
-share to thirty-five per cent raises the excess from $+0.0001$ to $+0.0005$ across $3{,}544$,
-$817$ and $121$ pages. That is consistent with attenuation by measurement, and also with the
-threshold selecting a different population of pages, which these data cannot separate. Wikipedia and the two General Social Survey collections put the
+The lottery gradient runs with arithmetic cost, and the mechanism of
+Section~\ref{sec:mixture} predicts its direction, since computation error is per-alternative and
+roughly Gaussian, so loading more of it onto each alternative raises $\sigma$ against $\beta$.
+
+On the Wikipedia rows, tightening the filter that identifies a genuine removal from a five per
+cent share to thirty-five per cent raises the excess from $+0.0001$ to $+0.0005$ across
+$3{,}544$, $817$ and $121$ pages. That is consistent with attenuation by measurement, and also
+with the threshold selecting a different population of pages, which these data cannot separate.
+
+Wikipedia and the two General Social Survey collections put the
 truth between the two maps, contracting when an alternative goes but by less than Case V says.
 They are the exception. Fitting the contraction slope $\lambda$ of Table~\ref{tab:mixture} to
 each collection's observed pairwise choices puts the observed slope \emph{above} the race's in
@@ -1106,7 +1112,7 @@ $\{F,H,X\}$, counterbalanced, $240$ trials per row. Responses were spoken letter
 the labels are identical across menus by construction. They published the full confusion
 matrices per subject, which is why the dataset is still usable forty-four years later.
 
-It is the cleanest calibration in the paper for a reason none of the others share.
+Its calibration is unusually clean, for a reason none of the other collections share.
 Calibration row and target row come from the \emph{same subject} in different blocks, so
 there is no population-heterogeneity confound of the kind every ranking collection carries,
 and the aggregation argument of Section~\ref{sec:mixture} is not available as an
@@ -1126,7 +1132,7 @@ two subsets that each remove a similar pair and retain the other, $+0.0040$ agai
 $+0.0093$. Those two designs are structurally symmetric, each removing a similar pair and
 retaining the other, so the difference between them is not attributable to similarity.
 
-What the row-level output does show is the limit of a parameter-free correction. For subject
+The row-level output shows the limit of a parameter-free correction. For subject
 one, stimulus $A$, subset $\{A,E,X\}$, the observed, renormalized and raced shares are
 $0.621 / 0.672 / 0.635$ on $A$, $0.217 / 0.129 / 0.149$ on $E$ and $0.163 / 0.199 / 0.217$
 on $X$. The race corrects the favourite downward and the near-substitute upward, both in the
@@ -1338,9 +1344,10 @@ collections: four tone conditions, three line restrictions, and the Getty condit
 survivors are mutual confusions. Wikipedia is the near-zero ninth. Three further populations fail
 both maps in ways that published aggregates settle without this protocol.
 
-Those eight are fewer independent observations than the row count suggests, and what they have in
-common is worth getting right, because the obvious reading is wrong in two ways that can be shown
-with three alternatives.
+Those eight are fewer independent observations than the row count suggests. The obvious reading of
+what they have in common is that the alternatives lie on a perceptual continuum.
+Section~\ref{sec:notculprit} shows that reading failing for two separate reasons, each of which
+can be demonstrated with three alternatives.
 
 \paragraph{A perceptual continuum.} Stewart, Brown and Chater \cite{stewart2005} had
 listeners name one of ten pure tones, and ran the same tones with the middle eight and the
@@ -1374,8 +1381,8 @@ containing similar letters and holds on the subset that does not.
 available, and then with only four, a different four in each of three conditions, the labels
 being the stimulus numbers. The stimulus set never changes; only the menu does. Over $72$
 cells the race wins by $+0.0272$ nats, and by $+0.0111$ on the rows whose stimulus survives
-in the menu, cell bootstrap $[+0.0021, +0.0225]$. But it loses one condition, and which one
-is not arbitrary.
+in the menu, cell bootstrap $[+0.0021, +0.0225]$. It loses one of the three conditions, and not
+at random.
 
 \begin{table}[ht]
 \centering
@@ -1456,7 +1463,7 @@ $\sigma \approx 11$ pixels against a $16$-pixel spacing between adjacent lengths
 
 One free parameter each makes this fair between the two models and unlike everything else in
 this paper, where neither map fits anything. It is reported because it is the same question on a
-dataset built to be one-dimensional, and because a referee who runs it will get this answer.
+dataset built to be one-dimensional.
 
 \paragraph{Withdrawn alternatives with negligible mass.} A large top share is not by itself
 enough to make the two maps agree. Calibrating Case V to $p = (0.90, 0.09, 0.01)$ and removing
@@ -1523,7 +1530,7 @@ there is to re-estimate rather than to transport.
 the two forecasts are practically indistinguishable. This settles what the choice is worth, not
 which map is right.
 
-Two consequences follow. First, an apparent conflict resolves. Meyer-Grant and colleagues \cite{meyergrant2026} show that Gumbel-min uniquely predicts accuracy invariance as a
+One apparent conflict resolves here. Meyer-Grant and colleagues \cite{meyergrant2026} show that Gumbel-min uniquely predicts accuracy invariance as a
 recognition set grows uniformly, find that invariance, and report the Gumbel model
 outperforming the Gaussian throughout. That is Yellott's own condition, independently
 confirmed, in the same domain where Section~\ref{sec:after} has the race winning on nested
@@ -1568,8 +1575,7 @@ and for goods, news articles, candidates, jokes and occupations no such matrix e
 questions have to be answered from the feature geometry or the semantics of the alternatives,
 and cannot be read off the shares.
 
-One further caveat belongs here rather than in the theory. Distinct unordered alternatives do
-not imply $\Sigma = I$. Goods, articles, candidates and occupations can carry clustered and
+Distinct unordered alternatives do not imply $\Sigma = I$. Goods, articles, candidates and occupations can carry clustered and
 correlated tastes, and Section~\ref{sec:mixture} shows the limit theorem delivering a Gaussian
 race with covariance $\Sigma$, of which Case V is the case that is isotropic on the contrast
 subspace.
@@ -1581,8 +1587,9 @@ one-dimensional quadrature on the same grid. At the field sizes here, ten altern
 most, both steps are immediate; the method is designed for and tested at much larger fields
 \cite{cotton2021}. So the
 recommendation needs no additional restricted-menu observations and no appreciable additional
-computation, although the boundary conditions below require structural information about
-similarity, ordering or task geometry that the shares do not contain. Within its condition it was better on every population
+computation, although the boundary conditions of Section~\ref{sec:boundary} require structural
+information about similarity, ordering or task geometry that the shares do not contain. Where that
+condition holds it was better on every population
 examined here. Outside it, it was worse on all four tone rows, all three line-restriction rows
 and the Getty condition whose survivors are mutual confusions.
 
@@ -1684,7 +1691,8 @@ Wikipedia traffic can shift the population as well as the menu. And similarity, 
 tastes, task adaptation and the identity of the alternatives removed remain boundary conditions
 rather than details.
 
-Three diagnostics are worth carrying away, and none is settled by the share vector alone. The alternatives lie on a perceptual continuum, so that neighbours are more confusable
+Four conditions are worth carrying away, and none is settled by the share vector alone. The
+alternatives lie on a perceptual continuum, so that neighbours are more confusable
 than distant pairs. A withdrawn option is a near-substitute for a survivor, so its mass returns
 to that neighbour rather than spreading. The withdrawal changes how easily the survivors can be
 told apart, in which case neither transport map applies and the choice model has to be
@@ -1705,7 +1713,7 @@ rather than withdrawing an alternative from it, and neither of the rules compare
 ordering law of the model it is named for. A model whose shape parameter nests the two can be fitted
 wherever a restricted-menu observation exists, and estimated under the same objective it is no
 worse in sample; whether it improves held-out prediction needs separate validation. A common
-noise scale cannot serve as that parameter, being a gauge.
+noise scale cannot serve as that parameter, since it is absorbed exactly by the fitted locations.
 
 We leave to future work the comparison of the exact Gaussian ordering law against
 Plackett--Luce ranking probabilities on complete-ranking data.
