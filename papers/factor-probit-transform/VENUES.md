@@ -5,7 +5,7 @@
 - **JCGS** (Journal of Computational and Graphical Statistics) — target.
   Submission build is `paper_jcgs.pdf` (double-spaced), supplement is
   `supplement_v1.1.0.zip`.
-- **SSRN** — preprint of `paper.pdf`. JCGS permits preprint posting of the
+- **SSRN** — preprint of `scalable-share-calibration.pdf`. JCGS permits preprint posting of the
   author's original manuscript.
 
 ## Fallbacks worth considering
