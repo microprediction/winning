@@ -1,4 +1,16 @@
-rho=0.00  p_A=0.179 | PL gap (A minus B): inf-data -0.422  n=1e4 -0.390          | probit gap (B minus A): known-rho +0.278 fitted-rho +1.076 (rho_hat 0.95) [43s]
-rho=0.20  p_A=0.205 | PL gap (A minus B): inf-data -0.254  n=1e4 -0.265          | probit gap (B minus A): known-rho +0.308 fitted-rho +0.976 (rho_hat 0.95) [41s]
-rho=0.40  p_A=0.234 | PL gap (A minus B): inf-data -0.085  n=1e4 -0.045          | probit gap (B minus A): known-rho +0.269 fitted-rho +0.796 (rho_hat 0.95) [36s]
-Terminated: 15             python -u run_perverse.py
+PART A/B: Plackett-Luce sign flip, and probit recovery at known rho
+  rho=0.00  p_lone=0.179 | PL gap (lone minus dup) -0.422          | probit delta_hat +0.284 (true 0.3) [0.1s]
+  rho=0.20  p_lone=0.205 | PL gap (lone minus dup) -0.254          | probit delta_hat +0.306 (true 0.3) [0.1s]
+  rho=0.40  p_lone=0.234 | PL gap (lone minus dup) -0.085          | probit delta_hat +0.278 (true 0.3) [0.1s]
+  rho=0.60  p_lone=0.268 | PL gap (lone minus dup) +0.096 PERVERSE | probit delta_hat +0.302 (true 0.3) [0.1s]
+  rho=0.70  p_lone=0.288 | PL gap (lone minus dup) +0.195 PERVERSE | probit delta_hat +0.293 (true 0.3) [0.1s]
+  rho=0.80  p_lone=0.312 | PL gap (lone minus dup) +0.308 PERVERSE | probit delta_hat +0.289 (true 0.3) [0.1s]
+  rho=0.90  p_lone=0.342 | PL gap (lone minus dup) +0.446 PERVERSE | probit delta_hat +0.288 (true 0.3) [0.1s]
+  rho=0.95  p_lone=0.364 | PL gap (lone minus dup) +0.541 PERVERSE | probit delta_hat +0.320 (true 0.3) [0.1s]
+  rho=0.99  p_lone=0.393 | PL gap (lone minus dup) +0.663 PERVERSE | probit delta_hat +0.305 (true 0.3) [0.1s]
+
+PART C: identification of rho (true rho = 0.8, delta = 0.3)
+  single composition (1 vs 3)          rho_hat=0.40 delta_hat=+0.000  loglik range over rho grid =      0.0  peak minus rho=0:      0.0
+  mixed compositions (1v3, 2v2, 3v1)   rho_hat=0.80 delta_hat=+0.298  loglik range over rho grid =    557.1  peak minus rho=0:    557.1
+
+wrote results/perverse_incentive.csv and results/identification.csv

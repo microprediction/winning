@@ -1,26 +1,31 @@
-"""The perverse incentive, and its repair, as one figure.
+"""The perverse incentive, its repair, and what it takes to identify rho.
 
-Setup from Xu, Dong, Lu, Lam, Wen & Van Roy (arXiv 2312.01057): each prompt
-draws K = 4 responses, one from source A and three near-duplicates from source
-B. Source B is genuinely better, delta = q_B - q_A > 0. The duplicates share a
-prompt-level factor with correlation rho, so they split wins that any one of
-them would have taken alone.
+Setting from Xu, Dong, Lu, Lam, Wen & Van Roy (arXiv 2312.01057): a prompt is
+answered by one response from source A and m near-duplicates from source B. B
+is genuinely better, delta = q_B - q_A > 0. The duplicates share a
+prompt-level factor with correlation rho, so they split votes.
 
-Plackett-Luce fitted to winner data is a multinomial logit, so its MLE
-reproduces the winner frequencies exactly, and its inferred score gap is a
-closed form of the true win probability of the lone response:
+PART A. Plackett-Luce fitted to winner data is a multinomial logit, so its MLE
+reproduces the winner frequencies exactly and its inferred per-slot score gap
+is closed form:
 
     s_A - s_B = log( m p_A / (1 - p_A) ).
 
-As rho rises, p_A rises past 1/(m+1) and the sign FLIPS: Plackett-Luce awards
-the lone, worse response the higher reward. That is the perverse incentive as
-a sign, with no estimation noise involved -- it is a property of the
-likelihood, not of a fit.
+As rho rises p_A rises past 1/(m+1) and the SIGN FLIPS: Plackett-Luce awards
+the lone, worse response the higher reward. No estimation noise is involved --
+this is a property of the likelihood, not of a fit.
 
-The correlated-probit likelihood fitted to the same data recovers delta at
-every rho, and (Cherapanamjeri, Daskalakis, Farina & Mohammadpour, arXiv
-2510.15839, identifiability of correlation from lists of K >= 3) recovers rho
-itself jointly, from choices alone.
+PART B. The correlated probit likelihood, with rho known, recovers delta at
+every rho.
+
+PART C. Identification. With ONE composition the duplicates are exchangeable,
+so winner counts carry exactly one free number (p_A) against two parameters
+(delta, rho): NOT IDENTIFIED, and a first version of this script duly returned
+rho_hat = 0.95 whatever the truth. Varying the composition across prompts --
+some with one A and three B, some two and two, some three and one -- gives one
+free number per composition and identifies both. That is also what real
+preference data looks like. The profile likelihood is reported for both cases
+so the failure and the repair are visible side by side.
 """
 
 from __future__ import annotations
@@ -31,89 +36,139 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize_scalar
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[0] / "qpo"))
 
-from likelihood import (loglik_and_grad_sources, plackett_luce_gap,  # noqa: E402
-                        true_win_probabilities)
-from pom import sobol_nodes  # noqa: E402
+from likelihood import win_probability_and_grad  # noqa: E402
+from pom import hermite_nodes, pom_fast  # noqa: E402
+
+# rank-1 factor: Gauss-Hermite is far better than Sobol here
+F1, W1 = hermite_nodes(1, Q=41)
+POINTS = 257
 
 
-def fit_probit_gap(counts, src, rho, n, points=201, iters=400, lr=0.5):
-    """MLE of the source scores at a given rho (rho known)."""
-    F, W = sobol_nodes(1, m=9, seed=0)
-    theta = np.zeros(2)
-    for _ in range(iters):
-        ll, g = loglik_and_grad_sources(counts, src, theta, rho, 3, F, W,
-                                        points=points)
-        g = g - g.mean()
-        theta = theta + lr * g / max(n, 1)
-        theta -= theta.mean()
-        if np.max(np.abs(g / max(n, 1))) < 1e-7:
-            break
-    return float(theta[1] - theta[0]), ll
+def build(n_a, m, delta, rho):
+    """mu, V, d for n_a lone slots (quality 0) and m duplicates (quality delta).
+
+    Duplicates share one factor with loading sqrt(rho); every slot keeps unit
+    marginal variance so delta is on a fixed scale.
+    """
+    K = n_a + m
+    mu = np.concatenate([np.zeros(n_a), np.full(m, delta)])
+    V = np.zeros((K, 1))
+    d = np.ones(K)
+    V[n_a:, 0] = np.sqrt(max(rho, 0.0))
+    d[n_a:] = 1.0 - max(rho, 0.0)
+    return mu, V, d
 
 
-def fit_probit_gap_and_rho(counts, src, n, points=201, grid=None):
-    """Profile likelihood over rho: joint recovery of (delta, rho)."""
-    if grid is None:
-        grid = np.linspace(0.0, 0.95, 20)
-    best = (-np.inf, np.nan, np.nan)
+def true_p(n_a, m, delta, rho):
+    mu, V, d = build(n_a, m, delta, rho)
+    return pom_fast(mu, V, d, F1, W1, points=POINTS)
+
+
+def pl_gap(p, n_a, m):
+    """Per-slot score gap that Plackett-Luce infers, s_A - s_B. Positive means
+    the LONE response is awarded the higher reward: the perverse ranking."""
+    p = np.asarray(p, dtype=float)
+    pa = p[:n_a].sum() / n_a
+    pb = p[n_a:].sum() / m
+    return float(np.log(max(pa, 1e-300) / max(pb, 1e-300)))
+
+
+def loglik(delta, rho, data):
+    """Winner-only log-likelihood over a set of (n_a, m, counts) blocks."""
+    ll = 0.0
+    for n_a, m, counts in data:
+        mu, V, d = build(n_a, m, delta, rho)
+        for i, c in enumerate(counts):
+            if c == 0:
+                continue
+            p, _ = win_probability_and_grad(i, mu, V, d, F1, W1, points=POINTS)
+            ll += c * np.log(max(p, 1e-300))
+    return ll
+
+
+def fit_delta(rho, data, bracket=(-2.0, 2.0)):
+    r = minimize_scalar(lambda dl: -loglik(dl, rho, data), bounds=bracket,
+                        method="bounded", options={"xatol": 1e-4})
+    return float(r.x), float(-r.fun)
+
+
+def profile_rho(data, grid):
+    out = []
     for rho in grid:
-        gap, ll = fit_probit_gap(counts, src, rho, n, points=points)
-        if ll > best[0]:
-            best = (ll, gap, rho)
-    return best[1], best[2]
+        dl, ll = fit_delta(rho, data)
+        out.append((rho, dl, ll))
+    return out
 
 
 def main():
-    src = [0, 1, 1, 1]
-    delta = 0.3
-    theta_true = np.array([0.0, delta])
-    n = 10_000
+    delta_true = 0.3
+    m = 3
+    n = 20_000
     rng = np.random.default_rng(0)
 
+    # ---- Part A and B -----------------------------------------------------
     rows = []
+    print("PART A/B: Plackett-Luce sign flip, and probit recovery at known rho")
     for rho in [0.0, 0.2, 0.4, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]:
-        p = true_win_probabilities(src, theta_true, rho)
-        pl_gap_inf = plackett_luce_gap(p, src)
-
+        p = true_p(1, m, delta_true, rho)
+        gap_inf = pl_gap(p, 1, m)
         counts = rng.multinomial(n, p / p.sum())
-        p_hat = counts / n
-        pl_gap_n = plackett_luce_gap(p_hat, src)
-
+        gap_n = pl_gap(counts / n, 1, m)
         t0 = time.time()
-        pr_gap_known, _ = fit_probit_gap(counts, src, rho, n)
-        pr_gap_joint, rho_hat = fit_probit_gap_and_rho(counts, src, n)
+        dl_hat, _ = fit_delta(rho, [(1, m, counts)])
         secs = time.time() - t0
+        rows.append({"rho": rho, "p_lone": float(p[0]),
+                     "PL_gap_infinite_data": gap_inf, "PL_gap_n": gap_n,
+                     "PL_perverse": gap_inf > 0,
+                     "probit_delta_rho_known": dl_hat,
+                     "delta_true": delta_true, "seconds": secs})
+        print(f"  rho={rho:4.2f}  p_lone={p[0]:.3f} | PL gap (lone minus dup) "
+              f"{gap_inf:+.3f} {'PERVERSE' if gap_inf > 0 else '        '} "
+              f"| probit delta_hat {dl_hat:+.3f} (true {delta_true}) [{secs:.1f}s]",
+              flush=True)
+    pd.DataFrame(rows).to_csv(HERE / "results" / "perverse_incentive.csv",
+                              index=False)
 
-        rows.append({
-            "rho": rho, "delta_true": delta, "p_lone_true": float(p[0]),
-            "PL_gap_infinite_data": pl_gap_inf,
-            "PL_gap_n10000": pl_gap_n,
-            "probit_gap_rho_known": pr_gap_known,
-            "probit_gap_rho_fitted": pr_gap_joint,
-            "rho_hat": rho_hat, "fit_seconds": secs,
-            "PL_perverse": pl_gap_inf > 0,
-        })
-        print(f"rho={rho:4.2f}  p_A={p[0]:.3f} | PL gap (A minus B): "
-              f"inf-data {pl_gap_inf:+.3f}  n=1e4 {pl_gap_n:+.3f} "
-              f"{'PERVERSE' if pl_gap_inf > 0 else '        '} | "
-              f"probit gap (B minus A): known-rho {pr_gap_known:+.3f} "
-              f"fitted-rho {pr_gap_joint:+.3f} (rho_hat {rho_hat:.2f}) "
-              f"[{secs:.0f}s]", flush=True)
+    # ---- Part C: identification ------------------------------------------
+    rho_true = 0.8
+    grid = np.linspace(0.0, 0.95, 20)
+    print(f"\nPART C: identification of rho (true rho = {rho_true}, "
+          f"delta = {delta_true})")
 
-    df = pd.DataFrame(rows)
-    dest = HERE / "results" / "perverse_incentive.csv"
-    df.to_csv(dest, index=False)
-    print(f"\nwrote {dest}")
-    flip = df[df.PL_perverse].rho.min()
-    print(f"\nPlackett-Luce flips to the perverse ranking at rho >= {flip:.2f}; "
-          f"the correlated probit recovers delta = {delta} at every rho, "
-          f"max abs error {np.abs(df.probit_gap_rho_fitted - delta).max():.3f} "
-          f"with rho fitted from choices alone.")
+    p1 = true_p(1, m, delta_true, rho_true)
+    single = [(1, m, rng.multinomial(3 * n, p1 / p1.sum()))]
+
+    mixed = []
+    for n_a, mm in [(1, 3), (2, 2), (3, 1)]:
+        pc = true_p(n_a, mm, delta_true, rho_true)
+        mixed.append((n_a, mm, rng.multinomial(n, pc / pc.sum())))
+
+    prof_rows = []
+    for name, data in (("single composition (1 vs 3)", single),
+                       ("mixed compositions (1v3, 2v2, 3v1)", mixed)):
+        prof = profile_rho(data, grid)
+        lls = np.array([x[2] for x in prof])
+        best = int(np.argmax(lls))
+        span = float(lls.max() - lls.min())
+        # curvature: how many log-likelihood units separate the peak from rho=0
+        sep = float(lls[best] - lls[0])
+        print(f"  {name:36s} rho_hat={prof[best][0]:.2f} "
+              f"delta_hat={prof[best][1]:+.3f}  "
+              f"loglik range over rho grid = {span:8.1f}  "
+              f"peak minus rho=0: {sep:8.1f}")
+        for rho, dl, ll in prof:
+            prof_rows.append({"case": name, "rho": rho, "delta_hat": dl,
+                              "loglik": ll, "rho_true": rho_true,
+                              "delta_true": delta_true})
+    pd.DataFrame(prof_rows).to_csv(HERE / "results" / "identification.csv",
+                                   index=False)
+    print("\nwrote results/perverse_incentive.csv and results/identification.csv")
 
 
 if __name__ == "__main__":
