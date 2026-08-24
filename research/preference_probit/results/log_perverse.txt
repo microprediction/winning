@@ -1,0 +1,4 @@
+rho=0.00  p_A=0.179 | PL gap (A minus B): inf-data -0.422  n=1e4 -0.390          | probit gap (B minus A): known-rho +0.278 fitted-rho +1.076 (rho_hat 0.95) [43s]
+rho=0.20  p_A=0.205 | PL gap (A minus B): inf-data -0.254  n=1e4 -0.265          | probit gap (B minus A): known-rho +0.308 fitted-rho +0.976 (rho_hat 0.95) [41s]
+rho=0.40  p_A=0.234 | PL gap (A minus B): inf-data -0.085  n=1e4 -0.045          | probit gap (B minus A): known-rho +0.269 fitted-rho +0.796 (rho_hat 0.95) [36s]
+Terminated: 15             python -u run_perverse.py
