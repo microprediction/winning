@@ -209,6 +209,85 @@ on learning Sigma from shares alone).
 paywalled/403 at time of writing. Do not attribute rate conditions to them
 without reading them.
 
+## CORRECTIONS (2026-08-24) — three claims that must NOT be made
+
+A follow-up agent read PyBLP's source, its 188 GitHub issues, its shipped data
+and Conlon & Gortmaker in full. Three things I had been assembling into a pitch
+are false, and one is disproved by a specific thread.
+
+**1. "BLP breaks down at large J" is FALSE for the demand side.** PyBLP issue
+#36: a user runs "about 9000 product firms ... with five random coefficients"
+and reports "There is no memory strain on my 16gb RAM laptop", adding that
+PyBLP was "much faster" than their Matlab. The memory explosion in that thread
+is SUPPLY-SIDE only -- Conlon in-thread: "that tensor needs about 6TB of
+memory" for a J^3 object. Do not claim demand estimation fails at large J.
+And C&G measure cost "closer to sqrt(J_t)" in J, with footnote 30: "Even for a
+large market with J_t = 1,000 products, inverting a 1,000 x 1,000 matrix is
+easy relative to numerically computing J_t^2 integrals."
+
+The reason is obvious in hindsight and reframes the whole comparison: **BLP is
+fast because it is LOGIT.** The contraction and the shares are closed form.
+Our speed advantage is therefore NOT over BLP. It is that probit is
+unavailable to them at any useful J at all. Compare against GHK and simulation,
+never against the logit contraction.
+
+**2. "BLP is fragile / multiple local optima" is NOT supported by C&G — their
+headline says the opposite.** Abstract: "multiple local optima appear to be
+rare in well-identified problems"; and "we struggle to replicate some of the
+difficulties found in the previous literature", with "tighter optimization
+tolerances suffice to eliminate all dispersion for the problem in Nevo
+(2000b)". What survives is numerical rather than multi-modal: tolerance
+propagation (Dube-Fox-Su 2012) and "simulation error contributes substantial
+instability to this particular configuration".
+
+**3. "Practitioners feel constrained by K_2" is NOT established.** No clean
+statement of the form "we wanted more random coefficients but could not afford
+them" was found. The only near-evidence is the maintainer advising the
+9,000-product user to economize: "With five RCs, the number of nodes ... can be
+very large". Several issues push the other way, toward RESTRICTING Sigma
+(#99 diagonal only, #125, #178 covariance restrictions).
+
+Also correct the arithmetic: BLP autos is 2,217 product-MARKET OBSERVATIONS
+across 20 markets, i.e. a median of 106.5 products per market, not 2,217
+products. K_2 = 4 (Nevo) and 6 (BLP autos); no application found using more.
+
+### What survives, and it is sharper than what it replaces
+
+The integration wall is real and exponential. C&G, verbatim: "if one needs I_t
+points to approximate the integral in dimension one, then one needs I_t^d
+points ... This is the so-called curse of dimensionality", with the explicit
+rule I_t = 4^{K_2}:
+
+| K_2 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| product rule | 4 | 16 | 64 | 256 | 1,024 | 4,096 | 16,384 | 65,536 |
+| sparse grid | 4 | 29 | 69 | 137 | 241 | 389 | 589 | 849 |
+
+Sparse grids trade exponential for polynomial and are paid for in negative
+weights, which "can create problems during estimation or when trying to
+decompose the distribution of heterogeneity (particularly for counterfactuals)".
+
+**And the argument reduces to one sentence, in their own structure.** In
+PyBLP the idiosyncratic term is always i.i.d. Type-I extreme value at fixed
+scale, and heterogeneity enters ONLY as a rank-K_2 factor loading on OBSERVED
+characteristics X_2 (rc_types are 'linear', 'log', 'logit' transforms of
+elliptical draws; one node column per X_2 column). So a free PER-ALTERNATIVE
+variance -- our D -- requires product dummies in X_2, i.e. K_2 = J_t, which
+detonates integration by the 4^{K_2} rule above.
+
+That is the gap, precisely stated: **not that BLP is slow, but that its
+substitution flexibility is confined to a rank-K_2 factor on observed
+characteristics, and the one extension that would free it is exponentially
+out of reach.** Also worth noting: "probit" appears ZERO times in the entire
+PyBLP v1.2.0 source tree, and exactly twice in C&G, both times about
+integration technique rather than as a demand model.
+
+**Contested, cite both sides:** Armstrong (2016, Econometrica 84:1961-1980)
+finds that "absent strong cost shifting instruments, as the number of products
+increases, BLP instruments ... become weak". C&G rebut with their own Monte
+Carlos: "We find that when we increase the size of J_t the estimator performs
+better rather than worse." Never cite Armstrong alone.
+
 ## Open, and worth doing
 
 1. **Verify the theorem statement and its construction** against the published
