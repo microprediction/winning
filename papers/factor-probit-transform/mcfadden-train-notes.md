@@ -310,11 +310,22 @@ about a fifth of its deficit before turning around, with the ratio ending
 slightly wider than at s = 1. At matched rank, rescaling does not close the
 gap; only added mixing dimensions could, which is the cost argument above.
 
-Caveat for print: one seed, 15 held-out singles, medians. For a paper claim,
-extend to the 20-seed harness of experiment 36. (First run of this script had
-a truth-corruption bug -- np.isin fed a Python set, silently all-False, which
-made the "deletion truth" the IIA renormalisation and flipped the ordering;
-worth remembering as a class of bug that specifically flatters Gumbel.)
+REPLICATED 2026-08-25 over the twenty exp36 seeds
+(`../../research/experiments/exp36_factorial_replication/
+run_freescale_replication.py`, results_freescale.csv). Factor probit is
+better at each candidate's own best scale in **20 of 20 seeds**, median
+ratio 2.17x. Medians across seeds: mixed logit 0.2212 at s = 1 and
+0.1855 at its s*, probit 0.0975 at s = 1 and 0.0865 at its s*. The
+scale choices are stable: mixed logit picks s* in [1.2, 2.0] (always at
+or above oracle, reaching toward the shrink-the-Gumbel limit), probit
+picks s* in [1.0, 1.5]. Rescaling helps the Gumbel candidate in every
+seed and never comes close to closing the gap. This is now citable in
+the paper at the same evidential standard as the fixed-scale factorial.
+
+(First run of the single-seed script had a truth-corruption bug --
+np.isin fed a Python set, silently all-False, which made the "deletion
+truth" the IIA renormalisation and flipped the ordering; worth
+remembering as a class of bug that specifically flatters Gumbel.)
 
 ## Open, and worth doing
 

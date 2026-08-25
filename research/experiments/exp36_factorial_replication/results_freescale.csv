@@ -1,0 +1,41 @@
+seed,model,s_star,report_median_s1,report_median_sstar
+0,factor mixed logit,1.5,0.206011,0.186713
+0,factor probit,1.2,0.089199,0.079514
+1,factor mixed logit,2.0,0.201806,0.160270
+1,factor probit,1.5,0.087850,0.085447
+2,factor mixed logit,1.5,0.205729,0.195365
+2,factor probit,1.2,0.099888,0.092683
+3,factor mixed logit,2.0,0.223059,0.182322
+3,factor probit,1.5,0.093083,0.081489
+4,factor mixed logit,2.0,0.383764,0.302940
+4,factor probit,1.5,0.167228,0.135628
+5,factor mixed logit,2.0,0.211248,0.204573
+5,factor probit,1.2,0.093169,0.073762
+6,factor mixed logit,1.5,0.195960,0.175202
+6,factor probit,1.2,0.092537,0.090052
+7,factor mixed logit,2.0,0.220820,0.164638
+7,factor probit,1.2,0.104764,0.073372
+8,factor mixed logit,1.2,0.255190,0.218375
+8,factor probit,1.0,0.106428,0.106428
+9,factor mixed logit,2.0,0.209593,0.119116
+9,factor probit,1.2,0.070848,0.053342
+10,factor mixed logit,1.5,0.221536,0.204631
+10,factor probit,1.2,0.102356,0.095221
+11,factor mixed logit,1.2,0.242539,0.222202
+11,factor probit,1.0,0.104736,0.104736
+12,factor mixed logit,1.5,0.231227,0.178516
+12,factor probit,1.2,0.095885,0.085702
+13,factor mixed logit,2.0,0.164039,0.136938
+13,factor probit,1.2,0.073688,0.063585
+14,factor mixed logit,2.0,0.287566,0.180004
+14,factor probit,1.5,0.138353,0.093700
+15,factor mixed logit,1.5,0.262764,0.253137
+15,factor probit,1.2,0.111749,0.111501
+16,factor mixed logit,2.0,0.268869,0.222023
+16,factor probit,1.2,0.115551,0.101206
+17,factor mixed logit,2.0,0.204139,0.117043
+17,factor probit,1.2,0.084765,0.057334
+18,factor mixed logit,2.0,0.216973,0.206132
+18,factor probit,1.2,0.092888,0.087203
+19,factor mixed logit,2.0,0.229751,0.184373
+19,factor probit,1.2,0.099030,0.081648
