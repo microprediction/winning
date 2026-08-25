@@ -26,7 +26,7 @@ setup(
     tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],
     include_package_data=True,
     install_requires=["numpy", "scipy"],
-    extras_require={"test": ["pytest", "pandas"],
+    extras_require={"test": ["pytest", "pandas", "matplotlib"],
                     "benchmarks": ["pandas"]},
     entry_points={
         "console_scripts": [
