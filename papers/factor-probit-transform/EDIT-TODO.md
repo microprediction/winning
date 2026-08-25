@@ -18,11 +18,19 @@ back-of-envelope vs plain MC; "simulation owns coarse accuracy" fixed
 (EP/tilting/Vecchia cited as high-accuracy per-orthant).
 
 Still open from the review (bigger items, need Peter or new work):
-- REPRODUCIBILITY (major): paper says winning v1.1.0 / winning.factor;
-  public repo README now says 2.x renovation, core moved to thurstone,
-  1.0.3 last published 1.x. Need: immutable tag/commit SHA + Zenodo or
-  Software Heritage DOI + lockfiles + canonical-module statement.
-  Peter's call on which artefact is canonical.
+- REPRODUCIBILITY: RESOLVED per Peter 2026-08-24 ("just use whatever is
+  the latest at winning package"). The local repo is consistent with
+  the paper: setup.py 1.1.0, tag v1.1.0 exists and contains
+  winning/factor, README describes winning.thurstone (vendored home) +
+  winning.factor. The reviewer saw the stale PUBLIC state -- origin/main
+  is behind local. Remaining action: push main + tags publicly (and to
+  PyPI) so the public repo matches; git ssh, not gh CLI. Note v1.1.0 is
+  226 commits behind local HEAD, so retag or cut v1.1.1 at submission.
+- Quote verification: DONE 2026-08-24 -- Torgerson, Conlon slides, and
+  both Sawtooth quotes verified verbatim against primary sources, no
+  corrections needed (quote-verification.md). Tex comments upgraded to
+  VERIFIED. Still unverified: Chiang 1961 and Mukherjea-Stephens 1990
+  bibitem TITLES (flagged in the bibliography).
 - Independent large-N validation: spot-check 20-50 stratified shares at
   N=1000 against an independent code path (EP / Fasano-Denti, Vecchia /
   Cao-Katzfuss, or heavily replicated scrambled RQMC), three covariance

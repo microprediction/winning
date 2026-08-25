@@ -114,7 +114,7 @@ perfectly''. It also records the retreat that followed. Every working
 method from Thurstone forward, down to modern Thurstonian rating
 engines such as TrueSkill, reduces the $N$-way contest to pairwise
 events \citep{torgerson1958,herbrich2006}.
-% VERIFY: Torgerson quote (1958, pp.193-194) is agent-extracted; re-check against the book before submission.
+% VERIFIED 2026-08-24 against the archive.org scan: exact sentence p.194, df discussion pp.193-194. See quote-verification.md.
 
 Econometrics kept the $N$-way event and changed the distribution. A
 major reason for logit's dominance is brutally practical. Logit models
@@ -125,9 +125,10 @@ evaluator is the Geweke--Hajivassiliou--Keane (GHK) simulator
 of the Genz separation-of-variables family \citep{genz1992}. It treats
 the probability that alternative $i$ beats the rest as an orthant
 probability of the difference utilities, estimated by sampling
-truncated normals along a Cholesky factor. It is elegant, stochastic,
-and resolved by draw count, and it prices one orthant per alternative,
-exploiting nothing of the product shared across the $N$ winner events.
+truncated normals along a Cholesky factor. It is elegant and
+stochastic, its accuracy improves only as more Monte Carlo draws are
+added, and it prices one orthant per alternative, exploiting nothing of
+the product shared across the $N$ winner events.
 Graduate students are warned off accordingly. Conlon's industrial
 organization lecture notes put unrestricted MNP at ``potentially $J^2$
 parameters (that is a lot)!'' and one simulated integral of dimension
@@ -135,7 +136,7 @@ $J$ per share evaluation: ``I wouldn't do this for $J \geq
 5$.''\footnote{C.~Conlon, graduate industrial organization lecture
 notes (multinomial choice), New York University,
 \texttt{github.com/chrisconlon/Grad-IO}.}
-% VERIFY: slide quotes are agent-extracted; re-check before submission.
+% VERIFIED 2026-08-24 against multinomial_choice2.pdf (Fall 2025), slide 3: both quotes verbatim (second is two consecutive bullets). See quote-verification.md.
 The reference implementation of the logit tradition says the same by
 omission. The word \emph{probit} does not occur in the source tree of
 PyBLP \citep{conlon2020}, whose consumer heterogeneity is a rank-$K_2$
@@ -145,13 +146,16 @@ in \citet{conlon2020} uses $I_t = 4^{K_2}$, which is 65{,}536 nodes at
 $K_2 = 8$.
 
 The inversion is harder still, and the literature is quantitative about
-why. The inverse share map amplifies simulation and sampling error. In
-the large-product asymptotics of Berry, Linton and Pakes, consistency
-already constrains the draw count, and asymptotic normality requires
-draws growing as the square of the number of products \citep{berry2004}.
-Freyberger shows that unless the draw count grows quickly enough
-relative to the sample, the surviving simulation error enters the
-leading asymptotic terms as bias \citep{freyberger2015}. The standard
+why. The inverse share map amplifies whatever simulation and sampling
+error the shares carry. In the large-product asymptotics of Berry,
+Linton and Pakes, even consistency places a growth requirement on the
+number of Monte Carlo draws behind the simulated shares, and asymptotic
+normality requires the number of draws to grow as the square of the
+number of products \citep{berry2004}. Freyberger shows that unless the
+number of simulation draws grows quickly enough relative to the number
+of markets observed, the simulation error that survives shows up as a
+first-order bias in the estimated parameters, not merely as additional
+variance \citep{freyberger2015}. The standard
 escape at large $N$, estimation on a sampled subset of alternatives,
 rests on a logit cancellation, an explicit use of independence from
 irrelevant alternatives (IIA), and does not transfer to probit in the
@@ -164,7 +168,7 @@ and normal in its probit mode \citep{huber1999}. The variance split is
 tuned by grid search rather than fitted, and target shares are matched
 with an ad hoc fixed point its own authors call ``fudge factors'' and
 decline to encourage \citep{orme2006}.
-% VERIFY: Sawtooth quotes are agent-extracted from the primary PDFs; re-check before submission.
+% VERIFIED 2026-08-24 against the Sawtooth PDFs: HOM 1999 p.2 glossary and Orme-Johnson 2006 p.2 verbatim. See quote-verification.md.
 
 The standard reason for needing none of this is the McFadden--Train
 theorem that mixed logit approximates any random-utility model
