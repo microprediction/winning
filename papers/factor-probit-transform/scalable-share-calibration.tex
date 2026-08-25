@@ -1253,7 +1253,11 @@ Factor dimension reduction for probit is old, and older than
 econometrics: \citet{curnow1962} showed that product correlation
 collapses the multivariate normal integral to a one-dimensional integral
 of products of univariate CDFs, the reduction this paper conditions on,
-and \citet{dunnett1989} is its standard algorithm. The ranking-and-selection
+and \citet{dunnett1989} is its standard algorithm. Credit risk
+institutionalized the same reduction. The Basel II capital formula is
+Vasicek's one-factor conditional-independence integral
+\citep{vasicek2002,gordy2003}, adopted for regulation in preference to
+portfolio simulation. The ranking-and-selection
 tradition built on the same integrals from the 1950s
 \citep{bechhofer1954,gupta1963}, always evaluating one designated
 candidate per integral: assembling all $N$ that way costs $N$ separate
@@ -1289,6 +1293,16 @@ relaxation; \citet{berthet2020} differentiate general perturbed-argmax
 layers by Monte Carlo, with $p = \nabla G$ as the organizing identity.
 Both simulate the map this paper evaluates deterministically.
 
+The first-choice integral itself is psychometric and old.
+\citet{thurstone1945} evaluated the survival-product integral
+numerically for $n$ alternatives with a discretised computing formula,
+noting that it carries no restriction on the shapes of the
+distributions. The direction was forward only. \citet{guilford1937}
+stated the backward problem at $N > 2$ and solved it with a composite
+standard that \citet{torgerson1958} shows is Bradley--Terry in
+disguise. The retreat to pairwise that followed is quoted in the
+introduction.
+
 Racing supplied two of our ingredients. \citet{henery1981} wrote the
 survival-product win integral for normal running times and gave its
 first-order analytic inversion. \citet{ali1998} inverted market odds to
@@ -1303,9 +1317,16 @@ computation: \citet{mahani2019} compute all cause-specific cumulative
 incidences on one shared grid by forming the product of every survival
 function once and dividing out each cause's own factor (software since
 2015), and the Aalen--Johansen estimator \citep{aalen1978} reads all
-causes off a single survival product nonparametrically. Neither embeds
-the assembly in factor quadrature, differentiates it, nor inverts it.
-Racing arrived at it independently.
+causes off a single survival product nonparametrically. The earliest
+instance we have found is older still. \citet{lambert1975} computed the
+Barlow--Proschan importance of every fault-tree event from one shared
+product, noting that the top-event probability need not be recomputed
+each time. The deletion ensemble has a competing-risks ancestor as
+well. Chiang's partial crude probabilities \citep{chiang1961} give
+every deleted-subset share in closed form under proportional hazards,
+which is the logit-trivial case. None of these embeds the assembly in
+factor quadrature, differentiates it, or inverts it. Racing arrived at
+it independently.
 
 An older transportation literature used ``calibration'' for MNP
 parameter estimation. \citet{daganzo1977} introduced an early numerical
@@ -1330,7 +1351,17 @@ prove surjectivity of the utility-to-probability map;
 connected substitution;
 \citet{chiong2016} invert through the convex
 conjugate; \citet{fosgerau2020} show the probit inverse exists by
-generalized-entropy duality, without an algorithm.
+generalized-entropy duality, without an algorithm. For the Gaussian
+case specifically, \citet{andersonghurye1977} and \citet{mukherjea1990}
+prove that the distribution of the maximum identifies the parameters of
+a multivariate normal. These are theorems without numerics.
+\citet{li2018} comes closest to an algorithm. For arbitrary non-atomic
+bases he writes the inversion as an unconstrained convex minimization
+whose objective gradient is the share map, with globally convergent
+superlinear methods. He supplies the formulation and the optimizer
+without a fast evaluator of the shares and their Jacobian at large $N$.
+The shared field supplies the evaluator. The two are complements, and
+together they are the large-$N$ inversion for general bases.
 
  \citet{berry1995} built demand
 estimation on the logit-side inversion, and \citet{conlon2020}
@@ -2067,6 +2098,11 @@ Bayesian analysis of binary and polychotomous response data.
 \bibitem[Ali(1998)]{ali1998} M.~M. Ali. Probability models on horse-race
 outcomes. \emph{Journal of Applied Statistics} 25 (1998) 221--229.
 
+\bibitem[Anderson and Ghurye(1977)]{andersonghurye1977} T.~W. Anderson,
+S.~G. Ghurye. Identification of parameters by the distribution of a
+maximum random variable. \emph{Journal of the Royal Statistical Society
+B} 39 (1977) 337--342.
+
 \bibitem[Aurenhammer et~al.(1998)Aurenhammer, Hoffmann, and
 Aronov]{aurenhammer1998} F.~Aurenhammer, F.~Hoffmann, B.~Aronov.
 Minkowski-type theorems and least-squares clustering.
@@ -2149,6 +2185,12 @@ cracked the horse-racing code. \emph{Bloomberg Businessweek}, May 3,
 
 \bibitem[Chia(2021)]{chia2021} A.~Chia. Automatically differentiable random coefficient
 logistic demand estimation. arXiv:2106.04636 (2021).
+
+\bibitem[Chiang(1961)]{chiang1961} C.~L. Chiang. On the probability of
+death from specific causes in the presence of competing risks.
+\emph{Proceedings of the Fourth Berkeley Symposium on Mathematical
+Statistics and Probability} IV (1961) 169--180.
+% VERIFY: article title from memory; volume/pages verified against prior-art memo.
 
 \bibitem[Chiong et~al.(2016)Chiong, Galichon, and Shum]{chiong2016} K.~Chiong, A.~Galichon, M.~Shum. Duality in dynamic
 discrete-choice models. \emph{Quantitative Economics} 7 (2016) 83--115.
@@ -2273,6 +2315,10 @@ Financial Intermediation} 12 (2003) 199--232.
 \bibitem[Green and Swets(1966)]{green1966} D.~M. Green, J.~A. Swets.
 \emph{Signal Detection Theory and Psychophysics}. Wiley, 1966.
 
+\bibitem[Guilford(1937)]{guilford1937} J.~P. Guilford. Scale values
+derived from the method of choices. \emph{Psychometrika} 2 (1937)
+139--150.
+
 \bibitem[Gupta(1963)]{gupta1963} S.~S. Gupta. Probability integrals of
 multivariate normal and multivariate $t$. \emph{Annals of Mathematical
 Statistics} 34 (1963) 792--828.
@@ -2336,6 +2382,10 @@ Thibert]{kmt2019} J.~Kitagawa, Q.~M\'erigot, B.~Thibert. Convergence of
 a Newton algorithm for semi-discrete optimal transport. \emph{Journal
 of the European Mathematical Society} 21 (2019) 2603--2651.
 
+\bibitem[Lambert(1975)]{lambert1975} H.~E. Lambert. \emph{Fault Trees
+for Decision Making in Systems Analysis}. PhD thesis, UCRL-51829,
+Lawrence Livermore Laboratory (1975).
+
 \bibitem[Lazear and Rosen(1981)]{lazear1981} E.~P. Lazear, S.~Rosen.
 Rank-order tournaments as optimum labor contracts. \emph{Journal of
 Political Economy} 89 (1981) 841--864.
@@ -2347,6 +2397,9 @@ procedure for the one-factor random-component discrete choice model.
 \bibitem[L\'evy(2015)]{levy2015} B.~L\'evy. A numerical algorithm for
 $L_2$ semi-discrete optimal transport in 3D. \emph{ESAIM: Mathematical
 Modelling and Numerical Analysis} 49 (2015) 1693--1715.
+
+\bibitem[Li(2018)]{li2018} L.~Li. A general method for demand
+inversion. arXiv:1802.04444 (2018).
 
 \bibitem[Lin et~al.(2026)Lin, Yin, and Liu]{lin2026} X.~Lin,
 Y.~Yin, T.~Liu. Fenchel--Young estimators of perturbed utility
@@ -2412,6 +2465,12 @@ method of paired comparisons: I. The least squares solution assuming
 equal standard deviations and equal correlations. \emph{Psychometrika}
 16 (1951) 3--9.
 
+\bibitem[Mukherjea and Stephens(1990)]{mukherjea1990} A.~Mukherjea,
+R.~Stephens. Identification of parameters by the distribution of the
+maximum random variable. \emph{Probability Theory and Related Fields}
+84 (1990) 289--296.
+% VERIFY: article title from memory; journal/volume/pages verified against prior-art memo.
+
 \bibitem[Norets and Takahashi(2013)]{norets2013} A.~Norets, S.~Takahashi. On the surjectivity of the
 mapping between utilities and choice probabilities. \emph{Quantitative
 Economics} 4 (2013) 149--155.
@@ -2444,6 +2503,9 @@ numerical solution. \emph{Mathematical Programming} 199 (2023)
 
 \bibitem[Thurstone(1927)]{thurstone1927} L.~L. Thurstone. A law of comparative judgment.
 \emph{Psychological Review} 34 (1927) 273--286.
+
+\bibitem[Thurstone(1945)]{thurstone1945} L.~L. Thurstone. The
+prediction of choice. \emph{Psychometrika} 10 (1945) 237--253.
 
 \bibitem[Tinessa(2021)]{tinessa2021} F.~Tinessa. Closed-form random
 utility models with mixture distributions of random utilities:

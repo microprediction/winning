@@ -1,15 +1,21 @@
 # Deferred edits (from author-rewrite session)
 
-- Vasicek citation: add as the CREDIT-RISK instance in the Related Work
-  "factor dimension reduction is old" paragraph (line ~1220), NOT as
-  priority over Butler (Vasicek 1987/1991/2002 all post-date
-  Butler-Moffitt 1982). Frame: one-factor Gaussian conditional-
-  independence integral -> Basel II IRB capital, adopted because it beat
-  Monte Carlo. Reinforces the intro's "each field reinvents factor
-  integration" thesis + ties to the trillions/market-cap theme.
-  Ref: O.A. Vasicek, "Loan portfolio value," Risk 15 (2002) 160-162.
-- Racing citation: "second-place probabilities better modeled by probit
-  than logit" -> \citep{henery1981,lo1994} (both already in bib).
+- Vasicek citation: DONE 2026-08-24 — credit-risk sentence added to the
+  Related Work dimension-reduction paragraph, after Dunnett, no priority
+  claim over Butler.
+- Racing citation: DONE 2026-08-24 — henery1981/lo1994 already attached
+  to the second-place sentence in Potential applications.
+- Prior-art citations from papers/prior-art-inversion-and-shared-field.md:
+  DONE 2026-08-24 — Li 2018 (complement framing), Lambert 1975 (earliest
+  shared-field), Chiang 1961 (deletion ensemble), Anderson-Ghurye 1977 +
+  Mukherjea-Stephens 1990 (identification), Thurstone 1945 + Guilford
+  1937 (psychometric forward integral / backward problem). Two bibitem
+  titles flagged % VERIFY (Chiang, Mukherjea-Stephens: titles from
+  memory).
+- Intro rewrite: DONE 2026-08-24 — leads with the problem then the
+  hardness record (Torgerson, GHK, Conlon, PyBLP, BLP 2004, Freyberger,
+  Sawtooth, McFadden-Train); panorama moved to Potential applications.
+  Three quote sets flagged % VERIFY pending the verification agent.
 - China/US line in intro: author to decide (flagged as venue-tone risk,
   not logic error).
 
