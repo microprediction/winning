@@ -1,6 +1,6 @@
 # Brief for a new reviewer
 
-Manuscript: `papers/thurstone_humans/paper.tex`, 30 pages, commit `b1d598e` on branch
+Manuscript: `papers/thurstone_humans/paper.tex`, 33 pages, commit `057678d` on branch
 `machine-preference-paradox` of `github.com/microprediction/winning`. Quote a commit hash in
 your report; table and section numbers have moved between rounds and are not stable locators.
 
@@ -72,21 +72,22 @@ Experiment 2 data is one of the thirty-nine rows).
 3. ~~Menu weighting~~ done, and reported. The aggregate is the conservative weighting.
 4. ~~Add-$\alpha$ sensitivity~~ done, and reported. Occupational prestige is the one collection
    that moves, which is worth knowing when reading its $+0.0390$.
-5. **The full menu is inside the restriction estimand.** The ranking score includes $T=S$,
-   where the two maps coincide and the gain is zero by construction, which dilutes small-$K$
-   collections far more than large ones and distorts cross-collection magnitudes. Not yet fixed.
-6. **Only three menu weightings are reported, not the size-specific gain vector.** The whole
-   sensitivity to size weighting lives in $(g_2,\dots,g_{K-1})$, and within-size dispersion is
-   not reported at all, though Getty already shows a sign reversal across subsets inside one
-   experiment.
-7. **No bounded proper score.** The advantage is assembled from rare large gains against frequent
-   small losses, which is exactly what log loss rewards, so a Brier check is warranted before
-   calling it better transport in general.
+5. ~~The full menu is inside the restriction estimand~~ measured, and reported in the section
+   "What the score averages over". Excluding $T=S$ raises every gain and lowers none, by $1.33$
+   on Netflix, $1.10$ at $K=4$, $1.04$ at $K=5$ and $1.00$ to two decimals at $K \ge 7$. The
+   published figures include the tie and are the conservative ones.
+6. ~~Size-specific gain vector~~ done. Table 6 gives $(g_2,\dots,g_K)$ for all twelve ranking
+   collections. Nine fall monotonically; occupational prestige peaks at $|T|=4$ at about twice
+   its pairwise figure, and sports participation peaks at $|T|=3$.
+7. ~~No bounded proper score~~ done. Multiclass Brier on the same subsets and folds agrees in
+   sign on twelve of twelve. Its intervals cover zero on the two collections with the smallest
+   log gains, GSS job values and puzzles. The ordering of collections is preserved.
 8. **The cubic order is prose, not a lemma.** Smoothness in an explicit norm, interior shares
    and a nonsingular contrast Jacobian are assumed rather than stated.
 9. **No study-level primary table.** Rows overlap and nest; the count is descriptive and says so.
-10. **One figure has no committed run behind it**, the pooled forced-choice gain of $+0.0265$.
-   The audit prints this.
+10. ~~One figure has no committed run behind it~~ closed. `menus_heldout.py` now scores the
+   pooled forced-choice group, and it reproduces the printed row exactly: gain $+0.0265$, null
+   median $-0.0041$, excess $+0.0306$, $p = 0.010$. The audit traces all 504 table figures.
 
 ## Where to look before writing
 
@@ -95,7 +96,10 @@ Experiment 2 data is one of the thirty-nine rows).
   a simulated Gumbel race renormalizing exactly, the cubic order, the concentrated-share
   example. `node run_checks.js` runs the same suite.
 - `research/restriction/demo/check_tables.py` traces every figure the paper quotes from a run to
-  the output that produced it, and lists table figures no committed run accounts for.
+  the output that produced it, and lists table figures no committed run accounts for. All 504
+  currently trace.
+- `research/restriction/estimand.py` produces three of the answers above in one pass:
+  restrictions only, the size vector, and Brier beside log loss.
 - `research/restriction/results/STATUS.md` is the running log, including the errors we found in
   our own work.
 - Each collection under `research/restriction/data/` has a `SOURCE.md` with the fetched access

@@ -1119,6 +1119,66 @@ more counting once puts most of the weight near $|T| = K/2$, and pairs are where
 differ most, so the aggregate reported throughout is the conservative choice of the three rather
 than a neutral one. The direction does not depend on it.
 
+\subsection{What the score averages over}
+\label{sec:estimand}
+
+Three features of the score are choices rather than results, and each is varied here.
+
+The aggregate runs over every subset of size two or more, which includes $T = S$. There the
+two maps coincide and the gain is zero by construction, so the full menu contributes a
+guaranteed tie. It is one subset in $1{,}013$ at $K = 10$ and one in four at $K = 3$, so it
+dilutes small collections much more than large ones. Restricting the estimand to
+$2 \le |T| < K$ raises every gain and never lowers one: by a factor of $1.33$ on Netflix, $1.10$
+on the three $K = 4$ collections, $1.04$ on the two General Social Survey items and $1.00$ to
+two decimal places on everything with $K \ge 7$. Political goals moves from $+0.0069$ to
+$+0.0076$ and Netflix from $+0.0009$ to $+0.0013$; the rest move in the fourth decimal or not at
+all. The figures quoted throughout include the tie and are therefore the conservative ones.
+
+The second choice is the weighting across menu sizes, and the three weightings of
+Table~\ref{tab:conventions} are three summaries of one curve. Table~\ref{tab:sizevector}
+gives the curve itself.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Dataset & $|T|=2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
+\midrule
+Occupational prestige & $+.0286$ & $+.0516$ & $+.0549$ & $+.0454$ & $+.0313$ & $+.0178$ & $+.0076$ & $+.0017$ & $+.0000$ \\
+Sushi & $+.0412$ & $+.0263$ & $+.0150$ & $+.0081$ & $+.0040$ & $+.0017$ & $+.0005$ & $+.0000$ & $-.0000$ \\
+Political goals & $+.0079$ & $+.0071$ & $+.0000$ & & & & & & \\
+GSS socialization & $+.0130$ & $+.0011$ & $+.0004$ & $-.0000$ & & & & & \\
+Sports participation & $+.0058$ & $+.0062$ & $+.0051$ & $+.0036$ & $+.0019$ & $+.0001$ & & & \\
+Jester file 3 & $+.0064$ & $+.0050$ & $+.0033$ & $+.0020$ & $+.0012$ & $+.0006$ & $+.0003$ & $+.0001$ & $-.0000$ \\
+Jester file 1 & $+.0053$ & $+.0041$ & $+.0026$ & $+.0016$ & $+.0010$ & $+.0005$ & $+.0003$ & $+.0001$ & $+.0000$ \\
+Jester file 2 & $+.0048$ & $+.0037$ & $+.0024$ & $+.0015$ & $+.0009$ & $+.0005$ & $+.0002$ & $+.0001$ & $+.0000$ \\
+GSS job values & $+.0021$ & $+.0020$ & $+.0009$ & $-.0000$ & & & & & \\
+Dots & $+.0025$ & $+.0003$ & $-.0000$ & & & & & & \\
+Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
+Puzzles & $+.0013$ & $+.0000$ & $-.0000$ & & & & & & \\
+\bottomrule
+\end{tabular}
+\caption{Held-out gain by the size of the surviving menu, all twelve ranking collections.
+The last entry in each row is zero to the precision of the pipeline, since nothing has been
+removed. Nine collections fall monotonically in $|T|$. Occupational prestige and sports
+participation do not: prestige peaks at $|T| = 4$ with $+0.0549$, roughly twice its pairwise
+figure, which is why pairs-only weighting understates it while overstating everything else.
+Reproduced by \texttt{python estimand.py}.}
+\label{tab:sizevector}
+\end{table}
+
+The third is the score itself. Log loss is unbounded below, and Table~\ref{tab:byrank} shows
+the advantage assembled from rare large gains against frequent small losses, which is the shape
+log loss rewards most. The multiclass Brier score $\sum_j (q_j - y_j)^2$ is bounded and proper,
+and applied to the same subsets under the same folds it agrees in sign on all twelve
+collections. Its intervals cover zero on the two collections with the smallest log gains, GSS
+job values at $+0.00070$ $[-0.00004, +0.00147]$ and puzzles at $+0.00036$
+$[-0.00047, +0.00116]$. The largest Brier gains are occupational prestige at $+0.0104$,
+political goals at $+0.0060$ and Sushi at $+0.0046$. So the ordering of collections is
+preserved and the advantage is not an artifact of an unbounded score, though on the two
+weakest collections a bounded score cannot separate the maps.
+
 \subsection{The constant-ratio-rule datasets rescored}
 \label{sec:townsend}
 
