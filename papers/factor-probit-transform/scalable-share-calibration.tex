@@ -42,9 +42,9 @@ grid points, at $O(QNL)$ cost. The same field yields resampling-free
 Jacobian--vector products, and share inversion at $N = 1000$ takes
 three seconds in the compiled implementation at rank two. Ten thousand
 alternatives stay under a minute. In convergence comparisons, the
-computed shares carry log-share errors of a few parts in a hundred
-thousand, hundred-to-one shares included, measured against
-higher-resolution references of the same construction. Independent
+computed shares agree with higher-resolution references of the same
+construction to a few parts in a hundred thousand in log share,
+hundred-to-one shares included. Independent
 RQMC inversion checks through $N = 200$ recover utilities at the
 reference error floor. The established high-precision evaluators price
 one orthant at a time. A per-alternative factor-conditioned RQMC
@@ -101,7 +101,9 @@ performance is Gaussian, from bioassay and quantitative genetics to
 item response theory, signal detection, credit risk, skill rating, and
 the final layer of heteroskedastic image classifiers
 \citep{collier2021}. Section~\ref{sec:applications} collects these
-fields. The computation below applies to all of them. Any empirical
+fields. The construction below applies to those of their problems in
+which the observed event is a mutually exclusive argmax, or
+first-arrival, among the $N$ alternatives. Any empirical
 argument for one race over another on real data is deferred to a
 companion survey \citep{cottonsurvey}. Here the focus is the
 computation, and the record of its difficulty, which is clearest in
@@ -311,6 +313,21 @@ keeps the loadings' sign. It is valid
 because the Gaussian law is unchanged under $(f, \varepsilon) \mapsto
 (-f, -\varepsilon)$.
 
+The exact map is invariant to orthogonal rotations $V \mapsto VO$ and
+to common shifts $V \mapsto V + \mathbf{1}c^\top$, which move every
+utility by the same factor-dependent amount. The finite implementation
+is not automatically invariant to either. The envelope, the warm
+start, and the step caps are built from the raw conditional means and
+marginal variances, and a tensor-product factor rule at finite order is
+not rotation-invariant. A supplied $V$ carrying a large common
+component should therefore be centered by the caller, $V \mapsto (I -
+\mathbf{1}\mathbf{1}^\top/N)V$, and rotated to a fixed singular-value
+orientation. The forward pass does not re-canonicalize what it is
+given. The sensitivity is small at production resolution: in a spot
+check at $N = 30$, $k = 2$, a common shift of ten factor standard
+deviations moved log shares by under $10^{-9}$ and a rotation by under
+$10^{-6}$.
+
 \begin{algorithm}[H]
 \caption{All-share forward pass (min-wins; reflected from argmax by $a = -\mu$)}
 \label{alg:forward}
@@ -361,9 +378,15 @@ analyzed in Section~\ref{sec:theory} (Proposition~\ref{prop:jacobi}).
 \begin{algorithmic}[1]
 \Require strictly positive target shares $\hat p$ (normalized), $V$, $D$,
 factor rule, tolerance $10^{-6}$, cap 50 iterations
+\State if $N = 2$: return the closed-form inverse, in which $\hat p_1$
+pins $a_1 - a_2$ through one univariate normal CDF with variance $D_1 +
+D_2 + \|v_1 - v_2\|^2$ (the loop below is a local two-cycle at $N = 2$;
+Proposition~\ref{prop:jacobi})
 \State $a \gets$ high-accuracy independent-race inversion using
 marginal variances $D_i + \|v_i\|^2$ (this same algorithm with a
-single zero factor node) \Comment{warm start}
+single zero factor node; at $V = 0$ the warm start is the analytic
+log-share start, so the recursion is one level deep) \Comment{warm
+start}
 \State $\mathrm{damp} \gets 1$
 \Repeat
   \State run Algorithm~\ref{alg:forward} at $a$, collecting $\tilde p$
@@ -682,6 +705,13 @@ the quotient $\mathbb{R}^N/\mathrm{span}\{\mathbf{1}\}$, whose
 eigenvalues are the nonzero eigenvalues of $\Delta^{-1}J$.
 \end{proof}
 
+At $N = 2$ the photo-finish graph is $K_2$, which is bipartite, so
+$\lambda_2 = 2$ exactly and the undamped update is a local two-cycle.
+The oscillation holds the residual nearly constant, which also defeats
+the growth-based damping safeguard. The implementation therefore
+returns the closed-form $N = 2$ inverse before the loop, and the
+general-base inversion fixes its damping at $0.7$ when $N = 2$.
+
 Experiment 31 measures this at $N = 12$. The spectrum of $\Delta^{-1}J$ is
 $[0,\, 0.974, \dots, 1.379]$, and the observed contraction of the
 exact iteration matches the predicted factor to within $0.01$ ($0.369$
@@ -757,8 +787,9 @@ normalization conditions the quadrature on the retained node set, and the
 two contributions to the pre-normalization defect separate cleanly. The
 pruned factor weight is $\delta_{\mathrm{factor}} = 2.39\times10^{-8}$
 at $k=2$ (analytic). The measured $|1 - \mathbf{1}^\top \tilde p| =
-2.4\times10^{-8}$ equals it, so lattice truncation contributes below that
-level.
+2.4\times10^{-8}$ equals it, consistent with lattice truncation
+contributing below that level. Signed grid errors can cancel in the
+sum, so the equality is evidence rather than a bound.
 
 \paragraph{Benchmark designs.} Unless a row states otherwise, the
 benchmark problems are drawn by one shared generator: $\mu_i \sim
@@ -1260,7 +1291,8 @@ Deterministic approximations run from Mendell--Elston \citep{mendell1974}
 through Bhat's MACML \citep{bhat2011} to expectation propagation:
 \citet{cunningham2011} found EP
 highly accurate precisely for rectangular regions, and \citet{fasano2025} evaluate generic Gaussian CDFs by EP on a dual probit
-model, deterministically and sampling-free. Every one of these prices one
+model, deterministically and sampling-free. Every one of these
+orthant-probability methods prices one
 orthant at a time. None couples the $N$ winner probabilities.
 
 Factor dimension reduction for probit is old, and older than
@@ -1728,8 +1760,10 @@ base are complements in this design.
 One caveat applies to the factorial. Its loadings $v_{ir} \sim N(0,
 0.36/k)$ add $\|v_i\|^2$ to each marginal variance, unevenly across
 alternatives, so its factor axis is really a \emph{full factor
-covariance} axis. Experiment 29 above already removes this, and finds the
-pure-covariance effect larger, not smaller.
+covariance} axis. Experiment 29 above separately shows that a large
+substitution effect remains when every marginal variance is held at
+one. Its design differs from the factorial in more than the variance
+confound, so the two effect magnitudes are not directly comparable.
 
 A twenty-seed replication of the full factorial (experiment 36)
 reproduces the ordering. Median misallocation across seeds is
@@ -1847,8 +1881,9 @@ catalog candidates is the true cross-match, which sky tile hosts a
 gravitational-wave counterpart, which of a million nightly survey
 alerts deserves follow-up. Each is a race among thousands of
 alternatives whose scores share a few instrument and observing-condition
-factors, and observing a candidate then re-ranking the rest is
-precisely the removal counterfactual computed here.
+factors, and observing a candidate then re-ranking the rest is the
+removal counterfactual computed here whenever the observation leaves
+the other candidates' scores unchanged.
 
 It is not only horses that race. However, horse races are worthy of mention, and not only as regards attribution of a core trick used herein. For at least half a century those betting on them have been confronted by the nuances of choice and permutation probabilities in exacta, quinella, trifecta, and place betting. In that setting there has been a strong Darwinian selection that weeds out those anchoring to a simple renormalization of probability---this does not model second-place probabilities well at all if the favorite does not win \citep{henery1981,lo1994}.\footnote{The
 Darwinian winner is instructive. \citet{benter1994}, whose Hong Kong
@@ -1868,8 +1903,8 @@ calibration developed here as the inverse step.
 
 Why all this probit work? For anyone modeling performance directly,
 Gaussian is the natural noise. Sums of many small effects are Gaussian,
-and nobody measuring times, scores, or energies would posit
-Gumbel-distributed performance. The Gumbel race is chosen backwards,
+and measured times, scores, and energies are modeled with Gaussian
+errors far more often than with Gumbel. The Gumbel race is usually chosen backwards,
 for the convenience of its winner probabilities. That convenience is
 starkest when an item is removed from a list whose probabilities have
 already been assigned.

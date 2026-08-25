@@ -109,6 +109,10 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     target = target / target.sum()
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
+    # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
+    # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
+    # a local two-cycle. Fixed damping 0.7 restores contraction.
+    alpha = 1.0 if len(target) > 2 else 0.7
     for _ in range(n_iter):
         phat, sl = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
                                       points=points, temperature=temperature,
@@ -117,7 +121,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         if np.abs(resid).max() < tol:
             break
         dlogp = np.minimum(sl / np.maximum(phat, 1e-300), -1e-6)
-        mu = mu - np.clip(resid / dlogp, -2.0, 2.0)
+        mu = mu - np.clip(alpha * resid / dlogp, -2.0, 2.0)
         mu -= mu.mean()
     return mu
 

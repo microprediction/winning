@@ -59,6 +59,61 @@ Still open from the review (bigger items, need Peter or new work):
   held-out menu) remains the empirical gap the review and our own notes
   agree on.
 
+## From the 2026-08-24 second (technical) review
+
+FIXED 2026-08-24, code and paper:
+- N=2 Jacobi two-cycle CONFIRMED empirically (shipped inversion returned
+  silently with log-share errors up to ~1 at mid-range targets; the flat
+  oscillating residual never triggered the 20% damping rule). Gaussian
+  kernel now returns the closed form mu_2 - mu_1 = s Phi^-1(p_1),
+  s^2 = D1+D2+||v1-v2||^2 (verified numerically, min-wins sign); general-
+  base inversion uses alpha=0.7 at N=2. tests/test_factor_n2.py added,
+  12 tests; full suite 74 passed. Algorithm 2 gained the N=2 branch and
+  Prop 4 discussion notes K_2 bipartite / lambda_2 = 2.
+- Warm-start recursion was NOT circular in code (bottoms out at analytic
+  log-share start when V=0); Algorithm 2 pseudocode now says so.
+- Representation invariance: paragraph added after the reflection note
+  (exact map invariant to V->VO and V->V+1c^T; finite implementation
+  not; caller should center + SVD-orient). Measured at production
+  resolution: |c|=10 moves log shares <1e-9, rotation <1e-6 (spot check
+  N=30, k=2) -- real but small.
+- Wording: exp29 "larger, not smaller" -> not directly comparable;
+  "applies to all of them" -> mutually exclusive argmax/first-arrival
+  scope; astronomy "precisely" conditioned on unchanged scores; "nobody
+  would posit Gumbel" softened; "Every one of these" -> "these
+  orthant-probability methods"; abstract "errors" -> "agree with
+  higher-resolution references ... in log share"; pruned-mass equality
+  "so" -> "consistent with" + signed-cancellation caveat.
+
+Still open from review 2 (experiments / bigger):
+- Exp17 factor sweep confound: envelope recomputed per factor order, so
+  the sweep mixes factor and spatial error. Fix: fixed envelope from the
+  highest-order rule, or show doubling L moves results far below the
+  factor discrepancy.
+- Top-two O(RN) all-share estimator: promote to headline benchmark with
+  an accuracy-vs-time frontier at N=200 and N=1000 (shared with review 1
+  item). Restrict "gap widens linearly in N" to the per-alternative
+  formulation (abstract now says this).
+- One actual large-N matrix-free JVP/projected-CG solve experiment
+  (iterations, residual, wall time); state the gauge implementation (no
+  dense B). Also state exactly which equation Newton-Krylov solves
+  (continuum Laplacian vs frozen-grid derivative).
+- Rotation / common-shift / near-duplicate regression tests in the
+  package (spot check done; make them tests).
+- L auto-scaling rule (envelope width / smallest conditional sd) with
+  under-resolution warning; note nonneg-weight assumption breaks for
+  negative-weight sparse grids.
+- Removal ensemble: label full NxN ensemble O(QN^2L), selected removals
+  at forward cost (check current wording).
+- "Arbitrary densities" scope sentence (continuous, evaluable
+  density+CDF; accuracy distribution-dependent).
+- N=2 and stress cases (tiny D, near-duplicates, Dirichlet targets,
+  large common loadings) added to the robustness suite.
+- Reviewer suggests months/year + six-order passage still reads as a
+  strawman even labeled; Peter's call whether to delete outright.
+- Footnote 10 stranded across pages 11-12 (typesetting); number and
+  caption the tables on pp. 13/21/28.
+
 - Vasicek citation: DONE 2026-08-24 — credit-risk sentence added to the
   Related Work dimension-reduction paragraph, after Dunnett, no priority
   claim over Butler.
