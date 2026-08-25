@@ -80,7 +80,7 @@ recovering the relative ability of horses from the bookmaker odds, even
 when some horses are known to be correlated with others. The original
 transform \citep{cotton2021} assumed independent performances.}
 
-The logit version of this inversion is daily routine: demand estimation
+The logit version of this inversion is daily routine. Demand estimation
 in the Berry--Levinsohn--Pakes (BLP) tradition begins by inverting
 observed market shares to mean utilities, and runs on the closed forms
 and contraction mapping that the Gumbel distribution supplies
@@ -90,14 +90,14 @@ removing the barrier for the covariance class above.
 
 The model itself is the oldest in choice theory. Thurstone's 1927 law
 of comparative judgment posited jointly Gaussian utilities with
-unrestricted correlation \citep{thurstone1927}; econometrics
+unrestricted correlation \citep{thurstone1927}. Econometrics
 reintroduced the same object as the conditional, or multinomial, probit
-model (MNP) \citep{hausman1978}; and it re-emerges wherever latent
+model (MNP) \citep{hausman1978}. It re-emerges wherever latent
 performance is Gaussian, from bioassay and quantitative genetics to
 item response theory, signal detection, credit risk, skill rating, and
 the final layer of heteroskedastic image classifiers
 \citep{collier2021}. Section~\ref{sec:applications} collects these
-fields; the computation below applies to all of them. Any empirical
+fields. The computation below applies to all of them. Any empirical
 argument for one race over another on real data is deferred to a
 companion survey \citep{cottonsurvey}. Here the focus is the
 computation, and the record of its difficulty, which is clearest in
@@ -106,14 +106,14 @@ psychometrics and econometrics.
 Psychometrics stated the backward problem and abandoned it. Torgerson's
 text records the degrees-of-freedom count, $n$ observed frequencies
 against $n$ scale values, so ``we ought, therefore, to be able to fit
-perfectly''; it also records the retreat that followed. Every working
+perfectly''. It also records the retreat that followed. Every working
 method from Thurstone forward, down to modern Thurstonian rating
 engines such as TrueSkill, reduces the $N$-way contest to pairwise
 events \citep{torgerson1958,herbrich2006}.
 % VERIFY: Torgerson quote (1958, pp.193-194) is agent-extracted; re-check against the book before submission.
 
 Econometrics kept the $N$-way event and changed the distribution. A
-major reason for logit's dominance is brutally practical: logit models
+major reason for logit's dominance is brutally practical. Logit models
 can be computed. Probit probabilities are $(N-1)$-dimensional Gaussian
 integrals with, generically, no closed form. The standard evaluator is
 the Geweke--Hajivassiliou--Keane (GHK) simulator
@@ -158,8 +158,8 @@ authors call ``fudge factors'' and decline to encourage
 % VERIFY: Sawtooth quotes are agent-extracted from the primary PDFs; re-check before submission.
 
 The standard reason for needing none of this is the McFadden--Train
-theorem: mixed logit approximates any random-utility model arbitrarily
-closely \citep{mcfaddentrain2000}. The construction is priced in its
+theorem that mixed logit approximates any random-utility model
+arbitrarily closely \citep{mcfaddentrain2000}. The construction is priced in its
 own paper. It sends the extreme-value scale to zero while the mixing
 distribution grows without bound, and the authors report ``no practical
 indication of how to choose parsimonious mixing families, or how many
