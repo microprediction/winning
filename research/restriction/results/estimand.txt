@@ -1,0 +1,55 @@
+Restrictions only, 2 <= |T| < K. Gain is linear minus Gaussian, so positive
+favours Gaussian renormalization. 'with T=S' is the published estimand.
+
+dataset                      n  K  subs     gain               95% CI  with T=S  ratio
+Dots                      3183  4    10  +0.0016   [+0.0005, +0.0028]   +0.0015   1.10
+GSS job values            5000  5    25  +0.0018   [+0.0005, +0.0032]   +0.0017   1.04
+GSS socialization         5000  5    25  +0.0057   [+0.0042, +0.0073]   +0.0055   1.04
+Jester file 1             5000 10  1012  +0.0020   [+0.0012, +0.0027]   +0.0020   1.00
+Jester file 2             5000 10  1012  +0.0018   [+0.0010, +0.0025]   +0.0018   1.00
+Jester file 3             5000 10  1012  +0.0024   [+0.0016, +0.0032]   +0.0024   1.00
+Netflix                   4379  3     3  +0.0013   [+0.0010, +0.0016]   +0.0009   1.33
+Occupational prestige      143 10  1012  +0.0391   [+0.0227, +0.0556]   +0.0390   1.00
+Political goals           2262  4    10  +0.0076   [+0.0065, +0.0086]   +0.0069   1.10
+Puzzles                   3180  4    10  +0.0008   [-0.0003, +0.0019]   +0.0007   1.10
+Sports participation       130  7   119  +0.0051   [+0.0017, +0.0088]   +0.0050   1.01
+Sushi                     5000 10  1012  +0.0111   [+0.0094, +0.0128]   +0.0111   1.00
+
+
+Bounded proper score. Multiclass Brier on the same subsets and folds,
+so a positive Brier gain is Gaussian renormalization ahead there too.
+
+dataset                   log gain  Brier linear  Brier Gaussian  Brier gain                 95% CI
+Dots                       +0.0016        0.5104          0.5092    +0.00114   [+0.00029, +0.00200]
+GSS job values             +0.0018        0.5109          0.5102    +0.00070   [-0.00004, +0.00147]
+GSS socialization          +0.0057        0.4804          0.4791    +0.00137   [+0.00084, +0.00189]
+Jester file 1              +0.0020        0.7637          0.7626    +0.00112   [+0.00080, +0.00144]
+Jester file 2              +0.0018        0.7618          0.7607    +0.00107   [+0.00073, +0.00143]
+Jester file 3              +0.0024        0.7594          0.7580    +0.00140   [+0.00100, +0.00179]
+Netflix                    +0.0013        0.5029          0.5016    +0.00123   [+0.00092, +0.00153]
+Occupational prestige      +0.0391        0.5412          0.5309    +0.01037   [+0.00608, +0.01475]
+Political goals            +0.0076        0.5567          0.5507    +0.00599   [+0.00516, +0.00680]
+Puzzles                    +0.0008        0.5021          0.5017    +0.00036   [-0.00047, +0.00116]
+Sports participation       +0.0051        0.7003          0.6972    +0.00314   [+0.00124, +0.00509]
+Sushi                      +0.0111        0.6980          0.6934    +0.00462   [+0.00392, +0.00530]
+
+the two scores agree on sign in 12 of 12 collections
+
+
+Gain by size of the surviving menu. The three menu weightings are three
+summaries of this curve; |T| = K is the tie the estimand now excludes.
+
+dataset                         2        3        4        5        6        7        8        9       10
+Dots                      +0.0025  +0.0003  -0.0000                                                      
+GSS job values            +0.0021  +0.0020  +0.0009  -0.0000                                             
+GSS socialization         +0.0130  +0.0011  +0.0004  -0.0000                                             
+Jester file 1             +0.0053  +0.0041  +0.0026  +0.0016  +0.0010  +0.0005  +0.0003  +0.0001  +0.0000
+Jester file 2             +0.0048  +0.0037  +0.0024  +0.0015  +0.0009  +0.0005  +0.0002  +0.0001  +0.0000
+Jester file 3             +0.0064  +0.0050  +0.0033  +0.0020  +0.0012  +0.0006  +0.0003  +0.0001  -0.0000
+Netflix                   +0.0013  +0.0000                                                               
+Occupational prestige     +0.0286  +0.0516  +0.0549  +0.0454  +0.0313  +0.0178  +0.0076  +0.0017  +0.0000
+Political goals           +0.0079  +0.0071  +0.0000                                                      
+Puzzles                   +0.0013  +0.0000  -0.0000                                                      
+Sports participation      +0.0058  +0.0062  +0.0051  +0.0036  +0.0019  +0.0001                           
+Sushi                     +0.0412  +0.0263  +0.0150  +0.0081  +0.0040  +0.0017  +0.0005  +0.0000  -0.0000
+EXIT=0

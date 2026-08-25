@@ -190,11 +190,6 @@ def main():
         note = " (rounding of the underlying values)" if got != printed and mark == "ok" else ""
         print(f"  {label:<32} {gain:+.4f} - ({med:+.4f}) = {got:+.4f} against {printed:+.4f}  {mark}{note}")
 
-    print("\nfigures with no committed run behind them:")
-    print("  tab:null, +0.0265, the pooled forced-choice gain. menus_heldout.txt has")
-    print("  +0.0442 and +0.0140 for the two experiments' forced-choice subgroups and")
-    print("  +0.0100 for all subjects pooled, but no pooled forced-choice figure.")
-
     total = len(paper_table_figures(paper))
     n_unsourced = sum(len(v) for v in unsourced.values())
     print(f"\n{total} figures appear in tables; {n_unsourced} have no match in results/*.txt")
