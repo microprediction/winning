@@ -162,3 +162,5 @@ Still open from review 2 (experiments / bigger):
   transport/trace material in an appendix (currently its own section
   after the numerics). Editorial; Peter's call.
 - Intro trim: reviewer asks again for 40-50% cut of pp. 1-2 color.
+
+- RELEASE COMPLETE 2026-08-25: v1.1.1 on PyPI, CI green, N=2 fix shipped.
