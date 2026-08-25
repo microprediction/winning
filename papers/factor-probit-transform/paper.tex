@@ -87,7 +87,7 @@ Wherever performance is latent and Gaussian, the same object appears.
 
 With unrestricted alternative intercepts, a single interior share
 vector\footnote{We call the choice probabilities $p_i$ \emph{shares} throughout. The racing origin \citep{cotton2021} called them \emph{state prices}, borrowing prediction-market and finance usage. In the probit choice setting \emph{shares}, as in market shares, is the more natural term. \emph{Probability} would also be imprecise on the discrete lattice used later, where ties have positive probability and a dead heat splits the payout. The lattice objects really are state prices.} cannot distinguish full-support random-utility models, because
-each can be inverted to match it. However, when logit, probit or other models  are calibrated to observed shares, the recovered utilities can serve as inputs to questions the data do not answer
+each can be inverted to match it. However, when logit, probit, or other models are calibrated to observed shares, the recovered utilities can serve as inputs to questions the data do not answer
 directly: elasticities, welfare, pricing, the effect of adding or
 removing an alternative, and combinatorial probabilities. It is at this point that they make different, falsifiable predictions. 
 
@@ -162,13 +162,12 @@ bookmaker odds, even when some horses are known to be correlated with
 others. The original transform \citep{cotton2021} assumed independent
 performances.} 
 
-We solve this fixed factor probit share calibration problem at $N = 1000$ alternatives
-in three seconds at rank two. The computation is the probit analogue of a far more popular logit inversion. For example, 
+We solve this fixed factor-probit share calibration problem at $N = 1000$ alternatives
+in three seconds at rank two with the compiled implementation. The computation is the probit analogue of a far more popular logit inversion. For example, 
 demand estimation runs on the logit side every day \citep{berry1995,conlon2020}.\footnote{Estimating $(V, D)$ is the outer problem. It is discussed in
 Section~\ref{sec:discussion} but not claimed here.} 
 
-The inverse
-problem is also globally identified and onto the simplex interior
+The share map is also globally identified and onto the simplex interior
 (Proposition~\ref{thm:inv}: shares determine utilities uniquely up to
 location). 
 
@@ -225,7 +224,7 @@ Calibration solves for $\mu$ alone.
 
 Conditional on the factors, the alternatives are independent, and the
 algorithm is built entirely on that fact. Write $g_i(\cdot \mid f)$ and
-$F_i(\cdot \mid f)$ for the conditional density and CDF of $U_i$ given
+$F_i(\cdot \mid f)$ for the conditional density and cumulative distribution function (CDF) of $U_i$ given
 $f$. Alternative $i$ wins when it beats every rival, so
 \begin{equation}
 p_i \;=\; \E_f\!\left[\;\int g_i(x \mid f)
@@ -265,8 +264,8 @@ results in Section~\ref{sec:benchmark}.
 
 Algorithm~\ref{alg:forward} works in reflected \emph{min-wins}
 coordinates $a = -\mu$, a race won by the smallest value, while the
-theory is stated in the natural \emph{max-wins} coordinates $\mu$. It
-keeps the loadings' sign. The reflection is valid
+theory is stated in the natural \emph{max-wins} coordinates $\mu$; the reflection
+keeps the loadings' sign. It is valid
 because the Gaussian law is unchanged under $(f, \varepsilon) \mapsto
 (-f, -\varepsilon)$.
 
@@ -306,7 +305,7 @@ field also yields the full single-removal ensemble $\{P(j \text{ chosen}
 inverse transform finds mean-zero $\mu$ with $p(\mu) = \hat p$.
 
 Warm-start from a high-accuracy inversion of
-the matched \emph{independent} race with matched total variances, which this
+the \emph{independent} race with matched total variances, which this
 same machinery provides using a single zero factor node. Then repeat the following. Run
 the forward pass at the current utilities. Read off each runner's
 own-slope $\partial \tilde p_i / \partial a_i$ from the same pass. Take a coordinatewise Newton step on log
@@ -357,7 +356,7 @@ loadings.
 
 Just as a horse at infinite odds sits outside the race, zero shares lie outside the proposition. The boundary targets
 correspond to utilities diverging to $-\infty$, so real assortment data
-requires pseudocounts or regularization, not merely the implementation
+require pseudocounts or regularization, not merely the implementation
 floor. This adjustment must be left to the designer of the application. For example, depending
 on the data at hand, extrapolation to approximate shares could utilize near-misses. Alternatively, the user can
 simply not lean on those inferred probabilities that are very small. 
@@ -409,7 +408,7 @@ machinery.
 
 The algorithm computes a particular map from utilities to shares. This
 section records what that map is like: its identification and
-identification, the well-posedness of its inverse, the graph that
+differentiability, the well-posedness of its inverse, the graph that
 organizes both, its derivative structure, and the convergence of the
 calibration loop. Interpretations connecting the map to older
 mathematics are collected in Section~\ref{sec:structure}.
@@ -572,7 +571,7 @@ Because the algorithms presented here use lattice computation, we will be clear 
 the distinction between the approximation and the continuous idealization (just as in \citet{cotton2021}
 we delineated the discrete horse race from the continuous). 
 
-Due to conventions three maps must be
+Owing to differing conventions, three maps must be
 distinguished: the exact max-wins map $p^{\max}(\mu)$; the reflected
 min-wins map $p^{\min}(a)$ used by the implementation, related by $a = -\mu$
 so that $D_\mu p^{\max}[h] = D_a p^{\min}[-h]$; and the implemented
@@ -701,7 +700,7 @@ Gauss--Hermite of order 15/11/9 for $k = 2/3/4$. The boundary experiment
 pruning weights below $10^{-7}$ of the maximum leaves $Q = 145$, $1317$, and
 $10929$ nodes for $k = 2, 3, 4$, making the exponential growth of $Q$
 with rank explicit. Scrambled-Sobol nodes ($2^{13}$ points, fixed seed)
-are used only for $k > 4$. They are reproducible by construction with a fixed seed, though
+are used only for $k > 4$. They are reproducible by construction, though
 unlike Gauss--Hermite the node set is not canonical. A different seed
 gives a different, equally valid rule. Survival floors sit at
 $10^{-300}$ and the quadrature output is normalized by its sum. The
@@ -731,7 +730,7 @@ U(0.5, 1.5)$, with seeds fixed in each script.
 \toprule
 exp. & $N$ & $k$; $s$ & departures from the generator & targets / reference \\
 \midrule
-16 & 20--1000 & 2; 1.0/1.5 & $s = 1.0$ at $N \le 200$, else $1.5$ & twin $2{\times}10^6$-draw MC; $5{\times}10^6$ for inversion \\
+16 & 20--1000 & 2; 1.0/1.5 & $s = 1.0$ at $N \le 200$, else $1.5$ & twin $2{\times}10^6$-draw Monte Carlo (MC); $5{\times}10^6$ for inversion \\
 17 & 200 & 2; 1.0 & --- & higher-resolution internal \\
 19 & 1000--10000 & 2; 1.5 & --- & $5{\times}10^6$-draw MC \\
 21 & 200, 1000 & 2; 1.5 & robustness suite varies $s \in \{1, 1.5, 2\}$, loading scale $\{0.3, 0.7\}/\sqrt{k}$, $D \sim U(0.5,1.5)$ or $U(0.1,1.0)$, $k \in \{1,2,3\}$ & lattice-generated and $5{\times}10^6$-draw MC \\
@@ -786,7 +785,7 @@ assessment below).
 \paragraph{Log-share assessment.} Against higher-resolution internal references
 (Gauss--Hermite $60^2$ with $L=5001$ through $N=100$; $40^2$ with
 $L=3001$ at $N=1000$, three problems; experiment 25) the production
-settings' log-share error is at most $5\times10^{-5}$ on every share from
+settings' log-share error is at most $8\times10^{-5}$ on every share from
 $10^{-9}$ to one at $N \le 100$. At $N=1000$ it is at most
 $2\times10^{-6}$ on shares above one percent, $9\times10^{-5}$ down to
 $10^{-4}$, and $2.3\times10^{-4}$ on the deepest tails (shares to
@@ -832,7 +831,7 @@ error source & status \\
 \midrule
 factor-node pruning & rigorous bound ($\delta$ sup-norm) \\
 finite envelope & rigorous bound ($N\Phi(-8)$) \\
-covariance approximation & rigorous KL/Pinsker bound (Section~\ref{sec:boundary}) \\
+covariance approximation & rigorous Kullback--Leibler (KL)/Pinsker bound (Section~\ref{sec:boundary}) \\
 $x$-grid discretization & empirical convergence assessment \\
 factor quadrature & empirical higher-order comparison \\
 calibration residual & directly measured solver consistency \\
@@ -932,7 +931,7 @@ $N=10000$ in 38 seconds (10, 11, and 13 iterations; independent
 $5\times10^6$-draw targets, experiment 19).
 
 \paragraph{Scaling.} Calibration is approximately linear in $N$ over
-the tested range (experiment 19), a flat 11--15
+the tested range (experiment 19), flat at 11--15
 forward-pass equivalents of total wall time throughout (the excess over
 the iteration count is the warm start), with recovery quality unchanged
 (median error near $0.003$, 96--99\% of share mass identified). At fixed
@@ -983,7 +982,7 @@ $N = 50$. The matrix-free route through Proposition~\ref{prop:jvp} is
 the large-$N$ substitute. The implicit gradient matches central finite
 differences of the objective to $1.2\times10^{-7}$, and a damped Newton
 outer loop converges in three iterations to the truth up to the probit
-scale gauge (recovered $\theta_1^2 e^{-\theta_2} = 1.000002$ against
+scale gauge (recovered $\theta_1^2 e^{-\theta_2} = 1.0000000$ against
 $1$), which shares cannot identify. The scale ambiguity emerges from
 the experiment rather than being imposed.
 
@@ -1037,6 +1036,10 @@ the simplex and $p(\mu) = \arg\max_{q \in \Delta}\{\mu^\top q -
 the maximizer is softmax. In general it is the generalized entropy of
 \citet{fosgerau2020}, with the perturbation--regularization duality
 developed for machine learning by \citet{berthet2020}.
+\citet{lin2026} estimate perturbed utility models by minimizing the
+associated Fenchel--Young loss, whose gradient in the utilities is
+exactly $p(\mu) - \hat p$; the forward pass here supplies that
+gradient for the factor probit case.
 \citet{melo2025} gives the online-learning reading of the same
 duality. Factor probit
 carries a covariance-dependent, non-separable entropy that couples
@@ -1143,8 +1146,7 @@ Section~\ref{sec:comparisons} develops for covariance fitting.
 We checked this in the code (see experiment 27 in particular). The
 binary closed form $\Omega = -s\,\phi(\Phi^{-1}(q))$, with $s^2$ the
 difference variance and $q$ the first share, is verified to
-$3\times10^{-13}$. The full identity is verified to $3\times10^{-9}$. That $G^*$ is an assignment problem is previously known per
-\citet{chiong2016} but new here is the simplex form and also the
+$3\times10^{-13}$. The full identity is verified to $3\times10^{-9}$. That $G^*$ is an assignment problem was already known \citep{chiong2016}; new here is the simplex form and also the
 evaluation of the conjugate value
 at calibrated utilities from $k$ Jacobian--vector products and the
 diagonal slopes. The gradient $\nabla\Omega(p) = \mu$ is dearer. It
@@ -1179,7 +1181,7 @@ neural amortization \citep{huch2026} & learned approximation, accuracy not resol
 \hline
 BLP-side inversion \citep{berry1995,conlon2020} & --- & logit family only \\
 \hline
-\textbf{this paper} & one $O(QNL)$ pass & Prop.~\ref{thm:inv}; 3\,s at $N{=}1000$ \\
+\textbf{this paper} & one $O(QNL)$ pass & Prop.~\ref{thm:inv}; 3\,s at $N{=}1000$ (compiled) \\
 \hline
 \end{tabular}
 \end{center}
@@ -1304,7 +1306,7 @@ generalized-entropy duality, without an algorithm.
  \citet{berry1995} built demand
 estimation on the logit-side inversion, and \citet{conlon2020}
 maintain its modern practice. \citet{chia2021}
-differentiates logit BLP automatically. On the GEV side, closed-form
+differentiates logit BLP automatically. On the generalized extreme value (GEV) side, closed-form
 flexible-correlation kernels pursue rich substitution without
 high-dimensional integration \citep{tinessa2020,tinessa2021}.
 Meanwhile \citet{huch2026}
@@ -1383,9 +1385,8 @@ throughputs we measured is weeks of computation. A calibration could
 take months to a year. 
 
 If calibration time at a fixed accuracy can be reduced from months to
-a few seconds, that is a qualitative step which may materially impact
-the use of probit models versus their analytically simpler logit
-cousin. This particular example is roughly a six-order-of-magnitude speedup. 
+a few seconds, the tradeoff between probit and its analytically simpler logit
+cousin changes. This particular example is roughly a six-order-of-magnitude speedup. 
 
 Common random numbers do not change the plain-MC rate. Randomized QMC and
 specialized Gaussian integration can improve rates as well as
@@ -1403,8 +1404,7 @@ In contrast the quadrature route's accuracy against the exact map is set by
 resolution, not draws, at cost independent of $\tau$ until resolution
 binds. We are unaware of a reported
 probit share inversion at this scale in simulation-based practice, and this
-scaling is presumably why. We hope this work opens new territory,
-subject to our fixed low-factor limitation. 
+scaling is presumably why. Within the fixed low-factor regime, that constraint is now gone. 
 
 
 
@@ -1466,12 +1466,12 @@ and is choice-relevant, so $D$ must come from the quotient fit.
 The suggested fit is an iterative principal-factor heuristic applied to $P\Sigma P$ (eigendecompose
 $P\Sigma P - \mathrm{diag}(D)$, take the top $k$ directions, refit $D$ from
 the diagonal with a $10^{-3}$ floor, iterate to $10^{-10}$), followed by
-centering and SVD canonicalization of the loadings (ordered columns, fixed
+centering and singular value decomposition (SVD) canonicalization of the loadings (ordered columns, fixed
 signs).
 
-This procedure will not minimize a projected norm ($P\,\mathrm{diag}(D)\,P$
-is not diagonal) however. Therefore the repository also implements an alternating least-squares fit with
-exact block updates on the reduced quotient (precisely, a top-$k$ PSD step for the
+This procedure will not, however, minimize a projected norm
+($P\,\mathrm{diag}(D)\,P$ is not diagonal). Therefore the repository also implements an alternating least-squares fit with
+exact block updates on the reduced quotient (precisely, a top-$k$ positive semidefinite (PSD) step for the
 loadings and a nonnegative least squares for $D$ that is exact block
 minimization but should not be interpreted as global optimality). On
 the boundary matrices it changes the quotient residual by under 1\%.
@@ -1511,14 +1511,14 @@ but \emph{loses at intermediate decay} $\gamma = 1.5$
 ($3.7\times10^{-3}$ versus $2.3\times10^{-3}$). This is the hardest example. 
 Our interpretation is that the diagonal standardization 
 perturbs the nominal power law. The leading eigenvalue varies from 3.7 to 34.2
-across the three cases---quite different cases. 
+across the three cases. 
 
 We also tried replication over three independent eigenbases. Rank-8 beats GHK at $R=10^4$
 in 8 of 9 basis--decay cases, with the single loss at intermediate decay.
 The intermediate construction seems to be getting close to the boundary where  GHK should be preferred, but 
 it is not clear cut. The wall time is not matched. Our Sobol-node
 rank-8 pass takes about 20 seconds versus
-about one second for GHK, so the latter seems to be the cheaper route to middling accuracy (the lattice's advantage remains large $N$ at small
+about one second for GHK, so the latter seems to be the cheaper route to middling accuracy (the lattice's advantage remains at large $N$ and small
 $k$). So where accuracy demands exceed the achievable rank-$k$
 error, GHK's arbitrary-$\Sigma$ generality means that (forgive the pun) it should still be the tool of choice.  
 
@@ -1568,14 +1568,15 @@ experiment in loading estimation or in robustness to misspecification.
 The factorial below covers misspecification. Targets are independent
 $5\times10^6$-draw simulations, so there is no inverse crime. Median misallocation of
 released demand (logit against factor probit) is $0.245$ against
-$0.009$ for deleted shares above ten percent, $0.275$ against $0.031$
+$0.009$ for deleted shares above 10\%, $0.275$ against $0.031$
 at 2--10\%, and $0.325$ against $0.113$ at 0.5--2\%, with factor
-probit winning all twenty paired seeds in each of those strata. Below
+probit winning every paired seed in each of those strata (nineteen
+seeds produce a deletion above 10\%; twenty elsewhere). Below
 $0.5\%$ both degrade ($0.78$ against $0.68$, 17 of 20) as the targets'
 resolution binds. These are the numbers quoted in the introduction.
 
 A richer factorial design varies the noise family as well, at the cost
-of unequal marginal variances. We vary two things one at a time in a
+of unequal marginal variances. We vary two axes in a
 $2\times2$ design, the factor structure and the idiosyncratic noise
 family, holding the idiosyncratic scale common so the two axes stay
 clean (coupling either with alternative-specific scales would confound
@@ -1617,11 +1618,11 @@ blocks, 83 fall in the three best-resolved strata (26/29/28 at $>$10\% /
 the common-draw resolution floor, so that column carries the widest error
 bars).
 
-The score per deletion block $B$ is the
+The score per deletion block $\mathcal{R}$ is the
 misallocated fraction of the redistributed mass,
 \[
-\mathrm{TV}\!\left(q^{(-B)}_{\mathrm{model}},\,
-q^{(-B)}_{\mathrm{truth}}\right) \Big/ \textstyle\sum_{i \in B} p_i ,
+\mathrm{TV}\!\left(q^{(-\mathcal{R})}_{\mathrm{model}},\,
+q^{(-\mathcal{R})}_{\mathrm{truth}}\right) \Big/ \textstyle\sum_{i \in \mathcal{R}} p_i ,
 \]
 averaged within strata:
 
@@ -1722,12 +1723,10 @@ companion work \citep{cottonsurvey}.
 
 \section{Potential applications}\label{sec:applications}
 
-The territory is larger than econometrics. That's because a probit model is literally a race where performances
+The territory is larger than econometrics. That is because a probit model is a race in which performances
 are Gaussian, sometimes correlated. Races take many forms at all levels of spatial and temporal resolution. Predicting item selection and user clicks drives digital commerce, just as 
-predicting market share is fundamental to company analysis many levels
-higher. Countless choices are made by man, nature, and machine. Across all the world's applications
-of large language models, perhaps a billion next-token choices are made a second. Those microscopic battles
-determine the grand race for AI model supremacy.
+predicting market share is fundamental to company analysis. Countless choices are made by man, nature, and machine. Across all the world's applications
+of large language models, perhaps a billion next-token choices are made a second.
 
 Nature repeatedly poses the same computational problem: out of thousands, millions, or vastly more correlated alternatives---candidate crystal-growth directions, microscopic slip systems, adsorption geometries, pore-scale flow routes, turbulent modes, lightning leaders, fault asperities, or phase-transition seeds---which one wins first?
 
@@ -1748,7 +1747,7 @@ alternatives whose scores share a few instrument and observing-condition
 factors, and observing a candidate then re-ranking the rest is
 precisely the removal counterfactual computed here.
 
-Thus it is not only horses that race! However, horse races are worthy of mention, and not only as regards attribution of a core trick used herein. For at least half a century those betting on them have been confronted by the nuances of choice and permutation probabilities in exacta, quinella, trifecta, and place betting. In that setting there has been a strong Darwinian selection that weeds out those anchoring to a simple renormalization of probability---this does not model second-place probabilities well at all if the favorite does not win \citep{henery1981,lo1994}.\footnote{The
+It is not only horses that race. However, horse races are worthy of mention, and not only as regards attribution of a core trick used herein. For at least half a century those betting on them have been confronted by the nuances of choice and permutation probabilities in exacta, quinella, trifecta, and place betting. In that setting there has been a strong Darwinian selection that weeds out those anchoring to a simple renormalization of probability---this does not model second-place probabilities well at all if the favorite does not win \citep{henery1981,lo1994}.\footnote{The
 Darwinian winner is instructive. \citet{benter1994}, whose Hong Kong
 betting operations by his own concession made close to a billion
 dollars overall \citep{chellel2018}, wrote of the simple
@@ -1977,9 +1976,9 @@ experiments 13--27, 29--31, and 33--38, under
 companion paper, and exploratory experiment 32 remain in the
 \texttt{kinetics} research repository). A single manifest,
 \texttt{research/experiments/run\_all\_paper.py}, regenerates every
-table and figure; this submission is built from the tag
-\texttt{jcgs-v2}. (Archive supplied as a zip with the submission;
-repository at \url{https://github.com/microprediction/winning}.)
+table and figure; this paper is built from release \texttt{v1.1.0}
+of the repository at \url{https://github.com/microprediction/winning},
+whose package is on PyPI (\texttt{pip install winning}).
 \item[Software:] the algorithm ships in the open-source
 \texttt{winning} package \citep{winningpkg}, module
 \texttt{winning.factor}, with an optional compiled Rust kernel
@@ -2043,7 +2042,7 @@ market equilibrium. \emph{Econometrica} 63 (1995) 841--890.
 
 \bibitem[Berthet et~al.(2020)Berthet, Blondel, Teboul, Cuturi, Vert, and
 Bach]{berthet2020} Q.~Berthet, M.~Blondel, O.~Teboul, M.~Cuturi,
-J.-P.~Vert, F.~Bach. Learning with differentiable perturbed optimizers.
+J.-P.~Vert, F.~Bach. Learning with differentiable perturbed optimizers. In
 \emph{Advances in Neural Information Processing Systems} 33 (2020)
 9508--9519.
 
@@ -2104,7 +2103,8 @@ University of Connecticut, 2010.
 \bibitem[Collier et~al.(2021)Collier, Mustafa, Kokiopoulou, Jenatton,
 and Berent]{collier2021} M.~Collier, B.~Mustafa, E.~Kokiopoulou,
 R.~Jenatton, J.~Berent. Correlated input-dependent label noise in
-large-scale image classification. \emph{Proceedings of CVPR} (2021)
+large-scale image classification. \emph{Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR)} (2021)
 1551--1560.
 
 \bibitem[Conlon and Gortmaker(2020)]{conlon2020} C.~Conlon, J.~Gortmaker. Best practices for
@@ -2123,7 +2123,7 @@ probability in multientrant contests. \emph{SIAM Journal on Financial Mathematic
 2021. \url{https://github.com/microprediction/winning}.
 
 \bibitem[Cotton(2026)]{cottonsurvey} P.~Cotton. Probit versus logit:
-a survey of empirical accuracy. In preparation, 2026.
+a survey of empirical accuracy. SSRN working paper, 2026.
 
 \bibitem[Craig(2008)]{craig2008} P.~Craig. A new reconstruction of
 multivariate normal orthant probabilities. \emph{Journal of the Royal
@@ -2183,7 +2183,7 @@ choice and rational inattention: a general equivalence result.
 \emph{International Economic Review} 61 (2020) 1569--1589.
 
 \bibitem[Genton et~al.(2018)Genton, Keyes, and Turkiyyah]{genton2018}
-M.~G. Genton, D.~E. Keyes, G.~Turkiyyah. Hierarchical decompositions for
+M.~G. Genton, D.~E. Keyes, G.~M. Turkiyyah. Hierarchical decompositions for
 the computation of high-dimensional multivariate normal probabilities.
 \emph{Journal of Computational and Graphical Statistics} 27 (2018)
 268--277.
@@ -2271,10 +2271,6 @@ Thibert]{kmt2019} J.~Kitagawa, Q.~M\'erigot, B.~Thibert. Convergence of
 a Newton algorithm for semi-discrete optimal transport. \emph{Journal
 of the European Mathematical Society} 21 (2019) 2603--2651.
 
-\bibitem[L\'evy(2015)]{levy2015} B.~L\'evy. A numerical algorithm for
-$L_2$ semi-discrete optimal transport in 3D. \emph{ESAIM: Mathematical
-Modelling and Numerical Analysis} 49 (2015) 1693--1715.
-
 \bibitem[Lazear and Rosen(1981)]{lazear1981} E.~P. Lazear, S.~Rosen.
 Rank-order tournaments as optimum labor contracts. \emph{Journal of
 Political Economy} 89 (1981) 841--864.
@@ -2282,6 +2278,14 @@ Political Economy} 89 (1981) 841--864.
 \bibitem[Lee(2000)]{lee2000} L.-F. Lee. A numerically stable quadrature
 procedure for the one-factor random-component discrete choice model.
 \emph{Journal of Econometrics} 95 (2000) 117--129.
+
+\bibitem[L\'evy(2015)]{levy2015} B.~L\'evy. A numerical algorithm for
+$L_2$ semi-discrete optimal transport in 3D. \emph{ESAIM: Mathematical
+Modelling and Numerical Analysis} 49 (2015) 1693--1715.
+
+\bibitem[Lin et~al.(2026)Lin, Yin, and Liu]{lin2026} X.~Lin,
+Y.~Yin, T.~Liu. Fenchel--Young estimators of perturbed utility
+models. arXiv:2602.21376 (2026).
 
 \bibitem[Lo and Bacon-Shone(1994)]{lo1994} V.~S.~Y. Lo, J.~Bacon-Shone.
 A comparison between two models for predicting ordering probabilities in

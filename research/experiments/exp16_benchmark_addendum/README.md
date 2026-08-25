@@ -12,7 +12,7 @@ problem sequence, fresh 2e6-draw truths):
 | 20 | 7.6e-4 | 1.2e-4 | 1.2e-3 | 0.09 | 1.2e-3 (0.6M) |
 | 50 | 4.1e-4 | 5.6e-5 | 1.4e-3 | 0.23 | 5.5e-4 (0.6M) |
 | 200 | 3.7e-4 | 2.7e-5 | 2.7e-3 | 0.86 | 7.0e-4 (0.6M) |
-| 1000 | 4.9e-4 | 6.3e-6 | 3.1e-3 | 4.40 | 7.2e-4 (0.6M) |
+| 1000 | 4.9e-4 | 5.6e-6 | 2.8e-3 | 4.40 | 7.2e-4 (0.6M) |
 
 **The honest headline**: direct utility simulation (argmax over draws — whole
 share vector per draw, no per-alternative cost) at wall time matched to the
@@ -23,8 +23,8 @@ reproducibility, resampling-free derivatives, and inversion do. This is in
 the paper's abstract, as the referee required.
 
 **Part C — inversion replication** (N=1000, k=2, three independent 5e6-draw
-targets): 58–61 s each, the same 162 alternatives identified each time (98.1%
-of share mass), recovery max 0.018/0.025/0.018, median ≈0.0026. Figure:
+targets): 58–61 s each, 161–162 alternatives identified (98.1%
+of share mass), recovery max 0.018/0.015/0.023, median ≈0.0027. Figure:
 `figures/recovery_vs_share.png`.
 
 **Part D — replication over problems** (`run_replication.py`, common spread
