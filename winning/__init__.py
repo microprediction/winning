@@ -22,4 +22,4 @@ from .factor import (  # noqa: F401
 )
 from . import probit  # noqa: F401
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
