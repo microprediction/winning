@@ -56,120 +56,149 @@ model
 
 \section{Introduction}
 
-Probit models find their most traditional application in microeconomics, choice, and contest theory. 
-Thurstone's comparative judgment, the ordered and binary probits of applied
-microeconometrics, and the Lazear--Rosen tournament
-\citep{lazear1981} are all the same
-Gaussian latent-performance model. Machine learning runs on the same
-family: a softmax output layer is its Luce--Gumbel member
-\citep{luce1959,yellott1977}, and
-Thurstone--Mosteller pairwise comparison \citep{mosteller1951}, the
-probit member, underlies
-rating systems and preference learning.
+This paper solves a calibration problem. The data are $N$ shares
+(choice frequencies, market shares, win probabilities), one per
+alternative.\footnote{We call the choice probabilities $p_i$
+\emph{shares} throughout. The racing origin \citep{cotton2021} called
+them \emph{state prices}, borrowing prediction-market and finance
+usage. In the probit choice setting \emph{shares}, as in market shares,
+is the more natural term. \emph{Probability} would also be imprecise on
+the discrete lattice used later, where ties have positive probability
+and a dead heat splits the payout. The lattice objects really are state
+prices.} The model is multinomial probit: jointly Gaussian utilities
+whose covariance is low-rank-plus-diagonal,
+\[
+\Sigma = VV^\top + \mathrm{diag}(D),
+\]
+a race in which each performance is idiosyncratic but also influenced
+by a small number of factors common to all runners. The factor
+structure $(V, D)$ is fixed and supplied. The problem is to recover the
+utilities at which the model reproduces the shares, together with the
+derivatives and removal counterfactuals that make the calibrated model
+usable, at $N$ in the thousands.\footnote{In racing parlance, we are
+recovering the relative ability of horses from the bookmaker odds, even
+when some horses are known to be correlated with others. The original
+transform \citep{cotton2021} assumed independent performances.}
 
-The same engine was canonized independently, under different names,
-across the quantitative sciences. Bioassay named the probit and made
-Gaussian tolerances the dose--response standard
-\citep{bliss1934,finney1947}. Quantitative genetics reports the
-heritability of binary traits on the liability scale, a thresholded
-latent Gaussian \citep{dempster1950,falconer1965}. Item response theory
-began with the normal-ogive curve and adopted the logistic only as a
-computational stand-in \citep{lord1952}.
+The logit version of this inversion is daily routine: demand estimation
+in the Berry--Levinsohn--Pakes (BLP) tradition begins by inverting
+observed market shares to mean utilities, and runs on the closed forms
+and contraction mapping that the Gumbel distribution supplies
+\citep{berry1994,berry1995,conlon2020}. The probit version is treated
+as out of reach. The record is explicit, and we quote it before
+removing the barrier for the covariance class above.
 
-Signal detection's $d'$ is a
-double probit \citep{green1966}. The Basel capital formula that
-regulates the world's banks is a conditional probit with one common
-factor \citep{vasicek2002,gordy2003}, which is to say a rank-one factor
-model of exactly the form used here. Machine learning made probit its
-tractable Bayesian classifier \citep{albertchib1993} and ships a
-Thurstonian race as its skill-rating engine \citep{herbrich2006}.
-Wherever performance is latent and Gaussian, the same object appears.
+The model itself is the oldest in choice theory. Thurstone's 1927 law
+of comparative judgment posited jointly Gaussian utilities with
+unrestricted correlation \citep{thurstone1927}; econometrics
+reintroduced the same object as the conditional, or multinomial, probit
+model (MNP) \citep{hausman1978}; and it re-emerges wherever latent
+performance is Gaussian, from bioassay and quantitative genetics to
+item response theory, signal detection, credit risk, skill rating, and
+the final layer of heteroskedastic image classifiers
+\citep{collier2021}. Section~\ref{sec:applications} collects these
+fields; the computation below applies to all of them. Any empirical
+argument for one race over another on real data is deferred to a
+companion survey \citep{cottonsurvey}. Here the focus is the
+computation, and the record of its difficulty, which is clearest in
+psychometrics and econometrics.
 
-With unrestricted alternative intercepts, a single interior share
-vector\footnote{We call the choice probabilities $p_i$ \emph{shares} throughout. The racing origin \citep{cotton2021} called them \emph{state prices}, borrowing prediction-market and finance usage. In the probit choice setting \emph{shares}, as in market shares, is the more natural term. \emph{Probability} would also be imprecise on the discrete lattice used later, where ties have positive probability and a dead heat splits the payout. The lattice objects really are state prices.} cannot distinguish full-support random-utility models, because
-each can be inverted to match it. However, when logit, probit, or other models are calibrated to observed shares, the recovered utilities can serve as inputs to questions the data do not answer
-directly: elasticities, welfare, pricing, the effect of adding or
-removing an alternative, and combinatorial probabilities. It is at this point that they make different, falsifiable predictions. 
+Psychometrics stated the backward problem and abandoned it. Torgerson's
+text records the degrees-of-freedom count, $n$ observed frequencies
+against $n$ scale values, so ``we ought, therefore, to be able to fit
+perfectly''; it also records the retreat that followed. Every working
+method from Thurstone forward, down to modern Thurstonian rating
+engines such as TrueSkill, reduces the $N$-way contest to pairwise
+events \citep{torgerson1958,herbrich2006}.
+% VERIFY: Torgerson quote (1958, pp.193-194) is agent-extracted; re-check against the book before submission.
 
-Judged by popularity, the workhorse of econometrics
-remains the logit family: multinomial logit,
-nested logit, and above all random-coefficients logit in the Berry--Levinsohn--Pakes (BLP) tradition
-\citep{berry1995,train2009,conlon2020}. A major reason for logit's dominance is brutally practical. Logit
-models can be computed.
-
-Choice modeling did not start there. It started with Thurstone's 1927 model
-\citep{thurstone1927} of jointly Gaussian utilities with unrestricted
-correlation, brought into econometrics as the conditional (multinomial)
-probit model by \citet{hausman1978} and known since as MNP. The same
-object has re-emerged in machine learning: conditional on an input,
-heteroskedastic image classifiers place exactly this
-low-rank-plus-diagonal Gaussian race on their final layer and take the
-argmax, approximating the winner probabilities by Monte Carlo over a
-softmax relaxation \citep{collier2021}.
-
-Probit probabilities are $(N-1)$-dimensional Gaussian integrals with,
-generically, no closed form. A well-cited approach is the Geweke--Hajivassiliou--Keane
-(GHK) simulator \citep{geweke1994,hajivassiliou1998,train2009}, the
-econometric branch of the Genz separation-of-variables family
-\citep{genz1992} whose randomized quasi-Monte Carlo (RQMC) form
-(Genz--Bretz) is the default in
-computational statistics.  This method treats
+Econometrics kept the $N$-way event and changed the distribution. A
+major reason for logit's dominance is brutally practical: logit models
+can be computed. Probit probabilities are $(N-1)$-dimensional Gaussian
+integrals with, generically, no closed form. The standard evaluator is
+the Geweke--Hajivassiliou--Keane (GHK) simulator
+\citep{geweke1994,hajivassiliou1998,train2009}, the econometric branch
+of the Genz separation-of-variables family \citep{genz1992}. It treats
 the probability that alternative $i$ beats the rest as an orthant
-probability of the difference utilities, and estimates it by sampling
-truncated normals sequentially along a Cholesky factor.
+probability of the difference utilities, estimated by sampling
+truncated normals along a Cholesky factor. It is elegant, stochastic,
+and resolved by draw count, and it prices one orthant per alternative,
+exploiting nothing of the product shared across the $N$ winner events.
+Graduate students are warned off accordingly. Conlon's industrial
+organization lecture notes put unrestricted MNP at ``potentially $J^2$
+parameters (that is a lot)!'' and one simulated integral of dimension
+$J$ per share evaluation: ``I wouldn't do this for $J \geq
+5$.''\footnote{C.~Conlon, graduate industrial organization lecture
+notes (multinomial choice), New York University,
+\texttt{github.com/chrisconlon/Grad-IO}.}
+% VERIFY: slide quotes are agent-extracted; re-check before submission.
+The reference implementation of the logit tradition says the same by
+omission. The word \emph{probit} does not occur in the source tree of
+PyBLP \citep{conlon2020}, whose consumer heterogeneity is a rank-$K_2$
+factor loading on observed characteristics, priced by its own
+documentation at $4^{K_2}$ product-rule quadrature nodes, which is
+65{,}536 nodes at $K_2 = 8$.
 
-GHK is elegant, but it evaluates each winner event as a separate
-orthant probability. With ordinary Monte Carlo its stochastic error is
-$O(R^{-1/2})$ in the number of draws. RQMC often improves the empirical
-rate, but the method remains stochastic, resolved by draw count, and it
-still prices one orthant per alternative. The structural issue is that
-none of these formulations exploit the product shared across the $N$
-winner events.
+The inversion is harder still, and the literature is quantitative about
+why. Berry, Linton and Pakes show that estimation through inverted
+shares requires simulation draws growing as the square of the number of
+products, because the inverse share map amplifies simulation and
+sampling error \citep{berry2004}. Freyberger shows the surviving
+simulation error enters the estimator as a first-order bias
+\citep{freyberger2015}. The standard escape at large $N$, estimation on
+a sampled subset of alternatives, rests on a logit cancellation, an
+explicit use of independence from irrelevant alternatives (IIA), and
+has no probit counterpart \citep{train2009}. The dominant commercial
+conjoint platform, meanwhile, has shipped exactly this
+low-rank-plus-diagonal Gaussian race since 1999 \citep{huber1999},
+evaluating it by brute-force simulation with hand-tuned variance
+scalars, and matching target shares with an ad hoc fixed point its own
+authors call ``fudge factors'' and decline to encourage
+\citep{orme2006}.
+% VERIFY: Sawtooth quotes are agent-extracted from the primary PDFs; re-check before submission.
 
-The field kept the
-computable models and gave up the model it started from. The concession
-is not free. Logit-family substitution is structurally
-restricted. One measure of the cost comes from an oracle factor-probit
-benchmark with every marginal variance held at one
+The standard reason for needing none of this is the McFadden--Train
+theorem: mixed logit approximates any random-utility model arbitrarily
+closely \citep{mcfaddentrain2000}. The construction is priced in its
+own paper. It sends the extreme-value scale to zero while the mixing
+distribution grows without bound, and the authors report ``no practical
+indication of how to choose parsimonious mixing families, or how many
+terms are needed.'' The Gaussian kernel they considered was set aside
+on computational grounds, not fidelity. The limit is real. The question
+is whether the required rank is affordable, and that is a computational
+question, not a theoretical one.
+
+The field kept the computable models and gave up the model it started
+from. The concession is not free. One measure of the cost comes from an
+oracle factor-probit benchmark with every marginal variance held at one
 (Section~\ref{sec:boundary}). We generate a Gaussian factor race,
 calibrate both models to identical menu shares, delete an alternative,
 and ask where its demand goes. Among deletions of the largest
 alternatives, plain logit misallocates a median 25\% of the released
 demand, against 1\% for the correctly specified factor model
 (experiment 29).\footnote{Experiment numbers index committed, seeded
-scripts in the repository; see the Reproducibility section.} A companion factorial with a deliberately misspecified
-truth tells a similar story.
+scripts in the repository; see the Reproducibility section.} A
+companion factorial with a deliberately misspecified truth tells a
+similar story.
 
-We take the Gaussian race as the natural starting point, an argument
-developed in Section~\ref{sec:applications}, and the deletion experiments below measure
-its consequences under known synthetic truths. Any empirical argument for one race over the other on
-real data is deferred to a companion survey \citep{cottonsurvey}. The
-sustained literature on probit computation is evidence in itself that
-the model is worth computing.
+With unrestricted alternative intercepts, a single interior share
+vector cannot distinguish full-support random-utility models, because
+each can be inverted to match it. However, when logit, probit, or other
+models are calibrated to observed shares, the recovered utilities can
+serve as inputs to questions the data do not answer directly:
+elasticities, welfare, pricing, the effect of adding or removing an
+alternative, and combinatorial probabilities. It is at this point that
+they make different, falsifiable predictions.
 
-This paper's sole point is that probit's computational barrier is not real for an important
-class of covariance structures, the low-rank-plus-diagonal factor model
-\[
-\Sigma = VV^\top + \mathrm{diag}(D).
-\]
-These are races where each
-performance is idiosyncratic but also influenced by a small number of
-factors common to all runners. The goal is \emph{calibration}: given
-observed shares and a fixed, known factor structure $(V, D)$, recover the
-utilities at which the probit model reproduces them.\footnote{In racing
-parlance, we are recovering the relative ability of horses from the
-bookmaker odds, even when some horses are known to be correlated with
-others. The original transform \citep{cotton2021} assumed independent
-performances.} 
-
-We solve this fixed factor-probit share calibration problem at $N = 1000$ alternatives
-in three seconds at rank two with the compiled implementation. The computation is the probit analogue of a far more popular logit inversion. For example, 
-demand estimation runs on the logit side every day \citep{berry1995,conlon2020}.\footnote{Estimating $(V, D)$ is the outer problem. It is discussed in
-Section~\ref{sec:discussion} but not claimed here.} 
-
+This paper's sole point is that probit's computational barrier is not
+real for this covariance class. We solve the fixed factor-probit share
+calibration problem at $N = 1000$ alternatives in three seconds at rank
+two with the compiled implementation, and ten thousand alternatives
+stay under a minute.\footnote{Estimating $(V, D)$ is the outer problem.
+It is discussed in Section~\ref{sec:discussion} but not claimed here.}
 The share map is also globally identified and onto the simplex interior
 (Proposition~\ref{thm:inv}: shares determine utilities uniquely up to
-location). 
+location).
 
 Three ingredients make this possible: 
 
@@ -1728,6 +1757,29 @@ are Gaussian, sometimes correlated. Races take many forms at all levels of spati
 predicting market share is fundamental to company analysis. Countless choices are made by man, nature, and machine. Across all the world's applications
 of large language models, perhaps a billion next-token choices are made a second.
 
+The engine was canonized independently, under different names, across
+the quantitative sciences. Thurstone's comparative judgment, the
+ordered and binary probits of applied microeconometrics, and the
+Lazear--Rosen tournament \citep{lazear1981} are the same Gaussian
+latent-performance model, and machine learning runs on the same family:
+a softmax output layer is its Luce--Gumbel member
+\citep{luce1959,yellott1977}, while Thurstone--Mosteller pairwise
+comparison \citep{mosteller1951}, the probit member, underlies rating
+systems and preference learning. Bioassay named the probit and made
+Gaussian tolerances the dose--response standard
+\citep{bliss1934,finney1947}. Quantitative genetics reports the
+heritability of binary traits on the liability scale, a thresholded
+latent Gaussian \citep{dempster1950,falconer1965}. Item response theory
+began with the normal-ogive curve and adopted the logistic only as a
+computational stand-in \citep{lord1952}. Signal detection's $d'$ is a
+double probit \citep{green1966}. The Basel capital formula that
+regulates the world's banks is a conditional probit with one common
+factor \citep{vasicek2002,gordy2003}, a rank-one factor model of
+exactly the form used here. Machine learning made probit its tractable
+Bayesian classifier \citep{albertchib1993} and ships a Thurstonian race
+as its skill-rating engine \citep{herbrich2006}. Wherever performance
+is latent and Gaussian, the same object appears.
+
 Nature repeatedly poses the same computational problem: out of thousands, millions, or vastly more correlated alternatives---candidate crystal-growth directions, microscopic slip systems, adsorption geometries, pore-scale flow routes, turbulent modes, lightning leaders, fault asperities, or phase-transition seeds---which one wins first?
 
 Materials science is especially rich in such races. Any one of a
@@ -2040,6 +2092,11 @@ and invertibility of demand. \emph{Econometrica} 81 (2013) 2087--2111.
 \bibitem[Berry et~al.(1995)Berry, Levinsohn, and Pakes]{berry1995} S.~Berry, J.~Levinsohn, A.~Pakes. Automobile prices in
 market equilibrium. \emph{Econometrica} 63 (1995) 841--890.
 
+\bibitem[Berry et~al.(2004)Berry, Linton, and Pakes]{berry2004} S.~Berry,
+O.~B. Linton, A.~Pakes. Limit theorems for estimating the parameters of
+differentiated product demand systems. \emph{Review of Economic
+Studies} 71 (2004) 613--654.
+
 \bibitem[Berthet et~al.(2020)Berthet, Blondel, Teboul, Cuturi, Vert, and
 Bach]{berthet2020} Q.~Berthet, M.~Blondel, O.~Teboul, M.~Cuturi,
 J.-P.~Vert, F.~Bach. Learning with differentiable perturbed optimizers. In
@@ -2182,6 +2239,10 @@ Shum]{fosgerau2020} M.~Fosgerau, E.~Melo, A.~de~Palma, M.~Shum. Discrete
 choice and rational inattention: a general equivalence result.
 \emph{International Economic Review} 61 (2020) 1569--1589.
 
+\bibitem[Freyberger(2015)]{freyberger2015} J.~Freyberger. Asymptotic
+theory for differentiated products demand models with many markets.
+\emph{Journal of Econometrics} 185 (2015) 162--181.
+
 \bibitem[Genton et~al.(2018)Genton, Keyes, and Turkiyyah]{genton2018}
 M.~G. Genton, D.~E. Keyes, G.~M. Turkiyyah. Hierarchical decompositions for
 the computation of high-dimensional multivariate normal probabilities.
@@ -2252,6 +2313,10 @@ Processing Systems} 19 (2006) 569--576.
 \bibitem[Hotz and Miller(1993)]{hotz1993} V.~J. Hotz, R.~A. Miller. Conditional choice
 probabilities and the estimation of dynamic models. \emph{Review of
 Economic Studies} 60 (1993) 497--529.
+
+\bibitem[Huber et~al.(1999)Huber, Orme, and Miller]{huber1999} J.~Huber,
+B.~Orme, R.~Miller. Dealing with product similarity in conjoint
+simulations. \emph{Sawtooth Software Conference Proceedings} (1999).
 
 \bibitem[Huch and Keane(2026)]{huch2026} E.~Huch, M.~Keane. Amortized inference for correlated
 discrete choice models via equivariant neural networks. arXiv:2603.24705
@@ -2325,6 +2390,10 @@ North-Holland, 1984, 1395--1457.
 models via online decision problems. \emph{International Journal of
 Economic Theory} 21 (2025) 494--526.
 
+\bibitem[McFadden and Train(2000)]{mcfaddentrain2000} D.~McFadden,
+K.~Train. Mixed MNL models for discrete response. \emph{Journal of
+Applied Econometrics} 15 (2000) 447--470.
+
 \bibitem[Mendell and Elston(1974)]{mendell1974} N.~R. Mendell, R.~C. Elston. Multifactorial
 qualitative traits: genetic analysis and prediction of recurrence risks.
 \emph{Biometrics} 30 (1974) 41--57.
@@ -2346,6 +2415,10 @@ equal standard deviations and equal correlations. \emph{Psychometrika}
 \bibitem[Norets and Takahashi(2013)]{norets2013} A.~Norets, S.~Takahashi. On the surjectivity of the
 mapping between utilities and choice probabilities. \emph{Quantitative
 Economics} 4 (2013) 149--155.
+
+\bibitem[Orme and Johnson(2006)]{orme2006} B.~Orme, R.~M. Johnson.
+External effect adjustments in conjoint analysis. Sawtooth Software
+Research Paper Series (2006).
 
 \bibitem[Ridgway(2016)]{ridgway2016} J.~Ridgway. Computation of Gaussian orthant
 probabilities in high dimension. \emph{Statistics and Computing} 26 (2016)
@@ -2382,6 +2455,9 @@ F.~Tinessa, V.~Marzano, A.~Papola. Mixing distributions of tastes with
 a Combination of Nested Logit (CoNL) kernel: formulation and
 performance analysis. \emph{Transportation Research Part B} 141 (2020)
 1--23.
+
+\bibitem[Torgerson(1958)]{torgerson1958} W.~S. Torgerson. \emph{Theory
+and Methods of Scaling}. Wiley, New York (1958).
 
 \bibitem[Train(1995)]{train1995} K.~E. Train. Simulation methods for
 probit and related models based on convenient error partitioning.
