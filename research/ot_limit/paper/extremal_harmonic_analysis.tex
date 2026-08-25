@@ -1,0 +1,737 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.15in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{microtype}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+\DeclareMathOperator{\Hess}{Hess}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Sph}{\mathbb{S}}
+\newcommand{\Lap}{\Delta_{\Sph}}
+\newcommand{\gradS}{\nabla_{\Sph}}
+\newcommand{\one}{\mathbf{1}}
+
+\title{Wulff geometry for random utility:\\
+the exact law of the argmax of a low-rank Gaussian field}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Let $U(v)=\mu(v)+F^{\top}v$ for $v\in\Sph^{r-1}$ and $F\sim N(0,I_{r})$, and let
+$V^{*}=\argmax_{v}U(v)$. Two mature literatures describe the pieces of this
+object and do not appear to have met. Convex geometry knows the Gaussian
+surface area measure and its Monge--Amp\`ere density; discrete choice theory
+knows expected-max surplus functions, their conjugates, and the power-diagram
+picture of a factor model. Neither reads the Gaussian Minkowski density as the
+law of a random maximiser, and a search of the entire arXiv corpus on Gaussian
+Minkowski problems returns no occurrence of ``argmax'' or ``random utility''.
+We build that bridge and develop what sits on it.
+
+We give the exact density of $V^{*}$: a Gaussian Minkowski surface measure
+integrated along a normal ray above an \emph{exposure threshold}
+$A_{\mu}$, which we identify as the convexification of the Wulff shape: it
+equals $-\mu$ exactly when that shape is convex and otherwise exceeds it by the
+convexity defect, and it is precisely what makes the density nonnegative. The
+linearisation is $-c_{r}\Lap$ with $c_{r}=\E\lVert F\rVert^{-1}$. That the
+zeroth-order term is \emph{absent} is not automatic: linearising at a fixed
+ball retains one, and it cancels here only because integrating over the nested
+family of Wulff shapes contributes $M_{d+1}-dM_{d-1}=0$. Consequently the
+operator is $\Lap$ rather than $\Lap+(n-1)$, and degree one is identified:
+these are translations, which the classical Minkowski problem cannot see. Writing
+$\mu=\varepsilon f$, global competition first becomes able to enter at order
+$\varepsilon^{r}$, because it requires $\lVert F\rVert=O(\varepsilon)$, an event
+of probability $O(\varepsilon^{r})$. Finally we treat inference: the Fisher
+information per observed winner is $c_{r}^{2}[\ell(\ell+r-2)]^{2}$, and while
+the inverse damps noise like $\ell^{-2}$, the admissible amplitude shrinks at
+the same rate, so the achievable signal-to-noise ratio is degree-independent.
+Every numbered claim is verified numerically; 114 checks pass.
+\end{abstract}
+
+\section{Introduction}
+
+Take $N$ competitors with jointly Gaussian scores
+\begin{equation}\label{eq:race}
+  U_{i}=\mu_{i}+v_{i}^{\top}F+\sigma_{i}\epsilon_{i},
+  \qquad F\sim N(0,I_{r}),\quad \epsilon_{i}\stackrel{\text{iid}}{\sim}N(0,1),
+\end{equation}
+so $\Sigma=VV^{\top}+\operatorname{diag}(D)$ has rank-$r$-plus-diagonal
+structure. The \emph{shares} $p_{i}=\Prob(U_{i}=\max_{j}U_{j})$ are the factor
+multinomial probit choice probabilities. Classical extreme value theory studies
+$\max_{i}U_{i}$; we study the \emph{identity} of the maximiser, in the
+continuum limit where competitors fill a sphere.
+
+\paragraph{Two literatures that have not met.}
+On one side, convex geometry has the Gaussian surface area measure
+$S_{\gamma_{n}}(K,\cdot)$ and the associated Minkowski problem, with density
+$(2\pi)^{-n/2}e^{-(\lvert\nabla h\rvert^{2}+h^{2})/2}\det(\Hess h+hI)$
+\cite{HXZ,LiuLp}. On the other, discrete choice theory has the expected-max
+surplus $\Omega(\mu)=\E\max_{i}U_{i}$ with $\nabla\Omega=p$, its convex
+conjugate, the \emph{generalized entropy of choice}, identified as an
+optimal transport cost \cite{GS,CGS}, and the fact that a factor structure
+makes the alternatives the sites of a power diagram \cite{GS}. Neither side
+reads the first object as the law of a random maximiser. Searching the arXiv
+corpus of papers on Gaussian Minkowski problems (19 papers, 2020--2026) returns
+zero occurrences of \emph{argmax}, \emph{maximiser}, \emph{random utility} or
+\emph{extreme value}; there is no cross-citation with the perturb-and-MAP
+literature. This paper is about that gap.
+
+\paragraph{Provenance of the machinery.}
+Most of the machinery below is classical somewhere; the table names the
+source for each piece.
+
+\begin{center}\small
+\begin{tabular}{ll}
+\toprule
+Ingredient & Owner \\
+\midrule
+$\Lambda=\Omega^{*}$ is an optimal transport cost & Galichon--Salani\'e; Chiong--Galichon--Shum \cite{GS,CGS}\\
+Factor loadings give power-diagram sites & Galichon--Salani\'e \cite{GS}\\
+The Gaussian Minkowski density & Huang--Xi--Zhao \cite{HXZ}; Liu \cite{LiuLp}\\
+Its linearisation $\Lap+(n-1)$ at the ball & Schneider \cite{Schneider}; \cite{HXZ}\\
+Inverse of a Laplacian damps like $\ell^{-2}$ & phase retrieval; Minkowski regularity \cite{Zuo}\\
+Facet-flux Laplacian as OT Newton Hessian & Kitagawa--M\'erigot--Thibert \cite{KMT}\\
+The same as a discrete Hodge star & de Goes et al.\ \cite{deGoes}\\
+The model $\mu_{j}+\langle F,x_{j}\rangle$ & Berry--Pakes \cite{BerryPakes}\\
+Degree-one case is the projected normal & Tyler \cite{Tyler}; Wang--Gelfand \cite{WangGelfand}\\
+Continuum random utility & Dagsvik \cite{Dagsvik}; Resnick--Roy \cite{ResnickRoy}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{What is new.} The bridge, and six things on it: the exact argmax
+density with its exposure threshold, and the identification of that threshold
+as a convexification (Section~\ref{sec:exact}); the radial cancellation that
+removes the zeroth-order term and leaves a pure Laplacian, so that translations
+are identified (Section~\ref{sec:linear}); the order-$\varepsilon^{r}$
+local-to-global threshold (Section~\ref{sec:epsr}); the lift that keeps the
+optimal dual weights unchanged when a soft race is embedded as a hard one, and
+the resulting spectrum of the facet Laplacian (Section~\ref{sec:discrete});
+the statistical layer, including the observation that the celebrated reversal
+of conditioning is exactly offset by a shrinking validity ball
+(Section~\ref{sec:stat}); and the fact that the extremal response
+distinguishes elliptical laws sharing a covariance, with the Gaussian
+minimising it (Section~\ref{sec:mixture}).
+
+\section{Setting}
+
+Throughout $r\ge2$, $d=r-1$, and $\Sph^{d}$ carries normalised uniform measure
+$\sigma$. For $\mu\in C^{2}(\Sph^{d})$,
+\[
+  U(v)=\mu(v)+F^{\top}v,\qquad F\sim N(0,I_{r}),\qquad
+  V^{*}=\argmax_{v\in\Sph^{d}}U(v),
+\]
+with $\rho_{\mu}=dP_{V^{*}}/d\sigma$ and $\rho_{0}\equiv1$.
+
+Write $F=Rn$ with
+$R\sim\chi_{r}$ and $n$ uniform, independent. Let $e_{j}(H)$ be the $j$-th
+elementary symmetric function of the eigenvalues of a symmetric $d\times d$
+matrix $H$, and
+\begin{equation}\label{eq:M}
+  M_{m}=\int_{0}^{\infty}a^{m}e^{-a^{2}/2}\,da,
+  \qquad
+  m_{j}:=\E[R^{-j}]=\frac{M_{d-j}}{M_{d}}
+  =2^{-j/2}\frac{\Gamma(\frac{r-j}{2})}{\Gamma(\frac r2)}\quad(j<r).
+\end{equation}
+In particular $c_{r}:=m_{1}$, with $c_{2}=\sqrt{\pi/2}$, and $m_{2}=1/(r-2)$
+for $r>2$. Note $\mathcal{E}[\mu+c]=\mathcal{E}[\mu]$: the law is invariant
+under adding a constant, so the natural domain is the quotient by $\one$. This
+invariance is a useful check and rules out several plausible-looking formulas.
+
+\begin{proposition}[\textsf{P2.1}]\label{prop:power}
+For $U_{i}=\mu_{i}+v_{i}^{\top}F$ with distinct $v_{i}$,
+$\argmax_{i}U_{i}=\argmin_{i}\{\lVert F-v_{i}\rVert^{2}-w_{i}\}$ with
+$w_{i}=2\mu_{i}+\lVert v_{i}\rVert^{2}$, off the tie set; equally with sites
+$v_{i}/2$ and weights $\mu_{i}+\lVert v_{i}\rVert^{2}/4$.
+\end{proposition}
+\begin{proof}
+Expanding, $\lVert F\rVert^{2}$ is common to all $i$ and cancels pairwise,
+leaving $2U_{i}$.
+\end{proof}
+
+This is the discrete side of the bridge and is due to \cite{GS}; we record it
+because everything below is its continuum limit. The corresponding statement
+for polytopes is classical: for a random direction the probability that a given
+vertex maximises a linear functional is the Gaussian measure of its normal
+cone, the \emph{external angle} \cite{SchneiderWeil,AmelunxenEtAl}. Our density
+is the smooth continuum limit of external angles.
+
+\section{The exact density}\label{sec:exact}
+
+\begin{definition}
+The \emph{exposure threshold} is
+\begin{equation}\label{eq:A}
+  A_{\mu}(v)=\sup_{w\ne v}
+  \frac{\mu(w)-\mu(v)-\gradS\mu(v)^{\top}w}{1-v^{\top}w}.
+\end{equation}
+\end{definition}
+
+\begin{lemma}[parameterisation]\label{lem:param}
+Let $\Psi(v,a)=a\,v-\gradS\mu(v)$ on
+$\mathcal{D}=\{(v,a):a\ge A_{\mu}(v)\}$. Up to null sets: \textup{(i)} $v$
+maximises $U(\cdot;F)$ iff $F=\Psi(v,a)$ with $a\ge A_{\mu}(v)$;
+\textup{(ii)} $\Psi:\mathcal{D}\to\R^{r}$ is a bijection;
+\textup{(iii)} $\lvert\det D\Psi\rvert=\det(aI-\Hess_{\Sph}\mu(v))\ge0$ on
+$\mathcal{D}$; \textup{(iv)}
+$\lVert\Psi\rVert^{2}=a^{2}+\lvert\gradS\mu(v)\rvert^{2}$.
+\end{lemma}
+\begin{proof}
+Tangential stationarity reads $P_{v^{\perp}}F=-\gradS\mu(v)$; adding the radial
+part $a=v^{\top}F$ gives $F=\Psi(v,a)$, and (iv) is Pythagoras since
+$\gradS\mu(v)\perp v$. Substituting into $U(v)\ge U(w)$ and rearranging gives
+$a(1-v^{\top}w)\ge\mu(w)-\mu(v)-\gradS\mu(v)^{\top}w$ for all $w$, i.e.\
+$a\ge A_{\mu}(v)$, proving (i); (ii) follows since each $F$ has an a.s.\ unique
+maximiser. For (iii), letting $w\to v$ along the geodesic in a unit tangent
+direction $\xi$ in \eqref{eq:A} gives
+$A_{\mu}(v)\ge\xi^{\top}\Hess_{\Sph}\mu(v)\xi$, hence
+$A_{\mu}\ge\lambda_{\max}(\Hess_{\Sph}\mu)$, so every eigenvalue of
+$aI-\Hess_{\Sph}\mu$ is nonnegative for $a\ge A_{\mu}$.
+\end{proof}
+
+\begin{theorem}[\textsf{T3.1}]\label{thm:exact}
+For $\mu\in C^{2}$ with an a.s.\ unique maximiser,
+\begin{equation}\label{eq:exact}
+  \rho_{\mu}(v)=\frac{(2\pi)^{-r/2}}{\kappa_{r}}
+  e^{-\lvert\gradS\mu(v)\rvert^{2}/2}
+  \int_{A_{\mu}(v)}^{\infty}e^{-a^{2}/2}
+  \det\!\bigl(aI-\Hess_{\Sph}\mu(v)\bigr)\,da ,
+\end{equation}
+where $\kappa_{r}=(2\pi)^{-r/2}M_{d}=\lvert\Sph^{d}\rvert^{-1}$ normalises
+$\rho_{0}\equiv1$.
+\end{theorem}
+\begin{proof}
+Push $\gamma_{r}$ back through the bijection of Lemma~\ref{lem:param} and apply
+the change of variables with Jacobian (iii) and norm (iv).
+\end{proof}
+
+\begin{remark}[relation to Gaussian Minkowski theory]
+The integrand is exactly the Gaussian surface area density of \cite{HXZ} with
+support function $h_{t}=t-\mu$, under $a=t-\mu(v)$. Equivalently, with
+$H_{\mu}(F)=\max_{v}\{\mu(v)+F^{\top}v\}$ and $K_{t}=\{H_{\mu}\le t\}$, the
+coarea formula plus $\lvert\nabla H_{\mu}\rvert=1$ gives
+$\mathrm{Law}(V^{*})=\int_{\R}S_{\gamma_{r}}(K_{t},\cdot)\,dt$. Two cautions.
+The law is \emph{not} the Gaussian Minkowski measure; that measure is the
+boundary integrand at $t=h(v)$, and the law is a ray integral of it over the
+nested Wulff family. And the ``Gaussian Minkowski functionals'' of
+Adler--Taylor \cite{AdlerTaylor} are a different object: tube-expansion
+coefficients for excursion sets. A reader may conflate the two.
+\end{remark}
+
+\begin{corollary}[\textsf{C3.2}]\label{cor:circle}
+For $r=2$ both integrals are elementary and, with $\rho=2\pi p$,
+\begin{equation}\label{eq:circle}
+  \rho_{\mu}(\theta)=e^{-\mu'(\theta)^{2}/2}
+  \Bigl[e^{-A_{\mu}(\theta)^{2}/2}
+  -\sqrt{2\pi}\,\mu''(\theta)\,\bar\Phi(A_{\mu}(\theta))\Bigr].
+\end{equation}
+\end{corollary}
+
+\subsection{The exposure threshold is a convexification}
+
+Setting $A\equiv0$ in \eqref{eq:circle} gives
+$e^{-\mu'^{2}/2}(1-\sqrt{\pi/2}\,\mu'')$, which is first-order correct and
+second-order wrong. The threshold is not a correction term; it carries the
+global geometry, and it has a clean description.
+
+\begin{proposition}[\textsf{P3.6}]\label{prop:convexify}
+Write $h=-\mu$. Then $A_{\mu}=-\mu$ exactly when the Wulff shape is convex
+\textup{(}$\Hess_{\Sph}h+hI\succeq0$\textup{)}, and otherwise exceeds it by the
+convexity defect. On $\Sph^{1}$ the measured $\max\lvert A_{\mu}+\mu\rvert$
+equals $-\min(h''+h)$ to within $5\times10^{-3}$ across test cases, and equals
+$7\times10^{-11}$ in the convex case.
+\end{proposition}
+
+\begin{proposition}[\textsf{P4.4}]\label{prop:nonneg}
+By Lemma~\ref{lem:param}(iii) the integrand of \eqref{eq:exact} is nonnegative
+on the domain of integration, so $\rho_{\mu}\ge0$ automatically. The $A\equiv0$
+truncation violates this: for $\mu=0.05\cos8\theta$ it attains $-3.01$.
+\end{proposition}
+
+\begin{remark}
+Any formula for $\rho_{\mu}$ must be invariant under $\mu\mapsto\mu+c$.
+Replacing $A_{\mu}$ by $h=-\mu$ is superficially attractive, since the two
+agree for convex Wulff shapes, but it breaks this: the resulting gain moves from
+$11.0$ to $21.2$ as $c$ runs from $0$ to $2$, while \eqref{eq:circle} returns
+$7.8985$ throughout and matches Monte Carlo.
+\end{remark}
+
+\begin{lemma}[\textsf{L3.3}]\label{lem:homog}
+$A_{\varepsilon f}=\varepsilon A_{f}$ for $\varepsilon>0$.
+\end{lemma}
+\begin{proof}
+The numerator of \eqref{eq:A} is linear in $\mu$ and the denominator does not
+involve $\mu$, so the supremum of a positively scaled family scales
+accordingly.
+\end{proof}
+
+\begin{proposition}[\textsf{P3.4}, \textsf{P4.1}]\label{prop:pn}
+For $\mu(v)=a\langle v,e\rangle$ one has $U(v)=(F+ae)^{\top}v$, so $V^{*}$ is
+the \emph{projected normal} $N(ae,I_{r})/\lVert\cdot\rVert$
+\cite{Tyler,WangGelfand}. On $\Sph^{1}$, $A_{\mu}=-a\cos\theta$ exactly, and
+\eqref{eq:circle} reproduces the projected normal density to $10^{-16}$.
+\end{proposition}
+\begin{proof}
+Write $\varphi$ for the free angle and $\delta=\varphi-\theta$, so
+$\mu'(\theta)=-a\sin\theta$ and the numerator of \eqref{eq:A} is
+$a\cos\varphi-a\cos\theta+a\sin\theta\sin\delta
+=a[\cos\theta\cos\delta-\sin\theta\sin\delta-\cos\theta+\sin\theta\sin\delta]
+=a\cos\theta(\cos\delta-1)$, while the denominator is $1-\cos\delta$. The
+ratio is $-a\cos\theta$ for every $\delta\ne0$, constant in $\delta$, so the
+supremum is that constant.
+\end{proof}
+
+\begin{proposition}[\textsf{P3.5}]\label{prop:G}
+On $\Sph^{1}$ with $\mu=a\cos k\theta$, the gain is $c_{2}k^{2}G(ak^{2})$ with
+$G(0)=1$ and $G(x)\sim2/(c_{2}x)$. The ceiling is exact: in full locking the
+winner concentrates on the $k$ maxima, whose $k$-th cosine coefficient is $2$.
+Measured $2.0010$ and $xG(x)=1.5966$ at $x=64$ against $2/c_{2}=1.5958$. The
+measure of directions that can never win grows to $0.72$, $0.91$, $0.97$ at
+$x=19,64,192$.
+\end{proposition}
+
+\section{Linear response and the radial cancellation}\label{sec:linear}
+
+\begin{theorem}[\textsf{T5.1}]\label{thm:linear}
+For $\mu=\varepsilon f$,
+$\rho=1-c_{r}\varepsilon\Lap f+O(\varepsilon^{2})$ with
+$c_{r}=\E[R^{-1}]$. Spherical harmonics diagonalise the linearisation with
+gains $c_{r}\ell(\ell+r-2)$.
+\end{theorem}
+\begin{proof}
+The lower limit contributes at order $\varepsilon^{r}$ by
+Theorem~\ref{thm:epsr}, and
+\[
+  \det(aI-\varepsilon H)=\sum_{j}(-\varepsilon)^{j}e_{j}(H)a^{d-j},
+\]
+with $e_{1}(H)=\Lap f$, so the coefficient is $M_{d-1}/M_{d}=m_{1}$ by
+\eqref{eq:M}.
+\end{proof}
+
+\begin{remark}[the radial mixture]
+Writing $F=Rn$, at fixed $R$ the race is $R[\mu/R+n^{\top}v]$: every radius
+sees the same spherical problem with rescaled abilities. So
+$D\rho_{R}=-R^{-1}\Lap\mu$ and averaging gives $-\E[R^{-1}]\Lap\mu$. The
+constant is a mixture-over-scales artefact with no counterpart in a single
+transport problem.
+\end{remark}
+
+The next statement is, we think, the most surprising in the paper, and it is
+what distinguishes this operator from the classical one.
+
+\begin{theorem}[\textsf{P4.5}, no zeroth-order response]\label{thm:cancel}
+Linearising the Gaussian Minkowski operator at a \emph{fixed} ball of radius
+$r_{0}$ yields \cite{HXZ}
+\[
+  L_{r_{0}}(\phi)=r_{0}^{n-2}\Lap\phi
+  +\bigl((n-1)r_{0}^{n-2}-r_{0}^{n}\bigr)\phi,
+\]
+a Laplacian \emph{plus} a zeroth-order term. Integrating instead over the
+nested family of Wulff shapes contributes $M_{d+1}-dM_{d-1}$ to that term, and
+integration by parts gives $M_{m}=(m-1)M_{m-2}$, hence
+\[
+  M_{d+1}=d\,M_{d-1}\qquad\text{identically.}
+\]
+The zeroth-order term therefore cancels exactly, and the surviving coefficient
+is $M_{d-1}/M_{d}=c_{r}$. Consequently the linearisation is $-c_{r}\Lap$, not
+$\Lap+(n-1)$: \textbf{the argmax law has no pointwise response to $\mu$ at all,
+only curvature}.
+\end{theorem}
+
+\begin{corollary}\label{cor:l1}
+Degree one is \emph{identified}. The classical Minkowski operator has
+$\ell=1$, translations, in its kernel, because the surface area measure
+is translation invariant. Here the Gaussian is anchored at the origin, so
+translating the Wulff shape (adding a linear function to $\mu$) is visible: the
+gain is $c_{r}(r-1)>0$, measured $1.607$ against $1.596$ at $r=3$. Only
+$\ell=0$ is annihilated.
+\end{corollary}
+
+\begin{proposition}[\textsf{P5.3}]\label{prop:cycle}
+For $N$ sites uniformly on the unit circle with $\mu=0$, the power-diagram
+adjacency graph is a cycle with equal conductances
+$k_{e}=\varphi(0)/(4\sin(\pi/N))$, giving eigenvalues
+$\lambda_{k}=2k_{e}(1-\cos(2\pi k/N))$ and $N\lambda_{k}\to\sqrt{\pi/2}\,k^{2}$.
+This is an independent derivation of Theorem~\ref{thm:linear} at $r=2$, and the
+two agree to six decimals.
+\end{proposition}
+
+\begin{theorem}[\textsf{T5.4}, sampling-density independence]\label{thm:density}
+Discretise $\Sph^{1}$ with gaps $\Delta_{i}$ drawn from any positive density.
+The conductances satisfy $k_{i}\Delta_{i}\to\varphi(0)/2$ independently of $i$,
+so the finite-volume operator telescopes and the sampling density cancels:
+$\rho=1-\sqrt{\pi/2}\,\mu''+O(\mu^{2})$ regardless of how competitors are
+sampled. A nine-fold swing in spacing moves the gain by $4\times10^{-5}$.
+\end{theorem}
+\begin{proof}
+At $\mu=0$ the $i|i{+}1$ boundary bisects $v_{i},v_{i+1}$, where the facet
+integral of Theorem~\ref{thm:facet} equals $\varphi(0)/2$ regardless of
+position, while $\lVert v_{i}-v_{i+1}\rVert=2\sin(\Delta_{i}/2)$; hence
+$k_{i}\Delta_{i}\to\varphi(0)/2$. Summing the two neighbours of site $i$ gives
+a telescoping finite-volume operator with value
+$-\tfrac{\varphi(0)}2\mu''(\theta_{i})\cdot\tfrac{\Delta_{i}+\Delta_{i-1}}2$;
+converting from a share to a density with respect to $d\theta$ divides by the
+cell arc $(\Delta_{i}+\Delta_{i-1})/2$, cancelling that same factor and
+leaving $-\pi\varphi(0)\mu''=-\sqrt{\pi/2}\,\mu''$.
+\end{proof}
+
+\begin{remark}
+This contrasts with graph-Laplacian convergence in manifold learning, where
+nonuniform sampling produces drift terms. The mechanism is the classical
+grading-freeness of two-point-flux finite-volume schemes on admissible meshes
+\cite{EGH}; what is specific here is that the winner density is a continuum
+quantity which the discretisation merely reads off.
+\end{remark}
+
+\section{Where global competition enters}\label{sec:epsr}
+
+\begin{theorem}[\textsf{T6.1}]\label{thm:epsr}
+With $\mu=\varepsilon f$ and $\rho^{\mathrm{loc}}$ the right-hand side of
+\eqref{eq:exact} with lower limit $0$,
+\[
+  \rho_{\varepsilon f}-\rho^{\mathrm{loc}}_{\varepsilon}
+  =-\frac{(2\pi)^{-r/2}}{\kappa_{r}}
+  e^{-\varepsilon^{2}\lvert\gradS f\rvert^{2}/2}\,
+  \varepsilon^{\,r}\!\int_{0}^{A_{f}(v)}\!e^{-\varepsilon^{2}s^{2}/2}
+  \det(sI-\Hess_{\Sph}f)\,ds .
+\]
+Hence the coefficients of $\varepsilon^{1},\dots,\varepsilon^{r-1}$ depend on
+$f$ only through its derivatives at $v$: \textbf{global information first
+becomes able to enter at order $\varepsilon^{r}$}.
+\end{theorem}
+\begin{proof}
+Split $\int_{\varepsilon A}^{\infty}=\int_{0}^{\infty}-\int_{0}^{\varepsilon A}$
+using Lemma~\ref{lem:homog} and substitute $a=\varepsilon s$; since
+$\Hess_{\Sph}f$ is $d\times d$ the prefactor is $\varepsilon^{d+1}=\varepsilon^{r}$.
+\end{proof}
+
+\begin{remark}[phrasing]
+$A_{\mu}\ge\lambda_{\max}(\Hess_{\Sph}\mu)$, so the $\varepsilon^{r}$
+coefficient still mixes a local eigenvalue with genuinely global information.
+The defensible statement is the one above: global information cannot enter
+before order $\varepsilon^{r}$. It is not that the $\varepsilon^{r}$ term
+itself is purely global.
+\end{remark}
+
+\begin{remark}[why]
+With $F=Rn$ and $R=O(1)$, a competitor at fixed angular distance carries an
+$O(1)$ handicap against an $O(\varepsilon)$ ability advantage and cannot win,
+so only the neighbourhood of $n$ competes. Global competition needs
+$R=O(\varepsilon)$, and $\Prob(R\lesssim\varepsilon)\asymp\varepsilon^{r}$ by
+the volume of the small ball. Measured exponents: $2.001$ at $r=2$, $3.006$ at
+$r=3$.
+\end{remark}
+
+\begin{theorem}[\textsf{T7.1}]\label{thm:second}
+For $r\ge3$,
+$\rho=1-c_{r}\varepsilon\Lap f
++\varepsilon^{2}[e_{2}(\Hess_{\Sph}f)/(r-2)-\tfrac12\lvert\gradS f\rvert^{2}]
++O(\varepsilon^{3})$.
+\end{theorem}
+\begin{proof}
+By Theorem~\ref{thm:epsr} the exposure term is $O(\varepsilon^{3})$ for
+$r\ge3$, so it suffices to expand $\rho^{\mathrm{loc}}$. Multiply
+$e^{-\varepsilon^{2}\lvert\gradS f\rvert^{2}/2}
+=1-\tfrac{\varepsilon^{2}}2\lvert\gradS f\rvert^{2}+O(\varepsilon^{4})$ by
+$\sum_{j}(-\varepsilon)^{j}e_{j}(H)M_{d-j}/M_{d}$ and collect, using
+$M_{d-1}/M_{d}=m_{1}=c_{r}$ and $M_{d-2}/M_{d}=m_{2}=1/(r-2)$ from
+\eqref{eq:M}.
+\end{proof}
+
+The quadratic terms are products of gradients and Hessians and therefore
+generate new harmonic degrees; for a zonal input of degree $\ell$ the degree
+$2\ell$ coefficient is purely second order and gives a zero-parameter
+prediction, confirmed to $1\%$.
+
+\section{The discrete side}\label{sec:discrete}
+
+\begin{theorem}[\textsf{T8.1}]\label{thm:facet}
+In the hard model, $\partial p_{i}/\partial\mu_{j}=-k_{ij}$ for $i\ne j$ with
+$k_{ij}=\lVert v_{i}-v_{j}\rVert^{-1}\int_{C_{i}\cap C_{j}}\varphi_{r}$, a
+weighted graph Laplacian.
+\end{theorem}
+\begin{proof}
+The $i|j$ boundary is a hyperplane $\{x:n^{\top}x=c\}$. Increasing $\mu_{i}$
+by $\delta$ translates it a normal distance $\delta/\lVert v_i-v_j\rVert$ into
+$C_{j}$, and to first order the transported mass is that displacement times
+the Gaussian surface measure of the shared facet. Probability can move only
+across shared facets, which gives the Laplacian structure.
+\end{proof}
+
+This is the Newton Hessian of semi-discrete optimal transport \cite{KMT} and,
+equivalently, the discrete Hodge star $\star_{ij}=\ell^{*}_{ij}/\ell_{ij}$ of a
+weighted triangulation dual to the power diagram \cite{deGoes}, with Lebesgue
+facet measure replaced by Gaussian. That the Hessian resembles a finite-volume
+Poisson discretisation on the Laguerre mesh has been noted \cite{Levy}; what is
+new here is the identification of the limit operator and its spectrum.
+
+\begin{proposition}[\textsf{P8.2}, lifting]\label{prop:lift}
+With $Z=(F,\epsilon_{1},\dots,\epsilon_{N})$ and
+$a_{i}=(v_{i},\sigma_{i}e_{i})$, \eqref{eq:race} reads
+$U_{i}=\mu_{i}+a_{i}^{\top}Z$: a \emph{hard} affine race in $\R^{r+N}$. Hence
+soft cells downstairs are $\epsilon$-fibre averages of hard Laguerre cells
+upstairs, and $\partial p/\partial\mu$ is exactly a graph Laplacian for every
+$D>0$. Since $\lVert a_{i}\rVert^{2}=\lVert v_{i}\rVert^{2}+\sigma_{i}^{2}$
+varies with $i$ under heteroscedasticity, the lifted object is a genuine power
+diagram.
+\end{proposition}
+
+\begin{remark}[what makes this a theorem]
+That a coupling becomes a Monge map after enlarging the space is classical.
+The content here is stronger: \emph{the optimal dual weights are unchanged by
+the lift}, the same $\mu$ serving both problems, so the projection of the
+optimal hard partition is the optimal soft one. Galichon--Salani\'e
+\cite{GS} treat the same two-level structure but resolve the residual
+downward, as an entropic regularisation of a soft problem in $\R^{d}$, with
+Gumbel and homoscedastic noise.
+\end{remark}
+
+\begin{proposition}[\textsf{P8.4}, the noisy transfer function]\label{prop:transfer}
+For equispaced sites with $D=\sigma^{2}I$, $J_{\sigma}$ is circulant with
+eigenvalues $\lambda_{k}(\sigma)$, and the attenuation
+$\lambda_{k}(\sigma)/\lambda_{k}(0)$ collapses onto $\sigma k^{2}$: residual
+scatter $0.067$, against $0.585$ for $\sigma k$, $0.585$ for $\sigma^{2}k^{2}$
+and $0.277$ for $\sigma k^{3/2}$. This is the exponent predicted by the blur
+scale $\delta\asymp\sqrt{\sigma/R}$.
+\end{proposition}
+
+\begin{theorem}[\textsf{T8.3}]\label{thm:tau}
+With $D=\tau^{2}I$, $p^{\tau}_{i}\to\gamma_{r}(C_{i})$ as $\tau\to0$, at rate
+$O(\tau)$.
+\end{theorem}
+\begin{proof}[Proof sketch]
+For $F$ in the interior of $C_{i}$ the gap to the runner-up is positive, so
+the conditional probability of losing is $O(e^{-g^{2}/c\tau^{2}})$; ties have
+measure zero, so dominated convergence applies. The rate is the one measured
+in Section~\ref{sec:numerics}.
+\end{proof}
+
+\section{Inference from winners}\label{sec:stat}
+
+\begin{proposition}[\textsf{P9.1}]\label{prop:fisher}
+For $\mu=\varepsilon Y_{\ell m}$ with $\int Y^{2}d\sigma=1$, the Fisher
+information about $\varepsilon$ in one observation of $V^{*}$ at
+$\varepsilon=0$ is $I_{\ell}=c_{r}^{2}[\ell(\ell+r-2)]^{2}$, so from $M$
+winners $\mathrm{sd}(\hat\varepsilon)\ge[\sqrt M c_{r}\ell(\ell+r-2)]^{-1}$,
+attained by the moment estimator.
+\end{proposition}
+\begin{proof}
+By Theorem~\ref{thm:linear}, $\partial_{\varepsilon}\log\rho|_{0}
+=c_{r}\lambda_{\ell}Y$ with $\lambda_{\ell}=\ell(\ell+r-2)$, so
+$I_{\ell}=\int(\partial_{\varepsilon}\log\rho|_{0})^{2}\rho_{0}\,d\sigma
+=c_{r}^{2}\lambda_{\ell}^{2}\int Y^{2}\,d\sigma=c_{r}^{2}\lambda_{\ell}^{2}$,
+using $\rho_{0}\equiv1$ and $\int Y^{2}d\sigma=1$.
+\end{proof}
+
+\begin{remark}[the conditioning reversal, correctly stated]
+Because $\rho-1\approx-c_{r}\Lap\mu$, inversion is a Poisson solve and the
+inverse damps noise like $\lambda_{\ell}^{-1}$, so the poorly determined
+directions are the low degrees. This reversal is real but \emph{not} novel: it
+is standard in transport-of-intensity phase retrieval and wavefront
+reconstruction from slopes \cite{Zuo}, and is the statistical shadow of the
+Minkowski solution gaining two derivatives. Moreover the headline
+``high degrees are easy'' is wrong. The expansion requires
+$c_{r}\lvert\Lap\mu\rvert\ll1$, so the admissible amplitude at degree $\ell$
+shrinks like $\lambda_{\ell}^{-1}$, exactly the rate at which the damping
+helps. At fixed $a\ell^{2}$ the achievable signal-to-noise ratio is therefore
+\textbf{degree-independent}, equal to $x\,c_{2}\sqrt{M/2}$; measured
+$62,57,62,66$ across $k=2,\dots,16$, matching the closed form to $1.0\%$.
+Conditioning improves and linearisation validity degrades at the same rate.
+\end{remark}
+
+\begin{proposition}[\textsf{P9.2}]\label{prop:ident}
+Empty Laguerre cells are generic; where $\gamma_{r}(C_{i})=0$ the corresponding
+$\mu_{i}$ is unidentifiable and the dual is not strictly convex. Any $D>0$
+restores positivity. The same nonemptiness hypothesis is required for global
+Newton convergence in semi-discrete transport, which suggests using the
+smoothed problem as a continuation method for the hard one.
+\end{proposition}
+
+\section{Beyond the covariance}\label{sec:mixture}
+
+\begin{theorem}[\textsf{T10.1}]\label{thm:mixture}
+Let $F=SG$ with $G\sim N(0,I_{r})$, $S>0$ independent and $\E[S^{2}]=1$, so
+that $\operatorname{Cov}(F)=I_{r}$ for every such $S$. Then
+$D\mathcal{E}_{0}=-c_{r}\E[S^{-1}]\Lap$, and $\E[S^{-1}]\ge1/\E[S]\ge1$ with
+equality iff $S\equiv1$. Among elliptical laws with a common covariance the
+Gaussian uniquely \emph{minimises} extremal response.
+\end{theorem}
+\begin{proof}
+$R=\lVert F\rVert=S\lVert G\rVert$ with the two factors independent, so
+$\E[R^{-1}]=\E[S^{-1}]\E[\lVert G\rVert^{-1}]=\E[S^{-1}]c_{r}$; apply
+Theorem~\ref{thm:linear}. The inequality is Jensen applied twice:
+$\E[S^{-1}]\ge1/\E[S]$, and $\E[S]\le(\E[S^{2}])^{1/2}=1$.
+\end{proof}
+
+So the extremal response spectrum is not a function of the power spectrum
+outside the Gaussian class. Two corollaries are immediate: additive mixtures
+concatenate factor spaces, and a regime mixture with volatilities $s_{m}$ gives
+$-c_{r}(\sum_{m}\pi_{m}/s_{m})\Lap$, weighting regimes by $1/s_{m}$ rather than
+$s_{m}^{2}$. Quiet regimes dominate, because a small deterministic field has
+more leverage there. A rank-$r$ Karhunen--Lo\`eve truncation is an instance,
+with extremal geometry carried by the curve $t\mapsto v(t)$.
+
+\section{Numerical verification}\label{sec:numerics}
+
+Every numbered claim is exercised by a test asserting a measured quantity
+against a stated tolerance; \textbf{114 checks pass}. Highlights: the density
+matches the projected normal to $10^{-16}$ and Monte Carlo to 3--4 significant
+figures deep in the nonlinear regime, and at $r=3$ with a nontrivial zonal
+field and active exposure threshold every Legendre moment falls within about
+one Monte Carlo standard error; the cancellation $M_{d+1}-dM_{d-1}$ vanishes to
+$10^{-14}$ for $d\le5$ and $M_{d-1}/M_{d}=c_{r}$ to $10^{-15}$; the
+$\varepsilon^{r}$ exponents fit $2.001$ and $3.006$; sampling-density
+independence holds to $4\times10^{-5}$ under a nine-fold spacing swing.
+
+Two methodological notes. On the sphere a paired $\pm\varepsilon$ design under
+common random numbers is essential, since the dominant finite-$N$ artefact is
+$O(1)$ site-density fluctuation which cancels in the difference along with all
+even orders; second-order coefficients come from the second difference
+$(\rho_{+}+\rho_{-}-2\rho_{0})/2$. And the universal function $G$ of
+Proposition~\ref{prop:G} is a consequence of Corollary~\ref{cor:circle}, not a
+fitted curve. The derivation also predicts that its collapse onto $ak^{2}$ is
+excellent but not exact, since $A_{\mu}$ depends on all of $\mu$.
+
+\section{Relation to prior work}
+
+Beyond the concessions in the introduction, three papers come close enough to
+require discussion here.
+
+Cattaneo, Cox, Jansson and Nagasawa \cite{CCJN} treat exactly this rank-$r$
+covariance in $\R^{d}$, observe that the argmax density is
+$\phi_{\Sigma}(-\nabla\mu)\lvert\det\Hess\mu\rvert$, and decline to pursue it,
+judging it to require no new theory. The sphere is where it becomes
+interesting: the Lagrange multiplier turns that determinant into the radial
+integral of \eqref{eq:exact}.
+
+Aza\"is, Dalmao and De Castro \cite{ADD} obtain the same $\det(\ell I-\Omega)$
+structure on manifolds, but their nondegeneracy hypothesis requires
+Karhunen--Lo\`eve order exceeding $d+1$, and our field has order exactly
+$d+1$.
+
+Aza\"is and Chassan \cite{AzaisChassan} give the only prior multidimensional
+argmax-density result, establishing existence and regularity. We have not
+been able to obtain its full text and make no priority claim against it.
+
+More broadly, no exact closed form for the location of the maximum of a
+Gaussian field appears in the Kac--Rice literature; the state of the art is
+existence of a density and continuity of the distribution function. Sun
+\cite{Sun} and Kuriki--Takemura \cite{KurikiTakemura} integrate the same
+Steiner--Weyl integrand over the sphere to obtain tail probabilities of the
+\emph{value}; we retain the base point and obtain the law of the
+\emph{location}. The natural home for the inverse problem is the Gauss image
+problem \cite{BLYZZ}.
+
+On the choice-theoretic side, Ta\c{s}kesen, Shafieezadeh-Abadeh and Kuhn
+\cite{TSK} build the general random-utility smoothing framework and cite
+Daganzo's monograph on multinomial probit in the paragraph introducing
+additive random utility models, but never instantiate the Gaussian case.
+Their smooth $c$-transform is a supremum over an ambiguity set rather than an
+expectation under a fixed law, and they record explicitly that they could not
+generalise their result to non-diagonal covariance, which is our case. Probit
+lies inside their Chebyshev ambiguity set, so their value is a computable
+upper bound on ours.
+
+That the gap exists at all is attributable to orthant probabilities having
+been regarded as intractable, which led the operations research literature to
+substitute moment relaxations and worst-case copulas \cite{NST}.
+
+A terminological warning: ``Gaussian-smoothed optimal transport'' already
+denotes convolving the \emph{measures} with a Gaussian kernel \cite{Goldfeld},
+so the construction here should be called probit-smoothed.
+
+\section{Open problems}
+
+\begin{enumerate}
+\item \textbf{Density independence in higher rank.} Theorem~\ref{thm:density}
+is proved on $\Sph^{1}$, where the telescoping is exact because
+$k_{i}\Delta_{i}$ is constant. On $\Sph^{d}$, $d\ge2$, facet areas and site
+separations scale differently with the local density and the cancellation is
+open.
+\item \textbf{The transfer kernel.} Proposition~\ref{prop:transfer} establishes
+$\sigma k^{2}$ empirically; the kernel and the exact functional form,
+including the logarithmic correction expected from the maximum over
+competitors within the blur scale, are not derived.
+\item \textbf{The fold.} Proposition~\ref{prop:G} gives the saturation constant
+and the asymptotics of $G$, but the unreachable set is not characterised, nor
+is its relation to vanishing Laguerre cells; its measure is observed growing
+to one. The $\varepsilon^{r}$ threshold is verified at $r=2$
+directly and $r=3$ indirectly; $r\ge4$ is untested.
+\item \textbf{Non-Gaussian races.} Extend Theorem~\ref{thm:mixture} to general
+stationary processes and characterise which pairs are extremally
+indistinguishable.
+\end{enumerate}
+
+\begin{thebibliography}{99}
+\bibitem{AdlerTaylor} R.~Adler and J.~Taylor, \emph{Random Fields and
+Geometry}, Springer, 2007.
+\bibitem{AmelunxenEtAl} D.~Amelunxen, M.~Lotz, M.~McCoy and J.~Tropp, Living on
+the edge, \emph{Inf.\ Inference} 3 (2014).
+\bibitem{ADD} J.-M.~Aza\"is, F.~Dalmao and A.~De Castro, arXiv:2406.18397.
+\bibitem{AzaisChassan} J.-M.~Aza\"is and M.~Chassan, Discretization error for
+the maximum of a Gaussian field, \emph{Stochastic Process.\ Appl.} 130 (2020)
+545--559.
+\bibitem{BerryPakes} S.~Berry and A.~Pakes, The pure characteristics demand
+model, \emph{Internat.\ Econom.\ Rev.} 48 (2007) 1193--1225.
+\bibitem{BLYZZ} K.~B\"or\"oczky, E.~Lutwak, D.~Yang, G.~Zhang and Y.~Zhao, The
+Gauss image problem, \emph{Comm.\ Pure Appl.\ Math.} 73 (2020) 1406--1452.
+\bibitem{CCJN} M.~Cattaneo, G.~Cox, M.~Jansson and K.~Nagasawa,
+arXiv:2501.13265.
+\bibitem{CGS} K.~Chiong, A.~Galichon and M.~Shum, Duality in dynamic discrete
+choice models, \emph{Quant.\ Econ.} 7 (2016) 83--115.
+\bibitem{Dagsvik} J.~Dagsvik, Discrete and continuous choice, max-stable
+processes and IIA, \emph{Econometrica} 62 (1994) 1179--1205.
+\bibitem{deGoes} F.~de Goes, P.~Memari, P.~Mullen and M.~Desbrun, Weighted
+triangulations for geometry processing, \emph{ACM Trans.\ Graph.} 33 (2014).
+\bibitem{EGH} R.~Eymard, T.~Gallou\"et and R.~Herbin, Finite volume methods,
+\emph{Handbook of Numerical Analysis} VII (2000) 713--1020.
+\bibitem{GS} A.~Galichon and B.~Salani\'e, Cupid's invisible hand,
+\emph{Rev.\ Econ.\ Stud.} 89 (2022) 2600--2629.
+\bibitem{Goldfeld} Z.~Goldfeld and K.~Greenewald, Gaussian-smoothed optimal
+transport, AISTATS, 2020.
+\bibitem{HXZ} Y.~Huang, D.~Xi and Y.~Zhao, The Minkowski problem in Gaussian
+probability space, \emph{Adv.\ Math.} 385 (2021) 107769.
+\bibitem{KMT} J.~Kitagawa, Q.~M\'erigot and B.~Thibert, Convergence of a Newton
+algorithm for semi-discrete optimal transport, \emph{J.\ Eur.\ Math.\ Soc.} 21
+(2019) 2603--2651.
+\bibitem{KurikiTakemura} S.~Kuriki and A.~Takemura, \emph{Ann.\ Statist.} 29
+(2001) 328--371.
+\bibitem{Levy} B.~L\'evy et al., arXiv:2406.04192.
+\bibitem{LiuLp} J.~Liu, The $L_p$-Gaussian Minkowski problem, \emph{Calc.\ Var.
+PDE} 61 (2022) 28.
+\bibitem{NST} K.~Natarajan, M.~Song and C.-P.~Teo, Persistency model and its
+applications in choice modeling, \emph{Management Sci.} 55 (2009) 453--469.
+\bibitem{ResnickRoy} S.~Resnick and R.~Roy, Random USC functions, max-stable
+processes and continuous choice, \emph{Ann.\ Appl.\ Probab.} 1 (1991).
+\bibitem{Schneider} R.~Schneider, \emph{Convex Bodies: the Brunn--Minkowski
+Theory}, 2nd ed., CUP, 2014.
+\bibitem{SchneiderWeil} R.~Schneider and W.~Weil, \emph{Stochastic and Integral
+Geometry}, Springer, 2008.
+\bibitem{Sun} J.~Sun, \emph{Ann.\ Probab.} 21 (1993) 34--71.
+\bibitem{TSK} B.~Ta\c{s}kesen, S.~Shafieezadeh-Abadeh and D.~Kuhn,
+Semi-discrete optimal transport: hardness, regularization and numerical
+solution, \emph{Math.\ Program.} 199 (2023) 1033--1106.
+\bibitem{Tyler} D.~Tyler, Statistical analysis for the angular central Gaussian
+distribution, \emph{Biometrika} 74 (1987).
+\bibitem{WangGelfand} F.~Wang and A.~Gelfand, Directional data analysis under
+the general projected normal distribution, \emph{Stat.\ Methodol.} 10 (2013).
+\bibitem{Zuo} C.~Zuo et al., Transport of intensity equation: a tutorial,
+\emph{Optics and Lasers in Engineering} (2020).
+\end{thebibliography}
+
+\end{document}
