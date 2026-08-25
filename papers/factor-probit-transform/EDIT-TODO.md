@@ -1,5 +1,56 @@
 # Deferred edits (from author-rewrite session)
 
+## From the 2026-08-24 deep-research review (external)
+
+Wording fixes APPLIED 2026-08-24: "oldest in choice theory" softened +
+Daganzo 1977 credited in intro; GHK -> "classic econometric evaluator";
+BLP04 J^2 tied to asymptotic normality (consistency weaker); Freyberger
+conditional on draw growth; "no probit counterpart" -> "does not
+transfer in the same closed form"; Sawtooth corrected to mode-dependent
+idiosyncratic term (Gumbel logit / normal probit -- per the VERIFIED
+1999 PDF quote, contra the review which claimed always-Gumbel);
+"dominant" dropped; PyBLP 4^K2 reattributed to C&G's own accounting,
+generic m^K2 stated; abstract 140x relabeled "per-alternative
+factor-conditioned RQMC baseline" + hardware qualifier + self-convergence
+vs independent-validation distinction; Newton-Krylov global-convergence
+claim softened to safeguarded-methods-apply; six-order speedup labeled
+back-of-envelope vs plain MC; "simulation owns coarse accuracy" fixed
+(EP/tilting/Vecchia cited as high-accuracy per-orthant).
+
+Still open from the review (bigger items, need Peter or new work):
+- REPRODUCIBILITY (major): paper says winning v1.1.0 / winning.factor;
+  public repo README now says 2.x renovation, core moved to thurstone,
+  1.0.3 last published 1.x. Need: immutable tag/commit SHA + Zenodo or
+  Software Heritage DOI + lockfiles + canonical-module statement.
+  Peter's call on which artefact is canonical.
+- Independent large-N validation: spot-check 20-50 stratified shares at
+  N=1000 against an independent code path (EP / Fasano-Denti, Vecchia /
+  Cao-Katzfuss, or heavily replicated scrambled RQMC), three covariance
+  regimes (benign rank-2, heterogeneous D near grid stress, small
+  photo-finish gap). Report share, log-share, AND post-inversion utility
+  error.
+- Promote the O(RN) conditional all-N Monte Carlo estimator (Section 7)
+  into the headline comparison table, run at N=1000+, with an
+  accuracy-vs-wall-time frontier (1e-2..1e-5) rather than one matched
+  point.
+- Conditioning diagnostics: report lambda_2 / spectral gap + iteration
+  count per calibration benchmark; plot Jacobi contraction vs lambda_2
+  over the stress suite (turns Prop 4 into a predictive result).
+- k>4 factor integration: multiple independent Sobol scrambles in
+  research benchmarks to measure integration variability (keep fixed
+  seed for the production map).
+- Citations to verify then add/elevate: Looi, Loaiza-Maya & Nibbering
+  2026 skew-MNP (arXiv ~Aug 11 2026 -- verify it exists); elevate
+  Huch-Keane (amortized, cited) and Loaiza-Maya-Nibbering (factor MNP
+  estimation, cited) with explicit division-of-labour sentences; check
+  Chang-Narita-Saito citation placement (should support cross-menu
+  restrictions, not covariance identification); Grieco-Murry-Pinkse-Sagl
+  (consumer+product data) and recent nonparametric-identification work
+  for the Section 8 estimation agenda.
+- Real-data cross-menu validation (calibrate on one menu, predict a
+  held-out menu) remains the empirical gap the review and our own notes
+  agree on.
+
 - Vasicek citation: DONE 2026-08-24 — credit-risk sentence added to the
   Related Work dimension-reduction paragraph, after Dunnett, no priority
   claim over Butler.

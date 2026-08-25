@@ -43,11 +43,14 @@ Jacobian--vector products, and share inversion at $N = 1000$ takes
 three seconds in the compiled implementation at rank two. Ten thousand
 alternatives stay under a minute. In convergence comparisons, the
 computed shares carry log-share errors of a few parts in a hundred
-thousand, hundred-to-one shares included. The established
-high-precision evaluators price one orthant at a time. The nearest
-factor-aware competitor computes the same share vector roughly
-$140\times$ slower at matched accuracy at $N = 1000$, and the gap
-widens linearly in $N$.
+thousand, hundred-to-one shares included, measured against
+higher-resolution references of the same construction. Independent
+RQMC inversion checks through $N = 200$ recover utilities at the
+reference error floor. The established high-precision evaluators price
+one orthant at a time. A per-alternative factor-conditioned RQMC
+baseline computes the same share vector roughly $140\times$ slower at
+matched accuracy at $N = 1000$ on the reported hardware, and the gap
+widens linearly in $N$ because it performs $N$ separate integrals.
 \end{abstract}
 
 \noindent\textbf{Keywords:} multinomial probit; discrete choice;
@@ -88,10 +91,11 @@ and contraction mapping that the Gumbel distribution supplies
 as out of reach. The record is explicit, and we quote it before
 removing the barrier for the covariance class above.
 
-The model itself is the oldest in choice theory. Thurstone's 1927 law
-of comparative judgment posited jointly Gaussian utilities with
-unrestricted correlation \citep{thurstone1927}. Econometrics
-reintroduced the same object as the conditional, or multinomial, probit
+The model is among the oldest in choice theory. Thurstone's 1927 law
+of comparative judgment posited jointly Gaussian utilities, correlated
+in its general cases \citep{thurstone1927}. Transportation science
+pursued its computation early \citep{daganzo1977}, and econometrics
+adopted the same object as the conditional, or multinomial, probit
 model (MNP) \citep{hausman1978}. It re-emerges wherever latent
 performance is Gaussian, from bioassay and quantitative genetics to
 item response theory, signal detection, credit risk, skill rating, and
@@ -115,8 +119,8 @@ events \citep{torgerson1958,herbrich2006}.
 Econometrics kept the $N$-way event and changed the distribution. A
 major reason for logit's dominance is brutally practical. Logit models
 can be computed. Probit probabilities are $(N-1)$-dimensional Gaussian
-integrals with, generically, no closed form. The standard evaluator is
-the Geweke--Hajivassiliou--Keane (GHK) simulator
+integrals with, generically, no closed form. The classic econometric
+evaluator is the Geweke--Hajivassiliou--Keane (GHK) simulator
 \citep{geweke1994,hajivassiliou1998,train2009}, the econometric branch
 of the Genz separation-of-variables family \citep{genz1992}. It treats
 the probability that alternative $i$ beats the rest as an orthant
@@ -135,26 +139,31 @@ notes (multinomial choice), New York University,
 The reference implementation of the logit tradition says the same by
 omission. The word \emph{probit} does not occur in the source tree of
 PyBLP \citep{conlon2020}, whose consumer heterogeneity is a rank-$K_2$
-factor loading on observed characteristics, priced by its own
-documentation at $4^{K_2}$ product-rule quadrature nodes, which is
-65{,}536 nodes at $K_2 = 8$.
+factor loading on observed characteristics. A tensor-product rule with
+$m$ nodes per dimension there costs $m^{K_2}$ nodes, and the accounting
+in \citet{conlon2020} uses $I_t = 4^{K_2}$, which is 65{,}536 nodes at
+$K_2 = 8$.
 
 The inversion is harder still, and the literature is quantitative about
-why. Berry, Linton and Pakes show that estimation through inverted
-shares requires simulation draws growing as the square of the number of
-products, because the inverse share map amplifies simulation and
-sampling error \citep{berry2004}. Freyberger shows the surviving
-simulation error enters the estimator as a first-order bias
-\citep{freyberger2015}. The standard escape at large $N$, estimation on
-a sampled subset of alternatives, rests on a logit cancellation, an
-explicit use of independence from irrelevant alternatives (IIA), and
-has no probit counterpart \citep{train2009}. The dominant commercial
-conjoint platform, meanwhile, has shipped exactly this
-low-rank-plus-diagonal Gaussian race since 1999 \citep{huber1999},
-evaluating it by brute-force simulation with hand-tuned variance
-scalars, and matching target shares with an ad hoc fixed point its own
-authors call ``fudge factors'' and decline to encourage
-\citep{orme2006}.
+why. The inverse share map amplifies simulation and sampling error. In
+the large-product asymptotics of Berry, Linton and Pakes, consistency
+already constrains the draw count, and asymptotic normality requires
+draws growing as the square of the number of products \citep{berry2004}.
+Freyberger shows that unless the draw count grows quickly enough
+relative to the sample, the surviving simulation error enters the
+leading asymptotic terms as bias \citep{freyberger2015}. The standard
+escape at large $N$, estimation on a sampled subset of alternatives,
+rests on a logit cancellation, an explicit use of independence from
+irrelevant alternatives (IIA), and does not transfer to probit in the
+same closed form \citep{train2009}. Commercial conjoint practice,
+meanwhile, has simulated a closely related factor race since 1999.
+Randomized First Choice perturbs part-worths with normal errors shared
+across alternatives, inducing exactly the low-rank-plus-diagonal
+covariance, over an idiosyncratic term that is Gumbel in its logit mode
+and normal in its probit mode \citep{huber1999}. The variance split is
+tuned by grid search rather than fitted, and target shares are matched
+with an ad hoc fixed point its own authors call ``fudge factors'' and
+decline to encourage \citep{orme2006}.
 % VERIFY: Sawtooth quotes are agent-extracted from the primary PDFs; re-check before submission.
 
 The standard reason for needing none of this is the McFadden--Train
@@ -396,9 +405,10 @@ of the capped, adaptive-grid implementation. We can only
 say that in practice it typically converges in 10--15 iterations, and in 6--31 across the stress suite of
 Section~\ref{sec:benchmark}. A globally safe fallback exists in
 principle. Calibration minimizes the strictly convex, coercive
-potential in the proof of Proposition~\ref{thm:inv}, so a damped
-Newton--Krylov method with a line search converges globally for the
-continuum map by standard convex-optimization arguments. We ship the
+potential in the proof of Proposition~\ref{thm:inv}, so the problem
+admits globally safeguarded convex optimization. A damped
+Newton--Krylov method with a line search converges for the continuum
+map under the usual descent and regularity conditions. We ship the
 Jacobi iteration because it has never needed the safeguard.
 
 \paragraph{Tail-stable implementation.} Tail stability requires the log
@@ -1446,7 +1456,11 @@ take months to a year.
 
 If calibration time at a fixed accuracy can be reduced from months to
 a few seconds, the tradeoff between probit and its analytically simpler logit
-cousin changes. This particular example is roughly a six-order-of-magnitude speedup. 
+cousin changes. This particular example is roughly a
+six-order-of-magnitude reduction against plain winner-frequency Monte
+Carlo. The figure is a back-of-the-envelope extrapolation, not a
+matched benchmark against modern RQMC or specialized Gaussian
+integration.
 
 Common random numbers do not change the plain-MC rate. Randomized QMC and
 specialized Gaussian integration can improve rates as well as
@@ -1771,8 +1785,10 @@ Gumbel base with zero loadings reproduces the Luce model exactly
 correlated softmax.
 
 Neither method class dominates the other. Simulation owns arbitrary
-$\Sigma$ and coarse accuracy whereas the shared field owns the factor form,
-tight accuracy, derivatives, and calibration. Our experiments give some guidance as to the boundary. 
+$\Sigma$, and modern Gaussian-probability methods reach high accuracy
+one orthant at a time \citep{botev2017,fasano2025,cao2025}. The shared
+field owns the factor form, all $N$ shares jointly, derivatives, and
+calibration. Our experiments give some guidance as to the boundary. 
 
 In particular, covariance approximation rather than quadrature
 becomes the binding limitation when the choice-relevant covariance is
@@ -1840,6 +1856,11 @@ tempered the win probabilities before conditioning.}
 
 At the racetrack both nature and the market make choices---the latter in risk-neutral probability. We do not always personify markets as choosers with revealed preferences but perhaps we should. 
 Trillions of dollars are invested passively in capital-weighted indexes in a subtle, unwitting nod to that same simple renormalization deemed unworthy for the racetrack.
+A companion working paper develops the correction
+\citep{cotton2026polish}. It reads index weights as the win
+probabilities of a race among assets, inverts them to latent abilities,
+and re-tilts the allocation under a view on tail dependence, with the
+calibration developed here as the inverse step.
 
 Why all this probit work? For anyone modeling performance directly,
 Gaussian is the natural noise. Sums of many small effects are Gaussian,
@@ -2221,7 +2242,12 @@ probability in multientrant contests. \emph{SIAM Journal on Financial Mathematic
 \bibitem[Cotton(2021b)]{winningpkg} P.~Cotton. The \texttt{winning} package: inference for multi-entrant contests,
 2021. \url{https://github.com/microprediction/winning}.
 
-\bibitem[Cotton(2026)]{cottonsurvey} P.~Cotton. Probit versus logit:
+\bibitem[Cotton(2026a)]{cotton2026polish} P.~Cotton. Thurstone
+portfolio polishing: tail-sensitive Black--Litterman and beyond.
+Working paper (2026),
+\url{https://allocation.microprediction.org/papers/thurstone-portfolios/}.
+
+\bibitem[Cotton(2026b)]{cottonsurvey} P.~Cotton. Probit versus logit:
 a survey of empirical accuracy. SSRN working paper, 2026.
 
 \bibitem[Craig(2008)]{craig2008} P.~Craig. A new reconstruction of
