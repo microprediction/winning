@@ -729,6 +729,33 @@ with no decision-theoretic backing. Sampling from it is Thompson; reducing
 its entropy is entropy search; valuing the batch directly is E[max]. All
 three are principled and all three beat top-b where the field is flat.
 
+
+### Closed-loop postscript: neither corrected rule survives the benchmark
+
+Reported for completeness, and explicitly not a claim of this work. Ten more
+seeds of the antibiotic closed loop, final top-10 average (library optimum
+-0.0931):
+
+| method | final top-10 |
+|---|---:|
+| qPO-MC-10k (shipped) | -0.1025 |
+| qPO-fast-r4-thompson (exact p, stochastic selection) | -0.1039 |
+| F-LITE-full | -0.1058 |
+| Greedy | -0.1073 |
+| UCB | -0.1075 |
+| qPO-fast-r4-full | -0.1086 |
+| **qPO-fast-r4-greedymax (E[max], explicit diversity)** | **-0.1094** |
+| qPO-fast-r4-10k (exact p, top-b) | -0.1098 |
+| Random-plausible | -0.1348 |
+
+Greedy E[max] wins the SNAPSHOT decisively (best molecule in batch -0.104
+against the sampler's -0.129) and then does not convert it, landing at
+-0.1094 over ten seeds. That is the third time in this directory that
+snapshot accuracy has failed to become closed-loop discovery, and it is the
+reason the paper claims arithmetic rather than acquisition: on ten rounds of
+a noisy screen, seed-to-seed spread swamps every method difference except
+the collapse of the random arm.
+
 ## Decision rule
 
 The brief set three conditions, all of them about the snapshot experiment. All

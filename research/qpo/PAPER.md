@@ -39,6 +39,39 @@ whose off-diagonal covariance error is still 40% delivers essentially the
 whole objective, and Plackett's relation says why: the argmax weights the few
 pairs that compete for the lead, not the N^2/2 pairs that Frobenius counts.
 
+## Target: short, narrow, JCIM
+
+qPO was published in J. Chem. Inf. Model. 65(10):4808-4817 (May 2025), and
+again in TMLR (2025). JCIM is the natural home: same readership, same
+application area, and a short methods note that makes a recently published
+method 800x faster is exactly the shape of paper that journal takes. Target
+4-6 pages: the race formulation, the lattice, the rank kill test, the
+timing/accuracy table, the whole-library demonstration. No new acquisition
+function, no re-litigation of the objective, no closed-loop claims.
+
+## Why this reaches past one paper
+
+`p_i = P(i is best)` is one computation with many names, and in every one of
+them the standard practice is to sample:
+
+- **Thompson sampling.** TS selects arm i with probability exactly
+  `P(i optimal)`; the usual implementation draws a posterior sample and takes
+  an argmax. With correlated arms that draw is O(N^2), which is precisely the
+  regime this solves.
+- **Bayesian A/B testing.** "Probability to be best" is the headline number in
+  every commercial testing platform, and it is computed by Monte Carlo --
+  closed forms exist only for two to four independent variants.
+- **Response-adaptive randomisation.** Allocation proportional to
+  `P(treatment best)`; the regulatory setting wants reproducibility, which a
+  counted estimate does not give and a lattice does.
+- **Entropy search and its variants.** All are built on the distribution of
+  the argmax, `p(x*)`.
+- **Best-arm and top-k identification**, and the discrete-choice/ranking
+  literature this machinery came from.
+
+The claim is narrow and portable: wherever the arms are correlated and the
+field is large, the win probability need not be sampled.
+
 **Out of scope, deliberately.** Whether `P(x* in batch)` is the right
 objective, whether the loop should be exploitative, and how acquisition
 functions compare in closed-loop discovery are all questions about the method,
