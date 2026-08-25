@@ -4,7 +4,7 @@ factor-probit paper (experiments 13-17).
     python experiments/run_all_paper.py
 
 Runs each committed experiment script in order and reports pass/fail. Every
-table entry and figure in paper/factor-probit-transform/paper.tex traces to
+table entry and figure in papers/factor-probit-transform/scalable-share-calibration.tex traces to
 one of these scripts' results.csv / figures/ outputs; the mapping is:
 
   exp13 run_ghk_benchmark.py   -> benchmark table, smoothness figure,
