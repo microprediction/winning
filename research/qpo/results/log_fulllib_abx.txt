@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/Users/petercotton/github/winning/research/qpo/run_full_library.py", line 179, in <module>
+    main()
+  File "/Users/petercotton/github/winning/research/qpo/run_full_library.py", line 65, in main
+    post, meta = load_gp(snap)
+                 ^^^^^^^^^^^^^
+  File "/Users/petercotton/github/winning/research/qpo/factorgp.py", line 369, in load_gp
+    X = np.load(snapshot_dir / "gp_train_x.npy").astype(float)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Caskroom/miniconda/base/envs/fastqpo/lib/python3.12/site-packages/numpy/lib/_npyio_impl.py", line 454, in load
+    fid = stack.enter_context(open(os.fspath(file), "rb"))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/petercotton/github/winning/research/qpo/snapshots/wong_antibiotics_Mean_50uM_seed7_min/gp_train_x.npy'
+ERROR conda.cli.main_run:execute(125): `conda run python -u run_full_library.py --snapshot wong_antibiotics_Mean_50uM_seed7_min --ranks 2 4 8 --sobol-m 8 --points 129 --batch 50` failed. (See above for error)

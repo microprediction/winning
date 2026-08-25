@@ -1,0 +1,33 @@
+
+frontier at N=10000:
+  r=  2 fast  Q=    32    1.06s self_tv=1.52e-02 tv*=1.38e-02
+  r=  2 fast  Q=    64    2.04s self_tv=8.92e-03 tv*=6.85e-03
+  r=  2 fast  Q=   128    4.06s self_tv=4.65e-03 tv*=4.00e-03
+  r=  2 fast  Q=   256    8.08s self_tv=1.57e-03 tv*=1.13e-03
+  r=  2 fast  Q=   512   16.37s self_tv=1.45e-03 tv*=9.05e-04
+  r=  2 fmc   M=    30000    2.43s self_tv=5.61e-02 tv*=3.96e-02
+  r=  2 fmc   M=   100000    7.65s self_tv=2.91e-02 tv*=2.14e-02
+  r=  2 fmc   M=   300000   24.09s self_tv=1.77e-02 tv*=1.32e-02
+  r=  2 fmc   M=  1000000   78.13s self_tv=1.06e-02 tv*=7.42e-03
+  r=  2 fmc   M=  3000000  234.47s self_tv=5.82e-03 tv*=4.17e-03
+  r=  4 fast  Q=    32    1.00s self_tv=5.27e-02 tv*=4.28e-02
+  r=  4 fast  Q=    64    2.01s self_tv=3.34e-02 tv*=2.17e-02
+  r=  4 fast  Q=   128    4.00s self_tv=2.35e-02 tv*=1.38e-02
+  r=  4 fast  Q=   256    8.13s self_tv=1.29e-02 tv*=8.38e-03
+  r=  4 fast  Q=   512   16.24s self_tv=5.14e-03 tv*=3.80e-03
+  r=  4 fmc   M=    30000    2.40s self_tv=7.45e-02 tv*=5.46e-02
+  r=  4 fmc   M=   100000    7.63s self_tv=4.14e-02 tv*=3.13e-02
+  r=  4 fmc   M=   300000   22.92s self_tv=2.46e-02 tv*=1.88e-02
+  r=  4 fmc   M=  1000000   78.37s self_tv=1.49e-02 tv*=1.07e-02
+  r=  4 fmc   M=  3000000  235.07s self_tv=7.71e-03 tv*=5.80e-03
+  r=  8 fast  Q=    32    1.02s self_tv=1.15e-01 tv*=8.66e-02
+  r=  8 fast  Q=    64    2.02s self_tv=7.73e-02 tv*=5.53e-02
+  r=  8 fast  Q=   128    3.99s self_tv=3.34e-02 tv*=2.63e-02
+  r=  8 fast  Q=   256    8.12s self_tv=2.34e-02 tv*=1.66e-02
+  r=  8 fast  Q=   512   16.30s self_tv=1.41e-02 tv*=1.09e-02
+  r=  8 fmc   M=    30000    2.39s self_tv=8.07e-02 tv*=5.88e-02
+  r=  8 fmc   M=   100000    7.83s self_tv=4.61e-02 tv*=3.25e-02
+  r=  8 fmc   M=   300000   23.40s self_tv=2.67e-02 tv*=1.90e-02
+  r=  8 fmc   M=  1000000   78.20s self_tv=1.47e-02 tv*=1.17e-02
+  r=  8 fmc   M=  3000000  241.26s self_tv=8.28e-03 tv*=7.58e-03
+done

@@ -1,0 +1,416 @@
+
+=== qPO-MC-10k seed 0 ===
+  [qPO-MC-10k seed0] iter  1 n=  200 top10=0.3649 top100=0.3325 top1%=0.016 top0.01%=0.000 acq=   9.7s score=  3.5s peak=  2643MB tan=0.389
+  [qPO-MC-10k seed0] iter  2 n=  300 top10=0.3734 top100=0.3506 top1%=0.048 top0.01%=0.000 acq=   9.6s score=  2.5s peak=  2643MB tan=0.350
+  [qPO-MC-10k seed0] iter  3 n=  400 top10=0.3765 top100=0.3605 top1%=0.089 top0.01%=0.000 acq=  10.4s score=  1.6s peak=  2643MB tan=0.325
+  [qPO-MC-10k seed0] iter  4 n=  500 top10=0.3831 top100=0.3677 top1%=0.136 top0.01%=0.000 acq=   9.8s score=  2.0s peak=  2643MB tan=0.285
+  [qPO-MC-10k seed0] iter  5 n=  600 top10=0.3890 top100=0.3732 top1%=0.180 top0.01%=0.000 acq=   9.6s score=  2.3s peak=  2643MB tan=0.297
+  [qPO-MC-10k seed0] iter  6 n=  700 top10=0.3978 top100=0.3763 top1%=0.225 top0.01%=0.077 acq=   9.6s score=  2.7s peak=  2643MB tan=0.268
+  [qPO-MC-10k seed0] iter  7 n=  800 top10=0.4044 top100=0.3784 top1%=0.262 top0.01%=0.154 acq=  20.7s score=  3.1s peak=  2643MB tan=0.227
+  [qPO-MC-10k seed0] iter  8 n=  900 top10=0.4245 top100=0.3878 top1%=0.310 top0.01%=0.615 acq=  23.9s score=  7.9s peak=  2643MB tan=0.237
+  [qPO-MC-10k seed0] iter  9 n= 1000 top10=0.4504 top100=0.3914 top1%=0.344 top0.01%=0.769 acq=  23.6s score=  8.6s peak=  2643MB tan=0.410
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo0_iter10
+  [qPO-MC-10k seed0] iter 10 n= 1100 top10=0.4567 top100=0.3926 top1%=0.362 top0.01%=0.846 acq=  30.0s score= 12.0s peak=  2643MB tan=0.159
+  [qPO-MC-10k seed0] iter 11 n= 1200 top10=0.4567 top100=0.3933 top1%=0.400 top0.01%=0.846 acq=  14.8s score=  9.5s peak=  2643MB tan=0.230
+  [qPO-MC-10k seed0] iter 12 n= 1300 top10=0.4567 top100=0.3941 top1%=0.434 top0.01%=0.923 acq=  10.9s score=  6.2s peak=  2643MB tan=0.226
+  [qPO-MC-10k seed0] iter 13 n= 1400 top10=0.4654 top100=0.3958 top1%=0.467 top0.01%=1.000 acq=  11.9s score=  7.3s peak=  2643MB tan=0.208
+  [qPO-MC-10k seed0] iter 14 n= 1500 top10=0.4654 top100=0.3958 top1%=0.497 top0.01%=1.000 acq=  11.8s score=  7.8s peak=  2643MB tan=0.213
+  [qPO-MC-10k seed0] iter 15 n= 1600 top10=0.4654 top100=0.3960 top1%=0.522 top0.01%=1.000 acq=  10.9s score=  8.4s peak=  2643MB tan=0.216
+  [qPO-MC-10k seed0] iter 16 n= 1700 top10=0.4654 top100=0.3961 top1%=0.545 top0.01%=1.000 acq=  10.7s score=  8.3s peak=  2643MB tan=0.221
+  [qPO-MC-10k seed0] iter 17 n= 1800 top10=0.4654 top100=0.3961 top1%=0.564 top0.01%=1.000 acq=  10.7s score=  9.1s peak=  2643MB tan=0.232
+  [qPO-MC-10k seed0] iter 18 n= 1900 top10=0.4654 top100=0.3961 top1%=0.589 top0.01%=1.000 acq=  10.6s score=  9.7s peak=  2643MB tan=0.223
+  [qPO-MC-10k seed0] iter 19 n= 2000 top10=0.4654 top100=0.3961 top1%=0.607 top0.01%=1.000 acq=  11.3s score= 10.9s peak=  2643MB tan=0.233
+  [qPO-MC-10k seed0] iter 20 n= 2100 top10=0.4654 top100=0.3961 top1%=0.623 top0.01%=1.000 acq=  11.6s score= 11.8s peak=  2643MB tan=0.237
+
+=== qPO-MC-10k seed 1 ===
+  [qPO-MC-10k seed1] iter  1 n=  200 top10=0.3574 top100=0.3244 top1%=0.007 top0.01%=0.000 acq=   9.1s score=  2.0s peak=  2643MB tan=0.399
+  [qPO-MC-10k seed1] iter  2 n=  300 top10=0.3639 top100=0.3370 top1%=0.014 top0.01%=0.000 acq=   9.3s score=  2.1s peak=  2643MB tan=0.294
+  [qPO-MC-10k seed1] iter  3 n=  400 top10=0.3673 top100=0.3444 top1%=0.028 top0.01%=0.000 acq=   9.2s score=  1.5s peak=  2643MB tan=0.273
+  [qPO-MC-10k seed1] iter  4 n=  500 top10=0.3707 top100=0.3492 top1%=0.048 top0.01%=0.000 acq=   9.4s score=  1.8s peak=  2643MB tan=0.256
+  [qPO-MC-10k seed1] iter  5 n=  600 top10=0.3719 top100=0.3531 top1%=0.070 top0.01%=0.000 acq=   9.5s score=  2.3s peak=  2643MB tan=0.244
+  [qPO-MC-10k seed1] iter  6 n=  700 top10=0.3783 top100=0.3592 top1%=0.105 top0.01%=0.000 acq=   9.7s score=  2.6s peak=  2643MB tan=0.299
+  [qPO-MC-10k seed1] iter  7 n=  800 top10=0.3833 top100=0.3653 top1%=0.138 top0.01%=0.000 acq=   9.7s score=  3.1s peak=  2643MB tan=0.302
+  [qPO-MC-10k seed1] iter  8 n=  900 top10=0.3880 top100=0.3717 top1%=0.182 top0.01%=0.000 acq=   9.7s score=  3.5s peak=  2643MB tan=0.295
+  [qPO-MC-10k seed1] iter  9 n= 1000 top10=0.3981 top100=0.3760 top1%=0.220 top0.01%=0.077 acq=  10.1s score=  4.1s peak=  2643MB tan=0.317
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo1_iter10
+  [qPO-MC-10k seed1] iter 10 n= 1100 top10=0.4034 top100=0.3781 top1%=0.254 top0.01%=0.154 acq=   9.8s score=  4.5s peak=  2643MB tan=0.224
+  [qPO-MC-10k seed1] iter 11 n= 1200 top10=0.4087 top100=0.3795 top1%=0.286 top0.01%=0.154 acq=  10.1s score=  5.2s peak=  2643MB tan=0.242
+  [qPO-MC-10k seed1] iter 12 n= 1300 top10=0.4362 top100=0.3893 top1%=0.330 top0.01%=0.769 acq=   9.8s score=  5.6s peak=  2643MB tan=0.328
+  [qPO-MC-10k seed1] iter 13 n= 1400 top10=0.4567 top100=0.3931 top1%=0.365 top0.01%=0.923 acq=  10.1s score=  6.5s peak=  2643MB tan=0.333
+  [qPO-MC-10k seed1] iter 14 n= 1500 top10=0.4654 top100=0.3950 top1%=0.398 top0.01%=1.000 acq=  10.3s score=  6.9s peak=  2643MB tan=0.208
+  [qPO-MC-10k seed1] iter 15 n= 1600 top10=0.4654 top100=0.3957 top1%=0.442 top0.01%=1.000 acq=  10.3s score=  7.6s peak=  2643MB tan=0.286
+  [qPO-MC-10k seed1] iter 16 n= 1700 top10=0.4654 top100=0.3958 top1%=0.482 top0.01%=1.000 acq=  10.4s score=  8.2s peak=  2643MB tan=0.291
+  [qPO-MC-10k seed1] iter 17 n= 1800 top10=0.4654 top100=0.3958 top1%=0.519 top0.01%=1.000 acq=  10.6s score=  9.1s peak=  2643MB tan=0.235
+  [qPO-MC-10k seed1] iter 18 n= 1900 top10=0.4654 top100=0.3959 top1%=0.552 top0.01%=1.000 acq=  10.9s score=  9.7s peak=  2643MB tan=0.229
+  [qPO-MC-10k seed1] iter 19 n= 2000 top10=0.4654 top100=0.3960 top1%=0.576 top0.01%=1.000 acq=  10.9s score= 10.9s peak=  2643MB tan=0.203
+  [qPO-MC-10k seed1] iter 20 n= 2100 top10=0.4654 top100=0.3960 top1%=0.604 top0.01%=1.000 acq=  10.8s score= 11.4s peak=  2643MB tan=0.218
+
+=== qPO-MC-10k seed 2 ===
+  [qPO-MC-10k seed2] iter  1 n=  200 top10=0.3463 top100=0.3275 top1%=0.005 top0.01%=0.000 acq=   9.0s score=  0.9s peak=  2643MB tan=0.307
+  [qPO-MC-10k seed2] iter  2 n=  300 top10=0.3603 top100=0.3412 top1%=0.019 top0.01%=0.000 acq=   9.2s score=  1.2s peak=  2643MB tan=0.305
+  [qPO-MC-10k seed2] iter  3 n=  400 top10=0.3736 top100=0.3514 top1%=0.049 top0.01%=0.000 acq=   9.3s score=  1.5s peak=  2643MB tan=0.312
+  [qPO-MC-10k seed2] iter  4 n=  500 top10=0.3780 top100=0.3592 top1%=0.082 top0.01%=0.000 acq=   9.3s score=  1.8s peak=  2643MB tan=0.327
+  [qPO-MC-10k seed2] iter  5 n=  600 top10=0.3790 top100=0.3643 top1%=0.116 top0.01%=0.000 acq=   9.4s score=  2.3s peak=  2643MB tan=0.314
+  [qPO-MC-10k seed2] iter  6 n=  700 top10=0.3806 top100=0.3672 top1%=0.162 top0.01%=0.000 acq=   9.5s score=  2.7s peak=  2643MB tan=0.311
+  [qPO-MC-10k seed2] iter  7 n=  800 top10=0.3834 top100=0.3698 top1%=0.212 top0.01%=0.000 acq=   9.7s score=  3.1s peak=  2643MB tan=0.326
+  [qPO-MC-10k seed2] iter  8 n=  900 top10=0.3850 top100=0.3725 top1%=0.255 top0.01%=0.000 acq=   9.7s score=  3.5s peak=  2643MB tan=0.324
+  [qPO-MC-10k seed2] iter  9 n= 1000 top10=0.3882 top100=0.3732 top1%=0.283 top0.01%=0.000 acq=  10.1s score=  4.1s peak=  2643MB tan=0.302
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo2_iter10
+  [qPO-MC-10k seed2] iter 10 n= 1100 top10=0.3925 top100=0.3742 top1%=0.314 top0.01%=0.000 acq=  10.1s score=  4.6s peak=  2643MB tan=0.285
+  [qPO-MC-10k seed2] iter 11 n= 1200 top10=0.4017 top100=0.3789 top1%=0.351 top0.01%=0.077 acq=   9.9s score=  5.1s peak=  2643MB tan=0.198
+  [qPO-MC-10k seed2] iter 12 n= 1300 top10=0.4201 top100=0.3859 top1%=0.386 top0.01%=0.462 acq=  10.3s score=  5.7s peak=  2643MB tan=0.300
+  [qPO-MC-10k seed2] iter 13 n= 1400 top10=0.4421 top100=0.3908 top1%=0.433 top0.01%=0.615 acq=  10.5s score=  6.6s peak=  2643MB tan=0.259
+  [qPO-MC-10k seed2] iter 14 n= 1500 top10=0.4542 top100=0.3935 top1%=0.461 top0.01%=0.846 acq=  10.8s score=  7.2s peak=  2643MB tan=0.184
+  [qPO-MC-10k seed2] iter 15 n= 1600 top10=0.4567 top100=0.3942 top1%=0.496 top0.01%=0.923 acq=  10.6s score=  7.9s peak=  2643MB tan=0.193
+  [qPO-MC-10k seed2] iter 16 n= 1700 top10=0.4654 top100=0.3958 top1%=0.525 top0.01%=1.000 acq=  10.5s score=  8.5s peak=  2643MB tan=0.164
+  [qPO-MC-10k seed2] iter 17 n= 1800 top10=0.4654 top100=0.3959 top1%=0.547 top0.01%=1.000 acq=  11.0s score= 10.8s peak=  2643MB tan=0.175
+  [qPO-MC-10k seed2] iter 18 n= 1900 top10=0.4654 top100=0.3960 top1%=0.565 top0.01%=1.000 acq=  10.7s score= 10.2s peak=  2643MB tan=0.202
+  [qPO-MC-10k seed2] iter 19 n= 2000 top10=0.4654 top100=0.3961 top1%=0.591 top0.01%=1.000 acq=  11.0s score= 11.3s peak=  2643MB tan=0.205
+  [qPO-MC-10k seed2] iter 20 n= 2100 top10=0.4654 top100=0.3961 top1%=0.608 top0.01%=1.000 acq=  11.8s score= 11.9s peak=  2643MB tan=0.243
+
+=== qPO-fast-r4-10k seed 0 ===
+  [qPO-fast-r4-10k seed0] iter  1 n=  200 top10=0.3659 top100=0.3344 top1%=0.019 top0.01%=0.000 acq=   2.6s score=  1.0s peak=  1207MB tan=0.414
+  [qPO-fast-r4-10k seed0] iter  2 n=  300 top10=0.3719 top100=0.3536 top1%=0.058 top0.01%=0.000 acq=   2.8s score=  1.3s peak=  1205MB tan=0.366
+  [qPO-fast-r4-10k seed0] iter  3 n=  400 top10=0.3770 top100=0.3624 top1%=0.100 top0.01%=0.000 acq=   2.9s score=  1.7s peak=  1205MB tan=0.316
+  [qPO-fast-r4-10k seed0] iter  4 n=  500 top10=0.3784 top100=0.3662 top1%=0.140 top0.01%=0.000 acq=   3.0s score=  2.1s peak=  1205MB tan=0.322
+  [qPO-fast-r4-10k seed0] iter  5 n=  600 top10=0.3815 top100=0.3693 top1%=0.186 top0.01%=0.000 acq=   3.1s score=  2.7s peak=  1205MB tan=0.304
+  [qPO-fast-r4-10k seed0] iter  6 n=  700 top10=0.3833 top100=0.3719 top1%=0.229 top0.01%=0.000 acq=   3.1s score=  2.8s peak=  1205MB tan=0.309
+  [qPO-fast-r4-10k seed0] iter  7 n=  800 top10=0.3887 top100=0.3737 top1%=0.264 top0.01%=0.000 acq=   3.2s score=  3.3s peak=  1205MB tan=0.298
+  [qPO-fast-r4-10k seed0] iter  8 n=  900 top10=0.3888 top100=0.3744 top1%=0.303 top0.01%=0.000 acq=   3.5s score=  3.7s peak=  1205MB tan=0.285
+  [qPO-fast-r4-10k seed0] iter  9 n= 1000 top10=0.3958 top100=0.3782 top1%=0.340 top0.01%=0.000 acq=   3.7s score=  4.8s peak=  1205MB tan=0.431
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo0_iter10
+  [qPO-fast-r4-10k seed0] iter 10 n= 1100 top10=0.4079 top100=0.3812 top1%=0.377 top0.01%=0.154 acq=   3.8s score=  5.0s peak=  1205MB tan=0.318
+  [qPO-fast-r4-10k seed0] iter 11 n= 1200 top10=0.4455 top100=0.3914 top1%=0.419 top0.01%=0.692 acq=   4.1s score=  5.6s peak=  1205MB tan=0.445
+  [qPO-fast-r4-10k seed0] iter 12 n= 1300 top10=0.4567 top100=0.3937 top1%=0.436 top0.01%=0.923 acq=   4.3s score=  6.3s peak=  1205MB tan=0.415
+  [qPO-fast-r4-10k seed0] iter 13 n= 1400 top10=0.4567 top100=0.3942 top1%=0.463 top0.01%=0.923 acq=   4.5s score=  6.7s peak=  1205MB tan=0.171
+  [qPO-fast-r4-10k seed0] iter 14 n= 1500 top10=0.4654 top100=0.3958 top1%=0.490 top0.01%=1.000 acq=   4.8s score=  7.4s peak=  1205MB tan=0.166
+  [qPO-fast-r4-10k seed0] iter 15 n= 1600 top10=0.4654 top100=0.3958 top1%=0.525 top0.01%=1.000 acq=   5.0s score=  8.3s peak=  1205MB tan=0.188
+  [qPO-fast-r4-10k seed0] iter 16 n= 1700 top10=0.4654 top100=0.3958 top1%=0.545 top0.01%=1.000 acq=   5.1s score=  8.5s peak=  1205MB tan=0.209
+  [qPO-fast-r4-10k seed0] iter 17 n= 1800 top10=0.4654 top100=0.3958 top1%=0.571 top0.01%=1.000 acq=   5.4s score=  9.5s peak=  1205MB tan=0.222
+  [qPO-fast-r4-10k seed0] iter 18 n= 1900 top10=0.4654 top100=0.3958 top1%=0.592 top0.01%=1.000 acq=   5.8s score= 10.3s peak=  1205MB tan=0.229
+  [qPO-fast-r4-10k seed0] iter 19 n= 2000 top10=0.4654 top100=0.3958 top1%=0.607 top0.01%=1.000 acq=   6.3s score= 11.1s peak=  1205MB tan=0.222
+  [qPO-fast-r4-10k seed0] iter 20 n= 2100 top10=0.4654 top100=0.3958 top1%=0.619 top0.01%=1.000 acq=   6.6s score= 11.8s peak=  1205MB tan=0.203
+
+=== qPO-fast-r4-10k seed 1 ===
+  [qPO-fast-r4-10k seed1] iter  1 n=  200 top10=0.3664 top100=0.3290 top1%=0.013 top0.01%=0.000 acq=   2.5s score=  0.9s peak=  1205MB tan=0.505
+  [qPO-fast-r4-10k seed1] iter  2 n=  300 top10=0.3737 top100=0.3423 top1%=0.026 top0.01%=0.000 acq=   2.6s score=  1.2s peak=  1205MB tan=0.412
+  [qPO-fast-r4-10k seed1] iter  3 n=  400 top10=0.3821 top100=0.3525 top1%=0.046 top0.01%=0.000 acq=   2.8s score=  1.6s peak=  1205MB tan=0.437
+  [qPO-fast-r4-10k seed1] iter  4 n=  500 top10=0.3843 top100=0.3612 top1%=0.074 top0.01%=0.000 acq=   2.9s score=  2.0s peak=  1205MB tan=0.380
+  [qPO-fast-r4-10k seed1] iter  5 n=  600 top10=0.3878 top100=0.3660 top1%=0.100 top0.01%=0.000 acq=   3.0s score=  2.4s peak=  1205MB tan=0.375
+  [qPO-fast-r4-10k seed1] iter  6 n=  700 top10=0.3902 top100=0.3703 top1%=0.135 top0.01%=0.000 acq=   3.1s score=  2.7s peak=  1205MB tan=0.356
+  [qPO-fast-r4-10k seed1] iter  7 n=  800 top10=0.3902 top100=0.3723 top1%=0.174 top0.01%=0.000 acq=   3.3s score=  3.2s peak=  1205MB tan=0.325
+  [qPO-fast-r4-10k seed1] iter  8 n=  900 top10=0.3911 top100=0.3736 top1%=0.228 top0.01%=0.000 acq=   3.4s score=  3.6s peak=  1205MB tan=0.319
+  [qPO-fast-r4-10k seed1] iter  9 n= 1000 top10=0.3914 top100=0.3748 top1%=0.271 top0.01%=0.000 acq=   3.6s score=  4.2s peak=  1205MB tan=0.330
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo1_iter10
+  [qPO-fast-r4-10k seed1] iter 10 n= 1100 top10=0.3934 top100=0.3759 top1%=0.310 top0.01%=0.000 acq=   3.8s score=  4.6s peak=  1205MB tan=0.326
+  [qPO-fast-r4-10k seed1] iter 11 n= 1200 top10=0.4011 top100=0.3790 top1%=0.357 top0.01%=0.077 acq=   4.0s score=  5.4s peak=  1205MB tan=0.307
+  [qPO-fast-r4-10k seed1] iter 12 n= 1300 top10=0.4490 top100=0.3901 top1%=0.395 top0.01%=0.692 acq=   4.2s score=  5.8s peak=  1205MB tan=0.381
+  [qPO-fast-r4-10k seed1] iter 13 n= 1400 top10=0.4539 top100=0.3911 top1%=0.419 top0.01%=0.769 acq=   4.5s score=  6.6s peak=  1205MB tan=0.481
+  [qPO-fast-r4-10k seed1] iter 14 n= 1500 top10=0.4542 top100=0.3940 top1%=0.463 top0.01%=0.846 acq=   4.7s score=  7.1s peak=  1205MB tan=0.376
+  [qPO-fast-r4-10k seed1] iter 15 n= 1600 top10=0.4567 top100=0.3950 top1%=0.506 top0.01%=0.923 acq=   5.0s score=  7.8s peak=  1205MB tan=0.234
+  [qPO-fast-r4-10k seed1] iter 16 n= 1700 top10=0.4567 top100=0.3952 top1%=0.549 top0.01%=0.923 acq=   5.3s score=  8.4s peak=  1205MB tan=0.202
+  [qPO-fast-r4-10k seed1] iter 17 n= 1800 top10=0.4654 top100=0.3964 top1%=0.576 top0.01%=1.000 acq=   5.6s score=  9.3s peak=  1205MB tan=0.186
+  [qPO-fast-r4-10k seed1] iter 18 n= 1900 top10=0.4654 top100=0.3966 top1%=0.603 top0.01%=1.000 acq=   5.9s score= 10.3s peak=  1205MB tan=0.238
+  [qPO-fast-r4-10k seed1] iter 19 n= 2000 top10=0.4654 top100=0.3966 top1%=0.629 top0.01%=1.000 acq=   6.8s score= 11.2s peak=  1205MB tan=0.191
+  [qPO-fast-r4-10k seed1] iter 20 n= 2100 top10=0.4654 top100=0.3966 top1%=0.651 top0.01%=1.000 acq=   6.6s score= 12.0s peak=  1205MB tan=0.243
+
+=== qPO-fast-r4-10k seed 2 ===
+  [qPO-fast-r4-10k seed2] iter  1 n=  200 top10=0.3514 top100=0.3283 top1%=0.009 top0.01%=0.000 acq=   2.5s score=  0.9s peak=  1205MB tan=0.329
+  [qPO-fast-r4-10k seed2] iter  2 n=  300 top10=0.3590 top100=0.3434 top1%=0.025 top0.01%=0.000 acq=   2.7s score=  1.2s peak=  1205MB tan=0.316
+  [qPO-fast-r4-10k seed2] iter  3 n=  400 top10=0.3654 top100=0.3490 top1%=0.048 top0.01%=0.000 acq=   2.8s score=  1.6s peak=  1205MB tan=0.280
+  [qPO-fast-r4-10k seed2] iter  4 n=  500 top10=0.3742 top100=0.3571 top1%=0.088 top0.01%=0.000 acq=   2.9s score=  1.9s peak=  1205MB tan=0.322
+  [qPO-fast-r4-10k seed2] iter  5 n=  600 top10=0.3795 top100=0.3622 top1%=0.120 top0.01%=0.000 acq=   3.0s score=  2.4s peak=  1205MB tan=0.315
+  [qPO-fast-r4-10k seed2] iter  6 n=  700 top10=0.3812 top100=0.3681 top1%=0.168 top0.01%=0.000 acq=   3.1s score=  2.8s peak=  1205MB tan=0.328
+  [qPO-fast-r4-10k seed2] iter  7 n=  800 top10=0.3837 top100=0.3708 top1%=0.212 top0.01%=0.000 acq=   3.3s score=  3.2s peak=  1205MB tan=0.359
+  [qPO-fast-r4-10k seed2] iter  8 n=  900 top10=0.3871 top100=0.3726 top1%=0.257 top0.01%=0.000 acq=   3.3s score=  3.7s peak=  1205MB tan=0.337
+  [qPO-fast-r4-10k seed2] iter  9 n= 1000 top10=0.3882 top100=0.3732 top1%=0.290 top0.01%=0.000 acq=   3.5s score=  4.4s peak=  1205MB tan=0.318
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo2_iter10
+  [qPO-fast-r4-10k seed2] iter 10 n= 1100 top10=0.3932 top100=0.3744 top1%=0.319 top0.01%=0.000 acq=   3.7s score=  4.8s peak=  1205MB tan=0.283
+  [qPO-fast-r4-10k seed2] iter 11 n= 1200 top10=0.4100 top100=0.3805 top1%=0.357 top0.01%=0.231 acq=   3.9s score=  5.5s peak=  1205MB tan=0.271
+  [qPO-fast-r4-10k seed2] iter 12 n= 1300 top10=0.4539 top100=0.3892 top1%=0.392 top0.01%=0.769 acq=   4.1s score=  5.9s peak=  1205MB tan=0.465
+  [qPO-fast-r4-10k seed2] iter 13 n= 1400 top10=0.4539 top100=0.3916 top1%=0.438 top0.01%=0.769 acq=   4.4s score=  6.7s peak=  1205MB tan=0.198
+  [qPO-fast-r4-10k seed2] iter 14 n= 1500 top10=0.4542 top100=0.3933 top1%=0.459 top0.01%=0.846 acq=   4.8s score=  7.2s peak=  1205MB tan=0.398
+  [qPO-fast-r4-10k seed2] iter 15 n= 1600 top10=0.4654 top100=0.3956 top1%=0.500 top0.01%=1.000 acq=   4.9s score=  8.1s peak=  1205MB tan=0.222
+  [qPO-fast-r4-10k seed2] iter 16 n= 1700 top10=0.4654 top100=0.3958 top1%=0.528 top0.01%=1.000 acq=   5.2s score=  8.7s peak=  1205MB tan=0.175
+  [qPO-fast-r4-10k seed2] iter 17 n= 1800 top10=0.4654 top100=0.3959 top1%=0.549 top0.01%=1.000 acq=   5.5s score=  9.7s peak=  1205MB tan=0.223
+  [qPO-fast-r4-10k seed2] iter 18 n= 1900 top10=0.4654 top100=0.3961 top1%=0.576 top0.01%=1.000 acq=   5.8s score= 10.2s peak=  1205MB tan=0.207
+  [qPO-fast-r4-10k seed2] iter 19 n= 2000 top10=0.4654 top100=0.3962 top1%=0.593 top0.01%=1.000 acq=   6.4s score= 11.4s peak=  1205MB tan=0.235
+  [qPO-fast-r4-10k seed2] iter 20 n= 2100 top10=0.4654 top100=0.3963 top1%=0.609 top0.01%=1.000 acq=   6.7s score= 11.9s peak=  1205MB tan=0.230
+
+=== qPO-fast-r4-full seed 0 ===
+  [qPO-fast-r4-full seed0] iter  1 n=  200 top10=0.3659 top100=0.3343 top1%=0.019 top0.01%=0.000 acq=  36.1s score=  1.0s peak=  2006MB tan=0.429
+  [qPO-fast-r4-full seed0] iter  2 n=  300 top10=0.3721 top100=0.3535 top1%=0.057 top0.01%=0.000 acq=  37.3s score=  1.1s peak=  2004MB tan=0.368
+  [qPO-fast-r4-full seed0] iter  3 n=  400 top10=0.3762 top100=0.3622 top1%=0.099 top0.01%=0.000 acq=  38.4s score=  1.5s peak=  2003MB tan=0.318
+  [qPO-fast-r4-full seed0] iter  4 n=  500 top10=0.3785 top100=0.3660 top1%=0.139 top0.01%=0.000 acq=  39.3s score=  1.8s peak=  2001MB tan=0.315
+  [qPO-fast-r4-full seed0] iter  5 n=  600 top10=0.3815 top100=0.3693 top1%=0.188 top0.01%=0.000 acq=  41.2s score=  2.3s peak=  2000MB tan=0.310
+  [qPO-fast-r4-full seed0] iter  6 n=  700 top10=0.3839 top100=0.3718 top1%=0.229 top0.01%=0.000 acq=  42.4s score=  2.7s peak=  1998MB tan=0.313
+  [qPO-fast-r4-full seed0] iter  7 n=  800 top10=0.3882 top100=0.3733 top1%=0.267 top0.01%=0.000 acq=  44.3s score=  3.2s peak=  1997MB tan=0.319
+  [qPO-fast-r4-full seed0] iter  8 n=  900 top10=0.3883 top100=0.3739 top1%=0.296 top0.01%=0.000 acq=  46.0s score=  3.6s peak=  1995MB tan=0.295
+  [qPO-fast-r4-full seed0] iter  9 n= 1000 top10=0.3958 top100=0.3780 top1%=0.332 top0.01%=0.000 acq=  48.0s score=  4.1s peak=  1994MB tan=0.434
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo0_iter10
+  [qPO-fast-r4-full seed0] iter 10 n= 1100 top10=0.4044 top100=0.3805 top1%=0.362 top0.01%=0.077 acq=  49.6s score=  4.6s peak=  1992MB tan=0.340
+  [qPO-fast-r4-full seed0] iter 11 n= 1200 top10=0.4567 top100=0.3931 top1%=0.407 top0.01%=0.846 acq=  51.5s score=  5.3s peak=  1991MB tan=0.455
+  [qPO-fast-r4-full seed0] iter 12 n= 1300 top10=0.4567 top100=0.3936 top1%=0.423 top0.01%=0.923 acq=  52.6s score=  5.6s peak=  1989MB tan=0.416
+  [qPO-fast-r4-full seed0] iter 13 n= 1400 top10=0.4567 top100=0.3941 top1%=0.456 top0.01%=0.923 acq=  55.4s score=  6.4s peak=  1988MB tan=0.157
+  [qPO-fast-r4-full seed0] iter 14 n= 1500 top10=0.4654 top100=0.3957 top1%=0.491 top0.01%=1.000 acq=  56.8s score=  6.8s peak=  1986MB tan=0.165
+  [qPO-fast-r4-full seed0] iter 15 n= 1600 top10=0.4654 top100=0.3958 top1%=0.516 top0.01%=1.000 acq=  59.6s score=  7.6s peak=  1985MB tan=0.194
+  [qPO-fast-r4-full seed0] iter 16 n= 1700 top10=0.4654 top100=0.3958 top1%=0.542 top0.01%=1.000 acq=  61.9s score=  8.1s peak=  1983MB tan=0.252
+  [qPO-fast-r4-full seed0] iter 17 n= 1800 top10=0.4654 top100=0.3958 top1%=0.569 top0.01%=1.000 acq=  65.3s score=  9.3s peak=  1982MB tan=0.212
+  [qPO-fast-r4-full seed0] iter 18 n= 1900 top10=0.4654 top100=0.3958 top1%=0.588 top0.01%=1.000 acq=  68.0s score= 10.0s peak=  2020MB tan=0.223
+  [qPO-fast-r4-full seed0] iter 19 n= 2000 top10=0.4654 top100=0.3958 top1%=0.606 top0.01%=1.000 acq=  70.8s score= 11.1s peak=  2067MB tan=0.207
+  [qPO-fast-r4-full seed0] iter 20 n= 2100 top10=0.4654 top100=0.3958 top1%=0.617 top0.01%=1.000 acq=  73.2s score= 11.6s peak=  2114MB tan=0.228
+
+=== qPO-fast-r4-full seed 1 ===
+  [qPO-fast-r4-full seed1] iter  1 n=  200 top10=0.3659 top100=0.3292 top1%=0.013 top0.01%=0.000 acq=  35.3s score=  0.9s peak=  2006MB tan=0.534
+  [qPO-fast-r4-full seed1] iter  2 n=  300 top10=0.3770 top100=0.3431 top1%=0.027 top0.01%=0.000 acq=  36.4s score=  1.1s peak=  2004MB tan=0.427
+  [qPO-fast-r4-full seed1] iter  3 n=  400 top10=0.3818 top100=0.3522 top1%=0.044 top0.01%=0.000 acq=  37.7s score=  1.5s peak=  2003MB tan=0.407
+  [qPO-fast-r4-full seed1] iter  4 n=  500 top10=0.3827 top100=0.3582 top1%=0.065 top0.01%=0.000 acq=  38.8s score=  1.8s peak=  2001MB tan=0.366
+  [qPO-fast-r4-full seed1] iter  5 n=  600 top10=0.3858 top100=0.3659 top1%=0.102 top0.01%=0.000 acq=  41.0s score=  2.3s peak=  2000MB tan=0.353
+  [qPO-fast-r4-full seed1] iter  6 n=  700 top10=0.3890 top100=0.3703 top1%=0.145 top0.01%=0.000 acq=  41.9s score=  2.7s peak=  1998MB tan=0.357
+  [qPO-fast-r4-full seed1] iter  7 n=  800 top10=0.3905 top100=0.3726 top1%=0.185 top0.01%=0.000 acq=  43.8s score=  3.1s peak=  1997MB tan=0.330
+  [qPO-fast-r4-full seed1] iter  8 n=  900 top10=0.3911 top100=0.3740 top1%=0.235 top0.01%=0.000 acq=  44.9s score=  3.5s peak=  1995MB tan=0.336
+  [qPO-fast-r4-full seed1] iter  9 n= 1000 top10=0.3914 top100=0.3752 top1%=0.273 top0.01%=0.000 acq=  46.9s score=  4.1s peak=  1994MB tan=0.331
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo1_iter10
+  [qPO-fast-r4-full seed1] iter 10 n= 1100 top10=0.3934 top100=0.3760 top1%=0.319 top0.01%=0.000 acq=  48.3s score=  4.5s peak=  1992MB tan=0.303
+  [qPO-fast-r4-full seed1] iter 11 n= 1200 top10=0.4011 top100=0.3790 top1%=0.366 top0.01%=0.077 acq=  51.3s score=  5.2s peak=  1991MB tan=0.254
+  [qPO-fast-r4-full seed1] iter 12 n= 1300 top10=0.4490 top100=0.3908 top1%=0.409 top0.01%=0.692 acq=  53.2s score=  6.4s peak=  1989MB tan=0.346
+  [qPO-fast-r4-full seed1] iter 13 n= 1400 top10=0.4539 top100=0.3925 top1%=0.433 top0.01%=0.769 acq=  54.8s score=  6.7s peak=  1988MB tan=0.429
+  [qPO-fast-r4-full seed1] iter 14 n= 1500 top10=0.4542 top100=0.3940 top1%=0.469 top0.01%=0.846 acq=  56.4s score=  6.9s peak=  1986MB tan=0.383
+  [qPO-fast-r4-full seed1] iter 15 n= 1600 top10=0.4567 top100=0.3950 top1%=0.513 top0.01%=0.923 acq=  59.4s score=  7.7s peak=  1985MB tan=0.190
+  [qPO-fast-r4-full seed1] iter 16 n= 1700 top10=0.4567 top100=0.3952 top1%=0.548 top0.01%=0.923 acq=  61.2s score=  8.1s peak=  1983MB tan=0.184
+  [qPO-fast-r4-full seed1] iter 17 n= 1800 top10=0.4654 top100=0.3964 top1%=0.578 top0.01%=1.000 acq=  64.9s score=  9.0s peak=  1982MB tan=0.181
+  [qPO-fast-r4-full seed1] iter 18 n= 1900 top10=0.4654 top100=0.3965 top1%=0.601 top0.01%=1.000 acq=  67.2s score= 10.0s peak=  2020MB tan=0.179
+  [qPO-fast-r4-full seed1] iter 19 n= 2000 top10=0.4654 top100=0.3966 top1%=0.629 top0.01%=1.000 acq=  70.2s score= 10.7s peak=  2067MB tan=0.223
+  [qPO-fast-r4-full seed1] iter 20 n= 2100 top10=0.4654 top100=0.3966 top1%=0.648 top0.01%=1.000 acq=  73.0s score= 11.3s peak=  2114MB tan=0.230
+
+=== qPO-fast-r4-full seed 2 ===
+  [qPO-fast-r4-full seed2] iter  1 n=  200 top10=0.3535 top100=0.3293 top1%=0.010 top0.01%=0.000 acq=  35.6s score=  1.0s peak=  2006MB tan=0.343
+  [qPO-fast-r4-full seed2] iter  2 n=  300 top10=0.3633 top100=0.3445 top1%=0.028 top0.01%=0.000 acq=  36.3s score=  1.1s peak=  2004MB tan=0.317
+  [qPO-fast-r4-full seed2] iter  3 n=  400 top10=0.3753 top100=0.3544 top1%=0.064 top0.01%=0.000 acq=  37.9s score=  1.5s peak=  2003MB tan=0.304
+  [qPO-fast-r4-full seed2] iter  4 n=  500 top10=0.3797 top100=0.3620 top1%=0.103 top0.01%=0.000 acq=  38.6s score=  1.8s peak=  2001MB tan=0.306
+  [qPO-fast-r4-full seed2] iter  5 n=  600 top10=0.3832 top100=0.3676 top1%=0.147 top0.01%=0.000 acq=  40.4s score=  2.3s peak=  2000MB tan=0.330
+  [qPO-fast-r4-full seed2] iter  6 n=  700 top10=0.3846 top100=0.3710 top1%=0.197 top0.01%=0.000 acq=  41.6s score=  2.6s peak=  1998MB tan=0.344
+  [qPO-fast-r4-full seed2] iter  7 n=  800 top10=0.3882 top100=0.3730 top1%=0.242 top0.01%=0.000 acq=  43.3s score=  3.1s peak=  1997MB tan=0.368
+  [qPO-fast-r4-full seed2] iter  8 n=  900 top10=0.3904 top100=0.3735 top1%=0.271 top0.01%=0.000 acq=  45.0s score=  3.4s peak=  1995MB tan=0.301
+  [qPO-fast-r4-full seed2] iter  9 n= 1000 top10=0.4010 top100=0.3770 top1%=0.313 top0.01%=0.077 acq=  47.0s score=  4.1s peak=  1994MB tan=0.258
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo2_iter10
+  [qPO-fast-r4-full seed2] iter 10 n= 1100 top10=0.4272 top100=0.3850 top1%=0.342 top0.01%=0.538 acq=  48.3s score=  4.5s peak=  1992MB tan=0.362
+  [qPO-fast-r4-full seed2] iter 11 n= 1200 top10=0.4539 top100=0.3892 top1%=0.369 top0.01%=0.769 acq=  50.2s score=  5.1s peak=  1991MB tan=0.464
+  [qPO-fast-r4-full seed2] iter 12 n= 1300 top10=0.4539 top100=0.3925 top1%=0.422 top0.01%=0.769 acq=  51.9s score=  5.5s peak=  1989MB tan=0.305
+  [qPO-fast-r4-full seed2] iter 13 n= 1400 top10=0.4542 top100=0.3935 top1%=0.448 top0.01%=0.846 acq=  55.0s score=  6.3s peak=  1988MB tan=0.390
+  [qPO-fast-r4-full seed2] iter 14 n= 1500 top10=0.4654 top100=0.3955 top1%=0.480 top0.01%=1.000 acq=  56.4s score=  6.8s peak=  1986MB tan=0.195
+  [qPO-fast-r4-full seed2] iter 15 n= 1600 top10=0.4654 top100=0.3958 top1%=0.507 top0.01%=1.000 acq=  58.7s score=  7.8s peak=  1985MB tan=0.184
+  [qPO-fast-r4-full seed2] iter 16 n= 1700 top10=0.4654 top100=0.3958 top1%=0.532 top0.01%=1.000 acq=  61.3s score=  8.1s peak=  1983MB tan=0.218
+  [qPO-fast-r4-full seed2] iter 17 n= 1800 top10=0.4654 top100=0.3958 top1%=0.556 top0.01%=1.000 acq=  64.5s score=  9.0s peak=  1982MB tan=0.214
+  [qPO-fast-r4-full seed2] iter 18 n= 1900 top10=0.4654 top100=0.3958 top1%=0.579 top0.01%=1.000 acq=  67.0s score=  9.6s peak=  2020MB tan=0.220
+  [qPO-fast-r4-full seed2] iter 19 n= 2000 top10=0.4654 top100=0.3960 top1%=0.599 top0.01%=1.000 acq=  70.4s score= 10.7s peak=  2067MB tan=0.237
+  [qPO-fast-r4-full seed2] iter 20 n= 2100 top10=0.4654 top100=0.3963 top1%=0.614 top0.01%=1.000 acq=  73.2s score= 11.4s peak=  2114MB tan=0.283
+
+=== F-LITE-full seed 0 ===
+  [F-LITE-full seed0] iter  1 n=  200 top10=0.3641 top100=0.3324 top1%=0.016 top0.01%=0.000 acq=   0.1s score=  0.9s peak=     5MB tan=0.436
+  [F-LITE-full seed0] iter  2 n=  300 top10=0.3721 top100=0.3538 top1%=0.058 top0.01%=0.000 acq=   0.1s score=  1.2s peak=     5MB tan=0.364
+  [F-LITE-full seed0] iter  3 n=  400 top10=0.3765 top100=0.3620 top1%=0.094 top0.01%=0.000 acq=   0.1s score=  1.5s peak=     5MB tan=0.318
+  [F-LITE-full seed0] iter  4 n=  500 top10=0.3785 top100=0.3657 top1%=0.129 top0.01%=0.000 acq=   0.1s score=  1.8s peak=     5MB tan=0.315
+  [F-LITE-full seed0] iter  5 n=  600 top10=0.3817 top100=0.3694 top1%=0.182 top0.01%=0.000 acq=   0.1s score=  2.3s peak=     5MB tan=0.307
+  [F-LITE-full seed0] iter  6 n=  700 top10=0.3833 top100=0.3718 top1%=0.227 top0.01%=0.000 acq=   0.1s score=  2.7s peak=     5MB tan=0.323
+  [F-LITE-full seed0] iter  7 n=  800 top10=0.3887 top100=0.3736 top1%=0.264 top0.01%=0.000 acq=   0.1s score=  3.1s peak=     5MB tan=0.302
+  [F-LITE-full seed0] iter  8 n=  900 top10=0.3891 top100=0.3749 top1%=0.305 top0.01%=0.000 acq=   0.1s score=  3.5s peak=     5MB tan=0.246
+  [F-LITE-full seed0] iter  9 n= 1000 top10=0.3963 top100=0.3788 top1%=0.333 top0.01%=0.000 acq=   0.1s score=  4.1s peak=     5MB tan=0.440
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo0_iter10
+  [F-LITE-full seed0] iter 10 n= 1100 top10=0.4109 top100=0.3822 top1%=0.364 top0.01%=0.154 acq=   0.1s score=  4.5s peak=     5MB tan=0.270
+  [F-LITE-full seed0] iter 11 n= 1200 top10=0.4567 top100=0.3934 top1%=0.407 top0.01%=0.846 acq=   0.1s score=  5.3s peak=     5MB tan=0.470
+  [F-LITE-full seed0] iter 12 n= 1300 top10=0.4567 top100=0.3941 top1%=0.426 top0.01%=0.923 acq=   0.1s score=  5.8s peak=     5MB tan=0.346
+  [F-LITE-full seed0] iter 13 n= 1400 top10=0.4567 top100=0.3945 top1%=0.455 top0.01%=0.923 acq=   0.1s score=  6.5s peak=     5MB tan=0.161
+  [F-LITE-full seed0] iter 14 n= 1500 top10=0.4654 top100=0.3958 top1%=0.478 top0.01%=1.000 acq=   0.1s score=  7.1s peak=     5MB tan=0.163
+  [F-LITE-full seed0] iter 15 n= 1600 top10=0.4654 top100=0.3958 top1%=0.510 top0.01%=1.000 acq=   0.1s score=  7.8s peak=     5MB tan=0.214
+  [F-LITE-full seed0] iter 16 n= 1700 top10=0.4654 top100=0.3958 top1%=0.539 top0.01%=1.000 acq=   0.1s score=  8.2s peak=     5MB tan=0.227
+  [F-LITE-full seed0] iter 17 n= 1800 top10=0.4654 top100=0.3958 top1%=0.564 top0.01%=1.000 acq=   0.1s score=  9.2s peak=     5MB tan=0.230
+  [F-LITE-full seed0] iter 18 n= 1900 top10=0.4654 top100=0.3958 top1%=0.581 top0.01%=1.000 acq=   0.1s score= 10.0s peak=     5MB tan=0.217
+  [F-LITE-full seed0] iter 19 n= 2000 top10=0.4654 top100=0.3958 top1%=0.600 top0.01%=1.000 acq=   0.1s score= 10.9s peak=     5MB tan=0.214
+  [F-LITE-full seed0] iter 20 n= 2100 top10=0.4654 top100=0.3958 top1%=0.618 top0.01%=1.000 acq=   0.1s score= 11.5s peak=     5MB tan=0.239
+
+=== F-LITE-full seed 1 ===
+  [F-LITE-full seed1] iter  1 n=  200 top10=0.3645 top100=0.3281 top1%=0.011 top0.01%=0.000 acq=   0.1s score=  0.9s peak=     5MB tan=0.530
+  [F-LITE-full seed1] iter  2 n=  300 top10=0.3750 top100=0.3428 top1%=0.026 top0.01%=0.000 acq=   0.1s score=  1.2s peak=     5MB tan=0.399
+  [F-LITE-full seed1] iter  3 n=  400 top10=0.3832 top100=0.3541 top1%=0.049 top0.01%=0.000 acq=   0.1s score=  1.5s peak=     5MB tan=0.423
+  [F-LITE-full seed1] iter  4 n=  500 top10=0.3839 top100=0.3602 top1%=0.070 top0.01%=0.000 acq=   0.1s score=  1.8s peak=     5MB tan=0.370
+  [F-LITE-full seed1] iter  5 n=  600 top10=0.3869 top100=0.3661 top1%=0.102 top0.01%=0.000 acq=   0.1s score=  2.2s peak=     5MB tan=0.372
+  [F-LITE-full seed1] iter  6 n=  700 top10=0.3902 top100=0.3708 top1%=0.135 top0.01%=0.000 acq=   0.1s score=  2.6s peak=     5MB tan=0.354
+  [F-LITE-full seed1] iter  7 n=  800 top10=0.3911 top100=0.3728 top1%=0.178 top0.01%=0.000 acq=   0.1s score=  3.3s peak=     5MB tan=0.331
+  [F-LITE-full seed1] iter  8 n=  900 top10=0.3911 top100=0.3744 top1%=0.230 top0.01%=0.000 acq=   0.1s score=  3.5s peak=     5MB tan=0.348
+  [F-LITE-full seed1] iter  9 n= 1000 top10=0.3923 top100=0.3755 top1%=0.267 top0.01%=0.000 acq=   0.1s score=  4.1s peak=     5MB tan=0.301
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo1_iter10
+  [F-LITE-full seed1] iter 10 n= 1100 top10=0.3947 top100=0.3766 top1%=0.315 top0.01%=0.000 acq=   0.1s score=  4.5s peak=     5MB tan=0.295
+  [F-LITE-full seed1] iter 11 n= 1200 top10=0.4078 top100=0.3830 top1%=0.365 top0.01%=0.077 acq=   0.1s score=  5.3s peak=     5MB tan=0.206
+  [F-LITE-full seed1] iter 12 n= 1300 top10=0.4527 top100=0.3927 top1%=0.405 top0.01%=0.769 acq=   0.1s score=  5.6s peak=     5MB tan=0.326
+  [F-LITE-full seed1] iter 13 n= 1400 top10=0.4567 top100=0.3942 top1%=0.430 top0.01%=0.923 acq=   0.1s score=  6.4s peak=     5MB tan=0.384
+  [F-LITE-full seed1] iter 14 n= 1500 top10=0.4567 top100=0.3949 top1%=0.466 top0.01%=0.923 acq=   0.1s score=  6.8s peak=     5MB tan=0.254
+  [F-LITE-full seed1] iter 15 n= 1600 top10=0.4654 top100=0.3964 top1%=0.510 top0.01%=1.000 acq=   0.1s score=  7.7s peak=     5MB tan=0.200
+  [F-LITE-full seed1] iter 16 n= 1700 top10=0.4654 top100=0.3965 top1%=0.544 top0.01%=1.000 acq=   0.1s score=  8.5s peak=     5MB tan=0.170
+  [F-LITE-full seed1] iter 17 n= 1800 top10=0.4654 top100=0.3965 top1%=0.570 top0.01%=1.000 acq=   0.1s score=  9.1s peak=     5MB tan=0.195
+  [F-LITE-full seed1] iter 18 n= 1900 top10=0.4654 top100=0.3965 top1%=0.601 top0.01%=1.000 acq=   0.1s score=  9.9s peak=     5MB tan=0.220
+  [F-LITE-full seed1] iter 19 n= 2000 top10=0.4654 top100=0.3965 top1%=0.624 top0.01%=1.000 acq=   0.1s score= 10.8s peak=     5MB tan=0.207
+  [F-LITE-full seed1] iter 20 n= 2100 top10=0.4654 top100=0.3966 top1%=0.645 top0.01%=1.000 acq=   0.1s score= 11.5s peak=     5MB tan=0.229
+
+=== F-LITE-full seed 2 ===
+  [F-LITE-full seed2] iter  1 n=  200 top10=0.3539 top100=0.3293 top1%=0.011 top0.01%=0.000 acq=   0.1s score=  0.9s peak=     5MB tan=0.347
+  [F-LITE-full seed2] iter  2 n=  300 top10=0.3615 top100=0.3442 top1%=0.028 top0.01%=0.000 acq=   0.1s score=  1.2s peak=     5MB tan=0.311
+  [F-LITE-full seed2] iter  3 n=  400 top10=0.3702 top100=0.3518 top1%=0.056 top0.01%=0.000 acq=   0.1s score=  1.5s peak=     5MB tan=0.274
+  [F-LITE-full seed2] iter  4 n=  500 top10=0.3772 top100=0.3587 top1%=0.092 top0.01%=0.000 acq=   0.1s score=  1.8s peak=     5MB tan=0.320
+  [F-LITE-full seed2] iter  5 n=  600 top10=0.3820 top100=0.3651 top1%=0.131 top0.01%=0.000 acq=   0.1s score=  2.3s peak=     5MB tan=0.326
+  [F-LITE-full seed2] iter  6 n=  700 top10=0.3838 top100=0.3698 top1%=0.179 top0.01%=0.000 acq=   0.1s score=  2.7s peak=     5MB tan=0.352
+  [F-LITE-full seed2] iter  7 n=  800 top10=0.3859 top100=0.3722 top1%=0.222 top0.01%=0.000 acq=   0.1s score=  3.1s peak=     5MB tan=0.352
+  [F-LITE-full seed2] iter  8 n=  900 top10=0.3893 top100=0.3740 top1%=0.265 top0.01%=0.000 acq=   0.1s score=  3.5s peak=     5MB tan=0.333
+  [F-LITE-full seed2] iter  9 n= 1000 top10=0.3914 top100=0.3744 top1%=0.291 top0.01%=0.000 acq=   0.1s score=  4.1s peak=     5MB tan=0.297
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo2_iter10
+  [F-LITE-full seed2] iter 10 n= 1100 top10=0.4017 top100=0.3784 top1%=0.338 top0.01%=0.077 acq=   0.1s score=  4.5s peak=     5MB tan=0.238
+  [F-LITE-full seed2] iter 11 n= 1200 top10=0.4330 top100=0.3872 top1%=0.374 top0.01%=0.692 acq=   0.1s score=  5.2s peak=     5MB tan=0.413
+  [F-LITE-full seed2] iter 12 n= 1300 top10=0.4539 top100=0.3918 top1%=0.409 top0.01%=0.769 acq=   0.1s score=  5.8s peak=     5MB tan=0.217
+  [F-LITE-full seed2] iter 13 n= 1400 top10=0.4542 top100=0.3934 top1%=0.438 top0.01%=0.846 acq=   0.1s score=  6.5s peak=     5MB tan=0.389
+  [F-LITE-full seed2] iter 14 n= 1500 top10=0.4567 top100=0.3946 top1%=0.476 top0.01%=0.923 acq=   0.1s score=  6.9s peak=     5MB tan=0.200
+  [F-LITE-full seed2] iter 15 n= 1600 top10=0.4654 top100=0.3960 top1%=0.503 top0.01%=1.000 acq=   0.1s score=  7.6s peak=     5MB tan=0.186
+  [F-LITE-full seed2] iter 16 n= 1700 top10=0.4654 top100=0.3963 top1%=0.534 top0.01%=1.000 acq=   0.1s score=  8.1s peak=     5MB tan=0.199
+  [F-LITE-full seed2] iter 17 n= 1800 top10=0.4654 top100=0.3963 top1%=0.549 top0.01%=1.000 acq=   0.1s score=  9.4s peak=     5MB tan=0.205
+  [F-LITE-full seed2] iter 18 n= 1900 top10=0.4654 top100=0.3963 top1%=0.572 top0.01%=1.000 acq=   0.1s score=  9.8s peak=     5MB tan=0.203
+  [F-LITE-full seed2] iter 19 n= 2000 top10=0.4654 top100=0.3963 top1%=0.597 top0.01%=1.000 acq=   0.1s score= 10.7s peak=     5MB tan=0.209
+  [F-LITE-full seed2] iter 20 n= 2100 top10=0.4654 top100=0.3963 top1%=0.617 top0.01%=1.000 acq=   0.1s score= 11.4s peak=     5MB tan=0.237
+
+=== UCB seed 0 ===
+  [UCB seed0] iter  1 n=  200 top10=0.3647 top100=0.3371 top1%=0.023 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     4MB tan=0.454
+  [UCB seed0] iter  2 n=  300 top10=0.3724 top100=0.3538 top1%=0.062 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     4MB tan=0.391
+  [UCB seed0] iter  3 n=  400 top10=0.3753 top100=0.3621 top1%=0.105 top0.01%=0.000 acq=   0.0s score=  1.5s peak=     4MB tan=0.335
+  [UCB seed0] iter  4 n=  500 top10=0.3805 top100=0.3681 top1%=0.155 top0.01%=0.000 acq=   0.0s score=  1.8s peak=     4MB tan=0.315
+  [UCB seed0] iter  5 n=  600 top10=0.3830 top100=0.3710 top1%=0.200 top0.01%=0.000 acq=   0.0s score=  2.2s peak=     4MB tan=0.305
+  [UCB seed0] iter  6 n=  700 top10=0.3875 top100=0.3728 top1%=0.249 top0.01%=0.000 acq=   0.0s score=  2.6s peak=     4MB tan=0.325
+  [UCB seed0] iter  7 n=  800 top10=0.3882 top100=0.3734 top1%=0.283 top0.01%=0.000 acq=   0.0s score=  3.2s peak=     4MB tan=0.330
+  [UCB seed0] iter  8 n=  900 top10=0.3886 top100=0.3739 top1%=0.324 top0.01%=0.000 acq=   0.0s score=  3.5s peak=     4MB tan=0.316
+  [UCB seed0] iter  9 n= 1000 top10=0.3962 top100=0.3776 top1%=0.367 top0.01%=0.000 acq=   0.0s score=  4.1s peak=     4MB tan=0.278
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo0_iter10
+  [UCB seed0] iter 10 n= 1100 top10=0.4003 top100=0.3795 top1%=0.402 top0.01%=0.077 acq=   0.0s score=  4.5s peak=     4MB tan=0.390
+  [UCB seed0] iter 11 n= 1200 top10=0.4056 top100=0.3805 top1%=0.428 top0.01%=0.154 acq=   0.0s score=  5.2s peak=     4MB tan=0.249
+  [UCB seed0] iter 12 n= 1300 top10=0.4056 top100=0.3805 top1%=0.455 top0.01%=0.154 acq=   0.0s score=  5.6s peak=     4MB tan=0.211
+  [UCB seed0] iter 13 n= 1400 top10=0.4058 top100=0.3811 top1%=0.489 top0.01%=0.154 acq=   0.0s score=  6.5s peak=     4MB tan=0.268
+  [UCB seed0] iter 14 n= 1500 top10=0.4080 top100=0.3822 top1%=0.510 top0.01%=0.154 acq=   0.0s score=  7.1s peak=     4MB tan=0.293
+  [UCB seed0] iter 15 n= 1600 top10=0.4567 top100=0.3944 top1%=0.552 top0.01%=0.923 acq=   0.0s score=  7.7s peak=     4MB tan=0.439
+  [UCB seed0] iter 16 n= 1700 top10=0.4567 top100=0.3944 top1%=0.574 top0.01%=0.923 acq=   0.0s score=  8.1s peak=     4MB tan=0.428
+  [UCB seed0] iter 17 n= 1800 top10=0.4567 top100=0.3944 top1%=0.597 top0.01%=0.923 acq=   0.0s score=  9.1s peak=     4MB tan=0.213
+  [UCB seed0] iter 18 n= 1900 top10=0.4567 top100=0.3946 top1%=0.620 top0.01%=0.923 acq=   0.0s score= 10.0s peak=     4MB tan=0.209
+  [UCB seed0] iter 19 n= 2000 top10=0.4567 top100=0.3946 top1%=0.635 top0.01%=0.923 acq=   0.0s score= 10.9s peak=     4MB tan=0.231
+  [UCB seed0] iter 20 n= 2100 top10=0.4567 top100=0.3946 top1%=0.654 top0.01%=0.923 acq=   0.0s score= 11.5s peak=     4MB tan=0.228
+
+=== UCB seed 1 ===
+  [UCB seed1] iter  1 n=  200 top10=0.3658 top100=0.3301 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     4MB tan=0.579
+  [UCB seed1] iter  2 n=  300 top10=0.3761 top100=0.3473 top1%=0.034 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     4MB tan=0.519
+  [UCB seed1] iter  3 n=  400 top10=0.3826 top100=0.3557 top1%=0.055 top0.01%=0.000 acq=   0.0s score=  1.5s peak=     4MB tan=0.433
+  [UCB seed1] iter  4 n=  500 top10=0.3839 top100=0.3607 top1%=0.076 top0.01%=0.000 acq=   0.0s score=  1.8s peak=     4MB tan=0.417
+  [UCB seed1] iter  5 n=  600 top10=0.3866 top100=0.3662 top1%=0.107 top0.01%=0.000 acq=   0.0s score=  2.2s peak=     4MB tan=0.404
+  [UCB seed1] iter  6 n=  700 top10=0.3866 top100=0.3693 top1%=0.136 top0.01%=0.000 acq=   0.0s score=  2.6s peak=     4MB tan=0.394
+  [UCB seed1] iter  7 n=  800 top10=0.3895 top100=0.3707 top1%=0.170 top0.01%=0.000 acq=   0.0s score=  3.1s peak=     4MB tan=0.403
+  [UCB seed1] iter  8 n=  900 top10=0.3907 top100=0.3722 top1%=0.203 top0.01%=0.000 acq=   0.0s score=  3.5s peak=     4MB tan=0.360
+  [UCB seed1] iter  9 n= 1000 top10=0.3907 top100=0.3734 top1%=0.246 top0.01%=0.000 acq=   0.0s score=  4.4s peak=     4MB tan=0.330
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo1_iter10
+  [UCB seed1] iter 10 n= 1100 top10=0.3911 top100=0.3750 top1%=0.300 top0.01%=0.000 acq=   0.0s score=  4.6s peak=     4MB tan=0.346
+  [UCB seed1] iter 11 n= 1200 top10=0.3918 top100=0.3759 top1%=0.348 top0.01%=0.000 acq=   0.0s score=  5.4s peak=     4MB tan=0.325
+  [UCB seed1] iter 12 n= 1300 top10=0.3926 top100=0.3763 top1%=0.387 top0.01%=0.000 acq=   0.0s score=  5.6s peak=     4MB tan=0.292
+  [UCB seed1] iter 13 n= 1400 top10=0.3936 top100=0.3768 top1%=0.422 top0.01%=0.000 acq=   0.0s score=  6.4s peak=     4MB tan=0.318
+  [UCB seed1] iter 14 n= 1500 top10=0.3952 top100=0.3774 top1%=0.461 top0.01%=0.000 acq=   0.0s score=  6.9s peak=     4MB tan=0.290
+  [UCB seed1] iter 15 n= 1600 top10=0.4039 top100=0.3823 top1%=0.508 top0.01%=0.077 acq=   0.0s score=  7.7s peak=     4MB tan=0.208
+  [UCB seed1] iter 16 n= 1700 top10=0.4495 top100=0.3931 top1%=0.549 top0.01%=0.769 acq=   0.0s score=  8.4s peak=     4MB tan=0.281
+  [UCB seed1] iter 17 n= 1800 top10=0.4542 top100=0.3941 top1%=0.576 top0.01%=0.846 acq=   0.0s score=  9.1s peak=     4MB tan=0.480
+  [UCB seed1] iter 18 n= 1900 top10=0.4542 top100=0.3945 top1%=0.614 top0.01%=0.846 acq=   0.0s score=  9.8s peak=     4MB tan=0.234
+  [UCB seed1] iter 19 n= 2000 top10=0.4567 top100=0.3953 top1%=0.645 top0.01%=0.923 acq=   0.0s score= 10.6s peak=     4MB tan=0.257
+  [UCB seed1] iter 20 n= 2100 top10=0.4567 top100=0.3953 top1%=0.677 top0.01%=0.923 acq=   0.0s score= 11.5s peak=     4MB tan=0.187
+
+=== UCB seed 2 ===
+  [UCB seed2] iter  1 n=  200 top10=0.3501 top100=0.3251 top1%=0.007 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     4MB tan=0.426
+  [UCB seed2] iter  2 n=  300 top10=0.3630 top100=0.3435 top1%=0.031 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     4MB tan=0.361
+  [UCB seed2] iter  3 n=  400 top10=0.3755 top100=0.3563 top1%=0.067 top0.01%=0.000 acq=   0.0s score=  1.5s peak=     4MB tan=0.328
+  [UCB seed2] iter  4 n=  500 top10=0.3831 top100=0.3666 top1%=0.111 top0.01%=0.000 acq=   0.0s score=  1.8s peak=     4MB tan=0.325
+  [UCB seed2] iter  5 n=  600 top10=0.3856 top100=0.3700 top1%=0.146 top0.01%=0.000 acq=   0.0s score=  2.3s peak=     4MB tan=0.330
+  [UCB seed2] iter  6 n=  700 top10=0.3882 top100=0.3725 top1%=0.192 top0.01%=0.000 acq=   0.0s score=  2.6s peak=     4MB tan=0.324
+  [UCB seed2] iter  7 n=  800 top10=0.3888 top100=0.3738 top1%=0.233 top0.01%=0.000 acq=   0.0s score=  3.1s peak=     4MB tan=0.314
+  [UCB seed2] iter  8 n=  900 top10=0.3895 top100=0.3744 top1%=0.281 top0.01%=0.000 acq=   0.0s score=  3.4s peak=     4MB tan=0.372
+  [UCB seed2] iter  9 n= 1000 top10=0.3915 top100=0.3756 top1%=0.326 top0.01%=0.000 acq=   0.0s score=  4.0s peak=     4MB tan=0.302
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo2_iter10
+  [UCB seed2] iter 10 n= 1100 top10=0.3915 top100=0.3759 top1%=0.362 top0.01%=0.000 acq=   0.0s score=  4.5s peak=     4MB tan=0.351
+  [UCB seed2] iter 11 n= 1200 top10=0.3915 top100=0.3761 top1%=0.394 top0.01%=0.000 acq=   0.0s score=  5.2s peak=     4MB tan=0.299
+  [UCB seed2] iter 12 n= 1300 top10=0.3915 top100=0.3761 top1%=0.421 top0.01%=0.000 acq=   0.0s score=  5.8s peak=     4MB tan=0.301
+  [UCB seed2] iter 13 n= 1400 top10=0.3924 top100=0.3763 top1%=0.443 top0.01%=0.000 acq=   0.0s score=  6.6s peak=     4MB tan=0.285
+  [UCB seed2] iter 14 n= 1500 top10=0.3952 top100=0.3773 top1%=0.465 top0.01%=0.000 acq=   0.0s score=  6.9s peak=     4MB tan=0.293
+  [UCB seed2] iter 15 n= 1600 top10=0.4013 top100=0.3800 top1%=0.491 top0.01%=0.077 acq=   0.0s score=  7.7s peak=     4MB tan=0.271
+  [UCB seed2] iter 16 n= 1700 top10=0.4483 top100=0.3895 top1%=0.520 top0.01%=0.615 acq=   0.0s score=  8.1s peak=     4MB tan=0.426
+  [UCB seed2] iter 17 n= 1800 top10=0.4539 top100=0.3909 top1%=0.543 top0.01%=0.769 acq=   0.0s score=  9.2s peak=     4MB tan=0.494
+  [UCB seed2] iter 18 n= 1900 top10=0.4539 top100=0.3932 top1%=0.593 top0.01%=0.769 acq=   0.0s score= 10.0s peak=     4MB tan=0.237
+  [UCB seed2] iter 19 n= 2000 top10=0.4542 top100=0.3946 top1%=0.616 top0.01%=0.846 acq=   0.0s score= 10.6s peak=     4MB tan=0.397
+  [UCB seed2] iter 20 n= 2100 top10=0.4567 top100=0.3954 top1%=0.655 top0.01%=0.923 acq=   0.0s score= 11.3s peak=     4MB tan=0.315
+
+=== Greedy seed 0 ===
+  [Greedy seed0] iter  1 n=  200 top10=0.3647 top100=0.3381 top1%=0.024 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     3MB tan=0.458
+  [Greedy seed0] iter  2 n=  300 top10=0.3730 top100=0.3519 top1%=0.058 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     3MB tan=0.403
+  [Greedy seed0] iter  3 n=  400 top10=0.3751 top100=0.3615 top1%=0.102 top0.01%=0.000 acq=   0.0s score=  1.5s peak=     3MB tan=0.336
+  [Greedy seed0] iter  4 n=  500 top10=0.3785 top100=0.3665 top1%=0.146 top0.01%=0.000 acq=   0.0s score=  1.8s peak=     3MB tan=0.342
+  [Greedy seed0] iter  5 n=  600 top10=0.3829 top100=0.3698 top1%=0.197 top0.01%=0.000 acq=   0.0s score=  2.3s peak=     3MB tan=0.325
+  [Greedy seed0] iter  6 n=  700 top10=0.3865 top100=0.3716 top1%=0.242 top0.01%=0.000 acq=   0.0s score=  2.7s peak=     3MB tan=0.291
+  [Greedy seed0] iter  7 n=  800 top10=0.3879 top100=0.3726 top1%=0.286 top0.01%=0.000 acq=   0.0s score=  3.1s peak=     3MB tan=0.297
+  [Greedy seed0] iter  8 n=  900 top10=0.3882 top100=0.3735 top1%=0.327 top0.01%=0.000 acq=   0.0s score=  3.5s peak=     3MB tan=0.327
+  [Greedy seed0] iter  9 n= 1000 top10=0.3886 top100=0.3738 top1%=0.356 top0.01%=0.000 acq=   0.0s score=  4.0s peak=     3MB tan=0.330
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo0_iter10
+  [Greedy seed0] iter 10 n= 1100 top10=0.3959 top100=0.3769 top1%=0.395 top0.01%=0.000 acq=   0.0s score=  4.5s peak=     3MB tan=0.253
+  [Greedy seed0] iter 11 n= 1200 top10=0.4003 top100=0.3793 top1%=0.427 top0.01%=0.077 acq=   0.0s score=  5.2s peak=     3MB tan=0.425
+  [Greedy seed0] iter 12 n= 1300 top10=0.4056 top100=0.3805 top1%=0.454 top0.01%=0.154 acq=   0.0s score=  5.6s peak=     3MB tan=0.294
+  [Greedy seed0] iter 13 n= 1400 top10=0.4058 top100=0.3807 top1%=0.484 top0.01%=0.154 acq=   0.0s score=  6.4s peak=     3MB tan=0.212
+  [Greedy seed0] iter 14 n= 1500 top10=0.4058 top100=0.3814 top1%=0.507 top0.01%=0.154 acq=   0.0s score=  6.9s peak=     3MB tan=0.219
+  [Greedy seed0] iter 15 n= 1600 top10=0.4068 top100=0.3819 top1%=0.531 top0.01%=0.154 acq=   0.0s score=  7.9s peak=     3MB tan=0.211
+  [Greedy seed0] iter 16 n= 1700 top10=0.4213 top100=0.3894 top1%=0.561 top0.01%=0.615 acq=   0.0s score=  8.4s peak=     3MB tan=0.208
+  [Greedy seed0] iter 17 n= 1800 top10=0.4567 top100=0.3946 top1%=0.600 top0.01%=0.923 acq=   0.0s score=  9.1s peak=     3MB tan=0.475
+  [Greedy seed0] iter 18 n= 1900 top10=0.4567 top100=0.3946 top1%=0.613 top0.01%=0.923 acq=   0.0s score=  9.9s peak=     3MB tan=0.348
+  [Greedy seed0] iter 19 n= 2000 top10=0.4567 top100=0.3946 top1%=0.634 top0.01%=0.923 acq=   0.0s score= 11.1s peak=     3MB tan=0.220
+  [Greedy seed0] iter 20 n= 2100 top10=0.4567 top100=0.3946 top1%=0.658 top0.01%=0.923 acq=   0.0s score= 11.6s peak=     3MB tan=0.232
+
+=== Greedy seed 1 ===
+  [Greedy seed1] iter  1 n=  200 top10=0.3662 top100=0.3300 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     3MB tan=0.582
+  [Greedy seed1] iter  2 n=  300 top10=0.3777 top100=0.3484 top1%=0.036 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     3MB tan=0.545
+  [Greedy seed1] iter  3 n=  400 top10=0.3846 top100=0.3576 top1%=0.060 top0.01%=0.000 acq=   0.0s score=  1.5s peak=     3MB tan=0.463
+  [Greedy seed1] iter  4 n=  500 top10=0.3862 top100=0.3626 top1%=0.080 top0.01%=0.000 acq=   0.0s score=  1.8s peak=     3MB tan=0.432
+  [Greedy seed1] iter  5 n=  600 top10=0.3871 top100=0.3673 top1%=0.112 top0.01%=0.000 acq=   0.0s score=  2.2s peak=     3MB tan=0.407
+  [Greedy seed1] iter  6 n=  700 top10=0.3896 top100=0.3699 top1%=0.141 top0.01%=0.000 acq=   0.0s score=  2.6s peak=     3MB tan=0.378
+  [Greedy seed1] iter  7 n=  800 top10=0.3905 top100=0.3720 top1%=0.173 top0.01%=0.000 acq=   0.0s score=  3.1s peak=     3MB tan=0.425
+  [Greedy seed1] iter  8 n=  900 top10=0.3905 top100=0.3727 top1%=0.197 top0.01%=0.000 acq=   0.0s score=  3.5s peak=     3MB tan=0.388
+  [Greedy seed1] iter  9 n= 1000 top10=0.3905 top100=0.3733 top1%=0.233 top0.01%=0.000 acq=   0.0s score=  4.1s peak=     3MB tan=0.373
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo1_iter10
+  [Greedy seed1] iter 10 n= 1100 top10=0.3917 top100=0.3741 top1%=0.268 top0.01%=0.000 acq=   0.0s score=  4.5s peak=     3MB tan=0.352
+  [Greedy seed1] iter 11 n= 1200 top10=0.3917 top100=0.3752 top1%=0.311 top0.01%=0.000 acq=   0.0s score=  5.3s peak=     3MB tan=0.360
+  [Greedy seed1] iter 12 n= 1300 top10=0.3918 top100=0.3765 top1%=0.358 top0.01%=0.000 acq=   0.0s score=  5.6s peak=     3MB tan=0.327
+  [Greedy seed1] iter 13 n= 1400 top10=0.3918 top100=0.3767 top1%=0.404 top0.01%=0.000 acq=   0.0s score=  6.5s peak=     3MB tan=0.339
+  [Greedy seed1] iter 14 n= 1500 top10=0.3918 top100=0.3768 top1%=0.454 top0.01%=0.000 acq=   0.0s score=  6.9s peak=     3MB tan=0.297
+  [Greedy seed1] iter 15 n= 1600 top10=0.3926 top100=0.3770 top1%=0.494 top0.01%=0.000 acq=   0.0s score=  7.6s peak=     3MB tan=0.292
+  [Greedy seed1] iter 16 n= 1700 top10=0.3936 top100=0.3776 top1%=0.523 top0.01%=0.000 acq=   0.0s score=  8.2s peak=     3MB tan=0.285
+  [Greedy seed1] iter 17 n= 1800 top10=0.3936 top100=0.3778 top1%=0.540 top0.01%=0.000 acq=   0.0s score=  9.3s peak=     3MB tan=0.261
+  [Greedy seed1] iter 18 n= 1900 top10=0.3936 top100=0.3781 top1%=0.558 top0.01%=0.000 acq=   0.0s score=  9.8s peak=     3MB tan=0.267
+  [Greedy seed1] iter 19 n= 2000 top10=0.3970 top100=0.3807 top1%=0.592 top0.01%=0.000 acq=   0.0s score= 10.7s peak=     3MB tan=0.265
+  [Greedy seed1] iter 20 n= 2100 top10=0.4044 top100=0.3838 top1%=0.623 top0.01%=0.077 acq=   0.0s score= 11.4s peak=     3MB tan=0.348
+
+=== Greedy seed 2 ===
+  [Greedy seed2] iter  1 n=  200 top10=0.3512 top100=0.3251 top1%=0.007 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     3MB tan=0.447
+  [Greedy seed2] iter  2 n=  300 top10=0.3681 top100=0.3406 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     3MB tan=0.549
+  [Greedy seed2] iter  3 n=  400 top10=0.3837 top100=0.3538 top1%=0.052 top0.01%=0.000 acq=   0.0s score=  1.5s peak=     3MB tan=0.509
+  [Greedy seed2] iter  4 n=  500 top10=0.3849 top100=0.3595 top1%=0.067 top0.01%=0.000 acq=   0.0s score=  1.8s peak=     3MB tan=0.468
+  [Greedy seed2] iter  5 n=  600 top10=0.3849 top100=0.3630 top1%=0.086 top0.01%=0.000 acq=   0.0s score=  2.3s peak=     3MB tan=0.409
+  [Greedy seed2] iter  6 n=  700 top10=0.3867 top100=0.3682 top1%=0.123 top0.01%=0.000 acq=   0.0s score=  2.6s peak=     3MB tan=0.395
+  [Greedy seed2] iter  7 n=  800 top10=0.3871 top100=0.3705 top1%=0.153 top0.01%=0.000 acq=   0.0s score=  3.1s peak=     3MB tan=0.409
+  [Greedy seed2] iter  8 n=  900 top10=0.3896 top100=0.3721 top1%=0.193 top0.01%=0.000 acq=   0.0s score=  3.5s peak=     3MB tan=0.336
+  [Greedy seed2] iter  9 n= 1000 top10=0.3906 top100=0.3741 top1%=0.237 top0.01%=0.000 acq=   0.0s score=  4.0s peak=     3MB tan=0.338
+    dumped mid-run snapshot to /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_bo2_iter10
+  [Greedy seed2] iter 10 n= 1100 top10=0.3916 top100=0.3759 top1%=0.282 top0.01%=0.000 acq=   0.0s score=  4.5s peak=     3MB tan=0.323
+  [Greedy seed2] iter 11 n= 1200 top10=0.3916 top100=0.3765 top1%=0.336 top0.01%=0.000 acq=   0.0s score=  5.2s peak=     3MB tan=0.329
+  [Greedy seed2] iter 12 n= 1300 top10=0.3916 top100=0.3767 top1%=0.379 top0.01%=0.000 acq=   0.0s score=  5.6s peak=     3MB tan=0.324
+  [Greedy seed2] iter 13 n= 1400 top10=0.3916 top100=0.3767 top1%=0.414 top0.01%=0.000 acq=   0.0s score=  6.4s peak=     3MB tan=0.305
+  [Greedy seed2] iter 14 n= 1500 top10=0.3916 top100=0.3767 top1%=0.452 top0.01%=0.000 acq=   0.0s score=  6.9s peak=     3MB tan=0.299
+  [Greedy seed2] iter 15 n= 1600 top10=0.3916 top100=0.3767 top1%=0.490 top0.01%=0.000 acq=   0.0s score=  7.8s peak=     3MB tan=0.294
+  [Greedy seed2] iter 16 n= 1700 top10=0.3924 top100=0.3769 top1%=0.514 top0.01%=0.000 acq=   0.0s score=  8.3s peak=     3MB tan=0.316
+  [Greedy seed2] iter 17 n= 1800 top10=0.3936 top100=0.3775 top1%=0.532 top0.01%=0.000 acq=   0.0s score=  9.1s peak=     3MB tan=0.275
+  [Greedy seed2] iter 18 n= 1900 top10=0.3952 top100=0.3781 top1%=0.547 top0.01%=0.000 acq=   0.0s score=  9.7s peak=     3MB tan=0.251
+  [Greedy seed2] iter 19 n= 2000 top10=0.4013 top100=0.3804 top1%=0.567 top0.01%=0.077 acq=   0.0s score= 10.9s peak=     3MB tan=0.242
+  [Greedy seed2] iter 20 n= 2100 top10=0.4481 top100=0.3893 top1%=0.600 top0.01%=0.615 acq=   0.0s score= 11.5s peak=     3MB tan=0.428
+
+wrote /Users/petercotton/github/winning/research/qpo/results/closed_loop.csv
