@@ -90,6 +90,15 @@ def acquire(method, post, X, cand, mu_c, var_c, batch, rank, sobol_m, points,
         return select_batch(mu_c, batch), info
     if method == "F-LITE-full":
         return select_batch(pom_flite(mu_c, var_c), batch, mu_c), info
+    if method == "Random-plausible":
+        # control arm for the antibiotic reversal: a batch drawn uniformly from
+        # the plausible set (top `prefilter` by UCB). If the shipped sampler's
+        # advantage is really "its counts are Poisson noise so its batch is
+        # nearly random, hence diverse", this arm should match it.
+        keep = select_batch(mu_c + np.sqrt(var_c), min(prefilter, len(cand)))
+        rng = np.random.default_rng(seed)
+        info["n_scored"] = len(keep)
+        return keep[rng.choice(len(keep), batch, replace=False)], info
 
     prefiltered = method.endswith("-10k")
     if prefiltered:
@@ -116,6 +125,23 @@ def acquire(method, post, X, cand, mu_c, var_c, batch, rank, sobol_m, points,
         p = pom_fast(mu_c[keep], V, d, F, W, points=points,
                      max_elements=max_elements)
         info.update({"rank": rank, "sobol_nodes": len(F)})
+        if "-greedymax" in method:
+            # EXPLICIT diversity: greedy maximisation of E[max over the batch].
+            # Submodular, so a candidate correlated with one already chosen
+            # adds little -- diversity by construction rather than by accident.
+            from pom import greedy_expected_max
+            pick = greedy_expected_max(mu_c[keep], V, d, batch, F, W, points=points)
+            return keep[pick], info
+        if "-thompson" in method:
+            # EXACT probabilities, STOCHASTIC selection: sample the batch
+            # without replacement with probability proportional to p, instead
+            # of taking the top b. This separates probability accuracy from
+            # selection stochasticity -- the 2x2 the antibiotic reversal needs.
+            rng = np.random.default_rng(seed)
+            q = np.maximum(p, 0.0)
+            q = q / q.sum()
+            pick = rng.choice(len(q), size=batch, replace=False, p=q)
+            return keep[pick], info
         return keep[select_batch(p, batch, mu_c[keep])], info
 
     raise ValueError(method)

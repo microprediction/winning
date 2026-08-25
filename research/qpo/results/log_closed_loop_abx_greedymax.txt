@@ -1,0 +1,14 @@
+
+=== qPO-fast-r4-greedymax-10k seed 0 ===
+  [qPO-fast-r4-greedymax-10k seed0] iter  1 n=  150 top10=-0.3066 top100=-0.8675 top1%=0.005 top0.01%=0.000 acq=  29.4s score=  1.6s peak=  1406MB tan=0.845
+  [qPO-fast-r4-greedymax-10k seed0] iter  2 n=  200 top10=-0.2351 top100=-0.8188 top1%=0.005 top0.01%=0.000 acq=  24.8s score=  1.1s peak=  1404MB tan=0.359
+  [qPO-fast-r4-greedymax-10k seed0] iter  3 n=  250 top10=-0.1693 top100=-0.6986 top1%=0.010 top0.01%=0.000 acq=  23.3s score=  0.8s peak=  1404MB tan=0.418
+  [qPO-fast-r4-greedymax-10k seed0] iter  4 n=  300 top10=-0.1693 top100=-0.6411 top1%=0.010 top0.01%=0.000 acq=  21.2s score=  0.8s peak=  1404MB tan=0.778
+  [qPO-fast-r4-greedymax-10k seed0] iter  5 n=  350 top10=-0.1117 top100=-0.5091 top1%=0.036 top0.01%=0.333 acq=  19.8s score=  1.4s peak=  1404MB tan=0.446
+  [qPO-fast-r4-greedymax-10k seed0] iter  6 n=  400 top10=-0.1032 top100=-0.4243 top1%=0.051 top0.01%=0.333 acq=  17.9s score=  0.9s peak=  1404MB tan=0.458
+  [qPO-fast-r4-greedymax-10k seed0] iter  7 n=  450 top10=-0.0986 top100=-0.2830 top1%=0.094 top0.01%=0.333 acq=  17.9s score=  1.0s peak=  1404MB tan=0.353
+  [qPO-fast-r4-greedymax-10k seed0] iter  8 n=  500 top10=-0.0955 top100=-0.1841 top1%=0.140 top0.01%=0.667 acq=  18.0s score=  1.1s peak=  1404MB tan=0.324
+  [qPO-fast-r4-greedymax-10k seed0] iter  9 n=  550 top10=-0.0954 top100=-0.1613 top1%=0.168 top0.01%=0.667 acq=  18.4s score=  1.3s peak=  1404MB tan=0.284
+  [qPO-fast-r4-greedymax-10k seed0] iter 10 n=  600 top10=-0.0954 top100=-0.1506 top1%=0.193 top0.01%=0.667 acq=  17.8s score=  1.4s peak=  1404MB tan=0.397
+
+=== qPO-fast-r4-greedymax-10k seed 1 ===

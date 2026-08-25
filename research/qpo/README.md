@@ -635,6 +635,100 @@ information and behaves accordingly. Factor covariance is a genuinely
 different regime, and in that regime the deterministic calculation is not a
 faster route to the answer -- it is the answer, and sampling adds nothing.
 
+## What qPO is actually optimising, and the selection rule it should use
+
+The antibiotic reversal above turned out not to be about estimator noise at
+all. Chasing it down led to the sharpest result in this directory.
+
+### The paper's objective is additive, so the SELECTION cannot see the batch
+
+qPO states its objective explicitly (Fromer et al., arXiv:2410.06333, Eqs 3
+and 5): choose the batch maximising `Pr(x* in X_acq)`, and note that
+`Pr(x* in X_acq) = sum_{x_i in X_acq} Pr(x* = x_i)` because those events are
+disjoint. That identity is what makes the batch problem tractable -- and it
+is also the whole story about diversity. **An additive objective has no
+interaction between batch members**, so the argmax over batches is exactly
+the top b by `p_i`, and the selection step is blind to redundancy. The
+diversity qPO exhibits is entirely a property of the MARGINALS (correlated
+candidates split their optimality mass), never of the choice. The paper's
+claim that it "naturally captures diversity through model covariance" is
+true in that restricted sense, but the covariance enters only through `p_i`,
+and cannot be traded against value at selection time.
+
+The paper is also explicit that it declines an iterative objective:
+
+> "We pursue a batch acquisition strategy that is purely exploitative,
+> optimizing expected performance in the immediate iteration as if the
+> optimization could be stopped at any time."
+
+So the iterative procedure has no stated objective: a one-shot criterion is
+iterated, and everything sequential (exploration, information, the value of
+the posterior update) happens by accident. That is the right thing to know
+before reading any closed-loop result, including the ones above.
+
+### The shipped sampler is accidentally doing Thompson sampling
+
+The paper distinguishes itself from parallel Thompson sampling *by
+determinism*: "qPO aims to choose candidates deterministically that maximize
+Pr(x*=x_i)". Its own default implementation does not deliver that. Each Monte
+Carlo draw's argmax IS a draw from `p(x*)`, and with M = 10,000 samples over
+N = 10,000 candidates the counts are Poisson with mean ~1, so "top b by
+count" is a tempered draw from `p(x*)` rather than its top b modes.
+
+On the antibiotic posterior `p(x*)` is nearly uniform (max/mean = 3.25,
+effective support 7,437 of 10,000), which makes the two rules maximally
+different. The 2x2 that separates probability accuracy from selection
+stochasticity (10-15 seeds, paired against the shipped sampler):
+
+| arm | probabilities | selection | final top-10 | paired p |
+|---|---|---|---|---:|
+| qPO-MC-10k (shipped) | noisy | top-b of noisy counts | **-0.1025** | -- |
+| qPO-fast-r4-thompson | **exact** | sample proportional to p | -0.1039 | 0.49 |
+| qPO-fast-r4-10k | **exact** | top-b (as specified) | -0.1098 | **0.028** |
+| Random-plausible | none | uniform over the pool | -0.1348 | **0.0004** |
+
+**Stochastic selection is the whole of the shipped sampler's advantage.**
+Thompson on exact probabilities matches it (p = 0.49) at a fraction of the
+cost; the deterministic rule the paper specifies is significantly worse
+(p = 0.028); and a random batch is catastrophic (p = 0.0004), which rules out
+"noise as exploration" in the loose sense. The estimator was never the
+problem -- the selection rule was, and the released implementation's
+inaccuracy was quietly protecting it from its own specification.
+
+### Explicit diversity beats accidental diversity
+
+If the batch is worth choosing jointly, the objective should say so.
+`E[max_{i in B} Y_i]` is submodular, so greedy is within 1 - 1/e, and a
+candidate correlated with one already chosen adds little because it raises
+the max only where the batch is already high. It also costs nothing new
+structurally: conditional on the factor the candidates are independent, so
+the batch's max has CDF `prod_{i in B} F_i(x|f)` -- the same field object the
+ability transform builds. **The exotics cavity DIVIDES that field to remove a
+competitor; batch selection MULTIPLIES one more CDF in to add a member**, and
+one greedy step costs the same O(N L Q) as one qPO board
+(`pom.greedy_expected_max`).
+
+Antibiotic snapshot, N = 10,000, batch 50 (higher is better):
+
+| selection rule | best molecule in batch | batch top-10 | Tanimoto |
+|---|---:|---:|---:|
+| **greedy E[max] (explicit)** | **-0.104** | **-0.643** | 0.099 |
+| shipped MC (accidental) | -0.129 | -0.658 | 0.075 |
+| top-b by qPO | -0.186 | -0.759 | 0.085 |
+| Thompson on exact p | -0.275 | -0.735 | 0.076 |
+| random from plausible | -0.268 | -0.711 | 0.089 |
+
+Greedy E[max] beats every rule on the quantity a batch is for, including the
+shipped sampler, using exact probabilities and 31/50 different molecules from
+top-b. The closed-loop run of this arm is in
+`results/closed_loop_abx_greedymax.csv`.
+
+The synthesis: this directory made qPO computable exactly, and the exact
+answer then exposed that `p(x*)`'s top-b modes are the one use of `p(x*)`
+with no decision-theoretic backing. Sampling from it is Thompson; reducing
+its entropy is entropy search; valuing the batch directly is E[max]. All
+three are principled and all three beat top-b where the field is flat.
+
 ## Decision rule
 
 The brief set three conditions, all of them about the snapshot experiment. All

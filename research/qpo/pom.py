@@ -544,3 +544,74 @@ def top_b(scores, b: int):
     """Indices of the b largest scores, ties broken by index (stable)."""
     s = np.asarray(scores, dtype=float)
     return np.argsort(-s, kind="stable")[:b]
+
+
+def greedy_expected_max(mu, V, d, b: int, nodes=None, weights=None,
+                        points: int = 257, lo=None, hi=None, seed_set=None):
+    """Batch selection by greedy maximisation of E[max_{i in B} Y_i].
+
+    WHY THIS AND NOT top-b BY qPO. The batch that maximises the probability of
+    CONTAINING the argmax is exactly the top b by p_i, because those events are
+    disjoint: P(argmax in B) = sum_{i in B} p_i. That objective is ADDITIVE --
+    it has no interaction between batch members at all, so the only diversity
+    it can express is whatever already sits in the marginals (near-duplicates
+    splitting their mass). E[max_B] is the objective that values the batch
+    itself: it is submodular, so greedy is within 1 - 1/e of optimal, and a
+    candidate correlated with one already chosen adds little because it raises
+    the max only where the batch is already high.
+
+    HOW IT REUSES THE CAVITY MACHINERY. Conditional on the factor node f the
+    candidates are independent, so the batch's max has CDF
+    G_B(x|f) = prod_{i in B} F_i(x|f) -- the same "field" object the ability
+    transform builds. The exotics cavity DIVIDES this field to remove a
+    competitor; batch selection MULTIPLIES one more CDF in to add a member.
+    The gain from adding j is
+
+        Delta_j = int E_f[ G_B(x|f) (1 - F_j(x|f)) ] dx
+
+    computable for every candidate at once per node, so one greedy step costs
+    the same O(N L Q) as one qPO board and the whole batch costs b of them.
+    """
+    mu = np.asarray(mu, dtype=float)
+    d = np.asarray(d, dtype=float)
+    n = mu.size
+    if nodes is None:
+        nodes, weights = np.zeros((1, 1)), np.ones(1)
+    nodes = np.atleast_2d(nodes)
+    weights = np.asarray(weights, dtype=float)
+    sd = np.sqrt(d)
+    tot = np.sqrt(d + (0.0 if V is None else np.sum(np.atleast_2d(V) ** 2, axis=1)))
+    if lo is None:
+        lo = float(mu.min() - 8.0 * tot.max())
+    if hi is None:
+        hi = float(mu.max() + 8.0 * tot.max())
+    x = np.linspace(lo, hi, points)
+    dx = x[1] - x[0]
+
+    # F[q] is (n, points): each candidate's conditional CDF at factor node q
+    F = []
+    for q in range(nodes.shape[0]):
+        shift = mu if V is None else mu + np.atleast_2d(V) @ nodes[q]
+        F.append(ndtr((x[None, :] - shift[:, None]) / sd[:, None]))
+    F = np.asarray(F)                                   # (Q, n, points)
+    w = weights / weights.sum()
+
+    chosen = list(seed_set or [])
+    G = np.ones((nodes.shape[0], points))               # batch field per node
+    for i in chosen:
+        G *= F[:, i, :]
+    mask = np.zeros(n, dtype=bool)
+    mask[chosen] = True
+
+    while len(chosen) < b:
+        # gain_j = sum_q w_q * dx * sum_x G_q(x) (1 - F_q,j(x))
+        gain = np.zeros(n)
+        for q in range(nodes.shape[0]):
+            gain += w[q] * ((G[q][None, :] * (1.0 - F[q])).sum(axis=1))
+        gain *= dx
+        gain[mask] = -np.inf
+        j = int(np.argmax(gain))
+        chosen.append(j)
+        mask[j] = True
+        G *= F[:, j, :]
+    return np.array(chosen, dtype=int)
