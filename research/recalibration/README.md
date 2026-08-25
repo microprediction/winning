@@ -39,3 +39,42 @@ Consequences:
   real public checkpoint, then set-efficiency against conformal
   baselines (conformalize the race score: guarantee kept, sets smaller
   if the ordering is better).
+
+## Application scouting digest (2026-08-25, three fronts)
+
+Details with verbatim quotes: `apps-nlp-bio.md`,
+`apps-forecasting-medicine.md`, `apps-industrial.md`.
+
+**The unifying pitch, in the field's own words.** Between temperature
+scaling (one parameter, cannot express between-class structure) and
+matrix scaling (Guo et al.: any calibration model "with tens of
+thousands (or more) parameters will overfit") there is a missing rung.
+Low-rank-plus-diagonal is that rung, and unlike every incumbent it
+produces a JOINT distribution -- restricted menus, top-k sets,
+co-confusability -- not a map on marginals.
+
+**The selection criterion that explains every ranking: does the menu
+repeat?** Pooled ML for (V, D) needs many races against the same N
+outcomes (or embeddings to tie across menus). Classifiers are the
+ideal case (fixed menu, varying mu). Metaculus-style question sets
+fail it (vivid IIA quotes, but menus never repeat).
+
+Cross-front shortlist:
+1. LLM multiple-choice calibration (semantic entropy is a hard-clustered
+   special case of a fitted V; "temperature scaling significantly
+   deteriorates calibration"; free data via lm-eval-harness).
+2. Verbal autopsy cause-of-death (34 fixed causes, frozen scorers,
+   PHMRC gold standard in one R call, restricted cause-lists native to
+   practice, currently renormalized).
+3. Winter precipitation type (rank-2 truth is KNOWN PHYSICS -- melting
+   and refreezing layers; a fitted V that reproduces thermodynamics
+   from labels alone is a spectacular figure; mPING + RAP open).
+4. Cell-type annotation (organ-restricted menus; field admits bad
+   calibration and broken ontology hierarchies).
+5. Crop-type / remote sensing (phenology factors, region menus,
+   public benchmarks).
+6. Fault diagnosis and malware families (drift refits, top-k
+   troubleshooting sets, shared-codebase factors).
+Demoted with reasons in the files: variant nowcasting (correlated
+modelling already published), forecast aggregation (menus never
+repeat), ENSO/terciles (N = 3, ordered).
