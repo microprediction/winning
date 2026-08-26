@@ -78,3 +78,43 @@ Cross-front shortlist:
 Demoted with reasons in the files: variant nowcasting (correlated
 modelling already published), forecast aggregation (menus never
 repeat), ENSO/terciles (N = 3, ordered).
+
+
+## CIFAR-100, a real checkpoint: mostly a negative result
+
+`run_cifar_recalibration.py`, frozen `cifar100_resnet56` (measured top-1
+0.7262), 5k calibration / 5k evaluation, class embeddings E from the
+classifier's own head (d = 64). Fits took 7,776 s.
+
+| method | NLL | ECE (15-bin) | Brier |
+|---|---:|---:|---:|
+| softmax | 1.2817 | 0.1423 | 0.4168 |
+| temperature scaling | 1.0293 | 0.0314 | 0.3817 |
+| race-diag (tied heteroskedastic) | **1.0291** | **0.0250** | 0.3803 |
+| race-r2 (tied rank-2 factor) | 1.0420 | 0.0279 | **0.3794** |
+
+**The correlated layer does not pay here.** race-diag ties temperature
+scaling on NLL (1.0291 vs 1.0293) and improves ECE by 0.006; adding the rank-2
+factor makes NLL WORSE (1.0420) while winning Brier by 0.002. Nothing in that
+table would survive a demand for a real effect.
+
+**The superclass probe fails outright.** The fitted `VV'` off-diagonal
+correlates -0.027 with the same-superclass indicator, and the top 5% of `VV'`
+pairs are same-superclass 4.0% of the time against a base rate of 4.0% --
+exactly zero signal. The factor did not rediscover the semantic hierarchy.
+
+**One genuinely positive line.** On superclass-restricted menus (condition on
+the true superclass's five fine labels) the exact race deletion beats
+renormalised temperature-softmax, 0.4497 against 0.4572 NLL per example. That
+is the IIA violation showing up on real data and in the predicted direction:
+renormalising a softmax over a restricted menu is not the same as deleting
+competitors from a race, and the race is better. It is a small effect on one
+checkpoint, and it is the only claim here the data actually supports.
+
+Why the negative might be the setup rather than the method: 5,000 winners over
+K = 100 classes is 50 per class, and the identification study found the
+correlated fit needs T ~ 5,000 at K = 12 before it stops overfitting. At
+K = 100 with 193 tied parameters this sits near the boundary. A larger
+calibration split, or a checkpoint whose logit residuals are genuinely
+correlated, would be a fairer test. But as measured: on this checkpoint the
+correlated layer buys nothing over temperature scaling.
