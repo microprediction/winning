@@ -192,3 +192,36 @@ by the second slice that makes it accurate (TV 4e-4). scipy's ndtr is
 simply fast. The design still pays in a compiled path, where the gather is
 a contiguous memcpy and the blend is fused -- which is where the package's
 own implementation lives. Installed as an option, honestly labelled.
+
+
+## The Rust port (2026-08-26)
+
+`fastrace.block_race` -- the block kernel added to the package's existing
+Rust crate, following its architecture exactly: rayon-parallel over lattice
+columns, fully fused per-column work (log_ndtr with the asymptotic tail, the
+per-cluster field sums, the cluster-cavity division), no N x L temporaries.
+Python wrappers `block_race_rs` / `nested_race_rs` in blockrace.py sort by
+cluster and unpermute.
+
+First, the discrepancy audit the port required: the rust factor kernel
+matches `winning.factor.core` to 1.3e-16, while research/qpo's numpy
+`pom_fast` sits 2.2e-3 from both -- constant in lattice resolution, so a
+convention/windowing difference in pom_fast, not error accumulation. All
+qpo results used pom_fast; 2.2e-3 is far below every effect size reported
+there, so conclusions stand, but fastrace is the reference.
+
+Measured, machine-identical (TV ~1e-16) at every size tried:
+
+    block forward   N=300     18 ms numpy ->  3.9 ms rust   (4.6x)
+                    N=2,000  114 ms       -> 23 ms          (4.9x)
+                    N=10,000 693 ms       -> 113 ms         (6.1x)
+    nested forward  N=200    472 ms       -> 35 ms          (13.5x)
+    block inversion (rust forward, numpy Jacobian):
+                    1.1 s -> 0.2 s to residual 7e-15
+
+Not ported yet: the tree race (messages need lattice-shift interpolation in
+the kernel -- same pattern, more plumbing) and the block Jacobian (the
+inversion above already runs 5x faster on the rust forward alone; the
+Jacobian is the remaining 0.15 s). The survival-lookup design that broke
+even in numpy is exactly what this kernel does natively -- fused, in cache,
+which is why the numbers above hold.

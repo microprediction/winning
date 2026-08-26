@@ -797,3 +797,14 @@ Running: runtime scaling to N = 250,000, the frontier at N = 10,000, seven more
 closed-loop seeds, the antibiotic-screen closed loop, a random (unprefiltered)
 candidate subset, a mid-run posterior from round 10, the second QM9 seed, and
 the antibiotic screen.
+
+
+## Note (2026-08-26): pom_fast deviates 2.2e-3 from the reference
+
+Arbitrated while porting the Schur kernels to Rust: `fastrace`'s factor
+kernel matches `winning.factor.core.win_probabilities_factor` to 1.3e-16;
+this directory's numpy `pom_fast` sits TV 2.2e-3 from both, constant in
+lattice points (so a windowing/convention difference, not resolution). Every
+effect reported here is 5x-500x larger than 2.2e-3, so no conclusion
+changes; but for reference-grade numbers use fastrace or winning.factor,
+and the difference deserves a diagnosis before pom_fast is reused elsewhere.
