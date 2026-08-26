@@ -100,3 +100,51 @@ def nested_race(mu, sd, cluster, v, g=None, gamma=1.0, points=257, qa=9,
         p += fw[q] * block_race(mu + gamma * g * fn[q], sd, cluster, v,
                                 points=points, qa=qa, span=span)
     return p
+
+
+def block_abilities_from_probabilities(p, sd, cluster, v, g=None, gamma=1.0,
+                                       points=257, qa=9, qf=15, tol=1e-8,
+                                       max_iter=200, eta0=1.0):
+    """Invert the block/nested race: find centred mu with p(mu) = p.
+
+    The map mu -> log p is smooth and diagonally dominant (raising one
+    ability chiefly raises its own win probability), so a damped log-space
+    fixed point converges:
+
+        mu <- mu + eta * (log p_target - log p(mu)),   recentred each step,
+
+    with eta halved on any step that worsens the residual (the same scheme
+    the winning package's coordinate inversion reduces to when the forward
+    map is treated as a black box). Identification: p is invariant to a
+    common shift, so mu is returned centred -- the contrast is the estimand,
+    exactly as everywhere else in this programme.
+    """
+    p = np.asarray(p, float)
+    p = p / p.sum()
+    lt = np.log(np.maximum(p, 1e-300))
+    mu = np.log(p) - np.log(p).mean()          # Luce start
+    if g is not None and gamma != 0.0:
+        def forward(m):
+            return nested_race(m, sd, cluster, v, g=g, gamma=gamma,
+                               points=points, qa=qa, qf=qf)
+    else:
+        def forward(m):
+            return block_race(m, sd, cluster, v, points=points, qa=qa)
+    eta = eta0
+    lp = np.log(np.maximum(forward(mu), 1e-300))
+    err = np.abs(lp - lt).max()
+    for _ in range(max_iter):
+        if err < tol:
+            break
+        mu_new = mu + eta * (lt - lp)
+        mu_new -= mu_new.mean()
+        lp_new = np.log(np.maximum(forward(mu_new), 1e-300))
+        err_new = np.abs(lp_new - lt).max()
+        if err_new < err:
+            mu, lp, err = mu_new, lp_new, err_new
+            eta = min(eta * 1.2, 1.5)
+        else:
+            eta *= 0.5
+            if eta < 1e-4:
+                break
+    return mu, err

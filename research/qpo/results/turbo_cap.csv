@@ -9,3 +9,4 @@ ackley,100,factor-5k,factor,5000,1,9.30947,379,16.8,399.2
 ackley,100,factor-5k,factor,5000,2,8.69014,371,18.5,411.8
 ackley,100,factor-5k,factor,5000,3,9.36699,371,15.5,350.7
 ackley,100,factor-5k,factor,5000,4,8.7622,389,14.8,366.8
+ackley,100,factor-20k,factor,20000,0,9.32576,391,51.6,391.9

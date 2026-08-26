@@ -52,3 +52,20 @@ decoration: the portfolio finding that intermediate gamma is more robust
 than either end has a direct racing analogue worth testing -- shrink the
 coupling when it is estimated from noise, exactly as shrunk_cavity shrinks
 tilts.
+
+
+## The inversion (completing the generalization)
+
+`block_abilities_from_probabilities`: given a win vector, recover centred mu
+under block or nested covariance -- the block-structured analogue of the
+winning package's factor inversion, closing the loop so the Schur race is a
+full forward/inverse pair like every other covariance class in this
+programme. Damped log-space fixed point on the exact forward map; eta adapts
+by backtracking.
+
+Validated round trips: block (N=200, 30 clusters, rho=0.65) recovers mu to
+7e-9 in 4.4 s; nested (global coupling + blocks) to 4e-6 in 49 s. And the
+distortion measurement that motivates it: inverting block-generated
+probabilities under an ASSUMED-independent model mislocates abilities by up
+to 1.31 against a true spread of 5.96 -- 22% of the field's range. Ignoring
+known block structure at inversion time is not a small error.
