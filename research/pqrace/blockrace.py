@@ -28,7 +28,44 @@ from scipy.special import ndtr, roots_hermitenorm
 TINY = 1e-300
 
 
-def block_race(mu, sd, cluster, v, points=257, qa=9, span=8.0):
+class SurvivalTables:
+    """The package's saved-survival-lookup design, adopted: per-member base
+    tables of log Phi(x / sd_i) and the matching pdf on an EXTENDED lattice,
+    built once while (sd, v, cluster, lattice) are fixed -- once per
+    inversion -- and evaluated for any mu by TWO-SLICE FRACTIONAL BLEND
+    (linear interpolation between adjacent integer shifts, O(dx^2); the same
+    trick winning.lattice uses for shifted densities)."""
+
+    def __init__(self, sd, v, an, x, pad_extra=2.0):
+        self.sd = np.asarray(sd, float); self.v = np.asarray(v, float)
+        self.an = np.asarray(an, float)
+        self.x = x; self.dx = x[1] - x[0]
+        shift_max = np.abs(self.v).max() * np.abs(self.an).max() + pad_extra
+        self.PAD = int(np.ceil((shift_max + 6.0) / self.dx)) + 2
+        xe = x[0] + self.dx * np.arange(-self.PAD, len(x) + self.PAD)
+        self.xe = xe
+        with np.errstate(divide="ignore"):
+            self.BF = np.log(np.maximum(ndtr(xe[None, :] / self.sd[:, None]), TINY))
+        self.BP = (np.exp(-0.5 * (xe[None, :] / self.sd[:, None]) ** 2)
+                   / (self.sd[:, None] * np.sqrt(2.0 * np.pi)))
+
+    def eval(self, mu):
+        N, L = len(self.sd), len(self.x)
+        sh = (np.asarray(mu, float)[:, None] + self.v[:, None] * self.an[None, :]) / self.dx
+        k = np.floor(sh).astype(int)
+        w = (sh - k)[:, :, None]
+        idx = (self.PAD - k)[:, :, None] + np.arange(L)[None, None, :]
+        idx = np.clip(idx, 1, len(self.xe) - 1)
+        BFb = np.broadcast_to(self.BF[:, None, :], (N, self.an.size, len(self.xe)))
+        BPb = np.broadcast_to(self.BP[:, None, :], (N, self.an.size, len(self.xe)))
+        logF = ((1.0 - w) * np.take_along_axis(BFb, idx, axis=2)
+                + w * np.take_along_axis(BFb, idx - 1, axis=2))
+        pdf = ((1.0 - w) * np.take_along_axis(BPb, idx, axis=2)
+               + w * np.take_along_axis(BPb, idx - 1, axis=2))
+        return logF, pdf
+
+
+def block_race(mu, sd, cluster, v, points=257, qa=9, span=8.0, tables=None):
     """p_i = P(Y_i = max_j Y_j) under the nested-effects model.
 
     mu, sd, v : (N,) means, idiosyncratic sds, cluster-effect loadings
@@ -51,9 +88,12 @@ def block_race(mu, sd, cluster, v, points=257, qa=9, span=8.0):
     aw = aw / aw.sum()
 
     # logF[j, q, l] = log Phi((x_l - mu_j - v_j a_q) / sd_j)
-    z = (x[None, None, :] - mu_o[:, None, None] - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
-    logF = np.log(np.maximum(ndtr(z), TINY))                       # (N, qa, L)
-    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+    if tables is not None:
+        logF, pdf = tables.eval(mu_o)
+    else:
+        z = (x[None, None, :] - mu_o[:, None, None] - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
+        logF = np.log(np.maximum(ndtr(z), TINY))                   # (N, qa, L)
+        pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
 
     S = np.add.reduceat(logF, starts, axis=0)                      # (nC, qa, L)
     G = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))     # (nC, L), S<=0

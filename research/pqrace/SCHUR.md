@@ -183,7 +183,12 @@ Measured on the block race (N=200, L=257):
   interpolation between adjacent integer shifts, O(dx^2)), which is exactly
   how winning.lattice evaluates shifted densities.
 
-Verdict: the package's survival-lookup design applies to all three Schur
-kernels and belongs in any promoted implementation; in numpy the honest gain
-is ~1.7x (more in a compiled path where slicing is memcpy). Not retrofitted
-into blockrace.py today -- recorded so the promotion does it right.
+Verdict, after actually installing it (`SurvivalTables`, optional
+`tables=` argument to block_race): in numpy the honest answer is
+BREAK-EVEN. The accurate two-slice blend costs 24.8 ms against 22.2 ms for
+recomputation -- the gather (take_along_axis on (N, Q, L)) costs what the
+transcendentals cost, so the 1.7x of raw integer snapping is exactly eaten
+by the second slice that makes it accurate (TV 4e-4). scipy's ndtr is
+simply fast. The design still pays in a compiled path, where the gather is
+a contiguous memcpy and the blend is fused -- which is where the package's
+own implementation lives. Installed as an option, honestly labelled.
