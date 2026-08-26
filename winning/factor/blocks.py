@@ -31,10 +31,62 @@ except Exception:                                            # pragma: no cover
     _HAVE_RUST = False
 
 
+def _cluster_nodes(r, qa, seed=0):
+    """Quadrature for a cluster's r-dim effect: GH for r = 1, scrambled
+    Sobol for r >= 2 (the node economy validated in research/qpo)."""
+    if r == 1:
+        an, aw = roots_hermitenorm(qa)
+        return an.reshape(-1, 1), aw / aw.sum()
+    from scipy.stats import qmc
+    from scipy.special import ndtri
+    m = max(4, int(np.ceil(np.log2(qa ** r))))
+    u = qmc.Sobol(r, scramble=True, seed=seed).random_base2(min(m, 10))
+    nodes = ndtri(np.clip(u, 1e-9, 1 - 1e-9))
+    return nodes, np.full(len(nodes), 1.0 / len(nodes))
+
+
+def _block_max_r(mu, sd, cluster, V, points, qa):
+    """Max-wins kernel for RANK-R blocks: loading matrix V (n, r), each
+    cluster with its own independent r-dim effect. Conditional independence
+    given the effect makes the field a per-cluster r-dim quadrature."""
+    mu = np.asarray(mu, float); sd = np.asarray(sd, float)
+    V = np.atleast_2d(np.asarray(V, float))
+    if V.shape[0] != len(mu):
+        V = V.T
+    r = V.shape[1]
+    cluster = np.asarray(cluster)
+    n = len(mu)
+    _, inv = np.unique(cluster, return_inverse=True)
+    order = np.argsort(inv, kind="stable")
+    mu_o, sd_o, V_o, c_o = mu[order], sd[order], V[order], inv[order]
+    starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
+    nodes, w = _cluster_nodes(r, qa)
+    Q = len(nodes)
+    tot = np.sqrt(sd_o ** 2 + (V_o ** 2).sum(1))
+    lo = float((mu_o - 8 * tot).min()); hi = float((mu_o + 8 * tot).max())
+    x = np.linspace(lo, hi, points); dx = x[1] - x[0]
+    shift = V_o @ nodes.T                                   # (n, Q)
+    z = (x[None, None, :] - mu_o[:, None, None]
+         - shift[:, :, None]) / sd_o[:, None, None]
+    logF = np.log(np.maximum(ndtr(z), TINY))
+    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+    S = np.add.reduceat(logF, starts, axis=0)
+    G = np.einsum("q,cql->cl", w, np.exp(np.minimum(S, 0.0)))
+    logG = np.log(np.maximum(G, TINY))
+    rest = np.exp(np.minimum(logG.sum(axis=0)[None, :] - logG, 0.0))
+    h = np.einsum("q,nql->nl", w, pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
+    p_o = (h * rest[c_o]).sum(axis=1) * dx
+    p = np.empty(n); p[order] = p_o
+    return np.maximum(p, 0.0)
+
+
 def _block_max(mu, sd, cluster, v, points, qa):
     """Max-wins kernel (numpy reference); public functions negate."""
     mu = np.asarray(mu, float); sd = np.asarray(sd, float)
     v = np.asarray(v, float); cluster = np.asarray(cluster)
+    if v.ndim == 2 and v.shape[-1] > 1:
+        return _block_max_r(mu, sd, cluster, v, points, qa)
+    v = v.reshape(len(mu))
     n = len(mu)
     _, inv = np.unique(cluster, return_inverse=True)
     order = np.argsort(inv, kind="stable")
@@ -84,11 +136,18 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
     if coupling is None or gamma == 0.0:
         return block_race_probabilities(mu, cluster, loading, D,
                                         points=points, qa=qa)
-    fn, fw = roots_hermitenorm(qf); fw = fw / fw.sum()
-    mu = np.asarray(mu, float); g = np.asarray(coupling, float)
+    mu = np.asarray(mu, float)
+    g = np.atleast_2d(np.asarray(coupling, float))
+    if g.shape[0] != len(mu):
+        g = g.T
+    if g.shape[1] == 1:
+        fn, fw = roots_hermitenorm(qf)
+        fn = fn.reshape(-1, 1); fw = fw / fw.sum()
+    else:
+        fn, fw = _cluster_nodes(g.shape[1], qf, seed=1)
     p = np.zeros(len(mu))
-    for q in range(qf):
-        p += fw[q] * block_race_probabilities(mu + gamma * g * fn[q], cluster,
+    for q in range(len(fn)):
+        p += fw[q] * block_race_probabilities(mu + gamma * (g @ fn[q]), cluster,
                                               loading, D, points=points, qa=qa)
     t = p.sum()
     return p / t if t > 0 else p

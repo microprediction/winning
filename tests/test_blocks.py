@@ -96,3 +96,35 @@ def test_one_race_five_grammars():
     parent = np.array([nC] * nC + [-1]); strength = np.zeros(nC + 1)
     p_t = race_probabilities(mu, structure=Tree(cl, v, D, parent, strength))
     assert 0.5 * np.abs(p_t - p_b).sum() < 2e-3
+
+
+def test_rank2_blocks_with_rank2_coupling():
+    """The US/Europe spec: 2 global factors (free loadings) over two regions,
+    each region with its own 2 local factors (free loadings)."""
+    rng = np.random.default_rng(7)
+    n = 40
+    region = (np.arange(n) >= n // 2).astype(int)
+    mu = rng.normal(0, 0.8, n); mu -= mu.mean()
+    D = (0.5 + 0.5 * rng.random(n)) ** 2
+    G = rng.normal(0, 0.5, (n, 2))
+    Vl = rng.normal(0, 0.6, (n, 2))
+    p = nested_race_probabilities(mu, region, Vl, D, coupling=G, gamma=1.0,
+                                  qa=11, qf=8)
+    assert abs(p.sum() - 1.0) < 1e-9
+    M, cnt = 300_000, np.zeros(n)
+    for a in range(0, M, 100_000):
+        m = min(100_000, M - a)
+        f = rng.standard_normal((m, 2))
+        aU = rng.standard_normal((m, 2)); aE = rng.standard_normal((m, 2))
+        loc = np.where(region[None, :, None] == 0, aU[:, None, :], aE[:, None, :])
+        Y = -mu + f @ G.T + np.einsum("mnr,nr->mn", loc, Vl) \
+            + np.sqrt(D) * rng.standard_normal((m, n))
+        np.add.at(cnt, np.argmax(Y, axis=1), 1.0)
+    assert 0.5 * np.abs(p - cnt / M).sum() < 0.012
+
+
+def test_rank1_column_matrix_matches_vector_loading():
+    mu, cl, v, D = _prob(n=30, c=6)
+    p1 = block_race_probabilities(mu, cl, v, D)
+    p2 = block_race_probabilities(mu, cl, v.reshape(-1, 1), D)
+    assert np.abs(p1 - p2).max() < 1e-12
