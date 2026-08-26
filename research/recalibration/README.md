@@ -105,19 +105,24 @@ exactly zero signal. The factor did not rediscover the semantic hierarchy.
 
 **One genuinely positive line.** On superclass-restricted menus (condition on
 the true superclass's five fine labels) the exact race deletion beats
-renormalised temperature-softmax, 0.4497 against 0.4572 NLL per example. That
-is in the predicted direction, but two caveats from the restriction
-programme (`../restriction/`, behind papers/thurstone_humans) apply
-before calling it an IIA violation: the comparison has not been scored
-against a Luce null in which renormalisation holds by construction (the
-programme's standing rule, since contraction gains can be artifacts),
-and the race used here is the rank-2 fit, so the effect conflates base
-law, heteroskedasticity, and factor. Given the factor bought nothing on
-the full menu, the likely reading is a base/heteroskedasticity effect
--- the thurstone_humans thesis showing up in a machine population.
-Needed: the race-diag ablation on restricted menus plus the null
-pipeline (requires refitting; parameters were not saved to disk --
-future runs should np.savez the fits).
+renormalised temperature-softmax, 0.4497 against 0.4572 NLL per example. CORRECTED
+INTERPRETATION (2026-08-25, prompted by Peter): this is NOT an IIA
+violation and cannot be one. For a classifier there is a fixed true
+label, so menu restriction is conditioning on y in S, and Bayes makes
+renormalisation of the TRUE conditionals exactly optimal; softmax under
+logit masking renormalises identically by construction. Nothing
+re-decides, so IIA is an identity here, not a testable axiom. What the
+gap measures is error propagation of a misspecified fitted model: the
+deletion map propagated the fit's errors onto subsets better than
+renormalising the fit did, on this checkpoint -- an implicit
+subset-recalibration effect, unscored against the restriction
+programme's Luce null and conflating base law, heteroskedasticity, and
+factor (parameters were not saved; future runs should np.savez fits).
+The genuine machine-population IIA test needs an actual chooser that
+re-decides on restricted menus -- an LLM re-answering with fewer
+options -- which is one more reason the multiple-choice experiment is
+the decisive one. Contrast ../restriction/, where human populations
+genuinely re-choose and the axiom is substantive.
 
 Why the negative might be the setup rather than the method: 5,000 winners over
 K = 100 classes is 50 per class, and the identification study found the
