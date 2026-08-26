@@ -1,0 +1,16 @@
+data 6s: DB 133385 x 128, 500 queries
+codebooks 86s
+encode 36s
+error model 1s
+exact truth 41s
+race search 40s
+
+=== calibrated per-query rerank depth (adaptive) vs fixed depth ===
+  target   mean m   p90 m   max m  coverage | fixed-depth m for same coverage
+    0.90    153.5     346     712     1.000 | 218
+    0.95    289.3     644    1209     1.000 | 218
+    0.99    805.8    1684    2536     1.000 | 218
+
+fixed-depth coverage: m=8: 0.900  m=32: 0.982  m=128: 0.998  m=512: 1.000  m=2048: 1.000
+
+ADC top-1 == truth (no rerank): 0.510

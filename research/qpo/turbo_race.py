@@ -15,6 +15,7 @@ The candidates sit inside a trust region, so they are close together and
 strongly correlated: exactly the regime where a factor model earns its place.
 """
 from __future__ import annotations
+import time
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve, qr
 from scipy.optimize import minimize
@@ -118,3 +119,80 @@ class GP:
         V *= self.ys
         D = np.maximum(var - (V ** 2).sum(1), 1e-10 * var)
         return mu, V, D
+
+
+# ------------------------------------------------------------------ TuRBO-1
+def ackley(X, lo=-5.0, hi=10.0):
+    Z = lo + (hi - lo) * X
+    a, b, c = 20.0, 0.2, 2 * np.pi
+    return (-a * np.exp(-b * np.sqrt((Z ** 2).mean(1)))
+            - np.exp(np.cos(c * Z).mean(1)) + a + np.e)
+
+
+def levy(X, lo=-10.0, hi=10.0):
+    Z = lo + (hi - lo) * X
+    w = 1 + (Z - 1) / 4
+    t1 = np.sin(np.pi * w[:, 0]) ** 2
+    t2 = ((w[:, :-1] - 1) ** 2 * (1 + 10 * np.sin(np.pi * w[:, :-1] + 1) ** 2)).sum(1)
+    t3 = (w[:, -1] - 1) ** 2 * (1 + np.sin(2 * np.pi * w[:, -1]) ** 2)
+    return t1 + t2 + t3
+
+
+def turbo(f, d, n_init=20, n_iter=40, batch=10, N_cand=5000, mode="factor",
+          rank=2, seed=0, verbose=False):
+    """TuRBO-1. `mode` selects how the Thompson batch is drawn:
+
+        "cholesky"  form the N x N posterior covariance, factor it, draw q
+                    joint samples, take each argmin  -- what TuRBO does, and
+                    the reason N is capped at min(100d, 5000).
+        "factor"    fit a rank-r factor model without ever forming N x N and
+                    sample the LATENT: q draws of (f in R^r, eps in R^N).
+    """
+    rng = np.random.default_rng(seed)
+    X = qmc.Sobol(d, scramble=True, seed=seed).random(n_init)
+    y = f(X)
+    L, n_succ, n_fail = 0.8, 0, 0
+    succ_tol, fail_tol = 3, max(4, int(np.ceil(d / batch)))
+    t_acq = 0.0
+    for it in range(n_iter):
+        if L < 0.5 ** 7:                      # restart
+            X2 = qmc.Sobol(d, scramble=True, seed=seed + 1000 + it).random(n_init)
+            X, y = np.vstack([X, X2]), np.concatenate([y, f(X2)])
+            L, n_succ, n_fail = 0.8, 0, 0
+        keep = np.argsort(y)[:400]            # cap GP size
+        g = GP(X[keep], y[keep])
+        xc = X[np.argmin(y)]
+        w = g.ls / g.ls.mean(); w = w / np.prod(w) ** (1.0 / d)
+        lb, ub = np.clip(xc - L * w / 2, 0, 1), np.clip(xc + L * w / 2, 0, 1)
+        pert = rng.random((N_cand, d)) < min(20.0 / d, 1.0)
+        pert[~pert.any(1), rng.integers(0, d, (~pert.any(1)).sum())] = True
+        C = np.tile(xc, (N_cand, 1))
+        S = lb + (ub - lb) * rng.random((N_cand, d))
+        C[pert] = S[pert]
+        t0 = time.time()
+        if mode == "cholesky":
+            mu = g.predict_mean_var(C)[0]
+            Sig = g.posterior_cov(C)
+            Lc = np.linalg.cholesky(Sig + 1e-8 * np.eye(N_cand))
+            idx = [int(np.argmin(mu + rng.standard_normal(N_cand) @ Lc.T))
+                   for _ in range(batch)]
+            del Sig, Lc
+        else:
+            mu, V, D = g.factor_model(C, rank=rank, seed=seed + it)
+            sd = np.sqrt(D)
+            idx = [int(np.argmin(mu + V @ rng.standard_normal(rank)
+                                 + sd * rng.standard_normal(N_cand)))
+                   for _ in range(batch)]
+        t_acq += time.time() - t0
+        idx = list(dict.fromkeys(idx))
+        Xn = C[idx]; yn = f(Xn)
+        if yn.min() < y.min() - 1e-3 * abs(y.min()):
+            n_succ, n_fail = n_succ + 1, 0
+        else:
+            n_succ, n_fail = 0, n_fail + 1
+        if n_succ >= succ_tol: L, n_succ = min(2 * L, 1.6), 0
+        if n_fail >= fail_tol: L, n_fail = L / 2, 0
+        X, y = np.vstack([X, Xn]), np.concatenate([y, yn])
+        if verbose:
+            print(f"    it {it:3d} n={len(y):5d} best {y.min():.4f} L={L:.3f}", flush=True)
+    return y.min(), len(y), t_acq

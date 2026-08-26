@@ -1,0 +1,9 @@
+ackley d=100, 40 iters x batch 10, seeds [0, 1, 2, 3, 4]
+/Users/petercotton/github/winning/research/qpo/turbo_race.py:152: UserWarning: The balance properties of Sobol' points require n to be a power of 2.
+  X = qmc.Sobol(d, scramble=True, seed=seed).random(n_init)
+  cholesky-5k  seed 0: best   9.2315  (371 evals, acq  97.9s, total   423s)
+  cholesky-5k  seed 1: best   9.3578  (380 evals, acq  92.2s, total   434s)
+  cholesky-5k  seed 2: best   9.1911  (361 evals, acq  92.9s, total   412s)
+  cholesky-5k  seed 3: best   9.6316  (377 evals, acq  98.9s, total   440s)
+  cholesky-5k  seed 4: best   9.4028  (376 evals, acq 100.9s, total   457s)
+  factor-5k    seed 0: best   9.3997  (386 evals, acq  15.2s, total   361s)

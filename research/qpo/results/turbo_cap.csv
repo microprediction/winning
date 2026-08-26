@@ -1,0 +1,7 @@
+fn,d,arm,mode,N_cand,seed,best,n_evals,acq_seconds,total_seconds
+ackley,100,cholesky-5k,cholesky,5000,0,9.23149,371,97.9,423.4
+ackley,100,cholesky-5k,cholesky,5000,1,9.35777,380,92.2,434.1
+ackley,100,cholesky-5k,cholesky,5000,2,9.19113,361,92.9,412.0
+ackley,100,cholesky-5k,cholesky,5000,3,9.63155,377,98.9,440.4
+ackley,100,cholesky-5k,cholesky,5000,4,9.40279,376,100.9,457.4
+ackley,100,factor-5k,factor,5000,0,9.39971,386,15.2,361.4
