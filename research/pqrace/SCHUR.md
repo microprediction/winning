@@ -69,3 +69,34 @@ distortion measurement that motivates it: inverting block-generated
 probabilities under an ASSUMED-independent model mislocates abilities by up
 to 1.31 against a true spread of 5.96 -- 22% of the field's range. Ignoring
 known block structure at inversion time is not a small error.
+
+
+## Done properly: the exact Jacobian, and hybrid Newton
+
+Per Peter: the black-box fixed point was the lazy version. The proper one
+uses what the forward pass already computes -- and the Jacobian inherits the
+Schur structure of the model:
+
+    same block   J_ij = -int dx sum_a w_a f_i f_j exp(S_c - lF_i - lF_j) R_c
+                 (i and j coupled through the shared block effect per node)
+    cross block  J_ij = -int dx h_i h_j G/(G_c G_d): a GRAM over lattice
+                 points -- block-diagonal plus a factored field coupling,
+                 never an N x N surprise
+    diagonal     rows sum to zero (a common shift moves nothing)
+
+`block_race_jac` returns p and the exact J from one pass; validated against
+finite differences to 4e-5 (FD noise). `block_invert_newton` solves in
+log-residual space with the ones-projector fixing the gauge.
+
+Globalization mattered, measurably: pure Newton from the Luce start diverges
+under strong correlation, and so does an UN-damped fixed point -- the
+adaptive (backtracking) fixed point run to a loose tolerance is the correct
+globalizer, after which Newton contracts quadratically (machine precision
+from |mu err| <= 0.5 in 3-4 steps).
+
+    hybrid (adaptive FP to 0.2, then Newton):  0.8 s to 1e-14
+    fixed point alone:                          4.4 s to 2e-10
+
+5x faster and four orders tighter. The same pattern as one_pass_polished in
+exotics: the cheap estimator is the initializer that makes the exact solver
+well-posed, not the answer.

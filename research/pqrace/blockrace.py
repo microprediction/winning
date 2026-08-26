@@ -148,3 +148,109 @@ def block_abilities_from_probabilities(p, sd, cluster, v, g=None, gamma=1.0,
             if eta < 1e-4:
                 break
     return mu, err
+
+
+def block_race_jac(mu, sd, cluster, v, points=257, qa=9, span=8.0):
+    """Win probabilities AND the exact Jacobian d p / d mu, from one pass.
+
+    The Jacobian inherits the Schur structure of the model:
+      same block   J_ij = -int dx sum_a w_a f_i f_j exp(S_c - lF_i - lF_j) R_c(x)
+                   (i and j share the block effect at each node)
+      cross block  J_ij = -int dx h_i(x) h_j(x) G(x) / (G_c(x) G_d(x))
+                   -- a GRAM over lattice points: block-diagonal plus a
+                   factored coupling, so Newton can solve blocks locally and
+                   correct through the shared field. Rows sum to zero (a
+                   common shift moves nothing), which sets the diagonal.
+    """
+    mu = np.asarray(mu, float); sd = np.asarray(sd, float)
+    v = np.asarray(v, float); cluster = np.asarray(cluster)
+    N = len(mu)
+    _, inv = np.unique(cluster, return_inverse=True)
+    order = np.argsort(inv, kind="stable")
+    mu_o, sd_o, v_o, c_o = mu[order], sd[order], v[order], inv[order]
+    starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
+    nC = len(starts)
+    tot = np.sqrt(sd_o ** 2 + v_o ** 2)
+    lo = float((mu_o - span * tot).min()); hi = float((mu_o + span * tot).max())
+    x = np.linspace(lo, hi, points); dx = x[1] - x[0]
+    an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
+
+    z = (x[None, None, :] - mu_o[:, None, None] - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
+    logF = np.log(np.maximum(ndtr(z), TINY))
+    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+    S = np.add.reduceat(logF, starts, axis=0)
+    G = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))
+    logG_all = np.log(np.maximum(G, TINY)).sum(axis=0)
+    Rc = np.exp(np.minimum(logG_all[None, :] - np.log(np.maximum(G, TINY)), 0.0))  # (nC, L)
+
+    lo_i = np.exp(np.minimum(S[c_o] - logF, 0.0))            # leave-one-out (N, qa, L)
+    h = np.einsum("q,nql->nl", aw, pdf * lo_i)               # (N, L)
+    p_o = (h * Rc[c_o]).sum(axis=1) * dx
+
+    # cross-block Gram: U_i(x) = h_i sqrt(dx G_all) / G_c(i)
+    Gall = np.exp(np.minimum(logG_all, 0.0))
+    U = h * np.sqrt(np.maximum(Gall, TINY) * dx)[None, :] / np.maximum(G[c_o], TINY)
+    J = -(U @ U.T)
+    # replace same-block entries with the exact shared-node term
+    for ci in range(nC):
+        a0 = starts[ci]; a1 = starts[ci + 1] if ci + 1 < nC else N
+        idx = np.arange(a0, a1)
+        if len(idx) == 1:
+            J[a0, a0] = 0.0
+            continue
+        lo2 = np.exp(np.minimum(S[ci][None, None, :, :] - logF[idx][:, None, :, :]
+                                - logF[idx][None, :, :, :], 0.0))
+        term = np.einsum("q,ijql,l->ij", aw, pdf[idx][:, None, :, :] * pdf[idx][None, :, :, :]
+                         * lo2, Rc[ci]) * dx
+        Jb = -term
+        J[np.ix_(idx, idx)] = Jb
+    np.fill_diagonal(J, 0.0)
+    J[np.arange(N), np.arange(N)] = -J.sum(axis=1)
+    # un-permute
+    p = np.empty(N); p[order] = p_o
+    Jf = np.empty((N, N)); Jf[np.ix_(order, order)] = J
+    return np.maximum(p, 0.0), Jf
+
+
+def block_invert_newton(p_target, sd, cluster, v, points=257, qa=9,
+                        tol=1e-10, max_iter=30):
+    """Newton inversion using the exact Jacobian. Gauge fixed by working on
+    the centred subspace (J's rows sum to zero; add the ones-projector)."""
+    p_t = np.asarray(p_target, float); p_t = p_t / p_t.sum()
+    N = len(p_t)
+    mu = np.log(np.maximum(p_t, 1e-300)); mu -= mu.mean()
+    ones = np.ones((N, N)) / N
+    lt = np.log(np.maximum(p_t, 1e-300))
+    # globalize with the ADAPTIVE fixed point (backtracking eta) until inside
+    # Newton's basin -- measured: Newton contracts to machine precision from
+    # |mu err| <= 0.5, and an un-damped fixed point can diverge outright
+    # under strong correlation, which is why the globalizer must backtrack
+    mu, _ = block_abilities_from_probabilities(p_t, sd, cluster, v,
+                                               points=points, qa=qa,
+                                               tol=0.2, max_iter=60)
+    for it in range(max_iter):
+        p, J = block_race_jac(mu, sd, cluster, v, points=points, qa=qa)
+        p = np.maximum(p / p.sum(), 1e-300)
+        r = np.log(p) - lt                       # log residual: even rows scale
+        if np.abs(r).max() < tol:
+            return mu - mu.mean(), float(np.abs(r).max()), it
+        Jl = J / p[:, None]                      # d log p / d mu
+        step, *_ = np.linalg.lstsq(Jl + ones, -r, rcond=1e-12)
+        n = np.linalg.norm(step)
+        if n > 5.0:                              # trust region on the step
+            step *= 5.0 / n
+        cur = np.abs(r).max()
+        for _ in range(12):                      # damp but never abort
+            mu_n = mu + step; mu_n -= mu_n.mean()
+            p_n = block_race(mu_n, sd, cluster, v, points=points, qa=qa)
+            p_n = np.maximum(p_n / p_n.sum(), 1e-300)
+            if np.abs(np.log(p_n) - lt).max() < cur:
+                mu = mu_n
+                break
+            step *= 0.5
+        else:
+            mu = mu + step * (2.0 ** 0)          # take the tiny step anyway
+            mu -= mu.mean()
+    p, _ = block_race_jac(mu, sd, cluster, v, points=points, qa=qa)
+    p = np.maximum(p / p.sum(), 1e-300)
+    return mu - mu.mean(), float(np.abs(np.log(p) - lt).max()), max_iter
