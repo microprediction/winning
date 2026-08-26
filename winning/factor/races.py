@@ -25,6 +25,13 @@ from scipy.special import ndtr
 
 from .core import hermite_nodes
 
+try:                                       # compiled kernels (rust/fastrace)
+    import fastrace as _fastrace
+    _HAVE_RUST = hasattr(_fastrace, "forward_and_slopes")
+except ImportError:
+    _fastrace = None
+    _HAVE_RUST = False
+
 _EULER = 0.5772156649015329
 
 
@@ -152,6 +159,18 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         x = np.linspace(M_all.min() - left * sd.max(),
                         M_all.max() + right * sd.max(), points)
     dx = x[1] - x[0]
+    if _HAVE_RUST and base == "normal":
+        try:
+            p, sl, total = _fastrace.forward_and_slopes(
+                np.ascontiguousarray(mu), np.ascontiguousarray(V),
+                np.ascontiguousarray(D), np.ascontiguousarray(F),
+                np.ascontiguousarray(W), points,
+                float(x[0]), float(x[-1]))
+            if return_slopes:
+                return np.asarray(p), np.asarray(sl) / total
+            return np.asarray(p)
+        except TypeError:
+            pass       # older fastrace without window arguments: numpy path
     p = np.zeros(n)
     slope = np.zeros(n)
     chunk = max(1, int(5e6 / (n * points)))

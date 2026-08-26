@@ -50,6 +50,8 @@ fn forward_kernel(
     f_nodes: ArrayView2<f64>,
     w: ArrayView1<f64>,
     points: usize,
+    lo_in: f64,
+    hi_in: f64,
 ) -> (Array1<f64>, Array1<f64>, f64) {
     let n = mu.len();
     let q = f_nodes.nrows();
@@ -74,6 +76,10 @@ fn forward_kernel(
     }
     lo -= 8.0 * sd_max;
     hi += 8.0 * sd_max;
+    if lo_in.is_finite() && hi_in.is_finite() && hi_in > lo_in {
+        lo = lo_in;
+        hi = hi_in;
+    }
     let dx = (hi - lo) / (points - 1) as f64;
 
     let p: Vec<f64> = (0..q)
@@ -147,7 +153,7 @@ fn forward_kernel(
 /// slopes of the unnormalized map (the inversion preconditioner), and the
 /// pre-normalization total. slope_i = d p_raw_i / d mu_i.
 #[pyfunction]
-#[pyo3(signature = (mu, v, d, f, w, points=501))]
+#[pyo3(signature = (mu, v, d, f, w, points=501, lo=f64::NAN, hi=f64::NAN))]
 fn forward_and_slopes<'py>(
     py: Python<'py>,
     mu: PyReadonlyArray1<f64>,
@@ -156,6 +162,8 @@ fn forward_and_slopes<'py>(
     f: PyReadonlyArray2<f64>,
     w: PyReadonlyArray1<f64>,
     points: usize,
+    lo: f64,
+    hi: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, f64)> {
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
@@ -164,14 +172,14 @@ fn forward_and_slopes<'py>(
     let w_o: Array1<f64> = w.as_array().to_owned();
     let (p, sl, total) = py.allow_threads(|| {
         forward_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
-                       w_o.view(), points)
+                       w_o.view(), points, lo, hi)
     });
     Ok((p.into_pyarray_bound(py), sl.into_pyarray_bound(py), total))
 }
 
 /// Back-compatible forward-only entry point: (normalized p, total).
 #[pyfunction]
-#[pyo3(signature = (mu, v, d, f, w, points=501))]
+#[pyo3(signature = (mu, v, d, f, w, points=501, lo=f64::NAN, hi=f64::NAN))]
 fn win_probabilities_factor<'py>(
     py: Python<'py>,
     mu: PyReadonlyArray1<f64>,
@@ -180,6 +188,8 @@ fn win_probabilities_factor<'py>(
     f: PyReadonlyArray2<f64>,
     w: PyReadonlyArray1<f64>,
     points: usize,
+    lo: f64,
+    hi: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
@@ -188,7 +198,7 @@ fn win_probabilities_factor<'py>(
     let w_o: Array1<f64> = w.as_array().to_owned();
     let (p, _sl, total) = py.allow_threads(|| {
         forward_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
-                       w_o.view(), points)
+                       w_o.view(), points, lo, hi)
     });
     Ok((p.into_pyarray_bound(py), total))
 }
@@ -1148,6 +1158,459 @@ fn block_race_r<'py>(
     Ok(p.into_pyarray_bound(py))
 }
 
+// ---------------------------------------------------------------------------
+// Tree race: hierarchy of uniform shared effects, two message passes on the
+// lattice. Port of winning.factor.blocks.tree_race_probabilities (the python
+// wrapper negates, sorts by cluster, computes the bulk window, and
+// normalizes; this kernel takes the sorted arrays and returns raw p).
+// ---------------------------------------------------------------------------
+
+const LN_TINY: f64 = -690.77552789821368; // ln(1e-300)
+
+/// Evaluate g at x + delta on the uniform grid [lo, lo+dx, ...] (linear,
+/// clamped at the edges) -- matches np.interp(x, x - delta, g, g[0], g[-1]).
+fn interp_shift(g: &[f64], delta_over_dx: f64) -> Vec<f64> {
+    let m = g.len();
+    (0..m)
+        .map(|t| {
+            let pos = t as f64 + delta_over_dx;
+            if pos <= 0.0 {
+                g[0]
+            } else if pos >= (m - 1) as f64 {
+                g[m - 1]
+            } else {
+                let k = pos.floor() as usize;
+                let r = pos - k as f64;
+                g[k] * (1.0 - r) + g[k + 1] * r
+            }
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn tree_kernel(
+    mu: &[f64],
+    sd: &[f64],
+    v: &[f64],
+    starts: &[usize],
+    parent: &[i64],
+    lam: &[f64],
+    an: &[f64],
+    aw: &[f64],
+    points: usize,
+    lo: f64,
+    hi: f64,
+) -> Vec<f64> {
+    let n = mu.len();
+    let nc = starts.len();
+    let nt = parent.len();
+    let qa = an.len();
+    let dx = (hi - lo) / (points - 1) as f64;
+    let mut ends: Vec<usize> = starts[1..].to_vec();
+    ends.push(n);
+
+    // pass 1: per-cluster survival logs S[c][q][t]
+    let mut s_arr = vec![0.0f64; nc * qa * points];
+    s_arr
+        .par_chunks_mut(qa * points)
+        .enumerate()
+        .for_each(|(c, sc)| {
+            for i in starts[c]..ends[c] {
+                let inv_sd = 1.0 / sd[i];
+                for q in 0..qa {
+                    let mi = mu[i] + v[i] * an[q];
+                    let row = &mut sc[q * points..(q + 1) * points];
+                    for (t, rt) in row.iter_mut().enumerate() {
+                        let x = lo + t as f64 * dx;
+                        let z = (x - mi) * inv_sd;
+                        *rt += log_ndtr(z).max(LN_TINY);
+                    }
+                }
+            }
+        });
+
+    // leaf messages G[c] = sum_q aw_q exp(min(S, 0))
+    let mut g: Vec<Vec<f64>> = vec![vec![0.0; points]; nt];
+    for c in 0..nc {
+        let gc = &mut g[c];
+        for q in 0..qa {
+            let row = &s_arr[c * qa * points + q * points..c * qa * points + (q + 1) * points];
+            for t in 0..points {
+                gc[t] += aw[q] * row[t].min(0.0).exp();
+            }
+        }
+    }
+
+    // tree bookkeeping (matches the python: depth_shift by |lam| path sums)
+    let mut depth_shift = vec![0.0f64; nt];
+    for t in 0..nt {
+        let mut s_ = 0.0;
+        let mut u = t;
+        while parent[u] >= 0 {
+            s_ += lam[parent[u] as usize].abs();
+            u = parent[u] as usize;
+        }
+        depth_shift[t] = s_;
+    }
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); nt];
+    for t in 0..nt {
+        if parent[t] >= 0 {
+            children[parent[t] as usize].push(t);
+        }
+    }
+
+    // upward pass: internal nodes, deepest first (stable on ties)
+    let mut up: Vec<usize> = (nc..nt).collect();
+    up.sort_by(|&a, &b| depth_shift[b].partial_cmp(&depth_shift[a]).unwrap());
+    for &t in &up {
+        let mut acc = vec![0.0f64; points];
+        for q in 0..qa {
+            let mut prod = vec![1.0f64; points];
+            for &c in &children[t] {
+                let sh = interp_shift(&g[c], lam[t] * an[q] / dx);
+                for (p_, s_) in prod.iter_mut().zip(sh) {
+                    *p_ *= s_;
+                }
+            }
+            for (a_, p_) in acc.iter_mut().zip(prod) {
+                *a_ += aw[q] * p_;
+            }
+        }
+        for a_ in acc.iter_mut() {
+            *a_ = a_.max(0.0);
+        }
+        g[t] = acc;
+    }
+
+    // downward pass: shallowest first (stable on ties)
+    let mut r: Vec<Vec<f64>> = vec![vec![1.0; points]; nt];
+    let mut down: Vec<usize> = (0..nt).collect();
+    down.sort_by(|&a, &b| depth_shift[a].partial_cmp(&depth_shift[b]).unwrap());
+    for &t in &down {
+        if parent[t] < 0 {
+            continue;
+        }
+        let pa = parent[t] as usize;
+        let mut sm = vec![0.0f64; points];
+        for q in 0..qa {
+            let sh = interp_shift(&r[pa], -lam[pa] * an[q] / dx);
+            for (s_, v_) in sm.iter_mut().zip(sh) {
+                *s_ += aw[q] * v_;
+            }
+        }
+        let mut prod = vec![1.0f64; points];
+        for &s_ in &children[pa] {
+            if s_ != t {
+                for (p_, gv) in prod.iter_mut().zip(&g[s_]) {
+                    *p_ *= gv;
+                }
+            }
+        }
+        let rt: Vec<f64> = sm
+            .iter()
+            .zip(prod)
+            .map(|(s_, p_)| (s_ * p_).max(0.0))
+            .collect();
+        r[t] = rt;
+    }
+
+    // pass 2: per-runner win integrand against its own leaf message
+    let cluster_of: Vec<usize> = {
+        let mut cl = vec![0usize; n];
+        for c in 0..nc {
+            for i in starts[c]..ends[c] {
+                cl[i] = c;
+            }
+        }
+        cl
+    };
+    (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let c = cluster_of[i];
+            let inv_sd = 1.0 / sd[i];
+            let ln_i = sd[i].ln() + LN_SQRT_2PI;
+            let rc = &r[c];
+            let mut pi = 0.0f64;
+            for q in 0..qa {
+                let mi = mu[i] + v[i] * an[q];
+                let row =
+                    &s_arr[c * qa * points + q * points..c * qa * points + (q + 1) * points];
+                for t in 0..points {
+                    let x = lo + t as f64 * dx;
+                    let z = (x - mi) * inv_sd;
+                    let lf = log_ndtr(z).max(LN_TINY);
+                    let e = (row[t] - lf).min(0.0) + (-0.5 * z * z - ln_i);
+                    if e > -745.0 {
+                        pi += aw[q] * e.exp() * rc[t];
+                    }
+                }
+            }
+            (pi * dx).max(0.0)
+        })
+        .collect()
+}
+
+#[pyfunction]
+#[pyo3(signature = (mu, sd, v, starts, parent, lam, a_nodes, a_weights, points, lo, hi))]
+#[allow(clippy::too_many_arguments)]
+fn tree_race<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    sd: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray1<f64>,
+    starts: PyReadonlyArray1<i64>,
+    parent: PyReadonlyArray1<i64>,
+    lam: PyReadonlyArray1<f64>,
+    a_nodes: PyReadonlyArray1<f64>,
+    a_weights: PyReadonlyArray1<f64>,
+    points: usize,
+    lo: f64,
+    hi: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let mu_o: Vec<f64> = mu.as_array().to_vec();
+    let sd_o: Vec<f64> = sd.as_array().to_vec();
+    let v_o: Vec<f64> = v.as_array().to_vec();
+    let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
+    let pa: Vec<i64> = parent.as_array().to_vec();
+    let lm: Vec<f64> = lam.as_array().to_vec();
+    let an: Vec<f64> = a_nodes.as_array().to_vec();
+    let aw: Vec<f64> = a_weights.as_array().to_vec();
+    let p = py.allow_threads(|| {
+        tree_kernel(&mu_o, &sd_o, &v_o, &st, &pa, &lm, &an, &aw, points, lo, hi)
+    });
+    Ok(Array1::from_vec(p).into_pyarray_bound(py))
+}
+
+// ---------------------------------------------------------------------------
+// Classic core: the original state-price lattice calibration
+// (winning.lattice / winning.lattice_calibration), dead-heat multiplicity
+// machinery included, with the reference implementation's exact epsilon
+// conventions so the two paths agree to numerical noise.
+// ---------------------------------------------------------------------------
+
+fn pdf_to_cdf(f: &[f64]) -> Vec<f64> {
+    let mut c = Vec::with_capacity(f.len());
+    let mut s = 0.0;
+    for &x in f {
+        s += x;
+        c.push(s);
+    }
+    c
+}
+
+fn cdf_to_pdf(c: &[f64]) -> Vec<f64> {
+    let mut f = Vec::with_capacity(c.len());
+    let mut prev = 0.0;
+    for &x in c {
+        f.push(x - prev);
+        prev = x;
+    }
+    f
+}
+
+fn integer_shift(cdf: &[f64], k: i64) -> Vec<f64> {
+    let m = cdf.len() as i64;
+    let k = k.clamp(-(m - 1), m - 1);
+    if k < 0 {
+        let a = (-k) as usize;
+        let last = cdf[cdf.len() - 1];
+        let mut out: Vec<f64> = cdf[a..].to_vec();
+        out.extend(std::iter::repeat(last).take(a));
+        out
+    } else if k == 0 {
+        cdf.to_vec()
+    } else {
+        let a = k as usize;
+        let mut out = vec![0.0; a];
+        out.extend_from_slice(&cdf[..cdf.len() - a]);
+        out
+    }
+}
+
+fn low_high(offset: f64, l: i64) -> ((i64, f64), (i64, f64)) {
+    let lf = l as f64;
+    if offset > -lf + 2.0 && offset < lf - 2.0 {
+        let lo = offset.floor() as i64;
+        let up = offset.ceil() as i64;
+        let r = offset - lo as f64;
+        ((lo, 1.0 - r), (up, r))
+    } else if offset >= lf - 2.0 {
+        ((l - 2, 1.0), (l - 1, 0.0))
+    } else {
+        ((-l + 1, 0.0), (-l + 2, 1.0))
+    }
+}
+
+fn shifted_cdf(cdf: &[f64], offset: f64, l: i64) -> Vec<f64> {
+    let ((a, ac), (b, bc)) = low_high(offset, l);
+    let sa = integer_shift(cdf, a);
+    let sb = integer_shift(cdf, b);
+    sa.iter().zip(sb).map(|(x, y)| ac * x + bc * y).collect()
+}
+
+/// Fold the field: density/cdf/multiplicity of the minimum, dead heats
+/// tracked via the reference _winner_of_two_pdf recursion.
+fn winner_of_many(cdfs: &[Vec<f64>]) -> (Vec<f64>, Vec<f64>) {
+    let m = cdfs[0].len();
+    let mut cdf_min = cdfs[0].clone();
+    let mut mult = vec![1.0f64; m];
+    for cb in &cdfs[1..] {
+        let fa = cdf_to_pdf(&cdf_min);
+        let fb = cdf_to_pdf(cb);
+        let mut new_cdf = Vec::with_capacity(m);
+        let mut new_mult = Vec::with_capacity(m);
+        for t in 0..m {
+            let win = fa[t] * (1.0 - cb[t]);
+            let draw = fa[t] * fb[t];
+            let lose = fb[t] * (1.0 - cdf_min[t]);
+            new_mult.push(
+                (win * mult[t] + draw * (mult[t] + 1.0) + lose * 1.0 + 1e-18)
+                    / (win + draw + lose + 1e-18),
+            );
+            new_cdf.push(1.0 - (1.0 - cdf_min[t]) * (1.0 - cb[t]));
+        }
+        cdf_min = new_cdf;
+        mult = new_mult;
+    }
+    (cdf_min, mult)
+}
+
+/// get_the_rest + conditional payoff, summed: the expected payoff of a
+/// contestant with cdf `cdf` against the field (cdf_all, mult_all).
+fn expected_payoff_sum(cdf: &[f64], cdf_all: &[f64], mult_all: &[f64]) -> f64 {
+    let m = cdf.len();
+    let f1 = cdf_to_pdf(cdf);
+    let mut cdf_rest = Vec::with_capacity(m);
+    for t in 0..m {
+        let s = 1.0 - cdf_all[t];
+        let s1 = 1.0 - cdf[t];
+        cdf_rest.push(1.0 - (s + 1e-18) / (s1 + 1e-6));
+    }
+    let f_rest = cdf_to_pdf(&cdf_rest);
+    // multiplicity of the rest: left-tail inversion, right-tail asymptotic,
+    // switch at the mode of f1 (first argmax), exactly as the reference
+    let mut kmax = 0;
+    let mut fmax = f64::MIN;
+    for (t, &x) in f1.iter().enumerate() {
+        if x > fmax {
+            fmax = x;
+            kmax = t;
+        }
+    }
+    let mut mult_rest = Vec::with_capacity(m);
+    for t in 0..m {
+        let mm = mult_all[t];
+        let s1 = 1.0 - cdf[t];
+        let srest = (1.0 - cdf_all[t] + 1e-18) / (s1 + 1e-6);
+        if t < kmax {
+            let numer =
+                mm * f1[t] * srest + mm * (f1[t] + s1) * f_rest[t] - f1[t] * (srest + f_rest[t]);
+            let denom = f_rest[t] * (f1[t] + s1);
+            mult_rest.push((1e-18 + numer) / (1e-18 + denom));
+        } else {
+            let t1 = (s1 + 1e-18) / (f1[t] + 1e-6);
+            let trest = (srest + 1e-18) / (f_rest[t] + 1e-6);
+            mult_rest.push(mm * trest / (1.0 + t1) + mm - (1.0 + trest) / (1.0 + t1));
+        }
+    }
+    // forced monotone cdf of the rest, then payoff = win + draw/(1 + mult)
+    let mut run = f64::MIN;
+    let mut total = 0.0;
+    let mut prev = 0.0;
+    for t in 0..m {
+        run = run.max(cdf_rest[t]);
+        let fr = run - prev;
+        prev = run;
+        total += f1[t] * (1.0 - run) + f1[t] * fr / (1.0 + mult_rest[t]);
+    }
+    total
+}
+
+/// implicit_state_prices: expected payoff of the base density shifted to
+/// each offset (float offsets blend the two integer shifts).
+fn implicit_prices(
+    base_cdf: &[f64],
+    cdf_all: &[f64],
+    mult_all: &[f64],
+    offsets: &[f64],
+    l: i64,
+) -> Vec<f64> {
+    offsets
+        .par_iter()
+        .map(|&k| {
+            if k == k.trunc() {
+                expected_payoff_sum(&integer_shift(base_cdf, k as i64), cdf_all, mult_all)
+            } else {
+                let ((a, ac), (b, bc)) = low_high(k, l);
+                ac * expected_payoff_sum(&integer_shift(base_cdf, a), cdf_all, mult_all)
+                    + bc * expected_payoff_sum(&integer_shift(base_cdf, b), cdf_all, mult_all)
+            }
+        })
+        .collect()
+}
+
+/// np.interp(x, xp, fp) for ascending xp, end-clamped.
+fn interp1(x: f64, xp: &[f64], fp: &[f64]) -> f64 {
+    if x <= xp[0] {
+        return fp[0];
+    }
+    let last = xp.len() - 1;
+    if x >= xp[last] {
+        return fp[last];
+    }
+    let j = xp.partition_point(|&p| p <= x) - 1;
+    if j >= last {
+        return fp[last];
+    }
+    let denom = xp[j + 1] - xp[j];
+    if denom <= 0.0 {
+        return fp[j];
+    }
+    fp[j] + (x - xp[j]) / denom * (fp[j + 1] - fp[j])
+}
+
+/// state_prices_from_offsets: field from the shifted base density, then
+/// implicit prices AT those offsets (unnormalized, as the reference).
+#[pyfunction]
+fn classic_state_prices(density: Vec<f64>, offsets: Vec<f64>) -> PyResult<Vec<f64>> {
+    let l = ((density.len() - 1) / 2) as i64;
+    let base_cdf = pdf_to_cdf(&density);
+    let cdfs: Vec<Vec<f64>> = offsets.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+    let (cdf_all, mult_all) = winner_of_many(&cdfs);
+    Ok(implicit_prices(&base_cdf, &cdf_all, &mult_all, &offsets, l))
+}
+
+/// solve_for_implied_offsets: the reference fixed-point iteration --
+/// interpolation table offset -> price rebuilt against the current field.
+#[pyfunction]
+#[pyo3(signature = (density, prices, offset_samples, guess, n_iter=3))]
+fn classic_calibrate(
+    density: Vec<f64>,
+    prices: Vec<f64>,
+    offset_samples: Vec<f64>,
+    guess: Vec<f64>,
+    n_iter: usize,
+) -> PyResult<Vec<f64>> {
+    let l = ((density.len() - 1) / 2) as i64;
+    let base_cdf = pdf_to_cdf(&density);
+    let mut cdfs: Vec<Vec<f64>> =
+        guess.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+    // offset_samples arrive descending (better first); implied prices are
+    // then ascending, which is what the interpolation needs
+    let mut implied: Vec<f64> = prices.clone();
+    for _ in 0..n_iter {
+        let (cdf_all, mult_all) = winner_of_many(&cdfs);
+        let table = implicit_prices(&base_cdf, &cdf_all, &mult_all, &offset_samples, l);
+        implied = prices
+            .iter()
+            .map(|&p| interp1(p, &table, &offset_samples))
+            .collect();
+        cdfs = implied.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+    }
+    Ok(implied)
+}
+
 #[pymodule]
 fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(forward_and_slopes, m)?)?;
@@ -1157,5 +1620,8 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(win_probabilities_factor_separated, m)?)?;
     m.add_function(wrap_pyfunction!(ghk_all_shares, m)?)?;
     m.add_function(wrap_pyfunction!(win_probabilities_factor, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_race, m)?)?;
+    m.add_function(wrap_pyfunction!(classic_state_prices, m)?)?;
+    m.add_function(wrap_pyfunction!(classic_calibrate, m)?)?;
     Ok(())
 }

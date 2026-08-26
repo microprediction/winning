@@ -2,6 +2,13 @@ from winning.normaldist import normcdf, normpdf
 import numpy as np
 import math
 
+try:                                       # compiled kernels (rust/fastrace)
+    import fastrace as _fastrace
+    _HAVE_RUST = hasattr(_fastrace, "classic_state_prices")
+except ImportError:
+    _fastrace = None
+    _HAVE_RUST = False
+
 #########################################################################################
 #   Operations on univariate atomic distributions supported on evenly spaced points     #
 #########################################################################################
@@ -742,6 +749,9 @@ def state_prices_from_offsets(density, offsets):
     """
     # See the paper for a definition of state price
     # Be aware that this may fail if offsets provided are integers rather than float
+    if _HAVE_RUST:
+        return list(_fastrace.classic_state_prices(
+            [float(d) for d in density], [float(o) for o in offsets]))
     densities = densities_from_offsets(density, offsets)
     densityAll, multiplicityAll = winner_of_many(densities)
     return implicit_state_prices(density, densityAll=densityAll, multiplicityAll=multiplicityAll, offsets=offsets)

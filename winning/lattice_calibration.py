@@ -3,6 +3,13 @@ from winning.lattice import state_prices_from_extended_offsets, densities_and_co
 import numpy as np
 from winning.lattice_conventions import NAN_DIVIDEND
 
+try:                                       # compiled kernels (rust/fastrace)
+    import fastrace as _fastrace
+    _HAVE_RUST = hasattr(_fastrace, "classic_calibrate")
+except ImportError:
+    _fastrace = None
+    _HAVE_RUST = False
+
 
 #################################################################
 #                                                               #
@@ -145,6 +152,12 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
 
     if implied_offsets_guess is None:
         implied_offsets_guess = list(range(int(L / 3)))
+
+    if _HAVE_RUST and not verbose and not visualize:
+        return list(_fastrace.classic_calibrate(
+            [float(d) for d in density], [float(p) for p in prices],
+            [float(o) for o in offset_samples],
+            [float(o) for o in implied_offsets_guess], nIter))
 
     # First guess at densities
     densities, coefs = densities_and_coefs_from_offsets(density, implied_offsets_guess)

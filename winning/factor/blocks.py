@@ -361,6 +361,17 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
         path_var[c] = s_
     tot = np.sqrt(sd_o ** 2 + v_o ** 2 + path_var[c_o])
     lo, hi = _bulk_lo_hi(mu_o, tot)
+    if _HAVE_RUST and hasattr(_fastrace, "tree_race"):
+        p_o = np.asarray(_fastrace.tree_race(
+            np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
+            np.ascontiguousarray(v_o), starts.astype(np.int64),
+            parent.astype(np.int64), np.ascontiguousarray(lam),
+            np.ascontiguousarray(an), np.ascontiguousarray(aw),
+            points, lo, hi))
+        p = np.empty(n); p[order] = p_o
+        p = np.maximum(p, 0.0)
+        t_ = p.sum()
+        return p / t_ if t_ > 0 else p
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     z = (x[None, None, :] - mu_o[:, None, None]
          - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
