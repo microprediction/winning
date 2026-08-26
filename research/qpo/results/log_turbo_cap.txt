@@ -16,3 +16,4 @@ ackley d=100, 40 iters x batch 10, seeds [0, 1, 2, 3, 4]
   factor-20k   seed 2: best   9.0608  (389 evals, acq  40.4s, total   316s)
   factor-20k   seed 3: best   8.7929  (388 evals, acq  40.4s, total   314s)
   factor-20k   seed 4: best   9.0238  (395 evals, acq  40.6s, total   325s)
+  factor-50k   seed 0: best   9.0521  (406 evals, acq 101.0s, total   357s)

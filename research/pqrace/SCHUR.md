@@ -161,3 +161,29 @@ and could flow back. NOT yet borrowed and worth it at scale: the package's
 coordinate-Newton with analytic per-coordinate slopes from the same pass
 (no N x N matrix, ~10 forward equivalents), with the full Jacobian reserved
 for final polish or for when J itself is wanted.
+
+
+## Saved survival lookups: measured, adopted in design, not yet in code
+
+Peter's question caught a real gap: every forward pass recomputes
+ndtr + log for all (N x Q x L) entries -- 75% of the pass -- even though
+inside an inversion the tables are FIXED (sd, loadings, clusters constant;
+only mu moves), which is exactly the regime the winning package's
+quantized-lattice design exploits.
+
+Measured on the block race (N=200, L=257):
+
+- naive table + np.interp: SLOWER than ndtr (31 vs 15 ms) -- the trick is
+  not "use a table", it is INTEGER-SHIFT EVALUATION: abilities snapped to
+  lattice units so lookup is slicing, not interpolation.
+- per-member base tables (3 ms to build, once per inversion) + integer
+  shifts: 1.7x faster per forward (12.6 vs 22.0 ms) -- but raw snapping at
+  dx = 0.08 costs TV 1e-2, too coarse to use alone.
+- the completing piece is the two-slice fractional blend (linear
+  interpolation between adjacent integer shifts, O(dx^2)), which is exactly
+  how winning.lattice evaluates shifted densities.
+
+Verdict: the package's survival-lookup design applies to all three Schur
+kernels and belongs in any promoted implementation; in numpy the honest gain
+is ~1.7x (more in a compiled path where slicing is memcpy). Not retrofitted
+into blockrace.py today -- recorded so the promotion does it right.
