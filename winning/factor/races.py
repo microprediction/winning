@@ -124,7 +124,7 @@ def _ndtr_local(z):
 
 
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
-                       points=501, temperature=0.0, return_slopes=False,
+                       points=257, temperature=0.0, return_slopes=False,
                        structure=None, window="bulk", delta=1e-12):
     """Win probabilities of the general race, all N in one field pass.
 
@@ -172,7 +172,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
 
 
 def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
-                        points=501, temperature=0.0, n_iter=60, tol=1e-8):
+                        points=257, temperature=0.0, n_iter=60, tol=1e-8):
     """Invert the general race: mean-zero mu with race_probabilities(mu) = p."""
     target = np.asarray(p, dtype=float)
     if np.any(target <= 0):
