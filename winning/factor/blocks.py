@@ -32,11 +32,22 @@ except Exception:                                            # pragma: no cover
 
 
 def _cluster_nodes(r, qa, seed=0):
-    """Quadrature for a cluster's r-dim effect: GH for r = 1, scrambled
-    Sobol for r >= 2 (the node economy validated in research/qpo)."""
+    """Quadrature for a cluster's r-dim effect.
+
+    r = 1: Gauss-Hermite. r = 2: tensor GH -- rank two is SPECIAL: the field
+    integrand is smooth and the 2-d product rule beats scrambled Sobol by ~7x
+    at equal node count (measured: TV 4.8e-4 vs 3.6e-3 at ~121 nodes against
+    a 2048-node reference; rotation-invariant radial-angular rules sit
+    between). r >= 3: scrambled Sobol, where tensor products explode and QMC
+    earns its place (the node economy validated in research/qpo)."""
     if r == 1:
         an, aw = roots_hermitenorm(qa)
         return an.reshape(-1, 1), aw / aw.sum()
+    if r == 2:
+        an, aw = roots_hermitenorm(qa)
+        nodes = np.array([[a, b] for a in an for b in an])
+        w = np.array([u * v for u in aw for v in aw])
+        return nodes, w / w.sum()
     from scipy.stats import qmc
     from scipy.special import ndtri
     m = max(4, int(np.ceil(np.log2(qa ** r))))
