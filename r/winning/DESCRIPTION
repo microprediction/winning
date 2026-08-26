@@ -1,7 +1,7 @@
 Package: winning
 Type: Package
 Title: Contest Win Probabilities and Ability Calibration
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: person("Peter", "Cotton", email = "peter.cotton@microprediction.com",
     role = c("aut", "cre"))
 Description: Solves the horse race problem in both directions. Infers

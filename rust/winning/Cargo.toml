@@ -1,12 +1,12 @@
 [package]
-name = "fastrace-core"
+name = "winning"
 version = "0.1.0"
 edition = "2021"
 description = "Lattice race kernels: factor/block/nested/tree win probabilities and the classic state-price calibration (pure rust, no python)"
 license = "MIT"
 
 [lib]
-name = "fastrace_core"
+name = "winning"
 
 [dependencies]
 ndarray = "0.16"

@@ -3,8 +3,8 @@
 //! arrays and releases the GIL. The future R frontend (extendr) wraps
 //! the same core.
 
-use fastrace_core::*;
-use fastrace_core::ndarray::{Array1, Array2};
+use winning::*;
+use winning::ndarray::{Array1, Array2};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use rayon::prelude::*;

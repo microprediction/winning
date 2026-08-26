@@ -10,7 +10,7 @@ name = "fastrace"
 crate-type = ["cdylib"]
 
 [dependencies]
-fastrace-core = { path = "../fastrace-core" }
+winning = { path = "../winning" }
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
 numpy = "0.22"
 rayon = "1.10"
