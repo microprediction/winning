@@ -23,3 +23,24 @@ Readings:
    cluster texture; dendrogram lossiness incl. seriation) and this blend
    lumps them. Decomposition (fixed-topology vs re-clustered) is the next
    experiment, per Peter's point that seriation itself uses R imperfectly.
+
+
+## T=45 (noisy regime): shrinkage question answered
+
+    HRP baseline | raw-fit gamma .25/.5/1.0: -0.11/-0.20/-0.32%
+    LW-shrunk-then-fit gamma .25/.5/1.0: +0.01/+0.03/+0.08%  (HURTS)
+    MinVar(ridged): -0.85%  (collapsed from -4.07% at T=90)
+
+Three conclusions:
+1. NO explicit shrinkage: Ledoit-Wolf toward identity deletes exactly the
+   signal the finishing uses -- cross-cluster correlation -- and turns the
+   improvement into a small loss at every gamma.
+2. The rank-k+diagonal structural fit IS the right regularizer: even at
+   T=45 the raw-fit ladder stays monotone to gamma=1 with no interior
+   optimum. Structure-as-shrinkage suffices.
+3. Robustness inversion: min-var's edge collapsed 5x under estimation noise
+   (-4.07% -> -0.85%) while race-finishing held (-0.42% -> -0.32%). At T=45
+   the free repair captures ~40% of what unstable optimization captures.
+
+FINAL RECIPE: invert w_HRP under the cophenetic belief; re-price under the
+rank-k+diag fit of the RAW sample covariance; gamma = 1; no other shrinkage.

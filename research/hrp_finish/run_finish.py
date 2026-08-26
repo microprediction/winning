@@ -13,7 +13,8 @@ from scipy.spatial.distance import squareform
 from winning.factor.races import race_probabilities, abilities_from_race
 
 rng = np.random.default_rng(7)
-N_ASSETS, T_OBS, TRIALS = 30, 90, 150
+import sys
+N_ASSETS, T_OBS, TRIALS = 30, int(sys.argv[1]) if len(sys.argv)>1 else 90, 150
 SECTORS = np.repeat(np.arange(3), 10)
 
 def true_cov(rng):
@@ -76,6 +77,7 @@ def factor_approx(M, rank=3):
 
 GAMMAS = [0.0, 0.25, 0.5, 0.75, 1.0]
 res = {g: [] for g in GAMMAS}
+for g in GAMMAS: res[('lw', g)] = []
 res['HRP'] = []; res['EW'] = []; res['MinVar'] = []
 for tr in range(TRIALS):
     S_true = true_cov(rng)
@@ -93,14 +95,18 @@ for tr in range(TRIALS):
     # transport: invert under coph belief, re-price under blended belief
     V0, D0 = factor_approx(coph)
     mu = abilities_from_race(w_hrp, V=V0, D=D0, points=201)
+    # Ledoit-Wolf-style shrink of the sample correlation toward identity
+    lw = 0.3
+    R_lw = (1-lw)*R_hat + lw*np.eye(N_ASSETS)
     for g in GAMMAS:
         Vg, Dg = factor_approx((1-g)*coph + g*R_hat)
-        w_g = race_probabilities(mu, V=Vg, D=Dg, points=201)
-        res[g].append(vol(w_g))
+        res[g].append(vol(race_probabilities(mu, V=Vg, D=Dg, points=201)))
+        Vs, Ds = factor_approx((1-g)*coph + g*R_lw)
+        res[('lw', g)].append(vol(race_probabilities(mu, V=Vs, D=Ds, points=201)))
 print('realized volatility under TRUE covariance (lower is better), %d trials:' % TRIALS)
 hr = np.array(res['HRP'])
-for k in ['EW', 'HRP', 'MinVar'] + GAMMAS:
+for k in ['EW', 'HRP', 'MinVar'] + GAMMAS + [('lw', g) for g in GAMMAS]:
     v = np.array(res[k])
-    lbl = ('gamma=%.2f' % k) if isinstance(k, float) else k
+    lbl = ('gamma=%.2f' % k) if isinstance(k, float) else ('lw g=%.2f' % k[1] if isinstance(k, tuple) else k)
     dv = 100*(v-hr)/hr
     print('  %-11s %.4f +- %.4f   vs HRP: %+0.2f%%' % (lbl, v.mean(), v.std()/np.sqrt(TRIALS), dv.mean()))
