@@ -143,3 +143,45 @@ def test_cross_engine_block_c1_equals_factor_race():
     p_block = block_race_probabilities(mu, np.zeros(n, int), v, D, points=1001)
     p_factor = race_probabilities(mu, V=v[:, None], D=D, points=1001)
     assert 0.5 * np.abs(p_block - p_factor).sum() < 2e-3
+
+
+def test_cophenetic_tree_race_identity():
+    """HRP's implicit covariance IS a tree race, exactly: build the tree from
+    the linkage with lam^2 = cophenetic correlation increment per merge, and
+    the implied correlation equals the cophenetic matrix to the last bit.
+    (Increments nonnegative by linkage monotonicity.)"""
+    from scipy.cluster.hierarchy import linkage, cophenet
+    from scipy.spatial.distance import squareform
+    n = 12
+    blocks = np.repeat(np.arange(4), 3); superb = blocks // 2
+    R = (0.15 * np.ones((n, n)) + 0.25 * (superb[:, None] == superb[None, :])
+         + 0.35 * (blocks[:, None] == blocks[None, :]))
+    np.fill_diagonal(R, 1.0)
+    d = np.sqrt(0.5 * (1.0 - R))
+    Z = linkage(squareform(d, checks=False), method="average")
+    coph = 1.0 - 2.0 * squareform(cophenet(Z)) ** 2
+    np.fill_diagonal(coph, 1.0)
+    parent = -np.ones(2 * n - 1, int)
+    rho = np.zeros(2 * n - 1)
+    for k, (a, b, h, _) in enumerate(Z):
+        t = n + k
+        parent[int(a)] = t; parent[int(b)] = t
+        rho[t] = 1.0 - 2.0 * h * h
+    lam2 = np.zeros(2 * n - 1)
+    for t in range(n, 2 * n - 1):
+        pa = parent[t]
+        lam2[t] = rho[t] - (rho[pa] if pa >= 0 else 0.0)
+    assert (lam2[n:] >= -1e-12).all()
+    implied = np.eye(n)
+    for i in range(n):
+        anc_i = set(); u = i
+        while parent[u] >= 0:
+            anc_i.add(parent[u]); u = parent[u]
+        for j in range(n):
+            if i == j:
+                continue
+            anc_j = set(); u = j
+            while parent[u] >= 0:
+                anc_j.add(parent[u]); u = parent[u]
+            implied[i, j] = sum(lam2[t] for t in anc_i & anc_j)
+    assert np.abs(implied - coph).max() < 1e-14

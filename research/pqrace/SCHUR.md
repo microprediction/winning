@@ -286,3 +286,32 @@ headroom -- the model is input-bound (32 bytes/runner), effectively
 limitless. Boards sum to 1.000000 at every size. Compounded history: the
 numpy span-window kernel priced 1M runners in ~700 s; rust made it 12 s;
 the bulk window 4.3 s -- 160x, exact throughout.
+
+
+## The cophenetic identity (2026-08-26): HRP's covariance IS a tree race
+
+The right race for polishing an HRP portfolio is not a modelling choice --
+it is forced. HRP trusts only dendrogram-consistent correlation, i.e. it
+implicitly replaces the correlation matrix with the COPHENETIC matrix
+(constant per merge, graded by tree distance). A matrix constant on common
+ancestors is exactly what the tree race generates, and the construction is
+closed-form from the linkage HRP already computed:
+
+    topology   = the linkage tree
+    lam_t^2    = cophenetic correlation increment at merge t
+                 (nonnegative by linkage monotonicity)
+    D_i        = 1 - rho at asset i's first merge
+
+Verified to 0.00e+00: the tree race's implied correlation equals the
+cophenetic matrix bit for bit (test_cophenetic_tree_race_identity). So
+polishing HRP weights under this structure is polishing under HRP's OWN
+belief -- the nearest dendrogram-consistent portfolio satisfying the caps,
+with redistribution flowing along the tree at every depth. Scaling all
+lam^2 by gamma reproduces the Schur-allocation interpolation dial at the
+constraint layer; anything the dendrogram misses (market beta across
+clusters) is one free-loading factor on top, already in the
+Sigma = VV' + Tree + D grammar.
+
+Remaining plumbing for polish_race(structure=Tree.from_linkage(Z)): the
+from_linkage constructor and the tree Jacobian's promotion from this
+directory into the package.
