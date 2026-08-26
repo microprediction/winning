@@ -119,3 +119,61 @@ def test_one_dominant_runner():
     p = race_probabilities(mu, V=None, D=np.ones(10), points=101)
     assert p[0] > 0.9999
     assert np.all(p[1:] > 0)                   # smooth positives, never zero
+
+
+# ---------------------------------------- hopeless runners are nearly free
+@pytest.mark.parametrize("n_hopeless", [50, 500])
+def test_adding_hopeless_runners_bounded_impact_factor(n_hopeless):
+    """Adding irrelevant runners perturbs the live field by at most (a small
+    multiple of) their total win mass -- the field-product bound, enforced."""
+    rng = np.random.default_rng(21)
+    n_live = 20
+    mu = rng.normal(0, 0.8, n_live); mu -= mu.mean()
+    D = (0.5 + 0.5 * rng.random(n_live)) ** 2
+    v = rng.normal(0, 0.6, n_live)
+    p_before = race_probabilities(mu, V=v[:, None], D=D, points=1001)
+    mu_h = 4.0 + 4.0 * rng.random(n_hopeless)          # min-wins: hopeless
+    mu2 = np.r_[mu, mu_h]
+    D2 = np.r_[D, np.ones(n_hopeless)]
+    v2 = np.r_[v, 0.3 * np.ones(n_hopeless)]
+    p_after = race_probabilities(mu2, V=v2[:, None], D=D2, points=1001)
+    mass = p_after[n_live:].sum()
+    live = p_after[:n_live] / p_after[:n_live].sum()
+    tv = 0.5 * np.abs(live - p_before).sum()
+    assert tv <= 3.0 * mass + 1e-9
+    assert mass < 0.01
+
+
+@pytest.mark.parametrize("n_hopeless", [50, 500])
+def test_adding_hopeless_runners_bounded_impact_blocks(n_hopeless):
+    from winning.factor.blocks import block_race_probabilities
+    rng = np.random.default_rng(22)
+    n_live = 20
+    mu = rng.normal(0, 0.8, n_live); mu -= mu.mean()
+    D = (0.5 + 0.5 * rng.random(n_live)) ** 2
+    v = 0.7 * np.sqrt(D)
+    cl = rng.integers(0, 5, n_live)
+    p_before = block_race_probabilities(mu, cl, v, D, points=513)
+    mu2 = np.r_[mu, 4.0 + 4.0 * rng.random(n_hopeless)]
+    D2 = np.r_[D, np.ones(n_hopeless)]
+    v2 = np.r_[v, 0.3 * np.ones(n_hopeless)]
+    cl2 = np.r_[cl, rng.integers(5, 5 + n_hopeless // 10, n_hopeless)]
+    p_after = block_race_probabilities(mu2, cl2, v2, D2, points=513)
+    mass = p_after[n_live:].sum()
+    live = p_after[:n_live] / p_after[:n_live].sum()
+    assert 0.5 * np.abs(live - p_before).sum() <= 3.0 * mass + 1e-9
+
+
+def test_hopeless_runners_do_not_degrade_lattice_accuracy():
+    # the bulk window must keep the closed form accurate at 65 points even
+    # with 300 hopeless runners stretching the ability span
+    rng = np.random.default_rng(23)
+    mu = np.array([0.4, -0.4]); D = np.array([0.6, 1.1]); v = np.array([0.8, 0.3])
+    nh = 300
+    mu2 = np.r_[mu, 5.0 + 5.0 * rng.random(nh)]
+    D2 = np.r_[D, np.ones(nh)]
+    v2 = np.r_[v, np.zeros(nh)]
+    p = race_probabilities(mu2, V=v2[:, None], D=D2, points=65)
+    exact_ratio = norm.cdf((mu[1] - mu[0]) / np.sqrt(D.sum() + (v[0] - v[1]) ** 2))
+    pair = p[0] / (p[0] + p[1])
+    assert abs(pair - exact_ratio) < 5e-4
