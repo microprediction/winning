@@ -225,3 +225,21 @@ inversion above already runs 5x faster on the rust forward alone; the
 Jacobian is the remaining 0.15 s). The survival-lookup design that broke
 even in numpy is exactly what this kernel does natively -- fused, in cache,
 which is why the numbers above hold.
+
+
+## Scaling of the Rust block race
+
+Measured (points=257, qa=9, 10 cores):
+
+    N            clusters   wall     per candidate
+    1,000        50         0.02 s   15.6 us
+    10,000       300        0.12 s   11.5 us
+    100,000      2,000      1.17 s   11.7 us
+    1,000,000    20,000     11.7 s   11.7 us
+
+Flat per-candidate cost across two orders of magnitude; cluster count
+irrelevant (the field factorizes by cluster inside the same fused pass);
+O(N) memory -- no N x L array exists, let alone N x N. A million-runner
+correlated race prices in ~12 s on a laptop with every probability smooth
+and positive at the 1e-6 scale. Costs scale linearly in lattice points and
+quadrature nodes; times are 10-core wall clock.
