@@ -105,3 +105,31 @@ The consolidated lesson of the whole directory: calibrated shortlists are
 won or lost in the noise model, and the discipline is always the same three
 subtractions -- common mode, group effects, and then CORRELATION, which
 cannot be subtracted and must be raced.
+
+
+## v4/v5: the Schur ladder meets its measurement
+
+    model                      0.90    0.95    0.99    ms/query
+    independent                50.7    86.0   231.8      19
+    v3  global rank-4          47.9    78.0   181.2     297
+    v4  blocks only            55.5    88.9   207.0      52
+    v5  coupling + blocks      51.1    82.5   191.3     356
+
+All at matched coverage. The verdict is humbler than the theory deserved:
+v5 beats its block-only parent but NOT the plain rank-4 fit, and every
+correlated variant clusters within ~10-20% of independent. The race kernels
+are exact (block_race and nested_race validate to MC noise); what binds is
+the ESTIMATED residual-correlation model -- a similarity kernel fitted on 24
+calibration queries, pushed through eigen-decompositions and cluster
+assignments per query. Structure we can price exactly, we can only estimate
+roughly.
+
+That is a familiar shape: in the exotics work the fitted Sigma reached 0.148
+where the true Sigma reached 0.006 -- estimation, not machinery, was the
+binding constraint there too. The cascade's honest summary: calibrated
+per-query depth works (the noise-model discipline bought 2x); correlation
+modelling on top buys 10-20% more and is not yet worth 300 ms/query; the
+Schur race kernels themselves are validated, general, and waiting for a
+problem where the block structure is KNOWN rather than estimated -- analogue
+series with declared scaffolds, A/B variants with declared families,
+running-style groups declared on the race card.

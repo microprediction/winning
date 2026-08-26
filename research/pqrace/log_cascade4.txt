@@ -1,0 +1,6 @@
+cluster at proxy-sim > 0.702 (g >= 0.25)
+block race 52 ms/query
+ target  mean m   med   p90  coverage   (v3 corr: 47.9/78.0/181.2; indep: 50.7/86.0/231.8)
+   0.90    55.5    26   149     0.989
+   0.95    88.9    43   236     0.991
+   0.99   207.0   150   513     1.000
