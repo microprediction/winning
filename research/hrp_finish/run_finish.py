@@ -79,6 +79,7 @@ GAMMAS = [0.0, 0.25, 0.5, 0.75, 1.0]
 res = {g: [] for g in GAMMAS}
 for g in GAMMAS: res[('lw', g)] = []
 res['HRP'] = []; res['EW'] = []; res['MinVar'] = []
+res['MinVar-LW'] = []; res['MinVar-struct'] = []
 for tr in range(TRIALS):
     S_true = true_cov(rng)
     L = np.linalg.cholesky(S_true)
@@ -92,6 +93,18 @@ for tr in range(TRIALS):
     Sr = S_hat + 1e-4*np.trace(S_hat)/N_ASSETS*np.eye(N_ASSETS)
     mv = np.linalg.solve(Sr, np.ones(N_ASSETS)); mv = np.clip(mv, 0, None)
     res['MinVar'].append(vol(mv/mv.sum()))
+    # min-var on Ledoit-Wolf shrunk covariance (analytic intensity)
+    from sklearn.covariance import LedoitWolf
+    S_lw = LedoitWolf().fit(X).covariance_
+    mvl = np.linalg.solve(S_lw + 1e-10*np.eye(N_ASSETS), np.ones(N_ASSETS))
+    mvl = np.clip(mvl, 0, None)
+    res['MinVar-LW'].append(vol(mvl/mvl.sum()))
+    # min-var on the SAME rank-3+diag structured fit the race uses
+    Vf, Df = factor_approx(R_hat)
+    S_st = (np.outer(std, std)) * (Vf @ Vf.T + np.diag(Df))
+    mvs = np.linalg.solve(S_st + 1e-10*np.eye(N_ASSETS), np.ones(N_ASSETS))
+    mvs = np.clip(mvs, 0, None)
+    res['MinVar-struct'].append(vol(mvs/mvs.sum()))
     # transport: invert under coph belief, re-price under blended belief
     V0, D0 = factor_approx(coph)
     mu = abilities_from_race(w_hrp, V=V0, D=D0, points=201)
@@ -105,7 +118,7 @@ for tr in range(TRIALS):
         res[('lw', g)].append(vol(race_probabilities(mu, V=Vs, D=Ds, points=201)))
 print('realized volatility under TRUE covariance (lower is better), %d trials:' % TRIALS)
 hr = np.array(res['HRP'])
-for k in ['EW', 'HRP', 'MinVar'] + GAMMAS + [('lw', g) for g in GAMMAS]:
+for k in ['EW', 'HRP', 'MinVar', 'MinVar-LW', 'MinVar-struct'] + GAMMAS + [('lw', g) for g in GAMMAS]:
     v = np.array(res[k])
     lbl = ('gamma=%.2f' % k) if isinstance(k, float) else ('lw g=%.2f' % k[1] if isinstance(k, tuple) else k)
     dv = 100*(v-hr)/hr

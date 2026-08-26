@@ -1,0 +1,6 @@
+559 rebalances
+  HRP         ann.vol 0.1513   vs HRP +0.00%
+  L250-full   ann.vol 0.1547   vs HRP +2.25%
+  L250-r1     ann.vol 0.1514   vs HRP +0.07%
+  L1250-full  ann.vol 0.1555   vs HRP +2.80%
+  L1250-r1    ann.vol 0.1516   vs HRP +0.20%
