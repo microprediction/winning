@@ -125,3 +125,39 @@ gaps, recorded rather than hidden: the tree Jacobian (same Gram-through-
 messages structure, one level up) and per-leaf loadings on INTERNAL node
 effects, which would break the one-variable message property and need the
 2-d message tables the uniform restriction avoids.
+
+
+## Inversion for all three rungs
+
+`invert_race` is the generic hybrid (adaptive fixed point into Newton's
+basin, then Newton on the log residual, with a monotone fixed-point fallback
+so a failed Newton step never strands the iterate). Jacobians: block exact
+(one pass); nested exact for free (the nested race is a finite mixture over
+the global node, so J is the mixture of block Jacobians at shifted mu); tree
+approximate (same-cluster exact under the message R_c, cross-cluster by the
+Gram h_i h_j R_c R_d / G_root -- exact in the flat case) with the residual
+always measured on the exact forward map.
+
+Round trips (N = 200):
+
+    block   3 Newton steps   1.1 s   residual 9e-14
+    nested  3 Newton steps   7.4 s   residual 1e-12
+    tree   converged          19 s   residual 4e-5 (approx J: superlinear,
+                                     not quadratic -- as expected)
+
+Two failures on the way, both instructive. The monotone fallback exists
+because a failed Newton backtrack previously ABORTED the solve. And the
+nested case exposed the resolution-floor lesson in a sharper form: the
+target board contained probabilities down to 2.5e-38 -- not zeros -- and the
+un-floored Luce start inherited a mu-spread of ~86 from them. A probability
+below resolution BOUNDS an ability; it does not measure one. `invert_race`
+floors targets at max(1e-14, min-positive/1000) and labels the floored
+entries as upper bounds.
+
+Provenance, honestly: the Luce start, damped log-space fixed point, and
+centred gauge are the original factor inversion's ideas reused; the full
+Schur-structured Jacobian, monotone hybrid and resolution floor are new here
+and could flow back. NOT yet borrowed and worth it at scale: the package's
+coordinate-Newton with analytic per-coordinate slopes from the same pass
+(no N x N matrix, ~10 forward equivalents), with the full Jacobian reserved
+for final polish or for when J itself is wanted.

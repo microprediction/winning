@@ -256,7 +256,8 @@ def block_invert_newton(p_target, sd, cluster, v, points=257, qa=9,
     return mu - mu.mean(), float(np.abs(np.log(p) - lt).max()), max_iter
 
 
-def tree_race(mu, sd, cluster, v, parent, lam, points=257, qa=9, span=8.0):
+def tree_race(mu, sd, cluster, v, parent, lam, points=257, qa=9, span=8.0,
+              return_internals=False):
     """Rung 3: exact win probabilities under a HIERARCHICAL covariance.
 
     Nodes 0..nC-1 are the leaf clusters (with per-member loadings v, as in
@@ -342,4 +343,131 @@ def tree_race(mu, sd, cluster, v, parent, lam, points=257, qa=9, span=8.0):
     h = np.einsum("q,nql->nl", aw, pdf * lo_i)
     p_o = (h * R[c_o]).sum(axis=1) * dx
     p = np.empty(N); p[order] = p_o
+    if return_internals:
+        return (np.maximum(p, 0.0),
+                dict(h=h, R=R, G=G, S=S, logF=logF, pdf=pdf, starts=starts,
+                     c_o=c_o, order=order, dx=dx, root=root, nC=nC))
     return np.maximum(p, 0.0)
+
+
+def nested_race_jac(mu, sd, cluster, v, g, gamma=1.0, points=257, qa=9, qf=15):
+    """Exact Jacobian for the nested race: it is a finite MIXTURE over the
+    global node, so J = sum_q w_q J_block(mu + gamma g f_q). Free exactness."""
+    fn, fw = roots_hermitenorm(qf); fw = fw / fw.sum()
+    N = len(mu)
+    p = np.zeros(N); J = np.zeros((N, N))
+    for q in range(qf):
+        pq, Jq = block_race_jac(np.asarray(mu, float) + gamma * np.asarray(g, float) * fn[q],
+                                sd, cluster, v, points=points, qa=qa)
+        p += fw[q] * pq; J += fw[q] * Jq
+    return p, J
+
+
+def tree_race_jac(mu, sd, cluster, v, parent, lam, points=257, qa=9):
+    """Jacobian for the tree race: same-cluster term EXACT under the message
+    R_c; cross-cluster by the Gram h_i h_j R_c R_d / G_root -- exact when the
+    clusters share no ancestor effects (reduces to block_race_jac's formula),
+    an approximation otherwise. Good enough for Newton, whose residual is
+    always measured with the exact forward map."""
+    p, I = tree_race(mu, sd, cluster, v, parent, lam, points=points, qa=qa,
+                     return_internals=True)
+    h, R, G, S, logF, pdf = I["h"], I["R"], I["G"], I["S"], I["logF"], I["pdf"]
+    starts, c_o, order, dx, root, nC = (I["starts"], I["c_o"], I["order"],
+                                        I["dx"], I["root"], I["nC"])
+    N = len(mu)
+    an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
+    Gr = np.maximum(G[root], TINY)
+    U = h * R[c_o] / np.sqrt(Gr)[None, :] * np.sqrt(dx)
+    J = -(U @ U.T)
+    for ci in range(nC):
+        a0 = starts[ci]; a1 = starts[ci + 1] if ci + 1 < nC else N
+        idx = np.arange(a0, a1)
+        if len(idx) == 1:
+            continue
+        lo2 = np.exp(np.minimum(S[ci][None, None, :, :] - logF[idx][:, None, :, :]
+                                - logF[idx][None, :, :, :], 0.0))
+        term = np.einsum("q,ijql,l->ij", aw, pdf[idx][:, None, :, :]
+                         * pdf[idx][None, :, :, :] * lo2, R[ci]) * dx
+        J[np.ix_(idx, idx)] = -term
+    np.fill_diagonal(J, 0.0)
+    J[np.arange(N), np.arange(N)] = -J.sum(axis=1)
+    Jf = np.empty((N, N)); Jf[np.ix_(order, order)] = J
+    return p, Jf
+
+
+def _generic_fixed_point(forward, p_t, tol=0.2, max_iter=80, eta0=1.0):
+    p_t = p_t / p_t.sum()
+    lt = np.log(np.maximum(p_t, 1e-300))
+    mu = lt - lt.mean()
+    eta = eta0
+    lp = np.log(np.maximum(forward(mu), 1e-300))
+    err = np.abs(lp - lt).max()
+    for _ in range(max_iter):
+        if err < tol:
+            break
+        mu_n = mu + eta * (lt - lp); mu_n -= mu_n.mean()
+        lp_n = np.log(np.maximum(forward(mu_n), 1e-300))
+        e_n = np.abs(lp_n - lt).max()
+        if e_n < err:
+            mu, lp, err = mu_n, lp_n, e_n
+            eta = min(eta * 1.2, 1.5)
+        else:
+            eta *= 0.5
+            if eta < 1e-4:
+                break
+    return mu, err
+
+
+def invert_race(p_target, forward, forward_jac, tol=1e-10, max_iter=25):
+    """Generic hybrid inversion: adaptive fixed point into Newton's basin,
+    then Newton on the log residual with the supplied (exact or approximate)
+    Jacobian. Works for block, nested and tree races alike."""
+    p_t = np.asarray(p_target, float); p_t = p_t / p_t.sum()
+    N = len(p_t)
+    # RESOLUTION FLOOR: a target probability of zero (below lattice
+    # resolution) does not measure an ability, it only BOUNDS it -- the
+    # zero-count-longshot lesson again. Without the floor, log p carries
+    # -690 entries, the Luce start inherits a spread of hundreds, and no
+    # optimizer recovers. Floored entries converge to the ability that
+    # prices AT the floor: an upper bound, honestly labelled by `floor`.
+    floor = max(1e-14, p_t[p_t > 0].min() * 1e-3)
+    p_t = np.maximum(p_t, floor); p_t = p_t / p_t.sum()
+    lt = np.log(p_t)
+    ones = np.ones((N, N)) / N
+    mu, err = _generic_fixed_point(forward, p_t, tol=0.2, max_iter=200)
+    eta = 0.5
+    for it in range(max_iter):
+        p, J = forward_jac(mu)
+        p = np.maximum(p / p.sum(), 1e-300)
+        r = np.log(p) - lt
+        cur = np.abs(r).max()
+        if cur < tol:
+            return mu - mu.mean(), float(cur), it
+        Jl = J / p[:, None]
+        step, *_ = np.linalg.lstsq(Jl + ones, -r, rcond=1e-12)
+        n = np.linalg.norm(step)
+        if n > 5.0:
+            step *= 5.0 / n
+        improved = False
+        for _ in range(6):
+            mu_n = mu + step; mu_n -= mu_n.mean()
+            p_n = np.maximum(forward(mu_n), 1e-300); p_n = p_n / p_n.sum()
+            if np.abs(np.log(p_n) - lt).max() < cur:
+                mu, improved = mu_n, True
+                break
+            step *= 0.5
+        if not improved:
+            # MONOTONE FALLBACK: adaptive fixed-point steps -- provably
+            # convergent, so a failed Newton step never strands the iterate
+            lp = np.log(np.maximum(forward(mu), 1e-300))
+            for _ in range(10):
+                mu_n = mu + eta * (lt - lp); mu_n -= mu_n.mean()
+                lp_n = np.log(np.maximum(forward(mu_n), 1e-300))
+                if np.abs(lp_n - lt).max() < cur:
+                    mu, lp = mu_n, lp_n
+                    cur = np.abs(lp_n - lt).max()
+                    eta = min(eta * 1.2, 1.5)
+                else:
+                    eta *= 0.5
+    p = np.maximum(forward(mu), 1e-300); p = p / p.sum()
+    return mu - mu.mean(), float(np.abs(np.log(p) - lt).max()), max_iter
