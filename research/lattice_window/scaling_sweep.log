@@ -1,0 +1,5 @@
+N=   100000 C=    2000 fast          0.4 s    4.2 us/runner  peak  0.5 GB  sum 1.000000
+N=   300000 C=    6000 fast          1.3 s    4.3 us/runner  peak  0.9 GB  sum 1.000000
+N=  1000000 C=   20000 fast          4.3 s    4.3 us/runner  peak  2.5 GB  sum 1.000000
+N=  3000000 C=   60000 streaming    18.2 s    6.1 us/runner  peak  3.1 GB  sum 1.000000
+N= 10000000 C=  200000 streaming    64.1 s    6.4 us/runner  peak  4.7 GB  sum 1.000000

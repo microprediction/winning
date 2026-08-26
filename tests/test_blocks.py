@@ -128,3 +128,30 @@ def test_rank1_column_matrix_matches_vector_loading():
     p1 = block_race_probabilities(mu, cl, v, D)
     p2 = block_race_probabilities(mu, cl, v.reshape(-1, 1), D)
     assert np.abs(p1 - p2).max() < 1e-12
+
+
+def test_fast_and_streaming_kernels_agree_exactly():
+    """The hybrid seam: identical inputs through both memory layouts must be
+    machine-identical (forced via the fast_max_entries threshold)."""
+    fastrace = pytest.importorskip("fastrace")
+    if not hasattr(fastrace, "block_race"):
+        pytest.skip("fastrace without block_race")
+    from scipy.special import roots_hermitenorm
+    rng = np.random.default_rng(31)
+    n, C = 4000, 80
+    cl = np.sort(rng.integers(0, C, n))
+    mu = rng.normal(0, 1.0, n)
+    sd = 0.4 + 0.6 * rng.random(n)
+    v = 0.7 * sd
+    starts = np.flatnonzero(np.r_[True, np.diff(cl) != 0]).astype(np.int64)
+    an, aw = roots_hermitenorm(9); aw = aw / aw.sum()
+    args = (np.ascontiguousarray(mu), np.ascontiguousarray(sd),
+            np.ascontiguousarray(v), starts, np.ascontiguousarray(an),
+            np.ascontiguousarray(aw), 257)
+    try:
+        p_fast = np.asarray(fastrace.block_race(*args, np.nan, np.nan,
+                                                10_000_000_000))
+        p_stream = np.asarray(fastrace.block_race(*args, np.nan, np.nan, 0))
+    except TypeError:
+        pytest.skip("fastrace without fast_max_entries")
+    assert np.abs(p_fast - p_stream).max() < 1e-14

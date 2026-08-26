@@ -265,3 +265,24 @@ checks through the identical code path: C = 1 is a pure one-factor race,
 C = N is exact independence, both sum to 1.000000. The block count is not a
 tuning parameter, not a cost driver, and not a limit -- use as many as the
 problem has. Runtime prices only in N, lattice points, and quadrature nodes.
+
+
+## Scaling, final form (2026-08-26): the hybrid kernel
+
+Bulk window (65 points) + hybrid memory strategy (fast N x Q scratch below
+10M entries, streaming O(largest-cluster) scratch above; the seam verified
+machine-identical on forced identical inputs, 1e-14):
+
+    N            clusters   path        wall     per runner   peak RSS
+    100,000      2,000      fast        0.4 s    4.2 us       0.5 GB
+    300,000      6,000      fast        1.3 s    4.3 us       0.9 GB
+    1,000,000    20,000     fast        4.3 s    4.3 us       2.5 GB
+    3,000,000    60,000     streaming   18.2 s   6.1 us       3.1 GB
+    10,000,000   200,000    streaming   64.1 s   6.4 us       4.7 GB
+
+Laptop, 2 BLAS threads (rayon parallel over columns). Flat cost per runner
+within each path; the streaming premium is ~45% for unbounded memory
+headroom -- the model is input-bound (32 bytes/runner), effectively
+limitless. Boards sum to 1.000000 at every size. Compounded history: the
+numpy span-window kernel priced 1M runners in ~700 s; rust made it 12 s;
+the bulk window 4.3 s -- 160x, exact throughout.

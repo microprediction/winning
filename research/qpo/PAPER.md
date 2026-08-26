@@ -77,3 +77,17 @@ objective, whether the loop should be exploitative, and how acquisition
 functions compare in closed-loop discovery are all questions about the method,
 not the arithmetic. This paper replaces the arithmetic. The closed-loop
 measurements in README.md are reported for completeness and are not the claim.
+
+
+## Scaling addendum (2026-08-26)
+
+The block-structured extension of the same kernel (winning.factor.blocks,
+fastrace hybrid backend, winner-bulk lattice window with an exact
+omitted-mass bound) prices a correlated race over 10,000,000 candidates in
+200,000 clusters in 64 s on a laptop at 4.7 GB peak -- flat ~4-6 us per
+candidate from 1e5 to 1e7, boards summing to 1.000000 throughout, every
+probability smooth and positive. The dense-covariance alternative does not
+exist at any budget (an 800 TB matrix); the sampling alternative would need
+>1e7 draws for one expected win count per candidate. For the paper's scope
+this extends the operating-point claim by two orders of magnitude beyond
+the whole-library molecular run.

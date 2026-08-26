@@ -769,10 +769,11 @@ fn block_kernel(
     points: usize,
     lo_in: f64,
     hi_in: f64,
+    fast_max_entries: usize,
 ) -> Array1<f64> {
     let n = mu.len();
     let qa = a_nodes.len();
-    if n * qa > FAST_SCRATCH_ENTRIES {
+    if n * qa > fast_max_entries {
         return block_kernel_streaming(mu, sd, v, starts, a_nodes, a_w,
                                       points, lo_in, hi_in);
     }
@@ -977,7 +978,7 @@ fn block_kernel_streaming(
 }
 
 #[pyfunction]
-#[pyo3(signature = (mu, sd, v, starts, a_nodes, a_weights, points=257, lo=f64::NAN, hi=f64::NAN))]
+#[pyo3(signature = (mu, sd, v, starts, a_nodes, a_weights, points=257, lo=f64::NAN, hi=f64::NAN, fast_max_entries=10_000_000))]
 fn block_race<'py>(
     py: Python<'py>,
     mu: PyReadonlyArray1<f64>,
@@ -989,6 +990,7 @@ fn block_race<'py>(
     points: usize,
     lo: f64,
     hi: f64,
+    fast_max_entries: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
@@ -998,7 +1000,7 @@ fn block_race<'py>(
     let aw: Array1<f64> = a_weights.as_array().to_owned();
     let p = py.allow_threads(|| {
         block_kernel(mu_o.view(), sd_o.view(), v_o.view(), &st, an.view(),
-                     aw.view(), points, lo, hi)
+                     aw.view(), points, lo, hi, fast_max_entries)
     });
     Ok(p.into_pyarray_bound(py))
 }
