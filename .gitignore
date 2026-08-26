@@ -139,3 +139,5 @@ dmypy.json
 r/winning.Rcheck/
 r/winning_*.tar.gz
 .DS_Store
+r/*.tar.gz
+r/winning.Rcheck/
