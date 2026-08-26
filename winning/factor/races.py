@@ -64,9 +64,68 @@ def _setup(mu, V, D, F, W, base):
     return mu, V, D, np.asarray(F, float), np.asarray(W, float), fn, left, right
 
 
+
+
+def _bulk_window(M_all, sd, points, delta):
+    """Lattice over the WINNER distribution's bulk, not the ability span.
+
+    G(x) = 1 - prod_j S_j(x) is the winner cdf under the min-race (averaged
+    over factor nodes via the extreme conditional locations, a conservative
+    envelope); [G^-1(delta), G^-1(1-delta)] carries all but 2*delta of every
+    runner's win integrand -- a hopeless runner only wins by running a
+    winner-class time. Measured (research/lattice_window): 33 points here
+    beat 513 on the ability-span window, whose own truncation floors its
+    accuracy near 6e-11. Bisection on a monotone function; cost negligible.
+    """
+    from .races import _setup  # noqa -- self-module, for clarity only
+    mu_lo = M_all.min(axis=0)
+    mu_hi = M_all.max(axis=0)
+    s = sd
+
+    def G(x):
+        # envelope: winner cdf using each runner's most favourable node
+        z = (x - mu_lo) / s
+        logS = np.log(np.maximum(1.0 - _ndtr_local(z), 1e-300))
+        return 1.0 - np.exp(logS.sum())
+
+    lo0 = float(mu_lo.min() - 9.0 * s.max())
+    hi0 = float(mu_hi.max() + 9.0 * s.max())
+    a, b = lo0, hi0
+    for _ in range(80):
+        m = 0.5 * (a + b)
+        if G(m) < delta:
+            a = m
+        else:
+            b = m
+    xlo = a
+    a, b = xlo, hi0
+    # right edge from the LEAST favourable nodes so no runner's density is cut
+    def H(x):
+        z = (x - mu_hi) / s
+        logS = np.log(np.maximum(1.0 - _ndtr_local(z), 1e-300))
+        return 1.0 - np.exp(logS.sum())
+    for _ in range(80):
+        m = 0.5 * (a + b)
+        if H(m) < 1.0 - delta:
+            a = m
+        else:
+            b = m
+    # base-agnostic safety margin: the bisection envelope uses the normal
+    # survival, and other bases (gumbel) have different tails -- pad both
+    # edges by 2 sd so no base's density is clipped. Costs ~15% width,
+    # preserves the ~4x narrowing.
+    pad = 2.0 * float(s.max())
+    return np.linspace(xlo - pad, b + pad, points)
+
+
+def _ndtr_local(z):
+    from scipy.special import ndtr
+    return ndtr(z)
+
+
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                        points=501, temperature=0.0, return_slopes=False,
-                       structure=None):
+                       structure=None, window="bulk", delta=1e-12):
     """Win probabilities of the general race, all N in one field pass.
 
     Pass `structure=` (Independent/Factor/Blocks/Nested/Tree from
@@ -87,8 +146,11 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     sd = np.sqrt(D)
     n = len(mu)
     M_all = mu[None, :] + F @ V.T
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), points)
+    if window == "bulk":
+        x = _bulk_window(M_all, sd, points, delta)
+    else:
+        x = np.linspace(M_all.min() - left * sd.max(),
+                        M_all.max() + right * sd.max(), points)
     dx = x[1] - x[0]
     p = np.zeros(n)
     slope = np.zeros(n)
