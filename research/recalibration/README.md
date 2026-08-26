@@ -106,10 +106,18 @@ exactly zero signal. The factor did not rediscover the semantic hierarchy.
 **One genuinely positive line.** On superclass-restricted menus (condition on
 the true superclass's five fine labels) the exact race deletion beats
 renormalised temperature-softmax, 0.4497 against 0.4572 NLL per example. That
-is the IIA violation showing up on real data and in the predicted direction:
-renormalising a softmax over a restricted menu is not the same as deleting
-competitors from a race, and the race is better. It is a small effect on one
-checkpoint, and it is the only claim here the data actually supports.
+is in the predicted direction, but two caveats from the restriction
+programme (`../restriction/`, behind papers/thurstone_humans) apply
+before calling it an IIA violation: the comparison has not been scored
+against a Luce null in which renormalisation holds by construction (the
+programme's standing rule, since contraction gains can be artifacts),
+and the race used here is the rank-2 fit, so the effect conflates base
+law, heteroskedasticity, and factor. Given the factor bought nothing on
+the full menu, the likely reading is a base/heteroskedasticity effect
+-- the thurstone_humans thesis showing up in a machine population.
+Needed: the race-diag ablation on restricted menus plus the null
+pipeline (requires refitting; parameters were not saved to disk --
+future runs should np.savez the fits).
 
 Why the negative might be the setup rather than the method: 5,000 winners over
 K = 100 classes is 50 per class, and the identification study found the
