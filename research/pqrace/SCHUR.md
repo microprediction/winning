@@ -34,7 +34,7 @@ Markowitz end). Cost: Q_f outer nodes x the block field assembly.
 Validated: TV 0.0025 vs MC noise 0.0033, corr 0.999993, 1.4 s; the coupling
 is doing real work (TV between gamma=0 and gamma=1 boards: 0.25).
 
-**Rung 3 -- the tree race** (designed, not built). Recurse the same move:
+**Rung 3 -- the tree race** (`blockrace.tree_race`, BUILT and validated). Recurse the same move:
 blocks of blocks, one rank-1 coupling per split -- an HODLR-style
 hierarchical covariance. The field integral is then message passing on the
 tree (each node's field is a function of (x, ancestor shift)), giving
@@ -100,3 +100,28 @@ from |mu err| <= 0.5 in 3-4 steps).
 5x faster and four orders tighter. The same pattern as one_pass_polished in
 exotics: the cheap estimator is the initializer that makes the exact solver
 well-posed, not the answer.
+
+
+## Rung 3, measured
+
+The tree race runs as designed: an upward pass building subtree fields
+G_t(y) = E_a[prod_children G_c(y - lam_t a)] and a downward pass
+distributing outside-fields R_c(y) = Smooth[R_parent] * prod_siblings, with
+the leaf step exactly block_race's under R. Uniform per-node strengths are
+what keep every message a function of one lattice variable; leaf clusters
+retain per-member loadings. Validated:
+
+- 3-level hierarchy (2 supergroups x 5 clusters x ~20 members): TV 0.0017
+  vs a 2M-draw MC whose own noise is 0.0025, corr 0.999998, **50 ms**.
+- Structural invariance: adding a strong COMMON root effect (lam = 1.5)
+  moves the board by 2.8e-7 -- the argmax cannot see a shared shift, and the
+  message passing respects that to numerical precision.
+- Asymmetric depth-4 tree with heterogeneous strengths: TV 0.0022 vs MC
+  noise 0.0025, corr 0.999996.
+
+The ladder is complete: block (rung 1), nested (rung 2), tree (rung 3),
+plus the exact Jacobian and hybrid Newton inversion for rung 1. Remaining
+gaps, recorded rather than hidden: the tree Jacobian (same Gram-through-
+messages structure, one level up) and per-leaf loadings on INTERNAL node
+effects, which would break the one-variable message property and need the
+2-d message tables the uniform restriction avoids.

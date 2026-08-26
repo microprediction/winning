@@ -254,3 +254,92 @@ def block_invert_newton(p_target, sd, cluster, v, points=257, qa=9,
     p, _ = block_race_jac(mu, sd, cluster, v, points=points, qa=qa)
     p = np.maximum(p / p.sum(), 1e-300)
     return mu - mu.mean(), float(np.abs(np.log(p) - lt).max()), max_iter
+
+
+def tree_race(mu, sd, cluster, v, parent, lam, points=257, qa=9, span=8.0):
+    """Rung 3: exact win probabilities under a HIERARCHICAL covariance.
+
+    Nodes 0..nC-1 are the leaf clusters (with per-member loadings v, as in
+    block_race). Internal nodes are indexed nC..nT-1; parent[t] gives each
+    node's parent (root's parent = -1); lam[t] is the strength of node t's
+    shared effect, applied UNIFORMLY to every leaf beneath it (that
+    uniformity is what keeps every message a function of one variable).
+    Correlation between two leaves = sum of lam^2 over common ancestors plus
+    the leaf-cluster term: an HODLR-style hierarchy at any depth.
+
+    Two passes of message passing on the lattice:
+      up    G_t(y) = E_a[ prod_children G_c(y - lam_t a) ]
+      down  R_c(y) = Smooth_{lam_t}[R_t](y) * prod_siblings G_s(y)
+    then the leaf step is block_race's, with R_c in place of the flat field.
+    Cost O(n_nodes * L * Q) at any depth.
+    """
+    mu = np.asarray(mu, float); sd = np.asarray(sd, float)
+    v = np.asarray(v, float); cluster = np.asarray(cluster)
+    parent = np.asarray(parent, int); lam = np.asarray(lam, float)
+    N = len(mu); nT = len(parent)
+    _, inv = np.unique(cluster, return_inverse=True)
+    nC = inv.max() + 1
+    order = np.argsort(inv, kind="stable")
+    mu_o, sd_o, v_o, c_o = mu[order], sd[order], v[order], inv[order]
+    starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
+
+    # lattice must cover accumulated ancestor shifts
+    depth_shift = np.zeros(nT)
+    for t in range(nT):
+        s_, u = 0.0, t
+        while parent[u] >= 0:
+            s_ += abs(lam[parent[u]]); u = parent[u]
+        depth_shift[t] = s_
+    tot = np.sqrt(sd_o ** 2 + v_o ** 2)
+    pad = span + 3.5 * (depth_shift[:nC].max() if nC < nT else 0.0)
+    lo = float((mu_o - pad * np.maximum(tot, 1.0)).min())
+    hi = float((mu_o + pad * np.maximum(tot, 1.0)).max())
+    x = np.linspace(lo, hi, points); dx = x[1] - x[0]
+    an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
+
+    z = (x[None, None, :] - mu_o[:, None, None] - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
+    logF = np.log(np.maximum(ndtr(z), TINY))
+    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+    S = np.add.reduceat(logF, starts, axis=0)                  # (nC, qa, L)
+    G = np.empty((nT, points))
+    G[:nC] = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))
+
+    children = [[] for _ in range(nT)]
+    root = -1
+    for t in range(nT):
+        if parent[t] >= 0:
+            children[parent[t]].append(t)
+        else:
+            root = t
+    def shift_eval(g, delta):
+        return np.interp(x, x - delta, g, left=g[0], right=g[-1])
+    # upward: internal nodes in an order where children precede parents
+    topo = sorted(range(nC, nT), key=lambda t: -depth_shift[t])
+    for t in topo:
+        acc = np.zeros(points)
+        for q in range(qa):
+            prod = np.ones(points)
+            for c in children[t]:
+                prod = prod * shift_eval(G[c], lam[t] * an[q])
+            acc += aw[q] * prod
+        G[t] = np.maximum(acc, 0.0)
+    # downward
+    R = np.ones((nT, points))
+    for t in [root] + sorted(range(nT), key=lambda u: depth_shift[u]):
+        if t == root or parent[t] < 0:
+            continue
+        pa = parent[t]
+        sm = np.zeros(points)
+        for q in range(qa):
+            sm += aw[q] * shift_eval(R[pa], -lam[pa] * an[q])
+        prod = np.ones(points)
+        for s_ in children[pa]:
+            if s_ != t:
+                prod = prod * G[s_]
+        R[t] = np.maximum(sm * prod, 0.0)
+    # leaf step
+    lo_i = np.exp(np.minimum(S[c_o] - logF, 0.0))
+    h = np.einsum("q,nql->nl", aw, pdf * lo_i)
+    p_o = (h * R[c_o]).sum(axis=1) * dx
+    p = np.empty(N); p[order] = p_o
+    return np.maximum(p, 0.0)
