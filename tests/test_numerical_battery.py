@@ -141,15 +141,19 @@ def test_chain_ancestor_folds_into_uniform_loading():
     assert 0.5 * np.abs(p_tree - p_block).sum() < 1e-3
 
 
-def test_min_max_mirror():
-    mu, cl, v, D = _mk(7)
-    p1 = block_race_probabilities(mu, cl, v, D)
-    p2 = block_race_probabilities(-(-mu), cl, v, D)
-    assert np.abs(p1 - p2).max() == 0.0      # trivial but guards refactors
-    # mirror symmetry: negating mu reverses favorites and longshots
-    p3 = block_race_probabilities(-mu, cl, v, D)
-    assert (np.argsort(p1) == np.argsort(p3)[::-1]).all() or True  # order flip
-    assert p3[np.argmax(mu)] == p3.max() or p1[np.argmin(mu)] == p1.max()
+def test_equal_abilities_variance_wins():
+    # at equal abilities the HIGHER-variance runner wins more: the minimum
+    # of symmetric variables favors spread. (An earlier draft of this test
+    # asserted the opposite ordering and was wrong -- worth pinning.)
+    n = 6
+    mu = np.zeros(n)
+    D = np.array([0.4, 0.6, 0.8, 1.0, 1.4, 2.0])
+    p = race_probabilities(mu, V=None, D=D, points=1001)
+    assert (np.diff(p) > 0).all()            # monotone in variance
+    # and with a common factor the same ordering holds on the idiosyncratic
+    v = np.full(n, 0.5)
+    p2 = block_race_probabilities(mu, np.zeros(n, int), v, D, points=1001)
+    assert (np.diff(p2) > 0).all()
 
 
 # ------------------------------------------------- derivative identities
