@@ -5,3 +5,5 @@ ackley,100,cholesky-5k,cholesky,5000,2,9.19113,361,92.9,412.0
 ackley,100,cholesky-5k,cholesky,5000,3,9.63155,377,98.9,440.4
 ackley,100,cholesky-5k,cholesky,5000,4,9.40279,376,100.9,457.4
 ackley,100,factor-5k,factor,5000,0,9.39971,386,15.2,361.4
+ackley,100,factor-5k,factor,5000,1,9.30947,379,16.8,399.2
+ackley,100,factor-5k,factor,5000,2,8.69014,371,18.5,411.8

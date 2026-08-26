@@ -69,3 +69,39 @@ which for a coverage guarantee is the safe direction.
     run_pq_race2.py   v2 (common-mode and code-shared projected out)
     run_pq_race3.py   v3 (exact bias + residual-energy variance)
     log_pq_race*.txt  outputs
+
+
+## The cascade extension: empirical noise, and the correlated race
+
+`run_cascade.py` / `run_cascade3.py`: the same idea where stage 2 is
+expensive (the bi-encoder -> cross-encoder shape). Proxy = 128d projected
+distance; truth = exact 2048d cosine; noise model fitted, not derived.
+
+The empirical noise model leaked exactly like the PQ one, one layer at a
+time: pooled variance over-covered (mean depth 93 at target 0.90 against an
+oracle of 4); removing QUERY FIXED EFFECTS -- per-query hardness shifts all
+of a query's scores together and cannot change the argmax -- halved it to 51.
+The third leak has nowhere further to hide: it is genuine within-query
+correlation between similar candidates.
+
+Measured, that correlation is real and similarity-driven: the calibrated
+g(sim) curve rises from 0 for unrelated candidates to 0.82 for near
+neighbours. Racing CORRELATED (per-query Sigma_ij = s_i s_j g(sim_ij),
+rank-4 factorization, pom_fast) tightens the sets a further 6-22% at
+identical coverage, the gain growing with the target:
+
+    target   indep mean m   corr mean m
+      0.90       50.7          47.9
+      0.95       86.0          78.0
+      0.99      231.8         181.2     (coverage 1.000 both)
+
+The limit is the rank: clustered correlation (many small similar groups) is
+exactly what a global low-rank factorization represents worst -- the same
+geometry lesson as the qPO random-pool result, from the other side. A
+block/cluster covariance model is the natural next step, as is cutting the
+297 ms/query correlated-race cost.
+
+The consolidated lesson of the whole directory: calibrated shortlists are
+won or lost in the noise model, and the discipline is always the same three
+subtractions -- common mode, group effects, and then CORRELATION, which
+cannot be subtracted and must be raced.

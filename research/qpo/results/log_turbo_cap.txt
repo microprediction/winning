@@ -7,3 +7,5 @@ ackley d=100, 40 iters x batch 10, seeds [0, 1, 2, 3, 4]
   cholesky-5k  seed 3: best   9.6316  (377 evals, acq  98.9s, total   440s)
   cholesky-5k  seed 4: best   9.4028  (376 evals, acq 100.9s, total   457s)
   factor-5k    seed 0: best   9.3997  (386 evals, acq  15.2s, total   361s)
+  factor-5k    seed 1: best   9.3095  (379 evals, acq  16.8s, total   399s)
+  factor-5k    seed 2: best   8.6901  (371 evals, acq  18.5s, total   412s)
