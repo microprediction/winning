@@ -99,8 +99,8 @@ def concentration_matrix(n, name_caps=None, groups=None):
 
 
 def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
-                base="normal", points=501, name_caps=None, groups=None,
-                A=None, b=None, tol=1e-9, max_iter=60):
+                base="normal", points=257, name_caps=None, groups=None,
+                A=None, b=None, tol=1e-9, max_iter=60, structure=None):
     """Nearest race satisfying concentration constraints.
 
     Give either the current weights p0 (inverted to abilities internally) or
@@ -113,11 +113,20 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     gradients A J(mu); the mean-zero gauge is an equality constraint.
     """
     from scipy.optimize import minimize, NonlinearConstraint, LinearConstraint
+    if structure is not None:
+        forward, jac, invert = _structure_engines(structure, points)
+    else:
+        forward = lambda m: race_probabilities(m, V=V, D=D, F=F, W=W,
+                                               base=base, points=points)
+        jac = lambda m: race_jacobian(m, V=V, D=D, F=F, W=W, base=base,
+                                      points=points)
+        invert = lambda p: abilities_from_race(np.asarray(p, float), V=V,
+                                               D=D, F=F, W=W, base=base,
+                                               points=points)
     if mu0 is None:
         if p0 is None:
             raise ValueError("give p0 or mu0")
-        mu0 = abilities_from_race(np.asarray(p0, float), V=V, D=D, F=F, W=W,
-                                  base=base, points=points)
+        mu0 = invert(np.asarray(p0, float))
     mu0 = np.asarray(mu0, float) - np.mean(mu0)
     n = len(mu0)
     A0, b0 = concentration_matrix(n, name_caps=name_caps, groups=groups)
@@ -125,19 +134,16 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
         A0 = np.vstack([A0, np.atleast_2d(A)])
         b0 = np.concatenate([b0, np.atleast_1d(b)])
     if len(b0) == 0:
-        p = race_probabilities(mu0, V=V, D=D, F=F, W=W, base=base, points=points)
-        return p, mu0, {"active": [], "nit": 0}
+        return forward(mu0), mu0, {"active": [], "nit": 0}
 
     def p_of(m):
-        return race_probabilities(m, V=V, D=D, F=F, W=W, base=base,
-                                  points=points)
+        return forward(m)
 
     def cons_f(m):
         return b0 - A0 @ p_of(m)
 
     def cons_j(m):
-        return -A0 @ race_jacobian(m, V=V, D=D, F=F, W=W, base=base,
-                                   points=points)
+        return -A0 @ jac(m)
 
     res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), mu0,
                    jac=lambda m: m - mu0, method="SLSQP",
@@ -151,3 +157,58 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     return p, mu, {"active": list(np.flatnonzero(slack < 1e-6)),
                    "nit": int(res.nit), "max_violation": float(-min(slack.min(), 0.0)),
                    "mu_distance": float(np.linalg.norm(mu - mu0))}
+
+
+def _structure_engines(structure, points):
+    """(forward, jacobian, invert) for a declarative covariance structure."""
+    from .structures import Independent, Factor, Blocks, Nested, Tree
+    from .blocks import (block_race_probabilities, nested_race_probabilities,
+                         block_race_jacobian, nested_race_jacobian,
+                         abilities_from_block_race)
+    if isinstance(structure, (Independent, Factor)):
+        V = None if isinstance(structure, Independent) else np.asarray(structure.V, float)
+        D = np.asarray(structure.D, float)
+        return (lambda m: race_probabilities(m, V=V, D=D, points=points),
+                lambda m: race_jacobian(m, V=V, D=D, points=points),
+                lambda p: abilities_from_race(p, V=V, D=D, points=points))
+    if isinstance(structure, Blocks):
+        c, L, D = structure.cluster, structure.loading, structure.D
+        return (lambda m: block_race_probabilities(m, c, L, D, points=points),
+                lambda m: block_race_jacobian(m, c, L, D, points=points),
+                lambda p: abilities_from_block_race(p, c, L, D, points=points)[0])
+    if isinstance(structure, Nested):
+        c, L, D, g, ga = (structure.cluster, structure.loading, structure.D,
+                          structure.coupling, structure.gamma)
+        return (lambda m: nested_race_probabilities(m, c, L, D, coupling=g,
+                                                    gamma=ga, points=points),
+                lambda m: nested_race_jacobian(m, c, L, D, coupling=g,
+                                               gamma=ga, points=points),
+                None or (lambda p: _invert_generic(
+                    p, lambda m: nested_race_probabilities(
+                        m, c, L, D, coupling=g, gamma=ga, points=points))))
+    raise NotImplementedError(
+        f"polish_race structure {type(structure).__name__} not yet supported "
+        "(Tree needs its Jacobian promoted from research/pqrace)")
+
+
+def _invert_generic(p, forward, tol=1e-9, max_iter=400):
+    p = np.asarray(p, float); p = p / p.sum()
+    lt = np.log(np.maximum(p, 1e-300))
+    mu = -(lt - lt.mean())
+    eta = 1.0
+    lp = np.log(np.maximum(forward(mu), 1e-300))
+    err = np.abs(lp - lt).max()
+    for _ in range(max_iter):
+        if err < tol:
+            break
+        mu_n = mu - eta * (lt - lp); mu_n -= mu_n.mean()
+        lp_n = np.log(np.maximum(forward(mu_n), 1e-300))
+        e = np.abs(lp_n - lt).max()
+        if e < err:
+            mu, lp, err = mu_n, lp_n, e
+            eta = min(eta * 1.2, 1.5)
+        else:
+            eta *= 0.5
+            if eta < 1e-4:
+                break
+    return mu

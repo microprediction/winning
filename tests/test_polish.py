@@ -68,3 +68,54 @@ def test_concentration_matrix_shapes():
                                 groups=[([0, 1], 0.5)])
     assert A.shape == (3, 5) and len(b) == 3
     assert b[-1] == 0.5 and A[-1, :2].sum() == 2.0
+
+
+def test_hrp_polish_under_blocks_redistributes_along_the_dendrogram():
+    """The HRP case: hierarchy-consistent covariance. Capping a name must
+    push its mass DISPROPORTIONATELY to cluster siblings (they win in the
+    same states), which independence-polishing cannot know."""
+    from winning.factor.structures import Blocks, Independent
+    rng = np.random.default_rng(17)
+    n = 12
+    cl = np.repeat(np.arange(3), 4)                # 3 sectors of 4
+    mu = rng.normal(0, 0.6, n); mu -= mu.mean()
+    D = (0.6 + 0.4 * rng.random(n)) ** 2
+    v = 0.9 * np.sqrt(D)                           # strong within-sector corr
+    S_blocks = Blocks(cl, v, D)
+    from winning.factor.blocks import block_race_probabilities
+    p0 = block_race_probabilities(mu, cl, v, D)
+    big = int(np.argmax(p0))
+    caps = np.full(n, np.nan); caps[big] = 0.7 * p0[big]
+    p_b, mu_b, info_b = polish_race(mu0=mu, name_caps=caps,
+                                    structure=S_blocks)
+    assert p_b[big] <= caps[big] + 1e-7
+    assert np.abs(p_b - block_race_probabilities(mu_b, cl, v, D)).max() < 1e-10
+    # independence polish of the same weights for comparison
+    p_i, _, _ = polish_race(p0=p0, name_caps=caps,
+                            structure=Independent(D))
+    sib = (cl == cl[big]) & (np.arange(n) != big)
+    oth = cl != cl[big]
+    gain_sib_b = (p_b[sib].sum() - p0[sib].sum())
+    gain_sib_i = (p_i[sib].sum() - p0[sib].sum())
+    # the freed mass is the same order; the block model gives siblings more
+    assert gain_sib_b > gain_sib_i
+    assert info_b["max_violation"] < 1e-7
+
+
+def test_nested_structure_polish_runs_and_binds():
+    from winning.factor.structures import Nested
+    rng = np.random.default_rng(19)
+    n = 10
+    cl = np.repeat(np.arange(2), 5)
+    mu = rng.normal(0, 0.5, n); mu -= mu.mean()
+    D = (0.7 + 0.3 * rng.random(n)) ** 2
+    v = 0.6 * np.sqrt(D)
+    g = rng.normal(0, 0.4, n); g -= g.mean()
+    S = Nested(cl, v, D, g, 1.0)
+    from winning.factor.blocks import nested_race_probabilities
+    p0 = nested_race_probabilities(mu, cl, v, D, coupling=g, gamma=1.0)
+    big = int(np.argmax(p0))
+    caps = np.full(n, np.nan); caps[big] = 0.75 * p0[big]
+    p, mu1, info = polish_race(mu0=mu, name_caps=caps, structure=S)
+    assert p[big] <= caps[big] + 1e-6
+    assert info["max_violation"] < 1e-6

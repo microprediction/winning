@@ -404,3 +404,26 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     p = np.maximum(p, 0.0)
     t_ = p.sum()
     return p / t_ if t_ > 0 else p
+
+
+def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
+                         points=257, qa=9, qf=15):
+    """Exact d p / d mu for the nested race: a mixture over the global node,
+    so the Jacobian is the mixture of block Jacobians at shifted mu."""
+    if coupling is None or gamma == 0.0:
+        return block_race_jacobian(mu, cluster, loading, D, points=points, qa=qa)
+    fn, fw = roots_hermitenorm(qf); fw = fw / fw.sum()
+    mu = np.asarray(mu, float)
+    g = np.atleast_2d(np.asarray(coupling, float))
+    if g.shape[0] != len(mu):
+        g = g.T
+    if g.shape[1] == 1:
+        nodes = fn.reshape(-1, 1); w = fw
+    else:
+        nodes, w = _cluster_nodes(g.shape[1], qf, seed=1)
+    n = len(mu)
+    J = np.zeros((n, n))
+    for q in range(len(nodes)):
+        J += w[q] * block_race_jacobian(mu + gamma * (g @ nodes[q]), cluster,
+                                        loading, D, points=points, qa=qa)
+    return J
