@@ -18,3 +18,12 @@ ackley d=100, 40 iters x batch 10, seeds [0, 1, 2, 3, 4]
   factor-20k   seed 4: best   9.0238  (395 evals, acq  40.6s, total   325s)
   factor-50k   seed 0: best   9.0521  (406 evals, acq 101.0s, total   357s)
   factor-50k   seed 1: best   9.3625  (411 evals, acq 101.3s, total   365s)
+  factor-50k   seed 2: best   9.5481  (409 evals, acq 100.0s, total   350s)
+  factor-50k   seed 3: best   9.0451  (402 evals, acq  61.0s, total   210s)
+  factor-50k   seed 4: best   9.3449  (399 evals, acq  46.7s, total   177s)
+
+=== mean best (lower is better) ===
+  cholesky-5k    9.3629 +- 0.0694  (n=5)
+  factor-5k      9.1057 +- 0.1396  (n=5)
+  factor-20k     9.0781 +- 0.0794  (n=5)
+  factor-50k     9.2705 +- 0.0871  (n=5)

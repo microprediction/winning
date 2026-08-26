@@ -68,3 +68,31 @@ fitted ARD lengthscales inside a trust region -- the d = 100 Ackley posterior
 above -- `max_p * N` is 79 with effective support 355 of 5,000: strong
 opinions and real correlation. The regime practitioners actually use is
 exactly the regime where this computation applies.
+
+
+## The cap experiment: removing it does not help (measured)
+
+Ackley d=100, 40 iterations x batch 10, five seeds per arm, everything held
+fixed except candidate count and the sampling route:
+
+    arm             mean best     acq time/run
+    cholesky-5k     9.363 +- 0.069    96 s      (TuRBO as shipped)
+    factor-5k       9.106 +- 0.140    16 s      (control: same cap, our route)
+    factor-20k      9.078 +- 0.079    44 s
+    factor-50k      9.271 +- 0.087    82 s
+
+Three conclusions. The rank-2 route costs nothing against exact Cholesky
+sampling (the control ties or slightly betters it). Lifting the cap 4x or
+10x does NOT improve the optimum found -- the arms are statistically
+indistinguishable -- so the intuition "5,000 points in 100 dimensions is
+too sparse" fails here, plausibly because the trust region's own adaptation
+substitutes for candidate density: the region shrinks onto the action, and
+a modest set inside a well-adapted region suffices. What survives is the
+cost claim: same optimization at 6x cheaper acquisition, and 10x candidates
+available at the old price if a use case wants them.
+
+This is the third appearance of the pattern (molecular batches, antibiotic
+loop, now TuRBO): the numerical claim holds completely; converting it into
+better OUTCOMES fails on saturating or self-correcting benchmarks. The
+paper should state the cost result and this negative honestly rather than
+benchmark-shop for the outcome result.
