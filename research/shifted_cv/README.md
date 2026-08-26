@@ -243,3 +243,24 @@ transform -- now lives in its own repository:
 It vendors `envelope_fast.py` and `references.py` from here as dependencies, so
 those two files are shared; everything else in this directory is the shifted
 control-variate experiment and stands alone.
+
+
+## Negative result (2026-08-26): Gumbel surrogates as control variates
+
+The tempting idea: Gumbel races have closed-form shares (softmax; mixed
+logit and nested logit for the factor and tree twins), so couple each
+Gaussian draw to a Gumbel draw through common uniforms and Monte Carlo only
+the discrepancy. Measured at N = 100 via the VRF identity
+(1 - sum p^2) / (2 (1 - P(same winner))):
+
+    factor Sigma       P(same) 0.386   VRF 0.78   (hurts)
+    dense Sigma        P(same) 0.457   VRF 0.88   (hurts)
+    independent Sigma  P(same) 0.555   VRF 1.06   (nothing)
+
+Even under independence -- where the Gumbel twin is exact in distribution --
+quantile coupling agrees on the winner barely half the time, because the
+argmax is decided in the right tail, exactly where the Gaussian and Gumbel
+quantile maps disagree most. Same lesson as the main study from a new angle:
+coupling quality is everything, and SHAPE mismatch destroys it where winners
+are decided. The surrogate that worked here was same-shape with calibrated
+location; closed-form shares are worthless as a CV if the shape differs.
