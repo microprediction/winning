@@ -868,10 +868,145 @@ fn block_race<'py>(
     Ok(p.into_pyarray_bound(py))
 }
 
+
+/// Rank-r block race: like `block_race`, but each cluster's shared effect is
+/// r-dimensional with a free per-member loading MATRIX v (n x r); the
+/// quadrature nodes are (Q x r) with weights w. Members must be sorted by
+/// cluster; `starts` gives each cluster's first index. MAX-wins.
+fn block_kernel_r(
+    mu: ArrayView1<f64>,
+    sd: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    starts: &[usize],
+    nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+) -> Array1<f64> {
+    let n = mu.len();
+    let qa = nodes.nrows();
+    let r = nodes.ncols();
+    let n_c = starts.len();
+    // shift[i*qa + a] = sum_k v[i,k] nodes[a,k], computed once (r is small)
+    let mut shift = vec![0.0f64; n * qa];
+    for i in 0..n {
+        for a in 0..qa {
+            let mut s_ = 0.0;
+            for k in 0..r {
+                s_ += v[[i, k]] * nodes[[a, k]];
+            }
+            shift[i * qa + a] = s_;
+        }
+    }
+    let mut lo = f64::MAX;
+    let mut hi = f64::MIN;
+    for i in 0..n {
+        let mut smax: f64 = 0.0;
+        for a in 0..qa {
+            smax = smax.max(shift[i * qa + a].abs());
+        }
+        lo = lo.min(mu[i] - 8.0 * sd[i] - smax);
+        hi = hi.max(mu[i] + 8.0 * sd[i] + smax);
+    }
+    let dx = (hi - lo) / (points - 1) as f64;
+
+    let p: Vec<f64> = (0..points)
+        .into_par_iter()
+        .fold(
+            || vec![0.0f64; n],
+            |mut acc, t| {
+                let x = lo + dx * t as f64;
+                let mut lf = vec![0.0f64; n * qa];
+                let mut pf = vec![0.0f64; n * qa];
+                let mut s_ca = vec![0.0f64; n_c * qa];
+                for c in 0..n_c {
+                    let e = if c + 1 < n_c { starts[c + 1] } else { n };
+                    for a in 0..qa {
+                        let mut s_sum = 0.0;
+                        for i in starts[c]..e {
+                            let z = (x - mu[i] - shift[i * qa + a]) / sd[i];
+                            let l = log_ndtr(z);
+                            lf[i * qa + a] = l;
+                            pf[i * qa + a] =
+                                (-0.5 * z * z - LN_SQRT_2PI - sd[i].ln()).exp();
+                            s_sum += l;
+                        }
+                        s_ca[c * qa + a] = s_sum;
+                    }
+                }
+                let mut log_g = vec![0.0f64; n_c];
+                let mut log_all = 0.0;
+                for c in 0..n_c {
+                    let mut g = 0.0;
+                    for a in 0..qa {
+                        g += w[a] * s_ca[c * qa + a].exp();
+                    }
+                    let lg = if g > 1e-300 { g.ln() } else { -690.0 };
+                    log_g[c] = lg;
+                    log_all += lg;
+                }
+                for c in 0..n_c {
+                    let e = if c + 1 < n_c { starts[c + 1] } else { n };
+                    let rest = log_all - log_g[c];
+                    if rest < -690.0 {
+                        continue;
+                    }
+                    let rest_e = rest.exp();
+                    for i in starts[c]..e {
+                        let mut h = 0.0;
+                        for a in 0..qa {
+                            let ex = s_ca[c * qa + a] - lf[i * qa + a];
+                            if ex > -690.0 {
+                                h += w[a] * pf[i * qa + a] * ex.exp();
+                            }
+                        }
+                        acc[i] += h * rest_e;
+                    }
+                }
+                acc
+            },
+        )
+        .reduce(
+            || vec![0.0f64; n],
+            |mut a, b| {
+                for i in 0..n {
+                    a[i] += b[i];
+                }
+                a
+            },
+        );
+    Array1::from_iter(p.into_iter().map(|x| (x * dx).max(0.0)))
+}
+
+#[pyfunction]
+#[pyo3(signature = (mu, sd, v, starts, nodes, weights, points=257))]
+fn block_race_r<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    sd: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray2<f64>,
+    starts: PyReadonlyArray1<i64>,
+    nodes: PyReadonlyArray2<f64>,
+    weights: PyReadonlyArray1<f64>,
+    points: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let mu_o: Array1<f64> = mu.as_array().to_owned();
+    let sd_o: Array1<f64> = sd.as_array().to_owned();
+    let v_o: Array2<f64> = v.as_array().to_owned();
+    let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
+    let nd: Array2<f64> = nodes.as_array().to_owned();
+    let ww: Array1<f64> = weights.as_array().to_owned();
+    let p = py.allow_threads(|| {
+        block_kernel_r(mu_o.view(), sd_o.view(), v_o.view(), &st, nd.view(),
+                       ww.view(), points)
+    });
+    Ok(p.into_pyarray_bound(py))
+}
+
 #[pymodule]
 fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(forward_and_slopes, m)?)?;
     m.add_function(wrap_pyfunction!(block_race, m)?)?;
+    m.add_function(wrap_pyfunction!(block_race_r, m)?)?;
     m.add_function(wrap_pyfunction!(jacobian_vector_product, m)?)?;
     m.add_function(wrap_pyfunction!(win_probabilities_factor_separated, m)?)?;
     m.add_function(wrap_pyfunction!(ghk_all_shares, m)?)?;

@@ -62,6 +62,13 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
     nodes, w = _cluster_nodes(r, qa)
     Q = len(nodes)
+    if _HAVE_RUST and hasattr(_fastrace, "block_race_r"):
+        p_o = np.asarray(_fastrace.block_race_r(
+            np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
+            np.ascontiguousarray(V_o), starts.astype(np.int64),
+            np.ascontiguousarray(nodes), np.ascontiguousarray(w), points))
+        p = np.empty(n); p[order] = p_o
+        return np.maximum(p, 0.0)
     tot = np.sqrt(sd_o ** 2 + (V_o ** 2).sum(1))
     lo = float((mu_o - 8 * tot).min()); hi = float((mu_o + 8 * tot).max())
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
