@@ -25,9 +25,12 @@ TINY = 1e-300
 
 try:
     import fastrace as _fastrace
-    _HAVE_RUST = hasattr(_fastrace, "block_race")
+    _RUST_OK = hasattr(_fastrace, "block_race")
+    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
+        "WINNING_PURE", "").strip() in ("", "0")
 except Exception:                                            # pragma: no cover
     _fastrace = None
+    _RUST_OK = False
     _HAVE_RUST = False
 
 

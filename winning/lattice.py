@@ -4,9 +4,12 @@ import math
 
 try:                                       # compiled kernels (rust/fastrace)
     import fastrace as _fastrace
-    _HAVE_RUST = hasattr(_fastrace, "classic_state_prices")
+    _RUST_OK = hasattr(_fastrace, "classic_state_prices")
+    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
+        "WINNING_PURE", "").strip() in ("", "0")
 except ImportError:
     _fastrace = None
+    _RUST_OK = False
     _HAVE_RUST = False
 
 #########################################################################################

@@ -31,5 +31,6 @@ from .factor import (  # noqa: F401
     tie_densities,
 )
 from . import probit  # noqa: F401
+from .rustconfig import use_rust, rust_active  # noqa: F401
 
 __version__ = "1.1.1"

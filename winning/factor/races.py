@@ -27,9 +27,12 @@ from .core import hermite_nodes
 
 try:                                       # compiled kernels (rust/fastrace)
     import fastrace as _fastrace
-    _HAVE_RUST = hasattr(_fastrace, "forward_and_slopes")
+    _RUST_OK = hasattr(_fastrace, "forward_and_slopes")
+    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
+        "WINNING_PURE", "").strip() in ("", "0")
 except ImportError:
     _fastrace = None
+    _RUST_OK = False
     _HAVE_RUST = False
 
 _EULER = 0.5772156649015329
