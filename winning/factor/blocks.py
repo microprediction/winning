@@ -31,6 +31,37 @@ except Exception:                                            # pragma: no cover
     _HAVE_RUST = False
 
 
+def _bulk_lo_hi(mu, tot, delta=1e-12):
+    """Winner-bulk lattice bounds for a MAX-wins field, from the marginal
+    proxy G(x) = prod_j Phi((x - mu_j)/tot_j) (Slepian-safe on the right;
+    the 2 sd pad covers the left-edge correlation correction and any
+    non-normal base). See research/lattice_window: 3-4x narrower than the
+    ability span at equal safety."""
+    mu = np.asarray(mu, float); tot = np.asarray(tot, float)
+    lo0 = float((mu - 9 * tot).min()); hi0 = float((mu + 9 * tot).max())
+
+    def G(x):
+        return np.exp(np.log(np.maximum(ndtr((x - mu) / tot), TINY)).sum())
+
+    a, b = lo0, hi0
+    for _ in range(70):
+        m = 0.5 * (a + b)
+        if G(m) < delta:
+            a = m
+        else:
+            b = m
+    xlo = a
+    a, b = xlo, hi0
+    for _ in range(70):
+        m = 0.5 * (a + b)
+        if G(m) < 1.0 - delta:
+            a = m
+        else:
+            b = m
+    pad = 2.0 * float(tot.max())
+    return xlo - pad, b + pad
+
+
 def _cluster_nodes(r, qa, seed=0):
     """Quadrature for a cluster's r-dim effect.
 
@@ -74,14 +105,23 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     nodes, w = _cluster_nodes(r, qa)
     Q = len(nodes)
     if _HAVE_RUST and hasattr(_fastrace, "block_race_r"):
-        p_o = np.asarray(_fastrace.block_race_r(
-            np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
-            np.ascontiguousarray(V_o), starts.astype(np.int64),
-            np.ascontiguousarray(nodes), np.ascontiguousarray(w), points))
+        tot_r = np.sqrt(sd_o ** 2 + (V_o ** 2).sum(1))
+        lo_r, hi_r = _bulk_lo_hi(mu_o, tot_r)
+        try:
+            p_o = np.asarray(_fastrace.block_race_r(
+                np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
+                np.ascontiguousarray(V_o), starts.astype(np.int64),
+                np.ascontiguousarray(nodes), np.ascontiguousarray(w), points,
+                lo_r, hi_r))
+        except TypeError:
+            p_o = np.asarray(_fastrace.block_race_r(
+                np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
+                np.ascontiguousarray(V_o), starts.astype(np.int64),
+                np.ascontiguousarray(nodes), np.ascontiguousarray(w), points))
         p = np.empty(n); p[order] = p_o
         return np.maximum(p, 0.0)
     tot = np.sqrt(sd_o ** 2 + (V_o ** 2).sum(1))
-    lo = float((mu_o - 8 * tot).min()); hi = float((mu_o + 8 * tot).max())
+    lo, hi = _bulk_lo_hi(mu_o, tot)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     shift = V_o @ nodes.T                                   # (n, Q)
     z = (x[None, None, :] - mu_o[:, None, None]
@@ -112,13 +152,23 @@ def _block_max(mu, sd, cluster, v, points, qa):
     starts = np.flatnonzero(np.r_[True, np.diff(inv[order]) != 0])
     an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
     if _HAVE_RUST:
-        p_o = np.asarray(_fastrace.block_race(
-            np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
-            np.ascontiguousarray(v_o), starts.astype(np.int64),
-            np.ascontiguousarray(an), np.ascontiguousarray(aw), points))
+        tot_r = np.sqrt(sd_o ** 2 + v_o ** 2)
+        lo_r, hi_r = _bulk_lo_hi(mu_o, tot_r)
+        kw = {}
+        try:
+            p_o = np.asarray(_fastrace.block_race(
+                np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
+                np.ascontiguousarray(v_o), starts.astype(np.int64),
+                np.ascontiguousarray(an), np.ascontiguousarray(aw), points,
+                lo_r, hi_r))
+        except TypeError:      # older fastrace without window arguments
+            p_o = np.asarray(_fastrace.block_race(
+                np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
+                np.ascontiguousarray(v_o), starts.astype(np.int64),
+                np.ascontiguousarray(an), np.ascontiguousarray(aw), points))
     else:
         tot = np.sqrt(sd_o ** 2 + v_o ** 2)
-        lo = float((mu_o - 8 * tot).min()); hi = float((mu_o + 8 * tot).max())
+        lo, hi = _bulk_lo_hi(mu_o, tot)
         x = np.linspace(lo, hi, points); dx = x[1] - x[0]
         z = (x[None, None, :] - mu_o[:, None, None]
              - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
@@ -185,7 +235,7 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
     n_c = len(starts)
     an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
     tot = np.sqrt(sd_o ** 2 + v_o ** 2)
-    lo = float((mu_o - 8 * tot).min()); hi = float((mu_o + 8 * tot).max())
+    lo, hi = _bulk_lo_hi(mu_o, tot)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     z = (x[None, None, :] - mu_o[:, None, None]
          - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
@@ -303,10 +353,14 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
         while parent[u] >= 0:
             s_ += abs(lam[parent[u]]); u = parent[u]
         depth_shift[t] = s_
-    tot = np.sqrt(sd_o ** 2 + v_o ** 2)
-    pad = 8.0 + 3.5 * (depth_shift[:nC].max() if nC < nT else 0.0)
-    lo = float((mu_o - pad * np.maximum(tot, 1.0)).min())
-    hi = float((mu_o + pad * np.maximum(tot, 1.0)).max())
+    path_var = np.zeros(nC)
+    for c in range(nC):
+        s_, u = 0.0, c
+        while parent[u] >= 0:
+            s_ += lam[parent[u]] ** 2; u = parent[u]
+        path_var[c] = s_
+    tot = np.sqrt(sd_o ** 2 + v_o ** 2 + path_var[c_o])
+    lo, hi = _bulk_lo_hi(mu_o, tot)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     z = (x[None, None, :] - mu_o[:, None, None]
          - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]

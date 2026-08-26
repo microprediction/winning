@@ -761,18 +761,25 @@ fn block_kernel(
     a_nodes: ArrayView1<f64>,
     a_w: ArrayView1<f64>,
     points: usize,
+    lo_in: f64,
+    hi_in: f64,
 ) -> Array1<f64> {
     let n = mu.len();
     let qa = a_nodes.len();
     let n_c = starts.len();
-    let mut lo = f64::MAX;
-    let mut hi = f64::MIN;
-    let amax = a_nodes.iter().fold(0.0f64, |m, &x| m.max(x.abs()));
-    for i in 0..n {
-        let spread = 8.0 * sd[i] + amax * v[i].abs();
-        lo = lo.min(mu[i] - spread);
-        hi = hi.max(mu[i] + spread);
-    }
+    let (lo, hi) = if lo_in.is_finite() && hi_in.is_finite() {
+        (lo_in, hi_in)
+    } else {
+        let mut lo = f64::MAX;
+        let mut hi = f64::MIN;
+        let amax = a_nodes.iter().fold(0.0f64, |m, &x| m.max(x.abs()));
+        for i in 0..n {
+            let spread = 8.0 * sd[i] + amax * v[i].abs();
+            lo = lo.min(mu[i] - spread);
+            hi = hi.max(mu[i] + spread);
+        }
+        (lo, hi)
+    };
     let dx = (hi - lo) / (points - 1) as f64;
 
     let p: Vec<f64> = (0..points)
@@ -844,7 +851,7 @@ fn block_kernel(
 }
 
 #[pyfunction]
-#[pyo3(signature = (mu, sd, v, starts, a_nodes, a_weights, points=257))]
+#[pyo3(signature = (mu, sd, v, starts, a_nodes, a_weights, points=257, lo=f64::NAN, hi=f64::NAN))]
 fn block_race<'py>(
     py: Python<'py>,
     mu: PyReadonlyArray1<f64>,
@@ -854,6 +861,8 @@ fn block_race<'py>(
     a_nodes: PyReadonlyArray1<f64>,
     a_weights: PyReadonlyArray1<f64>,
     points: usize,
+    lo: f64,
+    hi: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
@@ -863,7 +872,7 @@ fn block_race<'py>(
     let aw: Array1<f64> = a_weights.as_array().to_owned();
     let p = py.allow_threads(|| {
         block_kernel(mu_o.view(), sd_o.view(), v_o.view(), &st, an.view(),
-                     aw.view(), points)
+                     aw.view(), points, lo, hi)
     });
     Ok(p.into_pyarray_bound(py))
 }
@@ -881,6 +890,8 @@ fn block_kernel_r(
     nodes: ArrayView2<f64>,
     w: ArrayView1<f64>,
     points: usize,
+    lo_in: f64,
+    hi_in: f64,
 ) -> Array1<f64> {
     let n = mu.len();
     let qa = nodes.nrows();
@@ -897,16 +908,21 @@ fn block_kernel_r(
             shift[i * qa + a] = s_;
         }
     }
-    let mut lo = f64::MAX;
-    let mut hi = f64::MIN;
-    for i in 0..n {
-        let mut smax: f64 = 0.0;
-        for a in 0..qa {
-            smax = smax.max(shift[i * qa + a].abs());
+    let (lo, hi) = if lo_in.is_finite() && hi_in.is_finite() {
+        (lo_in, hi_in)
+    } else {
+        let mut lo = f64::MAX;
+        let mut hi = f64::MIN;
+        for i in 0..n {
+            let mut smax: f64 = 0.0;
+            for a in 0..qa {
+                smax = smax.max(shift[i * qa + a].abs());
+            }
+            lo = lo.min(mu[i] - 8.0 * sd[i] - smax);
+            hi = hi.max(mu[i] + 8.0 * sd[i] + smax);
         }
-        lo = lo.min(mu[i] - 8.0 * sd[i] - smax);
-        hi = hi.max(mu[i] + 8.0 * sd[i] + smax);
-    }
+        (lo, hi)
+    };
     let dx = (hi - lo) / (points - 1) as f64;
 
     let p: Vec<f64> = (0..points)
@@ -978,7 +994,7 @@ fn block_kernel_r(
 }
 
 #[pyfunction]
-#[pyo3(signature = (mu, sd, v, starts, nodes, weights, points=257))]
+#[pyo3(signature = (mu, sd, v, starts, nodes, weights, points=257, lo=f64::NAN, hi=f64::NAN))]
 fn block_race_r<'py>(
     py: Python<'py>,
     mu: PyReadonlyArray1<f64>,
@@ -988,6 +1004,8 @@ fn block_race_r<'py>(
     nodes: PyReadonlyArray2<f64>,
     weights: PyReadonlyArray1<f64>,
     points: usize,
+    lo: f64,
+    hi: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
@@ -997,7 +1015,7 @@ fn block_race_r<'py>(
     let ww: Array1<f64> = weights.as_array().to_owned();
     let p = py.allow_threads(|| {
         block_kernel_r(mu_o.view(), sd_o.view(), v_o.view(), &st, nd.view(),
-                       ww.view(), points)
+                       ww.view(), points, lo, hi)
     });
     Ok(p.into_pyarray_bound(py))
 }
