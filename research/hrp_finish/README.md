@@ -44,3 +44,23 @@ Three conclusions:
 
 FINAL RECIPE: invert w_HRP under the cophenetic belief; re-price under the
 rank-k+diag fit of the RAW sample covariance; gamma = 1; no other shrinkage.
+
+
+## The full T-ladder: the crossover, and near-invariance of the repair
+
+    vs HRP (negative = better)      T=90     T=45     T=30(=n)  T=20(<n)
+    min-var (ridged)               -4.07%   -0.85%   +2.02%    +0.60%
+    finished HRP (gamma=1)         -0.42%   -0.32%   -0.31%    -0.28%
+
+Two findings:
+1. THE CROSSOVER: at T <= n, min-var is WORSE than plain HRP (its classic
+   failure regime), while finished HRP keeps its full edge -- beating
+   min-var by 2.3% at T=n and 0.9% at T<n. Break-even is near T ~ 1.2n.
+   Below it, finished HRP is the best allocator tested.
+2. NEAR-INVARIANCE: the finishing improvement is essentially constant
+   (-0.42/-0.32/-0.31/-0.28%) across a 4.5x range of estimation quality,
+   while min-var swings six points. This is the shrinkage-via-the-race
+   signature in one row: the transport's bounded sensitivity makes its
+   edge nearly independent of estimation noise. The repair is small, but
+   it is ALWAYS there -- which is precisely what a practitioner wants from
+   a free post-processing step.
