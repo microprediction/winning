@@ -753,6 +753,12 @@ fn ghk_all_shares<'py>(
 /// cluster, G(x) = prod_c G_c(x); the winner's own cluster is handled by
 /// leave-one-out inside its block. Parallel over lattice columns, fully
 /// fused per column -- no N x L temporaries.
+
+/// Scratch threshold for the fast path: per-thread lf/pf scratch is
+/// 2 * n * qa * 8 bytes; beyond ~10M entries the streaming kernel's O(max
+/// cluster) memory wins over its ~35% arithmetic premium.
+const FAST_SCRATCH_ENTRIES: usize = 10_000_000;
+
 fn block_kernel(
     mu: ArrayView1<f64>,
     sd: ArrayView1<f64>,
@@ -766,6 +772,10 @@ fn block_kernel(
 ) -> Array1<f64> {
     let n = mu.len();
     let qa = a_nodes.len();
+    if n * qa > FAST_SCRATCH_ENTRIES {
+        return block_kernel_streaming(mu, sd, v, starts, a_nodes, a_w,
+                                      points, lo_in, hi_in);
+    }
     let n_c = starts.len();
     let (lo, hi) = if lo_in.is_finite() && hi_in.is_finite() {
         (lo_in, hi_in)
@@ -781,7 +791,6 @@ fn block_kernel(
         (lo, hi)
     };
     let dx = (hi - lo) / (points - 1) as f64;
-
     let p: Vec<f64> = (0..points)
         .into_par_iter()
         .fold(
@@ -830,6 +839,123 @@ fn block_kernel(
                             let ex = s_ca[c * qa + a] - lf[i * qa + a];
                             if ex > -690.0 {
                                 h += a_w[a] * pf[i * qa + a] * ex.exp();
+                            }
+                        }
+                        acc[i] += h * rest_e;
+                    }
+                }
+                acc
+            },
+        )
+        .reduce(
+            || vec![0.0f64; n],
+            |mut a, b| {
+                for i in 0..n {
+                    a[i] += b[i];
+                }
+                a
+            },
+        );
+    Array1::from_iter(p.into_iter().map(|x| (x * dx).max(0.0)))
+}
+
+fn block_kernel_streaming(
+    mu: ArrayView1<f64>,
+    sd: ArrayView1<f64>,
+    v: ArrayView1<f64>,
+    starts: &[usize],
+    a_nodes: ArrayView1<f64>,
+    a_w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+) -> Array1<f64> {
+    // STREAMING kernel: per (column, cluster) only that cluster's logF/pdf
+    // scratch is held (max_cluster x qa), so memory is O(largest cluster),
+    // not O(N) -- the model is input-bound, not scratch-bound. Costs one
+    // extra pass of arithmetic per column; measured competitive because the
+    // scratch now lives in cache.
+    let n = mu.len();
+    let qa = a_nodes.len();
+    let n_c = starts.len();
+    let mut maxc = 0usize;
+    for c in 0..n_c {
+        let e = if c + 1 < n_c { starts[c + 1] } else { n };
+        maxc = maxc.max(e - starts[c]);
+    }
+    let (lo, hi) = if lo_in.is_finite() && hi_in.is_finite() {
+        (lo_in, hi_in)
+    } else {
+        let mut lo = f64::MAX;
+        let mut hi = f64::MIN;
+        let amax = a_nodes.iter().fold(0.0f64, |m, &x| m.max(x.abs()));
+        for i in 0..n {
+            let spread = 8.0 * sd[i] + amax * v[i].abs();
+            lo = lo.min(mu[i] - spread);
+            hi = hi.max(mu[i] + spread);
+        }
+        (lo, hi)
+    };
+    let dx = (hi - lo) / (points - 1) as f64;
+
+    let p: Vec<f64> = (0..points)
+        .into_par_iter()
+        .fold(
+            || vec![0.0f64; n],
+            |mut acc, t| {
+                let x = lo + dx * t as f64;
+                let mut lf = vec![0.0f64; maxc * qa];
+                let mut pf = vec![0.0f64; maxc * qa];
+                let mut s_a = vec![0.0f64; qa];
+                let mut log_g = vec![0.0f64; n_c];
+                let mut log_all = 0.0;
+                // pass 1: per-cluster fields (cluster scratch reused)
+                for c in 0..n_c {
+                    let e = if c + 1 < n_c { starts[c + 1] } else { n };
+                    for a in 0..qa {
+                        s_a[a] = 0.0;
+                    }
+                    for i in starts[c]..e {
+                        for a in 0..qa {
+                            let z = (x - mu[i] - v[i] * a_nodes[a]) / sd[i];
+                            s_a[a] += log_ndtr(z);
+                        }
+                    }
+                    let mut g = 0.0;
+                    for a in 0..qa {
+                        g += a_w[a] * s_a[a].exp();
+                    }
+                    let lg = if g > 1e-300 { g.ln() } else { -690.0 };
+                    log_g[c] = lg;
+                    log_all += lg;
+                }
+                // pass 2: member terms, one cluster's scratch at a time
+                for c in 0..n_c {
+                    let e = if c + 1 < n_c { starts[c + 1] } else { n };
+                    let rest = log_all - log_g[c];
+                    if rest < -690.0 {
+                        continue;
+                    }
+                    let rest_e = rest.exp();
+                    for a in 0..qa {
+                        s_a[a] = 0.0;
+                    }
+                    for (k, i) in (starts[c]..e).enumerate() {
+                        for a in 0..qa {
+                            let z = (x - mu[i] - v[i] * a_nodes[a]) / sd[i];
+                            let l = log_ndtr(z);
+                            lf[k * qa + a] = l;
+                            pf[k * qa + a] =
+                                (-0.5 * z * z - LN_SQRT_2PI - sd[i].ln()).exp();
+                            s_a[a] += l;
+                        }
+                    }
+                    for (k, i) in (starts[c]..e).enumerate() {
+                        let mut h = 0.0;
+                        for a in 0..qa {
+                            let ex = s_a[a] - lf[k * qa + a];
+                            if ex > -690.0 {
+                                h += a_w[a] * pf[k * qa + a] * ex.exp();
                             }
                         }
                         acc[i] += h * rest_e;
