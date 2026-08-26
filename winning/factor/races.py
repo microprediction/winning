@@ -65,12 +65,21 @@ def _setup(mu, V, D, F, W, base):
 
 
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
-                       points=501, temperature=0.0, return_slopes=False):
+                       points=501, temperature=0.0, return_slopes=False,
+                       structure=None):
     """Win probabilities of the general race, all N in one field pass.
 
+    Pass `structure=` (Independent/Factor/Blocks/Nested/Tree from
+    winning.factor.structures) to describe the covariance declaratively --
+    one race, five grammars; V=/D= remain as sugar for the factor case.
     temperature > 0 returns the softmin expectation E[softmin(X/tau)],
     computed exactly as the hard race with each base convolved with the
     tau-scaled min-Gumbel kernel."""
+    if structure is not None:
+        from .structures import dispatch_probabilities
+        return dispatch_probabilities(mu, structure, base=base,
+                                      temperature=temperature,
+                                      return_slopes=return_slopes)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     if temperature and temperature > 0:
         return _race_tempered(mu, V, D, F, W, fn, left, right,
