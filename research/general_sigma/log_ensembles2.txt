@@ -1,0 +1,16 @@
+lkj                      m=16  resolvable=201  median abs err=2.4e-05  max abs err=6.6e-03
+wishart                  m=16  resolvable=193  median abs err=1.7e-05  max abs err=3.0e-03
+residuals                m=10  resolvable=126  median abs err=2.7e-04  max abs err=1.8e-02
+walk                     m=16  resolvable=186  median abs err=1.9e-05  max abs err=7.9e-03
+animals                  m= 9  resolvable= 47  median abs err=4.1e-04  max abs err=1.8e-02
+onion                    m=16  resolvable=192  median abs err=2.9e-05  max abs err=5.3e-03
+vine                     m=16  resolvable=193  median abs err=2.2e-05  max abs err=4.3e-03
+archakov_hansen          m=11  resolvable=142  median abs err=1.9e-04  max abs err=1.4e-02
+spectrum:marchenko_pastur m=16  resolvable=193  median abs err=2.2e-05  max abs err=2.8e-03
+spectrum:spiked          m=16  resolvable=131  median abs err=3.1e-05  max abs err=1.4e-03
+factor:30                m=16  resolvable=131  median abs err=1.9e-05  max abs err=3.1e-03
+hierarchical             m=16  resolvable=183  median abs err=1.3e-05  max abs err=1.3e-03
+block_equicorr           m= 3  resolvable=164  median abs err=2.1e-05  max abs err=3.3e-03
+ar1                      m=16  resolvable=199  median abs err=3.1e-05  max abs err=1.0e-02
+kernel                   m= 3  resolvable= 16  median abs err=3.5e-03  max abs err=1.3e-02
+sparse_precision         m=16  resolvable=194  median abs err=1.1e-05  max abs err=4.1e-04

@@ -58,3 +58,18 @@ structure, so a fixed m=5 residual captures little. Fix candidates:
 adaptive m chosen from the residual spectrum (fit until captured
 variance passes a threshold), or the rung-6 deconvolution top-up.
 Claims about "general Sigma" now read per-measure, reproducible by seed.
+
+## Overnight batteries (Aug 27)
+
+**Tree exactness (research/tree_exactness).** 2^22-path CRN referee,
+depths 1-4: rms z 0.75-1.1 on resolvable entries everywhere -- the
+recursion is exact at the noise floor. Sub-resolution entries match
+Botev minimax tilting to 0.2-0.3% relative at p ~ 7e-8 (47-dim orthant).
+Grammar kernels have tilting-grade tails natively; the tail weakness
+belongs to the promoted-residual quadrature only.
+
+**Adaptive residual rank (run_ensembles2): negative result.** Choosing
+m by spectral capture (85%, cap 16) saturates the cap on most ensembles
+for marginal gains and leaves the kernel row essentially unchanged
+(3.5e-3 vs 4.3e-3): the kernel boundary is structural, not a rank
+deficit. Fixed m stays the default.
