@@ -176,6 +176,83 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60):
     return B @ W, np.maximum(D, 1e-8)
 
 
+def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
+                   blocks: int | None = None, nodes_log2: int = 11,
+                   seed: int = 0):
+    """One-call dense-covariance intake: fit C to the race grammar and
+    return (V, D, F, W) ready for race_probabilities.
+
+    Stages (the paper's dense-Sigma pipeline, validated against the
+    randomcov ensemble battery): (1) k global factors by the certified
+    quotient-space fit -- only P Sigma P is choice-relevant, so the fit
+    minimizes the projected residual, not the raw one; (2) average-linkage
+    clustering of the residual correlation into blocks, one rank-1 loading
+    per block from the off-diagonal residual; (3) the remaining
+    off-diagonal residual's top-m eigendirections promoted to further
+    factor columns; (4) idiosyncratic D by diagonal matching, floored.
+    Numerically dead columns are dropped so the Sobol node rank stays
+    honest. Works on covariances; correlation matrices are the special
+    case with unit diagonal.
+    """
+    from scipy.cluster.hierarchy import fcluster, linkage
+    from scipy.spatial.distance import squareform
+
+    C = np.asarray(C, dtype=float)
+    n = len(C)
+    s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
+    corr = C / np.outer(s, s)
+    V, D0 = factor_model_projected(C, min(k, n - 1))
+    V = np.asarray(V, dtype=float)
+    if blocks is None:
+        blocks = max(2, min(n // 5, 20))
+    P = np.eye(n) - np.ones((n, n)) / n
+    # everything downstream fits the CHOICE-RELEVANT residual: the raw
+    # residual C - VV' - D0 contains a common component the quotient fit
+    # rightly ignored; chasing it with block loadings would trade real
+    # projected error for irrelevant reconstruction (in-grammar inputs
+    # would come back distorted). Project it out once, here.
+    R = P @ (C - V @ V.T - np.diag(D0)) @ P
+    v = np.zeros(n)
+    cluster = np.zeros(n, dtype=int)
+    if n >= 3 and blocks >= 2:
+        d = np.sqrt(np.clip(0.5 * (1.0 - corr), 0.0, 1.0))
+        Z = linkage(squareform(d, checks=False), method="average")
+        cluster = fcluster(Z, blocks, criterion="maxclust") - 1
+        for c in np.unique(cluster):
+            idx = np.where(cluster == c)[0]
+            if len(idx) < 2:
+                continue
+            Rb = R[np.ix_(idx, idx)].copy()
+            np.fill_diagonal(Rb, 0.0)
+            wb, Ub = np.linalg.eigh(Rb)
+            if wb[-1] > 0:
+                v[idx] = Ub[:, -1] * np.sqrt(wb[-1])
+    uniq = np.unique(cluster)
+    BD = np.zeros((n, len(uniq)))
+    for j, c in enumerate(uniq):
+        idx = np.where(cluster == c)[0]
+        BD[idx, j] = v[idx]
+    E = R - BD @ BD.T
+    np.fill_diagonal(E, 0.0)
+    wE, UE = np.linalg.eigh(E)
+    m_eff = min(m, n)
+    Vres = UE[:, n - m_eff:] * np.sqrt(np.maximum(wE[n - m_eff:], 0.0))
+    Vall = np.hstack([V, Vres, BD])
+    keep = (Vall ** 2).sum(axis=0) > 1e-10 * np.trace(C) / n
+    if not keep.any():
+        keep[0] = True
+    Vall = Vall[:, keep]
+    # closing D solve: min over d of ||P(C - Vall Vall' - diag(d))P||_F.
+    # The map d -> diag(P diag(d) P) is linear with matrix P.P (elementwise
+    # square), so the first-order condition is (P.P) d = diag(P R2 P).
+    R2 = C - Vall @ Vall.T
+    rhs = np.diag(P @ R2 @ P)
+    D = np.linalg.solve(P * P, rhs)
+    D = np.maximum(D, 1e-3 * float(np.mean(np.diag(C))))
+    F, W = qmc_nodes(Vall.shape[1], m=nodes_log2, seed=seed)
+    return Vall, D, F, W
+
+
 def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
     """Product Gauss-Hermite rule for E over N(0, I_k); returns (nodes, weights)."""
     x, w = np.polynomial.hermite_e.hermegauss(Q)

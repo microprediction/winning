@@ -158,15 +158,24 @@ def _ndtr_local(z):
 
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                        points=257, temperature=0.0, return_slopes=False,
-                       structure=None, window="bulk", delta=1e-12):
+                       structure=None, window="bulk", delta=1e-12, cov=None):
     """Win probabilities of the general race, all N in one field pass.
 
     Pass `structure=` (Independent/Factor/Blocks/Nested/Tree from
     winning.factor.structures) to describe the covariance declaratively --
     one race, five grammars; V=/D= remain as sugar for the factor case.
+    Pass `cov=` (a dense covariance or correlation matrix) to have it
+    fitted to the grammar first via winning.factor.core.fit_covariance
+    (approximate: the fit residual is the price of density; see the
+    paper's dense-Sigma section for measured accuracy by ensemble).
     temperature > 0 returns the softmin expectation E[softmin(X/tau)],
     computed exactly as the hard race with each base convolved with the
     tau-scaled min-Gumbel kernel."""
+    if cov is not None:
+        if structure is not None or V is not None or D is not None:
+            raise ValueError("cov= replaces structure=/V=/D=; pass one only")
+        from .core import fit_covariance
+        V, D, F, W = fit_covariance(cov)
     if structure is not None:
         from .structures import dispatch_probabilities
         return dispatch_probabilities(mu, structure, base=base,
