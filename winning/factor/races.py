@@ -482,3 +482,57 @@ def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
 # canonical tier-1 name; calibrate_factors is reserved for the outer
 # estimation problem (see the paper's discussion and experiment 30)
 calibrate_abilities = abilities_from_race
+
+_GUMBEL_UNIT_D = np.pi ** 2 / 6.0
+
+
+def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
+    """Luce/softmax as the closed-form special case of the race, exposed.
+
+    Min-wins: p = softmax(-mu/tau). Identical to
+    race_probabilities(mu, D=tau^2 pi^2/6, base="gumbel") -- the
+    Gumbel-argmin identity -- but analytic: no lattice, no quadrature
+    over the winning value (verified against the lattice at machine
+    precision in the tests). With factor loadings V (and nodes F, W over
+    the factors), performances are conditionally uniform-scale Gumbel
+    given f, so the answer is the exact mixture of conditional softmaxes
+        p = sum_q w_q softmax(-(mu + V f_q)/tau),
+    one closed form per node. Because it is analytic wherever the race
+    is priced numerically, it is the natural control variate and the
+    permanent point of comparison: same mu, same conditioning, the IIA
+    answer next to the correlated one. Heterogeneous Gumbel scales have
+    no closed form; use race_probabilities(..., base="gumbel") there.
+    """
+    mu = np.asarray(mu, dtype=float)
+    tau = float(temperature)
+    if tau <= 0:
+        raise ValueError("temperature must be positive")
+    if V is None:
+        z = -mu / tau
+        z -= z.max()
+        w = np.exp(z)
+        return w / w.sum()
+    V = np.atleast_2d(np.asarray(V, dtype=float))
+    if V.shape[0] != len(mu):
+        V = V.T
+    if F is None or W is None:
+        D_impl = np.full(len(mu), _GUMBEL_UNIT_D * tau * tau)
+        _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
+    F = np.asarray(F, dtype=float)
+    W = np.asarray(W, dtype=float)
+    M = -(mu[None, :] + F @ V.T) / tau
+    M -= M.max(axis=1, keepdims=True)
+    E = np.exp(M)
+    P = E / E.sum(axis=1, keepdims=True)
+    return W @ P
+
+
+def abilities_from_softmax(p, temperature=1.0):
+    """Exact inverse of the independent softmax race: mean-zero mu with
+    softmax_probabilities(mu, temperature) = p. Closed form."""
+    p = np.asarray(p, dtype=float)
+    if np.any(p <= 0):
+        raise ValueError("all target probabilities must be positive")
+    tau = float(temperature)
+    logp = np.log(p / p.sum())
+    return -tau * (logp - logp.mean())

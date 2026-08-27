@@ -10,6 +10,9 @@ times; negate utilities, or use winning.probit for max-wins semantics):
 
     race_probabilities(mu, structure=, base=, temperature=)   (V=/D= = Factor sugar)
     calibrate_abilities(p, ...)      inverse: abilities from win probabilities
+    softmax_probabilities(mu, ...)   the Luce/softmax special case, closed form
+                                     (the standing IIA comparison and control
+                                     variate; exact inverse abilities_from_softmax)
     race_jacobian(mu, ...)           exact dp/dmu           (factor.polish)
     polish_race(p, ..., caps)        nearest race obeying linear constraints
     removal_shares(mu, ...)          P(j wins | i removed), all pairs, one field
@@ -32,7 +35,11 @@ from .factor import (  # noqa: F401
     removal_shares,
     tie_densities,
 )
+from .factor.races import (  # noqa: F401
+    abilities_from_softmax,
+    softmax_probabilities,
+)
 from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 
-__version__ = "1.1.1"
+__version__ = "1.2.0"
