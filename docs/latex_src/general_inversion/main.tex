@@ -143,12 +143,13 @@ $10^6$ & $29$ s & $4{,}100$ years & $4\times10^{9}$ \\
 \end{center}
 
 Section \ref{sec:alternatives} places the method among the alternatives.
-Sections \ref{sec:lattice}--\ref{sec:tree} describe the algorithm: the
-independent lattice race, then the factor, block, nested and tree extensions,
-each with its recursion written out. Section \ref{sec:jac} gives the Jacobian and
-the inversion. Section \ref{sec:general} reduces dense covariance to the grammar
-family and reports accuracy per named random-correlation ensemble. Section
-\ref{sec:num} contains the benchmarks.
+Section \ref{sec:lattice} gives the independent lattice race; Section
+\ref{sec:grammar} extends it across the covariance grammar, factor to blocks
+to trees, each with its recursion written out. Section \ref{sec:jac} gives
+the Jacobian operator and the inversion. Section \ref{sec:general} reduces
+dense covariance to the grammar family, approximately, and reports accuracy
+per named random-correlation ensemble. Section \ref{sec:num} contains the
+benchmarks.
 
 \section{The alternatives}\label{sec:alternatives}
 
@@ -255,7 +256,16 @@ probability $j$ wins after deleting $i$, by dividing a second contestant out of
 the field; and photo-finish tie densities, which \S\ref{sec:jac} identifies with
 the off-diagonal Jacobian.
 
-\section{Factor covariance}\label{sec:factor}
+\section{The covariance grammar}\label{sec:grammar}
+
+Three structures make contestants conditionally independent given a few
+shared variables, in increasing order of hierarchy: a global factor, factors
+per cluster, and a tree of uniform shared effects. Each keeps the shared
+field and the $O(nLQ)$ bill; each is exact, not fitted. The approximate
+reduction of a dense covariance to this family is a separate matter and has
+its own section (\S\ref{sec:general}).
+
+\subsection{Factor}\label{sec:factor}
 
 Let $X=\mu+Vf+\mathrm{diag}(\sqrt D)\,\epsilon$ with $f\sim N(0,I_k)$
 independent of $\epsilon$, so $\Sigma=VV'+\mathrm{diag}(D)$. Conditional on $f$
@@ -280,7 +290,7 @@ at no extra cost (negative in this min-wins convention: raising a time mean
 lowers the win probability), which \S\ref{sec:jac} uses as the Newton
 preconditioner.
 
-\section{Block and nested covariance}\label{sec:blocks}
+\subsection{Blocks and nested}\label{sec:blocks}
 
 Assign contestant $i$ to cluster $c(i)$ with loading $v_i\in\R^r$ and let
 \begin{equation}
@@ -321,7 +331,7 @@ $p=\sum_q w_q\,p_{\mathrm{block}}(\mu+\gamma g f_q)$, a finite mixture of block
 races. At $\gamma=0$ the clusters are isolated, at $\gamma=1$ fully
 coupled, and the covariance contribution scales as $\gamma^{2}gg'$.
 
-\section{Tree covariance}\label{sec:tree}
+\subsection{Trees}\label{sec:tree}
 
 Let a rooted tree have the leaf clusters at its bottom and internal nodes $t$
 above, and give node $t$ a scalar effect $b_t\sim N(0,1)$ applied with uniform
