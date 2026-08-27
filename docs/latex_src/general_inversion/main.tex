@@ -159,9 +159,16 @@ alternatives at $n=30$, and at ten times the budget remains a factor of two to
 four behind.
 
 \paragraph{GHK.} Defined above. Its dominance is documentable rather than
-folklore: Stata's \texttt{asmprobit} and \texttt{cmmprobit} compute
-probabilities by GHK \citep{statacorp2023}, and R's \texttt{mlogit} and
-\texttt{mvProbit} default to it \citep{croissant2020}. Two properties matter
+folklore. Stata's \texttt{cmmprobit} manual states that the likelihood
+evaluator ``implements the Geweke--Hajivassiliou--Keane (GHK) algorithm to
+approximate the multivariate distribution function''
+\citep{statacorp2023,gates2006}, and the command's entire
+\texttt{intmethod} menu---Hammersley, Halton, or pseudorandom point
+sets---selects only the sequence feeding the same simulator: the
+market-leading implementation offers no non-GHK method at all. R's
+\texttt{mlogit} and \texttt{mvProbit} default to GHK likewise
+\citep{croissant2020}, and the GHK-based \texttt{mvprobit} of
+\citet{cappellari2003} carried the method to applied Stata work at large. Two properties matter
 for comparison: it is smooth in parameters, which frequency counting is not,
 and it prices one alternative per run. \citet{stern1992} gave a related
 decomposition with an analytic leading term.
@@ -576,6 +583,9 @@ models. \emph{Journal of Econometrics} 58:347--368, 1993.
 The maximum approximate composite marginal likelihood (MACML) estimation of
 multinomial probit-based unordered response choice models.
 \emph{Transportation Research Part B} 45(7):923--939, 2011.
+\bibitem[Cappellari and Jenkins(2003)]{cappellari2003} L.~Cappellari,
+S.~P. Jenkins. Multivariate probit regression using simulated maximum
+likelihood. \emph{Stata Journal} 3(3):278--294, 2003.
 \bibitem[Clark(1961)]{clark1961} C.~E. Clark.
 The greatest of a finite set of random variables.
 \emph{Operations Research} 9:145--162, 1961.
@@ -585,6 +595,9 @@ Estimation of random utility models in R: the mlogit package.
 \bibitem[Cotton(2021)]{cotton2021} P.~Cotton.
 Inferring relative ability from winning probability in multi-entrant contests.
 \emph{SIAM Journal on Financial Mathematics} 12(1):295--317, 2021.
+\bibitem[Gates(2006)]{gates2006} R.~Gates.
+A Mata Geweke--Hajivassiliou--Keane multivariate normal simulator.
+\emph{Stata Journal} 6(2):190--213, 2006.
 \bibitem[Genz(1992)]{genz1992} A.~Genz.
 Numerical computation of multivariate normal probabilities.
 \emph{Journal of Computational and Graphical Statistics} 1:141--149, 1992.
