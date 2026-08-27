@@ -131,3 +131,26 @@ K = 100 with 193 tied parameters this sits near the boundary. A larger
 calibration split, or a checkpoint whose logit residuals are genuinely
 correlated, would be a fairer test. But as measured: on this checkpoint the
 correlated layer buys nothing over temperature scaling.
+
+## Specialist menus: COMPLETE (resumed 2026-08-27 after sharp-field fix)
+
+The FloatingPointError was the sharp-field failure class (rescaled
+post-deletion logits); core.win_probabilities_factor now falls back to
+the bulk-window front door (db18630) and the run completed all 60 menus.
+
+Medians by menu type, KL(specialist || map):
+
+  type    renorm   diag    r2     null(renorm)
+  super   0.183    0.814   0.956  0.290
+  random  0.142    0.596   0.595  0.149
+  confus  0.204    0.654   0.871  0.347
+
+Renormalization beats both deletion maps 3-4x on every menu type and
+sits at or below the distillation null; on confusable menus its NLL
+matches the specialist itself (0.967 vs 0.966). Verdict: the
+linear-probe tier is IIA-COMPLIANT across menu types, including the
+confusable menus that should have been hardest for IIA. Decision-layer
+menu dependence is ~nil; any genuine effect requires deep retraining
+(tier 2). The "specialist simulator" framing survives with
+renormalization as the (trivially cheap) simulator; deletion maps are
+worse predictors here.
