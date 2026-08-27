@@ -1,7 +1,7 @@
 // Demo support: seeded correlation generators (randomcov's ensembles in
 // miniature), dense linear algebra for the in-browser grammar fit, and
 // a Monte Carlo sampler to race against.
-import { hermite1, interpClamped } from "./core.mjs";
+import { hermite1, interpClamped, solve } from "./core.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
@@ -187,34 +187,57 @@ export function jacobiEigh(Ain, maxSweeps = 12) {
 }
 
 export function fitGrammar(C, k = 3, m = 4) {
-  // rank-k + promoted residual (the paper's pipeline, blocks omitted for
-  // browser latency): returns { V, D } columns for raceProbabilities
+  // rank-k + promoted residual on the PROJECTED residual (the package's
+  // fit_covariance pipeline; blocks omitted for browser latency, and the
+  // contrast heuristic stands in for the certified quotient ALS):
+  // returns { V, D } columns for raceProbabilities. Only P C P is
+  // choice-relevant, so every stage fits the projected matrix and the
+  // closing diagonal solves (P.P) d = diag(P R P).
   const n = C.length;
-  const { values, vectors } = jacobiEigh(C);
+  const proj = M => {
+    // P M P with P = I - 11'/n
+    const rm = M.map(row => row.reduce((a, b) => a + b, 0) / n);
+    const tot = rm.reduce((a, b) => a + b, 0) / n;
+    return M.map((row, i) => row.map((v, j) => v - rm[i] - rm[j] + tot));
+  };
+  const CP = proj(C);
+  const { values, vectors } = jacobiEigh(CP);
   const order = values.map((v, i) => i).sort((a, b) => values[b] - values[a]);
   const cols = [];
   for (const idx of order.slice(0, k)) {
     const lam = Math.max(values[idx], 0);
     cols.push(vectors.map(row => row[idx] * Math.sqrt(lam)));
   }
-  // residual off-diagonal, top-m eigencolumns
-  const E = C.map((row, i) => row.map((v, j) => {
+  // projected residual, diagonal zeroed, top-m eigencolumns promoted
+  const E = proj(C.map((row, i) => row.map((v, j) => {
     let s = v;
     for (const col of cols) s -= col[i] * col[j];
-    return i === j ? 0 : s;
-  }));
+    return s;
+  })));
+  for (let i = 0; i < n; i++) E[i][i] = 0;
   const eE = jacobiEigh(E);
   const orderE = eE.values.map((v, i) => i).sort((a, b) => eE.values[b] - eE.values[a]);
   for (const idx of orderE.slice(0, m)) {
     const lam = Math.max(eE.values[idx], 0);
     if (lam > 1e-8) cols.push(eE.vectors.map(row => row[idx] * Math.sqrt(lam)));
   }
+  // closing diagonal: (P.P) d = diag(P R P), R = C - VV'
+  const R = C.map((row, i) => row.map((v, j) => {
+    let s = v;
+    for (const col of cols) s -= col[i] * col[j];
+    return s;
+  }));
+  const RP = proj(R);
+  const G = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => {
+      const p = (i === j ? 1 - 1 / n : -1 / n);
+      return p * p;
+    }));
+  const d = solve(G, RP.map((row, i) => row[i]));
   const V = [], D = [];
   for (let i = 0; i < n; i++) {
     V.push(cols.map(col => col[i]));
-    let d = C[i][i];
-    for (const col of cols) d -= col[i] * col[i];
-    D.push(Math.max(d, 0.03));
+    D.push(Math.max(d[i], 0.03));
   }
   return { V, D };
 }
