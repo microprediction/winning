@@ -277,3 +277,81 @@ elif mode == "tenmillion":
     p = block_race_probabilities(mu, cluster, loading, D, points=257)
     print(f"n={n:,d} clusters={n_c:,d}: {time.time()-t0:.1f} s "
           f"(sum {p.sum():.6f})")
+
+elif mode == "invert":
+    # Referee 9: per-grammar inversion round trips through the shipped
+    # front door (abilities_from_race with structure=), n=400.
+    from winning.factor.structures import (Independent, Factor, Blocks,
+                                           Nested, Tree,
+                                           dispatch_probabilities)
+    from winning.factor.races import abilities_from_race
+    rng = np.random.default_rng(3)
+    n = 400
+    cluster = np.repeat(np.arange(20), 20)
+    mu0 = rng.normal(size=n); mu0 -= mu0.mean()
+    parent = np.array([20 + c // 5 for c in range(20)] + [24] * 4 + [-1])
+    strength = np.concatenate([np.zeros(20), 0.4 * np.ones(4), [0.3]])
+    cases = {
+        "independent": Independent(D=0.5 + rng.random(n)),
+        "factor r2": Factor(V=rng.normal(size=(n, 2)) * 0.5,
+                            D=0.5 + rng.random(n)),
+        "blocks": Blocks(cluster=cluster, loading=0.4 + 0.3 * rng.random(n),
+                         D=0.5 + rng.random(n)),
+        "nested": Nested(cluster=cluster, loading=0.4 + 0.3 * rng.random(n),
+                         D=0.5 + rng.random(n), coupling=0.5 * rng.random(n),
+                         gamma=0.8),
+        "tree": Tree(cluster=cluster, loading=0.4 + 0.3 * rng.random(n),
+                     D=0.5 + rng.random(n), parent=parent,
+                     strength=strength),
+    }
+    for name, s in cases.items():
+        pstar = dispatch_probabilities(mu0, s)
+        t0 = time.time()
+        mu_hat = abilities_from_race(pstar, structure=s)
+        dt = time.time() - t0
+        p2 = dispatch_probabilities(mu_hat, s)
+        print(f"{name:12s} {dt:6.2f} s   max|mu err| {np.abs(mu_hat-mu0).max():.1e}"
+              f"   max|log p resid| {np.abs(np.log(p2)-np.log(pstar)).max():.1e}")
+
+elif mode == "bm":
+    # Referee 3: the per-alternative factor-quadrature comparator
+    # (Butler--Moffitt's conditioning computed one alternative at a time,
+    # no shared field) against the shared-field lattice, same nodes, same
+    # lattice, rank-2 factor covariance at n=200.
+    from winning.factor.core import hermite_nodes
+    from winning.factor.races import race_probabilities
+    from scipy.special import log_ndtr
+    from scipy.stats import norm
+    rng = np.random.default_rng(0)
+    n, k = 200, 2
+    mu = rng.normal(size=n); mu -= mu.mean()
+    V = rng.normal(size=(n, k)) * 0.5
+    D = 0.5 + rng.random(n)
+    F, W = hermite_nodes(k, 15)
+    t0 = time.time()
+    p_field = race_probabilities(mu, V=V, D=D, F=F, W=W, points=257)
+    t_field = time.time() - t0
+    sd = np.sqrt(D)
+    t0 = time.time()
+    p_alt = np.zeros(n)
+    L = 257
+    for i in range(n):
+        # this alternative's own integral: same conditioning, same rule,
+        # but the survival product is rebuilt from scratch for each i
+        M = mu[None, :] + F @ V.T                      # Q x n conditional means
+        lo = (M[:, i] - 8 * sd[i]).min(); hi = (M[:, i] + 8 * sd[i]).max()
+        x = np.linspace(lo, hi, L)
+        z_i = (x[None, :] - M[:, i][:, None]) / sd[i]
+        f_i = np.exp(-0.5 * z_i ** 2) / (sd[i] * np.sqrt(2 * np.pi))
+        logS = np.zeros((len(F), L))
+        for j in range(n):
+            if j == i:
+                continue
+            zj = (x[None, :] - M[:, j][:, None]) / sd[j]
+            logS += log_ndtr(-zj)
+        p_alt[i] = float(np.sum(W[:, None] * f_i * np.exp(logS)) * (x[1] - x[0]))
+    t_alt = time.time() - t0
+    p_alt = p_alt / p_alt.sum()
+    print(f"shared field: {t_field*1000:.0f} ms   per-alternative: {t_alt:.1f} s "
+          f"({t_alt/t_field:.0f}x)   TV {0.5*np.abs(p_field-p_alt).sum():.2e}   "
+          f"max|log ratio| {np.abs(np.log(p_field)-np.log(p_alt)).max():.2e}")
