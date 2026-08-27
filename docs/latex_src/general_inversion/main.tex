@@ -408,6 +408,28 @@ and there we consider GHK replaced. GHK retains general rectangle probabilities
 and locality-structured covariance, and \citet{botev2017} remains the reference
 for single extreme tail probabilities.
 
+\paragraph{Estimation.} The pricing advantage transfers to estimation. Simulate
+$T=50{,}000$ choices among $n=30$ alternatives under a known rank-2 factor
+covariance and estimate the mean-zero utilities by maximum likelihood, exact
+probabilities and analytic score against GHK probabilities with common random
+numbers and finite-difference gradients, eight replications:
+
+\begin{center}\small
+\begin{tabular}{lrr}
+\toprule
+estimator & RMSE over identified alternatives & median fit time \\
+\midrule
+exact gradient MLE & $0.0187$ & $4.9$ s \\
+MSL, $R=100$ & $0.0305$ & $4.4$ s \\
+MSL, $R=1000$ & $0.0198$ & $40.7$ s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent At equal fitting time the simulated estimator pays a $63$ percent
+error premium; at eight times the budget it remains behind. The exact estimator
+sits at the statistical floor.
+
 \paragraph{Scale.} The Rust kernels are input-bound: ten million contestants in
 $64$ seconds under the block grammar with a hybrid in-memory and streaming
 field, and $232$ times the speed of the interpreted classic calibration.

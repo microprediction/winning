@@ -73,3 +73,17 @@ m by spectral capture (85%, cap 16) saturates the cap on most ensembles
 for marginal gains and leaves the kernel row essentially unchanged
 (3.5e-3 vs 4.3e-3): the kernel boundary is structural, not a rank
 deficit. Fixed m stays the default.
+
+**MNP estimation (research/mnp_estimation, run_mle2).** n=30, T=50k,
+known Sigma, mu by MLE: exact-gradient 0.0187 rmse in 4.9s; GHK-MSL
+R=100 0.0305 in 4.4s (63% premium at equal time); R=1000 0.0198 in
+40.7s (8x budget, still behind). In the paper. Round 1 (run_mle)
+records the design lesson: at small T statistical error swamps the
+simulation penalty and everything ties.
+
+**Naive tilting (run_tilt): negative result.** Translating Sobol nodes
+with exact Gaussian reweighting collapses effective sample size
+(weights span e^{+-12}); the selection heuristic was circular; deepest
+band worsened. Tail fix for the promoted-residual path stays the
+Botev-per-entry hybrid; proper minimax tilting per bucket is future
+work.
