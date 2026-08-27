@@ -1,0 +1,41 @@
+name: Publish fastmvn to PyPI
+
+on:
+  push:
+    tags: ["fastmvn-v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test
+        run: |
+          pip install -e python/fastmvn pytest numpy scipy
+          pytest python/fastmvn/tests -q
+      - name: Build
+        run: |
+          pip install build twine
+          python -m build --outdir python/fastmvn/dist python/fastmvn
+          twine check python/fastmvn/dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fastmvn-dist
+          path: python/fastmvn/dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fastmvn-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
