@@ -76,3 +76,46 @@ def test_ar1_within_measured_band():
 def test_cov_excludes_other_specs():
     with pytest.raises(ValueError):
         race_probabilities([0.0, 1.0], cov=np.eye(2), D=np.ones(2))
+
+
+def test_grammar_inversion_round_trips():
+    # the intro table's claim: priced and inverted by the same two calls,
+    # for every grammar member (generic damped inverse, exact forward map)
+    from winning.factor.structures import (Blocks, Nested, Tree,
+                                           dispatch_probabilities)
+    from winning.factor.races import abilities_from_race
+    rng = np.random.default_rng(3)
+    n = 60
+    cluster = np.repeat(np.arange(6), 10)
+    mu0 = rng.normal(size=n)
+    mu0 -= mu0.mean()
+    parent = np.array([6, 6, 7, 7, 8, 8, 8, 8, -1])
+    strength = np.concatenate([np.zeros(6), [0.4, 0.4, 0.3]])
+    cases = [
+        Blocks(cluster=cluster, loading=0.4 + 0.3 * rng.random(n),
+               D=0.5 + rng.random(n)),
+        Nested(cluster=cluster, loading=0.4 + 0.3 * rng.random(n),
+               D=0.5 + rng.random(n), coupling=0.5 * rng.random(n),
+               gamma=0.8),
+        Tree(cluster=cluster, loading=0.4 + 0.3 * rng.random(n),
+             D=0.5 + rng.random(n), parent=parent, strength=strength),
+    ]
+    for s in cases:
+        pstar = dispatch_probabilities(mu0, s)
+        mu_hat = abilities_from_race(pstar, structure=s)
+        assert np.abs(mu_hat - mu0).max() < 1e-6
+
+
+def test_cov_inversion_round_trip():
+    # invert the fitted race: forward with cov=, invert with cov=,
+    # recover the abilities of the fitted model
+    rng = np.random.default_rng(4)
+    n = 30
+    Vt = rng.normal(size=(n, 2)) * 0.5
+    C = Vt @ Vt.T + np.diag(0.5 + rng.random(n))
+    mu0 = rng.normal(size=n)
+    mu0 -= mu0.mean()
+    from winning.factor.races import abilities_from_race
+    p = race_probabilities(mu0, cov=C)
+    mu_hat = abilities_from_race(p, cov=C)
+    assert np.abs(mu_hat - mu0).max() < 1e-5

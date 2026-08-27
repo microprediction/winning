@@ -249,8 +249,32 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
 
 
 def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
-                        points=257, temperature=0.0, n_iter=60, tol=1e-8):
-    """Invert the general race: mean-zero mu with race_probabilities(mu) = p."""
+                        points=257, temperature=0.0, n_iter=60, tol=1e-8,
+                        structure=None, cov=None):
+    """Invert the general race: mean-zero mu with race_probabilities(mu) = p.
+
+    Accepts the same covariance descriptions as the forward call: V=/D=
+    factor sugar, structure= for any grammar member, cov= for a dense
+    matrix (fitted first, so the inverse is of the fitted race). For
+    block/nested/tree structures the update below keeps the exact forward
+    map and preconditions with the own-slope of the variance-matched
+    independent race (one extra O(nL) pass per iteration)."""
+    if cov is not None:
+        if structure is not None or V is not None or D is not None:
+            raise ValueError("cov= replaces structure=/V=/D=; pass one only")
+        from .core import fit_covariance
+        V, D, F, W = fit_covariance(cov)
+    if structure is not None:
+        from .structures import Factor, Independent
+        if isinstance(structure, Independent):
+            structure, D = None, np.asarray(structure.D, float)
+        elif isinstance(structure, Factor):
+            V = np.asarray(structure.V, float)
+            D = np.asarray(structure.D, float)
+            structure = None
+    if structure is not None:
+        return _abilities_from_structure(p, structure, points=points,
+                                         n_iter=max(n_iter, 120), tol=tol)
     target = np.asarray(p, dtype=float)
     if np.any(target <= 0):
         raise ValueError("all target probabilities must be positive")
@@ -269,6 +293,39 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         if np.abs(resid).max() < tol:
             break
         dlogp = np.minimum(sl / np.maximum(phat, 1e-300), -1e-6)
+        mu = mu - np.clip(alpha * resid / dlogp, -2.0, 2.0)
+        mu -= mu.mean()
+    return mu
+
+
+def _abilities_from_structure(p, structure, points=257, n_iter=120,
+                              tol=1e-8):
+    """Generic grammar inversion: exact forward map through the dispatch,
+    damped log-residual fixed point preconditioned by the own-slope of the
+    independent race at matched total variances. Damping backtracks (halves)
+    whenever the residual fails to shrink, so contraction is monitored, not
+    assumed."""
+    from .structures import dispatch_probabilities, structure_variances
+    target = np.asarray(p, dtype=float)
+    if np.any(target <= 0):
+        raise ValueError("all target probabilities must be positive")
+    target = target / target.sum()
+    logt = np.log(target)
+    mu = -(logt - logt.mean()) / 2.0
+    totvar = structure_variances(structure)
+    alpha, last = 0.7, np.inf
+    for _ in range(n_iter):
+        phat = dispatch_probabilities(mu, structure, points=points)
+        resid = np.log(np.maximum(phat, 1e-300)) - logt
+        err = np.abs(resid).max()
+        if err < tol:
+            break
+        if err > last:
+            alpha = max(alpha * 0.5, 0.05)
+        last = err
+        ps, ss = race_probabilities(mu, D=totvar, points=points,
+                                    return_slopes=True)
+        dlogp = np.minimum(ss / np.maximum(ps, 1e-300), -1e-6)
         mu = mu - np.clip(alpha * resid / dlogp, -2.0, 2.0)
         mu -= mu.mean()
     return mu

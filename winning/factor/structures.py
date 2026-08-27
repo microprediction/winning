@@ -143,3 +143,39 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
                                        structure.parent, structure.strength,
                                        points=points, qa=qa)
     raise TypeError(f"unknown structure {type(structure).__name__}")
+
+
+def structure_variances(structure):
+    """Total per-runner variance implied by a grammar structure (shared
+    effects plus idiosyncratic): the marginal the generic inverter's
+    independent surrogate preconditioner matches."""
+    D = np.asarray(structure.D, float)
+    if isinstance(structure, Independent):
+        return D.copy()
+    if isinstance(structure, Factor):
+        V = np.asarray(structure.V, float)
+        return D + (V ** 2).sum(axis=1)
+    if isinstance(structure, Blocks):
+        return D + np.asarray(structure.loading, float) ** 2
+    if isinstance(structure, Nested):
+        tot = D + np.asarray(structure.loading, float) ** 2
+        if structure.coupling is not None and structure.gamma:
+            g = np.atleast_2d(np.asarray(structure.coupling, float))
+            if g.shape[0] != len(D):
+                g = g.T
+            tot = tot + (float(structure.gamma) ** 2) * (g ** 2).sum(axis=1)
+        return tot
+    if isinstance(structure, Tree):
+        tot = D + np.asarray(structure.loading, float) ** 2
+        parent = np.asarray(structure.parent, int)
+        strength = np.asarray(structure.strength, float)
+        cluster = np.asarray(structure.cluster, int)
+        anc = np.zeros(len(strength))
+        for c in range(len(strength)):
+            u, s = c, 0.0
+            while parent[u] >= 0:
+                s += strength[parent[u]] ** 2
+                u = parent[u]
+            anc[c] = s
+        return tot + anc[cluster]
+    raise TypeError(f"unknown structure {type(structure).__name__}")
