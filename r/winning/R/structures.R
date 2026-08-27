@@ -159,7 +159,9 @@ tree_from_linkage <- function(Z) {
     b <- as.integer(Z[k, 2]) + 1L
     t <- n + k
     parent[a] <- t; parent[b] <- t
-    rho[t] <- 1 - 2 * Z[k, 3]^2
+    # floor at zero: the tree race cannot represent negative dependence,
+    # so merges above the h = 1/sqrt(2) horizon leave branches independent
+    rho[t] <- max(1 - 2 * Z[k, 3]^2, 0)
   }
   lam <- numeric(nT)
   for (t in (n + 1L):nT) {

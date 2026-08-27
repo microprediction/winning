@@ -185,3 +185,40 @@ def test_cophenetic_tree_race_identity():
                 anc_j.add(parent[u]); u = parent[u]
             implied[i, j] = sum(lam2[t] for t in anc_i & anc_j)
     assert np.abs(implied - coph).max() < 1e-14
+
+
+def test_from_linkage_floors_negative_cophenetic_correlation():
+    """Merges above the h = 1/sqrt(2) horizon imply NEGATIVE cophenetic
+    correlation, which the tree race cannot represent; from_linkage floors
+    rho at zero. Without the floor, clipping the negative root increment
+    silently inflated implied correlations above one (caught by the
+    general-Sigma control-variate experiment)."""
+    from scipy.cluster.hierarchy import linkage
+    from scipy.spatial.distance import squareform
+    from winning.factor.structures import Tree
+    rng = np.random.default_rng(11)
+    n = 20
+    B = rng.normal(size=(n, 2)) * [0.55, 0.3]
+    S = B @ B.T + 0.5 * np.eye(n)
+    d_ = np.sqrt(np.diag(S)); C = S / np.outer(d_, d_)
+    Z = linkage(squareform(np.sqrt(np.clip(0.5 * (1 - C), 0, 1)),
+                           checks=False), method="average")
+    assert (1.0 - 2.0 * Z[-1, 2] ** 2) < 0    # the premise: negative at root
+    tr = Tree.from_linkage(Z)
+    lam2 = np.asarray(tr.strength) ** 2
+    parent = np.asarray(tr.parent)
+    implied = np.eye(n)
+    for i in range(n):
+        anc_i = set(); u = i
+        while parent[u] >= 0:
+            anc_i.add(parent[u]); u = parent[u]
+        for j in range(n):
+            if j == i:
+                continue
+            anc_j = set(); u = j
+            while parent[u] >= 0:
+                anc_j.add(parent[u]); u = parent[u]
+            implied[i, j] = sum(lam2[t] for t in anc_i & anc_j)
+    assert implied.max() <= 1.0 + 1e-12
+    assert implied.min() >= -1e-12
+    assert np.linalg.eigvalsh(implied).min() > -1e-10

@@ -101,7 +101,13 @@ class Tree:
             a, b, h = int(Z[k, 0]), int(Z[k, 1]), Z[k, 2]
             t = n + k
             parent[a] = t; parent[b] = t
-            rho[t] = 1.0 - 2.0 * h * h
+            # the tree race cannot represent NEGATIVE dependence (its
+            # shared effects contribute nonnegative correlation), so
+            # cophenetic correlations are floored at zero: merges above
+            # the h = 1/sqrt(2) horizon leave their branches independent.
+            # Without the floor, clipping the negative root increment
+            # silently inflates every other implied correlation.
+            rho[t] = max(1.0 - 2.0 * h * h, 0.0)
         lam = np.zeros(nT)
         for t in range(n, nT):
             pa = parent[t]
