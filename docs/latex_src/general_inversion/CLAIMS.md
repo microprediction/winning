@@ -47,3 +47,30 @@ index. Paths are repo-relative.
    0.43 s per probability at maxpts=250k with estimated error 2e-4
    (agreement with the lattice to ~4-5 digits); the lattice prices all
    200 in 25 ms. Six-digit agreement needs multi-second maxpts budgets.
+
+## Ninth review (referee 3), pinned measurements (2026-08-28)
+
+1. Identified-objective fit: `factor_model_projected` minimizes
+   min ||P(Sigma - VV' - diag D)P||_F (ALS; D-step collapsed to its
+   n-dim normal equations, Gram exactly P∘P — 67 s → 0.27 s at n=300,
+   identical minimizer to 1e-14). Packaged one-call:
+   `fit_covariance` / `race_probabilities(cov=)`. In-grammar truths
+   return at the 2e-4 node-noise floor (the raw-residual pipeline
+   scored 1.7e-2 — the bug the ninth review's point 5 flushed out).
+2. Multi-seed ensemble battery: `research/general_sigma/run_ensembles4.py`,
+   20 seeds per ensemble, n=300, 1M-draw MC referee per seed, both arms
+   (raw eigenfit pipeline vs identified pipeline), kernel stratified
+   RBF/Matérn-3/2 × length scale {0.08, 0.2, 0.4} × promoted rank
+   {5, 12}. randomcov pinned at commit 0d27a51.
+3. Per-grammar inversion round trips: `bench.py invert`, n=400.
+   independent 0.04 s, tree 0.37 s, blocks 0.67 s, factor r2 1.7 s,
+   nested 3.7 s; max log-probability residual < 1e-8 in every grammar
+   through the shipped `abilities_from_race(structure=)`.
+4. Per-alternative factor-quadrature comparator (Butler–Moffitt run
+   per alternative): `bench.py bm`, n=200 rank 2. Agrees with the
+   shared field to TV 3e-15 and max log-ratio 3e-10; costs 21.9 s
+   against 36 ms — 601×. Same conditioning, no shared field.
+5. Cross-language fitter parity: R `fit_covariance` matches python's
+   fitted model covariance VV'+diag(D) to 3e-15 on a mixed factor/AR
+   test matrix (priced probabilities differ TV 2e-3: Halton vs Sobol
+   nodes, by design).
