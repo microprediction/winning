@@ -1,0 +1,3 @@
+export(pmvnorm_fast)
+export(factorize_covariance)
+importFrom(stats, pnorm, qnorm, dnorm)
