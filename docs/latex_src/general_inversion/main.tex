@@ -37,9 +37,9 @@ $O(R^{-1/2})$. We observe that
 the choice event is one-dimensional: the probability that alternative $i$
 wins is an integral over the winning value, and one shared survival field
 prices all $n$ alternatives at once. For covariances under which performances
-are conditionally independent given a few shared variables---factor, block,
+are conditionally independent given a few shared variables (factor, block,
 nested and hierarchical structures, the restrictions applied multinomial
-probit imposes in practice---one shared field computes all $n$
+probit imposes in practice), one shared field computes all $n$
 probabilities, and matrix-free Jacobian--vector products, in $O(nLQ)$
 operations over a lattice of $L$ winning values and $Q$ factor quadrature
 nodes, and inverts observed probabilities back to utilities under a fixed,
@@ -182,8 +182,8 @@ folklore. Stata's \texttt{cmmprobit} manual states that the likelihood
 evaluator ``implements the Geweke--Hajivassiliou--Keane (GHK) algorithm to
 approximate the multivariate distribution function''
 \citep{statacorp2023,gates2006}, and the command's entire
-\texttt{intmethod} menu---Hammersley, Halton, or pseudorandom point
-sets---selects only the sequence feeding the same simulator: the
+\texttt{intmethod} menu (Hammersley, Halton, or pseudorandom point
+sets) selects only the sequence feeding the same simulator: the
 market-leading implementation offers no non-GHK method at all. R's
 \texttt{mlogit} and \texttt{mvProbit} default to GHK likewise
 \citep{croissant2020}, and the GHK-based \texttt{mvprobit} of
