@@ -500,8 +500,13 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
     one closed form per node. Because it is analytic wherever the race
     is priced numerically, it is the natural control variate and the
     permanent point of comparison: same mu, same conditioning, the IIA
-    answer next to the correlated one. Heterogeneous Gumbel scales have
-    no closed form; use race_probabilities(..., base="gumbel") there.
+    answer next to the correlated one. Control-variate accounting,
+    measured in research/gumbel_cv: equal-draw variance reduction 3-12x
+    for bases at or near Gumbel, deflating to 1.2-1.8x at equal compute
+    because the coupled twin nearly doubles the simulation loop --
+    worthwhile if you are simulating a near-Gumbel base anyway, not a
+    reason to simulate. Heterogeneous Gumbel scales have no closed
+    form; use race_probabilities(..., base="gumbel") there.
     """
     mu = np.asarray(mu, dtype=float)
     tau = float(temperature)
