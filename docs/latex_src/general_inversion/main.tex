@@ -434,13 +434,76 @@ is exact within a cluster and Gram-approximate across clusters, which suffices
 for Newton because residuals always use the exact forward map.
 Feasibility-critical callers fall back to finite differences.
 
-Inversion recovers mean-zero $\mu$ from a target $p$ with the covariance
-fixed and known: an adaptive damped fixed point on the log residual carries
+The inversion rests on a convex program.
+
+\begin{theorem}[The inverse exists and is unique on contrasts]\label{thm:inverse}
+Fix a covariance of full support (any member of the grammar with every
+$D_i>0$) and let $W(\mu)=\E\min_i(\mu_i+\epsilon_i)$,
+$\epsilon\sim N(0,\Sigma)$. Then $W$ is concave and differentiable with
+$\nabla W(\mu)=p(\mu)$, and its Hessian is $-L(\mu)$, the negative of the
+graph Laplacian whose edge weights are the tie densities \eqref{eq:tie}.
+Every tie density is strictly positive, so $W$ is strictly concave on the
+contrast space $\mathbf{1}^{\perp}$. For any target with $p^{\star}_i>0$
+and $\sum_i p^{\star}_i=1$, the program
+\[
+\max_{\mu}\; W(\mu)-\langle p^{\star},\mu\rangle
+\]
+is constant along $\mathbf{1}$, strictly concave and coercive on
+$\mathbf{1}^{\perp}$, and its unique mean-zero maximiser is the inverse:
+$p(\mu^{\star})=p^{\star}$. If some $p^{\star}_i=0$ the supremum is
+approached only as $\mu_i\to+\infty$; no finite inverse exists, and a
+floored target recovers a lower bound on that $\mu_i$.
+\end{theorem}
+
+\begin{proof}
+A minimum of affine functions of $\mu$ is concave and expectation
+preserves this. Ties have measure zero under full support, so the
+minimiser is almost surely unique and Danskin's theorem gives
+$\partial W/\partial\mu_i=\Pr\{i\ \text{wins}\}$. Differentiating once
+more yields the Jacobian above: off-diagonals \eqref{eq:tie} and zero row
+sums, that is $-L(\mu)$. Full support makes every pairwise tie density
+positive, the tie graph complete, and $L\succ0$ on
+$\mathbf{1}^{\perp}$. Translation invariance
+$W(\mu+c\mathbf{1})=W(\mu)+c$ makes the objective constant along
+$\mathbf{1}$ exactly when the target sums to one. For coercivity take a
+unit contrast $d$: the derivative of $W(td)-t\langle p^{\star},d\rangle$
+in $t$ is $\langle p(td)-p^{\star},d\rangle$, and as $t\to\infty$ the
+race concentrates on $\operatorname{argmin}_i d_i$, so the derivative
+tends to $\min_i d_i-\langle p^{\star},d\rangle$, which is strictly
+negative for interior $p^{\star}$ and nonconstant $d$. A strictly
+concave coercive function attains a unique maximum, where the gradient
+vanishes.
+\end{proof}
+
+The program is the Legendre dual of the social surplus function of
+\citet{mcfadden1981}, and share inversion as a convex problem is
+established territory: \citet{berry1994} inverts market shares in
+logit-family demand, \citet{galichon2022} identify the general random-utility
+inversion with optimal transport, and \citet{chiong2016} compute it by
+linear programming in the discrete case. What the field representation adds
+is not the convex program but its derivatives: the Hessian is the
+tie-density Laplacian of the same field pass, so gauge-fixed Newton runs
+matrix-free at $O(nLQ)$ per iteration.
+
+Identification lives on the same contrast space. Choice probabilities are
+invariant to a common utility shock, so the model depends on $\Sigma$ only
+through $P\Sigma P$ with $P=I-\mathbf{1}\mathbf{1}^{\top}/n$: a factor
+proportional to $\mathbf{1}$, or a tree-root effect applied to every leaf,
+is choice-irrelevant. The fitting target for a dense covariance is
+therefore the projected matrix, and the reference implementation provides
+that fit directly (\texttt{factor\_model\_contrast}); a raw-space fit can
+spend scarce rank reproducing an irrelevant common component. The
+introduction's identified-class sentence is to be read in this sense:
+structured covariance is the estimable and computable restriction on
+$\mathbf{1}^{\perp}$, not a claim that structure exhausts identification.
+
+In practice: an adaptive damped fixed point on the log residual carries
 the iterate into Newton's basin, then Newton steps on
-$\log p(\mu)-\log p^\star$, preconditioned by the own-parameter slopes and
-solved matrix-free, reach $10^{-8}$; targets below the forward map's
-resolution are floored, and the recovered utilities for those entries are
-one-sided bounds. Ignoring known structure at inversion time is
+$\log p(\mu)-\log p^{\star}$, preconditioned by the own-parameter slopes
+and solved matrix-free, reach $10^{-8}$, which
+Theorem~\ref{thm:inverse} makes the solution of a well-posed problem;
+targets below the forward map's resolution are floored, with the
+one-sided bound direction the theorem states. Ignoring known structure at inversion time is
 not a small error: inverting block-generated probabilities under an assumed
 independent model mislocates abilities by up to a fifth of the field's spread.
 
@@ -628,6 +691,9 @@ interface, and a zero-dependency browser port drives a live demonstration at
 \bibitem[Albert and Chib(1993)]{albert1993} J.~H. Albert, S.~Chib.
 Bayesian analysis of binary and polychotomous response data.
 \emph{JASA} 88:669--679, 1993.
+\bibitem[Berry(1994)]{berry1994} S.~Berry.
+Estimating discrete-choice models of product differentiation.
+\emph{RAND Journal of Economics} 25(2):242--262, 1994.
 \bibitem[Botev(2017)]{botev2017} Z.~I. Botev.
 The normal law under linear restrictions: simulation and estimation via minimax
 tilting. \emph{Journal of the Royal Statistical Society B} 79(1):125--148, 2017.
@@ -648,6 +714,9 @@ multinomial probit-based unordered response choice models.
 \bibitem[Cappellari and Jenkins(2003)]{cappellari2003} L.~Cappellari,
 S.~P. Jenkins. Multivariate probit regression using simulated maximum
 likelihood. \emph{Stata Journal} 3(3):278--294, 2003.
+\bibitem[Chiong et al.(2016)]{chiong2016} K.~Chiong, A.~Galichon, M.~Shum.
+Duality in dynamic discrete-choice models.
+\emph{Quantitative Economics} 7(1):83--115, 2016.
 \bibitem[Clark(1961)]{clark1961} C.~E. Clark.
 The greatest of a finite set of random variables.
 \emph{Operations Research} 9:145--162, 1961.
@@ -657,6 +726,9 @@ Estimation of random utility models in R: the mlogit package.
 \bibitem[Cotton(2021)]{cotton2021} P.~Cotton.
 Inferring relative ability from winning probability in multi-entrant contests.
 \emph{SIAM Journal on Financial Mathematics} 12(1):295--317, 2021.
+\bibitem[Galichon and Salani\'e(2022)]{galichon2022} A.~Galichon,
+B.~Salani\'e. Cupid's invisible hand: social surplus and identification in
+matching models. \emph{Review of Economic Studies} 89(5):2600--2629, 2022.
 \bibitem[Gates(2006)]{gates2006} R.~Gates.
 A Mata Geweke--Hajivassiliou--Keane multivariate normal simulator.
 \emph{Stata Journal} 6(2):190--213, 2006.
@@ -685,6 +757,9 @@ random fields. \emph{Journal of the Royal Statistical Society B}
 \bibitem[L\'opez de Prado(2016)]{lopezdeprado2016} M.~L\'opez de Prado.
 Building diversified portfolios that outperform out of sample.
 \emph{Journal of Portfolio Management} 42(4):59--69, 2016.
+\bibitem[McFadden(1981)]{mcfadden1981} D.~McFadden.
+Econometric models of probabilistic choice. In C.~Manski, D.~McFadden,
+eds., \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
 \bibitem[McCulloch and Rossi(1994)]{mcculloch1994} R.~McCulloch, P.~Rossi.
 An exact likelihood analysis of the multinomial probit model.
 \emph{Journal of Econometrics} 64:207--240, 1994.
