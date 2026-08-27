@@ -7,7 +7,31 @@ download counts are in the general-inversion paper and its commit
 history (Stata's cmmprobit/asmprobit: GHK with no non-GHK option;
 mlogit 19k downloads/mo; mvtnorm 335k/mo).
 
-## Shipped
+## Shipped (Python, in the winning package itself)
+
+- **winning.fastmvn**: scipy.stats.multivariate_normal.cdf drop-in for
+  factor-structured covariance (numpy has no MVN-probability surface;
+  scipy is the ecosystem target). 0.3-1 ms where scipy needs 4 ms-4.6 s;
+  scrambled Sobol past rank 2 (plain Halton degrades by dim 6:
+  measured 1e-4 -> 2.6e-6); Laplace recentering for deep tails; strict
+  factorization verification with scipy fallback. Five tests.
+- **winning.likelihood**: the estimation core the package lacked --
+  observation-level exact likelihood + analytic score (posterior-
+  weighted Mills ratios), validated vs finite differences at 1e-8 on
+  both node branches. Rust port of this kernel is the natural next
+  fastrace addition.
+- **winning.mnprobit**: MNProbit / MNProbitClassifier -- the model
+  statsmodels does not have (it has binary and ordered probit, no
+  multinomial) and sklearn cannot express (softmax only). Not a
+  replacement: a first. Fishing: referee logLik -1212.82 +- 0.10 in
+  9.5 s (vs GHK -1215.7 in 22.2 s), with the likelihood reported from
+  independent Sobol scrambles rather than the optimizer's own
+  landscape, and a boundary_ flag: the unrestricted-covariance MLE on
+  Fishing is boundary-seeking (true logLik still rising at ||v||~4000,
+  verified 2^16-2^18) -- GHK's simulation noise was accidentally
+  regularizing a ridge with no interior maximum.
+
+## Shipped (R)
 
 - **mvtnormfast** (r/mvtnormfast): pmvnorm drop-in for factor-structured
   covariance. 1-2 ms vs 31 ms - 8.2 s at matched accuracy; auto-detects

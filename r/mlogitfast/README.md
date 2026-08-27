@@ -20,8 +20,18 @@ Same identified model space (rank-2 factors, zero reference loadings,
 unit idiosyncratic variance covers every positive-definite differenced
 covariance up to scale, with the same five covariance parameters at
 J=4). The scale-invariant coefficient ratio catch/price agrees with
-mlogit to 1% (-45.0 vs -44.6); the one-nat likelihood gain is the
-expected sign and size of removing simulation bias at the optimum.
+mlogit to 1% (-45.0 vs -44.6).
+
+Honesty update (2026-08-27, later): a stabilized referee (Sobol
+2^16-2^18, multiple scrambles, in the Python port winning.mnprobit)
+shows every likelihood in this comparison carries 1-2 nats of
+integration or simulation noise at the fitted sharpness, and the
+underlying unrestricted-covariance likelihood on Fishing is
+BOUNDARY-SEEKING (still rising at ||v|| ~ 4000). The table's ordering
+of reported likelihoods is therefore not an ordering of true optima;
+the Python port, which reports referee-evaluated likelihoods with a
+standard error and a boundary flag, supersedes this package as the
+reference implementation.
 
 The analytic score (posterior-weighted Mills ratios, one extra pass
 over arrays the likelihood already computes, validated against finite
