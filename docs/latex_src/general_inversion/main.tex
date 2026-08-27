@@ -104,7 +104,7 @@ model & covariance grammar & source \\
 \midrule
 Luce / softmax & independent, Gumbel base, $D=\pi^2/6$ & exact identity \\
 Thurstone--Mosteller & independent, normal base & \citet{cotton2021} \\
-factor multinomial probit & $VV'+\mathrm{diag}(D)$ & companion note \\
+factor multinomial probit & $VV'+\mathrm{diag}(D)$ & \S\ref{sec:factor} \\
 teams, conferences & blocks: rank-$r$ effect per cluster & \S\ref{sec:blocks} \\
 market plus sectors & nested: blocks $\times$ global factor & \S\ref{sec:blocks} \\
 hierarchies & tree: uniform shared effects & \S\ref{sec:tree} \\
@@ -131,7 +131,7 @@ $10^6$ & $29$ s & $4{,}100$ years & $4\times10^{9}$ \\
 \end{tabular}
 \end{center}
 
-Sections \ref{sec:alternatives} places the method among the alternatives.
+Section \ref{sec:alternatives} places the method among the alternatives.
 Sections \ref{sec:lattice}--\ref{sec:tree} describe the algorithm: the
 independent lattice race, then the factor, block, nested and tree extensions,
 each with its recursion written out. Section \ref{sec:jac} gives the Jacobian and
@@ -465,9 +465,9 @@ variation. Scrambled-Sobol factor nodes restore reference-level accuracy
 ($4\times10^{-4}$) at the same call: heavy correlation wants
 quasi-Monte-Carlo nodes, not deeper polynomial rules. The default now
 escalates the family automatically past sharpness $3$, in both the Python
-and R ports (Sobol and dependency-free Halton respectively, agreeing to
-$5\times10^{-4}$ on the worst case), with the escalation pinned by
-regression tests; the figures above are the pre-escalation diagnosis.
+and R implementations (scrambled Sobol and Halton respectively), which agree
+to $5\times10^{-4}$ on the worst case; the figures above are the
+pre-escalation diagnosis.
 
 \paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
 covariance, against a $2^{20}$-point QMC reference:
@@ -519,12 +519,12 @@ sits at the statistical floor.
 
 \paragraph{Scale.} The Rust kernels are input-bound: ten million contestants in
 $64$ seconds under the block grammar with a hybrid in-memory and streaming
-field, and $232$ times the speed of the interpreted classic calibration.
+field, and $232$ times the speed of the pure-Python implementation.
 
 \paragraph{Parity.} One vector file embeds the inputs and outputs of
-$22$ scenarios spanning every claim above. Python, R, JavaScript and Rust replay
-them: twenty at machine precision, the optimizer-mediated scenarios to
-$10^{-6}$.
+$22$ scenarios spanning every claim above. The four language implementations of
+\S\ref{sec:avail} replay them: twenty at machine precision, the
+optimizer-mediated scenarios to $10^{-6}$.
 
 \begin{remark}[A portfolio identity]\label{rem:hrp}
 Long-only portfolio weights are race probabilities, and the covariance implicitly
@@ -540,7 +540,7 @@ limits into contest inversions, but portfolio applications are not this paper's
 subject.
 \end{remark}
 
-\section{Availability}
+\section{Availability}\label{sec:avail}
 \texttt{pip install winning} is pure Python; \texttt{winning[fast]} adds the
 Rust kernels as one abi3 wheel per platform. A base-R package mirrors the full
 interface, and a zero-dependency browser port drives a live demonstration at
