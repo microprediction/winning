@@ -113,10 +113,22 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   keep <- colSums(Vall ^ 2) > 1e-10 * sum(diag(C)) / n
   if (!any(keep)) keep[1] <- TRUE
   Vall <- Vall[, keep, drop = FALSE]
-  R2 <- C - Vall %*% t(Vall)
-  rhs <- diag(P %*% R2 %*% P)
-  D <- solve(P * P, rhs)
-  D <- pmax(D, 1e-3 * mean(diag(C)))
+  close_fit <- function(Vc) {
+    rhs <- diag(P %*% (C - Vc %*% t(Vc)) %*% P)
+    Dc <- pmax(solve(P * P, rhs), 1e-3 * mean(diag(C)))
+    Rm <- P %*% (C - Vc %*% t(Vc) - diag(Dc)) %*% P
+    list(D = Dc, res = max(abs(Rm)))
+  }
+  a1 <- close_fit(Vall)
+  # second arm: pure eigen fit at the same total rank (greedy
+  # factor+blocks allocation is the wrong shape for globally smooth
+  # covariance); smaller choice-relevant residual wins, pipeline on ties
+  rank <- ncol(Vall)
+  eC <- eigen(C, symmetric = TRUE)
+  Veig <- eC$vectors[, seq_len(rank), drop = FALSE] *
+    rep(sqrt(pmax(eC$values[seq_len(rank)], 0)), each = n)
+  a2 <- close_fit(Veig)
+  if (a2$res < a1$res) { Vall <- Veig; D <- a2$D } else D <- a1$D
   hw <- .halton_normal_nodes(ncol(Vall), nodes)
   list(V = Vall, D = D, F = hw$F, W = hw$W)
 }
