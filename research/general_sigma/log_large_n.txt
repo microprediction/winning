@@ -1,0 +1,6 @@
+n=2000 r=48 nodes=2048
+fit 0.8s | one-call 4.4s | MC: chol 0.0s + 1000k draws 36.4s
+bulk TV (one-call vs 1M-draw MC, entries p>1e-3): 1.01e-02
+node self-convergence (2^11 vs 2^13 nodes), max abs: 4.55e-04
+tail (p<1e-5): 1563 runners; MC saw ZERO wins for 82% of them; our node-to-node max relative drift 115429026.1%
+smallest resolved probability, one call: 7.3e-95 (MC floor at 1M draws: 1e-6)

@@ -1,0 +1,79 @@
+qm9_gap_seed7 N=1000: reference with 20,000,000 samples
+  312s each; reference vs itself: eta=1.0000 top100=1.000 TV=0.0038
+
+dense MC-qPO (the shipped estimator):
+  M=    10,000     0.11s  eta=0.9168 top100=0.64 TV=0.1186
+  M=    30,000     0.33s  eta=0.9665 top100=0.75 TV=0.0707
+  M=   100,000     1.11s  eta=0.9815 top100=0.82 TV=0.0377
+  M=   300,000     3.25s  eta=0.9958 top100=0.91 TV=0.0226
+  M= 1,000,000    25.01s  eta=0.9984 top100=0.96 TV=0.0131
+  M= 3,000,000    35.68s  eta=0.9993 top100=0.97 TV=0.0080
+  M=10,000,000   195.20s  eta=1.0000 top100=0.99 TV=0.0047
+
+rank 2:
+  fast Q=    32    0.10s  eta=0.9966 top100=0.93 TV=0.0188 selfTV=4.1e-03
+  fast Q=    64    0.20s  eta=0.9956 top100=0.92 TV=0.0187 selfTV=2.7e-03
+  fast Q=   128    0.40s  eta=0.9957 top100=0.92 TV=0.0184 selfTV=7.7e-04
+  fast Q=   256    0.81s  eta=0.9957 top100=0.92 TV=0.0186 selfTV=3.4e-04
+  fast Q=   512    1.63s  eta=0.9957 top100=0.92 TV=0.0186 selfTV=3.1e-04
+  fast Q=  1024    3.26s  eta=0.9957 top100=0.92 TV=0.0186 selfTV=1.0e-04
+  fmc  M=   10,000    0.07s  eta=0.9170 top100=0.62 TV=0.1232
+  fmc  M=   30,000    0.25s  eta=0.9605 top100=0.72 TV=0.0732
+  fmc  M=  100,000    0.80s  eta=0.9837 top100=0.84 TV=0.0429
+  fmc  M=  300,000    2.39s  eta=0.9871 top100=0.85 TV=0.0303
+  fmc  M=1,000,000    7.84s  eta=0.9926 top100=0.89 TV=0.0223
+  fmc  M=3,000,000   23.35s  eta=0.9944 top100=0.91 TV=0.0200
+  fmc  M=10,000,000   88.11s  eta=0.9958 top100=0.92 TV=0.0191
+
+rank 4:
+  fast Q=    32    0.11s  eta=0.9920 top100=0.91 TV=0.0227 selfTV=1.6e-02
+  fast Q=    64    0.22s  eta=0.9959 top100=0.93 TV=0.0191 selfTV=7.6e-03
+  fast Q=   128    0.42s  eta=0.9963 top100=0.93 TV=0.0175 selfTV=5.4e-03
+  fast Q=   256    0.83s  eta=0.9957 top100=0.92 TV=0.0173 selfTV=2.6e-03
+  fast Q=   512    1.68s  eta=0.9963 top100=0.93 TV=0.0172 selfTV=9.3e-04
+  fast Q=  1024    3.30s  eta=0.9973 top100=0.94 TV=0.0172 selfTV=5.4e-04
+  fmc  M=   10,000    0.07s  eta=0.9056 top100=0.60 TV=0.1240
+  fmc  M=   30,000    0.24s  eta=0.9557 top100=0.72 TV=0.0731
+  fmc  M=  100,000    0.82s  eta=0.9820 top100=0.83 TV=0.0435
+  fmc  M=  300,000    2.44s  eta=0.9861 top100=0.84 TV=0.0299
+  fmc  M=1,000,000    8.21s  eta=0.9947 top100=0.90 TV=0.0213
+  fmc  M=3,000,000   24.72s  eta=0.9953 top100=0.92 TV=0.0189
+  fmc  M=10,000,000  137.06s  eta=0.9950 top100=0.92 TV=0.0176
+
+rank 8:
+  fast Q=    32    0.27s  eta=0.9688 top100=0.79 TV=0.0408 selfTV=5.2e-02
+  fast Q=    64    0.41s  eta=0.9846 top100=0.89 TV=0.0262 selfTV=3.1e-02
+  fast Q=   128    0.92s  eta=0.9959 top100=0.94 TV=0.0175 selfTV=1.1e-02
+  fast Q=   256    1.89s  eta=0.9982 top100=0.96 TV=0.0145 selfTV=7.1e-03
+  fast Q=   512    3.96s  eta=0.9968 top100=0.94 TV=0.0139 selfTV=4.1e-03
+  fast Q=  1024    6.31s  eta=0.9968 top100=0.94 TV=0.0135 selfTV=2.3e-03
+  fmc  M=   10,000    0.10s  eta=0.9084 top100=0.56 TV=0.1282
+  fmc  M=   30,000    0.33s  eta=0.9710 top100=0.81 TV=0.0723
+  fmc  M=  100,000    1.09s  eta=0.9800 top100=0.83 TV=0.0411
+  fmc  M=  300,000    3.08s  eta=0.9910 top100=0.91 TV=0.0262
+  fmc  M=1,000,000    7.46s  eta=0.9974 top100=0.95 TV=0.0183
+  fmc  M=3,000,000   22.88s  eta=0.9980 top100=0.96 TV=0.0152
+  fmc  M=10,000,000   78.85s  eta=0.9968 top100=0.94 TV=0.0139
+
+rank 16:
+  fast Q=    32    0.11s  eta=0.9380 top100=0.69 TV=0.0771 selfTV=1.2e-01
+  fast Q=    64    0.21s  eta=0.9779 top100=0.83 TV=0.0383 selfTV=6.0e-02
+  fast Q=   128    0.41s  eta=0.9887 top100=0.87 TV=0.0275 selfTV=4.1e-02
+  fast Q=   256    0.83s  eta=0.9959 top100=0.93 TV=0.0179 selfTV=2.5e-02
+  fast Q=   512    1.66s  eta=0.9965 top100=0.93 TV=0.0146 selfTV=1.5e-02
+  fast Q=  1024    3.32s  eta=0.9971 top100=0.95 TV=0.0107 selfTV=7.9e-03
+  fmc  M=   10,000    0.07s  eta=0.8853 top100=0.51 TV=0.1272
+  fmc  M=   30,000    0.24s  eta=0.9600 top100=0.73 TV=0.0725
+  fmc  M=  100,000    0.81s  eta=0.9837 top100=0.83 TV=0.0401
+  fmc  M=  300,000    2.38s  eta=0.9920 top100=0.90 TV=0.0242
+  fmc  M=1,000,000    8.09s  eta=0.9984 top100=0.96 TV=0.0152
+  fmc  M=3,000,000   24.67s  eta=0.9988 top100=0.96 TV=0.0114
+  fmc  M=10,000,000  127.51s  eta=0.9992 top100=0.97 TV=0.0096
+
+independence baselines:
+  qPO-independent-exact      0.0077s  eta=0.9178 top100=0.60 TV=0.0857
+  F-LITE                     0.0007s  eta=0.9197 top100=0.61 TV=0.0891
+  A-LITE                     0.0138s  eta=0.9147 top100=0.60 TV=0.0840
+
+wrote /Users/petercotton/github/winning/research/qpo/results/budget_qm9_gap_seed7_N1000.csv
+

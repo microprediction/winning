@@ -1,0 +1,2 @@
+export(mlogit_fast)
+importFrom(stats, pnorm, dnorm, optim, model.matrix)

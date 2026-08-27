@@ -1,0 +1,50 @@
+  eps= 1.0e+00 Q=  256  TV=0.0106 (floor 0.0027)  rel err: bottom-q 0.035 top-q 0.014  n_eff=257
+  eps= 1.0e+00 Q= 1024  TV=0.0031 (floor 0.0027)  rel err: bottom-q 0.023 top-q 0.005  n_eff=257
+  eps= 1.0e+00 Q= 4096  TV=0.0020 (floor 0.0027)  rel err: bottom-q 0.023 top-q 0.003  n_eff=257
+  eps= 3.0e-01 Q=  256  TV=0.0217 (floor 0.0020)  rel err: bottom-q 0.055 top-q 0.027  n_eff=199
+  eps= 3.0e-01 Q= 1024  TV=0.0051 (floor 0.0020)  rel err: bottom-q 0.031 top-q 0.009  n_eff=199
+  eps= 3.0e-01 Q= 4096  TV=0.0020 (floor 0.0020)  rel err: bottom-q 0.035 top-q 0.004  n_eff=199
+  eps= 1.0e-01 Q=  256  TV=0.0367 (floor 0.0016)  rel err: bottom-q 0.149 top-q 0.059  n_eff=127
+  eps= 1.0e-01 Q= 1024  TV=0.0085 (floor 0.0016)  rel err: bottom-q 0.055 top-q 0.019  n_eff=127
+  eps= 1.0e-01 Q= 4096  TV=0.0034 (floor 0.0016)  rel err: bottom-q 0.041 top-q 0.006  n_eff=127
+  eps= 3.0e-02 Q=  256  TV=0.0492 (floor 0.0012)  rel err: bottom-q 0.471 top-q 0.126  n_eff=86
+  eps= 3.0e-02 Q= 1024  TV=0.0144 (floor 0.0012)  rel err: bottom-q 0.140 top-q 0.024  n_eff=86
+  eps= 3.0e-02 Q= 4096  TV=0.0063 (floor 0.0012)  rel err: bottom-q 0.073 top-q 0.013  n_eff=86
+  eps= 1.0e-02 Q=  256  TV=0.0579 (floor 0.0011)  rel err: bottom-q 0.876 top-q 0.116  n_eff=64
+  eps= 1.0e-02 Q= 1024  TV=0.0192 (floor 0.0011)  rel err: bottom-q 0.329 top-q 0.029  n_eff=64
+  eps= 1.0e-02 Q= 4096  TV=0.0083 (floor 0.0011)  rel err: bottom-q 0.237 top-q 0.012  n_eff=64
+  eps= 3.0e-03 Q=  256  TV=0.0635 (floor 0.0010)  rel err: bottom-q 0.998 top-q 0.075  n_eff=57
+  eps= 3.0e-03 Q= 1024  TV=0.0224 (floor 0.0010)  rel err: bottom-q 0.790 top-q 0.023  n_eff=57
+  eps= 3.0e-03 Q= 4096  TV=0.0096 (floor 0.0010)  rel err: bottom-q 0.416 top-q 0.013  n_eff=57
+  eps= 1.0e-03 Q=  256  TV=0.0672 (floor 0.0009)  rel err: bottom-q 0.997 top-q 0.078  n_eff=51
+  eps= 1.0e-03 Q= 1024  TV=0.0237 (floor 0.0009)  rel err: bottom-q 0.991 top-q 0.020  n_eff=51
+  eps= 1.0e-03 Q= 4096  TV=0.0106 (floor 0.0009)  rel err: bottom-q 0.495 top-q 0.020  n_eff=51
+  eps= 1.0e-04 Q=  256  TV=0.0717 (floor 0.0009)  rel err: bottom-q 1.000 top-q 0.077  n_eff=49
+  eps= 1.0e-04 Q= 1024  TV=0.0263 (floor 0.0009)  rel err: bottom-q 1.000 top-q 0.027  n_eff=49
+  eps= 1.0e-04 Q= 4096  TV=0.0132 (floor 0.0009)  rel err: bottom-q 0.684 top-q 0.021  n_eff=49
+
+wrote /Users/petercotton/github/winning/research/qpo/results/degeneracy.csv
+
+TV against the reference, by eps and node count:
+nodes    256    1024   4096
+eps                        
+0.0001 0.0717 0.0263 0.0132
+0.0010 0.0672 0.0237 0.0106
+0.0030 0.0635 0.0224 0.0096
+0.0100 0.0579 0.0192 0.0083
+0.0300 0.0492 0.0144 0.0063
+0.1000 0.0367 0.0085 0.0034
+0.3000 0.0217 0.0051 0.0020
+1.0000 0.0106 0.0031 0.0020
+
+ratio of bottom-quartile to top-quartile relative error (1.0 = error independent of p, the headline property):
+nodes   256   1024  4096
+eps                     
+0.0001 12.93 37.26 32.14
+0.0010 12.86 50.48 24.43
+0.0030 13.36 34.44 32.76
+0.0100  7.58 11.33 19.86
+0.0300  3.75  5.76  5.59
+0.1000  2.54  2.94  6.78
+0.3000  2.03  3.46  9.78
+1.0000  2.47  4.95  9.28

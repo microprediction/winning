@@ -9,20 +9,18 @@
 #' @return list with matrix F (nodes x k) and vector W of weights
 #' @export
 hermite_nodes <- function(k, order = 15, prune = 1e-7) {
-  off <- sqrt(seq_len(order - 1))
-  J <- matrix(0, order, order)
-  J[cbind(seq_len(order - 1), seq_len(order - 1) + 1)] <- off
-  J[cbind(seq_len(order - 1) + 1, seq_len(order - 1))] <- off
-  e <- eigen(J, symmetric = TRUE)
-  x1 <- e$values
-  w1 <- e$vectors[1, ]^2
-  grids <- do.call(expand.grid, rep(list(x1), k))
-  wgrid <- do.call(expand.grid, rep(list(w1), k))
-  W <- apply(as.matrix(wgrid), 1, prod)
+  h <- .hermite1(order)
+  x1 <- h$nodes
+  w1 <- h$weights
+  if (k == 1) return(list(F = matrix(x1, ncol = 1), W = w1))
+  # match the reference ordering (first coordinate slowest); prune the
+  # product grid WITHOUT renormalizing, exactly as the reference
+  idx <- as.matrix(do.call(expand.grid, rep(list(seq_along(x1)), k)))[, k:1,
+                                                                     drop = FALSE]
+  F <- matrix(x1[idx], nrow(idx), k)
+  W <- apply(matrix(w1[idx], nrow(idx), k), 1, prod)
   keep <- W > prune * max(W)
-  F <- as.matrix(grids)[keep, , drop = FALSE]
-  W <- W[keep]
-  list(F = unname(F), W = W / sum(W))
+  list(F = unname(F[keep, , drop = FALSE]), W = W[keep])
 }
 
 #' All win probabilities of a factor Gaussian race (min wins)
@@ -132,57 +130,4 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
     mu <- mu - mean(mu)
   }
   mu
-}
-
-
-#' All win probabilities of a race, tier-1 name (min wins)
-#'
-#' The package's front door, matching the Python API: an alias of
-#' \code{\link{win_probabilities_factor}} in which V and D are optional
-#' (omitting both gives the classic independent race with unit
-#' variances). Gaussian base only in R.
-#'
-#' @param mu vector of locations (length N); lower is better
-#' @param V optional N x k matrix of factor loadings
-#' @param D optional vector of idiosyncratic variances (default 1)
-#' @param nodes optional list(F, W) of factor nodes
-#' @param points lattice size L (default 501)
-#' @return vector of win probabilities summing to one
-#' @export
-race_probabilities <- function(mu, V = NULL, D = NULL, nodes = NULL,
-                               points = 501) {
-  N <- length(mu)
-  if (is.null(V)) {
-    V <- matrix(0, N, 1)
-    nodes <- list(F = matrix(0, 1, 1), W = 1)
-  }
-  if (is.null(D)) D <- rep(1, N)
-  win_probabilities_factor(mu, V, D, nodes = nodes, points = points)
-}
-
-#' Calibrate abilities from observed shares, tier-1 name
-#'
-#' Alias of \code{\link{abilities_from_probabilities_factor}} with
-#' optional V and D, matching the Python \code{calibrate_abilities}.
-#'
-#' @param p vector of positive target shares (normalized internally)
-#' @param V optional N x k matrix of factor loadings
-#' @param D optional vector of idiosyncratic variances (default 1)
-#' @param nodes optional list(F, W) of factor nodes
-#' @param n_iter maximum Newton iterations (default 50)
-#' @param tol convergence tolerance (default 1e-6)
-#' @param points lattice size L (default 501)
-#' @return mean-zero ability vector (min-wins convention)
-#' @export
-calibrate_abilities <- function(p, V = NULL, D = NULL, nodes = NULL,
-                                n_iter = 50, tol = 1e-6, points = 501) {
-  N <- length(p)
-  if (is.null(V)) {
-    V <- matrix(0, N, 1)
-    nodes <- list(F = matrix(0, 1, 1), W = 1)
-  }
-  if (is.null(D)) D <- rep(1, N)
-  abilities_from_probabilities_factor(p, V, D, nodes = nodes,
-                                      n_iter = n_iter, tol = tol,
-                                      points = points)
 }

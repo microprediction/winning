@@ -1,0 +1,286 @@
+#### problems: 92  rows: 4480
+
+#### MEDIAN VRF by method x n (all families/regimes)
+nn                        50    250   1000
+method                                    
+logit_commonz             1.04  0.84  0.71
+iid_procrustes            1.08  0.86  0.71
+diag_procrustes           1.14  0.94  0.74
+lowrank1_procrustes       1.40  1.06  0.87
+lowrank2_procrustes       1.94  1.27  0.95
+lowrank4_procrustes       3.67  1.73  0.97
+lowrank8_procrustes       5.14  2.20  1.16
+lowrank16_procrustes     10.50   NaN   NaN
+rb                        1.59  1.38  1.75
+rb_lowrank4_procrustes   11.99  4.82  2.50
+rb_lowrank8_procrustes   43.93  7.52  3.50
+rb_lowrank16_procrustes  55.04   NaN   NaN
+
+#### MEDIAN winner agreement by method x n
+nn                        50     250    1000
+method                                      
+logit_commonz            0.759  0.602  0.350
+iid_procrustes           0.762  0.603  0.353
+diag_procrustes          0.795  0.608  0.365
+lowrank1_procrustes      0.821  0.696  0.436
+lowrank2_procrustes      0.839  0.726  0.481
+lowrank4_procrustes      0.919  0.825  0.501
+lowrank8_procrustes      0.964  0.861  0.578
+lowrank16_procrustes     0.975    NaN    NaN
+rb                         NaN    NaN    NaN
+rb_lowrank4_procrustes     NaN    NaN    NaN
+rb_lowrank8_procrustes     NaN    NaN    NaN
+rb_lowrank16_procrustes    NaN    NaN    NaN
+
+#### VRF by family (median over regimes, n) for key methods
+method        logit_commonz  lowrank4_procrustes  lowrank8_procrustes   rb  rb_lowrank4_procrustes  rb_lowrank8_procrustes
+family                                                                                                                    
+asymmetric              1.5                 15.7                 24.2  1.5                    55.2                    71.9
+clustered               0.9                  1.2                  1.9  1.3                     1.9                     3.3
+clustered5              0.8                  3.7                 25.1  1.6                     9.1                   161.1
+dense                   1.0                  1.2                  1.2  1.2                     1.6                     1.6
+factor                  0.7                 42.5                 31.9  2.9                  2064.2                  1199.0
+nearsingular            0.7                  0.8                  0.9  1.3                     1.3                     1.5
+spectral0.25            2.8                  5.8                  7.3  1.2                    18.1                    28.4
+spectral0.5             1.6                  2.7                  3.7  1.3                     7.1                    11.7
+spectral1               0.8                  1.5                  1.9  2.0                     4.4                     7.3
+spectral2               0.6                  1.6                  2.5  3.6                     8.8                    18.5
+
+#### n=1000 detail (VRF | agreement)
+method                        diag_procrustes  iid_procrustes  logit_commonz  lowrank1_procrustes  lowrank2_procrustes  lowrank4_procrustes  lowrank8_procrustes   rb  rb_lowrank4_procrustes  rb_lowrank8_procrustes
+key                                                                                                                                                                                                                  
+clustered5_diffuse_n1000_s0               0.9             0.8            0.8                  1.0                  1.2                  2.8                 16.3  1.6                     8.1                    90.4
+clustered5_moderate_n1000_s0              0.8             0.8            0.8                  1.0                  1.2                  2.9                 26.1  1.7                     8.3                   192.9
+clustered_diffuse_n1000_s0                1.0             0.8            0.8                  1.0                  1.0                  1.1                  1.2  1.3                     1.7                     1.9
+clustered_moderate_n1000_s0               1.0             0.8            0.8                  1.0                  1.0                  1.0                  1.1  1.3                     1.7                     1.9
+dense_diffuse_n1000_s0                    0.8             0.8            0.8                  0.8                  0.8                  0.8                  0.8  1.1                     1.0                     1.0
+dense_moderate_n1000_s0                   0.9             0.9            0.9                  0.9                  0.9                  0.9                  0.9  1.1                     1.1                     1.1
+factor_diffuse_n1000_s0                   0.7             0.7            0.7                  0.9                  1.3                 21.7                 21.1  2.9                   803.6                   761.9
+factor_moderate_n1000_s0                  0.7             0.7            0.7                  0.9                  1.8                 36.4                 34.5  2.8                   887.8                  1408.3
+spectral1_diffuse_n1000_s0                0.6             0.6            0.6                  0.7                  0.7                  0.7                  0.8  2.0                     1.7                     2.0
+spectral1_moderate_n1000_s0               0.7             0.7            0.7                  0.7                  0.8                  0.8                  0.9  1.8                     1.7                     2.0
+spectral2_diffuse_n1000_s0                0.5             0.5            0.5                  0.6                  0.7                  0.8                  1.0  3.8                     3.3                     5.0
+spectral2_moderate_n1000_s0               0.5             0.5            0.5                  0.7                  0.7                  0.9                  1.2  4.1                     3.5                     6.2
+method                        diag_procrustes  iid_procrustes  logit_commonz  lowrank1_procrustes  lowrank2_procrustes  lowrank4_procrustes  lowrank8_procrustes
+key                                                                                                                                                             
+clustered5_diffuse_n1000_s0             0.443           0.368          0.359                0.527                0.610                0.831                0.970
+clustered5_moderate_n1000_s0            0.422           0.376          0.370                0.520                0.601                0.831                0.981
+clustered_diffuse_n1000_s0              0.514           0.394          0.387                0.514                0.528                0.552                0.586
+clustered_moderate_n1000_s0             0.502           0.387          0.382                0.511                0.519                0.534                0.569
+dense_diffuse_n1000_s0                  0.382           0.382          0.380                0.382                0.382                0.384                0.388
+dense_moderate_n1000_s0                 0.440           0.441          0.435                0.442                0.443                0.444                0.447
+factor_diffuse_n1000_s0                 0.256           0.249          0.248                0.429                0.629                0.977                0.977
+factor_moderate_n1000_s0                0.348           0.339          0.341                0.513                0.754                0.988                0.987
+spectral1_diffuse_n1000_s0              0.204           0.196          0.196                0.244                0.275                0.325                0.392
+spectral1_moderate_n1000_s0             0.271           0.263          0.262                0.313                0.349                0.401                0.454
+spectral2_diffuse_n1000_s0              0.118           0.082          0.081                0.189                0.265                0.392                0.529
+spectral2_moderate_n1000_s0             0.151           0.124          0.125                0.308                0.367                0.468                0.624
+
+#### H1 share matching: same-mu logit (best tau) vs shifted logit, same coupling<stdin>:36: UserWarning: This pattern is interpreted as a regular expression, and has match groups. To actually get the groups, use str.extract.
+
+       samemu_best  shifted
+count        92.00    92.00
+mean          1.03     1.12
+std           0.48     0.68
+min           0.50     0.52
+25%           0.74     0.74
+50%           0.99     0.86
+75%           1.01     1.15
+max           3.37     3.90
+shifted > samemu on 57 of 92
+
+#### H3 coupling: independent vs common vs procrustes (lowrank4 + iid), median VRF
+ref          iid  lowrank
+coupling                 
+Qopt         NaN     5.84
+common      0.75     1.20
+indep       0.50     0.50
+procrustes  1.11     3.02
+
+#### sqrt kind (lowrank4 common vs procrustes), median VRF
+                  vrf
+sqrt coupling        
+chol common      0.74
+     procrustes  2.29
+eig  common      0.50
+     procrustes  2.30
+sym  common      1.70
+     procrustes  3.95
+
+#### Qopt hill-climb vs procrustes (fresh-sample VRF)
+count    88.000
+mean      0.978
+std       0.106
+min       0.461
+25%       0.954
+50%       0.985
+75%       1.014
+max       1.389
+dtype: float64
+
+#### beta regression vs beta=1 (lowrank4 one-hot + rb), ratio of VRF
+lowrank4_common_beta       median x1.12  worst x1.00 best x1.66 (N=92)
+rb_lowrank4_common_beta    median x1.92  worst x1.00 best x2.89 (N=92)
+logit_commonz_beta         median x1.41  worst x1.07 best x1.91 (N=92)
+
+#### bias check: |mean control residual|_1 vs its se (should be comparable)
+count    276.00
+mean       3.88
+std        6.43
+min        0.44
+25%        0.90
+50%        1.19
+75%        3.00
+max       45.88
+dtype: float64
+
+#### INVERSION (n=50): median share_l1 by method x M, with surrogate baseline
+surrogate median share_l1: 0.0271
+M                       64      256     1024    4096
+method                                              
+diag_shift            0.0401  0.0385  0.0324  0.0326
+iid_shift             0.0326  0.0329  0.0338  0.0319
+logit_samemu          0.3138  0.1089  0.0417  0.0331
+logit_shift           0.0326  0.0401  0.0331  0.0328
+lowrank_local         0.1066  0.0647  0.0386  0.0324
+lowrank_samemu        0.0315  0.0326  0.0326  0.0332
+lowrank_samemu_r8     0.0233  0.0233  0.0233  0.0233
+lowrank_shift         0.0314  0.0326  0.0326  0.0327
+lowrank_shift_r8      0.0233  0.0233  0.0233  0.0233
+multi                 0.0432  0.0356  0.0318  0.0313
+multi_r8              0.0233  0.0233  0.0233  0.0233
+raw                   0.0408  0.0415  0.0421  0.0337
+raw_r8                0.0256  0.0250  0.0282  0.0244
+rb                    0.0701  0.0417  0.0375  0.0325
+rb_lowrank_local      0.0653  0.0403  0.0348  0.0284
+rb_lowrank_samemu     0.0328  0.0315  0.0318  0.0272
+rb_lowrank_samemu_r8  0.0231  0.0235  0.0237  0.0239
+rb_lowrank_shift      0.0330  0.0343  0.0319  0.0272
+rb_lowrank_shift_r8   0.0230  0.0236  0.0238  0.0240
+rb_multi              0.0406  0.0359  0.0320  0.0270
+rb_multi_r8           0.0234  0.0236  0.0238  0.0240
+rb_r8                 0.0270  0.0312  0.0263  0.0230
+
+median ratio share_l1 / surrogate share_l1
+M                      64     256    1024   4096
+method                                          
+diag_shift            1.000  1.000  1.000  0.996
+iid_shift             1.000  1.000  1.000  0.995
+logit_samemu          6.365  2.695  1.030  1.014
+logit_shift           1.000  1.000  1.000  1.000
+lowrank_local         2.885  1.624  1.155  0.996
+lowrank_samemu        1.000  1.000  1.000  0.968
+lowrank_samemu_r8     0.799  0.799  0.799  0.799
+lowrank_shift         1.000  1.000  1.000  0.965
+lowrank_shift_r8      0.799  0.799  0.799  0.797
+multi                 1.000  1.003  0.999  0.961
+multi_r8              0.799  0.799  0.799  0.798
+raw                   1.000  1.000  1.078  0.995
+raw_r8                0.799  0.799  0.849  0.783
+rb                    1.712  1.153  1.043  0.979
+rb_lowrank_local      1.836  1.178  1.016  0.931
+rb_lowrank_samemu     1.000  0.985  0.968  0.911
+rb_lowrank_samemu_r8  0.781  0.774  0.752  0.750
+rb_lowrank_shift      1.000  0.995  0.957  0.915
+rb_lowrank_shift_r8   0.780  0.773  0.743  0.748
+rb_multi              1.021  1.002  0.961  0.893
+rb_multi_r8           0.778  0.772  0.743  0.748
+rb_r8                 1.021  1.138  0.998  0.826
+
+median seconds / samples per inversion
+M                      64     256    1024   4096
+method                                          
+diag_shift             0.00   0.00   0.01   0.03
+iid_shift              0.00   0.00   0.00   0.02
+logit_samemu           0.00   0.01   0.01   0.04
+logit_shift            0.00   0.00   0.00   0.05
+lowrank_local         24.76  23.81  19.06  21.58
+lowrank_samemu         0.47   0.95   1.62   3.72
+lowrank_samemu_r8      0.46   0.46   0.46   0.92
+lowrank_shift          0.00   0.00   0.00   0.02
+lowrank_shift_r8       0.00   0.00   0.00   0.01
+multi                  0.00   0.01   0.03   0.17
+multi_r8               0.00   0.01   0.03   0.14
+raw                    0.00   0.00   0.00   0.02
+raw_r8                 0.00   0.00   0.00   0.01
+rb                     0.00   0.00   0.00   0.03
+rb_lowrank_local      23.98  23.19  21.28  19.90
+rb_lowrank_samemu      2.59   3.27   2.81   3.09
+rb_lowrank_samemu_r8   6.59   5.15   4.30   3.62
+rb_lowrank_shift       0.00   0.00   0.02   0.07
+rb_lowrank_shift_r8    0.00   0.00   0.01   0.07
+rb_multi               0.00   0.01   0.04   0.16
+rb_multi_r8            0.00   0.01   0.03   0.12
+rb_r8                  0.00   0.00   0.00   0.02
+
+#### distance summary: VRF at t=0 vs t=0.4 vs t=1.6 (median over problems)
+t             0.00   0.05   0.10   0.20   0.40   0.80   1.60
+method                                                      
+combined      5.12   4.71   4.50   4.11   3.58   3.34   3.49
+fixed         4.55   4.01   3.23   1.86   1.16   0.67   0.34
+local         3.45   3.44   3.59   3.50   3.14   3.05   3.29
+raw           1.00   1.00   1.00   1.00   1.00   1.00   1.00
+rb            1.61   1.60   1.61   1.62   1.67   1.92   2.11
+rb_combined  12.33  10.97  10.26   9.62   9.77  13.39  21.11
+rb_fixed     11.43   9.79   7.49   4.75   2.67   1.43   0.52
+rb_local      7.81   7.88   8.45   8.72   9.05  12.96  20.97
+rb_stale     11.43  11.24  11.28  10.71  10.75  12.47  19.76
+stale         4.55   4.54   4.47   4.04   3.45   3.09   2.94
+
+#### jacobian: fro rel err
+method  ref_only  ref_plus_correction  ref_plus_correction_indep  target_only
+M                                                                            
+16         0.081                1.732                      2.132        1.560
+64         0.081                1.231                      1.184        0.944
+256        0.081                0.653                      0.628        0.515
+
+#### variance vs M: slope check (tr_cov * M should be flat) and bias floor
+M                    8       16      32      64      128     256     512     1024
+method                                                                           
+logit_shift        0.7326  0.8067  0.7065  0.7651  0.7169  0.7810  0.7816  0.7770
+lowrank4_shift     0.2206  0.2071  0.1932  0.2072  0.1991  0.1987  0.1987  0.2096
+raw                0.7461  0.7559  0.7401  0.7493  0.7350  0.7599  0.7400  0.7489
+rb                 0.5278  0.5053  0.5070  0.5025  0.5127  0.5487  0.4534  0.5105
+rb_lowrank4_shift  0.1009  0.1031  0.0940  0.0995  0.1035  0.0988  0.0994  0.1125
+M                                              8       16      32      64      128     256     512     1024
+key                       method                                                                           
+clustered_moderate_n50_s0 logit_shift        0.5712  0.4981  0.3775  0.2984  0.2202  0.1627  0.1195  0.0846
+                          lowrank4_shift     0.1988  0.1731  0.1406  0.1247  0.1012  0.0774  0.0568  0.0427
+                          raw                0.8784  0.6471  0.4727  0.3356  0.2434  0.1678  0.1223  0.0851
+                          rb                 0.6743  0.4927  0.3622  0.2562  0.1824  0.1340  0.0947  0.0676
+                          rb_lowrank4_shift  0.1621  0.1430  0.1135  0.0937  0.0732  0.0534  0.0401  0.0302
+dense_moderate_n50_s0     logit_shift        0.4850  0.4250  0.3816  0.3130  0.2439  0.1824  0.1365  0.1011
+                          lowrank4_shift     0.4188  0.3675  0.3234  0.2581  0.2080  0.1627  0.1208  0.0867
+                          raw                0.8871  0.6888  0.5436  0.3977  0.2849  0.2049  0.1481  0.1051
+                          rb                 0.7663  0.5765  0.4287  0.3216  0.2323  0.1699  0.1152  0.0849
+                          rb_lowrank4_shift  0.3705  0.3149  0.2532  0.1981  0.1550  0.1149  0.0840  0.0607
+factor_moderate_n50_s0    logit_shift        0.5900  0.4806  0.3881  0.2823  0.2064  0.1506  0.1089  0.0791
+                          lowrank4_shift     0.0162  0.0125  0.0169  0.0163  0.0144  0.0130  0.0125  0.0120
+                          raw                0.6883  0.4951  0.3672  0.2683  0.1993  0.1441  0.0997  0.0704
+                          rb                 0.4419  0.3130  0.2212  0.1663  0.1207  0.0849  0.0594  0.0427
+                          rb_lowrank4_shift  0.0118  0.0112  0.0104  0.0103  0.0101  0.0100  0.0098  0.0098
+
+#### per-draw wall-clock cost (bench_cost.log, factor family)
+
+factor n=250 rank4: setup 115s = 58.69M raw-draw equivalents
+  raw               2 us/draw  cost-ratio vs raw 1.00
+  rb               11 us/draw  cost-ratio vs raw 5.78
+  onehot_cv        13 us/draw  cost-ratio vs raw 6.49
+  rb_cv            22 us/draw  cost-ratio vs raw 11.40
+
+factor n=1000 rank4: setup 433s = 29.22M raw-draw equivalents
+  raw              15 us/draw  cost-ratio vs raw 1.00
+  rb               33 us/draw  cost-ratio vs raw 2.21
+  onehot_cv        31 us/draw  cost-ratio vs raw 2.11
+  rb_cv            75 us/draw  cost-ratio vs raw 5.07
+
+#### rank-8+diagonal fit: off-diagonal energy left uncopied (projected covariance)
+factor n=1000: 0.00 | clustered5 n=1000: 0.00 | spectral2 n=250: 0.02 |
+spectral0.25 n=250: 0.68 (but off-diag small absolutely) | clustered n=1000: 0.81 | dense n=1000: 0.97
+
+#### bench_cost final block (clustered5 n=1000 rank8)
+clustered5 n=1000 rank8: setup 368s = 22.19M raw-draw equivalents
+  raw              17 us/draw  cost-ratio vs raw 1.00
+  rb               35 us/draw  cost-ratio vs raw 2.11
+  onehot_cv        36 us/draw  cost-ratio vs raw 2.17
+  rb_cv           122 us/draw  cost-ratio vs raw 7.39

@@ -1,0 +1,8 @@
+
+(VRF = variance reduction factor vs plain MC at equal draws; unbiased by construction)
+dense_onion    M=  64 alpha=0.38  sd 9.48e-03 (plain 2.63e-03)  VRF     0.1  VRF/cost     0.0  maxbias 9.5e-03  t 1.03s vs 0.000s
+dense_onion    M= 256 alpha=0.38  sd 5.17e-03 (plain 2.63e-03)  VRF     0.3  VRF/cost     0.0  maxbias 2.4e-03  t 4.61s vs 0.000s
+sample_T60     M=  64 alpha=0.24  sd 1.20e-02 (plain 2.49e-03)  VRF     0.0  VRF/cost     0.0  maxbias 6.1e-03  t 1.10s vs 0.000s
+sample_T60     M= 256 alpha=0.24  sd 5.82e-03 (plain 2.49e-03)  VRF     0.2  VRF/cost     0.0  maxbias 7.1e-03  t 4.60s vs 0.000s
+factor_sparse  M=  64 alpha=0.00  sd 1.98e-02 (plain 2.64e-03)  VRF     0.0  VRF/cost     0.0  maxbias 1.2e-02  t 0.43s vs 0.000s
+factor_sparse  M= 256 alpha=0.00  sd 9.04e-03 (plain 2.64e-03)  VRF     0.1  VRF/cost     0.0  maxbias 8.9e-03  t 1.66s vs 0.000s

@@ -1,0 +1,12 @@
+index 112s  (stored: 16 code bytes + 2 floats per vector)
+kappa = 0.0378  (isotropic prediction ~ 4/128 * ||q||^2 = 0.0312)
+truth 36s
+
+race overhead 42.0 ms/query
+ target  mean m  med m   p90    max  coverage
+   0.90    58.1     47   117    305     0.992
+   0.95   107.3     88   214    538     0.998
+   0.99   310.9    258   610   1330     0.998
+
+debiased fixed-depth coverage: m=4: 0.684  m=8: 0.804  m=16: 0.882  m=32: 0.942  m=64: 0.976
+oracle fixed depth: 0.90: m=21  0.95: m=43  0.99: m=140

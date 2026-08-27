@@ -1,0 +1,273 @@
+"""Polish a race onto linear constraints: the concentration primitive.
+
+The portfolio-facing problem (allocation's "transport"): weights ARE race
+probabilities, and finance imposes linear constraints on them -- a cap per
+name, a cap per sector/group, a floor. Clipping and renormalising breaks
+model-consistency; the right object is the NEAREST RACE satisfying the
+constraints:
+
+    minimise   ||mu - mu0||^2   over abilities mu (mean-zero gauge)
+    subject to a_k . p(mu) <= b_k          for each cap (>= for floors)
+
+where p(mu) = race_probabilities(mu, V, D, ...). The result is exactly a
+race of the same model -- same covariance story, same base -- with the
+concentration limits active only where they bind. Everything runs on the
+exact Jacobian dp/dmu, assembled from the same shared-field pass as the
+race itself.
+
+Conventions follow races.py: MIN-wins abilities, base in {normal, gumbel},
+V/D/F/W as in race_probabilities.
+"""
+from __future__ import annotations
+
+import numpy as np
+
+from .races import race_probabilities, abilities_from_race, _setup
+
+
+def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
+                  points=501):
+    """Exact J[i, j] = d p_i / d mu_j for the general race, one field pass.
+
+    Off-diagonal, per factor node, J is a GRAM over the lattice:
+        J_ij = sum_a w_a int f_i f_j exp(L - logS_i - logS_j) dx,
+    with L = sum_k logS_k -- so per node it is U U' with
+    U = f * exp(L/2 - logS). Rows sum to zero (a common shift moves
+    nothing), which sets the diagonal. Raising mu_j (slower j, min-wins)
+    raises every other p_i: off-diagonals are positive.
+    """
+    mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
+    sd = np.sqrt(D)
+    n = len(mu)
+    M_all = mu[None, :] + F @ V.T
+    x = np.linspace(M_all.min() - left * sd.max(),
+                    M_all.max() + right * sd.max(), points)
+    dx = x[1] - x[0]
+    J = np.zeros((n, n))
+    chunk = max(1, int(5e6 / (n * points)))
+    for a in range(0, len(F), chunk):
+        M = M_all[a:a + chunk]
+        Wc = W[a:a + chunk]
+        z = (x[None, None, :] - M[:, :, None]) / sd[None, :, None]
+        S, f, _ = fn(z)
+        f = f / sd[None, :, None]
+        logS = np.log(S)
+        logf = np.log(np.maximum(f, 1e-300))
+        L = logS.sum(axis=1)                                   # (chunk, points)
+        # pair integrand f_i f_j prod_{k != i,j} S_k, factored STABLY as
+        # [f_i prod_{k != i} S_k] * [f_j / S_j]: the first is bounded by f,
+        # the second is the hazard, which grows only polynomially. (The
+        # symmetric square-root split overflows where S vanishes.)
+        P1 = np.exp(np.clip(logf + L[:, None, :] - logS, -745.0, 40.0))
+        P2 = np.exp(np.clip(logf - logS, -745.0, 40.0))
+        for q in range(P1.shape[0]):
+            J += Wc[q] * (P1[q] @ P2[q].T) * dx
+    total = race_probabilities(np.asarray(mu, float), V=V, D=D, F=F, W=W,
+                               base=base, points=points)
+    # J currently holds the off-diagonal integrals (its diagonal entries are
+    # int f_i^2 e^{L - 2 logS_i}, which are NOT dp_i/dmu_i): overwrite the
+    # diagonal from the zero-row-sum identity, then normalise as p is.
+    np.fill_diagonal(J, 0.0)
+    np.fill_diagonal(J, -J.sum(axis=1))
+    # p was normalised by its lattice total; apply the same projection:
+    # d(p/T)/dmu = (J - p 1'J)/T with T ~ 1; the correction is second order
+    # and the zero-sum structure is already exact, so return J as is.
+    return J
+
+
+def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
+                      points=257):
+    """One row of the race Jacobian: d p_y / d mu_j for all j, one field
+    pass (the estimation score needs only the observed alternative's row,
+    not the full matrix). Same pair factorization as race_jacobian with
+    i fixed at y; rows sum to zero."""
+    mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
+    sd = np.sqrt(D)
+    n = len(mu)
+    M_all = mu[None, :] + F @ V.T
+    x = np.linspace(M_all.min() - left * sd.max(),
+                    M_all.max() + right * sd.max(), points)
+    dx = x[1] - x[0]
+    row = np.zeros(n)
+    for q in range(len(F)):
+        z = (x[None, :] - M_all[q][:, None]) / sd[:, None]
+        S, f, _ = fn(z)
+        f = f / sd[:, None]
+        logS = np.log(S)
+        L = logS.sum(axis=0)
+        logf = np.log(np.maximum(f, 1e-300))
+        P1y = np.exp(np.clip(logf[y] + L - logS[y], -745.0, 40.0))
+        P2 = np.exp(np.clip(logf - logS, -745.0, 40.0))
+        row += W[q] * (P2 @ P1y) * dx
+    row[y] = 0.0
+    row[y] = -row.sum()
+    return row
+
+
+def concentration_matrix(n, name_caps=None, groups=None):
+    """Assemble (A, b) rows for caps: A p <= b.
+
+    name_caps : scalar or length-n array -- per-name weight caps (NaN/None
+                entries skipped)
+    groups    : iterable of (indices, cap) -- group/sector concentration caps
+    """
+    rows, bs = [], []
+    if name_caps is not None:
+        caps = np.broadcast_to(np.asarray(name_caps, float), (n,))
+        for i in range(n):
+            if np.isfinite(caps[i]):
+                r = np.zeros(n); r[i] = 1.0
+                rows.append(r); bs.append(float(caps[i]))
+    if groups is not None:
+        for idx, cap in groups:
+            r = np.zeros(n); r[np.asarray(idx, int)] = 1.0
+            rows.append(r); bs.append(float(cap))
+    if not rows:
+        return np.zeros((0, n)), np.zeros(0)
+    return np.vstack(rows), np.asarray(bs)
+
+
+def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
+                base="normal", points=257, name_caps=None, groups=None,
+                A=None, b=None, tol=1e-9, max_iter=60, structure=None):
+    """Nearest race satisfying concentration constraints.
+
+    Give either the current weights p0 (inverted to abilities internally) or
+    abilities mu0 directly. Constraints via name_caps/groups (see
+    concentration_matrix) and/or explicit (A, b) with A p <= b. Returns
+    (p, mu, info): a probability vector that IS the race at mu, satisfying
+    the caps, with mu as close to mu0 as the constraints allow.
+
+    Solved by SLSQP on mu with the exact race Jacobian supplying constraint
+    gradients A J(mu); the mean-zero gauge is an equality constraint.
+    """
+    from scipy.optimize import minimize, NonlinearConstraint, LinearConstraint
+    if structure is not None:
+        forward, jac, invert = _structure_engines(structure, points)
+    else:
+        forward = lambda m: race_probabilities(m, V=V, D=D, F=F, W=W,
+                                               base=base, points=points)
+        jac = lambda m: race_jacobian(m, V=V, D=D, F=F, W=W, base=base,
+                                      points=points)
+        invert = lambda p: abilities_from_race(np.asarray(p, float), V=V,
+                                               D=D, F=F, W=W, base=base,
+                                               points=points)
+    if mu0 is None:
+        if p0 is None:
+            raise ValueError("give p0 or mu0")
+        mu0 = invert(np.asarray(p0, float))
+    mu0 = np.asarray(mu0, float) - np.mean(mu0)
+    n = len(mu0)
+    A0, b0 = concentration_matrix(n, name_caps=name_caps, groups=groups)
+    if A is not None:
+        A0 = np.vstack([A0, np.atleast_2d(A)])
+        b0 = np.concatenate([b0, np.atleast_1d(b)])
+    if len(b0) == 0:
+        return forward(mu0), mu0, {"active": [], "nit": 0}
+
+    def p_of(m):
+        return forward(m)
+
+    def cons_f(m):
+        return b0 - A0 @ p_of(m)
+
+    def cons_j(m):
+        return -A0 @ jac(m)
+
+    res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), mu0,
+                   jac=lambda m: m - mu0, method="SLSQP",
+                   constraints=[
+                       NonlinearConstraint(cons_f, 0.0, np.inf, jac=cons_j),
+                       LinearConstraint(np.ones((1, n)), 0.0, 0.0)],
+                   options={"maxiter": max_iter, "ftol": tol})
+    mu = res.x - res.x.mean()
+    p = p_of(mu)
+    slack = b0 - A0 @ p
+    if -slack.min() > 1e-6:
+        # the analytic Jacobian may be approximate (tree: cross-cluster
+        # Gram); if SLSQP converged infeasible, restore feasibility with
+        # exact finite-difference constraint gradients from the current
+        # point -- the forward map is always exact.
+        def cons_j_fd(m, h=1e-6):
+            Jn = np.empty((n, n))
+            for j in range(n):
+                e = np.zeros(n); e[j] = h
+                Jn[:, j] = (p_of(m + e) - p_of(m - e)) / (2 * h)
+            return -A0 @ Jn
+        res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), mu,
+                       jac=lambda m: m - mu0, method="SLSQP",
+                       constraints=[
+                           NonlinearConstraint(cons_f, 0.0, np.inf,
+                                               jac=cons_j_fd),
+                           LinearConstraint(np.ones((1, n)), 0.0, 0.0)],
+                       options={"maxiter": max_iter, "ftol": tol})
+        mu = res.x - res.x.mean()
+        p = p_of(mu)
+        slack = b0 - A0 @ p
+    return p, mu, {"active": list(np.flatnonzero(slack < 1e-6)),
+                   "nit": int(res.nit), "max_violation": float(-min(slack.min(), 0.0)),
+                   "mu_distance": float(np.linalg.norm(mu - mu0))}
+
+
+def _structure_engines(structure, points):
+    """(forward, jacobian, invert) for a declarative covariance structure."""
+    from .structures import Independent, Factor, Blocks, Nested, Tree
+    from .blocks import (block_race_probabilities, nested_race_probabilities,
+                         block_race_jacobian, nested_race_jacobian,
+                         abilities_from_block_race)
+    if isinstance(structure, (Independent, Factor)):
+        V = None if isinstance(structure, Independent) else np.asarray(structure.V, float)
+        D = np.asarray(structure.D, float)
+        return (lambda m: race_probabilities(m, V=V, D=D, points=points),
+                lambda m: race_jacobian(m, V=V, D=D, points=points),
+                lambda p: abilities_from_race(p, V=V, D=D, points=points))
+    if isinstance(structure, Blocks):
+        c, L, D = structure.cluster, structure.loading, structure.D
+        return (lambda m: block_race_probabilities(m, c, L, D, points=points),
+                lambda m: block_race_jacobian(m, c, L, D, points=points),
+                lambda p: abilities_from_block_race(p, c, L, D, points=points)[0])
+    if isinstance(structure, Nested):
+        c, L, D, g, ga = (structure.cluster, structure.loading, structure.D,
+                          structure.coupling, structure.gamma)
+        return (lambda m: nested_race_probabilities(m, c, L, D, coupling=g,
+                                                    gamma=ga, points=points),
+                lambda m: nested_race_jacobian(m, c, L, D, coupling=g,
+                                               gamma=ga, points=points),
+                None or (lambda p: _invert_generic(
+                    p, lambda m: nested_race_probabilities(
+                        m, c, L, D, coupling=g, gamma=ga, points=points))))
+    if isinstance(structure, Tree):
+        from .blocks import tree_race_probabilities, tree_race_jacobian
+        c, L, D, pa, lam = (structure.cluster, structure.loading,
+                            structure.D, structure.parent, structure.strength)
+        fwd = lambda m: tree_race_probabilities(m, c, L, D, pa, lam,
+                                                points=points)
+        return (fwd,
+                lambda m: tree_race_jacobian(m, c, L, D, pa, lam,
+                                             points=points),
+                lambda p: _invert_generic(p, fwd))
+    raise TypeError(f"polish_race: unknown structure "
+                    f"{type(structure).__name__}")
+
+
+def _invert_generic(p, forward, tol=1e-9, max_iter=400):
+    p = np.asarray(p, float); p = p / p.sum()
+    lt = np.log(np.maximum(p, 1e-300))
+    mu = -(lt - lt.mean())
+    eta = 1.0
+    lp = np.log(np.maximum(forward(mu), 1e-300))
+    err = np.abs(lp - lt).max()
+    for _ in range(max_iter):
+        if err < tol:
+            break
+        mu_n = mu - eta * (lt - lp); mu_n -= mu_n.mean()
+        lp_n = np.log(np.maximum(forward(mu_n), 1e-300))
+        e = np.abs(lp_n - lt).max()
+        if e < err:
+            mu, lp, err = mu_n, lp_n, e
+            eta = min(eta * 1.2, 1.5)
+        else:
+            eta *= 0.5
+            if eta < 1e-4:
+                break
+    return mu

@@ -8,7 +8,7 @@ max-wins arena interface."""
 from __future__ import annotations
 
 import numpy as np
-from scipy.special import log_ndtr, ndtr
+from scipy.special import log_ndtr, ndtr, ndtri
 
 _TINY = 1e-300
 _PFLOOR = 1e-15
@@ -252,6 +252,23 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
                 q[i] += (Wc * dx) @ contrib
     total = p.sum()
     if not np.isfinite(total) or total <= 0:
+        # sharp fields (huge ability spread over small sd) can drop every
+        # density spike between the span-window lattice points; the front
+        # door's winner-bulk window and sharpness-adaptive quadrature are
+        # built for exactly this, so retry once through it (same min-wins
+        # kernel, tighter lattice) before giving up. Deletion output is
+        # not available on this path.
+        from .races import race_probabilities
+        p_fb = race_probabilities(mu, V=V, D=D, points=max(points, 257))
+        if np.all(np.isfinite(p_fb)) and p_fb.sum() > 0:
+            if return_deletions:
+                raise FloatingPointError(
+                    "factor race integration failed on the span window; "
+                    "the bulk-window fallback succeeded but does not "
+                    "provide deletions -- call race_probabilities/"
+                    "removal_shares directly for this field")
+            out = p_fb / p_fb.sum()
+            return (out, float(p_fb.sum())) if return_total else out
         raise FloatingPointError("factor race integration failed")
     out = p / total
     if return_deletions:
@@ -292,6 +309,19 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
     ident = p > floor
+    if N == 2:
+        # Closed form. Min-wins: p_1 = Phi((mu_2 - mu_1)/s) with
+        # s^2 = D_1 + D_2 + ||v_1 - v_2||^2. The loop below must not be
+        # used here: K_2 is bipartite, the normalized photo-finish
+        # Laplacian eigenvalue is exactly 2, and the undamped Jacobi
+        # update is a local two-cycle whose flat residual defeats the
+        # growth safeguard (observed log-share errors up to ~1).
+        s = float(np.sqrt(D.sum() + np.sum((V[0] - V[1]) ** 2)))
+        half = 0.5 * s * float(ndtri(p[0]))
+        mu = np.array([-half, half])
+        if return_info:
+            return mu, {"iterations": 0, "residual": 0.0, "converged": True}
+        return mu
     # warm start: exact INDEPENDENT inversion (allocation's design), using each
     # runner's total sd, via this same Newton with a single zero factor node
     if F.shape[1] >= 1 and np.any(V != 0.0):

@@ -1,0 +1,7 @@
+T_est=60, 616 rebalances
+  HRP        ann.vol 0.1471   vs HRP +0.00%
+  full-g1    ann.vol 0.1492   vs HRP +1.45%
+  r1-g0.5    ann.vol 0.1483   vs HRP +0.83%
+  r1-g1      ann.vol 0.1492   vs HRP +1.39%
+  r2-g0.5    ann.vol 0.1481   vs HRP +0.66%
+  r2-g1      ann.vol 0.1486   vs HRP +0.99%

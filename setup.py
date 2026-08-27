@@ -7,7 +7,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="winning",
-    version="1.1.0",
+    version="1.2.0",
     description="Dealing with races, correlated or not",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -26,8 +26,10 @@ setup(
     tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],
     include_package_data=True,
     install_requires=["numpy", "scipy"],
-    extras_require={"test": ["pytest", "pandas"],
-                    "benchmarks": ["pandas"]},
+    extras_require={"test": ["pytest", "pandas", "matplotlib"],
+                    "benchmarks": ["pandas"],
+                    # compiled kernels (rust/fastrace); pure python without
+                    "fast": ["fastrace"]},
     entry_points={
         "console_scripts": [
             "winning=winning.__main__:main",

@@ -1,0 +1,4 @@
+# Regenerable problem caches, ~15 MB each, ~220 MB total.
+cache/
+__pycache__/
+*.pyc

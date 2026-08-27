@@ -1,0 +1,13 @@
+setup 119s
+error model 1s
+median race sd: v2 0.1060  (v1 counted code-shared too)
+truth 37s
+
+race overhead: 40.6 ms/query
+ target  mean m  med m   p90    max  coverage
+   0.90   141.0    104   319    666     1.000
+   0.95   266.0    196   597   1142     1.000
+   0.99   746.5    620  1582   2440     1.000
+
+fixed-depth coverage: m=4: 0.804  m=8: 0.900  m=16: 0.962  m=32: 0.982  m=64: 0.994  m=128: 0.998
+depth of an ORACLE fixed rule at each target: 0.90: m=9  0.95: m=14  0.99: m=40

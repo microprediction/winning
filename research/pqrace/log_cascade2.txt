@@ -1,0 +1,11 @@
+N=133485, 400 queries; proxy=128d projection, truth=2048d cosine
+noise model: 98304 near pairs, corr(proxy, true) = 0.780, resid sd 0.0574
+race overhead 16.5 ms/query
+
+ target  mean m   med   p90    max  coverage
+   0.90    50.7    23   121    801     0.991
+   0.95    86.0    38   209   1252     0.991
+   0.99   231.8   124   580   1863     1.000
+
+fixed-depth coverage (proxy order): m=8: 0.957  m=32: 0.986  m=128: 1.000  m=512: 1.000  m=1024: 1.000
+oracle fixed depth: 0.90: m=4  0.95: m=8  0.99: m=35

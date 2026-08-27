@@ -1,0 +1,16 @@
+realized volatility under TRUE covariance (lower is better), 150 trials:
+  EW          0.1723 +- 0.0003   vs HRP: +1.21%
+  HRP         0.1703 +- 0.0003   vs HRP: +0.00%
+  MinVar      0.1737 +- 0.0004   vs HRP: +2.02%
+  MinVar-LW   0.1678 +- 0.0004   vs HRP: -1.43%
+  MinVar-struct 0.1658 +- 0.0004   vs HRP: -2.61%
+  gamma=0.00  0.1703 +- 0.0003   vs HRP: +0.00%
+  gamma=0.25  0.1701 +- 0.0003   vs HRP: -0.11%
+  gamma=0.50  0.1699 +- 0.0003   vs HRP: -0.20%
+  gamma=0.75  0.1698 +- 0.0003   vs HRP: -0.26%
+  gamma=1.00  0.1697 +- 0.0003   vs HRP: -0.31%
+  lw g=0.00   0.1703 +- 0.0003   vs HRP: +0.00%
+  lw g=0.25   0.1702 +- 0.0003   vs HRP: -0.03%
+  lw g=0.50   0.1702 +- 0.0003   vs HRP: -0.04%
+  lw g=0.75   0.1702 +- 0.0003   vs HRP: -0.03%
+  lw g=1.00   0.1702 +- 0.0003   vs HRP: -0.02%

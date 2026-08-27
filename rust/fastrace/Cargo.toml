@@ -1,17 +1,19 @@
 [package]
 name = "fastrace"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
+description = "Compiled kernels for the winning package (factor/block/nested/tree races, classic calibration)"
+license = "MIT"
 
 [lib]
 name = "fastrace"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module"] }
+winning = { path = "../winning" }
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
 numpy = "0.22"
 rayon = "1.10"
-libm = "0.2"
 
 [profile.release]
 lto = true

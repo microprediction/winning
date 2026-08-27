@@ -1,0 +1,21 @@
+qm9_gap_seed7: full candidate pool N = 133,702, dense covariance would be 143 GB
+  fingerprints (133702, 2048) float32 (1.10 GB)
+
+10k-prefiltered dense MC-qPO (the released pipeline):
+  forming the 10k covariance: 5.7s, 1136MB, 0.80 GB
+  prefiltered-MC-qPO-10000               35.4s  oracle(mean 0.3218, top10 0.3555, max 0.3733)  top1%hits=  8  outside prefilter=0.00  tanimoto=0.314
+  prefiltered-MC-qPO-10000               30.3s  oracle(mean 0.3221, top10 0.3550, max 0.3733)  top1%hits=  8  outside prefilter=0.00  tanimoto=0.297
+  prefiltered-MC-qPO-10000               31.1s  oracle(mean 0.3244, top10 0.3608, max 0.3771)  top1%hits= 11  outside prefilter=0.00  tanimoto=0.316
+  prefiltered-fast-qPO-r2                29.3s  oracle(mean 0.3293, top10 0.3653, max 0.3733)  top1%hits= 15  outside prefilter=0.00  tanimoto=0.336
+  prefiltered-fast-qPO-r4                24.1s  oracle(mean 0.3292, top10 0.3657, max 0.3733)  top1%hits= 15  outside prefilter=0.00  tanimoto=0.345
+  prefiltered-fast-qPO-r8                14.5s  oracle(mean 0.3286, top10 0.3655, max 0.3733)  top1%hits= 14  outside prefilter=0.00  tanimoto=0.344
+
+full-library fast qPO over all 133,702 candidates:
+  full-library-fast-qPO-r2              232.3s  oracle(mean 0.3337, top10 0.3722, max 0.3778)  top1%hits= 23  outside prefilter=0.00  tanimoto=0.375
+  full-library-fast-qPO-r4              160.7s  oracle(mean 0.3337, top10 0.3722, max 0.3778)  top1%hits= 23  outside prefilter=0.00  tanimoto=0.380
+  full-library-fast-qPO-r8              237.3s  oracle(mean 0.3319, top10 0.3708, max 0.3771)  top1%hits= 21  outside prefilter=0.00  tanimoto=0.368
+  full-library-F-LITE                     0.1s  oracle(mean 0.3339, top10 0.3722, max 0.3778)  top1%hits= 24  outside prefilter=0.00  tanimoto=0.375
+  full-library-UCB                        0.0s  oracle(mean 0.3336, top10 0.3670, max 0.3771)  top1%hits= 22  outside prefilter=0.00  tanimoto=0.392
+  full-library-Greedy                     0.0s  oracle(mean 0.3339, top10 0.3659, max 0.3771)  top1%hits= 24  outside prefilter=0.00  tanimoto=0.399
+
+wrote /Users/petercotton/github/winning/research/qpo/results/full_library_qm9_gap_seed7.csv

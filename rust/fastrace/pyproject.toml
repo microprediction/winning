@@ -1,0 +1,19 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "fastrace"
+description = "Compiled kernels for the `winning` package: factor/block/nested/tree race probabilities and the classic state-price calibration"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Peter Cotton" }]
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/microprediction/winning"

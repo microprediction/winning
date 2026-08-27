@@ -1,0 +1,18 @@
+[package]
+name = "winning"
+version = "0.1.0"
+edition = "2021"
+description = "Lattice race kernels: factor/block/nested/tree win probabilities and the classic state-price calibration (pure rust, no python)"
+license = "MIT"
+repository = "https://github.com/microprediction/winning"
+readme = "README.md"
+keywords = ["probability", "racing", "probit", "lattice", "portfolio"]
+categories = ["algorithms", "science", "mathematics", "finance"]
+
+[lib]
+name = "winning"
+
+[dependencies]
+ndarray = "0.16"
+rayon = "1.10"
+libm = "0.2"

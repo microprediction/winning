@@ -1,0 +1,15 @@
+qm9_gap_seed7, top 200 candidates by UCB
+reference 20,000,000 samples x2 in 226s; seed-to-seed TV 0.00179
+  r=  2 full Delta: frobenius 0.347 captured 1.000  predicted TV 0.0122 measured TV 0.0160 corr +0.705 (251s)
+  r=  4 full Delta: frobenius 0.279 captured 1.000  predicted TV 0.0122 measured TV 0.0145 corr +0.824 (243s)
+  r=  8 full Delta: frobenius 0.226 captured 1.000  predicted TV 0.0080 measured TV 0.0107 corr +0.766 (416s)
+  r= 16 full Delta: frobenius 0.176 captured 1.000  predicted TV 0.0059 measured TV 0.0138 corr +0.585 (215s)
+
+first-order check at rank 2: p(Sigma_r + t Delta) against t*pred
+  t= 0.05: measured TV 0.0029  predicted TV 0.0006  rel err 0.984  corr +0.183
+  t= 0.10: measured TV 0.0030  predicted TV 0.0012  rel err 0.920  corr +0.393
+  t= 0.25: measured TV 0.0039  predicted TV 0.0030  rel err 0.694  corr +0.725
+  t= 0.50: measured TV 0.0065  predicted TV 0.0061  rel err 0.547  corr +0.844
+  t= 1.00: measured TV 0.0158  predicted TV 0.0122  rel err 0.739  corr +0.681
+
+wrote /Users/petercotton/github/winning/research/qpo/results/theory_qm9_gap_seed7_N200.csv

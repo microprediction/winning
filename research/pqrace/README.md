@@ -1,0 +1,135 @@
+# PQ search as a race: calibrated per-query rerank depth
+
+Product-quantized search reranks the ADC top-m exactly; m is a hand-tuned
+global constant in every production ANN system. "Is the true nearest
+neighbour in my shortlist?" is a place question in a race over N candidates
+with noisy abilities, so the right m is per-query: smallest shortlist whose
+summed win probability reaches the target (the events are disjoint, so
+coverage is additive -- qPO's identity, used for good this time).
+
+Data: QM9 fingerprints (133,885) random-projected to 128d, unit-normalised;
+PQ 16 blocks x 8 dims x 256 codes; 500 held-out queries; exact brute-force
+ground truth.
+
+## Three versions, each a diagnosis
+
+**v1** treated the fitted per-(block, code) error variance as independent
+noise: asked 95%, delivered 100% at mean depth 289 against a fixed depth of
+32 giving 98.2%. Useless. Diagnosis: most of that variance is COMMON to all
+candidates (query geometry) or shared within codebook cells, and a shift
+that moves every score together cannot change the argmin. The racing
+common-mode lesson, in costume.
+
+**v2** projected out the query-common and code-shared components: barely
+moved (266 at 95%). Second diagnosis: the variance was fitted on random
+(query, vector) pairs, i.e. FAR pairs, whose error geometry is nothing like
+the near-neighbour region where races are decided.
+
+**v3** uses the algebra instead of estimation. The ADC error is exactly
+e_ib = (||x_b||^2 - ||c_b||^2) - 2<q_b, r_ib>: a per-candidate constant
+known at index time, plus a zero-mean query-linear term whose variance is
+proportional to the stored residual energy rho_i. So store TWO extra floats
+per vector (const_i, rho_i) next to the 16 code bytes: exact debias, and
+per-candidate race variance v_i = kappa rho_i with kappa calibrated once
+(measured 0.038 vs the isotropic prediction 0.031).
+
+## v3 result: adaptive beats fixed at matched coverage
+
+    target   mean m   p90    max   achieved coverage
+      0.90     58     117    305       0.992
+      0.95    107     214    538       0.998
+      0.99    311     610   1330       0.998
+
+Fixed-depth coverage on the same (debiased) ordering: m=32: 0.942,
+m=64: 0.976 -- reaching the adaptive rule's 0.992 needs a fixed m well above
+100. So at matched coverage the adaptive rule spends roughly HALF the
+average rerank budget, while carrying a per-query statement instead of an
+empirical average. It is conservative (over-covers its nominal target),
+which for a coverage guarantee is the safe direction.
+
+## Two honest surprises
+
+1. **Exact debiasing made the RANKING worse.** The oracle fixed depth under
+   exactly-debiased scores is 21/43/140 (targets .90/.95/.99) against 9/14/40
+   under v2's biased scores. Unbiased per-candidate estimates are not the
+   best ranker: the biased ADC score is a shrunk estimator, and shrinkage
+   helps ordering. (The race framework accommodates this -- rank by win
+   probability, which shrinks automatically -- but the interplay deserves its
+   own experiment.)
+2. **The race overhead is currently 42 ms/query** (a 129-point quadrature
+   over 4,096 candidates in numpy) against reranks that cost microseconds
+   each. The DEPTHS are won; the arithmetic must get ~100x cheaper (fewer
+   candidates in the race, fewer points, or the closed-form Gumbel-style
+   approximation) before the wall-clock trade is interesting. This is an
+   engineering gap, not a conceptual one, and it is the next task.
+
+## Files
+
+    run_pq_race.py    v1 (independent fitted variance)
+    run_pq_race2.py   v2 (common-mode and code-shared projected out)
+    run_pq_race3.py   v3 (exact bias + residual-energy variance)
+    log_pq_race*.txt  outputs
+
+
+## The cascade extension: empirical noise, and the correlated race
+
+`run_cascade.py` / `run_cascade3.py`: the same idea where stage 2 is
+expensive (the bi-encoder -> cross-encoder shape). Proxy = 128d projected
+distance; truth = exact 2048d cosine; noise model fitted, not derived.
+
+The empirical noise model leaked exactly like the PQ one, one layer at a
+time: pooled variance over-covered (mean depth 93 at target 0.90 against an
+oracle of 4); removing QUERY FIXED EFFECTS -- per-query hardness shifts all
+of a query's scores together and cannot change the argmax -- halved it to 51.
+The third leak has nowhere further to hide: it is genuine within-query
+correlation between similar candidates.
+
+Measured, that correlation is real and similarity-driven: the calibrated
+g(sim) curve rises from 0 for unrelated candidates to 0.82 for near
+neighbours. Racing CORRELATED (per-query Sigma_ij = s_i s_j g(sim_ij),
+rank-4 factorization, pom_fast) tightens the sets a further 6-22% at
+identical coverage, the gain growing with the target:
+
+    target   indep mean m   corr mean m
+      0.90       50.7          47.9
+      0.95       86.0          78.0
+      0.99      231.8         181.2     (coverage 1.000 both)
+
+The limit is the rank: clustered correlation (many small similar groups) is
+exactly what a global low-rank factorization represents worst -- the same
+geometry lesson as the qPO random-pool result, from the other side. A
+block/cluster covariance model is the natural next step, as is cutting the
+297 ms/query correlated-race cost.
+
+The consolidated lesson of the whole directory: calibrated shortlists are
+won or lost in the noise model, and the discipline is always the same three
+subtractions -- common mode, group effects, and then CORRELATION, which
+cannot be subtracted and must be raced.
+
+
+## v4/v5: the Schur ladder meets its measurement
+
+    model                      0.90    0.95    0.99    ms/query
+    independent                50.7    86.0   231.8      19
+    v3  global rank-4          47.9    78.0   181.2     297
+    v4  blocks only            55.5    88.9   207.0      52
+    v5  coupling + blocks      51.1    82.5   191.3     356
+
+All at matched coverage. The verdict is humbler than the theory deserved:
+v5 beats its block-only parent but NOT the plain rank-4 fit, and every
+correlated variant clusters within ~10-20% of independent. The race kernels
+are exact (block_race and nested_race validate to MC noise); what binds is
+the ESTIMATED residual-correlation model -- a similarity kernel fitted on 24
+calibration queries, pushed through eigen-decompositions and cluster
+assignments per query. Structure we can price exactly, we can only estimate
+roughly.
+
+That is a familiar shape: in the exotics work the fitted Sigma reached 0.148
+where the true Sigma reached 0.006 -- estimation, not machinery, was the
+binding constraint there too. The cascade's honest summary: calibrated
+per-query depth works (the noise-model discipline bought 2x); correlation
+modelling on top buys 10-20% more and is not yet worth 300 ms/query; the
+Schur race kernels themselves are validated, general, and waiting for a
+problem where the block structure is KNOWN rather than estimated -- analogue
+series with declared scaffolds, A/B variants with declared families,
+running-style groups declared on the race card.

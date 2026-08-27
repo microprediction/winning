@@ -1,0 +1,141 @@
+
+=== qm9_gap_seed7 N=500 batch=100 ===
+spectrum (raw)      {'trace': 0.4228, 'participation_ratio': 65.5112, 'erank_shannon': 254.433, 'r_for_50pct_trace': 73, 'r_for_90pct_trace': 363, 'r_for_99pct_trace': 482}
+spectrum (quotient) {'trace': 0.3818, 'participation_ratio': 179.2454, 'erank_shannon': 330.1103, 'r_for_50pct_trace': 94, 'r_for_90pct_trace': 373, 'r_for_99pct_trace': 483}
+reference seed 0: M=20,000,000 in 100.7s (TV noise 2.47e-03, peak 962MB)
+reference seed 1: M=20,000,000 in 91.0s (TV noise 2.47e-03, peak 962MB)
+eta scale: random batch 0.6776, optimal 1.0  (Q*=0.2952, max p=5.63e-03, uniform=2.00e-03)
+  reference-2nd-seed       r= nan eta=1.0000 etaN=1.000 top100=1.00 TV=0.0028 rho=1.000 tan=0.311 91.0s
+  qPO-MC-10000             r= nan eta=0.9347 etaN=0.797 top100=0.66 TV=0.0927 rho=0.738 tan=0.324 0.0s
+  qPO-MC-10000             r= nan eta=0.9567 etaN=0.866 top100=0.72 TV=0.0860 rho=0.757 tan=0.321 0.0s
+  qPO-MC-10000             r= nan eta=0.9517 etaN=0.850 top100=0.72 TV=0.0843 rho=0.779 tan=0.327 0.0s
+  qPO-MC-10000             r= nan eta=0.9425 etaN=0.822 top100=0.70 TV=0.0948 rho=0.768 tan=0.318 0.0s
+  qPO-MC-10000             r= nan eta=0.9529 etaN=0.854 top100=0.70 TV=0.0912 rho=0.742 tan=0.316 0.0s
+  eigendecomposing once for r<=256 ...
+  eigh 0.0s raw, 0.0s quotient
+  qPO-fast-eig             r=   0 eta=0.8984 etaN=0.685 top100=0.56 TV=0.0886 rho=0.673 tan=0.381 0.0s
+  qPO-factorMC             r=   0 eta=0.8972 etaN=0.681 top100=0.56 TV=0.0886 rho=0.672 tan=0.381 14.5s
+  qPO-fast-eig             r=   2 eta=0.9969 etaN=0.990 top100=0.94 TV=0.0179 rho=0.985 tan=0.310 2.8s
+  qPO-factorMC             r=   2 eta=0.9976 etaN=0.993 top100=0.95 TV=0.0190 rho=0.984 tan=0.310 14.2s
+  qPO-fast-contrast        r=   2 eta=0.9974 etaN=0.992 top100=0.94 TV=0.0139 rho=0.990 tan=0.312 2.9s
+  qPO-fast-eig             r=   4 eta=0.9982 etaN=0.994 top100=0.95 TV=0.0166 rho=0.989 tan=0.309 2.9s
+  qPO-factorMC             r=   4 eta=0.9982 etaN=0.994 top100=0.95 TV=0.0172 rho=0.988 tan=0.309 15.4s
+  qPO-fast-contrast        r=   4 eta=0.9981 etaN=0.994 top100=0.94 TV=0.0115 rho=0.994 tan=0.313 2.8s
+  qPO-fast-eig             r=   8 eta=0.9977 etaN=0.993 top100=0.94 TV=0.0131 rho=0.993 tan=0.310 2.8s
+  qPO-factorMC             r=   8 eta=0.9978 etaN=0.993 top100=0.94 TV=0.0136 rho=0.992 tan=0.310 29.9s
+  qPO-fast-contrast        r=   8 eta=0.9992 etaN=0.998 top100=0.96 TV=0.0092 rho=0.995 tan=0.311 5.5s
+  qPO-fast-eig             r=  16 eta=0.9987 etaN=0.996 top100=0.94 TV=0.0098 rho=0.995 tan=0.311 5.6s
+  qPO-factorMC             r=  16 eta=0.9987 etaN=0.996 top100=0.95 TV=0.0089 rho=0.996 tan=0.309 27.6s
+  qPO-fast-contrast        r=  16 eta=0.9996 etaN=0.999 top100=0.98 TV=0.0083 rho=0.996 tan=0.311 5.8s
+  qPO-fast-eig             r=  32 eta=0.9978 etaN=0.993 top100=0.92 TV=0.0150 rho=0.988 tan=0.316 7.1s
+  qPO-factorMC             r=  32 eta=0.9998 etaN=0.999 top100=0.98 TV=0.0064 rho=0.998 tan=0.311 29.0s
+  qPO-fast-contrast        r=  32 eta=0.9983 etaN=0.995 top100=0.96 TV=0.0147 rho=0.988 tan=0.313 3.5s
+  qPO-fast-eig             r=  64 eta=0.9877 etaN=0.962 top100=0.86 TV=0.0264 rho=0.972 tan=0.313 3.5s
+  qPO-factorMC             r=  64 eta=0.9995 etaN=0.998 top100=0.98 TV=0.0061 rho=0.998 tan=0.312 17.7s
+  qPO-fast-contrast        r=  64 eta=0.9916 etaN=0.974 top100=0.87 TV=0.0279 rho=0.968 tan=0.314 2.9s
+  qPO-fast-eig             r= 128 eta=0.9729 etaN=0.916 top100=0.77 TV=0.0490 rho=0.906 tan=0.325 2.9s
+  qPO-factorMC             r= 128 eta=0.9998 etaN=0.999 top100=0.99 TV=0.0061 rho=0.998 tan=0.312 19.1s
+  qPO-fast-contrast        r= 128 eta=0.9748 etaN=0.922 top100=0.79 TV=0.0520 rho=0.909 tan=0.318 2.9s
+  qPO-fast-eig             r= 256 eta=0.9090 etaN=0.718 top100=0.57 TV=0.1090 rho=0.683 tan=0.312 2.9s
+  qPO-factorMC             r= 256 eta=0.9989 etaN=0.997 top100=0.96 TV=0.0078 rho=0.997 tan=0.312 22.9s
+  qPO-fast-contrast        r= 256 eta=0.9234 etaN=0.762 top100=0.65 TV=0.1089 rho=0.688 tan=0.319 2.8s
+  F-LITE                   r=   0 eta=0.9035 etaN=0.701 top100=0.56 TV=0.0922 rho=0.675 tan=0.379 0.0s
+  A-LITE                   r=   0 eta=0.8993 etaN=0.688 top100=0.56 TV=0.0869 rho=0.671 tan=0.381 0.0s
+  UCB                      r= nan eta=0.8689 etaN=0.593 top100=0.48 TV=   n/a rho=0.425 tan=0.392 0.0s
+  Greedy                   r= nan eta=0.7777 etaN=0.311 top100=0.34 TV=   n/a rho=0.120 tan=0.399 0.0s
+wrote /Users/petercotton/github/winning/research/qpo/results/qm9_gap_seed7_N500/sweep.csv
+
+=== qm9_gap_seed7 N=1000 batch=100 ===
+spectrum (raw)      {'trace': 0.8483, 'participation_ratio': 90.6097, 'erank_shannon': 442.5945, 'r_for_50pct_trace': 119, 'r_for_90pct_trace': 702, 'r_for_99pct_trace': 958}
+spectrum (quotient) {'trace': 0.7799, 'participation_ratio': 231.4545, 'erank_shannon': 564.6769, 'r_for_50pct_trace': 151, 'r_for_90pct_trace': 721, 'r_for_99pct_trace': 960}
+reference seed 0: M=20,000,000 in 363.8s (TV noise 3.48e-03, peak 968MB)
+reference seed 1: M=20,000,000 in 308.1s (TV noise 3.48e-03, peak 968MB)
+eta scale: random batch 0.5656, optimal 1.0  (Q*=0.1768, max p=3.62e-03, uniform=1.00e-03)
+  reference-2nd-seed       r= nan eta=1.0000 etaN=1.000 top100=0.99 TV=0.0039 rho=0.999 tan=0.315 308.1s
+  qPO-MC-10000             r= nan eta=0.8985 etaN=0.766 top100=0.53 TV=0.1262 rho=0.732 tan=0.322 0.3s
+  qPO-MC-10000             r= nan eta=0.8898 etaN=0.746 top100=0.59 TV=0.1241 rho=0.718 tan=0.318 0.3s
+  qPO-MC-10000             r= nan eta=0.9248 etaN=0.827 top100=0.65 TV=0.1186 rho=0.719 tan=0.322 0.3s
+  qPO-MC-10000             r= nan eta=0.9096 etaN=0.792 top100=0.61 TV=0.1239 rho=0.733 tan=0.313 0.3s
+  qPO-MC-10000             r= nan eta=0.9119 etaN=0.797 top100=0.64 TV=0.1176 rho=0.707 tan=0.317 0.3s
+  eigendecomposing once for r<=256 ...
+  eigh 0.1s raw, 0.1s quotient
+  qPO-fast-eig             r=   0 eta=0.9180 etaN=0.811 top100=0.60 TV=0.0858 rho=0.810 tan=0.379 0.1s
+  qPO-factorMC             r=   0 eta=0.9206 etaN=0.817 top100=0.61 TV=0.0861 rho=0.810 tan=0.377 60.0s
+  qPO-fast-eig             r=   2 eta=0.9956 etaN=0.990 top100=0.92 TV=0.0188 rho=0.988 tan=0.310 7.7s
+  qPO-factorMC             r=   2 eta=0.9957 etaN=0.990 top100=0.92 TV=0.0197 rho=0.987 tan=0.311 32.3s
+  qPO-fast-contrast        r=   2 eta=0.9972 etaN=0.994 top100=0.94 TV=0.0158 rho=0.992 tan=0.314 5.8s
+  qPO-fast-eig             r=   4 eta=0.9974 etaN=0.994 top100=0.94 TV=0.0174 rho=0.991 tan=0.311 5.8s
+  qPO-factorMC             r=   4 eta=0.9952 etaN=0.989 top100=0.91 TV=0.0181 rho=0.990 tan=0.309 33.8s
+  qPO-fast-contrast        r=   4 eta=0.9972 etaN=0.994 top100=0.94 TV=0.0139 rho=0.994 tan=0.313 16.0s
+  qPO-fast-eig             r=   8 eta=0.9970 etaN=0.993 top100=0.94 TV=0.0136 rho=0.994 tan=0.310 14.3s
+  qPO-factorMC             r=   8 eta=0.9977 etaN=0.995 top100=0.94 TV=0.0142 rho=0.993 tan=0.311 68.5s
+  qPO-fast-contrast        r=   8 eta=0.9982 etaN=0.996 top100=0.96 TV=0.0102 rho=0.996 tan=0.314 15.0s
+  qPO-fast-eig             r=  16 eta=0.9971 etaN=0.993 top100=0.95 TV=0.0106 rho=0.996 tan=0.311 11.0s
+  qPO-factorMC             r=  16 eta=0.9981 etaN=0.996 top100=0.94 TV=0.0107 rho=0.996 tan=0.314 35.4s
+  qPO-fast-contrast        r=  16 eta=0.9990 etaN=0.998 top100=0.97 TV=0.0102 rho=0.996 tan=0.314 5.9s
+  qPO-fast-eig             r=  32 eta=0.9975 etaN=0.994 top100=0.94 TV=0.0167 rho=0.991 tan=0.315 5.8s
+  qPO-factorMC             r=  32 eta=0.9991 etaN=0.998 top100=0.96 TV=0.0088 rho=0.997 tan=0.314 34.2s
+  qPO-fast-contrast        r=  32 eta=0.9965 etaN=0.992 top100=0.92 TV=0.0170 rho=0.990 tan=0.317 5.9s
+  qPO-fast-eig             r=  64 eta=0.9916 etaN=0.981 top100=0.88 TV=0.0259 rho=0.978 tan=0.318 5.8s
+  qPO-factorMC             r=  64 eta=0.9996 etaN=0.999 top100=0.97 TV=0.0078 rho=0.998 tan=0.317 35.0s
+  qPO-fast-contrast        r=  64 eta=0.9884 etaN=0.973 top100=0.85 TV=0.0265 rho=0.976 tan=0.317 5.8s
+  qPO-fast-eig             r= 128 eta=0.9714 etaN=0.934 top100=0.77 TV=0.0458 rho=0.941 tan=0.316 5.8s
+  qPO-factorMC             r= 128 eta=0.9996 etaN=0.999 top100=0.98 TV=0.0071 rho=0.998 tan=0.313 73.9s
+  qPO-fast-contrast        r= 128 eta=0.9777 etaN=0.949 top100=0.80 TV=0.0462 rho=0.935 tan=0.322 14.5s
+  qPO-fast-eig             r= 256 eta=0.9310 etaN=0.841 top100=0.62 TV=0.0800 rho=0.855 tan=0.312 15.2s
+  qPO-factorMC             r= 256 eta=0.9998 etaN=1.000 top100=0.99 TV=0.0071 rho=0.998 tan=0.315 76.5s
+  qPO-fast-contrast        r= 256 eta=0.9465 etaN=0.877 top100=0.70 TV=0.0820 rho=0.839 tan=0.315 5.9s
+  F-LITE                   r=   0 eta=0.9199 etaN=0.816 top100=0.61 TV=0.0892 rho=0.813 tan=0.377 0.0s
+  A-LITE                   r=   0 eta=0.9149 etaN=0.804 top100=0.60 TV=0.0841 rho=0.809 tan=0.380 0.0s
+  UCB                      r= nan eta=0.8654 etaN=0.690 top100=0.49 TV=   n/a rho=0.525 tan=0.392 0.0s
+  Greedy                   r= nan eta=0.7580 etaN=0.443 top100=0.33 TV=   n/a rho=0.215 tan=0.399 0.0s
+wrote /Users/petercotton/github/winning/research/qpo/results/qm9_gap_seed7_N1000/sweep.csv
+
+=== qm9_gap_seed7 N=2000 batch=100 ===
+spectrum (raw)      {'trace': 1.7142, 'participation_ratio': 128.0202, 'erank_shannon': 772.4353, 'r_for_50pct_trace': 196, 'r_for_90pct_trace': 1362, 'r_for_99pct_trace': 1912}
+spectrum (quotient) {'trace': 1.6023, 'participation_ratio': 294.4825, 'erank_shannon': 960.1871, 'r_for_50pct_trace': 243, 'r_for_90pct_trace': 1395, 'r_for_99pct_trace': 1916}
+reference seed 0: M=20,000,000 in 1163.9s (TV noise 4.89e-03, peak 992MB)
+reference seed 1: M=20,000,000 in 1208.9s (TV noise 4.89e-03, peak 992MB)
+eta scale: random batch 0.4578, optimal 1.0  (Q*=0.1092, max p=2.41e-03, uniform=5.00e-04)
+  reference-2nd-seed       r= nan eta=0.9998 etaN=1.000 top100=0.98 TV=0.0054 rho=0.999 tan=0.317 1208.9s
+  qPO-MC-10000             r= nan eta=0.8705 etaN=0.761 top100=0.50 TV=0.1736 rho=0.640 tan=0.312 0.3s
+  qPO-MC-10000             r= nan eta=0.8459 etaN=0.716 top100=0.46 TV=0.1705 rho=0.647 tan=0.315 0.3s
+  qPO-MC-10000             r= nan eta=0.8629 etaN=0.747 top100=0.49 TV=0.1795 rho=0.632 tan=0.311 0.3s
+  qPO-MC-10000             r= nan eta=0.8652 etaN=0.751 top100=0.53 TV=0.1707 rho=0.652 tan=0.318 0.3s
+  qPO-MC-10000             r= nan eta=0.8553 etaN=0.733 top100=0.52 TV=0.1775 rho=0.620 tan=0.312 0.3s
+  eigendecomposing once for r<=256 ...
+  eigh 0.3s raw, 0.3s quotient
+  qPO-fast-eig             r=   0 eta=0.9349 etaN=0.880 top100=0.64 TV=0.0830 rho=0.876 tan=0.377 0.4s
+  qPO-factorMC             r=   0 eta=0.9386 etaN=0.887 top100=0.65 TV=0.0838 rho=0.874 tan=0.376 56.8s
+  qPO-fast-eig             r=   2 eta=0.9981 etaN=0.996 top100=0.93 TV=0.0206 rho=0.990 tan=0.313 11.6s
+  qPO-factorMC             r=   2 eta=0.9977 etaN=0.996 top100=0.94 TV=0.0223 rho=0.989 tan=0.317 65.4s
+  qPO-fast-contrast        r=   2 eta=0.9964 etaN=0.993 top100=0.92 TV=0.0177 rho=0.993 tan=0.320 11.6s
+  qPO-fast-eig             r=   4 eta=0.9969 etaN=0.994 top100=0.94 TV=0.0178 rho=0.993 tan=0.315 28.0s
+  qPO-factorMC             r=   4 eta=0.9980 etaN=0.996 top100=0.95 TV=0.0197 rho=0.992 tan=0.313 136.5s
+  qPO-fast-contrast        r=   4 eta=0.9980 etaN=0.996 top100=0.94 TV=0.0157 rho=0.995 tan=0.314 12.0s
+  qPO-fast-eig             r=   8 eta=0.9983 etaN=0.997 top100=0.94 TV=0.0137 rho=0.996 tan=0.311 11.6s
+  qPO-factorMC             r=   8 eta=0.9974 etaN=0.995 top100=0.92 TV=0.0162 rho=0.994 tan=0.311 65.9s
+  qPO-fast-contrast        r=   8 eta=0.9986 etaN=0.997 top100=0.95 TV=0.0114 rho=0.997 tan=0.314 11.8s
+  qPO-fast-eig             r=  16 eta=0.9992 etaN=0.999 top100=0.95 TV=0.0115 rho=0.997 tan=0.317 30.5s
+  qPO-factorMC             r=  16 eta=0.9989 etaN=0.998 top100=0.97 TV=0.0129 rho=0.996 tan=0.317 125.9s
+  qPO-fast-contrast        r=  16 eta=0.9987 etaN=0.998 top100=0.95 TV=0.0110 rho=0.997 tan=0.317 11.8s
+  qPO-fast-eig             r=  32 eta=0.9959 etaN=0.992 top100=0.92 TV=0.0173 rho=0.993 tan=0.314 11.7s
+  qPO-factorMC             r=  32 eta=0.9992 etaN=0.999 top100=0.97 TV=0.0116 rho=0.997 tan=0.318 66.8s
+  qPO-fast-contrast        r=  32 eta=0.9964 etaN=0.993 top100=0.94 TV=0.0169 rho=0.993 tan=0.321 11.6s
+  qPO-fast-eig             r=  64 eta=0.9909 etaN=0.983 top100=0.88 TV=0.0275 rho=0.982 tan=0.319 11.6s
+  qPO-factorMC             r=  64 eta=0.9995 etaN=0.999 top100=0.97 TV=0.0109 rho=0.997 tan=0.317 100.1s
+  qPO-fast-contrast        r=  64 eta=0.9933 etaN=0.988 top100=0.89 TV=0.0256 rho=0.985 tan=0.321 30.0s
+  qPO-fast-eig             r= 128 eta=0.9788 etaN=0.961 top100=0.85 TV=0.0451 rho=0.953 tan=0.319 36.2s
+  qPO-factorMC             r= 128 eta=0.9991 etaN=0.998 top100=0.96 TV=0.0104 rho=0.997 tan=0.317 77.8s
+  qPO-fast-contrast        r= 128 eta=0.9777 etaN=0.959 top100=0.79 TV=0.0451 rho=0.957 tan=0.314 11.7s
+  qPO-fast-eig             r= 256 eta=0.9475 etaN=0.903 top100=0.72 TV=0.0731 rho=0.895 tan=0.311 11.8s
+  qPO-factorMC             r= 256 eta=0.9994 etaN=0.999 top100=0.97 TV=0.0099 rho=0.998 tan=0.318 119.4s
+  qPO-fast-contrast        r= 256 eta=0.9428 etaN=0.894 top100=0.68 TV=0.0726 rho=0.903 tan=0.316 30.3s
+  F-LITE                   r=   0 eta=0.9359 etaN=0.882 top100=0.65 TV=0.0864 rho=0.878 tan=0.376 0.0s
+  A-LITE                   r=   0 eta=0.9367 etaN=0.883 top100=0.64 TV=0.0810 rho=0.874 tan=0.378 0.0s
+  UCB                      r= nan eta=0.8648 etaN=0.751 top100=0.50 TV=   n/a rho=0.551 tan=0.392 0.0s
+  Greedy                   r= nan eta=0.7452 etaN=0.530 top100=0.32 TV=   n/a rho=0.277 tan=0.399 0.0s
+wrote /Users/petercotton/github/winning/research/qpo/results/qm9_gap_seed7_N2000/sweep.csv
+
+wrote /Users/petercotton/github/winning/research/qpo/results/sweep_qm9_gap_seed7.csv  (108 rows)
+

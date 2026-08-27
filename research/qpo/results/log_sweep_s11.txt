@@ -1,0 +1,45 @@
+
+=== qm9_gap_seed11 N=500 batch=100 ===
+spectrum (raw)      {'trace': 0.5053, 'participation_ratio': 75.5021, 'erank_shannon': 242.2617, 'r_for_50pct_trace': 62, 'r_for_90pct_trace': 337, 'r_for_99pct_trace': 472}
+spectrum (quotient) {'trace': 0.4664, 'participation_ratio': 136.2627, 'erank_shannon': 289.7632, 'r_for_50pct_trace': 75, 'r_for_90pct_trace': 345, 'r_for_99pct_trace': 473}
+reference seed 0: M=10,000,000 in 49.4s (TV noise 3.46e-03, peak 962MB)
+reference seed 1: M=10,000,000 in 135.8s (TV noise 3.46e-03, peak 962MB)
+eta scale: random batch 0.6081, optimal 1.0  (Q*=0.3289, max p=5.42e-03, uniform=2.00e-03)
+  reference-2nd-seed       r= nan eta=0.9997 etaN=0.999 top100=0.98 TV=0.0040 rho=0.999 tan=0.302 135.8s
+  qPO-MC-10000             r= nan eta=0.9426 etaN=0.854 top100=0.72 TV=0.0855 rho=0.851 tan=0.306 0.1s
+  qPO-MC-10000             r= nan eta=0.9517 etaN=0.877 top100=0.75 TV=0.0886 rho=0.849 tan=0.305 0.1s
+  qPO-MC-10000             r= nan eta=0.9519 etaN=0.877 top100=0.72 TV=0.0888 rho=0.857 tan=0.302 0.1s
+  qPO-MC-10000             r= nan eta=0.9565 etaN=0.889 top100=0.74 TV=0.0891 rho=0.865 tan=0.301 0.1s
+  qPO-MC-10000             r= nan eta=0.9504 etaN=0.873 top100=0.72 TV=0.0860 rho=0.872 tan=0.308 0.1s
+  eigendecomposing once for r<=64 ...
+  eigh 0.0s raw, 0.0s quotient
+  qPO-fast-eig             r=   0 eta=0.9506 etaN=0.874 top100=0.75 TV=0.0861 rho=0.831 tan=0.325 0.0s
+  qPO-factorMC             r=   0 eta=0.9443 etaN=0.858 top100=0.75 TV=0.0860 rho=0.832 tan=0.328 15.9s
+  qPO-fast-eig             r=   2 eta=0.9846 etaN=0.961 top100=0.88 TV=0.0425 rho=0.960 tan=0.307 5.3s
+  qPO-factorMC             r=   2 eta=0.9821 etaN=0.954 top100=0.88 TV=0.0427 rho=0.959 tan=0.307 19.6s
+  qPO-fast-contrast        r=   2 eta=0.9983 etaN=0.996 top100=0.95 TV=0.0202 rho=0.987 tan=0.303 4.7s
+  qPO-fast-eig             r=   4 eta=0.9984 etaN=0.996 top100=0.96 TV=0.0188 rho=0.990 tan=0.301 3.6s
+  qPO-factorMC             r=   4 eta=0.9980 etaN=0.995 top100=0.95 TV=0.0198 rho=0.989 tan=0.300 13.0s
+  qPO-fast-contrast        r=   4 eta=0.9982 etaN=0.995 top100=0.96 TV=0.0162 rho=0.992 tan=0.302 2.3s
+  qPO-fast-eig             r=   8 eta=0.9982 etaN=0.995 top100=0.95 TV=0.0158 rho=0.993 tan=0.302 2.5s
+  qPO-factorMC             r=   8 eta=0.9989 etaN=0.997 top100=0.96 TV=0.0171 rho=0.992 tan=0.301 7.8s
+  qPO-fast-contrast        r=   8 eta=0.9995 etaN=0.999 top100=0.98 TV=0.0140 rho=0.994 tan=0.303 1.8s
+  qPO-fast-eig             r=  16 eta=0.9994 etaN=0.999 top100=0.98 TV=0.0129 rho=0.995 tan=0.304 1.7s
+  qPO-factorMC             r=  16 eta=0.9989 etaN=0.997 top100=0.96 TV=0.0128 rho=0.995 tan=0.301 8.6s
+  qPO-fast-contrast        r=  16 eta=0.9988 etaN=0.997 top100=0.96 TV=0.0130 rho=0.995 tan=0.303 1.7s
+  qPO-fast-eig             r=  32 eta=0.9986 etaN=0.996 top100=0.96 TV=0.0183 rho=0.990 tan=0.304 1.8s
+  qPO-factorMC             r=  32 eta=0.9993 etaN=0.998 top100=0.97 TV=0.0100 rho=0.997 tan=0.302 8.9s
+  qPO-fast-contrast        r=  32 eta=0.9968 etaN=0.992 top100=0.93 TV=0.0195 rho=0.990 tan=0.301 1.8s
+  qPO-fast-eig             r=  64 eta=0.9936 etaN=0.984 top100=0.90 TV=0.0323 rho=0.973 tan=0.300 1.9s
+  qPO-factorMC             r=  64 eta=0.9999 etaN=1.000 top100=0.99 TV=0.0092 rho=0.997 tan=0.303 9.3s
+  qPO-fast-contrast        r=  64 eta=0.9929 etaN=0.982 top100=0.89 TV=0.0310 rho=0.978 tan=0.301 1.7s
+  F-LITE                   r=   0 eta=0.9597 etaN=0.897 top100=0.79 TV=0.0860 rho=0.835 tan=0.321 0.0s
+  A-LITE                   r=   0 eta=0.9428 etaN=0.854 top100=0.73 TV=0.0868 rho=0.829 tan=0.329 0.0s
+  UCB                      r= nan eta=0.8030 etaN=0.497 top100=0.46 TV=   n/a rho=0.413 tan=0.381 0.0s
+  Greedy                   r= nan eta=0.6952 etaN=0.222 top100=0.31 TV=   n/a rho=-0.004 tan=0.402 0.0s
+wrote /Users/petercotton/github/winning/research/qpo/results/qm9_gap_seed11_N500/sweep.csv
+
+=== qm9_gap_seed11 N=1000 batch=100 ===
+spectrum (raw)      {'trace': 1.0267, 'participation_ratio': 104.517, 'erank_shannon': 426.257, 'r_for_50pct_trace': 103, 'r_for_90pct_trace': 657, 'r_for_99pct_trace': 941}
+spectrum (quotient) {'trace': 0.9613, 'participation_ratio': 188.5193, 'erank_shannon': 506.3089, 'r_for_50pct_trace': 125, 'r_for_90pct_trace': 672, 'r_for_99pct_trace': 944}
+Terminated: 15             python -u run_sweep.py --snapshot qm9_gap_seed11 --N 500 1000 2000 --ranks 0 2 4 8 16 32 64 --ref-samples 10000000 --fmc-samples 2000000 --sobol-m 10 --points 129

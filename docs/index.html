@@ -13,6 +13,10 @@
   <meta property="og:image" content="https://winning.microprediction.org/assets/images/winning-pic.png" />
   <meta property="og:image:alt" content="The fastest time, the best offer and the most popular product are the same order statistic." />
   <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
   <link rel="stylesheet" href="./academic.css" />
   <style>
     .fitter { border: 1px solid #ddd; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.5rem 0; }
@@ -35,6 +39,8 @@
       <a class="brand" href="/">winning</a>
       <nav>
         <a href="/">Home</a>
+        <a href="#grammars">Grammars</a>
+        <a href="#languages">Languages</a>
         <a href="#papers">Papers</a>
         <a href="#demos">Demos</a>
         <a href="./ratings.html">Ratings</a>
@@ -57,6 +63,14 @@
       observed shares back to abilities. Factor probit, Luce's softmax and the
       finite-temperature softmin are special cases of one parameterized
       race.</p>
+
+    <div class="tag-row">
+      <span class="tag">one race, five grammars</span>
+      <span class="tag">O(QNL) shared field</span>
+      <span class="tag">exact dead heats</span>
+      <span class="tag">Python &middot; R &middot; Rust</span>
+      <span class="tag">parity-locked ports</span>
+    </div>
 
     <div class="fitter">
       <h2 style="margin-top:0">The model, live</h2>
@@ -111,10 +125,51 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
       paper-faithful kernels in <code>winning.factor</code>.
     </p>
 
+    <h2 id="grammars">One race, five covariance grammars</h2>
+    <p>Every model in the package is the same Gaussian min-race
+    $Y = \mu + \text{noise}$; the grammars are declarative descriptions of the
+    noise covariance that admit $O(N)$-per-lattice-point evaluation. Pass any of
+    them as <code>structure=</code> to the front-door verbs.</p>
+<pre><code>from winning import Independent, Factor, Blocks, Nested, Tree
+
+race_probabilities(mu, structure=Factor(V, D))        # &Sigma; = VV' + diag(D)
+race_probabilities(mu, structure=Blocks(cluster, loading, D))
+race_probabilities(mu, structure=Nested(cluster, loading, D, coupling, gamma))
+race_probabilities(mu, structure=Tree.from_linkage(Z))  # HRP's belief, exactly
+polish_race(p0=w, structure=tree, name_caps=0.05)     # nearest race under caps</code></pre>
+    <p><code>Tree.from_linkage</code> builds the race whose implied correlation
+    is exactly the cophenetic matrix of a hierarchical clustering — so a
+    portfolio's HRP weights can be inverted, re-priced and polished along the
+    dendrogram they came from. Exact Jacobians (rows sum to zero; off-diagonals
+    are photo-finish tie densities) ship for the factor, block and nested
+    grammars, with hybrid Newton inversion throughout. An arbitrary dense
+    $\Sigma$ is priced by fitting the grammar family (seriated blocks under
+    global factors) and promoting the residual to extra factor dimensions —
+    one deterministic call that beats million-draw Monte Carlo on wall clock at
+    $n = 2000$ and prices tail probabilities Monte Carlo cannot see.</p>
+
+    <h2 id="languages">Languages</h2>
+    <p>The numpy implementation is the spec. The compiled kernels
+    (<a href="https://pypi.org/project/fastrace/">fastrace</a>, thin
+    <a href="https://github.com/PyO3/pyo3">pyo3</a> bindings over the pure-rust
+    <code>winning</code> crate) accelerate every path — 232&times; on the classic
+    calibration, input-bound to ten million runners on the block field — and the
+    base-R package mirrors the complete API with no compiled dependency. All
+    ports are parity-locked: <code>parity/vectors.json</code> embeds inputs and
+    outputs from the reference, and every language replays the same scenarios,
+    seventeen of twenty-two at machine precision.</p>
+<pre><code>pip install winning          # pure python (numpy/scipy)
+pip install winning[fast]    # + compiled kernels (abi3 wheels)
+remotes::install_github("microprediction/winning", subdir = "r/winning")</code></pre>
+    <p>Random test covariances come from
+    <a href="https://randomcov.microprediction.org/">randomcov</a>: fifteen
+    named ensembles, because “a random covariance matrix” means nothing until
+    the measure is named.</p>
+
     <h2 id="papers">Papers</h2>
     <ul>
       <li><a href="./assets/pdf/factor_probit_share_calibration.pdf">Scalable share
-        calibration for factor multinomial probit models</a> (2026, submitted). All
+        calibration for factor multinomial probit models</a> (2026, SSRN working paper). All
         shares of a correlated Gaussian race in one O(QNL) pass, matrix-free
         graph-Laplacian derivatives, and inversion of observed shares to utilities at
         ten thousand alternatives in under a minute. The algorithm ships here as
@@ -135,6 +190,12 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
     </ul>
 
     <h2 id="demos">Demos</h2>
+    <ul>
+      <li><a href="./polish.html">Polish your portfolio</a> — concentration caps
+        without breaking model-consistency: the nearest race satisfying your
+        limits, solved live in the browser with the exact race Jacobian, showing
+        the redistribution running along the correlation structure.</li>
+    </ul>
     <ul>
       <li><a href="./fit.html">Fit a correlated race</a> — the inverse problem,
         live: drag observed shares and a correlation, and the engine calibrates
@@ -314,10 +375,8 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
 
   <footer>
     <a href="https://github.com/microprediction/winning">Source</a> &middot;
-    Part of the <a href="https://repos.microprediction.org/">microprediction</a> family
-    (see also <a href="https://thurstone.microprediction.org">thurstone</a>,
-    <a href="https://skaters.microprediction.org">skaters</a>,
-    <a href="http://schur.microprediction.org">schur</a>).
+    Part of the <a href="https://repos.microprediction.org/">microprediction family</a> &middot;
+    Authored by <a href="https://home.microprediction.org/">Peter Cotton</a>.
   </footer>
 </body>
 </html>

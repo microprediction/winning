@@ -1,0 +1,30 @@
+=== z-score tests, n=500, MC 20M draws ===
+  blocky/wide              entries(MC-resolvable)= 240  max|z|=110.44  frac|z|>3=62.5%  rms z=17.78
+  blocky/tight             entries(MC-resolvable)= 500  max|z|=70.89  frac|z|>3=89.4%  rms z=19.09
+  blocky/superstar         entries(MC-resolvable)= 441  max|z|=215.64  frac|z|>3=56.2%  rms z=20.68
+  dense_onion/wide         entries(MC-resolvable)= 307  max|z|=31.31  frac|z|>3=34.2%  rms z=5.77
+  dense_onion/tight        entries(MC-resolvable)= 500  max|z|= 7.59  frac|z|>3=19.4%  rms z=2.38
+  dense_onion/superstar    entries(MC-resolvable)= 497  max|z|=52.70  frac|z|>3=55.7%  rms z=8.57
+  sample_T400/wide         entries(MC-resolvable)= 229  max|z|=62.08  frac|z|>3=52.8%  rms z=9.94
+  sample_T400/tight        entries(MC-resolvable)= 500  max|z|=13.73  frac|z|>3=42.8%  rms z=4.06
+  sample_T400/superstar    entries(MC-resolvable)= 425  max|z|=75.95  frac|z|>3=55.8%  rms z=10.18
+
+=== ablation (blocky/wide) ===
+  k3 only                  entries(MC-resolvable)= 240  max|z|=95.09  frac|z|>3=75.8%  rms z=18.60
+  k6 only                  entries(MC-resolvable)= 240  max|z|=104.82  frac|z|>3=71.2%  rms z=17.45
+  k3+m5                    entries(MC-resolvable)= 240  max|z|=95.42  frac|z|>3=68.8%  rms z=17.15
+  k3+blocks                entries(MC-resolvable)= 240  max|z|=92.94  frac|z|>3=70.8%  rms z=18.33
+  k3+m5+blocks             entries(MC-resolvable)= 240  max|z|=110.44  frac|z|>3=62.5%  rms z=17.78
+  k3+m10+blocks            entries(MC-resolvable)= 240  max|z|=79.20  frac|z|>3=52.9%  rms z=12.22
+
+=== tail relative-stability band (blocky/wide) ===
+  p in [1e-04,1e-02):   95 runners  median rel drift    0.8%  max     34.9%
+  p in [1e-06,1e-04):  132 runners  median rel drift    1.4%  max     65.1%
+  p in [1e-08,1e-06):  106 runners  median rel drift    3.1%  max    629.3%
+  p in [1e-12,1e-08):   94 runners  median rel drift    9.0%  max  17261.6%
+  p in [1e-20,1e-12):   41 runners  median rel drift   28.3%  max   2075.8%
+
+=== n scaling (one call, 2^11 nodes) ===
+  n=  500     1.2s  (sum 1.000000)
+  n= 2000     5.7s  (sum 1.000000)
+  n= 8000    94.6s  (sum 1.000000)

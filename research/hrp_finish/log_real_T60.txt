@@ -1,0 +1,9 @@
+data: 13000 days x 30 industries
+T_est=60, 616 rebalances
+  EW             ann.vol 0.1688   vs HRP +14.75%
+  HRP            ann.vol 0.1471   vs HRP +0.00%
+  MinVar         ann.vol 0.1454   vs HRP -1.19%
+  MinVar-LW      ann.vol 0.1398   vs HRP -4.98%
+  MinVar-struct  ann.vol 0.1362   vs HRP -7.45%
+  finish-g0.5    ann.vol 0.1485   vs HRP +0.95%
+  finish-g1      ann.vol 0.1492   vs HRP +1.45%

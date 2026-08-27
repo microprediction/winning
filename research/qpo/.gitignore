@@ -1,0 +1,13 @@
+# Snapshots are regenerable from snapshot.py given the qPO checkout, and they
+# are large: the fingerprint caches are ~1 GB each and a single N = 10,000
+# posterior covariance is 800 MB. The whole directory is about 5 GB.
+snapshots/
+
+# Per-run covariance and fingerprint copies, same reasoning.
+results/**/Sigma.npy
+results/**/fps.npy
+
+# Kept deliberately: results/*.csv, results/**/p_*.npy (the probability vectors
+# the brief asks to save, a few KB each), figures/*.png, and all the code.
+__pycache__/
+*.pyc

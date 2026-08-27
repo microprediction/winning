@@ -1,0 +1,11 @@
+library: 133885 rows, 133802 unique smiles
+acquired 100 molecules; 133702 candidates remain
+GP fit in 0.3s: {'likelihood.noise': 0.00010000015754485503, 'covar_module.outputscale': 0.0015527912182733417, 'mean_module.constant': 0.24134179949760437}
+UCB over 133702 candidates in 8.3s
+  N=   500: mu[0.3050,0.3392] var[4.033e-04,1.262e-03] cov in 0.0s cond=3.343e+02
+  N=  1000: mu[0.3021,0.3392] var[4.033e-04,1.280e-03] cov in 0.0s cond=6.310e+02
+  N=  2000: mu[0.2988,0.3392] var[4.033e-04,1.305e-03] cov in 0.1s cond=1.160e+03
+  N=  5000: mu[0.2933,0.3392] var[4.033e-04,1.335e-03] cov in 0.5s cond=nan
+  N= 10000: mu[0.2876,0.3392] var[4.033e-04,1.397e-03] cov in 4.1s cond=nan
+wrote /Users/petercotton/github/winning/research/qpo/snapshots/qm9_gap_seed11
+

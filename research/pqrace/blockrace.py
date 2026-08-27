@@ -1,0 +1,551 @@
+"""The block race: exact win probabilities under clustered covariance.
+
+    Y_i = mu_i + v_i * a_{c(i)} + sd_i * eps_i,
+    a_c ~ N(0,1) independent across clusters, eps independent.
+
+Sigma is block-structured: within cluster c, cov(Y_i, Y_j) = v_i v_j;
+across clusters, zero (plus diagonal). This is the geometry a global
+low-rank factorization represents worst (many small blocks), and it
+factorizes EXACTLY: across-cluster independence splits the field product
+by cluster,
+
+    G(x) = prod_c G_c(x),      G_c(x) = E_a[ prod_{j in c} F_j(x - v_j a) ],
+
+so each cluster needs one 1-d quadrature, not a joint dimension. The winner's
+own cluster is handled by leave-one-out INSIDE its block -- a cavity division
+at the cluster level (the Schur move: condition on the block, integrate it
+out):
+
+    p_i = int dx sum_a w_a f_i(x,a) exp(S_{c(i)}(x,a) - logF_i(x,a))
+                        * prod_{c' != c(i)} G_{c'}(x)
+
+Cost O(N * L * Q_a): the same order as a rank-1 race, for arbitrarily many
+blocks. A global factor on top would add one outer quadrature dimension.
+"""
+import numpy as np
+from scipy.special import ndtr, roots_hermitenorm
+
+TINY = 1e-300
+
+
+class SurvivalTables:
+    """The package's saved-survival-lookup design, adopted: per-member base
+    tables of log Phi(x / sd_i) and the matching pdf on an EXTENDED lattice,
+    built once while (sd, v, cluster, lattice) are fixed -- once per
+    inversion -- and evaluated for any mu by TWO-SLICE FRACTIONAL BLEND
+    (linear interpolation between adjacent integer shifts, O(dx^2); the same
+    trick winning.lattice uses for shifted densities)."""
+
+    def __init__(self, sd, v, an, x, pad_extra=2.0):
+        self.sd = np.asarray(sd, float); self.v = np.asarray(v, float)
+        self.an = np.asarray(an, float)
+        self.x = x; self.dx = x[1] - x[0]
+        shift_max = np.abs(self.v).max() * np.abs(self.an).max() + pad_extra
+        self.PAD = int(np.ceil((shift_max + 6.0) / self.dx)) + 2
+        xe = x[0] + self.dx * np.arange(-self.PAD, len(x) + self.PAD)
+        self.xe = xe
+        with np.errstate(divide="ignore"):
+            self.BF = np.log(np.maximum(ndtr(xe[None, :] / self.sd[:, None]), TINY))
+        self.BP = (np.exp(-0.5 * (xe[None, :] / self.sd[:, None]) ** 2)
+                   / (self.sd[:, None] * np.sqrt(2.0 * np.pi)))
+
+    def eval(self, mu):
+        N, L = len(self.sd), len(self.x)
+        sh = (np.asarray(mu, float)[:, None] + self.v[:, None] * self.an[None, :]) / self.dx
+        k = np.floor(sh).astype(int)
+        w = (sh - k)[:, :, None]
+        idx = (self.PAD - k)[:, :, None] + np.arange(L)[None, None, :]
+        idx = np.clip(idx, 1, len(self.xe) - 1)
+        BFb = np.broadcast_to(self.BF[:, None, :], (N, self.an.size, len(self.xe)))
+        BPb = np.broadcast_to(self.BP[:, None, :], (N, self.an.size, len(self.xe)))
+        logF = ((1.0 - w) * np.take_along_axis(BFb, idx, axis=2)
+                + w * np.take_along_axis(BFb, idx - 1, axis=2))
+        pdf = ((1.0 - w) * np.take_along_axis(BPb, idx, axis=2)
+               + w * np.take_along_axis(BPb, idx - 1, axis=2))
+        return logF, pdf
+
+
+def block_race(mu, sd, cluster, v, points=257, qa=9, span=8.0, tables=None):
+    """p_i = P(Y_i = max_j Y_j) under the nested-effects model.
+
+    mu, sd, v : (N,) means, idiosyncratic sds, cluster-effect loadings
+    cluster   : (N,) int cluster ids (singletons allowed: loading irrelevant)
+    """
+    mu = np.asarray(mu, float); sd = np.asarray(sd, float)
+    v = np.asarray(v, float); cluster = np.asarray(cluster)
+    N = len(mu)
+    _, inv = np.unique(cluster, return_inverse=True)
+    order = np.argsort(inv, kind="stable")
+    mu_o, sd_o, v_o, c_o = mu[order], sd[order], v[order], inv[order]
+    starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
+    nC = len(starts)
+
+    tot = np.sqrt(sd_o ** 2 + v_o ** 2)
+    lo = float((mu_o - span * tot).min()); hi = float((mu_o + span * tot).max())
+    x = np.linspace(lo, hi, points); dx = x[1] - x[0]
+
+    an, aw = roots_hermitenorm(qa)
+    aw = aw / aw.sum()
+
+    # logF[j, q, l] = log Phi((x_l - mu_j - v_j a_q) / sd_j)
+    if tables is not None:
+        logF, pdf = tables.eval(mu_o)
+    else:
+        z = (x[None, None, :] - mu_o[:, None, None] - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
+        logF = np.log(np.maximum(ndtr(z), TINY))                   # (N, qa, L)
+        pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+
+    S = np.add.reduceat(logF, starts, axis=0)                      # (nC, qa, L)
+    G = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))     # (nC, L), S<=0
+    logG = np.log(np.maximum(G, TINY))
+    logG_all = logG.sum(axis=0)                                    # (L,)
+    rest = logG_all[None, :] - logG                                # (nC, L) leave-cluster-out
+
+    # per member: within-cluster leave-one-out at each (a, x)
+    Sc = S[c_o]                                                    # (N, qa, L)
+    inner = pdf * np.exp(np.minimum(Sc - logF, 0.0))               # (N, qa, L)
+    inner = np.einsum("q,nql->nl", aw, inner)                      # (N, L)
+    p_o = (inner * np.exp(np.minimum(rest[c_o], 0.0))).sum(axis=1) * dx
+    p = np.empty(N); p[order] = p_o
+    return np.maximum(p, 0.0)
+
+
+def nested_race(mu, sd, cluster, v, g=None, gamma=1.0, points=257, qa=9,
+                qf=15, span=8.0):
+    """Depth-2 Schur race: global coupling factor over correlated blocks.
+
+        Y_i = mu_i + gamma * g_i * f + v_i * a_{c(i)} + sd_i * eps_i
+
+    Sigma = gamma^2 g g' + block-diagonal + D: blocks whose CROSS-covariance
+    is carried by one rank-1 term -- the race analogue of the Schur
+    complementary portfolio construction, where sub-problems stay separable
+    and the inter-block coupling enters through a low-rank adjustment.
+    gamma interpolates: 0 = independent blocks (the hierarchical/Harville
+    end), 1 = the full nested covariance (the Markowitz end).
+
+    Cost: qf outer nodes x the block_race field assembly. Recursing the same
+    move (blocks of blocks, one coupling factor per split) gives the tree
+    race at O(N L Q log C); this is the first rung.
+    """
+    from scipy.stats import qmc
+    from scipy.special import ndtri
+    mu = np.asarray(mu, float)
+    if g is None or gamma == 0.0:
+        return block_race(mu, sd, cluster, v, points=points, qa=qa, span=span)
+    g = np.asarray(g, float)
+    fn, fw = roots_hermitenorm(qf)
+    fw = fw / fw.sum()
+    p = np.zeros(len(mu))
+    for q in range(qf):
+        p += fw[q] * block_race(mu + gamma * g * fn[q], sd, cluster, v,
+                                points=points, qa=qa, span=span)
+    return p
+
+
+def block_abilities_from_probabilities(p, sd, cluster, v, g=None, gamma=1.0,
+                                       points=257, qa=9, qf=15, tol=1e-8,
+                                       max_iter=200, eta0=1.0):
+    """Invert the block/nested race: find centred mu with p(mu) = p.
+
+    The map mu -> log p is smooth and diagonally dominant (raising one
+    ability chiefly raises its own win probability), so a damped log-space
+    fixed point converges:
+
+        mu <- mu + eta * (log p_target - log p(mu)),   recentred each step,
+
+    with eta halved on any step that worsens the residual (the same scheme
+    the winning package's coordinate inversion reduces to when the forward
+    map is treated as a black box). Identification: p is invariant to a
+    common shift, so mu is returned centred -- the contrast is the estimand,
+    exactly as everywhere else in this programme.
+    """
+    p = np.asarray(p, float)
+    p = p / p.sum()
+    lt = np.log(np.maximum(p, 1e-300))
+    mu = np.log(p) - np.log(p).mean()          # Luce start
+    if g is not None and gamma != 0.0:
+        def forward(m):
+            return nested_race(m, sd, cluster, v, g=g, gamma=gamma,
+                               points=points, qa=qa, qf=qf)
+    else:
+        def forward(m):
+            return block_race(m, sd, cluster, v, points=points, qa=qa)
+    eta = eta0
+    lp = np.log(np.maximum(forward(mu), 1e-300))
+    err = np.abs(lp - lt).max()
+    for _ in range(max_iter):
+        if err < tol:
+            break
+        mu_new = mu + eta * (lt - lp)
+        mu_new -= mu_new.mean()
+        lp_new = np.log(np.maximum(forward(mu_new), 1e-300))
+        err_new = np.abs(lp_new - lt).max()
+        if err_new < err:
+            mu, lp, err = mu_new, lp_new, err_new
+            eta = min(eta * 1.2, 1.5)
+        else:
+            eta *= 0.5
+            if eta < 1e-4:
+                break
+    return mu, err
+
+
+def block_race_jac(mu, sd, cluster, v, points=257, qa=9, span=8.0):
+    """Win probabilities AND the exact Jacobian d p / d mu, from one pass.
+
+    The Jacobian inherits the Schur structure of the model:
+      same block   J_ij = -int dx sum_a w_a f_i f_j exp(S_c - lF_i - lF_j) R_c(x)
+                   (i and j share the block effect at each node)
+      cross block  J_ij = -int dx h_i(x) h_j(x) G(x) / (G_c(x) G_d(x))
+                   -- a GRAM over lattice points: block-diagonal plus a
+                   factored coupling, so Newton can solve blocks locally and
+                   correct through the shared field. Rows sum to zero (a
+                   common shift moves nothing), which sets the diagonal.
+    """
+    mu = np.asarray(mu, float); sd = np.asarray(sd, float)
+    v = np.asarray(v, float); cluster = np.asarray(cluster)
+    N = len(mu)
+    _, inv = np.unique(cluster, return_inverse=True)
+    order = np.argsort(inv, kind="stable")
+    mu_o, sd_o, v_o, c_o = mu[order], sd[order], v[order], inv[order]
+    starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
+    nC = len(starts)
+    tot = np.sqrt(sd_o ** 2 + v_o ** 2)
+    lo = float((mu_o - span * tot).min()); hi = float((mu_o + span * tot).max())
+    x = np.linspace(lo, hi, points); dx = x[1] - x[0]
+    an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
+
+    z = (x[None, None, :] - mu_o[:, None, None] - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
+    logF = np.log(np.maximum(ndtr(z), TINY))
+    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+    S = np.add.reduceat(logF, starts, axis=0)
+    G = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))
+    logG_all = np.log(np.maximum(G, TINY)).sum(axis=0)
+    Rc = np.exp(np.minimum(logG_all[None, :] - np.log(np.maximum(G, TINY)), 0.0))  # (nC, L)
+
+    lo_i = np.exp(np.minimum(S[c_o] - logF, 0.0))            # leave-one-out (N, qa, L)
+    h = np.einsum("q,nql->nl", aw, pdf * lo_i)               # (N, L)
+    p_o = (h * Rc[c_o]).sum(axis=1) * dx
+
+    # cross-block Gram: U_i(x) = h_i sqrt(dx G_all) / G_c(i)
+    Gall = np.exp(np.minimum(logG_all, 0.0))
+    U = h * np.sqrt(np.maximum(Gall, TINY) * dx)[None, :] / np.maximum(G[c_o], TINY)
+    J = -(U @ U.T)
+    # replace same-block entries with the exact shared-node term
+    for ci in range(nC):
+        a0 = starts[ci]; a1 = starts[ci + 1] if ci + 1 < nC else N
+        idx = np.arange(a0, a1)
+        if len(idx) == 1:
+            J[a0, a0] = 0.0
+            continue
+        lo2 = np.exp(np.minimum(S[ci][None, None, :, :] - logF[idx][:, None, :, :]
+                                - logF[idx][None, :, :, :], 0.0))
+        term = np.einsum("q,ijql,l->ij", aw, pdf[idx][:, None, :, :] * pdf[idx][None, :, :, :]
+                         * lo2, Rc[ci]) * dx
+        Jb = -term
+        J[np.ix_(idx, idx)] = Jb
+    np.fill_diagonal(J, 0.0)
+    J[np.arange(N), np.arange(N)] = -J.sum(axis=1)
+    # un-permute
+    p = np.empty(N); p[order] = p_o
+    Jf = np.empty((N, N)); Jf[np.ix_(order, order)] = J
+    return np.maximum(p, 0.0), Jf
+
+
+def block_invert_newton(p_target, sd, cluster, v, points=257, qa=9,
+                        tol=1e-10, max_iter=30):
+    """Newton inversion using the exact Jacobian. Gauge fixed by working on
+    the centred subspace (J's rows sum to zero; add the ones-projector)."""
+    p_t = np.asarray(p_target, float); p_t = p_t / p_t.sum()
+    N = len(p_t)
+    mu = np.log(np.maximum(p_t, 1e-300)); mu -= mu.mean()
+    ones = np.ones((N, N)) / N
+    lt = np.log(np.maximum(p_t, 1e-300))
+    # globalize with the ADAPTIVE fixed point (backtracking eta) until inside
+    # Newton's basin -- measured: Newton contracts to machine precision from
+    # |mu err| <= 0.5, and an un-damped fixed point can diverge outright
+    # under strong correlation, which is why the globalizer must backtrack
+    mu, _ = block_abilities_from_probabilities(p_t, sd, cluster, v,
+                                               points=points, qa=qa,
+                                               tol=0.2, max_iter=60)
+    for it in range(max_iter):
+        p, J = block_race_jac(mu, sd, cluster, v, points=points, qa=qa)
+        p = np.maximum(p / p.sum(), 1e-300)
+        r = np.log(p) - lt                       # log residual: even rows scale
+        if np.abs(r).max() < tol:
+            return mu - mu.mean(), float(np.abs(r).max()), it
+        Jl = J / p[:, None]                      # d log p / d mu
+        step, *_ = np.linalg.lstsq(Jl + ones, -r, rcond=1e-12)
+        n = np.linalg.norm(step)
+        if n > 5.0:                              # trust region on the step
+            step *= 5.0 / n
+        cur = np.abs(r).max()
+        for _ in range(12):                      # damp but never abort
+            mu_n = mu + step; mu_n -= mu_n.mean()
+            p_n = block_race(mu_n, sd, cluster, v, points=points, qa=qa)
+            p_n = np.maximum(p_n / p_n.sum(), 1e-300)
+            if np.abs(np.log(p_n) - lt).max() < cur:
+                mu = mu_n
+                break
+            step *= 0.5
+        else:
+            mu = mu + step * (2.0 ** 0)          # take the tiny step anyway
+            mu -= mu.mean()
+    p, _ = block_race_jac(mu, sd, cluster, v, points=points, qa=qa)
+    p = np.maximum(p / p.sum(), 1e-300)
+    return mu - mu.mean(), float(np.abs(np.log(p) - lt).max()), max_iter
+
+
+def tree_race(mu, sd, cluster, v, parent, lam, points=257, qa=9, span=8.0,
+              return_internals=False):
+    """Rung 3: exact win probabilities under a HIERARCHICAL covariance.
+
+    Nodes 0..nC-1 are the leaf clusters (with per-member loadings v, as in
+    block_race). Internal nodes are indexed nC..nT-1; parent[t] gives each
+    node's parent (root's parent = -1); lam[t] is the strength of node t's
+    shared effect, applied UNIFORMLY to every leaf beneath it (that
+    uniformity is what keeps every message a function of one variable).
+    Correlation between two leaves = sum of lam^2 over common ancestors plus
+    the leaf-cluster term: an HODLR-style hierarchy at any depth.
+
+    Two passes of message passing on the lattice:
+      up    G_t(y) = E_a[ prod_children G_c(y - lam_t a) ]
+      down  R_c(y) = Smooth_{lam_t}[R_t](y) * prod_siblings G_s(y)
+    then the leaf step is block_race's, with R_c in place of the flat field.
+    Cost O(n_nodes * L * Q) at any depth.
+    """
+    mu = np.asarray(mu, float); sd = np.asarray(sd, float)
+    v = np.asarray(v, float); cluster = np.asarray(cluster)
+    parent = np.asarray(parent, int); lam = np.asarray(lam, float)
+    N = len(mu); nT = len(parent)
+    _, inv = np.unique(cluster, return_inverse=True)
+    nC = inv.max() + 1
+    order = np.argsort(inv, kind="stable")
+    mu_o, sd_o, v_o, c_o = mu[order], sd[order], v[order], inv[order]
+    starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
+
+    # lattice must cover accumulated ancestor shifts
+    depth_shift = np.zeros(nT)
+    for t in range(nT):
+        s_, u = 0.0, t
+        while parent[u] >= 0:
+            s_ += abs(lam[parent[u]]); u = parent[u]
+        depth_shift[t] = s_
+    tot = np.sqrt(sd_o ** 2 + v_o ** 2)
+    pad = span + 3.5 * (depth_shift[:nC].max() if nC < nT else 0.0)
+    lo = float((mu_o - pad * np.maximum(tot, 1.0)).min())
+    hi = float((mu_o + pad * np.maximum(tot, 1.0)).max())
+    x = np.linspace(lo, hi, points); dx = x[1] - x[0]
+    an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
+
+    z = (x[None, None, :] - mu_o[:, None, None] - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
+    logF = np.log(np.maximum(ndtr(z), TINY))
+    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+    S = np.add.reduceat(logF, starts, axis=0)                  # (nC, qa, L)
+    G = np.empty((nT, points))
+    G[:nC] = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))
+
+    children = [[] for _ in range(nT)]
+    root = -1
+    for t in range(nT):
+        if parent[t] >= 0:
+            children[parent[t]].append(t)
+        else:
+            root = t
+    def shift_eval(g, delta):
+        return np.interp(x, x - delta, g, left=g[0], right=g[-1])
+    # upward: internal nodes in an order where children precede parents
+    topo = sorted(range(nC, nT), key=lambda t: -depth_shift[t])
+    for t in topo:
+        acc = np.zeros(points)
+        for q in range(qa):
+            prod = np.ones(points)
+            for c in children[t]:
+                prod = prod * shift_eval(G[c], lam[t] * an[q])
+            acc += aw[q] * prod
+        G[t] = np.maximum(acc, 0.0)
+    # downward
+    R = np.ones((nT, points))
+    for t in [root] + sorted(range(nT), key=lambda u: depth_shift[u]):
+        if t == root or parent[t] < 0:
+            continue
+        pa = parent[t]
+        sm = np.zeros(points)
+        for q in range(qa):
+            sm += aw[q] * shift_eval(R[pa], -lam[pa] * an[q])
+        prod = np.ones(points)
+        for s_ in children[pa]:
+            if s_ != t:
+                prod = prod * G[s_]
+        R[t] = np.maximum(sm * prod, 0.0)
+    # leaf step
+    lo_i = np.exp(np.minimum(S[c_o] - logF, 0.0))
+    h = np.einsum("q,nql->nl", aw, pdf * lo_i)
+    p_o = (h * R[c_o]).sum(axis=1) * dx
+    p = np.empty(N); p[order] = p_o
+    if return_internals:
+        return (np.maximum(p, 0.0),
+                dict(h=h, R=R, G=G, S=S, logF=logF, pdf=pdf, starts=starts,
+                     c_o=c_o, order=order, dx=dx, root=root, nC=nC))
+    return np.maximum(p, 0.0)
+
+
+def nested_race_jac(mu, sd, cluster, v, g, gamma=1.0, points=257, qa=9, qf=15):
+    """Exact Jacobian for the nested race: it is a finite MIXTURE over the
+    global node, so J = sum_q w_q J_block(mu + gamma g f_q). Free exactness."""
+    fn, fw = roots_hermitenorm(qf); fw = fw / fw.sum()
+    N = len(mu)
+    p = np.zeros(N); J = np.zeros((N, N))
+    for q in range(qf):
+        pq, Jq = block_race_jac(np.asarray(mu, float) + gamma * np.asarray(g, float) * fn[q],
+                                sd, cluster, v, points=points, qa=qa)
+        p += fw[q] * pq; J += fw[q] * Jq
+    return p, J
+
+
+def tree_race_jac(mu, sd, cluster, v, parent, lam, points=257, qa=9):
+    """Jacobian for the tree race: same-cluster term EXACT under the message
+    R_c; cross-cluster by the Gram h_i h_j R_c R_d / G_root -- exact when the
+    clusters share no ancestor effects (reduces to block_race_jac's formula),
+    an approximation otherwise. Good enough for Newton, whose residual is
+    always measured with the exact forward map."""
+    p, I = tree_race(mu, sd, cluster, v, parent, lam, points=points, qa=qa,
+                     return_internals=True)
+    h, R, G, S, logF, pdf = I["h"], I["R"], I["G"], I["S"], I["logF"], I["pdf"]
+    starts, c_o, order, dx, root, nC = (I["starts"], I["c_o"], I["order"],
+                                        I["dx"], I["root"], I["nC"])
+    N = len(mu)
+    an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
+    Gr = np.maximum(G[root], TINY)
+    U = h * R[c_o] / np.sqrt(Gr)[None, :] * np.sqrt(dx)
+    J = -(U @ U.T)
+    for ci in range(nC):
+        a0 = starts[ci]; a1 = starts[ci + 1] if ci + 1 < nC else N
+        idx = np.arange(a0, a1)
+        if len(idx) == 1:
+            continue
+        lo2 = np.exp(np.minimum(S[ci][None, None, :, :] - logF[idx][:, None, :, :]
+                                - logF[idx][None, :, :, :], 0.0))
+        term = np.einsum("q,ijql,l->ij", aw, pdf[idx][:, None, :, :]
+                         * pdf[idx][None, :, :, :] * lo2, R[ci]) * dx
+        J[np.ix_(idx, idx)] = -term
+    np.fill_diagonal(J, 0.0)
+    J[np.arange(N), np.arange(N)] = -J.sum(axis=1)
+    Jf = np.empty((N, N)); Jf[np.ix_(order, order)] = J
+    return p, Jf
+
+
+def _generic_fixed_point(forward, p_t, tol=0.2, max_iter=80, eta0=1.0):
+    p_t = p_t / p_t.sum()
+    lt = np.log(np.maximum(p_t, 1e-300))
+    mu = lt - lt.mean()
+    eta = eta0
+    lp = np.log(np.maximum(forward(mu), 1e-300))
+    err = np.abs(lp - lt).max()
+    for _ in range(max_iter):
+        if err < tol:
+            break
+        mu_n = mu + eta * (lt - lp); mu_n -= mu_n.mean()
+        lp_n = np.log(np.maximum(forward(mu_n), 1e-300))
+        e_n = np.abs(lp_n - lt).max()
+        if e_n < err:
+            mu, lp, err = mu_n, lp_n, e_n
+            eta = min(eta * 1.2, 1.5)
+        else:
+            eta *= 0.5
+            if eta < 1e-4:
+                break
+    return mu, err
+
+
+def invert_race(p_target, forward, forward_jac, tol=1e-10, max_iter=25):
+    """Generic hybrid inversion: adaptive fixed point into Newton's basin,
+    then Newton on the log residual with the supplied (exact or approximate)
+    Jacobian. Works for block, nested and tree races alike."""
+    p_t = np.asarray(p_target, float); p_t = p_t / p_t.sum()
+    N = len(p_t)
+    # RESOLUTION FLOOR: a target probability of zero (below lattice
+    # resolution) does not measure an ability, it only BOUNDS it -- the
+    # zero-count-longshot lesson again. Without the floor, log p carries
+    # -690 entries, the Luce start inherits a spread of hundreds, and no
+    # optimizer recovers. Floored entries converge to the ability that
+    # prices AT the floor: an upper bound, honestly labelled by `floor`.
+    floor = max(1e-14, p_t[p_t > 0].min() * 1e-3)
+    p_t = np.maximum(p_t, floor); p_t = p_t / p_t.sum()
+    lt = np.log(p_t)
+    ones = np.ones((N, N)) / N
+    mu, err = _generic_fixed_point(forward, p_t, tol=0.2, max_iter=200)
+    eta = 0.5
+    for it in range(max_iter):
+        p, J = forward_jac(mu)
+        p = np.maximum(p / p.sum(), 1e-300)
+        r = np.log(p) - lt
+        cur = np.abs(r).max()
+        if cur < tol:
+            return mu - mu.mean(), float(cur), it
+        Jl = J / p[:, None]
+        step, *_ = np.linalg.lstsq(Jl + ones, -r, rcond=1e-12)
+        n = np.linalg.norm(step)
+        if n > 5.0:
+            step *= 5.0 / n
+        improved = False
+        for _ in range(6):
+            mu_n = mu + step; mu_n -= mu_n.mean()
+            p_n = np.maximum(forward(mu_n), 1e-300); p_n = p_n / p_n.sum()
+            if np.abs(np.log(p_n) - lt).max() < cur:
+                mu, improved = mu_n, True
+                break
+            step *= 0.5
+        if not improved:
+            # MONOTONE FALLBACK: adaptive fixed-point steps -- provably
+            # convergent, so a failed Newton step never strands the iterate
+            lp = np.log(np.maximum(forward(mu), 1e-300))
+            for _ in range(10):
+                mu_n = mu + eta * (lt - lp); mu_n -= mu_n.mean()
+                lp_n = np.log(np.maximum(forward(mu_n), 1e-300))
+                if np.abs(lp_n - lt).max() < cur:
+                    mu, lp = mu_n, lp_n
+                    cur = np.abs(lp_n - lt).max()
+                    eta = min(eta * 1.2, 1.5)
+                else:
+                    eta *= 0.5
+    p = np.maximum(forward(mu), 1e-300); p = p / p.sum()
+    return mu - mu.mean(), float(np.abs(np.log(p) - lt).max()), max_iter
+
+
+# ---------------------------------------------------------------------------
+# rust-backed forwards (fastrace.block_race): machine-identical, 5-6x faster
+# ---------------------------------------------------------------------------
+
+def block_race_rs(mu, sd, cluster, v, points=257, qa=9):
+    """Rust-backed block race (fastrace). Validated: TV ~1e-16 against the
+    numpy kernel at N up to 10,000; 4.6-6.1x faster (rayon over columns,
+    fused per-column work, no N x L temporaries)."""
+    import fastrace
+    from scipy.special import roots_hermitenorm as _rh
+    an, aw = _rh(qa); aw = aw / aw.sum()
+    cluster = np.asarray(cluster)
+    _, inv = np.unique(cluster, return_inverse=True)
+    order = np.argsort(inv, kind="stable")
+    starts = np.flatnonzero(np.r_[True, np.diff(inv[order]) != 0]).astype(np.int64)
+    p_o = fastrace.block_race(
+        np.ascontiguousarray(np.asarray(mu, float)[order]),
+        np.ascontiguousarray(np.asarray(sd, float)[order]),
+        np.ascontiguousarray(np.asarray(v, float)[order]),
+        starts, np.ascontiguousarray(an), np.ascontiguousarray(aw), points)
+    p = np.empty(len(mu)); p[order] = np.asarray(p_o)
+    return p
+
+
+def nested_race_rs(mu, sd, cluster, v, g=None, gamma=1.0, points=257, qa=9, qf=15):
+    """Rust-backed nested race: the mixture over the global node, each term a
+    rust block call with shifted mu."""
+    if g is None or gamma == 0.0:
+        return block_race_rs(mu, sd, cluster, v, points=points, qa=qa)
+    fn, fw = roots_hermitenorm(qf); fw = fw / fw.sum()
+    mu = np.asarray(mu, float); g = np.asarray(g, float)
+    p = np.zeros(len(mu))
+    for q in range(qf):
+        p += fw[q] * block_race_rs(mu + gamma * g * fn[q], sd, cluster, v,
+                                   points=points, qa=qa)
+    return p

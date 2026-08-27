@@ -1,0 +1,4 @@
+
+(VRF = variance reduction factor vs plain MC at equal draws; unbiased by construction)
+dense_onion    k=3 M=  64 resid_dims=12 negmass 3.360  sd 7.96e-04 (plain 2.63e-03)  VRF     10.9  maxbias 3.2e-02  t 1.01s vs 0ms
+dense_onion    k=3 M= 256 resid_dims=12 negmass 3.360  sd 2.92e-04 (plain 2.63e-03)  VRF     81.1  maxbias 3.2e-02  t 32.65s vs 0ms

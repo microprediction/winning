@@ -1,0 +1,13 @@
+  dropping 1 unparseable SMILES
+library: 39311 rows, 39223 unique smiles
+  fingerprints: (39311, 2048) in 4.7s
+acquired 50 molecules; 39173 candidates remain
+GP fit in 0.3s: {'likelihood.noise': 0.00824352540075779, 'covar_module.outputscale': 0.010026773437857628, 'mean_module.constant': 0.9992265701293945}
+UCB over 39173 candidates in 1.9s
+  N=   500: mu[0.9195,0.9609] var[1.136e-02,1.734e-02] cov in 0.0s cond=4.709e+01
+  N=  1000: mu[0.9195,0.9667] var[1.108e-02,1.755e-02] cov in 0.0s cond=8.033e+01
+  N=  2000: mu[0.9195,0.9744] var[1.108e-02,1.787e-02] cov in 0.1s cond=1.414e+02
+  N=  5000: mu[0.9195,0.9876] var[1.108e-02,1.808e-02] cov in 0.5s cond=nan
+  N= 10000: mu[0.9195,1.0048] var[1.092e-02,1.827e-02] cov in 2.5s cond=nan
+wrote /Users/petercotton/github/winning/research/qpo/snapshots/wong_antibiotics_Mean_50uM_seed7_min
+

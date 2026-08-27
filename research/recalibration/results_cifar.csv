@@ -1,0 +1,9 @@
+model,nll,ece,brier
+softmax,1.281678,0.142255,0.416814
+temp,1.029278,0.031443,0.381659
+race-diag,1.029126,0.024986,0.380265
+race-r2,1.042027,0.027850,0.379369
+superclass_corr,-0.027143,,
+superclass_top5pct,0.040323,0.040404,
+restricted_iia,0.457164,,
+restricted_race,0.449695,,

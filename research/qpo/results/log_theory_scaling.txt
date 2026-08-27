@@ -1,0 +1,9 @@
+rank 2, N=200, common random numbers, M=40,000,000
+  first-order prediction built from 1.000 of Delta
+  CRN difference noise floor (t=0): TV 0.00123
+  t= 0.05: measured TV 0.00068  predicted TV 0.00061  rel err 0.398  corr +0.917
+  t= 0.10: measured TV 0.00127  predicted TV 0.00122  rel err 0.261  corr +0.965
+  t= 0.25: measured TV 0.00306  predicted TV 0.00304  rel err 0.253  corr +0.968
+  t= 0.50: measured TV 0.00632  predicted TV 0.00608  rel err 0.409  corr +0.915
+  t= 1.00: measured TV 0.01608  predicted TV 0.01217  rel err 0.714  corr +0.703
+wrote /Users/petercotton/github/winning/research/qpo/results/theory_scaling_qm9_gap_seed7_N200.csv

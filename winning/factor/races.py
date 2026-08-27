@@ -25,6 +25,16 @@ from scipy.special import ndtr
 
 from .core import hermite_nodes
 
+try:                                       # compiled kernels (rust/fastrace)
+    import fastrace as _fastrace
+    _RUST_OK = hasattr(_fastrace, "forward_and_slopes")
+    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
+        "WINNING_PURE", "").strip() in ("", "0")
+except ImportError:
+    _fastrace = None
+    _RUST_OK = False
+    _HAVE_RUST = False
+
 _EULER = 0.5772156649015329
 
 
@@ -57,30 +67,159 @@ def _setup(mu, V, D, F, W, base):
     else:
         V = np.atleast_2d(np.asarray(V, dtype=float))
         if F is None or W is None:
-            F, W = hermite_nodes(V.shape[1])
+            # adaptive order: when idiosyncratic noise is small relative
+            # to the loadings, the conditional race is nearly
+            # deterministic and the factor integrand is nearly a step --
+            # a fixed 15-node rule silently loses 2-5% (found by the
+            # fuzz battery, research/fuzz). Scale the order with the
+            # sharpness ratio; identical rule in the R port.
+            sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1))
+                                 / np.sqrt(np.maximum(D, 1e-300))))
+            r = V.shape[1]
+            if r >= 2 and sharp > 3.0:
+                # past this sharpness the integrand is a near-step in
+                # factor space and Gauss-Hermite converges slowly at ANY
+                # order (measured: the 25-node rule still loses ~1e-2 TV
+                # at sharp ~ 10, while scrambled Sobol reaches the QMC
+                # reference's own noise). Escalate the FAMILY, not the
+                # order. See docs/latex_src/general_inversion/break.py,
+                # section H; identical rule in the R port (Halton there,
+                # to stay dependency-free).
+                from .core import qmc_nodes
+                F, W = qmc_nodes(r, m=13)
+            else:
+                cap = 201 if r == 1 else (41 if r == 2 else 15)
+                Q = int(np.clip(np.ceil(8.0 * sharp), 15, cap))
+                F, W = hermite_nodes(r, Q=Q)
     fn = base if callable(base) else BASES[base]
     left, right = _SPANS.get(base, (12.0, 12.0)) if not callable(base) \
         else (12.0, 12.0)
     return mu, V, D, np.asarray(F, float), np.asarray(W, float), fn, left, right
 
 
+
+
+def _bulk_window(M_all, sd, points, delta):
+    """Lattice over the WINNER distribution's bulk, not the ability span.
+
+    G(x) = 1 - prod_j S_j(x) is the winner cdf under the min-race (averaged
+    over factor nodes via the extreme conditional locations, a conservative
+    envelope); [G^-1(delta), G^-1(1-delta)] carries all but 2*delta of every
+    runner's win integrand -- a hopeless runner only wins by running a
+    winner-class time. Measured (research/lattice_window): 33 points here
+    beat 513 on the ability-span window, whose own truncation floors its
+    accuracy near 6e-11. Bisection on a monotone function; cost negligible.
+    """
+    from .races import _setup  # noqa -- self-module, for clarity only
+    mu_lo = M_all.min(axis=0)
+    mu_hi = M_all.max(axis=0)
+    s = sd
+
+    def G(x):
+        # envelope: winner cdf using each runner's most favourable node
+        z = (x - mu_lo) / s
+        logS = np.log(np.maximum(1.0 - _ndtr_local(z), 1e-300))
+        return 1.0 - np.exp(logS.sum())
+
+    lo0 = float(mu_lo.min() - 9.0 * s.max())
+    hi0 = float(mu_hi.max() + 9.0 * s.max())
+    a, b = lo0, hi0
+    for _ in range(80):
+        m = 0.5 * (a + b)
+        if G(m) < delta:
+            a = m
+        else:
+            b = m
+    xlo = a
+    a, b = xlo, hi0
+    # right edge from the LEAST favourable nodes so no runner's density is cut
+    def H(x):
+        z = (x - mu_hi) / s
+        logS = np.log(np.maximum(1.0 - _ndtr_local(z), 1e-300))
+        return 1.0 - np.exp(logS.sum())
+    for _ in range(80):
+        m = 0.5 * (a + b)
+        if H(m) < 1.0 - delta:
+            a = m
+        else:
+            b = m
+    # base-agnostic safety margin: the bisection envelope uses the normal
+    # survival, and other bases (gumbel) have different tails -- pad both
+    # edges by 2 sd so no base's density is clipped. Costs ~15% width,
+    # preserves the ~4x narrowing.
+    pad = 2.0 * float(s.max())
+    return np.linspace(xlo - pad, b + pad, points)
+
+
+def _ndtr_local(z):
+    from scipy.special import ndtr
+    return ndtr(z)
+
+
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
-                       points=501, temperature=0.0, return_slopes=False):
+                       points=257, temperature=0.0, return_slopes=False,
+                       structure=None, window="bulk", delta=1e-12):
     """Win probabilities of the general race, all N in one field pass.
 
+    Pass `structure=` (Independent/Factor/Blocks/Nested/Tree from
+    winning.factor.structures) to describe the covariance declaratively --
+    one race, five grammars; V=/D= remain as sugar for the factor case.
     temperature > 0 returns the softmin expectation E[softmin(X/tau)],
     computed exactly as the hard race with each base convolved with the
     tau-scaled min-Gumbel kernel."""
+    if structure is not None:
+        from .structures import dispatch_probabilities
+        return dispatch_probabilities(mu, structure, base=base,
+                                      temperature=temperature,
+                                      return_slopes=return_slopes)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     if temperature and temperature > 0:
         return _race_tempered(mu, V, D, F, W, fn, left, right,
                               float(temperature), points, return_slopes)
     sd = np.sqrt(D)
     n = len(mu)
+    if _HAVE_RUST and base == "normal" and n * len(F) > 2e7:
+        # at scale, materializing the Q x n conditional-means matrix (only
+        # ever used for the window) costs gigabytes and dominates runtime;
+        # per-runner extremes over the node set suffice. For GH tensor
+        # grids the box hull IS the exact node-set extreme (every sign
+        # corner is a node); for Sobol it is a conservative superset.
+        fabs = np.abs(F).max(axis=0)
+        spread = np.abs(V) @ fabs
+        M_lo = (mu - spread)[None, :]
+        M_hi = (mu + spread)[None, :]
+        if window == "bulk":
+            x = _bulk_window(np.vstack([M_lo, M_hi]), sd, points, delta)
+        else:
+            x = np.linspace(M_lo.min() - left * sd.max(),
+                            M_hi.max() + right * sd.max(), points)
+        dx = x[1] - x[0]
+        p, sl, total = _fastrace.forward_and_slopes(
+            np.ascontiguousarray(mu), np.ascontiguousarray(V),
+            np.ascontiguousarray(D), np.ascontiguousarray(F),
+            np.ascontiguousarray(W), points, float(x[0]), float(x[-1]))
+        if return_slopes:
+            return np.asarray(p), np.asarray(sl) / total
+        return np.asarray(p)
     M_all = mu[None, :] + F @ V.T
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), points)
+    if window == "bulk":
+        x = _bulk_window(M_all, sd, points, delta)
+    else:
+        x = np.linspace(M_all.min() - left * sd.max(),
+                        M_all.max() + right * sd.max(), points)
     dx = x[1] - x[0]
+    if _HAVE_RUST and base == "normal":
+        try:
+            p, sl, total = _fastrace.forward_and_slopes(
+                np.ascontiguousarray(mu), np.ascontiguousarray(V),
+                np.ascontiguousarray(D), np.ascontiguousarray(F),
+                np.ascontiguousarray(W), points,
+                float(x[0]), float(x[-1]))
+            if return_slopes:
+                return np.asarray(p), np.asarray(sl) / total
+            return np.asarray(p)
+        except TypeError:
+            pass       # older fastrace without window arguments: numpy path
     p = np.zeros(n)
     slope = np.zeros(n)
     chunk = max(1, int(5e6 / (n * points)))
@@ -101,7 +240,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
 
 
 def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
-                        points=501, temperature=0.0, n_iter=60, tol=1e-8):
+                        points=257, temperature=0.0, n_iter=60, tol=1e-8):
     """Invert the general race: mean-zero mu with race_probabilities(mu) = p."""
     target = np.asarray(p, dtype=float)
     if np.any(target <= 0):
@@ -109,6 +248,10 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     target = target / target.sum()
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
+    # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
+    # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
+    # a local two-cycle. Fixed damping 0.7 restores contraction.
+    alpha = 1.0 if len(target) > 2 else 0.7
     for _ in range(n_iter):
         phat, sl = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
                                       points=points, temperature=temperature,
@@ -117,7 +260,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         if np.abs(resid).max() < tol:
             break
         dlogp = np.minimum(sl / np.maximum(phat, 1e-300), -1e-6)
-        mu = mu - np.clip(resid / dlogp, -2.0, 2.0)
+        mu = mu - np.clip(alpha * resid / dlogp, -2.0, 2.0)
         mu -= mu.mean()
     return mu
 

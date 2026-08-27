@@ -1,0 +1,15 @@
+Package: mlogitfast
+Title: Fast Exact Multinomial Probit Behind the mlogit Interface
+Version: 0.1.0
+Authors@R: person("Peter", "Cotton", email = "peter.cotton@microprediction.com", role = c("aut", "cre"))
+Description: Deterministic maximum likelihood for the multinomial probit
+    choice model, replacing GHK simulation with an exact factor-conditional
+    product integral. Accepts mlogit-style dfidx data and formulas for
+    alternative-specific covariates. The covariance is parameterized as
+    rank-2 factors with zero reference loadings and unit idiosyncratic
+    variance, which covers the same identified model space as mlogit's
+    differenced-Cholesky parameterization with the same degrees of freedom.
+License: MIT + file LICENSE
+Imports: stats
+Suggests: mlogit, dfidx, testthat
+Encoding: UTF-8

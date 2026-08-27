@@ -1,0 +1,242 @@
+
+=== qPO-fast-r4-thompson-10k seed 0 ===
+  [qPO-fast-r4-thompson-10k seed0] iter  1 n=  150 top10=-0.4860 top100=-0.8971 top1%=0.000 top0.01%=0.000 acq=   4.4s score=  1.0s peak=  1206MB tan=0.227
+  [qPO-fast-r4-thompson-10k seed0] iter  2 n=  200 top10=-0.2591 top100=-0.8344 top1%=0.003 top0.01%=0.333 acq=   4.5s score=  0.5s peak=  1204MB tan=0.189
+  [qPO-fast-r4-thompson-10k seed0] iter  3 n=  250 top10=-0.1629 top100=-0.7762 top1%=0.013 top0.01%=0.333 acq=   4.5s score=  0.6s peak=  1204MB tan=0.149
+  [qPO-fast-r4-thompson-10k seed0] iter  4 n=  300 top10=-0.1071 top100=-0.5659 top1%=0.053 top0.01%=0.333 acq=   4.8s score=  0.7s peak=  1204MB tan=0.319
+  [qPO-fast-r4-thompson-10k seed0] iter  5 n=  350 top10=-0.1021 top100=-0.4146 top1%=0.089 top0.01%=0.333 acq=   4.8s score=  0.8s peak=  1204MB tan=0.261
+  [qPO-fast-r4-thompson-10k seed0] iter  6 n=  400 top10=-0.1021 top100=-0.3439 top1%=0.102 top0.01%=0.333 acq=   4.9s score=  0.8s peak=  1204MB tan=0.139
+  [qPO-fast-r4-thompson-10k seed0] iter  7 n=  450 top10=-0.1019 top100=-0.2840 top1%=0.109 top0.01%=0.333 acq=   5.0s score=  0.9s peak=  1204MB tan=0.156
+  [qPO-fast-r4-thompson-10k seed0] iter  8 n=  500 top10=-0.1019 top100=-0.2224 top1%=0.120 top0.01%=0.333 acq=   5.1s score=  1.0s peak=  1204MB tan=0.200
+  [qPO-fast-r4-thompson-10k seed0] iter  9 n=  550 top10=-0.1008 top100=-0.1840 top1%=0.130 top0.01%=0.333 acq=   5.3s score=  1.1s peak=  1204MB tan=0.182
+  [qPO-fast-r4-thompson-10k seed0] iter 10 n=  600 top10=-0.0995 top100=-0.1742 top1%=0.140 top0.01%=0.333 acq=   5.5s score=  1.3s peak=  1204MB tan=0.189
+
+=== qPO-fast-r4-thompson-10k seed 1 ===
+  [qPO-fast-r4-thompson-10k seed1] iter  1 n=  150 top10=-0.3177 top100=-0.9022 top1%=0.005 top0.01%=0.000 acq=   4.6s score=  0.4s peak=  1204MB tan=0.137
+  [qPO-fast-r4-thompson-10k seed1] iter  2 n=  200 top10=-0.1567 top100=-0.8325 top1%=0.015 top0.01%=0.000 acq=   4.7s score=  0.5s peak=  1204MB tan=0.175
+  [qPO-fast-r4-thompson-10k seed1] iter  3 n=  250 top10=-0.1525 top100=-0.7748 top1%=0.018 top0.01%=0.000 acq=   4.9s score=  0.6s peak=  1204MB tan=0.181
+  [qPO-fast-r4-thompson-10k seed1] iter  4 n=  300 top10=-0.1343 top100=-0.7215 top1%=0.025 top0.01%=0.000 acq=   4.7s score=  0.7s peak=  1204MB tan=0.198
+  [qPO-fast-r4-thompson-10k seed1] iter  5 n=  350 top10=-0.1159 top100=-0.5842 top1%=0.051 top0.01%=0.000 acq=   5.0s score=  0.7s peak=  1204MB tan=0.217
+  [qPO-fast-r4-thompson-10k seed1] iter  6 n=  400 top10=-0.1049 top100=-0.3889 top1%=0.092 top0.01%=0.000 acq=   5.2s score=  0.9s peak=  1204MB tan=0.258
+  [qPO-fast-r4-thompson-10k seed1] iter  7 n=  450 top10=-0.1028 top100=-0.2525 top1%=0.104 top0.01%=0.000 acq=   5.5s score=  0.9s peak=  1204MB tan=0.185
+  [qPO-fast-r4-thompson-10k seed1] iter  8 n=  500 top10=-0.1028 top100=-0.1993 top1%=0.127 top0.01%=0.000 acq=   5.3s score=  1.4s peak=  1204MB tan=0.136
+  [qPO-fast-r4-thompson-10k seed1] iter  9 n=  550 top10=-0.1012 top100=-0.1674 top1%=0.145 top0.01%=0.000 acq=   5.4s score=  1.3s peak=  1204MB tan=0.170
+  [qPO-fast-r4-thompson-10k seed1] iter 10 n=  600 top10=-0.1012 top100=-0.1602 top1%=0.163 top0.01%=0.000 acq=   5.8s score=  1.5s peak=  1204MB tan=0.151
+
+=== qPO-fast-r4-thompson-10k seed 2 ===
+  [qPO-fast-r4-thompson-10k seed2] iter  1 n=  150 top10=-0.5555 top100=-0.9095 top1%=0.003 top0.01%=0.000 acq=   4.6s score=  0.5s peak=  1204MB tan=0.206
+  [qPO-fast-r4-thompson-10k seed2] iter  2 n=  200 top10=-0.4226 top100=-0.8692 top1%=0.005 top0.01%=0.000 acq=   4.6s score=  0.5s peak=  1204MB tan=0.198
+  [qPO-fast-r4-thompson-10k seed2] iter  3 n=  250 top10=-0.3116 top100=-0.8453 top1%=0.008 top0.01%=0.000 acq=   4.5s score=  0.5s peak=  1204MB tan=0.187
+  [qPO-fast-r4-thompson-10k seed2] iter  4 n=  300 top10=-0.1815 top100=-0.8039 top1%=0.015 top0.01%=0.000 acq=   5.1s score=  0.7s peak=  1204MB tan=0.178
+  [qPO-fast-r4-thompson-10k seed2] iter  5 n=  350 top10=-0.1492 top100=-0.7725 top1%=0.018 top0.01%=0.000 acq=   4.8s score=  0.8s peak=  1204MB tan=0.150
+  [qPO-fast-r4-thompson-10k seed2] iter  6 n=  400 top10=-0.1436 top100=-0.7501 top1%=0.020 top0.01%=0.000 acq=   5.0s score=  0.9s peak=  1204MB tan=0.164
+  [qPO-fast-r4-thompson-10k seed2] iter  7 n=  450 top10=-0.1199 top100=-0.6865 top1%=0.031 top0.01%=0.000 acq=   5.1s score=  0.9s peak=  1204MB tan=0.179
+  [qPO-fast-r4-thompson-10k seed2] iter  8 n=  500 top10=-0.1035 top100=-0.5008 top1%=0.069 top0.01%=0.000 acq=   5.5s score=  1.0s peak=  1204MB tan=0.242
+  [qPO-fast-r4-thompson-10k seed2] iter  9 n=  550 top10=-0.1014 top100=-0.3188 top1%=0.109 top0.01%=0.000 acq=   5.4s score=  1.2s peak=  1204MB tan=0.206
+  [qPO-fast-r4-thompson-10k seed2] iter 10 n=  600 top10=-0.1007 top100=-0.1791 top1%=0.148 top0.01%=0.000 acq=   5.5s score=  1.3s peak=  1204MB tan=0.238
+
+=== qPO-fast-r4-thompson-10k seed 3 ===
+  [qPO-fast-r4-thompson-10k seed3] iter  1 n=  150 top10=-0.5841 top100=-0.9145 top1%=0.005 top0.01%=0.000 acq=   4.4s score=  0.5s peak=  1204MB tan=0.206
+  [qPO-fast-r4-thompson-10k seed3] iter  2 n=  200 top10=-0.4038 top100=-0.8696 top1%=0.008 top0.01%=0.000 acq=   4.6s score=  0.5s peak=  1204MB tan=0.174
+  [qPO-fast-r4-thompson-10k seed3] iter  3 n=  250 top10=-0.1598 top100=-0.7854 top1%=0.018 top0.01%=0.000 acq=   4.8s score=  0.6s peak=  1204MB tan=0.184
+  [qPO-fast-r4-thompson-10k seed3] iter  4 n=  300 top10=-0.1103 top100=-0.6535 top1%=0.043 top0.01%=0.000 acq=   5.0s score=  0.7s peak=  1204MB tan=0.216
+  [qPO-fast-r4-thompson-10k seed3] iter  5 n=  350 top10=-0.1103 top100=-0.5406 top1%=0.056 top0.01%=0.000 acq=   4.9s score=  0.8s peak=  1204MB tan=0.212
+  [qPO-fast-r4-thompson-10k seed3] iter  6 n=  400 top10=-0.1085 top100=-0.4513 top1%=0.064 top0.01%=0.000 acq=   5.1s score=  0.8s peak=  1204MB tan=0.203
+  [qPO-fast-r4-thompson-10k seed3] iter  7 n=  450 top10=-0.1085 top100=-0.3772 top1%=0.069 top0.01%=0.000 acq=   5.2s score=  0.9s peak=  1204MB tan=0.246
+  [qPO-fast-r4-thompson-10k seed3] iter  8 n=  500 top10=-0.1073 top100=-0.3111 top1%=0.084 top0.01%=0.000 acq=   5.4s score=  1.1s peak=  1204MB tan=0.215
+  [qPO-fast-r4-thompson-10k seed3] iter  9 n=  550 top10=-0.1073 top100=-0.2548 top1%=0.094 top0.01%=0.000 acq=   5.4s score=  1.2s peak=  1204MB tan=0.240
+  [qPO-fast-r4-thompson-10k seed3] iter 10 n=  600 top10=-0.1065 top100=-0.2048 top1%=0.109 top0.01%=0.000 acq=   5.4s score=  1.3s peak=  1204MB tan=0.222
+
+=== qPO-fast-r4-thompson-10k seed 4 ===
+  [qPO-fast-r4-thompson-10k seed4] iter  1 n=  150 top10=-0.5482 top100=-0.9189 top1%=0.008 top0.01%=0.000 acq=   4.6s score=  0.5s peak=  1204MB tan=0.145
+  [qPO-fast-r4-thompson-10k seed4] iter  2 n=  200 top10=-0.1472 top100=-0.8040 top1%=0.020 top0.01%=0.000 acq=   4.7s score=  0.5s peak=  1204MB tan=0.204
+  [qPO-fast-r4-thompson-10k seed4] iter  3 n=  250 top10=-0.1078 top100=-0.6092 top1%=0.061 top0.01%=0.000 acq=   5.1s score=  0.6s peak=  1204MB tan=0.236
+  [qPO-fast-r4-thompson-10k seed4] iter  4 n=  300 top10=-0.1062 top100=-0.4739 top1%=0.076 top0.01%=0.000 acq=   5.0s score=  0.7s peak=  1204MB tan=0.187
+  [qPO-fast-r4-thompson-10k seed4] iter  5 n=  350 top10=-0.1062 top100=-0.3937 top1%=0.089 top0.01%=0.000 acq=   4.9s score=  0.8s peak=  1204MB tan=0.096
+  [qPO-fast-r4-thompson-10k seed4] iter  6 n=  400 top10=-0.1031 top100=-0.3182 top1%=0.102 top0.01%=0.000 acq=   5.1s score=  0.9s peak=  1204MB tan=0.105
+  [qPO-fast-r4-thompson-10k seed4] iter  7 n=  450 top10=-0.1017 top100=-0.2573 top1%=0.112 top0.01%=0.000 acq=   5.3s score=  0.9s peak=  1204MB tan=0.147
+  [qPO-fast-r4-thompson-10k seed4] iter  8 n=  500 top10=-0.1016 top100=-0.2363 top1%=0.117 top0.01%=0.000 acq=   5.5s score=  1.1s peak=  1204MB tan=0.168
+  [qPO-fast-r4-thompson-10k seed4] iter  9 n=  550 top10=-0.1016 top100=-0.2228 top1%=0.122 top0.01%=0.000 acq=   5.6s score=  1.2s peak=  1204MB tan=0.157
+  [qPO-fast-r4-thompson-10k seed4] iter 10 n=  600 top10=-0.1016 top100=-0.2046 top1%=0.130 top0.01%=0.000 acq=   5.5s score=  1.4s peak=  1204MB tan=0.168
+
+=== qPO-fast-r4-thompson-10k seed 5 ===
+  [qPO-fast-r4-thompson-10k seed5] iter  1 n=  150 top10=-0.6976 top100=-0.9255 top1%=0.003 top0.01%=0.000 acq=   4.5s score=  0.5s peak=  1204MB tan=0.517
+  [qPO-fast-r4-thompson-10k seed5] iter  2 n=  200 top10=-0.3785 top100=-0.8612 top1%=0.008 top0.01%=0.000 acq=   4.8s score=  0.5s peak=  1204MB tan=0.278
+  [qPO-fast-r4-thompson-10k seed5] iter  3 n=  250 top10=-0.1650 top100=-0.7431 top1%=0.020 top0.01%=0.000 acq=   4.8s score=  0.6s peak=  1204MB tan=0.247
+  [qPO-fast-r4-thompson-10k seed5] iter  4 n=  300 top10=-0.1202 top100=-0.5853 top1%=0.051 top0.01%=0.000 acq=   4.9s score=  0.7s peak=  1204MB tan=0.196
+  [qPO-fast-r4-thompson-10k seed5] iter  5 n=  350 top10=-0.1087 top100=-0.4291 top1%=0.071 top0.01%=0.000 acq=   5.3s score=  0.8s peak=  1204MB tan=0.224
+  [qPO-fast-r4-thompson-10k seed5] iter  6 n=  400 top10=-0.1056 top100=-0.3214 top1%=0.092 top0.01%=0.000 acq=   5.1s score=  0.8s peak=  1204MB tan=0.168
+  [qPO-fast-r4-thompson-10k seed5] iter  7 n=  450 top10=-0.1056 top100=-0.2800 top1%=0.099 top0.01%=0.000 acq=   5.2s score=  1.0s peak=  1204MB tan=0.188
+  [qPO-fast-r4-thompson-10k seed5] iter  8 n=  500 top10=-0.1046 top100=-0.2250 top1%=0.109 top0.01%=0.000 acq=   5.4s score=  1.2s peak=  1204MB tan=0.159
+  [qPO-fast-r4-thompson-10k seed5] iter  9 n=  550 top10=-0.1036 top100=-0.1803 top1%=0.125 top0.01%=0.000 acq=   5.5s score=  1.2s peak=  1204MB tan=0.201
+  [qPO-fast-r4-thompson-10k seed5] iter 10 n=  600 top10=-0.1009 top100=-0.1646 top1%=0.163 top0.01%=0.000 acq=   5.7s score=  1.3s peak=  1204MB tan=0.188
+
+=== qPO-fast-r4-thompson-10k seed 6 ===
+  [qPO-fast-r4-thompson-10k seed6] iter  1 n=  150 top10=-0.5293 top100=-0.8922 top1%=0.008 top0.01%=0.000 acq=   4.4s score=  0.5s peak=  1204MB tan=0.166
+  [qPO-fast-r4-thompson-10k seed6] iter  2 n=  200 top10=-0.3923 top100=-0.8519 top1%=0.013 top0.01%=0.000 acq=   4.6s score=  0.5s peak=  1204MB tan=0.170
+  [qPO-fast-r4-thompson-10k seed6] iter  3 n=  250 top10=-0.2708 top100=-0.8255 top1%=0.018 top0.01%=0.000 acq=   5.0s score=  0.6s peak=  1204MB tan=0.173
+  [qPO-fast-r4-thompson-10k seed6] iter  4 n=  300 top10=-0.2039 top100=-0.8053 top1%=0.018 top0.01%=0.000 acq=   4.6s score=  0.7s peak=  1204MB tan=0.215
+  [qPO-fast-r4-thompson-10k seed6] iter  5 n=  350 top10=-0.1536 top100=-0.7748 top1%=0.025 top0.01%=0.000 acq=   8.8s score=  1.3s peak=  1204MB tan=0.208
+  [qPO-fast-r4-thompson-10k seed6] iter  6 n=  400 top10=-0.1474 top100=-0.7564 top1%=0.028 top0.01%=0.000 acq=   8.6s score=  2.6s peak=  1204MB tan=0.172
+  [qPO-fast-r4-thompson-10k seed6] iter  7 n=  450 top10=-0.1444 top100=-0.7333 top1%=0.031 top0.01%=0.000 acq=   8.3s score=  2.0s peak=  1204MB tan=0.167
+  [qPO-fast-r4-thompson-10k seed6] iter  8 n=  500 top10=-0.1413 top100=-0.7189 top1%=0.033 top0.01%=0.000 acq=   9.3s score=  2.6s peak=  1204MB tan=0.180
+  [qPO-fast-r4-thompson-10k seed6] iter  9 n=  550 top10=-0.1350 top100=-0.7025 top1%=0.038 top0.01%=0.000 acq=  10.9s score=  3.2s peak=  1204MB tan=0.180
+  [qPO-fast-r4-thompson-10k seed6] iter 10 n=  600 top10=-0.1290 top100=-0.6685 top1%=0.043 top0.01%=0.000 acq=   9.7s score=  3.2s peak=  1204MB tan=0.154
+
+=== qPO-fast-r4-thompson-10k seed 7 ===
+  [qPO-fast-r4-thompson-10k seed7] iter  1 n=  150 top10=-0.7532 top100=-0.9336 top1%=0.000 top0.01%=0.000 acq=   7.6s score=  0.9s peak=  1204MB tan=0.178
+  [qPO-fast-r4-thompson-10k seed7] iter  2 n=  200 top10=-0.6854 top100=-0.9029 top1%=0.000 top0.01%=0.000 acq=   7.1s score=  1.0s peak=  1204MB tan=0.153
+  [qPO-fast-r4-thompson-10k seed7] iter  3 n=  250 top10=-0.3824 top100=-0.8440 top1%=0.008 top0.01%=0.000 acq=   7.5s score=  1.3s peak=  1204MB tan=0.184
+  [qPO-fast-r4-thompson-10k seed7] iter  4 n=  300 top10=-0.1189 top100=-0.6102 top1%=0.046 top0.01%=0.000 acq=   7.7s score=  1.5s peak=  1204MB tan=0.287
+  [qPO-fast-r4-thompson-10k seed7] iter  5 n=  350 top10=-0.1066 top100=-0.4353 top1%=0.079 top0.01%=0.000 acq=   7.8s score=  1.1s peak=  1204MB tan=0.262
+  [qPO-fast-r4-thompson-10k seed7] iter  6 n=  400 top10=-0.1018 top100=-0.3034 top1%=0.109 top0.01%=0.333 acq=   7.4s score=  1.7s peak=  1204MB tan=0.225
+  [qPO-fast-r4-thompson-10k seed7] iter  7 n=  450 top10=-0.0988 top100=-0.1763 top1%=0.153 top0.01%=0.333 acq=   7.8s score=  1.7s peak=  1204MB tan=0.307
+  [qPO-fast-r4-thompson-10k seed7] iter  8 n=  500 top10=-0.0988 top100=-0.1619 top1%=0.163 top0.01%=0.333 acq=   8.7s score=  2.3s peak=  1204MB tan=0.152
+  [qPO-fast-r4-thompson-10k seed7] iter  9 n=  550 top10=-0.0977 top100=-0.1560 top1%=0.186 top0.01%=0.333 acq=   6.0s score=  1.2s peak=  1204MB tan=0.221
+  [qPO-fast-r4-thompson-10k seed7] iter 10 n=  600 top10=-0.0974 top100=-0.1523 top1%=0.204 top0.01%=0.333 acq=   6.2s score=  1.4s peak=  1204MB tan=0.163
+
+=== qPO-fast-r4-thompson-10k seed 8 ===
+  [qPO-fast-r4-thompson-10k seed8] iter  1 n=  150 top10=-0.4957 top100=-0.9023 top1%=0.003 top0.01%=0.000 acq=   6.8s score=  0.7s peak=  1204MB tan=0.245
+  [qPO-fast-r4-thompson-10k seed8] iter  2 n=  200 top10=-0.3630 top100=-0.8659 top1%=0.005 top0.01%=0.000 acq=   5.9s score=  0.7s peak=  1204MB tan=0.319
+  [qPO-fast-r4-thompson-10k seed8] iter  3 n=  250 top10=-0.2111 top100=-0.8255 top1%=0.008 top0.01%=0.000 acq=   5.5s score=  0.7s peak=  1204MB tan=0.181
+  [qPO-fast-r4-thompson-10k seed8] iter  4 n=  300 top10=-0.1664 top100=-0.7772 top1%=0.013 top0.01%=0.000 acq=   5.9s score=  1.0s peak=  1204MB tan=0.176
+  [qPO-fast-r4-thompson-10k seed8] iter  5 n=  350 top10=-0.1437 top100=-0.7002 top1%=0.025 top0.01%=0.000 acq=   5.9s score=  1.1s peak=  1204MB tan=0.213
+  [qPO-fast-r4-thompson-10k seed8] iter  6 n=  400 top10=-0.1135 top100=-0.5313 top1%=0.051 top0.01%=0.000 acq=   6.1s score=  1.2s peak=  1204MB tan=0.271
+  [qPO-fast-r4-thompson-10k seed8] iter  7 n=  450 top10=-0.1089 top100=-0.3299 top1%=0.097 top0.01%=0.000 acq=   6.0s score=  1.3s peak=  1204MB tan=0.276
+  [qPO-fast-r4-thompson-10k seed8] iter  8 n=  500 top10=-0.1046 top100=-0.1979 top1%=0.127 top0.01%=0.000 acq=   7.0s score=  1.7s peak=  1204MB tan=0.246
+  [qPO-fast-r4-thompson-10k seed8] iter  9 n=  550 top10=-0.1046 top100=-0.1689 top1%=0.150 top0.01%=0.000 acq=   7.1s score=  2.1s peak=  1204MB tan=0.239
+  [qPO-fast-r4-thompson-10k seed8] iter 10 n=  600 top10=-0.1031 top100=-0.1563 top1%=0.191 top0.01%=0.000 acq=   7.6s score=  2.8s peak=  1204MB tan=0.238
+
+=== qPO-fast-r4-thompson-10k seed 9 ===
+  [qPO-fast-r4-thompson-10k seed9] iter  1 n=  150 top10=-0.1695 top100=-0.8486 top1%=0.013 top0.01%=0.000 acq=   5.8s score=  0.7s peak=  1204MB tan=0.126
+  [qPO-fast-r4-thompson-10k seed9] iter  2 n=  200 top10=-0.1145 top100=-0.6765 top1%=0.048 top0.01%=0.000 acq=   5.6s score=  0.8s peak=  1204MB tan=0.173
+  [qPO-fast-r4-thompson-10k seed9] iter  3 n=  250 top10=-0.1064 top100=-0.5529 top1%=0.069 top0.01%=0.000 acq=   4.8s score=  0.6s peak=  1204MB tan=0.177
+  [qPO-fast-r4-thompson-10k seed9] iter  4 n=  300 top10=-0.1064 top100=-0.4700 top1%=0.079 top0.01%=0.000 acq=   4.9s score=  0.6s peak=  1204MB tan=0.149
+  [qPO-fast-r4-thompson-10k seed9] iter  5 n=  350 top10=-0.1041 top100=-0.3791 top1%=0.097 top0.01%=0.333 acq=   4.9s score=  0.8s peak=  1204MB tan=0.172
+  [qPO-fast-r4-thompson-10k seed9] iter  6 n=  400 top10=-0.1040 top100=-0.2949 top1%=0.117 top0.01%=0.333 acq=   4.9s score=  0.9s peak=  1204MB tan=0.163
+  [qPO-fast-r4-thompson-10k seed9] iter  7 n=  450 top10=-0.1016 top100=-0.2065 top1%=0.132 top0.01%=0.333 acq=   5.1s score=  0.9s peak=  1204MB tan=0.180
+  [qPO-fast-r4-thompson-10k seed9] iter  8 n=  500 top10=-0.1001 top100=-0.1697 top1%=0.155 top0.01%=0.333 acq=   5.3s score=  1.0s peak=  1204MB tan=0.194
+  [qPO-fast-r4-thompson-10k seed9] iter  9 n=  550 top10=-0.0997 top100=-0.1627 top1%=0.165 top0.01%=0.333 acq=   5.3s score=  1.2s peak=  1204MB tan=0.231
+  [qPO-fast-r4-thompson-10k seed9] iter 10 n=  600 top10=-0.0986 top100=-0.1557 top1%=0.188 top0.01%=0.333 acq=   5.4s score=  1.4s peak=  1204MB tan=0.161
+
+=== Random-plausible seed 0 ===
+  [Random-plausible seed0] iter  1 n=  150 top10=-0.2874 top100=-0.8704 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  0.4s peak=     1MB tan=0.224
+  [Random-plausible seed0] iter  2 n=  200 top10=-0.1475 top100=-0.7818 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.252
+  [Random-plausible seed0] iter  3 n=  250 top10=-0.1413 top100=-0.7035 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.238
+  [Random-plausible seed0] iter  4 n=  300 top10=-0.1413 top100=-0.6738 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.215
+  [Random-plausible seed0] iter  5 n=  350 top10=-0.1330 top100=-0.6468 top1%=0.031 top0.01%=0.000 acq=   0.0s score=  0.8s peak=     1MB tan=0.216
+  [Random-plausible seed0] iter  6 n=  400 top10=-0.1242 top100=-0.5941 top1%=0.038 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.236
+  [Random-plausible seed0] iter  7 n=  450 top10=-0.1193 top100=-0.5463 top1%=0.041 top0.01%=0.000 acq=   0.0s score=  1.0s peak=     1MB tan=0.245
+  [Random-plausible seed0] iter  8 n=  500 top10=-0.1164 top100=-0.5083 top1%=0.048 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.232
+  [Random-plausible seed0] iter  9 n=  550 top10=-0.1103 top100=-0.4609 top1%=0.059 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.166
+  [Random-plausible seed0] iter 10 n=  600 top10=-0.1103 top100=-0.4257 top1%=0.066 top0.01%=0.000 acq=   0.0s score=  1.3s peak=     1MB tan=0.196
+
+=== Random-plausible seed 1 ===
+  [Random-plausible seed1] iter  1 n=  150 top10=-0.3837 top100=-0.9078 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.185
+  [Random-plausible seed1] iter  2 n=  200 top10=-0.2154 top100=-0.8500 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.220
+  [Random-plausible seed1] iter  3 n=  250 top10=-0.1844 top100=-0.8027 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.233
+  [Random-plausible seed1] iter  4 n=  300 top10=-0.1655 top100=-0.7550 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.283
+  [Random-plausible seed1] iter  5 n=  350 top10=-0.1575 top100=-0.7099 top1%=0.015 top0.01%=0.000 acq=   0.0s score=  0.8s peak=     1MB tan=0.260
+  [Random-plausible seed1] iter  6 n=  400 top10=-0.1575 top100=-0.7049 top1%=0.015 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.246
+  [Random-plausible seed1] iter  7 n=  450 top10=-0.1389 top100=-0.6542 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.300
+  [Random-plausible seed1] iter  8 n=  500 top10=-0.1324 top100=-0.6148 top1%=0.028 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.310
+  [Random-plausible seed1] iter  9 n=  550 top10=-0.1324 top100=-0.6045 top1%=0.028 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.172
+  [Random-plausible seed1] iter 10 n=  600 top10=-0.1324 top100=-0.5609 top1%=0.033 top0.01%=0.000 acq=   0.0s score=  1.4s peak=     1MB tan=0.244
+
+=== Random-plausible seed 2 ===
+  [Random-plausible seed2] iter  1 n=  150 top10=-0.5349 top100=-0.9100 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.253
+  [Random-plausible seed2] iter  2 n=  200 top10=-0.3470 top100=-0.8601 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.287
+  [Random-plausible seed2] iter  3 n=  250 top10=-0.1779 top100=-0.8104 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.241
+  [Random-plausible seed2] iter  4 n=  300 top10=-0.1690 top100=-0.7802 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.259
+  [Random-plausible seed2] iter  5 n=  350 top10=-0.1438 top100=-0.7431 top1%=0.018 top0.01%=0.000 acq=   0.0s score=  0.8s peak=     1MB tan=0.261
+  [Random-plausible seed2] iter  6 n=  400 top10=-0.1438 top100=-0.7410 top1%=0.018 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.233
+  [Random-plausible seed2] iter  7 n=  450 top10=-0.1387 top100=-0.7274 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.228
+  [Random-plausible seed2] iter  8 n=  500 top10=-0.1387 top100=-0.7203 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.279
+  [Random-plausible seed2] iter  9 n=  550 top10=-0.1387 top100=-0.7174 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.198
+  [Random-plausible seed2] iter 10 n=  600 top10=-0.1316 top100=-0.6945 top1%=0.023 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.261
+
+=== Random-plausible seed 3 ===
+  [Random-plausible seed3] iter  1 n=  150 top10=-0.5982 top100=-0.9168 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.201
+  [Random-plausible seed3] iter  2 n=  200 top10=-0.5401 top100=-0.8896 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.194
+  [Random-plausible seed3] iter  3 n=  250 top10=-0.5401 top100=-0.8736 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.156
+  [Random-plausible seed3] iter  4 n=  300 top10=-0.4314 top100=-0.8488 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.186
+  [Random-plausible seed3] iter  5 n=  350 top10=-0.2923 top100=-0.8249 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.186
+  [Random-plausible seed3] iter  6 n=  400 top10=-0.1815 top100=-0.7900 top1%=0.015 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.215
+  [Random-plausible seed3] iter  7 n=  450 top10=-0.1614 top100=-0.7677 top1%=0.018 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.209
+  [Random-plausible seed3] iter  8 n=  500 top10=-0.1501 top100=-0.7167 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.233
+  [Random-plausible seed3] iter  9 n=  550 top10=-0.1451 top100=-0.6998 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  1.3s peak=     1MB tan=0.215
+  [Random-plausible seed3] iter 10 n=  600 top10=-0.1448 top100=-0.6709 top1%=0.028 top0.01%=0.000 acq=   0.0s score=  1.3s peak=     1MB tan=0.222
+
+=== Random-plausible seed 4 ===
+  [Random-plausible seed4] iter  1 n=  150 top10=-0.6840 top100=-0.9381 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.4s peak=     1MB tan=0.190
+  [Random-plausible seed4] iter  2 n=  200 top10=-0.6615 top100=-0.9112 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.187
+  [Random-plausible seed4] iter  3 n=  250 top10=-0.4461 top100=-0.8705 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.192
+  [Random-plausible seed4] iter  4 n=  300 top10=-0.3055 top100=-0.8386 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.187
+  [Random-plausible seed4] iter  5 n=  350 top10=-0.1597 top100=-0.8004 top1%=0.015 top0.01%=0.000 acq=   0.0s score=  0.8s peak=     1MB tan=0.208
+  [Random-plausible seed4] iter  6 n=  400 top10=-0.1337 top100=-0.7767 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.195
+  [Random-plausible seed4] iter  7 n=  450 top10=-0.1221 top100=-0.7455 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.193
+  [Random-plausible seed4] iter  8 n=  500 top10=-0.1120 top100=-0.7246 top1%=0.031 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.217
+  [Random-plausible seed4] iter  9 n=  550 top10=-0.1120 top100=-0.7055 top1%=0.033 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.188
+  [Random-plausible seed4] iter 10 n=  600 top10=-0.1120 top100=-0.6844 top1%=0.036 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.179
+
+=== Random-plausible seed 5 ===
+  [Random-plausible seed5] iter  1 n=  150 top10=-0.5806 top100=-0.9177 top1%=0.003 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.547
+  [Random-plausible seed5] iter  2 n=  200 top10=-0.4533 top100=-0.8747 top1%=0.003 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.412
+  [Random-plausible seed5] iter  3 n=  250 top10=-0.2986 top100=-0.8254 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.280
+  [Random-plausible seed5] iter  4 n=  300 top10=-0.2203 top100=-0.7815 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.248
+  [Random-plausible seed5] iter  5 n=  350 top10=-0.2069 top100=-0.7564 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.202
+  [Random-plausible seed5] iter  6 n=  400 top10=-0.2047 top100=-0.7376 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.206
+  [Random-plausible seed5] iter  7 n=  450 top10=-0.1982 top100=-0.7089 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  1.0s peak=     1MB tan=0.221
+  [Random-plausible seed5] iter  8 n=  500 top10=-0.1919 top100=-0.6845 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.186
+  [Random-plausible seed5] iter  9 n=  550 top10=-0.1790 top100=-0.6652 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.200
+  [Random-plausible seed5] iter 10 n=  600 top10=-0.1766 top100=-0.6433 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  1.4s peak=     1MB tan=0.228
+
+=== Random-plausible seed 6 ===
+  [Random-plausible seed6] iter  1 n=  150 top10=-0.4979 top100=-0.9027 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.167
+  [Random-plausible seed6] iter  2 n=  200 top10=-0.4172 top100=-0.8700 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.203
+  [Random-plausible seed6] iter  3 n=  250 top10=-0.2383 top100=-0.8316 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.235
+  [Random-plausible seed6] iter  4 n=  300 top10=-0.2383 top100=-0.8227 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.214
+  [Random-plausible seed6] iter  5 n=  350 top10=-0.1753 top100=-0.7875 top1%=0.018 top0.01%=0.000 acq=   0.0s score=  0.8s peak=     1MB tan=0.195
+  [Random-plausible seed6] iter  6 n=  400 top10=-0.1423 top100=-0.7622 top1%=0.023 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.217
+  [Random-plausible seed6] iter  7 n=  450 top10=-0.1419 top100=-0.7423 top1%=0.023 top0.01%=0.000 acq=   0.0s score=  1.0s peak=     1MB tan=0.227
+  [Random-plausible seed6] iter  8 n=  500 top10=-0.1329 top100=-0.7296 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.191
+  [Random-plausible seed6] iter  9 n=  550 top10=-0.1321 top100=-0.7173 top1%=0.028 top0.01%=0.000 acq=   0.0s score=  1.2s peak=     1MB tan=0.219
+  [Random-plausible seed6] iter 10 n=  600 top10=-0.1321 top100=-0.7091 top1%=0.028 top0.01%=0.000 acq=   0.0s score=  1.4s peak=     1MB tan=0.228
+
+=== Random-plausible seed 7 ===
+  [Random-plausible seed7] iter  1 n=  150 top10=-0.8021 top100=-0.9436 top1%=0.000 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.186
+  [Random-plausible seed7] iter  2 n=  200 top10=-0.5966 top100=-0.8973 top1%=0.003 top0.01%=0.000 acq=   0.0s score=  0.5s peak=     1MB tan=0.203
+  [Random-plausible seed7] iter  3 n=  250 top10=-0.4565 top100=-0.8667 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  0.6s peak=     1MB tan=0.214
+  [Random-plausible seed7] iter  4 n=  300 top10=-0.2496 top100=-0.8243 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  0.7s peak=     1MB tan=0.186
+  [Random-plausible seed7] iter  5 n=  350 top10=-0.1980 top100=-0.7979 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.8s peak=     1MB tan=0.183
+  [Random-plausible seed7] iter  6 n=  400 top10=-0.1799 top100=-0.7659 top1%=0.013 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.213
+  [Random-plausible seed7] iter  7 n=  450 top10=-0.1456 top100=-0.7218 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  1.0s peak=     1MB tan=0.246
+  [Random-plausible seed7] iter  8 n=  500 top10=-0.1375 top100=-0.7049 top1%=0.023 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.254
+  [Random-plausible seed7] iter  9 n=  550 top10=-0.1300 top100=-0.6813 top1%=0.028 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.221
+  [Random-plausible seed7] iter 10 n=  600 top10=-0.1177 top100=-0.6626 top1%=0.033 top0.01%=0.000 acq=   0.0s score=  1.3s peak=     1MB tan=0.249
+
+=== Random-plausible seed 8 ===
+  [Random-plausible seed8] iter  1 n=  150 top10=-0.6400 top100=-0.9295 top1%=0.000 top0.01%=0.000 acq=   0.0s score=  1.0s peak=     1MB tan=0.210
+  [Random-plausible seed8] iter  2 n=  200 top10=-0.4487 top100=-0.8779 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.375
+  [Random-plausible seed8] iter  3 n=  250 top10=-0.3138 top100=-0.8410 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  1.3s peak=     1MB tan=0.329
+  [Random-plausible seed8] iter  4 n=  300 top10=-0.3138 top100=-0.8324 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  1.5s peak=     1MB tan=0.351
+  [Random-plausible seed8] iter  5 n=  350 top10=-0.1875 top100=-0.8009 top1%=0.015 top0.01%=0.000 acq=   0.0s score=  1.6s peak=     1MB tan=0.321
+  [Random-plausible seed8] iter  6 n=  400 top10=-0.1506 top100=-0.7662 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  2.0s peak=     1MB tan=0.257
+  [Random-plausible seed8] iter  7 n=  450 top10=-0.1462 top100=-0.7324 top1%=0.023 top0.01%=0.000 acq=   0.0s score=  2.2s peak=     1MB tan=0.302
+  [Random-plausible seed8] iter  8 n=  500 top10=-0.1376 top100=-0.7026 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  2.9s peak=     1MB tan=0.251
+  [Random-plausible seed8] iter  9 n=  550 top10=-0.1376 top100=-0.6725 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  3.2s peak=     1MB tan=0.211
+  [Random-plausible seed8] iter 10 n=  600 top10=-0.1296 top100=-0.6538 top1%=0.028 top0.01%=0.000 acq=   0.0s score=  3.5s peak=     1MB tan=0.247
+
+=== Random-plausible seed 9 ===
+  [Random-plausible seed9] iter  1 n=  150 top10=-0.3264 top100=-0.8893 top1%=0.005 top0.01%=0.000 acq=   0.0s score=  0.9s peak=     1MB tan=0.144
+  [Random-plausible seed9] iter  2 n=  200 top10=-0.2853 top100=-0.8496 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  1.1s peak=     1MB tan=0.180
+  [Random-plausible seed9] iter  3 n=  250 top10=-0.2489 top100=-0.8251 top1%=0.008 top0.01%=0.000 acq=   0.0s score=  1.3s peak=     1MB tan=0.186
+  [Random-plausible seed9] iter  4 n=  300 top10=-0.2095 top100=-0.8078 top1%=0.010 top0.01%=0.000 acq=   0.0s score=  1.5s peak=     1MB tan=0.207
+  [Random-plausible seed9] iter  5 n=  350 top10=-0.1829 top100=-0.7653 top1%=0.015 top0.01%=0.000 acq=   0.0s score=  1.7s peak=     1MB tan=0.223
+  [Random-plausible seed9] iter  6 n=  400 top10=-0.1696 top100=-0.7373 top1%=0.018 top0.01%=0.000 acq=   0.0s score=  2.0s peak=     1MB tan=0.220
+  [Random-plausible seed9] iter  7 n=  450 top10=-0.1624 top100=-0.7105 top1%=0.020 top0.01%=0.000 acq=   0.0s score=  2.2s peak=     1MB tan=0.225
+  [Random-plausible seed9] iter  8 n=  500 top10=-0.1622 top100=-0.6900 top1%=0.023 top0.01%=0.000 acq=   0.0s score=  2.7s peak=     1MB tan=0.207
+  [Random-plausible seed9] iter  9 n=  550 top10=-0.1622 top100=-0.6718 top1%=0.023 top0.01%=0.000 acq=   0.0s score=  3.0s peak=     1MB tan=0.210
+  [Random-plausible seed9] iter 10 n=  600 top10=-0.1607 top100=-0.6565 top1%=0.025 top0.01%=0.000 acq=   0.0s score=  3.5s peak=     1MB tan=0.266
+
+wrote /Users/petercotton/github/winning/research/qpo/results/closed_loop_abx_2x2.csv

@@ -1,0 +1,8 @@
+dense_onion    chol   plain sd 2.67e-03 | factor1: VRF    1.9  factor3: VRF    2.3  cophtree: VRF    2.0  equicorr: VRF    1.7
+dense_onion    sqrtm  plain sd 2.69e-03 | factor1: VRF    1.7  factor3: VRF    2.0  cophtree: VRF    1.7  equicorr: VRF    1.6
+sample_T60     chol   plain sd 2.55e-03 | factor1: VRF    1.7  factor3: VRF    2.4  cophtree: VRF    1.4  equicorr: VRF    1.1
+sample_T60     sqrtm  plain sd 2.55e-03 | factor1: VRF    1.8  factor3: VRF    2.6  cophtree: VRF    1.7  equicorr: VRF    1.2
+factor_sparse  chol   plain sd 2.59e-03 | factor1: VRF    2.9  factor3: VRF    4.6  cophtree: VRF    1.5  equicorr: VRF    1.2
+factor_sparse  sqrtm  plain sd 2.59e-03 | factor1: VRF    2.0  factor3: VRF    3.3  cophtree: VRF    1.6  equicorr: VRF    1.1
+
+(VRF = variance reduction factor vs plain MC at equal draws; unbiased by construction)

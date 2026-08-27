@@ -1,0 +1,12 @@
+VIOLATION mc_referee_tv seed=10700  8.105e-03 > 8e-03
+VIOLATION mc_referee_tv seed=11500  1.755e-02 > 8e-03
+VIOLATION mc_referee_tv seed=11540  4.792e-02 > 8e-03
+VIOLATION mc_referee_tv seed=11920  1.159e-02 > 8e-03
+VIOLATION mc_referee_tv seed=11940  2.236e-02 > 8e-03
+
+2000 cases; 5 violations
+   ('mc_referee_tv', 10700, np.float64(0.00810497281213138), 0.008)
+   ('mc_referee_tv', 11500, np.float64(0.0175477901537647), 0.008)
+   ('mc_referee_tv', 11540, np.float64(0.04792149160045584), 0.008)
+   ('mc_referee_tv', 11920, np.float64(0.011590973034199845), 0.008)
+   ('mc_referee_tv', 11940, np.float64(0.02236328548283894), 0.008)

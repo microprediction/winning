@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>winning — polish your portfolio, live</title>
+  <meta name="description" content="Concentration caps without breaking model-consistency: the nearest race satisfying your limits, computed live in the browser by the winning engine." />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    .panel { border: 1px solid #ddd; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.4rem 0; }
+    .controls { display: flex; flex-wrap: wrap; gap: 1.4rem; align-items: center; margin: 0.6rem 0 1rem; }
+    .controls label { font-size: 0.9rem; }
+    .controls input[type="range"] { vertical-align: middle; width: 160px; }
+    .val { font-variant-numeric: tabular-nums; font-weight: 600; color: #4b4bd8; }
+    .legend { font-size: 0.88rem; color: #555; }
+    svg { width: 100%; display: block; }
+    .stat { font-size: 0.9rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/#grammars">Grammars</a>
+        <a href="/#papers">Papers</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <h1>Polish your portfolio</h1>
+    <p class="lead">Your weights are race probabilities. Clipping them to meet a
+    concentration cap and renormalizing breaks the model they came from; the
+    right object is the <em>nearest race</em> that satisfies the caps. Drag the
+    caps and watch the polish — computed live in your browser by the same
+    parity-locked engine the Python, R and Rust packages share.</p>
+
+    <div class="panel">
+      <div class="controls">
+        <label>name cap <input type="range" id="cap" min="12" max="40" value="18" />
+          <span class="val" id="capv"></span></label>
+        <label>sector cap <input type="range" id="gcap" min="36" max="80" value="45" />
+          <span class="val" id="gcapv"></span></label>
+        <label>correlation strength <input type="range" id="rho" min="10" max="80" value="55" />
+          <span class="val" id="rhov"></span></label>
+        <span class="legend" id="timing"></span>
+      </div>
+      <svg id="bars" viewBox="0 0 940 320"></svg>
+      <p class="legend">Bars: portfolio weights before (hollow) and after
+      (filled) polishing; colors are the dendrogram's sectors; red line = name
+      cap. Where a capped name gives up weight, its <em>cluster siblings</em>
+      absorb most of it — the race redistributes along the correlation
+      structure, not pro&nbsp;rata.</p>
+      <p class="stat" id="stats"></p>
+    </div>
+
+    <p>The engine: invert the weights to abilities under the clustered race
+    (<code>structure=Blocks</code> from the dendrogram), then solve for the
+    nearest abilities whose race probabilities satisfy the caps, using the
+    exact race Jacobian. Everything here — the field pass, the Newton
+    inversion, the constrained polish — is
+    <a href="https://github.com/microprediction/winning/tree/main/docs/js/winning">the
+    JavaScript port</a>, pinned to the reference implementation by the shared
+    parity vectors.</p>
+  </main>
+  <footer>
+    <a href="https://github.com/microprediction/winning">Source</a> &middot;
+    Part of the <a href="https://repos.microprediction.org/">microprediction family</a> &middot;
+    Authored by <a href="https://home.microprediction.org/">Peter Cotton</a>.
+  </footer>
+
+  <script type="module">
+    import { raceProbabilities, abilitiesFromRace } from "./js/winning/races.mjs";
+    import { blockRaceProbabilities, abilitiesFromBlockRace } from "./js/winning/blocks.mjs";
+    import { Blocks, averageLinkage, cutLinkage } from "./js/winning/structures.mjs";
+    import { polishRace } from "./js/winning/polish.mjs";
+
+    const n = 10, nSec = 3;
+    // deterministic little market: three sectors, one favourite
+    const mulberry = s => () => (s = Math.imul(48271, s) % 2147483647) / 2147483647;
+    const rand = mulberry(9);
+    const sector = [0,0,0,0,1,1,1,2,2,2];
+    const names = ["Alpha","Birch","Cedar","Delta","Ember","Flint","Gorse","Heath","Iris","Juniper"];
+    const w0raw = [0.24,0.13,0.10,0.08,0.12,0.09,0.07,0.07,0.06,0.04];
+
+    const COLORS = ["#4b4bd8","#1a8c4a","#c2571a"];
+    const svg = document.getElementById("bars");
+    const capEl = document.getElementById("cap"), gcapEl = document.getElementById("gcap"), rhoEl = document.getElementById("rho");
+
+    function computeAndRender() {
+      const t0 = performance.now();
+      const cap = capEl.value / 100, gcap = gcapEl.value / 100, rho = rhoEl.value / 100;
+      document.getElementById("capv").textContent = (100 * cap).toFixed(0) + "%";
+      document.getElementById("gcapv").textContent = (100 * gcap).toFixed(0) + "%";
+      document.getElementById("rhov").textContent = rho.toFixed(2);
+      // clustered structure: within-sector loading rho, unit total variance
+      const loading = sector.map(() => Math.sqrt(rho));
+      const D = sector.map(() => 1 - rho);
+      const s = Blocks(sector, loading, D);
+      const groups = [];
+      for (let g = 0; g < nSec; g++)
+        groups.push([sector.map((v, i) => [v, i]).filter(([v]) => v === g).map(([, i]) => i), gcap]);
+      // feasibility guard: caps must admit a probability vector at all
+      if (n * cap < 1.001 || nSec * gcap < 1.001) {
+        document.getElementById("timing").textContent = "caps infeasible: they sum below 100%";
+        return;
+      }
+      const out = polishRace({ p0: w0raw, structure: s, points: 129,
+                               nameCaps: cap, groups, fdFallback: false });
+      const ms = performance.now() - t0;
+      document.getElementById("timing").textContent = `solved in ${ms.toFixed(0)} ms`;
+      render(out);
+    }
+
+    function render(out) {
+      const W = 940, H = 320, pad = 40, bw = (W - 2 * pad) / n;
+      const ymax = Math.max(0.3, Math.max(...w0raw, ...out.p) * 1.15);
+      const y = v => H - 30 - (H - 70) * v / ymax;
+      let sv = "";
+      const cap = capEl.value / 100;
+      sv += `<line x1="${pad}" x2="${W - pad}" y1="${y(cap)}" y2="${y(cap)}" stroke="#d33" stroke-dasharray="5 4" />`;
+      sv += `<text x="${W - pad + 2}" y="${y(cap) + 4}" font-size="11" fill="#d33">cap</text>`;
+      for (let i = 0; i < n; i++) {
+        const x0 = pad + i * bw;
+        const c = COLORS[sector[i]];
+        sv += `<rect x="${x0 + 6}" y="${y(w0raw[i])}" width="${bw / 2 - 8}" height="${H - 30 - y(w0raw[i])}"
+                 fill="none" stroke="${c}" stroke-width="2" />`;
+        sv += `<rect x="${x0 + bw / 2}" y="${y(out.p[i])}" width="${bw / 2 - 8}" height="${H - 30 - y(out.p[i])}"
+                 fill="${c}" opacity="0.85" />`;
+        sv += `<text x="${x0 + bw / 2}" y="${H - 14}" font-size="11" text-anchor="middle">${names[i]}</text>`;
+        const dchg = out.p[i] - w0raw[i];
+        if (Math.abs(dchg) > 0.004)
+          sv += `<text x="${x0 + bw / 2}" y="${y(Math.max(out.p[i], w0raw[i])) - 6}" font-size="10"
+                   text-anchor="middle" fill="${dchg > 0 ? "#1a8c4a" : "#d33"}">${dchg > 0 ? "+" : ""}${(100 * dchg).toFixed(1)}</text>`;
+      }
+      svg.innerHTML = sv;
+      const act = out.info.active.length;
+      document.getElementById("stats").textContent =
+        `${act} constraint${act === 1 ? "" : "s"} binding · max violation ` +
+        `${out.info.maxViolation.toExponential(1)} · ability distance ${out.info.muDistance.toFixed(3)} · ` +
+        `weights sum to ${out.p.reduce((a, b) => a + b, 0).toFixed(6)}`;
+    }
+
+    // labels track the drag; the solve runs debounced so the UI never
+    // stacks 300ms synchronous solves while the thumb is moving
+    let pending = null;
+    function labelsOnly() {
+      document.getElementById("capv").textContent = (capEl.value) + "%";
+      document.getElementById("gcapv").textContent = (gcapEl.value) + "%";
+      document.getElementById("rhov").textContent = (rhoEl.value / 100).toFixed(2);
+      clearTimeout(pending);
+      pending = setTimeout(computeAndRender, 150);
+    }
+    for (const el of [capEl, gcapEl, rhoEl]) {
+      el.addEventListener("input", labelsOnly);
+      el.addEventListener("change", computeAndRender);
+    }
+    computeAndRender();
+  </script>
+</body>
+</html>

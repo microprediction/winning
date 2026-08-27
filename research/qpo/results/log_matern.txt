@@ -1,0 +1,41 @@
+d=  1 seed=0  ref self-TV 0.0033  (100s)  r0:TV0.084/rec1.00  r2:TV0.084/rec1.00  r4:TV0.084/rec1.00  r8:TV0.148/rec1.00  r16:TV0.041/rec1.00  r32:TV0.026/rec1.00  r64:TV0.026/rec1.00
+d=  1 seed=1  ref self-TV 0.0043  (100s)  r0:TV0.311/rec0.50  r2:TV0.064/rec1.00  r4:TV0.064/rec1.00  r8:TV0.041/rec1.00  r16:TV0.011/rec1.00  r32:TV0.011/rec1.00  r64:TV0.015/rec1.00
+d=  2 seed=0  ref self-TV 0.0023  (101s)  r0:TV0.347/rec0.60  r2:TV0.240/rec0.70  r4:TV0.228/rec0.80  r8:TV0.146/rec0.80  r16:TV0.123/rec0.80  r32:TV0.068/rec0.90  r64:TV0.058/rec0.90
+d=  2 seed=1  ref self-TV 0.0016  (99s)  r0:TV0.323/rec0.70  r2:TV0.322/rec0.70  r4:TV0.319/rec0.70  r8:TV0.262/rec0.70  r16:TV0.124/rec0.90  r32:TV0.086/rec0.90  r64:TV0.042/rec0.90
+d=  3 seed=0  ref self-TV 0.0027  (101s)  r0:TV0.385/rec0.50  r2:TV0.305/rec0.60  r4:TV0.292/rec0.60  r8:TV0.228/rec0.80  r16:TV0.160/rec0.70  r32:TV0.139/rec0.70  r64:TV0.109/rec0.90
+d=  3 seed=1  ref self-TV 0.0026  (101s)  r0:TV0.414/rec0.60  r2:TV0.412/rec0.60  r4:TV0.352/rec0.40  r8:TV0.269/rec0.60  r16:TV0.156/rec0.80  r32:TV0.121/rec0.90  r64:TV0.098/rec0.90
+d=  5 seed=0  ref self-TV 0.0071  (103s)  r0:TV0.112/rec0.70  r2:TV0.096/rec0.60  r4:TV0.089/rec0.70  r8:TV0.072/rec0.80  r16:TV0.058/rec0.90  r32:TV0.052/rec0.90  r64:TV0.067/rec0.80
+d=  5 seed=1  ref self-TV 0.0074  (107s)  r0:TV0.101/rec0.60  r2:TV0.086/rec0.60  r4:TV0.076/rec0.70  r8:TV0.063/rec0.70  r16:TV0.051/rec0.80  r32:TV0.047/rec0.90  r64:TV0.063/rec0.80
+d=  8 seed=0  ref self-TV 0.0089  (120s)  r0:TV0.030/rec0.80  r2:TV0.014/rec1.00  r4:TV0.013/rec1.00  r8:TV0.012/rec1.00  r16:TV0.013/rec0.90  r32:TV0.015/rec0.90  r64:TV0.026/rec0.60
+d=  8 seed=1  ref self-TV 0.0083  (131s)  r0:TV0.027/rec0.70  r2:TV0.015/rec0.90  r4:TV0.014/rec0.90  r8:TV0.011/rec0.90  r16:TV0.011/rec0.90  r32:TV0.014/rec0.90  r64:TV0.023/rec0.80
+d= 10 seed=0  ref self-TV 0.0086  (130s)  r0:TV0.017/rec1.00  r2:TV0.009/rec1.00  r4:TV0.009/rec1.00  r8:TV0.008/rec1.00  r16:TV0.008/rec1.00  r32:TV0.010/rec1.00  r64:TV0.017/rec0.90
+d= 10 seed=1  ref self-TV 0.0090  (131s)  r0:TV0.015/rec0.80  r2:TV0.008/rec0.90  r4:TV0.007/rec0.90  r8:TV0.007/rec0.90  r16:TV0.008/rec0.90  r32:TV0.010/rec0.90  r64:TV0.016/rec0.90
+d= 15 seed=0  ref self-TV 0.0089  (105s)  r0:TV0.007/rec0.90  r2:TV0.006/rec0.90  r4:TV0.006/rec0.90  r8:TV0.006/rec0.90  r16:TV0.007/rec0.80  r32:TV0.008/rec0.80  r64:TV0.011/rec0.70
+d= 15 seed=1  ref self-TV 0.0090  (110s)  r0:TV0.007/rec0.90  r2:TV0.006/rec0.90  r4:TV0.006/rec0.90  r8:TV0.006/rec0.90  r16:TV0.007/rec0.80  r32:TV0.008/rec0.80  r64:TV0.011/rec0.90
+d= 20 seed=0  ref self-TV 0.0090  (102s)  r0:TV0.006/rec0.50  r2:TV0.007/rec0.50  r4:TV0.007/rec0.50  r8:TV0.007/rec0.50  r16:TV0.007/rec0.40  r32:TV0.007/rec0.20  r64:TV0.010/rec0.20
+d= 20 seed=1  ref self-TV 0.0090  (100s)  r0:TV0.006/rec0.90  r2:TV0.006/rec0.90  r4:TV0.006/rec0.90  r8:TV0.006/rec0.90  r16:TV0.006/rec0.90  r32:TV0.007/rec0.60  r64:TV0.010/rec0.40
+
+wrote /Users/petercotton/github/winning/research/qpo/results/matern_matern52.csv
+
+median total variation against the reference, by dimension and rank:
+rank     0      2      4      8      16     32     64
+d                                                    
+1    0.1975 0.0742 0.0741 0.0948 0.0260 0.0185 0.0202
+2    0.3347 0.2812 0.2734 0.2039 0.1235 0.0770 0.0500
+3    0.3995 0.3585 0.3219 0.2483 0.1579 0.1296 0.1034
+5    0.1063 0.0909 0.0824 0.0674 0.0546 0.0493 0.0646
+8    0.0285 0.0146 0.0133 0.0113 0.0119 0.0147 0.0250
+10   0.0161 0.0083 0.0081 0.0079 0.0081 0.0101 0.0164
+15   0.0068 0.0064 0.0064 0.0064 0.0066 0.0076 0.0109
+20   0.0062 0.0064 0.0064 0.0064 0.0066 0.0073 0.0099
+
+reference self-TV by dimension (the floor):
+d
+1    0.0038
+2    0.0020
+3    0.0026
+5    0.0072
+8    0.0086
+10   0.0088
+15   0.0090
+20   0.0090
