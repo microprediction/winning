@@ -1,0 +1,4 @@
+^cran-comments\.md$
+^UPSTREAM-NOTE\.md$
+^.*\.Rcheck$
+^.*\.tar\.gz$
