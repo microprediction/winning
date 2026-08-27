@@ -39,9 +39,9 @@
 
     <div class="panel">
       <div class="controls">
-        <label>name cap <input type="range" id="cap" min="8" max="40" value="18" />
+        <label>name cap <input type="range" id="cap" min="12" max="40" value="18" />
           <span class="val" id="capv"></span></label>
-        <label>sector cap <input type="range" id="gcap" min="25" max="80" value="45" />
+        <label>sector cap <input type="range" id="gcap" min="36" max="80" value="45" />
           <span class="val" id="gcapv"></span></label>
         <label>correlation strength <input type="range" id="rho" min="10" max="80" value="55" />
           <span class="val" id="rhov"></span></label>
@@ -102,8 +102,13 @@
       const groups = [];
       for (let g = 0; g < nSec; g++)
         groups.push([sector.map((v, i) => [v, i]).filter(([v]) => v === g).map(([, i]) => i), gcap]);
+      // feasibility guard: caps must admit a probability vector at all
+      if (n * cap < 1.001 || nSec * gcap < 1.001) {
+        document.getElementById("timing").textContent = "caps infeasible: they sum below 100%";
+        return;
+      }
       const out = polishRace({ p0: w0raw, structure: s, points: 129,
-                               nameCaps: cap, groups });
+                               nameCaps: cap, groups, fdFallback: false });
       const ms = performance.now() - t0;
       document.getElementById("timing").textContent = `solved in ${ms.toFixed(0)} ms`;
       render(out);
@@ -138,7 +143,20 @@
         `weights sum to ${out.p.reduce((a, b) => a + b, 0).toFixed(6)}`;
     }
 
-    for (const el of [capEl, gcapEl, rhoEl]) el.addEventListener("input", computeAndRender);
+    // labels track the drag; the solve runs debounced so the UI never
+    // stacks 300ms synchronous solves while the thumb is moving
+    let pending = null;
+    function labelsOnly() {
+      document.getElementById("capv").textContent = (capEl.value) + "%";
+      document.getElementById("gcapv").textContent = (gcapEl.value) + "%";
+      document.getElementById("rhov").textContent = (rhoEl.value / 100).toFixed(2);
+      clearTimeout(pending);
+      pending = setTimeout(computeAndRender, 150);
+    }
+    for (const el of [capEl, gcapEl, rhoEl]) {
+      el.addEventListener("input", labelsOnly);
+      el.addEventListener("change", computeAndRender);
+    }
     computeAndRender();
   </script>
 </body>

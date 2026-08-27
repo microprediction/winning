@@ -161,7 +161,7 @@ function bfgsMin(x0, obj, grad, maxit = 80) {
 export function polishRace(opts = {}) {
   const { p0 = null, mu0: mu0In = null, V = null, D = null, base = "normal",
           points = 257, nameCaps = null, groups = null, A = null, b = null,
-          structure = null } = opts;
+          structure = null, fdFallback = true } = opts;
   const forward = m => raceProbabilities(m, { V, D, base, points, structure });
   const jac = m => raceJacobian(m, { V, D, base, points, structure });
   let mu0 = mu0In;
@@ -233,7 +233,7 @@ export function polishRace(opts = {}) {
   let m = solveAL(false);
   let p = forward(m);
   let slack = applyA(p).map((v, k) => b0[k] - v);
-  if (-Math.min(...slack) > 1e-6) {
+  if (fdFallback && -Math.min(...slack) > 1e-6) {
     m = solveAL(true);
     p = forward(m);
     slack = applyA(p).map((v, k) => b0[k] - v);
