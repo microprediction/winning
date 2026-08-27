@@ -90,10 +90,11 @@ def gain_by_rank(R, folds=5, seed=0, max_resp=5000):
                 ranks = rank_of[np.array(idx)][win]
                 np.add.at(buckets, ranks, contrib)
                 np.add.at(counts, ranks, 1)
-    total = counts.sum()
-    return {"share": counts / total,
-            "gain": np.divide(buckets, counts, out=np.zeros_like(buckets), where=counts > 0),
-            "aggregate": buckets.sum() / total}
+    # return the raw accumulators. Pooling has to add these, not average the two
+    # derived rows: the mean of the share vectors dotted with the mean of the gain
+    # vectors is not the mean of the aggregates, and a table whose own rows do not
+    # reproduce its own total is an error however each piece was computed.
+    return {"buckets": buckets, "counts": counts}
 
 
 def favourite_second(R, K):
@@ -150,16 +151,23 @@ def main():
         if pooled_share is None:
             pooled_share = np.zeros(K)
             pooled_gain = np.zeros(K)
-        pooled_share += out["share"]
-        pooled_gain += out["gain"]
-        agg += out["aggregate"]
+        pooled_share += out["counts"]
+        pooled_gain += out["buckets"]
         n_seen += 1
     if n_seen:
-        pooled_share /= n_seen
-        pooled_gain /= n_seen
+        counts, buckets = pooled_share, pooled_gain
+        total = counts.sum()
+        pooled_share = counts / total
+        pooled_gain = np.divide(buckets, counts, out=np.zeros_like(buckets),
+                                where=counts > 0)
+        agg = buckets.sum() / total
+        n_seen = 1
+        assert abs(float((pooled_share * pooled_gain).sum()) - agg) < 1e-12, \
+            "the printed rows must reproduce the printed total"
         K = len(pooled_share)
         print("rank of chosen item  " + "".join(f"{r + 1:>8}" for r in range(K)))
-        print("share of outcomes    " + "".join(f"{v:>8.2f}" for v in pooled_share))
+        # three decimals so a reader can dot the two rows and land on the total
+        print("share of outcomes    " + "".join(f"{v:>8.3f}" for v in pooled_share))
         print("mean gain            " + "".join(f"{v:>+8.3f}" for v in pooled_gain))
         print(f"\ncontributions sum to {agg / n_seen:+.4f}")
 
