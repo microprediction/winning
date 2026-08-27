@@ -83,8 +83,13 @@ for case in range(N_CASES):
     p4 = race_probabilities(mu * c, V=None if V is None else V * c,
                             D=D * c * c, points=257)
     report("scale_invariance", seed, np.abs(p - p4).max(), 5e-9)
-    # hopeless runner moves nobody
-    mu_h = np.append(mu, mu.max() + 12 * np.sqrt(D.max()))
+    # hopeless runner moves nobody -- the margin must scale with TOTAL
+    # variance: 12 idiosyncratic sigmas is not hopeless when factor
+    # exposure dominates (a 10k-sweep flag at seed 18957 proved the
+    # margin wrong, not the kernel: 2^18-node reference agreed with the
+    # kernel's 1.2e-5 for a runner "only" 12 idio-sigmas back)
+    tot_max = np.sqrt(D.max() + (0 if V is None else (V ** 2).sum(1).max()))
+    mu_h = np.append(mu, mu.max() + 12 * tot_max)
     D_h = np.append(D, D.mean())
     V_h = None if V is None else np.vstack([V, np.zeros(V.shape[1])])
     p5 = race_probabilities(mu_h, V=V_h, D=D_h, points=257)
