@@ -166,6 +166,29 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                               float(temperature), points, return_slopes)
     sd = np.sqrt(D)
     n = len(mu)
+    if _HAVE_RUST and base == "normal" and n * len(F) > 2e7:
+        # at scale, materializing the Q x n conditional-means matrix (only
+        # ever used for the window) costs gigabytes and dominates runtime;
+        # per-runner extremes over the node set suffice. For GH tensor
+        # grids the box hull IS the exact node-set extreme (every sign
+        # corner is a node); for Sobol it is a conservative superset.
+        fabs = np.abs(F).max(axis=0)
+        spread = np.abs(V) @ fabs
+        M_lo = (mu - spread)[None, :]
+        M_hi = (mu + spread)[None, :]
+        if window == "bulk":
+            x = _bulk_window(np.vstack([M_lo, M_hi]), sd, points, delta)
+        else:
+            x = np.linspace(M_lo.min() - left * sd.max(),
+                            M_hi.max() + right * sd.max(), points)
+        dx = x[1] - x[0]
+        p, sl, total = _fastrace.forward_and_slopes(
+            np.ascontiguousarray(mu), np.ascontiguousarray(V),
+            np.ascontiguousarray(D), np.ascontiguousarray(F),
+            np.ascontiguousarray(W), points, float(x[0]), float(x[-1]))
+        if return_slopes:
+            return np.asarray(p), np.asarray(sl) / total
+        return np.asarray(p)
     M_all = mu[None, :] + F @ V.T
     if window == "bulk":
         x = _bulk_window(M_all, sd, points, delta)

@@ -1,0 +1,494 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.15in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage[round]{natbib}
+\usepackage[hidelinks]{hyperref}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+
+\title{A General Contest Inversion Algorithm}
+\author{Peter Cotton\thanks{\texttt{peter.cotton@microprediction.com}. The reference
+implementation, its parity-locked ports (Python, R, Rust, JavaScript) and the seeded
+scripts behind every number in this paper live at
+\texttt{github.com/microprediction/winning}.}}
+\date{August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Multinomial probit choice probabilities are Gaussian orthant integrals, and for
+thirty years econometrics has computed them by simulation, most commonly with the
+GHK sampler, at cost $O(n^2 R)$ per probability vector and error $O(R^{-1/2})$. We
+observe that the choice event is one-dimensional: the probability that alternative
+$i$ wins is an integral over the winning value, and one shared survival field
+prices all $n$ alternatives at once. For covariances under which performances are
+conditionally independent given a few shared variables---factor, block, nested and
+hierarchical structures, which are also the covariances multinomial probit can
+identify---the field method is deterministic, computes all $n$ probabilities and
+their exact Jacobian in $O(nLQ)$ operations, and inverts observed probabilities
+back to utilities. At $n=200$ it is two hundred times faster than GHK at $10^4$
+draws and five times more accurate, and the measured gap grows as $n^{2.8}$. The
+same two calls price and invert softmax, Thurstone--Mosteller, factor multinomial
+probit, and a hierarchy of team and sector models, to ten million alternatives.
+\end{abstract}
+
+\section{Introduction}\label{sec:intro}
+
+A decision maker faces $n$ alternatives and chooses the one with the highest
+utility. Write $U_i = \mu_i + \varepsilon_i$ with
+$\varepsilon\sim N(0,\Sigma)$; the probability that alternative $i$ is chosen is
+\begin{equation}\label{eq:orthant}
+p_i \;=\; \Pr\{U_i \ge U_j \ \text{for all } j\}
+      \;=\; \Pr\{\tilde U \ge 0\},
+\qquad \tilde U_j = U_i - U_j,
+\end{equation}
+an $(n-1)$-dimensional Gaussian orthant integral. This is the multinomial probit
+model. Its appeal has been understood since \citet{thurstone1927}: unlike the
+logit family it imposes no independence of irrelevant alternatives, because
+$\Sigma$ lets alternatives be close substitutes. Its curse has been understood
+just as long. The integral \eqref{eq:orthant} has no closed form, and estimation
+needs it, and its derivatives, at every trial value of the parameters.
+
+The workhorse answer is the GHK simulator of \citet{geweke1989},
+\citet{borschsupan1993}, \citet{keane1994} and \citet{hajivassiliou1996}. GHK
+factors $\Sigma$ by Cholesky and writes the orthant probability as a nested
+sequence of one-dimensional truncated normal probabilities, each conditioning on
+draws for the previous coordinates. Averaging $R$ such importance weights gives an
+unbiased, smooth estimate of one $p_i$ at cost $O(n^2)$ per draw. The estimator
+made maximum simulated likelihood practical and it remains the default in
+textbooks \citep{train2009}. Its costs are also standard: error shrinks as
+$O(R^{-1/2})$; the log of a simulated probability is biased at $O(1/R)$;
+gradients inherit the simulation noise; and a full probability vector, which the
+likelihood needs, costs $n$ separate runs.
+
+This paper takes a different route to the same object. The choice event is
+one-dimensional. Alternative $i$ wins when its performance beats the field, so
+\begin{equation}\label{eq:field-intro}
+p_i \;=\; \int f_i(x)\prod_{j\ne i}S_j(x)\,dx,
+\end{equation}
+where $f_i$ is the density of $U_i$ and $S_j$ the survival of $U_j$: integrate
+over the winning value $x$, requiring everyone else to fall short. For
+independent performances \citet{cotton2021} computed \eqref{eq:field-intro} for
+all $n$ on a lattice by building the field $\sum_j \log S_j$ once and dividing
+each alternative out, and inverted the map from probabilities back to $\mu$. The
+present paper extends the field construction to correlated performances by
+conditioning: whenever $\Sigma$ makes performances independent given a few shared
+variables, the field factorizes, and all $n$ probabilities, their exact Jacobian,
+and the inversion cost $O(nLQ)$ for a lattice of $L$ points and $Q$ quadrature
+nodes. No simulation, no per-alternative repetition, deterministic error.
+
+The structures that admit this treatment are not a restriction to apologize for.
+Unrestricted $\Sigma$ is not identified in multinomial probit; applied work
+restricts to factor-analytic and related structured covariances as a matter of
+course \citep{train2009}. The table lists the models the single
+\texttt{structure} argument nests exactly; each row is priced and inverted by the
+same two calls.
+
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule
+model & covariance grammar & source \\
+\midrule
+Luce / softmax & independent, Gumbel base, $D=\pi^2/6$ & exact identity \\
+Thurstone--Mosteller & independent, normal base & \citet{cotton2021} \\
+factor multinomial probit & $VV'+\mathrm{diag}(D)$ & companion note \\
+teams, conferences & blocks: rank-$r$ effect per cluster & \S\ref{sec:blocks} \\
+market plus sectors & nested: blocks $\times$ global factor & \S\ref{sec:blocks} \\
+hierarchies & tree: uniform shared effects & \S\ref{sec:tree} \\
+dense $\Sigma$, estimable case & fitted grammar $+$ residual factors & \S\ref{sec:general} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Scale motivates second. The next table reports measured wall clock for all $n$
+probabilities (Rust kernels, one laptop) against GHK's cost law, measured as
+$n^{2.8}$ up to $n=10^3$ at $R=10^4$ draws and extrapolated beyond. At these
+budgets GHK's total variation error is near $10^{-2}$; the lattice error is near
+$10^{-8}$.
+
+\begin{center}\small
+\begin{tabular}{rrrr}
+\toprule
+$n$ & lattice, measured & GHK at $10^4$ draws, cost law & multiplier \\
+\midrule
+$10^4$ & $0.16$ s & $3.7$ days & $2\times10^{6}$ \\
+$10^5$ & $2.2$ s & $6.5$ years & $9\times10^{7}$ \\
+$10^6$ & VVV s & $4{,}100$ years & MMM \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Sections \ref{sec:alternatives} places the method among the alternatives.
+Sections \ref{sec:lattice}--\ref{sec:tree} describe the algorithm: the
+independent lattice race, then the factor, block, nested and tree extensions,
+each with its recursion written out. Section \ref{sec:jac} gives the Jacobian and
+the inversion. Section \ref{sec:general} reduces dense covariance to the grammar
+family and reports accuracy per named random-correlation ensemble. Section
+\ref{sec:num} contains the benchmarks.
+
+\section{The alternatives}\label{sec:alternatives}
+
+\paragraph{Deterministic quadrature.} \citet{genz1992} transformed the orthant
+integral to the unit cube and integrated by adaptive and quasi-Monte Carlo rules;
+the \texttt{mvtnorm} implementation is the standard in R. The method is accurate
+and general but treats one probability at a time, and its practical range is a
+few dozen dimensions.
+
+\paragraph{Frequency simulation.} The crude frequency estimator of
+\citet{lerman1981} counts argmax draws. It is unbiased for the whole vector at
+once but not smooth in parameters, its per-entry relative error explodes for
+small $p_i$, and a tail alternative may receive no draws at all.
+
+\paragraph{GHK.} Defined above. Two properties matter for comparison: it is
+smooth in parameters, which frequency counting is not, and it prices one
+alternative per run. \citet{stern1992} gave a related decomposition with an
+analytic leading term.
+
+\paragraph{Bayesian data augmentation.} \citet{albert1993} and
+\citet{mcculloch1994} sidestep the integral entirely by Gibbs sampling the latent
+utilities. The cost moves into the Markov chain, and the likelihood surface
+itself is never available, which forecloses everything that needs it.
+
+\paragraph{Analytic approximations.} \citet{clark1961} matched moments of
+pairwise maxima; \citet{mendell1974} and \citet{solow1990} approximate by
+sequential conditioning on first and second moments. These are fast, sometimes
+startlingly accurate, and carry no error control. Expectation propagation is the
+modern member of this family.
+
+\paragraph{Minimax tilting.} \citet{botev2017} computes single Gaussian
+rectangle probabilities with bounded relative error deep into the tails, in
+dimensions up to roughly a thousand. It is the accuracy reference, and we use it
+as the referee for our own tail claims; it prices one probability per run.
+
+\medskip
+Every method above computes one probability at a time. Estimation wants all $n$
+and their derivatives at every parameter value. Sharing the field across
+alternatives is the algorithmic point of this paper, and it is what makes the
+$n$-fold and the derivative costs disappear.
+
+\section{The lattice race}\label{sec:lattice}
+
+Fix a min-wins convention: performances are times, the lowest wins, and
+$U_i = -X_i$ translates to the utility convention. Let $X_i=\mu_i+\sigma_i
+\epsilon_i$ with $\epsilon_i$ i.i.d.\ from a standardized base density (normal,
+Gumbel, or any density supplied as code), and write $f_i$, $S_i$ for the density
+and survival of $X_i$.
+
+The algorithm evaluates \eqref{eq:field-intro} on a lattice $x_1<\dots<x_L$:
+\begin{enumerate}\itemsep2pt
+\item compute $\log S_j(x_\ell)$ and $\log f_j(x_\ell)$ for all $j,\ell$;
+\item accumulate the field $L(x_\ell)=\sum_j \log S_j(x_\ell)$;
+\item for each $i$, form the integrand
+      $f_i(x_\ell)\,e^{L(x_\ell)-\log S_i(x_\ell)}$, which is contestant $i$'s
+      density times everyone else's survival, with $i$ divided out of the shared
+      field in log space;
+\item sum times the lattice spacing, and normalize the vector.
+\end{enumerate}
+The cost is $O(nL)$: the field is built once, not once per contestant. Log-space
+arithmetic keeps hopeless contestants finite (their $e^{L-\log S_i}$ underflows
+gracefully rather than dividing zero by zero), and the exponent is clipped at
+$-745$.
+
+The lattice itself is placed on the winner's bulk, not the ability span. A
+hopeless contestant wins only by running a winner-class time, so only the region
+where the winning time lives matters. Bisect the conservative winner c.d.f.\
+envelope $G(x)=1-\prod_j S_j(x)$ to $[G^{-1}(\delta),G^{-1}(1-\delta)]$ and pad
+two standard deviations so that no base's tails are clipped. Measured: $33$
+points on this window reach accuracy that a $500$-point ability-span lattice
+cannot, because the span window's own truncation floors near $6\times10^{-11}$;
+on fields with many hopeless contestants the bulk window is one hundred times
+more accurate at equal budget.
+
+Two byproducts are free. The same pass yields removal counterfactuals, the
+probability $j$ wins after deleting $i$, by dividing a second contestant out of
+the field; and photo-finish tie densities, which \S\ref{sec:jac} identifies with
+the off-diagonal Jacobian.
+
+\section{Factor covariance}\label{sec:factor}
+
+Let $X=\mu+Vf+\mathrm{diag}(\sqrt D)\,\epsilon$ with $f\sim N(0,I_k)$
+independent of $\epsilon$, so $\Sigma=VV'+\mathrm{diag}(D)$. Conditional on $f$
+the performances are independent with means $\mu+Vf$, and
+\begin{equation}
+p \;=\; \sum_q w_q\, p^{\mathrm{ind}}(\mu+Vf_q),
+\end{equation}
+a $Q$-node quadrature over runs of the independent algorithm, cost $O(nLQ)$. In
+English: average the independent race over the shared luck. Gauss--Hermite nodes
+serve $k\le2$; scrambled Sobol serves $k\ge3$.
+
+One default matters. When $D_i\ll\lVert V_i\rVert^2$ the conditional race is
+nearly deterministic and the integrand over $f$ is nearly a step function; a
+fixed 15-node rule then silently loses up to five percent of total variation, and
+the loss is invisible to lattice refinement because it is points-invariant.
+Randomized invariant testing against a QMC referee found this. The default order
+now scales with the sharpness $\max_i \lVert V_i\rVert/\sqrt{D_i}$, capped by
+rank.
+
+The same pass returns own-ability slopes $\partial p_i/\partial\mu_i$ at no extra
+cost, which \S\ref{sec:jac} uses as the Newton preconditioner.
+
+\section{Block and nested covariance}\label{sec:blocks}
+
+Assign contestant $i$ to cluster $c(i)$ with loading $v_i\in\R^r$ and let
+\begin{equation}
+X_i=\mu_i+v_i'a_{c(i)}+\sqrt{D_i}\,\epsilon_i,
+\qquad a_c \ \text{i.i.d.}\ N(0,I_r),
+\end{equation}
+a block-diagonal rank-$r$-plus-diagonal covariance: teams, conferences, sibling
+products. Two independences do the work. Conditional on its own cluster's effect
+a contestant is independent of its teammates; and distinct clusters are
+independent outright. So the field factorizes across clusters,
+\begin{equation}\label{eq:blockfield}
+\prod_j S_j(x) \;=\; \prod_c G_c(x),
+\qquad
+G_c(x)\;=\;\E_a \prod_{j\in c} S_j(x\mid a)
+       \;=\;\sum_q w_q\, e^{S_c(x,a_q)},
+\end{equation}
+with $S_c(x,a)=\sum_{j\in c}\log S_j(x\mid a)$ the cluster's conditional
+log-survival. In English: $G_c(x)$ is the probability that every member of
+cluster $c$ survives past $x$, with the cluster's shared luck integrated out.
+
+Contestant $i$ then wins against a cavity field:
+\begin{equation}\label{eq:cavity}
+p_i \;=\; \int h_i(x)\prod_{c\ne c(i)}G_c(x)\,dx,
+\qquad
+h_i(x) \;=\; \sum_q w_q\, f_i(x\mid a_q)\,e^{S_{c(i)}(x,a_q)-\log S_i(x\mid a_q)}.
+\end{equation}
+The term $h_i$ couples $i$'s win density to its own teammates within the shared
+draw of $a_{c(i)}$; the cavity product supplies the rest of the field. The cost
+is $O(nLQ_a)$ whatever the number of clusters, because the per-cluster factors
+are accumulated once. Rank two is special: the conditional integrand is smooth
+and a tensor Gauss--Hermite rule beats scrambled Sobol at equal nodes by a wide
+measured margin.
+
+\paragraph{Nested.} Add one global factor with couplings $g_i$ and a dial
+$\gamma\in[0,1]$: conditional on the global draw $f_q$ the model is a block race
+at shifted abilities, so
+$p=\sum_q w_q\,p_{\mathrm{block}}(\mu+\gamma g f_q)$, a finite mixture of block
+races. The dial interpolates Schur-complementary beliefs from isolated clusters
+to full coupling.
+
+\section{Tree covariance}\label{sec:tree}
+
+Let a rooted tree have the leaf clusters at its bottom and internal nodes $t$
+above, and give node $t$ a scalar effect $b_t\sim N(0,1)$ applied with uniform
+strength $\lambda_t$ to every leaf beneath it:
+\begin{equation}
+X_i=\mu_i+v_i\,a_{c(i)}+\sum_{t\,\in\,\mathrm{anc}(c(i))}\lambda_t b_t
+    +\sqrt{D_i}\,\epsilon_i .
+\end{equation}
+The implied covariance is hierarchical: two contestants share the variance of
+exactly their common ancestors. The uniform strength is the crucial restriction,
+because a shared effect that hits every subtree member equally moves the whole
+subtree's field by a translation of its argument. Messages therefore remain
+functions of one variable. Per-leaf loadings on internal effects would force
+two-dimensional message tables.
+
+The algorithm is two passes over the same lattice.
+
+\paragraph{Upward.} Each leaf cluster carries its block factor
+$G_c(x)=\sum_q w_q e^{S_c(x,a_q)}$ from \eqref{eq:blockfield}. Each internal
+node, visited deepest first, combines its children under its own effect:
+\begin{equation}\label{eq:up}
+G_t(x)\;=\;\sum_q w_q \prod_{c\,\in\,\mathrm{children}(t)} G_c\!\left(x+\lambda_t
+a_q\right).
+\end{equation}
+In English: $G_t(x)$ is the probability that every leaf below $t$ survives past
+$x$, with $t$'s effect integrated by quadrature and each child's message shifted
+because the effect moves that child's whole subtree at once. Shifted evaluations
+are linear interpolations on the lattice.
+
+\paragraph{Downward.} The root's cavity is one. Each node, visited shallowest
+first, receives the field of everything outside its subtree:
+\begin{equation}\label{eq:down}
+R_t(x)\;=\;\Bigl[\sum_q w_q\,R_{\mathrm{parent}(t)}\!\left(x-\lambda_{\mathrm{parent}(t)}
+a_q\right)\Bigr]\ \prod_{s\,\in\,\mathrm{siblings}(t)} G_s(x).
+\end{equation}
+Contestant $i$ then wins against its own leaf cavity,
+$p_i=\int h_i(x)\,R_{c(i)}(x)\,dx$ with $h_i$ as in \eqref{eq:cavity}. The cost
+is $O(nLQ)$ plus $O(L\,Q)$ per tree node.
+
+A depth-one tree with zero strengths reproduces the block race to machine
+precision, which is tested. Against Monte Carlo the recursion agrees at the
+simulation noise floor across the validation battery, and moving mass to a
+common root is invariant to $3\times10^{-7}$; we do not claim exactness of the
+downward pass at depth and record it as an approximation validated empirically.
+
+\section{Jacobians, tie densities, inversion}\label{sec:jac}
+
+\begin{proposition}[Off-diagonals are photo-finish densities]
+For the race \eqref{eq:field-intro} and $j\ne i$,
+\begin{equation}\label{eq:tie}
+\frac{\partial p_i}{\partial \mu_j}
+  \;=\; \int f_i(x)\,f_j(x)\prod_{k\ne i,j}S_k(x)\,dx \;\ge\; 0,
+\end{equation}
+and each row of the Jacobian sums to zero.
+\end{proposition}
+
+The zero row sum says a common shift moves nothing. The off-diagonal is the
+density of a dead heat between $i$ and $j$ ahead of the field, so the Jacobian is
+a byproduct of the same field pass: per quadrature node it is a Gram matrix over
+the lattice. The stable pair factorization is
+$[f_i e^{L-\log S_i}]\times[f_j/S_j]$, a bounded density times a polynomially
+growing hazard; the symmetric square-root split overflows where survivals
+vanish.
+
+The block Jacobian is exact, with the within-cluster term computed under the
+cavity; the nested Jacobian is the mixture of block Jacobians; the tree Jacobian
+is exact within a cluster and Gram-approximate across clusters, which suffices
+for Newton because residuals always use the exact forward map.
+Feasibility-critical callers fall back to finite differences.
+
+Inversion recovers mean-zero $\mu$ from a target $p$: an adaptive damped fixed
+point on the log residual carries the iterate into Newton's basin, then Newton
+steps on $\log p(\mu)-\log p^\star$ solve to $10^{-8}$; sub-resolution targets
+are floored and reported as bounds. Ignoring known structure at inversion time is
+not a small error: inverting block-generated probabilities under an assumed
+independent model mislocates abilities by up to a fifth of the field's spread.
+
+\section{Dense covariance}\label{sec:general}
+
+Fit the grammar family to a dense $\Sigma$: rank-$k$ global factors, then
+hierarchically seriated blocks with one rank-one effect each fitted to the
+within-block residual, alternated to convergence with the diagonal excluded from
+every fit; then promote the top $m$ eigencomponents of the remaining residual to
+additional factor columns. What results is a factor-plus-blocks race priced in
+one deterministic call. At $n=2000$ the call takes five seconds against
+thirty-six for a $10^6$-draw simulation, agrees with it at its noise floor, and
+prices the $82$ percent of tail alternatives for which the simulation records
+zero wins.
+
+A random covariance matrix means nothing until the measure is named, so accuracy
+is reported per named ensemble of the \texttt{randomcov} library. Median
+absolute error is $1$--$4\times10^{-5}$ under twelve of fifteen measures: factor
+with sparse links, sparse-precision graphical, Wishart, Marchenko--Pastur and
+spiked spectra, LKJ, onion, vine, hierarchical, block equicorrelation, AR(1) and
+elliptope walks. It is $1$--$4\times10^{-4}$ under the dense-strong ensembles,
+and it fails, at $4\times10^{-3}$, under Mat\'ern and RBF kernel fields. Kernel
+covariance is locality, not spectrum: such fields are approximately Markov
+\citep{lindgren2011} and their polynomially decaying spectra offer a low-rank
+fit nothing to hold. The right algorithm there is sequential conditioning with
+cheap sparse-precision draws, and a production front door should dispatch on the
+structure it detects.
+
+\section{Benchmarks}\label{sec:num}
+
+\paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
+covariance, against a $2^{20}$-point QMC reference:
+
+\begin{center}\small
+\begin{tabular}{rrrrrrr}
+\toprule
+& \multicolumn{2}{c}{lattice race} & \multicolumn{2}{c}{GHK, $R=10^3$} & \multicolumn{2}{c}{GHK, $R=10^4$}\\
+$n$ & time & TV err & time & TV err & time & TV err\\
+\midrule
+10  & 2.3 ms & $\le 1.8\times10^{-4}$ & 1.0 ms & $8.4\times10^{-3}$ & 8 ms & $2.1\times10^{-3}$\\
+50  & 7.0 ms & $\le 1.7\times10^{-3}$ & 21 ms & $4.2\times10^{-2}$ & 222 ms & $1.2\times10^{-2}$\\
+200 & 25 ms  & $\le 2.4\times10^{-3}$ & 436 ms & $3.2\times10^{-2}$ & 5.0 s & $1.2\times10^{-2}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The lattice bounds are the reference's own noise; self-convergence places the
+lattice error near $10^{-8}$. GHK error contracts as $O(R^{-1/2})$ and its
+measured cost grows as $n^{2.8}$ per probability vector. The lattice is
+deterministic, supplies the exact Jacobian that maximum simulated likelihood
+lacks, and prices the tails. Identification restricts multinomial probit to
+structured covariance in any case, so the structured case is the estimable case,
+and there we consider GHK replaced. GHK retains general rectangle probabilities
+and locality-structured covariance, and \citet{botev2017} remains the reference
+for single extreme tail probabilities.
+
+\paragraph{Scale.} The Rust kernels are input-bound: ten million contestants in
+$64$ seconds under the block grammar with a hybrid in-memory and streaming
+field, and $232$ times the speed of the interpreted classic calibration.
+
+\paragraph{Parity and testing.} One vector file embeds the inputs and outputs of
+$22$ scenarios spanning every claim above. Python, R, JavaScript and Rust replay
+them: twenty at machine precision, the optimizer-mediated scenarios to
+$10^{-6}$. Randomized differential, invariant and metamorphic testing, thousands
+of seeded cases per run, found the two defects reported in
+\S\ref{sec:factor} and Remark~\ref{rem:hrp}; both fixes carry regression tests.
+
+\begin{remark}[A portfolio identity]\label{rem:hrp}
+Long-only portfolio weights are race probabilities, and the covariance implicitly
+assumed by hierarchical risk parity \citep{lopezdeprado2016} is exactly a tree
+race: give internal node $t$ strength
+$\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$ with $\rho_t=\max(1-2h_t^2,0)$
+for merge height $h_t$, and leaf $i$ idiosyncratic variance
+$1-\rho_{\mathrm{first}(i)}$; the implied correlation equals the floored
+cophenetic matrix. The floor is forced, because uniform shared effects cannot
+represent negative dependence, and omitting it silently inflates other implied
+correlations above one. The identity turns dendrogram-consistent concentration
+limits into contest inversions, but portfolio applications are not this paper's
+subject.
+\end{remark}
+
+\section{Availability}
+\texttt{pip install winning} is pure Python; \texttt{winning[fast]} adds the
+Rust kernels as one abi3 wheel per platform. A base-R package mirrors the full
+interface, and a zero-dependency browser port drives a live demonstration at
+\texttt{winning.microprediction.org}.
+
+\begin{thebibliography}{19}\small
+\bibitem[Albert and Chib(1993)]{albert1993} J.~H. Albert, S.~Chib.
+Bayesian analysis of binary and polychotomous response data.
+\emph{JASA} 88:669--679, 1993.
+\bibitem[Botev(2017)]{botev2017} Z.~I. Botev.
+The normal law under linear restrictions: simulation and estimation via minimax
+tilting. \emph{Journal of the Royal Statistical Society B} 79(1):125--148, 2017.
+\bibitem[B\"orsch-Supan and Hajivassiliou(1993)]{borschsupan1993}
+A.~B\"orsch-Supan, V.~Hajivassiliou. Smooth unbiased multivariate probability
+simulators for maximum likelihood estimation of limited dependent variable
+models. \emph{Journal of Econometrics} 58:347--368, 1993.
+\bibitem[Clark(1961)]{clark1961} C.~E. Clark.
+The greatest of a finite set of random variables.
+\emph{Operations Research} 9:145--162, 1961.
+\bibitem[Cotton(2021)]{cotton2021} P.~Cotton.
+Inferring relative ability from winning probability in multi-entrant contests.
+\emph{SIAM Journal on Financial Mathematics} 12(1):295--317, 2021.
+\bibitem[Genz(1992)]{genz1992} A.~Genz.
+Numerical computation of multivariate normal probabilities.
+\emph{Journal of Computational and Graphical Statistics} 1:141--149, 1992.
+\bibitem[Geweke(1989)]{geweke1989} J.~Geweke.
+Bayesian inference in econometric models using Monte Carlo integration.
+\emph{Econometrica} 57:1317--1339, 1989.
+\bibitem[Hajivassiliou et al.(1996)]{hajivassiliou1996} V.~Hajivassiliou,
+D.~McFadden, P.~Ruud. Simulation of multivariate normal rectangle probabilities
+and their derivatives. \emph{Journal of Econometrics} 72:85--134, 1996.
+\bibitem[Keane(1994)]{keane1994} M.~P. Keane.
+A computationally practical simulation estimator for panel data.
+\emph{Econometrica} 62:95--116, 1994.
+\bibitem[Lerman and Manski(1981)]{lerman1981} S.~Lerman, C.~Manski.
+On the use of simulated frequencies to approximate choice probabilities.
+In \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
+\bibitem[Lindgren et al.(2011)]{lindgren2011} F.~Lindgren, H.~Rue,
+J.~Lindstr\"om. An explicit link between Gaussian fields and Gaussian Markov
+random fields. \emph{Journal of the Royal Statistical Society B}
+73(4):423--498, 2011.
+\bibitem[L\'opez de Prado(2016)]{lopezdeprado2016} M.~L\'opez de Prado.
+Building diversified portfolios that outperform out of sample.
+\emph{Journal of Portfolio Management} 42(4):59--69, 2016.
+\bibitem[McCulloch and Rossi(1994)]{mcculloch1994} R.~McCulloch, P.~Rossi.
+An exact likelihood analysis of the multinomial probit model.
+\emph{Journal of Econometrics} 64:207--240, 1994.
+\bibitem[Mendell and Elston(1974)]{mendell1974} N.~Mendell, R.~Elston.
+Multifactorial qualitative traits: genetic analysis and prediction of
+recurrence risks. \emph{Biometrics} 30:41--57, 1974.
+\bibitem[Solow(1990)]{solow1990} A.~R. Solow.
+A method for approximating multivariate normal orthant probabilities.
+\emph{Journal of Statistical Computation and Simulation} 37:225--229, 1990.
+\bibitem[Stern(1992)]{stern1992} S.~Stern.
+A method for smoothing simulated moments of discrete probabilities in
+multinomial probit models. \emph{Econometrica} 60:943--952, 1992.
+\bibitem[Thurstone(1927)]{thurstone1927} L.~L. Thurstone.
+A law of comparative judgment. \emph{Psychological Review} 34:273--286, 1927.
+\bibitem[Train(2009)]{train2009} K.~Train.
+\emph{Discrete Choice Methods with Simulation}. 2nd ed., Cambridge, 2009.
+\end{thebibliography}
+\end{document}
