@@ -424,6 +424,22 @@ grows silently: its tail entries are off by $e^{1.3}\approx3.7$ with nothing in
 the output to say so. The race's tail figure is the reference's own noise;
 lattice self-convergence places its error near $10^{-8}$.
 
+\paragraph{Referee agreement.} A replay harness maps each benchmark
+probability to its difference orthant and prices it through the two
+field-standard R implementations. \texttt{mvtnorm}'s Genz--Bretz agrees with
+the lattice to within its own reported error bound in every family:
+$3.8\times10^{-7}$ against a bound of $8.1\times10^{-7}$ at $n=10$, and
+$2.7\times10^{-8}$ against $5.8\times10^{-8}$ on a case whose smallest
+probability is $3\times10^{-10}$. Botev's minimax tilting agrees to its own
+Monte Carlo noise, which in relative terms is $2.2\times10^{-4}$ at
+$p\approx3\times10^{-10}$: the tail claim rests on the named accuracy
+reference, not only on self-convergence. On the independent family an
+adaptive-quadrature referee reaches machine precision and the lattice matches
+it to $1.9\times10^{-15}$. An invariance battery (two-runner closed form,
+translation, permutation, symmetry) holds to $10^{-16}$ throughout, except
+the two-runner comparison at $7\times10^{-9}$, which is the lattice
+discretization itself.
+
 \paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
 covariance, against a $2^{20}$-point QMC reference:
 
