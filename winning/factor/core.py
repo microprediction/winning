@@ -251,13 +251,29 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     if not keep.any():
         keep[0] = True
     Vall = Vall[:, keep]
-    # closing D solve: min over d of ||P(C - Vall Vall' - diag(d))P||_F.
-    # The map d -> diag(P diag(d) P) is linear with matrix P.P (elementwise
-    # square), so the first-order condition is (P.P) d = diag(P R2 P).
-    R2 = C - Vall @ Vall.T
-    rhs = np.diag(P @ R2 @ P)
-    D = np.linalg.solve(P * P, rhs)
-    D = np.maximum(D, 1e-3 * float(np.mean(np.diag(C))))
+
+    def _close(Vc):
+        # closing D solve: min over d of ||P(C - Vc Vc' - diag(d))P||_F.
+        # The map d -> diag(P diag(d) P) is linear with matrix P.P
+        # (elementwise square): (P.P) d = diag(P R2 P).
+        rhs = np.diag(P @ (C - Vc @ Vc.T) @ P)
+        Dc = np.maximum(np.linalg.solve(P * P, rhs),
+                        1e-3 * float(np.mean(np.diag(C))))
+        Rm = P @ (C - Vc @ Vc.T - np.diag(Dc)) @ P
+        return Dc, float(np.abs(Rm).max())
+
+    D, res_pipe = _close(Vall)
+    # second arm: a pure eigen fit at the same total rank. Greedy
+    # factor+blocks allocation is the wrong shape for globally smooth
+    # covariance (measured: smooth RBF kernels at rank 27 hold to 1e-3
+    # under eigen, 0.14 under the pipeline); keep whichever leaves the
+    # smaller choice-relevant residual, pipeline winning ties.
+    rank = Vall.shape[1]
+    wC, UC = np.linalg.eigh(C)
+    Veig = UC[:, n - rank:] * np.sqrt(np.maximum(wC[n - rank:], 0.0))
+    Deig, res_eig = _close(Veig)
+    if res_eig < res_pipe:
+        Vall, D, res_pipe = Veig, Deig, res_eig
     F, W = qmc_nodes(Vall.shape[1], m=nodes_log2, seed=seed)
     if return_report:
         Rfin = P @ (C - Vall @ Vall.T - np.diag(D)) @ P
@@ -268,9 +284,12 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         # against measured TV error (AR(1) and short-scale RBF sit at
         # 0.08-0.40 here with TV 0.03-0.04 at n=40; in-grammar truths at 0)
         absmax = float(np.abs(Rfin).max() / max(np.mean(np.diag(C)), 1e-300))
+        sharp = float(np.max(np.linalg.norm(Vall, axis=1)
+                             / np.sqrt(np.maximum(D, 1e-300))))
         report = {"projected_residual_rel": rel,
                   "projected_residual_max": absmax,
-                  "rank": Vall.shape[1]}
+                  "rank": Vall.shape[1],
+                  "sharpness": sharp}
         return Vall, D, F, W, report
     return Vall, D, F, W
 

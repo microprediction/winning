@@ -186,6 +186,16 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                 "known hard family). Probabilities may carry percent-level "
                 "bias; see the paper's dense-covariance section.",
                 RuntimeWarning, stacklevel=2)
+        elif report["rank"] > 12 and report["sharpness"] > 5:
+            import warnings
+            warnings.warn(
+                "cov= fits well but needs a high-rank, sharp factor "
+                f"integral (rank {report['rank']}, sharpness "
+                f"{report['sharpness']:.0f}); the default node budget may "
+                "leave percent-level quadrature error. Pass more nodes "
+                "(fit_covariance(..., nodes_log2=14)) or price by "
+                "simulation for near-singular smooth covariances.",
+                RuntimeWarning, stacklevel=2)
     if structure is not None:
         from .structures import dispatch_probabilities
         return dispatch_probabilities(mu, structure, base=base,
