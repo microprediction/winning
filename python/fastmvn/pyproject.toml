@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastmvn"
+version = "0.1.0"
+description = "Fast multivariate normal rectangle probabilities for factor-structured covariance; scipy drop-in with patch_scipy()"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Peter Cotton", email = "peter.cotton@microprediction.com"}]
+dependencies = ["numpy", "scipy"]
+
+[project.urls]
+Homepage = "https://github.com/microprediction/winning"
+
+[tool.setuptools.packages.find]
+where = ["src"]
