@@ -358,6 +358,20 @@ $7\times10^{-8}$, which is within the tilting estimate's own error. Tail
 accuracy is a property of the lattice, not of node placement, so the grammar
 kernels price the tails that simulation cannot see.
 
+\begin{remark}[A portfolio identity]\label{rem:hrp}
+Long-only portfolio weights are race probabilities, and the covariance implicitly
+assumed by hierarchical risk parity \citep{lopezdeprado2016} is exactly a tree
+race: give internal node $t$ strength
+$\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$ with $\rho_t=\max(1-2h_t^2,0)$
+for merge height $h_t$, and leaf $i$ idiosyncratic variance
+$1-\rho_{\mathrm{first}(i)}$; the implied correlation equals the floored
+cophenetic matrix. The floor is forced, because uniform shared effects cannot
+represent negative dependence, and omitting it silently inflates other implied
+correlations above one. The identity turns dendrogram-consistent concentration
+limits into contest inversions, but portfolio applications are not this paper's
+subject.
+\end{remark}
+
 \section{Jacobians, tie densities, inversion}\label{sec:jac}
 
 \begin{proposition}[Off-diagonals are photo-finish densities]
@@ -548,19 +562,6 @@ $22$ scenarios spanning every claim above. The four language implementations of
 \S\ref{sec:avail} replay them: twenty at machine precision, the
 optimizer-mediated scenarios to $10^{-6}$.
 
-\begin{remark}[A portfolio identity]\label{rem:hrp}
-Long-only portfolio weights are race probabilities, and the covariance implicitly
-assumed by hierarchical risk parity \citep{lopezdeprado2016} is exactly a tree
-race: give internal node $t$ strength
-$\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$ with $\rho_t=\max(1-2h_t^2,0)$
-for merge height $h_t$, and leaf $i$ idiosyncratic variance
-$1-\rho_{\mathrm{first}(i)}$; the implied correlation equals the floored
-cophenetic matrix. The floor is forced, because uniform shared effects cannot
-represent negative dependence, and omitting it silently inflates other implied
-correlations above one. The identity turns dendrogram-consistent concentration
-limits into contest inversions, but portfolio applications are not this paper's
-subject.
-\end{remark}
 
 \section{Availability}\label{sec:avail}
 \texttt{pip install winning} is pure Python; \texttt{winning[fast]} adds the
