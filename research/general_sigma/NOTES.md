@@ -24,3 +24,19 @@ rust) and any use needing the analytic side products. Scaling run TBD.
 
 Candidate package verbs: fit_structure(Sigma) (the composed fit);
 price_sigma(mu, Sigma) = rung-6 estimator.
+
+## Large n: the one-call estimator (run_large_n.py)
+
+Residual-as-extra-factors makes the whole ladder deterministic: fit
+(rank-3 + seriated blocks + top-5 residual eigendirs), then ONE race
+call with Sobol factor nodes. n=2000, dense truth: 5.2s total vs 36.4s
+for 1M-draw MC; bulk agreement at MC's noise floor; node
+self-convergence 4.6e-4. MC saw zero wins for 82% of the 1563 tail
+runners; we price down to 7e-95.
+
+Open (the last piece): deep-tail RELATIVE accuracy across factor nodes
+is quadrature-limited (a 1e-20 runner is priced by whichever node lands
+in its favorable corner). Fix: exponential tilting of the factor
+Gaussian per runner-group (analytic shift + reweight), turning the tail
+into a bulk calculation. Then the large-n claim is complete: uniform
+relative accuracy at any n, no draws, no Cholesky of Sigma.
