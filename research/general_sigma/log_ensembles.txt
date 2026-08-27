@@ -1,0 +1,16 @@
+lkj                      resolvable=201  rms z=  9.37  median abs err=2.9e-05  max abs err=8.2e-03
+wishart                  resolvable=193  rms z=  3.46  median abs err=1.8e-05  max abs err=2.9e-03
+residuals                resolvable=126  rms z= 29.42  median abs err=2.0e-04  max abs err=1.8e-02
+walk                     resolvable=186  rms z=  6.06  median abs err=2.0e-05  max abs err=6.6e-03
+animals                  resolvable= 47  rms z= 40.70  median abs err=4.0e-04  max abs err=2.6e-02
+onion                    resolvable=192  rms z=  5.33  median abs err=3.1e-05  max abs err=3.6e-03
+vine                     resolvable=193  rms z=  4.69  median abs err=2.6e-05  max abs err=5.5e-03
+archakov_hansen          resolvable=142  rms z= 28.66  median abs err=1.3e-04  max abs err=1.1e-02
+spectrum:marchenko_pastur resolvable=193  rms z=  3.52  median abs err=2.1e-05  max abs err=2.9e-03
+spectrum:spiked          resolvable=131  rms z=  4.86  median abs err=3.9e-05  max abs err=2.4e-03
+factor:30                resolvable=131  rms z=  1.69  median abs err=1.2e-05  max abs err=7.1e-04
+hierarchical             resolvable=183  rms z=  5.05  median abs err=1.1e-05  max abs err=1.4e-03
+block_equicorr           resolvable=164  rms z=  6.01  median abs err=2.2e-05  max abs err=3.3e-03
+ar1                      resolvable=199  rms z=  6.89  median abs err=3.6e-05  max abs err=1.1e-02
+kernel                   resolvable= 16  rms z=138.43  median abs err=4.3e-03  max abs err=1.3e-02
+sparse_precision         resolvable=194  rms z=  1.56  median abs err=1.2e-05  max abs err=5.7e-04

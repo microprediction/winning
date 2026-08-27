@@ -40,3 +40,21 @@ in its favorable corner). Fix: exponential tilting of the factor
 Gaussian per runner-group (analytic shift + reweight), turning the tail
 into a bulk calculation. Then the large-n claim is complete: uniform
 relative accuracy at any n, no draws, no Cholesky of Sigma.
+
+## Named-ensemble battery (run_ensembles.py, randomcov 0.1.0)
+
+One-call estimator (k3+m5+blocks20, n=300) vs 2M-draw MC per named
+measure. Median absolute error:
+
+  ~1e-5..4e-5   factor+sparse, sparse_precision, wishart, marchenko_
+                pastur, spiked, onion, vine, lkj, hierarchical,
+                block_equicorr, walk, ar1        (12 of 15: excellent)
+  ~1e-4..4e-4   residuals, archakov_hansen, animals  (dense-strong corr)
+  ~4e-3         kernel (Matern/RBF point cloud)      (FAILS relatively)
+
+The kernel ensemble is the honest adversary: smooth spatial correlation
+has a polynomially-decaying spectrum with no low-rank-plus-blocks
+structure, so a fixed m=5 residual captures little. Fix candidates:
+adaptive m chosen from the residual spectrum (fit until captured
+variance passes a threshold), or the rung-6 deconvolution top-up.
+Claims about "general Sigma" now read per-measure, reproducible by seed.
