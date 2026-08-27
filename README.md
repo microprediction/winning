@@ -2,30 +2,32 @@
 
 *A package for dealing with races, correlated or not.*
 
-`winning` began as the reference implementation of the lattice ability
-transform (SIAM J. Financial Mathematics, 2021) and owns the whole line:
-the original density-agnostic engine, the factor-correlated
-generalization developed for "Scalable Share Calibration for Factor
-Multinomial Probit Models", an arena of competing methods, and a
-standing benchmark database.
+**Documentation, live demos, and the papers: [winning.microprediction.org](https://winning.microprediction.org)** —
+watch the lattice race [beat GHK and Mendell–Elston on wall
+time](https://winning.microprediction.org/converge.html) in your
+browser, then read how it works.
 
-- `winning.thurstone` — the core engine, vendored home from the
-  thurstone package (now a compatibility shim). Densities on a lattice,
-  winner-of-many, dead heats, and the ability transform, for **any**
-  base distribution.
-- `winning.factor` — the correlated extension: all-share forward pass,
-  share calibration, Jacobian-vector products, and factor fitting. One
-  general race, `race_probabilities`, takes the distribution and the
-  factor rank as parameters; factor probit, the classic independent
-  transform, Luce/softmax, and correlated softmax are named special
-  cases, and custom standardized bases plug in as callables. The
-  Gaussian specialization keeps its dedicated tail-exact kernel.
-- `winning.methods` — every contestant behind one interface: the
-  lattice transform, direct and Sobol simulation, per-alternative
-  factor-RQMC, GHK / Genz separation-of-variables, minimax tilting.
-  Each passes closed-form and Monte Carlo anchors before admission.
-- `winning.bench` — a seeded problem grid, cached references, and
-  append-only accuracy-time records: `python -m winning.bench.runner`.
+One race, five covariance grammars, two calls. `race_probabilities`
+prices every contestant of a correlated Gaussian (or Gumbel/softmax)
+race in one shared-field pass; `abilities_from_race` inverts observed
+probabilities back to abilities. Both accept the same covariance
+descriptions: factor sugar (`V=`, `D=`), any grammar `structure=`
+(independent, factor, blocks, nested, tree), or a dense `cov=` that is
+fitted to the grammar on the way in.
+
+- `winning.factor` — the engine: all-share forward pass, inversion,
+  exact Jacobians and tie densities, covariance fitting
+  (`fit_covariance`), constrained polish.
+- `winning.probit` — the same machine in the probit literature's
+  max-wins, utilities-and-shares conventions.
+- `winning.classic` — the original SIAM-paper lattice ability
+  transform (racing vocabulary: dividends, state prices, dead heats);
+  see History below.
+- `winning.methods` / `winning.bench` — every rival method behind one
+  interface, and a seeded accuracy-time benchmark grid:
+  `python -m winning.bench.runner`.
+- `winning.thurstone` — the density-agnostic research engine for
+  arbitrary bases.
 
 [![CI](https://github.com/microprediction/winning/workflows/CI/badge.svg)](https://github.com/microprediction/winning/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -147,8 +149,14 @@ the current package.
 
 ## History
 
-Versions 1.x were the SIAM paper's reference implementation, and those
-imports still work. A 2.0 renovation explored splitting the numerical
+Versions 1.x were the SIAM paper's reference implementation. That
+original lattice API now lives in `winning.classic` — maintained,
+rust-accelerated, and parity-locked against the R and JavaScript ports,
+just no longer sprawled across the top level. The old import paths
+(`winning.lattice_calibration` and friends) keep working as aliases
+that raise a `DeprecationWarning` pointing at the new home.
+
+A 2.0 renovation explored splitting the numerical
 core into the separate thurstone package with winning as an
 applications layer; the decision went the other way. `winning` owns the
 core — heritage and name — the thurstone implementation is vendored

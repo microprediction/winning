@@ -1,26 +1,17 @@
-from winning.lattice import symmetric_lattice
+"""Deprecation shim: the classic lattice API lives in winning.classic.
 
-try:
-    import matplotlib.pyplot as plt
-    using_matplotlib = True
-except:
-    using_matplotlib = False
-    print('pip install matplotlib')
+This module IS winning.classic.lattice_plot (module aliasing, so private
+attributes and module state work unchanged); new imports should say so.
+"""
+import sys as _sys
+import warnings as _warnings
 
+import winning.classic.lattice_plot as _real
 
-def densitiesPlot( densities, unit, legend = None ):
-    assert using_matplotlib
-    L = int(len( densities[0]-1 )/2)
-    pts = symmetric_lattice( L=L, unit=unit )
-    for density in densities:
-        plt.plot( pts, density )
-    if legend is not None:
-        plt.legend( legend )
-    plt.grid()
-    plt.show()
-
-
-def std_plot( abilities, legend = None):
-    from winning.std_calibration import centered_std_density
-    densities = [centered_std_density(loc=a) for a in abilities]
-    densitiesPlot(densities=densities, legend=legend)
+_warnings.warn(
+    "winning.lattice_plot moved to winning.classic.lattice_plot; this top-level alias "
+    "remains for compatibility",
+    DeprecationWarning,
+    stacklevel=2,
+)
+_sys.modules[__name__] = _real

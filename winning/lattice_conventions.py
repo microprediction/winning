@@ -1,18 +1,17 @@
+"""Deprecation shim: the classic lattice API lives in winning.classic.
 
-######################################
-#    Lattice parameters              #
-######################################
+This module IS winning.classic.lattice_conventions (module aliasing, so private
+attributes and module state work unchanged); new imports should say so.
+"""
+import sys as _sys
+import warnings as _warnings
 
-# Arbitrary conventions used for std_calibration and skew_calibration
+import winning.classic.lattice_conventions as _real
 
-NAN_DIVIDEND = 2000  # Used to assign odds to longshots where there is no bid
-
-ALT_L     = 500
-ALT_UNIT  = 0.1
-ALT_SCALE = 1.0
-ALT_A     = 0.5   # Previously 1.0
-
-STD_L        = 500
-STD_UNIT     = 0.1
-STD_SCALE    = 1.0
-STD_A        = 0.0
+_warnings.warn(
+    "winning.lattice_conventions moved to winning.classic.lattice_conventions; this top-level alias "
+    "remains for compatibility",
+    DeprecationWarning,
+    stacklevel=2,
+)
+_sys.modules[__name__] = _real
