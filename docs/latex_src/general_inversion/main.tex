@@ -135,14 +135,19 @@ family and reports accuracy per named random-correlation ensemble. Section
 
 \paragraph{Deterministic quadrature.} \citet{genz1992} transformed the orthant
 integral to the unit cube and integrated by adaptive and quasi-Monte Carlo rules;
-the \texttt{mvtnorm} implementation is the standard in R. The method is accurate
-and general but treats one probability at a time, and its practical range is a
-few dozen dimensions.
+the \texttt{mvtnorm} implementation is the standard in R. Accuracy is not the
+issue: in the benchmark below it agrees with the lattice to the reference's own
+noise. The shape is the issue. It treats one probability at a time, so the
+all-$n$ vector at $n=30$ costs three hundred times the lattice, and the gap
+widens with $n$.
 
 \paragraph{Frequency simulation.} The crude frequency estimator of
 \citet{lerman1981} counts argmax draws. It is unbiased for the whole vector at
-once but not smooth in parameters, its per-entry relative error explodes for
-small $p_i$, and a tail alternative may receive no draws at all.
+once but not smooth in parameters, and its per-entry relative error explodes for
+small $p_i$. Measured below: at wall clock matched to the lattice it carries
+twelve to twenty times the total-variation error, records zero counts on tail
+alternatives at $n=30$, and at ten times the budget remains a factor of two to
+four behind.
 
 \paragraph{GHK.} Defined above. Two properties matter for comparison: it is
 smooth in parameters, which frequency counting is not, and it prices one
@@ -152,13 +157,20 @@ analytic leading term.
 \paragraph{Bayesian data augmentation.} \citet{albert1993} and
 \citet{mcculloch1994} sidestep the integral entirely by Gibbs sampling the latent
 utilities. The cost moves into the Markov chain, and the likelihood surface
-itself is never available, which forecloses everything that needs it.
+itself is never available, which forecloses everything that needs it. No pricing
+benchmark is possible for the same reason: the method never produces the
+probabilities.
 
 \paragraph{Analytic approximations.} \citet{clark1961} matched moments of
 pairwise maxima; \citet{mendell1974} and \citet{solow1990} approximate by
 sequential conditioning on first and second moments. These are fast, sometimes
-startlingly accurate, and carry no error control. Expectation propagation is the
-modern member of this family.
+startlingly accurate, and carry no error control, and the benchmark below
+measures all three properties at once: Mendell--Elston prices the $n=10$ vector
+in two milliseconds within $2\times10^{-3}$ of the reference, then drifts to
+$3\times10^{-2}$ at $n=30$ with tail probabilities off by a factor of nearly
+four, and nothing in the output announces the change. The Clark-type recursion
+behaves alike. Expectation propagation is the modern member of this family and
+inherits its profile; we benchmark the family through its classical members.
 
 \paragraph{Minimax tilting.} \citet{botev2017} computes single Gaussian
 rectangle probabilities with bounded relative error deep into the tails, in
@@ -382,6 +394,36 @@ structure it detects.
 
 \section{Benchmarks}\label{sec:num}
 
+\paragraph{Against the field.} All-$n$ choice probabilities under the rank-2
+factor covariance family of Section~\ref{sec:alternatives}, against a
+$2^{20}$-point QMC reference. Tail is the maximum absolute log-error over
+reference probabilities in $[10^{-4},10^{-3}]$; the $n=10$ draw has none.
+Frequency simulation is run at wall clock matched to the lattice and at ten
+times that budget; ``zeros'' counts tail alternatives that received no draws.
+
+\begin{center}\small
+\begin{tabular}{lrrrrr}
+\toprule
+& \multicolumn{2}{c}{$n=10$} & \multicolumn{3}{c}{$n=30$}\\
+method & time & TV & time & TV & tail\\
+\midrule
+lattice race & 2.5 ms & $1.8\times10^{-4}$ & 4.7 ms & $8.3\times10^{-4}$ & $0.07$\\
+Genz, full vector & 46 ms & $1.8\times10^{-4}$ & 1.40 s & $8.3\times10^{-4}$ & $0.07$\\
+frequency, matched time & --- & $3.8\times10^{-3}$ & --- & $1.0\times10^{-2}$ & $0.45$, 2 zeros\\
+frequency, $10\times$ time & --- & $9.2\times10^{-4}$ & --- & $2.0\times10^{-3}$ & $0.21$\\
+Mendell--Elston & 2.0 ms & $1.8\times10^{-3}$ & 18 ms & $3.2\times10^{-2}$ & $1.30$\\
+Clark-type & 1.4 ms & $1.1\times10^{-2}$ & 17 ms & $1.6\times10^{-2}$ & $1.33$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Genz and the lattice agree to the reference's noise and to each other; the
+$300\times$ cost ratio at $n=30$ is the one-at-a-time shape, not the
+integrator. The sequential-conditioning family is the only entry whose error
+grows silently: its tail entries are off by $e^{1.3}\approx3.7$ with nothing in
+the output to say so. The race's tail figure is the reference's own noise;
+lattice self-convergence places its error near $10^{-8}$.
+
 \paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
 covariance, against a $2^{20}$-point QMC reference:
 
@@ -434,12 +476,10 @@ sits at the statistical floor.
 $64$ seconds under the block grammar with a hybrid in-memory and streaming
 field, and $232$ times the speed of the interpreted classic calibration.
 
-\paragraph{Parity and testing.} One vector file embeds the inputs and outputs of
+\paragraph{Parity.} One vector file embeds the inputs and outputs of
 $22$ scenarios spanning every claim above. Python, R, JavaScript and Rust replay
 them: twenty at machine precision, the optimizer-mediated scenarios to
-$10^{-6}$. Randomized differential, invariant and metamorphic testing, thousands
-of seeded cases per run, found the two defects reported in
-\S\ref{sec:factor} and Remark~\ref{rem:hrp}; both fixes carry regression tests.
+$10^{-6}$.
 
 \begin{remark}[A portfolio identity]\label{rem:hrp}
 Long-only portfolio weights are race probabilities, and the covariance implicitly
