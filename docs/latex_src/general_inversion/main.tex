@@ -82,7 +82,7 @@ variables, the field factorizes, and all $n$ probabilities, their exact Jacobian
 and the inversion cost $O(nLQ)$ for a lattice of $L$ points and $Q$ quadrature
 nodes. No simulation, no per-alternative repetition, deterministic error.
 
-The structures that admit this treatment are not a restriction to apologize for.
+The structures that admit this treatment cover the estimable cases.
 Unrestricted $\Sigma$ is not identified in multinomial probit; applied work
 restricts to factor-analytic and related structured covariances as a matter of
 course \citep{train2009}. The table lists the models the single
@@ -453,10 +453,13 @@ one operative boundary is factor strength. When loadings make implied
 correlations exceed roughly $0.9$, the argmax integrand loses smoothness in
 factor space and Gauss--Hermite converges slowly in the node count: at
 loading scale $4$ the $25$-node rule still sits at $8\times10^{-3}$ total
-variation. Scrambled-Sobol factor nodes, already provided for high factor
-ranks, restore reference-level accuracy ($4\times10^{-4}$) at the same
-call; heavy correlation wants quasi-Monte Carlo nodes, not deeper
-polynomial rules.
+variation. Scrambled-Sobol factor nodes restore reference-level accuracy
+($4\times10^{-4}$) at the same call: heavy correlation wants
+quasi-Monte-Carlo nodes, not deeper polynomial rules. The default now
+escalates the family automatically past sharpness $3$, in both the Python
+and R ports (Sobol and dependency-free Halton respectively, agreeing to
+$5\times10^{-4}$ on the worst case), with the escalation pinned by
+regression tests; the figures above are the pre-escalation diagnosis.
 
 \paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
 covariance, against a $2^{20}$-point QMC reference:

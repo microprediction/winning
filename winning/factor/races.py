@@ -76,9 +76,21 @@ def _setup(mu, V, D, F, W, base):
             sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1))
                                  / np.sqrt(np.maximum(D, 1e-300))))
             r = V.shape[1]
-            cap = 201 if r == 1 else (41 if r == 2 else 15)
-            Q = int(np.clip(np.ceil(8.0 * sharp), 15, cap))
-            F, W = hermite_nodes(r, Q=Q)
+            if r >= 2 and sharp > 3.0:
+                # past this sharpness the integrand is a near-step in
+                # factor space and Gauss-Hermite converges slowly at ANY
+                # order (measured: the 25-node rule still loses ~1e-2 TV
+                # at sharp ~ 10, while scrambled Sobol reaches the QMC
+                # reference's own noise). Escalate the FAMILY, not the
+                # order. See docs/latex_src/general_inversion/break.py,
+                # section H; identical rule in the R port (Halton there,
+                # to stay dependency-free).
+                from .core import qmc_nodes
+                F, W = qmc_nodes(r, m=13)
+            else:
+                cap = 201 if r == 1 else (41 if r == 2 else 15)
+                Q = int(np.clip(np.ceil(8.0 * sharp), 15, cap))
+                F, W = hermite_nodes(r, Q=Q)
     fn = base if callable(base) else BASES[base]
     left, right = _SPANS.get(base, (12.0, 12.0)) if not callable(base) \
         else (12.0, 12.0)

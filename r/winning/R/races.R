@@ -37,6 +37,27 @@
   list(nodes = e$values[idx], weights = w / sum(w))
 }
 
+# Dependency-free Halton sequence mapped through qnorm: equal-weight
+# nodes for E over N(0, I_r). Used when the sharpness escalation calls
+# for a low-discrepancy family (see .race_setup); adequate for r <= 4.
+.halton_normal_nodes <- function(r, n) {
+  primes <- c(2, 3, 5, 7)[seq_len(r)]
+  H <- vapply(primes, function(b) {
+    idx <- seq_len(n) + 20L          # drop the first few, standard hygiene
+    h <- numeric(n)
+    f <- 1 / b
+    i <- idx
+    while (any(i > 0)) {
+      h <- h + f * (i %% b)
+      i <- i %/% b
+      f <- f / b
+    }
+    h
+  }, numeric(n))
+  F <- qnorm(pmin(pmax(H, 1e-12), 1 - 1e-12))
+  list(F = matrix(F, ncol = r), W = rep(1 / n, n))
+}
+
 .race_setup <- function(mu, V, D, F, W, base) {
   mu <- as.numeric(mu)
   n <- length(mu)
@@ -53,11 +74,21 @@
       # races (small D relative to loadings) need more factor nodes
       sharp <- max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
       r <- ncol(V)
-      cap <- if (r == 1) 201 else if (r == 2) 41 else 15
-      Q <- as.integer(min(max(ceiling(8 * sharp), 15), cap))
-      hw <- hermite_nodes(ncol(V), order = Q)
-      F <- hw$F
-      W <- hw$W
+      if (r >= 2 && sharp > 3.0) {
+        # matching the python reference: past this sharpness the factor
+        # integrand is a near-step and Gauss-Hermite converges slowly at
+        # any order; escalate the FAMILY to a low-discrepancy rule.
+        # Python uses scrambled Sobol; here dependency-free Halton.
+        hw <- .halton_normal_nodes(r, 2^13)
+        F <- hw$F
+        W <- hw$W
+      } else {
+        cap <- if (r == 1) 201 else if (r == 2) 41 else 15
+        Q <- as.integer(min(max(ceiling(8 * sharp), 15), cap))
+        hw <- hermite_nodes(ncol(V), order = Q)
+        F <- hw$F
+        W <- hw$W
+      }
     }
   }
   fn <- if (is.function(base)) base else .BASES[[base]]
