@@ -75,6 +75,35 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
     return J
 
 
+def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
+                      points=257):
+    """One row of the race Jacobian: d p_y / d mu_j for all j, one field
+    pass (the estimation score needs only the observed alternative's row,
+    not the full matrix). Same pair factorization as race_jacobian with
+    i fixed at y; rows sum to zero."""
+    mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
+    sd = np.sqrt(D)
+    n = len(mu)
+    M_all = mu[None, :] + F @ V.T
+    x = np.linspace(M_all.min() - left * sd.max(),
+                    M_all.max() + right * sd.max(), points)
+    dx = x[1] - x[0]
+    row = np.zeros(n)
+    for q in range(len(F)):
+        z = (x[None, :] - M_all[q][:, None]) / sd[:, None]
+        S, f, _ = fn(z)
+        f = f / sd[:, None]
+        logS = np.log(S)
+        L = logS.sum(axis=0)
+        logf = np.log(np.maximum(f, 1e-300))
+        P1y = np.exp(np.clip(logf[y] + L - logS[y], -745.0, 40.0))
+        P2 = np.exp(np.clip(logf - logS, -745.0, 40.0))
+        row += W[q] * (P2 @ P1y) * dx
+    row[y] = 0.0
+    row[y] = -row.sum()
+    return row
+
+
 def concentration_matrix(n, name_caps=None, groups=None):
     """Assemble (A, b) rows for caps: A p <= b.
 

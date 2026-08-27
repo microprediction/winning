@@ -516,7 +516,10 @@ Theorem~\ref{thm:inverse} makes the solution of a well-posed problem;
 targets below the forward map's resolution are floored, with the
 one-sided bound direction the theorem states. Ignoring known structure at inversion time is
 not a small error: inverting block-generated probabilities under an assumed
-independent model mislocates abilities by up to a fifth of the field's spread.
+independent model mislocates abilities by up to three tenths of the field's
+spread (the pinned configuration: $n=200$, thirty clusters, within-cluster
+correlation $0.65$; maximum mislocation $2.49$ against a spread of $8.24$,
+median $0.34$).
 
 \section{Dense covariance}\label{sec:general}
 
@@ -730,9 +733,12 @@ $1.4$ s and supplies no analytic score, so a single finite-difference gradient
 step ($31$ vector evaluations) costs roughly eight times the entire
 exact-gradient fit.
 
-\paragraph{Scale.} The Rust kernels are input-bound: ten million contestants in
-$64$ seconds under the block grammar with a hybrid in-memory and streaming
-field, and $232$ times the speed of the pure-Python implementation.
+\paragraph{Scale.} Ten million contestants price in $245$ seconds under the
+block grammar (ten thousand clusters, $257$-point lattice, the streaming
+field pass; the committed \texttt{bench.py tenmillion}), and the Rust
+classic-calibration kernel runs $232$ times the speed of the pure-Python
+implementation. Throughput at this size is a systems statement; the accuracy
+evidence lives at the scales the referees above can reach.
 
 \paragraph{Parity.} One vector file embeds the inputs and outputs of
 $22$ scenarios spanning every claim above. The four language implementations of

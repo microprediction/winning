@@ -207,3 +207,73 @@ elif mode == "scale":
         p = race_probabilities(mu, V=V, D=D, points=257)
         print(f"n={n:9,d}  {time.time()-t0:8.2f} s  (sum {p.sum():.6f})",
               flush=True)
+elif mode == "mislocate":
+    # Gap 2: inverting block-generated probabilities under an assumed
+    # independent model. Pin for the "fifth of the field's spread" claim.
+    from winning.factor.blocks import block_race_probabilities
+    from winning.factor.races import abilities_from_race
+    rng = np.random.default_rng(7)
+    n, n_c, rho = 200, 30, 0.65
+    cluster = rng.integers(0, n_c, size=n)
+    loading = np.full(n, np.sqrt(rho))
+    D = np.full(n, 1.0 - rho)
+    mu = rng.normal(size=n) * 1.5
+    mu -= mu.mean()
+    p = block_race_probabilities(mu, cluster, loading, D, points=257)
+    mu_ind = abilities_from_race(np.maximum(p, 1e-300), D=np.ones(n),
+                                 points=257)
+    spread = mu.max() - mu.min()
+    mis = np.abs(mu_ind - mu)
+    print(f"n={n} clusters={n_c} rho={rho}: spread {spread:.2f}  "
+          f"max mislocation {mis.max():.2f}  "
+          f"ratio {mis.max()/spread:.1%}  median {np.median(mis):.3f}")
+elif mode == "genz200":
+    # Gap 3: the n=200 Genz single-probability cost, via mvtnorm in R.
+    # One choice probability = one (n-1)-dim orthant integral; the
+    # lattice prices all n in the same breath.
+    import subprocess, json, tempfile, os
+    rng = np.random.default_rng(4)
+    n = 200
+    mu = rng.normal(size=n)
+    V = rng.normal(size=(n, 2)) * 0.4
+    D = 0.5 + rng.random(n)
+    t0 = time.time()
+    p_lat = race_probabilities(mu, V=V, D=D, points=257)
+    t_lat = time.time() - t0
+    i = int(np.argmax(p_lat))
+    Sig = V @ V.T + np.diag(D)
+    case = {"mu": mu.tolist(), "Sig": Sig.tolist(), "i": i}
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(case, f); path = f.name
+    rcode = f'''
+suppressMessages(library(mvtnorm)); suppressMessages(library(jsonlite))
+cs <- fromJSON("{path}"); mu <- cs$mu; S <- as.matrix(cs$Sig); i <- cs$i + 1
+n <- length(mu); o <- setdiff(seq_len(n), i)
+m <- mu[o] - mu[i]
+SS <- S[o,o] - outer(S[o,i], rep(1,n-1)) - outer(rep(1,n-1), S[i,o]) + S[i,i]
+t0 <- Sys.time()
+pr <- pmvnorm(lower = rep(0, n-1), upper = rep(Inf, n-1), mean = m,
+              sigma = SS, algorithm = GenzBretz(maxpts = 250000))
+cat(sprintf("genz: %.6e (err est %.1e) in %.2f s\\n", pr,
+    attr(pr, "error"), as.numeric(Sys.time() - t0, units = "secs")))
+'''
+    out = subprocess.run(["Rscript", "-e", rcode], capture_output=True,
+                         text=True)
+    os.unlink(path)
+    print(f"lattice all-{n}: {t_lat*1e3:.1f} ms; favourite p = {p_lat[i]:.6e}")
+    print(out.stdout.strip() or out.stderr.strip()[-200:])
+elif mode == "tenmillion":
+    # Gap 1: the ten-million-contestant block race, seeded. Needs ~5 GB
+    # and a quiet machine; the paper's Scale paragraph cites this run.
+    from winning.factor.blocks import block_race_probabilities
+    rng = np.random.default_rng(1)
+    n = 10_000_000
+    n_c = 10_000
+    cluster = rng.integers(0, n_c, size=n)
+    loading = np.full(n, 0.5)
+    D = np.full(n, 0.75)
+    mu = rng.normal(size=n)
+    t0 = time.time()
+    p = block_race_probabilities(mu, cluster, loading, D, points=257)
+    print(f"n={n:,d} clusters={n_c:,d}: {time.time()-t0:.1f} s "
+          f"(sum {p.sum():.6f})")

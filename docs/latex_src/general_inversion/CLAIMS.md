@@ -34,16 +34,16 @@ index. Paths are repo-relative.
 | Estimation table (exact MLE 0.0187/4.9 s vs MSL) | `research/mnp_estimation/run_mle.py` |
 | Parity: 22 scenarios, four languages | `r/winning/tests/testthat/` golden files + counterparts per port |
 
-## Gaps (claims whose committed backing is thin)
+## Gaps: CLOSED (2026-08-27)
 
-1. Rust scale paragraph: "ten million contestants in 64 seconds ...
-   232x the pure-Python implementation" is documented in
-   `rust/winning/README.md` / `lib.rs` but has no committed seeded
-   bench script. Action: commit the bench harness or soften the claim.
-2. "Inverting block-generated probabilities under an assumed
-   independent model mislocates abilities by up to a fifth of the
-   field's spread": mapping not yet pinned to a specific script
-   (candidates in `research/general_sigma/`). Action: pin or re-measure
-   in `break.py`.
-3. The n=200 Genz single-probability measurement lives in a commit
-   message snippet; fold into `bench.py alt` as a flagged slow case.
+1. Rust scale: `bench.py tenmillion` committed and run on a quiet
+   machine: 244.9 s at n=1e7, 1e4 clusters, 257-point lattice
+   (streaming field). The research-note 64 s figure was a different
+   configuration; the paper now cites the pinned 245 s.
+2. Mislocation: `bench.py mislocate` pins it. Measured: max 2.49 vs
+   spread 8.24 = 30.2% (median 0.34); paper updated from "a fifth" to
+   "three tenths" with the configuration stated.
+3. Genz n=200 single probability: `bench.py genz200` pins it. Measured:
+   0.43 s per probability at maxpts=250k with estimated error 2e-4
+   (agreement with the lattice to ~4-5 digits); the lattice prices all
+   200 in 25 ms. Six-digit agreement needs multi-second maxpts budgets.
