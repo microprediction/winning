@@ -141,3 +141,6 @@ r/winning_*.tar.gz
 .DS_Store
 r/*.tar.gz
 r/winning.Rcheck/
+
+# overnight rerun scratch
+research/restriction/results/RERUN_STDERR.txt

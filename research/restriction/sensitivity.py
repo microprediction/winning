@@ -42,7 +42,8 @@ def predictions(p):
         return None, err
     a = np.asarray(a)
     out = {}
-    for r in range(2, K + 1):
+    # restrictions only; see the note in luce_null.py on why T=S is excluded
+    for r in range(2, K):
         for S in itertools.combinations(range(K), r):
             idx = list(S)
             lu = np.maximum(p[idx] / p[idx].sum(), FLOOR)

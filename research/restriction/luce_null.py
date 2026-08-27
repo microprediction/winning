@@ -42,9 +42,18 @@ from heldout_score import load_all, MAX_RESP
 FLOOR = 1e-6
 
 
+# The estimand is restrictions, so the full menu is excluded. There the two maps are
+# calibrated on the same shares, return those shares, and contribute an identical zero.
+# Its weight is 1 in 2^K - K - 1, which is nothing at K=10 and a quarter at K=3, so
+# including it shrinks small-K collections and not large ones. Set RESTRICTIONS_ONLY
+# false to recover the earlier published estimand.
+RESTRICTIONS_ONLY = True
+
+
 def subsets_of(K):
+    top = K if RESTRICTIONS_ONLY else K + 1
     out = []
-    for r in range(2, K + 1):
+    for r in range(2, top):
         out.extend(itertools.combinations(range(K), r))
     return out
 
