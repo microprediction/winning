@@ -100,7 +100,8 @@ for kind in ("rbf", "matern32"):
                           kernel_case(kind, ls), {}, m))
 
 import csv
-out = csv.writer(open("results_ensembles4.csv", "w"))
+outf = open("results_ensembles4.csv", "w", buffering=1)
+out = csv.writer(outf)
 out.writerow(["ensemble", "space", "seed", "tv", "linf", "med"])
 for tag, gen, kw, m in CASES:
     rows = {"raw": [], "projected": []}
