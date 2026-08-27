@@ -81,25 +81,28 @@ pub fn forward_kernel(
     }
     let dx = (hi - lo) / (points - 1) as f64;
 
+    // per-task scratch is n * tile floats twice over; cap it so large n
+    // does not swap (n = 1e6 with the fixed 256-tile costs 2 GB per task)
+    let tile = TILE.min((25_000_000usize / n.max(1)).max(4));
     let p: Vec<f64> = (0..q)
         .into_par_iter()
         .map(|qi| {
             let m = &m_all[qi * n..(qi + 1) * n];
             let wq = w[qi];
             let mut acc = vec![0.0f64; 2 * n];
-            let mut logs = vec![0.0f64; n * TILE];
-            let mut logg = vec![0.0f64; n * TILE];
-            let mut field = vec![0.0f64; TILE];
+            let mut logs = vec![0.0f64; n * tile];
+            let mut logg = vec![0.0f64; n * tile];
+            let mut field = vec![0.0f64; tile];
             let mut t0 = 0;
             while t0 < points {
-                let tl = TILE.min(points - t0);
+                let tl = tile.min(points - t0);
                 field[..tl].fill(0.0);
                 for i in 0..n {
                     let inv_sd = 1.0 / sd[i];
                     let ln_i = log_norm[i];
                     let mi = m[i];
-                    let row_s = &mut logs[i * TILE..i * TILE + tl];
-                    let row_g = &mut logg[i * TILE..i * TILE + tl];
+                    let row_s = &mut logs[i * tile..i * tile + tl];
+                    let row_g = &mut logg[i * tile..i * tile + tl];
                     for t in 0..tl {
                         let x = lo + (t0 + t) as f64 * dx;
                         let z = (x - mi) * inv_sd;
@@ -110,8 +113,8 @@ pub fn forward_kernel(
                     }
                 }
                 for i in 0..n {
-                    let row_s = &logs[i * TILE..i * TILE + tl];
-                    let row_g = &logg[i * TILE..i * TILE + tl];
+                    let row_s = &logs[i * tile..i * tile + tl];
+                    let row_g = &logg[i * tile..i * tile + tl];
                     let inv_sd = 1.0 / sd[i];
                     let mi = m[i];
                     let mut s = 0.0f64;
