@@ -14,7 +14,7 @@ Measured on mlogit's own Fishing vignette (J=4, T=1182):
 |  | logLik | time | note |
 |---|---|---|---|
 | mlogit(probit=TRUE), GHK | -1215.655 | 22.2 s | simulated likelihood |
-| mlogit_fast | **-1214.613** | 94.2 s | exact to quadrature accuracy |
+| mlogit_fast | **-1214.613** | **17.2 s** | exact to quadrature accuracy, analytic score |
 
 Same identified model space (rank-2 factors, zero reference loadings,
 unit idiosyncratic variance covers every positive-definite differenced
@@ -23,10 +23,11 @@ J=4). The scale-invariant coefficient ratio catch/price agrees with
 mlogit to 1% (-45.0 vs -44.6); the one-nat likelihood gain is the
 expected sign and size of removing simulation bias at the optimum.
 
-Slower than GHK in this version: numeric gradients cost 21 likelihood
-evaluations each, and the fitted covariance is sharp enough that every
-evaluation runs on the escalated Halton branch. The analytic score
-(closed-form derivative of the product integral) is the named fix.
+The analytic score (posterior-weighted Mills ratios, one extra pass
+over arrays the likelihood already computes, validated against finite
+differences to 1e-8 on both node branches) replaced numeric gradients
+and cut the fit from 94 s to 17 s. Remaining headroom if wanted:
+sharp-branch node count, warm starts.
 
 One war story worth reading in the source: without sharpness-aware
 node escalation the OPTIMIZER EXPLOITS QUADRATURE HOLES -- the first

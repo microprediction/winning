@@ -50,51 +50,88 @@
        W = rep(1 / n, n))
 }
 
-# negative log-likelihood, fully vectorized across observations.
+# Negative log-likelihood AND analytic score, fully vectorized.
 # Sharpness-aware: when the loadings make the factor integrand a
 # near-step, Gauss-Hermite under-integrates at any order and the
 # OPTIMIZER EXPLOITS THE HOLES (observed: a runaway to ||w|| ~ 300 with
 # a fake 20-nat likelihood gain that collapses under denser rules), so
 # past sharpness 3 the evaluation switches to Halton nodes -- the same
 # family-escalation rule as winning::race_probabilities.
-.nll <- function(theta, Xb, choice, J, r, nodes, nodes_sharp) {
-  nb <- ncol(Xb[[1]])
+#
+# Score: with a_ijq = dmu_ij + s_jq and posterior node weights
+# omega_iq = w_q exp(sum_j log Phi) / p_i, the derivative of log p_i in
+# a_ijq is omega_iq * lambda(a_ijq), lambda = phi/Phi (the Mills ratio),
+# and beta / loading gradients follow by the chain rule. One extra pass
+# over arrays the likelihood already computes; replaces 2*npar numeric
+# evaluations per gradient.
+.nll_core <- function(theta, Xb, choice, J, r, nodes, nodes_sharp,
+                      want_grad = TRUE) {
+  X <- Xb[[1]]
+  nb <- ncol(X)
   beta <- theta[seq_len(nb)]
   wfree <- theta[-seq_len(nb)]
   V <- matrix(0, J, r)
-  # reference row stays zero; free block is strictly-lower-triangular
-  # by column: col 1 fills rows 2..J, col 2 rows 3..J, and so on
   k <- 1L
+  fill <- list()
   for (col in seq_len(r)) for (row in (col + 1L):J) {
-    V[row, col] <- wfree[k]; k <- k + 1L
+    V[row, col] <- wfree[k]; fill[[k]] <- c(row, col); k <- k + 1L
   }
-  Tn <- nrow(Xb[[1]]) / J
-  mu <- matrix(Xb[[1]] %*% beta, nrow = Tn, ncol = J, byrow = TRUE)
+  Tn <- nrow(X) / J
+  mu <- matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)
   sharp <- max(sqrt(rowSums(V^2)))
   nd <- if (sharp > 3.0) nodes_sharp else nodes
   Fq <- nd$F[, seq_len(r), drop = FALSE]
   zq <- nd$F[, r + 1L]
   Wq <- nd$W
   Q <- length(Wq)
-  # conditional means shift per alternative: (Q, J)
   Vf <- Fq %*% t(V)
-  ll <- 0
   logp <- numeric(Tn)
-  # loop over the CHOSEN alternative only (J small); vectorize obs x nodes
+  gbeta <- numeric(nb)
+  gV <- matrix(0, J, r)
   for (k_alt in seq_len(J)) {
     idx <- which(choice == k_alt)
     if (!length(idx)) next
-    dmu <- mu[idx, k_alt] - mu[idx, , drop = FALSE]      # (Ti, J)
-    acc <- matrix(0, length(idx), Q)
-    for (j in seq_len(J)) {
-      if (j == k_alt) next
-      shift <- Vf[, k_alt] - Vf[, j] + zq                # (Q,)
-      acc <- acc + log(pmax(pnorm(outer(dmu[, j], shift, "+")), 1e-300))
+    Ti <- length(idx)
+    dmu <- mu[idx, k_alt] - mu[idx, , drop = FALSE]
+    rivals <- setdiff(seq_len(J), k_alt)
+    logPhi <- vector("list", J)
+    A <- vector("list", J)
+    acc <- matrix(0, Ti, Q)
+    for (j in rivals) {
+      A[[j]] <- outer(dmu[, j], Vf[, k_alt] - Vf[, j] + zq, "+")
+      logPhi[[j]] <- log(pmax(pnorm(A[[j]]), 1e-300))
+      acc <- acc + logPhi[[j]]
     }
     m <- apply(acc, 1, max)
-    logp[idx] <- m + log(pmax(exp(acc - m) %*% Wq, 1e-300))
+    pw <- exp(acc - m) * rep(Wq, each = Ti)
+    rs <- rowSums(pw)
+    logp[idx] <- m + log(pmax(rs, 1e-300))
+    if (!want_grad) next
+    omega <- pw / rs                       # (Ti, Q) posterior node weights
+    rowsK <- (idx - 1L) * J + k_alt
+    for (j in rivals) {
+      lam <- exp(dnorm(A[[j]], log = TRUE) - logPhi[[j]])
+      wl <- omega * lam                    # (Ti, Q)
+      g_i <- rowSums(wl)                   # d logp_i / d dmu_ij
+      rowsJ <- (idx - 1L) * J + j
+      gbeta <- gbeta + colSums((X[rowsK, , drop = FALSE]
+                                - X[rowsJ, , drop = FALSE]) * g_i)
+      H <- wl %*% Fq                       # (Ti, r)
+      hc <- colSums(H)
+      gV[k_alt, ] <- gV[k_alt, ] + hc
+      gV[j, ] <- gV[j, ] - hc
+    }
   }
-  -sum(logp)
+  val <- -sum(logp)
+  if (!want_grad) return(list(value = val, grad = NULL))
+  gw <- vapply(fill, function(rc) gV[rc[1], rc[2]], 0)
+  list(value = val, grad = -c(gbeta, gw))
+}
+
+# value-only wrapper (kept for tests and diagnostics)
+.nll <- function(theta, Xb, choice, J, r, nodes, nodes_sharp) {
+  .nll_core(theta, Xb, choice, J, r, nodes, nodes_sharp,
+            want_grad = FALSE)$value
 }
 
 #' Exact multinomial probit, mlogit-style interface
@@ -128,8 +165,20 @@ mlogit_fast <- function(formula, data, r = 2L, Qf = 7L, Qz = 7L,
   nodes <- .nodes3(Qf, Qz, r)
   nodes_sharp <- .halton_nodes3(r, 10L)
   theta0 <- c(rep(0, nb), rep(0.1, nw))
-  fit <- optim(theta0, .nll, Xb = list(X), choice = choice, J = J, r = r,
-               nodes = nodes, nodes_sharp = nodes_sharp, method = "BFGS",
+  memo <- new.env()
+  fn <- function(th) {
+    if (!is.null(memo$th) && identical(th, memo$th)) return(memo$out$value)
+    memo$th <- th
+    memo$out <- .nll_core(th, list(X), choice, J, r, nodes, nodes_sharp)
+    memo$out$value
+  }
+  gr <- function(th) {
+    if (!is.null(memo$th) && identical(th, memo$th)) return(memo$out$grad)
+    memo$th <- th
+    memo$out <- .nll_core(th, list(X), choice, J, r, nodes, nodes_sharp)
+    memo$out$grad
+  }
+  fit <- optim(theta0, fn, gr, method = "BFGS",
                control = list(maxit = maxit, reltol = 1e-8))
   secs <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
   beta <- fit$par[seq_len(nb)]
