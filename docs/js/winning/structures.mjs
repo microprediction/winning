@@ -89,3 +89,61 @@ function da(p, s, opts) {
   throw new Error("unknown structure " + s.kind);
 }
 _setDispatch(dp, da);
+
+/* average-linkage agglomerative clustering on a distance matrix,
+   returning a scipy-style linkage Z (for treeFromLinkage and demos) */
+export function averageLinkage(dist) {
+  const n = dist.length;
+  let active = [...Array(n).keys()].map(i => ({ id: i, members: [i] }));
+  const D = new Map();
+  const key = (a, b) => (a < b ? a + "_" + b : b + "_" + a);
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++) D.set(key(i, j), dist[i][j]);
+  const Z = [];
+  let nextId = n;
+  while (active.length > 1) {
+    let best = Infinity, bi = 0, bj = 1;
+    for (let i = 0; i < active.length; i++)
+      for (let j = i + 1; j < active.length; j++) {
+        const d = D.get(key(active[i].id, active[j].id));
+        if (d < best) { best = d; bi = i; bj = j; }
+      }
+    const a = active[bi], b = active[bj];
+    Z.push([a.id, b.id, best, a.members.length + b.members.length]);
+    const merged = { id: nextId++, members: a.members.concat(b.members) };
+    const rest = active.filter((_, k) => k !== bi && k !== bj);
+    for (const c of rest) {
+      const da = D.get(key(a.id, c.id)), db = D.get(key(b.id, c.id));
+      D.set(key(merged.id, c.id),
+        (da * a.members.length + db * b.members.length)
+          / (a.members.length + b.members.length));
+    }
+    active = rest.concat([merged]);
+  }
+  return Z;
+}
+
+/* cut a linkage into k clusters (fcluster maxclust equivalent) */
+export function cutLinkage(Z, n, k) {
+  const parent = new Array(2 * n - 1).fill(-1);
+  for (let m = 0; m < Z.length; m++) {
+    parent[Z[m][0]] = n + m;
+    parent[Z[m][1]] = n + m;
+  }
+  // remove the k-1 highest merges
+  const cutIds = new Set();
+  for (let m = Z.length - 1; m >= Z.length - (k - 1) && m >= 0; m--) cutIds.add(n + m);
+  const labels = new Array(n);
+  const rootOf = i => {
+    let u = i;
+    while (parent[u] >= 0 && !cutIds.has(parent[u])) u = parent[u];
+    return u;
+  };
+  const map = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = rootOf(i);
+    if (!map.has(r)) map.set(r, map.size);
+    labels[i] = map.get(r);
+  }
+  return labels;
+}
