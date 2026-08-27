@@ -252,6 +252,23 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
                 q[i] += (Wc * dx) @ contrib
     total = p.sum()
     if not np.isfinite(total) or total <= 0:
+        # sharp fields (huge ability spread over small sd) can drop every
+        # density spike between the span-window lattice points; the front
+        # door's winner-bulk window and sharpness-adaptive quadrature are
+        # built for exactly this, so retry once through it (same min-wins
+        # kernel, tighter lattice) before giving up. Deletion output is
+        # not available on this path.
+        from .races import race_probabilities
+        p_fb = race_probabilities(mu, V=V, D=D, points=max(points, 257))
+        if np.all(np.isfinite(p_fb)) and p_fb.sum() > 0:
+            if return_deletions:
+                raise FloatingPointError(
+                    "factor race integration failed on the span window; "
+                    "the bulk-window fallback succeeded but does not "
+                    "provide deletions -- call race_probabilities/"
+                    "removal_shares directly for this field")
+            out = p_fb / p_fb.sum()
+            return (out, float(p_fb.sum())) if return_total else out
         raise FloatingPointError("factor race integration failed")
     out = p / total
     if return_deletions:

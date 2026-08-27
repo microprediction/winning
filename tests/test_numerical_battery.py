@@ -242,3 +242,22 @@ def test_sharp_factor_race_matches_mc():
     ref = np.bincount(np.argmin(mu[:, None] + L @ z, axis=0),
                       minlength=n) / z.shape[1]
     assert 0.5 * np.abs(p - ref).sum() < 3e-3
+
+
+def test_sharp_field_falls_back_to_bulk_window():
+    """Regression for the specialist_menus crash: a sharp field (huge
+    ability spread over tiny sd, e.g. rescaled logits after deletion)
+    drops every density spike between span-window lattice points and
+    integrated to zero. core.win_probabilities_factor now retries once
+    through the bulk-window front door instead of raising."""
+    from winning.factor.core import win_probabilities_factor, hermite_nodes
+    rng = np.random.default_rng(0)
+    n = 40
+    mu = np.linspace(0, 500, n)
+    V = rng.normal(size=(n, 2)) * 0.1
+    D = np.full(n, 1e-4)
+    F, W = hermite_nodes(2)
+    p = win_probabilities_factor(mu, V, D, F, W, points=501)
+    assert np.all(np.isfinite(p))
+    assert abs(p.sum() - 1.0) < 1e-9
+    assert p[0] > 0.999            # min-wins: the runaway favourite
