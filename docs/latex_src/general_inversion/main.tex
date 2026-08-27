@@ -31,19 +31,23 @@ scripts behind every number in this paper live at
 Multinomial probit choice probabilities over $n$ alternatives are Gaussian
 orthant integrals, and for thirty years econometrics has computed them by
 simulation, most commonly with the GHK sampler, whose $R$ draws cost
-$O(n^2 R)$ per probability vector with error $O(R^{-1/2})$. We observe that
+$O(n^2 R)$ per probability, $n$-fold that for a full vector, with error
+$O(R^{-1/2})$. We observe that
 the choice event is one-dimensional: the probability that alternative $i$
 wins is an integral over the winning value, and one shared survival field
 prices all $n$ alternatives at once. For covariances under which performances
 are conditionally independent given a few shared variables---factor, block,
 nested and hierarchical structures, which are also the covariances
-multinomial probit can identify---the field method is deterministic, computes
-all $n$ probabilities and their exact Jacobian in $O(nLQ)$ operations over a
-lattice of $L$ winning values and $Q$ factor quadrature nodes, and inverts
-observed probabilities back to utilities. At $n=200$ it is two hundred times faster than GHK at $10^4$
-draws and five times more accurate, and the measured gap grows as $n^{2.8}$. The
-same two calls price and invert softmax, Thurstone--Mosteller, factor multinomial
-probit, and a hierarchy of team and sector models, to ten million alternatives.
+multinomial probit can identify---one shared field computes all $n$
+probabilities, and matrix-free Jacobian--vector products, in $O(nLQ)$
+operations over a lattice of $L$ winning values and $Q$ factor quadrature
+nodes, and inverts observed probabilities back to utilities under a fixed,
+known covariance. At $n=200$ it is two hundred times faster than GHK at $10^4$ draws, with
+error below the comparison's resolution; GHK's measured cost grows as
+$n^{2.8}$ against the lattice's near-linear growth, so the ratio widens
+almost quadratically. The same two calls price and invert softmax,
+Thurstone--Mosteller, factor multinomial probit, and a hierarchy of team and
+sector models; forward pricing is benchmarked to ten million alternatives.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -75,21 +79,27 @@ $O(R^{-1/2})$; the log of a simulated probability is biased at $O(1/R)$;
 gradients inherit the simulation noise; and a full probability vector, which the
 likelihood needs, costs $n$ separate runs.
 
-This paper takes a different route to the same object. The choice event is
-one-dimensional. Alternative $i$ wins when its performance beats the field, so
+This paper takes a different route to the same object, in a min-wins
+convention fixed here once: performances are times, $X_i=-U_i$, and the
+lowest time wins. The choice event is one-dimensional. Contestant $i$ wins
+when its time beats the field, so
 \begin{equation}\label{eq:field-intro}
 p_i \;=\; \int f_i(x)\prod_{j\ne i}S_j(x)\,dx,
 \end{equation}
-where $f_i$ is the density of $U_i$ and $S_j$ the survival of $U_j$: integrate
-over the winning value $x$, requiring everyone else to fall short. For
+where $f_i$ is the density of $X_i$ and $S_j$ the survival of $X_j$:
+integrate over the winning time $x$, requiring every rival to come in
+slower. For
 independent performances \citet{cotton2021} computed \eqref{eq:field-intro} for
 all $n$ on a lattice by building the field $\sum_j \log S_j$ once and dividing
 each alternative out, and inverted the map from probabilities back to $\mu$. The
 present paper extends the field construction to correlated performances by
 conditioning: whenever $\Sigma$ makes performances independent given a few shared
-variables, the field factorizes, and all $n$ probabilities, their exact Jacobian,
-and the inversion cost $O(nLQ)$ for a lattice of $L$ points and $Q$ quadrature
-nodes. No simulation, no per-alternative repetition, deterministic error.
+variables, the field factorizes, and all $n$ probabilities,
+Jacobian--vector products, and each inversion iteration cost $O(nLQ)$ for a
+lattice of $L$ points and $Q$ quadrature nodes; the Jacobian itself is a
+weighted graph Laplacian applied as an operator, never materialized. No per-alternative repetition; error controlled by quadrature,
+deterministic for the Gauss--Hermite rules and reproducibly randomized for
+scrambled-Sobol nodes.
 
 The structures that admit this treatment cover the estimable cases.
 Unrestricted $\Sigma$ is not identified in multinomial probit; applied work
@@ -103,7 +113,7 @@ same two calls.
 \toprule
 model & covariance grammar & source \\
 \midrule
-Luce / softmax & independent, Gumbel base, $D=\pi^2/6$ & exact identity \\
+Luce / softmax & independent, minimum-Gumbel base, $D=\pi^2/6$ & exact identity \\
 Thurstone--Mosteller & independent, normal base & \citet{cotton2021} \\
 factor multinomial probit & $VV'+\mathrm{diag}(D)$ & \S\ref{sec:factor} \\
 teams, conferences & blocks: rank-$r$ effect per cluster & \S\ref{sec:blocks} \\
@@ -201,15 +211,15 @@ dimensions up to roughly a thousand. It is the accuracy reference, and we use it
 as the referee for our own tail claims; it prices one probability per run.
 
 \medskip
-Every method above computes one probability at a time. Estimation wants all $n$
-and their derivatives at every parameter value. Sharing the field across
+Every smooth, likelihood-grade method above prices one probability at a
+time; frequency counting obtains the vector but not derivatives. Estimation
+wants all $n$ and their derivatives at every parameter value. Sharing the field across
 alternatives is the algorithmic point of this paper, and it is what makes the
 $n$-fold and the derivative costs disappear.
 
 \section{The lattice race}\label{sec:lattice}
 
-Fix a min-wins convention: performances are times, the lowest wins, and
-$U_i = -X_i$ translates to the utility convention. Let $X_i=\mu_i+\sigma_i
+In the min-wins convention of the introduction, let $X_i=\mu_i+\sigma_i
 \epsilon_i$ with $\epsilon_i$ i.i.d.\ from a standardized base density (normal,
 Gumbel, or any density supplied as code), and write $f_i$, $S_i$ for the density
 and survival of $X_i$.
@@ -233,7 +243,8 @@ The lattice itself is placed on the winner's bulk, not the ability span. A
 hopeless contestant wins only by running a winner-class time, so only the region
 where the winning time lives matters. Bisect the conservative winner c.d.f.\
 envelope $G(x)=1-\prod_j S_j(x)$ to $[G^{-1}(\delta),G^{-1}(1-\delta)]$ and pad
-two standard deviations so that no base's tails are clipped. Measured: $33$
+two standard deviations, which makes the truncated tail mass negligible
+against the accuracy floors reported below. Measured: $33$
 points on this window reach accuracy that a $500$-point ability-span lattice
 cannot, because the span window's own truncation floors near $6\times10^{-11}$;
 on fields with many hopeless contestants the bulk window is one hundred times
@@ -264,8 +275,10 @@ Randomized invariant testing against a QMC referee found this. The default order
 now scales with the sharpness $\max_i \lVert V_i\rVert/\sqrt{D_i}$, capped by
 rank.
 
-The same pass returns own-ability slopes $\partial p_i/\partial\mu_i$ at no extra
-cost, which \S\ref{sec:jac} uses as the Newton preconditioner.
+The same pass returns the own-parameter slopes $\partial p_i/\partial\mu_i$
+at no extra cost (negative in this min-wins convention: raising a time mean
+lowers the win probability), which \S\ref{sec:jac} uses as the Newton
+preconditioner.
 
 \section{Block and nested covariance}\label{sec:blocks}
 
@@ -277,9 +290,9 @@ X_i=\mu_i+v_i'a_{c(i)}+\sqrt{D_i}\,\epsilon_i,
 a block-diagonal rank-$r$-plus-diagonal covariance: teams, conferences, sibling
 products. Two independences do the work. Conditional on its own cluster's effect
 a contestant is independent of its teammates; and distinct clusters are
-independent outright. So the field factorizes across clusters,
+independent outright. So the joint survival factorizes across clusters,
 \begin{equation}\label{eq:blockfield}
-\prod_j S_j(x) \;=\; \prod_c G_c(x),
+\Pr\{X_j>x\ \text{for every } j\} \;=\; \prod_c G_c(x),
 \qquad
 G_c(x)\;=\;\E_a \prod_{j\in c} S_j(x\mid a)
        \;=\;\sum_q w_q\, e^{S_c(x,a_q)},
@@ -305,8 +318,8 @@ measured margin.
 $\gamma\in[0,1]$: conditional on the global draw $f_q$ the model is a block race
 at shifted abilities, so
 $p=\sum_q w_q\,p_{\mathrm{block}}(\mu+\gamma g f_q)$, a finite mixture of block
-races. The dial interpolates Schur-complementary beliefs from isolated clusters
-to full coupling.
+races. At $\gamma=0$ the clusters are isolated, at $\gamma=1$ fully
+coupled, and the covariance contribution scales as $\gamma^{2}gg'$.
 
 \section{Tree covariance}\label{sec:tree}
 
@@ -318,7 +331,8 @@ X_i=\mu_i+v_i\,a_{c(i)}+\sum_{t\,\in\,\mathrm{anc}(c(i))}\lambda_t b_t
     +\sqrt{D_i}\,\epsilon_i .
 \end{equation}
 The implied covariance is hierarchical: two contestants share the variance of
-exactly their common ancestors. The uniform strength is the crucial restriction,
+exactly their common ancestors. The root's effect is common to every
+contestant, hence choice-irrelevant, and is fixed to zero. The uniform strength is the crucial restriction,
 because a shared effect that hits every subtree member equally moves the whole
 subtree's field by a translation of its argument. Messages therefore remain
 functions of one variable. Per-leaf loadings on internal effects would force
@@ -354,14 +368,14 @@ referee the recursion sits at the simulation noise floor on every resolvable
 entry at depths one through four (root-mean-square $z$ between $0.75$ and
 $1.1$). Entries below the referee's resolution agree with minimax tilting
 \citep{botev2017} to $0.3$ percent relative at probabilities down to
-$7\times10^{-8}$, which is within the tilting estimate's own error. Tail
-accuracy is a property of the lattice, not of node placement, so the grammar
-kernels price the tails that simulation cannot see.
+$7\times10^{-8}$, which is within the tilting estimate's own error. Given
+adequate factor quadrature, tail accuracy is carried by the lattice, and the
+grammar kernels price tails that simulation does not resolve.
 
 \begin{remark}[A portfolio identity]\label{rem:hrp}
-Long-only portfolio weights are race probabilities, and the covariance implicitly
-assumed by hierarchical risk parity \citep{lopezdeprado2016} is exactly a tree
-race: give internal node $t$ strength
+Long-only portfolio weights are race probabilities, and there is a tree-race
+covariance under which hierarchical risk parity's bisection geometry
+\citep{lopezdeprado2016} is exactly a race: give internal node $t$ strength
 $\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$ with $\rho_t=\max(1-2h_t^2,0)$
 for merge height $h_t$, and leaf $i$ idiosyncratic variance
 $1-\rho_{\mathrm{first}(i)}$; the implied correlation equals the floored
@@ -384,9 +398,19 @@ and each row of the Jacobian sums to zero.
 \end{proposition}
 
 The zero row sum says a common shift moves nothing. The off-diagonal is the
-density of a dead heat between $i$ and $j$ ahead of the field, so the Jacobian is
-a byproduct of the same field pass: per quadrature node it is a Gram matrix over
-the lattice. The stable pair factorization is
+density of a dead heat between $i$ and $j$ ahead of the field. The Jacobian
+is a negative weighted graph Laplacian and is applied as an operator:
+individual entries and Jacobian--vector products are byproducts of the same
+field pass (per quadrature node a Gram structure over the lattice), while
+materializing all $n^{2}$ entries is a choice with $\Omega(n^{2})$ cost that
+nothing downstream requires. Three derivative objects should be
+distinguished: the continuum identity \eqref{eq:tie}; its quadrature
+evaluation; and the exact derivative of the normalized, adaptive-lattice
+numerical map, which differs from the first two through the normalization
+quotient and grid motion. The implementation exposes the frozen-grid form,
+which matches finite differences of the returned map at every lattice
+resolution, alongside the continuum form, whose symmetry serves
+preconditioning. The stable pair factorization is
 $[f_i e^{L-\log S_i}]\times[f_j/S_j]$, a bounded density times a polynomially
 growing hazard; the symmetric square-root split overflows where survivals
 vanish.
@@ -397,10 +421,13 @@ is exact within a cluster and Gram-approximate across clusters, which suffices
 for Newton because residuals always use the exact forward map.
 Feasibility-critical callers fall back to finite differences.
 
-Inversion recovers mean-zero $\mu$ from a target $p$: an adaptive damped fixed
-point on the log residual carries the iterate into Newton's basin, then Newton
-steps on $\log p(\mu)-\log p^\star$ solve to $10^{-8}$; sub-resolution targets
-are floored and reported as bounds. Ignoring known structure at inversion time is
+Inversion recovers mean-zero $\mu$ from a target $p$ with the covariance
+fixed and known: an adaptive damped fixed point on the log residual carries
+the iterate into Newton's basin, then Newton steps on
+$\log p(\mu)-\log p^\star$, preconditioned by the own-parameter slopes and
+solved matrix-free, reach $10^{-8}$; targets below the forward map's
+resolution are floored, and the recovered utilities for those entries are
+one-sided bounds. Ignoring known structure at inversion time is
 not a small error: inverting block-generated probabilities under an assumed
 independent model mislocates abilities by up to a fifth of the field's spread.
 
@@ -422,9 +449,13 @@ absolute error is $1$--$4\times10^{-5}$ under twelve of fifteen measures: factor
 with sparse links, sparse-precision graphical, Wishart, Marchenko--Pastur and
 spiked spectra, LKJ, onion, vine, hierarchical, block equicorrelation, AR(1) and
 elliptope walks. It is $1$--$4\times10^{-4}$ under the dense-strong ensembles,
-and it fails, at $4\times10^{-3}$, under Mat\'ern and RBF kernel fields. Kernel
-covariance is locality, not spectrum: such fields are approximately Markov
-\citep{lindgren2011} and their polynomially decaying spectra offer a low-rank
+and it fails, at $4\times10^{-3}$, under Mat\'ern and RBF kernel fields.
+Kernel covariance is locality, which a low-rank factorization serves badly.
+The Mat\'ern family additionally admits a sparse-precision representation
+through the SPDE connection \citep{lindgren2011}; the squared-exponential
+does not share that route, and its spectrum decays faster than any
+polynomial, so the two cases likely want different specialized methods.
+Neither offers a low-rank
 fit nothing to hold. The right algorithm there is sequential conditioning with
 cheap sparse-precision draws, and a production front door should dispatch on the
 structure it detects.
@@ -520,8 +551,9 @@ $n$ & time & TV err & time & TV err & time & TV err\\
 The lattice bounds are the reference's own noise; self-convergence places the
 lattice error near $10^{-8}$. GHK error contracts as $O(R^{-1/2})$ and its
 measured cost grows as $n^{2.8}$ per probability vector. The lattice is
-deterministic, supplies the exact Jacobian that maximum simulated likelihood
-lacks, and prices the tails. Identification restricts multinomial probit to
+deterministic, supplies smooth matrix-free derivatives free of simulation
+noise (simulated likelihoods can be differentiated, but inherit the noise),
+and prices the tails. Identification restricts multinomial probit to
 structured covariance in any case, so the structured case is the estimable case,
 and there we consider GHK replaced. GHK retains general rectangle probabilities
 and locality-structured covariance, and \citet{botev2017} remains the reference
