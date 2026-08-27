@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>winning — watch it converge</title>
+  <meta name="description" content="Pick a covariance ensemble and a field size; the lattice race answers in milliseconds while frequency simulation crawls its inverse-square-root slope. Live, in your browser, on the parity-locked engine." />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    .panel { border: 1px solid #ddd; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.4rem 0; }
+    .controls { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; margin-bottom: 0.8rem; }
+    .controls label { font-size: 0.9rem; }
+    select, button.go { font-size: 0.95rem; padding: 2px 8px; }
+    input[type="range"] { vertical-align: middle; width: 140px; }
+    .val { font-variant-numeric: tabular-nums; font-weight: 600; color: #4b4bd8; }
+    .legend { font-size: 0.88rem; color: #555; }
+    svg { width: 100%; display: block; }
+    .stat { font-size: 0.92rem; margin-top: 0.4rem; font-variant-numeric: tabular-nums; }
+    .lat { color: #4b4bd8; font-weight: 600; }
+    .mc { color: #c2571a; font-weight: 600; }
+    .ind { color: #999; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/polish.html">Polish demo</a>
+        <a href="/#papers">Papers</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <h1>Watch it converge</h1>
+    <p class="lead">Pick a covariance ensemble and a field size. The
+    <span class="lat">lattice race</span> prices every contestant in a few
+    milliseconds; <span class="mc">frequency simulation</span> crawls down its
+    $1/\sqrt{M}$ slope toward the same answer; and
+    <span class="ind">ignoring the correlation</span> never arrives at all.
+    Everything runs in your browser on the same parity-locked engine the
+    Python, R and Rust packages share.</p>
+
+    <div class="panel">
+      <div class="controls">
+        <label>ensemble
+          <select id="gen"></select></label>
+        <label>field size <input type="range" id="n" min="10" max="200" value="60" />
+          <span class="val" id="nv">60</span></label>
+        <label>seed <input type="range" id="seed" min="1" max="99" value="7" />
+          <span class="val" id="seedv">7</span></label>
+        <button class="go" id="go">run</button>
+        <span class="legend" id="note"></span>
+      </div>
+      <svg id="chart" viewBox="0 0 940 360"></svg>
+      <p class="stat" id="stats"></p>
+      <p class="legend">Vertical axis: total-variation distance to the lattice
+      answer (log scale). Horizontal axis: Monte-Carlo draws (log scale). The
+      dashed guide is the $1/\sqrt{M}$ law. On the dense ensembles the
+      simulation floors at the small grammar-fit residual instead of zero:
+      that visible gap is the honest boundary of the fitted approximation
+      (largest for the AR(1) chain, whose locality structure is the one
+      family the grammar serves worst).</p>
+    </div>
+
+    <p>The lattice number quoted below is the full all-$n$ computation,
+    including (for the dense rows) the in-browser eigenfit of the covariance
+    to the race grammar. The simulator draws correlated fields through a
+    Cholesky factor as fast as your machine allows.</p>
+  </main>
+  <footer>
+    <a href="https://github.com/microprediction/winning">Source</a> &middot;
+    Part of the <a href="https://repos.microprediction.org/">microprediction family</a> &middot;
+    Authored by <a href="https://home.microprediction.org/">Peter Cotton</a>.
+  </footer>
+
+  <script type="module">
+    import { raceProbabilities } from "./js/winning/races.mjs";
+    import "./js/winning/structures.mjs";
+    import { GENERATORS, rng, fitGrammar, structureCov, cholesky, mcBatch,
+             haltonNormalNodes } from "./js/winning/demo.mjs";
+
+    const sel = document.getElementById("gen");
+    for (const name of Object.keys(GENERATORS)) {
+      const o = document.createElement("option");
+      o.textContent = name; sel.appendChild(o);
+    }
+    const $ = id => document.getElementById(id);
+    $("n").addEventListener("input", () => $("nv").textContent = $("n").value);
+    $("seed").addEventListener("input", () => $("seedv").textContent = $("seed").value);
+
+    let timer = null;
+    function run() {
+      clearInterval(timer);
+      const n = +$("n").value, seed = +$("seed").value;
+      const gen = GENERATORS[sel.value];
+      const g = gen(n, rng(seed));
+      $("note").textContent = g.note;
+      const rmu = rng(seed + 1000);
+      const mu = Array.from({ length: n }, () => rmu.n() * 0.9);
+
+      // the lattice answer (timed, includes any fit)
+      const t0 = performance.now();
+      let pLat;
+      if (g.structure) {
+        pLat = raceProbabilities(mu, { structure: g.structure, points: 257 });
+      } else {
+        const fit = fitGrammar(g.C, 3, 5);
+        const nodes = haltonNormalNodes(fit.V[0].length, 1024);
+        pLat = raceProbabilities(mu, { V: fit.V, D: fit.D,
+                                       F: nodes.F, W: nodes.W, points: 129 });
+      }
+      const tLat = performance.now() - t0;
+
+      // the structure-ignoring answer (flat bias line)
+      const C = g.structure ? structureCov(g.structure) : g.C;
+      const pInd = raceProbabilities(mu, { D: C.map((r_, i) => C[i][i]),
+                                           points: 257 });
+      let tvInd = 0;
+      for (let i = 0; i < n; i++) tvInd += Math.abs(pInd[i] - pLat[i]);
+      tvInd /= 2;
+
+      // Monte Carlo, animated
+      const L = cholesky(C);
+      const counts = new Array(n).fill(0);
+      const rmc = rng(seed + 2000);
+      let draws = 0;
+      const pts = [];
+      const tStart = performance.now();
+      timer = setInterval(() => {
+        const batch = Math.min(4000, Math.max(500, Math.floor(draws / 4) || 500));
+        mcBatch(mu, L, rmc, batch, counts);
+        draws += batch;
+        let tv = 0;
+        for (let i = 0; i < n; i++) tv += Math.abs(counts[i] / draws - pLat[i]);
+        pts.push([draws, Math.max(tv / 2, 1e-6)]);
+        render(pts, tvInd, tLat, draws, performance.now() - tStart);
+        if (draws > 3e6) clearInterval(timer);
+      }, 40);
+      render(pts, tvInd, tLat, 0, 0);
+    }
+
+    function render(pts, tvInd, tLat, draws, ms) {
+      const W = 940, H = 360, padL = 60, padB = 40, padT = 16, padR = 20;
+      const xmin = Math.log10(500), xmax = Math.log10(3e6);
+      const ymin = Math.log10(2e-4), ymax = Math.log10(1);
+      const X = d => padL + (W - padL - padR) * (Math.log10(Math.max(d, 500)) - xmin) / (xmax - xmin);
+      const Y = v => padT + (H - padT - padB) * (ymax - Math.log10(Math.min(Math.max(v, 2e-4), 1))) / (ymax - ymin);
+      let sv = "";
+      for (const e of [-1, -2, -3]) {
+        sv += `<line x1="${padL}" x2="${W - padR}" y1="${Y(10 ** e)}" y2="${Y(10 ** e)}" stroke="#eee"/>`;
+        sv += `<text x="${padL - 6}" y="${Y(10 ** e) + 4}" font-size="11" text-anchor="end">1e${e}</text>`;
+      }
+      for (const d of [1e3, 1e4, 1e5, 1e6]) {
+        sv += `<line y1="${padT}" y2="${H - padB}" x1="${X(d)}" x2="${X(d)}" stroke="#eee"/>`;
+        sv += `<text y="${H - padB + 16}" x="${X(d)}" font-size="11" text-anchor="middle">${d.toExponential(0).replace("e+", "e")}</text>`;
+      }
+      // 1/sqrt(M) guide through the first point
+      if (pts.length > 1) {
+        const [d0, v0] = pts[0];
+        sv += `<line x1="${X(d0)}" y1="${Y(v0)}" x2="${X(3e6)}" y2="${Y(v0 * Math.sqrt(d0 / 3e6))}"
+                 stroke="#c2571a" stroke-dasharray="3 5" opacity="0.5"/>`;
+      }
+      // structure-ignoring flat line
+      sv += `<line x1="${padL}" x2="${W - padR}" y1="${Y(tvInd)}" y2="${Y(tvInd)}"
+               stroke="#999" stroke-dasharray="6 4"/>`;
+      sv += `<text x="${W - padR - 4}" y="${Y(tvInd) - 5}" font-size="11" fill="#777"
+               text-anchor="end">ignore correlation</text>`;
+      // lattice marker: it is the origin of the metric; draw its time note
+      sv += `<line x1="${padL}" x2="${W - padR}" y1="${Y(2e-4)}" y2="${Y(2e-4)}"
+               stroke="#4b4bd8" stroke-width="2"/>`;
+      sv += `<text x="${padL + 4}" y="${Y(2e-4) - 6}" font-size="11" fill="#4b4bd8">lattice answer (${tLat.toFixed(0)} ms, all ${$("n").value} contestants)</text>`;
+      // MC path
+      if (pts.length) {
+        let path = "";
+        for (let i = 0; i < pts.length; i++)
+          path += (i ? "L" : "M") + X(pts[i][0]).toFixed(1) + "," + Y(pts[i][1]).toFixed(1);
+        sv += `<path d="${path}" fill="none" stroke="#c2571a" stroke-width="2"/>`;
+      }
+      document.getElementById("chart").innerHTML = sv;
+      const last = pts.length ? pts[pts.length - 1][1] : NaN;
+      document.getElementById("stats").innerHTML =
+        `<span class="lat">lattice: ${tLat.toFixed(1)} ms</span> &middot; ` +
+        `<span class="mc">simulation: ${draws.toLocaleString()} draws in ${(ms / 1000).toFixed(1)} s, ` +
+        `TV distance ${isFinite(last) ? last.toExponential(2) : "—"}</span> &middot; ` +
+        `<span class="ind">ignoring correlation: TV ${tvInd.toExponential(2)}, forever</span>`;
+    }
+
+    document.getElementById("go").addEventListener("click", run);
+    run();
+  </script>
+</body>
+</html>
