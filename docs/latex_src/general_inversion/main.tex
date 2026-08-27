@@ -4,6 +4,12 @@
 \usepackage{booktabs}
 \usepackage[round]{natbib}
 \usepackage[hidelinks]{hyperref}
+% run-in headings italic, not bold (house style)
+\makeatletter
+\renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}%
+  {3.25ex \@plus1ex \@minus.2ex}{-1em}%
+  {\normalfont\normalsize\itshape}}
+\makeatother
 \newtheorem{theorem}{Theorem}
 \newtheorem{proposition}{Proposition}
 \newtheorem{remark}{Remark}
