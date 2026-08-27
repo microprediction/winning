@@ -707,11 +707,14 @@ families we consider GHK replaced. GHK retains general rectangle probabilities
 and locality-structured covariance, and \citet{botev2017} remains the reference
 for single extreme tail probabilities.
 
-\paragraph{Estimation.} The pricing advantage transfers to estimation. Simulate
-$T=50{,}000$ choices among $n=30$ alternatives under a known rank-2 factor
-covariance and estimate the mean-zero utilities by maximum likelihood, exact
-probabilities and analytic score against GHK probabilities with common random
-numbers and finite-difference gradients, eight replications:
+\paragraph{Share inversion under sampling noise.} The first estimation
+exercise is deliberately the saturated case. Simulate $T=50{,}000$ choices
+from one fixed menu of $n=30$ alternatives under a known rank-2 factor
+covariance and estimate the mean-zero utilities by maximum likelihood. With
+the menu fixed the model is saturated over the simplex interior, so the
+exact-gradient maximizer is the inversion of empirical shares,
+$\hat\mu=p^{-1}(c/T)$, and the exercise measures how faithfully each method
+performs that inversion under multinomial noise. Eight replications:
 
 \begin{center}\small
 \begin{tabular}{lrr}
@@ -725,13 +728,69 @@ MSL, $R=1000$ & $0.0198$ & $40.7$ s \\
 \end{tabular}
 \end{center}
 
-\noindent At equal fitting time the simulated estimator pays a $63$ percent
-error premium; at eight times the budget it remains behind. The exact estimator
-sits at the statistical floor. Deterministic quadrature does not rescue
-estimation either: at $n=30$ one probability vector by Genz--Bretz costs
-$1.4$ s and supplies no analytic score, so a single finite-difference gradient
-step ($31$ vector evaluations) costs roughly eight times the entire
-exact-gradient fit.
+\noindent At equal fitting time the simulated inversion pays a $63$ percent
+error premium. The $R=1000$ figure is close to the exact one and the
+difference is within replication noise at eight replications; the claim is
+the equal-time column, not the third row.
+
+\paragraph{Covariate estimation.} The overidentified case behaves
+differently, and we report it as we found it. Draw observation-specific
+design matrices $X_t$ ($n=10$ alternatives, $d=3$ covariates,
+$T=800$ observations), utilities $\mu_t=X_t\beta$, one choice per
+observation, covariance known, and estimate $\beta$ by individual-level
+maximum likelihood: the exact path uses lattice probabilities with the
+analytic score (one Jacobian row per observation, a single field pass);
+the simulated path uses this paper's own Rust GHK with common random
+numbers and finite-difference gradients. Eight replications, means with
+standard errors:
+
+\begin{center}\small
+\begin{tabular}{lrr}
+\toprule
+estimator & RMSE$(\hat\beta)$ & median fit time \\
+\midrule
+exact gradient MLE & $0.0363\pm0.0066$ & $41.3$ s \\
+MSL, $R=100$ & $0.0380\pm0.0073$ & $5.4$ s \\
+MSL, $R=1000$ & $0.0367\pm0.0067$ & $39.6$ s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent All three estimators reach the statistical floor: with three
+parameters and eight hundred observations the simulation error averages
+out, and a well-implemented simulator at $R=100$ is the fastest of the
+three at this size. The exact path's time is dominated by per-observation
+Python overhead (the compiled kernel accounts for under a second of the
+$41$); the comparison at $n=10$ measures plumbing, not method. What the
+exact likelihood buys in estimation is not this row of the table: it is
+freedom from the choice of $R$, gradients without simulation noise, the
+cost law as $n$ grows, and diagnostics that simulation smooths over. The
+last point is not hypothetical: on the classic Fishing data, the
+unrestricted-covariance MNP likelihood evaluated exactly is
+boundary-seeking (still rising at loading norms near $4000$), a ridge that
+GHK's simulation noise had been regularizing by accident.
+
+\paragraph{The Genz--Bretz score.} Our quadrature comparator used
+\texttt{pmvnorm}, which exposes no score, with finite-difference gradients
+($31$ vector evaluations per step at $n=30$, roughly eight times the entire
+exact-gradient share-inversion fit). The \texttt{mvtnorm} manual (v1.4-2)
+also documents \texttt{slpmvnorm} and, for the reduced-rank covariance
+$BB'+\mathrm{diag}(D)$ of this paper's benchmarks, \texttt{lpRR} and
+\texttt{slpRR}: simulated log-likelihoods and score functions that
+integrate over the $K$ factor dimensions. That interface is itself the
+conditioning construction of \S\ref{sec:factor} with Monte Carlo in place
+of quadrature and no shared field across alternatives, which makes it the
+natural structure-aware comparator for a fuller estimation study.
+
+\paragraph{GHK protocol.} The GHK figures throughout use this paper's own
+Rust implementation: per-alternative sequential conditioning on the
+reference-differenced covariance with a fresh Cholesky factorization per
+alternative, pseudorandom draws (xoshiro family) with a per-alternative
+seed offset so that parameter evaluations share common random numbers, no
+antithetics, no quasi-random sequence, no variable-reordering heuristic,
+parallelized across alternatives. Cost figures are complete-vector; the
+large-$n$ columns of the introduction are extrapolations of the measured
+law and are displayed as such.
 
 \paragraph{Scale.} Ten million contestants price in $245$ seconds under the
 block grammar (ten thousand clusters, $257$-point lattice, the streaming
