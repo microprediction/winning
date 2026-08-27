@@ -161,14 +161,23 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60):
     B = np.linalg.qr(np.eye(n) - np.ones((n, n)) / n)[0][:, :n - 1]
     S = B.T @ C @ B
     D = np.full(n, 0.5 * float(np.mean(np.diag(C))))
-    M = np.column_stack([np.outer(B[i], B[i]).ravel() for i in range(n)])
+    # The D-step least squares min ||vec(S - WW') - M d||, M's columns
+    # vec(b_i b_i'), collapses exactly to n dimensions: the Gram of those
+    # columns is (b_i . b_j)^2 = P_ij^2 (B B' = P), so with G = P o P = LL'
+    # the same minimizer is nnls(L', L^{-1} c), c_i = b_i'(S - WW') b_i.
+    # (The naive (n-1)^2 x n design made this step 67s at n=300; this is
+    # milliseconds, same objective, same minimizer.)
+    P = B @ B.T
+    L = np.linalg.cholesky(P * P + 1e-14 * np.eye(n))
     W = np.zeros((n - 1, k))
     for _ in range(n_outer):
         R = S - (B.T * D) @ B
         lam, U = np.linalg.eigh(R)
         idx = np.argsort(lam)[::-1][:k]
         W = U[:, idx] * np.sqrt(np.maximum(lam[idx], 0.0))
-        D_new, _ = nnls(M, (S - W @ W.T).ravel())
+        A = S - W @ W.T
+        c = ((B @ A) * B).sum(axis=1)
+        D_new, _ = nnls(L.T, np.linalg.solve(L, c))
         if np.abs(D_new - D).max() < 1e-12:
             D = D_new
             break
