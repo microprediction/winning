@@ -154,35 +154,92 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60):
     heuristic, so the heuristic is not the binding constraint; this exists
     to certify that.
     """
-    from scipy.optimize import nnls
-
     C = np.asarray(C, dtype=float)
     n = len(C)
-    B = np.linalg.qr(np.eye(n) - np.ones((n, n)) / n)[0][:, :n - 1]
-    S = B.T @ C @ B
     D = np.full(n, 0.5 * float(np.mean(np.diag(C))))
-    # The D-step least squares min ||vec(S - WW') - M d||, M's columns
-    # vec(b_i b_i'), collapses exactly to n dimensions: the Gram of those
-    # columns is (b_i . b_j)^2 = P_ij^2 (B B' = P), so with G = P o P = LL'
-    # the same minimizer is nnls(L', L^{-1} c), c_i = b_i'(S - WW') b_i.
-    # (The naive (n-1)^2 x n design made this step 67s at n=300; this is
-    # milliseconds, same objective, same minimizer.)
-    P = B @ B.T
-    L = np.linalg.cholesky(P * P + 1e-14 * np.eye(n))
-    W = np.zeros((n - 1, k))
-    for _ in range(n_outer):
-        R = S - (B.T * D) @ B
-        lam, U = np.linalg.eigh(R)
-        idx = np.argsort(lam)[::-1][:k]
-        W = U[:, idx] * np.sqrt(np.maximum(lam[idx], 0.0))
-        A = S - W @ W.T
-        c = ((B @ A) * B).sum(axis=1)
-        D_new, _ = nnls(L.T, np.linalg.solve(L, c))
+    V = np.zeros((n, k))
+    Q = None
+    for it in range(n_outer):
+        # V-step: top-k eigenpairs of P (C - diag D) P. Conjugation by P
+        # is double centering (O(n^2)), and the eigenpairs come from
+        # warm-started subspace iteration (O(k n^2) per sweep) with a
+        # Rayleigh-Ritz finish -- no reduced basis, no full eigh.
+        M = _center2(C - np.diag(D))
+        lam, U, Q = _top_eigen(M, k, Q=Q, sweeps=30 if Q is None else 8)
+        V = U * np.sqrt(np.maximum(lam, 0.0))
+        # D-step: exact NNLS against the Gram P o P, which is the
+        # closed-form matrix (1-2/n) I + (1/n^2) 11' with analytic
+        # square root sqrt(a) I + ((sqrt(a+n b)-sqrt(a))/n) 11'.
+        c = _diag_center2(C - V @ V.T)
+        D_new = _nnls_centered_gram(c, n)
         if np.abs(D_new - D).max() < 1e-12:
             D = D_new
             break
         D = D_new
-    return B @ W, np.maximum(D, 1e-8)
+    return V, np.maximum(D, 1e-8)
+
+
+def _top_eigen(M, k, Q=None, sweeps=30, pad=3):
+    """Top-k eigenpairs of symmetric M by shifted subspace iteration.
+
+    The Gershgorin shift makes M + sigma I PSD so power iteration cannot
+    lock onto a large-magnitude negative eigenvalue; Rayleigh-Ritz on the
+    unshifted M returns genuine eigenvalues. O(k n^2) per sweep. Returns
+    (lam desc, U, Q) with Q the iterated basis for warm restarts."""
+    n = len(M)
+    if n <= 800:
+        # exact path: at these sizes a full eigh is cheap and removes any
+        # subspace-convergence question (battery numbers reproduce exactly)
+        lam, U = np.linalg.eigh(M)
+        order = np.argsort(lam)[::-1]
+        return lam[order][:k], U[:, order[:k]], None
+    m = min(k + pad, n)
+    if Q is None or Q.shape[1] < m:
+        rng = np.random.default_rng(0)
+        Q = np.linalg.qr(rng.standard_normal((n, m)))[0]
+    sigma = float(np.abs(M).sum(axis=1).max())
+    for _ in range(sweeps):
+        Q = np.linalg.qr(M @ Q + sigma * Q)[0]
+    T = Q.T @ M @ Q
+    lam, S_ = np.linalg.eigh(T)
+    order = np.argsort(lam)[::-1]
+    Q = Q @ S_[:, order]
+    return lam[order][:k], Q[:, :k], Q
+
+
+def _center2(M):
+    """P M P for symmetric M via double centering, O(n^2)."""
+    rm = M.mean(axis=1, keepdims=True)
+    return M - rm - rm.T + rm.mean()
+
+
+def _diag_center2(M):
+    """diag(P M P) without forming it: M_ii - 2 rowmean_i + totalmean."""
+    rm = M.mean(axis=1)
+    return np.diag(M) - 2.0 * rm + rm.mean()
+
+
+def _nnls_centered_gram(c, n, n_pass=100):
+    """Exact argmin_{d>=0} d'Gd/2 - c'd for G = P o P = a I + b 11'
+    (G_ii = (1-1/n)^2, G_ij = 1/n^2: a = 1-2/n, b = 1/n^2).
+
+    KKT reduces to water-filling: with s = sum(d) and threshold t = b s,
+    passive coordinates are exactly {c_i > t} with d_i = (c_i - t)/a and
+    active ones have gradient b s - c_i >= 0. Iterating the scalar fixed
+    point s = sum_{c_i > b s} c_i / (a + b |{c_i > b s}|) converges in a
+    few O(n) passes; scipy's dense nnls on the same problem was 4 s per
+    call at n=2000, this is microseconds, same minimizer."""
+    a = 1.0 - 2.0 / n
+    b = 1.0 / (n * n)
+    s = max(float(c.sum()), 0.0) / (a + b * n)
+    for _ in range(n_pass):
+        mask = c > b * s
+        s_new = float(c[mask].sum()) / (a + b * int(mask.sum()))
+        if abs(s_new - s) <= 1e-15 * max(1.0, abs(s)):
+            s = s_new
+            break
+        s = s_new
+    return np.maximum((c - b * s) / a, 0.0)
 
 
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
@@ -214,13 +271,12 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     V = np.asarray(V, dtype=float)
     if blocks is None:
         blocks = max(2, min(n // 5, 20))
-    P = np.eye(n) - np.ones((n, n)) / n
     # everything downstream fits the CHOICE-RELEVANT residual: the raw
     # residual C - VV' - D0 contains a common component the quotient fit
     # rightly ignored; chasing it with block loadings would trade real
     # projected error for irrelevant reconstruction (in-grammar inputs
     # would come back distorted). Project it out once, here.
-    R = P @ (C - V @ V.T - np.diag(D0)) @ P
+    R = _center2(C - V @ V.T - np.diag(D0))
     v = np.zeros(n)
     cluster = np.zeros(n, dtype=int)
     if n >= 3 and blocks >= 2:
@@ -243,9 +299,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         BD[idx, j] = v[idx]
     E = R - BD @ BD.T
     np.fill_diagonal(E, 0.0)
-    wE, UE = np.linalg.eigh(E)
     m_eff = min(m, n)
-    Vres = UE[:, n - m_eff:] * np.sqrt(np.maximum(wE[n - m_eff:], 0.0))
+    lamE, UE, _ = _top_eigen(E, m_eff)
+    Vres = UE * np.sqrt(np.maximum(lamE, 0.0))
     Vall = np.hstack([V, Vres, BD])
     keep = (Vall ** 2).sum(axis=0) > 1e-10 * np.trace(C) / n
     if not keep.any():
@@ -254,12 +310,16 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
 
     def _close(Vc):
         # closing D solve: min over d of ||P(C - Vc Vc' - diag(d))P||_F.
-        # The map d -> diag(P diag(d) P) is linear with matrix P.P
-        # (elementwise square): (P.P) d = diag(P R2 P).
-        rhs = np.diag(P @ (C - Vc @ Vc.T) @ P)
-        Dc = np.maximum(np.linalg.solve(P * P, rhs),
-                        1e-3 * float(np.mean(np.diag(C))))
-        Rm = P @ (C - Vc @ Vc.T - np.diag(Dc)) @ P
+        # The map d -> diag(P diag(d) P) is linear with matrix
+        # P o P = a I + b 11' (a = 1-2/n, b = 1/n^2), inverted in
+        # closed form by Sherman-Morrison; the rhs diagonal comes from
+        # double centering. All O(n^2) except the Vc Vc' product.
+        rhs = _diag_center2(C - Vc @ Vc.T)
+        a = 1.0 - 2.0 / n
+        b = 1.0 / (n * n)
+        d = rhs / a - (b * rhs.sum()) / (a * (a + n * b))
+        Dc = np.maximum(d, 1e-3 * float(np.mean(np.diag(C))))
+        Rm = _center2(C - Vc @ Vc.T - np.diag(Dc))
         return Dc, float(np.abs(Rm).max())
 
     D, res_pipe = _close(Vall)
@@ -269,15 +329,15 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     # under eigen, 0.14 under the pipeline); keep whichever leaves the
     # smaller choice-relevant residual, pipeline winning ties.
     rank = Vall.shape[1]
-    wC, UC = np.linalg.eigh(C)
-    Veig = UC[:, n - rank:] * np.sqrt(np.maximum(wC[n - rank:], 0.0))
+    lamC, UC, _ = _top_eigen(C, rank, pad=10, sweeps=40)
+    Veig = UC * np.sqrt(np.maximum(lamC, 0.0))
     Deig, res_eig = _close(Veig)
     if res_eig < res_pipe:
         Vall, D, res_pipe = Veig, Deig, res_eig
     F, W = qmc_nodes(Vall.shape[1], m=nodes_log2, seed=seed)
     if return_report:
-        Rfin = P @ (C - Vall @ Vall.T - np.diag(D)) @ P
-        denom = float(np.linalg.norm(P @ C @ P))
+        Rfin = _center2(C - Vall @ Vall.T - np.diag(D))
+        denom = float(np.linalg.norm(_center2(C)))
         rel = float(np.linalg.norm(Rfin)) / denom if denom > 0 else 0.0
         # the warning diagnostic: worst single choice-relevant entry the
         # fit failed to hold, in units of the average variance. Calibrated
