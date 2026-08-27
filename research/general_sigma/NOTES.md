@@ -87,3 +87,12 @@ with exact Gaussian reweighting collapses effective sample size
 band worsened. Tail fix for the promoted-residual path stays the
 Botev-per-entry hybrid; proper minimax tilting per bucket is future
 work.
+
+**Chessboard conditioning (run_chessboard): negative and decisive.** On
+a full-rank Matern-3/2 point cloud the conditional-independence
+approximation fails locally (cond corr max 0.98: B-neighbours far from
+the net stay coupled), giving a flat 1.3e-1 bias, while plain MC with
+cheap draws achieves 6.6e-4 max err at equal time. Point clouds do not
+screen like lattices. Verdict for the boundary: no hybrid needed --
+locality means cheap draws, so SIMULATE; spectral structure means the
+lattice race. The dispatcher has exactly two arms.
