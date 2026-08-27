@@ -158,17 +158,21 @@ twelve to twenty times the total-variation error, records zero counts on tail
 alternatives at $n=30$, and at ten times the budget remains a factor of two to
 four behind.
 
-\paragraph{GHK.} Defined above. Two properties matter for comparison: it is
-smooth in parameters, which frequency counting is not, and it prices one
-alternative per run. \citet{stern1992} gave a related decomposition with an
-analytic leading term.
+\paragraph{GHK.} Defined above. Its dominance is documentable rather than
+folklore: Stata's \texttt{asmprobit} and \texttt{cmmprobit} compute
+probabilities by GHK \citep{statacorp2023}, and R's \texttt{mlogit} and
+\texttt{mvProbit} default to it \citep{croissant2020}. Two properties matter
+for comparison: it is smooth in parameters, which frequency counting is not,
+and it prices one alternative per run. \citet{stern1992} gave a related
+decomposition with an analytic leading term.
 
 \paragraph{Bayesian data augmentation.} \citet{albert1993} and
 \citet{mcculloch1994} sidestep the integral entirely by Gibbs sampling the latent
-utilities. The cost moves into the Markov chain, and the likelihood surface
-itself is never available, which forecloses everything that needs it. No pricing
-benchmark is possible for the same reason: the method never produces the
-probabilities.
+utilities; \citet{imai2005} implement the marginal data-augmentation version
+in the \texttt{MNP} package. The cost moves into the Markov chain, and the
+likelihood surface itself is never available, which forecloses everything that
+needs it. No pricing benchmark is possible for the same reason: the method
+never produces the probabilities.
 
 \paragraph{Analytic approximations.} \citet{clark1961} matched moments of
 pairwise maxima; \citet{mendell1974} and \citet{solow1990} approximate by
@@ -178,8 +182,11 @@ measures all three properties at once: Mendell--Elston prices the $n=10$ vector
 in two milliseconds within $2\times10^{-3}$ of the reference, then drifts to
 $3\times10^{-2}$ at $n=30$ with tail probabilities off by a factor of nearly
 four, and nothing in the output announces the change. The Clark-type recursion
-behaves alike. Expectation propagation is the modern member of this family and
-inherits its profile; we benchmark the family through its classical members.
+behaves alike. The family is current practice, not history:
+\citet{bhat2011} builds the MACML estimator on precisely these
+approximations, and \texttt{Rprobit} implements it. Expectation propagation
+is the modern member of the same family. We benchmark the family through its
+classical members, which is also a benchmark of MACML's core ingredient.
 
 \paragraph{Minimax tilting.} \citet{botev2017} computes single Gaussian
 rectangle probabilities with bounded relative error deep into the tails, in
@@ -428,7 +435,10 @@ Clark-type & 1.4 ms & $1.1\times10^{-2}$ & 17 ms & $1.6\times10^{-2}$ & $1.33$\\
 
 Genz and the lattice agree to the reference's noise and to each other; the
 $300\times$ cost ratio at $n=30$ is the one-at-a-time shape, not the
-integrator. The sequential-conditioning family is the only entry whose error
+integrator. At the paper's headline scale the shape is decisive: one
+probability at $n=200$ costs $4.6$ s (values agreeing with the lattice to six
+digits), so the full vector costs fifteen minutes against $26$ ms for the
+lattice, a factor of $3\times10^{4}$. The sequential-conditioning family is the only entry whose error
 grows silently: its tail entries are off by $e^{1.3}\approx3.7$ with nothing in
 the output to say so. The race's tail figure is the reference's own noise;
 lattice self-convergence places its error near $10^{-8}$.
@@ -516,7 +526,11 @@ MSL, $R=1000$ & $0.0198$ & $40.7$ s \\
 
 \noindent At equal fitting time the simulated estimator pays a $63$ percent
 error premium; at eight times the budget it remains behind. The exact estimator
-sits at the statistical floor.
+sits at the statistical floor. Deterministic quadrature does not rescue
+estimation either: at $n=30$ one probability vector by Genz--Bretz costs
+$1.4$ s and supplies no analytic score, so a single finite-difference gradient
+step ($31$ vector evaluations) costs roughly eight times the entire
+exact-gradient fit.
 
 \paragraph{Scale.} The Rust kernels are input-bound: ten million contestants in
 $64$ seconds under the block grammar with a hybrid in-memory and streaming
@@ -558,9 +572,16 @@ tilting. \emph{Journal of the Royal Statistical Society B} 79(1):125--148, 2017.
 A.~B\"orsch-Supan, V.~Hajivassiliou. Smooth unbiased multivariate probability
 simulators for maximum likelihood estimation of limited dependent variable
 models. \emph{Journal of Econometrics} 58:347--368, 1993.
+\bibitem[Bhat(2011)]{bhat2011} C.~R. Bhat.
+The maximum approximate composite marginal likelihood (MACML) estimation of
+multinomial probit-based unordered response choice models.
+\emph{Transportation Research Part B} 45(7):923--939, 2011.
 \bibitem[Clark(1961)]{clark1961} C.~E. Clark.
 The greatest of a finite set of random variables.
 \emph{Operations Research} 9:145--162, 1961.
+\bibitem[Croissant(2020)]{croissant2020} Y.~Croissant.
+Estimation of random utility models in R: the mlogit package.
+\emph{Journal of Statistical Software} 95(11):1--41, 2020.
 \bibitem[Cotton(2021)]{cotton2021} P.~Cotton.
 Inferring relative ability from winning probability in multi-entrant contests.
 \emph{SIAM Journal on Financial Mathematics} 12(1):295--317, 2021.
@@ -573,6 +594,9 @@ Bayesian inference in econometric models using Monte Carlo integration.
 \bibitem[Hajivassiliou et al.(1996)]{hajivassiliou1996} V.~Hajivassiliou,
 D.~McFadden, P.~Ruud. Simulation of multivariate normal rectangle probabilities
 and their derivatives. \emph{Journal of Econometrics} 72:85--134, 1996.
+\bibitem[Imai and van Dyk(2005)]{imai2005} K.~Imai, D.~A. van Dyk.
+MNP: R package for fitting the multinomial probit model.
+\emph{Journal of Statistical Software} 14(3):1--32, 2005.
 \bibitem[Keane(1994)]{keane1994} M.~P. Keane.
 A computationally practical simulation estimator for panel data.
 \emph{Econometrica} 62:95--116, 1994.
@@ -598,6 +622,9 @@ A method for approximating multivariate normal orthant probabilities.
 \bibitem[Stern(1992)]{stern1992} S.~Stern.
 A method for smoothing simulated moments of discrete probabilities in
 multinomial probit models. \emph{Econometrica} 60:943--952, 1992.
+\bibitem[StataCorp(2023)]{statacorp2023} StataCorp.
+\emph{Stata Choice Models Reference Manual: cmmprobit, asmprobit}.
+Stata Press, College Station, 2023.
 \bibitem[Thurstone(1927)]{thurstone1927} L.~L. Thurstone.
 A law of comparative judgment. \emph{Psychological Review} 34:273--286, 1927.
 \bibitem[Train(2009)]{train2009} K.~Train.
