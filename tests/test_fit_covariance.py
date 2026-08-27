@@ -119,3 +119,22 @@ def test_cov_inversion_round_trip():
     p = race_probabilities(mu0, cov=C)
     mu_hat = abilities_from_race(p, cov=C)
     assert np.abs(mu_hat - mu0).max() < 1e-5
+
+
+def test_hard_covariance_warns_easy_does_not():
+    # the front door tells the user when the grammar fit is imperfect
+    import warnings
+    rng = np.random.default_rng(0)
+    n = 40
+    mu = np.sort(rng.normal(size=n))
+    Vt = rng.normal(size=(n, 2)) * 0.5
+    C_easy = Vt @ Vt.T + np.diag(0.5 + rng.random(n))
+    C_hard = 0.5 ** np.abs(np.subtract.outer(np.arange(n), np.arange(n)))
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        race_probabilities(mu, cov=C_easy)
+        assert not any(issubclass(x.category, RuntimeWarning) for x in w)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        race_probabilities(mu, cov=C_hard)
+        assert any("grammar fit" in str(x.message) for x in w)

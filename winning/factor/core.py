@@ -187,7 +187,7 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60):
 
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                    blocks: int | None = None, nodes_log2: int = 11,
-                   seed: int = 0):
+                   seed: int = 0, return_report: bool = False):
     """One-call dense-covariance intake: fit C to the race grammar and
     return (V, D, F, W) ready for race_probabilities.
 
@@ -259,6 +259,19 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     D = np.linalg.solve(P * P, rhs)
     D = np.maximum(D, 1e-3 * float(np.mean(np.diag(C))))
     F, W = qmc_nodes(Vall.shape[1], m=nodes_log2, seed=seed)
+    if return_report:
+        Rfin = P @ (C - Vall @ Vall.T - np.diag(D)) @ P
+        denom = float(np.linalg.norm(P @ C @ P))
+        rel = float(np.linalg.norm(Rfin)) / denom if denom > 0 else 0.0
+        # the warning diagnostic: worst single choice-relevant entry the
+        # fit failed to hold, in units of the average variance. Calibrated
+        # against measured TV error (AR(1) and short-scale RBF sit at
+        # 0.08-0.40 here with TV 0.03-0.04 at n=40; in-grammar truths at 0)
+        absmax = float(np.abs(Rfin).max() / max(np.mean(np.diag(C)), 1e-300))
+        report = {"projected_residual_rel": rel,
+                  "projected_residual_max": absmax,
+                  "rank": Vall.shape[1]}
+        return Vall, D, F, W, report
     return Vall, D, F, W
 
 

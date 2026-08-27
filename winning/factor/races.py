@@ -175,7 +175,17 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         if structure is not None or V is not None or D is not None:
             raise ValueError("cov= replaces structure=/V=/D=; pass one only")
         from .core import fit_covariance
-        V, D, F, W = fit_covariance(cov)
+        V, D, F, W, report = fit_covariance(cov, return_report=True)
+        if report["projected_residual_max"] > 0.05:
+            import warnings
+            warnings.warn(
+                "cov= is imperfectly served by the grammar fit (worst "
+                "choice-relevant residual entry "
+                f"{report['projected_residual_max']:.2f} of the average "
+                "variance; short-length-scale/locality covariances are the "
+                "known hard family). Probabilities may carry percent-level "
+                "bias; see the paper's dense-covariance section.",
+                RuntimeWarning, stacklevel=2)
     if structure is not None:
         from .structures import dispatch_probabilities
         return dispatch_probabilities(mu, structure, base=base,
