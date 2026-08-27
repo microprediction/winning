@@ -314,10 +314,14 @@ $p_i=\int h_i(x)\,R_{c(i)}(x)\,dx$ with $h_i$ as in \eqref{eq:cavity}. The cost
 is $O(nLQ)$ plus $O(L\,Q)$ per tree node.
 
 A depth-one tree with zero strengths reproduces the block race to machine
-precision, which is tested. Against Monte Carlo the recursion agrees at the
-simulation noise floor across the validation battery, and moving mass to a
-common root is invariant to $3\times10^{-7}$; we do not claim exactness of the
-downward pass at depth and record it as an approximation validated empirically.
+precision, which is tested. Against a $2^{22}$-path common-random-numbers
+referee the recursion sits at the simulation noise floor on every resolvable
+entry at depths one through four (root-mean-square $z$ between $0.75$ and
+$1.1$). Entries below the referee's resolution agree with minimax tilting
+\citep{botev2017} to $0.3$ percent relative at probabilities down to
+$7\times10^{-8}$, which is within the tilting estimate's own error. Tail
+accuracy is a property of the lattice, not of node placement, so the grammar
+kernels price the tails that simulation cannot see.
 
 \section{Jacobians, tie densities, inversion}\label{sec:jac}
 
