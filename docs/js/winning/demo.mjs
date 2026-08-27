@@ -290,3 +290,96 @@ export function mcBatch(mu, L, r, batch, counts) {
     counts[best]++;
   }
 }
+
+/* ---- the competition: GHK and Mendell-Elston --------------------------
+   Both price alternative i through the difference vector u_j = x_j - x_i,
+   j != i (min-wins: p_i = P(u > 0)), each with its own (n-1)-dimensional
+   covariance and its own O(n^3/6) Cholesky or sweep. That per-alternative
+   structure is the point the demo makes: pricing the whole field costs n
+   times a single-alternative price, before a single draw is taken. */
+import { ndtr, npdf } from "./core.mjs";
+
+function invNormalCdf(p) { return invNormal(Math.min(Math.max(p, 1e-15), 1 - 1e-15)); }
+
+function diffProblem(mu, C, i) {
+  // mean and covariance of (x_j - x_i)_{j != i}
+  const n = mu.length, m = new Float64Array(n - 1);
+  const S = new Float64Array((n - 1) * (n - 1));
+  const idx = [];
+  for (let j = 0; j < n; j++) if (j !== i) idx.push(j);
+  for (let a = 0; a < n - 1; a++) {
+    m[a] = mu[idx[a]] - mu[i];
+    for (let b = 0; b < n - 1; b++)
+      S[a * (n - 1) + b] = C[idx[a]][idx[b]] - C[idx[a]][i] - C[i][idx[b]] + C[i][i];
+  }
+  return { m, S };
+}
+
+export function ghkPrepareOne(mu, C, i) {
+  // per-alternative Cholesky of the difference covariance (the GHK setup
+  // cost the wall-time axis charges honestly)
+  const { m, S } = diffProblem(mu, C, i);
+  const d = mu.length - 1;
+  const L = new Float64Array(d * d);
+  for (let a = 0; a < d; a++) {
+    for (let b = 0; b <= a; b++) {
+      let s = S[a * d + b];
+      for (let k = 0; k < b; k++) s -= L[a * d + k] * L[b * d + k];
+      if (a === b) L[a * d + a] = Math.sqrt(Math.max(s, 1e-12));
+      else L[a * d + b] = s / L[b * d + b];
+    }
+  }
+  return { m, L, d };
+}
+
+export function ghkSampleOne(prob, reps, r) {
+  // GHK sequential-conditioning importance sampler: mean weight over reps
+  const { m, L, d } = prob;
+  const e = new Float64Array(d);
+  let sum = 0;
+  for (let rep = 0; rep < reps; rep++) {
+    let w = 1;
+    for (let k = 0; k < d; k++) {
+      let partial = m[k];
+      const Lk = k * d;
+      for (let l = 0; l < k; l++) partial += L[Lk + l] * e[l];
+      const a = -partial / L[Lk + k];
+      const Fa = ndtr(a), q = 1 - Fa;
+      w *= q;
+      if (q < 1e-14) { w = 0; break; }
+      e[k] = invNormalCdf(Fa + r.u() * q);
+    }
+    sum += w;
+  }
+  return sum;
+}
+
+export function mendellElstonOne(mu, C, i) {
+  // Mendell-Elston analytic sequential moment approximation: condition on
+  // u_k > 0 one coordinate at a time, propagating truncated-normal moments
+  // and pretending normality is preserved (it is not; the bias is the
+  // flat line this arm draws).
+  const { m, S } = diffProblem(mu, C, i);
+  const d = mu.length - 1;
+  let logp = 0;
+  const alive = [];
+  for (let a = 0; a < d; a++) alive.push(a);
+  while (alive.length) {
+    const k = alive.shift();
+    const skk = Math.max(S[k * d + k], 1e-12), sk = Math.sqrt(skk);
+    const z = m[k] / sk;
+    const Pz = Math.max(ndtr(z), 1e-300);
+    logp += Math.log(Pz);
+    const lam = npdf(z) / Pz;
+    const del = lam * (lam + z);
+    for (const j of alive) m[j] += (S[k * d + j] / sk) * lam;
+    for (let aj = 0; aj < alive.length; aj++)
+      for (let ak = aj; ak < alive.length; ak++) {
+        const j = alive[aj], l = alive[ak];
+        const upd = (S[k * d + j] * S[k * d + l] / skk) * del;
+        S[j * d + l] -= upd;
+        if (l !== j) S[l * d + j] -= upd;
+      }
+  }
+  return Math.exp(logp);
+}
