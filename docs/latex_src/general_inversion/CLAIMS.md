@@ -74,3 +74,14 @@ index. Paths are repo-relative.
    fitted model covariance VV'+diag(D) to 3e-15 on a mixed factor/AR
    test matrix (priced probabilities differ TV 2e-3: Halton vs Sobol
    nodes, by design).
+6. Kernel stratification (final, two-arm fitter): med TV over 20 seeds —
+   RBF ls 0.08/0.2/0.4 at m=5: 3.4/2.6/1.6e-2 (m=12: 3.1/2.6/1.7e-2;
+   m=5 @2^14 nodes: 3.3/1.2/0.82e-2); Matérn-3/2: 2.9/2.5/2.1e-2
+   (m=12: 2.5/2.3/1.7e-2; @2^14: 2.4/1.6/1.2e-2). Two regimes: short
+   scale = representation (rank helps, nodes don't), long scale =
+   quadrature (nodes help, rank doesn't; 2^16 reaches 6e-3 on the
+   diagnostic draw). The old kernel row (up to 7e-2) was greedy rank
+   misallocation, repaired by the eigen arm (stage vi).
+7. n=2000 one-call: fit 0.6 s + price 3.6 s (fit was 41 s before the
+   double-centering/subspace/water-filling rework, commit db111e3;
+   NNLS closed form verified to 1e-14 vs scipy).
