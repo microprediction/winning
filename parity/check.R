@@ -68,7 +68,17 @@ runs <- list(
   polish_p = function()
     polish_race(p0 = pt, V = V1, D = D, points = 257, name_caps = 0.15)$p,
   polish_mu = function()
-    polish_race(p0 = pt, V = V1, D = D, points = 257, name_caps = 0.15)$mu
+    polish_race(p0 = pt, V = V1, D = D, points = 257, name_caps = 0.15)$mu,
+  jacobian_tree = function()
+    tree_race_jacobian(mu, cl, ld, D, pa_r, stg, points = 257),
+  coph_tree = function() {
+    tr <- tree_from_linkage(as.matrix(inp$linkage_Z))
+    tree_race_probabilities(mu, tr$cluster, tr$loading, tr$D, tr$parent,
+                            tr$strength, points = 257)
+  },
+  polish_tree_p = function()
+    polish_race(p0 = pt, structure = tree_from_linkage(as.matrix(inp$linkage_Z)),
+                points = 257, name_caps = 0.14)$p
 )
 
 fails <- 0

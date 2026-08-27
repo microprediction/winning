@@ -136,3 +136,51 @@ Tree <- function(cluster, loading, D, parent, strength)
   }
   mu
 }
+
+#' The tree race implied by a hierarchical clustering (HRP's belief)
+#'
+#' Builds the Tree structure whose implied correlation is EXACTLY the
+#' cophenetic correlation matrix 1 - 2 d^2 of the clustering: each merge
+#' at cophenetic distance h contributes lam^2 = rho - rho_parent with
+#' rho = 1 - 2 h^2; unit total variance per runner.
+#'
+#' @param Z scipy-style linkage matrix (n-1 rows; columns: merged node
+#'   ids 0-based, distance, size)
+#' @return a \code{\link{Tree}} structure
+#' @export
+tree_from_linkage <- function(Z) {
+  Z <- as.matrix(Z)
+  n <- nrow(Z) + 1L
+  nT <- 2L * n - 1L
+  parent <- integer(nT)                    # 0 = root
+  rho <- numeric(nT)
+  for (k in seq_len(nrow(Z))) {
+    a <- as.integer(Z[k, 1]) + 1L          # 0-based ids -> 1-based
+    b <- as.integer(Z[k, 2]) + 1L
+    t <- n + k
+    parent[a] <- t; parent[b] <- t
+    rho[t] <- 1 - 2 * Z[k, 3]^2
+  }
+  lam <- numeric(nT)
+  for (t in (n + 1L):nT) {
+    pa <- parent[t]
+    lam[t] <- sqrt(max(rho[t] - if (pa > 0) rho[pa] else 0, 0))
+  }
+  D <- pmax(1 - rho[parent[1:n]], 1e-10)
+  Tree(cluster = seq_len(n), loading = numeric(n), D = D,
+       parent = parent, strength = lam)
+}
+
+#' @rdname tree_from_linkage
+#' @param hc an \code{\link[stats]{hclust}} object
+#' @export
+tree_from_hclust <- function(hc) {
+  m <- hc$merge
+  n <- nrow(m) + 1L
+  Z <- matrix(0, n - 1L, 4)
+  for (k in seq_len(nrow(m))) {
+    id <- function(x) if (x < 0) -x - 1L else n + x - 1L   # to 0-based
+    Z[k, ] <- c(id(m[k, 1]), id(m[k, 2]), hc$height[k], 0)
+  }
+  tree_from_linkage(Z)
+}

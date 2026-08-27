@@ -420,6 +420,102 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     return p / t_ if t_ > 0 else p
 
 
+def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
+                       points=257, qa=9):
+    """d p / d mu for the tree race (min-wins), one pass.
+
+    Same-cluster term EXACT under the downward message R_c; cross-cluster
+    by the Gram h_i h_j R_c R_d / G_root -- exact when the clusters share
+    no ancestor effects (then it reduces to block_race_jacobian), an
+    approximation otherwise. Good enough for Newton and for polish
+    constraint gradients: the residual/feasibility is always measured on
+    the exact forward map. Promoted from research/pqrace (SCHUR.md)."""
+    mu = np.asarray(mu, float)
+    m = -mu
+    sd = np.sqrt(np.asarray(D, float))
+    v = np.asarray(loading, float); cluster = np.asarray(cluster)
+    parent = np.asarray(parent, int); lam = np.asarray(strength, float)
+    n = len(m); nT = len(parent)
+    _, inv = np.unique(cluster, return_inverse=True)
+    nC = inv.max() + 1
+    order = np.argsort(inv, kind="stable")
+    mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
+    starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
+    an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
+    depth_shift = np.zeros(nT)
+    for t in range(nT):
+        s_, u = 0.0, t
+        while parent[u] >= 0:
+            s_ += abs(lam[parent[u]]); u = parent[u]
+        depth_shift[t] = s_
+    path_var = np.zeros(nC)
+    for c in range(nC):
+        s_, u = 0.0, c
+        while parent[u] >= 0:
+            s_ += lam[parent[u]] ** 2; u = parent[u]
+        path_var[c] = s_
+    tot = np.sqrt(sd_o ** 2 + v_o ** 2 + path_var[c_o])
+    lo, hi = _bulk_lo_hi(mu_o, tot)
+    x = np.linspace(lo, hi, points); dx = x[1] - x[0]
+    z = (x[None, None, :] - mu_o[:, None, None]
+         - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
+    logF = np.log(np.maximum(ndtr(z), TINY))
+    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+    S = np.add.reduceat(logF, starts, axis=0)
+    G = np.empty((nT, points))
+    G[:nC] = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))
+    children = [[] for _ in range(nT)]
+    root = -1
+    for t in range(nT):
+        if parent[t] >= 0:
+            children[parent[t]].append(t)
+        else:
+            root = t
+    shift_eval = lambda g, delta: np.interp(x, x - delta, g,
+                                            left=g[0], right=g[-1])
+    for t in sorted(range(nC, nT), key=lambda u: -depth_shift[u]):
+        acc = np.zeros(points)
+        for q in range(qa):
+            prod = np.ones(points)
+            for c in children[t]:
+                prod = prod * shift_eval(G[c], lam[t] * an[q])
+            acc += aw[q] * prod
+        G[t] = np.maximum(acc, 0.0)
+    R = np.ones((nT, points))
+    for t in sorted(range(nT), key=lambda u: depth_shift[u]):
+        pa = parent[t]
+        if pa < 0:
+            continue
+        sm = np.zeros(points)
+        for q in range(qa):
+            sm += aw[q] * shift_eval(R[pa], -lam[pa] * an[q])
+        prod = np.ones(points)
+        for s_ in children[pa]:
+            if s_ != t:
+                prod = prod * G[s_]
+        R[t] = np.maximum(sm * prod, 0.0)
+    h = np.einsum("q,nql->nl", aw, pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
+    Gr = np.maximum(G[root], TINY)
+    U = h * R[c_o] / np.sqrt(Gr)[None, :] * np.sqrt(dx)
+    J = -(U @ U.T)
+    for ci in range(nC):
+        a0 = starts[ci]; a1 = starts[ci + 1] if ci + 1 < nC else n
+        idx = np.arange(a0, a1)
+        if len(idx) == 1:
+            continue
+        lo2 = np.exp(np.minimum(S[ci][None, None, :, :]
+                                - logF[idx][:, None, :, :]
+                                - logF[idx][None, :, :, :], 0.0))
+        term = np.einsum("q,ijql,l->ij", aw,
+                         pdf[idx][:, None, :, :] * pdf[idx][None, :, :, :] * lo2,
+                         R[ci]) * dx
+        J[np.ix_(idx, idx)] = -term
+    np.fill_diagonal(J, 0.0)
+    J[np.arange(n), np.arange(n)] = -J.sum(axis=1)
+    Jf = np.empty((n, n)); Jf[np.ix_(order, order)] = J
+    return -Jf
+
+
 def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
                          points=257, qa=9, qf=15):
     """Exact d p / d mu for the nested race: a mixture over the global node,

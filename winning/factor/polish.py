@@ -154,6 +154,27 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     mu = res.x - res.x.mean()
     p = p_of(mu)
     slack = b0 - A0 @ p
+    if -slack.min() > 1e-6:
+        # the analytic Jacobian may be approximate (tree: cross-cluster
+        # Gram); if SLSQP converged infeasible, restore feasibility with
+        # exact finite-difference constraint gradients from the current
+        # point -- the forward map is always exact.
+        def cons_j_fd(m, h=1e-6):
+            Jn = np.empty((n, n))
+            for j in range(n):
+                e = np.zeros(n); e[j] = h
+                Jn[:, j] = (p_of(m + e) - p_of(m - e)) / (2 * h)
+            return -A0 @ Jn
+        res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), mu,
+                       jac=lambda m: m - mu0, method="SLSQP",
+                       constraints=[
+                           NonlinearConstraint(cons_f, 0.0, np.inf,
+                                               jac=cons_j_fd),
+                           LinearConstraint(np.ones((1, n)), 0.0, 0.0)],
+                       options={"maxiter": max_iter, "ftol": tol})
+        mu = res.x - res.x.mean()
+        p = p_of(mu)
+        slack = b0 - A0 @ p
     return p, mu, {"active": list(np.flatnonzero(slack < 1e-6)),
                    "nit": int(res.nit), "max_violation": float(-min(slack.min(), 0.0)),
                    "mu_distance": float(np.linalg.norm(mu - mu0))}
@@ -186,9 +207,18 @@ def _structure_engines(structure, points):
                 None or (lambda p: _invert_generic(
                     p, lambda m: nested_race_probabilities(
                         m, c, L, D, coupling=g, gamma=ga, points=points))))
-    raise NotImplementedError(
-        f"polish_race structure {type(structure).__name__} not yet supported "
-        "(Tree needs its Jacobian promoted from research/pqrace)")
+    if isinstance(structure, Tree):
+        from .blocks import tree_race_probabilities, tree_race_jacobian
+        c, L, D, pa, lam = (structure.cluster, structure.loading,
+                            structure.D, structure.parent, structure.strength)
+        fwd = lambda m: tree_race_probabilities(m, c, L, D, pa, lam,
+                                                points=points)
+        return (fwd,
+                lambda m: tree_race_jacobian(m, c, L, D, pa, lam,
+                                             points=points),
+                lambda p: _invert_generic(p, fwd))
+    raise TypeError(f"polish_race: unknown structure "
+                    f"{type(structure).__name__}")
 
 
 def _invert_generic(p, forward, tol=1e-9, max_iter=400):

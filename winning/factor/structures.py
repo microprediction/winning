@@ -82,6 +82,35 @@ class Tree:
     def n(self):
         return len(np.asarray(self.D))
 
+    @classmethod
+    def from_linkage(cls, Z):
+        """The tree race whose implied correlation IS the cophenetic matrix
+        of a scipy linkage (HRP's implicit covariance), exactly.
+
+        Each leaf is its own cluster; internal node t (the k-th merge, at
+        cophenetic distance h) carries lam_t^2 = rho_t - rho_parent(t) with
+        rho_t = 1 - 2 h^2 (increments nonnegative by linkage monotonicity);
+        D_i = 1 - rho at the leaf's first merge. Unit total variance per
+        runner; see tests/test_race_invariants.py for the exactness proof."""
+        Z = np.asarray(Z, float)
+        n = len(Z) + 1
+        nT = 2 * n - 1
+        parent = -np.ones(nT, int)
+        rho = np.zeros(nT)
+        for k in range(len(Z)):
+            a, b, h = int(Z[k, 0]), int(Z[k, 1]), Z[k, 2]
+            t = n + k
+            parent[a] = t; parent[b] = t
+            rho[t] = 1.0 - 2.0 * h * h
+        lam = np.zeros(nT)
+        for t in range(n, nT):
+            pa = parent[t]
+            lam2 = rho[t] - (rho[pa] if pa >= 0 else 0.0)
+            lam[t] = np.sqrt(max(lam2, 0.0))
+        D = np.array([1.0 - rho[parent[i]] for i in range(n)])
+        return cls(cluster=np.arange(n), loading=np.zeros(n),
+                   D=np.maximum(D, 1e-10), parent=parent, strength=lam)
+
 
 def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
     from .races import race_probabilities as _rp

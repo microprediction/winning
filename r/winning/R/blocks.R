@@ -248,7 +248,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
     if (parent[t] > 0) children[[parent[t]]] <- c(children[[parent[t]]], t)
   }
   shift_eval <- function(g, delta) {
-    stats::approx(x - delta, g, xout = x, rule = 2)$y
+    stats::approx(x - delta, g, xout = x, rule = 2, ties = "ordered")$y
   }
   up <- setdiff(seq_len(nT), seq_len(nC))
   up <- up[order(-depth_shift[up])]
@@ -449,4 +449,125 @@ abilities_from_block_race <- function(p, cluster, loading, D,
   pv <- pmax(forward(mu), .TINY); pv <- pv / sum(pv)
   list(mu = mu - mean(mu), residual = max(abs(log(pv) - lt)),
        iterations = max_iter)
+}
+
+#' Jacobian of the tree race (min-wins)
+#'
+#' Same-cluster term exact under the downward message; cross-cluster by
+#' a Gram approximation, exact when clusters share no ancestor effects.
+#' Feasibility-critical callers (polish_race) verify on the exact
+#' forward map and fall back to finite differences.
+#'
+#' @inheritParams tree_race_probabilities
+#' @return n x n matrix with zero row sums
+#' @export
+tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
+                               points = 257, qa = 9) {
+  mu <- as.numeric(mu)
+  m <- -mu
+  sd <- sqrt(as.numeric(D))
+  v <- as.numeric(loading)
+  parent <- as.integer(ifelse(is.na(parent), 0L, parent))
+  lam <- as.numeric(strength)
+  n <- length(m)
+  nT <- length(parent)
+  inv <- .cluster_index(cluster)
+  nC <- max(inv)
+  ord <- order(inv)
+  mu_o <- m[ord]; sd_o <- sd[ord]; v_o <- v[ord]; c_o <- inv[ord]
+  h1 <- .hermite1(qa)
+  an <- h1$nodes; aw <- h1$weights
+  depth_shift <- numeric(nT)
+  for (t in seq_len(nT)) {
+    s_ <- 0; u <- t
+    while (parent[u] > 0) { s_ <- s_ + abs(lam[parent[u]]); u <- parent[u] }
+    depth_shift[t] <- s_
+  }
+  path_var <- numeric(nC)
+  for (cc in seq_len(nC)) {
+    s_ <- 0; u <- cc
+    while (parent[u] > 0) { s_ <- s_ + lam[parent[u]]^2; u <- parent[u] }
+    path_var[cc] <- s_
+  }
+  tot <- sqrt(sd_o^2 + v_o^2 + path_var[c_o])
+  lh <- .bulk_lo_hi(mu_o, tot)
+  x <- seq(lh[1], lh[2], length.out = points)
+  dx <- x[2] - x[1]
+  xm <- matrix(x, n, points, byrow = TRUE)
+  S <- array(0, c(nC, qa, points))
+  logF <- array(0, c(n, qa, points))
+  pdf <- array(0, c(n, qa, points))
+  for (q in seq_len(qa)) {
+    z <- (xm - mu_o - v_o * an[q]) / sd_o
+    lf <- log(pmax(stats::pnorm(z), .TINY))
+    logF[, q, ] <- lf
+    pdf[, q, ] <- exp(-0.5 * z * z) / (sd_o * sqrt(2 * pi))
+    S[, q, ] <- rowsum(lf, c_o)
+  }
+  G <- matrix(0, nT, points)
+  for (q in seq_len(qa)) {
+    G[1:nC, ] <- G[1:nC, ] + aw[q] * exp(pmin(matrix(S[, q, ], nC, points), 0))
+  }
+  children <- vector("list", nT)
+  root <- 0L
+  for (t in seq_len(nT)) {
+    if (parent[t] > 0) children[[parent[t]]] <- c(children[[parent[t]]], t)
+    else root <- t
+  }
+  shift_eval <- function(g, delta) stats::approx(x - delta, g, xout = x,
+                                                 rule = 2,
+                                                 ties = "ordered")$y
+  up <- setdiff(seq_len(nT), seq_len(nC))
+  up <- up[order(-depth_shift[up])]
+  for (t in up) {
+    acc <- numeric(points)
+    for (q in seq_len(qa)) {
+      prod <- rep(1, points)
+      for (cc in children[[t]]) prod <- prod * shift_eval(G[cc, ], lam[t] * an[q])
+      acc <- acc + aw[q] * prod
+    }
+    G[t, ] <- pmax(acc, 0)
+  }
+  R <- matrix(1, nT, points)
+  for (t in order(depth_shift)) {
+    pa <- parent[t]
+    if (pa == 0) next
+    sm <- numeric(points)
+    for (q in seq_len(qa)) sm <- sm + aw[q] * shift_eval(R[pa, ], -lam[pa] * an[q])
+    prod <- rep(1, points)
+    for (s_ in children[[pa]]) if (s_ != t) prod <- prod * G[s_, ]
+    R[t, ] <- pmax(sm * prod, 0)
+  }
+  hmat <- matrix(0, n, points)
+  for (q in seq_len(qa)) {
+    hmat <- hmat + aw[q] * pdf[, q, ] * exp(pmin(S[c_o, q, ] - logF[, q, ], 0))
+  }
+  Gr <- pmax(G[root, ], .TINY)
+  U <- hmat * R[c_o, , drop = FALSE] /
+    matrix(sqrt(Gr), n, points, byrow = TRUE) * sqrt(dx)
+  J <- -(U %*% t(U))
+  for (ci in seq_len(nC)) {
+    idx <- which(c_o == ci)
+    k <- length(idx)
+    if (k == 1) next
+    term <- matrix(0, k, k)
+    for (q in seq_len(qa)) {
+      Rcq <- R[ci, ]
+      Fk <- matrix(logF[idx, q, ], k, points)
+      Pk <- matrix(pdf[idx, q, ], k, points)
+      for (ii in seq_len(k)) {
+        base <- matrix(S[ci, q, ] - Fk[ii, ], k, points, byrow = TRUE)
+        lo2 <- exp(pmin(base - Fk, 0))
+        wrow <- Pk[ii, ] * Rcq
+        term[ii, ] <- term[ii, ] + aw[q] *
+          rowSums(Pk * lo2 * matrix(wrow, k, points, byrow = TRUE)) * dx
+      }
+    }
+    J[idx, idx] <- -term
+  }
+  diag(J) <- 0
+  diag(J) <- -rowSums(J)
+  Jf <- matrix(0, n, n)
+  Jf[ord, ord] <- J
+  -Jf
 }

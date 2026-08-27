@@ -31,6 +31,10 @@ race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                   structure$D, coupling = structure$coupling,
                                   gamma = structure$gamma, points = points,
                                   qa = qa, qf = qf))
+    if (cls == "Tree")
+      return(tree_race_jacobian(mu, structure$cluster, structure$loading,
+                                structure$D, structure$parent,
+                                structure$strength, points = points, qa = qa))
     stop("race_jacobian: structure ", cls, " not yet supported")
   }
   st <- .race_setup(mu, V, D, F, W, base)
@@ -172,6 +176,46 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
   }
   p <- forward(m)
   slack <- b0 - as.numeric(A0 %*% p)
+  if (-min(slack) > 1e-6) {
+    # the analytic Jacobian may be approximate (tree: cross-cluster Gram);
+    # restore feasibility with exact finite-difference constraint
+    # gradients -- the forward map is always exact
+    jac_fd <- function(mm, h = 1e-6) {
+      Jn <- matrix(0, n, n)
+      for (j in seq_len(n)) {
+        e <- numeric(n); e[j] <- h
+        Jn[, j] <- (forward(mm + e) - forward(mm - e)) / (2 * h)
+      }
+      Jn
+    }
+    lam <- numeric(length(b0)); rho <- 10
+    for (outer in seq_len(20)) {
+      obj <- function(mm) {
+        mm <- mm - mean(mm)
+        cvec <- b0 - as.numeric(A0 %*% forward(mm))
+        psi <- pmax(0, lam - rho * cvec)
+        0.5 * sum((mm - mu0)^2) + sum(psi^2 - lam^2) / (2 * rho)
+      }
+      grd <- function(mm) {
+        mm <- mm - mean(mm)
+        cvec <- b0 - as.numeric(A0 %*% forward(mm))
+        psi <- pmax(0, lam - rho * cvec)
+        gc <- -A0 %*% jac_fd(mm)
+        g <- (mm - mu0) - as.numeric(t(gc) %*% psi)
+        g - mean(g)
+      }
+      res <- stats::optim(m, obj, grd, method = "BFGS",
+                          control = list(maxit = 200, reltol = 1e-12))
+      m <- res$par - mean(res$par)
+      nit <- nit + res$counts[1]
+      cvec <- b0 - as.numeric(A0 %*% forward(m))
+      lam <- pmax(0, lam - rho * cvec)
+      if (max(0, -min(cvec)) < 1e-8 && outer > 1) break
+      rho <- min(rho * 3, 1e6)
+    }
+    p <- forward(m)
+    slack <- b0 - as.numeric(A0 %*% p)
+  }
   list(p = p, mu = m,
        info = list(active = which(slack < 1e-6), nit = as.integer(nit),
                    max_violation = max(0, -min(slack)),

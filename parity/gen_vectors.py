@@ -23,12 +23,27 @@ from winning.factor.blocks import (block_race_probabilities,
                                    tree_race_probabilities,
                                    block_race_jacobian,
                                    nested_race_jacobian,
+                                   tree_race_jacobian,
                                    abilities_from_block_race)
+from winning.factor.structures import Tree
 from winning.factor.polish import race_jacobian, polish_race
 from winning.lattice import skew_normal_density, state_prices_from_offsets
 from winning.lattice_calibration import dividend_implied_ability
 
 TOL_DEFAULT = 1e-10
+
+
+def _linkage_Z(n):
+    from scipy.cluster.hierarchy import linkage
+    from scipy.spatial.distance import squareform
+    blocks = np.repeat(np.arange(4), n // 4)
+    superb = blocks // 2
+    R = (0.15 + 0.25 * (superb[:, None] == superb[None, :])
+         + 0.35 * (blocks[:, None] == blocks[None, :]))
+    np.fill_diagonal(R, 1.0)
+    Z = linkage(squareform(np.sqrt(0.5 * (1.0 - R)), checks=False),
+                method="average")
+    return np.round(Z, 12).tolist()
 
 
 def make_inputs(seed=2026):
@@ -53,6 +68,7 @@ def make_inputs(seed=2026):
         "loading2": loading2.tolist(), "coupling": coupling.tolist(),
         "parent": parent, "strength": strength, "p_target": p_target,
         "dividends": [2.0, 3.5, 6.0, 12.0, 20.0, 41.0],
+        "linkage_Z": _linkage_Z(n),
         "classic_L": 500, "classic_unit": 0.01, "classic_a": 1.5,
     }
 
@@ -112,6 +128,16 @@ def build(inputs):
                                 name_caps=0.15)
     sc("polish_p", pp, 5e-4)
     sc("polish_mu", mup, 5e-3)
+
+    sc("jacobian_tree", tree_race_jacobian(mu, cl, ld, D, pa, stg,
+                                           points=257), 1e-9)
+    tree = Tree.from_linkage(np.asarray(inputs["linkage_Z"]))
+    sc("coph_tree", tree_race_probabilities(
+        np.asarray(mu), tree.cluster, tree.loading, tree.D,
+        tree.parent, tree.strength, points=257))
+    ppt, _, _ = polish_race(p0=pt, structure=tree, points=257,
+                            name_caps=0.14)
+    sc("polish_tree_p", ppt, 5e-4)
     return out
 
 

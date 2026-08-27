@@ -119,3 +119,42 @@ def test_nested_structure_polish_runs_and_binds():
     p, mu1, info = polish_race(mu0=mu, name_caps=caps, structure=S)
     assert p[big] <= caps[big] + 1e-6
     assert info["max_violation"] < 1e-6
+
+
+def test_tree_jacobian_flat_equals_block():
+    """A depth-1 tree with zero strengths IS the block race; its Jacobian
+    must reduce to the exact block Jacobian to machine precision."""
+    from winning.factor.blocks import tree_race_jacobian, block_race_jacobian
+    rng = np.random.default_rng(3)
+    n = 12
+    mu = rng.normal(size=n); D = 0.5 + rng.random(n)
+    cluster = np.repeat(np.arange(4), 3); ld = 0.2 + 0.3 * rng.random(n)
+    parent = np.array([4, 4, 4, 4, -1]); lam = np.zeros(5)
+    Jt = tree_race_jacobian(mu, cluster, ld, D, parent, lam, points=257)
+    Jb = block_race_jacobian(mu, cluster, ld, D, points=257)
+    assert np.abs(Jt - Jb).max() < 1e-12
+    assert np.abs(Jt.sum(axis=1)).max() < 1e-12
+
+
+def test_polish_tree_from_linkage_enforces_caps():
+    """polish_race(structure=Tree.from_linkage(Z)): polishing along the
+    dendrogram (HRP's own belief) satisfies the caps exactly, via the
+    finite-difference fallback where the analytic tree Jacobian's
+    cross-cluster approximation would mislead SLSQP."""
+    from scipy.cluster.hierarchy import linkage
+    from scipy.spatial.distance import squareform
+    from winning.factor.structures import Tree
+    rng = np.random.default_rng(3)
+    n = 12
+    blocks = np.repeat(np.arange(4), 3); superb = blocks // 2
+    R = (0.15 + 0.25 * (superb[:, None] == superb[None, :])
+         + 0.35 * (blocks[:, None] == blocks[None, :]))
+    np.fill_diagonal(R, 1.0)
+    Z = linkage(squareform(np.sqrt(0.5 * (1 - R)), checks=False),
+                method="average")
+    tree = Tree.from_linkage(Z)
+    w0 = rng.dirichlet(np.ones(n) * 3)
+    p, mu, info = polish_race(p0=w0, structure=tree, name_caps=0.14)
+    assert p.max() <= 0.14 + 1e-6
+    assert info["max_violation"] < 1e-6
+    assert abs(p.sum() - 1.0) < 1e-9

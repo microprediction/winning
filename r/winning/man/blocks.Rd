@@ -5,6 +5,7 @@
 \alias{block_race_jacobian}
 \alias{nested_race_jacobian}
 \alias{abilities_from_block_race}
+\alias{tree_race_jacobian}
 \title{Block, nested and tree races}
 \usage{
 block_race_probabilities(mu, cluster, loading, D, points = 257, qa = 9)
@@ -22,6 +23,9 @@ nested_race_jacobian(mu, cluster, loading, D, coupling = NULL, gamma = 1,
 
 abilities_from_block_race(p, cluster, loading, D, points = 257, qa = 9,
   tol = 1e-10, max_iter = 25)
+
+tree_race_jacobian(mu, cluster, loading, D, parent, strength,
+  points = 257, qa = 9)
 }
 \arguments{
 \item{mu}{abilities (min-wins), length n}
