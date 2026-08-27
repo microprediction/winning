@@ -544,20 +544,30 @@ to $5\times10^{-4}$ on the worst case; the figures above are the
 pre-escalation diagnosis.
 
 \paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
-covariance, against a $2^{20}$-point QMC reference:
+covariance, against a $2^{20}$-point QMC reference. TV is a bulk metric and
+blind to the tails, so the same tail column as above is reported: the
+maximum absolute log-error over reference probabilities in
+$[10^{-4},10^{-3}]$, which for probabilities this small is the log-odds
+error, and which the reference's own counting noise floors near $0.1$.
 
 \begin{center}\small
-\begin{tabular}{rrrrrrr}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{rrrrrrrrrr}
 \toprule
-& \multicolumn{2}{c}{lattice race} & \multicolumn{2}{c}{GHK, $R=10^3$} & \multicolumn{2}{c}{GHK, $R=10^4$}\\
-$n$ & time & TV err & time & TV err & time & TV err\\
+& \multicolumn{3}{c}{lattice race} & \multicolumn{3}{c}{GHK, $R=10^3$} & \multicolumn{3}{c}{GHK, $R=10^4$}\\
+$n$ & time & TV & tail & time & TV & tail & time & TV & tail\\
 \midrule
-10  & 2.3 ms & $\le 1.8\times10^{-4}$ & 1.0 ms & $8.4\times10^{-3}$ & 8 ms & $2.1\times10^{-3}$\\
-50  & 7.0 ms & $\le 1.7\times10^{-3}$ & 21 ms & $4.2\times10^{-2}$ & 222 ms & $1.2\times10^{-2}$\\
-200 & 25 ms  & $\le 2.4\times10^{-3}$ & 436 ms & $3.2\times10^{-2}$ & 5.0 s & $1.2\times10^{-2}$\\
+10  & 2.3 ms & $1.8\times10^{-4}$ & --- & 1.0 ms & $8.4\times10^{-3}$ & --- & 8 ms & $2.1\times10^{-3}$ & ---\\
+50  & 7.0 ms & $1.7\times10^{-3}$ & $0.11$ & 21 ms & $4.2\times10^{-2}$ & $1.10$ & 214 ms & $1.2\times10^{-2}$ & $0.29$\\
+200 & 25 ms  & $2.4\times10^{-3}$ & $0.15$ & 436 ms & $3.2\times10^{-2}$ & $1.50$ & 4.8 s & $1.2\times10^{-2}$ & $0.35$\\
 \bottomrule
 \end{tabular}
 \end{center}
+
+The $n=10$ draw has no reference probability in the tail band. The
+lattice's tail figures equal the reference's own noise; GHK's are two to
+ten times larger in log terms even at ten times the draws, which is the
+tail blindness the TV column cannot show.
 
 The lattice bounds are the reference's own noise; self-convergence places the
 lattice error near $10^{-8}$. GHK error contracts as $O(R^{-1/2})$ and its

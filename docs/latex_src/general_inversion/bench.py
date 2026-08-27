@@ -16,6 +16,16 @@ from scipy.special import ndtr, ndtri
 from winning.factor.races import race_probabilities
 import fastrace
 
+def tail_band_err(p, ref, lo=1e-4, hi=1e-3):
+    """Max abs log-error over reference probabilities in [lo, hi]: a
+    log-odds-style tail metric the bulk TV number cannot see."""
+    band = (ref >= lo) & (ref <= hi)
+    if not band.any():
+        return float("nan")
+    return float(np.max(np.abs(np.log(np.maximum(p[band], 1e-300))
+                               - np.log(ref[band]))))
+
+
 mode = sys.argv[1] if len(sys.argv) > 1 else "ghk"
 rng = np.random.default_rng(4 if mode != "scale" else 1)
 
@@ -32,14 +42,16 @@ if mode == "ghk":
         t0 = time.time()
         p = race_probabilities(mu, V=V, D=D, points=257)
         line = (f"n={n:4d}  race {1e3*(time.time()-t0):7.1f} ms "
-                f"TV {0.5*np.abs(p-ref).sum():.2e}")
+                f"TV {0.5*np.abs(p-ref).sum():.2e} "
+                f"tail {tail_band_err(p, ref):.2f}")
         for R in (1000, 10000):
             t0 = time.time()
             g = np.asarray(fastrace.ghk_all_shares(-mu, V, D, R, 7))
             t_g = time.time() - t0
             g = g / g.sum()
             line += (f"  | GHK R={R}: {1e3*t_g:8.1f} ms "
-                     f"TV {0.5*np.abs(g-ref).sum():.2e}")
+                     f"TV {0.5*np.abs(g-ref).sum():.2e} "
+                     f"tail {tail_band_err(g, ref):.2f}")
         print(line, flush=True)
 elif mode == "alt":
     from scipy.stats import multivariate_normal, norm
