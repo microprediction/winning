@@ -67,7 +67,18 @@ def _setup(mu, V, D, F, W, base):
     else:
         V = np.atleast_2d(np.asarray(V, dtype=float))
         if F is None or W is None:
-            F, W = hermite_nodes(V.shape[1])
+            # adaptive order: when idiosyncratic noise is small relative
+            # to the loadings, the conditional race is nearly
+            # deterministic and the factor integrand is nearly a step --
+            # a fixed 15-node rule silently loses 2-5% (found by the
+            # fuzz battery, research/fuzz). Scale the order with the
+            # sharpness ratio; identical rule in the R port.
+            sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1))
+                                 / np.sqrt(np.maximum(D, 1e-300))))
+            r = V.shape[1]
+            cap = 201 if r == 1 else (41 if r == 2 else 15)
+            Q = int(np.clip(np.ceil(8.0 * sharp), 15, cap))
+            F, W = hermite_nodes(r, Q=Q)
     fn = base if callable(base) else BASES[base]
     left, right = _SPANS.get(base, (12.0, 12.0)) if not callable(base) \
         else (12.0, 12.0)

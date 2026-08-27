@@ -221,3 +221,24 @@ def test_repeated_calls_are_deterministic():
     p1 = block_race_probabilities(mu, cl, v, D)
     p2 = block_race_probabilities(mu, cl, v, D)
     assert np.abs(p1 - p2).max() < 1e-12     # rust rayon reduction included
+
+
+def test_sharp_factor_race_matches_mc():
+    """Fuzz-battery regression (seed 11540): D tiny relative to loadings
+    makes the conditional race nearly deterministic; the fixed GH-15 rule
+    lost 5e-2 TV. The adaptive order must bring it under 3e-3."""
+    from scipy.stats import qmc
+    from scipy.special import ndtri
+    rng = np.random.default_rng(11540)
+    n = 11
+    mu = rng.normal(size=n)
+    V = rng.normal(size=(n, 1)) * 1.2
+    D = 0.01 + 0.02 * rng.random(n)
+    p = race_probabilities(mu, V=V, D=D, points=1001)
+    Sig = V @ V.T + np.diag(D)
+    L = np.linalg.cholesky(Sig + 1e-12 * np.eye(n))
+    z = ndtri(np.clip(qmc.Sobol(n, scramble=True, seed=1).random_base2(17),
+                      1e-12, 1 - 1e-12)).T
+    ref = np.bincount(np.argmin(mu[:, None] + L @ z, axis=0),
+                      minlength=n) / z.shape[1]
+    assert 0.5 * np.abs(p - ref).sum() < 3e-3

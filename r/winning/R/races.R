@@ -49,7 +49,13 @@
   } else {
     V <- as.matrix(V)
     if (is.null(F) || is.null(W)) {
-      hw <- hermite_nodes(ncol(V))
+      # adaptive order matching the python reference: sharp conditional
+      # races (small D relative to loadings) need more factor nodes
+      sharp <- max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
+      r <- ncol(V)
+      cap <- if (r == 1) 201 else if (r == 2) 41 else 15
+      Q <- as.integer(min(max(ceiling(8 * sharp), 15), cap))
+      hw <- hermite_nodes(ncol(V), order = Q)
       F <- hw$F
       W <- hw$W
     }
