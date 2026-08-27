@@ -38,6 +38,12 @@ mlogit 19k downloads/mo; mvtnorm 335k/mo).
   exact structure, strict refusal + fallback for dense sigma; Laplace
   recentering for deep tails. Eight tests.
 
+- **rprobitfast** (r/rprobitfast): exact MNP for the model class of
+  Bauer's Rprobit (MACML/Mendell-Elston engine, whose measured tail
+  drift is the field table's ME row). Plain data-frame interface,
+  shared engine with mlogitfast (sync-guarded), boundary detection.
+  Direct head-to-head pending an Rprobit Rcpp build that succeeds.
+
 ## Next
 
 - **mlogitfast** (R): probit estimation behind mlogit's interface.

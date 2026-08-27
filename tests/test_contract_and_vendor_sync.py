@@ -14,3 +14,11 @@ def test_fastmvn_vendored_copy_is_identical():
     b = (root / "python" / "fastmvn" / "src" / "fastmvn" / "core.py").read_text()
     assert a == b, ("python/fastmvn vendors winning/fastmvn.py; they have "
                     "diverged -- sync deliberately and update both tests")
+
+
+def test_rprobitfast_engine_is_identical_to_mlogitfast():
+    root = Path(__file__).resolve().parents[1]
+    a = (root / "r" / "mlogitfast" / "R" / "mlogit_fast.R").read_text()
+    b = (root / "r" / "rprobitfast" / "R" / "engine.R").read_text()
+    assert a == b, ("r/rprobitfast/R/engine.R is a sync-guarded copy of "
+                    "r/mlogitfast/R/mlogit_fast.R; they have diverged")
