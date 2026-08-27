@@ -202,7 +202,9 @@ $3\times10^{-2}$ at $n=30$ with tail probabilities off by a factor of nearly
 four, and nothing in the output announces the change. The Clark-type recursion
 behaves alike. The family is current practice, not history:
 \citet{bhat2011} builds the MACML estimator on precisely these
-approximations, and \texttt{Rprobit} implements it. Expectation propagation
+approximations, and the \texttt{Rprobit} package implements it
+\citep{bauerRprobit}, with its asymptotics examined by
+\citet{batram2019}. Expectation propagation
 is the modern member of the same family. We benchmark the family through its
 classical members, which is also a benchmark of MACML's core ingredient.
 
@@ -633,6 +635,12 @@ tilting. \emph{Journal of the Royal Statistical Society B} 79(1):125--148, 2017.
 A.~B\"orsch-Supan, V.~Hajivassiliou. Smooth unbiased multivariate probability
 simulators for maximum likelihood estimation of limited dependent variable
 models. \emph{Journal of Econometrics} 58:347--368, 1993.
+\bibitem[Batram and Bauer(2019)]{batram2019} M.~Batram, D.~Bauer.
+On consistency of the MACML approach to discrete choice modelling.
+\emph{Journal of Choice Modelling} 30:1--16, 2019.
+\bibitem[Bauer(2024)]{bauerRprobit} D.~Bauer.
+\emph{Rprobit: R package for the estimation of multinomial probit models}.
+\texttt{github.com/dbauer72/Rprobit}.
 \bibitem[Bhat(2011)]{bhat2011} C.~R. Bhat.
 The maximum approximate composite marginal likelihood (MACML) estimation of
 multinomial probit-based unordered response choice models.
