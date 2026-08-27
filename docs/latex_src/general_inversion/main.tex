@@ -440,6 +440,24 @@ translation, permutation, symmetry) holds to $10^{-16}$ throughout, except
 the two-runner comparison at $7\times10^{-9}$, which is the lattice
 discretization itself.
 
+\paragraph{Stress boundaries.} An adversarial battery pushes each failure
+axis until something gives. Depth: against pure-relative adaptive
+quadrature, relative error is $4\times10^{-13}$ at $p\approx10^{-30}$ and
+$2\times10^{-8}$ at $p\approx10^{-50}$, with the first genuine breakdown
+near $p\approx10^{-119}$, a laggard twenty-five standard deviations behind.
+Inversion: the round trip $p\to\mu\to p$ holds $10^{-9}$ in log even when
+the target contains a $10^{-10}$ entry or ties at the $10^{-9}$ level. The
+Gumbel base reproduces softmax to $10^{-15}$ at $n=1000$; exact duplicates
+split exactly, and an $\epsilon$ perturbation moves the split linearly. The
+one operative boundary is factor strength. When loadings make implied
+correlations exceed roughly $0.9$, the argmax integrand loses smoothness in
+factor space and Gauss--Hermite converges slowly in the node count: at
+loading scale $4$ the $25$-node rule still sits at $8\times10^{-3}$ total
+variation. Scrambled-Sobol factor nodes, already provided for high factor
+ranks, restore reference-level accuracy ($4\times10^{-4}$) at the same
+call; heavy correlation wants quasi-Monte Carlo nodes, not deeper
+polynomial rules.
+
 \paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
 covariance, against a $2^{20}$-point QMC reference:
 
