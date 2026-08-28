@@ -96,3 +96,17 @@ def test_correlation_scale_recovered_from_rankings():
            for s in grid]
     s_hat = grid[int(np.argmax(lls))]
     assert abs(s_hat - s_true) < 0.25
+
+
+def test_order_loglik_impossible_orders_never_raise():
+    # bandits-lane report: small-sd reversed orders underflowed the
+    # adjoint denominator to exact zero and raised ZeroDivisionError;
+    # the public API degrades gracefully instead (finite or -inf
+    # loglik, finite gradient, no exception)
+    from winning.ratings import order_loglik
+    for sep, sd, n in [(6, 0.1, 4), (12, 0.22, 6), (10, 0.1, 5),
+                       (30, 0.05, 8)]:
+        m = np.linspace(sep / 2, -sep / 2, n)
+        ll, g = order_loglik(m, np.full(n, sd), list(range(n - 1, -1, -1)))
+        assert np.isfinite(g).all()
+        assert ll < -50

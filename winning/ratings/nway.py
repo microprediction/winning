@@ -182,6 +182,14 @@ def _order_pass(m, sd, order, L=2001):
         w = cum_T(u)                                   # C^T u_t
         # denominator in matching scales: P = <u_t, T_t> e^{su+sT_t}
         denom = float(np.sum(u * T[t]))
+        if denom <= 0.0:
+            # the running product underflowed in this scaling: the order
+            # is numerically impossible at these means/sds, remaining
+            # gradient entries are irrecoverable at this precision.
+            # Degrade like the mx-guard below so mixture-over-nodes
+            # callers never see an exception (reported by the bandits
+            # lane against small-sd reversed orders).
+            return logP, grad
         num = float(np.sum(w * dg[t - 1] * T[t + 1]))
         grad[order[t - 1]] = (num / denom) * np.exp(sT[t + 1] - sT[t])
         u = w * g[t - 1]
