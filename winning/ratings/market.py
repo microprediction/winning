@@ -99,6 +99,21 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
     v = np.asarray(v, dtype=float).copy()
     info = {}
     if p_market is not None:
+        if V is not None and not market_model:
+            # the seam the bandits integration caught: the named V never
+            # reached **market_model, so the market leg inverted under
+            # the INDEPENDENT map while the outcome leg used the
+            # correlated one. Default the market's pricing model to the
+            # outcome model (loadings V, idio beta2); pass market_model
+            # kwargs or invert= to price the market differently.
+            from ..factor.races import abilities_from_race
+            Vm = np.atleast_2d(np.asarray(V, dtype=float))
+            if Vm.shape[0] != len(m):
+                Vm = Vm.T
+            Dm = np.broadcast_to(np.asarray(beta2, dtype=float),
+                                 (len(m),)).astype(float)
+            market_model = {"invert":
+                            lambda p: -abilities_from_race(p, V=Vm, D=Dm)}
         m, v, lz = update_market(m, v, p_market, tau2=tau2, **market_model)
         info["logZ_market"] = lz
     if order is not None:

@@ -92,3 +92,24 @@ def test_bare_call_ranks_the_favorite_highest():
                           tau2=0.1)
     assert int(np.argmax(m)) == 0
     assert (np.argsort(-m) == np.argsort(-s)).all()
+
+
+def test_update_race_market_leg_inverts_under_the_outcome_model():
+    # bandits catch: the named V never reached the market leg, which
+    # inverted under the independent map. With V given and no explicit
+    # market model, the market now inverts under (V, beta2).
+    from winning.factor.races import race_probabilities
+    import numpy as np
+    rng = np.random.default_rng(3)
+    n = 5
+    V = np.array([[0.9], [0.8], [-0.5], [0.2], [0.0]])
+    s = np.array([0.6, 0.1, -0.1, -0.3, -0.3])
+    p_mkt = race_probabilities(-s, V=V, D=np.ones(n))
+    m_a, v_a, _ = update_race(np.zeros(n), np.ones(n), p_market=p_mkt,
+                              tau2=0.05, V=V)
+    # inverting under the correct model recovers s's contrasts closely
+    from winning.factor.races import abilities_from_race
+    y = -abilities_from_race(p_mkt, V=V, D=np.ones(n))
+    assert np.abs((y - y.mean()) - (s - s.mean())).max() < 1e-4
+    # and the update pulls means toward those contrasts, favorite first
+    assert int(np.argmax(m_a)) == 0
