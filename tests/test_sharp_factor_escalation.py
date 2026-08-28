@@ -49,3 +49,22 @@ def test_mild_factor_unchanged():
     p = race_probabilities(mu, V=V, D=D, points=513)
     tv = 0.5 * np.abs(p - ref).sum()
     assert tv < 2.5e-3, f"mild-factor TV {tv:.2e}"
+
+
+def test_rank_one_extreme_sharpness_cliff_fixed():
+    # gap-stress find: at sharpness 100 (rank 1, D = 1e-4) the GH-201
+    # default carried TV 0.65 against Monte Carlo; the midpoint-quantile
+    # escalation plus lattice refinement carries 3.5e-4. Guard the fix.
+    import numpy as np
+    from winning.factor.races import race_probabilities
+    rng = np.random.default_rng(0)
+    n = 30
+    V = rng.normal(size=(n, 1))
+    mu = np.sort(rng.normal(size=n)) * 0.5
+    D = np.full(n, 1e-4)
+    p = race_probabilities(mu, V=V, D=D)
+    C = V @ V.T + np.diag(D)
+    L = np.linalg.cholesky(C + 1e-12 * np.eye(n))
+    Z = rng.standard_normal((400_000, n))
+    counts = np.bincount((mu + Z @ L.T).argmin(1), minlength=n) / 400_000
+    assert 0.5 * np.abs(p - counts).sum() < 5e-3

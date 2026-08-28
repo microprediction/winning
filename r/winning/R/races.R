@@ -84,6 +84,14 @@
         hw <- .halton_normal_nodes(r, 2^13)
         F <- hw$F
         W <- hw$W
+      } else if (r == 1 && ceiling(8 * sharp) > 201) {
+        # rank-1 extreme sharpness (matching the python reference):
+        # Gauss-Hermite is the wrong family for a near-step integrand;
+        # an equal-weight midpoint-quantile grid scaled with sharpness
+        # replaces it (TV 0.65 -> 6e-3 at the same node count)
+        Q <- as.integer(min(ceiling(8 * sharp), 4001))
+        F <- matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)
+        W <- rep(1 / Q, Q)
       } else {
         cap <- if (r == 1) 201 else if (r == 2) 41 else 15
         Q <- as.integer(min(max(ceiling(8 * sharp), 15), cap))
@@ -181,6 +189,22 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
         length.out = points)
   }
   dx <- x[2] - x[1]
+  smin <- min(sd)
+  sharp_here <- max(sqrt(rowSums(st$V^2))) / max(smin, 1e-300)
+  if (sharp_here > 25 && dx > 0.5 * smin) {
+    # extreme-sharpness lattice refinement (matching python): refine to
+    # ~2 points per conditional sd, capped, warn when the cap binds
+    need <- ceiling((x[length(x)] - x[1]) / (0.5 * smin)) + 1
+    pts2 <- min(need, 8193)
+    if (pts2 > points) {
+      x <- seq(x[1], x[length(x)], length.out = pts2)
+      dx <- x[2] - x[1]
+      points <- pts2
+    }
+    if (need > 8193)
+      warning("conditional races sharper than the lattice can resolve ",
+              "even at 8193 points; results may carry percent-level error")
+  }
   p <- numeric(n)
   slope <- numeric(n)
   xm <- matrix(x, n, points, byrow = TRUE)

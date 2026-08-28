@@ -21,7 +21,7 @@ experiments (the Gumbel base's zero-loading case equals softmax to
 from __future__ import annotations
 
 import numpy as np
-from scipy.special import ndtr
+from scipy.special import ndtr, ndtri
 
 from .core import hermite_nodes
 
@@ -87,6 +87,17 @@ def _setup(mu, V, D, F, W, base):
                 # to stay dependency-free).
                 from .core import qmc_nodes
                 F, W = qmc_nodes(r, m=13)
+            elif r == 1 and np.ceil(8.0 * sharp) > 201:
+                # rank-1 extreme sharpness (gap-stress find): Gauss-
+                # Hermite's clustered nodes and wild weights are the
+                # wrong family for a near-step integrand -- at sharp 100
+                # the 201-node GH rule carried TV 0.65 where an
+                # equal-weight midpoint-quantile grid of the SAME size
+                # carried 6e-3. Scale the grid with sharpness, capped.
+                Q = int(min(np.ceil(8.0 * sharp), 4001))
+                u = (np.arange(Q) + 0.5) / Q
+                F = ndtri(u)[:, None]
+                W = np.full(Q, 1.0 / Q)
             else:
                 cap = 201 if r == 1 else (41 if r == 2 else 15)
                 Q = int(np.clip(np.ceil(8.0 * sharp), 15, cap))
@@ -237,6 +248,34 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         x = np.linspace(M_all.min() - left * sd.max(),
                         M_all.max() + right * sd.max(), points)
     dx = x[1] - x[0]
+    smin = float(sd.min())
+    sharp_here = float(np.max(np.sqrt((V ** 2).sum(axis=1))) /
+                       max(smin, 1e-300))
+    if sharp_here > 25.0 and dx > 0.5 * smin:
+        # extreme-sharpness lattice refinement (gap-stress find): with
+        # near-deterministic conditional races (same sharp > 25 regime
+        # as the node escalation -- an explicit coarse points= budget on
+        # ordinary fields is honored untouched) the winner density is
+        # narrower than the lattice spacing and the integral is
+        # underresolved (TV 5e-2 at conditional sd 1e-3 on the default
+        # 257 points; 6e-4 once resolved). Refine to ~2 points per
+        # conditional sd, capped; warn when the cap still leaves the
+        # lattice coarse.
+        need = int(np.ceil((x[-1] - x[0]) / (0.5 * smin))) + 1
+        pts2 = min(need, 8193)
+        if pts2 > points:
+            x = np.linspace(x[0], x[-1], pts2)
+            dx = x[1] - x[0]
+            points = pts2
+        if need > 8193:
+            import warnings
+            warnings.warn(
+                "conditional races are sharper than the lattice can "
+                f"resolve even at 8193 points (min sd {smin:.1e} over a "
+                f"window of {x[-1]-x[0]:.3g}); results may carry "
+                "percent-level error. This is the near-deterministic "
+                "regime; consider larger idiosyncratic variances or "
+                "simulation.", RuntimeWarning, stacklevel=2)
     if _HAVE_RUST and base == "normal":
         try:
             p, sl, total = _fastrace.forward_and_slopes(
