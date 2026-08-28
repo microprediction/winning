@@ -138,3 +138,26 @@ def test_hard_covariance_warns_easy_does_not():
         warnings.simplefilter("always")
         race_probabilities(mu, cov=C_hard)
         assert any("grammar fit" in str(x.message) for x in w)
+
+
+def test_bad_covariances_raise_clearly():
+    # gap-stress find: a non-PSD "covariance" silently priced to all-NaN
+    # probabilities, and a NaN entry died inside LAPACK with an
+    # inscrutable message; both now raise at the door with a diagnosis
+    rng = np.random.default_rng(0)
+    mu = np.linspace(-1, 1, 6)
+    A = rng.normal(size=(6, 6))
+    C_npsd = 0.3 * (A + A.T) / 2 + np.eye(6) * 0.3 - 0.8 * np.eye(6)
+    with pytest.raises(ValueError, match="positive semidefinite"):
+        race_probabilities(mu, cov=C_npsd)
+    C_nan = np.eye(6)
+    C_nan[0, 1] = np.nan
+    with pytest.raises(ValueError, match="NaN"):
+        race_probabilities(mu, cov=C_nan)
+    C_asym = np.eye(6) + 0.3 * rng.normal(size=(6, 6))
+    with pytest.raises(ValueError, match="symmetric"):
+        race_probabilities(mu, cov=C_asym)
+    # a singular but valid covariance (rank 2) must still price
+    B = rng.normal(size=(6, 2))
+    p = race_probabilities(mu, cov=B @ B.T)
+    assert abs(p.sum() - 1) < 1e-9 and np.isfinite(p).all()

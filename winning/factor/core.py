@@ -265,6 +265,20 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
 
     C = np.asarray(C, dtype=float)
     n = len(C)
+    if not np.isfinite(C).all():
+        raise ValueError("cov= contains NaN or inf")
+    asym = float(np.abs(C - C.T).max())
+    if asym > 1e-8 * max(float(np.abs(C).max()), 1e-300):
+        raise ValueError(
+            f"cov= is not symmetric (max asymmetry {asym:.2e}); pass "
+            "(C + C.T)/2 if the asymmetry is numerical noise")
+    C = 0.5 * (C + C.T)
+    lam_min = float(np.linalg.eigvalsh(C).min())
+    if lam_min < -1e-8 * max(float(np.trace(C)) / n, 1e-300):
+        raise ValueError(
+            f"cov= is not positive semidefinite (min eigenvalue "
+            f"{lam_min:.2e}); this is not a covariance matrix. Project "
+            "to the PSD cone first if it came from noisy estimation.")
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     V, D0 = factor_model_projected(C, min(k, n - 1))
