@@ -134,6 +134,7 @@ def main():
     print("Restrictions only, 2 <= |T| < K. Gain is linear minus Gaussian, so positive")
     print("favours Gaussian renormalization. 'with T=S' is the published estimand.\n")
     print(f"{'dataset':<24}{'n':>6}{'K':>3}{'subs':>6}"
+          f"{'linear':>9}{'Gaussian':>10}"
           f"{'gain':>9}{'95% CI':>21}{'with T=S':>10}{'ratio':>7}")
     for name in names:
         r = score(data[name])
@@ -143,6 +144,7 @@ def main():
         rows[name] = r
         ratio = r["gain"] / r["gain_all"] if r["gain_all"] else float("nan")
         print(f"{name:<24}{r['n']:>6}{r['K']:>3}{r['subsets']:>6}"
+              f"{r['luce']:>9.4f}{r['race']:>10.4f}"
               f"{r['gain']:>+9.4f}   [{r['lo']:+.4f}, {r['hi']:+.4f}]"
               f"{r['gain_all']:>+10.4f}{ratio:>7.2f}", flush=True)
 
