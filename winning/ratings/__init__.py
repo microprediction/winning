@@ -4,3 +4,7 @@ from .nway import (update_winner, pairwise_update_winner,  # noqa: F401
 from .market import update_market, update_race  # noqa: F401
 from .full import (update_winner_full, update_order_full,  # noqa: F401
                    update_market_full)
+from .history import (rate_history, diffuse, diffuse_full,  # noqa: F401
+                      update_margins_full)
+from .teams import (update_team_winner_full, update_team_order_full,  # noqa: F401
+                    update_team_margins_full)

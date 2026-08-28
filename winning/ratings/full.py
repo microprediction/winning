@@ -44,48 +44,63 @@ def _augmented_nodes(rank, nodes_log2):
 
 
 def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=12,
-                         eps=1e-3):
+                         eps=1e-3, A=None):
+    """Core of the full-covariance updates. A (optional, k x n) maps the
+    belief space to the OBSERVATION space -- identity for individual
+    races, the team assignment/weight matrix for team races: the
+    observed performance is A s + V f + noise, so with S = L L' the
+    observation-space race has loadings [A L, V] (still the engine's
+    native factor form) and the posterior lifts back through A':
+    E[s|E] = m + S A' grad, Cov[s|E] = S + S A' H A S."""
     m = np.asarray(m, dtype=float)
     S = np.asarray(S, dtype=float)
     n = len(m)
     L = np.linalg.cholesky(_psd_repair(S))
+    if A is None:
+        A = np.eye(n)
+    else:
+        A = np.atleast_2d(np.asarray(A, dtype=float))
+    k = A.shape[0]
+    AL = A @ L
     if V is None:
-        Vaug = L
+        Vaug = AL
     else:
         V = np.atleast_2d(np.asarray(V, dtype=float))
-        if V.shape[0] != n:
+        if V.shape[0] != k:
             V = V.T
-        Vaug = np.hstack([L, V])
+        Vaug = np.hstack([AL, V])
     F, W = _augmented_nodes(Vaug.shape[1], nodes_log2)
     logW = np.log(W)
     shifts = F @ Vaug.T
+    mu_obs = A @ m
 
-    def mixture(mm):
+    def mixture(mo):
         logps = np.empty(len(F))
-        grads = np.empty((len(F), n))
+        grads = np.empty((len(F), k))
         for q in range(len(F)):
-            lp, g = node_logp_grad(mm + shifts[q])
+            lp, g = node_logp_grad(mo + shifts[q])
             logps[q] = lp
             grads[q] = g
         a = logW + logps
         astar = a.max()
         if not np.isfinite(astar):
-            return np.zeros(n), -np.inf
+            return np.zeros(k), -np.inf
         pw = np.exp(a - astar)
         logZ = astar + np.log(pw.sum())
         omega = pw / pw.sum()
         return omega @ grads, logZ
 
-    G, logZ = mixture(m)
-    m_new = m + S @ G
-    H = np.empty((n, n))
-    for j in range(n):
-        ej = np.zeros(n); ej[j] = eps
-        gp, _ = mixture(m + ej)
-        gm, _ = mixture(m - ej)
+    G, logZ = mixture(mu_obs)
+    m_new = m + S @ (A.T @ G)
+    H = np.empty((k, k))
+    for j in range(k):
+        ej = np.zeros(k); ej[j] = eps
+        gp, _ = mixture(mu_obs + ej)
+        gm, _ = mixture(mu_obs - ej)
         H[j] = (gp - gm) / (2 * eps)
     H = 0.5 * (H + H.T)
-    S_new = _psd_repair(S + S @ H @ S)
+    SAt = S @ A.T
+    S_new = _psd_repair(S + SAt @ H @ SAt.T)
     return m_new, S_new, float(logZ)
 
 
