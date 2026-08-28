@@ -35,8 +35,12 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
     p_market: the market's win probabilities (dividends: pass 1/div,
     renormalized). tau2: variance of the market's ability-estimation
     noise (scalar or per-runner). invert: optional callable p -> a
-    replacing the default abilities_from_race(p, **market_model), for
-    markets priced under a different model than the outcome race.
+    for markets priced under a different model than the outcome race;
+    the DEFAULT is -abilities_from_race(p, **market_model): the racing
+    engine speaks min-wins, this module speaks max-wins skills
+    throughout, and the negation is owned here so a bare call ranks the
+    favorite highest (a silent convention mix was caught downstream by
+    a sign test; if you supply invert=, supply it max-wins).
     Returns (m_post, v_post_diag, logZ) with logZ the contrast-space
     Gaussian evidence of the observation, for weighting market trust.
     """
@@ -47,7 +51,7 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
         from ..factor.races import abilities_from_race
 
         def invert(p):
-            return abilities_from_race(p, **market_model)
+            return -abilities_from_race(p, **market_model)
     y = np.asarray(invert(np.asarray(p_market, dtype=float)), dtype=float)
     y = y - y.mean()
     tau2 = np.broadcast_to(np.asarray(tau2, dtype=float), (n,)).copy()
