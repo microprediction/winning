@@ -16,9 +16,19 @@ def test_fastmvn_vendored_copy_is_identical():
                     "diverged -- sync deliberately and update both tests")
 
 
-def test_rprobitfast_engine_is_identical_to_mlogitfast():
+def test_rprobitfast_engine_is_prefix_of_mlogitfast():
+    # Conscious divergence (2026-08-28, CRAN prep): engine.R used to be a
+    # FULL copy of mlogit_fast.R, but that shipped a dead, unexported
+    # copy of mlogitfast's interface inside rprobitfast (and drew a CRAN
+    # NOTE for its stray imports). engine.R is now the shared internals
+    # only, and the guard is that it remains an exact PREFIX of
+    # mlogit_fast.R: the engine cannot drift between the two packages,
+    # while the interface tail belongs to mlogitfast alone.
     root = Path(__file__).resolve().parents[1]
     a = (root / "r" / "mlogitfast" / "R" / "mlogit_fast.R").read_text()
     b = (root / "r" / "rprobitfast" / "R" / "engine.R").read_text()
-    assert a == b, ("r/rprobitfast/R/engine.R is a sync-guarded copy of "
-                    "r/mlogitfast/R/mlogit_fast.R; they have diverged")
+    assert len(b) > 3000, "engine.R suspiciously small; sync check void"
+    assert a.startswith(b.rstrip("\n")), (
+        "r/rprobitfast/R/engine.R must be an exact prefix of "
+        "r/mlogitfast/R/mlogit_fast.R (shared engine internals); "
+        "they have diverged -- sync deliberately and update this test")
