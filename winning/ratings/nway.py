@@ -14,6 +14,10 @@ identities are verified against brute-force Monte Carlo in the tests.
 update_winner: the exact N-way update from winner-only data.
 pairwise_update_winner: the classical decomposition (winner beats each
 loser in independent two-player probit updates) for comparison.
+update_winner_correlated / update_order_correlated: the same exact
+moments when participants share performance factors (V loadings), by
+posterior-weighted mixture over factor nodes; both return logZ for
+evidence and model comparison.
 """
 
 from __future__ import annotations
@@ -111,9 +115,12 @@ def update_ranking(m, v, order, beta2=1.0):
     likelihood, measured unbiased where this stagewise shortcut was 3x
     off; the stagewise decomposition stays exact under Gumbel only
     (Plackett-Luce; winning.likelihood.ranking_loglik_and_score). On the
-    MOMENT-UPDATE side, update_ranking_exact (below) is the
-    shared-realization-correct member for independent skills; its
-    factor-correlated mixture is the remaining follow-up."""
+    MOMENT-UPDATE side the ladder is now complete:
+    update_ranking_exact (below) is the shared-realization-correct
+    member for independent skills, and update_winner_correlated /
+    update_order_correlated are its factor-correlated mixtures,
+    MC-posterior-verified. Use this stagewise function only for speed
+    on independent worlds, knowing what it costs."""
     m = np.asarray(m, dtype=float).copy()
     v = np.asarray(v, dtype=float).copy()
     order = list(order)
@@ -250,3 +257,90 @@ def order_loglik(m, sd, order, L=2001):
     m = np.asarray(m, dtype=float)
     sd = np.asarray(sd, dtype=float)
     return _order_pass(m, sd, np.asarray(order, dtype=int), L=L)
+
+
+def _factor_grid(r, Qf=7):
+    """Nodes over the shared factors: GH tensor for r <= 2, Sobol past."""
+    from ..likelihood import _factor_nodes
+    return _factor_nodes(r, Qf=Qf)
+
+
+def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3):
+    """Shared engine of the correlated updates. For Gaussian priors,
+    E[s_j | event] = m_j + v_j d log P / d m_j and
+    Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for ANY
+    event; with shared factors, log P is the log-mixture of conditional
+    event probabilities over factor nodes, its gradient the posterior-
+    node-weighted average of conditional gradients, and the diagonal
+    curvature comes from central differences of that mixture gradient
+    (matching update_winner / update_ranking_exact's treatment)."""
+    m = np.asarray(m, dtype=float)
+    v = np.asarray(v, dtype=float)
+    V = np.atleast_2d(np.asarray(V, dtype=float))
+    if V.shape[0] != len(m):
+        V = V.T
+    F, W = _factor_grid(V.shape[1], Qf=Qf)
+    logW = np.log(W)
+    shifts = F @ V.T                                  # (Q, n)
+
+    def mixture(mm):
+        logps = np.empty(len(F))
+        grads = np.empty((len(F), len(mm)))
+        for q in range(len(F)):
+            lp, g = node_logp_grad(mm + shifts[q])
+            logps[q] = lp
+            grads[q] = g
+        a = logW + logps
+        astar = a.max()
+        if not np.isfinite(astar):
+            return np.zeros(len(mm)), -np.inf
+        pw = np.exp(a - astar)
+        logZ = astar + np.log(pw.sum())
+        omega = pw / pw.sum()
+        return omega @ grads, logZ
+
+    G, logZ = mixture(m)
+    m_new = m + v * G
+    d2 = np.empty(len(m))
+    for j in range(len(m)):
+        ej = np.zeros(len(m)); ej[j] = eps
+        gp, _ = mixture(m + ej)
+        gm, _ = mixture(m - ej)
+        d2[j] = (gp[j] - gm[j]) / (2 * eps)
+    v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
+    return m_new, v_new, float(logZ)
+
+
+def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3):
+    """Exact-moment posterior update from `winner` won, when participants
+    share performance factors: X_j = s_j + (V f)_j + noise_j,
+    f ~ N(0, I_r), noise_j ~ N(0, beta2_j), s_j ~ N(m_j, v_j) (max-wins,
+    matching this module throughout). Conditional on f the race is the
+    independent one update_winner serves; the update mixes those
+    conditionals with posterior node weights. Returns
+    (m_post, v_post, logZ) with logZ = log P(winner) for evidence and
+    model comparison. Verified against rejection-sampled Monte Carlo
+    posteriors in the tests."""
+    D = np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float)
+
+    def node(mm):
+        g, p = _grad_logp_row(mm, D, winner)
+        return np.log(max(p, 1e-300)), g
+
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps)
+
+
+def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3):
+    """The shared-realization-correct full-order update with factor
+    correlation: the factor mixture of update_ranking_exact, closing the
+    open item recorded in update_ranking's caveat. order lists players
+    first to last finisher (max-wins). Returns (m_post, v_post, logZ),
+    logZ = log P(order). Near-impossible orders degrade like
+    order_loglik (finite moments, tiny logZ), never raise."""
+    sd = np.sqrt(np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float))
+    order = np.asarray(order, dtype=int)
+
+    def node(mm):
+        return _order_pass(mm, sd, order)
+
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps)
