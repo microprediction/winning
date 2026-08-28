@@ -237,7 +237,12 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     resid <- log(pmax(phat, 1e-300)) - logt
     if (max(abs(resid)) < tol) break
     dlogp <- pmin(sl / pmax(phat, 1e-300), -1e-6)
-    mu <- mu - pmin(pmax(alpha * resid / dlogp, -2), 2)
+    # residual-proportional step cap: a near-certain winner's residual
+    # and own-slope both vanish and their noisy ratio destabilizes the
+    # recentered fixed point (heavy-favorite targets 1e-4..1e-8 stalled;
+    # capped they converge in a handful of iterations)
+    lim <- pmin(2, 10 * abs(resid))
+    mu <- mu - pmin(pmax(alpha * resid / dlogp, -lim), lim)
     mu <- mu - mean(mu)
   }
   mu

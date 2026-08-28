@@ -166,7 +166,10 @@ export function abilitiesFromRace(pTarget, opts = {}) {
     if (Math.max(...resid.map(Math.abs)) < tol) break;
     mu = mu.map((m, i) => {
       const dlogp = Math.min(sl[i] / Math.max(phat[i], 1e-300), -1e-6);
-      return m - Math.min(Math.max(alpha * resid[i] / dlogp, -2), 2);
+      // residual-proportional step cap (heavy-favorite stall fix,
+      // mirrored from the python engine)
+      const lim = Math.min(2, 10 * Math.abs(resid[i]));
+      return m - Math.min(Math.max(alpha * resid[i] / dlogp, -lim), lim);
     });
     const mm = mean(mu);
     mu = mu.map(v => v - mm);

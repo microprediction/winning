@@ -222,3 +222,22 @@ def test_from_linkage_floors_negative_cophenetic_correlation():
     assert implied.max() <= 1.0 + 1e-12
     assert implied.min() >= -1e-12
     assert np.linalg.eigvalsh(implied).min() > -1e-10
+
+
+def test_heavy_favorite_inversion_converges():
+    # the dominance-window stall: a near-certain winner's residual and
+    # own-slope both vanish, and their noisy ratio destabilized the
+    # damped fixed point through the recentering (stalled at 0.31 max
+    # log-residual for targets in the 1e-4..1e-8 window, any n >= 4;
+    # the residual-proportional step cap converges these in 4-6
+    # iterations). Round trips must hold across the whole window.
+    import numpy as np
+    from winning import race_probabilities
+    from winning.factor.races import abilities_from_race
+    for n in (4, 8, 20):
+        for tiny in (1e-4, 1e-6, 1e-8, 1e-10):
+            p = np.full(n, tiny)
+            p[0] = 1 - (n - 1) * tiny
+            mu = abilities_from_race(p / p.sum())
+            p2 = race_probabilities(mu)
+            assert np.abs(np.log(p2) - np.log(p / p.sum())).max() < 1e-6

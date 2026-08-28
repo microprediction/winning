@@ -313,7 +313,15 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         if np.abs(resid).max() < tol:
             break
         dlogp = np.minimum(sl / np.maximum(phat, 1e-300), -1e-6)
-        mu = mu - np.clip(alpha * resid / dlogp, -2.0, 2.0)
+        # residual-proportional step cap: a near-certain winner has
+        # residual AND own-slope both vanishing, and their ratio is an
+        # O(0.1) noise step that recentering sloshes into every other
+        # coordinate (measured: heavy-favorite targets in the 1e-4..1e-8
+        # window stalled at 200 iterations; capped, they converge in
+        # 4-6). No coordinate moves much further than its own residual
+        # warrants.
+        lim = np.minimum(2.0, 10.0 * np.abs(resid))
+        mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
     return mu
 
@@ -346,7 +354,8 @@ def _abilities_from_structure(p, structure, points=257, n_iter=120,
         ps, ss = race_probabilities(mu, D=totvar, points=points,
                                     return_slopes=True)
         dlogp = np.minimum(ss / np.maximum(ps, 1e-300), -1e-6)
-        mu = mu - np.clip(alpha * resid / dlogp, -2.0, 2.0)
+        lim = np.minimum(2.0, 10.0 * np.abs(resid))
+        mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
     return mu
 
