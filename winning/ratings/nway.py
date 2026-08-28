@@ -31,15 +31,22 @@ _F1 = np.zeros((1, 1))
 _W1 = np.ones(1)
 
 
-def _grad_logp_row(m, D, i):
-    """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP."""
+def _grad_logp_row(m, D, i, V=None, F=None, W=None):
+    """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP.
+
+    With V/F/W supplied, the mixture over the factor nodes is computed
+    by the engine's shared field in ONE vectorized pass -- the same
+    mixture a per-node python loop assembles at 30-100x the cost (the
+    full-covariance updates lean on this)."""
     n = len(m)
-    Vz = np.zeros((n, 1))
+    Vz = np.zeros((n, 1)) if V is None else V
+    Fz = _F1 if F is None else F
+    Wz = _W1 if W is None else W
     a = -np.asarray(m, dtype=float)
-    p = win_probabilities_factor(a, Vz, D, _F1, _W1)
+    p = win_probabilities_factor(a, Vz, D, Fz, Wz)
     e = np.zeros(n)
     e[i] = 1.0
-    Ji = jacobian_vector_product(a, Vz, D, _F1, _W1, e, form="grid")
+    Ji = jacobian_vector_product(a, Vz, D, Fz, Wz, e, form="grid")
     return -Ji / max(p[i], 1e-300), p[i]
 
 

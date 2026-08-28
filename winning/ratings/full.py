@@ -104,21 +104,59 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=12,
     return m_new, S_new, float(logZ)
 
 
-def update_winner_full(m, S, winner, V=None, beta2=1.0, nodes_log2=12,
-                       eps=1e-3):
+def update_winner_full(m, S, winner, V=None, beta2=1.0, nodes_log2=10,
+                       eps=1e-3, points=801):
     """Winner observation against a full-covariance belief N(m, S)
     (max-wins). V: optional shared performance factors on top of the
     belief correlation; beta2: idiosyncratic performance noise (scalar
-    or per-participant). Returns (m_post, S_post, logZ)."""
+    or per-participant). Returns (m_post, S_post, logZ).
+
+    Fast path (bandits profiling: the per-node python loop cost 15-18 s
+    at nodes_log2=12): the mixture over augmented factor nodes IS a
+    factor race, so log P and its gradient row come from ONE vectorized
+    shared-field pass (win_probabilities_factor + a JVP), and the full
+    Hessian from 2n more passes. Measured frontier (m=5, r=1, against a
+    2^13/3001 reference): defaults 2^10/801 = 1.6 s at 1.7e-3 moment
+    error; online recipe nodes_log2=8, points=401 = 0.29 s at 2.4e-3;
+    high accuracy 2^12/801 = 6.4 s at 2e-4."""
+    m = np.asarray(m, dtype=float)
+    S = np.asarray(S, dtype=float)
     n = len(m)
     D = np.broadcast_to(np.asarray(beta2, dtype=float), (n,)).astype(float)
+    L = np.linalg.cholesky(_psd_repair(S))
+    if V is None:
+        Vaug = L
+    else:
+        Vv = np.atleast_2d(np.asarray(V, dtype=float))
+        if Vv.shape[0] != n:
+            Vv = Vv.T
+        Vaug = np.hstack([L, Vv])
+    F, W = _augmented_nodes(Vaug.shape[1], nodes_log2)
 
-    def node(mm):
-        g, p = _grad_logp_row(mm, D, winner)
-        return np.log(max(p, 1e-300)), g
+    from ..factor.core import (jacobian_vector_product,
+                               win_probabilities_factor)
+    e = np.zeros(n)
+    e[winner] = 1.0
 
-    return _mixture_update_full(m, S, V, beta2, node,
-                                nodes_log2=nodes_log2, eps=eps)
+    def grad_logZ(mm):
+        a = -mm
+        p = win_probabilities_factor(a, Vaug, D, F, W)
+        Ji = jacobian_vector_product(a, Vaug, D, F, W, e, form="grid",
+                                     points=points)
+        pi = max(p[winner], 1e-300)
+        return -Ji / pi, float(np.log(pi))
+
+    G, logZ = grad_logZ(m)
+    m_new = m + S @ G
+    H = np.empty((n, n))
+    for j in range(n):
+        ej = np.zeros(n); ej[j] = eps
+        gp, _ = grad_logZ(m + ej)
+        gm, _ = grad_logZ(m - ej)
+        H[j] = (gp - gm) / (2 * eps)
+    H = 0.5 * (H + H.T)
+    S_new = _psd_repair(S + S @ H @ S)
+    return m_new, S_new, float(logZ)
 
 
 def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=12,
