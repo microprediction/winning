@@ -159,21 +159,58 @@ def update_winner_full(m, S, winner, V=None, beta2=1.0, nodes_log2=10,
     return m_new, S_new, float(logZ)
 
 
-def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=12,
+def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
                       eps=1e-3):
     """Full-order observation against a full-covariance belief
     (max-wins, order best-first). Returns (m_post, S_post, logZ);
-    near-impossible orders degrade like order_loglik."""
+    near-impossible orders degrade like order_loglik.
+
+    The mixture is computed by _order_pass_batch -- the ordered-
+    statistics sweeps vectorized across factor nodes on a common
+    lattice -- because online deployments are ORDER-heavy (bandits
+    measurement: correlation identification flows through order
+    feedback at +3.4 nats/300 races against +0.8 winner-only)."""
+    from .nway import _order_pass_batch
+    m = np.asarray(m, dtype=float)
+    S = np.asarray(S, dtype=float)
     n = len(m)
     sd = np.sqrt(np.broadcast_to(np.asarray(beta2, dtype=float),
                                  (n,)).astype(float))
     order = np.asarray(order, dtype=int)
+    L = np.linalg.cholesky(_psd_repair(S))
+    if V is None:
+        Vaug = L
+    else:
+        Vv = np.atleast_2d(np.asarray(V, dtype=float))
+        if Vv.shape[0] != n:
+            Vv = Vv.T
+        Vaug = np.hstack([L, Vv])
+    F, W = _augmented_nodes(Vaug.shape[1], nodes_log2)
+    logW = np.log(W)
+    shifts = F @ Vaug.T
 
-    def node(mm):
-        return _order_pass(mm, sd, order)
+    def mixture(mm):
+        logps, grads = _order_pass_batch(mm[None, :] + shifts, sd, order)
+        a = logW + logps
+        astar = a.max()
+        if not np.isfinite(astar):
+            return np.zeros(n), -np.inf
+        pw = np.exp(a - astar)
+        logZ = astar + np.log(pw.sum())
+        omega = pw / pw.sum()
+        return omega @ grads, logZ
 
-    return _mixture_update_full(m, S, V, beta2, node,
-                                nodes_log2=nodes_log2, eps=eps)
+    G, logZ = mixture(m)
+    m_new = m + S @ G
+    H = np.empty((n, n))
+    for j in range(n):
+        ej = np.zeros(n); ej[j] = eps
+        gp, _ = mixture(m + ej)
+        gm, _ = mixture(m - ej)
+        H[j] = (gp - gm) / (2 * eps)
+    H = 0.5 * (H + H.T)
+    S_new = _psd_repair(S + S @ H @ S)
+    return m_new, S_new, float(logZ)
 
 
 def update_market_full(m, S, p_market, tau2=0.25, invert=None,

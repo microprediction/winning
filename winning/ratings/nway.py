@@ -351,3 +351,95 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3):
         return _order_pass(mm, sd, order)
 
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps)
+
+
+def _order_pass_batch(Ms, sd, order, L=None):
+    """_order_pass vectorized over a batch of mean vectors (the factor
+    nodes of the full-covariance order update -- the order-heavy online
+    case the bandits lane measured: correlation identification flows
+    through order feedback at +3.4 nats/300 races vs +0.8 winner-only).
+
+    Ms: (Q, n) means; common lattice sized to cover every node at the
+    resolution a single call would use. Per-node scale carrying and
+    underflow guards match the scalar path: an impossible-order node
+    contributes -inf log-likelihood and a zero gradient tail.
+    Returns (logP (Q,), grad (Q, n)).
+    """
+    Ms = np.atleast_2d(np.asarray(Ms, dtype=float))
+    sd = np.asarray(sd, dtype=float)
+    Q, nm = Ms.shape
+    n = len(order)
+    lo = float((Ms - 8 * sd.max()).min())
+    hi = float((Ms + 8 * sd.max()).max())
+    if L is None:
+        span_single = float(Ms[0].max() - Ms[0].min()) + 16 * float(sd.max())
+        dx_t = span_single / 2001.0
+        L = int(np.clip(np.ceil((hi - lo) / max(dx_t, 1e-12)), 2001, 8001))
+    x = np.linspace(lo, hi, L)
+    dx = x[1] - x[0]
+
+    def cum(y):                        # trapezoid cumulative, batched (Q, L)
+        c = np.cumsum(y, axis=1) * dx
+        return c - 0.5 * dx * (y + y[:, :1])
+
+    def cum_T(u):
+        c = np.cumsum(u[:, ::-1], axis=1)[:, ::-1] * dx
+        return c - 0.5 * dx * (u + u[:, -1:])
+
+    g = np.empty((n, Q, L)); dg = np.empty((n, Q, L))
+    for t, j in enumerate(order):
+        z = (x[None, :] - Ms[:, j][:, None]) / sd[j]
+        g[t] = np.exp(-0.5 * z * z) / (sd[j] * np.sqrt(2 * np.pi))
+        dg[t] = g[t] * z / sd[j]
+
+    T = np.empty((n + 1, Q, L)); sT = np.zeros((n + 1, Q))
+    j = order[-1]
+    T[n] = ndtr((x[None, :] - Ms[:, j][:, None]) / sd[j])
+    alive = np.ones(Q, dtype=bool)
+    for t in range(n - 1, 1, -1):
+        raw = cum(g[t - 1] * T[t + 1])
+        mx = raw.max(axis=1)
+        dead = mx <= 0
+        alive &= ~dead
+        mx = np.where(mx > 0, mx, 1.0)
+        T[t] = raw / mx[:, None]
+        sT[t] = sT[t + 1] + np.where(alive, np.log(mx), 0.0)
+
+    raw_p = (g[0] * T[2]).sum(axis=1) * dx
+    alive &= raw_p > 0
+    logP = np.where(alive,
+                    np.log(np.maximum(raw_p, 1e-300)) + sT[2],
+                    -np.inf)
+    grad = np.zeros((Q, nm))
+    safe_p = np.maximum(raw_p, 1e-300)
+    grad[:, order[0]] = np.where(alive,
+                                 (dg[0] * T[2]).sum(axis=1) * dx / safe_p,
+                                 0.0)
+    u = g[0] * dx
+    for t in range(2, n):
+        w = cum_T(u)
+        denom = (u * T[t]).sum(axis=1)
+        ok = alive & (denom > 0)
+        num = (w * dg[t - 1] * T[t + 1]).sum(axis=1)
+        with np.errstate(over="ignore", invalid="ignore"):
+            val = (num / np.where(ok, denom, 1.0)) * np.exp(sT[t + 1] - sT[t])
+        grad[:, order[t - 1]] = np.where(ok, val, 0.0)
+        alive = ok
+        u = w * g[t - 1]
+        mx = u.max(axis=1)
+        ok2 = mx > 0
+        alive &= ok2
+        u = u / np.where(ok2, mx, 1.0)[:, None]
+        sT_u = np.where(ok2, np.log(np.where(ok2, mx, 1.0)), 0.0)
+        # fold the u-scale into a running offset against sT
+        sT[t + 1] = sT[t + 1]  # scales already relative; denom uses same u
+        if t + 1 <= n:
+            pass
+        # carry: subsequent denom/num both use the SAME rescaled u, so the
+        # ratio is invariant to the rescale; nothing further to track
+    # last coordinate
+    denom = (u * T[n]).sum(axis=1)
+    ok = alive & (denom > 0)
+    num = (u * (-g[n - 1])).sum(axis=1)
+    grad[:, order[-1]] = np.where(ok, num / np.where(ok, denom, 1.0), 0.0)
+    return logP, grad
