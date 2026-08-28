@@ -98,7 +98,17 @@ def update_ranking(m, v, order, beta2=1.0):
     Reference TrueSkill respects that shared structure and beats this
     update on full rankings (RMSE 0.085 vs 0.310 at 1500 races), while the
     exact winner update dominates on winner-only data (0.331 vs 0.815).
-    Exact ranked-race moments with shared noise are the open item."""
+
+    The same defect biases STRUCTURE LEARNING, and the bias is measured
+    (bandits repo, family-vs-outsider world, 2026-08-28): learning a
+    correlation scale by gradient ascent on stagewise-decomposed rankings
+    under the Gaussian base inflates it three-fold (s_hat 1.53 +/- 0.36
+    against 0.56 +/- 0.05 from winner-only events on the same data) --
+    the shared realization across stages masquerades as factor
+    correlation. Stagewise is exact under the Gumbel base only (IIA);
+    Gaussian-base pipelines should consume winner-only or
+    top-1-of-subset events until exact ranked-race moments with shared
+    noise exist. That remains the open item."""
     m = np.asarray(m, dtype=float).copy()
     v = np.asarray(v, dtype=float).copy()
     order = list(order)
