@@ -105,10 +105,15 @@ def update_ranking(m, v, order, beta2=1.0):
     under the Gaussian base inflates it three-fold (s_hat 1.53 +/- 0.36
     against 0.56 +/- 0.05 from winner-only events on the same data) --
     the shared realization across stages masquerades as factor
-    correlation. Stagewise is exact under the Gumbel base only (IIA);
-    Gaussian-base pipelines should consume winner-only or
-    top-1-of-subset events until exact ranked-race moments with shared
-    noise exist. That remains the open item."""
+    correlation. Stagewise is exact under the Gumbel base only (IIA).
+    For the LIKELIHOOD the fix now exists: order_loglik (this module)
+    mixed over Gaussian factor nodes is the exact correlated ranking
+    likelihood, measured unbiased where this stagewise shortcut was 3x
+    off; the stagewise decomposition stays exact under Gumbel only
+    (Plackett-Luce; winning.likelihood.ranking_loglik_and_score). On the
+    MOMENT-UPDATE side, update_ranking_exact (below) is the
+    shared-realization-correct member for independent skills; its
+    factor-correlated mixture is the remaining follow-up."""
     m = np.asarray(m, dtype=float).copy()
     v = np.asarray(v, dtype=float).copy()
     order = list(order)
@@ -213,3 +218,27 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3):
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new
+
+
+def order_loglik(m, sd, order, L=2001):
+    """Exact log-likelihood of a full finishing order for INDEPENDENT
+    Gaussian performances, with its exact gradient in m: the public face
+    of the ordered-statistics pass (one forward and one adjoint sweep,
+    O(nL); explicit stage log-scales keep 20-player orders accurate).
+
+    Promoted to official API because it is load-bearing downstream:
+    mixed over Gaussian factor nodes it IS the exact correlated ranking
+    likelihood -- sum_q w_q exp(order_loglik(m + F_q @ V.T, sqrt(D),
+    order)) -- which measured UNBIASED for structure learning where the
+    Harville/stagewise shortcut inflated the learned correlation
+    threefold (bandits repo, exact_scale_map: s_hat 0.65 +/- 0.35
+    against stagewise 1.53 +/- 0.36 and winner-only 0.24 +/- 0.49 at
+    200 ranked races -- rankings consumed exactly are worth about ten
+    winner-only races each). Min-wins: order lists indices from first
+    (smallest performance) to last.
+
+    Returns (loglik, dlogp_dm).
+    """
+    m = np.asarray(m, dtype=float)
+    sd = np.asarray(sd, dtype=float)
+    return _order_pass(m, sd, np.asarray(order, dtype=int), L=L)
