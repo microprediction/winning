@@ -73,3 +73,26 @@ def test_mixed_pl_matches_conditional_average():
     for q in range(len(F)):
         ref += W[q] * np.exp(harville_order_logprob(mu + F[q] @ V.T, order))
     assert abs(np.exp(lp) - ref) < 1e-14
+
+
+def test_place_sums_exact_under_near_certain_favorite():
+    # gap-stress catch: 1 - p_fav computed by subtraction lost three
+    # digits at p_fav = 1 - 1e-13 and the identity sum(top-k) = k
+    # drifted to k + 3e-3; complements are now sums of the others
+    p = np.array([1 - 1e-13, 3e-14, 3e-14, 4e-14])
+    for k in (2, 3):
+        out = harville_place_probabilities(p, k=k)
+        assert abs(out.sum() - k) < 1e-9
+        assert (out <= 1 + 1e-12).all()
+    # and the deeper variant: two large entries exhausting the field
+    # (denom2 cancellation), plus a 300-field fuzz of extreme spreads
+    p2 = np.array([0.7, 0.3 - 4e-15, 1e-15, 1e-15, 1e-15, 1e-15])
+    p2 = p2 / p2.sum()
+    assert abs(harville_place_probabilities(p2, 3).sum() - 3) < 1e-9
+    rng = np.random.default_rng(0)
+    for _ in range(50):
+        n = int(rng.integers(3, 12))
+        logp = rng.normal(size=n) * rng.uniform(1, 15)
+        q = np.exp(logp - logp.max()); q /= q.sum()
+        for k in (2, 3):
+            assert abs(harville_place_probabilities(q, k).sum() - k) < 1e-8

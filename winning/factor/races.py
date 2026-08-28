@@ -598,9 +598,13 @@ def harville_place_probabilities(p, k=3):
     if k == 1:
         return p.copy()
     out = p.copy()
-    # second place: j first, i second -- P2[j, i] = p_j p_i / (1 - p_j)
-    denom1 = np.maximum(1.0 - p, 1e-300)
-    P2 = (p / denom1)[:, None] * p[None, :]
+    # the complement 1 - p_j is computed as the SUM OF THE OTHERS, never
+    # by subtraction from one: at p_fav = 1 - 1e-13 the subtraction loses
+    # three digits to cancellation and the exact identity sum(top-k) = k
+    # drifted to k + 3e-3 (caught by the gap-stress battery)
+    rest = np.array([p[np.arange(n) != j].sum() for j in range(n)])
+    # second place: j first, i second -- P2[j, i] = p_j p_i / rest_j
+    P2 = (p / np.maximum(rest, 1e-300))[:, None] * p[None, :]
     np.fill_diagonal(P2, 0.0)
     out += P2.sum(axis=0)
     if k == 2:
@@ -610,12 +614,20 @@ def harville_place_probabilities(p, k=3):
     # third place: j first, l second, i third
     for j in range(n):
         pj = p[j]
-        rem1 = 1.0 - pj
+        rem1 = rest[j]
         for l in range(n):
             if l == j:
                 continue
             w = pj * p[l] / max(rem1, 1e-300)
-            denom2 = max(rem1 - p[l], 1e-300)
+            denom2 = rem1 - p[l]
+            if denom2 < 1e-8 * rem1:
+                # same cancellation one level deeper (two large entries
+                # exhausting the field): recompute as the sum of the
+                # actual remaining entries, exactly
+                mask = np.ones(n, dtype=bool)
+                mask[j] = mask[l] = False
+                denom2 = p[mask].sum()
+            denom2 = max(denom2, 1e-300)
             contrib = w * p / denom2
             contrib[j] = 0.0
             contrib[l] = 0.0
