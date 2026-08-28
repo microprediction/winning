@@ -532,6 +532,88 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
     return W @ P
 
 
+def harville_order_logprob(mu, order, temperature=1.0, V=None, F=None,
+                           W=None):
+    """log P(full finishing order) under (mixed) Plackett--Luce: Harville's
+    formula, the stagewise winner-of-remaining product that is EXACT for
+    the Gumbel base (IIA) and only there.
+
+    Min-wins: stage t contributes z_{o_t} - logsumexp(z_{o_t:}) with
+    z = -mu/tau. With factor loadings V and nodes (F, W) the result is
+    the mixed Plackett--Luce likelihood log sum_q w_q P(order | f_q),
+    each conditional closed form: the safe way to consume full rankings
+    under correlation (consuming them stagewise under the GAUSSIAN base
+    instead inflates learned correlation threefold; see
+    winning.ratings.nway). Racing lore's Henery and Stern corrections
+    are exactly the non-Gumbel ordering problem, i.e. the still-open
+    shared-noise ranked-moments item.
+    """
+    mu = np.asarray(mu, dtype=float)
+    tau = float(temperature)
+    order = np.asarray(order, dtype=int)
+
+    def _one(z):
+        rest = order.copy()
+        total = 0.0
+        for t in range(len(order) - 1):
+            zr = z[rest]
+            m = zr.max()
+            total += z[rest[0]] - (m + np.log(np.exp(zr - m).sum()))
+            rest = rest[1:]
+        return total
+
+    if V is None:
+        return _one(-mu / tau)
+    V = np.atleast_2d(np.asarray(V, dtype=float))
+    if V.shape[0] != len(mu):
+        V = V.T
+    if F is None or W is None:
+        D_impl = np.full(len(mu), _GUMBEL_UNIT_D * tau * tau)
+        _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
+    logs = np.array([_one(-(mu + np.asarray(F)[q] @ V.T) / tau)
+                     for q in range(len(F))])
+    m = logs.max()
+    return float(m + np.log(np.dot(np.asarray(W), np.exp(logs - m))))
+
+
+def harville_place_probabilities(p, k=3):
+    """P(finish in the top k) for every runner, from win probabilities,
+    by Harville's conditioning: after removing a finisher, the rest
+    renormalize (exact under Luce/Gumbel, the classical racing formula;
+    its known favorite-longshot bias in real place markets is the
+    Gaussian/Gamma ordering effect Henery and Stern model). k in
+    {1, 2, 3} (win, place, show)."""
+    p = np.asarray(p, dtype=float)
+    p = p / p.sum()
+    n = len(p)
+    if k == 1:
+        return p.copy()
+    out = p.copy()
+    # second place: j first, i second -- P2[j, i] = p_j p_i / (1 - p_j)
+    denom1 = np.maximum(1.0 - p, 1e-300)
+    P2 = (p / denom1)[:, None] * p[None, :]
+    np.fill_diagonal(P2, 0.0)
+    out += P2.sum(axis=0)
+    if k == 2:
+        return out
+    if k != 3:
+        raise ValueError("k must be 1, 2 or 3")
+    # third place: j first, l second, i third
+    for j in range(n):
+        pj = p[j]
+        rem1 = 1.0 - pj
+        for l in range(n):
+            if l == j:
+                continue
+            w = pj * p[l] / max(rem1, 1e-300)
+            denom2 = max(rem1 - p[l], 1e-300)
+            contrib = w * p / denom2
+            contrib[j] = 0.0
+            contrib[l] = 0.0
+            out += contrib
+    return out
+
+
 def abilities_from_softmax(p, temperature=1.0):
     """Exact inverse of the independent softmax race: mean-zero mu with
     softmax_probabilities(mu, temperature) = p. Closed form."""

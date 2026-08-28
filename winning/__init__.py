@@ -37,6 +37,8 @@ from .factor import (  # noqa: F401
 )
 from .factor.races import (  # noqa: F401
     abilities_from_softmax,
+    harville_order_logprob,
+    harville_place_probabilities,
     softmax_probabilities,
 )
 from . import probit  # noqa: F401
