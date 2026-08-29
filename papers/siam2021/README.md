@@ -9,8 +9,18 @@ Reproduces the Harville-formula and "rule of a quarter" comparison tables from
 The CSVs here are the published table data and stand on their own.
 
 `comparison_to_harville.py` is preserved exactly as it ran against the 1.x
-package and imports `winning.lattice*` modules that no longer exist in 2.x —
-to execute it, use `pip install winning==1.0.3` (the last published 1.x) in a
-separate environment.
-Porting it to the `thurstone` API is tracked in
+package. **It runs against the current package again** (verified
+2026-08-29): the modules it imports — `winning.lattice` and
+`winning.lattice_calibration` — moved to `winning.classic` but the old
+top-level paths remain as aliases, so every import in the script
+resolves unchanged (it emits a `DeprecationWarning` naming the new
+home). The previous instruction to install `winning==1.0.3` in a
+separate environment is no longer necessary.
+
+The script is a Monte Carlo exotics-pricing demonstration and takes a
+long time to run; the CSVs in this directory are the published table
+data and stand on their own regardless.
+
+Porting the imports to `winning.classic.*` (to drop the deprecation
+warnings) is tracked in
 `planning/thurstone_issues/07-port-winning-tests-as-fixtures.md`.
