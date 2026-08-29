@@ -6,11 +6,31 @@ commit `1aec3bb` (the high-rank tensor fix).
 
 ## Actionable items
 
-1. **The site overstates demonstrated scale.** winning.microprediction.org
-   says the method scales to "millions of variables"; the paper
-   demonstrates 10^4 alternatives at rank 2. Replace with:
-   *"Demonstrated at 10^4 alternatives; linear in N at fixed modest
-   rank."* Conceivable is not demonstrated.
+1. ~~**The site overstates demonstrated scale.**~~ **RETRACTED by the
+   auditor, and correctly so.** The audit conflated the factor-probit
+   paper's headline full-INVERSION benchmark at N = 10^4 with the scale
+   of the forward engines, which is pinned and seeded in this repo:
+   `bench.py scale` prices all N at 10^4 / 10^5 / 10^6 in 0.18 s /
+   2.7 s / 29 s (rank-one factor), and `bench.py tenmillion` prices
+   N = 10^7 under the block grammar (10^4 clusters, 257-point lattice)
+   in 244.9 s at roughly 5 GB. Committed experiments, not O(N)
+   extrapolations; CLAIMS.md item 1 records the run. The site's
+   "scales to millions of variables" is therefore justified.
+
+   The distinction that IS worth stating is operation-by-operation,
+   not a blanket scale limit:
+   - forward block-field pricing: demonstrated at 10^7;
+   - forward rank-one factor pricing: demonstrated at 10^6;
+   - full rank-two factor-probit INVERSION: demonstrated at 10^4 in
+     under a minute;
+   - arbitrary dense covariance: a different claim entirely, since it
+     first requires fitting/compressing into one of the scalable
+     grammars.
+
+   (Process note: this session edited the site to the audit's weaker
+   wording before checking the repo's own pinned evidence, then
+   reverted. Check CLAIMS.md before believing an external claim about
+   what this repo has measured.)
 2. **CI is red on Ruff** even though functional tests pass across
    Linux/macOS/Windows and Python 3.10-3.13.
 3. **Abstract undersells the object.** Lead with counterfactual
