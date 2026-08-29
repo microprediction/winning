@@ -106,7 +106,6 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     mu_o, sd_o, V_o, c_o = mu[order], sd[order], V[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
     nodes, w = _cluster_nodes(r, qa)
-    Q = len(nodes)
     if _HAVE_RUST and hasattr(_fastrace, "block_race_r"):
         tot_r = np.sqrt(sd_o ** 2 + (V_o ** 2).sum(1))
         lo_r, hi_r = _bulk_lo_hi(mu_o, tot_r)
@@ -157,7 +156,6 @@ def _block_max(mu, sd, cluster, v, points, qa):
     if _HAVE_RUST:
         tot_r = np.sqrt(sd_o ** 2 + v_o ** 2)
         lo_r, hi_r = _bulk_lo_hi(mu_o, tot_r)
-        kw = {}
         try:
             p_o = np.asarray(_fastrace.block_race(
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
@@ -384,12 +382,9 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     G = np.empty((nT, points))
     G[:nC] = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))
     children = [[] for _ in range(nT)]
-    root = -1
     for t in range(nT):
         if parent[t] >= 0:
             children[parent[t]].append(t)
-        else:
-            root = t
     shift_eval = lambda g, delta: np.interp(x, x - delta, g, left=g[0], right=g[-1])
     for t in sorted(range(nC, nT), key=lambda u: -depth_shift[u]):
         acc = np.zeros(points)

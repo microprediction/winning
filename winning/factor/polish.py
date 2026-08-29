@@ -62,8 +62,6 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
         P2 = np.exp(np.clip(logf - logS, -745.0, 40.0))
         for q in range(P1.shape[0]):
             J += Wc[q] * (P1[q] @ P2[q].T) * dx
-    total = race_probabilities(np.asarray(mu, float), V=V, D=D, F=F, W=W,
-                               base=base, points=points)
     # J currently holds the off-diagonal integrals (its diagonal entries are
     # int f_i^2 e^{L - 2 logS_i}, which are NOT dp_i/dmu_i): overwrite the
     # diagonal from the zero-row-sum identity, then normalise as p is.

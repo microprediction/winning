@@ -662,22 +662,22 @@ def harville_place_probabilities(p, k=3):
     for j in range(n):
         pj = p[j]
         rem1 = rest[j]
-        for l in range(n):
-            if l == j:
+        for sec in range(n):
+            if sec == j:
                 continue
-            w = pj * p[l] / max(rem1, 1e-300)
-            denom2 = rem1 - p[l]
+            w = pj * p[sec] / max(rem1, 1e-300)
+            denom2 = rem1 - p[sec]
             if denom2 < 1e-8 * rem1:
                 # same cancellation one level deeper (two large entries
                 # exhausting the field): recompute as the sum of the
                 # actual remaining entries, exactly
                 mask = np.ones(n, dtype=bool)
-                mask[j] = mask[l] = False
+                mask[j] = mask[sec] = False
                 denom2 = p[mask].sum()
             denom2 = max(denom2, 1e-300)
             contrib = w * p / denom2
             contrib[j] = 0.0
-            contrib[l] = 0.0
+            contrib[sec] = 0.0
             out += contrib
     return out
 

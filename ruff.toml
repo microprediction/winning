@@ -1,6 +1,15 @@
 # Pin the lint contract so local and CI agree regardless of ruff version.
 [lint]
 select = ["E4", "E7", "E9", "F"]
+# House style, deliberate throughout the numerical kernels:
+#   E702  paired assignments on one line keep tightly-coupled lattice
+#         bookkeeping visually adjacent
+#   E731  named lambdas for one-line mathematical maps read closer to
+#         the formula they implement than a def would
+# Everything else stays on: enabling this contract caught three dead
+# locals (one an entire wasted race pass inside race_jacobian) and an
+# ambiguous `l`.
+ignore = ["E702", "E731"]
 
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]
