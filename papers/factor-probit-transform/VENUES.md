@@ -5,8 +5,16 @@
 - **JCGS** (Journal of Computational and Graphical Statistics) — target.
   Submission build is `scalable-share-calibration-jcgs.pdf` (double-spaced; regenerate by flipping \jcgsfalse to \jcgstrue in the main tex, three pdflatex passes), supplement is
   `supplement_v1.1.0.zip`.
-- **SSRN** — preprint of `scalable-share-calibration.pdf`. JCGS permits preprint posting of the
-  author's original manuscript.
+- **SSRN** — preprint of `scalable-share-calibration.pdf`, abstract id
+  7307363, **doi:10.2139/ssrn.7307363** (registered in Crossref; cite
+  this as the method reference, e.g. the `mvtnormfast` DESCRIPTION
+  does). JCGS permits preprint posting of the author's original
+  manuscript.
+  - *Open:* SSRN shows **0 references** for the record although the
+    manuscript carries 109 `\bibitem`s under a standard "References"
+    heading that `pdftotext` extracts cleanly. Most likely the posted
+    PDF is stale — the same staleness that had the JCGS build seven
+    commits behind. Re-upload the current build and recheck.
 
 ## Fallbacks worth considering
 

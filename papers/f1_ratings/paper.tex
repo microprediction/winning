@@ -4,6 +4,7 @@
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{microtype}
+\usepackage[round,authoryear]{natbib}
 \usepackage{tikz}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
@@ -21,7 +22,9 @@ is ability plus normal or logistic noise. We present a setting where the
 assumption is visibly false and measurably costly: Formula 1, where for
 decades the most likely outcome of starting a race was not finishing it. A
 lattice-based Thurstonian rater that accepts arbitrary noise densities
-outperforms TrueSkill, Elo, Glicko-2 and OpenSkill over 1{,}158 races, and
+outperforms TrueSkill \citep{herbrich2007}, Elo \citep{elo1978},
+Glicko-2 \citep{glickman2012} and OpenSkill \citep{weng2011} over
+1{,}158 races, and
 replacing its normal noise with a two-component density, a Gaussian pace
 term plus a separated block of slow mass representing retirement, improves
 every metric. Estimating the block's mass from the trailing retirement rate
@@ -33,9 +36,9 @@ gain is attributable to the block, not to non-normality in general.
 
 Nearly every rating system in use rests on the same distributional
 convention. A competitor's performance in a contest is modeled as a skill
-parameter plus noise, and the noise is normal (Thurstone, TrueSkill, the
-Thurstone--Mosteller systems) or logistic or Gumbel (Elo, Glicko,
-Bradley--Terry, Plackett--Luce). The convention is so uniform that it is
+parameter plus noise, and the noise is normal \citep{thurstone1927,
+mosteller1951, herbrich2007} or logistic or Gumbel \citep{elo1978,
+glickman1999, bradley1952, luce1959, plackett1975}. The convention is so uniform that it is
 rarely stated as an assumption. This paper is about what happens when it is
 false, and about how much can be gained by replacing it, in a setting where
 the truth is not subtle.
@@ -275,6 +278,41 @@ Section 3, and the scripts \texttt{research/f1\_dirac\_disaster.py},
 and \texttt{research/f1\_market\_test.py} for Sections 4 and 5. Race data
 is fetched at run time from f1db (CC-BY-4.0). The lattice machinery is the
 \texttt{thurstone} package; the underlying ability transform is described
-in Cotton, \emph{SIAM J.\ Financial Mathematics} 12(1), 2021.
+in \citet{cotton2021}.
+
+\begin{thebibliography}{99}
+\bibitem[Bradley and Terry(1952)]{bradley1952} R.~A. Bradley,
+M.~E. Terry. Rank analysis of incomplete block designs: I. The method
+of paired comparisons. \emph{Biometrika} 39(3/4) (1952) 324--345.
+\bibitem[Cotton(2021)]{cotton2021} P.~Cotton. Inferring relative
+ability from winning probability in multientrant contests.
+\emph{SIAM Journal on Financial Mathematics} 12(1) (2021) 295--317.
+doi:10.1137/19M1276261.
+\bibitem[Elo(1978)]{elo1978} A.~E. Elo. \emph{The Rating of Chessplayers,
+Past and Present}. Arco, New York, 1978.
+\bibitem[Glickman(1999)]{glickman1999} M.~E. Glickman. Parameter
+estimation in large dynamic paired comparison experiments.
+\emph{Journal of the Royal Statistical Society C} 48(3) (1999) 377--394.
+\bibitem[Glickman(2012)]{glickman2012} M.~E. Glickman. Example of the
+Glicko-2 system. Boston University technical note, 2012.
+\bibitem[Herbrich et~al.(2007)Herbrich, Minka, and Graepel]{herbrich2007}
+R.~Herbrich, T.~Minka, T.~Graepel. TrueSkill(TM): a Bayesian skill
+rating system. \emph{Advances in Neural Information Processing Systems}
+19 (2007) 569--576.
+\bibitem[Luce(1959)]{luce1959} R.~D. Luce. \emph{Individual Choice
+Behavior: A Theoretical Analysis}. Wiley, New York, 1959.
+\bibitem[Mosteller(1951)]{mosteller1951} F.~Mosteller. Remarks on the
+method of paired comparisons: I. The least squares solution assuming
+equal standard deviations and equal correlations. \emph{Psychometrika}
+16(1) (1951) 3--9.
+\bibitem[Plackett(1975)]{plackett1975} R.~L. Plackett. The analysis of
+permutations. \emph{Journal of the Royal Statistical Society C} 24(2)
+(1975) 193--202.
+\bibitem[Thurstone(1927)]{thurstone1927} L.~L. Thurstone. A law of
+comparative judgment. \emph{Psychological Review} 34(4) (1927) 273--286.
+\bibitem[Weng and Lin(2011)]{weng2011} R.~C. Weng, C.-J. Lin. A
+Bayesian approximation method for online ranking. \emph{Journal of
+Machine Learning Research} 12 (2011) 267--300.
+\end{thebibliography}
 
 \end{document}

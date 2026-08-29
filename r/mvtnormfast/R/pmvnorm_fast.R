@@ -87,10 +87,10 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 
 #' Fast multivariate normal rectangle probability
 #'
-#' Drop-in for mvtnorm::pmvnorm on the structured slice. Supply V and D
+#' Drop-in for mvtnorm::pmvnorm() on the structured slice. Supply V and D
 #' for the factor representation sigma = VV' + diag(D), or supply sigma
 #' and an exact decomposition is searched for (ranks 1..6); if none
-#' exists the call falls back to mvtnorm::pmvnorm unchanged. The result
+#' exists the call falls back to mvtnorm::pmvnorm() unchanged. The result
 #' carries attr "method" ("factor" or "mvtnorm-fallback").
 pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                          sigma = NULL, V = NULL, D = NULL, ...) {

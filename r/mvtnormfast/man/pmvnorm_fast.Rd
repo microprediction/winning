@@ -9,7 +9,7 @@ univariate normal CDFs: deterministic, no simulation, milliseconds at
 dimensions where general-purpose quadrature needs seconds to minutes.
 Supply \code{V} and \code{D}, or supply \code{sigma} and an exact
 decomposition is searched for; a covariance that is not exactly
-factor-plus-diagonal falls back to \code{mvtnorm::pmvnorm} unchanged.
+factor-plus-diagonal falls back to \code{mvtnorm::pmvnorm()} unchanged.
 }
 \usage{
 pmvnorm_fast(lower = -Inf, upper = Inf, mean = NULL, sigma = NULL,
@@ -22,7 +22,7 @@ pmvnorm_fast(lower = -Inf, upper = Inf, mean = NULL, sigma = NULL,
   \item{sigma}{covariance matrix; used when V and D are not supplied.}
   \item{V}{n-by-r factor loading matrix, so that sigma = VV' + diag(D).}
   \item{D}{length-n positive idiosyncratic variances.}
-  \item{...}{passed to \code{mvtnorm::pmvnorm} on the fallback path.}
+  \item{...}{passed to \code{mvtnorm::pmvnorm()} on the fallback path.}
 }
 \value{
 A single probability. Attribute \code{method} records the path taken:
