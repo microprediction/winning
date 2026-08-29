@@ -12,7 +12,7 @@ index. Paths are repo-relative.
 | GHK cost law n^2.8 points | `bench.py law` |
 | Scale: 0.18 s / 2.7 s / 29 s at 1e4..1e6 | `bench.py scale` |
 | Against-the-field table (Genz, frequency, ME, Clark) | `bench.py alt` |
-| Genz n=200: 4.6 s/probability, agreement to 6 digits | commit ed3f411 snippet; fold into `bench.py` |
+| Genz n=200 single probability: 0.43 s at maxpts=250k, agreement to 4-5 digits (six digits needs multi-second budgets) | `bench.py genz200` (pinned 2026-08-27; supersedes an earlier 4.6 s / six-digit note taken at a different tolerance) |
 | Referee agreement (mvtnorm within own bound; Botev 2.2e-4 at 3e-10; quadrature 1.9e-15; invariance battery) | `referee_cases.py` + `referee.R` + `referee_check.py` |
 | Stress boundaries (tails to 1e-119, round-trip 1e-9, Gumbel=softmax 1e-15, duplicates, JVP 8e-12, sharpness escalation) | `break.py` |
 

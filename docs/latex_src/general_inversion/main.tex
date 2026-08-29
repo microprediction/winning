@@ -553,7 +553,13 @@ The program is the Legendre dual of the social surplus function of
 established territory: \citet{berry1994} inverts market shares in
 logit-family demand, \citet{galichon2022} identify the general random-utility
 inversion with optimal transport, and \citet{chiong2016} compute it by
-linear programming in the discrete case. What the field representation adds
+linear programming in the discrete case. Closest to an algorithm is
+\citet{li2018}, who for arbitrary non-atomic bases writes the inversion
+as an unconstrained convex minimization whose objective gradient is the
+share map, with globally convergent superlinear methods --- the
+formulation and the optimizer, without a fast evaluator of the shares
+and their Jacobian at large $n$. The shared field is that evaluator, so
+the two are complements. What the field representation adds
 is not the convex program but its derivatives: the Hessian is the
 tie-density Laplacian of the same field pass, so gauge-fixed Newton runs
 matrix-free at $O(nLQ)$ per iteration.
@@ -1072,6 +1078,8 @@ A computationally practical simulation estimator for panel data.
 \bibitem[Lerman and Manski(1981)]{lerman1981} S.~Lerman, C.~Manski.
 On the use of simulated frequencies to approximate choice probabilities.
 In \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
+\bibitem[Li(2018)]{li2018} L.~Li. A general method for demand
+inversion. arXiv:1802.04444 (2018).
 \bibitem[Lindgren et al.(2011)]{lindgren2011} F.~Lindgren, H.~Rue,
 J.~Lindstr\"om. An explicit link between Gaussian fields and Gaussian Markov
 random fields. \emph{Journal of the Royal Statistical Society B}
