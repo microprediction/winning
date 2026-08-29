@@ -10,11 +10,26 @@
   this as the method reference, e.g. the `mvtnormfast` DESCRIPTION
   does). JCGS permits preprint posting of the author's original
   manuscript.
-  - *Open:* SSRN shows **0 references** for the record although the
-    manuscript carries 109 `\bibitem`s under a standard "References"
-    heading that `pdftotext` extracts cleanly. Most likely the posted
-    PDF is stale — the same staleness that had the JCGS build seven
-    commits behind. Re-upload the current build and recheck.
+  - *Open (confirmed 2026-08-29, live record inspected):* the posted
+    version **is stale** — 41 pages posted 20 Aug against 44 in the
+    current build, with seven commits landing 24 Aug (prior-art
+    citations, N=2 inversion fix). Two fields need revising:
+    - **the PDF** (should also fix the 0-references: 109 `\bibitem`s
+      under a standard "References" heading that `pdftotext` extracts
+      cleanly);
+    - **the abstract**, which matters more — the posted text is the
+      pre-correction version and overstates. It says the shares
+      "carry log-share errors" where the corrected text says they
+      "agree with higher-resolution references of the same
+      construction" (self-convergence, named as such); it omits the
+      independent RQMC check sentence; and it calls the 140x
+      comparator "the nearest factor-aware competitor" where the
+      corrected text names it precisely as "a per-alternative
+      factor-conditioned RQMC baseline … on the reported hardware …
+      because it performs N separate integrals".
+
+    Paste-ready text and the full checklist: `~/Downloads/ssrn/`.
+    Record stats at inspection: 18 downloads, 51 abstract views.
 
 ## Fallbacks worth considering
 
