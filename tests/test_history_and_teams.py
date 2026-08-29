@@ -104,3 +104,72 @@ def test_team_scores_conjugate_and_uninvolved_players_untouched():
     assert abs(S2[6, 6] - 1.0) < 1e-10
     assert m2[0] > m2[2] > m2[4]     # score order respected
     assert np.isfinite(lz)
+
+
+def test_state_resume_equals_single_pass():
+    rng = np.random.default_rng(5)
+    races, _ = _make_history(rng, n_h=8, n_races=40, drift_ts=50.0)
+    ids = sorted({r for rc in races for r in rc["runners"]})
+    r1, z1, st1 = rate_history(races, ids=ids, timescale=50.0,
+                               return_state=True)
+    _, za, sta = rate_history(races[:20], ids=ids, timescale=50.0,
+                              return_state=True)
+    r2, zb, st2 = rate_history(races[20:], state=sta, timescale=50.0,
+                               return_state=True)
+    assert np.abs(st1["m"] - st2["m"]).max() < 1e-10
+    assert np.abs(st1["S"] - st2["S"]).max() < 1e-10
+    assert abs(z1 - (za + zb)) < 1e-8
+
+
+def test_predict_race_prices_the_field():
+    from winning.ratings.history import predict_race
+    rng = np.random.default_rng(6)
+    races, s_end = _make_history(rng, n_h=8, n_races=80, drift_ts=60.0)
+    _, _, state = rate_history(races, timescale=60.0, tau2=0.09,
+                               return_state=True)
+    runners = [0, 1, 2, 3, "newcomer"]
+    p, odds = predict_race(state, runners, t=81.0, beta2=1.0)
+    assert abs(p.sum() - 1) < 1e-9
+    assert np.isfinite(odds).all()
+    # the favorite is the top-rated runner...
+    ratings_m = np.array([state["m"][state["index"][r]]
+                          for r in runners[:4]])
+    assert int(np.argmax(p[:4])) == int(np.argmax(ratings_m))
+    # ...but full ordering need NOT follow means (heterogeneous
+    # predictive variance legitimately reorders close runners); the
+    # real invariant is exact agreement with the manual construction
+    from winning.ratings.history import diffuse_full
+    from winning.factor.races import race_probabilities
+    mm, SS = diffuse_full(state["m"], state["S"], dt=81.0 - state["t"],
+                          timescale=60.0)
+    ix = state["index"]                    # ids map through first-seen order
+    mu = np.zeros(5); Sf = np.eye(5)
+    for a, r in enumerate(runners[:4]):
+        mu[a] = mm[ix[r]]
+        for b, r2 in enumerate(runners[:4]):
+            Sf[a, b] = SS[ix[r], ix[r2]]
+    p_manual = race_probabilities(-mu, cov=Sf + np.eye(5))
+    assert np.abs(p - p_manual).max() < 1e-12
+
+
+def test_walk_forward_beats_uniform_and_reports_market():
+    from winning.ratings.history import walk_forward
+    rng = np.random.default_rng(7)
+    races, _ = _make_history(rng, n_h=8, n_races=80, drift_ts=60.0)
+    out = walk_forward(races, warmup=25, timescale=60.0, tau2=0.09,
+                       beta2=1.0, lengths_scale=0.2)
+    n = out["n_scored"]
+    assert n >= 50
+    ll_uniform = n * np.log(1.0 / 6.0)
+    assert out["log_loss_model"] > ll_uniform + 5
+    assert out["log_loss_market"] > ll_uniform
+
+
+def test_tune_history_improves_evidence():
+    from winning.ratings.history import tune_history
+    rng = np.random.default_rng(8)
+    races, _ = _make_history(rng, n_h=8, n_races=50, drift_ts=60.0)
+    _, z0 = rate_history(races, timescale=200.0, tau2=0.5, beta2=2.0)
+    best, z1 = tune_history(races, tune=("tau2", "beta2"), maxiter=25,
+                            timescale=60.0)
+    assert z1 > z0

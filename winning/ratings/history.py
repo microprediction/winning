@@ -138,7 +138,8 @@ def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
 
 def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
                  timescale=200.0, tau2=0.25, beta2=1.0, lengths_scale=0.2,
-                 meas_var=0.0, transform=None):
+                 meas_var=0.0, transform=None, state=None,
+                 return_state=False):
     """Forward filter over a racing history (full-covariance belief).
 
     races: iterable of dicts with keys
@@ -158,19 +159,25 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
     (mean, sd) at the final time; history_logZ is the total evidence,
     the objective for tuning the hyperparameters.
     """
-    all_ids = ids
-    if all_ids is None:
-        seen = []
-        for race in races:
-            for rid in race["runners"]:
-                if rid not in seen:
-                    seen.append(rid)
-        all_ids = seen
-    index = {rid: i for i, rid in enumerate(all_ids)}
-    n = len(all_ids)
-    m = np.full(n, float(prior_mean))
-    S = np.eye(n) * float(prior_var)
-    t_last = None
+    if state is not None:
+        index = dict(state["index"])
+        m = np.asarray(state["m"], dtype=float).copy()
+        S = np.asarray(state["S"], dtype=float).copy()
+        t_last = state["t"]
+    else:
+        all_ids = ids
+        if all_ids is None:
+            seen = []
+            for race in races:
+                for rid in race["runners"]:
+                    if rid not in seen:
+                        seen.append(rid)
+            all_ids = seen
+        index = {rid: i for i, rid in enumerate(all_ids)}
+        n = len(index)
+        m = np.full(n, float(prior_mean))
+        S = np.eye(n) * float(prior_var)
+        t_last = None
     total_logZ = 0.0
     for race in races:
         t = float(race.get("t", 0.0))
@@ -207,5 +214,128 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
         S[np.ix_(idx, idx)] = Sk
         S = _psd_repair(S)
     sd = np.sqrt(np.maximum(np.diag(S), 0.0))
-    return {rid: (float(m[i]), float(sd[i])) for rid, i in index.items()}, \
-        float(total_logZ)
+    ratings = {rid: (float(m[i]), float(sd[i])) for rid, i in index.items()}
+    if return_state:
+        return ratings, float(total_logZ), \
+            {"m": m, "S": S, "t": t_last, "index": index,
+             "prior_mean": prior_mean, "prior_var": prior_var,
+             "timescale": timescale}
+    return ratings, float(total_logZ)
+
+
+def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257):
+    """Predictive win probabilities (and fair odds) for the NEXT race.
+
+    state: from rate_history(..., return_state=True). runners: ids (new
+    ids get the population prior). t: race time (diffuses the belief
+    forward; None prices at the state's time). The predictive
+    performance covariance is S_field + V V' + beta2 I -- belief
+    uncertainty PLUS race noise, which is what makes these genuine
+    predictive odds rather than point estimates raced against each
+    other. Returns (p, odds) with odds = 1/p (no overround).
+    """
+    from ..factor.races import race_probabilities
+
+    m = np.asarray(state["m"], dtype=float)
+    S = np.asarray(state["S"], dtype=float)
+    if t is not None and state["t"] is not None and t > state["t"]:
+        m, S = diffuse_full(m, S, dt=t - state["t"],
+                            timescale=state.get("timescale", 200.0),
+                            prior_mean=state.get("prior_mean", 0.0),
+                            prior_var=state.get("prior_var", 1.0))
+    k = len(runners)
+    mu = np.full(k, float(state.get("prior_mean", 0.0)))
+    Sf = np.eye(k) * float(state.get("prior_var", 1.0))
+    known = [(a, state["index"][r]) for a, r in enumerate(runners)
+             if r in state["index"]]
+    for a, i in known:
+        mu[a] = m[i]
+        for b, j in known:
+            Sf[a, b] = S[i, j]
+    B = np.broadcast_to(np.asarray(beta2, dtype=float), (k,)).astype(float)
+    C = Sf + np.diag(B)
+    if V is not None:
+        Vm = np.atleast_2d(np.asarray(V, dtype=float))
+        if Vm.shape[0] != k:
+            Vm = Vm.T
+        C = C + Vm @ Vm.T
+    p = race_probabilities(-mu, cov=C, points=points)
+    return p, 1.0 / np.maximum(p, 1e-12)
+
+
+def tune_history(races, tune=("tau2", "beta2", "timescale",
+                              "lengths_scale"), maxiter=60, **fixed):
+    """Fit hyperparameters by maximizing the filter's total evidence
+    (Nelder-Mead over log-parameters; the objective is the logZ stream
+    every update already returns). Returns (best_params, best_logZ)."""
+    from scipy.optimize import minimize
+
+    defaults = dict(tau2=0.25, beta2=1.0, timescale=200.0,
+                    lengths_scale=0.2)
+    defaults.update(fixed)
+    x0 = np.log([defaults[k] for k in tune])
+
+    def neg_evidence(x):
+        params = dict(defaults)
+        params.update({k: float(np.exp(v)) for k, v in zip(tune, x)})
+        try:
+            _, lz = rate_history(races, **params)
+        except Exception:
+            return 1e12
+        return -lz
+
+    res = minimize(neg_evidence, x0, method="Nelder-Mead",
+                   options={"maxiter": maxiter, "xatol": 1e-3,
+                            "fatol": 1e-3})
+    best = dict(defaults)
+    best.update({k: float(np.exp(v)) for k, v in zip(tune, res.x)})
+    return best, -float(res.fun)
+
+
+def walk_forward(races, warmup=20, market_arm=True, V_key="V",
+                 **params):
+    """Walk-forward evaluation: predict each race's winner from the
+    history strictly before it, score by log-loss. Reports the
+    PURE-FORM arm (no market input to the prediction; the filter still
+    consumes prices historically unless market_arm=False strips them),
+    and the market's own log-loss as the benchmark when prices are
+    present. Returns a dict of totals and per-race records."""
+    races = list(races)
+    state = None
+    recs = []
+    ll_model = ll_market = 0.0
+    n_scored = 0
+    for i, race in enumerate(races):
+        hist = [race] if state is not None else races[:i + 1]
+        if i >= warmup and (race.get("winner") is not None
+                            or race.get("order") is not None
+                            or race.get("margins") is not None):
+            p, _ = predict_race(state, race["runners"],
+                                t=float(race.get("t", 0.0)),
+                                V=race.get(V_key),
+                                beta2=params.get("beta2", 1.0))
+            if race.get("order") is not None:
+                w = int(race["order"][0])
+            elif race.get("winner") is not None:
+                w = int(race["winner"])
+            else:
+                w = int(np.argmin(np.asarray(race["margins"])))
+            ll_model += float(np.log(max(p[w], 1e-12)))
+            rec = {"i": i, "p_model": p, "winner": w}
+            if race.get("p_market") is not None:
+                pm = np.asarray(race["p_market"], dtype=float)
+                pm = pm / pm.sum()
+                ll_market += float(np.log(max(pm[w], 1e-12)))
+                rec["p_market"] = pm
+            recs.append(rec)
+            n_scored += 1
+        feed = dict(race)
+        if not market_arm:
+            feed.pop("p_market", None)
+        _, _, state = rate_history([feed], state=state, return_state=True,
+                                   **params) if state is not None else             rate_history([feed], return_state=True,
+                         ids=sorted({r for rc in races
+                                     for r in rc["runners"]}),
+                         **params)
+    return {"log_loss_model": ll_model, "log_loss_market": ll_market,
+            "n_scored": n_scored, "records": recs}
