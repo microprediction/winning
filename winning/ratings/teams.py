@@ -17,40 +17,27 @@ from __future__ import annotations
 
 import numpy as np
 
-from .full import (_mixture_update_full, _psd_repair)
-from .nway import _grad_logp_row, _order_pass
+from .full import (_mixture_update_full, _order_kernel, _psd_repair,
+                   _winner_kernel)
 
 
 def update_team_winner_full(m, S, A, winner, V=None, beta2=1.0,
-                            nodes_log2=12, eps=1e-3):
+                            nodes_log2=10, eps=None):
     """Team `winner` (row index of A) won. Returns (m_post, S_post,
     logZ) over the PLAYER belief (max-wins)."""
     A = np.atleast_2d(np.asarray(A, dtype=float))
-    k = A.shape[0]
-    D = np.broadcast_to(np.asarray(beta2, dtype=float), (k,)).astype(float)
-
-    def node(mo):
-        g, p = _grad_logp_row(mo, D, winner)
-        return np.log(max(p, 1e-300)), g
-
-    return _mixture_update_full(m, S, V, beta2, node,
-                                nodes_log2=nodes_log2, eps=eps, A=A)
+    return _mixture_update_full(m, S, V, beta2, None,
+                                nodes_log2=nodes_log2, eps=eps, A=A,
+                                kernel=_winner_kernel(winner, A.shape[0]))
 
 
 def update_team_order_full(m, S, A, order, V=None, beta2=1.0,
-                           nodes_log2=12, eps=1e-3):
+                           nodes_log2=10, eps=None):
     """Full team finishing order (best first, rows of A)."""
     A = np.atleast_2d(np.asarray(A, dtype=float))
-    k = A.shape[0]
-    sd = np.sqrt(np.broadcast_to(np.asarray(beta2, dtype=float),
-                                 (k,)).astype(float))
-    order = np.asarray(order, dtype=int)
-
-    def node(mo):
-        return _order_pass(mo, sd, order)
-
-    return _mixture_update_full(m, S, V, beta2, node,
-                                nodes_log2=nodes_log2, eps=eps, A=A)
+    return _mixture_update_full(m, S, V, beta2, None,
+                                nodes_log2=nodes_log2, eps=eps, A=A,
+                                kernel=_order_kernel(order))
 
 
 def update_team_margins_full(m, S, A, margins=None, V=None, beta2=1.0,

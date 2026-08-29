@@ -91,3 +91,58 @@ def test_fusion_gap_closes_with_full_covariance():
     gap_full = np.abs(mf2 - m_mc).max()
     assert gap_full < 0.05
     assert gap_full < 0.6 * gap_diag
+
+
+def test_diffuse_prior_updates_stay_exact():
+    # corner-space audit (bandits): the belief used to ride quadrature,
+    # so posterior variance inflated with prior_sd/sqrt(beta2) -- 7x at
+    # ratio 100 on the winner path, a hard crash past ratio 20 on the
+    # order path. With the belief's diagonal part on the LATTICE both
+    # paths track the diagonal members (themselves MC-exact) at every
+    # ratio.
+    from winning.ratings.full import update_order_full
+    from winning.ratings.nway import update_winner_correlated
+    n = 3
+    for sd in (3.0, 10.0, 30.0, 100.0):
+        m0 = np.zeros(n)
+        S0 = np.eye(n) * sd * sd
+        mf, Sf, _ = update_winner_full(m0, S0, 0, V=np.zeros((n, 1)),
+                                       beta2=1.0)
+        md, vd, _ = update_winner_correlated(m0, np.full(n, sd * sd), 0,
+                                             np.zeros((n, 1)), beta2=1.0)
+        assert np.abs(mf - md).max() < 1e-6 * max(sd, 1.0)
+        assert np.abs(np.diag(Sf) - vd).max() < 3e-3 * vd.max()
+        mo, So, lz = update_order_full(m0, S0, np.array([0, 1, 2]),
+                                       V=np.zeros((n, 1)), beta2=1.0)
+        assert np.isfinite(mo).all() and np.isfinite(So).all()
+        assert np.isfinite(lz)
+        # the order arm agrees with the winner arm on the WINNER's
+        # coordinate only -- it additionally ranks 2nd against 3rd,
+        # which a winner observation is silent about (order splits the
+        # losers +-2.41 where winner leaves both at -1.20; both right)
+        assert abs(mo[0] - md[0]) < 3e-3 * max(sd, 1.0)
+        assert mo[1] > mo[2]
+        assert abs(mo.sum() - md.sum()) < 1e-6 * max(sd, 1.0)
+
+
+def test_relabelling_equivariance():
+    # the belief split is eigendecomposition-based, so relabelling the
+    # field permutes the answer; residual error is finite-node only and
+    # falls with the node budget (2.9e-2 at 2^10 -> 7e-4 at 2^14)
+    from winning.ratings.full import _belief_split
+    rng = np.random.default_rng(3)
+    n = 5
+    A = rng.normal(size=(n, n)) * 0.4
+    S = A @ A.T + 0.6 * np.eye(n)
+    perm = np.array([2, 0, 4, 1, 3])
+    B1, psi1 = _belief_split(S)
+    B2, psi2 = _belief_split(S[np.ix_(perm, perm)])
+    assert np.abs(psi2 - psi1[perm]).max() < 1e-10
+    assert np.abs(B2 @ B2.T - (B1 @ B1.T)[np.ix_(perm, perm)]).max() < 1e-10
+    m = rng.normal(size=n) * 0.5
+    V = rng.normal(size=(n, 2)) * 0.5
+    inv = np.argsort(perm)
+    m1, S1, _ = update_winner_full(m, S, 1, V=V, beta2=1.0)
+    m2, S2, _ = update_winner_full(m[perm], S[np.ix_(perm, perm)],
+                                   int(inv[1]), V=V[perm], beta2=1.0)
+    assert np.abs(m2 - m1[perm]).max() < 5e-3
