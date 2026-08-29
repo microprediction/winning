@@ -42,6 +42,22 @@ function setup(mu, V, D, F, W, base) {
         const Q = Math.min(Math.ceil(8 * sharp), 4001);
         F = []; W = new Array(Q).fill(1 / Q);
         for (let q = 0; q < Q; q++) F.push([invNormalRational((q + 0.5) / Q)]);
+      } else if (Math.pow(15, r) > 100000) {
+        // high-rank tensor footgun (matching python/R): Halton fallback
+        const Q = 8192;
+        F = []; W = new Array(Q).fill(1 / Q);
+        const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
+                        43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89];
+        for (let idx = 0; idx < Q; idx++) {
+          const node = [];
+          for (let dim = 0; dim < r; dim++) {
+            const b = primes[dim];
+            let i = idx + 21, f = 1 / b, h = 0;
+            while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
+            node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
+          }
+          F.push(node);
+        }
       } else {
         const cap = r === 1 ? 201 : r === 2 ? 41 : 15;
         const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);

@@ -98,6 +98,14 @@ def _setup(mu, V, D, F, W, base):
                 u = (np.arange(Q) + 0.5) / Q
                 F = ndtri(u)[:, None]
                 W = np.full(Q, 1.0 / Q)
+            elif 15 ** r > 100_000:
+                # high-rank ecology footgun (bandits, 120 horses x 12
+                # stable factors): the tensor grid is 15^r nodes BEFORE
+                # pruning -- 2.6e9 at r=8, 944 TiB at r=12, a hard kill.
+                # Past a 1e5-node tensor budget the rule escalates to
+                # scrambled Sobol, as the likelihood module always did.
+                from .core import qmc_nodes
+                F, W = qmc_nodes(r, m=13)
             else:
                 cap = 201 if r == 1 else (41 if r == 2 else 15)
                 Q = int(np.clip(np.ceil(8.0 * sharp), 15, cap))

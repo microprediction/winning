@@ -68,3 +68,27 @@ def test_rank_one_extreme_sharpness_cliff_fixed():
     Z = rng.standard_normal((400_000, n))
     counts = np.bincount((mu + Z @ L.T).argmin(1), minlength=n) / 400_000
     assert 0.5 * np.abs(p - counts).sum() < 5e-3
+
+
+def test_high_rank_does_not_build_the_tensor():
+    # bandits ecology footgun: 15^r tensor before pruning (2.6e9 nodes
+    # at r=8, SIGKILL at r=12). Past a 1e5-node tensor budget the rule
+    # escalates to Sobol; the repro completes in under a second and the
+    # r=6 answer matches Monte Carlo.
+    import numpy as np
+    from winning import race_probabilities
+    p = race_probabilities(np.zeros(8), V=np.eye(8))
+    assert abs(p.sum() - 1) < 1e-9
+    p = race_probabilities(np.zeros(12), V=np.eye(12) * 0.7)
+    assert abs(p.sum() - 1) < 1e-9
+    rng = np.random.default_rng(0)
+    n, r = 20, 6
+    V = rng.normal(size=(n, r)) * 0.4
+    mu = np.sort(rng.normal(size=n)) * 0.6
+    D = 0.5 + rng.random(n)
+    p = race_probabilities(mu, V=V, D=D)
+    L = np.linalg.cholesky(V @ V.T + np.diag(D))
+    counts = np.bincount(
+        (mu + rng.standard_normal((400_000, n)) @ L.T).argmin(1),
+        minlength=n) / 400_000
+    assert 0.5 * np.abs(p - counts).sum() < 6e-3

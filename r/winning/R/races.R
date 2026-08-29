@@ -92,6 +92,12 @@
         Q <- as.integer(min(ceiling(8 * sharp), 4001))
         F <- matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)
         W <- rep(1 / Q, Q)
+      } else if (15^r > 1e5) {
+        # high-rank tensor footgun (matching python): past a 1e5-node
+        # tensor budget escalate to low-discrepancy nodes
+        hw <- .halton_normal_nodes(r, 2^13)
+        F <- hw$F
+        W <- hw$W
       } else {
         cap <- if (r == 1) 201 else if (r == 2) 41 else 15
         Q <- as.integer(min(max(ceiling(8 * sharp), 15), cap))
