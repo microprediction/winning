@@ -153,3 +153,42 @@ Ran their counterexamples before believing them:
    zero by 33, asymmetric near-tied fields) -- why the factor engine
    carries no multiplicity bookkeeping while the classic integer-lattice
    engine, whose dead-heat mass is real and fixed, rightly does.
+
+## Fifth review, adjudicated (2026-08-30)
+
+Every claim checked by running it. Four hit real defects in the code:
+
+1. **Jacobian normalization quotient (their blocker): CONFIRMED.** The
+   grid JVP returned the derivative of the UNNORMALIZED rectangle sum;
+   the quotient its own docstring described was never applied. Measured
+   against finite differences of the returned map: 2.06e-3 at L=25.
+   Now applied (`normalized=True` default, `normalized=False` for the
+   raw form): 3.1e-11 at L>=101. A residual 6.2e-4 remains at L=25
+   because the JVP's own window moves with mu -- a grid-motion term, now
+   stated in the paper rather than claimed away.
+2. **Saturated MLE has no finite maximizer: CONFIRMED, exactly.** min p
+   = 2.534e-5, expected count 1.27, and seeds 103 and 105 do have an
+   empty cell. run_mle2.py now adds a Jeffreys pseudocount (counts +
+   1/2, ALPHA configurable, ALPHA=0 reproduces the old unpenalized run)
+   and the paper calls the estimand a MAP maximizer. Rerun numbers are
+   BETTER, not worse: exact 0.0148 in 2.4 s against MSL-100 0.0275 in
+   3.5 s and MSL-1000 0.0161 in 39.9 s.
+3. **Bulk window hardcoded the normal survival: CONFIRMED.** Heavy tails
+   were clipped -- Student-t(2.5) at n=40 lost 5.1e-3 of total variation
+   against the span window. `_bulk_window` now takes the caller's base
+   survival and honors a base's declared span: 5.2e-5 after (Laplace
+   2.0e-6, normal/Gumbel unchanged at 1e-16).
+4. **hermite_nodes did not renormalize after pruning: CONFIRMED.**
+   Weights summed to 1 - 2.4e-8 (k=2) and 1 - 3.1e-7 (k=3). Forward
+   races renormalize downstream and were unaffected, but direct weighted
+   mixtures consume W as-is. Now renormalized.
+
+Prose and scope corrections from the same review: abstract now scopes
+matrix-free JVPs and removals to the factor grammar and calls the
+removal table Omega(n^2); the removal passage carries their own
+mu=(-20,0,1) counterexample (3e-28 of unnormalized mass on the original
+window) and states that removals integrate on their own span window;
+the node policy is described as it actually is (tensor GH under 1e5
+nodes, Sobol when sharp, midpoint-quantile at extreme rank one).
+Package bumped to 1.3.0 with python_requires >=3.10 and corrected
+classifiers (3.7/3.9 were advertised while the code uses `X | None`).

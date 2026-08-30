@@ -7,7 +7,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="winning",
-    version="1.2.0",
+    version="1.3.0",
     description="Dealing with races, correlated or not",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -18,9 +18,12 @@ setup(
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
+    python_requires=">=3.10",
     packages=["winning", "winning.classic", "winning.factor", "winning.methods", "winning.bench", "winning.thurstone", "winning.probit", "winning.ratings"],
     test_suite='pytest',
     tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],

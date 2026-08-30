@@ -389,7 +389,10 @@ def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
     for d in range(k):
         W *= w[np.searchsorted(x, F[:, d])]
     keep = W > prune * W.max()
-    return F[keep], W[keep]
+    W = W[keep]
+    # renormalize: pruning drops ~1e-7 of mass, and direct weighted
+    # mixtures (mixed softmax, moment updates) consume W as-is
+    return F[keep], W / W.sum()
 
 
 def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
@@ -586,7 +589,8 @@ def qmc_nodes(k: int, m: int = 13, seed: int = 0):
     return F, np.full(len(F), 1.0 / len(F))
 
 
-def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp"):
+def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
+                            normalized=True):
     """(J h)_i for J = d p / d mu of the min-wins factor race, in O(Q N L).
 
     Uses the integration-by-parts form (referee of the factor-probit paper):
@@ -601,9 +605,11 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp"):
     for which sum_i p_i = 1 and J^T 1 = J 1 = 0; for the max-wins (argmax
     utility) map with mu = -a the sign flips, (J_max h) = -(J_min h). The
     implemented forward map normalizes its quadrature output; the
-    normalization correction (v - p (1^T v))/s is O(quadrature defect)
-    because 1^T v = 0 analytically, and this formula matches central finite
-    differences of the returned normalized map to ~5e-9 in tests.
+    normalization correction (v - p (1^T v))/T is applied by default
+    (normalized=True); pass normalized=False for the raw derivative of
+    the unnormalized rectangle sum. The fifth review measured the raw
+    form 2e-3 from finite differences of the returned map at L=25;
+    corrected, the grid form matches at ~1e-10 (tested).
 
     form="ibp" (default) is the integration-by-parts / weighted-Laplacian
     form: the exact derivative of the CONTINUUM map, and a symmetric
@@ -623,6 +629,7 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp"):
     x = np.linspace(M_all.min() - 8 * sd.max(), M_all.max() + 8 * sd.max(), points)
     dx = x[1] - x[0]
     out = np.zeros(N)
+    raw = np.zeros(N)
     log_norm = np.log(sd * np.sqrt(2 * np.pi))
     chunk = max(1, int(4e6 / (N * points)))
     for a0 in range(0, len(F), chunk):
@@ -641,7 +648,16 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp"):
             else:
                 integ = gR * (A[None, :] - h[:, None] * haz.sum(0)[None, :])
             out += Wc[c] * (integ.sum(1) * dx)
-    return out
+            raw += Wc[c] * (gR.sum(1) * dx)
+    if not normalized:
+        return out
+    # the quotient this docstring has always described, now actually
+    # applied (fifth review: the raw directional integral differed from
+    # finite differences of the normalized map by 2e-3 at L=25):
+    # d(a/T)[h] = (Da[h] - (a/T) 1'Da[h]) / T, with a the unnormalized
+    # frozen-grid masses accumulated in the same pass
+    T = raw.sum()
+    return (out - (raw / T) * out.sum()) / T
 
 
 

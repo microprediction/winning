@@ -36,11 +36,12 @@ event is one-dimensional: whoever wins, wins at some value, so a
 single shared survival field prices all $n$ alternatives at once. For
 the covariances applied work actually uses (factor, block, nested,
 hierarchical: conditional independence given a few shared variables),
-the field yields all $n$ probabilities, matrix-free derivatives, and
-every single-removal counterfactual in $O(nLQ)$ operations over a
+the field yields all $n$ probabilities in $O(nLQ)$ operations over a
 lattice of $L$ winning values and $Q$ factor quadrature nodes, and
-inverts observed probabilities back to utilities under a fixed, known
-covariance. The Jacobian is a weighted graph Laplacian whose edge
+inverts them back to utilities under a fixed, known covariance. For the
+factor grammar the same pass gives matrix-free Jacobian--vector
+products and any specified single-removal counterfactual at the same
+order; the complete removal table has quadratic output size. The Jacobian is a weighted graph Laplacian whose edge
 weights are photo-finish tie densities: the geometry of substitution
 between alternatives, from the same pass that prices them. The cleanest
 evidence is internal: the identical factor conditioning computed one
@@ -262,20 +263,34 @@ $-745$.
 The lattice itself is placed on the winner's bulk, not the ability span. A
 hopeless contestant wins only by running a winner-class time, so only the region
 where the winning time lives matters. Bisect the conservative winner c.d.f.\
-envelope $G(x)=1-\prod_j S_j(x)$ to $[G^{-1}(\delta),G^{-1}(1-\delta)]$ and pad
+envelope $G(x)=1-\prod_j S_j(x)$, built from the caller's own base survival,
+to $[G^{-1}(\delta),G^{-1}(1-\delta)]$ and pad
 two standard deviations, which makes the truncated tail mass negligible
-against the accuracy floors reported below. Measured: $33$
+against the accuracy floors reported below. The envelope must use the
+supplied base, not a normal surrogate: a Student-$t$ base at
+$\nu=2.5$ has polynomial tails that a normal envelope clips, costing
+$5\times10^{-3}$ of total variation at $n=40$ against
+$5\times10^{-5}$ once the true survival sets the window. Measured: $33$
 points on this window reach accuracy that a $500$-point ability-span lattice
 cannot, because the span window's own truncation floors near $6\times10^{-11}$;
 on fields with many hopeless contestants the bulk window is one hundred times
 more accurate at equal budget.
 
-Two byproducts are cheap once the field is built. Any specified removal
-counterfactual, the probability $j$ wins after deleting $i$, costs one more
-division out of the field, and any specified photo-finish tie density is one
-more lattice sum; \S\ref{sec:jac} identifies the latter with the off-diagonal
-Jacobian. The full $n\times n$ matrices of such queries are $O(n^2)$ outputs
-and are priced per query, not free.
+Two byproducts are cheap once the field is built. Any specified photo-finish
+tie density is one more lattice sum; \S\ref{sec:jac} identifies it with the
+off-diagonal Jacobian. A removal counterfactual, the probability $j$ wins
+after deleting $i$, is one more division in the continuum, but the
+\emph{numerical} field must be rebuilt on a window that covers the
+post-removal winner: delete a dominant favorite and the surviving race
+lives in the original race's second-order-statistic region, where the
+winner-bulk lattice carries no mass at all. With $\mu=(-20,0,1)$ the bulk
+window is about $[-29,-11]$, the post-removal truth is
+$\Phi(1/\sqrt2)=0.760$, and dividing the favorite out on the original
+grid leaves $3\times10^{-28}$ of unnormalized mass, whose renormalization
+is numerical debris. The implementation therefore integrates removals on
+their own span window and checks the unnormalized mass, raising on a
+defect rather than renormalizing it away. The full $n\times n$ matrices of
+such queries are $\Omega(n^2)$ outputs and are priced per query, not free.
 
 \section{The covariance grammar}\label{sec:grammar}
 
@@ -295,8 +310,13 @@ the performances are independent with means $\mu+Vf$, and
 p \;=\; \sum_q w_q\, p^{\mathrm{ind}}(\mu+Vf_q),
 \end{equation}
 a $Q$-node quadrature over runs of the independent algorithm, cost $O(nLQ)$. In
-English: average the independent race over the shared luck. Gauss--Hermite nodes
-serve $k\le2$; scrambled Sobol serves $k\ge3$. Conditioning on the factor is
+English: average the independent race over the shared luck. The node rule is adaptive rather than fixed by
+rank: a tensor Gauss--Hermite grid while it stays under $10^{5}$ nodes,
+so ranks three and four still use it; scrambled Sobol once the
+integrand is sharp or the tensor would exceed that budget; and an
+equal-weight midpoint-quantile grid at extremely sharp rank one, where
+Gauss--Hermite's clustered abscissae are the wrong family for a
+near-step integrand. Conditioning on the factor is
 not new: \citet{butler1982} built exactly this quadrature for the one-factor
 random-effects probit, and the \texttt{lpRR}/\texttt{slpRR} interfaces of
 \texttt{mvtnorm} integrate over the factor dimensions of $BB'+\mathrm{diag}(D)$
@@ -455,13 +475,18 @@ nothing downstream requires. Three derivative objects should be
 distinguished: the continuum identity \eqref{eq:tie}; its quadrature
 evaluation; and the exact derivative of the normalized, adaptive-lattice
 numerical map, which differs from the first two through the normalization
-quotient and grid motion. The implementation exposes the frozen-grid form,
-which matches central finite differences of the returned map with the grid held fixed at the base point and the normalization quotient
-included, at every lattice resolution tested; a finite difference that
-lets the adaptive grid move with the perturbation measures a different
-(also legitimate) derivative and differs from the frozen-grid form by
-the grid-motion term. The continuum form, whose symmetry serves
-preconditioning, is exposed alongside. The stable pair factorization is
+quotient and grid motion. The implementation's grid form differentiates the rectangle sum itself
+and applies the normalization quotient
+$(v-p\,\mathbf{1}^{\top}v)/T$, with $T$ the unnormalized total. That
+quotient is not optional: without it the returned directional derivative
+differs from central finite differences of the returned map by
+$2\times10^{-3}$ at $L=25$. With it, agreement is $3\times10^{-11}$
+from $L=101$ upward, the production range. A residual $6\times10^{-4}$
+survives at $L=25$ because the window itself moves with $\mu$; that is a
+grid-motion term, which no fixed-grid derivative contains and which a
+finite difference recomputing its own window will always see. The
+continuum form, whose symmetry serves preconditioning, is exposed
+alongside. The stable pair factorization is
 $[f_i e^{L-\log S_i}]\times[f_j/S_j]$: the first factor is bounded, and the
 hazard $f_j/S_j$ grows linearly in the normal base and exponentially in the
 Gumbel base, either of which the exponent clip absorbs. The symmetric
@@ -944,32 +969,41 @@ extreme tail probabilities.
 \paragraph{Share inversion under sampling noise.} The first estimation
 exercise is deliberately the saturated case. Simulate $T=50{,}000$ choices
 from one fixed menu of $n=30$ alternatives under a known rank-2 factor
-covariance and estimate the mean-zero utilities by maximum likelihood. With
+covariance and estimate the mean-zero utilities. With
 the menu fixed the model is saturated over the simplex interior, so the
-exact-gradient maximizer is the inversion of empirical shares,
-$\hat\mu=p^{-1}(c/T)$, and the exercise measures how faithfully each method
-performs that inversion under multinomial noise. Eight replications:
+exact-gradient maximizer is the inversion of the observed shares and the
+exercise measures how faithfully each method performs that inversion
+under multinomial noise.
+
+The estimand is the penalized (MAP) maximizer under a Jeffreys Dirichlet
+prior, counts $+\tfrac12$, applied identically to every arm. This is not
+cosmetic. The unpenalized saturated likelihood has \emph{no} finite
+maximizer when any count is zero, which Theorem~\ref{thm:inverse}
+states and this design would otherwise walk into: the smallest
+alternative here has $p=2.5\times10^{-5}$, so its expected count is
+$1.27$ and it is empty with probability $e^{-1.27}=0.28$; two of the
+eight replications (seeds $103$ and $105$) do have an empty cell, where
+an unpenalized optimizer returns a tolerance-dependent point on a
+boundary sequence rather than a maximizer. Eight replications:
 
 \begin{center}\small
 \begin{tabular}{lrr}
 \toprule
 estimator & RMSE over identified alternatives & median fit time \\
 \midrule
-exact gradient MLE & $0.0187$ & $4.9$ s \\
-MSL, $R=100$ & $0.0305$ & $4.4$ s \\
-MSL, $R=1000$ & $0.0198$ & $40.7$ s \\
+exact gradient MAP & $0.0148$ & $2.4$ s \\
+MSL, $R=100$ & $0.0275$ & $3.5$ s \\
+MSL, $R=1000$ & $0.0161$ & $39.9$ s \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\noindent At equal fitting time the simulated inversion pays roughly a
-$60$ percent error premium in this diagnostic ($8$ replications; the
-paired difference is stable in sign across all eight, but the premium's
-magnitude carries replication noise we have not driven down, and we
-present it as a diagnostic rather than an anchored constant). The
-$R=1000$ figure is close to the exact one and the
-difference is within replication noise; the claim is
-the equal-time column, not the third row.
+\noindent The exact path is both faster and more accurate than the
+$R=100$ simulator here, and reaches the $R=1000$ accuracy in a
+sixteenth of its time. We present the gap as a diagnostic rather than
+an anchored constant: at eight replications the paired difference is
+stable in sign but its magnitude carries replication noise we have not
+driven down.
 
 \paragraph{Covariate estimation.} The overidentified case behaves
 differently, and we report it as we found it. Draw observation-specific

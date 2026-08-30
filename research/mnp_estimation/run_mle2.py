@@ -1,6 +1,16 @@
 """Round 2: isolate the simulation penalty. T = 50,000 choices (so
 statistical error is small and simulation bias binds), known Sigma,
 estimate mu only, n = 30, scored on identified alternatives (p > 0.01).
+
+Fifth review: the saturated likelihood has NO finite maximizer when any
+count is zero, and two of these eight replications (seeds 103 and 105)
+have one -- the smallest alternative has p = 2.5e-5, so its expected
+count is 1.27 and it is empty with probability e^-1.27 = 0.28. The
+estimand is therefore the penalized (MAP) maximizer under a Jeffreys
+Dirichlet prior, counts + 1/2, applied identically to every arm so the
+comparison stays like-for-like. ALPHA = 0 reproduces the original
+unpenalized run, which is well defined only on the six replications
+with full support.
 """
 import time
 import numpy as np
@@ -10,6 +20,7 @@ from winning.factor.polish import race_jacobian
 import fastrace
 
 n, T, REPS = 30, 50_000, 8
+ALPHA = 0.5          # Jeffreys pseudocount; 0.0 = unpenalized (may not exist)
 rng0 = np.random.default_rng(3)
 mu_star = np.sort(rng0.normal(size=n)) * 0.8
 mu_star -= mu_star.mean()
@@ -50,7 +61,7 @@ for method in ("exact", "msl100", "msl1000"):
     errs, times = [], []
     for rep in range(REPS):
         rng = np.random.default_rng(100 + rep)
-        counts = rng.multinomial(T, p_true).astype(float)
+        counts = rng.multinomial(T, p_true).astype(float) + ALPHA
         th0 = np.zeros(n)
         t0 = time.time()
         if method == "exact":

@@ -215,7 +215,7 @@ def _setup(mu, V, D, F, W, base):
 
 
 
-def _bulk_window(M_all, sd, points, delta):
+def _bulk_window(M_all, sd, points, delta, fn=None):
     """Lattice over the WINNER distribution's bulk, not the ability span.
 
     G(x) = 1 - prod_j S_j(x) is the winner cdf under the min-race (averaged
@@ -225,8 +225,15 @@ def _bulk_window(M_all, sd, points, delta):
     winner-class time. Measured (research/lattice_window): 33 points here
     beat 513 on the ability-span window, whose own truncation floors its
     accuracy near 6e-11. Bisection on a monotone function; cost negligible.
+
+    The envelope uses the CALLER'S base survival (fn), not the normal one.
+    An earlier version hardcoded the normal survival for every base, which
+    clipped polynomial tails: a Student-t(2.5) race at n=40 lost 5e-3 of
+    total variation against the span window (fifth review). With the base
+    supplied, the window adapts to the tail it is actually integrating.
     """
-    from .races import _setup  # noqa -- self-module, for clarity only
+    S_of = (lambda z: np.maximum(1.0 - _ndtr_local(z), 1e-300)) if fn is None \
+        else (lambda z: np.maximum(fn(z)[0], 1e-300))
     mu_lo = M_all.min(axis=0)
     mu_hi = M_all.max(axis=0)
     s = sd
@@ -234,7 +241,7 @@ def _bulk_window(M_all, sd, points, delta):
     def G(x):
         # envelope: winner cdf using each runner's most favourable node
         z = (x - mu_lo) / s
-        logS = np.log(np.maximum(1.0 - _ndtr_local(z), 1e-300))
+        logS = np.log(S_of(z))
         return 1.0 - np.exp(logS.sum())
 
     lo0 = float(mu_lo.min() - 9.0 * s.max())
@@ -251,7 +258,7 @@ def _bulk_window(M_all, sd, points, delta):
     # right edge from the LEAST favourable nodes so no runner's density is cut
     def H(x):
         z = (x - mu_hi) / s
-        logS = np.log(np.maximum(1.0 - _ndtr_local(z), 1e-300))
+        logS = np.log(S_of(z))
         return 1.0 - np.exp(logS.sum())
     for _ in range(80):
         m = 0.5 * (a + b)
@@ -259,11 +266,14 @@ def _bulk_window(M_all, sd, points, delta):
             a = m
         else:
             b = m
-    # base-agnostic safety margin: the bisection envelope uses the normal
-    # survival, and other bases (gumbel) have different tails -- pad both
-    # edges by 2 sd so no base's density is clipped. Costs ~15% width,
-    # preserves the ~4x narrowing.
+    # safety margin beyond the bisected bulk. The envelope now uses the
+    # true base, so the pad only absorbs the node-extreme approximation;
+    # heavy-tailed bases additionally widen it by their own declared span.
     pad = 2.0 * float(s.max())
+    if fn is not None:
+        span = getattr(fn, "span", None)
+        if span is not None:
+            pad = max(pad, 0.25 * float(max(span)) * float(s.max()))
     return np.linspace(xlo - pad, b + pad, points)
 
 
@@ -334,7 +344,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         M_lo = (mu - spread)[None, :]
         M_hi = (mu + spread)[None, :]
         if window == "bulk":
-            x = _bulk_window(np.vstack([M_lo, M_hi]), sd, points, delta)
+            x = _bulk_window(np.vstack([M_lo, M_hi]), sd, points, delta, fn)
         else:
             x = np.linspace(M_lo.min() - left * sd.max(),
                             M_hi.max() + right * sd.max(), points)
@@ -348,7 +358,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         return np.asarray(p)
     M_all = mu[None, :] + F @ V.T
     if window == "bulk":
-        x = _bulk_window(M_all, sd, points, delta)
+        x = _bulk_window(M_all, sd, points, delta, fn)
     else:
         x = np.linspace(M_all.min() - left * sd.max(),
                         M_all.max() + right * sd.max(), points)
