@@ -5,31 +5,14 @@
 - **JCGS** (Journal of Computational and Graphical Statistics) — target.
   Submission build is `scalable-share-calibration-jcgs.pdf` (double-spaced; regenerate by flipping \jcgsfalse to \jcgstrue in the main tex, three pdflatex passes), supplement is
   `supplement_v1.1.0.zip`.
-- **SSRN** — preprint of `scalable-share-calibration.pdf`, abstract id
-  7307363, **doi:10.2139/ssrn.7307363** (registered in Crossref; cite
-  this as the method reference, e.g. the `mvtnormfast` DESCRIPTION
-  does). JCGS permits preprint posting of the author's original
-  manuscript.
-  - *Open (confirmed 2026-08-29, live record inspected):* the posted
-    version **is stale** — 41 pages posted 20 Aug against 44 in the
-    current build, with seven commits landing 24 Aug (prior-art
-    citations, N=2 inversion fix). Two fields need revising:
-    - **the PDF** (should also fix the 0-references: 109 `\bibitem`s
-      under a standard "References" heading that `pdftotext` extracts
-      cleanly);
-    - **the abstract**, which matters more — the posted text is the
-      pre-correction version and overstates. It says the shares
-      "carry log-share errors" where the corrected text says they
-      "agree with higher-resolution references of the same
-      construction" (self-convergence, named as such); it omits the
-      independent RQMC check sentence; and it calls the 140x
-      comparator "the nearest factor-aware competitor" where the
-      corrected text names it precisely as "a per-alternative
-      factor-conditioned RQMC baseline … on the reported hardware …
-      because it performs N separate integrals".
-
-    Paste-ready text and the full checklist: `~/Downloads/ssrn/`.
-    Record stats at inspection: 18 downloads, 51 abstract views.
+- **SSRN** — *no record.* The SSRN record that formerly held this paper
+  (abstract id 7307363, doi:10.2139/ssrn.7307363) was revised on
+  2026-08-29 to hold the general inversion paper instead
+  (`docs/latex_src/general_inversion`), a deliberate decision: that
+  paper is the successor line of work, and JCGS is this paper's home.
+  So this manuscript currently has no preprint posting. If a preprint
+  is ever wanted, it needs a NEW record and will get a new DOI; do not
+  reuse 7307363, which now points elsewhere.
 
 ## Fallbacks worth considering
 
