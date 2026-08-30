@@ -231,6 +231,19 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     clipped polynomial tails: a Student-t(2.5) race at n=40 lost 5e-3 of
     total variation against the span window (fifth review). With the base
     supplied, the window adapts to the tail it is actually integrating.
+
+    Two things make the quantile claim literally true (sixth review).
+    The interval is BRACKETED before it is bisected -- nine sigma holds
+    the delta-quantiles of a Gaussian race but not of an arbitrary
+    polynomial tail, and bisecting an unbracketed interval converges to
+    its endpoint while looking successful. And delta is treated as a
+    request, not a guarantee: a t(4) race's 1e-12 winner quantile sits
+    1456 standard units out, so honoring it at 257 points would spread
+    the lattice to a spacing of 5.7 and lose more to discretization than
+    truncation ever cost. When the requested window will not fit the
+    point budget, delta is relaxed by factors of a hundred until it
+    does, and the achieved delta is reported. The window is then exactly
+    what it claims to be at the delta it names.
     """
     S_of = (lambda z: np.maximum(1.0 - _ndtr_local(z), 1e-300)) if fn is None \
         else (lambda z: np.maximum(fn(z)[0], 1e-300))
@@ -244,28 +257,36 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
         logS = np.log(S_of(z))
         return 1.0 - np.exp(logS.sum())
 
-    lo0 = float(mu_lo.min() - 9.0 * s.max())
-    hi0 = float(mu_hi.max() + 9.0 * s.max())
-    a, b = lo0, hi0
-    for _ in range(80):
-        m = 0.5 * (a + b)
-        if G(m) < delta:
-            a = m
-        else:
-            b = m
-    xlo = a
-    a, b = xlo, hi0
-    # right edge from the LEAST favourable nodes so no runner's density is cut
     def H(x):
+        # right edge from the LEAST favourable nodes: no runner's density cut
         z = (x - mu_hi) / s
         logS = np.log(S_of(z))
         return 1.0 - np.exp(logS.sum())
-    for _ in range(80):
-        m = 0.5 * (a + b)
-        if H(m) < 1.0 - delta:
-            a = m
-        else:
-            b = m
+
+    def _bracket(x0, step0, ok, sign):
+        """Push x0 outward until ok(x0), doubling the step (sixth review).
+
+        Nine sigma brackets the delta-quantiles of a Gaussian race and of
+        every shipped base, but a caller's own polynomial tail can leave
+        G^-1(delta) outside it, and bisection on an unbracketed interval
+        converges to the endpoint while looking like it succeeded. So
+        bracket first, and say so when even a capped expansion fails
+        rather than returning a window whose quantile claim is false.
+        """
+        step = step0
+        for _ in range(60):
+            if ok(x0):
+                return x0
+            x0 += sign * step
+            step *= 2.0
+        import warnings
+        warnings.warn(
+            "bulk window could not bracket the requested quantile after 60 "
+            "doublings; this base's tail is heavier than the lattice can "
+            "span, and the window is truncated rather than quantile-exact.",
+            RuntimeWarning, stacklevel=3)
+        return x0
+
     # safety margin beyond the bisected bulk. The envelope now uses the
     # true base, so the pad only absorbs the node-extreme approximation;
     # heavy-tailed bases additionally widen it by their own declared span.
@@ -274,12 +295,117 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
         span = getattr(fn, "span", None)
         if span is not None:
             pad = max(pad, 0.25 * float(max(span)) * float(s.max()))
-    return np.linspace(xlo - pad, b + pad, points)
+
+    def window_at(d):
+        step0 = max(9.0 * float(s.max()), 1e-12)
+        lo0 = _bracket(float(mu_lo.min() - 9.0 * s.max()), step0,
+                       lambda x: G(x) <= d, -1.0)
+        hi0 = _bracket(float(mu_hi.max() + 9.0 * s.max()), step0,
+                       lambda x: H(x) >= 1.0 - d, +1.0)
+        a, b = lo0, hi0
+        for _ in range(80):
+            m = 0.5 * (a + b)
+            if G(m) < d:
+                a = m
+            else:
+                b = m
+        xlo = a
+        a, b = xlo, hi0
+        for _ in range(80):
+            m = 0.5 * (a + b)
+            if H(m) < 1.0 - d:
+                a = m
+            else:
+                b = m
+        return xlo - pad, b + pad
+
+    # affordable width: keep the spacing under half the tightest
+    # performance sd, the same resolution target the sharpness refinement
+    # uses, so relaxation fires only when the tail would genuinely
+    # outrun the lattice rather than whenever the budget is modest
+    budget = 0.5 * float(s.min()) * max(points - 1, 1)
+    d = float(delta)
+    lo, hi = window_at(d)
+    while hi - lo > budget and d < 1e-4:
+        d = min(d * 100.0, 1e-4)
+        lo, hi = window_at(d)
+    if d > delta:
+        import warnings
+        warnings.warn(
+            f"bulk window relaxed delta from {delta:.0e} to {d:.0e}: this "
+            f"base's tail puts the requested quantile further out than "
+            f"{points} points can resolve, so the window is "
+            f"{hi - lo:.3g} units wide at the relaxed delta and exact "
+            "there. Raise points= to tighten it.",
+            RuntimeWarning, stacklevel=3)
+    return np.linspace(lo, hi, points)
 
 
 def _ndtr_local(z):
     from scipy.special import ndtr
     return ndtr(z)
+
+
+def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
+                 delta=1e-12):
+    """THE lattice: window plus any sharpness refinement, in one place.
+
+    The forward map and its derivatives have to integrate on the SAME
+    grid or the derivative is not the derivative of the map that was
+    evaluated (sixth review). Every caller that differentiates the race
+    -- race_jacobian, race_jacobian_row -- builds its lattice here, so
+    the only remaining difference between them and race_probabilities is
+    the integrand.
+
+    Returns (x, points); points may exceed the request after refinement.
+    """
+    sd = np.asarray(sd, dtype=float)
+    if window == "bulk":
+        x = _bulk_window(M_all, sd, points, delta, fn)
+    else:
+        x = np.linspace(M_all.min() - left * sd.max(),
+                        M_all.max() + right * sd.max(), points)
+    dx = x[1] - x[0]
+    smin = float(sd.min())
+    sharp_here = float(np.max(np.sqrt((np.asarray(V, float) ** 2).sum(axis=1)))
+                       / max(smin, 1e-300))
+    if sharp_here > 25.0 and dx > 0.5 * smin:
+        # extreme-sharpness lattice refinement (gap-stress find): with
+        # near-deterministic conditional races (same sharp > 25 regime
+        # as the node escalation -- an explicit coarse points= budget on
+        # ordinary fields is honored untouched) the winner density is
+        # narrower than the lattice spacing and the integral is
+        # underresolved (TV 5e-2 at conditional sd 1e-3 on the default
+        # 257 points; 6e-4 once resolved). Refine to ~2 points per
+        # conditional sd, capped; warn when the cap still leaves the
+        # lattice coarse.
+        need = int(np.ceil((x[-1] - x[0]) / (0.5 * smin))) + 1
+        pts2 = min(need, 8193)
+        if pts2 > points:
+            x = np.linspace(x[0], x[-1], pts2)
+            points = pts2
+        if need > 8193:
+            import warnings
+            warnings.warn(
+                "conditional races are sharper than the lattice can "
+                f"resolve even at 8193 points (min sd {smin:.1e} over a "
+                f"window of {x[-1]-x[0]:.3g}); results may carry "
+                "percent-level error. This is the near-deterministic "
+                "regime; consider larger idiosyncratic variances or "
+                "simulation.", RuntimeWarning, stacklevel=2)
+    # A correctly bracketed window can still be unusable: a polynomial
+    # tail pushes the delta-quantile so far out that the points are
+    # spread too thin to resolve the bulk. That used to hide behind a
+    # truncated window; now that the window is honest, say so.
+    if (x[-1] - x[0]) / max(len(x) - 1, 1) > 0.5 * smin:
+        import warnings
+        warnings.warn(
+            f"lattice spacing {(x[-1]-x[0])/max(len(x)-1,1):.3g} exceeds "
+            f"half the smallest performance sd ({smin:.3g}): this base's "
+            "tail forced a window wider than the point budget can "
+            "resolve. Raise points=, raise delta=, or declare a span on "
+            "the base.", RuntimeWarning, stacklevel=2)
+    return x, points
 
 
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
@@ -357,40 +483,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             return np.asarray(p), np.asarray(sl) / total
         return np.asarray(p)
     M_all = mu[None, :] + F @ V.T
-    if window == "bulk":
-        x = _bulk_window(M_all, sd, points, delta, fn)
-    else:
-        x = np.linspace(M_all.min() - left * sd.max(),
-                        M_all.max() + right * sd.max(), points)
+    x, points = forward_grid(M_all, sd, V, fn, left, right, points,
+                             window=window, delta=delta)
     dx = x[1] - x[0]
-    smin = float(sd.min())
-    sharp_here = float(np.max(np.sqrt((V ** 2).sum(axis=1))) /
-                       max(smin, 1e-300))
-    if sharp_here > 25.0 and dx > 0.5 * smin:
-        # extreme-sharpness lattice refinement (gap-stress find): with
-        # near-deterministic conditional races (same sharp > 25 regime
-        # as the node escalation -- an explicit coarse points= budget on
-        # ordinary fields is honored untouched) the winner density is
-        # narrower than the lattice spacing and the integral is
-        # underresolved (TV 5e-2 at conditional sd 1e-3 on the default
-        # 257 points; 6e-4 once resolved). Refine to ~2 points per
-        # conditional sd, capped; warn when the cap still leaves the
-        # lattice coarse.
-        need = int(np.ceil((x[-1] - x[0]) / (0.5 * smin))) + 1
-        pts2 = min(need, 8193)
-        if pts2 > points:
-            x = np.linspace(x[0], x[-1], pts2)
-            dx = x[1] - x[0]
-            points = pts2
-        if need > 8193:
-            import warnings
-            warnings.warn(
-                "conditional races are sharper than the lattice can "
-                f"resolve even at 8193 points (min sd {smin:.1e} over a "
-                f"window of {x[-1]-x[0]:.3g}); results may carry "
-                "percent-level error. This is the near-deterministic "
-                "regime; consider larger idiosyncratic variances or "
-                "simulation.", RuntimeWarning, stacklevel=2)
     if _HAVE_RUST and base == "normal":
         try:
             p, sl, total = _fastrace.forward_and_slopes(
@@ -455,9 +550,6 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
             V = np.asarray(structure.V, float)
             D = np.asarray(structure.D, float)
             structure = None
-    if structure is not None:
-        return _abilities_from_structure(p, structure, points=points,
-                                         n_iter=max(n_iter, 120), tol=tol)
     target = np.asarray(p, dtype=float)
     if target_floor is not None:
         if not target_floor > 0:
@@ -475,6 +567,15 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                 "bound on the floored contrasts, or supply a pseudocount "
                 "upstream.")
     target = target / target.sum()
+    if structure is not None:
+        # the grammar path takes the SAME contract (sixth review): the
+        # target was validated or floored above, and the iteration reports
+        # convergence through the same tail rather than returning silently
+        mu, converged, resid_max, iters = _abilities_from_structure(
+            target, structure, points=points, n_iter=max(n_iter, 120),
+            tol=tol)
+        return _inverse_return(mu, converged, resid_max, iters, floored,
+                               tol, return_info)
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
@@ -482,7 +583,9 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # a local two-cycle. Fixed damping 0.7 restores contraction.
     alpha = 1.0 if len(target) > 2 else 0.7
     resid_max = np.inf
-    for _ in range(n_iter):
+    iters = 0
+    for it in range(n_iter):
+        iters = it + 1
         phat, sl = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
                                       points=points, temperature=temperature,
                                       return_slopes=True)
@@ -501,38 +604,49 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         lim = np.minimum(2.0, 10.0 * np.abs(resid))
         mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
-    converged = resid_max < tol
+    return _inverse_return(mu, resid_max < tol, resid_max, iters, floored,
+                           tol, return_info)
+
+
+def _inverse_return(mu, converged, resid_max, iters, floored, tol,
+                    return_info):
+    """One exit for every inversion path, so the contract cannot differ
+    by grammar: warn on non-convergence unless the caller asked for the
+    diagnostics, and report the iteration actually reached."""
     if not converged and not return_info:
         import warnings
         warnings.warn(
             f"abilities_from_race did not converge: max |log residual| "
-            f"{resid_max:.2e} after {n_iter} iterations (tol {tol:.0e}). "
+            f"{resid_max:.2e} after {iters} iterations (tol {tol:.0e}). "
             "Pass return_info=True for the residual and iteration count "
             "instead of this warning.",
             RuntimeWarning, stacklevel=2)
     if return_info:
-        return mu, {"converged": converged, "max_log_residual": resid_max,
-                    "iterations": n_iter, "floored": floored}
+        return mu, {"converged": bool(converged),
+                    "max_log_residual": float(resid_max),
+                    "iterations": int(iters), "floored": floored}
     return mu
 
 
-def _abilities_from_structure(p, structure, points=257, n_iter=120,
+def _abilities_from_structure(target, structure, points=257, n_iter=120,
                               tol=1e-8):
     """Generic grammar inversion: exact forward map through the dispatch,
     damped log-residual fixed point preconditioned by the own-slope of the
     independent race at matched total variances. Damping backtracks (halves)
     whenever the residual fails to shrink, so contraction is monitored, not
-    assumed."""
+    assumed.
+
+    Takes an already validated and normalized target (the caller owns the
+    contract) and returns (mu, converged, max_log_residual, iterations)."""
     from .structures import dispatch_probabilities, structure_variances
-    target = np.asarray(p, dtype=float)
-    if np.any(target <= 0):
-        raise ValueError("all target probabilities must be positive")
-    target = target / target.sum()
+    target = np.asarray(target, dtype=float)
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
     totvar = structure_variances(structure)
     alpha, last = 0.7, np.inf
-    for _ in range(n_iter):
+    err, iters = np.inf, 0
+    for it in range(n_iter):
+        iters = it + 1
         phat = dispatch_probabilities(mu, structure, points=points)
         resid = np.log(np.maximum(phat, 1e-300)) - logt
         err = np.abs(resid).max()
@@ -547,7 +661,7 @@ def _abilities_from_structure(p, structure, points=257, n_iter=120,
         lim = np.minimum(2.0, 10.0 * np.abs(resid))
         mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
-    return mu
+    return mu, bool(err < tol), float(err), iters
 
 
 # ---------------------------------------------------------------------------

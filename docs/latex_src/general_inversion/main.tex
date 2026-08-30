@@ -104,11 +104,16 @@ independent performances \citet{cotton2021} computed \eqref{eq:field-intro} for
 all $n$ on a lattice by building the field $\sum_j \log S_j$ once and dividing
 each alternative out, and inverted the map from probabilities back to $\mu$. The
 present paper extends the field construction to correlated performances by
-conditioning: whenever $\Sigma$ makes performances independent given a few shared
-variables, the field factorizes, and all $n$ probabilities,
-Jacobian--vector products, and each inversion iteration cost $O(nLQ)$ for a
-lattice of $L$ points and $Q$ quadrature nodes; the Jacobian itself is a
-weighted graph Laplacian applied as an operator, never materialized. No per-alternative repetition; error controlled by quadrature,
+conditioning: whenever $\Sigma$ makes performances independent given a few
+shared variables, the field factorizes and all $n$ probabilities cost
+$O(nLQ)$ for a lattice of $L$ points and $Q$ quadrature nodes. For the
+factor grammar the derivatives ride the same pass at the same cost:
+Jacobian--vector products and each inversion iteration are $O(nLQ)$, with
+the Jacobian a weighted graph Laplacian applied as an operator and never
+materialized. The block and nested kernels materialize their Jacobians,
+and the tree's cross-cluster block is approximate, so the matrix-free
+claim is the factor grammar's, not every grammar's. No per-alternative
+repetition; error controlled by quadrature,
 deterministic for the Gauss--Hermite rules and reproducibly randomized for
 scrambled-Sobol nodes.
 
@@ -267,7 +272,21 @@ where the winning time lives matters. Bisect the conservative winner c.d.f.\
 envelope $G(x)=1-\prod_j S_j(x)$, built from the caller's own base survival,
 to $[G^{-1}(\delta),G^{-1}(1-\delta)]$ and pad
 two standard deviations, which makes the truncated tail mass negligible
-against the accuracy floors reported below. The envelope must use the
+against the accuracy floors reported below. Two details make that
+description literally true rather than nearly true. The interval is
+bracketed by geometric expansion before it is bisected: nine standard
+deviations hold the $\delta$-quantiles of a Gaussian race but not of an
+arbitrary polynomial tail, and bisecting an interval that does not
+bracket the root converges to its endpoint while appearing to succeed.
+And $\delta$ is a request rather than a guarantee, because the two error
+sources trade against each other: a $t_4$ race puts its $10^{-12}$
+winner quantile $1456$ standard units out, and honoring that at $257$
+points would spread the lattice to a spacing of $5.7$ and lose far more
+to discretization than truncation ever cost. When the requested window
+will not fit the point budget at a spacing of half the tightest
+performance standard deviation, $\delta$ is relaxed by factors of one
+hundred until it does, and the achieved value is reported. The window is
+then exactly the stated construction at the $\delta$ it names. The envelope must use the
 supplied base, not a normal surrogate: a Student-$t$ base at
 $\nu=2.5$ has polynomial tails that a normal envelope clips, costing
 $5\times10^{-3}$ of total variation at $n=40$ against
@@ -276,6 +295,25 @@ points on this window reach accuracy that a $500$-point ability-span lattice
 cannot, because the span window's own truncation floors near $6\times10^{-11}$;
 on fields with many hopeless contestants the bulk window is one hundred times
 more accurate at equal budget.
+
+The same lattice carries the derivatives. A Jacobian evaluated on a
+different grid, or one that treats the lattice total as stationary when
+it is not, is the derivative of a neighbouring map rather than of the
+one that was evaluated; both matter at the accuracy this paper claims.
+The shipped full and row Jacobians therefore build the window through
+the same routine as the forward pass, integrate the own-coordinate
+derivative $\partial f_i/\partial\mu_i$ instead of imposing it from the
+continuum's zero-row-sum identity, and apply the quotient rule to the
+lattice normalization: with unnormalized masses $a$, total
+$T=\mathbf{1}^{\top}a$ and $p=a/T$, the returned matrix is
+$(A-p\,\mathbf{1}^{\top}A)/T$ with $A=\partial a/\partial\mu$. Against
+central differences of the forward map this is exact to
+$2\times10^{-11}$ relative on a coarse $65$-point lattice and
+$1\times10^{-6}$ under a $t_4$ base, where the previous continuum
+surrogate stood at $1\times10^{-8}$ and $1\times10^{-5}$; on a fine
+Gaussian lattice the two agree, which is why the surrogate survived
+earlier scrutiny. Row sums now vanish as a property of the quadrature
+rather than by construction.
 
 Two byproducts are cheap once the field is built. Any specified photo-finish
 tie density is one more lattice sum; \S\ref{sec:jac} identifies it with the
@@ -442,12 +480,14 @@ bisection geometry
 \citep{lopezdeprado2016} is exactly a race: give internal node $t$ strength
 $\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$ with $\rho_t=\max(1-2h_t^2,0)$
 for merge height $h_t$, and leaf $i$ idiosyncratic variance
-$1-\rho_{\mathrm{first}(i)}$; with the root effect entering at its cophenetic value, the implied
-correlation equals the floored cophenetic matrix. The shipped
-\texttt{from\_linkage} instead fixes the root effect to zero, the root
-being choice-irrelevant; the two models agree on contrast space, with
-pairwise difference variances unchanged, but the zero-root model's raw
-correlations are $(\rho_{ij}-\rho_0)/(1-\rho_0)$, not $\rho_{ij}$.
+$1-\rho_{\mathrm{first}(i)}$. The shipped \texttt{from\_linkage} retains
+the root at its cophenetic value, so its implied correlation is the
+floored cophenetic matrix itself. Fixing the root effect to zero instead
+gives a contrast-equivalent race, the root being choice-irrelevant: the
+two agree on every pairwise difference variance, but the zero-root
+model's raw correlations are $(\rho_{ij}-\rho_0)/(1-\rho_0)$ rather than
+$\rho_{ij}$, which matters only to a reader reading correlations off the
+model rather than choices out of it.
 The floor is forced, because uniform shared effects cannot
 represent negative dependence, and omitting it silently inflates other implied
 correlations above one. The identity turns dendrogram-consistent concentration
@@ -472,8 +512,12 @@ $j\ne i$
 \]
 the second equality being the divergence theorem, the Euclidean special
 case of the generalized Stokes theorem, applied to the vector field
-$q_\mu e_j$. The contribution at infinity vanishes for any integrable
-$q_0$, and the only face of $\partial R_i$ whose outward normal has a
+$q_\mu e_j$. Take $q_0\in C^1$ with $q_0$ and $\nabla q_0$ integrable and
+$|x|^{n-1}q_0(x)\to0$, which the Gaussian law of the theorem satisfies
+outright; integrability alone would not license either the
+differentiation under the integral or the flux at infinity. The
+contribution over the sphere at infinity then vanishes, and the only
+face of $\partial R_i$ whose outward normal has a
 nonzero $j$-component is $F_{ij}$, where that normal is
 $(e_i-e_j)/\sqrt2$.
 
@@ -607,9 +651,12 @@ W(td)-t\langle p^{\star},d\rangle
 linearly in $t$. The decay is uniform, not merely raywise:
 $d\mapsto\langle p^{\star},d\rangle-\min_i d_i$ is continuous and
 strictly positive on the compact unit sphere of $\mathbf{1}^{\perp}$,
-so it attains a positive minimum $\kappa$, and the objective is bounded
-above by $W(0)-\kappa\lVert\mu\rVert$ along every direction --- which
-is coercivity for arbitrary diverging sequences. Constancy along
+so it attains a positive minimum $\kappa$, and the displayed inequality
+at $t=\lVert\mu\rVert$ gives $F(\mu)\le-\kappa\lVert\mu\rVert$ for every
+$\mu\in\mathbf{1}^{\perp}$, writing $F$ for the objective --- which is
+coercivity for arbitrary diverging sequences. (The bound is on $F$
+itself, not on $F$ relative to $F(0)$: the objective may climb toward
+its maximizer before the linear decay takes over.) Constancy along
 $\mathbf{1}$ is translation invariance
 again, exactly when the target sums to one. A strictly concave coercive
 function on $\mathbf{1}^{\perp}$ attains a unique maximum, where the
@@ -697,7 +744,11 @@ opt-in, and the result is then a one-sided bound on the floored
 contrasts in the direction the theorem states; the returned diagnostics
 name which entries were floored, whether the iteration converged and
 the residual reached, and non-convergence warns rather than returning a
-best effort silently. Ignoring known structure at inversion time is
+best effort silently. The contract is the same for every grammar: the
+target is validated once, before the call splits by structure, and all
+five paths return through one exit, so a block or tree inversion
+reports floored entries, iteration count and convergence exactly as the
+factor one does. Ignoring known structure at inversion time is
 not a small error: inverting block-generated probabilities under an assumed
 independent model mislocates abilities by up to three tenths of the field's
 spread (the pinned configuration: $n=200$, thirty clusters, within-cluster
@@ -1044,9 +1095,16 @@ exact-gradient maximizer is the inversion of the observed shares and the
 exercise measures how faithfully each method performs that inversion
 under multinomial noise.
 
-The estimand is the penalized (MAP) maximizer under a Jeffreys Dirichlet
-prior, counts $+\tfrac12$, applied identically to every arm. This is not
-cosmetic. The unpenalized saturated likelihood has \emph{no} finite
+Each count is smoothed by one half before any arm sees it, which is the
+posterior-mean share vector under the multinomial Jeffreys prior,
+$\mathbb{E}[p_i\mid c]=(c_i+\tfrac12)/(T+n/2)$. (It is not the Jeffreys
+MAP: the $\mathrm{Dirichlet}(\tfrac12)$ posterior has exponents
+$c_i-\tfrac12$, whose mode leaves empty cells on the boundary. Read as a
+penalized likelihood in simplex coordinates, add-half is the
+$\mathrm{Dirichlet}(\tfrac32)$ mode.) In the saturated model the estimator
+is the race inverse of that smoothed vector, and the simulated arms
+maximize the same add-half-smoothed criterion, so the comparison stays
+like for like. This is not cosmetic. The unpenalized saturated likelihood has \emph{no} finite
 maximizer when any count is zero, which Theorem~\ref{thm:inverse}
 states and this design would otherwise walk into: the smallest
 alternative here has $p=2.5\times10^{-5}$, so its expected count is
@@ -1060,7 +1118,7 @@ boundary sequence rather than a maximizer. Eight replications:
 \toprule
 estimator & RMSE over identified alternatives & median fit time \\
 \midrule
-exact gradient MAP & $0.0148$ & $2.4$ s \\
+exact-gradient smoothed inversion & $0.0148$ & $2.4$ s \\
 MSL, $R=100$ & $0.0275$ & $3.5$ s \\
 MSL, $R=1000$ & $0.0161$ & $39.9$ s \\
 \bottomrule

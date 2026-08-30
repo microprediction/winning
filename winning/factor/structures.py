@@ -127,6 +127,22 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
     if isinstance(structure, Factor):
         return _rp(mu, V=np.asarray(structure.V, float),
                    D=np.asarray(structure.D, float), **kw)
+    # the hierarchical kernels are Gaussian, hard-race, probabilities-only.
+    # They used to accept and discard base=, temperature= and
+    # return_slopes=, answering a different question than the caller asked
+    # (sixth review). Refuse instead.
+    unsupported = [k for k, bad in
+                   (("base", kw.get("base") not in (None, "normal")),
+                    ("temperature", bool(kw.get("temperature"))),
+                    ("return_slopes", bool(kw.get("return_slopes"))))
+                   if bad]
+    if unsupported:
+        raise NotImplementedError(
+            f"{type(structure).__name__} races do not support "
+            f"{', '.join(unsupported)}: the block/nested/tree kernels are "
+            "Gaussian hard races returning probabilities only. Use "
+            "structure=Factor (or V=/D=) for a non-normal base, finite "
+            "temperature or slopes.")
     if isinstance(structure, Blocks):
         return block_race_probabilities(mu, structure.cluster,
                                         structure.loading, structure.D,
