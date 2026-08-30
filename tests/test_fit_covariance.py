@@ -161,3 +161,41 @@ def test_bad_covariances_raise_clearly():
     B = rng.normal(size=(6, 2))
     p = race_probabilities(mu, cov=B @ B.T)
     assert abs(p.sum() - 1) < 1e-9 and np.isfinite(p).all()
+
+
+def test_heterogeneous_scales_analytic_two_alternative():
+    # fourth review's counterexample: C equicorrelated (rho = 0.9),
+    # S = diag(1, 2). A CORRELATION-space quotient fit that restores
+    # scales afterwards gets the only contrast that matters wrong
+    # (difference variance 0.5 instead of 1.4); the shipped fit works in
+    # covariance coordinates and must match the analytic binary
+    # probability. (Their example also exposed an n=2 division by zero
+    # in the water-filling diagonal solve, now guarded.)
+    from scipy.stats import norm
+    rho = 0.9
+    C = np.array([[1.0, rho], [rho, 1.0]])
+    S = np.diag([1.0, 2.0])
+    Sigma = S @ C @ S
+    mu = np.array([0.0, 0.5])
+    dvar = Sigma[0, 0] + Sigma[1, 1] - 2 * Sigma[0, 1]
+    p1 = norm.cdf((mu[1] - mu[0]) / np.sqrt(dvar))
+    p = race_probabilities(mu, cov=Sigma)
+    assert abs(p[0] - p1) < 1e-6
+
+
+def test_exact_grammar_round_trip_with_unequal_variances():
+    # variances spanning two decades; supplying Sigma through the dense
+    # front door must agree with supplying (V, D) directly
+    import warnings
+    rng = np.random.default_rng(0)
+    n = 12
+    V = rng.normal(size=(n, 2)) * 0.6
+    D = np.exp(rng.uniform(np.log(0.1), np.log(10), n))
+    Sigma = V @ V.T + np.diag(D)
+    mu = np.sort(rng.normal(size=n))
+    F, W = qmc_nodes(2, 12)
+    p_direct = race_probabilities(mu, V=V, D=D, F=F, W=W, points=513)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p_dense = race_probabilities(mu, cov=Sigma, points=513)
+    assert 0.5 * np.abs(p_direct - p_dense).sum() < 2e-2

@@ -231,6 +231,12 @@ def _nnls_centered_gram(c, n, n_pass=100):
     call at n=2000, this is microseconds, same minimizer."""
     a = 1.0 - 2.0 / n
     b = 1.0 / (n * n)
+    if n <= 2:
+        # n = 2 degenerates (a = 0): P o P is rank one, only d1 + d2 is
+        # determined, and the minimum-norm nonnegative representative is
+        # the symmetric split (referee-4 counterexample found the 0/0)
+        s = max(float(c.sum()), 0.0) / (a + b * n)
+        return np.full(n, max(s, 0.0) / n)
     s = max(float(c.sum()), 0.0) / (a + b * n)
     for _ in range(n_pass):
         mask = c > b * s
@@ -331,7 +337,10 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         rhs = _diag_center2(C - Vc @ Vc.T)
         a = 1.0 - 2.0 / n
         b = 1.0 / (n * n)
-        d = rhs / a - (b * rhs.sum()) / (a * (a + n * b))
+        if n <= 2:
+            d = np.full(n, max(float(rhs.sum()), 0.0) / (a + n * b) / n)
+        else:
+            d = rhs / a - (b * rhs.sum()) / (a * (a + n * b))
         Dc = np.maximum(d, 1e-3 * float(np.mean(np.diag(C))))
         Rm = _center2(C - Vc @ Vc.T - np.diag(Dc))
         return Dc, float(np.abs(Rm).max())

@@ -508,16 +508,44 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
 
 
 def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
-                   points=501):
+                   points=501, mass_tol=1e-3):
     """The full single-removal ensemble q[i][j] = P(j wins | i removed),
     every row from the same shared field by dividing i's survival back
-    out. Rows sum to one. O(Q N^2 L)."""
+    out. Rows sum to one. O(Q N^2 L) -- note the ensemble's OUTPUT alone
+    is Omega(n^2); a single requested row costs one field pass.
+
+    Grid discipline (fourth review): the removal identity is exact in
+    the continuum but the lattice must COVER the post-removal winner,
+    whose bulk is the first-or-second-order statistic of the original
+    field -- remove a dominant favorite and the new winner lives where
+    the old one never did. This function therefore uses the full
+    ability-span window (coverage by construction: it contains every
+    runner's density), refines the spacing to the sharpest runner so a
+    wide field cannot silently dilute resolution, and CHECKS the
+    unnormalized row masses, which the continuum identity fixes at one,
+    raising if the defect exceeds mass_tol instead of letting the
+    normalization hide it. The tight-window alternative is a lattice
+    sized to the first- and second-finisher bulks; the second-finisher
+    survival is the one-failure term of the SIAM paper's multiplicity
+    union calculus, prod_i S_i (1 + sum_i (1-S_i)/S_i), an O(nL)
+    byproduct of the field.
+    """
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
     n = len(mu)
     M_all = mu[None, :] + F @ V.T
+    span = float(M_all.max() - M_all.min()) + (left + right) * float(sd.max())
+    need = int(np.ceil(span / (float(sd.min()) / 8.0))) + 1
+    pts = int(min(max(points, need), 16385))
+    if need > 16385:
+        import warnings
+        warnings.warn(
+            "removal_shares: the ability span is too wide to resolve the "
+            f"sharpest runner even at 16385 lattice points (needs {need}); "
+            "row masses are checked and will raise if accuracy is lost",
+            RuntimeWarning, stacklevel=2)
     x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), points)
+                    M_all.max() + right * sd.max(), pts)
     dx = x[1] - x[0]
     q = np.zeros((n, n))
     for c in range(len(F)):
@@ -532,6 +560,15 @@ def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
             contrib = (f * rest).sum(1) * dx
             contrib[i] = 0.0
             q[i] += W[c] * contrib
+    mass = q.sum(axis=1)
+    defect = float(np.abs(mass - 1.0).max())
+    if defect > mass_tol:
+        raise FloatingPointError(
+            f"removal_shares: post-removal winner mass defect {defect:.2e} "
+            f"exceeds {mass_tol:.0e} (worst row {int(np.abs(mass-1).argmax())}); "
+            "the lattice failed to capture the post-removal race -- raise "
+            "points= or mass_tol= deliberately rather than trusting a "
+            "renormalization that would hide the missing mass")
     return q / q.sum(axis=1, keepdims=True)
 
 
@@ -691,3 +728,69 @@ def abilities_from_softmax(p, temperature=1.0):
     tau = float(temperature)
     logp = np.log(p / p.sum())
     return -tau * (logp - logp.mean())
+
+
+def failure_base(q, width=0.35, offset=6.0, base="normal",
+                 standardize=False):
+    """A performance density with a FAILURE LUMP: with probability q the
+    contestant does not perform (retires, crashes, times out, refuses,
+    emits a parse error) and lands far down the field; otherwise it runs
+    the given base.
+
+    Returns a base callable for race_probabilities(base=...) and the
+    ratings updates. Min-wins: the lump sits `offset` standard units
+    into the SLOW tail, smeared by `width` so everything stays smooth
+    and differentiable (a true Dirac would break the lattice, which is
+    exactly the 'dirac disaster' the F1 experiments recorded).
+
+    Why this rather than a heuristic: with a lump in the density, Bayes
+    SPLITS a catastrophic result between 'slow' and 'broke' according to
+    the modelled failure rate, instead of charging all of it to ability
+    (the naive treatment, which ranks a retirement as last) or throwing
+    the evidence away (censoring). Measured motivation, from the bandits
+    lane on synthetic motorsport: with mechanical, ability-independent
+    failures censoring is near-optimal (RMSE 0.146 against naive 0.351),
+    but once retirement probability rises as ability falls, neither
+    heuristic dominates -- naive wins the ordering, censoring wins the
+    magnitudes, and no tuning reconciles them, because they answer
+    different halves of the question.
+
+    NOT standardized by default, deliberately, and this matters: the
+    engine's other bases are mean-zero unit-variance so that `D` is the
+    performance variance, but a lump at six sigma inflates the mixture
+    variance to 7.5 at q=0.25, and standardizing would then squeeze the
+    RUNNING component by a factor of 2.7 -- `D` would silently stop
+    meaning what the caller thinks. Measured cost of getting this wrong:
+    abilities recovered with the right ORDER (rank correlation 0.85) but
+    badly shrunk magnitudes (RMSE 0.58 against 0.27 for the naive
+    treatment). Unstandardized, the running component stays N(0,1) in
+    `z`, so `D` is the variance of a contestant who actually runs, and
+    the lump is a separate event on top. Pass standardize=True only if
+    you specifically want the mixture itself normalized.
+    """
+    q = float(q)
+    if not 0.0 <= q < 1.0:
+        raise ValueError("failure probability q must lie in [0, 1)")
+    fn0 = base if callable(base) else BASES[base]
+    w = float(width)
+    off = float(offset)
+    if standardize:
+        m1 = q * off
+        var = (1.0 - q) * 1.0 + q * (w * w + off * off) - m1 * m1
+        sd = np.sqrt(max(var, 1e-12))
+    else:
+        m1, sd = 0.0, 1.0
+
+    def _fail(z):
+        u = m1 + sd * np.asarray(z, dtype=float)      # de-standardize
+        S0, f0, fp0 = fn0(u)
+        zl = (u - off) / w
+        Sl = np.maximum(1.0 - ndtr(zl), 1e-300)
+        fl = np.exp(-0.5 * zl * zl) / (w * np.sqrt(2.0 * np.pi))
+        fpl = -zl * fl / w
+        S = (1.0 - q) * S0 + q * Sl
+        f = ((1.0 - q) * f0 + q * fl) * sd
+        fp = ((1.0 - q) * fp0 + q * fpl) * sd * sd
+        return np.maximum(S, 1e-300), f, fp
+
+    return _fail

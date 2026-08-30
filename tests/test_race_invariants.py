@@ -241,3 +241,38 @@ def test_heavy_favorite_inversion_converges():
             mu = abilities_from_race(p / p.sum())
             p2 = race_probabilities(mu)
             assert np.abs(np.log(p2) - np.log(p / p.sum())).max() < 1e-6
+
+
+def test_removal_shares_dominant_favorite():
+    # fourth review: removing a contestant 20-200 sd better than the
+    # field moves the post-removal winner bulk far from the original
+    # one; the lattice must cover it and the row mass must be checked
+    # rather than silently renormalized
+    import numpy as np
+    from scipy.stats import norm
+    from winning.factor.races import removal_shares
+    truth = norm.cdf(1.0 / np.sqrt(2.0))
+    for gap in (20.0, 200.0):
+        mu = np.array([-gap, 0.0, 1.0])
+        q = removal_shares(mu, D=np.ones(3))
+        assert abs(q[0, 1] - truth) < 1e-4
+        assert abs(q.sum(axis=1) - 1).max() < 1e-9
+
+
+def test_lattice_convergence_is_spectral_not_quadratic():
+    # Peter's challenge ("we are on a lattice, there are always ties"):
+    # within-cell tie mass lives in the quadrature error, and for these
+    # smooth, tail-decaying integrands that error is SPECTRAL, not
+    # O(dx^2) -- measured 5.6e-3 at 9 points, 7.9e-7 at 17, machine zero
+    # by 33 on an asymmetric pair. This is why the factor engine needs
+    # no multiplicity bookkeeping where the classic integer-lattice
+    # engine (whose dead-heat mass is fixed and real) does.
+    import numpy as np
+    from scipy.stats import norm
+    from winning.factor.races import race_probabilities
+    mu = np.array([0.0, 0.3])
+    exact = norm.cdf(0.3 / np.sqrt(2))
+    p17 = race_probabilities(mu, D=np.ones(2), points=17, window="span")
+    p33 = race_probabilities(mu, D=np.ones(2), points=33, window="span")
+    assert abs(p17[0] - exact) < 1e-5
+    assert abs(p33[0] - exact) < 1e-12
