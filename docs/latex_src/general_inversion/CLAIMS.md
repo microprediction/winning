@@ -250,3 +250,36 @@ internally consistent within each run, so the paper's comparative claim
 (the exact path is both faster and more accurate than MSL at either
 replication count) holds in both. Re-run the script on an idle machine
 and replace the column before submission.
+
+### Closed since: three of the four disclosed gaps
+
+- **Replications.** The saturated study ran at eight, unpaired. Now
+  forty, paired (every arm sees the same draw). Exact beats MSL R=100 by
+  0.0112 +/- 0.0006 (18.7 SE, 39/40) and R=1000 by 0.0017 +/- 0.0002
+  (6.9 SE, 33/40). Point estimates moved slightly upward
+  (0.0148/0.0275/0.0161 -> 0.0168/0.0286/0.0184): the small sample was
+  mildly favourable, the ordering was never in doubt. Empty cells are 13
+  of 40 against the 11.2 the paper's own rate predicts.
+
+- **Multistart dispersion**, offered as a diagnostic and never reported.
+  Now measured, and the obvious version of it is the wrong one. Across
+  four ensembles at n=300 with eight random starts, every start reaches
+  the same objective to 4e-16 and none beats the shipped start. But on
+  block equicorrelation the starts agree on the objective AND on D to
+  every digit while pricing races that differ by TV 0.25: centering a
+  six-block matrix leaves a FIVE-fold tied eigenvalue, so a rank-three
+  fit picks an arbitrary three-of-five subspace, every pick exactly
+  optimal, each implying a different race. At the multiplicity the fit
+  is exact and the spread collapses to 8e-4. Diagnostic: disperse the
+  priced RACE, not the objective. Remedy: rank, not optimization.
+
+- **Zero-win tail at n=2000**, disclosed as untested. Sample splitting
+  now run: model mass 1.13e-4 on a set fixed by the first million paths,
+  111 wins from an independent second million, 95% CI
+  [9.13e-5, 1.34e-4], model inside. Bulk scored on the second half alone
+  at TV 4.4e-3 against a 5.4e-3 split-half noise floor.
+
+Still open: the timing column (see above) and, newly, whether the
+degeneracy finding deserves a rank-selection rule rather than a
+diagnostic. The fitter picks k=3 by default; on a matrix whose centered
+spectrum has a tied leading block, that default is silently arbitrary.
