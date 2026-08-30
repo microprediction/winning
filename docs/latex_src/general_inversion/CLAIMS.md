@@ -85,3 +85,22 @@ index. Paths are repo-relative.
 7. n=2000 one-call: fit 0.6 s + price 3.6 s (fit was 41 s before the
    double-centering/subspace/water-filling rework, commit db111e3;
    NNLS closed form verified to 1e-14 vs scipy).
+
+## Inversion at a million (2026-08-29)
+
+`bench.py invertmillion`. The paper's headline inversion benchmark is
+N=1e4 "in under a minute"; that was the table's limit, not the
+method's. Measured on one laptop:
+
+| n | structure | forward | inversion | max abs mu error |
+|---|---|---|---|---|
+| 1e5 | independent | 0.7 s | 6.8 s | 1.2e-11 |
+| 1e5 | factor rank-1 | 3.4 s | 111.6 s | 2.8e-09 |
+| 1e6 | independent | 7.7 s | 80.3 s | 7.5e-11 |
+| 1e6 | factor rank-1 | 31.2 s | 1319.9 s | 2.6e-09 |
+
+So the per-operation scale statement is now: forward block field 1e7,
+forward rank-one factor 1e6, INVERSION 1e6 (80 s independent, 22 min
+rank-one factor), full rank-two factor inversion 1e4 in under a minute.
+Dense covariance remains a separate claim because it must first be
+fitted into a scalable grammar.

@@ -355,3 +355,30 @@ elif mode == "bm":
     print(f"shared field: {t_field*1000:.0f} ms   per-alternative: {t_alt:.1f} s "
           f"({t_alt/t_field:.0f}x)   TV {0.5*np.abs(p_field-p_alt).sum():.2e}   "
           f"max|log ratio| {np.abs(np.log(p_field)-np.log(p_alt)).max():.2e}")
+
+elif mode == "invertmillion":
+    # Peter's challenge ("why don't you try calibrating a million"): the
+    # paper's headline inversion figure was N=1e4, but that was the
+    # table's limit, not the method's.
+    from winning.factor.races import abilities_from_race, race_probabilities
+    for n in (100_000, 1_000_000):
+        for kind in ("independent", "factor r1"):
+            rng = np.random.default_rng(0)
+            mu0 = rng.normal(size=n) * 0.8
+            mu0 -= mu0.mean()
+            if kind == "independent":
+                kw = dict(D=np.full(n, 1.0))
+            else:
+                kw = dict(V=rng.normal(size=(n, 1)) * 0.5,
+                          D=0.5 + rng.random(n))
+            t0 = time.time()
+            p = race_probabilities(mu0, **kw)
+            t_fwd = time.time() - t0
+            t0 = time.time()
+            mu_hat = abilities_from_race(p, **kw)
+            t_inv = time.time() - t0
+            p2 = race_probabilities(mu_hat, **kw)
+            resid = np.abs(np.log(p2) - np.log(p)).max()
+            print(f"n={n:>9,d} {kind:12s} forward {t_fwd:6.1f} s  "
+                  f"inversion {t_inv:7.1f} s  max|log p resid| {resid:.1e}  "
+                  f"max|mu err| {np.abs(mu_hat - mu0).max():.1e}")
