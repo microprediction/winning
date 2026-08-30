@@ -153,9 +153,35 @@ def update_ranking(m, v, order, beta2=1.0):
     return m, v
 
 
-def _order_pass(m, sd, order, L=2001):
-    """Joint ordered-statistics likelihood for independent Gaussians and its
-    exact gradient, by one forward and one adjoint sweep, O(nL).
+def _base_rows(x, m_j, sd_j, base):
+    """Max-wins density, its m-derivative, and CDF for one player.
+
+    The engine's bases are standardized MIN-wins laws (S, f, fp at z);
+    this module is max-wins, so evaluate at -z: for X = -Y,
+    f_max(z) = f_min(-z), P(X < x) = S_min(-z), and
+    d/dm [f_min(-z)/sd] = fp_min(-z)/sd^2. Gaussian reduces to the
+    former hardcoded rows exactly (fp = -z f gives g z / sd)."""
+    z = (x - m_j) / sd_j
+    if base == "normal":
+        g = np.exp(-0.5 * z * z) / (sd_j * np.sqrt(2 * np.pi))
+        return g, g * z / sd_j, ndtr(z)
+    from ..factor.races import BASES
+    fn = base if callable(base) else BASES[base]
+    S_u, f_u, fp_u = fn(-z)
+    return f_u / sd_j, fp_u / (sd_j * sd_j), np.maximum(S_u, 1e-300)
+
+
+def _order_pass(m, sd, order, L=2001, base="normal"):
+    """Joint ordered-statistics likelihood and its exact gradient, by one
+    forward and one adjoint sweep, O(nL).
+
+    base is any standardized density the race layer accepts (default
+    normal). A failure lump in the base is the point of this parameter:
+    with ranked feedback, a retirement is a LAST-PLACE finish, and the
+    lump lets Bayes split that observation between "slow" and "broke"
+    instead of charging all of it to ability. Winner-only feedback
+    barely sees a failure at all, since a failure simply is not the
+    winner.
 
     Structure: P = g_1^T D T_2 with T_t = C(g_t * T_{t+1}), T_n = F_n,
     C = trapezoidal cumulative integral, D = dx. P is linear in each
@@ -164,8 +190,16 @@ def _order_pass(m, sd, order, L=2001):
     log-scales so 20-player orders (P ~ 1e-19) stay accurate.
     Returns (log P, d log P / d m)."""
     n = len(order)
-    lo = float((m - 8 * sd.max()).min())
-    hi = float((m + 8 * sd.max()).max())
+    pad = 8.0
+    if base != "normal":
+        fn = base if callable(base) else None
+        span = getattr(fn, "span", None)
+        if span is not None:
+            pad = max(pad, float(max(span)))
+        else:
+            pad = max(pad, 12.0)
+    lo = float((m - pad * sd.max()).min())
+    hi = float((m + pad * sd.max()).max())
     x = np.linspace(lo, hi, L)
     dx = x[1] - x[0]
 
@@ -179,14 +213,12 @@ def _order_pass(m, sd, order, L=2001):
 
     g = np.empty((n, L)); dg = np.empty((n, L))
     for t, j in enumerate(order):
-        z = (x - m[j]) / sd[j]
-        g[t] = np.exp(-0.5 * z * z) / (sd[j] * np.sqrt(2 * np.pi))
-        dg[t] = g[t] * z / sd[j]
+        g[t], dg[t], _ = _base_rows(x, m[j], sd[j], base)
 
     # forward sweep: scaled T_t for t = n .. 2
     T = np.empty((n + 1, L)); sT = np.zeros(n + 1)
     j = order[-1]
-    T[n] = ndtr((x - m[j]) / sd[j])
+    T[n] = _base_rows(x, m[j], sd[j], base)[2]
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])
         mx = raw.max()
@@ -352,7 +384,8 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps)
 
 
-def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3):
+def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
+                            base="normal"):
     """The shared-realization-correct full-order update with factor
     correlation: the factor mixture of update_ranking_exact, closing the
     open item recorded in update_ranking's caveat. order lists players
@@ -363,12 +396,12 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3):
     order = np.asarray(order, dtype=int)
 
     def node(mm):
-        return _order_pass(mm, sd, order)
+        return _order_pass(mm, sd, order, base=base)
 
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps)
 
 
-def _order_pass_batch(Ms, sd, order, L=None):
+def _order_pass_batch(Ms, sd, order, L=None, base="normal"):
     """_order_pass vectorized over a batch of mean vectors (the factor
     nodes of the full-covariance order update -- the order-heavy online
     case the bandits lane measured: correlation identification flows
@@ -384,8 +417,12 @@ def _order_pass_batch(Ms, sd, order, L=None):
     sd = np.asarray(sd, dtype=float)
     Q, nm = Ms.shape
     n = len(order)
-    lo = float((Ms - 8 * sd.max()).min())
-    hi = float((Ms + 8 * sd.max()).max())
+    pad = 8.0
+    if base != "normal":
+        span = getattr(base, "span", None)
+        pad = max(pad, float(max(span))) if span is not None else max(pad, 12.0)
+    lo = float((Ms - pad * sd.max()).min())
+    hi = float((Ms + pad * sd.max()).max())
     if L is None:
         span_single = float(Ms[0].max() - Ms[0].min()) + 16 * float(sd.max())
         dx_t = span_single / 2001.0
@@ -403,13 +440,11 @@ def _order_pass_batch(Ms, sd, order, L=None):
 
     g = np.empty((n, Q, L)); dg = np.empty((n, Q, L))
     for t, j in enumerate(order):
-        z = (x[None, :] - Ms[:, j][:, None]) / sd[j]
-        g[t] = np.exp(-0.5 * z * z) / (sd[j] * np.sqrt(2 * np.pi))
-        dg[t] = g[t] * z / sd[j]
+        g[t], dg[t], _ = _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)
 
     T = np.empty((n + 1, Q, L)); sT = np.zeros((n + 1, Q))
     j = order[-1]
-    T[n] = ndtr((x[None, :] - Ms[:, j][:, None]) / sd[j])
+    T[n] = _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)[2]
     alive = np.ones(Q, dtype=bool)
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])

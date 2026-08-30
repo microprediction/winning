@@ -221,14 +221,15 @@ def _winner_kernel(winner, k, points=801):
     return kernel
 
 
-def _order_kernel(order):
+def _order_kernel(order, base="normal"):
     """Vectorized ordered-statistics kernel across factor nodes."""
     from .nway import _order_pass_batch
 
     order = np.asarray(order, dtype=int)
 
     def kernel(pts, D, Vaug, F, W):
-        return _order_pass_batch(pts, np.sqrt(np.maximum(D, 1e-300)), order)
+        return _order_pass_batch(pts, np.sqrt(np.maximum(D, 1e-300)), order,
+                                 base=base)
 
     return kernel
 
@@ -253,7 +254,7 @@ def update_winner_full(m, S, winner, V=None, beta2=1.0, nodes_log2=10,
 
 
 def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
-                      eps=None, eps_rel=0.15):
+                      eps=None, eps_rel=0.15, base="normal"):
     """Full-order observation against a full-covariance belief
     (max-wins, order best-first). Returns (m_post, S_post, logZ);
     near-impossible orders degrade like order_loglik.
@@ -264,7 +265,7 @@ def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
     sweeps vectorized across factor nodes, because online deployments
     are order-heavy.
     """
-    kernel = _order_kernel(order)
+    kernel = _order_kernel(order, base=base)
     return _mixture_update_full(m, S, V, beta2, None, nodes_log2=nodes_log2,
                                 eps=eps, eps_rel=eps_rel, kernel=kernel)
 
