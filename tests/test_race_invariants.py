@@ -276,3 +276,27 @@ def test_lattice_convergence_is_spectral_not_quadratic():
     p33 = race_probabilities(mu, D=np.ones(2), points=33, window="span")
     assert abs(p17[0] - exact) < 1e-5
     assert abs(p33[0] - exact) < 1e-12
+
+
+def test_primitive_conversion_cost_is_where_the_docs_say():
+    # the provenance rule, measured: representing a continuous law as
+    # classic's atoms costs algebraic-order conversion error, while the
+    # factor engine's exact-evaluation quadrature is at machine
+    # precision on the same grid budget (12 orders at 129 points)
+    import numpy as np
+    from winning.classic.lattice import (skew_normal_density,
+                                         state_prices_from_offsets)
+    from winning.factor.races import race_probabilities
+    mus = np.array([0.0, 0.25, 0.5, 1.0, 1.5])
+    truth = race_probabilities(mus, D=np.ones(5), points=8001,
+                               window="span")
+    unit = 0.25
+    L = int(np.ceil(16.0 / unit))
+    density = skew_normal_density(L=L, unit=unit, a=0)
+    offsets = [int(round(m / unit)) for m in mus]
+    p_classic = np.asarray(state_prices_from_offsets(density, offsets))
+    p_factor = race_probabilities(mus, D=np.ones(5), points=2 * L + 1,
+                                  window="span")
+    assert np.abs(p_classic - truth).max() < 5e-3      # atoms: conversion
+    assert np.abs(p_classic - truth).max() > 1e-5      # ...and it is real
+    assert np.abs(p_factor - truth).max() < 1e-12      # formulas: spectral

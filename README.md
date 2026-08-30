@@ -110,8 +110,14 @@ softmin expectation equals the hard race with each base convolved with
 the tau-scaled Gumbel kernel, so the same engine serves it. It is not
 identifiable from a single race, so inversion holds it fixed.
 
-Arbitrary densities (skewed, multimodal, empirical) run through custom
-bases or `winning.thurstone` — see the module docs and `research/demos/`.
+Arbitrary *formulas* (skewed, multimodal, anything with a standardized
+survival/density callable) run through custom `base=` functions.
+Arbitrary *data* — empirical histograms, integer scores, atoms with
+real dead-heat mass — belong to `winning.classic`, whose primitive is
+the lattice atom vector and whose multiplicity calculus prices genuine
+ties exactly. The rule is provenance: formulas to the front door, atoms
+to classic; the only error in either workflow is format conversion.
+See the module docstrings for the measured costs of crossing over.
 
 ## The papers
 

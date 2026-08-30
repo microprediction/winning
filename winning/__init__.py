@@ -24,8 +24,13 @@ available); inversion for blocks via abilities_from_block_race.
 winning.probit speaks the factor-probit literature's language (max-wins
 utilities, shares, supplied covariances). winning.factor holds the
 paper-faithful kernels; winning.thurstone the density-agnostic engine;
-winning.classic the original SIAM lattice ability transform (the old
-top-level imports alias to it with a DeprecationWarning).
+winning.classic the original SIAM lattice ability transform, whose
+primitive is the OPPOSITE of the front door's: there the atom vector on
+the lattice IS the distribution (empirical data, real dead heats,
+multiplicity calculus), here a distribution is a formula evaluated
+exactly with only the win integral discretized. Route by provenance:
+formulas here, atoms there. (The old top-level imports alias to
+winning.classic with a DeprecationWarning.)
 calibrate_factors (outer estimation) is reserved for a future release.
 """
 

@@ -12,6 +12,25 @@ UNIT-VARIANCE law (standardization keeps noise family separate from
 noise scale). Zero factors is literally the one-node quadrature, so the
 independent race is not a separate code path.
 
+WHAT A DISTRIBUTION IS HERE, and why it matters: a formula, not a
+vector. The engine never tabulates a distribution -- it evaluates
+S_i and f_i EXACTLY at the lattice points via the base callable, and
+the lattice discretizes only the one-dimensional win integral, whose
+smooth integrand makes that quadrature spectrally accurate (measured:
+machine precision by 33 points on asymmetric near-tied fields). Ties
+therefore have probability zero by construction and need no
+bookkeeping. The buy-in is that the law must BE a formula: an
+empirical atom set (finish times at recorded precision, integer
+scores, histogram data) has no native representation here and must
+either be smoothed into a callable -- erasing any real dead-heat mass
+-- or go to winning.classic, whose primitive is the opposite (the atom
+vector IS the distribution, and the multiplicity calculus prices its
+genuine ties exactly). The conversion error lives at that format
+boundary and only there: sampling a continuous law onto classic's
+atoms costs ~1e-3 at 129 points where this engine's quadrature costs
+1e-16 (pinned in the tests), and smoothing real atoms into a formula
+deletes model mass no refinement recovers.
+
 Promoted from research/experiments/exp14_boundaries/run_boundaries.py,
 where the general engine was exercised by the paper's substitution
 experiments (the Gumbel base's zero-loading case equals softmax to
