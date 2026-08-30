@@ -113,12 +113,14 @@ identifiable from a single race, so inversion holds it fixed.
 Arbitrary densities (skewed, multimodal, empirical) run through custom
 bases or `winning.thurstone` — see the module docs and `research/demos/`.
 
-## The paper
+## The papers
+
+Six manuscript projects live here; [papers/README.md](papers/README.md)
+indexes them all with venue status.
 
 The correlated calibration is documented in *Scalable Share Calibration
 for Factor Multinomial Probit Models*
-([papers/factor-probit-transform](papers/factor-probit-transform),
-submitted): all shares of a correlated Gaussian race in one O(QNL)
+([papers/factor-probit-transform](papers/factor-probit-transform)): all shares of a correlated Gaussian race in one O(QNL)
 pass, matrix-free graph-Laplacian derivatives, and inversion at ten
 thousand alternatives in under a minute. Every number comes from a
 committed, seeded script in
