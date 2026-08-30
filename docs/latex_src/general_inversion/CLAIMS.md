@@ -192,3 +192,61 @@ the node policy is described as it actually is (tensor GH under 1e5
 nodes, Sobol when sharp, midpoint-quantile at extreme rank one).
 Package bumped to 1.3.0 with python_requires >=3.10 and corrected
 classifiers (3.7/3.9 were advertised while the code uses `X | None`).
+
+## Sixth review (2026-08-30)
+
+Both indispensable items fixed in code rather than by softening the text.
+
+1. **"Exact gradient" was false at the numerical-map level.** Confirmed
+   and repaired. `race_jacobian`/`race_jacobian_row` built their own
+   ability-span lattice while probabilities came from the adaptive bulk
+   window, imposed the diagonal from the continuum zero-row-sum
+   identity, and skipped the normalization projection with a comment
+   calling it second order. Now: the lattice comes from the shared
+   `races.forward_grid`, the own coordinate is integrated
+   (`-f'_i/sd^2`), and the quotient rule is applied,
+   `J = (A - p 1'A)/T`. Verified against central differences of
+   `race_probabilities` itself: 2e-11 relative at 65 points (surrogate
+   1e-8) and 1e-6 under student-4 (surrogate 1e-5). Identical on a fine
+   Gaussian lattice, which is why five reviews missed it. Row sums now
+   vanish by quadrature (7e-17 normal, 5e-11 gumbel) rather than by
+   construction.
+
+2. **Jeffreys/MAP description was wrong.** Confirmed. Dirichlet(1/2) has
+   posterior exponents c_i - 1/2, whose mode is boundary-seeking at
+   empty cells; add-half is the Jeffreys posterior MEAN, or the
+   Dirichlet(3/2) mode read as a penalized likelihood. Text corrected,
+   table row renamed to "exact-gradient smoothed inversion".
+
+Smaller items, all confirmed and closed: the inversion contract reached
+only Independent/Factor (now validated once before the split, one exit
+for all five grammars, true iteration counts); the bulk window bisected
+an unbracketed interval (now bracketed geometrically, with delta
+relaxed and reported when the point budget cannot resolve the requested
+quantile -- honoring 1e-12 literally under student-4 costs 0.071 TV
+against a 4e-3 tolerance, so the relaxation is the accurate choice, not
+a concession); `winning.probit.removal_shares` bypassed the safe path;
+Blocks/Nested/Tree silently dropped base=/temperature=/return_slopes=;
+the introduction's matrix-free claim was broader than the abstract's;
+`from_linkage` retains the root (paper had it backwards); the flux
+proof needed C^1-with-decay rather than integrability; the coercivity
+bound is F(mu) <= -kappa||mu||, not W(0) - kappa||mu||.
+
+### Open: the saturated table's timing column
+
+The RMSE column is CONFIRMED unchanged after the Jacobian repair --
+re-running `research/mnp_estimation/run_mle2.py` on the new code gives
+0.0148 / 0.0275 / 0.0161, identical to the published table.
+
+The timing column is stale and needs re-measurement on a quiet machine.
+The new Jacobian does strictly more arithmetic (the fp own-derivative
+term and the total-mass derivative), measured at 1.37x the old
+surrogate's cost interleaved back-to-back at n=30, r=2, 257 points. The
+re-run's wall clock (6.5 / 9.1 / 69.3 s against the published 2.4 / 3.5
+/ 39.9) cannot be attributed: it was taken under load average 10.7 with
+five other CPU-saturating processes, and the MSL arms, which never
+touch the Jacobian, slowed by 2.6x and 1.7x. The three arms remain
+internally consistent within each run, so the paper's comparative claim
+(the exact path is both faster and more accurate than MSL at either
+replication count) holds in both. Re-run the script on an idle machine
+and replace the column before submission.
