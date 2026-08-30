@@ -1029,6 +1029,20 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
         lump at q/2                       0.967    0.203   <- best on both
         lump at 2q                        0.614    0.945
 
+    The crossover sits near a coupling of $0.08$, which in checkable
+    terms is: the weakest entrants failing about twice as often as the
+    strongest. Below roughly a 1.5x ratio, censor without thinking about
+    it. But the rule to remember is the asymmetry around the crossover,
+    not the crossover: the two mistakes cost about 5 to 1. Wrongly
+    lumping when failures are independent costs 0.072 RMSE (a 3.6-SE
+    effect); wrongly censoring when they are coupled costs 0.015 (1.1
+    SE). So the operational rule is "censor unless the coupling evidence
+    is strong", not "estimate the coupling and pick a side". At strong
+    coupling (0.16) the naive treatment becomes competitive again and
+    takes the best rank correlation, because a retirement genuinely has
+    become evidence of weakness, so the three rules partition by
+    coupling rather than one dominating.
+
     So this is a targeted instrument, not a general replacement for
     censoring. When failures are plausibly ability-independent, censor:
     the lump repairs most of the naive damage but does not reach the
