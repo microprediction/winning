@@ -861,16 +861,24 @@ one-call fit-and-price takes four seconds ($0.6$ of them the fit)
 against thirty-six for a $10^6$-draw simulation and agrees with it at
 its noise floor on the resolved bulk. For the $82$ percent of tail
 alternatives with zero simulation wins, agreement in that referee is
-unverifiable entry by entry. That set is also selected by the same
-simulation that would have to certify it, so a fixed-set binomial
-bound does not apply to it. The test that would apply is sample
-splitting: fix the zero-win set on one half of the draws, count the
-wins the independent second half places anywhere in it, and compare
-the resulting interval for its total mass with the model's
-$2$--$3\times10^{-4}$. We report the resolved bulk as verified against
-this referee and the zero-win tail as untested by it; the
-tail-exactness evidence at small $n$ comes from the Botev referee
-instead.
+unverifiable entry by entry, and the set is selected by the same
+simulation that would have to certify it, so a fixed-set binomial bound
+does not apply. Sample splitting does apply, and we run it. Fix the
+zero-win set on one half of the draws, then count the wins an
+independent second half places anywhere in that set: because the set is
+fixed before the second half is looked at, its count is binomial in the
+set's true mass and a Clopper--Pearson interval is valid. On a dense
+$n=2000$ correlation with three global factors and a forty-block layer,
+priced in a wide field where $63.6$ percent of alternatives take no win
+in the first million paths, the model puts $1.13\times10^{-4}$ of mass
+on that set and the second million paths place $111$ wins in it, a $95$
+percent interval of $[9.13\times10^{-5},1.34\times10^{-4}]$. The model's
+mass is inside it. Scored on the second half alone, so that no statistic
+is evaluated on the draws that selected its own target, full-vector
+total variation is $4.4\times10^{-3}$ against a split-half noise floor of
+$5.4\times10^{-3}$: at the referee's own resolution. Tail exactness at
+small $n$ still comes from the Botev referee, which prices individual
+orthant probabilities rather than counting wins.
 
 Fitting $VV'+\mathrm{diag}(D)$ \emph{to} $P\Sigma P$ is the wrong
 objective (\S\ref{sec:jac}). With the identified objective and projected residuals throughout, the ensemble
