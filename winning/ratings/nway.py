@@ -31,26 +31,40 @@ _F1 = np.zeros((1, 1))
 _W1 = np.ones(1)
 
 
-def _grad_logp_row(m, D, i, V=None, F=None, W=None):
+def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
+                   points=257):
     """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP.
 
     With V/F/W supplied, the mixture over the factor nodes is computed
     by the engine's shared field in ONE vectorized pass -- the same
     mixture a per-node python loop assembles at 30-100x the cost (the
-    full-covariance updates lean on this)."""
+    full-covariance updates lean on this).
+
+    base is any standardized density the engine accepts, so the moment
+    updates inherit the race layer's density-agnosticism: the Gaussian
+    moment identities need a Gaussian PRIOR, not Gaussian performance.
+    winning.factor.races.failure_base gives the retirement/DNF case."""
     n = len(m)
     Vz = np.zeros((n, 1)) if V is None else V
     Fz = _F1 if F is None else F
     Wz = _W1 if W is None else W
     a = -np.asarray(m, dtype=float)
-    p = win_probabilities_factor(a, Vz, D, Fz, Wz)
-    e = np.zeros(n)
-    e[i] = 1.0
-    Ji = jacobian_vector_product(a, Vz, D, Fz, Wz, e, form="grid")
+    if base == "normal":
+        p = win_probabilities_factor(a, Vz, D, Fz, Wz)
+        e = np.zeros(n)
+        e[i] = 1.0
+        Ji = jacobian_vector_product(a, Vz, D, Fz, Wz, e, form="grid")
+        return -Ji / max(p[i], 1e-300), p[i]
+    from ..factor.polish import race_jacobian_row
+    from ..factor.races import race_probabilities
+    p = race_probabilities(a, V=Vz, D=D, F=Fz, W=Wz, base=base,
+                           points=points)
+    Ji = race_jacobian_row(a, i, V=Vz, D=D, F=Fz, W=Wz, base=base,
+                           points=points)
     return -Ji / max(p[i], 1e-300), p[i]
 
 
-def update_winner(m, v, winner, beta2=1.0, eps=1e-4):
+def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     """Exact-moment posterior (m, v) update given `winner` won the race.
 
     m, v: prior skill means and variances; beta2: performance noise
@@ -60,15 +74,15 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4):
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     D = v + beta2
-    g, p_i = _grad_logp_row(m, D, winner)
+    g, p_i = _grad_logp_row(m, D, winner, base=base)
     m_new = m + v * g
     # diagonal second derivatives by per-coordinate central differences of
     # the gradient row (analytic second-order pass is a known follow-up)
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
-        gp, _ = _grad_logp_row(m + ej, D, winner)
-        gm, _ = _grad_logp_row(m - ej, D, winner)
+        gp, _ = _grad_logp_row(m + ej, D, winner, base=base)
+        gm, _ = _grad_logp_row(m - ej, D, winner, base=base)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
     v_new = np.maximum(v + v**2 * d2, 1e-6)
     return m_new, v_new, p_i
@@ -318,7 +332,8 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3):
     return m_new, v_new, float(logZ)
 
 
-def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3):
+def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
+                             base="normal"):
     """Exact-moment posterior update from `winner` won, when participants
     share performance factors: X_j = s_j + (V f)_j + noise_j,
     f ~ N(0, I_r), noise_j ~ N(0, beta2_j), s_j ~ N(m_j, v_j) (max-wins,
@@ -331,7 +346,7 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3):
     D = np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float)
 
     def node(mm):
-        g, p = _grad_logp_row(mm, D, winner)
+        g, p = _grad_logp_row(mm, D, winner, base=base)
         return np.log(max(p, 1e-300)), g
 
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps)
