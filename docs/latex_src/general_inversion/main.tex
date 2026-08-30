@@ -785,10 +785,26 @@ coordinatewise-stationary point. Above $n=800$ the $V$-step is subspace
 iteration rather than a full eigendecomposition and its subspace is only
 approximate, so descent is enforced instead of assumed: the objective is
 evaluated each sweep at $O(n^2)$, a sweep that fails to improve it is
-discarded, and the alternation returns the best iterate. The objective
-is nonconvex in the pair, so no global certificate is claimed; multistart
-dispersion is a cheap diagnostic and the residual report exposes the
-value reached.
+discarded, and the alternation returns the best iterate. The objective is nonconvex in the pair, so no global certificate is
+claimed, and the residual report exposes the value reached. Multistart
+dispersion is the natural diagnostic, but it has to be measured in the
+right coordinates, which is worth stating because the obvious choice is
+the wrong one. Across four ensembles at $n=300$ with eight random
+diagonal starts spanning two decades, every start reaches the same
+objective to $4\times10^{-16}$ relative and no random start ever beats
+the shipped one. On three of the four the fits agree in choices as well,
+to a total variation of $10^{-14}$. On block equicorrelation they do
+not: the starts agree on the objective and on $D$ to every digit, and
+still price races that differ by a total variation of $0.25$. The cause
+is degeneracy rather than optimization. Centering the six-block matrix
+leaves a five-fold tied leading eigenvalue, so a rank-three fit selects
+an arbitrary three-dimensional subspace of a five-dimensional one; every
+selection is exactly optimal and they imply different races. Raising the
+rank to the multiplicity makes the fit exact and collapses the
+disagreement to $8\times10^{-4}$. So the diagnostic to run is dispersion
+of the priced race across starts, not dispersion of the objective, which
+is blind to precisely the case that matters; and when it fires, the
+remedy is rank rather than a better optimizer.
 \item The working residual is then
 projected once, $R=P\,(\Sigma-VV'-\mathrm{diag}\,D_0)\,P$: the raw residual
 still contains the choice-irrelevant common component the quotient fit
@@ -1108,29 +1124,38 @@ like for like. This is not cosmetic. The unpenalized saturated likelihood has \e
 maximizer when any count is zero, which Theorem~\ref{thm:inverse}
 states and this design would otherwise walk into: the smallest
 alternative here has $p=2.5\times10^{-5}$, so its expected count is
-$1.27$ and it is empty with probability $e^{-1.27}=0.28$; two of the
-eight replications (seeds $103$ and $105$) do have an empty cell, where
-an unpenalized optimizer returns a tolerance-dependent point on a
-boundary sequence rather than a maximizer. Eight replications:
+$1.27$ and it is empty with probability $e^{-1.27}=0.28$. Thirteen of
+the forty replications do have an empty cell, against the $11.2$ that
+rate predicts, and on those an unpenalized optimizer returns a
+tolerance-dependent point on a boundary sequence rather than a
+maximizer. Forty replications, with the arms paired by construction
+since every method sees the same draw:
 
 \begin{center}\small
-\begin{tabular}{lrr}
+\begin{tabular}{lrrr}
 \toprule
-estimator & RMSE over identified alternatives & median fit time \\
+estimator & RMSE (median) & RMSE (mean $\pm$ s.e.) & median fit time \\
 \midrule
-exact-gradient smoothed inversion & $0.0148$ & $2.4$ s \\
-MSL, $R=100$ & $0.0275$ & $3.5$ s \\
-MSL, $R=1000$ & $0.0161$ & $39.9$ s \\
+exact-gradient smoothed inversion & $0.0168$ & $0.0168\pm0.0006$ & $2.4$ s \\
+MSL, $R=100$ & $0.0286$ & $0.0280\pm0.0006$ & $3.5$ s \\
+MSL, $R=1000$ & $0.0184$ & $0.0185\pm0.0005$ & $39.9$ s \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \noindent The exact path is both faster and more accurate than the
-$R=100$ simulator here, and reaches the $R=1000$ accuracy in a
-sixteenth of its time. We present the gap as a diagnostic rather than
-an anchored constant: at eight replications the paired difference is
-stable in sign but its magnitude carries replication noise we have not
-driven down.
+$R=100$ simulator here, and beats the $R=1000$ accuracy in a sixteenth
+of its time. Because the arms share every draw, the paired differences
+are the sharper statement: against $R=100$ the exact arm is better by
+$0.0112\pm0.0006$, nearly nineteen standard errors, winning $39$ of $40$
+replications; against $R=1000$ by $0.0017\pm0.0002$, seven standard
+errors, winning $33$ of $40$. The $R=1000$ margin is small in absolute
+terms, which is the honest characterization: enough simulation draws do
+approach the exact answer, at forty times the cost per fit, and the
+remaining gap is simulation bias rather than noise, since it survives
+pairing. The timing column is from an unloaded machine at the original
+eight replications; the accuracy columns are from all forty and are
+insensitive to load.
 
 \paragraph{Covariate estimation.} The overidentified case behaves
 differently, and we report it as we found it. Draw observation-specific

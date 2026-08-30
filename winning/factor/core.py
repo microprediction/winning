@@ -141,7 +141,8 @@ def factor_model_contrast(C: np.ndarray, k: int, n_iter: int = 200,
     return V, D
 
 
-def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60):
+def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
+                           D0=None):
     """Certified quotient-space factor fit (eighth-review construction).
 
     The contrast heuristic applies principal-factor logic to P C P, but
@@ -156,7 +157,11 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60):
     """
     C = np.asarray(C, dtype=float)
     n = len(C)
-    D = np.full(n, 0.5 * float(np.mean(np.diag(C))))
+    # D0 exists for multistart. The objective is nonconvex in (V, D), so
+    # the paper offers dispersion across starts as the cheap diagnostic;
+    # that diagnostic needs a way to start somewhere else.
+    D = (np.full(n, 0.5 * float(np.mean(np.diag(C)))) if D0 is None
+         else np.asarray(D0, dtype=float).copy())
     V = np.zeros((n, k))
     Q = None
     best = (V, D, _projected_sq(C, V, D))
