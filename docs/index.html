@@ -108,11 +108,12 @@
     </div>
 
     <div class="callout">
-      <strong>Calibration at ten thousand alternatives.</strong> All shares of a
-      correlated Gaussian race in one O(QNL) pass, matrix-free graph-Laplacian
-      derivatives, and inversion of observed shares to utilities in under a
-      minute at N = 10,000 — every number from a committed, seeded script.
-      <a href="./assets/pdf/factor_probit_share_calibration.pdf">The paper (PDF) →</a>
+      <strong>Forward pricing to ten million, inversion to one million.</strong>
+      All shares of a correlated race in one O(QNL) pass, matrix-free
+      graph-Laplacian derivatives, and inversion of observed shares back to
+      utilities: a million alternatives price in 29 seconds and invert in 80
+      — every number from a committed, seeded script.
+      <a href="./assets/pdf/scalable_contest_inversion.pdf">The paper (PDF) →</a>
     </div>
 
     <div class="callout">
@@ -179,13 +180,18 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
 
     <h2 id="papers">Papers</h2>
     <ul>
-      <li><a href="./assets/pdf/factor_probit_share_calibration.pdf">Scalable share
-        calibration for factor multinomial probit models</a> (2026, SSRN working paper). All
-        shares of a correlated Gaussian race in one O(QNL) pass, matrix-free
-        graph-Laplacian derivatives, and inversion of observed shares to utilities at
-        ten thousand alternatives in under a minute. The algorithm ships here as
-        <code>winning.factor</code>; every experiment is a committed script under
-        <code>research/experiments/</code>.</li>
+      <li><a href="./assets/pdf/scalable_contest_inversion.pdf">Scalable inversion of contests with correlated
+        performances, including softmax and multinomial probit</a> (2026,
+        <a href="https://papers.ssrn.com/abstract=7307363">SSRN working paper</a>).
+        All shares of a correlated race in one O(QNL) pass, matrix-free
+        graph-Laplacian derivatives, and inversion of observed shares back to
+        utilities &mdash; forward pricing benchmarked to ten million alternatives,
+        inversion to one million. Softmax is the Gumbel special case of the same
+        lattice. The algorithm ships here as <code>winning.factor</code>; every
+        experiment is a committed script under
+        <code>research/experiments/</code>. Supersedes the earlier
+        <a href="./assets/pdf/factor_probit_share_calibration.pdf">share-calibration
+        draft</a>.</li>
       <li><a href="./assets/pdf/rating_formula_1.pdf">Rating Formula 1: a case for
         non-Gaussian noise in rating systems</a> (2026). Seventy-five seasons of grands
         prix, a retirement-slab noise density, a qualifying control, and a stratified
