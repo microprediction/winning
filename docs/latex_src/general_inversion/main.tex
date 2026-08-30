@@ -22,7 +22,8 @@ Including Softmax and Multinomial Probit}
 implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
 scripts behind every number in this paper live at
 \texttt{github.com/microprediction/winning}; this revision's tables were
-produced at repository tag \texttt{paper-r1}.}}
+produced at repository tag \texttt{paper-r2}, package version
+\texttt{1.3.0}.}}
 \date{August 2026}
 
 \begin{document}
@@ -456,18 +457,72 @@ subject.
 
 \section{Jacobians, tie densities, inversion}\label{sec:jac}
 
-\begin{proposition}[Off-diagonals are photo-finish densities]
-For the race \eqref{eq:field-intro} and $j\ne i$,
+The Jacobian is a boundary flux, and saying so once derives its formula,
+its symmetry, its conservation law and its graph structure together.
+Contestant $i$ wins on the polyhedral cone
+$R_i=\{x: x_i\le x_k\ \forall k\}$, so $p_i(\mu)=\int_{R_i}q_\mu$ with
+$q_\mu(x)=q_0(x-\mu)$; the cones meet along the photo-finish faces
+$F_{ij}=\{x_i=x_j\le x_k,\ k\ne i,j\}$. Because $\mu$ enters only as a
+translation, $\partial_{\mu_j}q_\mu=-\partial_{x_j}q_\mu$, so for
+$j\ne i$
+\[
+  \frac{\partial p_i}{\partial\mu_j}
+   =-\int_{R_i}\frac{\partial q_\mu}{\partial x_j}\,dx
+   =-\int_{\partial R_i}q_\mu\,n_j\,dS ,
+\]
+the second equality being the divergence theorem, the Euclidean special
+case of the generalized Stokes theorem, applied to the vector field
+$q_\mu e_j$. The contribution at infinity vanishes for any integrable
+$q_0$, and the only face of $\partial R_i$ whose outward normal has a
+nonzero $j$-component is $F_{ij}$, where that normal is
+$(e_i-e_j)/\sqrt2$.
+
+\begin{proposition}[Photo-finish derivatives are a boundary flux]
+\label{prop:tie}
+For $j\ne i$,
+\begin{equation}\label{eq:flux}
+\frac{\partial p_i}{\partial\mu_j}
+ \;=\;\frac{1}{\sqrt2}\int_{F_{ij}}q_\mu\,dS\;\ge\;0 ,
+\end{equation}
+the probability flux across the surface on which $i$ and $j$ dead-heat
+ahead of the field. Parametrizing that face by the common value
+$x_i=x_j=t$ contributes a surface factor $\sqrt2$ which cancels, giving
+\begin{equation}\label{eq:tiecorr}
+\frac{\partial p_i}{\partial\mu_j}
+ =\int \varphi_{ij}(t,t)\,
+   \Pr\{X_k>t\ \forall k\ne i,j \mid X_i=X_j=t\}\,dt ,
+\end{equation}
+and under independence
 \begin{equation}\label{eq:tie}
 \frac{\partial p_i}{\partial \mu_j}
-  \;=\; \int f_i(x)\,f_j(x)\prod_{k\ne i,j}S_k(x)\,dx \;\ge\; 0,
+  \;=\; \int f_i(x)\,f_j(x)\prod_{k\ne i,j}S_k(x)\,dx .
 \end{equation}
-and each row of the Jacobian sums to zero.
+Under conditional independence the same factorization holds node by node
+and is averaged over the shared variables. Each row of the Jacobian sums
+to zero.
 \end{proposition}
 
-The zero row sum says a common shift moves nothing. The off-diagonal is the
-density of a dead heat between $i$ and $j$ ahead of the field. The Jacobian
-is a negative weighted graph Laplacian and is applied as an operator:
+Everything else follows from the geometry. Symmetry is $F_{ij}=F_{ji}$:
+one surface, one number, so $w_{ij}=\partial p_i/\partial\mu_j$ is
+symmetric and nonnegative. The zero row sum is translation invariance, a
+conservation law: what leaves one cone enters its neighbours. Writing $B$
+for the oriented incidence matrix of the photo-finish graph and $W_e$ for
+the diagonal of edge conductances $w_{ij}$,
+\[
+   J=-B^{\top}W_eB,
+   \qquad
+   (Jh)_i=\sum_{j\ne i}w_{ij}\,(h_j-h_i),
+\]
+the discrete analogue of $-\operatorname{div}(a\nabla h)$: $Bh$ takes
+differences across photo-finish boundaries, $W_eBh$ is the flux across
+them, $B^{\top}W_eBh$ the net flow into each winning region. The
+mass-one identity is the same theorem in dimension one, since
+$\sum_i f_i\prod_{j\ne i}S_j = \tfrac{d}{dt}(1-\prod_j S_j)$
+integrates to one; this is why the implementation's unnormalized mass
+checks are diagnostics rather than cosmetics, a material defect meaning
+the lattice missed the region, not that normalization was needed.
+
+The Jacobian is applied as an operator:
 individual entries and Jacobian--vector products are byproducts of the same
 field pass (per quadrature node a Gram structure over the lattice), while
 materializing all $n^{2}$ entries is a choice with $\Omega(n^{2})$ cost that
@@ -527,27 +582,13 @@ preserves this. Ties have measure zero under full support, so the
 minimiser is almost surely unique and Danskin's theorem gives
 $\partial W/\partial\mu_i=\Pr\{i\ \text{wins}\}$.
 
-The Hessian requires no independence assumption, and we derive it in
-three steps. Off-diagonal ($j\ne i$): raising $\mu_j$ moves only $X_j$,
-and the derivative of $p_i=\Pr\{X_i\le X_k\ \forall k\}$ is the
-probability flux through the boundary $\{X_j=X_i\}$ of the winning
-region,
-\[
-\frac{\partial p_i}{\partial\mu_j}
- \;=\;\int \varphi_{ij}(x,x)\,
- \Pr\{X_k>x,\ k\ne i,j \mid X_i=X_j=x\}\,dx\;\ge\;0,
-\]
-with $\varphi_{ij}$ the joint density of $(X_i,X_j)$ under the full
-correlated law: the photo-finish density of $i$ and $j$ jointly ahead of
-the field. Diagonal: translation invariance
-$W(\mu+c\mathbf{1})=W(\mu)+c$ forces the gradient to sum to one, hence
-every Hessian row to sum to zero, so
-$\partial p_i/\partial\mu_i=-\sum_{j\ne i}\partial p_i/\partial\mu_j$
-with no further computation. Reduction: when the law is conditionally
-independent given shared variables---every grammar member---conditioning
-factorizes the flux integral into \eqref{eq:tie}'s product form node by
-node. The Hessian is therefore $-L(\mu)$ with $L$ a weighted graph
-Laplacian; under full support ($D_i>0$, so every pairwise difference has
+The Hessian is Proposition~\ref{prop:tie}, which assumed no
+independence: its off-diagonals are the boundary fluxes
+\eqref{eq:tiecorr} under the full correlated law, and its rows sum to
+zero by the same translation invariance $W(\mu+c\mathbf{1})=W(\mu)+c$
+that fixes the diagonal without further computation. The Hessian is
+therefore $-L(\mu)$ with $L$ the weighted graph Laplacian of the
+photo-finish graph; under full support ($D_i>0$, so every pairwise difference has
 positive variance) each edge weight is strictly positive, the tie graph
 is complete, and $L\succ0$ on $\mathbf{1}^{\perp}$: $W$ is strictly
 concave there.
@@ -650,8 +691,13 @@ principle should a case demand it. Round trips through the shipped front door at
 three): independent $0.04$\,s, tree $0.37$\,s, blocks $0.67$\,s,
 factor rank-2 $1.7$\,s, nested $3.7$\,s, each to a maximum
 log-probability residual below $10^{-8}$.
-Targets below the forward map's resolution are floored, with the
-one-sided bound direction the theorem states. Ignoring known structure at inversion time is
+A zero or negative target raises rather than being silently repaired:
+by Theorem~\ref{thm:inverse} it has no finite inverse. Flooring is
+opt-in, and the result is then a one-sided bound on the floored
+contrasts in the direction the theorem states; the returned diagnostics
+name which entries were floored, whether the iteration converged and
+the residual reached, and non-convergence warns rather than returning a
+best effort silently. Ignoring known structure at inversion time is
 not a small error: inverting block-generated probabilities under an assumed
 independent model mislocates abilities by up to three tenths of the field's
 spread (the pinned configuration: $n=200$, thirty clusters, within-cluster
@@ -660,8 +706,11 @@ median $0.34$).
 
 \section{Dense covariance}\label{sec:general}
 
-The fitting procedure, stated so it can be reproduced. The fit runs
-in covariance coordinates. The tempting alternative --- standardize to a
+The fitting procedure, stated so it can be reproduced. Write
+$s_i=\sqrt{\Sigma_{ii}}$, $S=\mathrm{diag}(s)$ and
+$C=S^{-1}\Sigma S^{-1}$ throughout: every fit, residual and closing
+solve below is in $\Sigma$, and $C$ appears only in the clustering
+distance of stage~3. The tempting alternative --- standardize to a
 correlation matrix, fit there, restore scales --- fails: with
 $\Sigma=SCS$, $S=\mathrm{diag}(s)$, the choice-relevant residual after
 restoration is $PS(C-M)SP$, not $P(C-M)P$, and $P$ does not commute
@@ -679,12 +728,18 @@ The stages, in order:
 \begin{enumerate}
 \item Global factors: the quotient fit of \S\ref{sec:jac}
 (\texttt{factor\_model\_projected}), $k=3$ throughout, returning $(V,D_0)$
-by alternation that decreases the identified objective monotonically to a
-coordinatewise-stationary point (the objective is nonconvex in the pair,
-so no global certificate is claimed; multistart dispersion is a cheap
-diagnostic and the residual report exposes the value reached).
+by alternation. Each half-step is optimal in its own block, so in exact
+arithmetic the identified objective descends monotonically to a
+coordinatewise-stationary point. Above $n=800$ the $V$-step is subspace
+iteration rather than a full eigendecomposition and its subspace is only
+approximate, so descent is enforced instead of assumed: the objective is
+evaluated each sweep at $O(n^2)$, a sweep that fails to improve it is
+discarded, and the alternation returns the best iterate. The objective
+is nonconvex in the pair, so no global certificate is claimed; multistart
+dispersion is a cheap diagnostic and the residual report exposes the
+value reached.
 \item The working residual is then
-projected once, $R=P\,(C-VV'-\mathrm{diag}\,D_0)\,P$: the raw residual
+projected once, $R=P\,(\Sigma-VV'-\mathrm{diag}\,D_0)\,P$: the raw residual
 still contains the choice-irrelevant common component the quotient fit
 rightly ignored, and letting later stages chase it manufactures projected
 error (measurably: the raw-residual variant distorts an input already of the
@@ -700,10 +755,18 @@ zeroed, appended as further factor columns; negative eigenvalues are not
 promoted; numerically dead columns are dropped.
 \item The closing diagonal
 solves the identified problem's own normal equations,
-$(P\!\circ\!P)\,d=\mathrm{diag}(P(C-V_{\mathrm{all}}V_{\mathrm{all}}')P)$,
-floored at $10^{-3}$ (the Gram is exactly
-$(1-\tfrac2n)I+\tfrac1{n^2}\mathbf{1}\mathbf{1}^{\top}$, so both the
-solve and its nonnegative version are closed-form).
+$(P\!\circ\!P)\,d=\mathrm{diag}(P(\Sigma-V_{\mathrm{all}}V_{\mathrm{all}}')P)$
+subject to $d\ge\ell$, with $\ell$ a small multiple of the mean
+variance. The Gram is exactly
+$(1-\tfrac2n)I+\tfrac1{n^2}\mathbf{1}\mathbf{1}^{\top}$, so the
+constrained solve is closed form in $O(n)$: substituting
+$d=\ell\mathbf{1}+x$ with $x\ge0$ leaves the same Gram with a shifted
+right-hand side, and the KKT conditions make the active set a threshold
+set, solved by water-filling. It is the constrained minimizer, not an
+unconstrained solve with a floor applied afterwards, which the Gram's
+off-diagonal coupling would leave suboptimal. At $n=2$ the Gram is rank
+one, only $d_1+d_2$ is identified, and the symmetric representative is
+returned.
 \item A second candidate --- a pure eigenfit at the same total rank, closed by the same
 diagonal solve --- is computed, and whichever candidate leaves the
 smaller choice-relevant residual is kept, the pipeline winning ties:
@@ -731,13 +794,16 @@ one-call fit-and-price takes four seconds ($0.6$ of them the fit)
 against thirty-six for a $10^6$-draw simulation and agrees with it at
 its noise floor on the resolved bulk. For the $82$ percent of tail
 alternatives with zero simulation wins, agreement in that referee is
-unverifiable entry by entry; what the referee does bound is the
-aggregate: the fitted model puts $2$--$3\times10^{-4}$ of total mass on
-the zero-win set, and the referee's own $95$ percent bound for true
-mass on a set it never hit is $3.0\times10^{-6}$ per entry
-($\log(20)/10^{6}$), so the aggregate claim is consistency, not
-per-entry verification; the tail-exactness evidence at small $n$ comes
-from the Botev referee instead.
+unverifiable entry by entry. That set is also selected by the same
+simulation that would have to certify it, so a fixed-set binomial
+bound does not apply to it. The test that would apply is sample
+splitting: fix the zero-win set on one half of the draws, count the
+wins the independent second half places anywhere in it, and compare
+the resulting interval for its total mass with the model's
+$2$--$3\times10^{-4}$. We report the resolved bulk as verified against
+this referee and the zero-win tail as untested by it; the
+tail-exactness evidence at small $n$ comes from the Botev referee
+instead.
 
 Fitting $VV'+\mathrm{diag}(D)$ \emph{to} $P\Sigma P$ is the wrong
 objective (\S\ref{sec:jac}). With the identified objective and projected residuals throughout, the ensemble
@@ -758,7 +824,10 @@ each seed refereed by its own $10^6$-path simulation (the committed
 everything). The TV columns are full-vector total variation against
 the empirical frequency vector,
 zeros included, so the referee's own counting noise and any unresolved
-tail mass contribute to the reported number (they bound it from above);
+tail mass contribute to the reported number. That makes the statistic
+upward biased in expectation, by convexity, and not a
+realization-wise upper bound: on a single seed sampling error can
+cancel part of the model error;
 only the per-entry column is restricted, to entries with at least $25$
 referee wins. TV is reported as median, ninth decile and worst over
 seeds; the last column is the median per-entry absolute error on those

@@ -159,6 +159,7 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60):
     D = np.full(n, 0.5 * float(np.mean(np.diag(C))))
     V = np.zeros((n, k))
     Q = None
+    best = (V, D, _projected_sq(C, V, D))
     for it in range(n_outer):
         # V-step: top-k eigenpairs of P (C - diag D) P. Conjugation by P
         # is double centering (O(n^2)), and the eigenpairs come from
@@ -172,11 +173,27 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60):
         # square root sqrt(a) I + ((sqrt(a+n b)-sqrt(a))/n) 11'.
         c = _diag_center2(C - V @ V.T)
         D_new = _nnls_centered_gram(c, n)
+        # Each step is optimal in its own block, so exact arithmetic gives
+        # monotone descent. Above n = 800 the V-step is subspace iteration
+        # and can return a slightly inexact subspace, so the descent is
+        # enforced rather than assumed: a sweep that does not improve the
+        # objective is discarded and the alternation stops at the best
+        # iterate. Costs one O(n^2) evaluation per sweep.
+        obj = _projected_sq(C, V, D_new)
+        if obj > best[2] * (1.0 + 1e-12):
+            V, D = best[0], best[1]
+            break
+        best = (V, D_new, obj)
         if np.abs(D_new - D).max() < 1e-12:
             D = D_new
             break
         D = D_new
     return V, np.maximum(D, 1e-8)
+
+
+def _projected_sq(C, V, D):
+    """||P (C - V V' - diag D) P||_F^2, the identified objective."""
+    return float(np.sum(_center2(C - V @ V.T - np.diag(D)) ** 2))
 
 
 def _top_eigen(M, k, Q=None, sweeps=30, pad=3):
@@ -337,11 +354,20 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         rhs = _diag_center2(C - Vc @ Vc.T)
         a = 1.0 - 2.0 / n
         b = 1.0 / (n * n)
+        floor = 1e-3 * float(np.mean(np.diag(C)))
         if n <= 2:
-            d = np.full(n, max(float(rhs.sum()), 0.0) / (a + n * b) / n)
+            Dc = np.full(n, max(max(float(rhs.sum()), 0.0)
+                                / (a + n * b) / n, floor))
         else:
-            d = rhs / a - (b * rhs.sum()) / (a * (a + n * b))
-        Dc = np.maximum(d, 1e-3 * float(np.mean(np.diag(C))))
+            # the LOWER-BOUNDED least squares, not an unconstrained solve
+            # with a floor slapped on afterwards: substituting
+            # d = floor*1 + x, x >= 0 leaves the same Gram with shifted
+            # right-hand side c - floor*(a + nb)*1, so the water-filling
+            # solver applies unchanged and stays O(n). (Fifth review: the
+            # floor-after-solve is not the constrained minimizer because
+            # G = P o P has nonzero off-diagonal coupling.)
+            x = _nnls_centered_gram(rhs - floor * (a + n * b), n)
+            Dc = floor + x
         Rm = _center2(C - Vc @ Vc.T - np.diag(Dc))
         return Dc, float(np.abs(Rm).max())
 
