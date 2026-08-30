@@ -785,12 +785,12 @@ twenty-seven--dimensional \emph{sharp} factor integral (the closing
 diagonal is nearly zero, so conditional races are nearly deterministic),
 and there the node budget is the binding constraint: quadrupling rank
 does nothing while $2^{14}$ nodes halve the error, and $2^{16}$ nodes
-reach $6\times10^{-3}$ on the diagnostic draw. Getting even this far
-required the pipeline's stage (vi): the greedy factor-plus-blocks
-allocation left a projected residual of $0.14$ on the same draw that the
-matched-rank eigenfit holds to $10^{-3}$, and the earlier draft's kernel
-row (up to $7\times10^{-2}$) was that misallocation, not a limit of the
-grammar. What remains true is the dispatch conclusion: genuinely local
+reach $6\times10^{-3}$ on the diagnostic draw. Stage (vi) of the
+pipeline is what reaches this regime at all: the greedy
+factor-plus-blocks allocation leaves a projected residual of $0.14$ on
+the same draw that the matched-rank eigenfit holds to $10^{-3}$, a
+misallocation worth up to $7\times10^{-2}$ of total variation and not a
+limit of the grammar. The dispatch conclusion stands: genuinely local
 covariance wants sequential conditioning with cheap sparse-precision
 draws --- Mat\'ern is exactly the family with the SPDE route
 \citep{lindgren2011} --- near-singular smooth covariance wants either a
