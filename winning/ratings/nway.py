@@ -109,7 +109,7 @@ def pairwise_update_winner(m, v, winner, beta2=1.0):
     return m, v
 
 
-def update_ranking(m, v, order, beta2=1.0):
+def update_ranking(m, v, order, beta2=1.0, base="normal"):
     """Full-ranking update: the ranking factorizes exactly as a sequence of
     winner-of-remaining events, P(order) = prod_t P(order[t] wins among
     order[t:]); each stage applies the exact winner update on the shrinking
@@ -148,7 +148,8 @@ def update_ranking(m, v, order, beta2=1.0):
     for t in range(len(order) - 1):
         rest = np.array(order[t:])
         w_local = 0
-        mm, vv, _ = update_winner(m[rest], v[rest], w_local, beta2)
+        mm, vv, _ = update_winner(m[rest], v[rest], w_local, beta2,
+                                  base=base)
         m[rest], v[rest] = mm, vv
     return m, v
 
@@ -263,7 +264,8 @@ def _order_pass(m, sd, order, L=2001, base="normal"):
     return logP, grad
 
 
-def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3):
+def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
+                         base="normal"):
     """Exact full-ranking update: means from the analytic gradient of the
     ordered-statistics likelihood, variances from a coarse FD of the
     per-coordinate gradient (bounded below).
@@ -276,19 +278,19 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3):
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
-    _, grad = _order_pass(m, sd, order)
+    _, grad = _order_pass(m, sd, order, base=base)
     m_new = m + v * grad
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
-        _, gp = _order_pass(m + ej, sd, order)
-        _, gm = _order_pass(m - ej, sd, order)
+        _, gp = _order_pass(m + ej, sd, order, base=base)
+        _, gm = _order_pass(m - ej, sd, order, base=base)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new
 
 
-def order_loglik(m, sd, order, L=2001):
+def order_loglik(m, sd, order, L=2001, base="normal"):
     """Exact log-likelihood of a full finishing order for INDEPENDENT
     Gaussian performances, with its exact gradient in m: the public face
     of the ordered-statistics pass (one forward and one adjoint sweep,
@@ -309,7 +311,8 @@ def order_loglik(m, sd, order, L=2001):
     """
     m = np.asarray(m, dtype=float)
     sd = np.asarray(sd, dtype=float)
-    return _order_pass(m, sd, np.asarray(order, dtype=int), L=L)
+    return _order_pass(m, sd, np.asarray(order, dtype=int), L=L,
+                       base=base)
 
 
 def _factor_grid(r, Qf=7):

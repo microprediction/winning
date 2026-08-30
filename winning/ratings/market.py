@@ -89,7 +89,7 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
 
 
 def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
-                V=None, beta2=1.0, Qf=7, **market_model):
+                V=None, beta2=1.0, Qf=7, base="normal", **market_model):
     """The typical race: update from market prices, an outcome, or both
     (prices first -- the market's information is pre-race -- then the
     outcome on the updated prior). Any of winner/order/p_market may be
@@ -119,16 +119,18 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
     if order is not None:
         if V is not None:
             m, v, lz = update_order_correlated(m, v, order, V, beta2=beta2,
-                                               Qf=Qf)
+                                               Qf=Qf, base=base)
             info["logZ_outcome"] = lz
         else:
-            m, v = update_ranking_exact(m, v, order, beta2=beta2)
+            m, v = update_ranking_exact(m, v, order, beta2=beta2,
+                                        base=base)
     elif winner is not None:
         if V is not None:
             m, v, lz = update_winner_correlated(m, v, winner, V,
-                                                beta2=beta2, Qf=Qf)
+                                                beta2=beta2, Qf=Qf,
+                                                base=base)
             info["logZ_outcome"] = lz
         else:
-            m, v, p = update_winner(m, v, winner, beta2=beta2)
+            m, v, p = update_winner(m, v, winner, beta2=beta2, base=base)
             info["logZ_outcome"] = float(np.log(max(p, 1e-300)))
     return m, v, info

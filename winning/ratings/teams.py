@@ -32,12 +32,12 @@ def update_team_winner_full(m, S, A, winner, V=None, beta2=1.0,
 
 
 def update_team_order_full(m, S, A, order, V=None, beta2=1.0,
-                           nodes_log2=10, eps=None):
+                           nodes_log2=10, eps=None, base="normal"):
     """Full team finishing order (best first, rows of A)."""
     A = np.atleast_2d(np.asarray(A, dtype=float))
     return _mixture_update_full(m, S, V, beta2, None,
                                 nodes_log2=nodes_log2, eps=eps, A=A,
-                                kernel=_order_kernel(order))
+                                kernel=_order_kernel(order, base=base))
 
 
 def update_team_margins_full(m, S, A, margins=None, V=None, beta2=1.0,

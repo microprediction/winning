@@ -97,3 +97,64 @@ def test_order_pass_accepts_any_base():
                                            base=failure_base(0.2))
     assert f_mean[-1] > g_mean[-1] + 0.1
     assert f_mean[0] < g_mean[0]
+
+
+def test_failure_base_reaches_every_public_order_entry():
+    """The order path is where a failure lump carries information, so
+    every public order-side entry has to accept base= and act on it.
+
+    Also locks the lattice-first property under a non-Gaussian base: with
+    a DIAGONAL belief the full-covariance order update costs no quadrature
+    and must reproduce the diagonal one exactly."""
+    from winning.ratings.nway import (update_ranking, update_ranking_exact,
+                                      order_loglik)
+    from winning.ratings.full import update_order_full, update_winner_full
+    from winning.ratings.market import update_race
+    from winning.ratings.history import rate_history, predict_race
+
+    fb = failure_base(0.2)
+    n = 4
+    m = np.array([0.3, 0.0, -0.2, 0.1])
+    v = np.full(n, 0.4)
+    order = [1, 0, 3, 2]
+    sd = np.sqrt(v + 1.0)
+
+    # every entry moves when the base changes (no silently ignored kwarg)
+    assert not np.allclose(update_ranking(m, v, order, base=fb)[0],
+                           update_ranking(m, v, order)[0])
+    assert not np.allclose(update_ranking_exact(m, v, order, base=fb)[0],
+                           update_ranking_exact(m, v, order)[0])
+    assert not np.isclose(order_loglik(m, sd, order, base=fb)[0],
+                          order_loglik(m, sd, order)[0])
+    S = np.diag(v)
+    assert not np.allclose(update_order_full(m, S, order, base=fb)[0],
+                           update_order_full(m, S, order)[0])
+    assert not np.allclose(update_race(m, v, order=order, base=fb)[0],
+                           update_race(m, v, order=order)[0])
+
+    # lattice-first: diagonal belief, non-Gaussian base, no quadrature
+    # cost. The two paths agree to grid resolution rather than exactly --
+    # they run the same recursion on different grids (_order_pass at
+    # L=2001 against the batched pass, and the variance leg is a finite
+    # difference either way), which under the Gaussian base costs nothing
+    # in the mean and 2e-5 in the variance, and under the lump's sharper
+    # features 2e-6 and half a percent.
+    mf, Sf, _ = update_order_full(m, S, order, base=fb)
+    md, vd = update_ranking_exact(m, v, order, base=fb)
+    assert np.allclose(mf, md, atol=1e-5)
+    assert np.allclose(np.diag(Sf), vd, rtol=1e-2)
+
+    # history threads it, and the Gaussian-only winner path says so
+    races = [{"t": 0.0, "runners": ["a", "b", "c", "d"], "order": order},
+             {"t": 1.0, "runners": ["a", "b", "c", "d"], "order": [0, 2, 1, 3]}]
+    rg, _ = rate_history(races)
+    rf, _ = rate_history(races, base=fb)
+    assert not np.isclose(rf["c"][0], rg["c"][0])
+    _, _, st = rate_history(races, base=fb, return_state=True)
+    p, _ = predict_race(st, ["a", "b", "c", "d"], base=fb)
+    assert abs(float(np.sum(p)) - 1.0) < 1e-6
+    with pytest.raises(NotImplementedError):
+        update_winner_full(m, S, 0, base=fb)
+    with pytest.raises(NotImplementedError):
+        rate_history([{"t": 0.0, "runners": ["a", "b"], "winner": 0}],
+                     base=fb)

@@ -139,7 +139,7 @@ def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
 def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
                  timescale=200.0, tau2=0.25, beta2=1.0, lengths_scale=0.2,
                  meas_var=0.0, transform=None, state=None,
-                 return_state=False):
+                 return_state=False, base="normal"):
     """Forward filter over a racing history (full-covariance belief).
 
     races: iterable of dicts with keys
@@ -204,11 +204,11 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
             total_logZ += lz
         elif race.get("order") is not None:
             mk, Sk, lz = update_order_full(mk, Sk, race["order"], V=V,
-                                           beta2=beta2)
+                                           beta2=beta2, base=base)
             total_logZ += lz
         elif race.get("winner") is not None:
             mk, Sk, lz = update_winner_full(mk, Sk, race["winner"], V=V,
-                                            beta2=beta2)
+                                            beta2=beta2, base=base)
             total_logZ += lz
         m[idx] = mk
         S[np.ix_(idx, idx)] = Sk
@@ -223,7 +223,8 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
     return ratings, float(total_logZ)
 
 
-def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257):
+def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257,
+                 base="normal"):
     """Predictive win probabilities (and fair odds) for the NEXT race.
 
     state: from rate_history(..., return_state=True). runners: ids (new
@@ -259,7 +260,7 @@ def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257):
         if Vm.shape[0] != k:
             Vm = Vm.T
         C = C + Vm @ Vm.T
-    p = race_probabilities(-mu, cov=C, points=points)
+    p = race_probabilities(-mu, cov=C, points=points, base=base)
     return p, 1.0 / np.maximum(p, 1e-12)
 
 

@@ -200,9 +200,17 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
     return m_new, S_new, float(logZ)
 
 
-def _winner_kernel(winner, k, points=801):
+def _winner_kernel(winner, k, points=801, base="normal"):
     """Vectorized winner kernel: log P and the gradient row for every
-    factor node in ONE shared-field pass."""
+    factor node in ONE shared-field pass.
+
+    Gaussian only. The shared-field pass and its adjoint run in the log
+    domain on analytic Gaussian hazards (log_ndtr), so a general base
+    would need those two primitives generalized first. The ORDER kernel
+    has no such restriction, which is the path a failure lump wants
+    anyway: under winner-only feedback a retirement is just "not the
+    winner", which describes most of the field, while under ranked
+    feedback it is a last-place finish and carries real information."""
     from ..factor.core import (jacobian_vector_product,
                                win_probabilities_factor)
 
@@ -235,7 +243,7 @@ def _order_kernel(order, base="normal"):
 
 
 def update_winner_full(m, S, winner, V=None, beta2=1.0, nodes_log2=10,
-                       eps=None, points=801, eps_rel=0.15):
+                       eps=None, points=801, eps_rel=0.15, base="normal"):
     """Winner observation against a full-covariance belief N(m, S)
     (max-wins). V: optional shared performance factors on top of the
     belief correlation; beta2: idiosyncratic performance noise (scalar
@@ -247,6 +255,13 @@ def update_winner_full(m, S, winner, V=None, beta2=1.0, nodes_log2=10,
     exactly; whatever factors remain are integrated in ONE vectorized
     shared-field pass.
     """
+    if base != "normal":
+        raise NotImplementedError(
+            "update_winner_full is Gaussian only: the shared-field winner "
+            "pass and its adjoint are analytic in the Gaussian log domain. "
+            "For a non-normal base use update_order_full (ranked feedback, "
+            "which is where a failure lump carries information) or the "
+            "diagonal update_winner, both of which accept base=.")
     kernel = _winner_kernel(winner, len(np.asarray(m, dtype=float)),
                             points=points)
     return _mixture_update_full(m, S, V, beta2, None, nodes_log2=nodes_log2,

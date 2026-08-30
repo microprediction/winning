@@ -424,7 +424,8 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
 
 def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                         points=257, temperature=0.0, n_iter=60, tol=1e-8,
-                        structure=None, cov=None):
+                        structure=None, cov=None, target_floor=None,
+                        return_info=False):
     """Invert the general race: mean-zero mu with race_probabilities(mu) = p.
 
     Accepts the same covariance descriptions as the forward call: V=/D=
@@ -432,7 +433,15 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     matrix (fitted first, so the inverse is of the fitted race). For
     block/nested/tree structures the update below keeps the exact forward
     map and preconditions with the own-slope of the variance-matched
-    independent race (one extra O(nL) pass per iteration)."""
+    independent race (one extra O(nL) pass per iteration).
+
+    Contract on the target (fifth review): zero and negative entries
+    RAISE, because a zero share has no finite inverse. target_floor=
+    opts into flooring small entries, and the result is then a one-sided
+    bound on the floored contrasts, not their inverse; the returned info
+    dict (return_info=True) reports which entries were floored, whether
+    the iteration converged, and the achieved residual. Non-convergence
+    warns rather than returning silently."""
     if cov is not None:
         if structure is not None or V is not None or D is not None:
             raise ValueError("cov= replaces structure=/V=/D=; pass one only")
@@ -450,8 +459,21 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         return _abilities_from_structure(p, structure, points=points,
                                          n_iter=max(n_iter, 120), tol=tol)
     target = np.asarray(p, dtype=float)
-    if np.any(target <= 0):
-        raise ValueError("all target probabilities must be positive")
+    if target_floor is not None:
+        if not target_floor > 0:
+            raise ValueError("target_floor must be positive")
+        floored = target < target_floor
+        target = np.maximum(target, target_floor)
+    else:
+        floored = np.zeros(len(target), dtype=bool)
+        if np.any(target <= 0):
+            raise ValueError(
+                "all target probabilities must be positive: a zero share "
+                "has no finite inverse (the supremum is approached as that "
+                "contrast diverges). Pass target_floor= to floor small "
+                "entries deliberately and read the result as a one-sided "
+                "bound on the floored contrasts, or supply a pseudocount "
+                "upstream.")
     target = target / target.sum()
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
@@ -459,12 +481,14 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
     # a local two-cycle. Fixed damping 0.7 restores contraction.
     alpha = 1.0 if len(target) > 2 else 0.7
+    resid_max = np.inf
     for _ in range(n_iter):
         phat, sl = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
                                       points=points, temperature=temperature,
                                       return_slopes=True)
         resid = np.log(np.maximum(phat, 1e-300)) - logt
-        if np.abs(resid).max() < tol:
+        resid_max = float(np.abs(resid).max())
+        if resid_max < tol:
             break
         dlogp = np.minimum(sl / np.maximum(phat, 1e-300), -1e-6)
         # residual-proportional step cap: a near-certain winner has
@@ -477,6 +501,18 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         lim = np.minimum(2.0, 10.0 * np.abs(resid))
         mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
+    converged = resid_max < tol
+    if not converged and not return_info:
+        import warnings
+        warnings.warn(
+            f"abilities_from_race did not converge: max |log residual| "
+            f"{resid_max:.2e} after {n_iter} iterations (tol {tol:.0e}). "
+            "Pass return_info=True for the residual and iteration count "
+            "instead of this warning.",
+            RuntimeWarning, stacklevel=2)
+    if return_info:
+        return mu, {"converged": converged, "max_log_residual": resid_max,
+                    "iterations": n_iter, "floored": floored}
     return mu
 
 
@@ -861,6 +897,28 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
     heuristic dominates -- naive wins the ordering, censoring wins the
     magnitudes, and no tuning reconciles them, because they answer
     different halves of the question.
+
+    USE IT ON RANKED FEEDBACK. Under winner-only feedback a retirement
+    is just "not the winner", which describes most of the field too, so
+    the lump has almost nothing to explain: measured on the winner path
+    (bandits lane, M=10, 80 races, 10 seeds) it is one clear win at a
+    30 percent independent failure rate (ability RMSE 0.389 against
+    Gaussian's 0.420) and two mild losses under ability-coupled
+    failures. All the information in a retirement is in the LAST-PLACE
+    FINISH, which is why the order path is the one that carries this
+    feature (update_ranking_exact, order_loglik, update_order_full,
+    update_order_correlated, rate_history and update_race all take
+    base=). update_winner_full is Gaussian only.
+
+    GUESS q LOW WHEN IN DOUBT. Misspecification is sharply asymmetric,
+    measured on the same battery: doubling q is materially worse than
+    ignoring failures altogether (RMSE 0.464 and 0.538 against the
+    Gaussian base's 0.426 and 0.427), while halving it is nearly free
+    (0.421 to 0.428, within noise of both the true q and the Gaussian).
+    An overstated lump explains away real slowness as breakage; an
+    understated one merely leaves some evidence on the table. If q is
+    unknown, take the low end of the plausible range rather than the
+    midpoint, or use censoring, which has no q to misspecify.
 
     NOT standardized by default, deliberately, and this matters: the
     engine's other bases are mean-zero unit-variance so that `D` is the
