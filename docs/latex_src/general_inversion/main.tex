@@ -37,16 +37,18 @@ single shared survival field prices all $n$ alternatives at once. For
 the covariances applied work actually uses (factor, block, nested,
 hierarchical: conditional independence given a few shared variables),
 the field yields all $n$ probabilities, matrix-free derivatives, and
-every single-removal counterfactual in $O(nLQ)$ operations, and inverts
-observed probabilities back to utilities under a fixed, known
+every single-removal counterfactual in $O(nLQ)$ operations over a
+lattice of $L$ winning values and $Q$ factor quadrature nodes, and
+inverts observed probabilities back to utilities under a fixed, known
 covariance. The Jacobian is a weighted graph Laplacian whose edge
 weights are photo-finish tie densities: the geometry of substitution
 between alternatives, from the same pass that prices them. The cleanest
 evidence is internal: the identical factor conditioning computed one
 alternative at a time, on the same nodes and lattice, agrees to
 $3\times10^{-15}$ and costs six hundred times more. Against the field
-standard, GHK at $n=200$ is two hundred times slower at $10^{4}$ draws
-with error above the comparison's resolution. Forward
+standard, the Geweke--Hajivassiliou--Keane (GHK) simulator at $n=200$
+is two hundred times slower at $10^{4}$ draws with error above the
+comparison's resolution. Forward
 pricing is benchmarked to ten million alternatives, inversion to one
 million. Softmax, Thurstone--Mosteller, factor probit, and team and
 sector hierarchies are the same two calls, and the same objects serve
