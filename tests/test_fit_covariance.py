@@ -199,3 +199,57 @@ def test_exact_grammar_round_trip_with_unequal_variances():
         warnings.simplefilter("ignore")
         p_dense = race_probabilities(mu, cov=Sigma, points=513)
     assert 0.5 * np.abs(p_direct - p_dense).sum() < 2e-2
+
+
+def test_warns_when_the_rank_splits_a_tied_eigenvalue():
+    """A rank that cuts a degenerate eigenvalue is not an approximation,
+    it is an arbitrary choice, and nothing in the returned fit shows it.
+
+    Six equal blocks at correlation 0.7: centering leaves five tied
+    leading eigenvalues, so a rank-3 fit takes an arbitrary three of
+    five. Every choice scores the same objective to every digit and they
+    disagree about WHICH blocks are correlated, pricing races 0.25 apart
+    in total variation. Hence a warning rather than silence.
+    """
+    import warnings
+
+    def blocks(nb, n=300, rho=0.7):
+        lab = np.repeat(np.arange(nb), n // nb)
+        lab = np.concatenate([lab, np.full(n - len(lab), nb - 1)])
+        C = np.eye(n)
+        for c in range(nb):
+            i = np.where(lab == c)[0]
+            C[np.ix_(i, i)] = rho
+        np.fill_diagonal(C, 1.0)
+        return C
+
+    def warned(C, k):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            fit_covariance(C, k=k)
+            return any("tied eigenvalue" in str(x.message) for x in w)
+
+    six = blocks(6)
+    assert warned(six, 3)          # three of five tied directions
+    assert not warned(six, 5)      # the whole tied group: fit is exact
+    assert not warned(six, 6)      # past it, and the sixth is redundant
+
+    # ties below a useful rank are harmless -- every centered spectrum
+    # ends in a tied bulk, and choosing among near-null directions
+    # cannot move a race, so those must stay quiet
+    assert not warned(blocks(3), 3)
+    assert warned(blocks(3), 1)    # but cutting the leading pair is not
+
+    rng = np.random.default_rng(0)
+    n = 300
+    B = rng.standard_normal((n, 3))
+    assert not warned(B @ B.T + np.diag(0.5 + rng.random(n)), 3)
+    d = np.abs(np.arange(n)[:, None] - np.arange(n)[None, :])
+    assert not warned(0.9 ** d + 1e-8 * np.eye(n), 3)
+
+    # the warning names the rank that resolves it
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        fit_covariance(six, k=3)
+        msg = [str(x.message) for x in w if "tied eigenvalue" in str(x.message)][0]
+    assert "k=5" in msg and "3 of 5" in msg

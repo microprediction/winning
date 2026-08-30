@@ -201,6 +201,78 @@ def _projected_sq(C, V, D):
     return float(np.sum(_center2(C - V @ V.T - np.diag(D)) ** 2))
 
 
+def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6):
+    """Warn when the rank cuts through a degenerate eigenvalue.
+
+    A rank-k fit is normally a well-defined approximation: the top-k
+    eigenspace is unique and the residual says how good it is. When the
+    k-th and (k+1)-th eigenvalues of the centered matrix are equal, it is
+    not an approximation but an arbitrary CHOICE -- any k directions from
+    the tied group are exactly as good, and they imply different races.
+
+    Measured on six equal blocks at correlation 0.7, n=300: centering
+    leaves five tied eigenvalues, a rank-3 fit reports the same objective
+    to every digit from every start, and the fits disagree about WHICH
+    two blocks are uncorrelated, pricing races 0.25 apart in total
+    variation. Nothing in the returned fit reveals this, which is why it
+    is worth a warning rather than a paragraph in the docs.
+
+    Cheap: one extra subspace-iteration block on a matrix the fit has
+    already formed. The remedy is rank, not a better optimizer, so the
+    message names the rank that opens the gap.
+    """
+    n = len(C)
+    if k >= n - 1:
+        return
+    probe = int(min(2 * k + 4, n - 1))
+    # the tie lives in the INPUT's centered spectrum. Testing
+    # C - diag(D) instead hides it: a fitted, non-constant D perturbs the
+    # exact symmetry just enough to open a numerical gap while leaving
+    # the fit as underdetermined as it was.
+    lam = _top_eigen(_center2(C), probe)[0]
+    lam = np.asarray(lam, dtype=float)
+    if lam.size <= k or lam[0] <= 0:
+        return
+    scale = float(lam[0])
+    if lam[k - 1] - lam[k] > tol * scale:
+        return                                  # the boundary is clean
+    # A tie among directions that carry little variance is harmless:
+    # choosing arbitrarily among them cannot move a race, and every
+    # centered spectrum ends in a tied bulk, so without this filter every
+    # matrix would warn. The threshold is a judgment -- a direction
+    # holding under a twentieth of the leading direction's variance is
+    # not where a race is decided -- and it is what separates the real
+    # case (six equal blocks at k=3: the tie IS the leading eigenvalue,
+    # ratio 1.0) from the bulk ties that sit below every useful rank
+    # (the same matrix at k=6, ratio 0.008, where the fit is already
+    # exact and the extra column is redundant).
+    if lam[k - 1] < 0.05 * scale:
+        return
+    # size of the tied group straddling the boundary, and where it ends
+    lo = k - 1
+    while lo > 0 and lam[lo - 1] - lam[lo] <= tol * scale:
+        lo -= 1
+    hi = k
+    while hi + 1 < lam.size and lam[hi] - lam[hi + 1] <= tol * scale:
+        hi += 1
+    tied = hi - lo + 1
+    resolved = hi + 1
+    import warnings
+    at_probe = hi + 1 >= probe
+    warnings.warn(
+        f"rank {k} splits a tied eigenvalue of the centered covariance: "
+        f"eigenvalues {lo + 1} to {hi + 1} are equal to within {tol:g} "
+        f"relative"
+        + (" (and the tie may extend past the probe)" if at_probe else "")
+        + f", so the fit picks an arbitrary {k - lo} of {tied} equally "
+        "optimal directions. Every choice gives the same residual and a "
+        "DIFFERENT race. This is not approximation error and no optimizer "
+        f"fixes it; pass k={resolved} or more to take the whole tied "
+        "group, or check it by pricing the race from several starts "
+        "(factor_model_projected accepts D0=).",
+        RuntimeWarning, stacklevel=3)
+
+
 def _top_eigen(M, k, Q=None, sweeps=30, pad=3):
     """Top-k eigenpairs of symmetric M by shifted subspace iteration.
 
@@ -311,6 +383,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     corr = C / np.outer(s, s)
     V, D0 = factor_model_projected(C, min(k, n - 1))
     V = np.asarray(V, dtype=float)
+    _warn_if_rank_splits_a_tie(C, D0, min(k, n - 1))
     if blocks is None:
         blocks = max(2, min(n // 5, 20))
     # everything downstream fits the CHOICE-RELEVANT residual: the raw
