@@ -175,7 +175,23 @@ migration notes and unported ideas are preserved in
 
 ## Cite
 
-    @article{doi:10.1137/19M1276261,
+For the correlated engine (the shared field, the covariance grammars,
+the substitution Jacobian, removal counterfactuals, and inversion at
+scale):
+
+    @article{cotton2026inversion,
+    author = {Cotton, Peter},
+    title = {Scalable Inversion of Contests with Correlated Performances,
+             Including Softmax and Multinomial Probit},
+    year = {2026},
+    doi = {10.2139/ssrn.7307363},
+    note = {SSRN working paper},
+    URL = {https://ssrn.com/abstract=7307363}
+    }
+
+For the original independent lattice transform (`winning.classic`):
+
+    @article{cotton2021inferring,
     author = {Cotton, Peter},
     title = {Inferring Relative Ability from Winning Probability in Multientrant Contests},
     journal = {SIAM Journal on Financial Mathematics},
