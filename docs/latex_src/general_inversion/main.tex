@@ -19,7 +19,7 @@
 \title{Scalable Inversion of Contests with Correlated Performances,\\
 Including Softmax and Multinomial Probit}
 \author{Peter Cotton\thanks{\texttt{peter.cotton@microprediction.com}. The reference
-implementation, its parity-locked ports (Python, R, Rust, JavaScript) and the seeded
+implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
 scripts behind every number in this paper live at
 \texttt{github.com/microprediction/winning}; this revision's tables were
 produced at repository tag \texttt{paper-r1}.}}
@@ -47,8 +47,8 @@ evidence is internal: the identical factor conditioning computed one
 alternative at a time, on the same nodes and lattice, agrees to
 $3\times10^{-15}$ and costs six hundred times more. Against the field
 standard, the Geweke--Hajivassiliou--Keane (GHK) simulator at $n=200$
-is two hundred times slower at $10^{4}$ draws with error above the
-comparison's resolution. Forward
+is two hundred times slower at $10^{4}$ draws, with the lattice's
+error below the comparison's resolution. Forward
 pricing is benchmarked to ten million alternatives, inversion to one
 million. Softmax, Thurstone--Mosteller, factor probit, and team and
 sector hierarchies are the same two calls, and the same objects serve
@@ -135,10 +135,10 @@ dense $\Sigma$ & fitted grammar $+$ residual factors (approx.) & \S\ref{sec:gene
 \end{tabular}
 \end{center}
 
-Scale motivates second, and here the paper leads with what is
-\emph{measured}, not extrapolated: all-$n$ forward pricing at
+The second motivation is scale. Measured, on one laptop: all-$n$
+forward pricing at
 $n=10^{4},10^{5},10^{6}$ in $0.18$, $2.7$ and $29$ seconds (rank-one
-factor, Rust kernels, one laptop), a ten-million-contestant block field
+factor, Rust kernels), a ten-million-contestant block field
 in $245$ seconds, and inversion at $n=10^{6}$ in $80$ seconds
 (independent) and $22$ minutes (rank-one factor). GHK's measured
 complete-vector cost is superquadratic and steepening (log-log slope
@@ -309,7 +309,7 @@ One default matters. When $D_i\ll\lVert V_i\rVert^2$ the conditional race is
 nearly deterministic and the integrand over $f$ is nearly a step function; a
 fixed 15-node rule then silently loses up to five percent of total variation, and
 the loss is invisible to lattice refinement because it is points-invariant.
-Randomized invariant testing against a QMC referee found this. The default order
+The default order
 now scales with the sharpness $\max_i \lVert V_i\rVert/\sqrt{D_i}$, capped by
 rank.
 
@@ -421,14 +421,12 @@ bisection geometry
 \citep{lopezdeprado2016} is exactly a race: give internal node $t$ strength
 $\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$ with $\rho_t=\max(1-2h_t^2,0)$
 for merge height $h_t$, and leaf $i$ idiosyncratic variance
-$1-\rho_{\mathrm{first}(i)}$; the implied correlation equals the floored
-cophenetic matrix, with the root effect entering at its cophenetic value
-(when the dendrogram's root correlation is positive and the race
-construction instead fixes the root effect to zero --- as the shipped
-\texttt{from\_linkage} does, the root being choice-irrelevant --- the
-two models are equivalent on contrast space, pairwise difference
-variances unchanged, but the zero-root model's RAW correlations are
-$(\rho_{ij}-\rho_0)/(1-\rho_0)$, not $\rho_{ij}$).
+$1-\rho_{\mathrm{first}(i)}$; with the root effect entering at its cophenetic value, the implied
+correlation equals the floored cophenetic matrix. The shipped
+\texttt{from\_linkage} instead fixes the root effect to zero, the root
+being choice-irrelevant; the two models agree on contrast space, with
+pairwise difference variances unchanged, but the zero-root model's raw
+correlations are $(\rho_{ij}-\rho_0)/(1-\rho_0)$, not $\rho_{ij}$.
 The floor is forced, because uniform shared effects cannot
 represent negative dependence, and omitting it silently inflates other implied
 correlations above one. The identity turns dendrogram-consistent concentration
@@ -458,8 +456,7 @@ distinguished: the continuum identity \eqref{eq:tie}; its quadrature
 evaluation; and the exact derivative of the normalized, adaptive-lattice
 numerical map, which differs from the first two through the normalization
 quotient and grid motion. The implementation exposes the frozen-grid form,
-which matches central finite differences of the returned map WITH THE
-GRID HELD FIXED at the base point and the normalization quotient
+which matches central finite differences of the returned map with the grid held fixed at the base point and the normalization quotient
 included, at every lattice resolution tested; a finite difference that
 lets the adaptive grid move with the perturbation measures a different
 (also legitimate) derivative and differs from the frozen-grid form by
@@ -651,65 +648,74 @@ quantity, the difference variance, wrong by nearly a factor of three
 coordinates is $S^{-1}\mathbf{1}$, not $\mathbf{1}$. A single global
 rescaling for conditioning is harmless. The test suite pins the
 two-alternative example and an exact-grammar round trip with variances
-spanning two decades. (i)~Global factors: the quotient fit of \S\ref{sec:jac}
+spanning two decades.
+
+The stages, in order:
+\begin{enumerate}
+\item Global factors: the quotient fit of \S\ref{sec:jac}
 (\texttt{factor\_model\_projected}), $k=3$ throughout, returning $(V,D_0)$
 by alternation that decreases the identified objective monotonically to a
 coordinatewise-stationary point (the objective is nonconvex in the pair,
 so no global certificate is claimed; multistart dispersion is a cheap
-diagnostic and the residual report exposes the value reached). (ii)~The working residual is then
+diagnostic and the residual report exposes the value reached).
+\item The working residual is then
 projected once, $R=P\,(C-VV'-\mathrm{diag}\,D_0)\,P$: the raw residual
 still contains the choice-irrelevant common component the quotient fit
 rightly ignored, and letting later stages chase it manufactures projected
-error (measurably: an input already of the form $VV'+\mathrm{diag}(D)$
-came back with total variation $1.7\times10^{-2}$ under the raw-residual
-pipeline, and returns at the $2\times10^{-4}$ node-noise floor under the
-projected one). (iii)~Blocks: average-linkage clustering on
+error (measurably: the raw-residual variant distorts an input already of the
+form $VV'+\mathrm{diag}(D)$ by $1.7\times10^{-2}$ of total variation;
+the projected pipeline returns it at the $2\times10^{-4}$ node-noise
+floor).
+\item Blocks: average-linkage clustering on
 $\sqrt{(1-C)/2}$ cut to $20$ clusters; for each cluster, the leading
 eigenvector of the within-cluster block of $R$ with its diagonal zeroed,
-one rank-one loading per cluster (clusters are disjoint). (iv)~Residual
-promotion: the top $m=5$ eigencomponents of what remains of $R$, diagonal
+one rank-one loading per cluster (clusters are disjoint).
+\item Residual promotion: the top $m=5$ eigencomponents of what remains of $R$, diagonal
 zeroed, appended as further factor columns; negative eigenvalues are not
-promoted; numerically dead columns are dropped. (v)~The closing diagonal
+promoted; numerically dead columns are dropped.
+\item The closing diagonal
 solves the identified problem's own normal equations,
 $(P\!\circ\!P)\,d=\mathrm{diag}(P(C-V_{\mathrm{all}}V_{\mathrm{all}}')P)$,
 floored at $10^{-3}$ (the Gram is exactly
 $(1-\tfrac2n)I+\tfrac1{n^2}\mathbf{1}\mathbf{1}^{\top}$, so both the
-solve and its nonnegative version are closed-form). (vi)~A second
-candidate --- a pure eigenfit at the same total rank, closed by the same
+solve and its nonnegative version are closed-form).
+\item A second candidate --- a pure eigenfit at the same total rank, closed by the same
 diagonal solve --- is computed, and whichever candidate leaves the
 smaller choice-relevant residual is kept, the pipeline winning ties:
 the greedy factor-plus-blocks allocation is the wrong shape for
-globally smooth covariance, and the kernel battery below measures the
-repair. The constants $k$, the cluster count and $m$ are
+globally smooth covariance, and the kernel battery below measures the repair.
+\end{enumerate}
+
+The constants $k$, the cluster count and $m$ are
 fixed, not tuned per ensemble; a spectral rule for $m$ was tested and
 rejected (it saturates its cap for marginal gains and does not repair the
 failure case below). What results is a factor-plus-blocks race priced in
 one deterministic call, and the pipeline is the shipped one-call
 (\texttt{fit\_covariance}; \texttt{race\_probabilities} accepts
-\texttt{cov=} directly), not a research script. The shipped call also
+\texttt{cov=} directly), not a research script.
+
+The shipped call also
 reports its own quality and warns on two distinct failure modes: a
 large choice-relevant residual (the fit could not hold the matrix), and
 a well-fitted matrix whose pricing needs a high-rank, sharp factor
 integral (the quadrature, not the fit, is then the binding constraint;
-both regimes appear in the kernel battery below). At $n=2000$ the
+both regimes appear in the kernel battery below).
+
+At $n=2000$ the
 one-call fit-and-price takes four seconds ($0.6$ of them the fit)
 against thirty-six for a $10^6$-draw simulation and agrees with it at
 its noise floor on the resolved bulk. For the $82$ percent of tail
 alternatives with zero simulation wins, agreement in that referee is
 unverifiable entry by entry; what the referee does bound is the
-AGGREGATE: the fitted model puts $2$--$3\times10^{-4}$ of total mass on
+aggregate: the fitted model puts $2$--$3\times10^{-4}$ of total mass on
 the zero-win set, and the referee's own $95$ percent bound for true
 mass on a set it never hit is $3.0\times10^{-6}$ per entry
 ($\log(20)/10^{6}$), so the aggregate claim is consistency, not
 per-entry verification; the tail-exactness evidence at small $n$ comes
 from the Botev referee instead.
 
-One wrong objective is close enough to be tempting. Fitting
-$VV'+\mathrm{diag}(D)$ \emph{to} $P\Sigma P$ is not the identified
-problem: the projection of a rank-plus-diagonal matrix is not
-rank-plus-diagonal, so that fit manufactures error on in-class truths
-that the objective of \S\ref{sec:jac} does not have. With the
-identified objective and projected residuals throughout, the ensemble
+Fitting $VV'+\mathrm{diag}(D)$ \emph{to} $P\Sigma P$ is the wrong
+objective (\S\ref{sec:jac}). With the identified objective and projected residuals throughout, the ensemble
 study below ran a raw top-$k$ eigenfit pipeline and the identified
 pipeline over twenty seeds per ensemble. On thirteen of fifteen named
 ensembles the arms are statistically indistinguishable and none favors
@@ -749,9 +755,8 @@ residuals (dense-strong) & $6.8\times10^{-2}$ & $8.6\times10^{-2}$ & $9.2\times1
 \end{tabular}
 \end{center}
 
-The multi-seed medians reproduce the single-draw table of the earlier
-draft to within seed noise on every surviving row, so the original
-numbers were representative, not fortunate. Eight further named
+The medians are stable in the seed: any single seed reproduces them
+to within its own noise. Eight further named
 ensembles (LKJ, onion, vine, elliptope walk, animals, Marchenko--Pastur
 and spiked spectra, hierarchical) fall between the third and fifth
 rows; Archakov--Hansen sits with AR(1) at $4.9\times10^{-2}$.
@@ -787,8 +792,7 @@ twenty-seven--dimensional \emph{sharp} factor integral (the closing
 diagonal is nearly zero, so conditional races are nearly deterministic),
 and there the node budget is the binding constraint: quadrupling rank
 does nothing while $2^{14}$ nodes halve the error, and $2^{16}$ nodes
-reach $6\times10^{-3}$ on the diagnostic draw. Stage (vi) of the
-pipeline is what reaches this regime at all: the greedy
+reach $6\times10^{-3}$ on the diagnostic draw. Stage~6 of the pipeline is what reaches this regime at all: the greedy
 factor-plus-blocks allocation leaves a projected residual of $0.14$ on
 the same draw that the matched-rank eigenfit holds to $10^{-3}$, a
 misallocation worth up to $7\times10^{-2}$ of total variation and not a
@@ -809,7 +813,8 @@ independent-race integrand over the same Gauss--Hermite factor nodes
 (the construction of \citet{butler1982}; \texttt{mvtnorm}'s
 \texttt{lpRR}/\texttt{slpRR} are its Monte Carlo form). With the same
 nodes and the same lattice the two computations are algebraically
-identical, and measure so: at $n=200$, rank~2, the per-alternative
+identical, and the measurement
+confirms it: at $n=200$, rank~2, the per-alternative
 version agrees with the shared field to total variation
 $3\times10^{-15}$ and costs $601$ times as much ($22$\,s against
 $36$\,ms; the committed \texttt{bench.py bm}). The comparison isolates
@@ -818,7 +823,7 @@ years old, but the field shared across alternatives.
 
 
 \paragraph{Against the field.} All-$n$ choice probabilities under the rank-2
-factor covariance family of Section~\ref{sec:alternatives}, against a
+factor covariance family of \S\ref{sec:factor}, against a
 $2^{20}$-point QMC reference. Tail is the maximum absolute log-error over
 reference probabilities in $[10^{-4},10^{-3}]$; the $n=10$ draw has none.
 Frequency simulation is run at wall clock matched to the lattice and at ten
@@ -918,8 +923,7 @@ lattice's tail figures equal the reference's own noise; GHK's are two to
 ten times larger in log terms even at ten times the draws, which is the
 tail blindness the TV column cannot show.
 
-The lattice bounds are the reference's own noise; self-convergence places the
-lattice error near $10^{-8}$. GHK error contracts as $O(R^{-1/2})$ and its measured complete-vector cost
+Self-convergence places the lattice error near $10^{-8}$. GHK error contracts as $O(R^{-1/2})$ and its measured complete-vector cost
 grows superquadratically, with exponent $2.15$ to $2.8$ across the measured
 range. The lattice is
 deterministic, supplies smooth matrix-free derivatives free of simulation
@@ -931,8 +935,8 @@ standard GHK implementations and dominates the per-alternative GHK
 implementation tested here in both accuracy and cost. GHK implementations
 with antithetics, quasi-random sequences or reordering heuristics would
 move the constants, not the $n$-fold shape. Estimation pipelines built around GHK are a
-larger object than this loop, and \S\ref{sec:num}'s estimation
-paragraphs report where simulation remains competitive at face value.
+larger object than this loop, and the estimation paragraphs
+below report where simulation remains competitive at face value.
 GHK also retains general rectangle probabilities and locality-structured
 covariance, and \citet{botev2017} remains the reference for single
 extreme tail probabilities.
