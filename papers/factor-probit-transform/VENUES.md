@@ -14,6 +14,18 @@
   is ever wanted, it needs a NEW record and will get a new DOI; do not
   reuse 7307363, which now points elsewhere.
 
+## SSRN record 7307363 — state after 2026-08-30 revision
+
+Holds the INVERSION paper (docs/latex_src/general_inversion) by the
+2026-08-29 decision. Second revision submitted 2026-08-30 while the
+first was still in the moderation queue, so the moderator sees the
+final version once: 18-page PDF (post fourth review, style sweep, and
+full read-through), current abstract, one-line title (clearing the
+stray <div> tags), inversion keywords, JEL C25/C63/C35 unchanged.
+Verify after processing: page count 18, title on one line. Revisions
+are not re-announced in SSRN Alerts; a fresh announcement would need a
+new record and a new DOI.
+
 ## Fallbacks worth considering
 
 Computational Statistics & Data Analysis; Journal of Statistical
