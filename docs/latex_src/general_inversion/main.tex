@@ -51,8 +51,11 @@ known covariance (the Jacobian is exact for factor, block and nested
 structures, and for trees exact within clusters). That Jacobian is a
 weighted graph Laplacian whose edge weights are photo-finish tie
 densities: the geometry of substitution between alternatives, delivered
-by the same pass that prices them, so counterfactual removals need no
-fresh integration.
+by the same pass that prices them, so removal counterfactuals reuse the
+field --- on a lattice certified to cover the post-removal winner, whose
+bulk is the first- or second-finisher distribution of the original race
+(the implementation checks the post-removal mass rather than
+renormalizing a defect away).
 At $n=200$ it is two hundred times faster than GHK at $10^4$ draws, with
 error below the comparison's resolution; GHK's measured cost grows superquadratically (exponent $2.15$ to $2.8$
 across the measured range) against the lattice's near-linear growth, so the
@@ -260,7 +263,12 @@ $n$-fold and the derivative costs disappear for those tasks.
 In the min-wins convention of the introduction, let $X_i=\mu_i+\sigma_i
 \epsilon_i$ with $\epsilon_i$ i.i.d.\ from a standardized base density (normal,
 Gumbel, or any density supplied as code), and write $f_i$, $S_i$ for the density
-and survival of $X_i$.
+and survival of $X_i$. One notational warning, once and loudly: from
+here on $\mu_i$ is a TIME location --- raising it makes contestant $i$
+worse and lowers $p_i$ --- the negative of the introduction's utility
+location. Inversion returns time locations; utility coefficients are
+their negation, and implementations that forget the sign flip invert
+their leaderboards.
 
 The algorithm evaluates \eqref{eq:field-intro} on a lattice $x_1<\dots<x_L$:
 \begin{enumerate}\itemsep2pt
@@ -414,7 +422,12 @@ first, receives the field of everything outside its subtree:
 R_t(x)\;=\;\Bigl[\sum_q w_q\,R_{\mathrm{parent}(t)}\!\left(x-\lambda_{\mathrm{parent}(t)}
 a_q\right)\Bigr]\ \prod_{s\,\in\,\mathrm{siblings}(t)} G_s(x).
 \end{equation}
-Contestant $i$ then wins against its own leaf cavity,
+The sibling messages sit OUTSIDE the parent-factor quadrature, and
+correctly so, though it is not obvious: the parent effect shifts the
+candidate and every sibling subtree by the same amount, so it cancels
+from every candidate-versus-sibling comparison before those comparisons
+are evaluated; only the cavity from outside the parent must be shifted
+and averaged. Contestant $i$ then wins against its own leaf cavity,
 $p_i=\int h_i(x)\,R_{c(i)}(x)\,dx$ with $h_i$ as in \eqref{eq:cavity}. The cost
 is $O(nLQ)$ plus $O(L\,Q)$ per tree node.
 
@@ -436,7 +449,14 @@ bisection geometry
 $\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$ with $\rho_t=\max(1-2h_t^2,0)$
 for merge height $h_t$, and leaf $i$ idiosyncratic variance
 $1-\rho_{\mathrm{first}(i)}$; the implied correlation equals the floored
-cophenetic matrix. The floor is forced, because uniform shared effects cannot
+cophenetic matrix, with the root effect entering at its cophenetic value
+(when the dendrogram's root correlation is positive and the race
+construction instead fixes the root effect to zero --- as the shipped
+\texttt{from\_linkage} does, the root being choice-irrelevant --- the
+two models are equivalent on contrast space, pairwise difference
+variances unchanged, but the zero-root model's RAW correlations are
+$(\rho_{ij}-\rho_0)/(1-\rho_0)$, not $\rho_{ij}$).
+The floor is forced, because uniform shared effects cannot
 represent negative dependence, and omitting it silently inflates other implied
 correlations above one. The identity turns dendrogram-consistent concentration
 limits into contest inversions, but portfolio applications are not this paper's
@@ -465,9 +485,13 @@ distinguished: the continuum identity \eqref{eq:tie}; its quadrature
 evaluation; and the exact derivative of the normalized, adaptive-lattice
 numerical map, which differs from the first two through the normalization
 quotient and grid motion. The implementation exposes the frozen-grid form,
-which matches finite differences of the returned map at every lattice
-resolution, alongside the continuum form, whose symmetry serves
-preconditioning. The stable pair factorization is
+which matches central finite differences of the returned map WITH THE
+GRID HELD FIXED at the base point and the normalization quotient
+included, at every lattice resolution tested; a finite difference that
+lets the adaptive grid move with the perturbation measures a different
+(also legitimate) derivative and differs from the frozen-grid form by
+the grid-motion term. The continuum form, whose symmetry serves
+preconditioning, is exposed alongside. The stable pair factorization is
 $[f_i e^{L-\log S_i}]\times[f_j/S_j]$: the first factor is bounded, and the
 hazard $f_j/S_j$ grows linearly in the normal base and exponentially in the
 Gumbel base, either of which the exponent clip absorbs. The symmetric
@@ -496,8 +520,10 @@ and $\sum_i p^{\star}_i=1$, the program
 is constant along $\mathbf{1}$, strictly concave and coercive on
 $\mathbf{1}^{\perp}$, and its unique mean-zero maximiser is the inverse:
 $p(\mu^{\star})=p^{\star}$. If some $p^{\star}_i=0$ the supremum is
-approached only as $\mu_i\to+\infty$; no finite inverse exists, and a
-floored target recovers a lower bound on that $\mu_i$.
+approached only as the contrast
+$\mu_i-\min_{j:\,p^{\star}_j>0}\mu_j\to+\infty$ (the raw coordinate
+statement depends on the gauge); no finite inverse exists, and a
+floored target recovers a lower bound on that contrast.
 \end{theorem}
 
 \begin{proof}
@@ -542,7 +568,13 @@ W(td)-t\langle p^{\star},d\rangle
  \;\le\; t\bigl(\min_i d_i-\langle p^{\star},d\rangle\bigr)
  \;\longrightarrow\;-\infty
 \]
-linearly in $t$. Constancy along $\mathbf{1}$ is translation invariance
+linearly in $t$. The decay is uniform, not merely raywise:
+$d\mapsto\langle p^{\star},d\rangle-\min_i d_i$ is continuous and
+strictly positive on the compact unit sphere of $\mathbf{1}^{\perp}$,
+so it attains a positive minimum $\kappa$, and the objective is bounded
+above by $W(0)-\kappa\lVert\mu\rVert$ along every direction --- which
+is coercivity for arbitrary diverging sequences. Constancy along
+$\mathbf{1}$ is translation invariance
 again, exactly when the target sums to one. A strictly concave coercive
 function on $\mathbf{1}^{\perp}$ attains a unique maximum, where the
 gradient vanishes: $p(\mu^{\star})=p^{\star}$.
@@ -615,7 +647,11 @@ $\alpha=0.7$, halved whenever the residual fails to shrink.}}
 This is a diagonally preconditioned Newton iteration on log
 probabilities; Theorem~\ref{thm:inverse} makes the target a well-posed
 problem, and the clip and recentering confine the iterate to the
-contrast space. Round trips through the shipped front door at $n=400$
+contrast space. To prevent overreading: the theorem establishes
+well-posedness, not convergence of this particular clipped iteration,
+which is an empirically safeguarded solver --- the stress suite
+converges everywhere tested, and a safeguarded convex or Newton--Krylov
+fallback is available in principle should a case ever demand it. Round trips through the shipped front door at $n=400$
 (the committed \texttt{bench.py invert}; twenty clusters, tree of depth
 three): independent $0.04$\,s, tree $0.37$\,s, blocks $0.67$\,s,
 factor rank-2 $1.7$\,s, nested $3.7$\,s, each to a maximum
@@ -630,15 +666,27 @@ median $0.34$).
 
 \section{Dense covariance}\label{sec:general}
 
-The fitting procedure, stated so it can be reproduced. Standardize $\Sigma$
-to a correlation matrix $C=\mathrm{diag}(s)^{-1}\Sigma\,\mathrm{diag}(s)^{-1}$
-with $s_i=\sqrt{\Sigma_{ii}}$; after fitting $C\approx VV'+\mathrm{diag}(D)$,
-the covariance-scale model is restored as
-$\mathrm{diag}(s)\,(VV'+\mathrm{diag}(D))\,\mathrm{diag}(s)$, that is,
-loadings $s\!\circ\!V$ and idiosyncratic variances $s^2 D$, so nothing
-below loses the original scales. (i)~Global factors: the certified quotient fit of \S\ref{sec:jac}
+The fitting procedure, stated so it can be reproduced. The fit runs in
+COVARIANCE coordinates, deliberately: an earlier draft standardized to a
+correlation matrix, fit there, and restored scales afterwards, and a
+referee supplied the two-line refutation. With $\Sigma=SCS$,
+$S=\mathrm{diag}(s)$, the choice-relevant residual after restoration is
+$PS(C-M)SP$, not $P(C-M)P$, and $P$ does not commute with an unequal
+$S$: at $n=2$ with equicorrelated $C$ ($\rho=0.9$) and $s=(1,2)$, the
+correlation-space quotient objective declares the fit $M=(1-\rho)I$
+exact while the restored model gets the only identified quantity, the
+difference variance, wrong by nearly a factor of three ($0.5$ against
+$1.4$). Equivalently, the choice-irrelevant direction in correlation
+coordinates is $S^{-1}\mathbf{1}$, not $\mathbf{1}$. A single global
+rescaling for conditioning is harmless; per-coordinate standardization
+is not, and the shipped test suite pins the analytic two-alternative
+example and an exact-grammar round trip with variances spanning two
+decades. So: fit $\Sigma$ itself. (i)~Global factors: the quotient fit of \S\ref{sec:jac}
 (\texttt{factor\_model\_projected}), $k=3$ throughout, returning $(V,D_0)$
-that minimize the identified objective. (ii)~The working residual is then
+by alternation that decreases the identified objective monotonically to a
+coordinatewise-stationary point (the objective is nonconvex in the pair,
+so no global certificate is claimed; multistart dispersion is a cheap
+diagnostic and the residual report exposes the value reached). (ii)~The working residual is then
 projected once, $R=P\,(C-VV'-\mathrm{diag}\,D_0)\,P$: the raw residual
 still contains the choice-irrelevant common component the quotient fit
 rightly ignored, and letting later stages chase it manufactures projected
@@ -701,11 +749,16 @@ correct objective.
 Accuracy depends on the generating ensemble, so it is reported per named
 ensemble of the \texttt{randomcov} library (pinned at commit
 \texttt{0d27a51}), now over \emph{twenty seeds} per ensemble at $n=300$,
-each seed judged by its own $10^6$-path referee on the entries the
-referee resolves (the committed \texttt{run\_ensembles4.py} and
-\texttt{run\_kernel4.py} regenerate everything). Total variation is
-reported as median, ninth decile and worst over seeds; the last column
-is the median per-entry absolute error on resolved entries.
+each seed refereed by its own $10^6$-path simulation (the committed
+\texttt{run\_ensembles4.py} and \texttt{run\_kernel4.py} regenerate
+everything). To be unambiguous about the statistic: the TV columns are
+FULL-vector total variation against the empirical frequency vector,
+zeros included, so the referee's own counting noise and any unresolved
+tail mass contribute to the reported number (they bound it from above);
+only the per-entry column is restricted, to entries with at least $25$
+referee wins. TV is reported as median, ninth decile and worst over
+seeds; the last column is the median per-entry absolute error on those
+resolved entries.
 Representative rows, identified pipeline:
 
 \begin{center}\small
@@ -799,12 +852,17 @@ Clark-type & 1.4 ms & $1.1\times10^{-2}$ & 17 ms & $1.6\times10^{-2}$ & $1.33$\\
 \end{tabular}
 \end{center}
 
-Genz and the lattice agree to the reference's noise and to each other; the
-$300\times$ cost ratio at $n=30$ is the one-at-a-time shape, not the
-integrator. At the paper's headline scale the shape is decisive: one
-probability at $n=200$ costs $4.6$ s (values agreeing with the lattice to six
-digits), so the full vector costs fifteen minutes against $26$ ms for the
-lattice, a factor of $3\times10^{4}$. The sequential-conditioning family is the only entry whose error
+Genz and the lattice agree to the reference's noise and to each other.
+Of the $300\times$ cost ratio at $n=30$, the one-at-a-time interface
+supplies an unavoidable $n$-fold component; the remainder reflects the
+differing integral representations, tolerances and implementations, and
+we do not apportion it further. At the paper's headline scale the
+$n$-fold component alone is decisive: one probability at $n=200$ costs
+$0.43$ s at \texttt{maxpts} $=2.5\times10^{5}$ (agreement with the
+lattice to four to five digits; six digits needs multi-second budgets
+--- the committed \texttt{bench.py genz200}), so the full vector costs
+$86$ s against $26$ ms for the lattice, a factor of
+$3\times10^{3}$ before any accuracy matching. The sequential-conditioning family is the only entry whose error
 grows silently: its tail entries are off by $e^{1.3}\approx3.7$ with nothing in
 the output to say so. The race's tail figure is the reference's own noise;
 lattice self-convergence places its error near $10^{-8}$.
@@ -878,12 +936,14 @@ grows superquadratically, with exponent $2.15$ to $2.8$ across the measured
 range. The lattice is
 deterministic, supplies smooth matrix-free derivatives free of simulation
 noise (simulated likelihoods can be differentiated, but inherit the noise),
-and prices the tails. The claim is scoped to the task measured: pricing
-and inverting complete choice-probability vectors under a known
-structured covariance --- the inner loop that share inversion,
-counterfactuals, and derivative evaluation repeat --- and for that task,
-under the structured families applied multinomial probit imposes, we
-consider GHK replaced. Estimation pipelines built around GHK are a
+and prices the tails. The claim, stated so it cannot be read past its
+evidence: for complete-vector pricing and inversion under the factor,
+block, nested and tree covariance grammars, the shared-field
+construction removes the per-alternative repetition intrinsic to
+standard GHK implementations and dominates the per-alternative GHK
+implementation tested here in both accuracy and cost. GHK implementations
+with antithetics, quasi-random sequences or reordering heuristics would
+move the constants, not the $n$-fold shape. Estimation pipelines built around GHK are a
 larger object than this loop, and \S\ref{sec:num}'s estimation
 paragraphs report where simulation remains competitive at face value.
 GHK also retains general rectangle probabilities and locality-structured
@@ -925,9 +985,13 @@ MSL, $R=1000$ & $0.0198$ & $40.7$ s \\
 \end{tabular}
 \end{center}
 
-\noindent At equal fitting time the simulated inversion pays a $63$ percent
-error premium. The $R=1000$ figure is close to the exact one and the
-difference is within replication noise at eight replications; the claim is
+\noindent At equal fitting time the simulated inversion pays roughly a
+$60$ percent error premium in this diagnostic ($8$ replications; the
+paired difference is stable in sign across all eight, but the premium's
+magnitude carries replication noise we have not driven down, and we
+present it as a diagnostic rather than an anchored constant). The
+$R=1000$ figure is close to the exact one and the
+difference is within replication noise; the claim is
 the equal-time column, not the third row.
 
 \paragraph{Covariate estimation.} The overidentified case behaves

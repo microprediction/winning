@@ -104,3 +104,52 @@ forward rank-one factor 1e6, INVERSION 1e6 (80 s independent, 22 min
 rank-one factor), full rank-two factor inversion 1e4 in under a minute.
 Dense covariance remains a separate claim because it must first be
 fitted into a scalable grammar.
+
+## Fourth review, adjudicated (2026-08-30)
+
+Ran their counterexamples before believing them:
+
+1. **Heterogeneous-scale standardization (their must-fix 1): right about
+   the paper, wrong about the code.** The shipped `fit_covariance` fits
+   covariance coordinates directly (their recommended repair), and their
+   n=2 example passes to 9e-9 through `cov=`. The paper's Section 6 TEXT
+   described a standardize-then-restore pipeline the code never
+   performed -- and which their counterexample correctly kills (the
+   choice-irrelevant direction in correlation coordinates is S^-1 1,
+   not 1). Text rewritten to match the code, with their refutation kept
+   in the paper as the reason. Their example also exposed a genuine n=2
+   division by zero in the water-filling diagonal solve; guarded, with
+   regression tests (analytic binary probability; exact-grammar round
+   trip with variances over two decades).
+2. **Removal grid (their must-fix 2): right in principle, aimed at the
+   wrong window.** `removal_shares` uses the SPAN window, not the
+   winner bulk, and passes their dominant-contestant case exactly at 20
+   and 200 sigma. Hardened anyway: spacing now refines to the sharpest
+   runner, and unnormalized row masses (fixed at one by the continuum
+   identity) are checked, raising on defect instead of renormalizing it
+   away. Abstract claim qualified per their suggested wording; the
+   second-finisher window is the one-failure term of the SIAM paper's
+   multiplicity union calculus (Peter's pointer), noted in the
+   docstring.
+3. Superseded Genz figures found still in the paper (4.6 s / six
+   digits) and replaced by the pinned 0.43 s / 4-5 digits; full-vector
+   factor corrected from 3e4 to 3e3.
+4. TV definition matched to what run_ensembles4.py computes:
+   full-vector TV against empirical frequencies (zeros included, so the
+   referee's own noise bounds it from above); per-entry column
+   restricted to >= 25 wins.
+5. Prose: sign-convention warning at Section 3; HRP remark now states
+   the zero-root normalization and the contrast-equivalence vs raw
+   correlation distinction; "certified/minimize" softened to monotone
+   alternation to a coordinatewise-stationary point; frozen-vs-moving
+   grid FD statement made explicit; coercivity made uniform via
+   compactness of the unit sphere; zero-target statement moved to
+   contrasts; solver explicitly disclaimed from the theorem; tree
+   sibling-cancellation sentence added; "GHK replaced" replaced by
+   their per-alternative-repetition wording; 63-percent premium
+   demoted to a sign-stable diagnostic at 8 replications.
+6. Also pinned from the discussion: within-cell tie mass lives in the
+   quadrature error and decays SPECTRALLY (5.6e-3 at 9 points, machine
+   zero by 33, asymmetric near-tied fields) -- why the factor engine
+   carries no multiplicity bookkeeping while the classic integer-lattice
+   engine, whose dead-heat mass is real and fixed, rightly does.
