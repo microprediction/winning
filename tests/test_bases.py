@@ -158,3 +158,39 @@ def test_failure_base_reaches_every_public_order_entry():
     with pytest.raises(NotImplementedError):
         rate_history([{"t": 0.0, "runners": ["a", "b"], "winner": 0}],
                      base=fb)
+
+
+def test_partial_order_is_exact_censoring():
+    """Dropping a retirement from the finishing order marginalizes it
+    out exactly: the partial order's likelihood is the sum over every
+    position the omitted runner could have taken.
+
+    This is the documented way to censor, and it is the recommended
+    treatment when failures are independent of ability, so the identity
+    is worth pinning rather than assuming."""
+    from winning.ratings.nway import order_loglik, update_ranking_exact
+    from winning.ratings.full import update_order_full
+
+    m = np.array([0.4, 0.1, 0.0, -0.2, 0.3])
+    v = np.full(5, 0.4)
+    sd = np.sqrt(v + 1.0)
+    part = [1, 0, 4, 3]                    # runner 2 retired
+
+    lp = order_loglik(m, sd, part)[0]
+    tot = sum(np.exp(order_loglik(m, sd, part[:k] + [2] + part[k:])[0])
+              for k in range(5))
+    assert abs(lp - np.log(tot)) < 1e-4
+
+    # the censored runner's own belief is untouched under a diagonal prior
+    md, vd = update_ranking_exact(m, v, part)
+    assert md[2] == m[2] and vd[2] == v[2]
+    assert not np.allclose(md[[0, 1, 3, 4]], m[[0, 1, 3, 4]])
+
+    # under a correlated prior it moves, but only through real coupling:
+    # ranking gradients sum to zero, so an equicorrelated prior carries
+    # no information about a runner outside the order
+    S_eq = np.full((5, 5), 0.15) + np.eye(5) * 0.25
+    assert abs(update_order_full(m, S_eq, part)[0][2] - m[2]) < 1e-8
+    S_one = np.eye(5) * 0.4
+    S_one[1, 2] = S_one[2, 1] = 0.3
+    assert abs(update_order_full(m, S_one, part)[0][2] - m[2]) > 0.1

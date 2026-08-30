@@ -274,7 +274,19 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     observed) this reproduces TrueSkill to ~1e-3 per rating -- their EP is
     essentially exact there. The value is in models TrueSkill cannot
     express: beta2 may be a per-player array (consistent vs erratic
-    performers), and the recursion extends to factor-correlated skills."""
+    performers), and the recursion extends to factor-correlated skills.
+
+    CENSORING IS A PARTIAL ORDER. Pass the order over the runners who
+    actually finished and the rest are marginalized out exactly: the
+    likelihood of a partial order equals the sum over every position the
+    omitted runner could have taken (verified to grid resolution in
+    tests), the omitted runner's own belief is left untouched under a
+    diagonal prior, and under a correlated prior it moves only through
+    genuine correlation. That is the right treatment when retirements
+    are independent of ability, where it beats the failure lump
+    (winning.factor.races.failure_base carries the measurements). When
+    retirements are coupled to ability, an under-weighted lump does
+    better; overstating the failure rate is the one badly wrong move."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))

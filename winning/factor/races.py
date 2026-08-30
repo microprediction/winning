@@ -898,27 +898,58 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
     magnitudes, and no tuning reconciles them, because they answer
     different halves of the question.
 
+    WHEN TO REACH FOR IT (measured, bandits lane, M=8, 40 races, q=0.25,
+    25 seeds, paired per-seed comparisons; ability rank correlation and
+    RMSE):
+
+      failures INDEPENDENT of ability   spearman   rmse
+        naive (retirement ranks last)     0.951    0.488
+        censored (drop the retiree)       0.960    0.205   <- best
+        lump at the true q                0.957    0.290
+        lump at q/2                       0.957    0.279
+        lump at 2q                        0.418    1.155
+      failures COUPLED to ability (0.12)
+        naive                             0.965    0.255
+        censored                          0.961    0.214
+        lump at the true q                0.957    0.233
+        lump at q/2                       0.967    0.203   <- best on both
+        lump at 2q                        0.614    0.945
+
+    So this is a targeted instrument, not a general replacement for
+    censoring. When failures are plausibly ability-independent, censor:
+    the lump repairs most of the naive damage but does not reach the
+    simple fix, and that gap is not an artifact of the lump's shape (a
+    sweep of offset over 3, 6 and 12 moves RMSE only within 0.27-0.30).
+    When failures are coupled to ability, an UNDER-WEIGHTED lump is the
+    only method measured that wins on ordering and magnitude at once,
+    which is the reconciliation the mechanism promises and neither
+    heuristic could deliver. At the true q it does not reconcile.
+
+    Censoring in this package is passing the finishing order over the
+    runners who finished; the omitted runner is marginalized out exactly
+    (see update_ranking_exact).
+
+    GUESS q LOW. Misspecification is violently asymmetric and the
+    dangerous direction is overstatement: at 2q the model expects half
+    the field to break, so a genuinely slow finisher is attributed to
+    failure and the back of the field stops carrying ability information
+    at all -- rank correlation collapses from 0.96 to 0.42. Halving q is
+    free or better than free in both regimes. Take the low end of the
+    plausible range rather than the midpoint, and if q is a guess rather
+    than an estimate prefer censoring, which has no q to misspecify.
+
     USE IT ON RANKED FEEDBACK. Under winner-only feedback a retirement
     is just "not the winner", which describes most of the field too, so
-    the lump has almost nothing to explain: measured on the winner path
-    (bandits lane, M=10, 80 races, 10 seeds) it is one clear win at a
-    30 percent independent failure rate (ability RMSE 0.389 against
-    Gaussian's 0.420) and two mild losses under ability-coupled
-    failures. All the information in a retirement is in the LAST-PLACE
-    FINISH, which is why the order path is the one that carries this
-    feature (update_ranking_exact, order_loglik, update_order_full,
-    update_order_correlated, rate_history and update_race all take
-    base=). update_winner_full is Gaussian only.
-
-    GUESS q LOW WHEN IN DOUBT. Misspecification is sharply asymmetric,
-    measured on the same battery: doubling q is materially worse than
-    ignoring failures altogether (RMSE 0.464 and 0.538 against the
-    Gaussian base's 0.426 and 0.427), while halving it is nearly free
-    (0.421 to 0.428, within noise of both the true q and the Gaussian).
-    An overstated lump explains away real slowness as breakage; an
-    understated one merely leaves some evidence on the table. If q is
-    unknown, take the low end of the plausible range rather than the
-    midpoint, or use censoring, which has no q to misspecify.
+    the lump has almost nothing to explain: on the winner path (M=10, 80
+    races, 10 seeds) it is one clear win at a 30 percent independent
+    failure rate (RMSE 0.389 against Gaussian's 0.420) and otherwise
+    indistinguishable, and the same overstatement that is catastrophic
+    on ranked feedback is merely mild there. The information in a
+    retirement is in the LAST-PLACE FINISH, which is why the order path
+    carries this feature: update_ranking, update_ranking_exact,
+    order_loglik, update_order_correlated, update_order_full,
+    update_team_order_full, update_race, rate_history and predict_race
+    all take base=. update_winner_full is Gaussian only and says so.
 
     NOT standardized by default, deliberately, and this matters: the
     engine's other bases are mean-zero unit-variance so that `D` is the
