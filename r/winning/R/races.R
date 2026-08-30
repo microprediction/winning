@@ -23,8 +23,25 @@
   list(S = S, f = f, fp = cc * cc * eu * S * (1 - eu))
 }
 
-.BASES <- list(normal = .base_normal, gumbel = .base_gumbel)
-.SPANS <- list(normal = c(8, 8), gumbel = c(22, 8))
+.base_logistic <- function(z) {
+  cc <- pi / sqrt(3)
+  u <- pmin(pmax(cc * z, -700), 700)
+  S <- 1 / (1 + exp(u))
+  f <- cc * S * (1 - S)
+  list(S = pmax(S, 1e-300), f = f, fp = -cc * f * (1 - 2 * S))
+}
+
+.base_laplace <- function(z) {
+  b <- 1 / sqrt(2)
+  f <- exp(-abs(z) / b) / (2 * b)
+  S <- ifelse(z < 0, 1 - 0.5 * exp(z / b), 0.5 * exp(-z / b))
+  list(S = pmax(S, 1e-300), f = f, fp = -sign(z) * f / b)
+}
+
+.BASES <- list(normal = .base_normal, gumbel = .base_gumbel,
+               logistic = .base_logistic, laplace = .base_laplace)
+.SPANS <- list(normal = c(8, 8), gumbel = c(22, 8),
+               logistic = c(16, 16), laplace = c(18, 18))
 
 .hermite1 <- function(order) {
   off <- sqrt(seq_len(order - 1))

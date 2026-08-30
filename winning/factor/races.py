@@ -4,6 +4,11 @@
     race_probabilities(mu, V=V, D=D)                factor probit (Gaussian)
     race_probabilities(mu, base="gumbel")           Luce / softmax, exactly
     race_probabilities(mu, V=V, base="gumbel")      correlated Luce
+    race_probabilities(mu, base="logistic")         logistic noise
+    race_probabilities(mu, base="laplace")          robust double-exponential
+    race_probabilities(mu, base=student_base(4))    fat tails, unit variance
+    race_probabilities(mu, base=skew_normal_base(2))  the heritage family
+    race_probabilities(mu, base=failure_base(0.1))  performance + DNF lump
     race_probabilities(mu, base=my_base)            anything standardized
 
 Min-wins convention throughout. A base is a callable z -> (S, f, fp)
@@ -72,8 +77,81 @@ def _gumbel_min(z):
     return S, f, c * c * eu * S * (1.0 - eu)
 
 
-BASES = {"normal": _normal, "gumbel": _gumbel_min}
-_SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0)}   # (left, right) tails
+def _logistic(z):
+    # standardized logistic: scale s = sqrt(3)/pi gives unit variance
+    c = np.pi / np.sqrt(3.0)
+    u = np.clip(c * z, -700.0, 700.0)
+    S = 1.0 / (1.0 + np.exp(u))
+    f = c * S * (1.0 - S)
+    # S' = -f, so f' = c S'(1-2S) = -c f (1-2S) (a sign the numeric
+    # audit caught in the first draft)
+    return np.maximum(S, 1e-300), f, -c * f * (1.0 - 2.0 * S)
+
+
+def _laplace(z):
+    # standardized Laplace: scale b = 1/sqrt(2) gives unit variance
+    b = 1.0 / np.sqrt(2.0)
+    az = np.abs(z)
+    f = np.exp(-az / b) / (2.0 * b)
+    S = np.where(z < 0, 1.0 - 0.5 * np.exp(z / b), 0.5 * np.exp(-z / b))
+    return np.maximum(S, 1e-300), f, -np.sign(z) * f / b
+
+
+BASES = {"normal": _normal, "gumbel": _gumbel_min,
+         "logistic": _logistic, "laplace": _laplace}
+_SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails
+          "logistic": (16.0, 16.0), "laplace": (18.0, 18.0)}
+
+
+def student_base(nu):
+    """Standardized Student-t base (unit variance; needs nu > 2): fat
+    tails for performances with occasional wild days. Returns a callable
+    for base=; the tail span widens with falling nu automatically."""
+    nu = float(nu)
+    if nu <= 2.0:
+        raise ValueError("student_base needs nu > 2 for unit variance")
+    from scipy.stats import t as _t
+    s = np.sqrt(nu / (nu - 2.0))            # raw x = s * z
+
+    def _student(z):
+        x = s * np.asarray(z, dtype=float)
+        S = np.maximum(_t.sf(x, nu), 1e-300)
+        f = _t.pdf(x, nu) * s
+        fp = f * (-(nu + 1.0) * x / (nu + x * x)) * s
+        return S, f, fp
+
+    # polynomial tails: place the window edge at the actual 1e-7
+    # quantile (heavy tails on an equispaced lattice are intrinsically
+    # expensive; below nu ~ 3 expect wide windows and budget points
+    # accordingly)
+    edge = float(_t.isf(1e-7, nu)) / s
+    _student.span = (max(12.0, edge), max(12.0, edge))
+    return _student
+
+
+def skew_normal_base(a):
+    """Standardized skew-normal base (the classic engine's heritage
+    family), shape a: mean zero, unit variance. Returns a callable for
+    base=."""
+    a = float(a)
+    from scipy.stats import skewnorm as _sn
+    delta = a / np.sqrt(1.0 + a * a)
+    m = delta * np.sqrt(2.0 / np.pi)
+    sd = np.sqrt(1.0 - 2.0 * delta * delta / np.pi)
+
+    def _skew(z):
+        x = m + sd * np.asarray(z, dtype=float)
+        S = np.maximum(_sn.sf(x, a), 1e-300)
+        phi = np.exp(-0.5 * x * x) / np.sqrt(2.0 * np.pi)
+        Phi_ax = ndtr(a * x)
+        f = 2.0 * phi * Phi_ax * sd
+        fp = 2.0 * (-x * phi * Phi_ax
+                    + a * phi * np.exp(-0.5 * a * a * x * x)
+                    / np.sqrt(2.0 * np.pi)) * sd * sd
+        return S, f, fp
+
+    _skew.span = (10.0, 10.0)
+    return _skew
 
 
 def _setup(mu, V, D, F, W, base):
@@ -131,7 +209,7 @@ def _setup(mu, V, D, F, W, base):
                 F, W = hermite_nodes(r, Q=Q)
     fn = base if callable(base) else BASES[base]
     left, right = _SPANS.get(base, (12.0, 12.0)) if not callable(base) \
-        else (12.0, 12.0)
+        else getattr(base, "span", (12.0, 12.0))
     return mu, V, D, np.asarray(F, float), np.asarray(W, float), fn, left, right
 
 

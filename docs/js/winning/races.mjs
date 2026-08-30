@@ -18,8 +18,21 @@ export const BASES = {
     const f = c * eu * S;
     return [S, f, c * c * eu * S * (1 - eu)];
   },
+  logistic(z) {
+    const c = Math.PI / Math.sqrt(3);
+    const u = Math.min(Math.max(c * z, -700), 700);
+    const S = 1 / (1 + Math.exp(u));
+    const f = c * S * (1 - S);
+    return [Math.max(S, 1e-300), f, -c * f * (1 - 2 * S)];
+  },
+  laplace(z) {
+    const b = 1 / Math.sqrt(2);
+    const f = Math.exp(-Math.abs(z) / b) / (2 * b);
+    const S = z < 0 ? 1 - 0.5 * Math.exp(z / b) : 0.5 * Math.exp(-z / b);
+    return [Math.max(S, 1e-300), f, -Math.sign(z) * f / b];
+  },
 };
-const SPANS = { normal: [8, 8], gumbel: [22, 8] };
+const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [18, 18] };
 
 function setup(mu, V, D, F, W, base) {
   const n = mu.length;
