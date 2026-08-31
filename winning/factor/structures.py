@@ -161,6 +161,18 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
     raise TypeError(f"unknown structure {type(structure).__name__}")
 
 
+def _loading_var(loading, n):
+    """Per-runner shared variance from a loading that may be a scalar
+    per runner (rank one) or an (n, r) matrix (rank r): the rank-r
+    inversion crashed here on a broadcast before this existed."""
+    L = np.asarray(loading, float)
+    if L.ndim == 2:
+        if L.shape[0] != n:
+            L = L.T
+        return (L ** 2).sum(axis=1)
+    return L ** 2
+
+
 def structure_variances(structure):
     """Total per-runner variance implied by a grammar structure (shared
     effects plus idiosyncratic): the marginal the generic inverter's
@@ -172,9 +184,9 @@ def structure_variances(structure):
         V = np.asarray(structure.V, float)
         return D + (V ** 2).sum(axis=1)
     if isinstance(structure, Blocks):
-        return D + np.asarray(structure.loading, float) ** 2
+        return D + _loading_var(structure.loading, len(D))
     if isinstance(structure, Nested):
-        tot = D + np.asarray(structure.loading, float) ** 2
+        tot = D + _loading_var(structure.loading, len(D))
         if structure.coupling is not None and structure.gamma:
             g = np.atleast_2d(np.asarray(structure.coupling, float))
             if g.shape[0] != len(D):

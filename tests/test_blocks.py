@@ -155,3 +155,57 @@ def test_fast_and_streaming_kernels_agree_exactly():
     except TypeError:
         pytest.skip("fastrace without fast_max_entries")
     assert np.abs(p_fast - p_stream).max() < 1e-14
+
+
+def test_rank_r_blocks_forward_inverts_and_jacobian_refuses():
+    """Rank-r cluster loadings: the forward kernel prices them (verified
+    against Monte Carlo at 1e-3 TV when this was pinned), the inversion
+    round-trips through the variance-matched preconditioner, and the
+    Jacobian refuses cleanly rather than mis-broadcasting."""
+    import warnings
+    from winning.factor.races import race_probabilities, abilities_from_race
+    from winning.factor.structures import Blocks
+    from winning.factor.blocks import block_race_jacobian
+
+    n = 24
+    rng = np.random.default_rng(0)
+    mu = rng.standard_normal(n) * 0.6
+    mu -= mu.mean()
+    lab = np.repeat(np.arange(4), 6)
+    D = 0.5 + 0.5 * rng.random(n)
+    V2 = rng.standard_normal((n, 2)) * 0.5
+
+    B = Blocks(cluster=lab, loading=V2, D=D)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = race_probabilities(mu, structure=B)
+        mu_back = abilities_from_race(p, structure=B)
+        p2 = race_probabilities(mu_back, structure=B)
+    assert 0.5 * np.abs(p2 - p).sum() < 1e-7
+
+    with pytest.raises(NotImplementedError):
+        block_race_jacobian(mu, lab, V2, D)
+
+
+def test_sharp_blocks_warn_that_gh_cannot_converge():
+    """A cluster loading of 4 against idiosyncratic sd 0.22 is sharpness
+    18; the fixed-order hierarchical quadrature measured 5e-2 TV against
+    a 4M-draw referee there, landing on GROUP shares, and raising the
+    order does not converge (9 -> 31 nodes moves the answer by a further
+    8e-2). Until the factor path's family escalation is ported, the
+    kernel must say so."""
+    import warnings
+    from winning.factor.blocks import block_race_probabilities
+
+    n = 24
+    lab = np.repeat(np.arange(4), 6)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        block_race_probabilities(np.zeros(n), lab, np.full(n, 4.0),
+                                 np.full(n, 0.05))
+        assert any("sharpness" in str(x.message) for x in w)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        block_race_probabilities(np.zeros(n), lab, np.full(n, 0.6),
+                                 np.full(n, 0.7))
+        assert not any("sharpness" in str(x.message) for x in w)

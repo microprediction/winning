@@ -531,3 +531,19 @@ where-each-stopped framing. The paper keeps the composition claim with
 the missing-insight-per-lineage structure, which the same review's own
 table supports (matrix-free Jh from the shared field: "strong
 originality candidate"; the pipeline: "strongest originality claim").
+
+## Thirteenth round (2026-08-31): two blockers, both verified by running
+
+1. **Sharp hierarchical fields distorted**: block kernel at cluster
+   sharpness 18 measured 5e-2 TV vs a 4M-draw referee ON GROUP SHARES;
+   qa 9 -> 31 moves the answer a further 8e-2 (GH fails at any order --
+   the factor path's old lesson). Interim: kernels warn past sharpness 3
+   and direct to the factor grammar; escalation port tracked in issue
+   #11. Paper 4.2 states the limitation with the numbers.
+2. **Rank-r advertised, rank-one implemented**: forward kernel DOES
+   price rank-r (TV 1e-3 vs MC -- the claim was half wrong); inversion
+   crashed in structure_variances on (n,r) loadings, fixed (now
+   round-trips exactly); block_race_jacobian is rank-one and now refuses
+   cleanly instead of mis-broadcasting. Paper 5.1 scopes the block
+   Jacobian to rank one.
+Both pinned in tests/test_blocks.py.

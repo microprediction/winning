@@ -717,6 +717,19 @@ are accumulated once. Rank two is special: the conditional integrand is smooth
 and a tensor Gauss--Hermite rule beats scrambled Sobol at equal nodes by a wide
 measured margin.
 
+One limitation of the hierarchical kernels is stated here rather than
+discovered by the user: their quadrature is a fixed-order rule, without
+the sharpness escalation of \S\ref{sec:factor}. When a cluster loading
+is large against the idiosyncratic noise the conditional integrand is a
+near-step and Gauss--Hermite fails at any order --- measured at cluster
+sharpness $18$: $5\times10^{-2}$ of total variation against a
+four-million-path referee, landing on \emph{group} shares rather than
+tails, with a $31$-node rule moving the answer a further $8\times10^{-2}$
+rather than converging. The shipped kernels warn past sharpness $3$ and
+direct such fields to the factor grammar, whose node family escalates
+automatically; porting that escalation to the hierarchical kernels is
+tracked work.
+
 \paragraph{Nested.} Add one global factor with couplings $g_i$ and a dial
 $\gamma\in[0,1]$: conditional on the global draw $f_q$ the model is a block race
 at shifted abilities, so
@@ -1012,8 +1025,10 @@ under the normal base and exponentially under the Gumbel base; the
 exponent clip absorbs either. The symmetric square-root split, which
 looks more natural, overflows wherever survivals vanish.
 
-\paragraph{Across the grammar.} The block Jacobian is exact, with the
-within-cluster term computed under the cavity. The nested Jacobian is the
+\paragraph{Across the grammar.} The block Jacobian is exact for
+rank-one cluster loadings, with the within-cluster term computed under
+the cavity; the rank-$r$ forward kernel has no Jacobian yet, and the
+call refuses rather than mis-broadcasting. The nested Jacobian is the
 mixture of block Jacobians. The tree Jacobian is exact within a cluster
 and Gram-approximate across clusters. That approximation is safe for
 Newton because the residual is always computed from the exact forward

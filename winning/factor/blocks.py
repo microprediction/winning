@@ -34,6 +34,34 @@ except Exception:                                            # pragma: no cover
     _HAVE_RUST = False
 
 
+def _warn_if_sharp(v, sd, qa, threshold=3.0):
+    """The factor grammar escalates its quadrature past sharpness 3 and
+    refines its lattice; these hierarchical kernels do not yet, and at a
+    fixed 9-node rule a cluster with loading 4 and idiosyncratic sd 0.22
+    (sharpness 18) measured 5e-2 of total variation against a 4M-draw
+    referee -- on GROUP shares, not just tails. Warn until the factor
+    path's escalation is ported (tracked in the repository issues)."""
+    v = np.atleast_2d(np.asarray(v, float))
+    amp = np.sqrt((v ** 2).sum(axis=-1)) if v.shape[-1] > 1 else np.abs(v).ravel()
+    if len(amp) != len(np.asarray(sd).ravel()):
+        amp = np.abs(np.asarray(v, float)).ravel()
+    s = float(np.max(amp / np.maximum(np.asarray(sd, float).ravel(), 1e-300)))
+    if s > threshold:
+        import warnings
+        warnings.warn(
+            f"block/nested/tree quadrature is a fixed {qa}-node "
+            f"Gauss-Hermite rule and this field's cluster sharpness is "
+            f"{s:.1f} (loading over idiosyncratic sd); past 3 the "
+            "conditional integrand is a near-step, Gauss-Hermite fails at "
+            "ANY order (measured: 5e-2 TV at 9 nodes and sharpness 18, "
+            "and 31 nodes moves the answer by a further 8e-2 rather than "
+            "converging), and errors land on group shares, not just "
+            "tails. Restructure sharp shared effects into the factor "
+            "grammar, which escalates its node family automatically; "
+            "raising qa= does not fix this.",
+            RuntimeWarning, stacklevel=4)
+
+
 def _bulk_lo_hi(mu, tot, delta=1e-12):
     """Winner-bulk lattice bounds for a MAX-wins field, from the marginal
     proxy G(x) = prod_j Phi((x - mu_j)/tot_j) (Slepian-safe on the right;
@@ -144,6 +172,7 @@ def _block_max(mu, sd, cluster, v, points, qa):
     """Max-wins kernel (numpy reference); public functions negate."""
     mu = np.asarray(mu, float); sd = np.asarray(sd, float)
     v = np.asarray(v, float); cluster = np.asarray(cluster)
+    _warn_if_sharp(v, sd, qa)
     if v.ndim == 2 and v.shape[-1] > 1:
         return _block_max_r(mu, sd, cluster, v, points, qa)
     v = v.reshape(len(mu))
@@ -223,6 +252,14 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
 
 
 def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
+    _lv = np.asarray(loading, float)
+    if _lv.ndim == 2 and _lv.shape[-1] > 1 and _lv.shape[0] > 1:
+        raise NotImplementedError(
+            "block_race_jacobian supports rank-one cluster loadings only; "
+            "the rank-r block Jacobian is not implemented (the FORWARD "
+            "rank-r kernel is). Use finite differences of "
+            "block_race_probabilities, or the factor grammar if the "
+            "loadings are global.")
     """Exact d p / d mu (min-wins), one pass. Rows sum to zero."""
     mu = np.asarray(mu, float)
     m = -mu
