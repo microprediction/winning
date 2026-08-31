@@ -170,15 +170,14 @@
     without constructing its \(O(n^2)\) edges.</p>
 
     <figure class="diagram">
-      <img src="./assets/images/flux.png" alt="Cone geometry intuition: a winning cone as a control volume, with the divergence theorem turning a volume derivative into a boundary flux, and the discrete graph analogue with photo-finish ties as edges." />
-      <figcaption><strong>The cone as a control volume.</strong> On the
-      left, the continuous picture: contestant \(i\)'s winning region,
-      with probability flowing out through its boundary. On the right,
-      the discrete analogue: each contestant is a node, each
-      photo-finish tie density \(w_{ij}\) an edge conductance, and the
-      net flux out of a node is exactly a graph-Laplacian action. In the
-      inversion, the voltage-like vector \(v\) is the ability correction
-      and the source term \(r\) is the share residual.</figcaption>
+      <img src="./assets/images/boundary-flux.png" alt="Boundary flux intuition: the cone boundary decomposes into pairwise tie surfaces, each corresponding to a graph edge, so divergence at a node needs only pair-boundary fluxes." />
+      <figcaption><strong>Why no volume computation is needed.</strong>
+      The boundary of a winning cone decomposes into pairwise
+      photo-finish surfaces, one per rival, and each becomes one edge of
+      the graph. The divergence theorem says the interior tells you
+      nothing the boundary does not, so the Jacobian is assembled from
+      pair fluxes alone &mdash; and applied as an operator, never
+      materialized, at the same \(O(nLQ)\) cost as pricing.</figcaption>
     </figure>
 
     <p>Three structural facts fall out of the same picture, free of
@@ -199,11 +198,12 @@
     \[ J \;=\; -B^{\top} W_e B , \qquad
        (Jh)_i \;=\; \sum_{j\ne i} w_{ij}\,(h_j-h_i) , \]
     <p>with \(B\) the incidence matrix of the photo-finish graph and
-    \(W_e\) the diagonal of tie densities. What matters computationally
-    &mdash; the part the scale rests on &mdash; is the field identity
-    that lets this dense matrix act without being built. Write
-    \(A_i(x)=f_i(x)/S_i(x)\) for the hazard and \(G(x)=\prod_k S_k(x)\)
-    for the field; then \(w_{ij}=\int G\,A_i A_j\,dx\), and</p>
+    \(W_e\) the diagonal of tie densities.</p>
+    <p><strong>The identity the scale rests on.</strong> The dense matrix
+    above never has to be built, because its weights factor through the
+    field. Write \(A_i(x)=f_i(x)/S_i(x)\) for the hazard and
+    \(G(x)=\prod_k S_k(x)\) for the field; then
+    \(w_{ij}=\int G\,A_i A_j\,dx\), and</p>
     \[ (Jh)_i \;=\; \int G(x)\,A_i(x)\Bigl[\textstyle\sum_j A_j(x)h_j
        \;-\; h_i\sum_j A_j(x)\Bigr]\,dx , \]
     <p>where the two inner sums are shared across every contestant. A
@@ -231,14 +231,16 @@
     zero is choosing the ground node.</p>
 
     <figure class="diagram">
-      <img src="./assets/images/boundary-flux.png" alt="Boundary flux intuition: the cone boundary decomposes into pairwise tie surfaces, each corresponding to a graph edge, so divergence at a node needs only pair-boundary fluxes." />
-      <figcaption><strong>Why no volume computation is needed.</strong>
-      The boundary of a winning cone decomposes into pairwise
-      photo-finish surfaces, one per rival, and each becomes one edge of
-      the graph. The divergence theorem says the interior tells you
-      nothing the boundary does not, so the Jacobian is assembled from
-      pair fluxes alone &mdash; and applied as an operator, never
-      materialized, at the same \(O(nLQ)\) cost as pricing.</figcaption>
+      <img src="./assets/images/flux.png" alt="Cone geometry intuition: a winning cone as a control volume, with the divergence theorem turning a volume derivative into a boundary flux, and the discrete graph analogue with photo-finish ties as edges." />
+      <figcaption><strong>The cone as a control volume.</strong> On the
+      left, the continuous picture: contestant \(i\)'s winning region,
+      with probability flowing out through its boundary. On the right,
+      the discrete analogue: each contestant is a node, each
+      photo-finish tie density \(w_{ij}\) an edge conductance, and the
+      net flux out of a node is exactly a graph-Laplacian action &mdash;
+      the Kirchhoff picture of the text above, with the ability
+      correction \(v\) as potential and the share residual \(r\) as
+      injected current.</figcaption>
     </figure>
 
     <h2>4. Inversion is a convex program</h2>
@@ -257,22 +259,23 @@
     \[ \max_\mu \; W(\mu) - \langle p^\star, \mu\rangle \]
     <p>is a strictly concave, coercive program whose unique mean-zero
     maximiser is the inversion: the abilities exist and are unique up to
-    a common shift. What is ours is the oracle: Newton's method on this
-    program runs matrix-free because the Hessian is the Laplacian the
-    field pass already computed, and the field identity of the previous
-    section applies it in \(O(nL)\) per node &mdash; which is what makes
-    the known program practical at \(n=10^6\) rather than at the sizes
-    the literature stops at. The program also has an economic reading, noted in
-    the original paper (Cotton 2021): \(W(\mu)\) is the expected winning
-    time, so \(\partial W/\partial\mu_i = p_i\) says that paying to make
+    a common shift.</p>
+    <p>What is ours is the oracle. Newton's method on this program runs
+    matrix-free because the Hessian is the Laplacian the field pass
+    already computed, and the field identity of the previous section
+    applies it in \(O(nL)\) per node &mdash; which is what makes the
+    known program practical at \(n=10^6\) rather than at the sizes the
+    literature stops at. The shipped solver preconditions with just the
+    diagonal slopes and converges in a handful of field passes; a
+    million-contestant field inverts in about eighty seconds.</p>
+    <p>The program also has an economic reading, noted in the original
+    paper (Cotton 2021). \(W(\mu)\) is the expected winning time, so
+    \(\partial W/\partial\mu_i = p_i\) says that paying to make
     contestant \(i\) faster improves the expected winning time at a rate
-    equal to \(i\)'s win probability &mdash; the win probabilities are
-    the <em>shadow prices</em> of ability. Inversion is then the
-    equilibrium question run backwards: find the ability vector at which
-    the observed shares are exactly those shadow prices. The shipped
-    solver preconditions with just the diagonal slopes and converges in
-    a handful of field passes; a million-contestant field inverts in
-    about eighty seconds.</p>
+    equal to \(i\)'s win probability: the win probabilities are the
+    <em>shadow prices</em> of ability, and inversion is the equilibrium
+    question run backwards &mdash; find the ability vector at which the
+    observed shares are exactly those shadow prices.</p>
 
     <figure class="diagram">
       <img src="./assets/images/divergence-diagram.png" alt="The divergence calculation: build the race network from tie densities, form the Laplacian, equate divergence with the share residual, and see why deleting a runner does not redistribute share proportionally." />
@@ -309,7 +312,7 @@
       <li><strong>Against the standard.</strong> The GHK simulator at
       \(n=200\) and ten thousand draws is roughly
       <span class="num">200&times;</span> slower for the complete
-      vector, with superquadratic measured cost growth; the exact
+      vector, with superquadratic measured cost growth; the analytic
       derivatives here carry no simulation noise at all.</li>
       <li><strong>Any smooth base.</strong> Normal, Gumbel (softmax is
       the closed-form special case, reproduced to
