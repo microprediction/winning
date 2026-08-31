@@ -283,3 +283,53 @@ Still open: the timing column (see above) and, newly, whether the
 degeneracy finding deserves a rank-selection rule rather than a
 diagnostic. The fitter picks k=3 by default; on a matrix whose centered
 spectrum has a tied leading block, that default is silently arbitrary.
+
+## Seventh review (2026-08-31)
+
+All five leads confirmed and fixed; none touched the central results,
+which the review re-checked and passed (flux sign/geometry, uniform
+coercivity, projected objective, n=2 counterexample, removal grid,
+sample splitting).
+
+1. **Eq (2) under correlation** — confirmed. The marginal-survival
+   product was asserted before independence was assumed. Now: the
+   conditional identity first, factorization as the independent case,
+   grammars as conditioning routes to the same product.
+2. **Window envelope endpoints** — confirmed as a PAPER error only. The
+   code always used mu_lo for the lower endpoint and mu_hi for the
+   upper (races.py G/H functions); the prose said favourable node at
+   both ends, which is not an envelope. Prose fixed to match code.
+3. **"Exact derivative of the adaptive map"** — confirmed. The
+   implementation returns J_grid, exact conditional on the selected
+   grid, and omits grid motion. Taxonomy is now four objects and the
+   L=25 residual of 6e-4 is labelled as the grid-motion omission.
+4. **Row/column conflation** — already fixed in v9 (columns exact by
+   construction, rows quadrature-limited); the review read v7.
+5. **Sharpness not choice-invariant** — confirmed by running the
+   counterexample: identical loading rows give stated s = 30.0,
+   centered s = 0.0, and the factor moves probabilities by 2.8e-13.
+   Paper now defines s_c = max ||(PV)_i||/sqrt(D_i) as the
+   characterizing statistic and keeps raw s as the conservative
+   trigger (false positives cost nodes, not error). CODE still
+   triggers on raw s — acceptable per the review, logged as a
+   possible improvement (centered trigger would avoid needless
+   escalation on common-loading factors).
+6. **Tree transpose** — v_i' a_c(i); loading gloss added.
+7. **Root contradiction** — pricing gauge-fixes the root; reporting
+   constructors may retain it; from_linkage is the latter.
+8. **Theorem 1 scope** — Gaussian where stated; generalization
+   conditions stated at the invocation, read as such.
+9. **Flooring** — zero-target case proved; coordinatewise bounds for
+   small positive targets explicitly need a monotonicity argument not
+   made.
+10. **Parity bug** — confirmed: the tied-eigenvalue warning postdates
+    paper-r3 (added in 36f7d6d). Footnote now names paper-r4, cut at
+    the commit containing everything the paper describes.
+11. **Empty cells** — measured rather than argued: all 13 empty-cell
+    replications are the smallest cell (index 29) and no other cell
+    ever empties, so the 40 x 0.28 = 11.2 expectation compares to the
+    right event.
+
+Deferred as improvements, not defects: centered sharpness as the CODE
+trigger; alphabetizing the bibliography; generalizing Theorem 1
+formally rather than stating the conditions.
