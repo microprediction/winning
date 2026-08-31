@@ -1186,7 +1186,24 @@ $\alpha=0.7$, halved whenever the residual fails to shrink.}}
 \end{center}
 
 Each sweep is a diagonally preconditioned residual iteration on the
-log-probability residual $r_i=\log p_i(\mu)-\log p^{\star}_i$. A full
+log-probability residual
+$r_i=\log p_i(\mu)-\log p^{\star}_i$.\footnote{In handicapper's terms,
+for a million runners: you know the win probability you want for each
+runner and must adjust handicaps until the model produces it. Each pass
+of the reported solver computes every runner's current win probability
+and every runner's \emph{own} slope --- if only this runner slows
+slightly, how much does its own probability move? --- then adjusts each
+runner by its personal sensitivity, re-prices the whole race, and
+repeats. Interactions are not ignored (every re-pricing includes them);
+they are just not consulted when choosing each step. The $Jv$ oracle is
+the more powerful tool: propose changing \emph{all} abilities at once by
+$v$ and it returns the resulting change in \emph{all} win probabilities,
+without constructing the million-by-million Jacobian's $10^{12}$
+entries. A Newton--Krylov solver would repeatedly ask it what
+coordinated change removes the current errors most efficiently. That
+more sophisticated solver is not what produced the reported
+million-runner result; the own-slope iteration did, and making
+Newton--Krylov beat it is future solver work.} A full
 Newton step would solve a linear system in the Jacobian; here each
 coordinate is instead divided by a preconditioning slope $\tilde s_i$,
 which for the factor grammar is the own-coordinate slope the forward pass
