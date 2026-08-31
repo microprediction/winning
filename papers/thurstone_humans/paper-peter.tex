@@ -18,20 +18,23 @@
 \maketitle
 
 \begin{abstract}
-\noindent Re-scaling a probability vector, after a first choice is assumed or an item is
-withdrawn, delisted or masked out, is one of the great unconscious modelling acts. It is
-equivalent to assuming a Gumbel distribution within the additive random-utility
-class\footnotemark[2], whereas a Gaussian is an equally canonical and equally tuning-free choice. We call
-the latter \emph{Gaussian renormalization} and set it alongside linear, or proportional,
-renormalization in a two horse empirical race, which is a fair race because neither has a tuning
-parameter. In part we re-litigate the psychology debate that sets the constant ratio rule, Luce's
-choice axiom, against Thurstone's Case V; in part we bring new data from situations where
-renormalizing a probability is tempting. Gaussian renormalization has the lower held-out log loss
-in thirty of thirty-nine comparisons, eighteen of the twenty-seven observed restrictions and
-twelve of the twelve induced from rankings.
+\noindent Re-scaling a probability vector when an item is withdrawn, delisted or masked out is
+one of the great unconscious modelling acts. When the support shrinks because something was
+learned about a fixed experiment, that re-scaling is the conditional law and there is nothing to
+choose. When instead somebody intervenes on what may be chosen, the old vector does not determine
+the new one, and re-scaling amounts to assuming a Gumbel distribution within the additive
+random-utility class\footnotemark[6]. A Gaussian is an equally canonical and equally tuning-free
+choice. We call the latter \emph{Gaussian renormalization} and set it alongside linear, or
+proportional, renormalization in a two horse empirical race, which is fair because neither carries
+a parameter fitted to the data being predicted. In part we re-litigate the psychology debate that
+sets the constant ratio rule, Luce's choice axiom, against Thurstone's Case V; in part we bring
+new data from situations where renormalizing a probability is tempting. Gaussian renormalization
+has the lower held-out log loss in thirty of thirty-nine comparisons. The differences are small
+where they are small, a median of $0.004$ nats across all thirty-nine, and twelve exceed $0.01$
+with a maximum of $0.05$.
 \end{abstract}
 
-\footnotetext[2]{The Gumbel construction is due to Holman and Marley
+\footnotetext[6]{The Gumbel construction is due to Holman and Marley
 \cite{lucesuppes1965,holman1974}; the uniqueness is Yellott's \cite{yellott1977}.}
 
 \section{A two horse race between zero parameter choice models}
@@ -59,6 +62,26 @@ is scratched, the option is disallowed, the action is removed, and the experimen
 the choice is not the one that generated the shares. The old vector does not determine the new
 one, and any answer is a modelling assumption. The same masking arithmetic is often applied here
 too, and that is where it stops being a theorem and starts being a choice.
+
+Writing $Y(S)$ for what a chooser facing menu $S$ selects, and $P_S(i) = \Pr\{Y(S) = i\}$ for the
+share it produces, the four separate:
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+Operation & Target & Status \\
+\midrule
+Outcome information & $\Pr\{Y(S) = i \mid Y(S) \in T\}$ & linear by definition \\
+Mask on a fixed score vector & the same quantity, computed & linear by construction \\
+Feasible-set intervention & $P_T(i)$ & not identified by $P_S$ \\
+Menu-aware recomputation & $P_T(i)$, estimated directly & no transport needed \\
+\bottomrule
+\end{tabular}
+\end{center}
+The first two condition the law of $Y(S)$; the third asks about $Y(T)$, a different random
+variable produced by a different experiment, and that is what $P_S$ alone cannot determine. We
+write $P_S(i)$ rather than $P(i \mid S)$ throughout, because the conditioning bar is exactly the
+confusion at issue.
 
 A related problem arises in the computation of permutation probabilities, but here we focus on
 the case where the original vector is a market share of sorts, as with the population popularity
@@ -114,7 +137,10 @@ P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right).
 \end{equation}
 
 Our limited goal is a practical comparison of linear renormalization and Gaussian
-renormalization. The first holds the ratios of the shares fixed, the second holds the latent
+renormalization. Neither carries a parameter fitted to the data being predicted, which is the
+sense in which both are free of tuning; the pipeline around them does use one shared convention,
+the continuity correction $\alpha = 1/2$, and Section~\ref{sec:conventions} varies it.
+The first holds the ratios of the shares fixed, the second holds the latent
 locations fixed. The underlying physics is quite different, so even small persistent statistical
 advantages of one over the other may be suggestive of structure, and of interest to the
 psychology community but also, we hope, to the broader machine learning audience whose choice of
@@ -275,7 +301,7 @@ restriction. It is reported as a diagnostic and should not be read as a $p$-valu
 \toprule
 Population & Restriction & Gain & Null freq. & Family \\
 \midrule
-News slates & observed impressions & $+.0496$ & $.016$\footnotemark[4] & clicks \\
+News slates & observed impressions & $+.0496$ & $.016$\footnotemark[7] & clicks \\
 Sounds, eight to four, $\{1,3,5,7\}$ & observed menus & $+.0490$ & $\le .005$ & Getty \\
 Sounds, eight to four, $\{1,2,5,6\}$ & observed menus & $+.0453$ & $\le .005$ & Getty \\
 Consumer goods 1, forced choice & observed menus & $+.0442$ & $.005$ & Costa-Gomes \\
@@ -309,12 +335,12 @@ Gambles, low arithmetic cost & observed menus & $+.0002$ & $.667$ & Aguiar \\
 Wikipedia links & observed removals & $-.0001$ & $.005$ & clicks \\
 Tones, wide, ten to eight & observed menus & $-.0041$ & n/a & Stewart \\
 Tones, narrow, ten to eight & observed menus & $-.0051$ & n/a & Stewart \\
-Lines, twelve to eight & observed menus & $-.0057$ & $1.000$ & lines\footnotemark[5] \\
-Lines, twelve to four & observed menus & $-.0090$ & $1.000$ & lines\footnotemark[5] \\
+Lines, twelve to eight & observed menus & $-.0057$ & $1.000$ & lines\footnotemark[8] \\
+Lines, twelve to four & observed menus & $-.0090$ & $1.000$ & lines\footnotemark[8] \\
 Sounds, eight to four, $\{3,4,5,6\}$ & observed menus & $-.0127$ & $1.000$ & Getty \\
 Tones, narrow, ten to six & observed menus & $-.0133$ & n/a & Stewart \\
 Tones, wide, ten to six & observed menus & $-.0173$ & n/a & Stewart \\
-Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & lines\footnotemark[5] \\
+Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & lines\footnotemark[8] \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
@@ -325,9 +351,9 @@ row, four hundred; the tone matrices are participant-averaged, so no null freque
 \label{tab:scoreboard}
 \end{table}
 
-\footnotetext[4]{The news figure rests on sixty replicates, so $.016$ is the floor $1/61$ rather
+\footnotetext[7]{The news figure rests on sixty replicates, so $.016$ is the floor $1/61$ rather
 than a measured frequency.}
-\footnotetext[5]{The twelve-line data is unpublished laboratory data with no licence file and no
+\footnotetext[8]{The twelve-line data is unpublished laboratory data with no licence file and no
 associated publication, so we do not attribute it to a named author. See the data section.}
 
 Gaussian renormalization performs strongly. It has the lower held-out log loss in thirty of the
@@ -449,9 +475,11 @@ or deposited enough to score either assumption.
 
 Renormalization does not follow from probability theory. It is the correct posterior for
 mutually exclusive events only when learning that one of them is impossible says nothing about
-which of the rest obtained. Monty Hall is the famous counterexample. Withdrawal is neither
-of those two cases, because no information about a fixed experiment has arrived at all. An
-alternative is gone, which is a different problem.
+which of the rest obtained. Monty Hall is the familiar case where it does not: conditioning is
+still correct there, but the host's choice of door carries more information than the bare fact
+that the car is not behind it, so the event conditioned on is not simply $Y \in T$. Withdrawal is
+neither of those two cases, because no information about a fixed experiment has arrived at all.
+An alternative is gone, which is a different problem.
 Conditioning requires a model of how the probabilities were generated, and linear renormalization supplies one.
 
 Which model it supplies is known. Within the class of independent additive random-utility
@@ -505,7 +533,7 @@ differentiable. The highest draw wins, as above.
 \label{prop:contraction}
 Suppose $\log r$ is concave. Let $T \subset S$ and $i,j \in T$ with $a_i > a_j$. Then
 \[
-\frac{P(i \mid S)}{P(j \mid S)} \;\ge\; \frac{P(i \mid T)}{P(j \mid T)} \;\ge\; 1,
+\frac{P_S(i)}{P_S(j)} \;\ge\; \frac{P_T(i)}{P_T(j)} \;\ge\; 1,
 \]
 with the first inequality strict when $\log r$ is strictly concave and $H$ is non-constant on a
 set of positive measure, which holds whenever $S \setminus T$ is non-empty.
@@ -515,7 +543,7 @@ set of positive measure, which holds whenever $S \setminus T$ is non-empty.
 Write $A(x) = f(x-a_i)F(x-a_j)$ and $B(x) = f(x-a_j)F(x-a_i)$ for the two items in
 question, $C(x) = \prod_{k \in T \setminus \{i,j\}} F(x-a_k)$ for the other survivors, and
 $H(x) = \prod_{k \in S \setminus T} F(x-a_k)$ for the items removed. Then
-$P(i \mid T) \propto \int A C$ and $P(i \mid S) \propto \int A C H$, and likewise for $j$
+$P_T(i) \propto \int A C$ and $P_S(i) \propto \int A C H$, and likewise for $j$
 with $B$ in place of $A$. Now
 \[
 \frac{A(x)}{B(x)} = \frac{r(x-a_i)}{r(x-a_j)},
@@ -529,8 +557,8 @@ correlated, so
 \]
 which is the first inequality, strict under strict concavity when $S \setminus T$ is
 non-empty. For the second, raising $a_i$ stochastically increases $X_i$ and so raises
-$P(i \mid T)$ while lowering $P(j \mid T)$, and the two are equal at $a_i = a_j$ by
-exchangeability; hence $a_i > a_j$ gives $P(i \mid T) \ge P(j \mid T)$.
+$P_T(i)$ while lowering $P_T(j)$, and the two are equal at $a_i = a_j$ by
+exchangeability; hence $a_i > a_j$ gives $P_T(i) \ge P_T(j)$.
 \end{proof}
 
 The proposition says that removing alternatives moves the ratio toward one.
@@ -614,7 +642,7 @@ Let every individual obey the axiom, and let their tastes differ. Individual $\t
 assigns systematic utility $V_i(\theta)$ to alternative $i$ and chooses by Luce at scale
 $\beta > 0$,
 \begin{equation}
-P(i \mid S, \theta) = \frac{\exp\{V_i(\theta)/\beta\}}{\sum_{j \in S}\exp\{V_j(\theta)/\beta\}},
+P_S(i \mid \theta) = \frac{\exp\{V_i(\theta)/\beta\}}{\sum_{j \in S}\exp\{V_j(\theta)/\beta\}},
 \label{eq:condluce}
 \end{equation}
 which by Yellott's theorem is the same as choosing the largest
@@ -738,7 +766,11 @@ variation comes to outweigh within-person choice noise the composite approaches 
 population contraction approaches the Case V prediction. At any finite ratio the exact law is
 Gaussian plus Gumbel, not Gaussian, so Case V is the limit and not the aggregate itself.
 That mechanism also says where the fit should be worst: in populations whose members are
-nearly alike.
+nearly alike. It explains movement from linear renormalization toward Case V and no further.
+The composite path approaches $r = 1$ from below, so it does not account for the median $r$ of
+$1.16$ in Figure~\ref{fig:line}, nor for the fifteen of twenty populations that contract past
+Case V. That residual is unexplained here. Dependence, non-isotropic heterogeneity, menu-dependent
+attention and some third standardized shape are all candidates.
 
 Independent evidence for the same phenomenon exists in memory research. Robinson, DeStefano,
 Vul and Brady \cite{robinson2023} put softmax against Gaussian signal detection across
@@ -955,7 +987,9 @@ over the null rises with that requirement, from $-0.0012$ to $+0.0045$ to $+0.00
 the full-menu shares flatten alongside it, the largest falling from $0.357$ to $0.257$
 against a six-alternative maximum entropy of $1.792$.
 
-We read the gradient as the mechanism working rather than as instability. When the arithmetic is one
+We read the gradient as consistent with the mechanism rather than as instability, though
+increased random responding, attention failure or a change in what subjects consider would
+produce the same ordering. When the arithmetic is one
 step the task has a computable answer and is closer to an examination question than to a
 preference judgement; subjects converge, the shares concentrate, and there is little
 preference left for any restriction map to describe. When it takes five steps nobody can
@@ -1793,7 +1827,7 @@ theorem and there is nothing to choose. When a model recomputes its scores with 
 as an input, the result is not a transport of the old vector at all, and neither map describes it.
 The question belongs to the remaining case, where the feasible set is intervened upon, the
 experiment that generates the choice changes, and the original shares do not determine the new
-ones. A masked softmax is the arithmetic of the second case and the question of the third,
+ones. A masked softmax is the arithmetic of conditioning and the question of intervention,
 because the mask frequently stands for an intervention that nobody modelled.
 
 Three things are established by the tables. Gaussian renormalization has the lower held-out log
@@ -1882,7 +1916,7 @@ the answer.
 Source & Domain & Restriction & Status \\
 \midrule
 Clarke \cite{clarke1957} & speech in noise & $8 \to 4$, $6 \to 3$ & library access \\
-Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets & not scoreable\footnotemark[3] \\
+Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets & not scoreable\footnotemark[9] \\
 Hodge and Pollack & auditory, unidimensional & nested & library access \\
 Lacouture et al. & line lengths & nested & library access \\
 Kent and Lamberts & dot separation & $N = 2,4,6,8,10$ & library access \\
@@ -1899,7 +1933,7 @@ four-descriptor menu, so they calibrate and cannot score.}
 \label{tab:census}
 \end{table}
 
-\footnotetext[3]{Pollack and Decker's three overlapping four-way matrices were reduced to mean
+\footnotetext[9]{Pollack and Decker's three overlapping four-way matrices were reduced to mean
 absolute deviations before publication, one scalar per set per signal-to-noise level, so the
 subset matrices do not exist in print. Their four eight-way masters were recovered and are
 scoreable only as master matrices.}
