@@ -50,13 +50,14 @@ p_i \;=\; \Pr\{U_i \ge U_j \ \text{for all } j\}
       \;=\; \Pr\{\tilde U \ge 0\},
 \qquad \tilde U_j = U_i - U_j,
 \end{equation}
-an $(n-1)$-dimensional Gaussian orthant integral. The appeal of this inherently natural generative model has been understood since \citet{thurstone1927}. The $\Sigma$ allows alternatives to be close substitutes, but even for $\Sigma=I$ this departs from Luce's Choice Axiom when treated as a model for preference revealed by item removal. The axiom would mandate a simple linear renormalization of probability. But if \eqref{eq:orthant} is calibrated to known $p_i$ and then one runner is removed, the new race speaks otherwise except for very special situations (such as a symmetric contest).
+an $(n-1)$-dimensional Gaussian orthant integral. The appeal of this inherently natural generative model has been understood since \citet{thurstone1927}. The $\Sigma$ allows alternatives to be close substitutes, but even for $\Sigma=I$ this departs from the choice axiom of \citet{luce1959} when treated as a model for preference revealed by item removal. The axiom would mandate a simple linear renormalization of probability. But if \eqref{eq:orthant} is calibrated to known $p_i$ and then one runner is removed, the new race speaks otherwise except for very special situations (such as a symmetric contest).
 
 Although it is out of scope, most readers would not be surprised if the disagreement between counterfactuals implied by \eqref{eq:orthant} in this manner and Luce's Choice Axiom is often in the right direction for a diverse list of applications \citep{cottonsurvey}.\footnote{The practitioners are worth listening to. \citet{benter1994},
 whose Hong Kong betting operations by his own concession made close to a
 billion dollars overall \citep{chellel2018}, wrote of the simple
 renormalization used to run probabilities down the finishing order (the
-Harville formula, which is the Luce axiom applied to place and show)
+formula of \citet{harville1973}, which is the Luce axiom applied to place
+and show)
 that it ``is significantly biased, and should not be used for betting
 purposes.'' At that venue it also seems unnatural to add Gumbel noise to
 performance, rather than something closer to a mildly skewed normal.} Practitioners in signal processing and demand estimation have had their own reasons for preferring Gaussian races to those built on fixed-location exponential performance distributions, or on the Gumbel-noise variants of \eqref{eq:orthant} that look like unnatural attempts to satisfy Luce's Choice Axiom. In any case it would be desirable to develop numerical methods that support all possibilities, to remove the evidenced temptation to select a model based on its analytical tractability, and that is precisely what we deliver herein.
@@ -116,7 +117,7 @@ That said, the last row is a fitted approximation developed in \S\ref{sec:genera
 model & covariance grammar & source \\
 \midrule
 Luce / softmax & independent, minimum-Gumbel base, $D=\pi^2/6$ & exact identity \\
-Thurstone--Mosteller & independent, normal base & \citet{cotton2021} \\
+Thurstone--Mosteller \citep{mosteller1951} & independent, normal base & \citet{cotton2021} \\
 factor multinomial probit & $VV'+\mathrm{diag}(D)$ & \S\ref{sec:factor} \\
 teams, conferences & blocks: rank-$r$ effect per cluster & \S\ref{sec:blocks} \\
 market plus sectors & nested: blocks $\times$ global factor & \S\ref{sec:blocks} \\
@@ -1592,6 +1593,10 @@ matching models. \emph{Review of Economic Studies} 89(5):2600--2629, 2022.
 \bibitem[Gates(2006)]{gates2006} R.~Gates.
 A Mata Geweke--Hajivassiliou--Keane multivariate normal simulator.
 \emph{Stata Journal} 6(2):190--213, 2006.
+\bibitem[Harville(1973)]{harville1973} D.~A. Harville. Assigning
+probabilities to the outcomes of multi-entry competitions.
+\emph{Journal of the American Statistical Association}
+68(342):312--316, 1973.
 \bibitem[Genz(1992)]{genz1992} A.~Genz.
 Numerical computation of multivariate normal probabilities.
 \emph{Journal of Computational and Graphical Statistics} 1:141--149, 1992.
@@ -1623,6 +1628,8 @@ model. \emph{Journal of Business \& Economic Statistics}
 \bibitem[L\'opez de Prado(2016)]{lopezdeprado2016} M.~L\'opez de Prado.
 Building diversified portfolios that outperform out of sample.
 \emph{Journal of Portfolio Management} 42(4):59--69, 2016.
+\bibitem[Luce(1959)]{luce1959} R.~D. Luce. \emph{Individual Choice
+Behavior: A Theoretical Analysis}. Wiley, 1959.
 \bibitem[McFadden(1981)]{mcfadden1981} D.~McFadden.
 Econometric models of probabilistic choice. In C.~Manski, D.~McFadden,
 eds., \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
@@ -1632,6 +1639,10 @@ An exact likelihood analysis of the multinomial probit model.
 \bibitem[Mendell and Elston(1974)]{mendell1974} N.~Mendell, R.~Elston.
 Multifactorial qualitative traits: genetic analysis and prediction of
 recurrence risks. \emph{Biometrics} 30:41--57, 1974.
+\bibitem[Mosteller(1951)]{mosteller1951} F.~Mosteller. Remarks on the
+method of paired comparisons: I. The least squares solution assuming
+equal standard deviations and equal correlations. \emph{Psychometrika}
+16:3--9, 1951.
 \bibitem[Solow(1990)]{solow1990} A.~R. Solow.
 A method for approximating multivariate normal orthant probabilities.
 \emph{Journal of Statistical Computation and Simulation} 37:225--229, 1990.
