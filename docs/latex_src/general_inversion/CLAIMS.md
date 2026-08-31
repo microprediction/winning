@@ -472,3 +472,22 @@ ONE-dimensional integral of a pair density against the conditional
 survival -- the form a lattice can price. That is the precise sense in
 which the flux derivation is not just prettier but computationally
 load-bearing... rather: computationally necessary.
+
+### Domencich-McFadden read against source (ch. 4 scan, docs/assets/literature)
+
+Verified page by page, and the source is stronger for the paper than the
+reviewer's summary. Eq (4.7) p. 52 is the one-dimensional form, restated
+as (4.26) p. 66. The caveat sits below (4.26), in their words: extremely
+difficult to evaluate without numerical multivariate integration, only
+the Weibull convenient, multiple-choice probit "computationally
+intractable." Their (4.27)-(4.32) is the sequential-conditioning
+recursion GHK later simulates, set aside in 1975 as too cumbersome for
+iterative estimation -- now cited in the GHK paragraph as the
+deterministic ancestor. P. 68 eq (4.38): independent Cauchy in exactly
+the density-times-product one-dimensional form, priced per alternative,
+"straightforward, but costly." So 1975 contains the representation, the
+independent 1-D quadrature, and proto-GHK, all judged impractical --
+which is precisely the gap the shared field fills, and the crux passage
+now says so with equation numbers and their own words. (Note: the
+reviewer's "Eq. 4.26" and "p. 52" both check out -- same formula, two
+appearances.)

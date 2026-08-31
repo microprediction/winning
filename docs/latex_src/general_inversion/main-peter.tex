@@ -85,7 +85,10 @@ The workhorse answer to the challenge posed by \eqref{eq:orthant} and calibratio
 the focal alternative $i$, GHK Cholesky-factors the covariance of the
 $(n-1)$ utility differences $U_i-U_j$ and writes the orthant probability
 as a nested sequence of one-dimensional truncated normal probabilities,
-each conditioning on draws for the previous coordinates. Averaging $R$ such importance weights gives an
+each conditioning on draws for the previous coordinates --- the very
+recursion \citet{domencich1975} wrote down deterministically (their
+eq.~4.32) and set aside as too cumbersome for estimation; GHK's
+contribution was to simulate it. Averaging $R$ such importance weights gives an
 unbiased, smooth estimate of one $p_i$ at cost $O(n^2)$ per draw. The estimator
 made maximum simulated likelihood practical and it remains the default in
 textbooks \citep{train2009}. Its costs are also standard: error shrinks as
@@ -102,13 +105,21 @@ convention. Performances are to be considered golf scores, or running times wher
 when its time beats the field. The observation is as old as the subject, with one precision worth
 keeping. \citet{domencich1975} write the general random-utility choice
 probability as a one-dimensional integral over the winning utility
-(their equation on p.~52), while warning that its integrand generally
-still conceals a multivariate calculation --- a representation, not yet
-a quadrature. Under \emph{independence}, though, the integrand is a
-density times a product of univariate distribution functions and the
-one-dimensional quadrature is genuinely old: their own p.~68 treats
-independent Cauchy shocks in exactly that form, and the independent
-specialization below is also standard competing-risks calculus.
+(their eq.~4.7, restated as eq.~4.26), and immediately judge it a
+representation rather than a method: without special structure the
+integrand conceals a multivariate calculation, only the Weibull case
+yields a convenient form, and the multiple-choice probit generalization
+is, in their words, ``computationally intractable.'' Under
+\emph{independence} the integrand really is a density times a product of
+univariate distribution functions, and they price exactly that form for
+independent Cauchy shocks (their eq.~4.38) --- one alternative at a
+time, concluding it is obtainable by ``straightforward, but costly''
+numerical integration. So the representation, the independent
+one-dimensional quadrature, and even the sequential-conditioning
+decomposition that GHK later simulates (their eqs.~4.27--4.32, set aside
+as too cumbersome for iterative estimation) were all present in 1975,
+and all judged impractical. The independent specialization below is also
+standard competing-risks calculus.
 \citet{fosgerau2013} carry the companion representation --- expected
 maximum as potential, gradient as probabilities, choice probability as
 an integral along the common maximum level --- to general
