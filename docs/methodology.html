@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>winning — how it works</title>
+  <meta name="description" content="The methodology behind the winning package: the shared survival field, correlation by conditioning, the Jacobian as a boundary flux through photo-finish surfaces, and inversion as a convex program on a graph Laplacian." />
+  <link rel="stylesheet" href="./academic.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '\\(', right: '\\)', display: false}, {left: '\\[', right: '\\]', display: true}]});"></script>
+  <style>
+    figure.diagram { margin: 2rem auto; text-align: center; }
+    figure.diagram img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+    figure.diagram figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 0.6rem; line-height: 1.5; max-width: 760px; margin-left: auto; margin-right: auto; text-align: left; }
+    .num { font-variant-numeric: tabular-nums; }
+    code { background: rgba(127,127,127,0.12); padding: 0.05em 0.3em; border-radius: 3px; }
+    .callout { border-left: 3px solid var(--accent, #2a6); padding: 0.6rem 1rem; margin: 1.4rem 0; background: rgba(127,127,127,0.06); border-radius: 0 6px 6px 0; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
+        <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <h1>How it works</h1>
+    <p class="lead">The package prices and inverts contests &mdash;
+    races, choices, markets &mdash; at scales where the standard methods
+    give out. Three ideas carry all of it: the choice event is
+    one-dimensional, so one <strong>shared field</strong> prices every
+    contestant at once; correlation enters by
+    <strong>conditioning</strong>, so it costs a low-dimensional
+    quadrature rather than an \(n\)-dimensional one; and the Jacobian is
+    a <strong>boundary flux</strong>, which makes inversion a convex
+    program on a graph. This page walks through each, with the full
+    derivations and every measured number in
+    <a href="./assets/pdf/scalable_contest_inversion.pdf">the paper</a>.</p>
+
+    <h2>1. A race is decided at the winning time</h2>
+    <p>Give contestant \(i\) a running time \(X_i\) with density
+    \(f_i\) and survival \(S_i\) (min wins; a choice model is the same
+    thing with utilities negated). However many contestants there are,
+    contestant \(i\) wins by finishing at some time \(x\) with everyone
+    else still out on the course:</p>
+    \[ p_i \;=\; \int f_i(x)\prod_{j\ne i}S_j(x)\,dx . \]
+    <p>That integral is one-dimensional no matter how large \(n\) is.
+    The multivariate probit literature treats \(p_i\) as an
+    \((n-1)\)-dimensional orthant integral and pays for that view one
+    alternative at a time; the race view integrates over the winning
+    value once.</p>
+    <p>The computational trick is that the product is <em>shared</em>.
+    Build the log survival field
+    \(L(x)=\sum_j \log S_j(x)\) once on a lattice, and each contestant's
+    leave-one-out product is a subtraction rather than a rebuilt
+    product:</p>
+    \[ \prod_{j\ne i}S_j(x) \;=\; e^{\,L(x)-\log S_i(x)} . \]
+    <p>One pass over the lattice prices all \(n\) contestants, at cost
+    \(O(nL)\) for \(L\) lattice points. Working in logs is also what
+    keeps hopeless contestants finite: in the far tail the product of
+    survivals underflows to zero and a division would return \(0/0\),
+    while a difference of logs simply decays to nothing. The lattice
+    itself is placed on the winner's bulk &mdash; the region where the
+    race is actually decided &mdash; rather than across the ability
+    span, which is why 33 well-placed points can beat 500 badly placed
+    ones.</p>
+
+    <h2>2. Correlation enters by conditioning</h2>
+    <p>Independence looks like a strong assumption, and the escape is
+    old and simple: find shared variables that <em>make</em> the
+    contestants conditionally independent, price the independent race at
+    each value of the shared variables, and average. For the factor
+    model \(X=\mu+Vf+\mathrm{diag}(\sqrt D)\,\epsilon\),</p>
+    \[ p \;=\; \sum_q w_q\, p^{\mathrm{ind}}(\mu+Vf_q) , \]
+    <p>a \(Q\)-node quadrature over the shared luck \(f\), each node one
+    run of the shared-field pass: \(O(nLQ)\) in total. The package's
+    covariance <a href="/#grammars">grammar</a> is the set of structures
+    for which this works exactly &mdash; a global factor, rank-\(r\)
+    effects per cluster (teams, sectors), a global factor over clusters
+    (markets), and trees of uniform shared effects (hierarchies) &mdash;
+    plus a fitted reduction for dense matrices. Conditioning on a factor
+    is forty years old; the shared field underneath it is the new part,
+    and it is what removes the one-alternative-per-integral repetition
+    that GHK, Genz's quadrature, and minimax tilting all pay.</p>
+
+    <h2>3. The Jacobian is a boundary flux</h2>
+    <p>Everything downstream &mdash; calibration, counterfactuals,
+    ratings &mdash; needs derivatives: how does every win probability
+    move when one ability moves? The answer has a geometry worth seeing
+    rather than just differentiating.</p>
+    <p>An outcome of the race is a point \(x\in\mathbb{R}^n\), one
+    finishing value per contestant. Contestant \(i\) wins on the cone
+    \(R_i=\{x: x_i\le x_k\ \text{for all } k\}\), and these cones tile
+    the space. Two cones meet where two contestants dead-heat ahead of
+    the field &mdash; the <em>photo-finish face</em> \(F_{ij}\).
+    Because abilities only translate the density, differentiating
+    \(p_i\) in \(\mu_j\) turns, by the divergence theorem, into a
+    surface integral over the boundary of \(i\)'s cone, and the only
+    face that survives is the one it shares with \(j\):</p>
+    \[ \frac{\partial p_i}{\partial \mu_j}
+       \;=\; \frac{1}{\sqrt 2}\int_{F_{ij}} q_\mu\, dS \;\ge\; 0 ,
+       \qquad j\ne i . \]
+    <p>Slowing \(j\) pushes probability out of \(j\)'s winning region,
+    and all of it crosses into the neighbouring cones through the
+    surfaces where photo finishes happen. The derivative <em>is</em> the
+    tie density.</p>
+
+    <figure class="diagram">
+      <img src="./assets/images/flux.png" alt="Cone geometry intuition: a winning cone as a control volume, with the divergence theorem turning a volume derivative into a boundary flux, and the discrete graph analogue with photo-finish ties as edges." />
+      <figcaption><strong>The cone as a control volume.</strong> On the
+      left, the continuous picture: contestant \(i\)'s winning region,
+      with probability flowing out through its boundary. On the right,
+      the discrete analogue: each contestant is a node, each
+      photo-finish tie density \(w_{ij}\) an edge conductance, and the
+      net flux out of a node is exactly a graph-Laplacian action. In the
+      inversion, the voltage-like vector \(v\) is the ability correction
+      and the source term \(r\) is the share residual.</figcaption>
+    </figure>
+
+    <p>Three structural facts fall out of the same picture, free of
+    charge. The face \(F_{ij}\) is one surface shared by two cones, so
+    the Jacobian is <strong>symmetric</strong>. What leaves one cone
+    enters its neighbours, so each row sums to zero &mdash; a
+    <strong>conservation law</strong>, which is translation invariance:
+    slowing everyone equally changes nothing. And a symmetric,
+    nonnegative, row-sum-zero matrix is exactly a weighted
+    <strong>graph Laplacian</strong>,</p>
+    \[ J \;=\; -B^{\top} W_e B , \qquad
+       (Jh)_i \;=\; \sum_{j\ne i} w_{ij}\,(h_j-h_i) , \]
+    <p>with \(B\) the incidence matrix of the photo-finish graph and
+    \(W_e\) the diagonal of tie densities. The race is a resistor
+    network: tie densities are conductances, and probability flows along
+    the edges where photo finishes are likely.</p>
+
+    <figure class="diagram">
+      <img src="./assets/images/boundary-flux.png" alt="Boundary flux intuition: the cone boundary decomposes into pairwise tie surfaces, each corresponding to a graph edge, so divergence at a node needs only pair-boundary fluxes." />
+      <figcaption><strong>Why no volume computation is needed.</strong>
+      The boundary of a winning cone decomposes into pairwise
+      photo-finish surfaces, one per rival, and each becomes one edge of
+      the graph. The divergence theorem says the interior tells you
+      nothing the boundary does not, so the Jacobian is assembled from
+      pair fluxes alone &mdash; and applied as an operator, never
+      materialized, at the same \(O(nLQ)\) cost as pricing.</figcaption>
+    </figure>
+
+    <h2>4. Inversion is a convex program</h2>
+    <p>The inverse problem &mdash; given a probability vector, find the
+    abilities &mdash; is where this geometry pays. Let
+    \(W(\mu)=\mathbb{E}\min_i(\mu_i+\epsilon_i)\), the expected winning
+    time. Its gradient is the probability vector itself, and its Hessian
+    is the negative tie-density Laplacian, which is strictly negative
+    definite on the space of contrasts whenever every contestant has
+    some idiosyncratic noise. So</p>
+    \[ \max_\mu \; W(\mu) - \langle p^\star, \mu\rangle \]
+    <p>is a strictly concave, coercive program whose unique mean-zero
+    maximiser is the inversion: the abilities exist, they are unique up
+    to a common shift, and Newton's method on this program runs
+    matrix-free because the Hessian is the Laplacian the field pass
+    already computed. The shipped solver preconditions with just the
+    diagonal slopes and converges in a handful of field passes; a
+    million-contestant field inverts in about eighty seconds.</p>
+
+    <figure class="diagram">
+      <img src="./assets/images/divergence-diagram.png" alt="The divergence calculation: build the race network from tie densities, form the Laplacian, equate divergence with the share residual, and see why deleting a runner does not redistribute share proportionally." />
+      <figcaption><strong>Share changes behave like current on the
+      network.</strong> Tie densities wire the field; the mismatch
+      between model shares and target shares is a source term; the
+      ability correction is the voltage that reconciles them. The
+      right-hand panel is the practical consequence: delete a runner and
+      its share does <em>not</em> spread proportionally (the Luce/IIA
+      prediction) &mdash; it flows down the thickest wires, to the
+      runners most likely to have photo-finished with the deleted one.
+      That is the counterfactual a Gaussian race gets right and a logit
+      cannot.</figcaption>
+    </figure>
+
+    <div class="callout">
+      <strong>The one-sentence version.</strong> Build the survival
+      field once, condition correlation away, read derivatives off the
+      photo-finish boundaries, and invert by convexity &mdash; all
+      \(n\) contestants, one pass, \(O(nLQ)\).
+    </div>
+
+    <h2>What this buys, measured</h2>
+    <ul>
+      <li><strong>Forward pricing.</strong> All-\(n\) probabilities under
+      a rank-one factor in <span class="num">0.18</span>,
+      <span class="num">2.7</span> and <span class="num">29</span>
+      seconds at \(n=10^4, 10^5, 10^6\); a ten-million contestant block
+      field in <span class="num">245</span> seconds.</li>
+      <li><strong>Inversion.</strong> \(n=10^6\) in about
+      <span class="num">80</span> seconds independent, twenty minutes
+      rank-one; round trips accurate to a log-residual below
+      <span class="num">1e-8</span>.</li>
+      <li><strong>Against the standard.</strong> The GHK simulator at
+      \(n=200\) and ten thousand draws is roughly
+      <span class="num">200&times;</span> slower for the complete
+      vector, with superquadratic measured cost growth; the exact
+      derivatives here carry no simulation noise at all.</li>
+      <li><strong>Any smooth base.</strong> Normal, Gumbel (softmax is
+      the closed-form special case, reproduced to
+      <span class="num">1e-15</span>), logistic, Laplace, Student-t,
+      skew-normal, or your own callable &mdash; the machinery never uses
+      Gaussianity except where it says so.</li>
+    </ul>
+    <p>Every number is generated by a committed, seeded script in
+    <a href="https://github.com/microprediction/winning">the
+    repository</a>, and the
+    <a href="./assets/pdf/scalable_contest_inversion.pdf">paper</a>
+    carries the derivations, the accuracy referees, and the failure
+    modes as measured. To see the machinery run:
+    <a href="/converge.html">watch the lattice converge</a> against GHK
+    and Mendell&ndash;Elston on a wall-clock axis,
+    <a href="/fit.html">fit a correlated race</a> in the browser, or
+    inspect the <a href="/circuit.html">photo-finish circuit</a>
+    directly.</p>
+  </main>
+  <footer>
+    <a href="https://github.com/microprediction/winning">Source</a> &middot;
+    Part of the <a href="https://repos.microprediction.org/">microprediction family</a> &middot;
+    Authored by <a href="https://home.microprediction.org/">Peter Cotton</a>.
+  </footer>
+</body>
+</html>
