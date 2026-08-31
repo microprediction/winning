@@ -62,7 +62,13 @@ that it ``is significantly biased, and should not be used for betting
 purposes.'' At that venue it also seems unnatural to add Gumbel noise to
 performance, rather than something closer to a mildly skewed normal.} Practitioners in signal processing and demand estimation have had their own reasons for preferring Gaussian races to those built on fixed-location exponential performance distributions, or on the Gumbel-noise variants of \eqref{eq:orthant} that look like unnatural attempts to satisfy Luce's Choice Axiom. In any case it would be desirable to develop numerical methods that support all possibilities, to remove the evidenced temptation to select a model based on its analytical tractability, and that is precisely what we deliver herein.
 
-The curse of Gaussian Thurstone Class V models, to place \eqref{eq:orthant} in its original psychometrics terminology, has been understood since Thurstone himself. The integral \eqref{eq:orthant} has no closed form, and estimation
+The curse of the Gaussian Thurstone Case V model, to place
+\eqref{eq:orthant} in its original psychometrics terminology, has been
+understood since Thurstone himself. Case V is the special case of the law
+of comparative judgment in which the discriminal dispersions are equal
+and equally correlated, and it is \citet{mosteller1951} who supplied its
+estimation and testing apparatus, which is why the family carries both
+names. The integral \eqref{eq:orthant} has no closed form, and estimation
 needs it and its derivatives at every trial value of the parameters. It is no surprise that the considerably easier logit models tend to be far more popular than probit, not only for calculations such as their obvious extension to permutation probability, but also in the very architecture of most of the world's neural networks.
 
 The workhorse answer to the challenge posed by \eqref{eq:orthant} and calibration in particular (for which Monte Carlo is clearly problematic) is the GHK simulator of \citet{geweke1989},
