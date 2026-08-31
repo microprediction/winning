@@ -1878,6 +1878,14 @@ CAM1 deposit of \cite{wills2000}; and the twelve-line identification trials from
 \texttt{PerceptionCognitionLab/data0} repository, which carries no licence file and no
 associated publication, so its authorship is recorded as unattributed. All are public.
 
+That last deposit is the one input we do not redistribute, precisely because it carries no
+licence. What the repository holds is the derived confusion counts, one array of per-block
+stimulus-by-response tallies, which is what the analysis reads and is a measurement of the
+experiment rather than a copy of the deposit. \texttt{python derive\_rouder.py --fetch} clones
+the original and \texttt{python derive\_rouder.py} rebuilds the counts from it, reproducing every
+figure reported here exactly, and \texttt{MANIFEST.tsv} records the upstream git blob hash of
+every file the reduction was built from.
+
 Analysis code and every input needed to reproduce the tables are under
 \texttt{research/restriction} in \texttt{github.com/microprediction/winning}, with the inputs as
 column extracts rather than raw archives, one

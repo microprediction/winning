@@ -144,3 +144,6 @@ r/winning.Rcheck/
 
 # overnight rerun scratch
 research/restriction/results/RERUN_STDERR.txt
+
+# the twelve-line deposit is fetched, never committed: it carries no licence
+research/restriction/data/rouder_chunk_raw/
