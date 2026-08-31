@@ -453,3 +453,22 @@ Reviewer's final scores: ~1.5-2/5 new mathematics, ~4.5/5 algorithmic,
 with the defensible claim being the shared rank-one/Gram exploitation
 making p and Jh both O(nL) and inversion matrix-free at scale -- which
 is now the paper's stated claim, verbatim in spirit.
+
+### MNS read against source (arXiv 1909.05591v1, in docs/assets/literature)
+
+Verified page by page. Eq (1) is the gradient identity, which THEY
+attribute to Williams-Daly-Zachary [their refs 9, 10] -- now named at
+our Danskin step. Page 7: the mixed partial interpreted as the density
+that i and j both attain the maximum; diagonal as the sum over j != i.
+Page 8: the class A (symmetric, a_ii >= 0, a_ij <= 0, zero row sums)
+and Hessian membership. Pages 8-10: the structure is used solely to
+bound ||Hessian||_{inf,1} for prox-function convexity moduli; no graph
+vocabulary, no algorithm, no shared field anywhere. Our
+characterization ("no graph drawn, no algorithm built") is accurate as
+written. New distinction added to the paper from the source read:
+their cross-derivative remains an (n-2)-fold integral of the joint
+density, while the face parametrization reduces the same object to a
+ONE-dimensional integral of a pair density against the conditional
+survival -- the form a lattice can price. That is the precise sense in
+which the flux derivation is not just prettier but computationally
+load-bearing... rather: computationally necessary.

@@ -773,13 +773,18 @@ inversions. We do not pursue the application here.
 
 We now arrive at the central object of the algorithm: the Jacobian. Its
 structure has prior art we were unaware of when this work was done:
-\citet{muller2022}, differentiating the gradient identity
-$\partial E/\partial u_i=\Pr\{i \text{ wins}\}$ for general joint laws,
-derive the cross-Hessian as the density that two alternatives tie for
-the maximum, and observe that the resulting matrix is symmetric with
-signed off-diagonals and zero row sums --- the Laplacian class in all
-but name, though they draw no graph and build no algorithm from it,
-their object being convexity moduli for prox-functions. We arrived at
+\citet{muller2022}, differentiating the Williams--Daly--Zachary
+gradient identity $\partial E/\partial u_i=\Pr\{i \text{ wins}\}$ for
+general joint laws, derive the cross-Hessian as the density that two
+alternatives tie for the maximum, and observe that the resulting matrix
+is symmetric with signed off-diagonals and zero row sums --- the
+Laplacian class in all but name, though they draw no graph and build no
+algorithm from it, their object being convexity moduli for
+prox-functions, and their cross-derivative remains an $(n-2)$-fold
+integral of the joint density. The face parametrization below reduces
+the same object to a one-dimensional integral of a pair density against
+the conditional survival of the field, which is the form a lattice can
+price. We arrived at
 the same structure independently, by a different route, and the route is
 what we keep: a derivation of the structure as a literal probability
 flux through the boundary between winning regions,
@@ -1009,7 +1014,9 @@ A minimum of affine functions of $\mu$ is concave and expectation
 preserves this. Ties have measure zero under full support, so the
 minimiser is almost surely unique, and Danskin's theorem
 \citep{danskin1966} gives
-$\partial W/\partial\mu_i=\Pr\{i\ \text{wins}\}$.\footnote{Danskin's
+$\partial W/\partial\mu_i=\Pr\{i\ \text{wins}\}$ --- the identity known
+in discrete choice as the Williams--Daly--Zachary theorem
+\citep{mcfadden1981}.\footnote{Danskin's
 theorem differentiates a minimum over a parameter. For
 $W(\mu)=\E\min_i(\mu_i+\epsilon_i)$ the naive move, differentiating
 inside the expectation, is illegitimate because the minimum is not
