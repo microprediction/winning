@@ -68,10 +68,14 @@
     <p class="subtitle">A generalization of factor multinomial probit models that scales to millions of variables</p>
 
     <p class="lead">This package prices the winner of many: N competitors whose
-      performances can follow any noise distribution and can be correlated
-      through common factors. One pass over a shared survival field gives all N
-      win probabilities, and the same pass yields removal counterfactuals and
-      photo-finish tie densities. Calibration runs in the other direction, from
+      performances can be correlated through common factors, and for the
+      independent and factor grammars can follow any smooth noise
+      distribution (the block, nested and tree kernels are Gaussian, and
+      say so rather than silently ignoring a base). One pass over a
+      shared survival field gives all N win probabilities, and the same
+      field answers removal and photo-finish queries; complete all-pairs
+      tables of those have quadratic output size and are priced per
+      query. Calibration runs in the other direction, from
       observed shares back to abilities. Factor probit, Luce's softmax and the
       finite-temperature softmin are special cases of one parameterized
       race.</p>
@@ -79,7 +83,7 @@
     <div class="tag-row">
       <span class="tag">one race, five grammars</span>
       <span class="tag">O(QNL) shared field</span>
-      <span class="tag">exact dead heats</span>
+      <span class="tag">photo-finish densities</span>
       <span class="tag">Python &middot; R &middot; Rust</span>
       <span class="tag">parity-locked ports</span>
     </div>
@@ -110,11 +114,15 @@
 
     <div class="callout">
       <strong>Forward pricing to ten million, inversion to one million.</strong>
-      All shares of a correlated race in one O(QNL) pass, matrix-free
-      graph-Laplacian derivatives, and inversion of observed shares back to
-      utilities: a million alternatives price in 29 seconds and invert in 80
-      — every number from a committed, seeded script.
-      <a href="./assets/pdf/scalable_contest_inversion.pdf">The paper (PDF) →</a>
+      All shares of a correlated race in one O(QNL) pass, with
+      graph-Laplacian derivatives that are matrix-free for the factor
+      grammar, and inversion of observed shares back to utilities. A
+      million alternatives price in 29 seconds under a rank-one factor;
+      inversion at a million takes 80 seconds independent and about
+      twenty minutes rank-one — every number from a committed, seeded
+      script.
+      <a href="./assets/pdf/scalable_contest_inversion_paper-r5.pdf">The
+      paper (PDF, tag paper-r5) →</a>
     </div>
 
     <div class="callout">
@@ -143,23 +151,30 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
     $Y = \mu + \text{noise}$; the grammars are declarative descriptions of the
     noise covariance that admit $O(N)$-per-lattice-point evaluation. Pass any of
     them as <code>structure=</code> to the front-door verbs.</p>
-<pre><code>from winning import Independent, Factor, Blocks, Nested, Tree
+<pre><code>from winning import (Independent, Factor, Blocks, Nested, Tree,
+                     race_probabilities, polish_race)
 
+tree = Tree.from_linkage(Z)                    # floored cophenetic correlation
 race_probabilities(mu, structure=Factor(V, D))        # &Sigma; = VV' + diag(D)
 race_probabilities(mu, structure=Blocks(cluster, loading, D))
 race_probabilities(mu, structure=Nested(cluster, loading, D, coupling, gamma))
-race_probabilities(mu, structure=Tree.from_linkage(Z))  # HRP's belief, exactly
+race_probabilities(mu, structure=tree)
 polish_race(p0=w, structure=tree, name_caps=0.05)     # nearest race under caps</code></pre>
-    <p><code>Tree.from_linkage</code> builds the race whose implied correlation
-    is exactly the cophenetic matrix of a hierarchical clustering — so a
+    <p><code>Tree.from_linkage</code> builds the race whose implied
+    correlation is the <em>floored</em> cophenetic correlation of a
+    hierarchical clustering (merge height maps through
+    $\rho=\max(1-2h^2,0)$; negative cophenetic correlation has no tree
+    representation) — so a
     portfolio's HRP weights can be inverted, re-priced and polished along the
-    dendrogram they came from. Exact Jacobians (rows sum to zero; off-diagonals
-    are photo-finish tie densities) ship for the factor, block and nested
-    grammars, with hybrid Newton inversion throughout. An arbitrary dense
-    $\Sigma$ is priced by fitting the grammar family (seriated blocks under
-    global factors) and promoting the residual to extra factor dimensions —
-    one deterministic call that beats million-draw Monte Carlo on wall clock at
-    $n = 2000$ and prices tail probabilities Monte Carlo cannot see.</p>
+    dendrogram they came from. Analytic fixed-grid Jacobians (rows sum
+    to zero; off-diagonals are photo-finish tie densities) ship for the
+    factor, block and nested grammars, with preconditioned Newton
+    inversion throughout. An arbitrary dense $\Sigma$ is priced by
+    fitting the grammar family (seriated blocks under global factors)
+    and promoting the residual to extra factor dimensions — one seeded,
+    reproducible call that beats million-draw Monte Carlo on wall clock
+    at $n = 2000$ and prices tail probabilities Monte Carlo cannot
+    see.</p>
 
     <h2 id="languages">Languages</h2>
     <p>The numpy implementation is the spec. The compiled kernels
@@ -169,8 +184,9 @@ polish_race(p0=w, structure=tree, name_caps=0.05)     # nearest race under caps<
     calibration, input-bound to ten million runners on the block field — and the
     base-R package mirrors the complete API with no compiled dependency. All
     ports are parity-locked: <code>parity/vectors.json</code> embeds inputs and
-    outputs from the reference, and every language replays the same scenarios,
-    seventeen of twenty-two at machine precision.</p>
+    outputs from the reference, and every language replays the same
+    twenty-two scenarios — nineteen to within 1e-7 (most to 1e-10), the
+    three fit- or optimizer-mediated ones to between 5e-4 and 5e-3.</p>
 <pre><code>pip install winning          # pure python (numpy/scipy)
 pip install winning[fast]    # + compiled kernels (abi3 wheels)
 remotes::install_github("microprediction/winning", subdir = "r/winning")</code></pre>
@@ -215,7 +231,7 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         inverse-square-root slope, live in the browser.</li>
       <li><a href="./polish.html">Polish your portfolio</a> — concentration caps
         without breaking model-consistency: the nearest race satisfying your
-        limits, solved live in the browser with the exact race Jacobian, showing
+        limits, solved live in the browser with the analytic race Jacobian, showing
         the redistribution running along the correlation structure.</li>
     </ul>
     <ul>

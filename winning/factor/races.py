@@ -163,6 +163,18 @@ def _setup(mu, V, D, F, W, base):
         F, W = np.zeros((1, 1)), np.ones(1)
     else:
         V = np.atleast_2d(np.asarray(V, dtype=float))
+        # Gauge-fix the loadings: V -> PV, subtracting each factor's mean
+        # loading across contestants. A common loading column c adds the
+        # same c'f to every performance and cannot move an argmin, so the
+        # centered V prices the identical race -- and every downstream
+        # decision (node family, node order, lattice window) becomes
+        # invariant under V -> V + 1c', which the uncentered matrix is
+        # not. The eighth review's counterexample: rows (2.95,0) x2,
+        # (2.95,0.4), (-2.95,0) at D = 1 have max raw row norm 2.977,
+        # under the escalation threshold, while the centered rows reach
+        # 4.43 -- the race is genuinely sharp, the raw statistic missed
+        # it, and the shipped answer carried TV 9.5e-3.
+        V = V - V.mean(axis=0)
         if F is None or W is None:
             # adaptive order: when idiosyncratic noise is small relative
             # to the loadings, the conditional race is nearly
@@ -170,8 +182,17 @@ def _setup(mu, V, D, F, W, base):
             # a fixed 15-node rule silently loses 2-5% (found by the
             # fuzz battery, research/fuzz). Scale the order with the
             # sharpness ratio; identical rule in the R port.
-            sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1))
-                                 / np.sqrt(np.maximum(D, 1e-300))))
+            #
+            # The ratio itself: what decides a race is loading
+            # DIFFERENCES, and the intrinsic pairwise statistic
+            # s_delta = max_{ij} |V_i - V_j| / sqrt(D_i + D_j) is
+            # O(n^2 k). The dispatch uses the linear-time bound
+            # sqrt(2) * max_i |(PV)_i| / sqrt(D_i) >= s_delta
+            # (triangle inequality on centered rows), which cannot miss
+            # a sharp pair; its false positives cost nodes, not error.
+            sharp = float(np.sqrt(2.0)
+                          * np.max(np.sqrt((V ** 2).sum(axis=1))
+                                   / np.sqrt(np.maximum(D, 1e-300))))
             r = V.shape[1]
             if r >= 2 and sharp > 3.0:
                 # past this sharpness the integrand is a near-step in
@@ -428,6 +449,18 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             raise ValueError("cov= replaces structure=/V=/D=; pass one only")
         from .core import fit_covariance
         V, D, F, W, report = fit_covariance(cov, return_report=True)
+        if report.get("contrast_residual_max", 0.0) > 0.05:
+            import warnings
+            warnings.warn(
+                "cov= carries a nearly singular contrast the fit did not "
+                "hold: the worst pairwise difference variance is off by "
+                f"{report['contrast_residual_max']:.2f} of its own size. "
+                "Global residual norms cannot see this (choice "
+                "probabilities become infinitely sensitive as a contrast "
+                "variance approaches zero), so head-to-head probabilities "
+                "between the affected pair may be badly wrong even though "
+                "the covariance residual looks small.",
+                RuntimeWarning, stacklevel=2)
         if report["projected_residual_max"] > 0.05:
             import warnings
             warnings.warn(

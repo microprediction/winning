@@ -117,11 +117,30 @@
     finishing value per contestant. Contestant \(i\) wins on the cone
     \(R_i=\{x: x_i\le x_k\ \text{for all } k\}\), and these cones tile
     the space. Two cones meet where two contestants dead-heat ahead of
-    the field &mdash; the <em>photo-finish face</em> \(F_{ij}\).
-    Because abilities only translate the density, differentiating
-    \(p_i\) in \(\mu_j\) turns, by the divergence theorem, into a
-    surface integral over the boundary of \(i\)'s cone, and the only
-    face that survives is the one it shares with \(j\):</p>
+    the field &mdash; the <em>photo-finish face</em> \(F_{ij}\).</p>
+    <p>The tool is the divergence theorem, stated exactly: for a
+    continuously differentiable vector field \(\mathbf{F}\) on a region
+    \(\Omega\subset\mathbb{R}^n\) with piecewise-smooth boundary
+    \(\partial\Omega\) and outward unit normal \(n\),</p>
+    \[ \int_{\Omega} \nabla\!\cdot\!\mathbf{F}\; dV
+       \;=\; \oint_{\partial\Omega} \mathbf{F}\cdot n \; dS . \]
+    <p>Whatever a field does inside a region is accounted for by what
+    crosses its boundary. Here it is applied with
+    \(\Omega = R_i\) and \(\mathbf{F} = q_\mu\, e_j\), the joint density
+    times the \(j\)-th coordinate vector, so
+    \(\nabla\!\cdot\!\mathbf{F} = \partial q_\mu/\partial x_j\).
+    Because abilities only translate the density,
+    \(\partial q_\mu/\partial\mu_j = -\,\partial q_\mu/\partial x_j\),
+    and the cone \(R_i\) does not depend on \(\mu\), so</p>
+    \[ \frac{\partial p_i}{\partial \mu_j}
+       \;=\; -\int_{R_i} \frac{\partial q_\mu}{\partial x_j}\, dx
+       \;=\; -\oint_{\partial R_i} q_\mu\, n_j \, dS . \]
+    <p>The boundary of the cone decomposes into its photo-finish faces
+    plus a sphere at infinity whose contribution vanishes (the density
+    decays fast enough). On the face \(F_{ik}\) the outward normal is
+    \((e_i-e_k)/\sqrt2\), whose \(j\)-th component is zero unless
+    \(k=j\) &mdash; so every face drops out except the one shared with
+    \(j\):</p>
     \[ \frac{\partial p_i}{\partial \mu_j}
        \;=\; \frac{1}{\sqrt 2}\int_{F_{ij}} q_\mu\, dS \;\ge\; 0 ,
        \qquad j\ne i . \]
@@ -147,15 +166,36 @@
     the Jacobian is <strong>symmetric</strong>. What leaves one cone
     enters its neighbours, so each row sums to zero &mdash; a
     <strong>conservation law</strong>, which is translation invariance:
-    slowing everyone equally changes nothing. And a symmetric,
-    nonnegative, row-sum-zero matrix is exactly a weighted
-    <strong>graph Laplacian</strong>,</p>
+    slowing everyone equally changes nothing. Together those two facts
+    identify the matrix completely, and this is a two-line argument
+    rather than a named theorem. Take the off-diagonal entries as edge
+    weights, \(w_{ij} = \partial p_i/\partial\mu_j \ge 0\), symmetric
+    because the face is shared. The rows summing to zero then force each
+    diagonal entry to be the negative sum of its row's edge weights
+    &mdash; the diagonal holds no free information. A matrix of exactly
+    that form, minus degrees on the diagonal and weights off it, is what
+    <em>weighted graph Laplacian</em> means (up to our sign convention),
+    so the Jacobian is one:</p>
     \[ J \;=\; -B^{\top} W_e B , \qquad
        (Jh)_i \;=\; \sum_{j\ne i} w_{ij}\,(h_j-h_i) , \]
     <p>with \(B\) the incidence matrix of the photo-finish graph and
     \(W_e\) the diagonal of tie densities. The race is a resistor
-    network: tie densities are conductances, and probability flows along
-    the edges where photo finishes are likely.</p>
+    network, and the correspondence is exact, not decorative. Assign
+    node \(i\) a potential \(v_i\) (the ability correction the
+    inversion is solving for) and give the edge \(ij\) conductance
+    \(w_{ij}\) (the tie density). Ohm's law says the current from
+    \(i\) to \(j\) is \(w_{ij}(v_i-v_j)\); Kirchhoff's current law
+    says the net current out of node \(i\) equals whatever is injected
+    there externally. Summing Ohm's law over \(i\)'s neighbours gives
+    net outflow \(\sum_j w_{ij}(v_i-v_j) = (Lv)_i\) &mdash; Kirchhoff's
+    law <em>is</em> the graph Laplacian applied to the potentials. In the
+    inversion the injected current at node \(i\) is the share residual
+    \(r_i = p_i - p_i^\star\), the surplus probability that has to flow
+    away from \(i\) through its photo-finish edges, and one Newton step
+    solves the circuit \(Lv = r\) for the potentials. Even the gauge
+    matches: potentials are defined up to a constant, which is why only
+    ability <em>contrasts</em> are identified, and fixing the mean to
+    zero is choosing the ground node.</p>
 
     <figure class="diagram">
       <img src="./assets/images/boundary-flux.png" alt="Boundary flux intuition: the cone boundary decomposes into pairwise tie surfaces, each corresponding to a graph edge, so divergence at a node needs only pair-boundary fluxes." />
@@ -181,9 +221,17 @@
     maximiser is the inversion: the abilities exist, they are unique up
     to a common shift, and Newton's method on this program runs
     matrix-free because the Hessian is the Laplacian the field pass
-    already computed. The shipped solver preconditions with just the
-    diagonal slopes and converges in a handful of field passes; a
-    million-contestant field inverts in about eighty seconds.</p>
+    already computed. The program also has an economic reading, noted in
+    the original paper (Cotton 2021): \(W(\mu)\) is the expected winning
+    time, so \(\partial W/\partial\mu_i = p_i\) says that paying to make
+    contestant \(i\) faster improves the expected winning time at a rate
+    equal to \(i\)'s win probability &mdash; the win probabilities are
+    the <em>shadow prices</em> of ability. Inversion is then the
+    equilibrium question run backwards: find the ability vector at which
+    the observed shares are exactly those shadow prices. The shipped
+    solver preconditions with just the diagonal slopes and converges in
+    a handful of field passes; a million-contestant field inverts in
+    about eighty seconds.</p>
 
     <figure class="diagram">
       <img src="./assets/images/divergence-diagram.png" alt="The divergence calculation: build the race network from tie densities, form the Laplacian, equate divergence with the share residual, and see why deleting a runner does not redistribute share proportionally." />
@@ -200,13 +248,13 @@
     </figure>
 
     <div class="callout">
-      <strong>The one-sentence version.</strong> Build the survival
+      <strong>Summary.</strong> Build the survival
       field once, condition correlation away, read derivatives off the
       photo-finish boundaries, and invert by convexity &mdash; all
       \(n\) contestants, one pass, \(O(nLQ)\).
     </div>
 
-    <h2>What this buys, measured</h2>
+    <h2>Performance examples</h2>
     <ul>
       <li><strong>Forward pricing.</strong> All-\(n\) probabilities under
       a rank-one factor in <span class="num">0.18</span>,

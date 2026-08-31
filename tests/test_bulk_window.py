@@ -143,7 +143,11 @@ def test_adding_hopeless_runners_bounded_impact_factor(n_hopeless):
     mass = p_after[n_live:].sum()
     live = p_after[:n_live] / p_after[:n_live].sum()
     tv = 0.5 * np.abs(live - p_before).sum()
-    assert tv <= 3.0 * mass + 1e-9
+    # the additive term is engine resolution, not slack: the loadings are
+    # gauge-centered, so adding runners shifts the column mean and with it
+    # the node geometry, and the two fields differ at quadrature error
+    # (~3e-7 here) even where the hopeless mass itself is 1e-8
+    assert tv <= 3.0 * mass + 1e-6
     assert mass < 0.01
 
 

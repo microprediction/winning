@@ -333,3 +333,59 @@ sample splitting).
 Deferred as improvements, not defects: centered sharpness as the CODE
 trigger; alphabetizing the bibliography; generalizing Theorem 1
 formally rather than stating the conditions.
+
+## Eighth and ninth reviews (2026-08-31)
+
+Two genuine blockers, both verified by running them, both fixed in code.
+
+1. **The s >= s_c inequality was false and the dispatcher could miss a
+   sharp race.** P contracts Frobenius norms, not maximum row norms.
+   Verified on both counterexamples: the 4-runner rank-2 case (raw 2.977
+   vs centered 4.426; shipped TV 9.5e-3 against a 20M-draw referee, and
+   the choice-irrelevant shift V -> V + 1c' moved the answer by the same
+   9.5e-3) and the 3-runner case with an analytic orthant referee
+   (p_i = 1/4 + arcsin(rho_i)/2pi; raw 2.90, pairwise 4.10, shipped TV
+   6.1e-3). Fix: V is gauge-fixed to PV at every entry point (races
+   _setup, core forward + JVP, likelihood; mirrored in the R and JS
+   ports), and the dispatcher triggers on sqrt(2) max|(PV)_i|/sqrt(D_i),
+   which bounds the pairwise sharpness above by the triangle inequality
+   and so cannot false-negative. After: 4-runner TV 3e-5 (referee noise),
+   gauge shift bit-identical zero, 3-runner TV 2.2e-7. Parity vectors
+   regenerated; R, JS and JS-local checks green.
+
+2. **The absolute D-floor broke pass-through and the residual
+   diagnostic missed a 0.48 choice error.** diag(1e-8,1e-8,1) with
+   mu=(0,0.001,10): floor 1e-3 x mean variance forced Var(X1-X2) from
+   2e-8 to 6.7e-4, head-to-head 1.0 -> 0.515, zero warnings, global
+   residual 100x under threshold. Fixes: the closing floor is relative,
+   l_i = 1e-6 Sigma_ii (water-filling unchanged, vector shift); the fit
+   report carries max_{ij} |d'Rd|/(d'Sigma d) over pair contrasts d,
+   which reads 0.49 on the failure and 5e-9 after the fix, and cov=
+   warns on it; and fixing this exposed a THIRD defect the example was
+   masking -- the alternation's default start stalls on exactly
+   in-grammar small-n spread-variance matrices (objective 0.88 where 0
+   attainable), now rescued by two further deterministic starts
+   (diagonal-heavy, eigen-residual), each reaching 1e-13.
+
+Also actioned: theorem cites (tiecorr) with independent reduction;
+boundary-target claim now proved (restriction + dominated convergence +
+compactness converse); Case V history corrected (zero correlations
+originally; Mosteller relaxed to common); "sits exactly in the null
+space" corrected to the common-correlation component; window envelope
+scoped to retained nodes and achieved delta; "fixed-grid exact"
+propagated to docstrings, table labels and site; parity claim replaced
+by the measured tolerances (19 of 22 within 1e-7, three fit-mediated at
+5e-4..5e-3 -- BOTH prior public claims, "20 at machine precision" and
+"17 at machine precision", were wrong); homepage example now runs
+(structures and polish_race exported top-level); site scope fixes
+(matrix-free = factor grammar, million-scale timings split by model,
+floored cophenetic, photo-finish densities not exact dead heats,
+Gaussian-only hierarchical kernels); versioned PDF filename adopted.
+
+Deployment blocker reported against the live PDF was already resolved
+by the time of checking (the r4 Pages deploy was cancelled as
+superseded and the next push redeployed); versioned filename guards it.
+
+Open: the cottonsurvey bibliography entry has no SSRN number or stable
+locator -- only Peter can supply it (or relabel as unpublished
+manuscript).

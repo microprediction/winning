@@ -194,3 +194,48 @@ def test_partial_order_is_exact_censoring():
     S_one = np.eye(5) * 0.4
     S_one[1, 2] = S_one[2, 1] = 0.3
     assert abs(update_order_full(m, S_one, part)[0][2] - m[2]) > 0.1
+
+
+def test_sharpness_dispatch_is_gauge_invariant_and_safe():
+    """Two counterexamples from the eighth and ninth reviews, pinned.
+
+    The raw row-norm statistic max |V_i|/sqrt(D_i) does NOT bound the
+    pairwise contrast sharpness (centering can increase the largest row
+    norm), so a dispatcher trusting it can stay with Gauss-Hermite on a
+    genuinely sharp race. The engine gauge-fixes V <- PV and dispatches
+    on sqrt(2) max |(PV)_i|/sqrt(D_i) >= s_pairwise, which cannot miss.
+    """
+    import warnings
+    from winning.factor.races import race_probabilities
+
+    # ninth review: three runners, analytic zero-mean orthant referee
+    V = np.array([[-2.9, 0.0], [2.9, 0.01], [2.9, -0.01]])
+    D = np.ones(3)
+    mu = np.zeros(3)
+    S = V @ V.T + np.diag(D)
+    p_exact = []
+    for i in range(3):
+        d = [np.eye(3)[i] - np.eye(3)[j] for j in range(3) if j != i]
+        var = [dd @ S @ dd for dd in d]
+        rho = (d[0] @ S @ d[1]) / np.sqrt(var[0] * var[1])
+        p_exact.append(0.25 + np.arcsin(rho) / (2 * np.pi))
+    p_exact = np.array(p_exact)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = race_probabilities(mu, V=V, D=D)
+    assert 0.5 * np.abs(p - p_exact).sum() < 5e-5, p
+
+    # eighth review: four runners; raw row norm 2.977 hides centered 4.43
+    V4 = np.array([[2.95, 0.0], [2.95, 0.0], [2.95, 0.4], [-2.95, 0.0]])
+    mu4 = np.zeros(4)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p4 = race_probabilities(mu4, V=V4, D=np.ones(4))
+        # gauge invariance: a common loading column is choice-irrelevant
+        # and after the internal centering the answer is bit-identical
+        c = np.array([5.0, -3.0])
+        p4s = race_probabilities(mu4, V=V4 + np.ones((4, 1)) @ c[None, :],
+                                 D=np.ones(4))
+    assert np.array_equal(p4, p4s)
+    pmc = np.array([0.1831662, 0.1832104, 0.1908283, 0.4427951])  # 20M draws
+    assert 0.5 * np.abs(p4 - pmc).sum() < 3e-4

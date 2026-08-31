@@ -84,21 +84,24 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
 
 def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
                   points=501, window="bulk", delta=1e-12):
-    """Exact J[i, j] = d p_i / d mu_j for the general race, one field pass.
+    """Fixed-grid-exact J[i, j] = d p_i / d mu_j, one field pass.
 
-    Exact for the map that is actually evaluated, not for its continuum
-    limit (sixth review). Two things make that true. The lattice comes
-    from races.forward_grid, the same window and refinement
-    race_probabilities uses, so both integrate over the same x. And the
-    normalization is differentiated rather than assumed away: with raw
-    masses a, total T = 1'a and p = a/T,
+    Exact for the normalized rectangle sum CONDITIONAL ON THE SELECTED
+    GRID: the lattice comes from races.forward_grid, the same window and
+    refinement race_probabilities uses, so both integrate over the same
+    x, and the normalization is differentiated rather than assumed away.
+    With raw masses a, total T = 1'a and p = a/T,
 
         J = (A - p 1'A) / T,        A = da/dmu,
 
-    which is the quotient rule. In the continuum 1'A vanishes and rows
-    sum to zero on their own; on a lattice they do not, and the residual
-    is the difference between a continuum surrogate and the derivative
-    of the function being optimized.
+    the quotient rule. What it deliberately omits is differentiation of
+    the adaptive window itself (the grid-motion term), which is
+    measurable on very coarse lattices (6e-4 at L=25) and falls below
+    the reported agreement threshold (3e-11) at production resolutions
+    (L >= 101). In the continuum 1'A vanishes and rows sum to zero on
+    their own; on a lattice they do not, and the residual is the
+    difference between a continuum surrogate and the fixed-grid
+    derivative of the function being optimized.
 
     Raising mu_j (slower j, min-wins) raises every other p_i:
     off-diagonals are positive.
@@ -123,7 +126,8 @@ def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
 
     Same construction as race_jacobian restricted to i = y, including
     the shared lattice and the quotient rule, so the score it feeds is
-    the exact gradient of the objective the forward map defines."""
+    the fixed-grid-exact gradient of the objective the forward map
+    defines (grid motion omitted; see race_jacobian)."""
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T

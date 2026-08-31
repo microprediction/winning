@@ -22,7 +22,7 @@ Including Softmax and Multinomial Probit}
 implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
 scripts behind every number in this paper live at
 \texttt{github.com/microprediction/winning}; this revision's tables were
-produced at repository tag \texttt{paper-r4}, package version
+produced at repository tag \texttt{paper-r5}, package version
 \texttt{1.3.0}.}}
 \date{August 2026}
 
@@ -65,21 +65,19 @@ performance, rather than something closer to a mildly skewed normal.} Practition
 The computational curse has been understood since Thurstone himself,
 and it bites already in his simplest case. In the original psychometrics
 terminology, \eqref{eq:orthant} with equal discriminal dispersions and
-equal correlations is Thurstone's Case V, and it is \citet{mosteller1951} who supplied its
-estimation and testing apparatus, which is why the family carries both
-names.\footnote{Case V sits exactly in the null space of the
-identification we rely on throughout. Equal dispersions and equal
-correlations means
+zero correlations is Thurstone's Case V; \citet{mosteller1951} showed
+the correlations may be relaxed from zero to any common value without
+changing the method, and supplied the estimation and testing apparatus,
+which is why the family carries both names.\footnote{Mosteller's
+relaxation is an early sighting of the identification this paper relies
+on throughout. With equal dispersions and common correlation,
 $\Sigma=\sigma^2[(1-\rho)I+\rho\mathbf{1}\mathbf{1}^{\top}]$, and since
-$P\mathbf{1}=0$ the correlation term vanishes under the projection:
-$P\Sigma P=\sigma^2(1-\rho)P$, which is the independent model at variance
-$\sigma^2(1-\rho)$. The two price every contest identically, which the
-engine reproduces to $6\times10^{-17}$. So the equal-correlation
-assumption costs no generality at all, because the only correlation it
-admits is the one choices cannot see. The choice-irrelevant direction of
-\S\ref{sec:jac} is thus already present, unnamed, in the model the field
-was founded on; what this paper adds is the correlation that survives the
-projection.} The integral \eqref{eq:orthant} has no closed form, and estimation
+$P\mathbf{1}=0$ the common-correlation component --- that component, not
+the whole covariance --- lies in the choice-irrelevant direction:
+$P\Sigma P=\sigma^2(1-\rho)P$, observationally equivalent to independent
+noise at variance $\sigma^2(1-\rho)$. The two price every contest
+identically, which the engine reproduces to $6\times10^{-17}$. What this
+paper adds is the correlation that survives the projection.} The integral \eqref{eq:orthant} has no closed form, and estimation
 needs it and its derivatives at every trial value of the parameters. It is no surprise that the considerably easier logit models tend to be far more popular than probit, not only for calculations such as their obvious extension to permutation probability, but also in the very architecture of most of the world's neural networks.
 
 The workhorse answer to the challenge posed by \eqref{eq:orthant} and calibration in particular (for which Monte Carlo is clearly problematic) is the GHK simulator of \citet{geweke1989},
@@ -135,7 +133,7 @@ scrambled-Sobol nodes.
 
 There is an obvious translation symmetry since only relative performance matters. In the language more familiar in economics, only utility contrasts enter. So strictly speaking, the inversion is a map from a probability vector back to an equivalence class of races that yield the same probabilities. The raw covariance is likewise overparameterized.
 
-It tends to be the case in financial practice and elsewhere that structured covariance is assumed, making the clear limitation of our work less of a pragmatic concern. We do not, of course, claim a general solution for arbitrary covariance matrices, but nor do these tend to be advocated \citep{train2009}. Our intent is that the grammars here cover the structured families in typical use. The first six rows of Table~\ref{tab:grammar} are nested exactly.
+It tends to be the case in financial practice and elsewhere that structured covariance is assumed, making the clear limitation of our work less of a pragmatic concern. We do not, of course, claim a general solution for arbitrary covariance matrices, but nor do these tend to be advocated \citep{train2009}. Our intent is that the grammars here cover the structured families in typical use. The first six rows of Table~\ref{tab:grammar} are represented without covariance fitting.
 
 That said, the last row is a fitted approximation developed in \S\ref{sec:general}, and the utility is included in the accompanying software in anticipation of the desire to approximate the solution when an arbitrary matrix, perhaps one estimated from historical data, is supplied.
 
@@ -164,7 +162,10 @@ extreme scale also, in around $20$ minutes.
 Comparisons die well before this scale, as far as we know, if the comparison set is taken to be those providing smoothness suitable for inversion. GHK is in that category, but we estimate its empirical complete-vector cost as superquadratic and steepening (log-log slope
 $2.15$ from $n=10$ to $200$, $2.8$ from $200$ to $1000$; timings at
 $R=10^{3}$ of $0.57$, $5.66$ and $51.3$ seconds at $n=200,500,1000$,
-scaling by ten at $R=10^{4}$), so the gap widens without bound. We have provided in Appendix~\ref{app:extrap} some brave extrapolations of GHK performance to
+scaling by ten at $R=10^{4}$). Under that measured law, and for standard
+one-alternative-at-a-time GHK at fixed draw count, the gap grows
+rapidly with $n$, while the shared-field pass is linear in $n$ at fixed
+lattice and node budgets. We have provided in Appendix~\ref{app:extrap} some brave extrapolations of GHK performance to
 $10^{4}$--$10^{6}$ alternatives.\footnote{See \texttt{bench.py} for reproduction.}
 
 We proceed as follows. Section \ref{sec:alternatives} places the method among the alternatives.
@@ -183,7 +184,8 @@ benchmarks.
 integral to the unit cube and integrated by adaptive and quasi-Monte Carlo rules.
 This is somewhat of a standard in \texttt{R} because \texttt{mvtnorm} chooses this path, presumably for accuracy. It certainly is accurate. The benchmark below confirms that: its answers agree with our lattice to within the sampling noise of the simulation that both are checked against. However, the disadvantage lies in what a single call returns. Genz's method evaluates one orthant probability only, which is the win probability of one alternative. Pricing a contest
 requires all $n$ of them, so the routine must be called $n$ times, and each of
-those calls is itself an $n$-dimensional integral. At $n=30$ the complete vector therefore
+those calls is itself an $(n-1)$-dimensional integral over the focal
+alternative's difference orthant. At $n=30$ the complete vector therefore
 costs about three hundred times what the lattice costs, and since the work per
 call also grows with $n$, that ratio widens as the field grows.
 
@@ -214,10 +216,11 @@ univariate normal c.d.f.s, and averaged that analytic expression over
 Monte Carlo draws of the remainder. The motivation was also smoothness, and
 similarly, Stern is testimony to a common willingness to accept a substantial per-draw cost to buy a simulator that could be differentiated. Our work differs because the conditioning variables here are a
 low-dimensional factor structure chosen so that the outer integral is
-quadrature rather than simulation (deterministic Gauss--Hermite by
-default, seeded scrambled Sobol when the integrand is sharp). This
-removes the
-sampling error instead of reducing it, and, as we will discuss, the conditional problem is solved on a lattice that returns all $n$ alternatives from a single sweep rather than one probability per run, with derivatives coming out of that same
+quadrature rather than simulation: deterministic Gauss--Hermite by
+default, and seeded scrambled Sobol when the integrand is sharp, which
+replaces Monte Carlo noise with reproducible randomized-quadrature error
+rather than eliminating integration error outright. Either way there is
+no per-draw sampling noise in the returned probabilities, and, as we will discuss, the conditional problem is solved on a lattice that returns all $n$ alternatives from a single sweep rather than one probability per run, with derivatives coming out of that same
 sweep.
 
 \paragraph{Bayesian data augmentation.} \citet{albert1993} and
@@ -325,11 +328,17 @@ surrogate, say), and it is made conservative at each end separately: for
 the lower endpoint every contestant is placed at its most favourable
 conditional location, and for the upper endpoint at its least favourable.
 Those componentwise extremes need not occur at any single factor node,
-which is what makes the result an envelope, wider than any one
-conditional race requires and covering all of them at once. Solving $G(x)=\delta$ and
+which is what makes the result an envelope: wider than any one
+conditional race requires, and covering every conditional race
+represented by the retained factor nodes. Factor realizations outside
+the node set belong to the outer quadrature error, not to the lattice
+window. Solving $G(x)=\delta$ and
 $G(x)=1-\delta$ by bisection gives the two ends of the region the race
-is decided in. The lattice is placed there with two standard deviations
-of padding at each end for safety, and the tails left outside carry less mass than the accuracy floors reported shortly.
+is decided in. The lattice is placed there with two standard deviations of padding at
+each end for safety. At the achieved $\delta$ (which may be relaxed, as
+described next), the truncated tails are controlled separately from the
+bulk discretization error, and in the benchmark configurations they lie
+below the accuracy floors reported shortly.
 
 But two more steps are needed before bisection can deliver what it claims.
 
@@ -519,23 +528,42 @@ under $10^{5}$ nodes, which in practice means rank four and below.
 The other consideration is sharpness. What decides the race is not how
 far the factor moves a contestant but how far it moves contestants
 \emph{apart}: a factor loading every contestant identically shifts the
-whole field and changes nothing, however large it is. The statistic that
-respects this is centered,
+whole field and changes nothing, however large it is. The intrinsic
+statistic is therefore pairwise,
 \[
-s_{\mathrm{c}}=\max_i \frac{\lVert (PV)_i\rVert}{\sqrt{D_i}},
-\qquad P=I-\tfrac{1}{n}\mathbf{1}\mathbf{1}^{\top},
+s_{\Delta}=\max_{i<j}\frac{\lVert V_i-V_j\rVert}{\sqrt{D_i+D_j}},
 \]
-the largest ratio between the factor's ability to move a contestant
-relative to the field and that contestant's own noise. Nothing needs to
-be guessed: it follows from $V$ and $D$ \emph{before} any integration is
-done. When $s_{\mathrm{c}}$ is large the factor draw all but decides the
-race, so the quantity being averaged over $f$ is close to a step
-function, and a rule built for smooth integrands converges slowly on it.
-The implementation triggers on the cruder uncentered
-$s=\max_i\lVert V_i\rVert/\sqrt{D_i}\ge s_{\mathrm{c}}$, which
-cannot miss a sharp race but can escalate on a common-loading factor
-that is in fact harmless; the cost of that false positive is extra
-nodes, not error.
+the shared variation available to a contrast against that contrast's own
+noise, but computing it is $O(n^2 k)$. The implementation first
+gauge-fixes the loadings, $V\leftarrow PV$ with
+$P=I-\tfrac1n\mathbf{1}\mathbf{1}^{\top}$ --- a common loading column
+adds the same draw to every contestant and cannot move an argmin, so the
+centered matrix prices the identical race, and every downstream decision
+becomes invariant under $V\mapsto V+\mathbf{1}c^{\top}$ --- and then
+dispatches on the linear-time bound
+\[
+s_{\mathrm{trigger}}\;=\;\sqrt2\,
+\max_i \frac{\lVert (PV)_i\rVert}{\sqrt{D_i}}\;\ge\;s_{\Delta},
+\]
+which follows from the triangle inequality on centered rows. The bound
+cannot miss a pair whose contrast sharpness exceeds the threshold; its
+false positives cost extra nodes, not error. The centered maximum is a
+common-shift-invariant proxy for factor-space smoothness, not a complete
+characterization of it, which is exactly why the dispatcher uses the
+conservative side of it. Nothing needs to be guessed: everything follows
+from $V$ and $D$ before any integration is done. When the trigger is
+large the factor draw all but decides some pairwise contest, the
+quantity being averaged over $f$ is close to a step function, and a rule
+built for smooth integrands converges slowly on it. The uncentered
+maximum row norm $\max_i\lVert V_i\rVert/\sqrt{D_i}$, tempting because
+it skips the centering, obeys no such inequality: centering can
+\emph{increase} the largest row norm. A three-runner race with loadings
+$(-2.9,0)$, $(2.9,0.01)$, $(2.9,-0.01)$ at unit $D$ has uncentered
+maximum $2.90$, under the threshold, while its true pairwise sharpness
+is $4.10$; a dispatcher trusting the raw norm stays with Gauss--Hermite
+there and ships a total-variation error of $6.1\times10^{-3}$ against
+the analytic three-runner orthant probabilities. The test suite pins
+that race against its analytic answer.
 
 A fixed rule of fifteen nodes per dimension can then miss up to five
 percent of the total variation, and the error is easy to overlook because
@@ -544,8 +572,9 @@ it: the lattice discretizes the finishing time, while the loss is in the
 average over $f$, so refining $L$ returns a stable answer that is stably
 wrong.
 
-Two responses follow. The node order scales with $s$ rather than staying
-fixed, within the rank limit above. And past $s=3$ at rank two or more the
+Two responses follow. The node order scales with the trigger rather
+than staying fixed, within the rank limit above. And past a trigger of
+$3$ at rank two or more the
 family changes, scrambled Sobol points replacing the product rule, since
 more nodes of a smooth rule is the wrong medicine for a near-step
 integrand. Rank one with extreme sharpness gets a third treatment, an
@@ -683,8 +712,10 @@ grammar kernels price tails that simulation does not resolve.
 
 \begin{remark}[A connection to top-down portfolio construction]\label{rem:hrp}
 Long-only portfolio weights can be read as choice probabilities, and we make the further connection to dendrogram-inspired wealth bisection (the hierarchical risk parity construction of \citet{lopezdeprado2016}).
-There is a tree race whose implied correlation is exactly the cophenetic
-matrix of a dendrogram. Give internal node $t$ strength
+There is a tree race whose implied correlation is exactly the
+\emph{floored} cophenetic correlation of a dendrogram: for a linkage
+built from the correlation distance $d_{ij}=\sqrt{(1-\rho_{ij})/2}$,
+invert the distance transform at each merge height and floor at zero. Give internal node $t$ strength
 $\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$, with
 $\rho_t=\max(1-2h_t^2,0)$ at merge height $h_t$, and leaf $i$
 idiosyncratic variance $1-\rho_{\mathrm{first}(i)}$.
@@ -886,7 +917,8 @@ Fix a covariance of full support (any member of the grammar with every
 $D_i>0$) and let $W(\mu)=\E\min_i(\mu_i+\epsilon_i)$,
 $\epsilon\sim N(0,\Sigma)$. Then $W$ is concave and differentiable with
 $\nabla W(\mu)=p(\mu)$, and its Hessian is $-L(\mu)$, the negative of the
-graph Laplacian whose edge weights are the tie densities \eqref{eq:tie}.
+graph Laplacian whose edge weights are the correlated tie densities
+\eqref{eq:tiecorr}, reducing to \eqref{eq:tie} under independence.
 Every tie density is strictly positive, so $W$ is strictly concave on the
 contrast space $\mathbf{1}^{\perp}$. For any target with $p^{\star}_i>0$
 and $\sum_i p^{\star}_i=1$, the program
@@ -956,6 +988,19 @@ $\mathbf{1}$ is translation invariance
 again, exactly when the target sums to one. A strictly concave coercive
 function on $\mathbf{1}^{\perp}$ attains a unique maximum, where the
 gradient vanishes: $p(\mu^{\star})=p^{\star}$.
+
+For the boundary claim, suppose $p^{\star}_i=0$ for $i$ outside
+$S=\{j:p^{\star}_j>0\}$. Under full support $p_i(\mu)>0$ at every finite
+$\mu$, so no finite point inverts the target. Invert the target
+restricted to $S$, then send each excluded $\mu_i\to+\infty$ holding the
+$S$-contrasts fixed: by dominated convergence the race converges to the
+restricted race and the objective to its restricted optimum, so the
+supremum is approached along exactly those diverging contrasts.
+Conversely, on any maximizing sequence an excluded contrast that
+remained bounded would admit, after gauge fixing, a convergent
+subsequence whose limit gives alternative $i$ strictly positive
+probability, and the objective, continuous in $\mu$, would sit strictly
+below the restricted optimum there --- contradicting maximality.
 \end{proof}
 
 We remark on the connection to economics. We are considering the Legendre dual of the social surplus function of
@@ -1000,9 +1045,10 @@ whose Gram matrix is closed form, so the step is $O(n)$ rather than a
 least-squares solve (\S\ref{sec:general}).
 
 Everything downstream works from projected residuals, so a matrix
-already of the form $VV'+\mathrm{diag}(D)$ passes through unchanged
-whenever its factor rank lies within the fitted grammar's budget, up to
-the common-shock equivalence and factor-quadrature error.\footnote{Where
+already of the form $VV'+\mathrm{diag}(D)$ passes through whenever its
+factor rank lies within the fitted grammar's budget --- up to the
+common-shock equivalence, factor-quadrature error, and a diagonal floor
+of $10^{-6}$ of each runner's own variance.\footnote{Where
 the introduction speaks of an identified class, it means the restriction
 that is choice-relevant and computable on $\mathbf{1}^{\perp}$: choices
 depend on $\Sigma$ only through $P\Sigma P$, an observational-equivalence
@@ -1043,9 +1089,9 @@ coordinate is instead divided by a preconditioning slope $\tilde s_i$,
 which for the factor grammar is the own-coordinate slope the forward pass
 already returns, and for the other grammars an independent-race
 approximation to it. The residual, by contrast, always comes from the
-exact structured forward map, so the preconditioner's quality affects the
-step count and never the answer. One field pass per iteration, no linear
-solve. Working in
+exact structured forward map, so the preconditioner does not change the
+root equation; it can affect convergence and the finite-tolerance point
+returned. One field pass per iteration, no linear solve. Working in
 logs rather than in probabilities matters because win probabilities span
 many orders of magnitude, and an absolute residual would effectively
 ignore everything but the front of the field. A step clip and a
@@ -1142,7 +1188,13 @@ coordinatewise-stationary point. Above $n=800$ the $V$-step is subspace
 iteration rather than a full eigendecomposition and its subspace is only
 approximate, so descent is enforced instead of assumed: the objective is
 evaluated each sweep at $O(n^2)$, a sweep that fails to improve it is
-discarded, and the alternation returns the best iterate.
+discarded, and the alternation returns the best iterate. The alternation
+is nonconvex and its default start can stall on easy inputs (an exactly
+in-grammar matrix at $n=12$ with variances spread across two decades sat
+at objective $0.88$ where zero was attainable), so when the first
+start's objective is materially above zero, two further deterministic
+starts are tried --- diagonal-heavy and eigen-residual --- and the best
+kept; each rescues that case to $10^{-13}$.
 \item The working residual is then
 projected once, $R=P\,(\Sigma-VV'-\mathrm{diag}\,D_0)\,P$: the raw residual
 still contains the choice-irrelevant common component the quotient fit
@@ -1161,8 +1213,14 @@ promoted; numerically dead columns are dropped.
 \item The closing diagonal
 solves the projected problem's own normal equations,
 $(P\!\circ\!P)\,d=\mathrm{diag}(P(\Sigma-V_{\mathrm{all}}V_{\mathrm{all}}')P)$
-subject to $d\ge\ell$, with $\ell$ a small multiple of the mean
-variance. The Gram is exactly
+subject to $d_i\ge\ell_i$, where the floor is relative to each runner's
+own variance, $\ell_i=10^{-6}\,\Sigma_{ii}$. Relative matters: an
+absolute floor at a multiple of the \emph{mean} variance destroys nearly
+singular contrasts, and $\Sigma=\mathrm{diag}(10^{-8},10^{-8},1)$ makes
+the failure vivid --- it forced $\mathrm{Var}(X_1-X_2)$ from
+$2\times10^{-8}$ up to $6.7\times10^{-4}$, turning a near-certain
+head-to-head into a coin flip (choice error $0.48$) while the projected
+covariance residual sat one hundred times below the warning threshold. The Gram is exactly
 $(1-\tfrac2n)I+\tfrac1{n^2}\mathbf{1}\mathbf{1}^{\top}$, so the
 constrained solve is closed form in $O(n)$: substituting
 $d=\ell\mathbf{1}+x$ with $x\ge0$ leaves the same Gram with a shifted
@@ -1190,11 +1248,26 @@ is the shipped one-call
 \texttt{cov=} directly), not a research script.
 
 The shipped call also
-reports its own quality and warns on two distinct failure modes: a
-large choice-relevant residual (the fit could not hold the matrix), and
-a well-fitted matrix whose pricing needs a high-rank, sharp factor
+reports its own quality and warns on three distinct failure modes: a
+large choice-relevant residual (the fit could not hold the matrix); a
+well-fitted matrix whose pricing needs a high-rank, sharp factor
 integral (the quadrature, not the fit, is then the binding constraint;
-both regimes appear in the kernel battery below).
+both regimes appear in the kernel battery below); and a nearly singular
+contrast the fit failed to hold. The last needs its own diagnostic,
+because a Frobenius or maximum-entry residual normalized by the average
+variance does not control choice error near a nearly singular contrast:
+as a pairwise difference variance approaches zero, the head-to-head
+probability becomes infinitely sensitive to an absolute error that
+global norms call negligible. The report therefore carries
+\[
+\max_{i<j}\;
+\frac{\bigl|(e_i-e_j)^{\top}R\,(e_i-e_j)\bigr|}
+     {(e_i-e_j)^{\top}\Sigma\,(e_i-e_j)} ,
+\]
+the worst pairwise difference-variance error in units of that
+difference variance, which is $0.49$ on the diagonal example above
+(where the global residual is $5\times10^{-4}$) and $10^{-8}$ once the
+relative floor restores the fit.
 
 \paragraph{Is the fit unique?} The objective is nonconvex in $(V,D)$, so
 no global certificate is claimed, and the residual report exposes the
@@ -1558,7 +1631,7 @@ exercise is deliberately the saturated case. Simulate $T=50{,}000$ choices
 from one fixed menu of $n=30$ alternatives under a known rank-2 factor
 covariance and estimate the mean-zero utilities. With
 the menu fixed the model is saturated over the simplex interior, so the
-exact-gradient maximizer is the inversion of the observed shares and the
+analytic-gradient maximizer is the inversion of the observed shares and the
 exercise measures how faithfully each method performs that inversion
 under multinomial noise.
 
@@ -1590,7 +1663,7 @@ since every method sees the same draw:
 \toprule
 estimator & RMSE (median) & RMSE (mean $\pm$ s.e.) & median fit time \\
 \midrule
-exact-gradient smoothed inversion & $0.0168$ & $0.0168\pm0.0006$ & $2.4$ s \\
+analytic-gradient smoothed inversion & $0.0168$ & $0.0168\pm0.0006$ & $2.4$ s \\
 MSL, $R=100$ & $0.0286$ & $0.0280\pm0.0006$ & $3.5$ s \\
 MSL, $R=1000$ & $0.0184$ & $0.0185\pm0.0005$ & $39.9$ s \\
 \bottomrule
@@ -1630,7 +1703,7 @@ standard errors:
 \toprule
 estimator & RMSE$(\hat\beta)$ & median fit time \\
 \midrule
-exact gradient MLE & $0.0363\pm0.0066$ & $41.3$ s \\
+analytic-gradient MLE & $0.0363\pm0.0066$ & $41.3$ s \\
 MSL, $R=100$ & $0.0380\pm0.0073$ & $5.4$ s \\
 MSL, $R=1000$ & $0.0367\pm0.0067$ & $39.6$ s \\
 \bottomrule
@@ -1651,8 +1724,8 @@ over.
 
 That last point is not hypothetical. On the classic Fishing data, the
 unrestricted-covariance MNP likelihood evaluated exactly is
-boundary-seeking, still rising at loading norms near $4000$: a ridge that
-GHK's simulation noise had been regularizing by accident. The behavior is
+boundary-seeking, still rising at loading norms near $4000$: a ridge
+that the finite-$R$ simulated objective had obscured. The behavior is
 reproducible from the committed estimator (\texttt{winning.mnprobit}),
 which detects the ridge and reports it as a \texttt{boundary\_}
 diagnostic rather than returning the interior point simulation would have
@@ -1696,9 +1769,10 @@ evidence lives at the scales the referees above can reach.
 
 \paragraph{Parity.} One vector file embeds the inputs and outputs of
 $22$ scenarios spanning the principal implemented grammars, boundary
-cases and numerical identities used above. The four language implementations of
-\S\ref{sec:avail} replay them: twenty at machine precision, the
-optimizer-mediated scenarios to $10^{-6}$.
+cases and numerical identities used above. The four language
+implementations of \S\ref{sec:avail} replay them: nineteen to within
+$10^{-7}$ (most to $10^{-10}$), and the three fit- or optimizer-mediated
+scenarios to between $5\times10^{-4}$ and $5\times10^{-3}$.
 
 \section{Availability}\label{sec:avail}
 \texttt{pip install winning} is pure Python; \texttt{winning[fast]} adds the

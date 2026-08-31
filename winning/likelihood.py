@@ -76,7 +76,11 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     r = V.shape[1]
     D = np.ones(J) if D is None else np.asarray(D, dtype=float)
     s = np.sqrt(D)
-    sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1)))
+    # gauge-fix and dispatch on the pairwise-safe bound (eighth review):
+    # only loading DIFFERENCES decide a race, and
+    # sqrt(2) max_i |(PV)_i|/sqrt(D_i) bounds the pairwise sharpness
+    V = V - V.mean(axis=0)
+    sharp = float(np.sqrt(2.0) * np.max(np.sqrt((V ** 2).sum(axis=1)))
                   / np.sqrt(D.min()))
     F, W = nodes_for_likelihood(r, Qf, Qz, sharp)
     Fq, zq = F[:, :r], F[:, r]

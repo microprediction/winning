@@ -381,9 +381,27 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
             "to the PSD cone first if it came from noisy estimation.")
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
-    V, D0 = factor_model_projected(C, min(k, n - 1))
+    kk = min(k, n - 1)
+    V, D0 = factor_model_projected(C, kk)
+    # The alternation is nonconvex and its default start can stall at a
+    # nonglobal stationary point precisely on EASY inputs: an exactly
+    # in-grammar matrix at small n with idiosyncratic variances spread
+    # across decades sat at projected objective 0.88 where zero was
+    # attainable (ninth review's conditioning example exposed it). Two
+    # further deterministic starts, diagonal-heavy and eigen-residual,
+    # each rescue that case to 1e-13. They are tried only when the
+    # default start's objective is materially above zero, so hard fits
+    # pay two extra alternations and exact fits are recovered exactly.
+    scale2 = float(np.sum(_center2(C) ** 2))
+    if _projected_sq(C, V, D0) > 1e-12 * max(scale2, 1e-300):
+        lam_top = np.sort(np.linalg.eigvalsh(C))[::-1][:kk].sum() / n
+        for D_start in (0.9 * np.diag(C),
+                        np.maximum(np.diag(C) - lam_top, 1e-3)):
+            V2, D2 = factor_model_projected(C, kk, D0=D_start)
+            if _projected_sq(C, V2, D2) < _projected_sq(C, V, D0):
+                V, D0 = V2, D2
     V = np.asarray(V, dtype=float)
-    _warn_if_rank_splits_a_tie(C, D0, min(k, n - 1))
+    _warn_if_rank_splits_a_tie(C, D0, kk)
     if blocks is None:
         blocks = max(2, min(n // 5, 20))
     # everything downstream fits the CHOICE-RELEVANT residual: the raw
@@ -432,19 +450,30 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         rhs = _diag_center2(C - Vc @ Vc.T)
         a = 1.0 - 2.0 / n
         b = 1.0 / (n * n)
-        floor = 1e-3 * float(np.mean(np.diag(C)))
+        # the floor is RELATIVE to each runner's own variance, not an
+        # absolute multiple of the mean (eighth review). An absolute
+        # floor destroys near-singular contrasts: on
+        # diag(1e-8, 1e-8, 1) it forced Var(X1 - X2) from 2e-8 up to
+        # 6.7e-4, turning a near-certain head-to-head into a coin flip
+        # (choice error 0.48) while the covariance residual stayed 100x
+        # under the warning threshold. Relative to the runner's own
+        # variance, an in-grammar matrix passes through to one part in
+        # a million, and the floor still keeps every sd positive.
+        floor = 1e-6 * np.maximum(np.diag(C),
+                                  1e-6 * float(np.mean(np.diag(C))))
         if n <= 2:
-            Dc = np.full(n, max(max(float(rhs.sum()), 0.0)
-                                / (a + n * b) / n, floor))
+            Dc = np.maximum(np.full(n, max(float(rhs.sum()), 0.0)
+                                    / (a + n * b) / n), floor)
         else:
             # the LOWER-BOUNDED least squares, not an unconstrained solve
             # with a floor slapped on afterwards: substituting
-            # d = floor*1 + x, x >= 0 leaves the same Gram with shifted
-            # right-hand side c - floor*(a + nb)*1, so the water-filling
-            # solver applies unchanged and stays O(n). (Fifth review: the
-            # floor-after-solve is not the constrained minimizer because
-            # G = P o P has nonzero off-diagonal coupling.)
-            x = _nnls_centered_gram(rhs - floor * (a + n * b), n)
+            # d = floor + x, x >= 0 leaves the same Gram with shifted
+            # right-hand side c - (a*floor + b*sum(floor)), so the
+            # water-filling solver applies unchanged and stays O(n).
+            # (Fifth review: the floor-after-solve is not the constrained
+            # minimizer because G = P o P has nonzero off-diagonal
+            # coupling.)
+            x = _nnls_centered_gram(rhs - (a * floor + b * floor.sum()), n)
             Dc = floor + x
         Rm = _center2(C - Vc @ Vc.T - np.diag(Dc))
         return Dc, float(np.abs(Rm).max())
@@ -471,14 +500,49 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         # against measured TV error (AR(1) and short-scale RBF sit at
         # 0.08-0.40 here with TV 0.03-0.04 at n=40; in-grammar truths at 0)
         absmax = float(np.abs(Rfin).max() / max(np.mean(np.diag(C)), 1e-300))
-        sharp = float(np.max(np.linalg.norm(Vall, axis=1)
+        sharp = float(np.max(np.linalg.norm(Vall - Vall.mean(axis=0),
+                                            axis=1)
                              / np.sqrt(np.maximum(D, 1e-300))))
         report = {"projected_residual_rel": rel,
                   "projected_residual_max": absmax,
                   "rank": Vall.shape[1],
-                  "sharpness": sharp}
+                  "sharpness": sharp,
+                  "contrast_residual_max": _worst_contrast_ratio(C, Rfin)}
         return Vall, D, F, W, report
     return Vall, D, F, W
+
+
+def _worst_contrast_ratio(C, R, cap_n=4000):
+    """max over pairs of |contrast residual| / contrast variance.
+
+    A Frobenius or max-entry residual normalized by the average variance
+    does not control choice error near a nearly singular contrast: as a
+    pairwise difference variance approaches zero, the choice probability
+    becomes infinitely sensitive to an absolute error that global norms
+    call negligible (eighth review: 0.48 of choice probability behind a
+    residual 100x under the warning threshold). This measures the
+    residual where choices actually live, pair by pair:
+    (e_i - e_j)' R (e_i - e_j) over (e_i - e_j)' C (e_i - e_j).
+
+    O(n^2) memory, so past cap_n it restricts to the cap_n smallest
+    variances, which is where dangerous pairs live (a tiny difference
+    variance needs both variances small or correlation near one, and the
+    former dominates in practice).
+    """
+    n = len(C)
+    if n > cap_n:
+        idx = np.argsort(np.diag(C))[:cap_n]
+        C = C[np.ix_(idx, idx)]
+        R = R[np.ix_(idx, idx)]
+        n = cap_n
+    dC = np.diag(C)
+    varC = dC[:, None] + dC[None, :] - 2.0 * C
+    dR = np.diag(R)
+    varR = np.abs(dR[:, None] + dR[None, :] - 2.0 * R)
+    tiny = 1e-12 * max(float(dC.mean()), 1e-300)
+    np.fill_diagonal(varR, 0.0)
+    ratio = varR / np.maximum(varC, tiny)
+    return float(ratio.max())
 
 
 def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
@@ -525,6 +589,10 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
     sd = np.sqrt(D)
+    # gauge-fix: a common loading column shifts every conditional mean
+    # equally and cannot move an argmin, so center V for a lattice window
+    # and numerics invariant under V -> V + 1c' (eighth review)
+    V = V - np.asarray(V, dtype=float).mean(axis=0)
     M_all = mu[None, :] + F @ V.T                      # (nodes, N) cond. means
     pad = 8.0 * sd.max()
     grid = np.arange(points) / (points - 1)            # common normalized coord
@@ -729,6 +797,8 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     h = np.asarray(h, dtype=float)
     sd = np.sqrt(np.asarray(D, dtype=float))
     N = len(mu)
+    V = np.atleast_2d(np.asarray(V, dtype=float))
+    V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass
     M_all = mu[None, :] + F @ V.T
     x = np.linspace(M_all.min() - 8 * sd.max(), M_all.max() + 8 * sd.max(), points)
     dx = x[1] - x[0]

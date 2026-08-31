@@ -13,7 +13,7 @@ times; negate utilities, or use winning.probit for max-wins semantics):
     softmax_probabilities(mu, ...)   the Luce/softmax special case, closed form
                                      (the standing IIA comparison and control
                                      variate; exact inverse abilities_from_softmax)
-    race_jacobian(mu, ...)           exact dp/dmu           (factor.polish)
+    race_jacobian(mu, ...)           fixed-grid dp/dmu      (factor.polish)
     polish_race(p, ..., caps)        nearest race obeying linear constraints
     removal_shares(mu, ...)          P(j wins | i removed), all pairs, one field
     tie_densities(mu, ...)           photo-finish weights (circuit conductances)
@@ -46,6 +46,14 @@ from .factor.races import (  # noqa: F401
     harville_place_probabilities,
     softmax_probabilities,
 )
+from .factor.structures import (  # noqa: F401
+    Blocks,
+    Factor,
+    Independent,
+    Nested,
+    Tree,
+)
+from .factor.polish import polish_race, race_jacobian  # noqa: F401
 from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 

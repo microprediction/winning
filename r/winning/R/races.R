@@ -88,10 +88,17 @@
     W <- 1
   } else {
     V <- as.matrix(V)
+    # gauge-fix matching the python reference: a common loading column
+    # shifts every conditional mean equally and cannot move an argmin,
+    # so center V and make node selection and the lattice window
+    # invariant under V -> V + 1 c'
+    V <- sweep(V, 2, colMeans(V))
     if (is.null(F) || is.null(W)) {
       # adaptive order matching the python reference: sharp conditional
-      # races (small D relative to loadings) need more factor nodes
-      sharp <- max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
+      # races (small D relative to loadings) need more factor nodes.
+      # Dispatch on the pairwise-safe bound sqrt(2) max |(PV)_i|/sqrt(D_i),
+      # which bounds the pairwise contrast sharpness from above
+      sharp <- sqrt(2) * max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
       r <- ncol(V)
       if (r >= 2 && sharp > 3.0) {
         # matching the python reference: past this sharpness the factor

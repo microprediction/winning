@@ -311,3 +311,54 @@ def test_group_degeneracy_is_predictable_and_detected():
         warnings.simplefilter("always")
         race_probabilities(mu, structure=blocks)
         assert not any("tied eigenvalue" in str(x.message) for x in caught)
+
+
+def test_relative_floor_preserves_near_singular_contrasts():
+    """Ninth review's second blocker, pinned from both sides.
+
+    An absolute diagonal floor at a multiple of the MEAN variance
+    destroys nearly singular contrasts: on diag(1e-8, 1e-8, 1) it forced
+    Var(X1 - X2) from 2e-8 to 6.7e-4, a 0.48 choice error, while the
+    global residual sat 100x under the warning threshold. The floor is
+    relative to each runner's own variance, the fit passes the matrix
+    through, and the report carries the pairwise contrast diagnostic
+    that global norms cannot supply.
+    """
+    import warnings
+    from scipy.stats import norm
+
+    S = np.diag([1e-8, 1e-8, 1.0])
+    mu = np.array([0.0, 0.001, 10.0])
+    V, D, F, W, rep = fit_covariance(S, return_report=True)
+    assert abs(D[0] - 1e-8) < 1e-9 and abs(D[1] - 1e-8) < 1e-9
+    assert rep["contrast_residual_max"] < 1e-6
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = race_probabilities(mu, cov=S)
+    p_true1 = norm.cdf(0.001 / np.sqrt(2e-8))
+    assert abs(p[0] - p_true1) < 1e-3, p
+
+    # the diagnostic itself: rebuild the failure by hand and check the
+    # pairwise ratio sees what the global norm does not
+    from winning.factor.core import _worst_contrast_ratio, _center2
+    Dbad = np.array([3.33e-4, 3.33e-4, 0.25])       # the old absolute floor
+    Vbad = np.array([[0.0], [0.0], [np.sqrt(0.75)]])  # the fit it produced
+    R = _center2(S - Vbad @ Vbad.T - np.diag(Dbad))
+    ratio = _worst_contrast_ratio(S, R)
+    global_norm = float(np.abs(R).max()) / float(np.mean(np.diag(S)))
+    assert ratio > 0.4          # the diagnostic fires
+    assert global_norm < 0.05   # the old diagnostic would not have
+
+
+def test_in_grammar_small_n_spread_variances_fits_exactly():
+    """The default alternation start can stall on an exactly in-grammar
+    matrix at small n with variances spread across decades (projected
+    objective 0.88 where zero is attainable); the best-of-starts rescue
+    brings it back. Pinned at the contrast level, where it matters."""
+    rng = np.random.default_rng(0)
+    n = 12
+    Vt = rng.normal(size=(n, 2)) * 0.6
+    Dt = np.exp(rng.uniform(np.log(0.1), np.log(10), n))
+    St = Vt @ Vt.T + np.diag(Dt)
+    V, D, F, W, rep = fit_covariance(St, return_report=True)
+    assert rep["contrast_residual_max"] < 1e-5
