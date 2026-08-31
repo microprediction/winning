@@ -283,6 +283,19 @@ rather than eliminating integration error outright. Either way there is
 no per-draw sampling noise in the returned probabilities, and, as we will discuss, the conditional problem is solved on a lattice that returns all $n$ alternatives from a single sweep rather than one probability per run, with derivatives coming out of that same
 sweep.
 
+\paragraph{Distributionally robust choice.} A different escape from the
+orthant integral fixes only the first two moments of the utilities and
+prices the \emph{extremal} joint distribution: the cross-moment model of
+\citet{mishra2012} computes, by semidefinite optimization, the choice
+probabilities under the moment-feasible distribution that maximizes
+expected agent utility, and \citet{ahipasaoglu2019} reformulate that
+computation as a convex program that scales to many alternatives. This
+answers a genuinely different question from ours --- the worst case over
+a moment class rather than a specified law, with representative-agent
+rather than distributional semantics --- so the two are complements: that
+family avoids ever specifying the joint distribution, while this paper
+prices and inverts the distribution the modeller actually specifies.
+
 \paragraph{Bayesian data augmentation.} \citet{albert1993} and
 \citet{mcculloch1994} sidestep the integral entirely by Gibbs sampling the latent
 utilities; \citet{imai2005} implement the marginal data-augmentation version
@@ -1108,7 +1121,10 @@ below the restricted optimum there --- contradicting maximality.
 We remark on the connection to economics. We are considering the Legendre dual of the social surplus function of
 \citet{mcfadden1981}. Share inversion has frequently been viewed as a convex problem: \citet{berry1994} inverts market shares in
 logit-family demand, \citet{galichon2022} identify the general random-utility
-inversion with optimal transport, and \citet{chiong2016} compute it by linear programming in the discrete case.
+inversion with optimal transport, \citet{chiong2016} compute it by
+linear programming in the discrete case, and \citet{muller2022} state
+the inversion as the subdifferential of the conjugate surplus,
+$u\in\partial E^{*}(p)$, en route to their prox-functions.
 
 Closest is
 \citet{li2018}, who for arbitrary non-atomic bases writes the inversion
@@ -1907,6 +1923,11 @@ interface, and a zero-dependency browser port drives a live demonstration at
 \texttt{winning.microprediction.org}.
 
 \begin{thebibliography}{19}\small
+\bibitem[Ahipasaoglu et~al.(2019)Ahipasaoglu, Li and
+Natarajan]{ahipasaoglu2019} S.~D. Ahipasaoglu, X.~Li, K.~Natarajan. A
+convex optimization approach for computing correlated choice
+probabilities with many alternatives. \emph{IEEE Transactions on
+Automatic Control} 64:190--205, 2019.
 \bibitem[Albert and Chib(1993)]{albert1993} J.~H. Albert, S.~Chib.
 Bayesian analysis of binary and polychotomous response data.
 \emph{JASA} 88:669--679, 1993.
@@ -2021,6 +2042,10 @@ An exact likelihood analysis of the multinomial probit model.
 \bibitem[Mendell and Elston(1974)]{mendell1974} N.~Mendell, R.~Elston.
 Multifactorial qualitative traits: genetic analysis and prediction of
 recurrence risks. \emph{Biometrics} 30:41--57, 1974.
+\bibitem[Mishra et~al.(2012)Mishra, Natarajan and Teo]{mishra2012}
+V.~K. Mishra, K.~Natarajan, H.~Tao, C.-P. Teo. Choice prediction with
+semidefinite optimization when utilities are correlated. \emph{IEEE
+Transactions on Automatic Control} 57:2450--2463, 2012.
 \bibitem[Mosteller(1951)]{mosteller1951} F.~Mosteller. Remarks on the
 method of paired comparisons: I. The least squares solution assuming
 equal standard deviations and equal correlations. \emph{Psychometrika}
