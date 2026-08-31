@@ -491,3 +491,43 @@ which is precisely the gap the shared field fills, and the crux passage
 now says so with equation numbers and their own words. (Note: the
 reviewer's "Eq. 4.26" and "p. 52" both check out -- same formula, two
 appearances.)
+
+## Twelfth review (2026-08-31): solver causality, Pearlmutter, competing risks
+
+The main blocker was real and our own experiment proves it: exp23
+measures naive Newton-CG with exact grid JVPs at 387 s NOT converged
+against Jacobi's 3.7 s converged (n=200), and 2056 vs 19 s (n=1000). So
+the demonstrated million-inversion is powered by the field's
+own-coordinate slopes, not the Jv oracle. Abstract, contribution
+paragraph, the Li paragraph and the Newton-Krylov footnote all now say
+exactly that, with exp23's numbers in the footnote as the honest
+negative result. The site's section 4 says which oracle does what.
+
+Pearlmutter (Neural Computation 6(1):147-160, 1994 -- verified) added,
+and written as a rebuttal rather than a concession, per Peter's
+direction that no one else invented this algorithm: the meta-theorem
+prices Hv at gradient cost but needs a cheap gradient to differentiate;
+applied to the per-alternative evaluators the literature had, it
+returns the O(n^2 L) it started with. The missing piece was the object
+to differentiate, and that object is the field.
+
+Competing-risks precision: p_i = int G (f_i/S_i) is the classical
+cause-probability formula (Kalbfleisch-Prentice 2002, added); Cotton
+2021's claim is now stated as the log-domain lattice engine that
+evaluates and inverts that classical field for all n at once.
+
+Small: the one-alternative-at-a-time sentence scoped to smooth methods
+(frequency simulation returns whole vectors, unsmooth); strict
+definiteness conditioned on positive pairwise tie densities / connected
+photo-finish graph, with Gaussian-full-support as the guaranteed case.
+
+Deployment complaint checked and NOT reproduced: live page last-modified
+matches the latest push and serves the new sections; the reviewer's
+fetch predated the honesty-pass pushes by minutes.
+
+Declined, per Peter: the reviewer's suggested novelty paragraph, which
+frames the Jv oracle as "may support future solvers" and drops the
+where-each-stopped framing. The paper keeps the composition claim with
+the missing-insight-per-lineage structure, which the same review's own
+table supports (matrix-free Jh from the shared field: "strong
+originality candidate"; the pipeline: "strongest originality claim").

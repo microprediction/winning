@@ -77,10 +77,12 @@
     honest caveat that its integrand generally conceals a multivariate
     calculation; under <em>independence</em> the integrand really is a
     density times a product of univariate CDFs, and that one-dimensional
-    quadrature has been standard ever since. The
-    <em>correlated</em>-probit literature treats \(p_i\) as an
-    \((n-1)\)-dimensional orthant integral and pays for that view one
-    alternative at a time. And even the independent one-dimensional view,
+    quadrature has been standard ever since. The smooth methods of the
+    <em>correlated</em>-probit literature &mdash; GHK, Genz's quadrature,
+    minimax tilting &mdash; treat \(p_i\) as an \((n-1)\)-dimensional
+    orthant integral and pay for that view one alternative at a time
+    (frequency simulation does return the whole vector per draw, but is
+    not smooth in the parameters). And even the independent one-dimensional view,
     evaluated per alternative, re-forms an \((n-1)\)-fold product
     \(n\) times &mdash; which is where the representation stops being
     an algorithm.</p>
@@ -115,8 +117,10 @@
     (markets), and trees of uniform shared effects (hierarchies) &mdash;
     plus a fitted reduction for dense matrices. To be plain about
     lineage: the one-dimensional representation is 1975, conditioning on
-    a factor is forty years old, and the shared field under independence
-    is the 2021 paper this package began as. The contribution is the
+    a factor is forty years old, the common-survival field itself is
+    classical competing-risks calculus, and the log-domain lattice engine
+    that evaluates and inverts it for all \(n\) at once is the 2021
+    paper this package began as. The contribution is the
     organization &mdash; one field pass prices all \(n\) correlated
     alternatives <em>and applies their dense tie-density Jacobian in
     linear work</em>, removing the one-alternative-per-integral
@@ -211,7 +215,12 @@
     &mdash; the cost of pricing &mdash; without one edge being formed.
     That cancellation is the cavity trick of the forward pass applied to
     derivatives, and it is the step the earlier literature stopped short
-    of.</p>
+    of. Generic automatic differentiation does not supply it unaided:
+    Pearlmutter (1994) prices a Hessian&ndash;vector product at the cost
+    of a gradient, but differentiating the per-alternative evaluators the
+    literature had returns the \(O(n^2L)\) it started with &mdash; the
+    missing piece was the cheap object to differentiate, and that object
+    is the field.</p>
     <p>The race is a resistor
     network, and the correspondence is exact, not decorative. Assign
     node \(i\) a potential \(v_i\) (the ability correction the
@@ -254,20 +263,26 @@
     made explicit by Li (2018); and the Hessian is the negative
     tie-density Laplacian, whose structure M&uuml;ller, Nesterov and
     Shikhman had by 2019. It is strictly negative definite on the space
-    of contrasts whenever every contestant has some idiosyncratic
-    noise. So</p>
+    of contrasts whenever every pairwise tie density is positive &mdash;
+    the photo-finish graph connected &mdash; which the Gaussian factor
+    model guarantees when every contestant keeps idiosyncratic noise.
+    So</p>
     \[ \max_\mu \; W(\mu) - \langle p^\star, \mu\rangle \]
     <p>is a strictly concave, coercive program whose unique mean-zero
     maximiser is the inversion: the abilities exist and are unique up to
     a common shift.</p>
-    <p>What is ours is the oracle. Newton's method on this program runs
-    matrix-free because the Hessian is the Laplacian the field pass
-    already computed, and the field identity of the previous section
-    applies it in \(O(nL)\) per node &mdash; which is what makes the
-    known program practical at \(n=10^6\) rather than at the sizes the
-    literature stops at. The shipped solver preconditions with just the
-    diagonal slopes and converges in a handful of field passes; a
-    million-contestant field inverts in about eighty seconds.</p>
+    <p>What is ours is the pair of oracles the field supplies, and it is
+    worth being exact about which one does what. The demonstrated
+    million-contestant inversions (about eighty seconds) run a damped
+    coordinate iteration preconditioned by the own-coordinate slopes the
+    field pass returns for free &mdash; a handful of passes, no linear
+    algebra. The same field also exposes the exact matrix-free
+    Jacobian&ndash;vector product of the previous section, which makes
+    Newton&ndash;Krylov methods possible without constructing the dense
+    Jacobian; measured naively (the committed <code>exp23</code>), that
+    route currently loses to the diagonal iteration by two orders of
+    magnitude, so a competitive Newton&ndash;Krylov solver is solver
+    engineering still to do, not a capability the oracle lacks.</p>
     <p>The program also has an economic reading, noted in the original
     paper (Cotton 2021). \(W(\mu)\) is the expected winning time, so
     \(\partial W/\partial\mu_i = p_i\) says that paying to make

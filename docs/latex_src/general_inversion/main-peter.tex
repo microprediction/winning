@@ -32,7 +32,7 @@ produced at repository tag \texttt{paper-r5}, package version
 \begin{abstract}
 Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years,
-one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The pieces are individually old --- the one-dimensional representation, the convex duality, the tie-density derivatives --- and the innovation is their organization: a single shared survival field renders probabilities for all $n$ alternatives at once and applies their dense tie-density Jacobian, a weighted graph Laplacian that is a probability flux through the boundary between winning regions, in linear work per lattice point. By this means, calibration is not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
+one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The pieces are individually old --- the one-dimensional representation, the convex duality, the tie-density derivatives --- and the innovation is their organization: a single shared survival field renders probabilities for all $n$ alternatives at once, supplies the own-coordinate slopes that precondition the large-scale calibration reported here, and applies the dense tie-density Jacobian, a weighted graph Laplacian that is a probability flux through the boundary between winning regions, in linear work per lattice point. Calibration is thereby not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -118,8 +118,10 @@ numerical integration. So the representation, the independent
 one-dimensional quadrature, and even the sequential-conditioning
 decomposition that GHK later simulates (their eqs.~4.27--4.32, set aside
 as too cumbersome for iterative estimation) were all present in 1975,
-and all judged impractical. The independent specialization below is also
-standard competing-risks calculus.
+and all judged impractical. The independent specialization below is also standard competing-risks
+calculus: $G=\prod_k S_k$ is the all-causes survival and $f_i/S_i$ the
+cause-specific hazard, so $p_i=\int G\,(f_i/S_i)$ is the classical
+cause-probability formula \citep{kalbfleisch2002}.
 \citet{fosgerau2013} carry the companion representation --- expected
 maximum as potential, gradient as probabilities, choice probability as
 an integral along the common maximum level --- to general
@@ -153,23 +155,35 @@ To be plain about what is and is not claimed as new, since each
 ingredient has a history: the one-dimensional representation is
 \citet{domencich1975}, and the expected-maximum potential whose gradient
 is the probability vector runs through \citet{mcfadden1981} to
-\citet{fosgerau2013}; the all-$n$ shared field under independence is
-\citet{cotton2021}; that the cross-derivatives of the surplus function
+\citet{fosgerau2013}; the common-survival field itself is classical competing-risks calculus
+\citep{kalbfleisch2002}, and the log-domain lattice engine that evaluates
+and inverts it for all $n$ at once is \citet{cotton2021}; that the cross-derivatives of the surplus function
 are tie densities forming a matrix with zero row sums --- a graph
 Laplacian in all but name --- is \citet{muller2022}; and inversion as an
-unconstrained convex program is \citet{li2018}. The contribution here is
-the cavity organization that makes these compose at scale. Evaluated as
-the earlier literature leaves it, each of the $n$ probabilities re-forms
-an $(n-1)$-fold product, the vector costs $O(n^2L)$, and the Jacobian's
+unconstrained convex program is \citet{li2018}; and the fact that a
+Hessian--vector product can in principle be computed at the cost of a
+gradient is \citet{pearlmutter1994}. The contribution here is the cavity
+organization that makes these compose at scale. Evaluated as the earlier
+literature leaves it, each of the $n$ probabilities re-forms an
+$(n-1)$-fold product, the vector costs $O(n^2L)$, and the Jacobian's
 $\binom{n}{2}$ tie densities each need their own integral; that is where
-the representation stops being an algorithm. Building the survival field
-once and dividing each contestant out collapses the forward vector to
-$O(nL)$ (the move of \citealt{cotton2021}), and this paper shows the same
-cancellation collapses the \emph{derivatives}: the dense tie-density
-Jacobian acts in linear work per lattice point without its edges ever
-being formed (\S\ref{sec:jaccomp}), it survives correlation by
-conditioning, and the convex program therefore runs matrix-free at sizes
-where each ingredient alone stalls.
+the representation stops being an algorithm, and it is also why
+Pearlmutter's meta-theorem does not close the gap unaided --- it prices a
+Hessian--vector product at the cost of a gradient, but differentiating
+the per-alternative evaluators the literature had returns exactly the
+$O(n^2L)$ it started with. The missing piece was the cheap object to
+differentiate. Building the survival field once and dividing each
+contestant out collapses the forward vector to $O(nL)$ (the move of
+\citealt{cotton2021}, on what is classically the competing-risks field;
+see below), and this paper shows the same cancellation collapses the
+\emph{derivatives}: the dense tie-density Jacobian acts in linear work
+per lattice point without its edges ever being formed
+(\S\ref{sec:jaccomp}), with the explicit hazard factorization
+additionally exposing the flux and Laplacian structure that a generic
+directional derivative would leave implicit. It survives correlation by
+conditioning, and the demonstrated million-alternative inversions run on
+the same field's own-coordinate slopes as preconditioner, with the full
+Jacobian action exposed for Newton--Krylov solvers.
 
 More pertinent, within such a class of covariance matrices (we will term it the factor grammar), the derivatives ride the same pass at the same cost: Jacobian--vector products and each inversion iteration are $O(nLQ)$, where again $L$ dictates the lattice size and $Q$ the number of quadrature points. More interesting still, the Jacobian is a weighted graph Laplacian applied as an operator and never materialized. The block and nested kernels materialize their Jacobians,
 and the tree's cross-cluster block is approximate, so the matrix-free
@@ -1102,10 +1116,11 @@ as an unconstrained convex minimization whose objective gradient is the
 share map, with globally convergent superlinear methods. That is a formulation
 of the optimizer, but without a fast evaluator of the shares
 and their Jacobian at large $n$, which is what we supply. The shared field is that evaluator, so
-the two are complements. What the field representation adds
-is not the convex program but its derivatives: the Hessian is the
-tie-density Laplacian of the same field pass, so gauge-fixed Newton runs
-matrix-free at $O(nLQ)$ per iteration.
+the two are complements. What the field representation adds is not the
+convex program but its oracles: the shipped solver preconditions with
+the field's own-coordinate slopes, and the Hessian --- the tie-density
+Laplacian of the same pass --- is available as a matrix-free operator at
+$O(nLQ)$ per application for Newton--Krylov methods.
 
 As noted in passing earlier, an invariance applies to the covariance and
 not just to translation. Choice probabilities are
@@ -1196,8 +1211,14 @@ bases the uniqueness claim should be read as proved under those
 conditions rather than universally. The theorem also does not say that
 this clipped iteration finds the inverse. The solver's convergence as
 implemented stands on the empirical evidence, which is
-strong.\footnote{A Newton--Krylov alternative is provided and could be
-used as a fallback in principle should a case demand one.}
+strong.\footnote{A matrix-free Newton--CG solver using the exact grid
+Jacobian--vector product is provided and measured (the committed
+\texttt{exp23}): naively assembled, it loses badly to the damped
+diagonal iteration --- $387$ seconds without converging against $3.7$
+seconds converged at $n=200$, and $2056$ against $19$ at $n=1000$ --- so
+the diagonal iteration is the production solver and a competitive
+Newton--Krylov remains solver engineering, not a capability gap in the
+oracle.}
 
 We tested the round trip at $n=400$, with twenty
 clusters and a tree of depth three (the committed \texttt{bench.py
@@ -1950,6 +1971,9 @@ and their derivatives. \emph{Journal of Econometrics} 72:85--134, 1996.
 \bibitem[Imai and van Dyk(2005)]{imai2005} K.~Imai, D.~A. van Dyk.
 MNP: R package for fitting the multinomial probit model.
 \emph{Journal of Statistical Software} 14(3):1--32, 2005.
+\bibitem[Kalbfleisch and Prentice(2002)]{kalbfleisch2002}
+J.~D. Kalbfleisch, R.~L. Prentice. \emph{The Statistical Analysis of
+Failure Time Data}. 2nd ed., Wiley, 2002.
 \bibitem[Keane(1994)]{keane1994} M.~P. Keane.
 A computationally practical simulation estimator for panel data.
 \emph{Econometrica} 62:95--116, 1994.
@@ -1988,6 +2012,9 @@ equal standard deviations and equal correlations. \emph{Psychometrika}
 D.~M\"uller, Y.~Nesterov, V.~Shikhman. Discrete choice prox-functions on
 the simplex. \emph{Mathematics of Operations Research} 47(1):485--507,
 2022.
+\bibitem[Pearlmutter(1994)]{pearlmutter1994} B.~A. Pearlmutter.
+Fast exact multiplication by the Hessian. \emph{Neural Computation}
+6(1):147--160, 1994.
 \bibitem[Solow(1990)]{solow1990} A.~R. Solow.
 A method for approximating multivariate normal orthant probabilities.
 \emph{Journal of Statistical Computation and Simulation} 37:225--229, 1990.
