@@ -56,7 +56,11 @@
       photo-finish tie density between two runners — the probability density of the
       race coming down to exactly that pair, which is also the weight in the
       calibration Jacobian's graph Laplacian: the race is literally a resistor
-      network.</p>
+      network. (That the derivative matrix has this tie-density, zero-row-sum
+      structure was derived for general random-utility models by
+      M&uuml;ller, Nesterov and Shikhman in 2019; what this demo runs on is
+      the shared-field identity that applies the dense network in linear
+      work without building its edges.)</p>
     <p class="lead"><strong>Click a node</strong> to remove that runner. The engine
       then computes each survivor's new win probability q<sub>j</sub> exactly, and the
       bar for j is the excess over the naive IIA rule that just redistributes the

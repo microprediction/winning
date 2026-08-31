@@ -200,13 +200,20 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
       <li><a href="./assets/pdf/scalable_contest_inversion.pdf">Scalable inversion of contests with correlated
         performances, including softmax and multinomial probit</a> (2026,
         <a href="https://papers.ssrn.com/abstract=7307363">SSRN working paper</a>).
-        All shares of a correlated race in one O(QNL) pass, matrix-free
-        graph-Laplacian derivatives, and inversion of observed shares back to
-        utilities &mdash; forward pricing benchmarked to ten million alternatives,
-        inversion to one million. Softmax is the Gumbel special case of the same
-        lattice. The algorithm ships here as <code>winning.factor</code>; every
-        experiment is a committed script under
-        <code>research/experiments/</code>. Supersedes the earlier
+        All shares of a correlated race in one O(QNL) pass, with
+        graph-Laplacian derivatives applied matrix-free for the factor
+        grammar, and inversion of observed shares back to utilities
+        &mdash; forward pricing benchmarked to ten million alternatives,
+        inversion to one million. The pieces are old (the one-dimensional
+        representation is Domencich&ndash;McFadden 1975, the tie-density
+        Hessian is M&uuml;ller&ndash;Nesterov&ndash;Shikhman 2019, convex
+        inversion is Li 2018, the independent shared field is Cotton
+        2021); the paper's contribution is the organization that makes
+        them compose at this scale. Softmax is the Gumbel special case of
+        the same lattice. The algorithm ships here as
+        <code>winning.factor</code>; every experiment is a committed
+        script under <code>research/experiments/</code>. Supersedes the
+        earlier
         <a href="./assets/pdf/factor_probit_share_calibration.pdf">share-calibration
         draft</a>.</li>
       <li><a href="./assets/pdf/rating_formula_1.pdf">Rating Formula 1: a case for

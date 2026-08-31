@@ -52,7 +52,8 @@
     <h1>How it works</h1>
     <p class="lead">The package prices and inverts contests &mdash;
     races, choices, markets &mdash; at scales where the standard methods
-    give out. Three ideas carry all of it: the choice event is
+    give out. Three ideas carry all of it, each with a history credited
+    in its section: the choice event is
     one-dimensional, so one <strong>shared field</strong> prices every
     contestant at once; correlation enters by
     <strong>conditioning</strong>, so it costs a low-dimensional
@@ -242,18 +243,26 @@
 
     <h2>4. Inversion is a convex program</h2>
     <p>The inverse problem &mdash; given a probability vector, find the
-    abilities &mdash; is where this geometry pays. Let
+    abilities &mdash; is where this geometry pays, and none of the
+    convexity is ours. Let
     \(W(\mu)=\mathbb{E}\min_i(\mu_i+\epsilon_i)\), the expected winning
-    time. Its gradient is the probability vector itself, and its Hessian
-    is the negative tie-density Laplacian, which is strictly negative
-    definite on the space of contrasts whenever every contestant has
-    some idiosyncratic noise. So</p>
+    time. That its gradient is the probability vector is the
+    Williams&ndash;Daly&ndash;Zachary theorem of discrete choice; that
+    share inversion is therefore an unconstrained convex program was
+    made explicit by Li (2018); and the Hessian is the negative
+    tie-density Laplacian, whose structure M&uuml;ller, Nesterov and
+    Shikhman had by 2019. It is strictly negative definite on the space
+    of contrasts whenever every contestant has some idiosyncratic
+    noise. So</p>
     \[ \max_\mu \; W(\mu) - \langle p^\star, \mu\rangle \]
     <p>is a strictly concave, coercive program whose unique mean-zero
-    maximiser is the inversion: the abilities exist, they are unique up
-    to a common shift, and Newton's method on this program runs
-    matrix-free because the Hessian is the Laplacian the field pass
-    already computed. The program also has an economic reading, noted in
+    maximiser is the inversion: the abilities exist and are unique up to
+    a common shift. What is ours is the oracle: Newton's method on this
+    program runs matrix-free because the Hessian is the Laplacian the
+    field pass already computed, and the field identity of the previous
+    section applies it in \(O(nL)\) per node &mdash; which is what makes
+    the known program practical at \(n=10^6\) rather than at the sizes
+    the literature stops at. The program also has an economic reading, noted in
     the original paper (Cotton 2021): \(W(\mu)\) is the expected winning
     time, so \(\partial W/\partial\mu_i = p_i\) says that paying to make
     contestant \(i\) faster improves the expected winning time at a rate
