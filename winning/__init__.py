@@ -57,4 +57,4 @@ from .factor.polish import polish_race, race_jacobian  # noqa: F401
 from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"

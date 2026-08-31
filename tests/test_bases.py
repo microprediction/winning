@@ -231,11 +231,15 @@ def test_sharpness_dispatch_is_gauge_invariant_and_safe():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         p4 = race_probabilities(mu4, V=V4, D=np.ones(4))
-        # gauge invariance: a common loading column is choice-irrelevant
-        # and after the internal centering the answer is bit-identical
+        # gauge invariance: a common loading column is choice-irrelevant.
+        # In exact arithmetic the internal centering maps both inputs to
+        # the same loadings; in floats the centering arithmetic can round
+        # differently by an ulp (bit-identity holds on arm64 but not on
+        # x86), so assert at rounding scale -- the defect this pins moved
+        # the answer by 1e-2.
         c = np.array([5.0, -3.0])
         p4s = race_probabilities(mu4, V=V4 + np.ones((4, 1)) @ c[None, :],
                                  D=np.ones(4))
-    assert np.array_equal(p4, p4s)
+    assert np.abs(p4 - p4s).max() < 1e-12
     pmc = np.array([0.1831662, 0.1832104, 0.1908283, 0.4427951])  # 20M draws
     assert 0.5 * np.abs(p4 - pmc).sum() < 3e-4
