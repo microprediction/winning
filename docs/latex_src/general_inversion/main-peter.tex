@@ -844,8 +844,21 @@ floored target recovers a lower bound on that contrast.
 \begin{proof}
 A minimum of affine functions of $\mu$ is concave and expectation
 preserves this. Ties have measure zero under full support, so the
-minimiser is almost surely unique and Danskin's theorem gives
-$\partial W/\partial\mu_i=\Pr\{i\ \text{wins}\}$.
+minimiser is almost surely unique, and Danskin's theorem
+\citep{danskin1966} gives
+$\partial W/\partial\mu_i=\Pr\{i\ \text{wins}\}$.\footnote{Danskin's
+theorem differentiates a minimum over a parameter. For
+$W(\mu)=\E\min_i(\mu_i+\epsilon_i)$ the naive move, differentiating
+inside the expectation, is illegitimate because the minimum is not
+differentiable where two contestants tie. The theorem says the
+derivative exists anyway whenever the minimiser is unique, and equals the
+derivative of the selected branch: here $\partial/\partial\mu_i$ of
+$\mu_i+\epsilon_i$, which is one, on the event that $i$ is the
+minimiser and zero otherwise. Taking expectations gives the win
+probability. Full support is what supplies uniqueness, since ties then
+have measure zero; without it $W$ has kinks and only a subdifferential.
+This is the step that makes $p$ a gradient, and hence the inversion a
+convex program rather than a root-find.}
 
 The Hessian is Proposition~\ref{prop:tie}, which assumed no
 independence: its off-diagonals are the boundary fluxes
@@ -1593,6 +1606,9 @@ Estimation of random utility models in R: the mlogit package.
 \bibitem[Cotton(2021)]{cotton2021} P.~Cotton.
 Inferring relative ability from winning probability in multi-entrant contests.
 \emph{SIAM Journal on Financial Mathematics} 12(1):295--317, 2021.
+\bibitem[Danskin(1966)]{danskin1966} J.~M. Danskin. The theory of
+max-min, with applications. \emph{SIAM Journal on Applied Mathematics}
+14(4):641--664, 1966.
 \bibitem[Galichon and Salani\'e(2022)]{galichon2022} A.~Galichon,
 B.~Salani\'e. Cupid's invisible hand: social surplus and identification in
 matching models. \emph{Review of Economic Studies} 89(5):2600--2629, 2022.
