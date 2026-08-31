@@ -547,3 +547,57 @@ originality candidate"; the pipeline: "strongest originality claim").
    cleanly instead of mis-broadcasting. Paper 5.1 scopes the block
    Jacobian to rank one.
 Both pinned in tests/test_blocks.py.
+
+## Fourteenth round (2026-08-31): window blocker verified, then the mass check caught a second bug
+
+1. **Hierarchical window blocker (reviewer's counterexample, reproduced
+   exactly)**: 400-runner single cluster, loadings 1.0/0.9, D=0.01 --
+   the independent-marginal window proxy captured raw mass 0.719 and
+   silent normalization returned group shares 0.683/0.317 where symmetry
+   forces 0.50/0.50. Fixed with a node-aware envelope (_window_nodes):
+   per-runner conditional extremes mu +/- amp bracketed then bisected on
+   the idiosyncratic scale. Referee regression now 0.5 exact at 1025
+   points, 0.499957 at 257. Ported to R and the JS site engine; all
+   parity vectors regenerated, R/JS checks green.
+2. **Mass check promoted to error**: raw lattice mass is a diagnostic;
+   _checked_mass raises on |mass-1| > 5e-3 instead of normalizing.
+   Nested kernels in all three languages now average RAW conditional
+   masses and normalize once (per-node normalization hid defects).
+3. **The check earned its keep immediately**: it caught a tree
+   traversal-order bug present in Python, Rust, R and JS -- message
+   passes ordered by accumulated |strength| as a depth proxy, which TIES
+   at zero strengths (exactly what Tree.from_linkage produces for merges
+   beyond the correlation horizon), visiting children before parents and
+   reading unwritten cavities. A 6-leaf zero-strength linkage priced at
+   raw mass exactly 3.0; pre-fix output was wrong for any tree with tied
+   or non-monotone strength path sums, correct otherwise (why the
+   MC validations at random strengths passed). Fixed by ordering on hop
+   depth; zero-strength trees now match the independent race to 1e-9+
+   (rust/numpy agree to 1e-16).
+4. **R polish converged to a different local solution** than the python
+   reference on the linkage-tree scenario once tree pricing changed
+   (both feasible, R's objective higher, 1e-2 apart in p). The
+   projection manifold is nonlinear, so the algorithm PATH selects the
+   local solution: replaced R's augmented Lagrangian with the same SQP
+   path the python SLSQP takes (Hildreth dual QP per step, from mu0),
+   plus fd Jacobian for Tree structures (the analytic tree Jacobian's
+   cross-cluster bias steers the iterates). polish_tree_p parity
+   restored to 2e-7.
+5. **Sharpness defect confirmed independent of the window defect**:
+   sharp-blocks TV 0.0495 unchanged under the fixed window; the
+   existing warning text and issue #11 stand.
+6. Paper edits: abstract scopes distributional generality (non-normal =
+   independent/factor; hierarchical kernels Gaussian); 4.x adds the
+   hierarchical envelope + mass-check paragraph with the measured
+   numbers, including the traversal catch; 5.1 states the hierarchical
+   materialized Jacobians are the SECOND object (continuum tie densities
+   by quadrature), not the grid derivative; stage-5 substitution written
+   with the vector floor (d = ell + x componentwise); Newton--Krylov
+   footnote updated with exp23 round 3 (proper assembly converges on
+   benchmarks at ~60x wall clock, diverges on the constructed stall
+   case) and the convergence-evidence sentence now names the stall case;
+   added Kitagawa-Merigot-Thibert JEMS 2019 (damped Newton for
+   semi-discrete OT, global convergence, Hessian from boundary mass --
+   the nearest proven result for a problem of this shape; both refs
+   verified at publisher) and Levy-Mohayaee-von Hausegger MNRAS 2021
+   (the method at 1e7 cells). Tag paper-r6.

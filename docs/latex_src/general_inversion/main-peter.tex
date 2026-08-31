@@ -22,7 +22,7 @@ Including Softmax and Multinomial Probit}
 implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
 scripts behind every number in this paper live at
 \texttt{github.com/microprediction/winning}; this revision's tables were
-produced at repository tag \texttt{paper-r5}, package version
+produced at repository tag \texttt{paper-r6}, package version
 \texttt{1.3.0}.}}
 \date{August 2026}
 
@@ -32,7 +32,7 @@ produced at repository tag \texttt{paper-r5}, package version
 \begin{abstract}
 Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years,
-one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The pieces are individually old --- the one-dimensional representation, the convex duality, the tie-density derivatives --- and the innovation is their organization: a single shared survival field renders probabilities for all $n$ alternatives at once, supplies the own-coordinate slopes that precondition the large-scale calibration reported here, and applies the dense tie-density Jacobian, a weighted graph Laplacian that is a probability flux through the boundary between winning regions, in linear work per lattice point. Calibration is thereby not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
+one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The pieces are individually old --- the one-dimensional representation, the convex duality, the tie-density derivatives --- and the innovation is their organization: a single shared survival field renders probabilities for all $n$ alternatives at once, supplies the own-coordinate slopes that precondition the large-scale calibration reported here, and applies the dense tie-density Jacobian, a weighted graph Laplacian that is a probability flux through the boundary between winning regions, in linear work per lattice point. Calibration is thereby not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general: in the independent and factor grammars it applies, within reason, to any smooth choice of performance distribution, not just normal, while the hierarchical kernels as shipped are Gaussian. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -730,6 +730,26 @@ direct such fields to the factor grammar, whose node family escalates
 automatically; porting that escalation to the hierarchical kernels is
 tracked work.
 
+The hierarchical kernels place their lattice by the same envelope
+principle as \S\ref{sec:lattice}: for the lower endpoint every
+contestant sits at its most favourable retained conditional location,
+for the upper at its least favourable, and the idiosyncratic scale
+alone sets the bisection. The obvious shortcut --- an
+independent-marginal proxy using each runner's total standard deviation
+at its unconditional location --- fails exactly where these kernels are
+interesting. On a $400$-runner cluster at correlation $0.99$ the
+proxy's window dropped $28$ percent of the winner mass, asymmetrically
+across two loading groups, and silent normalization returned group
+shares of $0.68/0.32$ where the symmetry of the construction forces
+$0.50/0.50$. The raw lattice mass is therefore treated as a diagnostic
+rather than a nuisance: the kernels check it and raise an error on a
+material defect instead of normalizing it away. That check promptly
+earned its keep by catching an unrelated slip: the tree passes had been
+ordered by accumulated strength as a proxy for depth, which ties when
+strengths are zero --- precisely the trees a linkage induces --- and a
+tied order visits children before their parents, pricing a six-leaf
+zero-strength tree at raw mass $3.0$.
+
 \paragraph{Nested.} Add one global factor with couplings $g_i$ and a dial
 $\gamma\in[0,1]$: conditional on the global draw $f_q$ the model is a block race
 at shifted abilities, so
@@ -991,7 +1011,7 @@ a/\partial\mu$, it is $(A-p\,\mathbf{1}^{\top}A)/T$. The fourth is the
 exact derivative of the full adaptive map, which adds a grid-motion term,
 since the window itself depends on $\mu$.
 
-The implementation returns the third. It differentiates the rectangle sum
+The factor implementation returns the third. It differentiates the rectangle sum
 itself, then applies the normalization quotient: a directional derivative
 $v$ of the unnormalized masses is returned as
 $(v-p\,\mathbf{1}^{\top}v)/T$. It does not differentiate the adaptive
@@ -1009,6 +1029,16 @@ each perturbed $\mu$ and therefore sees a contribution the fixed-grid
 derivative does not contain. It falls below the agreement figure by
 $L=101$, so in the production range the grid derivative serves as the
 derivative of the adaptive map to the accuracy reported.
+
+The materialized Jacobians of the block, nested and tree kernels are
+the \emph{second} object, not the third: continuum tie densities
+evaluated by quadrature with the diagonal imposed, ignoring both the
+normalization quotient and the window. They are consistent estimates of
+the continuum derivative, and they are not exact derivatives of the
+normalized discrete maps they ship beside; a caller who needs the
+latter (an optimizer, say) should difference the forward map, which is
+what the polish stage does to restore feasibility when the
+approximation shows.
 
 The continuum form is exposed alongside the grid form, because it is
 symmetric by construction and so can be used as a preconditioner without
@@ -1258,15 +1288,33 @@ We have not written that generalization out formally, so for non-normal
 bases the uniqueness claim should be read as proved under those
 conditions rather than universally. The theorem also does not say that
 this clipped iteration finds the inverse. The solver's convergence as
-implemented stands on the empirical evidence, which is
-strong.\footnote{A matrix-free Newton--CG solver using the exact grid
-Jacobian--vector product is provided and measured (the committed
-\texttt{exp23}): naively assembled, it loses badly to the damped
-diagonal iteration --- $387$ seconds without converging against $3.7$
-seconds converged at $n=200$, and $2056$ against $19$ at $n=1000$ --- so
-the diagonal iteration is the production solver and a competitive
-Newton--Krylov remains solver engineering, not a capability gap in the
-oracle.}
+implemented stands on the empirical evidence, which is strong on the
+benchmark families but not universal: we can construct strongly
+correlated fields on which the damped iteration stalls at a residual
+near $10^{-4}$ instead of converging.\footnote{A matrix-free
+Newton--Krylov solver using the exact grid Jacobian--vector product is
+provided and measured (the committed \texttt{exp23}, three rounds).
+Naively assembled it loses badly to the damped diagonal iteration ---
+$387$ seconds without converging against $3.7$ seconds converged at
+$n=200$. Assembled properly --- log-residual system symmetrized by the
+$\sqrt{p}$ scaling, the integration-by-parts form of the product,
+conjugate gradients preconditioned by the own-slopes, null vector
+projected out, trust clip and a true-residual acceptance test --- it
+does converge on the benchmark fields ($9.6\times10^{-10}$, at roughly
+sixty times the wall clock), and on the constructed stall case it
+diverges where the diagonal iteration stalls. So the diagonal iteration
+is the production solver, and a robust Newton--Krylov remains solver
+engineering rather than a capability gap in the oracle. The nearest
+proven result we know for a problem of this shape is the damped Newton
+method of \citet{kitagawa2019} for semi-discrete optimal transport:
+prescribe the mass each Laguerre cell must capture and adjust one
+weight per cell, with a Hessian assembled from source mass on shared
+cell boundaries much as our Jacobian is assembled from tie density on
+shared win-region boundaries. They prove global linear convergence
+under regularity conditions on the cost and source;
+\citet{levy2021} run the method at ten million cells. Whether a
+race-market analogue of their conditions yields a convergence proof
+here is open.}
 
 We tested the round trip at $n=400$, with twenty
 clusters and a tree of depth three (the committed \texttt{bench.py
@@ -1379,10 +1427,11 @@ $2\times10^{-8}$ up to $6.7\times10^{-4}$, turning a near-certain
 head-to-head into a coin flip (choice error $0.48$) while the projected
 covariance residual sat one hundred times below the warning threshold. The Gram is exactly
 $(1-\tfrac2n)I+\tfrac1{n^2}\mathbf{1}\mathbf{1}^{\top}$, so the
-constrained solve is closed form in $O(n)$: substituting
-$d=\ell\mathbf{1}+x$ with $x\ge0$ leaves the same Gram with a shifted
-right-hand side, and the KKT conditions make the active set a threshold
-set, solved by water-filling. It is the constrained minimizer, not an
+constrained solve is closed form in $O(n)$: substituting $d=\ell+x$
+componentwise with $x\ge0$, writing $\ell$ for the vector of
+per-runner floors, leaves the same Gram with a shifted right-hand side,
+and the KKT conditions make the active set a threshold set, solved by
+water-filling. It is the constrained minimizer, not an
 unconstrained solve with a floor applied afterwards, which the Gram's
 off-diagonal coupling would leave suboptimal. At $n=2$ the Gram is rank
 one, only $d_1+d_2$ is identified, and the symmetric representative is
@@ -2030,9 +2079,19 @@ Failure Time Data}. 2nd ed., Wiley, 2002.
 \bibitem[Keane(1994)]{keane1994} M.~P. Keane.
 A computationally practical simulation estimator for panel data.
 \emph{Econometrica} 62:95--116, 1994.
+\bibitem[Kitagawa et~al.(2019)Kitagawa, M\'erigot and
+Thibert]{kitagawa2019} J.~Kitagawa, Q.~M\'erigot, B.~Thibert.
+Convergence of a Newton algorithm for semi-discrete optimal transport.
+\emph{Journal of the European Mathematical Society} 21(9):2603--2651,
+2019.
 \bibitem[Lerman and Manski(1981)]{lerman1981} S.~Lerman, C.~Manski.
 On the use of simulated frequencies to approximate choice probabilities.
 In \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
+\bibitem[L\'evy et~al.(2021)L\'evy, Mohayaee and von
+Hausegger]{levy2021} B.~L\'evy, R.~Mohayaee, S.~von Hausegger. A fast
+semidiscrete optimal transport algorithm for a unique reconstruction of
+the early Universe. \emph{Monthly Notices of the Royal Astronomical
+Society} 506(1):1165--1185, 2021.
 \bibitem[Li(2018)]{li2018} L.~Li. A general method for demand
 inversion. arXiv:1802.04444 (2018).
 \bibitem[Lindgren et al.(2011)]{lindgren2011} F.~Lindgren, H.~Rue,
