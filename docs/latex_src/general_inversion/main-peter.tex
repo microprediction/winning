@@ -32,7 +32,7 @@ produced at repository tag \texttt{paper-r4}, package version
 \begin{abstract}
 Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years,
-one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm tested for $n=1{,}000{,}000$ to reproduce probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The key innovation is a single shared survival field rendering conditional probabilities for all $n$ alternatives at once. The Jacobian is a weighted graph Laplacian whose edge weights are photo-finish tie densities, and it is a probability flux through the boundary between winning regions. By this means, calibration is not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
+one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The key innovation is a single shared survival field rendering conditional probabilities for all $n$ alternatives at once. The Jacobian is a weighted graph Laplacian whose edge weights are photo-finish tie densities, and it is a probability flux through the boundary between winning regions. By this means, calibration is not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -127,13 +127,13 @@ The present approach trades some of that flexibility for an implicit assumption 
 present paper also extends the field construction to correlated performances by
 conditioning, which itself is not a new idea by any means. Whenever $\Sigma$ makes performances independent given a few shared variables, the field factorizes and all $n$ probabilities cost $O(nLQ)$ for a lattice of $L$ points and $Q$ quadrature nodes.
 
-What is more pertinent is that, within such a class of covariance matrices (we will term it the factor grammar), the derivatives ride the same pass at the same cost. The Jacobian--vector products and each inversion iteration are $O(nLQ)$ where again, $L$ dictates the lattice size and $Q$ the number of quadrature points. And what is more interesting is that the Jacobian is a weighted graph Laplacian applied as an operator and never materialized. The block and nested kernels materialize their Jacobians,
+More pertinent, within such a class of covariance matrices (we will term it the factor grammar), the derivatives ride the same pass at the same cost: Jacobian--vector products and each inversion iteration are $O(nLQ)$, where again $L$ dictates the lattice size and $Q$ the number of quadrature points. More interesting still, the Jacobian is a weighted graph Laplacian applied as an operator and never materialized. The block and nested kernels materialize their Jacobians,
 and the tree's cross-cluster block is approximate, so the matrix-free
 claim is the factor grammar's, not every grammar's. There is no per-alternative
 repetition as with GHK iterating one choice at a time. The error is controlled by quadrature, deterministic for the Gauss--Hermite rules and reproducibly randomized for
 scrambled-Sobol nodes.
 
-There is an obvious translation symmetry since only relative performance matters. In the language more familiar in economics, only utility contrasts enter. So strictly speaking, the inversion is a map from a probability vector back to an equivalence class of races that yield the same. The raw covariance is also overparameterized.
+There is an obvious translation symmetry since only relative performance matters. In the language more familiar in economics, only utility contrasts enter. So strictly speaking, the inversion is a map from a probability vector back to an equivalence class of races that yield the same probabilities. The raw covariance is likewise overparameterized.
 
 It tends to be the case in financial practice and elsewhere that structured covariance is assumed, making the clear limitation of our work less of a pragmatic concern. We do not, of course, claim a general solution for arbitrary covariance matrices, but nor do these tend to be advocated \citep{train2009}. Our intent is that the grammars here cover the structured families in typical use. The first six rows of Table~\ref{tab:grammar} are nested exactly.
 
@@ -181,7 +181,7 @@ benchmarks.
 
 \paragraph{Deterministic quadrature.} \citet{genz1992} transformed the orthant
 integral to the unit cube and integrated by adaptive and quasi-Monte Carlo rules.
-This is somewhat of a standard in \texttt{R} because \texttt{mvtnorm} chooses this path, presumably for accuracy. It certainly is accurate. The benchmark below confirms that: its answers agree with our lattice to within the sampling noise of the simulation both are checked against. However, the disadvantage lies in what a single call returns. Genz's method evaluates one orthant probability only, which is the win probability of one alternative. Pricing a contest
+This is somewhat of a standard in \texttt{R} because \texttt{mvtnorm} chooses this path, presumably for accuracy. It certainly is accurate. The benchmark below confirms that: its answers agree with our lattice to within the sampling noise of the simulation that both are checked against. However, the disadvantage lies in what a single call returns. Genz's method evaluates one orthant probability only, which is the win probability of one alternative. Pricing a contest
 requires all $n$ of them, so the routine must be called $n$ times, and each of
 those calls is itself an $n$-dimensional integral. At $n=30$ the complete vector therefore
 costs about three hundred times what the lattice costs, and since the work per
@@ -195,14 +195,15 @@ twelve to twenty times the total-variation error, records zero counts on tail
 alternatives at $n=30$, and at ten times the budget remains a factor of two to
 four behind.
 
-\paragraph{GHK.} As described above. It is smooth in parameters but like Genz it prices one alternative per run. Despite this the GHK usage is seemingly the most widespread. Stata's \texttt{cmmprobit} manual states that the likelihood evaluator ``implements the Geweke--Hajivassiliou--Keane (GHK) algorithm to approximate the multivariate distribution function''
+\paragraph{GHK.} As described above. It is smooth in parameters but like Genz it prices one alternative per run. Despite this, GHK is seemingly the most widespread. Stata's \texttt{cmmprobit} manual states that the likelihood evaluator ``implements the Geweke--Hajivassiliou--Keane (GHK) algorithm to approximate the multivariate distribution function''
 \citep{statacorp2023,gates2006}, and the command's entire
 \texttt{intmethod} menu (Hammersley, Halton, or pseudorandom point
 sets) selects only the sequence feeding the same simulator. The
 market-leading implementation offers no non-GHK method at all. R's
 \texttt{mlogit} and \texttt{mvProbit} also default to GHK
 \citep{croissant2020}, and the GHK-based \texttt{mvprobit} of
-\citet{cappellari2003} is the seeming default for Stata.
+\citet{cappellari2003} carried the method into applied Stata work at
+large.
 
 \paragraph{Stern.}
 \citet{stern1992} is the closest ancestor of the construction used here.
@@ -271,7 +272,7 @@ speed, accuracy, scale, or smoothness. They can have all four, and very often th
 
 \section{The lattice race}\label{sec:lattice}
 
-The application programming interface for \citet{cotton2021} asked for numerical representation of performance densities on an equi-spaced lattice. The current method instead requires the user to supply this assumption in the form of user-supplied functions.\footnote{This is a crucial distinction. The lattice in the current work is only a computational device. The continuous race is more directly considered, compared to \citet{cotton2021} where the discrete race with explicit ties was the object under study and its relationship to the continuous race assumed.}
+The application programming interface for \citet{cotton2021} asked for numerical representation of performance densities on an equi-spaced lattice. The current method instead requires this assumption in the form of user-supplied functions.\footnote{This is a crucial distinction. The lattice in the current work is only a computational device. The continuous race is more directly considered, compared to \citet{cotton2021} where the discrete race with explicit ties was the object under study and its relationship to the continuous race assumed.}
 
 Emphasizing again our lowest-score-wins convention (arguably somewhat unfortunate for the special case of probit), let $X_i=\mu_i+\sigma_i
 \epsilon_i$ with $\epsilon_i$ i.i.d.\ from a standardized base density (normal,
@@ -370,8 +371,8 @@ used is reported in a warning. The window is then the stated construction
 at a stated $\delta$, and a caller who wants the original one back can
 have it by raising the number of points.}
 
-We determined that it is very important to use the caller's own survival rather than a normal surrogate. Continuing the Student-$t$ example, suppose the base at $\nu=2.5$ has polynomial tails, and a
-normal envelope cuts the window short of them: at $n=40$ that costs
+We determined that it is very important to use the caller's own survival rather than a normal surrogate. Continuing the Student-$t$ example, a base at $\nu=2.5$ has polynomial
+tails, and a normal envelope cuts the window short of them: at $n=40$ that costs
 $5\times10^{-3}$ of total variation, against $5\times10^{-5}$ when the
 true survival sets the window.
 
@@ -381,7 +382,7 @@ points spread across the ability span cannot, because the span window
 truncates the winner's tail and its error cannot fall below about
 $6\times10^{-11}$ however many points are added to it. We found that on fields with a large number of extreme longshots, the bulk window is a hundred times more accurate for the same number of points.
 
-Another important implementation detail is that the same lattice be used to carry derivatives. In contrast, a Jacobian evaluated on a
+Another important implementation detail is that the same lattice is used to carry the derivatives. In contrast, a Jacobian evaluated on a
 different grid, or one that treats the lattice total as stationary when
 it is not, is the derivative of a neighbouring map rather than of the
 one that was evaluated, and this would ruin the extreme accuracy of the present implementation.
@@ -389,11 +390,11 @@ one that was evaluated, and this would ruin the extreme accuracy of the present 
 \subsection{Derivatives}
 
 What a caller needs is
-$\partial p_i/\partial\mu_j$: the full $n\times n$ matrix when inverting,
-or a single row of it for an estimation score, which needs only the
-sensitivities of the alternative that was observed.
-Section~\ref{sec:jac} derives what that matrix is; what matters here is
-how it is computed.
+$\partial p_i/\partial\mu_j$, in one of three strengths: the Jacobian as
+an operator for a full Newton method, a single row of it for an
+estimation score, or just the diagonal to precondition the shipped
+inversion. Section~\ref{sec:jac} derives what the matrix is; what
+matters here is how it is computed.
 
 Prior to that we mention a lesson from the implementation, albeit one that might strike some readers as obvious. For a derivative to be as accurate as possible, it should differentiate the map that was
 \emph{actually evaluated}, rather than, say, the continuum integral that map
@@ -427,13 +428,13 @@ performance at four degrees of freedom, to $1\times10^{-6}$ and
 $1\times10^{-5}$. On a fine Gaussian lattice, where the quadrature error
 is far below either figure, $J$ and $J_0$ cannot be told apart.
 
-The two directions are now on a different footing, and it is worth
-being exact about which. Columns sum to zero identically: the quotient
+The two directions are on a different footing, and it is worth being
+exact about which. Columns sum to zero identically: the quotient
 divides by the lattice total, so $\mathbf{1}^{\top}J=0$ whatever the
 lattice does, at $6\times10^{-17}$ from the coarsest grid to the finest.
 Rows sum to zero only as the quadrature resolves, because translation
 invariance is a property of the integral rather than of the sum, and the
-diagonal is no longer set to enforce it. That row residual is therefore a
+diagonal is not set to enforce it. That row residual is therefore a
 free measurement of lattice quality: $1\times10^{-3}$ at $25$ points,
 $2\times10^{-10}$ at $65$, and machine precision at the $257$-point
 default, under either the Gaussian or the Gumbel base.
@@ -483,7 +484,9 @@ In increasing order of hierarchy we consider
 \item a tree of uniform shared effects.
 \end{enumerate}
 Each keeps the shared
-field and the $O(nLQ)$ volumetrics. We might imagine that each is exact, not fitted, or at least we do not consider the estimation error explicitly here. The approximate reduction of a dense covariance to this family is deferred to \S\ref{sec:general}.
+field and the $O(nLQ)$ volumetrics. Each is exact given its structure;
+estimating that structure from data is a separate problem we do not treat
+here. The approximate reduction of a dense covariance to this family is deferred to \S\ref{sec:general}.
 
 \subsection{Factor covariance}\label{sec:factor}
 
@@ -558,15 +561,15 @@ per-alternative version of this same quadrature.
 
 The same pass returns the own-parameter slopes $\partial p_i/\partial\mu_i$
 at no extra cost (negative in this min-wins convention: raising a time
-mean lowers the win probability), which \S\ref{sec:jac} uses as the Newton
-preconditioner.
+mean lowers the win probability), which \S\ref{sec:jac} uses to
+precondition the inversion.
 
 \subsection{Blocks and nested covariance}\label{sec:blocks}
 
 The implementation also supports groups. Assign contestant $i$ to cluster $c(i)$ with loading $v_i\in\R^r$ and let
 \begin{equation}
 X_i=\mu_i+v_i'a_{c(i)}+\sqrt{D_i}\,\epsilon_i,
-\qquad a_c \ \text{i.i.d.}\ N(0,I_r),
+\qquad a_c \ \text{i.i.d.}\ N(0,I_r).
 \end{equation}
 This is a block-diagonal rank-$r$-plus-diagonal covariance. It can be useful for teams, conferences, and sibling
 products, for example. And it falls into our framework because, conditional on its own cluster's effect, a contestant is independent of its teammates. Distinct clusters are
@@ -696,7 +699,7 @@ inversions. We do not pursue the application here.
 
 \section{Jacobians, tie densities, inversion}\label{sec:jac}
 
-We now arrive at the most important piece of state in the algorithm: the Jacobian, and we suggest that the form it takes is rather beautiful as a flux through a boundary. This helps us see the
+We now arrive at the central object of the algorithm: the Jacobian, and we suggest that the form it takes is rather beautiful as a flux through a boundary. This helps us see the
 formula, the symmetry, the conservation law and the graph structure
 together, as we now explain.
 
@@ -730,7 +733,7 @@ derivative falls on the integrand,
 \]
 
 We recognize this as a derivative integrated over a region, so the
-divergence theorem must apply to the vector field $q_\mu e_j$. This lets us
+divergence theorem applies to the vector field $q_\mu e_j$. This lets us
 compute over the boundary instead of the volume:
 \[
   \frac{\partial p_i}{\partial\mu_j}
@@ -739,8 +742,8 @@ compute over the boundary instead of the volume:
 with $n$ the outward unit normal.
 
 However for this we take $q_0$ continuously differentiable with $q_0$ and
-$\nabla q_0$ integrable and $|x|^{n-1}q_0(x)\to0$, all of which the
-Gaussian law of the theorem satisfies outright. Integrability alone would
+$\nabla q_0$ integrable and $|x|^{n-1}q_0(x)\to0$, conditions any
+Gaussian law satisfies outright. Integrability alone would
 license neither differentiating under the integral sign nor discarding
 the flux at infinity. With them the contribution over the sphere at
 infinity vanishes, and only the faces of $R_i$ remain.
@@ -762,7 +765,8 @@ For $j\ne i$,
 \end{equation}
 the probability flux across the surface on which $i$ and $j$ dead-heat
 ahead of the field. Parametrizing that face by the common value
-$x_i=x_j=t$ contributes a surface factor $\sqrt2$ which cancels, giving
+$x_i=x_j=t$ contributes a surface factor $\sqrt2$ which cancels, giving,
+with $\varphi_{ij}$ the joint density of $(X_i,X_j)$,
 \begin{equation}\label{eq:tiecorr}
 \frac{\partial p_i}{\partial\mu_j}
  =\int \varphi_{ij}(t,t)\,
@@ -800,7 +804,10 @@ the lattice missed the region, not that normalization was needed.
 
 \subsection{Jacobian computation}
 
-The scalability of our approach rests on the fact that Newton's method needs the Jacobian applied to a vector, not the whole matrix materialized.
+Scalability rests on never materializing the matrix. Full Newton needs
+the Jacobian only as an operator applied to a vector; a likelihood score
+needs one row of it; and the shipped inversion below needs only the
+own-coordinate preconditioning slopes.
 
 \paragraph{What gets computed.} Both a single entry and a
 Jacobian--vector product come out of the same field pass that produced
@@ -885,8 +892,8 @@ $\mathbf{1}^{\perp}$, and its unique mean-zero maximiser is the inverse:
 $p(\mu^{\star})=p^{\star}$. If some $p^{\star}_i=0$ the supremum is
 approached only as the contrast
 $\mu_i-\min_{j:\,p^{\star}_j>0}\mu_j\to+\infty$ (the raw coordinate
-statement depends on the gauge); no finite inverse exists, and a
-floored target recovers a lower bound on that contrast.
+statement depends on the gauge); no finite inverse exists, and any
+floored target yields a finite point on that diverging contrast.
 \end{theorem}
 
 \begin{proof}
@@ -908,7 +915,7 @@ have measure zero; without it $W$ has kinks and only a subdifferential.
 This is the step that makes $p$ a gradient, and hence the inversion a
 convex program rather than a root-find.}
 
-The Hessian is Proposition~\ref{prop:tie}, which assumed no
+The Hessian is given by Proposition~\ref{prop:tie}, which assumed no
 independence: its off-diagonals are the boundary fluxes
 \eqref{eq:tiecorr} under the full correlated law, and its rows sum to
 zero by the same translation invariance $W(\mu+c\mathbf{1})=W(\mu)+c$
@@ -961,7 +968,8 @@ is not the convex program but its derivatives: the Hessian is the
 tie-density Laplacian of the same field pass, so gauge-fixed Newton runs
 matrix-free at $O(nLQ)$ per iteration.
 
-As noted in passing earlier there is an identification issue for covariance and not just translation. Choice probabilities are
+As noted in passing earlier, an invariance applies to the covariance and
+not just to translation. Choice probabilities are
 invariant to a common utility shock, so the model depends on $\Sigma$ only
 through $P\Sigma P$ with $P=I-\mathbf{1}\mathbf{1}^{\top}/n$: a factor
 proportional to $\mathbf{1}$, or a tree-root effect applied to every leaf,
@@ -1013,7 +1021,7 @@ $O(nL)$ pass --- an approximation used only to precondition, never to
 form the residual);
 \item log residual $r_i=\log\hat p_i-t_i$; log-domain slope
 $d_i=\min(\tilde s_i/\hat p_i,\,-10^{-6})$;
-\item damped diagonal Newton step
+\item damped, clipped preconditioned step
 $\mu_i\leftarrow\mu_i-\operatorname{clip}(\alpha\,r_i/d_i,\pm2)$,
 then recenter $\mu\leftarrow\mu-\bar\mu$.
 \end{enumerate}
@@ -1092,17 +1100,17 @@ clustering in stage~3.
 
 That choice is apparently forced, as we discovered. The tempting alternative is to standardize to $C$,
 fit there, and restore the scales afterwards, which would let the fitter
-work on a matrix with unit diagonal. It does not work, for a reason that
-is instructive. Choices depend on $\Sigma$ only through $P\Sigma P$, so
+work on a matrix with unit diagonal. It does not work, and the reason is
+worth spelling out. Choices depend on $\Sigma$ only through $P\Sigma P$, so
 the residual that matters after restoration is $PS(C-M)SP$, not
 $P(C-M)P$, and those differ because $P$ does not commute with $S$ unless
 every scale is equal. Put another way: the direction choices ignore is
 the constant vector in covariance coordinates, but $S^{-1}\mathbf{1}$ in
 correlation coordinates. Fitting in correlation space with the ordinary
 projection removes the wrong direction.\footnote{This really matters. Take $n=2$, $C$ equicorrelated with $\rho=0.9$, and
-scales $s=(1,2)$. With two alternatives the only identified quantity is
-the variance of the difference $X_1-X_2$, since that alone decides the
-race. In correlation coordinates the fit $M=(1-\rho)I$ scores as exact.
+scales $s=(1,2)$. With two alternatives the only choice-relevant
+quantity is the variance of the difference $X_1-X_2$, since that alone
+decides the race. In correlation coordinates the fit $M=(1-\rho)I$ scores as exact.
 Restored to covariance coordinates it gives a difference variance of
 $0.5$ where the truth is $1.4$, wrong by nearly a factor of three, and
 the correlation-space objective reports no error at all.}
@@ -1121,7 +1129,7 @@ The stages, in order:
 \item Global factors: the quotient fit of \S\ref{sec:jac}
 (\texttt{factor\_model\_projected}), $k=3$ throughout, returning $(V,D_0)$
 by alternation. Each half-step is optimal in its own block, so in exact
-arithmetic the identified objective descends monotonically to a
+arithmetic the projected objective descends monotonically to a
 coordinatewise-stationary point. Above $n=800$ the $V$-step is subspace
 iteration rather than a full eigendecomposition and its subspace is only
 approximate, so descent is enforced instead of assumed: the objective is
@@ -1143,7 +1151,7 @@ one rank-one loading per cluster (clusters are disjoint).
 zeroed, appended as further factor columns; negative eigenvalues are not
 promoted; numerically dead columns are dropped.
 \item The closing diagonal
-solves the identified problem's own normal equations,
+solves the projected problem's own normal equations,
 $(P\!\circ\!P)\,d=\mathrm{diag}(P(\Sigma-V_{\mathrm{all}}V_{\mathrm{all}}')P)$
 subject to $d\ge\ell$, with $\ell$ a small multiple of the mean
 variance. The Gram is exactly
@@ -1209,8 +1217,7 @@ optimizer. The shipped fitter warns when the chosen rank splits a tied
 eigenvalue of the centered covariance, naming the rank that would take
 the whole tied group.
 
-The extreme case is instructive, and it is the oldest model in the
-subject. Under equicorrelation $P\Sigma P$ is a multiple of $P$, so its
+The extreme case is also the oldest model in the subject. Under equicorrelation $P\Sigma P$ is a multiple of $P$, so its
 spectrum is $(n-1)$-fold degenerate and a great many representations are
 exactly optimal: any factor rank at all, closed by a matching diagonal,
 reproduces $P\Sigma P$ perfectly. They are therefore all
