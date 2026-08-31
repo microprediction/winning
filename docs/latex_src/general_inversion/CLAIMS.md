@@ -432,3 +432,24 @@ Fresh prior-art search, accepted in full and written in.
 Abstract originality scores from the review, for the record: ~2/5 new
 foundational mathematics, ~4.5/5 numerical/computational methodology,
 4/5 overall. The reframe matches that assessment.
+
+### Eleventh round: the reviewer read the papers
+
+Refinements to the reframe, all applied. McFadden 1975 credit made
+precise: the GENERAL 1-D form is a representation whose integrand
+conceals a multivariate calculation (their own caveat below eq. 4.26);
+the genuine 1-D quadrature is the INDEPENDENT case (their p. 68
+independent Cauchy example has exactly the density-times-product form).
+fosgerau2013 (Choice probability generating functions, JoCM 8:1-18,
+2013 -- verified) added for the expected-max/gradient/common-level
+representation lineage. MNS credit now states their route
+(differentiating the gradient identity) and their scope (convexity
+moduli for prox-functions; no graph, no algorithm). Methodology page:
+the (n-1)-dimensional-orthant sentence now says CORRELATED probit, since
+independent probit has had 1-D quadrature for decades; MNS cited
+immediately at "the derivative is the tie density" with the
+independent-arrival note, and the later duplicate credit trimmed.
+Reviewer's final scores: ~1.5-2/5 new mathematics, ~4.5/5 algorithmic,
+with the defensible claim being the shared rank-one/Gram exploitation
+making p and Jh both O(nL) and inversion matrix-free at scale -- which
+is now the paper's stated claim, verbatim in spirit.

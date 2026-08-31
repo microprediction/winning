@@ -70,15 +70,19 @@
     else still out on the course:</p>
     \[ p_i \;=\; \int f_i(x)\prod_{j\ne i}S_j(x)\,dx . \]
     <p>That integral is one-dimensional no matter how large \(n\) is
-    &mdash; an observation as old as the subject: Domencich and McFadden
+    &mdash; an observation as old as the subject. Domencich and McFadden
     wrote the general random-utility choice probability as a
-    one-dimensional integral over the winning utility in 1975. The
-    multivariate probit literature nevertheless treats \(p_i\) as an
+    one-dimensional integral over the winning utility in 1975, with the
+    honest caveat that its integrand generally conceals a multivariate
+    calculation; under <em>independence</em> the integrand really is a
+    density times a product of univariate CDFs, and that one-dimensional
+    quadrature has been standard ever since. The
+    <em>correlated</em>-probit literature treats \(p_i\) as an
     \((n-1)\)-dimensional orthant integral and pays for that view one
-    alternative at a time. Evaluated per alternative, even the
-    one-dimensional view re-forms an \((n-1)\)-fold product \(n\)
-    times, which is where the representation stops being an
-    algorithm.</p>
+    alternative at a time. And even the independent one-dimensional view,
+    evaluated per alternative, re-forms an \((n-1)\)-fold product
+    \(n\) times &mdash; which is where the representation stops being
+    an algorithm.</p>
     <p>The computational trick is that the product is <em>shared</em>.
     Build the log survival field
     \(L(x)=\sum_j \log S_j(x)\) once on a lattice, and each contestant's
@@ -157,7 +161,12 @@
     <p>Slowing \(j\) pushes probability out of \(j\)'s winning region,
     and all of it crosses into the neighbouring cones through the
     surfaces where photo finishes happen. The derivative <em>is</em> the
-    tie density.</p>
+    tie density &mdash; an identity M&uuml;ller, Nesterov and Shikhman
+    (2019) derived for general joint laws by differentiating the surplus
+    function, and which the flux picture above reaches independently by
+    geometry. The contribution here is that picture, and, below, the
+    shared-field factorization that applies the resulting dense matrix
+    without constructing its \(O(n^2)\) edges.</p>
 
     <figure class="diagram">
       <img src="./assets/images/flux.png" alt="Cone geometry intuition: a winning cone as a control volume, with the divergence theorem turning a volume derivative into a boundary flux, and the discrete graph analogue with photo-finish ties as edges." />
@@ -189,15 +198,9 @@
     \[ J \;=\; -B^{\top} W_e B , \qquad
        (Jh)_i \;=\; \sum_{j\ne i} w_{ij}\,(h_j-h_i) , \]
     <p>with \(B\) the incidence matrix of the photo-finish graph and
-    \(W_e\) the diagonal of tie densities. The structure itself has
-    prior art we learned of only after arriving at it independently:
-    M&uuml;ller, Nesterov and Shikhman (2019) derived the cross-Hessian
-    of the random-utility surplus as the density of a tie for the
-    maximum, rows summing to zero, for general joint distributions. Ours
-    came by the different route above &mdash; the boundary flux &mdash;
-    and what is new is that derivation, and
-    &mdash; the part the scale rests on &mdash; the field identity that
-    lets this dense matrix act without being built. Write
+    \(W_e\) the diagonal of tie densities. What matters computationally
+    &mdash; the part the scale rests on &mdash; is the field identity
+    that lets this dense matrix act without being built. Write
     \(A_i(x)=f_i(x)/S_i(x)\) for the hazard and \(G(x)=\prod_k S_k(x)\)
     for the field; then \(w_{ij}=\int G\,A_i A_j\,dx\), and</p>
     \[ (Jh)_i \;=\; \int G(x)\,A_i(x)\Bigl[\textstyle\sum_j A_j(x)h_j

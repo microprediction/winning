@@ -99,11 +99,20 @@ and the derivative of any of these with respect to all $n$ utilities.
 
 This paper takes a different route to the same object, following the tradition established in \citet{cotton2021}. Also in keeping with that paper we will adopt once and for all a min-wins
 convention. Performances are to be considered golf scores, or running times where the smallest is the winner. To avoid confusion with utility we write $X_i=-U_i$. The crux is that the choice event itself is one-dimensional, by which we mean that contestant $i$ wins
-when its time beats the field. The observation is as old as the subject:
-\citet{domencich1975} already write the general random-utility choice
+when its time beats the field. The observation is as old as the subject, with one precision worth
+keeping. \citet{domencich1975} write the general random-utility choice
 probability as a one-dimensional integral over the winning utility
-(their equation on p.~52), and the independent specialization below is
-also standard competing-risks calculus. Universally,
+(their equation on p.~52), while warning that its integrand generally
+still conceals a multivariate calculation --- a representation, not yet
+a quadrature. Under \emph{independence}, though, the integrand is a
+density times a product of univariate distribution functions and the
+one-dimensional quadrature is genuinely old: their own p.~68 treats
+independent Cauchy shocks in exactly that form, and the independent
+specialization below is also standard competing-risks calculus.
+\citet{fosgerau2013} carry the companion representation --- expected
+maximum as potential, gradient as probabilities, choice probability as
+an integral along the common maximum level --- to general
+random-utility models. Universally,
 \begin{equation}\label{eq:onedim}
 p_i \;=\; \int f_i(x)\,
 \Pr\{X_j>x\ \text{for all } j\ne i\mid X_i=x\}\,dx,
@@ -131,7 +140,9 @@ conditioning, which itself is not a new idea by any means. Whenever $\Sigma$ mak
 
 To be plain about what is and is not claimed as new, since each
 ingredient has a history: the one-dimensional representation is
-\citet{domencich1975}; the all-$n$ shared field under independence is
+\citet{domencich1975}, and the expected-maximum potential whose gradient
+is the probability vector runs through \citet{mcfadden1981} to
+\citet{fosgerau2013}; the all-$n$ shared field under independence is
 \citet{cotton2021}; that the cross-derivatives of the surplus function
 are tie densities forming a matrix with zero row sums --- a graph
 Laplacian in all but name --- is \citet{muller2022}; and inversion as an
@@ -762,10 +773,13 @@ inversions. We do not pursue the application here.
 
 We now arrive at the central object of the algorithm: the Jacobian. Its
 structure has prior art we were unaware of when this work was done:
-\citet{muller2022} derive the cross-Hessian of the random-utility
-surplus function as the density that two alternatives tie for the
-maximum, and observe that the resulting matrix is symmetric with signed
-off-diagonals and zero row sums --- the Laplacian class. We arrived at
+\citet{muller2022}, differentiating the gradient identity
+$\partial E/\partial u_i=\Pr\{i \text{ wins}\}$ for general joint laws,
+derive the cross-Hessian as the density that two alternatives tie for
+the maximum, and observe that the resulting matrix is symmetric with
+signed off-diagonals and zero row sums --- the Laplacian class in all
+but name, though they draw no graph and build no algorithm from it,
+their object being convexity moduli for prox-functions. We arrived at
 the same structure independently, by a different route, and the route is
 what we keep: a derivation of the structure as a literal probability
 flux through the boundary between winning regions,
@@ -1890,6 +1904,9 @@ Inferring relative ability from winning probability in multi-entrant contests.
 \bibitem[Danskin(1966)]{danskin1966} J.~M. Danskin. The theory of
 max-min, with applications. \emph{SIAM Journal on Applied Mathematics}
 14(4):641--664, 1966.
+\bibitem[Fosgerau et~al.(2013)Fosgerau, McFadden and Bierlaire]{fosgerau2013}
+M.~Fosgerau, D.~McFadden, M.~Bierlaire. Choice probability generating
+functions. \emph{Journal of Choice Modelling} 8:1--18, 2013.
 \bibitem[Galichon and Salani\'e(2022)]{galichon2022} A.~Galichon,
 B.~Salani\'e. Cupid's invisible hand: social surplus and identification in
 matching models. \emph{Review of Economic Studies} 89(5):2600--2629, 2022.
