@@ -365,14 +365,14 @@ integrand varies on. This coarseness causes much more error than would be sustai
 So $\delta$ is treated only as a request. If the window it asks for cannot be
 covered at a spacing of half the smallest performance standard deviation
 in the field, $\delta$ is multiplied by one hundred and the window
-recomputed, repeating until the spacing is affordable.\footnote{In the
-current implementation, the value finally
-used is reported in a warning. The window is then the stated construction
-at a stated $\delta$, and a caller who wants the original one back can
-have it by raising the number of points.}
+recomputed, repeating until the spacing is affordable.\footnote{The
+value finally used is reported in a warning. The window is then the
+stated construction at a stated $\delta$, and a caller who wants the
+original one back can have it by raising the number of points.}
 
-We determined that it is very important to use the caller's own survival rather than a normal surrogate. Continuing the Student-$t$ example, a base at $\nu=2.5$ has polynomial
-tails, and a normal envelope cuts the window short of them: at $n=40$ that costs
+The envelope must use the caller's own survival, not a normal
+surrogate. Continuing the Student-$t$ example, a base at $\nu=2.5$ has
+polynomial tails, and a normal envelope cuts the window short of them: at $n=40$ that costs
 $5\times10^{-3}$ of total variation, against $5\times10^{-5}$ when the
 true survival sets the window.
 
@@ -380,7 +380,9 @@ Placing the lattice on the bulk is also what makes small lattices work.
 Thirty-three points on this window reach an accuracy that five hundred
 points spread across the ability span cannot, because the span window
 truncates the winner's tail and its error cannot fall below about
-$6\times10^{-11}$ however many points are added to it. We found that on fields with a large number of extreme longshots, the bulk window is a hundred times more accurate for the same number of points.
+$6\times10^{-11}$ however many points are added to it. On fields with a
+large number of extreme longshots the bulk window is a hundred times more
+accurate for the same number of points.
 
 Another important implementation detail is that the same lattice is used to carry the derivatives. In contrast, a Jacobian evaluated on a
 different grid, or one that treats the lattice total as stationary when
@@ -396,9 +398,10 @@ estimation score, or just the diagonal to precondition the shipped
 inversion. Section~\ref{sec:jac} derives what the matrix is; what
 matters here is how it is computed.
 
-Prior to that we mention a lesson from the implementation, albeit one that might strike some readers as obvious. For a derivative to be as accurate as possible, it should differentiate the map that was
-\emph{actually evaluated}, rather than, say, the continuum integral that map
-approximates.
+One principle governs everything in this subsection, obvious once
+stated: a derivative is accurate only if it differentiates the map that
+was \emph{actually evaluated}, rather than the continuum integral that
+map approximates.
 
 This is not a fine point. The lattice should be the very same one. Both the full Jacobian and the single-row version build their window through the routine the forward
 pass uses, so the two integrate over identical points.
@@ -408,7 +411,8 @@ moves contestant $i$'s own density, contributing $\partial
 f_i/\partial\mu_i$ to the integral. In the continuum this need never be
 computed, because a common shift moves no probability, so each row sums to zero
 and the diagonal follows from the off-diagonal entries. However, on a finite
-lattice that identity holds only to quadrature accuracy. For this reason, we determined that the diagonal be computed directly.
+lattice that identity holds only to quadrature accuracy, so the
+diagonal is computed directly.
 
 In a similar vein, the normalization must be differentiated too. The lattice masses do
 not sum to one \emph{exactly}. The returned probabilities are $p=a/T$ with
@@ -1001,8 +1005,8 @@ the introduction speaks of an identified class, it means the restriction
 that is choice-relevant and computable on $\mathbf{1}^{\perp}$: choices
 depend on $\Sigma$ only through $P\Sigma P$, an observational-equivalence
 statement, not a claim about what an estimation design can recover.
-Covariances outside the grammar are perfectly good models; we do not
-currently price them.}
+Covariances outside the grammar are perfectly good models; this grammar
+simply does not price them.}
 
 The implemented inversion (\texttt{abilities\_from\_race}) runs as follows.
 
@@ -1073,8 +1077,9 @@ that diverges as the floor is removed, so the floored answer understates
 that contrast in the direction the theorem indicates. For entries that
 are merely small and positive, reading the floored-and-renormalized
 solution as a coordinatewise bound on the true contrasts would need a
-monotonicity argument we do not make here.\footnote{At time of writing
-the diagnostics name which entries were floored, whether the iteration converged, and the residual it reached. In the event of non-convergence the user receives a warning.}
+monotonicity argument we do not make here.\footnote{The diagnostics
+name which entries were floored, whether the iteration converged, and
+the residual it reached; non-convergence warns.}
 
 Every grammar gets that same contract. The target is validated once,
 before the call splits by structure, and all five paths return through a
@@ -1098,7 +1103,7 @@ matrix. Every fit, residual and closing solve below is carried out in
 $\Sigma$. Correlations appear only once, as the distance used for
 clustering in stage~3.
 
-That choice is apparently forced, as we discovered. The tempting alternative is to standardize to $C$,
+That choice is forced. The tempting alternative is to standardize to $C$,
 fit there, and restore the scales afterwards, which would let the fitter
 work on a matrix with unit diagonal. It does not work, and the reason is
 worth spelling out. Choices depend on $\Sigma$ only through $P\Sigma P$, so
@@ -1492,11 +1497,11 @@ factor space and Gauss--Hermite converges slowly in the node count: at
 loading scale $4$ the $25$-node rule still sits at $8\times10^{-3}$ total
 variation. Scrambled-Sobol factor nodes restore reference-level accuracy
 ($4\times10^{-4}$) at the same call: heavy correlation wants
-quasi-Monte-Carlo nodes, not deeper polynomial rules. The default now
+quasi-Monte-Carlo nodes, not deeper polynomial rules. The default
 escalates the family automatically past sharpness $3$, in both the Python
-and R implementations (scrambled Sobol and Halton respectively), which agree
-to $5\times10^{-4}$ on the worst case; the figures above are the
-pre-escalation diagnosis.
+and R implementations (scrambled Sobol and Halton respectively), which
+agree to $5\times10^{-4}$ on the worst case; the figures above are
+measured with that escalation disabled, to expose the boundary itself.
 
 \paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
 covariance, against a $2^{20}$-point QMC reference. TV is a bulk metric and
