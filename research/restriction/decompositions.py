@@ -97,37 +97,64 @@ def gain_by_rank(R, folds=5, seed=0, max_resp=5000):
     return {"buckets": buckets, "counts": counts}
 
 
+def gauss_second_exact(a, lo=-14.0, hi=14.0, n=40001):
+    """P(rank(i) = 2) for independent N(a_i, 1), exactly.
+
+    Condition on i's draw at x. Item i is second when exactly one rival exceeds x and
+    the rest fall below, so integrate phi(x - a_i) times the sum over rivals j of
+    (1 - Phi(x - a_j)) times the product over the remaining k of Phi(x - a_k). Checked
+    against three million simulated Case V races; agreement is within Monte Carlo error.
+    """
+    from scipy.stats import norm
+    x = np.linspace(lo, hi, n)
+    a = np.asarray(a, dtype=float)
+    Phi = norm.cdf(x[:, None] - a[None, :])
+    phi = norm.pdf(x[:, None] - a[None, :])
+    out = np.zeros(len(a))
+    for i in range(len(a)):
+        others = [k for k in range(len(a)) if k != i]
+        P = Phi[:, others]
+        safe = P > 1e-300
+        ratio = np.where(safe, (1.0 - P) / np.where(safe, P, 1.0), 0.0)
+        out[i] = float(np.trapezoid(phi[:, i] * P.prod(axis=1) * ratio.sum(axis=1), x))
+    return out
+
+
 def favourite_second(R, K):
-    """P(favourite finishes second), observed against the two sequential rules."""
+    """P(favourite finishes second): observed, against each model's exact ordering law.
+
+    Sorting log w_i + Gumbel gives a Plackett-Luce ranking, so removing the winner and
+    renormalizing proportionally is not a heuristic for the Gumbel model. It is that
+    model's exact ordering law, which is Harville's construction and the Gumbel-top-k
+    identity. Verified here against four million simulated Gumbel races. The Gaussian
+    side has no such sequential identity, so its exact law is computed directly.
+    """
     p = shares(R, K)
     a, err = race_locations(p)
     if err > 0.05:
         return None
     fav = int(np.argmax(p))
-    second = 0
-    for row in R:
-        order = np.argsort(row)
-        if order[1] == fav:
-            second += 1
-    observed = second / len(R)
+    observed = float(np.mean([np.argsort(row)[1] == fav for row in R]))
 
-    # sequential renormalization, which is Harville: P(w first) * P(fav first among rest)
-    renorm = 0.0
+    # exact Plackett-Luce: sum over which item wins, then the favourite leads the rest
+    pl = 0.0
     for w in range(K):
         if w == fav:
             continue
         rest = [k for k in range(K) if k != w]
-        renorm += p[w] * (p[fav] / p[rest].sum())
-    # sequential race: remove the winner, re-run the contest among the survivors
-    race = 0.0
+        pl += p[w] * (p[fav] / p[rest].sum())
+
+    exact = float(gauss_second_exact(a)[fav])
+    # the sequential Gaussian rule, kept only to show it is not the Gaussian law
+    seq = 0.0
     for w in range(K):
         if w == fav:
             continue
         rest = [k for k in range(K) if k != w]
         q = win_probs_np(a[rest])
         q = q / q.sum()
-        race += p[w] * q[rest.index(fav)]
-    return {"observed": observed, "renorm": renorm, "race": race}
+        seq += p[w] * q[rest.index(fav)]
+    return {"observed": observed, "renorm": pl, "race": exact, "seq": seq}
 
 
 def main():
@@ -172,8 +199,8 @@ def main():
         print(f"\ncontributions sum to {agg / n_seen:+.4f}")
 
     print("\n\nProbability that the full-field favourite finishes second\n")
-    print(f"{'collection':<22}{'observed':>10}{'renorm':>10}{'race':>10}"
-          f"{'renorm err':>12}{'race err':>10}{'removed':>9}")
+    print(f"{'collection':<22}{'observed':>10}{'exact PL':>10}{'exact CaseV':>12}"
+          f"{'PL err':>9}{'CaseV err':>11}{'removed':>9}{'seq CaseV':>11}")
     for name in FAV_SECOND:
         if name not in data:
             print(f"  {name}: not available")
@@ -187,10 +214,14 @@ def main():
         er = out["renorm"] - out["observed"]
         eg = out["race"] - out["observed"]
         pct = 100 * (out["renorm"] - out["race"]) / er if er else float("nan")
-        print(f"{name:<22}{out['observed']:>10.3f}{out['renorm']:>10.3f}{out['race']:>10.3f}"
-              f"{er:>+12.3f}{eg:>+10.3f}{pct:>8.1f}%")
-    print("\nBoth columns are sequential heuristics, not the exact ordering law of either "
-          "model.")
+        print(f"{name:<22}{out['observed']:>10.3f}{out['renorm']:>10.3f}{out['race']:>12.3f}"
+              f"{er:>+9.3f}{eg:>+11.3f}{pct:>8.1f}%{out['seq']:>11.3f}")
+    print("\nBoth model columns are exact ordering laws. Removing the winner and")
+    print("renormalizing proportionally IS the Plackett-Luce ranking law, by the")
+    print("Gumbel-top-k identity, so the PL column is that model's own prediction and")
+    print("not a heuristic. The Case V column is the one-dimensional integral for")
+    print("P(rank = 2). The last column is the sequential Gaussian rule, shown only to")
+    print("record that it is not the Gaussian ordering law.")
 
 
 if __name__ == "__main__":

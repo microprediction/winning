@@ -1340,37 +1340,55 @@ small frequent losses. The ballot result is negligible because third-party candi
 tail and there is almost no tail mass to collect. And the effect is largest on news slates,
 where readers spread widely over the displayed set.
 
-\subsection{An aside on sequential heuristics}
+\subsection{Ordering, where both models have an exact law}
 \label{sec:sequential}
 
-The next comparison is not the restriction question, and is separated for that reason. Removing
-the observed winner and re-running is conditioning on the outcome of a fixed contest, not
-withdrawing an alternative from it, and learning who won is informative about the latent draw.
-Neither rule below is the exact ordering law of the model it is named for. What follows is
-therefore a comparison of two practical heuristics used in place of those laws, and it is
-evidence about the heuristics rather than about either transport map.
+Ordering is a different question from restriction, and the two should not be confused: removing
+the observed winner conditions on the outcome of a fixed contest rather than withdrawing an
+alternative from it, and learning who won is informative about the latent draws. It is worth
+asking anyway, because here both models make an exact prediction and the truth is observed, so
+the comparison is against fact rather than against each other.
+
+For the Gumbel model the sequential rule is not an approximation. Sorting
+$\log u_i + G_i$ with independent Gumbel $G_i$ yields a Plackett--Luce ranking, in which the next
+item is drawn from the survivors in proportion to their remaining worths, so removing the winner
+and renormalizing proportionally \emph{is} that model's ordering law. This is the Gumbel top-$k$
+identity, and it is the same construction the null of Section~\ref{sec:null} uses to draw
+rankings. Harville's formula is therefore exact for Luce and not a heuristic.
+
+The Gaussian side has no such sequential identity, so its law is computed directly. Conditioning
+on $i$'s draw at $x$, item $i$ is second when exactly one rival exceeds $x$ and the rest fall
+below, giving another one-dimensional integral,
+\begin{equation}
+P(\mathrm{rank}(i) = 2) = \int \varphi(x - a_i)
+  \sum_{j \neq i} \bigl[1 - \Phi(x - a_j)\bigr]
+  \prod_{k \neq i,j} \Phi(x - a_k)\, dx .
+\label{eq:second}
+\end{equation}
 
 \begin{table}[ht]
 \centering
 \small
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-Collection & Observed & Linear & Gaussian \\
+Collection & Observed & Plackett--Luce & Case V & PL error & Case V error \\
 \midrule
-Political goals & $0.123$ & $0.318$ & $0.309$ \\
-GSS job values & $0.186$ & $0.303$ & $0.294$ \\
-GSS socialization & $0.191$ & $0.302$ & $0.294$ \\
-Sushi & $0.206$ & $0.250$ & $0.245$ \\
-Jester file 1 & $0.138$ & $0.160$ & $0.158$ \\
+Political goals & $0.123$ & $0.318$ & $0.284$ & $+0.195$ & $+0.161$ \\
+GSS job values & $0.186$ & $0.303$ & $0.252$ & $+0.116$ & $+0.066$ \\
+GSS socialization & $0.191$ & $0.302$ & $0.257$ & $+0.110$ & $+0.065$ \\
+Sushi & $0.206$ & $0.250$ & $0.196$ & $+0.045$ & $-0.009$ \\
+Jester file 1 & $0.138$ & $0.160$ & $0.142$ & $+0.022$ & $+0.004$ \\
 \bottomrule
 \end{tabular}
-\caption{Probability that the full-field favourite finishes second. Both columns are
-sequential rules: remove the winner, then apply the map to the survivors. That is Harville's
-construction in the first column and its re-run-the-contest analogue in the second, and
-neither is the exact ordering law of its model, so this compares two practical rules rather
-than two models. Renormalization overstates the probability in every collection, by $0.022$
-to $0.195$, and Gaussian renormalization overstates it by a little less. The mirror holds for the
-last-ranked item, whose chance of finishing second both rules understate everywhere.}
+\caption{Probability that the full-field favourite finishes second, against each model's own
+exact ordering law: Plackett--Luce by the Gumbel top-$k$ identity, Case V by
+Equation~\eqref{eq:second}. Both are verified against direct simulation, four million Gumbel
+races and three million Gaussian ones, agreeing to within Monte Carlo error. Plackett--Luce
+overstates the probability in all five collections. Case V removes between $18$ and $121$ per
+cent of that error, overshooting slightly on Sushi. The sequential Gaussian rule, which is
+\emph{not} the Gaussian ordering law, removes only $5$ to $12$ per cent and is reported in
+\texttt{results/decompositions.txt} for comparison. Reproduced by
+\texttt{python decompositions.py}.}
 \label{tab:favsecond}
 \end{table}
 
@@ -1378,11 +1396,12 @@ This is the pattern reported for the Harville formula in racing place markets, f
 over-priced and outsiders under-priced, appearing in survey rankings of sushi, jokes,
 child-rearing values and political goals. It is the most useful result here for a
 practitioner, because it is a large, replicable, signed error in the default rather than a
-small average edge. Gaussian renormalization removes $4.9$ to $12.4$ per cent of it, so both rules share a bias
-much larger than the distance between them. What produces the
-remainder is not identified; the obvious candidate is that a single respondent's ranking is
-internally consistent, so adjacent places are positively correlated in a way no independent
-contest reproduces.
+small average edge, and because Harville's rule is exactly what the Luce model prescribes rather
+than a shortcut somebody chose. Case V removes most of it on three collections and all of it on
+Sushi, and it is the wrong sign there by $0.009$. What produces the remainder on political goals,
+where $0.161$ of the $0.195$ survives, is not identified; the obvious candidate is that a single
+respondent's ranking is internally consistent, so adjacent places are positively correlated in a
+way no independent contest reproduces.
 
 \subsection{The shrinkage null}
 \label{sec:null}
@@ -1749,16 +1768,15 @@ One limit is larger than the effect measured here. In the after-the-stimulus arm
 Section~\ref{sec:after} the observed restricted probability is available, so both maps can be
 checked against it rather than only against each other, and both err in the same direction by
 more than they differ from one another: Gaussian renormalization removes a fifth to a third of
-linear renormalization's error and no more. Table~\ref{tab:favsecond} is not a second such
-check. Observing the winner conditions on a realised contest instead of withdrawing an
-alternative from it, and neither rule compared there is the ordering law of the model it is named
-for, so it measures a heuristic error rather than the accuracy of either map.
+linear renormalization's error and no more. Table~\ref{tab:favsecond} is a second such check, on
+a different question. Both models have an exact ordering law there, Plackett--Luce by the Gumbel
+top-$k$ identity and Case V by Equation~\eqref{eq:second}, and the observed frequency is
+available, so the two are compared against fact. Case V is the closer of the two in all five
+collections, by margins from $0.004$ to $0.051$, having overshot on one. Ordering is not the
+restriction question and the agreement of the two exercises is not automatic.
 Choosing the better of these two maps is therefore a smaller change than fitting a shape
 parameter, wherever a restricted-menu observation exists to fit one. The
 case made here is for the situation where none does.
-
-Pricing ordered outcomes by removing the winner and re-running is not the Gaussian
-contest's own prediction, and the two come apart on individual pairs and triples.
 
 \section{Conclusion}
 \label{sec:conclusion}

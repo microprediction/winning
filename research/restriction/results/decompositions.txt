@@ -9,12 +9,17 @@ contributions sum to +0.0043
 
 Probability that the full-field favourite finishes second
 
-collection              observed    renorm      race  renorm err  race err  removed
-Political goals            0.123     0.318     0.309      +0.195    +0.185     4.9%
-GSS job values             0.186     0.303     0.294      +0.116    +0.108     7.6%
-GSS socialization          0.191     0.302     0.294      +0.110    +0.102     7.1%
-Sushi                      0.206     0.250     0.245      +0.045    +0.039    12.4%
-Jester file 1              0.138     0.160     0.158      +0.022    +0.020     9.0%
+collection              observed  exact PL exact CaseV   PL err  CaseV err  removed  seq CaseV
+Political goals            0.123     0.318       0.284   +0.195     +0.161    17.6%      0.309
+GSS job values             0.186     0.303       0.252   +0.116     +0.066    43.2%      0.294
+GSS socialization          0.191     0.302       0.257   +0.110     +0.065    40.9%      0.294
+Sushi                      0.206     0.250       0.196   +0.045     -0.009   120.8%      0.245
+Jester file 1              0.138     0.160       0.142   +0.022     +0.004    82.5%      0.158
 
-Both columns are sequential heuristics, not the exact ordering law of either model.
+Both model columns are exact ordering laws. Removing the winner and
+renormalizing proportionally IS the Plackett-Luce ranking law, by the
+Gumbel-top-k identity, so the PL column is that model's own prediction and
+not a heuristic. The Case V column is the one-dimensional integral for
+P(rank = 2). The last column is the sequential Gaussian rule, shown only to
+record that it is not the Gaussian ordering law.
 EXIT=0
