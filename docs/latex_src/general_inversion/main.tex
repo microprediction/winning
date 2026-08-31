@@ -32,7 +32,7 @@ produced at repository tag \texttt{paper-r3}, package version
 \begin{abstract}
 Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years,
-one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm tested for $n=1{,}000{,}000$ to reproduce probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The key innovation is a single shared survival field rendering conditional probabilities for all $n$ alternatives at once. The Jacobian is a weighted graph Laplacian whose edge weights are photo-finish tie densities, and it is a probability flux through the boundary between winning regions. By this means, calibration is not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower for $n=200$ assuming $10{,}000$ draws where it is many orders of magnitude less accurate. The performance discrepancy grows at close to $O(n^2)$ thereafter. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
+one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm tested for $n=1{,}000{,}000$ to reproduce probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The key innovation is a single shared survival field rendering conditional probabilities for all $n$ alternatives at once. The Jacobian is a weighted graph Laplacian whose edge weights are photo-finish tie densities, and it is a probability flux through the boundary between winning regions. By this means, calibration is not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -50,9 +50,16 @@ p_i \;=\; \Pr\{U_i \ge U_j \ \text{for all } j\}
       \;=\; \Pr\{\tilde U \ge 0\},
 \qquad \tilde U_j = U_i - U_j,
 \end{equation}
-an $(n-1)$-dimensional Gaussian orthant integral. The appeal of this inherently natural generative model has been understood since \citet{thurstone1927}. The $\Sigma$ allows alternatives to be close substitutes, but even for $\Sigma=I$ this departs from Luce's Choice Axiom when treated as a model for preference revealed by item removal: the former would mandate a simple linear renormalization of probability, but if \eqref{eq:orthant} is calibrated to known $p_i$ and then one runner is removed, the new race speaks otherwise except for very special situations (such as a symmetric contest).
+an $(n-1)$-dimensional Gaussian orthant integral. The appeal of this inherently natural generative model has been understood since \citet{thurstone1927}. The $\Sigma$ allows alternatives to be close substitutes, but even for $\Sigma=I$ this departs from Luce's Choice Axiom when treated as a model for preference revealed by item removal. The axiom would mandate a simple linear renormalization of probability. But if \eqref{eq:orthant} is calibrated to known $p_i$ and then one runner is removed, the new race speaks otherwise except for very special situations (such as a symmetric contest).
 
-Although it is out of scope, most readers would not be surprised if the disagreement between counterfactuals implied by \eqref{eq:orthant} in this manner and Luce's Choice Axiom is often in the right direction for a diverse list of applications \textbf{[CITE: Cotton survey, Gaussian comparison paper]}.\footnote{William Benter, who famously made close to a billion dollars wielding probit models at the racetrack \textbf{[CITE NEEDED]}, described the Lucian alternative as unsuitable \textbf{[CITE NEEDED: find the actual quote]}. At that venue it seems manifestly unnatural to add Gumbel distributed noise to performance, as compared with assuming something closer to mildly skewed normal, say. See \citet{cotton2021}.} Practitioners in signal processing and demand estimation have had their own reasons for preferring Gaussian races to those built on fixed-location exponential performance distributions, or on the Gumbel-noise variants of \eqref{eq:orthant} that look like unnatural attempts to satisfy Luce's Choice Axiom. In any case it would be desirable to develop numerical methods that support all possibilities, to remove the evidenced temptation to select a model based on its analytical tractability, and that is precisely what we deliver herein.
+Although it is out of scope, most readers would not be surprised if the disagreement between counterfactuals implied by \eqref{eq:orthant} in this manner and Luce's Choice Axiom is often in the right direction for a diverse list of applications \citep{cottonsurvey}.\footnote{The practitioners are worth listening to. \citet{benter1994},
+whose Hong Kong betting operations by his own concession made close to a
+billion dollars overall \citep{chellel2018}, wrote of the simple
+renormalization used to run probabilities down the finishing order (the
+Harville formula, which is the Luce axiom applied to place and show)
+that it ``is significantly biased, and should not be used for betting
+purposes.'' At that venue it also seems unnatural to add Gumbel noise to
+performance, rather than something closer to a mildly skewed normal.} Practitioners in signal processing and demand estimation have had their own reasons for preferring Gaussian races to those built on fixed-location exponential performance distributions, or on the Gumbel-noise variants of \eqref{eq:orthant} that look like unnatural attempts to satisfy Luce's Choice Axiom. In any case it would be desirable to develop numerical methods that support all possibilities, to remove the evidenced temptation to select a model based on its analytical tractability, and that is precisely what we deliver herein.
 
 The curse of Gaussian Thurstone Class V models, to place \eqref{eq:orthant} in its original psychometrics terminology, has been understood since Thurstone himself. The integral \eqref{eq:orthant} has no closed form, and estimation
 needs it and its derivatives at every trial value of the parameters. It is no surprise that the considerably easier logit models tend to be far more popular than probit, not only for calculations such as their obvious extension to permutation probability, but also in the very architecture of most of the world's neural networks.
@@ -385,10 +392,16 @@ performance at four degrees of freedom, to $1\times10^{-6}$ and
 $1\times10^{-5}$. On a fine Gaussian lattice, where the quadrature error
 is far below either figure, $J$ and $J_0$ cannot be told apart.
 
-Each row of the returned Jacobian now sums to zero because the quadrature
-makes it so, not because the diagonal was set to force it. That residual
-is therefore a measurement of the lattice's own quality: $7\times10^{-17}$
-under the Gaussian base, $5\times10^{-11}$ under Gumbel.
+The two directions are now on a different footing, and it is worth
+being exact about which. Columns sum to zero identically: the quotient
+divides by the lattice total, so $\mathbf{1}^{\top}J=0$ whatever the
+lattice does, at $6\times10^{-17}$ from the coarsest grid to the finest.
+Rows sum to zero only as the quadrature resolves, because translation
+invariance is a property of the integral rather than of the sum, and the
+diagonal is no longer set to enforce it. That row residual is therefore a
+free measurement of lattice quality: $1\times10^{-3}$ at $25$ points,
+$2\times10^{-10}$ at $65$, and machine precision at the $257$-point
+default, under either the Gaussian or the Gumbel base.
 
 \subsection{Benefits of maintaining the survival field}
 
@@ -772,9 +785,13 @@ recomputes the window at each perturbed $\mu$ and therefore sees a
 contribution that a fixed-grid derivative does not contain. It is below
 the agreement figure by $L=101$.
 
-The continuum form is exposed alongside the grid form. It is symmetric,
-which the grid form is not, and that symmetry is what makes it useful as
-a preconditioner.
+The continuum form is exposed alongside the grid form, because it is
+symmetric by construction and so can be used as a preconditioner without
+further checking. The grid form is symmetric only to the accuracy of its
+row sums, for the same reason: at $25$ points it is off by
+$3\times10^{-4}$ and at $65$ by $7\times10^{-11}$, but at the $257$-point
+default the two forms agree to machine precision, so the distinction is
+one of guarantee rather than of observed values in production.
 
 \paragraph{Keeping the pair term finite.} The photo-finish integrand is
 factored as $[f_i e^{L-\log S_i}]\times[f_j/S_j]$. The first factor is
@@ -1528,6 +1545,10 @@ Estimating discrete-choice models of product differentiation.
 \bibitem[Butler and Moffitt(1982)]{butler1982} J.~S. Butler and R.~Moffitt.
 A computationally efficient quadrature procedure for the one-factor
 multinomial probit model. \emph{Econometrica} 50(3):761--764, 1982.
+\bibitem[Benter(1994)]{benter1994} W.~Benter. Computer based horse
+race handicapping and wagering systems: a report. In D.~B. Hausch,
+V.~S.~Y. Lo, W.~T. Ziemba (eds.), \emph{Efficiency of Racetrack
+Betting Markets}, Academic Press, 1994, 183--198.
 \bibitem[Botev(2017)]{botev2017} Z.~I. Botev.
 The normal law under linear restrictions: simulation and estimation via minimax
 tilting. \emph{Journal of the Royal Statistical Society B} 79(1):125--148, 2017.
@@ -1551,9 +1572,14 @@ likelihood. \emph{Stata Journal} 3(3):278--294, 2003.
 \bibitem[Chiong et al.(2016)]{chiong2016} K.~Chiong, A.~Galichon, M.~Shum.
 Duality in dynamic discrete-choice models.
 \emph{Quantitative Economics} 7(1):83--115, 2016.
+\bibitem[Chellel(2018)]{chellel2018} K.~Chellel. The gambler who
+cracked the horse-racing code. \emph{Bloomberg Businessweek}, May 3,
+2018.
 \bibitem[Clark(1961)]{clark1961} C.~E. Clark.
 The greatest of a finite set of random variables.
 \emph{Operations Research} 9:145--162, 1961.
+\bibitem[Cotton(2026)]{cottonsurvey} P.~Cotton. Probit versus logit:
+a survey of empirical accuracy. SSRN working paper, 2026.
 \bibitem[Croissant(2020)]{croissant2020} Y.~Croissant.
 Estimation of random utility models in R: the mlogit package.
 \emph{Journal of Statistical Software} 95(11):1--41, 2020.
