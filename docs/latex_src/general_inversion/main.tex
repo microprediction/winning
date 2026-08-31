@@ -32,7 +32,7 @@ produced at repository tag \texttt{paper-r5}, package version
 \begin{abstract}
 Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years,
-one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The key innovation is a single shared survival field rendering conditional probabilities for all $n$ alternatives at once. The Jacobian is a weighted graph Laplacian whose edge weights are photo-finish tie densities, and it is a probability flux through the boundary between winning regions. By this means, calibration is not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
+one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The pieces are individually old --- the one-dimensional representation, the convex duality, the tie-density derivatives --- and the innovation is their organization: a single shared survival field renders probabilities for all $n$ alternatives at once and applies their dense tie-density Jacobian, a weighted graph Laplacian that is a probability flux through the boundary between winning regions, in linear work per lattice point. By this means, calibration is not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general and applies, within reason, to any smooth choice of performance distribution, not just normal. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -99,7 +99,11 @@ and the derivative of any of these with respect to all $n$ utilities.
 
 This paper takes a different route to the same object, following the tradition established in \citet{cotton2021}. Also in keeping with that paper we will adopt once and for all a min-wins
 convention. Performances are to be considered golf scores, or running times where the smallest is the winner. To avoid confusion with utility we write $X_i=-U_i$. The crux is that the choice event itself is one-dimensional, by which we mean that contestant $i$ wins
-when its time beats the field. Universally,
+when its time beats the field. The observation is as old as the subject:
+\citet{domencich1975} already write the general random-utility choice
+probability as a one-dimensional integral over the winning utility
+(their equation on p.~52), and the independent specialization below is
+also standard competing-risks calculus. Universally,
 \begin{equation}\label{eq:onedim}
 p_i \;=\; \int f_i(x)\,
 \Pr\{X_j>x\ \text{for all } j\ne i\mid X_i=x\}\,dx,
@@ -124,6 +128,26 @@ each alternative out, and inverted the map from probabilities back to $\mu$ usin
 The present approach trades some of that flexibility for an implicit assumption that performances are smoothly varying (in the loose sense) in order to lean more heavily on quadrature and achieve, empirically, much tighter inversion. The
 present paper also extends the field construction to correlated performances by
 conditioning, which itself is not a new idea by any means. Whenever $\Sigma$ makes performances independent given a few shared variables, the field factorizes and all $n$ probabilities cost $O(nLQ)$ for a lattice of $L$ points and $Q$ quadrature nodes.
+
+To be plain about what is and is not claimed as new, since each
+ingredient has a history: the one-dimensional representation is
+\citet{domencich1975}; the all-$n$ shared field under independence is
+\citet{cotton2021}; that the cross-derivatives of the surplus function
+are tie densities forming a matrix with zero row sums --- a graph
+Laplacian in all but name --- is \citet{muller2022}; and inversion as an
+unconstrained convex program is \citet{li2018}. The contribution here is
+the cavity organization that makes these compose at scale. Evaluated as
+the earlier literature leaves it, each of the $n$ probabilities re-forms
+an $(n-1)$-fold product, the vector costs $O(n^2L)$, and the Jacobian's
+$\binom{n}{2}$ tie densities each need their own integral; that is where
+the representation stops being an algorithm. Building the survival field
+once and dividing each contestant out collapses the forward vector to
+$O(nL)$ (the move of \citealt{cotton2021}), and this paper shows the same
+cancellation collapses the \emph{derivatives}: the dense tie-density
+Jacobian acts in linear work per lattice point without its edges ever
+being formed (\S\ref{sec:jaccomp}), it survives correlation by
+conditioning, and the convex program therefore runs matrix-free at sizes
+where each ingredient alone stalls.
 
 More pertinent, within such a class of covariance matrices (we will term it the factor grammar), the derivatives ride the same pass at the same cost: Jacobian--vector products and each inversion iteration are $O(nLQ)$, where again $L$ dictates the lattice size and $Q$ the number of quadrature points. More interesting still, the Jacobian is a weighted graph Laplacian applied as an operator and never materialized. The block and nested kernels materialize their Jacobians,
 and the tree's cross-cluster block is approximate, so the matrix-free
@@ -736,9 +760,19 @@ inversions. We do not pursue the application here.
 
 \section{Jacobians, tie densities, inversion}\label{sec:jac}
 
-We now arrive at the central object of the algorithm: the Jacobian, and we suggest that the form it takes is rather beautiful as a flux through a boundary. This helps us see the
-formula, the symmetry, the conservation law and the graph structure
-together, as we now explain.
+We now arrive at the central object of the algorithm: the Jacobian. Its
+structure has prior art we were unaware of when this work was done:
+\citet{muller2022} derive the cross-Hessian of the random-utility
+surplus function as the density that two alternatives tie for the
+maximum, and observe that the resulting matrix is symmetric with signed
+off-diagonals and zero row sums --- the Laplacian class. We arrived at
+the same structure independently, by a different route, and the route is
+what we keep: a derivation of the structure as a literal probability
+flux through the boundary between winning regions,
+which delivers the formula, the symmetry, the conservation law and the
+graph structure in one geometric picture; and, on the computational
+side, \S\ref{sec:jaccomp}'s identity letting the dense matrix act in
+linear work. The geometry first.
 
 First, an outcome of the race is a vector $x$ of finishing values, one per
 contestant. Contestant $i$ wins on the set
@@ -839,19 +873,41 @@ integrates to one; this is why the implementation's unnormalized mass
 checks are diagnostics rather than cosmetics, a material defect meaning
 the lattice missed the region, not that normalization was needed.
 
-\subsection{Jacobian computation}
+\subsection{Jacobian computation}\label{sec:jaccomp}
 
 Scalability rests on never materializing the matrix. Full Newton needs
 the Jacobian only as an operator applied to a vector; a likelihood score
 needs one row of it; and the shipped inversion below needs only the
 own-coordinate preconditioning slopes.
 
+\paragraph{The identity the scale rests on.} Per factor node, write
+$A_i(x)=f_i(x)/S_i(x)$ for contestant $i$'s hazard and
+$G(x)=\prod_k S_k(x)$ for the field. The tie density factors through the
+field,
+\[
+w_{ij}\;=\;\int G(x)\,A_i(x)\,A_j(x)\,dx ,\qquad j\ne i,
+\]
+so the apparently dense Laplacian is a continuous sum of rank-one
+contributions, and its action collapses: substituting into
+$(Jh)_i=\sum_{j\ne i}w_{ij}(h_j-h_i)$, the $j=i$ terms cancel between
+the two sums, leaving
+\[
+(Jh)_i\;=\;\int G(x)\,A_i(x)
+ \Bigl[\sum_{j} A_j(x)\,h_j\;-\;h_i\sum_{j} A_j(x)\Bigr]dx .
+\]
+The two inner sums are shared across every $i$, so the whole product
+costs $O(nL)$ per node --- the same order as pricing --- rather than the
+$O(n^2L)$ of assembling edges. This, more than the Laplacian structure
+itself (which \citet{muller2022} already had), is what turns the
+tie-density Hessian into a scalable object: a graph with $\binom{n}{2}$
+potential edges is applied without ever being constructed.
+
 \paragraph{What gets computed.} Both a single entry and a
 Jacobian--vector product come out of the same field pass that produced
-the probabilities: per quadrature node the entries have a Gram structure
-over the lattice, so a product against $h$ costs one more pass and no
-storage. Forming all $n^{2}$ entries is possible, but it is a choice with
-$\Omega(n^{2})$ cost in output alone, and nothing downstream requires it.
+the probabilities, by the identity above (in the log domain, with
+hazards clipped as \S\ref{sec:lattice} describes). Forming all $n^{2}$
+entries is possible, but it is a choice with $\Omega(n^{2})$ cost in
+output alone, and nothing downstream requires it.
 
 \paragraph{Four derivatives that are not the same.} In keeping with our
 previous remarks we delineate four objects. The first is the continuum
@@ -1844,6 +1900,9 @@ A Mata Geweke--Hajivassiliou--Keane multivariate normal simulator.
 probabilities to the outcomes of multi-entry competitions.
 \emph{Journal of the American Statistical Association}
 68(342):312--316, 1973.
+\bibitem[Domencich and McFadden(1975)]{domencich1975} T.~A. Domencich,
+D.~McFadden. \emph{Urban Travel Demand: A Behavioural Analysis}.
+North-Holland, Amsterdam, 1975.
 \bibitem[Genz(1992)]{genz1992} A.~Genz.
 Numerical computation of multivariate normal probabilities.
 \emph{Journal of Computational and Graphical Statistics} 1:141--149, 1992.
@@ -1890,6 +1949,10 @@ recurrence risks. \emph{Biometrics} 30:41--57, 1974.
 method of paired comparisons: I. The least squares solution assuming
 equal standard deviations and equal correlations. \emph{Psychometrika}
 16:3--9, 1951.
+\bibitem[M\"uller et~al.(2022)M\"uller, Nesterov and Shikhman]{muller2022}
+D.~M\"uller, Y.~Nesterov, V.~Shikhman. Discrete choice prox-functions on
+the simplex. \emph{Mathematics of Operations Research} 47(1):485--507,
+2022.
 \bibitem[Solow(1990)]{solow1990} A.~R. Solow.
 A method for approximating multivariate normal orthant probabilities.
 \emph{Journal of Statistical Computation and Simulation} 37:225--229, 1990.

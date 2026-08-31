@@ -389,3 +389,46 @@ superseded and the next push redeployed); versioned filename guards it.
 Open: the cottonsurvey bibliography entry has no SSRN number or stable
 locator -- only Peter can supply it (or relabel as unpublished
 manuscript).
+
+## Tenth review (2026-08-31): the novelty reframe
+
+Fresh prior-art search, accepted in full and written in.
+
+- **Domencich & McFadden (1975), p. 52**: the general random-utility
+  choice probability as a one-dimensional integral over the winning
+  utility. Cited at the crux sentence; one-dimensionality is no longer
+  implied to be new anywhere.
+- **Muller, Nesterov & Shikhman, MOR 47(1):485-507, 2022 (arXiv
+  1909.05591, 2019)** -- VERIFIED against the journal listing before
+  citing: cross-Hessian of the surplus = tie-for-maximum density, with
+  the zero-row-sum symmetric structure, for general joint laws. Cited at
+  the head of the Jacobian section, with the independent-arrival
+  statement (we were unaware of it when this work was done; same
+  structure, different route, and the boundary-flux route is what the
+  paper keeps).
+- **The claim that survives**: not one-dimensionality, not convex
+  duality, not the existence of tie densities -- the cavity organization
+  that composes them at scale. New "to be plain about what is and is not
+  claimed" paragraph in the introduction names all four lineages
+  (domencich1975, cotton2021, muller2022, li2018) and states the
+  contribution as: forward vector O(nL) via the field (Cotton 2021), the
+  SAME cancellation collapsing the derivatives (this paper), surviving
+  correlation by conditioning, feeding a matrix-free convex program at
+  n = 1e6.
+- **The Gram identity elevated** to its own displayed passage
+  (sec:jaccomp): w_ij = int G A_i A_j, hence
+  (Jh)_i = int G A_i [sum_j A_j h_j - h_i sum_j A_j] with the inner sums
+  shared across i -- the reviewer's candidate for the real leap, now
+  stated as the identity the scale rests on rather than a parenthesis
+  about "Gram structure".
+- Methodology page: same lineage, same identity, and the flagged
+  sentence ("the shared field underneath it is the new part") replaced
+  by the defensible composition claim.
+- The 2001 ZEW observation (independence -> one-dimensional even for
+  large n) was NOT cited: the reviewer did not name authors and a
+  search-verified record was not obtained. Domencich-McFadden carries
+  the point.
+
+Abstract originality scores from the review, for the record: ~2/5 new
+foundational mathematics, ~4.5/5 numerical/computational methodology,
+4/5 overall. The reframe matches that assessment.
