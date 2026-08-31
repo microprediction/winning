@@ -5,23 +5,59 @@
 
 .TINY <- 1e-300
 
-.bulk_lo_hi <- function(mu, tot, delta = 1e-12) {
-  lo0 <- min(mu - 9 * tot)
-  hi0 <- max(mu + 9 * tot)
-  G <- function(x) exp(sum(log(pmax(stats::pnorm((x - mu) / tot), .TINY))))
-  a <- lo0; b <- hi0
+# Winner-bulk window covering every RETAINED conditional race (max-wins):
+# per-runner conditional locations range over [mu - amp, mu + amp] with amp
+# the largest shared-effect shift the quadrature nodes can produce, and the
+# IDIOSYNCRATIC sd sets the local scale. Replaces an independent-marginal
+# proxy whose lower crossing drifted upward with n under near-common shocks
+# while the winner sat O(1) lower (28 percent of mass lost on a 400-runner
+# cluster at correlation 0.99; fourteenth review).
+.window_nodes <- function(mu, sd, amp, delta = 1e-12, pad_sds = 2) {
+  if (length(amp) == 1) amp <- rep(amp, length(mu))
+  m_lo <- mu - amp
+  m_hi <- mu + amp
+  smax <- max(max(sd), 1e-12)
+  Fx <- function(x, m) exp(sum(log(pmax(stats::pnorm((x - m) / sd), .TINY))))
+  lo <- min(m_lo) - 9 * smax
+  step <- 9 * smax
+  for (i in 1:60) {
+    if (Fx(lo, m_lo) <= delta) break
+    lo <- lo - step; step <- 2 * step
+  }
+  hi <- max(m_hi) + 9 * smax
+  step <- 9 * smax
+  for (i in 1:60) {
+    if (Fx(hi, m_hi) >= 1 - delta) break
+    hi <- hi + step; step <- 2 * step
+  }
+  a <- lo; b <- hi
   for (i in 1:70) {
     m <- 0.5 * (a + b)
-    if (G(m) < delta) a <- m else b <- m
+    if (Fx(m, m_lo) < delta) a <- m else b <- m
   }
   xlo <- a
-  a <- xlo; b <- hi0
+  a <- xlo; b <- hi
   for (i in 1:70) {
     m <- 0.5 * (a + b)
-    if (G(m) < 1 - delta) a <- m else b <- m
+    if (Fx(m, m_hi) < 1 - delta) a <- m else b <- m
   }
-  pad <- 2 * max(tot)
-  c(xlo - pad, b + pad)
+  c(xlo - pad_sds * smax, b + pad_sds * smax)
+}
+
+# Raw lattice mass is a diagnostic, not a nuisance: a material defect means
+# the window missed the winner's region, and normalizing it away returns
+# confident wrong shares. Stop instead.
+.checked_mass <- function(raw, kind, mass_tol = 5e-3) {
+  t_ <- sum(raw)
+  if (abs(t_ - 1) > mass_tol) {
+    stop(sprintf(paste0(
+      "%s lattice captured total mass %.4f (defect %.2e > %g): the window ",
+      "missed part of the winner distribution and the shares would be ",
+      "silently wrong if normalized. Raise points=, or report this field: ",
+      "the node-aware window should have covered it."),
+      kind, t_, abs(t_ - 1), mass_tol))
+  }
+  raw / t_
 }
 
 .cluster_index <- function(cluster) {
@@ -56,8 +92,8 @@
   mu_o <- mu[ord]; sd_o <- sd[ord]; v_o <- v[ord]; c_o <- inv[ord]
   h <- .hermite1(qa)
   an <- h$nodes; aw <- h$weights
-  tot <- sqrt(sd_o^2 + v_o^2)
-  lh <- .bulk_lo_hi(mu_o, tot)
+  amp <- abs(v_o) * max(abs(an))
+  lh <- .window_nodes(mu_o, sd_o, amp)
   x <- seq(lh[1], lh[2], length.out = points)
   dx <- x[2] - x[1]
   nC <- max(c_o)
@@ -97,8 +133,8 @@
   if (is.null(nodes)) nodes <- .cluster_nodes(r, qa)
   Fm <- nodes$nodes; w <- nodes$w
   Q <- nrow(Fm)
-  tot <- sqrt(sd_o^2 + rowSums(V_o^2))
-  lh <- .bulk_lo_hi(mu_o, tot)
+  amp <- sqrt(rowSums(V_o^2)) * max(sqrt(rowSums(Fm^2)))
+  lh <- .window_nodes(mu_o, sd_o, amp)
   x <- seq(lh[1], lh[2], length.out = points)
   dx <- x[2] - x[1]
   nC <- max(c_o)
@@ -142,8 +178,7 @@ block_race_probabilities <- function(mu, cluster, loading, D,
   mu <- as.numeric(mu)
   sd <- sqrt(as.numeric(D))
   p <- .block_max(-mu, sd, cluster, loading, points, qa)
-  t <- sum(p)
-  if (t > 0) p / t else p
+  .checked_mass(p, "block race")
 }
 
 #' Nested race: block race plus one global factor
@@ -174,14 +209,15 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
     cn <- .cluster_nodes(ncol(g), qf)
     fn <- cn$nodes; fw <- cn$w
   }
+  sd <- sqrt(as.numeric(D))
   p <- numeric(length(mu))
   for (q in seq_len(nrow(fn))) {
-    p <- p + fw[q] * block_race_probabilities(
-      mu + gamma * as.numeric(g %*% fn[q, ]), cluster, loading, D,
-      points = points, qa = qa)
+    # average the RAW conditional masses (each near one) and normalize
+    # once: normalizing each conditional separately hides a window defect
+    p <- p + fw[q] * .block_max(-(mu + gamma * as.numeric(g %*% fn[q, ])),
+                                sd, cluster, loading, points, qa)
   }
-  t <- sum(p)
-  if (t > 0) p / t else p
+  .checked_mass(p, "nested race")
 }
 
 #' Tree race: hierarchy of uniform shared effects
@@ -213,10 +249,18 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   h <- .hermite1(qa)
   an <- h$nodes; aw <- h$weights
   depth_shift <- numeric(nT)
+  # traverse by TREE depth, not by accumulated |strength|: zero strengths
+  # (from_linkage's floored merges) tie the |lambda| path sums and a tied
+  # sort visits children before their parents, reading cavities still at
+  # their initial value.
+  depth_hops <- integer(nT)
   for (t in seq_len(nT)) {
-    s_ <- 0; u <- t
-    while (parent[u] > 0) { s_ <- s_ + abs(lam[parent[u]]); u <- parent[u] }
+    s_ <- 0; d_ <- 0L; u <- t
+    while (parent[u] > 0) {
+      s_ <- s_ + abs(lam[parent[u]]); d_ <- d_ + 1L; u <- parent[u]
+    }
     depth_shift[t] <- s_
+    depth_hops[t] <- d_
   }
   path_var <- numeric(nC)
   for (cc in seq_len(nC)) {
@@ -224,8 +268,8 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
     while (parent[u] > 0) { s_ <- s_ + lam[parent[u]]^2; u <- parent[u] }
     path_var[cc] <- s_
   }
-  tot <- sqrt(sd_o^2 + v_o^2 + path_var[c_o])
-  lh <- .bulk_lo_hi(mu_o, tot)
+  amp <- (abs(v_o) + depth_shift[c_o]) * max(abs(an))
+  lh <- .window_nodes(mu_o, sd_o, amp)
   x <- seq(lh[1], lh[2], length.out = points)
   dx <- x[2] - x[1]
   xm <- matrix(x, n, points, byrow = TRUE)
@@ -251,7 +295,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
     stats::approx(x - delta, g, xout = x, rule = 2, ties = "ordered")$y
   }
   up <- setdiff(seq_len(nT), seq_len(nC))
-  up <- up[order(-depth_shift[up])]
+  up <- up[order(-depth_hops[up])]
   for (t in up) {
     acc <- numeric(points)
     for (q in seq_len(qa)) {
@@ -262,7 +306,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
     G[t, ] <- pmax(acc, 0)
   }
   R <- matrix(1, nT, points)
-  down <- order(depth_shift)
+  down <- order(depth_hops)
   for (t in down) {
     pa <- parent[t]
     if (pa == 0) next
@@ -278,9 +322,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   }
   p_o <- rowSums(hmat * R[c_o, , drop = FALSE]) * dx
   p <- numeric(n); p[ord] <- p_o
-  p <- pmax(p, 0)
-  t_ <- sum(p)
-  if (t_ > 0) p / t_ else p
+  .checked_mass(pmax(p, 0), "tree race")
 }
 
 #' Exact Jacobian d p / d mu of the block race (min-wins)
@@ -302,8 +344,8 @@ block_race_jacobian <- function(mu, cluster, loading, D,
   n_c <- max(c_o)
   h <- .hermite1(qa)
   an <- h$nodes; aw <- h$weights
-  tot <- sqrt(sd_o^2 + v_o^2)
-  lh <- .bulk_lo_hi(mu_o, tot)
+  amp <- abs(v_o) * max(abs(an))
+  lh <- .window_nodes(mu_o, sd_o, amp)
   x <- seq(lh[1], lh[2], length.out = points)
   dx <- x[2] - x[1]
   xm <- matrix(x, n, points, byrow = TRUE)
@@ -478,10 +520,18 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   h1 <- .hermite1(qa)
   an <- h1$nodes; aw <- h1$weights
   depth_shift <- numeric(nT)
+  # traverse by TREE depth, not by accumulated |strength|: zero strengths
+  # (from_linkage's floored merges) tie the |lambda| path sums and a tied
+  # sort visits children before their parents, reading cavities still at
+  # their initial value.
+  depth_hops <- integer(nT)
   for (t in seq_len(nT)) {
-    s_ <- 0; u <- t
-    while (parent[u] > 0) { s_ <- s_ + abs(lam[parent[u]]); u <- parent[u] }
+    s_ <- 0; d_ <- 0L; u <- t
+    while (parent[u] > 0) {
+      s_ <- s_ + abs(lam[parent[u]]); d_ <- d_ + 1L; u <- parent[u]
+    }
     depth_shift[t] <- s_
+    depth_hops[t] <- d_
   }
   path_var <- numeric(nC)
   for (cc in seq_len(nC)) {
@@ -489,8 +539,8 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
     while (parent[u] > 0) { s_ <- s_ + lam[parent[u]]^2; u <- parent[u] }
     path_var[cc] <- s_
   }
-  tot <- sqrt(sd_o^2 + v_o^2 + path_var[c_o])
-  lh <- .bulk_lo_hi(mu_o, tot)
+  amp <- (abs(v_o) + depth_shift[c_o]) * max(abs(an))
+  lh <- .window_nodes(mu_o, sd_o, amp)
   x <- seq(lh[1], lh[2], length.out = points)
   dx <- x[2] - x[1]
   xm <- matrix(x, n, points, byrow = TRUE)
@@ -518,7 +568,7 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
                                                  rule = 2,
                                                  ties = "ordered")$y
   up <- setdiff(seq_len(nT), seq_len(nC))
-  up <- up[order(-depth_shift[up])]
+  up <- up[order(-depth_hops[up])]
   for (t in up) {
     acc <- numeric(points)
     for (q in seq_len(qa)) {
@@ -529,7 +579,7 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
     G[t, ] <- pmax(acc, 0)
   }
   R <- matrix(1, nT, points)
-  for (t in order(depth_shift)) {
+  for (t in order(depth_hops)) {
     pa <- parent[t]
     if (pa == 0) next
     sm <- numeric(points)

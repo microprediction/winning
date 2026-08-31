@@ -9,32 +9,65 @@ function clusterIndex(cluster) {
 function stableOrder(inv) {
   return inv.map((v, i) => i).sort((a, b) => inv[a] - inv[b] || a - b);
 }
-function bulkLoHi(mu, tot, delta = 1e-12) {
+// Winner-bulk window covering every RETAINED conditional race (max-wins):
+// per-runner conditional locations range over [mu - amp, mu + amp] with amp
+// the largest shared-effect shift the quadrature nodes can produce, and the
+// IDIOSYNCRATIC sd sets the local scale. Replaces an independent-marginal
+// proxy whose lower crossing drifted upward with n under near-common shocks
+// while the winner sat O(1) lower (28% of mass lost on a 400-runner cluster
+// at correlation 0.99; fourteenth review).
+function windowNodes(mu, sd, amp, delta = 1e-12, padSds = 2) {
   const n = mu.length;
-  let lo0 = Infinity, hi0 = -Infinity;
-  for (let i = 0; i < n; i++) {
-    lo0 = Math.min(lo0, mu[i] - 9 * tot[i]);
-    hi0 = Math.max(hi0, mu[i] + 9 * tot[i]);
-  }
-  const G = x => {
+  const mLo = mu.map((m, i) => m - amp[i]);
+  const mHi = mu.map((m, i) => m + amp[i]);
+  const smax = Math.max(Math.max(...sd), 1e-12);
+  const F = (x, m) => {
     let ls = 0;
-    for (let i = 0; i < n; i++) ls += Math.log(Math.max(ndtr((x - mu[i]) / tot[i]), TINY));
+    for (let i = 0; i < n; i++) ls += Math.log(Math.max(ndtr((x - m[i]) / sd[i]), TINY));
     return Math.exp(ls);
   };
-  let a = lo0, b = hi0;
+  let lo = Math.min(...mLo) - 9 * smax;
+  let step = 9 * smax;
+  for (let it = 0; it < 60; it++) {
+    if (F(lo, mLo) <= delta) break;
+    lo -= step; step *= 2;
+  }
+  let hi = Math.max(...mHi) + 9 * smax;
+  step = 9 * smax;
+  for (let it = 0; it < 60; it++) {
+    if (F(hi, mHi) >= 1 - delta) break;
+    hi += step; step *= 2;
+  }
+  let a = lo, b = hi;
   for (let it = 0; it < 70; it++) {
     const m = 0.5 * (a + b);
-    if (G(m) < delta) a = m; else b = m;
+    if (F(m, mLo) < delta) a = m; else b = m;
   }
   const xlo = a;
-  a = xlo; b = hi0;
+  a = xlo; b = hi;
   for (let it = 0; it < 70; it++) {
     const m = 0.5 * (a + b);
-    if (G(m) < 1 - delta) a = m; else b = m;
+    if (F(m, mHi) < 1 - delta) a = m; else b = m;
   }
-  const pad = 2 * Math.max(...tot);
-  return [xlo - pad, b + pad];
+  return [xlo - padSds * smax, b + padSds * smax];
 }
+
+// Raw lattice mass is a diagnostic, not a nuisance: a material defect means
+// the window missed the winner's region, and normalizing it away returns
+// confident wrong shares. Stop instead.
+function checkedMass(raw, kind, massTol = 5e-3) {
+  const t = raw.reduce((a, b) => a + b, 0);
+  if (Math.abs(t - 1) > massTol) {
+    throw new Error(
+      `${kind} lattice captured total mass ${t.toFixed(4)} (defect ` +
+      `${Math.abs(t - 1).toExponential(2)} > ${massTol}): the window missed ` +
+      `part of the winner distribution and the shares would be silently ` +
+      `wrong if normalized. Raise points, or report this field: the ` +
+      `node-aware window should have covered it.`);
+  }
+  return raw.map(v => v / t);
+}
+
 function clusterNodes(r, qa) {
   const h = hermite1(qa);
   if (r === 1) return { nodes: h.nodes.map(x => [x]), w: h.weights.slice() };
@@ -85,8 +118,9 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
   const nC = Math.max(...cO) + 1;
   const { nodes, w } = nodesOverride || clusterNodes(r, qa);
   const Q = nodes.length;
-  const tot = muO.map((m, i) => Math.sqrt(sdO[i] * sdO[i] + VO[i].reduce((a, b) => a + b * b, 0)));
-  const [lo, hi] = bulkLoHi(muO, tot);
+  const maxNodeNorm = Math.max(...nodes.map(nq => Math.sqrt(nq.reduce((a, b) => a + b * b, 0))));
+  const amp = VO.map(vi => Math.sqrt(vi.reduce((a, b) => a + b * b, 0)) * maxNodeNorm);
+  const [lo, hi] = windowNodes(muO, sdO, amp);
   const P = points;
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
@@ -122,8 +156,7 @@ export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   const { points = 257, qa = 9, nodes = null } = opts;
   const sd = D.map(Math.sqrt);
   const p = blockMax(mu.map(v => -v), sd, cluster, loading, points, qa, nodes);
-  const t = p.reduce((a, b) => a + b, 0);
-  return t > 0 ? p.map(v => v / t) : p;
+  return checkedMass(p, "block race");
 }
 
 export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
@@ -141,14 +174,16 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
     fn = cn.nodes; fw = cn.w;
   }
   const n = mu.length;
+  const sd = D.map(Math.sqrt);
   const p = new Array(n).fill(0);
   for (let q = 0; q < fn.length; q++) {
-    const shifted = mu.map((m, i) => m + gamma * g[i].reduce((a, b, r) => a + b * fn[q][r], 0));
-    const pq = blockRaceProbabilities(shifted, cluster, loading, D, { points, qa });
+    // average the RAW conditional masses (each near one) and normalize
+    // once: normalizing each conditional separately hides a window defect
+    const shifted = mu.map((m, i) => -(m + gamma * g[i].reduce((a, b, r) => a + b * fn[q][r], 0)));
+    const pq = blockMax(shifted, sd, cluster, loading, points, qa, null);
     for (let i = 0; i < n; i++) p[i] += fw[q] * pq[i];
   }
-  const t = p.reduce((a, b) => a + b, 0);
-  return t > 0 ? p.map(v => v / t) : p;
+  return checkedMass(p, "nested race");
 }
 
 /* tree machinery shared by forward and jacobian */
@@ -165,11 +200,17 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
   const vO = ord.map(i => loading[i]), cO = ord.map(i => inv[i]);
   const h = hermite1(qa);
   const an = h.nodes, aw = h.weights;
-  const depth = new Array(nT).fill(0);
+  const depth = new Array(nT).fill(0);        // |lam| path sums, for the window
+  // traversal order must be TREE depth in hops, not the |lam| path sum:
+  // zero strengths (from_linkage's floored merges) tie the path sums and a
+  // tied sort visits children before their parents, reading cavities still
+  // at their initial value (raw mass 3.0 on a 6-leaf zero-strength linkage).
+  const depthHops = new Array(nT).fill(0);
   for (let t = 0; t < nT; t++) {
-    let s = 0, u = t;
-    while (par[u] >= 0) { s += Math.abs(lam[par[u]]); u = par[u]; }
+    let s = 0, d = 0, u = t;
+    while (par[u] >= 0) { s += Math.abs(lam[par[u]]); d += 1; u = par[u]; }
     depth[t] = s;
+    depthHops[t] = d;
   }
   const pathVar = new Array(nC).fill(0);
   for (let c = 0; c < nC; c++) {
@@ -177,8 +218,9 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
     while (par[u] >= 0) { s += lam[par[u]] * lam[par[u]]; u = par[u]; }
     pathVar[c] = s;
   }
-  const tot = muO.map((mm, i) => Math.sqrt(sdO[i] * sdO[i] + vO[i] * vO[i] + pathVar[cO[i]]));
-  const [lo, hi] = bulkLoHi(muO, tot);
+  const maxAn = Math.max(...an.map(Math.abs));
+  const amp = muO.map((mm, i) => (Math.abs(vO[i]) + depth[cO[i]]) * maxAn);
+  const [lo, hi] = windowNodes(muO, sdO, amp);
   const P = points;
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
@@ -197,7 +239,7 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
   const shiftEval = (g, delta) => x.map(xt => interpClamped(xt + delta, x, g));
   const up = [];
   for (let t = nC; t < nT; t++) up.push(t);
-  up.sort((a, b) => depth[b] - depth[a] || a - b);
+  up.sort((a, b) => depthHops[b] - depthHops[a] || a - b);
   for (const t of up) {
     const acc = new Array(P).fill(0);
     for (let q = 0; q < aw.length; q++) {
@@ -213,7 +255,7 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
   const R = Array.from({ length: nT }, () => new Array(P).fill(1));
   const down = [];
   for (let t = 0; t < nT; t++) down.push(t);
-  down.sort((a, b) => depth[a] - depth[b] || a - b);
+  down.sort((a, b) => depthHops[a] - depthHops[b] || a - b);
   for (const t of down) {
     const pa = par[t];
     if (pa < 0) continue;
@@ -251,8 +293,7 @@ export function treeRaceProbabilities(mu, cluster, loading, D, parent, strength,
   }
   const p = new Array(I.n);
   I.ord.forEach((orig, pos) => { p[orig] = pO[pos]; });
-  const t = p.reduce((a, b) => a + b, 0);
-  return t > 0 ? p.map(v => v / t) : p;
+  return checkedMass(p, "tree race");
 }
 
 function withinBlockTerm(J, I, negate = true) {
@@ -292,8 +333,9 @@ export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
   const n = m.length, nC = Math.max(...cO) + 1;
   const h = hermite1(qa);
   const an = h.nodes, aw = h.weights;
-  const tot = muO.map((mm, i) => Math.sqrt(sdO[i] * sdO[i] + vO[i] * vO[i]));
-  const [lo, hi] = bulkLoHi(muO, tot);
+  const maxAnJ = Math.max(...an.map(Math.abs));
+  const ampJ = muO.map((mm, i) => Math.abs(vO[i]) * maxAnJ);
+  const [lo, hi] = windowNodes(muO, sdO, ampJ);
   const P = points;
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);

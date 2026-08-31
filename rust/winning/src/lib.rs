@@ -1032,16 +1032,19 @@ pub fn tree_kernel(
         }
     }
 
-    // tree bookkeeping (matches the python: depth_shift by |lam| path sums)
-    let mut depth_shift = vec![0.0f64; nt];
+    // tree bookkeeping (matches the python): traversal order must be TREE
+    // depth in hops, not the |lam| path sum — zero strengths (from_linkage's
+    // floored merges) tie the path sums and a tied sort visits children
+    // before their parents, reading cavities still at their initial value.
+    let mut depth_hops = vec![0usize; nt];
     for t in 0..nt {
-        let mut s_ = 0.0;
+        let mut d_ = 0usize;
         let mut u = t;
         while parent[u] >= 0 {
-            s_ += lam[parent[u] as usize].abs();
+            d_ += 1;
             u = parent[u] as usize;
         }
-        depth_shift[t] = s_;
+        depth_hops[t] = d_;
     }
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); nt];
     for t in 0..nt {
@@ -1052,7 +1055,7 @@ pub fn tree_kernel(
 
     // upward pass: internal nodes, deepest first (stable on ties)
     let mut up: Vec<usize> = (nc..nt).collect();
-    up.sort_by(|&a, &b| depth_shift[b].partial_cmp(&depth_shift[a]).unwrap());
+    up.sort_by_key(|&t| std::cmp::Reverse(depth_hops[t]));
     for &t in &up {
         let mut acc = vec![0.0f64; points];
         for q in 0..qa {
@@ -1076,7 +1079,7 @@ pub fn tree_kernel(
     // downward pass: shallowest first (stable on ties)
     let mut r: Vec<Vec<f64>> = vec![vec![1.0; points]; nt];
     let mut down: Vec<usize> = (0..nt).collect();
-    down.sort_by(|&a, &b| depth_shift[a].partial_cmp(&depth_shift[b]).unwrap());
+    down.sort_by_key(|&t| depth_hops[t]);
     for &t in &down {
         if parent[t] < 0 {
             continue;
