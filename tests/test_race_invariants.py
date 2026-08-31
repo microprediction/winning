@@ -300,3 +300,46 @@ def test_primitive_conversion_cost_is_where_the_docs_say():
     assert np.abs(p_classic - truth).max() < 5e-3      # atoms: conversion
     assert np.abs(p_classic - truth).max() > 1e-5      # ...and it is real
     assert np.abs(p_factor - truth).max() < 1e-12      # formulas: spectral
+
+
+def test_case_v_is_choice_equivalent_to_independence():
+    """Thurstone's Case V lies exactly in the null space of the
+    identification: equal dispersions with equal correlations is
+    Sigma = s2[(1-rho)I + rho 11'], and P1 = 0 kills the correlation
+    term, so P Sigma P = s2(1-rho) P, the independent model at the
+    rescaled variance.
+
+    Pinned because the paper makes the point about the founding model of
+    the field: the only correlation Case V admits is the one choices
+    cannot see.
+    """
+    import warnings
+    from winning.factor.races import race_probabilities
+
+    rng = np.random.default_rng(0)
+    n = 8
+    mu = rng.standard_normal(n) * 0.7
+    mu -= mu.mean()
+    for s2, rho in ((1.7, 0.62), (0.4, 0.05), (2.5, 0.95)):
+        # stated exactly: the common factor sqrt(s2 rho) 1 against the
+        # independent race at the rescaled variance
+        V = np.full((n, 1), np.sqrt(s2 * rho))
+        p_case_v = race_probabilities(mu, V=V, D=np.full(n, s2 * (1 - rho)))
+        p_indep = race_probabilities(mu, D=np.full(n, s2 * (1 - rho)))
+        assert np.abs(p_case_v - p_indep).max() < 1e-12, (s2, rho)
+
+        # and through the dense front door, which has to FIT the matrix
+        # first. Same mathematics, looser tolerance, for a reason worth
+        # recording: P Sigma P is a multiple of P, so its spectrum is
+        # (n-1)-fold degenerate and many representations are exactly
+        # optimal. The fitter may pick one carrying factor rank the
+        # matrix does not need, and then pays quadrature error to price
+        # a factor integral that a pure diagonal would have avoided.
+        # Measured at 1.5e-5 on the rho = 0.05 case.
+        Sigma = s2 * ((1 - rho) * np.eye(n) + rho * np.ones((n, n)))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            p_dense = race_probabilities(mu, cov=Sigma)
+            assert any("tied eigenvalue" in str(w.message) for w in caught), (
+                "the maximally degenerate matrix must trigger the rank warning")
+        assert np.abs(p_dense - p_indep).max() < 1e-4, (s2, rho)

@@ -253,3 +253,61 @@ def test_warns_when_the_rank_splits_a_tied_eigenvalue():
         fit_covariance(six, k=3)
         msg = [str(x.message) for x in w if "tied eigenvalue" in str(x.message)][0]
     assert "k=5" in msg and "3 of 5" in msg
+
+
+def test_group_degeneracy_is_predictable_and_detected():
+    """g equal groups leave a tied leading eigenvalue of multiplicity
+    g-1, so the default rank 3 is exactly right for four groups and
+    misaligned outside that.
+
+    This pins the two facts the paper reports: the damaging cases (rank
+    cutting the tie) are all detected, and the harm scales with how much
+    of the tied group is cut. Measured against the same race priced
+    through the block grammar, which does no fitting at all.
+    """
+    import warnings
+    from winning.factor.races import race_probabilities
+    from winning.factor.structures import Blocks
+
+    n, rho = 24, 0.7
+    rng = np.random.default_rng(0)
+    mu = rng.standard_normal(n) * 0.6
+    mu -= mu.mean()
+
+    for nb, cuts_tie in ((2, False), (4, False), (6, True), (12, True)):
+        lab = np.repeat(np.arange(nb), n // nb)
+        C = np.eye(n)
+        for c in range(nb):
+            i = np.where(lab == c)[0]
+            C[np.ix_(i, i)] = rho
+        np.fill_diagonal(C, 1.0)
+
+        P = np.eye(n) - np.ones((n, n)) / n
+        w = np.linalg.eigvalsh(P @ C @ P)[::-1]
+        mult = int(np.sum(np.abs(w - w[0]) < 1e-8 * abs(w[0])))
+        assert mult == nb - 1, (nb, mult)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            p_dense = race_probabilities(mu, cov=C)
+            warned = any("tied eigenvalue" in str(x.message) for x in caught)
+        blocks = Blocks(cluster=lab, loading=np.full(n, np.sqrt(rho)),
+                        D=np.full(n, 1 - rho))
+        p_exact = race_probabilities(mu, structure=blocks)
+        tv = 0.5 * float(np.abs(p_dense - p_exact).sum())
+
+        if cuts_tie:
+            assert warned, f"{nb} groups: rank 3 cuts a {mult}-fold tie undetected"
+            assert tv > 5e-3, (nb, tv)
+        else:
+            assert tv < 1e-3, (nb, tv)
+
+    # the grammar path has no exposure at all: nothing is fitted, so no
+    # rank is chosen and no tie can be cut
+    lab = np.repeat(np.arange(6), 4)
+    blocks = Blocks(cluster=lab, loading=np.full(n, np.sqrt(rho)),
+                    D=np.full(n, 1 - rho))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        race_probabilities(mu, structure=blocks)
+        assert not any("tied eigenvalue" in str(x.message) for x in caught)
