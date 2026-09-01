@@ -15,6 +15,8 @@ times; negate utilities, or use winning.probit for max-wins semantics):
                                      variate; exact inverse abilities_from_softmax)
     race_jacobian(mu, ...)           fixed-grid dp/dmu      (factor.polish)
     polish_race(p, ..., caps)        nearest race obeying linear constraints
+    top_k_probabilities(mu, k, ...)  P(among the k best), min-wins
+    bottom_k_probabilities(mu, k)    P(among the k worst)
     removal_shares(mu, ...)          P(j wins | i removed), all pairs, one field
     tie_densities(mu, ...)           photo-finish weights (circuit conductances)
 
@@ -54,6 +56,8 @@ from .factor.structures import (  # noqa: F401
     Tree,
 )
 from .factor.polish import polish_race, race_jacobian  # noqa: F401
+from .factor.topk import (top_k_probabilities,  # noqa: F401
+                          bottom_k_probabilities)
 from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 

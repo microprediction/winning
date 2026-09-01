@@ -91,3 +91,26 @@ degeneracies; Pal-Pitman on stationary gaps of competing particles.
 Portfolio-weights-as-choice-probabilities (the HRP remark in the
 winning paper) is the bridge: market weights in SPT are literally a
 choice-probability vector evolving by rank collisions.
+
+## The third paper (Peter, 2026-09-01)
+Working title: "Calculation of Order Statistics at Scale". Scope: top-k
+/ bottom-k membership probabilities, rank distributions, order-statistic
+CDFs (the shared count DP is the cache), and their FLUX derivatives --
+the rank-boundary Jacobian eq (topk) of the Atlas note, i.e. the
+leakage adjustment. The winning paper is k=1 throughout; this paper is
+general k. Implementation begins at winning/factor/topk.py; measured
+results go here first.
+
+## Base-density claim, bounded (bandits exp24, final, 2026-09-01)
+If cited, cite the committed harness (bandits/experiments/
+exp24_select_the_tail.py), and cite the NARROW version: the base
+matters mostly through SKEW. F1 across seven bases spans 0.45 nats but
+0.42 of that is gumbel alone; the four symmetric families span 0.026.
+Two caveats travel with it: (1) validation selection over bases fails
+at ~100-race samples (normal ranked first on validation, second-to-last
+on test); (2) adding candidates degrades selection monotonically. The
+honest motivation sentence: any-smooth-base support lets a model avoid
+one specific expensive error (wrong skew) that a Gaussian-only engine
+cannot express -- NOT "tune the tail weight". Their earlier 0.088-0.119
+figure must be paired with the 0.026 symmetric-family span if ever
+quoted.
