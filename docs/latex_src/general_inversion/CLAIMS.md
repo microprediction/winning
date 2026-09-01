@@ -630,3 +630,14 @@ v1.4.0 (the window/traversal fixes) had shipped and IS the code at
 paper-r7, so the provenance claim was internally false. Corrected to
 paper-r8 / 1.4.0. No other change. Peter's pass 19 cleared v26 for
 publication; v27 (= r8) is the copy to publish.
+
+## r9 (2026-08-31): the novelty adjudication leaves the abstract
+
+Peter: the pieces-are-old / innovation-is-their-organization sentence
+does not belong in the middle of the abstract ("that can be in a
+summary" -- and the paper had no Summary). The abstract now states the
+mechanism plainly; a one-paragraph Summary section (before
+Availability) carries the adjudication with the lineage attributions
+and the restored flux clause. The intro's contribution paragraph is
+unchanged. arXiv pack and metadata trim refreshed; v28 is the copy to
+publish, superseding v27.

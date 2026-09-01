@@ -22,7 +22,7 @@ Including Softmax and Multinomial Probit}
 implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
 scripts behind every number in this paper live at
 \texttt{github.com/microprediction/winning}; this revision's tables were
-produced at repository tag \texttt{paper-r8}, package version
+produced at repository tag \texttt{paper-r9}, package version
 \texttt{1.4.0}.}}
 \date{August 2026}
 
@@ -32,7 +32,7 @@ produced at repository tag \texttt{paper-r8}, package version
 \begin{abstract}
 Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years,
-one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. The pieces are individually old --- the one-dimensional representation, the convex duality, the tie-density derivatives --- and the innovation is their organization: a single shared survival field renders probabilities for all $n$ alternatives at once, supplies the own-coordinate slopes that precondition the large-scale calibration reported here, and applies the dense tie-density Jacobian, a weighted graph Laplacian that is a probability flux through the boundary between winning regions, in linear work per lattice point. Calibration is thereby not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general: in the independent and factor grammars it applies, within reason, to any smooth choice of performance distribution, not just normal, while the hierarchical kernels as shipped are Gaussian. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
+one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. A single shared survival field renders probabilities for all $n$ alternatives at once, supplies the own-coordinate slopes that precondition the large-scale calibration reported here, and applies the dense tie-density Jacobian, a weighted graph Laplacian, in linear work per lattice point. Calibration is thereby not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general: in the independent and factor grammars it applies, within reason, to any smooth choice of performance distribution, not just normal, while the hierarchical kernels as shipped are Gaussian. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -1983,6 +1983,24 @@ cases and numerical identities used above. The four language
 implementations of \S\ref{sec:avail} replay them: nineteen to within
 $10^{-7}$ (most to $10^{-10}$), and the three fit- or optimizer-mediated
 scenarios to between $5\times10^{-4}$ and $5\times10^{-3}$.
+
+\section{Summary}\label{sec:summary}
+
+The pieces of this paper are individually old. The one-dimensional
+representation of the choice event is in \citet{domencich1975}, who
+judged it computationally intractable for correlated probit; the convex
+duality of calibration is in \citet{li2018}; the tie-density
+derivatives and the surplus function's Laplacian structure are in
+\citet{muller2022}; a Hessian--vector product at the cost of a gradient
+is \citet{pearlmutter1994}. The innovation is their organization: a
+single shared survival field renders probabilities for all $n$
+alternatives at once, supplies the own-coordinate slopes that
+precondition the million-alternative calibrations reported here, and
+applies the dense tie-density Jacobian --- a weighted graph Laplacian
+that is a probability flux through the boundary between winning regions
+--- in linear work per lattice point. Within the covariance grammar that
+organization prices, differentiates and inverts contests at a scale on
+which the representation had previously stopped being an algorithm.
 
 \section{Availability}\label{sec:avail}
 \texttt{pip install winning} is pure Python; \texttt{winning[fast]} adds the
