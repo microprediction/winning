@@ -23,7 +23,8 @@ import warnings
 import numpy as np
 
 warnings.filterwarnings("ignore")
-from winning.factor.topk import top_k_probabilities, top_k_jacobian  # noqa
+from winning.factor.topk import (top_k_probabilities,  # noqa
+                                 top_k_jacobians)
 
 
 def residuals(mu, s, targets, points):
@@ -63,22 +64,14 @@ def gn_fit(targets, n, points=513, starts=1, seed=0, max_iter=80,
         for it in range(1, max_iter + 1):
             rows_mu, rows_s, rhs = [], [], []
             D = np.exp(2 * s)
+            sigma = np.exp(s)
             for k in ks:
                 q = top_k_probabilities(mu, k, D=D, points=points)
                 rhs.append(np.log(q) - np.log(targets[k]))
-                rows_mu.append(top_k_jacobian(mu, k, D=D, points=points)
-                               / q[:, None])
-                Js = np.empty((n, n))
-                h = 1e-4
-                for j in range(n):
-                    e = np.zeros(n)
-                    e[j] = h
-                    qp = top_k_probabilities(mu, k, D=np.exp(2 * (s + e)),
-                                             points=points)
-                    qm = top_k_probabilities(mu, k, D=np.exp(2 * (s - e)),
-                                             points=points)
-                    Js[:, j] = (np.log(qp) - np.log(qm)) / (2 * h)
-                rows_s.append(Js)
+                Jm, Jsd = top_k_jacobians(mu, k, D=D, points=points)
+                rows_mu.append(Jm / q[:, None])
+                # chain rule to s = log sigma, and to log quotes
+                rows_s.append(Jsd * sigma[None, :] / q[:, None])
             r = np.concatenate(rhs)
             A = np.hstack([np.vstack(rows_mu), np.vstack(rows_s)])
             AtA = A.T @ A

@@ -71,11 +71,15 @@ def _count_window(mu, sd, k, base_rows, delta=1e-12, pad_sds=2.0):
         step *= 2.0
     # the Chernoff slack can exceed the saturating mean count n on
     # small fields (the mean count never reaches it, and the bracket
-    # doubling runs to infinity); cap just below saturation, where the
-    # whole field is below x almost surely
+    # doubling runs to infinity); cap just below saturation -- and only
+    # JUST below: at k = n-1 the membership factor 1 - prod F_j dies
+    # only once every runner is below almost surely, and a cap of
+    # n - 0.25 truncated a tail the slot renormalization then masked
+    # (the scale-gauge Euler identity exposed it at 3e-7, flat in the
+    # point count)
     target_hi = min(k + 2.0 * np.log(1.0 / delta)
                     + np.sqrt(2.0 * (k + 1) * np.log(1.0 / delta)),
-                    len(mu) - 0.25)
+                    len(mu) - 1e-4)
     hi = float(mu.max()) + 9.0 * smax
     step = 9.0 * smax
     for _ in range(60):
@@ -351,3 +355,59 @@ def top_k_jacobian(mu, k, D=None, base="normal", points=513):
     for i in range(n):
         J[i] = top_k_jacobian_row(mu, i, k, D=D, base=base, points=points)
     return J
+
+
+def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
+    """Row i of both derivatives at once: (dq_i/dmu, dq_i/dsigma).
+
+    The sigma off-diagonals ride the mu computation for one extra
+    weighted sum, because differentiating F_j((x - mu_j)/sigma_j) in
+    sigma_j inserts the standardized coordinate into the same pair
+    integrand:
+
+        dq_i/dsigma_j = int z_j f_i f_j P(N_{-ij} = k-1) dx,  j != i,
+
+    and the own term comes off the forward pass's membership factor,
+    dq_i/dsigma_i = -int (z f'(z) + f(z))/sigma_i^2 P(N_{-i} <= k-1) dx.
+    The scale gauge gives the exactness check: mu . row_mu +
+    sigma . row_sigma = 0, since scaling every performance jointly
+    moves no membership."""
+    mu = np.asarray(mu, float)
+    n = len(mu)
+    k = int(k)
+    if not 1 <= k <= n - 1:
+        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    D = np.ones(n) if D is None else np.asarray(D, float)
+    sd = np.sqrt(D)
+    base_rows = BASES[base] if not callable(base) else base
+    lo, hi = _count_window(mu, sd, k, base_rows)
+    x = np.linspace(lo, hi, points)
+    dx = x[1] - x[0]
+    z = (x[:, None] - mu[None, :]) / sd[None, :]
+    S, f, fp = base_rows(z)
+    F = np.clip(1.0 - S, 0.0, 1.0)
+    dens = f / sd[None, :]                       # (L, n)
+    C = _count_distribution(F)
+    Qi = _loo_pmf(C, F, i)
+    pair = _pair_pmf_at(Qi, F, i, k)             # (n, L)
+    kern = pair * dens[:, i][None, :]
+    row_mu = (kern * dens.T).sum(axis=1) * dx
+    row_sd = (kern * (z * dens).T).sum(axis=1) * dx
+    row_mu[i] = 0.0
+    row_mu[i] = -row_mu.sum()
+    cdf_i = Qi[:, :k].sum(axis=1)
+    dfdsd = -(z[:, i] * fp[:, i] + f[:, i]) / D[i]
+    row_sd[i] = (dfdsd * cdf_i).sum() * dx
+    return row_mu, row_sd
+
+
+def top_k_jacobians(mu, k, D=None, base="normal", points=513):
+    """Full (n, n) matrices (dq/dmu, dq/dsigma), row by row."""
+    mu = np.asarray(mu, float)
+    n = len(mu)
+    Jm = np.empty((n, n))
+    Js = np.empty((n, n))
+    for i in range(n):
+        Jm[i], Js[i] = top_k_jacobian_row_sigma(mu, i, k, D=D, base=base,
+                                                points=points)
+    return Jm, Js
