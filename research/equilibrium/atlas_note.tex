@@ -86,19 +86,42 @@ to the factor $2\sigma^2$, the instantaneous rate at which the
 leading-pair collision local time accrues.
 \end{claim}
 
-\emph{Derivation sketch.} By the occupation-times formula applied to
-$Y$ under the expectation, and Fubini,
-\[
+\emph{Derivation sketch.} Four steps, one manipulation each.
+\begin{align}
 \E\,\Lambda_T^{ij}
-= \lim_{\varepsilon\downarrow 0}\frac{2\sigma^2}{2\varepsilon}
-\int_0^T \Pr\bigl\{|Y_s|<\varepsilon,\ \text{$(i,j)$ lead}\bigr\}\,ds
-= 2\sigma^2 \int_0^T\!\! \int \varphi^{(s)}_{ij}(t,t)\,
-\Pr\bigl\{X_k(s)>t\ \forall k\ne i,j \bigm| X_i(s)=X_j(s)=t\bigr\}
-\,dt\,ds ,
-\]
-where $\varphi^{(s)}_{ij}$ is the joint density of the time-$s$ pair:
-the inner integral is precisely \eqref{eq:tie} for the time-$s$ race,
-i.e.\ $w_{ij}(s)$. What needs care to make this a proposition: the
+&= \lim_{\varepsilon\downarrow 0}\frac{1}{2\varepsilon}\,
+   \E\int_0^T \mathbf 1\bigl\{|Y_s|<\varepsilon,\ (i,j)\ \text{lead}\bigr\}\,
+   d\langle Y\rangle_s
+   \label{eq:step1}\\
+&= 2\sigma^2\,\lim_{\varepsilon\downarrow 0}\frac{1}{2\varepsilon}
+   \int_0^T \Pr\bigl\{|Y_s|<\varepsilon,\ (i,j)\ \text{lead}\bigr\}\,ds
+   \label{eq:step2}\\
+&= 2\sigma^2 \int_0^T \lim_{\varepsilon\downarrow 0}\frac{1}{2\varepsilon}\,
+   \Pr\bigl\{|Y_s|<\varepsilon,\ (i,j)\ \text{lead}\bigr\}\,ds
+   \label{eq:step3}\\
+&= 2\sigma^2 \int_0^T\!\!\int \varphi^{(s)}_{ij}(t,t)\,
+   \Pr\bigl\{X_k(s)>t\ \forall k\ne i,j \bigm|
+   X_i(s)=X_j(s)=t\bigr\}\,dt\,ds .
+   \label{eq:step4}
+\end{align}
+Step \eqref{eq:step1} is the definition of $\Lambda_T^{ij}$ with the
+expectation brought inside the limit. Step \eqref{eq:step2} uses
+$d\langle Y\rangle_s = 2\sigma^2\,ds$ and Fubini: the expectation of
+an indicator is a probability. Step \eqref{eq:step3} exchanges the
+limit with the time integral. Step \eqref{eq:step4} evaluates the
+band probability to first order in $\varepsilon$: writing
+$\varphi^{(s)}_{ij}$ for the joint density of $(X_i(s),X_j(s))$,
+\begin{align*}
+\Pr\bigl\{|Y_s|<\varepsilon,\ (i,j)\ \text{lead}\bigr\}
+&= \int\!\!\int_{|u-v|<\varepsilon} \varphi^{(s)}_{ij}(u,v)\,
+\Pr\bigl\{\text{field above } u\vee v \bigm| u,v\bigr\}\,du\,dv\\
+&= 2\varepsilon \int \varphi^{(s)}_{ij}(t,t)\,
+\Pr\bigl\{\text{field above } t \bigm| t,t\bigr\}\,dt
++ o(\varepsilon),
+\end{align*}
+the strip of width $2\varepsilon$ around the diagonal collapsing onto
+it. The inner integral of \eqref{eq:step4} is precisely \eqref{eq:tie}
+for the time-$s$ race, i.e.\ $w_{ij}(s)$. What needs care to make this a proposition: the
 $\varepsilon$-limit exchange (dominated convergence with the continuous
 conditional density), and the leading-pair indicator, whose
 discontinuity set is the triple-tie event --- measure zero for
