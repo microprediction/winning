@@ -402,12 +402,41 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
 
 
 def top_k_jacobians(mu, k, D=None, base="normal", points=513):
-    """Full (n, n) matrices (dq/dmu, dq/dsigma), row by row."""
+    """Full (n, n) matrices (dq/dmu, dq/dsigma). The lattice, the
+    field rows and the shared count distribution are built ONCE and
+    reused across rows -- the row helper rebuilds them per call, which
+    at n = 150 spent more time on redundant count programs than on the
+    pair terms themselves."""
     mu = np.asarray(mu, float)
     n = len(mu)
+    k = int(k)
+    if not 1 <= k <= n - 1:
+        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    D = np.ones(n) if D is None else np.asarray(D, float)
+    sd = np.sqrt(D)
+    base_rows = BASES[base] if not callable(base) else base
+    lo, hi = _count_window(mu, sd, k, base_rows)
+    x = np.linspace(lo, hi, points)
+    dx = x[1] - x[0]
+    z = (x[:, None] - mu[None, :]) / sd[None, :]
+    S, f, fp = base_rows(z)
+    F = np.clip(1.0 - S, 0.0, 1.0)
+    dens = f / sd[None, :]
+    zdens = (z * dens).T
+    C = _count_distribution(F)
     Jm = np.empty((n, n))
     Js = np.empty((n, n))
     for i in range(n):
-        Jm[i], Js[i] = top_k_jacobian_row_sigma(mu, i, k, D=D, base=base,
-                                                points=points)
+        Qi = _loo_pmf(C, F, i)
+        pair = _pair_pmf_at(Qi, F, i, k)
+        kern = pair * dens[:, i][None, :]
+        row_mu = (kern * dens.T).sum(axis=1) * dx
+        row_sd = (kern * zdens).sum(axis=1) * dx
+        row_mu[i] = 0.0
+        row_mu[i] = -row_mu.sum()
+        cdf_i = Qi[:, :k].sum(axis=1)
+        dfdsd = -(z[:, i] * fp[:, i] + f[:, i]) / D[i]
+        row_sd[i] = (dfdsd * cdf_i).sum() * dx
+        Jm[i] = row_mu
+        Js[i] = row_sd
     return Jm, Js
