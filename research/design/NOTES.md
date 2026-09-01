@@ -85,3 +85,17 @@ likelihood accuracy (ours vs their approximation vs MC) and regret.
 Caveat to carry: nearby batch points are strongly correlated, so the
 race is sharp -- the sharpness escalation and dense-covariance handling
 are the relevant machinery, and batch smallness keeps it cheap.
+
+Also: Gonzalez, Dai, Damianou, Lawrence, "Preferential Bayesian
+Optimization", arXiv:1704.03651 (2017) [locator-verified; unread in
+full] -- the pairwise predecessor: duels only, GP with a Bernoulli
+likelihood on comparisons, and their headline finding is that
+CORRELATION MODELLING is what drives the efficiency gain over discrete
+dueling bandits. That finding is the motivation sentence for the exact
+treatment: a duel is the two-runner race (closed-form probit of the
+difference), PBBO's batch is the n-way race, and the winning engine is
+what removes the reason the literature stopped at pairwise -- N-way
+preference factors lacked tractable likelihoods and moments, which the
+shared field supplies exactly. Lineage for the related-work section:
+PBO 2017 (duels) -> PBBO 2020 (batches, approximate) -> exact n-way
+(here).
