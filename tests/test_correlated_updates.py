@@ -80,3 +80,37 @@ def test_impossible_order_degrades_gracefully():
                                                  beta2=0.01)
     assert np.isfinite(m_hat).all() and np.isfinite(v_hat).all()
     assert logZ < -50
+
+
+def test_laplace_updates_shrink_variance():
+    """The laplace density's kink leaves O(dx) noise on the lattice
+    gradient; differencing that gradient at eps=1e-3 amplified it into
+    wrong-signed curvature, and forty repeated order updates inflated a
+    unit prior variance to 18 (bandits harness, 2026-09-01). Log-concave
+    bases have concave log-evidence in the means, so variance must be
+    non-increasing; the fix widens the differencing step for laplace and
+    clamps positive curvature for the named log-concave bases."""
+    import warnings
+    from winning.ratings import update_order_correlated
+
+    rng = np.random.default_rng(0)
+    M = 10
+    a = rng.normal(0, 1, M)
+    a -= a.mean()
+    mean = np.zeros(M)
+    var = np.ones(M)
+    V = np.zeros((M, 1))
+    r2 = np.random.default_rng(1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        for _ in range(25):
+            S = r2.choice(M, 5, replace=False)
+            perf = a[S] + r2.laplace(0, 1 / np.sqrt(2), 5)
+            order = np.argsort(perf)          # min-wins order, first to last
+            m_s, v_s, _ = update_order_correlated(mean[S], var[S], order,
+                                                  V[S], base="laplace")
+            mean[S] = m_s
+            var[S] = v_s
+    assert var.max() <= 1.0 + 1e-9, var.max()
+    assert var.mean() < 0.35, var.mean()
+    assert np.corrcoef(-mean, a)[0, 1] > 0.8

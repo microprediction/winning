@@ -93,7 +93,11 @@ def _laplace(z):
     b = 1.0 / np.sqrt(2.0)
     az = np.abs(z)
     f = np.exp(-az / b) / (2.0 * b)
-    S = np.where(z < 0, 1.0 - 0.5 * np.exp(z / b), 0.5 * np.exp(-z / b))
+    # exp of the negative magnitude only: np.where evaluates BOTH
+    # branches, so exp(z/b) overflows for large positive z even though
+    # the overflowing branch is never selected
+    half = b * f                        # = 0.5 * exp(-|z|/b)
+    S = np.where(z < 0, 1.0 - half, half)
     return np.maximum(S, 1e-300), f, -np.sign(z) * f / b
 
 

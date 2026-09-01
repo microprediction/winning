@@ -30,6 +30,28 @@ from ..factor.core import jacobian_vector_product, win_probabilities_factor
 _F1 = np.zeros((1, 1))
 _W1 = np.ones(1)
 
+# The named bases are log-concave, so log P(event) is concave in the
+# means (Prekopa): a positive diagonal curvature estimate is always
+# quadrature noise there, never signal, and clamping it keeps repeated
+# moment updates from inflating variance. User callables are exempt --
+# a bimodal base (failure_base) can legitimately grow variance.
+_LOG_CONCAVE = {"normal", "gumbel", "logistic", "laplace"}
+
+
+def _fd_eps(base, eps):
+    """The laplace density's kink leaves O(dx) noise on the lattice
+    gradient (~1e-3 at default resolution); differencing that gradient
+    at eps=1e-3 amplifies the noise a thousandfold into wrong-signed
+    curvature (measured: repeated laplace order updates inflated a unit
+    prior variance to 18). A wide step keeps the difference above the
+    noise floor; truncation error at eps=0.05 is O(eps^2) and
+    negligible against it."""
+    return max(eps, 5e-2) if base == "laplace" else eps
+
+
+def _clamp_d2(d2, base):
+    return np.minimum(d2, 0.0) if base in _LOG_CONCAVE else d2
+
 
 def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
                    points=257):
@@ -78,12 +100,14 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     m_new = m + v * g
     # diagonal second derivatives by per-coordinate central differences of
     # the gradient row (analytic second-order pass is a known follow-up)
+    eps = _fd_eps(base, eps)
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
         gp, _ = _grad_logp_row(m + ej, D, winner, base=base)
         gm, _ = _grad_logp_row(m - ej, D, winner, base=base)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
+    d2 = _clamp_d2(d2, base)
     v_new = np.maximum(v + v**2 * d2, 1e-6)
     return m_new, v_new, p_i
 
@@ -333,7 +357,8 @@ def _factor_grid(r, Qf=7):
     return _factor_nodes(r, Qf=Qf)
 
 
-def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3):
+def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
+                    base="normal"):
     """Shared engine of the correlated updates. For Gaussian priors,
     E[s_j | event] = m_j + v_j d log P / d m_j and
     Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for ANY
@@ -369,12 +394,14 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3):
 
     G, logZ = mixture(m)
     m_new = m + v * G
+    eps = _fd_eps(base, eps)
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
         gp, _ = mixture(m + ej)
         gm, _ = mixture(m - ej)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
+    d2 = _clamp_d2(d2, base)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new, float(logZ)
 
@@ -396,7 +423,7 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
         g, p = _grad_logp_row(mm, D, winner, base=base)
         return np.log(max(p, 1e-300)), g
 
-    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base)
 
 
 def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
@@ -413,7 +440,7 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     def node(mm):
         return _order_pass(mm, sd, order, base=base)
 
-    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base)
 
 
 def _order_pass_batch(Ms, sd, order, L=None, base="normal"):
