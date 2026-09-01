@@ -126,3 +126,14 @@ EXCEPTIONAL -- P(N_-ij = 0) is a product (the field over S_i S_j),
 while for general k it is a coefficient, so pair terms need two-runner
 deconvolution; the trace (leakage rate) still collapses via roots of
 unity, where the double sum factorizes per frequency.
+
+## Skew (Peter, 2026-09-01)
+Once (mu, sigma) joint calibration works, skew is the next shape
+parameter: a COMMON skew (one scalar, e.g. shared skew-normal alpha or
+a Gumbel-vs-normal dial) costs one column in the Gauss-Newton system
+and one more market's worth of identification; per-player skew costs n
+more. Dimension count with common skew: 2n-1 parameters, so win+top-20
+alone becomes underdetermined by one -- three markets (win/top-10/
+top-20) is the natural exactly-determined set. The engine's
+density-agnosticism means the skewed base already prices; only the
+calibration layer needs the extra column.
