@@ -22,7 +22,7 @@ Including Softmax and Multinomial Probit}
 implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
 scripts behind every number in this paper live at
 \texttt{github.com/microprediction/winning}; this revision's tables were
-produced at repository tag \texttt{paper-r6}, package version
+produced at repository tag \texttt{paper-r7}, package version
 \texttt{1.3.0}.}}
 \date{August 2026}
 
@@ -763,10 +763,14 @@ Let a rooted tree have the leaf clusters at its bottom and internal nodes $t$
 above, and give node $t$ a scalar effect $b_t\sim N(0,1)$ applied with uniform
 strength $\lambda_t$ to every leaf beneath it:
 \begin{equation}
-X_i=\mu_i+v_i'a_{c(i)}+\sum_{t\,\in\,\mathrm{anc}(c(i))}\lambda_t b_t
+X_i=\mu_i+v_i\,a_{c(i)}+\sum_{t\,\in\,\mathrm{anc}(c(i))}\lambda_t b_t
     +\sqrt{D_i}\,\epsilon_i ,
 \end{equation}
-with the leaf-cluster loadings $v_i$ of the block construction. The
+with the leaf-cluster construction of \S\ref{sec:blocks} restricted to
+scalar loadings, $v_i\in\R$ and $a_c\sim N(0,1)$: the shipped tree
+kernels take rank-one leaf-cluster effects, where the block kernels
+support rank $r$, and they refuse a rank-$r$ leaf loading rather than
+price it. The
 implied covariance is hierarchical: two contestants share the variance of
 exactly their common ancestors. The root's effect is common to every contestant, hence
 choice-irrelevant, and the pricing kernel gauge-fixes it to zero. A
@@ -806,7 +810,7 @@ outside the parent must be shifted and averaged. Contestant $i$ then wins agains
 $p_i=\int h_i(x)\,R_{c(i)}(x)\,dx$ with $h_i$ as in \eqref{eq:cavity}. The cost
 is $O(nLQ)$ plus $O(L\,Q)$ per tree node.
 
-A depth-one tree with zero strengths reproduces the block race to machine
+A depth-one tree with zero strengths reproduces the rank-one block race to machine
 precision, which is tested. Against a $2^{22}$-path common-random-numbers
 referee the recursion sits at the simulation noise floor on every resolvable
 entry at depths one through four (root-mean-square $z$ between $0.75$ and

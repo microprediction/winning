@@ -44,12 +44,28 @@
   c(xlo - pad_sds * smax, b + pad_sds * smax)
 }
 
+# Tree races take SCALAR (rank-one) leaf-cluster loadings; only the block
+# forward kernel prices rank r. as.numeric() on a matrix silently flattens
+# it, which priced garbage -- refuse instead.
+.scalar_loading <- function(loading) {
+  if (is.matrix(loading)) {
+    if (ncol(loading) > 1) {
+      stop(paste0("tree races take scalar (rank-one) leaf-cluster ",
+                  "loadings; rank-r leaf effects are supported by the ",
+                  "block grammar only."))
+    }
+    return(as.numeric(loading))
+  }
+  as.numeric(loading)
+}
+
 # Raw lattice mass is a diagnostic, not a nuisance: a material defect means
 # the window missed the winner's region, and normalizing it away returns
 # confident wrong shares. Stop instead.
 .checked_mass <- function(raw, kind, mass_tol = 5e-3) {
   t_ <- sum(raw)
-  if (abs(t_ - 1) > mass_tol) {
+  # non-finite mass must fail explicitly, not fall into the comparison
+  if (!is.finite(t_) || abs(t_ - 1) > mass_tol) {
     stop(sprintf(paste0(
       "%s lattice captured total mass %.4f (defect %.2e > %g): the window ",
       "missed part of the winner distribution and the shares would be ",
@@ -237,7 +253,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   mu <- as.numeric(mu)
   m <- -mu
   sd <- sqrt(as.numeric(D))
-  v <- as.numeric(loading)
+  v <- .scalar_loading(loading)
   parent <- as.integer(ifelse(is.na(parent), 0L, parent))  # 0 = root
   lam <- as.numeric(strength)
   n <- length(m)
@@ -333,6 +349,10 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
 #' @export
 block_race_jacobian <- function(mu, cluster, loading, D,
                                 points = 257, qa = 9) {
+  if (is.matrix(loading) && ncol(loading) > 1) {
+    stop(paste0("block_race_jacobian is implemented for rank-one cluster ",
+                "loadings only; rank-r tie densities are tracked work."))
+  }
   mu <- as.numeric(mu)
   m <- -mu
   sd <- sqrt(as.numeric(D))
@@ -508,7 +528,7 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   mu <- as.numeric(mu)
   m <- -mu
   sd <- sqrt(as.numeric(D))
-  v <- as.numeric(loading)
+  v <- .scalar_loading(loading)
   parent <- as.integer(ifelse(is.na(parent), 0L, parent))
   lam <- as.numeric(strength)
   n <- length(m)

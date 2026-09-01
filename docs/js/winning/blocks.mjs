@@ -57,7 +57,9 @@ function windowNodes(mu, sd, amp, delta = 1e-12, padSds = 2) {
 // confident wrong shares. Stop instead.
 function checkedMass(raw, kind, massTol = 5e-3) {
   const t = raw.reduce((a, b) => a + b, 0);
-  if (Math.abs(t - 1) > massTol) {
+  // NaN compares false against any tolerance, so test finiteness
+  // explicitly or a NaN mass sails through the check
+  if (!Number.isFinite(t) || Math.abs(t - 1) > massTol) {
     throw new Error(
       `${kind} lattice captured total mass ${t.toFixed(4)} (defect ` +
       `${Math.abs(t - 1).toExponential(2)} > ${massTol}): the window missed ` +
@@ -188,6 +190,14 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
 
 /* tree machinery shared by forward and jacobian */
 function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
+  if (Array.isArray(loading[0])) {
+    if (loading[0].length > 1) {
+      throw new Error(
+        "tree races take scalar (rank-one) leaf-cluster loadings; rank-r " +
+        "leaf effects are supported by the block grammar only.");
+    }
+    loading = loading.map(v => v[0]);
+  }
   const m = mu.map(v => -v);
   const sd = D.map(Math.sqrt);
   const lam = strength.slice();

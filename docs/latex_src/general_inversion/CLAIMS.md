@@ -601,3 +601,24 @@ Both pinned in tests/test_blocks.py.
    the nearest proven result for a problem of this shape; both refs
    verified at publisher) and Levy-Mohayaee-von Hausegger MNRAS 2021
    (the method at 1e7 cells). Tag paper-r6.
+
+## Fifteenth round (2026-08-31): the tree grammar was written wider than the shipped algorithm
+
+Peter's blocker, verified by running: the manuscript's tree equation used
+the block construction's rank-r leaf term v_i' a_c(i) ("the leaf-cluster
+loadings of the block construction"), but the shipped tree kernels are
+rank-one -- scalar v_o against a 1-D Gauss-Hermite node. Measured
+behavior on a rank-r tree loading: python crashed with a raw broadcast
+ValueError; the R port SILENTLY flattened the matrix via as.numeric()
+and returned normalized wrong shares; the JS engine produced NaN which
+sailed THROUGH the mass check (NaN compares false against any
+tolerance). Fixes: (1) paper tree equation rewritten with scalar
+v_i a_c(i) and an explicit sentence that the shipped tree grammar is
+rank-one where blocks support rank r, with refusal stated; the depth-one
+containment scoped to the rank-one block race; (2) clean refusals in all
+three languages (python NotImplementedError in both tree kernels and the
+inverter's variance surrogate; R stop() in tree forward/jacobian AND in
+block_race_jacobian, which had the same silent flatten; JS throw), with
+(n,1) columns accepted as the scalars they are; (3) mass checks in all
+three languages now test finiteness explicitly. Pinned in
+tests/test_blocks.py and the R testthat suite. Tag paper-r7.

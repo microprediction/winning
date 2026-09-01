@@ -25,3 +25,22 @@ test_that("mass defect stops instead of normalizing", {
   expect_error(winning:::.checked_mass(c(0.5, 0.22), "test race"),
                "captured total mass")
 })
+
+test_that("tree refuses rank-r leaf loadings instead of flattening", {
+  # as.numeric() on a matrix silently flattens; the port priced garbage
+  set.seed(7)
+  n <- 12
+  mu <- rnorm(n); mu <- mu - mean(mu)
+  V2 <- matrix(rnorm(2 * n) * 0.4, n, 2)
+  expect_error(tree_race_probabilities(mu, rep(1:3, each = 4), V2,
+                                       rep(0.6, n), c(4L, 4L, 4L, 0L),
+                                       c(0, 0, 0, 0.4)),
+               "rank-one")
+  expect_error(block_race_jacobian(mu, rep(1:3, each = 4), V2, rep(0.6, n)),
+               "rank-one")
+})
+
+test_that("mass check rejects non-finite mass", {
+  expect_error(winning:::.checked_mass(c(0.5, NaN), "test race"),
+               "captured total mass")
+})

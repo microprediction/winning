@@ -241,13 +241,31 @@ def _block_max(mu, sd, cluster, v, points, qa):
     return np.maximum(p, 0.0)
 
 
+def _scalar_loading(loading, kind):
+    """Tree races take SCALAR (rank-one) leaf-cluster loadings; the paper's
+    tree grammar is written that way and only the block grammar prices
+    rank r. Refuse a matrix rather than mis-broadcast (python crashed
+    cryptically; the R port silently priced the flattened matrix)."""
+    L = np.asarray(loading, float)
+    if L.ndim == 2 and L.shape[1] == 1:
+        return L.ravel()
+    if L.ndim > 1:
+        raise NotImplementedError(
+            f"{kind} take scalar (rank-one) leaf-cluster loadings; rank-r "
+            "leaf effects are supported by the block grammar only. Pass a "
+            "1-D loading, or use structure=Blocks.")
+    return L
+
+
 def _checked_mass(raw, kind, mass_tol=5e-3):
     """Raw lattice mass is a diagnostic, not a nuisance: a material
     defect means the window missed the winner's region, and normalizing
     it away returns confident wrong shares (the fourteenth review's
     0.68/0.32 against a forced 0.50/0.50). Raise instead."""
     t = float(raw.sum())
-    if abs(t - 1.0) > mass_tol:
+    # NaN compares false against any tolerance, so test finiteness
+    # explicitly or a NaN mass sails through the check
+    if not np.isfinite(t) or abs(t - 1.0) > mass_tol:
         raise RuntimeError(
             f"{kind} lattice captured total mass {t:.4f} (defect "
             f"{abs(t-1.0):.2e} > {mass_tol}): the window missed part of "
@@ -423,7 +441,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(np.asarray(D, float))
-    v = np.asarray(loading, float); cluster = np.asarray(cluster)
+    v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
     parent = np.asarray(parent, int); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -515,7 +533,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(np.asarray(D, float))
-    v = np.asarray(loading, float); cluster = np.asarray(cluster)
+    v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
     parent = np.asarray(parent, int); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)

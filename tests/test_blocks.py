@@ -330,3 +330,48 @@ def test_advertised_surface_all_structures():
             p = race_probabilities(mu, structure=st)
             assert abs(p.sum() - 1.0) < 1e-9, type(st).__name__
             assert (p >= 0).all(), type(st).__name__
+
+
+def test_tree_refuses_rank_r_leaf_loadings():
+    """The paper's tree grammar takes SCALAR leaf-cluster loadings (only
+    the block grammar prices rank r). Python mis-broadcast cryptically
+    and the R port silently priced the flattened matrix, so all tree
+    entry points must refuse a matrix loading cleanly; an (n, 1) column
+    is accepted as the scalar it is."""
+    from winning.factor.blocks import (tree_race_probabilities,
+                                       tree_race_jacobian)
+    from winning.factor.races import race_probabilities
+    from winning.factor.structures import Tree
+
+    n = 12
+    rng = np.random.default_rng(7)
+    mu = rng.standard_normal(n) * 0.5
+    mu -= mu.mean()
+    D = 0.4 + 0.4 * rng.random(n)
+    lab = np.repeat(np.arange(3), 4)
+    V2 = rng.standard_normal((n, 2)) * 0.4
+    parent = np.r_[np.full(3, 3), [-1]]
+    strength = np.r_[np.zeros(3), 0.4]
+
+    with pytest.raises(NotImplementedError, match="rank-one"):
+        tree_race_probabilities(mu, lab, V2, D, parent, strength)
+    with pytest.raises(NotImplementedError, match="rank-one"):
+        tree_race_jacobian(mu, lab, V2, D, parent, strength)
+    with pytest.raises(NotImplementedError, match="rank-one"):
+        race_probabilities(mu, structure=Tree(cluster=lab, loading=V2, D=D,
+                                              parent=parent,
+                                              strength=strength))
+    v1col = 0.5 * np.ones((n, 1))
+    p_col = tree_race_probabilities(mu, lab, v1col, D, parent, strength)
+    p_flat = tree_race_probabilities(mu, lab, v1col.ravel(), D, parent,
+                                     strength)
+    assert np.array_equal(p_col, p_flat)
+
+
+def test_mass_check_rejects_nan():
+    """NaN compares false against any tolerance, so without an explicit
+    finiteness test a NaN mass sails through the defect check."""
+    from winning.factor.blocks import _checked_mass
+
+    with pytest.raises(RuntimeError, match="captured total mass"):
+        _checked_mass(np.array([0.5, np.nan]), "test race")

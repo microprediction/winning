@@ -15,9 +15,10 @@ polish_race):
                                          to 1 (fully coupled)
     Tree(cluster, loading, D,
          parent, strength)               hierarchy of uniform shared effects
+                                         (leaf loadings are SCALAR: rank-one)
 
 Containments: Independent = Blocks with zero loadings = Factor with empty V;
-Blocks = Tree of depth 1; Nested = Tree with a rank-1 root IF the coupling is
+rank-one Blocks = Tree of depth 1; Nested = Tree with a rank-1 root IF the coupling is
 uniform, and strictly more general when it is not. D is always the
 idiosyncratic VARIANCE, as everywhere in winning.factor.
 """
@@ -194,7 +195,8 @@ def structure_variances(structure):
             tot = tot + (float(structure.gamma) ** 2) * (g ** 2).sum(axis=1)
         return tot
     if isinstance(structure, Tree):
-        tot = D + np.asarray(structure.loading, float) ** 2
+        from .blocks import _scalar_loading
+        tot = D + _scalar_loading(structure.loading, "tree races") ** 2
         parent = np.asarray(structure.parent, int)
         strength = np.asarray(structure.strength, float)
         cluster = np.asarray(structure.cluster, int)
