@@ -47,59 +47,65 @@
 
   <main>
     <h1>Rating systems</h1>
-    <p class="subtitle">The research line: whole-density beliefs, exact
-      full-order updates.</p>
 
-    <p class="lead">Rating systems for multi-entrant contests: races, tournaments,
-      leaderboards. Beliefs are whole densities on a lattice, free to be skewed or
-      multimodal; each event updates them with the <strong>exact likelihood of the full
-      finish order</strong>, computed by an O(N) chain; predictions are exact
-      winner-of-many probabilities, dead-heat aware. Every claim is benchmarked against
-      TrueSkill, OpenSkill, Glicko-2 and Elo on twelve datasets with market ceilings
-      where they exist.</p>
+    <p>This page describes the package's rating line: systems that
+      maintain a belief about each contestant in a multi-entrant contest
+      &mdash; a race, a tournament, a leaderboard &mdash; and update it
+      from observed finishing orders. The design differs from the
+      TrueSkill family in two respects. Beliefs are whole densities on a
+      lattice rather than parametric (&mu;, &sigma;) pairs, and each
+      event is absorbed through the exact likelihood of the full finish
+      order rather than a pairwise or stagewise decomposition. Every
+      claim below is benchmarked against TrueSkill, OpenSkill, Glicko-2
+      and Elo on twelve datasets, with bookmaker markets as ceilings
+      where odds exist.</p>
 
-    <div class="callout">
-      <strong>Beliefs are densities, not (mu, sigma) pairs.</strong> Each contestant's
-      ability lives on a lattice with no parametric family imposed, and the race noise is
-      an arbitrary kernel you choose: Gaussian, Student-t, or a
-      retirement "slab" for contests where entrants can fail outright. A single update
-      matches exact Bayes to lattice precision, and the update uses the whole finish
-      order rather than pairwise or stagewise approximations.
-      <a href="https://github.com/microprediction/winning#what-is-different-about-thurstonerating">How →</a>
-    </div>
+    <h2>Beliefs and updates</h2>
+    <p>A contestant's ability is represented as a density on a lattice,
+      with no parametric family imposed: skewed and multimodal beliefs
+      are representable, and the race noise is a kernel of the modeller's
+      choosing &mdash; Gaussian, Student-t, or a mixture with a uniform
+      "retirement" component for contests whose entrants can fail
+      outright. The update applies the exact likelihood of the observed
+      finish order, computed by an O(N) forward chain, and a single
+      update reproduces exact Bayes to lattice precision. Predictions are
+      exact winner-of-many probabilities from the same machinery as the
+      <a href="./index.html">race engine</a>, including tie handling.
+      The construction is described in the
+      <a href="https://github.com/microprediction/winning#what-is-different-about-thurstonerating">repository
+      documentation</a>.</p>
 
-    <div class="callout">
-      <strong>Benchmarked on twelve datasets, prequentially.</strong> Formula 1, ATP and
-      WTA tennis, chess, sumo, football, Halo 2, horse racing and synthetic worlds with
-      known truth. Each event is predicted before it is observed, and the tables carry
-      honest baselines: a uniform floor, an oracle where truth is known, and the
-      bookmaker market as a ceiling where odds exist.
-      <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">The tables →</a>
-    </div>
+    <h2>Benchmark protocol</h2>
+    <p>Twelve datasets: Formula 1, ATP and WTA tennis, chess, sumo,
+      football, Halo 2, horse racing, and synthetic worlds with known
+      generating truth. The protocol is prequential &mdash; each event is
+      predicted before it is observed &mdash; and each table carries a
+      uniform floor, an oracle where the truth is known, and the
+      bookmaker market as a ceiling where odds exist. The tables live in
+      <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">BENCHMARKS.md</a>
+      and regenerate from committed scripts.</p>
 
-    <div class="callout">
-      <strong>Non-Gaussian noise pays where the physics demands it.</strong> Formula 1
-      retirements make finishing order a mixture: pace when the car survives, a lottery
-      when it does not. A density with a uniform "disaster" component beats every
-      Gaussian system on 1,158 grands prix, and the same estimator, handed qualifying
-      sessions where no retirement process exists, drives its own disaster mass to
-      near zero. <a href="./assets/pdf/rating_formula_1.pdf">The paper (PDF) →</a>
-    </div>
-
-    <div class="callout">
-      <strong>And an efficiency result.</strong> Against 88 races with genuinely
-      pre-qualifying bookmaker odds, no rating system built on public results and grid
-      data adds statistical power to the market: the optimal pool puts zero weight on
-      every one of the six systems tested. The market's edge is knowledge of current car
-      form. <a href="./assets/pdf/rating_formula_1.pdf">Section 5 →</a>
-    </div>
+    <h2>Non-Gaussian noise, and a market-efficiency result</h2>
+    <p>Formula 1 retirements make finishing order a mixture: pace when
+      the car survives, a lottery when it does not. A noise density with
+      a uniform disaster component beats every Gaussian system tested on
+      1,158 grands prix, and the same estimator, handed qualifying
+      sessions in which no retirement process exists, drives its own
+      disaster mass to near zero &mdash; the component is measuring the
+      physics, not absorbing slack. Against the 88 races with genuinely
+      pre-qualifying bookmaker odds, however, no rating system built on
+      public results and grid data adds statistical power to the market:
+      the optimal forecast pool puts zero weight on every one of the six
+      systems tested, and the market's edge is plausibly knowledge of
+      current car form. Both results, with their designs and caveats, are
+      in <a href="./assets/pdf/rating_formula_1.pdf">Rating Formula 1</a>.</p>
 
     <h2>Quick start</h2>
-    <p><em>Status: this API is the research line, developed in the
-      repository's <a href="https://github.com/microprediction/winning/tree/main/src">src/</a>
-      and shipping with a future release; the results above are from
-      <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">BENCHMARKS.md</a>.
-      The shipped race engine is on the <a href="./index.html">home page</a>.</em></p>
+    <p>This API is the research line, developed in the repository's
+      <a href="https://github.com/microprediction/winning/tree/main/src">src/</a>
+      directory and shipping with a future release; the results above are
+      from BENCHMARKS.md. The shipped race engine is documented on the
+      <a href="./index.html">home page</a>.</p>
 <pre><code>from winning import ThurstoneRating
 
 tr = ThurstoneRating()
@@ -110,14 +116,14 @@ tr.win_probabilities(["ada", "cid", "eve"])   # exact field win probabilities
 tr.rating("ada")                              # Rating(mu=..., sigma=...)
 tr.leaderboard()                              # best-first, conservative</code></pre>
     <p>
-      Every system in the package speaks the same three verbs: <code>observe(names,
-      ranks)</code>, <code>win_probabilities(names)</code>, <code>rating(name)</code>.
-      That includes the shims around third-party comparators, so a benchmark row is a
-      one-line swap. Install with <code>pip install winning</code> (core depends only on
-      numpy) or <code>pip install winning[benchmarks]</code> for the
-      comparators.
+      Every system in the package speaks the same three verbs:
+      <code>observe(names, ranks)</code>,
+      <code>win_probabilities(names)</code> and <code>rating(name)</code>,
+      including the shims around the third-party comparators, so a
+      benchmark row is a one-line swap. Install with <code>pip install
+      winning</code> (the core depends only on numpy) or <code>pip
+      install winning[benchmarks]</code> for the comparators.
     </p>
-
   </main>
 </body>
 </html>
