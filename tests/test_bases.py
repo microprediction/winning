@@ -355,3 +355,39 @@ def test_exponential_power_order_updates_shrink_variance():
             var[S] = v_s
     assert var.max() <= 1.0 + 1e-9
     assert var.mean() < 0.5
+
+
+def test_rust_base_parity_all_families():
+    """Every shipped base family through the compiled forward kernel
+    against the numpy path: probabilities and slopes. Elementary bases
+    at machine epsilon; exponential-power at 1e-12 (puruspe vs scipy
+    incomplete gamma), student at 5e-11 (incomplete beta), skew-normal
+    at 1e-16 (the owens-t crate is the Boost Patefield-Tandy port)."""
+    import winning.factor.races as R
+    from winning.factor.races import (exponential_power_base,
+                                      skew_logistic_base)
+
+    if not (R._HAVE_RUST
+            and hasattr(R._fastrace, "forward_and_slopes_base")):
+        pytest.skip("fastrace without forward_and_slopes_base")
+    rng = np.random.default_rng(1)
+    n = 25
+    mu = rng.normal(0, 0.8, n)
+    D = 0.5 + rng.random(n)
+    V = 0.4 * np.ones((n, 1))
+    cases = ["gumbel", "logistic", "laplace",
+             exponential_power_base(3.0), exponential_power_base(1.4),
+             student_base(4.0), skew_normal_base(3.0),
+             skew_logistic_base(0.5), failure_base(0.2)]
+    for b in cases:
+        p_r, s_r = race_probabilities(mu, V=V, D=D, base=b,
+                                      return_slopes=True)
+        saved = R._HAVE_RUST
+        R._HAVE_RUST = False
+        try:
+            p_n, s_n = race_probabilities(mu, V=V, D=D, base=b,
+                                          return_slopes=True)
+        finally:
+            R._HAVE_RUST = saved
+        assert np.abs(p_r - p_n).max() < 1e-9, b
+        assert np.abs(s_r - s_n).max() < 1e-9, b

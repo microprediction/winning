@@ -440,3 +440,73 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513):
         Jm[i] = row_mu
         Js[i] = row_sd
     return Jm, Js
+
+
+def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
+                       qa=15):
+    """The full rank marginals: an (n, n) matrix whose (i, r) entry is
+    P(contestant i finishes in position r+1), min-wins.
+
+        P(R_i = r) = int f_i(x) P(N_{-i}(x) = r-1) dx,
+
+    the cavity count pmf against the runner's own density -- winner
+    pricing uses the zero-finish coefficient, second place the
+    one-finish coefficient, and so on down the field. Rows sum to one
+    (every runner takes exactly one rank) and columns sum to one (every
+    rank is taken), and both identities are enforced. Cumulative row
+    sums reproduce top_k_probabilities. O(n^2 L) per factor node."""
+    mu = np.asarray(mu, float)
+    n = len(mu)
+    D = np.ones(n) if D is None else np.asarray(D, float)
+    sd = np.sqrt(D)
+    base_rows = BASES[base] if not callable(base) else base
+
+    def one_node(m):
+        lo, hi = _count_window(m, sd, n - 1, base_rows)
+        x = np.linspace(lo, hi, points)
+        dx = x[1] - x[0]
+        z = (x[:, None] - m[None, :]) / sd[None, :]
+        S, f, _ = base_rows(z)
+        F = np.clip(1.0 - S, 0.0, 1.0)
+        dens = f / sd[None, :]
+        C = _count_distribution(F)
+        P = np.empty((n, n))
+        for i in range(n):
+            Qi = _loo_pmf(C, F, i)
+            P[i] = (Qi * dens[:, i][:, None]).sum(axis=0) * dx
+        return P
+
+    if V is None:
+        P = one_node(mu)
+    else:
+        Vm = np.asarray(V, float)
+        if Vm.ndim == 1:
+            Vm = Vm[:, None]
+        if Vm.shape[1] > 2:
+            raise NotImplementedError(
+                "rank_probabilities mixes Gauss-Hermite factor nodes and "
+                "is implemented for factor rank <= 2 (issue #12).")
+        Vm = Vm - Vm.mean(axis=0, keepdims=True)
+        an, aw = roots_hermitenorm(qa)
+        aw = aw / aw.sum()
+        if Vm.shape[1] == 1:
+            nodes, w = an[:, None], aw
+        else:
+            nodes = np.array([[a, b] for a in an for b in an])
+            w = np.array([u * v for u in aw for v in aw])
+            w = w / w.sum()
+        P = np.zeros((n, n))
+        for q in range(len(nodes)):
+            P += w[q] * one_node(mu + Vm @ nodes[q])
+
+    rows = P.sum(axis=1)
+    cols = P.sum(axis=0)
+    if (not np.isfinite(P).all() or np.abs(rows - 1).max() > 5e-3
+            or np.abs(cols - 1).max() > 5e-3):
+        raise RuntimeError(
+            "rank marginals defective: row-sum error "
+            f"{np.abs(rows-1).max():.2e}, column-sum error "
+            f"{np.abs(cols-1).max():.2e}. Raise points=, or report this "
+            "field.")
+    P = P / rows[:, None]
+    return np.clip(P, 0.0, 1.0)

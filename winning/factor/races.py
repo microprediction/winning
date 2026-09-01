@@ -105,6 +105,7 @@ BASES = {"normal": _normal, "gumbel": _gumbel_min,
          "logistic": _logistic, "laplace": _laplace}
 _SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails
           "logistic": (16.0, 16.0), "laplace": (18.0, 18.0)}
+_RUST_BASE_IDS = {"gumbel": 1, "logistic": 2, "laplace": 3}
 
 
 def exponential_power_base(beta):
@@ -144,6 +145,7 @@ def exponential_power_base(beta):
     from scipy.special import gammainccinv
     edge = a * float(gammainccinv(1.0 / beta, 2e-9)) ** (1.0 / beta)
     _expo.span = (max(10.0, edge + 2.0), max(10.0, edge + 2.0))
+    _expo.rust_base = (4, [beta, a])
     if beta < 2.0:
         # kinked density: lattice gradients carry O(dx) noise, and the
         # moment updates must widen their differencing step exactly as
@@ -193,6 +195,7 @@ def skew_logistic_base(alpha):
     lo_edge = abs((-abs(q_lo) - m)) / c + 2.0
     hi_edge = abs((np.log(alpha / 1e-9) - m)) / c + 2.0
     _skew_logistic.span = (max(14.0, lo_edge), max(14.0, hi_edge))
+    _skew_logistic.rust_base = (7, [alpha, m, c])
     return _skew_logistic
 
 
@@ -219,6 +222,7 @@ def student_base(nu):
     # accordingly)
     edge = float(_t.isf(1e-7, nu)) / s
     _student.span = (max(12.0, edge), max(12.0, edge))
+    _student.rust_base = (5, [nu, s])
     return _student
 
 
@@ -244,6 +248,7 @@ def skew_normal_base(a):
         return S, f, fp
 
     _skew.span = (10.0, 10.0)
+    _skew.rust_base = (6, [a, m, sd])
     return _skew
 
 
@@ -624,6 +629,19 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             return np.asarray(p)
         except TypeError:
             pass       # older fastrace without window arguments: numpy path
+    spec = _RUST_BASE_IDS.get(base) if isinstance(base, str) \
+        else getattr(base, "rust_base", None)
+    if _HAVE_RUST and spec is not None \
+            and hasattr(_fastrace, "forward_and_slopes_base"):
+        bid, prm = (spec, []) if isinstance(spec, int) else spec
+        p, sl, total = _fastrace.forward_and_slopes_base(
+            np.ascontiguousarray(mu), np.ascontiguousarray(V),
+            np.ascontiguousarray(D), np.ascontiguousarray(F),
+            np.ascontiguousarray(W), points,
+            float(x[0]), float(x[-1]), int(bid), [float(v) for v in prm])
+        if return_slopes:
+            return np.asarray(p), np.asarray(sl) / total
+        return np.asarray(p)
     p = np.zeros(n)
     slope = np.zeros(n)
     chunk = max(1, int(5e6 / (n * points)))
@@ -1243,4 +1261,6 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
         fp = ((1.0 - q) * fp0 + q * fpl) * sd * sd
         return np.maximum(S, 1e-300), f, fp
 
+    if base == "normal":
+        _fail.rust_base = (8, [q, w, off, m1, sd])
     return _fail

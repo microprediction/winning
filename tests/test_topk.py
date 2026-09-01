@@ -271,3 +271,26 @@ def test_euler_identity_across_k():
     for k in (1, 2, 4, 5):
         Jm, Js = top_k_jacobians(mu, k, D=sd ** 2)
         assert np.abs(Jm @ mu + Js @ sd).max() < 1e-12, k
+
+
+def test_rank_marginals():
+    """Peter's cavity order-statistic identity, whole-matrix form: rows
+    and columns are stochastic, cumulative rows reproduce top-k, and a
+    Monte Carlo referee confirms the interior."""
+    from winning.factor.topk import rank_probabilities, top_k_probabilities
+
+    rng = np.random.default_rng(8)
+    n = 9
+    mu = rng.normal(0, 0.7, n)
+    D = 0.5 + rng.random(n)
+    P = rank_probabilities(mu, D=D)
+    assert np.abs(P.sum(axis=1) - 1).max() < 1e-9
+    assert np.abs(P.sum(axis=0) - 1).max() < 1e-6
+    for k in (1, 3, 6):
+        q = top_k_probabilities(mu, k, D=D)
+        assert np.abs(P[:, :k].sum(axis=1) - q).max() < 1e-6, k
+    M = 400_000
+    X = mu[None, :] + np.sqrt(D)[None, :] * rng.standard_normal((M, n))
+    ranks = np.argsort(np.argsort(X, axis=1), axis=1)
+    emp = np.stack([(ranks == r).mean(axis=0) for r in range(n)], axis=1)
+    assert np.abs(P - emp).max() < 5e-3

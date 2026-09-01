@@ -15,4 +15,6 @@ name = "winning"
 [dependencies]
 ndarray = "0.16"
 rayon = "1.10"
+puruspe = "0.4"
+owens-t = "0.1"
 libm = "0.2"
