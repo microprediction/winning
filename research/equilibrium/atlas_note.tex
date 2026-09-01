@@ -8,10 +8,11 @@
 
 \title{Computation of Collision Local Times:\\
 A Connection Between New Scalable Probit Methodology and Atlas Models}
-\author{Peter Cotton\thanks{Research note, \texttt{winning} repository,
-\texttt{research/equilibrium/atlas\_note.tex}. Companion to the
-inversion paper, whose introduction defers this connection ``for
-another day.'' Every citation is verified to
+\author{Peter Cotton\thanks{Research note. Code, experiments and this
+source live at \texttt{github.com/microprediction/winning} under
+\texttt{research/equilibrium/}. Companion to \citet{cotton2026}, whose
+introduction defers this connection ``for another day.'' Every citation
+is verified to
 title, venue, volume and pages against the publisher's locator, but
 none has yet been read in full; that reading is the next gate before
 any of this is published.}}
@@ -22,17 +23,28 @@ any of this is published.}}
 
 \section{The static object}
 
-The inversion paper's Proposition (photo-finish flux): for a race with
-locations $\mu$ and a smooth joint density, the derivative of $i$'s win
-probability with respect to a rival's location is a boundary flux,
+Consider a one-shot race among $n$ contestants with performances
+$X_1,\dots,X_n$, smallest wins, locations $\mu$ and a smooth joint
+density; $p_i(\mu)$ is $i$'s win probability. \citet{cotton2026}
+(Proposition 1 there, the photo-finish flux) shows that the derivative
+of $i$'s win probability with respect to a rival's location is a
+boundary flux,
 \begin{equation}\label{eq:tie}
 w_{ij} \;=\; \frac{\partial p_i}{\partial \mu_j}
 \;=\; \int \varphi_{ij}(t,t)\,
 \Pr\{X_k > t\ \forall k\ne i,j \mid X_i=X_j=t\}\,dt ,
 \end{equation}
 the probability density that $i$ and $j$ dead-heat \emph{ahead of the
-field}. These are symmetric nonnegative edge conductances, and the
-Jacobian is the graph Laplacian they induce.
+field}, with $\varphi_{ij}$ the joint density of $(X_i,X_j)$. We call
+$w_{ij}$ the \emph{tie density}. The tie densities are symmetric and
+nonnegative, and because a common shift of every location moves no
+probability, the Jacobian $J$ they fill has zero row sums: it is the
+graph Laplacian of the ties. The same reference evaluates $p$, the tie
+densities and $J$'s action for all $n$ contestants together on a
+lattice of $L$ points in $O(nL)$, by sharing one survival field
+$\sum_j \log S_j$ across contestants, with $S_j$ the survival function
+of $X_j$; that cost is what makes everything below computable at
+scale.
 
 \section{The dynamic object}
 
@@ -41,10 +53,10 @@ Let the performances be Brownian,
 X_i(t) \;=\; \mu_i + \sigma\,W_i(t),
 \qquad W_1,\dots,W_n \ \text{independent},
 \]
-so that the time-$T$ marginals form exactly the Gaussian race of the
-paper with $D_i = \sigma^2 T$: the static machinery prices
-$p_i(T)=\Pr\{X_i(T)=\min_k X_k(T)\}$ and its Jacobian at every horizon,
-in $O(nL)$ per horizon.
+so that the time-$T$ marginals form exactly the Gaussian race of
+\citet{cotton2026} with idiosyncratic variances $D_i = \sigma^2 T$: the
+static machinery prices $p_i(T)=\Pr\{X_i(T)=\min_k X_k(T)\}$ and its
+Jacobian at every horizon, in $O(nL)$ per horizon.
 
 Now watch the boundary rather than the marginal. Fix a pair $(i,j)$ and
 set $Y = X_i - X_j$, a Brownian motion with drift $\mu_i-\mu_j$ and
@@ -80,19 +92,20 @@ $Y$ under the expectation, and Fubini,
 \E\,\Lambda_T^{ij}
 = \lim_{\varepsilon\downarrow 0}\frac{2\sigma^2}{2\varepsilon}
 \int_0^T \Pr\bigl\{|Y_s|<\varepsilon,\ \text{$(i,j)$ lead}\bigr\}\,ds
-= 2\sigma^2 \int_0^T \varphi^{(s)}_{Y}(0)\,
-\Pr\{\text{field above}\mid \text{tie at }s\}\,ds ,
+= 2\sigma^2 \int_0^T\!\! \int \varphi^{(s)}_{ij}(t,t)\,
+\Pr\bigl\{X_k(s)>t\ \forall k\ne i,j \bigm| X_i(s)=X_j(s)=t\bigr\}
+\,dt\,ds ,
 \]
-and the integrand is precisely the time-$s$ tie density
-\eqref{eq:tie}, i.e.\ $w_{ij}(s)$ by the paper's Proposition applied at
-horizon $s$. What needs care to make this a proposition: the
+where $\varphi^{(s)}_{ij}$ is the joint density of the time-$s$ pair:
+the inner integral is precisely \eqref{eq:tie} for the time-$s$ race,
+i.e.\ $w_{ij}(s)$. What needs care to make this a proposition: the
 $\varepsilon$-limit exchange (dominated convergence with the continuous
 conditional density), and the leading-pair indicator, whose
 discontinuity set is the triple-tie event --- measure zero for
 nondegenerate diffusions, and exactly the degeneracy the Atlas
 literature attends to \citep{ichiba2010}.
 Correlated (factor) versions keep the time-$T$ marginals inside the
-covariance grammar; the identity needs only $\langle Y\rangle$ adjusted
+covariance grammar of \citet{cotton2026}; the identity needs only $\langle Y\rangle$ adjusted
 for the factor covariance --- mechanical, unwritten. \hfill$\square$
 
 So the boundary flux is not an \emph{analogy} to local time: for
@@ -102,8 +115,9 @@ explicitly for any one pair --- at $O(nL)$ per horizon.
 
 \section{Measured}
 
-Three checks, all seeded and committed
-(\texttt{research/equilibrium/exp2\_localtime}).
+Three checks, all seeded and committed under
+\texttt{research/equilibrium/exp2\_localtime} at
+\texttt{github.com/microprediction/winning}.
 
 \emph{Claim~\ref{claim:main} against simulation.} A five-runner
 Brownian race ($\sigma=1$, $T=0.5$, distinct locations), $60{,}000$
@@ -112,18 +126,21 @@ run at band widths $\varepsilon=0.08$ and $0.04$ and extrapolated
 linearly to $\varepsilon\to0$ (the finite-band bias is visibly linear:
 the raw estimates sit $2.7$--$4.4$ percent low). Against the lattice
 side of \eqref{eq:main}, stable under doubling of the horizon grid:
-pair $(0,1)$, Monte Carlo $0.3539\pm0.0038$ against lattice $0.3544$
-($z=-0.14$); pair $(0,3)$, $0.0946\pm0.0022$ against $0.0956$
-($z=-0.47$).
+the two favourites, Monte Carlo $0.3539\pm0.0038$ against lattice
+$0.3544$ ($z=-0.14$); the favourite against a midfield runner,
+$0.0946\pm0.0022$ against $0.0956$ ($z=-0.47$).
 
-\emph{The trace identity.} Summing named pairs gives the ranked
-rank-$1$/rank-$2$ gap local time, and zero row sums make the total a
-trace: $\sum_{i<j} w_{ij} = -\tfrac12\operatorname{tr}J$. Measured
-identical to six decimals ($0.995801$ both ways). The trace is the sum
-of the own-slopes the forward pass returns anyway, so the whole-field
-collision rate is free with pricing.
+\emph{The trace identity.} Summing over named pairs $(i,j)$ gives the
+local time of the gap between the ranked first and second particles,
+whoever they are, and $J$'s zero row sums make the total a trace:
+$\sum_{i<j} w_{ij} = -\tfrac12\operatorname{tr}J$. Measured identical
+to six decimals ($0.995801$ both ways). The trace is the sum of the
+own-coordinate derivatives $\partial p_i/\partial\mu_i$, which the
+forward pass of \citet{cotton2026} returns with the probabilities, so
+the whole-field collision rate is free with pricing.
 
-\emph{Scale.} For a Russell-sized field, $n=3000$, the full expected
+\emph{Scale.} For a field the size of the Russell 3000 index,
+$n=3000$, the full expected
 rank-$1$/rank-$2$ collision-rate curve across $24$ horizons computes in
 $1.43$ seconds on one laptop. Collision local times at this scale are
 not otherwise available by any method we know.
@@ -151,19 +168,19 @@ $O(nLk)$ by the standard recursion. Summed over pairs and scaled by
 $2\sigma^2$, \eqref{eq:topk} is the expected local-time rate at the
 rank-$(k,k+1)$ gap: the leakage rate of a top-$k$ index under a fitted
 race model, at Russell scale ($k=1000$ or $3000$) at the same cost
-orders as everything above. Implementation is tracked as repository
-issue~\#12; equation \eqref{eq:topk} is derived here and not yet
-implemented or measured.
+orders as everything above. Implementation is tracked as issue~12 of
+the \texttt{winning} repository; equation \eqref{eq:topk} is derived
+here and not yet implemented or measured.
 
 \section{Why the Atlas literature should care}
 
 Rank-based (Atlas) models \citep{fernholz2002,banner2005} assign drift and volatility by \emph{rank}; the semimartingale
 decomposition of the $k$-th ranked process carries the collision local
-times $\Lambda^{(k,k+1)}$ between adjacent ranks as its leakage terms,
+times $\Lambda^{(k,k+1)}$ between adjacent ranks as correction terms,
 and in stochastic portfolio theory the size effect and the attrition of
 the largest market weight are expressed through them. Market weights
-are a choice-probability vector --- the inversion paper's
-portfolio remark is the same bridge --- and rank-crossing local times
+are a choice-probability vector --- the portfolio remark of
+\citet{cotton2026} is the same bridge --- and rank-crossing local times
 are what the static machinery evaluates, one horizon at a time.
 
 Trade flows in both directions.
@@ -173,10 +190,10 @@ Trade flows in both directions.
 analytically available only for small $n$ or special symmetric cases.
 Claim~\ref{claim:main} plus the lattice evaluates expected
 local-time densities for the leading pair at $O(nL)$ per horizon for
-$n$ in the millions; the removal counterfactual (delete the leaders,
-re-race) reaches lower ranks. Checkable against simulated ranked
-Brownian systems --- an exact-versus-Monte-Carlo experiment of the kind
-the repository already referees.
+$n$ in the millions; the removal counterfactual of \citet{cotton2026}
+(delete the leaders, re-race) reaches lower ranks. Checkable against
+simulated ranked Brownian systems --- an exact-versus-Monte-Carlo
+experiment of the kind that reference's benchmarks already referee.
 \item \emph{Structure to us.} The Atlas decomposition names the dynamic
 inversion: recover drifts from observed \emph{leadership turnover}
 (occupation and crossing rates of ranks), of which the static inversion
@@ -198,6 +215,10 @@ local time already carries a name in that literature is unchecked.
 \bibitem[Banner et~al.(2005)Banner, Fernholz and Karatzas]{banner2005}
 A.~D. Banner, R.~Fernholz, I.~Karatzas. Atlas models of equity markets.
 \emph{Annals of Applied Probability} 15(4):2296--2330, 2005.
+\bibitem[Cotton(2026)]{cotton2026} P.~Cotton. Scalable inversion of
+contests with correlated performances, including softmax and
+multinomial probit. Working paper, arXiv (submitted), 2026. Code and
+live demonstration: \texttt{winning.microprediction.org}.
 \bibitem[Fernholz(2002)]{fernholz2002} E.~R. Fernholz.
 \emph{Stochastic Portfolio Theory}. Springer, New York, 2002.
 \bibitem[Ichiba and Karatzas(2010)]{ichiba2010} T.~Ichiba,
