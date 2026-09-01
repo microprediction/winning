@@ -1,0 +1,137 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.2in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\newtheorem{claim}{Claim}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+
+\title{Tie densities are collision local times:\\ a note on the Atlas connection}
+\author{Peter Cotton\thanks{Research note, \texttt{winning} repository,
+\texttt{research/equilibrium/atlas\_note.tex}. Companion to the
+inversion paper, whose introduction defers this connection ``for
+another day.'' Citations marked [U] have not yet been verified at
+source and must be before any of this is published.}}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\section{The static object}
+
+The inversion paper's Proposition (photo-finish flux): for a race with
+locations $\mu$ and a smooth joint density, the derivative of $i$'s win
+probability with respect to a rival's location is a boundary flux,
+\begin{equation}\label{eq:tie}
+w_{ij} \;=\; \frac{\partial p_i}{\partial \mu_j}
+\;=\; \int \varphi_{ij}(t,t)\,
+\Pr\{X_k > t\ \forall k\ne i,j \mid X_i=X_j=t\}\,dt ,
+\end{equation}
+the probability density that $i$ and $j$ dead-heat \emph{ahead of the
+field}. These are symmetric nonnegative edge conductances, and the
+Jacobian is the graph Laplacian they induce.
+
+\section{The dynamic object}
+
+Let the performances be Brownian,
+\[
+X_i(t) \;=\; \mu_i + \sigma\,W_i(t),
+\qquad W_1,\dots,W_n \ \text{independent},
+\]
+so that the time-$T$ marginals form exactly the Gaussian race of the
+paper with $D_i = \sigma^2 T$: the static machinery prices
+$p_i(T)=\Pr\{X_i(T)=\min_k X_k(T)\}$ and its Jacobian at every horizon,
+in $O(nL)$ per horizon.
+
+Now watch the boundary rather than the marginal. Fix a pair $(i,j)$ and
+set $Y = X_i - X_j$, a Brownian motion with drift $\mu_i-\mu_j$ and
+quadratic variation $\langle Y\rangle_t = 2\sigma^2 t$. The event
+``$i$ and $j$ are the leading pair and tied'' is the particle system
+touching $\{X_i = X_j \le X_k\ \forall k\}$. Time spent straddling that
+set is measured by a local time: define the \emph{leading-pair
+collision local time}
+\[
+\Lambda_T^{ij} \;=\;
+\lim_{\varepsilon\downarrow 0}\frac{1}{2\varepsilon}
+\int_0^T \mathbf 1\bigl\{|Y_s|<\varepsilon,\;
+X_i(s)\wedge X_j(s) \le X_k(s)\ \forall k\ne i,j\bigr\}\,
+d\langle Y\rangle_s .
+\]
+
+\begin{claim}\label{claim:main}
+For the independent Brownian race,
+\begin{equation}\label{eq:main}
+\E\,\Lambda_T^{ij}
+\;=\; 2\sigma^2 \int_0^T w_{ij}(s)\,ds
+\;=\; 2\sigma^2 \int_0^T \frac{\partial p_i}{\partial\mu_j}(s)\,ds ,
+\end{equation}
+where $w_{ij}(s)$ is the static tie density \eqref{eq:tie} of the
+time-$s$ race. Equivalently: the Jacobian entry at horizon $s$ is, up
+to the factor $2\sigma^2$, the instantaneous rate at which the
+leading-pair collision local time accrues.
+\end{claim}
+
+\emph{Derivation sketch.} By the occupation-times formula applied to
+$Y$ under the expectation, and Fubini,
+\[
+\E\,\Lambda_T^{ij}
+= \lim_{\varepsilon\downarrow 0}\frac{2\sigma^2}{2\varepsilon}
+\int_0^T \Pr\bigl\{|Y_s|<\varepsilon,\ \text{$(i,j)$ lead}\bigr\}\,ds
+= 2\sigma^2 \int_0^T \varphi^{(s)}_{Y}(0)\,
+\Pr\{\text{field above}\mid \text{tie at }s\}\,ds ,
+\]
+and the integrand is precisely the time-$s$ tie density
+\eqref{eq:tie}, i.e.\ $w_{ij}(s)$ by the paper's Proposition applied at
+horizon $s$. What needs care to make this a proposition: the
+$\varepsilon$-limit exchange (dominated convergence with the continuous
+conditional density), and the leading-pair indicator, whose
+discontinuity set is the triple-tie event --- measure zero for
+nondegenerate diffusions, and exactly the degeneracy the Atlas
+literature attends to [U: Ichiba--Karatzas on triple collisions].
+Correlated (factor) versions keep the time-$T$ marginals inside the
+covariance grammar; the identity needs only $\langle Y\rangle$ adjusted
+for the factor covariance --- mechanical, unwritten. \hfill$\square$
+
+So the boundary flux is not an \emph{analogy} to local time: for
+Brownian races it \emph{is} the local-time density, and the shared
+field computes it --- implicitly for all $\binom{n}{2}$ pairs, and
+explicitly for any one pair --- at $O(nL)$ per horizon.
+
+\section{Why the Atlas literature should care}
+
+Rank-based (Atlas) models [U: Fernholz 2002; Banner--Fernholz--Karatzas
+2005] assign drift and volatility by \emph{rank}; the semimartingale
+decomposition of the $k$-th ranked process carries the collision local
+times $\Lambda^{(k,k+1)}$ between adjacent ranks as its leakage terms,
+and in stochastic portfolio theory the size effect and the attrition of
+the largest market weight are expressed through them. Market weights
+are a choice-probability vector --- the inversion paper's
+portfolio remark is the same bridge --- and rank-crossing local times
+are what the static machinery evaluates, one horizon at a time.
+
+Trade flows in both directions.
+
+\begin{enumerate}
+\item \emph{Computation to Atlas.} Collision local times are
+analytically available only for small $n$ or special symmetric cases
+[U]. Claim~\ref{claim:main} plus the lattice evaluates expected
+local-time densities for the leading pair at $O(nL)$ per horizon for
+$n$ in the millions; the removal counterfactual (delete the leaders,
+re-race) reaches lower ranks. Checkable against simulated ranked
+Brownian systems --- an exact-versus-Monte-Carlo experiment of the kind
+the repository already referees.
+\item \emph{Structure to us.} The Atlas decomposition names the dynamic
+inversion: recover drifts from observed \emph{leadership turnover}
+(occupation and crossing rates of ranks), of which the static inversion
+is the one-horizon shadow.
+\end{enumerate}
+
+\section{Scope honesty}
+
+The identity is stated for the leading pair; adjacent-rank local times
+at rank $k$ need a top-$k$ cavity (delete the $k-1$ leaders and
+re-race), with cost and accuracy unmeasured. Nothing here addresses
+stationary gap distributions [U: Pal--Pitman], where much of the Atlas
+literature lives; the contribution in prospect is finite-horizon and
+computational. Every bracketed citation above is unverified at source.
+
+\end{document}
