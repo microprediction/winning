@@ -1,6 +1,7 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1.2in]{geometry}
 \usepackage{amsmath,amssymb,amsthm}
+\usepackage[round]{natbib}
 \newtheorem{claim}{Claim}
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\E}{\mathbb{E}}
@@ -9,8 +10,10 @@
 \author{Peter Cotton\thanks{Research note, \texttt{winning} repository,
 \texttt{research/equilibrium/atlas\_note.tex}. Companion to the
 inversion paper, whose introduction defers this connection ``for
-another day.'' Citations marked [U] have not yet been verified at
-source and must be before any of this is published.}}
+another day.'' Every citation is verified to
+title, venue, volume and pages against the publisher's locator, but
+none has yet been read in full; that reading is the next gate before
+any of this is published.}}
 \date{September 2026}
 
 \begin{document}
@@ -86,7 +89,7 @@ $\varepsilon$-limit exchange (dominated convergence with the continuous
 conditional density), and the leading-pair indicator, whose
 discontinuity set is the triple-tie event --- measure zero for
 nondegenerate diffusions, and exactly the degeneracy the Atlas
-literature attends to [U: Ichiba--Karatzas on triple collisions].
+literature attends to \citep{ichiba2010}.
 Correlated (factor) versions keep the time-$T$ marginals inside the
 covariance grammar; the identity needs only $\langle Y\rangle$ adjusted
 for the factor covariance --- mechanical, unwritten. \hfill$\square$
@@ -96,10 +99,64 @@ Brownian races it \emph{is} the local-time density, and the shared
 field computes it --- implicitly for all $\binom{n}{2}$ pairs, and
 explicitly for any one pair --- at $O(nL)$ per horizon.
 
+\section{Measured}
+
+Three checks, all seeded and committed
+(\texttt{research/equilibrium/exp2\_localtime}).
+
+\emph{Claim~\ref{claim:main} against simulation.} A five-runner
+Brownian race ($\sigma=1$, $T=0.5$, distinct locations), $60{,}000$
+exactly simulated paths at $dt=2.5\times10^{-5}$, occupation estimator
+run at band widths $\varepsilon=0.08$ and $0.04$ and extrapolated
+linearly to $\varepsilon\to0$ (the finite-band bias is visibly linear:
+the raw estimates sit $2.7$--$4.4$ percent low). Against the lattice
+side of \eqref{eq:main}, stable under doubling of the horizon grid:
+pair $(0,1)$, Monte Carlo $0.3539\pm0.0038$ against lattice $0.3544$
+($z=-0.14$); pair $(0,3)$, $0.0946\pm0.0022$ against $0.0956$
+($z=-0.47$).
+
+\emph{The trace identity.} Summing named pairs gives the ranked
+rank-$1$/rank-$2$ gap local time, and zero row sums make the total a
+trace: $\sum_{i<j} w_{ij} = -\tfrac12\operatorname{tr}J$. Measured
+identical to six decimals ($0.995801$ both ways). The practical force:
+the trace is the sum of the own-slopes the forward pass returns anyway,
+so the whole-field collision rate is free with pricing.
+
+\emph{Scale.} For a Russell-sized field, $n=3000$, the full expected
+rank-$1$/rank-$2$ collision-rate curve across $24$ horizons computes in
+$1.43$ seconds on one laptop. Collision local times at this scale are
+not otherwise available by any method we know.
+
+\section{Index leakage}
+
+Fernholz calls the relative-return loss a capitalization-league
+portfolio suffers when stocks fall out of the league and are replaced
+\emph{leakage}, and expresses it through semimartingale local time at
+the dividing rank \citep{fernholz2002}. Index entry and exit ---
+reconstitution turnover --- is a rank-boundary crossing, so the
+machinery above prices it, once the boundary moves from rank one to
+rank $k$. The static object generalizes cleanly: for
+$q^{(k)}_i = \Pr\{X_i \text{ among the } k \text{ smallest}\}$ the
+same divergence-theorem argument puts the whole derivative on ties of
+$i$ and $j$ \emph{at the cutoff},
+\begin{equation}\label{eq:topk}
+\frac{\partial q^{(k)}_i}{\partial \mu_j}
+\;=\; \int \varphi_{ij}(t,t)\,
+\Pr\bigl\{\#\{m\ne i,j : X_m < t\} = k-1 \,\bigm|\, X_i=X_j=t\bigr\}\,dt ,
+\end{equation}
+with $k=1$ recovering \eqref{eq:tie}. The count probability is
+Poisson--binomial over the survivals the field already evaluates,
+$O(nLk)$ by the standard recursion. Summed over pairs and scaled by
+$2\sigma^2$, \eqref{eq:topk} is the expected local-time rate at the
+rank-$(k,k+1)$ gap: the leakage rate of a top-$k$ index under a fitted
+race model, at Russell scale ($k=1000$ or $3000$) at the same cost
+orders as everything above. Implementation is tracked as repository
+issue~\#12; equation \eqref{eq:topk} is derived here and not yet
+implemented or measured.
+
 \section{Why the Atlas literature should care}
 
-Rank-based (Atlas) models [U: Fernholz 2002; Banner--Fernholz--Karatzas
-2005] assign drift and volatility by \emph{rank}; the semimartingale
+Rank-based (Atlas) models \citep{fernholz2002,banner2005} assign drift and volatility by \emph{rank}; the semimartingale
 decomposition of the $k$-th ranked process carries the collision local
 times $\Lambda^{(k,k+1)}$ between adjacent ranks as its leakage terms,
 and in stochastic portfolio theory the size effect and the attrition of
@@ -112,8 +169,8 @@ Trade flows in both directions.
 
 \begin{enumerate}
 \item \emph{Computation to Atlas.} Collision local times are
-analytically available only for small $n$ or special symmetric cases
-[U]. Claim~\ref{claim:main} plus the lattice evaluates expected
+analytically available only for small $n$ or special symmetric cases.
+Claim~\ref{claim:main} plus the lattice evaluates expected
 local-time densities for the leading pair at $O(nL)$ per horizon for
 $n$ in the millions; the removal counterfactual (delete the leaders,
 re-race) reaches lower ranks. Checkable against simulated ranked
@@ -127,11 +184,27 @@ is the one-horizon shadow.
 
 \section{Scope honesty}
 
-The identity is stated for the leading pair; adjacent-rank local times
-at rank $k$ need a top-$k$ cavity (delete the $k-1$ leaders and
-re-race), with cost and accuracy unmeasured. Nothing here addresses
-stationary gap distributions [U: Pal--Pitman], where much of the Atlas
-literature lives; the contribution in prospect is finite-horizon and
-computational. Every bracketed citation above is unverified at source.
+The verified identity is for the leading pair; the rank-$k$ boundary
+formula \eqref{eq:topk} is derived but unimplemented and unmeasured.
+Nothing here addresses stationary gap distributions
+\citep{palpitman2008}, where much of the Atlas literature lives; the
+contribution in prospect is finite-horizon and computational. Citations
+are locator-verified only: the sources have not yet been read in full,
+and in particular whether the leading-pair (rather than adjacent-rank)
+local time already carries a name in that literature is unchecked.
+
+\begin{thebibliography}{9}\small
+\bibitem[Banner et~al.(2005)Banner, Fernholz and Karatzas]{banner2005}
+A.~D. Banner, R.~Fernholz, I.~Karatzas. Atlas models of equity markets.
+\emph{Annals of Applied Probability} 15(4):2296--2330, 2005.
+\bibitem[Fernholz(2002)]{fernholz2002} E.~R. Fernholz.
+\emph{Stochastic Portfolio Theory}. Springer, New York, 2002.
+\bibitem[Ichiba and Karatzas(2010)]{ichiba2010} T.~Ichiba,
+I.~Karatzas. On collisions of Brownian particles. \emph{Annals of
+Applied Probability} 20(3):951--977, 2010.
+\bibitem[Pal and Pitman(2008)]{palpitman2008} S.~Pal, J.~Pitman.
+One-dimensional Brownian particle systems with rank-dependent drifts.
+\emph{Annals of Applied Probability} 18(6):2179--2207, 2008.
+\end{thebibliography}
 
 \end{document}
