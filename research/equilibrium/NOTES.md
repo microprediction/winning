@@ -114,3 +114,15 @@ one specific expensive error (wrong skew) that a Gaussian-only engine
 cannot express -- NOT "tune the tail weight". Their earlier 0.088-0.119
 figure must be paired with the 0.026 symmetric-family span if ever
 quoted.
+
+Standing instruction (Peter, 2026-09-01): when the order-statistics
+paper has a draft PDF, add it to the site papers listing.
+MEASURED cornerstone for it: grad of W_k(mu) = E[sum of k smallest]
+equals q^(k) exactly (FD check 1.1e-8, eight runners, k=3) -- W_k is a
+min of affine subset-sums, so concave, so Danskin gives the gradient
+and the Theorem-1 inversion apparatus carries over to top-k shares.
+Note for the computation section: the k=1 rank-one JVP collapse is
+EXCEPTIONAL -- P(N_-ij = 0) is a product (the field over S_i S_j),
+while for general k it is a coefficient, so pair terms need two-runner
+deconvolution; the trace (leakage rate) still collapses via roots of
+unity, where the double sum factorizes per frequency.

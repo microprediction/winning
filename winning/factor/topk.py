@@ -242,3 +242,112 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     q = top_k_probabilities(mu, n - int(k), V=V, D=D, base=base,
                             points=points, qa=qa)
     return 1.0 - q
+
+
+def _loo_pmf(C, F, i):
+    """Full leave-one-out pmf Q^{-i}[l, m], m = 0..n-1, by one
+    stable-direction deconvolution per lattice point: forward everywhere
+    S_i >= F_i, backward everywhere else, so the recursion error decays
+    along its whole length."""
+    L, n = F.shape
+    Fi = F[:, i]
+    Si = 1.0 - Fi
+    Q = np.empty((L, n))
+    fwd = Si >= Fi
+    # forward, full length
+    if fwd.any():
+        s = np.maximum(Si[fwd], TINY)[:, None]
+        f = Fi[fwd][:, None]
+        Cf = C[fwd]
+        Qf = np.empty((fwd.sum(), n))
+        Qf[:, 0] = np.clip(Cf[:, 0] / s[:, 0], 0.0, 1.0)
+        for m in range(1, n):
+            Qf[:, m] = np.clip((Cf[:, m] - f[:, 0] * Qf[:, m - 1])
+                               / s[:, 0], 0.0, 1.0)
+        Q[fwd] = Qf
+    bwd = ~fwd
+    if bwd.any():
+        f = np.maximum(Fi[bwd], TINY)[:, None]
+        s = Si[bwd][:, None]
+        Cb = C[bwd]
+        Qb = np.empty((bwd.sum(), n))
+        Qb[:, n - 1] = np.clip(Cb[:, n] / f[:, 0], 0.0, 1.0)
+        for m in range(n - 2, -1, -1):
+            Qb[:, m] = np.clip((Cb[:, m + 1] - s[:, 0] * Qb[:, m + 1])
+                               / f[:, 0], 0.0, 1.0)
+        Q[bwd] = Qb
+    return Q
+
+
+def _pair_pmf_at(Qi, F, i, k, chunk=256):
+    """P(N_{-ij} = k-1) for every j != i at every lattice point:
+    deconvolve runner j's Bernoulli from the leave-i pmf Qi (L, n),
+    stable direction per (j, x), forward k-1 steps or backward n-1-k
+    steps since only one coefficient is needed."""
+    L, n = F.shape
+    out = np.zeros((n, L))
+    for a in range(0, n, chunk):
+        b = min(a + chunk, n)
+        Fc = F[:, a:b].T                       # (c, L)
+        Sc = 1.0 - Fc
+        fwd = Sc >= Fc
+        s_safe = np.maximum(Sc, TINY)
+        Q = np.clip(Qi[None, :, 0] / s_safe, 0.0, 1.0)
+        for m in range(1, k):
+            Q = np.clip((Qi[None, :, m] - Fc * Q) / s_safe, 0.0, 1.0)
+        f_safe = np.maximum(Fc, TINY)
+        Qb = np.clip(Qi[None, :, n - 1] / f_safe, 0.0, 1.0)
+        for m in range(n - 3, k - 2, -1):
+            Qb = np.clip((Qi[None, :, m + 1] - Sc * Qb) / f_safe,
+                         0.0, 1.0)
+        out[a:b] = np.where(fwd, Q, Qb)
+    out[i] = 0.0
+    return out
+
+
+def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
+    """Row i of dq^{(k)}/dmu: the off-diagonals are the cutoff tie
+    densities
+
+        w_ij = int f_i(x) f_j(x) P(N_{-ij}(x) = k-1) dx >= 0,
+
+    the same divergence-theorem flux as the win-probability Jacobian
+    with the tie constrained to straddle the rank-k boundary (k = 1
+    recovers it exactly), and the diagonal follows from translation
+    invariance: a common shift of every location moves no membership,
+    so the row sums to zero. Independent races only; min-wins."""
+    mu = np.asarray(mu, float)
+    n = len(mu)
+    k = int(k)
+    if not 1 <= k <= n - 1:
+        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    D = np.ones(n) if D is None else np.asarray(D, float)
+    sd = np.sqrt(D)
+    base_rows = BASES[base] if not callable(base) else base
+    lo, hi = _count_window(mu, sd, k, base_rows)
+    x = np.linspace(lo, hi, points)
+    dx = x[1] - x[0]
+    z = (x[:, None] - mu[None, :]) / sd[None, :]
+    S, f, _ = base_rows(z)
+    F = np.clip(1.0 - S, 0.0, 1.0)
+    dens = f / sd[None, :]                     # (L, n)
+    C = _count_distribution(F)
+    Qi = _loo_pmf(C, F, i)
+    pair = _pair_pmf_at(Qi, F, i, k)           # (n, L)
+    row = (pair * dens.T * dens[:, i][None, :]).sum(axis=1) * dx
+    row[i] = 0.0
+    row[i] = -row.sum()
+    return row
+
+
+def top_k_jacobian(mu, k, D=None, base="normal", points=513):
+    """The full (n, n) matrix dq^{(k)}/dmu, row by row: symmetric
+    nonnegative off-diagonals, zero row sums -- minus a graph Laplacian
+    on the rank-k boundary. O(n^2 L min(k, n-k)); intended for moderate
+    n (scores, small fields, tests). Independent races only."""
+    mu = np.asarray(mu, float)
+    n = len(mu)
+    J = np.empty((n, n))
+    for i in range(n):
+        J[i] = top_k_jacobian_row(mu, i, k, D=D, base=base, points=points)
+    return J

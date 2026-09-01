@@ -116,3 +116,33 @@ def test_rust_matches_numpy():
     finally:
         T._HAVE_RUST = saved
     assert np.abs(q_rust - q_np).max() < 1e-12
+
+
+def test_jacobian_matches_finite_differences():
+    """The cutoff tie-density Jacobian against central differences of
+    the forward map (measured 6.7e-11 when pinned), with k=1 recovering
+    the win-probability Jacobian to 1.2e-15, off-diagonals symmetric,
+    columns summing to zero, and minus the matrix PSD -- the rank-k
+    boundary Laplacian the potential's concavity demands."""
+    from winning.factor.topk import top_k_jacobian, top_k_probabilities
+    from winning.factor.polish import race_jacobian
+
+    rng = np.random.default_rng(2)
+    n, k = 6, 2
+    mu = rng.normal(0, 0.7, n)
+    mu -= mu.mean()
+    D = 0.5 + rng.random(n)
+    J = top_k_jacobian(mu, k, D=D)
+    h = 1e-5
+    for j in range(n):
+        e = np.zeros(n)
+        e[j] = h
+        fd = (top_k_probabilities(mu + e, k, D=D)
+              - top_k_probabilities(mu - e, k, D=D)) / (2 * h)
+        assert np.abs(J[:, j] - fd).max() < 1e-8
+    off = J - np.diag(np.diag(J))
+    assert np.abs(off - off.T).max() < 1e-14
+    assert np.abs(J.sum(axis=0)).max() < 1e-14
+    assert np.linalg.eigvalsh(-(J + J.T) / 2).min() > -1e-12
+    J1 = top_k_jacobian(mu, 1, D=D)
+    assert np.abs(J1 - race_jacobian(mu, D=D)).max() < 1e-12
