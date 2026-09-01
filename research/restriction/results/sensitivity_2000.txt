@@ -1,0 +1,32 @@
+Smoothing and menu weighting. Gain in nats per prediction.
+
+dataset                       a=0    a=1/2      a=1  |    subsets  by size    pairs
+Dots                      +0.0017  +0.0016  +0.0016  |    +0.0016  +0.0014  +0.0025
+GSS job values            +0.0019  +0.0018  +0.0018  |    +0.0018  +0.0017  +0.0021
+GSS socialization         +0.0060  +0.0057  +0.0055  |    +0.0057  +0.0048  +0.0130
+Jester file 1             +0.0020  +0.0020  +0.0019  |    +0.0020  +0.0019  +0.0053
+Jester file 2             +0.0018  +0.0018  +0.0017  |    +0.0018  +0.0017  +0.0048
+Jester file 3             +0.0024  +0.0024  +0.0024  |    +0.0024  +0.0024  +0.0064
+Netflix                   +0.0013  +0.0013  +0.0013  |    +0.0013  +0.0013  +0.0013
+Occupational prestige         n/a  +0.0391  +0.0153  |    +0.0391  +0.0299  +0.0286
+Political goals           +0.0076  +0.0076  +0.0076  |    +0.0076  +0.0075  +0.0079
+Puzzles                   +0.0008  +0.0008  +0.0008  |    +0.0008  +0.0007  +0.0013
+Sports participation      +0.0056  +0.0051  +0.0046  |    +0.0051  +0.0045  +0.0058
+Sushi                     +0.0113  +0.0111  +0.0109  |    +0.0111  +0.0121  +0.0412
+
+
+Respondent bootstrap with the whole pipeline refit inside each replicate, 2000 replicates.
+
+dataset                      gain          refit interval  reps    kind
+Dots                      +0.0016      [+0.0008, +0.0026]  2000     95%
+GSS job values            +0.0018      [+0.0013, +0.0049]  2000     95%
+GSS socialization         +0.0057      [+0.0028, +0.0104]  2000     95%
+Jester file 1             +0.0020      [+0.0013, +0.0031]  2000     95%
+Jester file 2             +0.0018      [+0.0014, +0.0032]  2000     95%
+Jester file 3             +0.0024      [+0.0013, +0.0031]  2000     95%
+Netflix                   +0.0013      [+0.0009, +0.0017]  2000     95%
+Occupational prestige     +0.0391      [+0.0201, +0.0759]  2000     95%
+Political goals           +0.0076      [+0.0060, +0.0096]  2000     95%
+Puzzles                   +0.0008      [+0.0002, +0.0017]  2000     95%
+Sports participation      +0.0051      [+0.0027, +0.0168]  2000     95%
+Sushi                     +0.0111      [+0.0088, +0.0142]  2000     95%

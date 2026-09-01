@@ -1109,19 +1109,19 @@ the outcome for a subset is the respondent's highest-ranked member of it.
 \toprule
 Dataset & $n$ & $K$ & Subsets & Linear & Gaussian & Gain \\
 \midrule
-Occupational prestige & 143 & 10 & 1{,}012 & $1.0170$ & $0.9780$ & $+0.0391$ $[+0.0207, +0.0802]$ \\
-Sushi & 5{,}000 & 10 & 1{,}012 & $1.3719$ & $1.3607$ & $+0.0111$ $[+0.0079, +0.0141]$ \\
-Political goals & 2{,}262 & 4 & 10 & $0.8431$ & $0.8355$ & $+0.0076$ $[+0.0060, +0.0095]$ \\
-GSS socialization & 5{,}000 & 5 & 25 & $0.7786$ & $0.7728$ & $+0.0057$ $[+0.0023, +0.0105]$ \\
-Jester file 3 & 5{,}000 & 10 & 1{,}012 & $1.5182$ & $1.5158$ & $+0.0024$ $[+0.0014, +0.0031]$ \\
-Jester file 1 & 5{,}000 & 10 & 1{,}012 & $1.5280$ & $1.5260$ & $+0.0020$ $[+0.0009, +0.0030]$ \\
-Jester file 2 & 5{,}000 & 10 & 1{,}012 & $1.5240$ & $1.5223$ & $+0.0018$ $[+0.0012, +0.0031]$ \\
-GSS job values & 5{,}000 & 5 & 25 & $0.8407$ & $0.8389$ & $+0.0018$ $[+0.0014, +0.0045]$ \\
-Dots & 3{,}183 & 4 & 10 & $0.7862$ & $0.7845$ & $+0.0016$ $[+0.0007, +0.0026]$ \\
-Netflix & 4{,}379 & 3 & 3 & $0.6961$ & $0.6949$ & $+0.0013$ $[+0.0008, +0.0016]$ \\
+Occupational prestige & 143 & 10 & 1{,}012 & $1.0170$ & $0.9780$ & $+0.0391$ $[+0.0201, +0.0759]$ \\
+Sushi & 5{,}000 & 10 & 1{,}012 & $1.3719$ & $1.3607$ & $+0.0111$ $[+0.0088, +0.0142]$ \\
+Political goals & 2{,}262 & 4 & 10 & $0.8431$ & $0.8355$ & $+0.0076$ $[+0.0060, +0.0096]$ \\
+GSS socialization & 5{,}000 & 5 & 25 & $0.7786$ & $0.7728$ & $+0.0057$ $[+0.0028, +0.0104]$ \\
+Jester file 3 & 5{,}000 & 10 & 1{,}012 & $1.5182$ & $1.5158$ & $+0.0024$ $[+0.0013, +0.0031]$ \\
+Jester file 1 & 5{,}000 & 10 & 1{,}012 & $1.5280$ & $1.5260$ & $+0.0020$ $[+0.0013, +0.0031]$ \\
+Jester file 2 & 5{,}000 & 10 & 1{,}012 & $1.5240$ & $1.5223$ & $+0.0018$ $[+0.0014, +0.0032]$ \\
+GSS job values & 5{,}000 & 5 & 25 & $0.8407$ & $0.8389$ & $+0.0018$ $[+0.0013, +0.0049]$ \\
+Dots & 3{,}183 & 4 & 10 & $0.7862$ & $0.7845$ & $+0.0016$ $[+0.0008, +0.0026]$ \\
+Netflix & 4{,}379 & 3 & 3 & $0.6961$ & $0.6949$ & $+0.0013$ $[+0.0009, +0.0017]$ \\
 Puzzles & 3{,}180 & 4 & 10 & $0.7769$ & $0.7761$ & $+0.0008$ $[+0.0002, +0.0017]$ \\
 \midrule
-Sports participation & 130 & 7 & 119 & $1.2519$ & $1.2468$ & $+0.0051$ $[+0.0027, +0.0159]$ \\
+Sports participation & 130 & 7 & 119 & $1.2519$ & $1.2468$ & $+0.0051$ $[+0.0027, +0.0168]$ \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss per prediction over every proper restriction, $2 \le |T| < K$.
@@ -1131,7 +1131,7 @@ scorable here only because the shared smoothing removes a zero training cell. Sp
 participation sits below the rule: its gain is real but Section~\ref{sec:null} shows it
 carries no evidence about the restriction map. Intervals resample respondents and refit the whole pipeline inside every
 replicate, calibration and both maps and all subsets, so they carry calibration uncertainty;
-one hundred replicates, or two hundred for the two collections under a thousand respondents.
+two thousand replicates for every collection.
 Every interval excludes zero, including puzzles, whose earlier interval held the fitted models
 fixed and covered it. Refitting widens most intervals and roughly trebles the width on GSS
 socialization.}
@@ -1466,23 +1466,24 @@ Dataset & Observed & Null median & Excess & Null freq. \\
 Menu experiment, forced choice & $+0.0265$ & $-0.0041$ & $+0.0306$ & $0.010$ \\
 Menu experiment, all subjects & $+0.0100$ & $-0.0023$ & $+0.0123$ & $0.015$ \\
 \midrule
-Occupational prestige & $+0.0391$ & $-0.0227$ & $+0.0618$ & $\le 0.005$ \\
-Sushi & $+0.0111$ & $-0.0064$ & $+0.0175$ & $\le 0.005$ \\
-GSS socialization & $+0.0057$ & $-0.0068$ & $+0.0126$ & $\le 0.005$ \\
-Political goals & $+0.0076$ & $-0.0014$ & $+0.0089$ & $\le 0.005$ \\
-GSS job values & $+0.0018$ & $-0.0049$ & $+0.0067$ & $\le 0.005$ \\
-Jester file 3 & $+0.0024$ & $-0.0015$ & $+0.0039$ & $\le 0.005$ \\
-Jester file 1 & $+0.0020$ & $-0.0014$ & $+0.0034$ & $\le 0.005$ \\
-Jester file 2 & $+0.0018$ & $-0.0014$ & $+0.0032$ & $\le 0.005$ \\
-Dots & $+0.0016$ & $-0.0015$ & $+0.0031$ & $\le 0.005$ \\
-Puzzles & $+0.0008$ & $-0.0012$ & $+0.0021$ & $\le 0.005$ \\
-Netflix & $+0.0013$ & $-0.0001$ & $+0.0013$ & $\le 0.005$ \\
+Occupational prestige & $+0.0391$ & $-0.0220$ & $+0.0610$ & $0.0005$ \\
+Sushi & $+0.0111$ & $-0.0065$ & $+0.0176$ & $0.0005$ \\
+GSS socialization & $+0.0057$ & $-0.0069$ & $+0.0126$ & $0.0005$ \\
+Political goals & $+0.0076$ & $-0.0013$ & $+0.0089$ & $0.0005$ \\
+GSS job values & $+0.0018$ & $-0.0049$ & $+0.0067$ & $0.0005$ \\
+Jester file 3 & $+0.0024$ & $-0.0015$ & $+0.0039$ & $0.0005$ \\
+Jester file 1 & $+0.0020$ & $-0.0014$ & $+0.0034$ & $0.0005$ \\
+Jester file 2 & $+0.0018$ & $-0.0014$ & $+0.0032$ & $0.0005$ \\
+Dots & $+0.0016$ & $-0.0015$ & $+0.0031$ & $0.0005$ \\
+Puzzles & $+0.0008$ & $-0.0012$ & $+0.0020$ & $0.0005$ \\
+Netflix & $+0.0013$ & $-0.0001$ & $+0.0013$ & $0.0005$ \\
 \midrule
-Sports participation & $+0.0051$ & $+0.0051$ & $-0.0000$ & $0.51$ \\
+Sports participation & $+0.0051$ & $+0.0051$ & $-0.0000$ & $0.509$ \\
 \bottomrule
 \end{tabular}
-\caption{The same gain when the axiom holds by construction. Two hundred replicates per
-row. The diagnostic is the excess of the observed gain over the null median; the null
+\caption{The same gain when the axiom holds by construction. Two thousand replicates per row.
+The frequency is $(b+1)/(B+1)$ for $b$ exceedances of the observed gain, so $0.0005$ is the
+floor $1/2001$ reached when no replicate matched it, printed as $0.000$ in the run. The diagnostic is the excess of the observed gain over the null median; the null
 probabilities are indicative rather than exact tests, and for the menu rows they are
 optimistic, because the null redraws each subject's thirty-one choices independently given
 the aggregate worths and so omits the within-subject dependence that the bootstrap

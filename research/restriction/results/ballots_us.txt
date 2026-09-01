@@ -3,3 +3,5 @@
 matched nested pairs (|D:R log-odds gap| <= 0.5): 263
   renormalization 0.7661   race 0.7660   gain +0.0002
   Luce null median -0.0000   excess +0.0002   MC tail 0.005  (200 reps)
+  pair bootstrap 95% [+0.0001, +0.0002]  from 263 pairs
+EXIT=0

@@ -147,7 +147,10 @@ def main():
         if g is None:
             print(f"{name:<24}{'n/a':>9}")
             continue
-        budget = reps if len(R) <= 1000 else max(100, reps // 2)
+        # every principal interval gets the full budget. The endpoints of a 95%
+        # interval are the 2.5th and 97.5th order statistics, so a few hundred
+        # replicates puts them on the second or third most extreme draw.
+        budget = reps
         bs = bootstrap_refit(R, reps=budget)
         if bs is None:
             print(f"{name:<24}{g:>+9.4f}{'  too few usable replicates':>24}")

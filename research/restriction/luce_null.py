@@ -146,7 +146,7 @@ def main():
                 continue
             print(f"{r['name']:<22}{r['n']:>6}{r['K']:>3}{r['obs']:>+10.4f}"
                   f"{r['null_med']:>+10.4f}{r['null_95']:>+10.4f}"
-                  f"{r['excess']:>+9.4f}{r['p']:>7.3f}{r['reps']:>6}",
+                  f"{r['excess']:>+9.4f}{r['p']:>7.4f}{r['reps']:>6}",
                   flush=True)
 
 
