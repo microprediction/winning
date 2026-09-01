@@ -58,3 +58,30 @@ first-response probabilities exactly or infers latency locations from
 winner-only logs. Base families fit too: latencies are skewed
 (lognormal-ish -> skew families on log-time) with failure lumps
 (timeouts) -- the failure_base story transfers whole.
+
+## Preferential Batch Bayesian Optimization (Peter, 2026-09-01)
+Siivola, Dhaka, Riis Andersen, Gonzalez, Garcia Moreno, Vehtari,
+"Preferential Batch Bayesian Optimization", arXiv:2003.11435 (2020)
+[locator-verified via abstract page; unread in full]. Their setting:
+BO with feedback only as rankings/winners over queried BATCHES, GP
+surrogate, "custom likelihood" for the batch preference. Three exact
+correspondences, making this a consumer of the engine rather than
+adjacent work:
+1. The batch-preferential likelihood is a correlated Gaussian race on
+   the batch's GP marginals (mu_B, Sigma_B): the lattice prices it
+   exactly with gradients, at batch sizes approximation methods cannot
+   reach, and rankings use the exact order likelihood.
+2. Their posterior update is update_winner_full / update_order_full on
+   the batch block plus linear-Gaussian conditioning of the rest --
+   the exact structure of exp1_scheduler's full-covariance arm. The
+   tournament scheduler IS discrete PBBO; PBBO is the scheduler with a
+   kernel prior and continuous designs.
+3. Their batch acquisition meets the D-optimal criterion above: the
+   photo-finish Laplacian of a candidate batch under the kernel
+   covariance, logdet' on contrasts.
+Candidate demo for the design note/paper: exact-likelihood PBBO versus
+their approximation on their own synthetic suite -- measure both the
+likelihood accuracy (ours vs their approximation vs MC) and regret.
+Caveat to carry: nearby batch points are strongly correlated, so the
+race is sharp -- the sharpness escalation and dense-covariance handling
+are the relevant machinery, and batch smallness keeps it cheap.
