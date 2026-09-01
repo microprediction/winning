@@ -622,3 +622,11 @@ block_race_jacobian, which had the same silent flatten; JS throw), with
 (n,1) columns accepted as the scalars they are; (3) mass checks in all
 three languages now test finiteness explicitly. Pinned in
 tests/test_blocks.py and the R testthat suite. Tag paper-r7.
+
+## r8 (2026-08-31): one stale fact
+
+The title footnote pinned the revision to "package version 1.3.0" -- but
+v1.4.0 (the window/traversal fixes) had shipped and IS the code at
+paper-r7, so the provenance claim was internally false. Corrected to
+paper-r8 / 1.4.0. No other change. Peter's pass 19 cleared v26 for
+publication; v27 (= r8) is the copy to publish.
