@@ -653,3 +653,27 @@ hierarchical caveat lives in section 4), and the Thurstone--Mosteller
 payoff. All cut numbers remain in the body. The abstract now fits
 arXiv's metadata limit verbatim, so the metadata trim is gone. v29
 supersedes v28.
+
+## r11 (2026-09-01): Peter's full writing pass merged
+
+Peter rewrote the abstract (1169 chars: problem, calibration-at-1e6
+claim, GHK comparison, distributional generality), restructured the
+introduction (new opening; "A key integral" and "Contribution"
+subsections; the front-loaded lineage/adjudication paragraph DROPPED
+from the intro as pre-context adjudication -- its attributions live in
+the Summary, which he rewrote to credit cotton2021 as the borrowed
+point of departure and MNS as independently-arrived-at), added new
+motivation paragraphs (nature's races, Atlas models), retitled several
+subsections ("Details of an adaptive lattice choice", "Benefits of
+maintaining the survival field", "Rationale for defaulting to a
+diagonal solver", "Heuristic fitting algorithm", "Kernel covariance as
+a weakness"), moved the 28-percent window example and the tree
+validation numbers into footnotes, and trimmed the traversal-catch
+anecdote. Merged verbatim with fourteen mechanical typo fixes only
+(botxh/gage/inversef/independenlty/probabiliites/discrepany/
+intepretation/"an its"/missing verbs in three sentences/singular
+agreement/display punctuation/unicode em dashes to ---), plus one
+substantive one-word correction: "derivative of winning probability
+with respect to utility" -> "with respect to ability" (the Jacobian is
+wrt time locations; utility flips the sign). 37 pages, zero unresolved
+references, tarball recompiled standalone. Tag paper-r11; publish v30.
