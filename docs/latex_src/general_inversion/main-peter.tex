@@ -22,7 +22,7 @@ Including Softmax and Multinomial Probit}
 implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
 scripts behind every number in this paper live at
 \texttt{github.com/microprediction/winning}; this revision's tables were
-produced at repository tag \texttt{paper-r9}, package version
+produced at repository tag \texttt{paper-r10}, package version
 \texttt{1.4.0}.}}
 \date{August 2026}
 
@@ -31,8 +31,22 @@ produced at repository tag \texttt{paper-r9}, package version
 
 \begin{abstract}
 Multinomial probit choice probabilities over $n$ alternatives are
-Gaussian orthant integrals, computed by simulation for thirty years,
-one expensive integral per alternative. The problem of inversion, which is to say determining item attractiveness from a given choice probability vector, is even more difficult and has been considered impractical for correlated contests when $n$ is large. However, because the choice event is one-dimensional in the sense that it is a quadrature over the winning value, we are able to exhibit an algorithm, tested at $n=1{,}000{,}000$, that reproduces probabilities to very high accuracy provided that the covariance is chosen from within a grammar describing many commonly used formats including factor, block, and hierarchical. A single shared survival field renders probabilities for all $n$ alternatives at once, supplies the own-coordinate slopes that precondition the large-scale calibration reported here, and applies the dense tie-density Jacobian, a weighted graph Laplacian, in linear work per lattice point. Calibration is thereby not only possible but extremely accurate for very large $n$ whereas the standard smooth alternative, the Geweke--Hajivassiliou--Keane (GHK) simulator, is already $200$ times slower at $n=200$ with $10{,}000$ draws, and five times less accurate against a common reference whose own noise is what floors the comparison: by self-convergence our error there is near $10^{-8}$. The gap then widens without bound, since GHK's complete-vector cost grows superquadratically in $n$ (measured exponent $2.15$ to $2.8$) while ours is linear. Our approach is also extremely general: in the independent and factor grammars it applies, within reason, to any smooth choice of performance distribution, not just normal, while the hierarchical kernels as shipped are Gaussian. It therefore not only revives Thurstone--Mosteller model families as an alternative to logit, but it greatly enhances their domain of applicability in digital commerce, to pick one application.
+Gaussian orthant integrals, computed by simulation for thirty years, one
+expensive integral per alternative. Inversion --- determining item
+attractiveness from a given choice probability vector --- has been
+considered impractical for correlated contests when $n$ is large. Both
+change once the choice event is treated as what it is: a one-dimensional
+quadrature over the winning value. For covariance drawn from a grammar
+covering factor, block, and hierarchical structure, a single shared
+survival field prices all $n$ alternatives at once and applies the dense
+tie-density Jacobian, a weighted graph Laplacian, in linear work per
+lattice point. Forward pricing and calibration are tested at
+$n=1{,}000{,}000$ and reproduce probabilities to very high accuracy; the
+Geweke--Hajivassiliou--Keane simulator is two hundred times slower
+already at $n=200$, and its measured cost grows superquadratically while
+ours is linear. In the independent and factor grammars the performance
+distribution need not be normal. Thurstone--Mosteller model families
+thereby become a practical alternative to logit at modern scale.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}

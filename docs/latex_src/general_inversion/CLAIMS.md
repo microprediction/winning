@@ -641,3 +641,15 @@ Availability) carries the adjudication with the lineage attributions
 and the restored flux clause. The intro's contribution paragraph is
 unchanged. arXiv pack and metadata trim refreshed; v28 is the copy to
 publish, superseding v27.
+
+## r10 (2026-08-31): the abstract stops being the paper
+
+Peter: "The abstract is extremely long... you don't need to put the
+entire paper in the abstract," and the hierarchical-Gaussian caveat
+clause "is unclear and can come later." Rewritten 2030 -> 1176 chars:
+problem, mechanism, the n=1e6 scale claim, one GHK comparison, positive
+distributional scoping (independent/factor need not be normal; the
+hierarchical caveat lives in section 4), and the Thurstone--Mosteller
+payoff. All cut numbers remain in the body. The abstract now fits
+arXiv's metadata limit verbatim, so the metadata trim is gone. v29
+supersedes v28.
