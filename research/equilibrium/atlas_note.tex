@@ -168,6 +168,46 @@ rank-$1$/rank-$2$ collision-rate curve across $24$ horizons computes in
 $1.43$ seconds on one laptop. Collision local times at this scale are
 not otherwise available by any method we know.
 
+\section{Calibration to market weights at scale}
+
+The identities above become \emph{inference} through the calibration of
+\citet{cotton2026}. Market weights are nonnegative and sum to one, so a
+cross-section of weights is a choice-probability vector, and the
+inversion problem --- find locations $\mu$ for which the race
+reproduces an observed vector --- is Theorem 1 of that reference: for
+any interior target the inverse exists and is unique up to a common
+shift, as the maximizer of a strictly concave program whose Hessian is
+$J$ itself --- minus the graph Laplacian of Section 1, negative
+definite on the contrast space. The shipped solver is a damped
+diagonal iteration on the log residual, preconditioned by the same
+own-coordinate derivatives that the trace identity uses, and the
+reported round trips run at $n=10^{6}$: about a minute for independent
+performances, about twenty minutes for a rank-one factor, with maximum
+log-probability residuals below $10^{-8}$. Forward pricing alone at
+$n=10^{4}$, $10^{5}$, $10^{6}$ takes $0.18$, $2.7$ and $29$ seconds.
+
+Correlation enters through a covariance grammar priced exactly: a
+global factor ($VV'+\mathrm{diag}\,D$), blocks (a rank-$r$ shared
+effect per cluster --- sectors), nested (blocks under a global factor
+--- market plus sectors), and trees of uniform shared effects. The tree
+case is the one an equity reader should notice: \citet{cotton2026}
+exhibits a tree race whose implied correlation reproduces the floored
+cophenetic correlation of a linkage dendrogram exactly, so the
+hierarchical correlation structure behind hierarchical risk parity sits
+inside the grammar, and a stock field can be calibrated under sector,
+factor or dendrogram covariance rather than independence. Dense
+covariance outside the grammar is fitted approximately, with the fit
+residual reported per named random-correlation ensemble.
+
+The consequence for this note: every local-time quantity above can be
+evaluated at the calibrated point. Fit a covariance (sectors, a
+dendrogram, a factor model), invert today's weights to drifts, and the
+collision-rate curves and the leakage rates of the next section become
+\emph{market-implied} --- implied in the sense of implied volatility,
+the values that make the model reproduce the observed cross-section ---
+with the whole pipeline running in minutes at the scale of the Russell
+3000.
+
 \section{Index leakage}
 
 Fernholz calls the relative-return loss a capitalization-league
@@ -227,7 +267,10 @@ is the one-horizon shadow.
 
 The verified identity is for the leading pair; the rank-$k$ boundary
 formula \eqref{eq:topk} is derived but unimplemented and unmeasured.
-Nothing here addresses stationary gap distributions
+Market-implied local times inherit the covariance grammar: a
+mis-specified covariance moves the implied rates, and nothing here
+measures that sensitivity. Nothing here addresses stationary gap
+distributions
 \citep{palpitman2008}, where much of the Atlas literature lives; the
 contribution in prospect is finite-horizon and computational. Citations
 are locator-verified only: the sources have not yet been read in full,
