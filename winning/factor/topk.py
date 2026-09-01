@@ -38,6 +38,13 @@ import numpy as np
 from .races import BASES
 from .blocks import TINY, roots_hermitenorm
 
+try:
+    import fastrace as _fastrace
+    _HAVE_RUST = hasattr(_fastrace, "top_k")
+except ImportError:                                  # pragma: no cover
+    _fastrace = None
+    _HAVE_RUST = False
+
 
 def _count_window(mu, sd, k, base_rows, delta=1e-12, pad_sds=2.0):
     """Lattice window for the top-k integrand.
@@ -142,8 +149,13 @@ def _leave_one_out_cdf(C, F, k, chunk=256):
     return out
 
 
-def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12):
+def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
+                      is_normal=False):
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta)
+    if is_normal and _HAVE_RUST:
+        return np.asarray(_fastrace.top_k(
+            np.ascontiguousarray(mu, dtype=float),
+            np.ascontiguousarray(sd, dtype=float), k, lo, hi, points))
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -186,8 +198,10 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
 
+    is_normal = (base == "normal")
     if V is None:
-        raw = _topk_independent(mu, sd, k, base_rows, points)
+        raw = _topk_independent(mu, sd, k, base_rows, points,
+                                is_normal=is_normal)
         return _checked_topk(raw, k, "top-k race")
 
     Vm = np.asarray(V, float)
@@ -213,7 +227,7 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     for q in range(len(nodes)):
         shift = Vm @ nodes[q]
         raw += w[q] * _topk_independent(mu + shift, sd, k, base_rows,
-                                        points)
+                                        points, is_normal=is_normal)
     return _checked_topk(raw, k, "top-k race")
 
 
