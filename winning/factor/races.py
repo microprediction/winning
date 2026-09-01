@@ -107,6 +107,52 @@ _SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails
           "logistic": (16.0, 16.0), "laplace": (18.0, 18.0)}
 
 
+def exponential_power_base(beta):
+    """Standardized exponential-power (generalised normal, Subbotin)
+    base: density proportional to exp(-|x/a|^beta), with the scale a
+    fixed for unit variance. beta = 1 is the laplace base, beta = 2 is
+    exactly the normal, and large beta approaches the uniform while
+    keeping full support -- so log S stays finite and the lattice
+    machinery keeps its shape (issue 13: the tail exponent controls how
+    fast the maximum of K draws grows, (log K)^(1/beta), which is the
+    knob on whether systematic components keep deciding large fields).
+    The CDF is the regularised incomplete gamma, evaluated from the
+    tail side for precision. For beta < 2 the density has a kink at
+    zero (its second derivative is singular), and the factory says so
+    to the moment updates via the fd_eps attribute -- the laplace
+    lesson. Very large beta makes near-edges the lattice must resolve;
+    accuracy is measured in the tests at beta = 12."""
+    beta = float(beta)
+    if beta <= 0.0:
+        raise ValueError("exponential_power_base needs beta > 0")
+    from scipy.special import gamma as _gamma, gammainc, gammaincc
+    a = np.sqrt(_gamma(1.0 / beta) / _gamma(3.0 / beta))
+    c = beta / (2.0 * a * _gamma(1.0 / beta))
+
+    def _expo(z):
+        z = np.asarray(z, dtype=float)
+        t = np.power(np.abs(z) / a, beta)
+        f = c * np.exp(-np.minimum(t, 745.0))
+        half_tail = 0.5 * gammaincc(1.0 / beta, t)  # mass beyond |z|
+        S = np.where(z >= 0.0, half_tail, 1.0 - half_tail)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            fp = -f * beta * np.power(np.abs(z) / a, beta - 1.0) \
+                * np.sign(z) / a
+        fp = np.where(np.isfinite(fp), fp, 0.0)
+        return np.maximum(S, 1e-300), f, fp
+
+    from scipy.special import gammainccinv
+    edge = a * float(gammainccinv(1.0 / beta, 2e-9)) ** (1.0 / beta)
+    _expo.span = (max(10.0, edge + 2.0), max(10.0, edge + 2.0))
+    if beta < 2.0:
+        # kinked density: lattice gradients carry O(dx) noise, and the
+        # moment updates must widen their differencing step exactly as
+        # they do for the named laplace base
+        _expo.fd_eps = 5e-2
+    _expo.log_concave = beta >= 1.0
+    return _expo
+
+
 def skew_logistic_base(alpha):
     """Standardized Type I generalized logistic base: CDF of the raw
     variable is (1 + e^{-x})^{-alpha}, so both the density and the

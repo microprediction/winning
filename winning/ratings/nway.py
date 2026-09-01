@@ -46,11 +46,16 @@ def _fd_eps(base, eps):
     prior variance to 18). A wide step keeps the difference above the
     noise floor; truncation error at eps=0.05 is O(eps^2) and
     negligible against it."""
-    return max(eps, 5e-2) if base == "laplace" else eps
+    if base == "laplace":
+        return max(eps, 5e-2)
+    wide = getattr(base, "fd_eps", None)     # kinked factory bases say so
+    return max(eps, wide) if wide else eps
 
 
 def _clamp_d2(d2, base):
-    return np.minimum(d2, 0.0) if base in _LOG_CONCAVE else d2
+    if base in _LOG_CONCAVE or getattr(base, "log_concave", False):
+        return np.minimum(d2, 0.0)
+    return d2
 
 
 def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",

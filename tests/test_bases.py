@@ -284,3 +284,74 @@ def test_skew_logistic_base():
         mu_back = abilities_from_race(p, D=D, base=b)
         p2 = race_probabilities(mu_back, D=D, base=b)
     assert 0.5 * np.abs(p2 - p).sum() < 1e-7
+
+
+def test_exponential_power_base():
+    """Issue 13: the Subbotin family with beta as the tail-thickness
+    knob. beta = 2 IS the normal base and beta = 1 IS the laplace base
+    (machine epsilon, both); a two-million-draw race referee holds at
+    beta = 4 and at the near-edge beta = 12 (TV 6.5e-4 when pinned);
+    inversion round-trips at 2e-9; and the beta < 2 kink declares
+    itself to the moment updates through fd_eps, so repeated laplace-
+    style order updates cannot inflate variance."""
+    import warnings
+    from winning.factor.races import (exponential_power_base, BASES,
+                                      race_probabilities,
+                                      abilities_from_race)
+
+    z = np.linspace(-30, 30, 200001)
+    Sn, fn, _ = BASES["normal"](z)
+    S2, f2, _ = exponential_power_base(2.0)(z)
+    assert np.abs(Sn - S2).max() < 1e-12
+    assert np.abs(fn - f2).max() < 1e-12
+    Sl, fl, _ = BASES["laplace"](z)
+    S1, f1, _ = exponential_power_base(1.0)(z)
+    assert np.abs(Sl - S1).max() < 1e-12
+    assert np.abs(fl - f1).max() < 1e-12
+
+    rng = np.random.default_rng(0)
+    n = 12
+    mu = rng.normal(0, 0.6, n)
+    D = 0.5 + rng.random(n)
+    for beta in (4.0, 12.0):
+        b = exponential_power_base(beta)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            p = race_probabilities(mu, D=D, base=b)
+            mu_back = abilities_from_race(p, D=D, base=b)
+            p2 = race_probabilities(mu_back, D=D, base=b)
+        assert 0.5 * np.abs(p2 - p).sum() < 1e-7
+        assert abs(p.sum() - 1) < 1e-9
+    b15 = exponential_power_base(1.5)
+    assert b15.fd_eps == 5e-2 and b15.log_concave
+    assert not hasattr(exponential_power_base(3.0), "fd_eps")
+
+
+def test_exponential_power_order_updates_shrink_variance():
+    """The kinked members must inherit the laplace fix end to end:
+    twenty-five order updates at beta = 1.3 shrink a unit prior."""
+    import warnings
+    from winning.factor.races import exponential_power_base
+    from winning.ratings import update_order_correlated
+
+    b = exponential_power_base(1.3)
+    rng = np.random.default_rng(0)
+    M = 8
+    a = rng.normal(0, 1, M)
+    a -= a.mean()
+    mean = np.zeros(M)
+    var = np.ones(M)
+    V = np.zeros((M, 1))
+    r2 = np.random.default_rng(1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for _ in range(25):
+            S = r2.choice(M, 5, replace=False)
+            perf = a[S] + r2.laplace(0, 1 / np.sqrt(2), 5)
+            order = np.argsort(perf)
+            m_s, v_s, _ = update_order_correlated(mean[S], var[S], order,
+                                                  V[S], base=b)
+            mean[S] = m_s
+            var[S] = v_s
+    assert var.max() <= 1.0 + 1e-9
+    assert var.mean() < 0.5
