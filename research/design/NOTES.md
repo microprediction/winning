@@ -99,3 +99,25 @@ preference factors lacked tractable likelihoods and moments, which the
 shared field supplies exactly. Lineage for the related-work section:
 PBO 2017 (duels) -> PBBO 2020 (batches, approximate) -> exact n-way
 (here).
+
+## prefGP (Peter, 2026-09-01)
+github.com/benavoli/prefGP -- Benavoli (Trinity) and Azzimonti (IDSIA),
+JAX/PyTorch, the reference implementation for GP preference/choice
+learning: nine likelihood models including Thurstonian ORDERING and
+Plackett-Luce, plus choice-from-menu ("rational choice") models, with
+the companion tutorial "A tutorial on learning from preferences and
+choices with Gaussian Processes", arXiv:2403.11782 (2024)
+[locator-verified; both unread in full]. Three uses here:
+1. THE comparator for benchmark claims: their Thurstonian order and
+   choice likelihoods under a correlated GP are computed by
+   approximation (EP/variational/MC -- verify which); the engine's
+   order_loglik and win probabilities are exact for the
+   factor-conditional structure and near-exact through the dense fit.
+   Same data, likelihood accuracy and wall clock, their inference
+   against exact: the natural experiment.
+2. The tutorial is the related-work map for the preference-learning
+   positioning of the design note (model zoo: consistent, JND, probit
+   error, Thurstone, PL, rational choice).
+3. Their "choice from a menu" data IS winner-only race feedback, so
+   the moment updates and the D-optimal scheduler apply to their
+   problem class directly.
