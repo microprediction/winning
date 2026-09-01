@@ -29,8 +29,11 @@ proportional, renormalization in a two horse empirical race, which is fair becau
 a parameter fitted to the data being predicted. In part we re-litigate the psychology debate that
 sets the constant ratio rule, Luce's choice axiom, against Thurstone's Case V; in part we bring
 new data from situations where renormalizing a probability is tempting. Gaussian renormalization
-has the lower held-out log loss in thirty of thirty-nine comparisons. The differences are small
-where they are small, a median of $0.004$ nats across all thirty-nine, and twelve exceed $0.01$
+has the lower held-out log loss in thirty of thirty-nine comparisons. Those rows cluster, so we
+also count by source, taking one specification per study and calling a source drawn when its
+resampling interval covers zero: Gaussian renormalization is then ahead in fourteen sources,
+linear renormalization in one, with two drawn and two unresolved. The differences are small where
+they are small, a median of $0.004$ nats across the thirty-nine rows, and twelve exceed $0.01$
 with a maximum of $0.05$.
 \end{abstract}
 
@@ -384,6 +387,75 @@ Each consumer experiment appears twice because a gain and a null frequency have 
 same people, and the forced-choice subgroup is not the whole sample. Three further populations
 appear in Section~\ref{sec:boundary} instead of here, since published aggregates fix the direction
 of their failure but do not support this protocol.
+
+\subsection{The same evidence counted by source}
+\label{sec:bysource}
+
+Thirty-nine rows are not thirty-nine tests. Four of them are tone conditions from one
+experiment, three are restrictions of one line experiment, three are Jester files drawn the same
+way, and the consumer rows are nested subgroups of two studies. The row count is a description of
+Table~\ref{tab:scoreboard} and nothing more. Table~\ref{tab:bysource} gives one row per source,
+one primary specification each, and a verdict that turns on whether the resampling interval
+excludes zero rather than on the sign of a point estimate.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llrrl}
+\toprule
+Source & Primary specification & Gain & 95\% interval & Verdict \\
+\midrule
+\multicolumn{5}{l}{\emph{Controlled: the same subjects or stimuli before and after}} \\
+Costa-Gomes et al. & all subjects, both experiments & $+.0100$ & $[+.0048, +.0246]$ & Gaussian \\
+Yeon and Rahnev & four colours, menu revealed after & $+.0147$ & $[+.0118, +.0179]$ & Gaussian \\
+Townsend and Landon & 38 restricted rows & $+.0042$ & $[+.0022, +.0064]$ & Gaussian \\
+Utochkin et al. & 360 nested foil cells & $+.0037$ & $[+.0029, +.0047]$ & Gaussian \\
+Getty et al. & all 72 cells & $+.0272$ & $[-.0015, +.0618]$ & draw \\
+Stewart et al. & four tone conditions & $-.0041$ to $-.0173$ & none possible & unresolved \\
+Twelve-line laboratory data & all restricted blocks & $-.0134$ & $[-.0176, -.0104]$ & linear \\
+\midrule
+\multicolumn{5}{l}{\emph{Designed, across groups}} \\
+Wills et al. & Experiment 2, 39 cells & $+.0299$ & $[+.0175, +.0717]$ & Gaussian \\
+Aguiar et al. & high arithmetic cost & $+.0101$ & $[+.0046, +.0246]$ & Gaussian\footnotemark[10] \\
+\midrule
+\multicolumn{5}{l}{\emph{Ecological: the menu changed for reasons outside the design}} \\
+Microsoft News & 6{,}000 nested slate pairs & $+.0496$ & not computed here & unresolved \\
+US state ballots 2024 & 263 matched state pairs & $+.0002$ & $[+.0001, +.0002]$ & Gaussian\footnotemark[11] \\
+Wikipedia clickstream & 3{,}544 pages & $-.0001$ & not computed here & draw \\
+\midrule
+\multicolumn{5}{l}{\emph{Ranking-induced}} \\
+Occupational prestige & all proper restrictions & $+.0391$ & $[+.0201, +.0759]$ & Gaussian \\
+Sushi & all proper restrictions & $+.0111$ & $[+.0088, +.0142]$ & Gaussian \\
+Political goals & all proper restrictions & $+.0076$ & $[+.0060, +.0096]$ & Gaussian \\
+General Social Survey & socialization item & $+.0057$ & $[+.0028, +.0104]$ & Gaussian \\
+Jester & file 3 & $+.0024$ & $[+.0013, +.0031]$ & Gaussian \\
+PrefLib perceptual & dots & $+.0016$ & $[+.0008, +.0026]$ & Gaussian \\
+Netflix & all proper restrictions & $+.0013$ & $[+.0009, +.0017]$ & Gaussian \\
+Sports participation & all proper restrictions & $+.0051$ & $[+.0027, +.0168]$ & excluded\footnotemark[12] \\
+\bottomrule
+\end{tabular}
+\caption{One row per source. A verdict of Gaussian or linear means the interval excludes zero;
+a draw means it covers zero; unresolved means no interval could be computed. Counting this way,
+Gaussian renormalization is ahead in fourteen sources, linear renormalization in one, two are
+drawn, two are unresolved and one is excluded. The two unresolved rows point in opposite
+directions, and both scripts would produce an interval for anyone holding the data: the tone
+matrices are participant-averaged and digitized from figures, so there is no unit to resample,
+and the news and Wikipedia inputs are large public archives we do not redistribute.}
+\label{tab:bysource}
+\end{table}
+
+\footnotetext[10]{The low-cost frame of the same experiment is a draw, $+.0002$ with an interval
+of $[-.0037, +.0180]$, which is the gradient discussed in Section~\ref{sec:more}.}
+\footnotetext[11]{The interval excludes zero and the gain is negligible. Third-party candidates
+carry almost no mass, so the two maps agree to within a rounding error whatever the truth.}
+\footnotetext[12]{Sports participation sits exactly on its shrinkage null, frequency $0.509$, so
+its gain carries no evidence about the restriction map and it is excluded from every claim.}
+
+The picture is the same as the row count gives, with the magnitudes smaller and the losses
+concentrated. Linear renormalization is ahead in exactly one source where the interval settles
+it, the unpublished twelve-line data, and it has the sign in a second, the tone matrices, where
+nothing settles it. Of the two draws, one is Getty, whose three conditions split in sign inside a
+single experiment, and one is Wikipedia at a ten-thousandth of a nat.
 
 \section{Prior tests of the constant-ratio rule}
 \label{sec:prior}
@@ -1832,12 +1904,13 @@ ones. A masked softmax is the arithmetic of conditioning and the question of int
 because the mask frequently stands for an intervention that nobody modelled.
 
 Three things are established by the tables. Gaussian renormalization has the lower held-out log
-loss in thirty of the thirty-nine comparisons, split eighteen of twenty-seven observed against
-twelve of twelve ranking-induced, and on the contraction axis of Figure~\ref{fig:line} it is the
+loss in thirty of the thirty-nine comparisons, and counting by source instead, which is the
+honest unit because the rows cluster, it is ahead in fourteen of twenty with one going the other
+way, two drawn and two unresolved. On the contraction axis of Figure~\ref{fig:line} it is the
 nearer of the two maps in nineteen of the twenty populations that axis can place. Neither count
-estimates a rate, since the corpus was assembled by searching for restriction data and its rows
-overlap. Linear renormalization is ahead on all four tone conditions, all three line-length
-restrictions and the one Getty condition whose survivors are each other's confusions.
+estimates a rate, since the corpus was assembled by searching for restriction data. Linear
+renormalization is ahead where an interval settles it in exactly one source, the unpublished
+twelve-line data, and it carries the sign in the tone matrices, where nothing settles it.
 
 Where the restricted probability is itself observed, which is the after-stimulus arms of
 Section~\ref{sec:after}, both maps over-predict the favourite and Gaussian renormalization removes
