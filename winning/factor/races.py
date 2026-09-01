@@ -107,6 +107,49 @@ _SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails
           "logistic": (16.0, 16.0), "laplace": (18.0, 18.0)}
 
 
+def skew_logistic_base(alpha):
+    """Standardized Type I generalized logistic base: CDF of the raw
+    variable is (1 + e^{-x})^{-alpha}, so both the density and the
+    distribution function are elementary, the density is smooth and
+    log-concave for every alpha > 0, and alpha = 1 is exactly the
+    logistic base. alpha < 1 skews the race toward heavy LEFT tails
+    (occasional disasters, min-wins), alpha > 1 toward heavy right
+    tails. Standardized to zero mean and unit variance in closed form:
+    mean psi(alpha) - psi(1), variance psi'(alpha) + psi'(1). Returns a
+    callable for base=; a natural one-parameter skew dial for joint
+    market calibration."""
+    alpha = float(alpha)
+    if alpha <= 0.0:
+        raise ValueError("skew_logistic_base needs alpha > 0")
+    from scipy.special import digamma, polygamma
+    m = digamma(alpha) - digamma(1.0)
+    v = polygamma(1, alpha) + polygamma(1, 1.0)
+    c = np.sqrt(v)                          # raw x = m + c z
+
+    def _skew_logistic(z):
+        x = m + c * np.asarray(z, dtype=float)
+        u = np.clip(-x, -700.0, 700.0)
+        eu = np.exp(u)                       # e^{-x}
+        log1p_eu = np.log1p(eu)
+        cdf = np.exp(-alpha * log1p_eu)      # (1 + e^{-x})^{-alpha}
+        S = np.maximum(1.0 - cdf, 1e-300)
+        sig = 1.0 / (1.0 + eu)               # logistic cdf of x
+        f = alpha * eu * np.exp(-(alpha + 1.0) * log1p_eu) * c
+        # d/dz f: chain rule through x = m + c z
+        fp = f * c * ((alpha + 1.0) * (1.0 - sig) - 1.0)
+        return S, f, fp
+
+    # exponential tails on both sides; the left tail fattens as alpha
+    # falls (raw left quantile ~ log of the alpha-th root), so place the
+    # span at the actual 1e-9 quantiles
+    q_lo = (np.log(np.expm1(np.log(1e-9) / -alpha)) if alpha < 60
+            else np.log(1e-9 / alpha))
+    lo_edge = abs((-abs(q_lo) - m)) / c + 2.0
+    hi_edge = abs((np.log(alpha / 1e-9) - m)) / c + 2.0
+    _skew_logistic.span = (max(14.0, lo_edge), max(14.0, hi_edge))
+    return _skew_logistic
+
+
 def student_base(nu):
     """Standardized Student-t base (unit variance; needs nu > 2): fat
     tails for performances with occasional wild days. Returns a callable
