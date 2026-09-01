@@ -10,7 +10,7 @@
 \usepackage{float}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
-\title{\textbf{Softmax Masking Is a Transport Assumption:\\Evidence from Thirty-Nine Tests of Linear\\versus Gaussian Renormalization}}
+\title{\textbf{Think Before Scaling Probabilities to Unity:\\Evidence from Thirty-Nine Tests of Linear\\versus Gaussian Renormalization}}
 \author{Peter Cotton}
 \date{Provisional draft, 31 August 2026}
 
@@ -194,9 +194,9 @@ Another caveat: rows are comparisons. Several reuse the same subjects or source 
 not to be considered independent tests of the same hypothesis. Section~\ref{sec:empirical} goes
 into complete detail on the protocol, the datasets and the null.
 
-\begin{figure}[H]
+\begin{figure}[t]
 \centering
-\begin{tikzpicture}[x=1.6cm,y=0.385cm]
+\begin{tikzpicture}[x=1.55cm,y=0.315cm]
   \node[font=\scriptsize,anchor=east] at (-0.04,0) {gambles, high arithmetic cost};
   \draw[gray!35,thin] (0,0) -- (4.0,0);
   \fill (0.33,0) circle (1.9pt);
@@ -400,28 +400,29 @@ excludes zero rather than on the sign of a point estimate.
 
 \begin{table}[ht]
 \centering
-\small
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{llrrl}
 \toprule
 Source & Primary specification & Gain & 95\% interval & Verdict \\
 \midrule
 \multicolumn{5}{l}{\emph{Controlled: the same subjects or stimuli before and after}} \\
 Costa-Gomes et al. & all subjects, both experiments & $+.0100$ & $[+.0048, +.0246]$ & Gaussian \\
-Yeon and Rahnev & four colours, menu revealed after & $+.0147$ & $[+.0118, +.0179]$ & Gaussian \\
+Yeon and Rahnev & four colours, revealed after & $+.0147$ & $[+.0118, +.0179]$ & Gaussian \\
 Townsend and Landon & 38 restricted rows & $+.0042$ & $[+.0022, +.0064]$ & Gaussian \\
 Utochkin et al. & 360 nested foil cells & $+.0037$ & $[+.0029, +.0047]$ & Gaussian \\
 Getty et al. & all 72 cells & $+.0272$ & $[-.0015, +.0618]$ & draw \\
-Stewart et al. & four tone conditions & $-.0041$ to $-.0173$ & none possible & unresolved \\
+Stewart et al. & four tone conditions & \multicolumn{1}{c}{$-.0041$ to $-.0173$} & none possible & unresolved \\
 Twelve-line laboratory data & all restricted blocks & $-.0134$ & $[-.0176, -.0104]$ & linear \\
 \midrule
 \multicolumn{5}{l}{\emph{Designed, across groups}} \\
 Wills et al. & Experiment 2, 39 cells & $+.0299$ & $[+.0175, +.0717]$ & Gaussian \\
 Aguiar et al. & high arithmetic cost & $+.0101$ & $[+.0046, +.0246]$ & Gaussian\footnotemark[10] \\
 \midrule
-\multicolumn{5}{l}{\emph{Ecological: the menu changed for reasons outside the design}} \\
-Microsoft News & 6{,}000 nested slate pairs & $+.0496$ & not computed here & unresolved \\
-US state ballots 2024 & 263 matched state pairs & $+.0002$ & $[+.0001, +.0002]$ & Gaussian\footnotemark[11] \\
-Wikipedia clickstream & 3{,}544 pages & $-.0001$ & not computed here & draw \\
+\multicolumn{5}{l}{\emph{Ecological: the menu changed outside the design}} \\
+Microsoft News & 6{,}000 nested slate pairs & $+.0496$ & not computed & unresolved \\
+US state ballots 2024 & 263 state pairs & $+.0002$ & $[+.0001, +.0002]$ & Gaussian\footnotemark[11] \\
+Wikipedia clickstream & 3{,}544 pages & $-.0001$ & not computed & draw \\
 \midrule
 \multicolumn{5}{l}{\emph{Ranking-induced}} \\
 Occupational prestige & all proper restrictions & $+.0391$ & $[+.0201, +.0759]$ & Gaussian \\
@@ -637,7 +638,7 @@ The proposition says that removing alternatives moves the ratio toward one.
 
 \begin{figure}[t]
 \centering
-\begin{tikzpicture}[x=1.05cm,y=5.2cm]
+\begin{tikzpicture}[x=1.00cm,y=5.2cm]
   \begin{scope}
     \draw[->] (-3.8,0) -- (3.9,0);
     \draw[->] (-3.8,0) -- (-3.8,0.55);
@@ -648,7 +649,7 @@ The proposition says that removing alternatives moves the ratio toward one.
     \node[font=\small\bfseries,anchor=south] at (0,0.52) {Gumbel};
     \node[font=\scriptsize,anchor=west] at (-3.6,0.44) {skewness $1.14$};
   \end{scope}
-  \begin{scope}[xshift=8.6cm]
+  \begin{scope}[xshift=8.2cm]
     \draw[->] (-3.8,0) -- (3.9,0);
     \draw[->] (-3.8,0) -- (-3.8,0.55);
     \foreach \x in {-3,-2,-1,0,1,2,3}
@@ -1210,11 +1211,11 @@ socialization.}
 \label{tab:heldout}
 \end{table}
 
-\subsection{Two conventions, and what they change}
+\subsection{Smoothing and menu weighting}
 \label{sec:conventions}
 
-Neither map fits anything, but the pipeline around them makes two choices. Shares are smoothed
-by add-$\alpha$ with $\alpha = 1/2$, and the aggregate weights every subset of size two or more
+The pipeline makes two choices that the maps themselves do not. Shares are smoothed by
+add-$\alpha$ with $\alpha = 1/2$, and the aggregate weights every subset of size two or more
 equally. Both are conventions rather than results, so both are varied.
 
 \begin{table}[ht]
@@ -1255,10 +1256,10 @@ more counting once puts most of the weight near $|T| = K/2$, and pairs are where
 differ most, so the aggregate reported throughout is the conservative choice of the three rather
 than a neutral one. The direction does not depend on it.
 
-\subsection{What the score averages over}
+\subsection{The estimand, the weighting and the score}
 \label{sec:estimand}
 
-Three features of the score are choices rather than results, and each is varied here.
+Three features of the score are choices rather than results. Each is varied here.
 
 The first is which menus are scored. The estimand throughout is proper restrictions,
 $2 \le |T| < K$. The full menu is excluded because it is not a restriction: both maps are
@@ -1276,7 +1277,8 @@ gives the curve itself.
 
 \begin{table}[ht]
 \centering
-\small
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrrrrrrr}
 \toprule
 Dataset & $|T|=2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
@@ -1389,6 +1391,7 @@ concentrated where most of the menu has been withdrawn.
 \begin{table}[ht]
 \centering
 \small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrrrrrrr}
 \toprule
 Dataset & $|T|=2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
@@ -1403,8 +1406,8 @@ Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
 \bottomrule
 \end{tabular}
 \caption{Held-out gain by the size of the surviving menu, for a representative seven of the
-twelve ranking collections. In most collections the pairwise gain exceeds the all-subsets aggregate, by factors from
-$1.2$ to $3.7$, though occupational prestige reverses it at $0.73$. The last entry in each row
+twelve ranking collections. In most collections the pairwise gain exceeds the all-subsets
+aggregate, by factors from $1.2$ to $3.7$, though occupational prestige reverses it at $0.73$. The last entry in each row
 is zero to the precision of the pipeline, because nothing has been removed and the two maps
 coincide exactly in theory. The aggregate quoted elsewhere is therefore lower than the
 pairwise figure. Occupational prestige and sports participation are non-monotone in the size
@@ -1422,9 +1425,10 @@ ten-item collections, shows what the average is made of.
 \begin{table}[ht]
 \centering
 \small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrrrrrrrr}
 \toprule
-Rank of chosen item & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 \\
+Rank & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 \\
 \midrule
 Share of outcomes & $.173$ & $.130$ & $.127$ & $.104$ & $.099$ & $.101$ & $.079$ & $.072$ & $.072$ & $.044$ \\
 Mean gain & $-.062$ & $-.045$ & $-.034$ & $-.004$ & $+.009$ & $+.019$ & $+.050$ & $+.058$ & $+.101$ & $+.171$ \\
@@ -1432,8 +1436,8 @@ Mean gain & $-.062$ & $-.045$ & $-.034$ & $-.004$ & $+.009$ & $+.019$ & $+.050$ 
 \end{tabular}
 \caption{Held-out gain by the full-menu rank of the item actually chosen, pooled over Sushi
 and the three Jester files. Monotone in rank, crossing zero between fourth and fifth. The two
-rows are pooled by summing outcome counts and gain contributions across the four collections, so
-they dot to the aggregate: $+0.0043$, which the script asserts.}
+rows are pooled by summing outcome counts and gain contributions across the four
+collections, so they dot to the aggregate of $+0.0043$, which the script asserts.}
 \label{tab:byrank}
 \end{table}
 
@@ -1446,7 +1450,7 @@ small frequent losses. The ballot result is negligible because third-party candi
 tail and there is almost no tail mass to collect. And the effect is largest on news slates,
 where readers spread widely over the displayed set.
 
-\subsection{Ordering, where both models have an exact law}
+\subsection{The exact ordering laws}
 \label{sec:sequential}
 
 Ordering is a different question from restriction, and the two should not be confused: removing
@@ -1905,7 +1909,7 @@ because the mask frequently stands for an intervention that nobody modelled.
 
 Three things are established by the tables. Gaussian renormalization has the lower held-out log
 loss in thirty of the thirty-nine comparisons, and counting by source instead, which is the
-honest unit because the rows cluster, it is ahead in fourteen of twenty with one going the other
+right unit because the rows cluster, it is ahead in fourteen of twenty with one going the other
 way, two drawn and two unresolved. On the contraction axis of Figure~\ref{fig:line} it is the
 nearer of the two maps in nineteen of the twenty populations that axis can place. Neither count
 estimates a rate, since the corpus was assembled by searching for restriction data. Linear
@@ -1918,11 +1922,12 @@ between a fifth and a third of the error. That is the ceiling on what either def
 and it is well below what a fitted shape parameter should reach wherever a restricted-menu
 observation exists to fit one.
 
-What the boundary conditions of Section~\ref{sec:boundary} amount to is not established, and we
-put them no higher than heuristics: dependence among the alternatives, a task that changes when an
-option is withdrawn, and too little withdrawn mass for the choice to matter. None of the three can
-be read off a share vector, a confusion matrix answers the first where one exists, and the
-judgement can be wrong.
+Section~\ref{sec:boundary} lists three conditions under which Gaussian renormalization should
+not be expected to help: the alternatives are dependent, the task changes when an option is
+withdrawn, or too little mass is withdrawn for the choice to matter. We have not established
+these. They are heuristics. None of them can be determined from a share vector alone. A confusion
+matrix settles the first when one is available, and otherwise the judgement is made from the
+alternatives themselves and can be wrong.
 
 We leave to future work the comparison of the exact Gaussian ordering law against
 Plackett--Luce ranking probabilities on complete-ranking data.
@@ -1956,17 +1961,20 @@ That last deposit is the one input we do not redistribute, precisely because it 
 licence. What the repository holds is the derived confusion counts, one array of per-block
 stimulus-by-response tallies, which is what the analysis reads and is a measurement of the
 experiment rather than a copy of the deposit. \texttt{python derive\_rouder.py --fetch} clones
-the original and \texttt{python derive\_rouder.py} rebuilds the counts from it, reproducing every
-figure reported here exactly, and \texttt{MANIFEST.tsv} records the upstream git blob hash of
-every file the reduction was built from.
+the original, and \texttt{python derive\_rouder.py} rebuilds the counts from it, reproducing
+every figure reported here exactly. \texttt{MANIFEST.tsv} records the upstream git blob hash
+of every file the reduction was built from.
 
+\begin{sloppypar}
 Analysis code and every input needed to reproduce the tables are under
-\texttt{research/restriction} in \texttt{github.com/microprediction/winning}, with the inputs as
-column extracts rather than raw archives, one
-script per population, and, for the collections transcribed or downloaded for this paper, a
-\texttt{SOURCE.md} giving the fetched access route and the caveats. Each transcribed table carries its own arithmetic check: every row of the
-sound-identification and letter matrices reproduces its printed total, and the recounted
-Yeon--Rahnev condition reproduces the authors' saved matrix exactly.
+\texttt{research/\allowbreak restriction} in the \texttt{microprediction/\allowbreak winning}
+repository, with the
+inputs as column extracts rather than raw archives, one script per population, and, for the
+collections transcribed or downloaded for this paper, a \texttt{SOURCE.md} recording the
+access route and the caveats. Each transcribed table carries its own arithmetic check: every
+row of the sound-identification and letter matrices reproduces its printed total, and the
+recounted Yeon--Rahnev condition reproduces the authors' saved matrix exactly.
+\end{sloppypar}
 
 Two storage conventions must be told apart when reproducing this. BayesMallows,
 ConsRank and PerMallows store ranks, so element $j$ holds the rank of alternative $j$,
