@@ -96,3 +96,19 @@ cheap draws achieves 6.6e-4 max err at equal time. Point clouds do not
 screen like lattices. Verdict for the boundary: no hybrid needed --
 locality means cheap draws, so SIMULATE; spectral structure means the
 lattice race. The dispatcher has exactly two arms.
+
+## 2026-08-28: ninth-review battery (run_ensembles4 + run_kernel4)
+
+Twenty seeds x fifteen named ensembles x two arms (raw eigenfit
+pipeline vs identified fit_covariance), n=300, 1M-draw referee per
+seed; kernel stratified RBF/Matern x ls {0.08,0.2,0.4} x m {5,12} plus
+a 2^14-node arm. randomcov @ 0d27a51. Findings: (1) medians reproduce
+the old single-draw table; (2) 13/15 arms tied, none favor raw,
+block_equicorr reverses 8x for the identified arm (raw worst seed
+0.162); (3) kernel failure = two regimes -- short scale representation
+(rank helps), long scale sharp high-rank quadrature (nodes help; a
+rank-27 eigenfit holds RBF ls 0.4 to 1e-3 residual) -- and the old
+7e-2 kernel row was greedy rank misallocation, repaired by the
+fitter's eigen arm. Package: fit_covariance two arms + quality warnings;
+n=2000 fit 41 s -> 0.6 s (double centering, subspace iteration,
+water-filling NNLS on P.P = (1-2/n)I + (1/n^2)11').

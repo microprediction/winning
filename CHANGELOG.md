@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Dense-covariance front door: `race_probabilities(mu, cov=Sigma)` and
+  `winning.factor.core.fit_covariance(Sigma, k, m)` package the paper's
+  dense pipeline (certified quotient factor fit, blocks and residual
+  promotion on the projected residual, closing `(P∘P) d = diag(P R P)`
+  diagonal solve). In-grammar inputs are returned undistorted.
+- Grammar-wide inversion: `abilities_from_race` accepts `structure=` and
+  `cov=`; blocks/nested/tree invert through the exact forward dispatch
+  with a damped, variance-matched-preconditioner fixed point.
+- `factor_model_projected` D-step collapsed to its n-dimensional normal
+  equations (Gram is exactly `P∘P`): 67 s → 0.27 s at n=300, identical
+  minimizer.
+- The classic lattice API moved to `winning.classic`; the old top-level
+  imports keep working as aliases that raise a `DeprecationWarning`.
+
 ## 1.2.0 (2026-08-27)
 
 The structured-covariance engine.

@@ -584,8 +584,10 @@ SOMETHING.''
 [MASK] because they are SOMETHING.''
 \end{enumerate}
 where SOMETHING ranges over many adjectives so that luck of phrasing is
-averaged out (the appendix of the working version lists roughly one
-hundred category/adjective combinations).
+averaged out. The ninety-nine categories and their adjective lists are
+committed as \texttt{research/polysemy\_pilot/qvols/*.yaml} in the
+\texttt{winning} repository, and the sweep that consumes them is
+\texttt{research/polysemy\_pilot/sweep.py}.
 
 Both models make zero-parameter predictions of the restricted
 distribution from the unrestricted one. Luce's prediction is
@@ -662,7 +664,11 @@ in approximately 80\% of cases, with its advantage concentrated where the
 qualification is substantial and the entropy of the unrestricted
 distribution is low.
 % Figures 1 and 2 of the July 2024 version (entropy scatter; per-category
-% RMSE bars) belong here; source files live with the original draft.
+% RMSE bars) belong here. Their source files were not carried into this
+% repository; the underlying sweep is research/polysemy_pilot (99
+% categories x 926 adjective pairs, raw logs in sweep_raw.jsonl), from
+% which both figures can be regenerated. Tracked in this directory's
+% README.
 
 \section{A human benchmark}
 \label{sec:human}

@@ -3,10 +3,28 @@
 ## Primary
 
 - **JCGS** (Journal of Computational and Graphical Statistics) — target.
-  Submission build is `paper_jcgs.pdf` (double-spaced), supplement is
+  Submission build is `scalable-share-calibration-jcgs.pdf` (double-spaced; regenerate by flipping \jcgsfalse to \jcgstrue in the main tex, three pdflatex passes), supplement is
   `supplement_v1.1.0.zip`.
-- **SSRN** — preprint of `scalable-share-calibration.pdf`. JCGS permits preprint posting of the
-  author's original manuscript.
+- **SSRN** — *no record.* The SSRN record that formerly held this paper
+  (abstract id 7307363, doi:10.2139/ssrn.7307363) was revised on
+  2026-08-29 to hold the general inversion paper instead
+  (`docs/latex_src/general_inversion`), a deliberate decision: that
+  paper is the successor line of work, and JCGS is this paper's home.
+  So this manuscript currently has no preprint posting. If a preprint
+  is ever wanted, it needs a NEW record and will get a new DOI; do not
+  reuse 7307363, which now points elsewhere.
+
+## SSRN record 7307363 — state after 2026-08-30 revision
+
+Holds the INVERSION paper (docs/latex_src/general_inversion) by the
+2026-08-29 decision. Second revision submitted 2026-08-30 while the
+first was still in the moderation queue, so the moderator sees the
+final version once: 18-page PDF (post fourth review, style sweep, and
+full read-through), current abstract, one-line title (clearing the
+stray <div> tags), inversion keywords, JEL C25/C63/C35 unchanged.
+Verify after processing: page count 18, title on one line. Revisions
+are not re-announced in SSRN Alerts; a fresh announcement would need a
+new record and a new DOI.
 
 ## Fallbacks worth considering
 

@@ -2,30 +2,32 @@
 
 *A package for dealing with races, correlated or not.*
 
-`winning` began as the reference implementation of the lattice ability
-transform (SIAM J. Financial Mathematics, 2021) and owns the whole line:
-the original density-agnostic engine, the factor-correlated
-generalization developed for "Scalable Share Calibration for Factor
-Multinomial Probit Models", an arena of competing methods, and a
-standing benchmark database.
+**Documentation, live demos, and the papers: [winning.microprediction.org](https://winning.microprediction.org)** —
+watch the lattice race [beat GHK and Mendell–Elston on wall
+time](https://winning.microprediction.org/converge.html) in your
+browser, then read how it works.
 
-- `winning.thurstone` — the core engine, vendored home from the
-  thurstone package (now a compatibility shim). Densities on a lattice,
-  winner-of-many, dead heats, and the ability transform, for **any**
-  base distribution.
-- `winning.factor` — the correlated extension: all-share forward pass,
-  share calibration, Jacobian-vector products, and factor fitting. One
-  general race, `race_probabilities`, takes the distribution and the
-  factor rank as parameters; factor probit, the classic independent
-  transform, Luce/softmax, and correlated softmax are named special
-  cases, and custom standardized bases plug in as callables. The
-  Gaussian specialization keeps its dedicated tail-exact kernel.
-- `winning.methods` — every contestant behind one interface: the
-  lattice transform, direct and Sobol simulation, per-alternative
-  factor-RQMC, GHK / Genz separation-of-variables, minimax tilting.
-  Each passes closed-form and Monte Carlo anchors before admission.
-- `winning.bench` — a seeded problem grid, cached references, and
-  append-only accuracy-time records: `python -m winning.bench.runner`.
+One race, five covariance grammars, two calls. `race_probabilities`
+prices every contestant of a correlated Gaussian (or Gumbel/softmax)
+race in one shared-field pass; `abilities_from_race` inverts observed
+probabilities back to abilities. Both accept the same covariance
+descriptions: factor sugar (`V=`, `D=`), any grammar `structure=`
+(independent, factor, blocks, nested, tree), or a dense `cov=` that is
+fitted to the grammar on the way in.
+
+- `winning.factor` — the engine: all-share forward pass, inversion,
+  exact Jacobians and tie densities, covariance fitting
+  (`fit_covariance`), constrained polish.
+- `winning.probit` — the same machine in the probit literature's
+  max-wins, utilities-and-shares conventions.
+- `winning.classic` — the original SIAM-paper lattice ability
+  transform (racing vocabulary: dividends, state prices, dead heats);
+  see History below.
+- `winning.methods` / `winning.bench` — every rival method behind one
+  interface, and a seeded accuracy-time benchmark grid:
+  `python -m winning.bench.runner`.
+- `winning.thurstone` — the density-agnostic research engine for
+  arbitrary bases.
 
 [![CI](https://github.com/microprediction/winning/workflows/CI/badge.svg)](https://github.com/microprediction/winning/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -108,15 +110,23 @@ softmin expectation equals the hard race with each base convolved with
 the tau-scaled Gumbel kernel, so the same engine serves it. It is not
 identifiable from a single race, so inversion holds it fixed.
 
-Arbitrary densities (skewed, multimodal, empirical) run through custom
-bases or `winning.thurstone` — see the module docs and `research/demos/`.
+Arbitrary *formulas* (skewed, multimodal, anything with a standardized
+survival/density callable) run through custom `base=` functions.
+Arbitrary *data* — empirical histograms, integer scores, atoms with
+real dead-heat mass — belong to `winning.classic`, whose primitive is
+the lattice atom vector and whose multiplicity calculus prices genuine
+ties exactly. The rule is provenance: formulas to the front door, atoms
+to classic; the only error in either workflow is format conversion.
+See the module docstrings for the measured costs of crossing over.
 
-## The paper
+## The papers
+
+Six manuscript projects live here; [papers/README.md](papers/README.md)
+indexes them all with venue status.
 
 The correlated calibration is documented in *Scalable Share Calibration
 for Factor Multinomial Probit Models*
-([papers/factor-probit-transform](papers/factor-probit-transform),
-submitted): all shares of a correlated Gaussian race in one O(QNL)
+([papers/factor-probit-transform](papers/factor-probit-transform)): all shares of a correlated Gaussian race in one O(QNL)
 pass, matrix-free graph-Laplacian derivatives, and inversion at ten
 thousand alternatives in under a minute. Every number comes from a
 committed, seeded script in
@@ -147,8 +157,14 @@ the current package.
 
 ## History
 
-Versions 1.x were the SIAM paper's reference implementation, and those
-imports still work. A 2.0 renovation explored splitting the numerical
+Versions 1.x were the SIAM paper's reference implementation. That
+original lattice API now lives in `winning.classic` — maintained,
+rust-accelerated, and parity-locked against the R and JavaScript ports,
+just no longer sprawled across the top level. The old import paths
+(`winning.lattice_calibration` and friends) keep working as aliases
+that raise a `DeprecationWarning` pointing at the new home.
+
+A 2.0 renovation explored splitting the numerical
 core into the separate thurstone package with winning as an
 applications layer; the decision went the other way. `winning` owns the
 core — heritage and name — the thurstone implementation is vendored
@@ -159,7 +175,23 @@ migration notes and unported ideas are preserved in
 
 ## Cite
 
-    @article{doi:10.1137/19M1276261,
+For the correlated engine (the shared field, the covariance grammars,
+the substitution Jacobian, removal counterfactuals, and inversion at
+scale):
+
+    @article{cotton2026inversion,
+    author = {Cotton, Peter},
+    title = {Scalable Inversion of Contests with Correlated Performances,
+             Including Softmax and Multinomial Probit},
+    year = {2026},
+    doi = {10.2139/ssrn.7307363},
+    note = {SSRN working paper},
+    URL = {https://ssrn.com/abstract=7307363}
+    }
+
+For the original independent lattice transform (`winning.classic`):
+
+    @article{cotton2021inferring,
     author = {Cotton, Peter},
     title = {Inferring Relative Ability from Winning Probability in Multientrant Contests},
     journal = {SIAM Journal on Financial Mathematics},

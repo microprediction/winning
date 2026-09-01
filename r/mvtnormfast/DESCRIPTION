@@ -1,14 +1,16 @@
 Package: mvtnormfast
 Title: Fast Multivariate Normal Rectangle Probabilities for Structured Covariance
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: person("Peter", "Cotton", email = "peter.cotton@microprediction.com", role = c("aut", "cre"))
-Description: Drop-in accelerator for mvtnorm::pmvnorm on the structured slice:
-    when the covariance is (or is supplied as) factor plus diagonal,
+Description: Drop-in accelerator for mvtnorm::pmvnorm() on the structured
+    slice: when the covariance is (or is supplied as) factor plus diagonal,
     rectangle probabilities reduce to a low-dimensional factor integral of a
     product of univariate normal CDFs, evaluated deterministically in
     milliseconds at dimensions where general-purpose quadrature needs
-    seconds to minutes. Dense unstructured covariances fall back to
-    mvtnorm::pmvnorm unchanged.
+    seconds to minutes. The method is described in Cotton (2026)
+    <doi:10.2139/ssrn.7307363>, extending the factor-conditioning
+    quadrature of Butler and Moffitt (1982) <doi:10.2307/1912613>. Dense
+    unstructured covariances fall back to mvtnorm::pmvnorm() unchanged.
 License: MIT + file LICENSE
 Imports: mvtnorm, stats
 Suggests: testthat

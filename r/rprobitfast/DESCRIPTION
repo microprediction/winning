@@ -4,7 +4,7 @@ Version: 0.1.0
 Authors@R: person("Peter", "Cotton", email = "peter.cotton@microprediction.com", role = c("aut", "cre"))
 Description: Multinomial probit estimation with an exact
     factor-conditional likelihood and analytic score, aimed at the model
-    class served by the Rprobit package (Bauer), whose MACML engine rests
+    class served by the 'Rprobit' package (Bauer), whose MACML engine rests
     on Mendell-Elston / Solow-Joe analytic approximations. Those
     approximations are fast and centrally accurate but drift silently in
     the tails (measured: tail probabilities off by a factor of ~4 at
@@ -13,5 +13,5 @@ Description: Multinomial probit estimation with an exact
     sharpness-escalating node rule and referee-evaluated reporting.
 License: MIT + file LICENSE
 Imports: stats
-Suggests: Rprobit, testthat
+Suggests: testthat
 Encoding: UTF-8

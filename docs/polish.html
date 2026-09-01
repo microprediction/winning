@@ -23,9 +23,26 @@
       <a class="brand" href="/">winning</a>
       <nav>
         <a href="/">Home</a>
-        <a href="/#grammars">Grammars</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
         <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
         <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
       </nav>
     </div>
   </header>
@@ -59,7 +76,7 @@
     <p>The engine: invert the weights to abilities under the clustered race
     (<code>structure=Blocks</code> from the dendrogram), then solve for the
     nearest abilities whose race probabilities satisfy the caps, using the
-    exact race Jacobian. Everything here — the field pass, the Newton
+    analytic fixed-grid race Jacobian. Everything here — the field pass, the Newton
     inversion, the constrained polish — is
     <a href="https://github.com/microprediction/winning/tree/main/docs/js/winning">the
     JavaScript port</a>, pinned to the reference implementation by the shared

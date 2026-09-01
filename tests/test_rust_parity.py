@@ -11,9 +11,9 @@ fastrace = pytest.importorskip("fastrace")
 
 import winning.factor.races as races
 import winning.factor.blocks as blocks
-import winning.lattice as lattice
-import winning.lattice_calibration as lc
-from winning.lattice import skew_normal_density
+import winning.classic.lattice as lattice
+import winning.classic.lattice_calibration as lc
+from winning.classic.lattice import skew_normal_density
 from winning.factor.blocks import tree_race_probabilities
 
 RNG = np.random.default_rng(7)

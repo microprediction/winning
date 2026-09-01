@@ -6,6 +6,11 @@ on:
   workflow_dispatch:
 
 jobs:
+  # The gate. A release is the one action that cannot be taken back, so it
+  # runs more than a build: the full suite on the source, then the SHIPPED
+  # wheel installed into a clean environment and exercised from a directory
+  # where the source tree cannot shadow the import. install-smoke.yml runs
+  # the same script again afterwards against PyPI itself.
   build:
     runs-on: ubuntu-latest
     steps:
@@ -18,6 +23,26 @@ jobs:
           pip install build twine
           python -m build
           twine check dist/*
+      - name: Version matches the tag
+        if: github.event_name == 'release'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          WHEEL=$(ls dist/*.whl)
+          case "$WHEEL" in
+            *winning-"$TAG"-*) echo "wheel matches tag $TAG" ;;
+            *) echo "tag $TAG does not match $WHEEL"; exit 1 ;;
+          esac
+      - name: Test suite on the source
+        run: |
+          pip install -e ".[test]"
+          python -m pytest -q
+      - name: Contract and smoke on the built wheel
+        run: |
+          python -m venv /tmp/wheelenv
+          /tmp/wheelenv/bin/pip install --upgrade pip
+          /tmp/wheelenv/bin/pip install dist/*.whl
+          cd /tmp && GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            /tmp/wheelenv/bin/python "$GITHUB_WORKSPACE/.github/smoke.py"
       - uses: actions/upload-artifact@v4
         with:
           name: dist

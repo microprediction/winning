@@ -313,7 +313,26 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ghk_all_shares, m)?)?;
     m.add_function(wrap_pyfunction!(win_probabilities_factor, m)?)?;
     m.add_function(wrap_pyfunction!(tree_race, m)?)?;
+    m.add_function(wrap_pyfunction!(top_k, m)?)?;
     m.add_function(wrap_pyfunction!(classic_state_prices, m)?)?;
     m.add_function(wrap_pyfunction!(classic_calibrate, m)?)?;
     Ok(())
+}
+
+
+/// Top-k membership probabilities, normal base; see winning::top_k_kernel.
+#[pyfunction]
+fn top_k<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    sd: PyReadonlyArray1<f64>,
+    k: usize,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let m: Vec<f64> = mu.as_array().to_vec();
+    let s: Vec<f64> = sd.as_array().to_vec();
+    let q = py.allow_threads(|| winning::top_k_kernel(&m, &s, k, lo, hi, points));
+    Ok(Array1::from_vec(q).into_pyarray_bound(py))
 }

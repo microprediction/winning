@@ -222,3 +222,124 @@ def test_from_linkage_floors_negative_cophenetic_correlation():
     assert implied.max() <= 1.0 + 1e-12
     assert implied.min() >= -1e-12
     assert np.linalg.eigvalsh(implied).min() > -1e-10
+
+
+def test_heavy_favorite_inversion_converges():
+    # the dominance-window stall: a near-certain winner's residual and
+    # own-slope both vanish, and their noisy ratio destabilized the
+    # damped fixed point through the recentering (stalled at 0.31 max
+    # log-residual for targets in the 1e-4..1e-8 window, any n >= 4;
+    # the residual-proportional step cap converges these in 4-6
+    # iterations). Round trips must hold across the whole window.
+    import numpy as np
+    from winning import race_probabilities
+    from winning.factor.races import abilities_from_race
+    for n in (4, 8, 20):
+        for tiny in (1e-4, 1e-6, 1e-8, 1e-10):
+            p = np.full(n, tiny)
+            p[0] = 1 - (n - 1) * tiny
+            mu = abilities_from_race(p / p.sum())
+            p2 = race_probabilities(mu)
+            assert np.abs(np.log(p2) - np.log(p / p.sum())).max() < 1e-6
+
+
+def test_removal_shares_dominant_favorite():
+    # fourth review: removing a contestant 20-200 sd better than the
+    # field moves the post-removal winner bulk far from the original
+    # one; the lattice must cover it and the row mass must be checked
+    # rather than silently renormalized
+    import numpy as np
+    from scipy.stats import norm
+    from winning.factor.races import removal_shares
+    truth = norm.cdf(1.0 / np.sqrt(2.0))
+    for gap in (20.0, 200.0):
+        mu = np.array([-gap, 0.0, 1.0])
+        q = removal_shares(mu, D=np.ones(3))
+        assert abs(q[0, 1] - truth) < 1e-4
+        assert abs(q.sum(axis=1) - 1).max() < 1e-9
+
+
+def test_lattice_convergence_is_spectral_not_quadratic():
+    # Peter's challenge ("we are on a lattice, there are always ties"):
+    # within-cell tie mass lives in the quadrature error, and for these
+    # smooth, tail-decaying integrands that error is SPECTRAL, not
+    # O(dx^2) -- measured 5.6e-3 at 9 points, 7.9e-7 at 17, machine zero
+    # by 33 on an asymmetric pair. This is why the factor engine needs
+    # no multiplicity bookkeeping where the classic integer-lattice
+    # engine (whose dead-heat mass is fixed and real) does.
+    import numpy as np
+    from scipy.stats import norm
+    from winning.factor.races import race_probabilities
+    mu = np.array([0.0, 0.3])
+    exact = norm.cdf(0.3 / np.sqrt(2))
+    p17 = race_probabilities(mu, D=np.ones(2), points=17, window="span")
+    p33 = race_probabilities(mu, D=np.ones(2), points=33, window="span")
+    assert abs(p17[0] - exact) < 1e-5
+    assert abs(p33[0] - exact) < 1e-12
+
+
+def test_primitive_conversion_cost_is_where_the_docs_say():
+    # the provenance rule, measured: representing a continuous law as
+    # classic's atoms costs algebraic-order conversion error, while the
+    # factor engine's exact-evaluation quadrature is at machine
+    # precision on the same grid budget (12 orders at 129 points)
+    import numpy as np
+    from winning.classic.lattice import (skew_normal_density,
+                                         state_prices_from_offsets)
+    from winning.factor.races import race_probabilities
+    mus = np.array([0.0, 0.25, 0.5, 1.0, 1.5])
+    truth = race_probabilities(mus, D=np.ones(5), points=8001,
+                               window="span")
+    unit = 0.25
+    L = int(np.ceil(16.0 / unit))
+    density = skew_normal_density(L=L, unit=unit, a=0)
+    offsets = [int(round(m / unit)) for m in mus]
+    p_classic = np.asarray(state_prices_from_offsets(density, offsets))
+    p_factor = race_probabilities(mus, D=np.ones(5), points=2 * L + 1,
+                                  window="span")
+    assert np.abs(p_classic - truth).max() < 5e-3      # atoms: conversion
+    assert np.abs(p_classic - truth).max() > 1e-5      # ...and it is real
+    assert np.abs(p_factor - truth).max() < 1e-12      # formulas: spectral
+
+
+def test_case_v_is_choice_equivalent_to_independence():
+    """Thurstone's Case V lies exactly in the null space of the
+    identification: equal dispersions with equal correlations is
+    Sigma = s2[(1-rho)I + rho 11'], and P1 = 0 kills the correlation
+    term, so P Sigma P = s2(1-rho) P, the independent model at the
+    rescaled variance.
+
+    Pinned because the paper makes the point about the founding model of
+    the field: the only correlation Case V admits is the one choices
+    cannot see.
+    """
+    import warnings
+    from winning.factor.races import race_probabilities
+
+    rng = np.random.default_rng(0)
+    n = 8
+    mu = rng.standard_normal(n) * 0.7
+    mu -= mu.mean()
+    for s2, rho in ((1.7, 0.62), (0.4, 0.05), (2.5, 0.95)):
+        # stated exactly: the common factor sqrt(s2 rho) 1 against the
+        # independent race at the rescaled variance
+        V = np.full((n, 1), np.sqrt(s2 * rho))
+        p_case_v = race_probabilities(mu, V=V, D=np.full(n, s2 * (1 - rho)))
+        p_indep = race_probabilities(mu, D=np.full(n, s2 * (1 - rho)))
+        assert np.abs(p_case_v - p_indep).max() < 1e-12, (s2, rho)
+
+        # and through the dense front door, which has to FIT the matrix
+        # first. Same mathematics, looser tolerance, for a reason worth
+        # recording: P Sigma P is a multiple of P, so its spectrum is
+        # (n-1)-fold degenerate and many representations are exactly
+        # optimal. The fitter may pick one carrying factor rank the
+        # matrix does not need, and then pays quadrature error to price
+        # a factor integral that a pure diagonal would have avoided.
+        # Measured at 1.5e-5 on the rho = 0.05 case.
+        Sigma = s2 * ((1 - rho) * np.eye(n) + rho * np.ones((n, n)))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            p_dense = race_probabilities(mu, cov=Sigma)
+            assert any("tied eigenvalue" in str(w.message) for w in caught), (
+                "the maximally degenerate matrix must trigger the rank warning")
+        assert np.abs(p_dense - p_indep).max() < 1e-4, (s2, rho)

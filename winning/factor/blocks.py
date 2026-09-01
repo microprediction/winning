@@ -34,35 +34,89 @@ except Exception:                                            # pragma: no cover
     _HAVE_RUST = False
 
 
-def _bulk_lo_hi(mu, tot, delta=1e-12):
-    """Winner-bulk lattice bounds for a MAX-wins field, from the marginal
-    proxy G(x) = prod_j Phi((x - mu_j)/tot_j) (Slepian-safe on the right;
-    the 2 sd pad covers the left-edge correlation correction and any
-    non-normal base). See research/lattice_window: 3-4x narrower than the
-    ability span at equal safety."""
-    mu = np.asarray(mu, float); tot = np.asarray(tot, float)
-    lo0 = float((mu - 9 * tot).min()); hi0 = float((mu + 9 * tot).max())
+def _warn_if_sharp(v, sd, qa, threshold=3.0):
+    """The factor grammar escalates its quadrature past sharpness 3 and
+    refines its lattice; these hierarchical kernels do not yet, and at a
+    fixed 9-node rule a cluster with loading 4 and idiosyncratic sd 0.22
+    (sharpness 18) measured 5e-2 of total variation against a 4M-draw
+    referee -- on GROUP shares, not just tails. Warn until the factor
+    path's escalation is ported (tracked in the repository issues)."""
+    v = np.atleast_2d(np.asarray(v, float))
+    amp = np.sqrt((v ** 2).sum(axis=-1)) if v.shape[-1] > 1 else np.abs(v).ravel()
+    if len(amp) != len(np.asarray(sd).ravel()):
+        amp = np.abs(np.asarray(v, float)).ravel()
+    s = float(np.max(amp / np.maximum(np.asarray(sd, float).ravel(), 1e-300)))
+    if s > threshold:
+        import warnings
+        warnings.warn(
+            f"block/nested/tree quadrature is a fixed {qa}-node "
+            f"Gauss-Hermite rule and this field's cluster sharpness is "
+            f"{s:.1f} (loading over idiosyncratic sd); past 3 the "
+            "conditional integrand is a near-step, Gauss-Hermite fails at "
+            "ANY order (measured: 5e-2 TV at 9 nodes and sharpness 18, "
+            "and 31 nodes moves the answer by a further 8e-2 rather than "
+            "converging), and errors land on group shares, not just "
+            "tails. Restructure sharp shared effects into the factor "
+            "grammar, which escalates its node family automatically; "
+            "raising qa= does not fix this.",
+            RuntimeWarning, stacklevel=4)
 
-    def G(x):
-        return np.exp(np.log(np.maximum(ndtr((x - mu) / tot), TINY)).sum())
 
-    a, b = lo0, hi0
+def _window_nodes(mu, sd, amp, delta=1e-12, pad_sds=2.0):
+    """Winner-bulk window covering every RETAINED conditional race
+    (max-wins). Per-runner conditional locations range over
+    [mu - amp, mu + amp], with amp the largest shared-effect shift the
+    retained quadrature nodes can produce; the lower endpoint comes from
+    the least favourable locations mu - amp and the upper from the most
+    favourable mu + amp, each bracketed by geometric expansion before
+    bisection, with the IDIOSYNCRATIC sd setting the local scale.
+
+    This replaces an independent-marginal proxy that used the total sd at
+    the unconditional locations. Under near-common shocks that proxy's
+    lower crossing drifts upward with n while every retained node's field
+    sits O(1) lower: on an exactly in-grammar 400-runner single cluster
+    at correlation 0.99 it dropped 28 percent of the winner mass, the
+    truncation fell asymmetrically across loading groups, and the public
+    normalization silently returned group shares of 0.68/0.32 where
+    symmetry forces 0.50/0.50 (fourteenth review).
+    """
+    mu = np.asarray(mu, float); sd = np.asarray(sd, float)
+    amp = np.broadcast_to(np.asarray(amp, float), mu.shape)
+    m_lo = mu - amp
+    m_hi = mu + amp
+    smax = max(float(sd.max()), 1e-12)
+
+    def F(x, m):
+        return np.exp(np.log(np.maximum(ndtr((x - m) / sd), TINY)).sum())
+
+    lo = float(m_lo.min()) - 9.0 * smax
+    step = 9.0 * smax
+    for _ in range(60):
+        if F(lo, m_lo) <= delta:
+            break
+        lo -= step; step *= 2.0
+    hi = float(m_hi.max()) + 9.0 * smax
+    step = 9.0 * smax
+    for _ in range(60):
+        if F(hi, m_hi) >= 1.0 - delta:
+            break
+        hi += step; step *= 2.0
+    a, b = lo, hi
     for _ in range(70):
-        m = 0.5 * (a + b)
-        if G(m) < delta:
-            a = m
+        mid = 0.5 * (a + b)
+        if F(mid, m_lo) < delta:
+            a = mid
         else:
-            b = m
+            b = mid
     xlo = a
-    a, b = xlo, hi0
+    a, b = xlo, hi
     for _ in range(70):
-        m = 0.5 * (a + b)
-        if G(m) < 1.0 - delta:
-            a = m
+        mid = 0.5 * (a + b)
+        if F(mid, m_hi) < 1.0 - delta:
+            a = mid
         else:
-            b = m
-    pad = 2.0 * float(tot.max())
-    return xlo - pad, b + pad
+            b = mid
+    return xlo - pad_sds * smax, b + pad_sds * smax
 
 
 def _cluster_nodes(r, qa, seed=0):
@@ -106,10 +160,10 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     mu_o, sd_o, V_o, c_o = mu[order], sd[order], V[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
     nodes, w = _cluster_nodes(r, qa)
-    Q = len(nodes)
+    amp = np.linalg.norm(V_o, axis=1) * float(
+        np.max(np.linalg.norm(nodes, axis=1)))
     if _HAVE_RUST and hasattr(_fastrace, "block_race_r"):
-        tot_r = np.sqrt(sd_o ** 2 + (V_o ** 2).sum(1))
-        lo_r, hi_r = _bulk_lo_hi(mu_o, tot_r)
+        lo_r, hi_r = _window_nodes(mu_o, sd_o, amp)
         try:
             p_o = np.asarray(_fastrace.block_race_r(
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
@@ -123,8 +177,7 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
                 np.ascontiguousarray(nodes), np.ascontiguousarray(w), points))
         p = np.empty(n); p[order] = p_o
         return np.maximum(p, 0.0)
-    tot = np.sqrt(sd_o ** 2 + (V_o ** 2).sum(1))
-    lo, hi = _bulk_lo_hi(mu_o, tot)
+    lo, hi = _window_nodes(mu_o, sd_o, amp)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     shift = V_o @ nodes.T                                   # (n, Q)
     z = (x[None, None, :] - mu_o[:, None, None]
@@ -145,6 +198,7 @@ def _block_max(mu, sd, cluster, v, points, qa):
     """Max-wins kernel (numpy reference); public functions negate."""
     mu = np.asarray(mu, float); sd = np.asarray(sd, float)
     v = np.asarray(v, float); cluster = np.asarray(cluster)
+    _warn_if_sharp(v, sd, qa)
     if v.ndim == 2 and v.shape[-1] > 1:
         return _block_max_r(mu, sd, cluster, v, points, qa)
     v = v.reshape(len(mu))
@@ -154,10 +208,9 @@ def _block_max(mu, sd, cluster, v, points, qa):
     mu_o, sd_o, v_o = mu[order], sd[order], v[order]
     starts = np.flatnonzero(np.r_[True, np.diff(inv[order]) != 0])
     an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
+    amp = np.abs(v_o) * float(np.max(np.abs(an)))
     if _HAVE_RUST:
-        tot_r = np.sqrt(sd_o ** 2 + v_o ** 2)
-        lo_r, hi_r = _bulk_lo_hi(mu_o, tot_r)
-        kw = {}
+        lo_r, hi_r = _window_nodes(mu_o, sd_o, amp)
         try:
             p_o = np.asarray(_fastrace.block_race(
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
@@ -170,8 +223,7 @@ def _block_max(mu, sd, cluster, v, points, qa):
                 np.ascontiguousarray(v_o), starts.astype(np.int64),
                 np.ascontiguousarray(an), np.ascontiguousarray(aw), points))
     else:
-        tot = np.sqrt(sd_o ** 2 + v_o ** 2)
-        lo, hi = _bulk_lo_hi(mu_o, tot)
+        lo, hi = _window_nodes(mu_o, sd_o, amp)
         x = np.linspace(lo, hi, points); dx = x[1] - x[0]
         z = (x[None, None, :] - mu_o[:, None, None]
              - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
@@ -189,15 +241,50 @@ def _block_max(mu, sd, cluster, v, points, qa):
     return np.maximum(p, 0.0)
 
 
+def _scalar_loading(loading, kind):
+    """Tree races take SCALAR (rank-one) leaf-cluster loadings; the paper's
+    tree grammar is written that way and only the block grammar prices
+    rank r. Refuse a matrix rather than mis-broadcast (python crashed
+    cryptically; the R port silently priced the flattened matrix)."""
+    L = np.asarray(loading, float)
+    if L.ndim == 2 and L.shape[1] == 1:
+        return L.ravel()
+    if L.ndim > 1:
+        raise NotImplementedError(
+            f"{kind} take scalar (rank-one) leaf-cluster loadings; rank-r "
+            "leaf effects are supported by the block grammar only. Pass a "
+            "1-D loading, or use structure=Blocks.")
+    return L
+
+
+def _checked_mass(raw, kind, mass_tol=5e-3):
+    """Raw lattice mass is a diagnostic, not a nuisance: a material
+    defect means the window missed the winner's region, and normalizing
+    it away returns confident wrong shares (the fourteenth review's
+    0.68/0.32 against a forced 0.50/0.50). Raise instead."""
+    t = float(raw.sum())
+    # NaN compares false against any tolerance, so test finiteness
+    # explicitly or a NaN mass sails through the check
+    if not np.isfinite(t) or abs(t - 1.0) > mass_tol:
+        raise RuntimeError(
+            f"{kind} lattice captured total mass {t:.4f} (defect "
+            f"{abs(t-1.0):.2e} > {mass_tol}): the window missed part of "
+            "the winner distribution and the shares would be silently "
+            "wrong if normalized. Raise points=, or report this field: "
+            "the node-aware window should have covered it.")
+    return raw / t
+
+
 def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     """P(i wins | min-wins) under one private factor per cluster.
 
     loading[i] is member i's exposure to its cluster's shared effect;
-    D[i] its idiosyncratic VARIANCE (as everywhere in winning.factor)."""
-    p = _block_max(-np.asarray(mu, float), np.sqrt(np.asarray(D, float)),
-                   cluster, loading, points, qa)
-    t = p.sum()
-    return p / t if t > 0 else p
+    D[i] its idiosyncratic VARIANCE (as everywhere in winning.factor).
+    The unnormalized lattice mass is checked before normalization and a
+    material defect raises rather than being normalized away."""
+    raw = _block_max(-np.asarray(mu, float), np.sqrt(np.asarray(D, float)),
+                     cluster, loading, points, qa)
+    return _checked_mass(raw, "block race")
 
 
 def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
@@ -216,15 +303,28 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
         fn = fn.reshape(-1, 1); fw = fw / fw.sum()
     else:
         fn, fw = _cluster_nodes(g.shape[1], qf, seed=1)
+    # average the UNNORMALIZED conditional block masses and normalize
+    # once: normalizing each conditional race separately would hide any
+    # per-node mass defect inside a plausible-looking average
+    # (fourteenth review)
     p = np.zeros(len(mu))
+    muv = np.asarray(mu, float)
+    sdv = np.sqrt(np.asarray(D, float))
     for q in range(len(fn)):
-        p += fw[q] * block_race_probabilities(mu + gamma * (g @ fn[q]), cluster,
-                                              loading, D, points=points, qa=qa)
-    t = p.sum()
-    return p / t if t > 0 else p
+        p += fw[q] * _block_max(-(muv + gamma * (g @ fn[q])), sdv,
+                                cluster, loading, points, qa)
+    return _checked_mass(p, "nested race")
 
 
 def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
+    _lv = np.asarray(loading, float)
+    if _lv.ndim == 2 and _lv.shape[-1] > 1 and _lv.shape[0] > 1:
+        raise NotImplementedError(
+            "block_race_jacobian supports rank-one cluster loadings only; "
+            "the rank-r block Jacobian is not implemented (the FORWARD "
+            "rank-r kernel is). Use finite differences of "
+            "block_race_probabilities, or the factor grammar if the "
+            "loadings are global.")
     """Exact d p / d mu (min-wins), one pass. Rows sum to zero."""
     mu = np.asarray(mu, float)
     m = -mu
@@ -237,8 +337,8 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
     n_c = len(starts)
     an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
-    tot = np.sqrt(sd_o ** 2 + v_o ** 2)
-    lo, hi = _bulk_lo_hi(mu_o, tot)
+    amp = np.abs(v_o) * float(np.max(np.abs(an)))
+    lo, hi = _window_nodes(mu_o, sd_o, amp)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     z = (x[None, None, :] - mu_o[:, None, None]
          - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
@@ -341,7 +441,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(np.asarray(D, float))
-    v = np.asarray(loading, float); cluster = np.asarray(cluster)
+    v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
     parent = np.asarray(parent, int); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -351,19 +451,21 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
     an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
     depth_shift = np.zeros(nT)
+    depth_hops = np.zeros(nT, int)
     for t in range(nT):
-        s_, u = 0.0, t
+        s_, d_, u = 0.0, 0, t
         while parent[u] >= 0:
-            s_ += abs(lam[parent[u]]); u = parent[u]
+            s_ += abs(lam[parent[u]]); d_ += 1; u = parent[u]
         depth_shift[t] = s_
+        depth_hops[t] = d_
     path_var = np.zeros(nC)
     for c in range(nC):
         s_, u = 0.0, c
         while parent[u] >= 0:
             s_ += lam[parent[u]] ** 2; u = parent[u]
         path_var[c] = s_
-    tot = np.sqrt(sd_o ** 2 + v_o ** 2 + path_var[c_o])
-    lo, hi = _bulk_lo_hi(mu_o, tot)
+    amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
+    lo, hi = _window_nodes(mu_o, sd_o, amp)
     if _HAVE_RUST and hasattr(_fastrace, "tree_race"):
         p_o = np.asarray(_fastrace.tree_race(
             np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
@@ -372,9 +474,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
             np.ascontiguousarray(an), np.ascontiguousarray(aw),
             points, lo, hi))
         p = np.empty(n); p[order] = p_o
-        p = np.maximum(p, 0.0)
-        t_ = p.sum()
-        return p / t_ if t_ > 0 else p
+        return _checked_mass(np.maximum(p, 0.0), "tree race")
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     z = (x[None, None, :] - mu_o[:, None, None]
          - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
@@ -384,14 +484,16 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     G = np.empty((nT, points))
     G[:nC] = np.einsum("q,cql->cl", aw, np.exp(np.minimum(S, 0.0)))
     children = [[] for _ in range(nT)]
-    root = -1
     for t in range(nT):
         if parent[t] >= 0:
             children[parent[t]].append(t)
-        else:
-            root = t
     shift_eval = lambda g, delta: np.interp(x, x - delta, g, left=g[0], right=g[-1])
-    for t in sorted(range(nC, nT), key=lambda u: -depth_shift[u]):
+    # traverse by TREE depth, not by accumulated |strength|: zero
+    # strengths (from_linkage's floored merges) tie the |lambda| path
+    # sums, and a tied sort visits children before their parents, so the
+    # downward pass reads cavities that are still their initial value.
+    # The old key priced a 6-leaf zero-strength linkage at raw mass 3.0.
+    for t in sorted(range(nC, nT), key=lambda u: -depth_hops[u]):
         acc = np.zeros(points)
         for q in range(qa):
             prod = np.ones(points)
@@ -400,7 +502,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
             acc += aw[q] * prod
         G[t] = np.maximum(acc, 0.0)
     R = np.ones((nT, points))
-    for t in sorted(range(nT), key=lambda u: depth_shift[u]):
+    for t in sorted(range(nT), key=lambda u: depth_hops[u]):
         pa = parent[t]
         if pa < 0:
             continue
@@ -415,9 +517,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     h = np.einsum("q,nql->nl", aw, pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
     p_o = (h * R[c_o]).sum(axis=1) * dx
     p = np.empty(n); p[order] = p_o
-    p = np.maximum(p, 0.0)
-    t_ = p.sum()
-    return p / t_ if t_ > 0 else p
+    return _checked_mass(np.maximum(p, 0.0), "tree race")
 
 
 def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
@@ -433,7 +533,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(np.asarray(D, float))
-    v = np.asarray(loading, float); cluster = np.asarray(cluster)
+    v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
     parent = np.asarray(parent, int); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -443,19 +543,21 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
     an, aw = roots_hermitenorm(qa); aw = aw / aw.sum()
     depth_shift = np.zeros(nT)
+    depth_hops = np.zeros(nT, int)
     for t in range(nT):
-        s_, u = 0.0, t
+        s_, d_, u = 0.0, 0, t
         while parent[u] >= 0:
-            s_ += abs(lam[parent[u]]); u = parent[u]
+            s_ += abs(lam[parent[u]]); d_ += 1; u = parent[u]
         depth_shift[t] = s_
+        depth_hops[t] = d_
     path_var = np.zeros(nC)
     for c in range(nC):
         s_, u = 0.0, c
         while parent[u] >= 0:
             s_ += lam[parent[u]] ** 2; u = parent[u]
         path_var[c] = s_
-    tot = np.sqrt(sd_o ** 2 + v_o ** 2 + path_var[c_o])
-    lo, hi = _bulk_lo_hi(mu_o, tot)
+    amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
+    lo, hi = _window_nodes(mu_o, sd_o, amp)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     z = (x[None, None, :] - mu_o[:, None, None]
          - v_o[:, None, None] * an[None, :, None]) / sd_o[:, None, None]
@@ -473,7 +575,12 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
             root = t
     shift_eval = lambda g, delta: np.interp(x, x - delta, g,
                                             left=g[0], right=g[-1])
-    for t in sorted(range(nC, nT), key=lambda u: -depth_shift[u]):
+    # traverse by TREE depth, not by accumulated |strength|: zero
+    # strengths (from_linkage's floored merges) tie the |lambda| path
+    # sums, and a tied sort visits children before their parents, so the
+    # downward pass reads cavities that are still their initial value.
+    # The old key priced a 6-leaf zero-strength linkage at raw mass 3.0.
+    for t in sorted(range(nC, nT), key=lambda u: -depth_hops[u]):
         acc = np.zeros(points)
         for q in range(qa):
             prod = np.ones(points)
@@ -482,7 +589,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
             acc += aw[q] * prod
         G[t] = np.maximum(acc, 0.0)
     R = np.ones((nT, points))
-    for t in sorted(range(nT), key=lambda u: depth_shift[u]):
+    for t in sorted(range(nT), key=lambda u: depth_hops[u]):
         pa = parent[t]
         if pa < 0:
             continue

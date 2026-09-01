@@ -14,6 +14,10 @@ identities are verified against brute-force Monte Carlo in the tests.
 update_winner: the exact N-way update from winner-only data.
 pairwise_update_winner: the classical decomposition (winner beats each
 loser in independent two-player probit updates) for comparison.
+update_winner_correlated / update_order_correlated: the same exact
+moments when participants share performance factors (V loadings), by
+posterior-weighted mixture over factor nodes; both return logZ for
+evidence and model comparison.
 """
 
 from __future__ import annotations
@@ -26,20 +30,63 @@ from ..factor.core import jacobian_vector_product, win_probabilities_factor
 _F1 = np.zeros((1, 1))
 _W1 = np.ones(1)
 
+# The named bases are log-concave, so log P(event) is concave in the
+# means (Prekopa): a positive diagonal curvature estimate is always
+# quadrature noise there, never signal, and clamping it keeps repeated
+# moment updates from inflating variance. User callables are exempt --
+# a bimodal base (failure_base) can legitimately grow variance.
+_LOG_CONCAVE = {"normal", "gumbel", "logistic", "laplace"}
 
-def _grad_logp_row(m, D, i):
-    """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP."""
+
+def _fd_eps(base, eps):
+    """The laplace density's kink leaves O(dx) noise on the lattice
+    gradient (~1e-3 at default resolution); differencing that gradient
+    at eps=1e-3 amplifies the noise a thousandfold into wrong-signed
+    curvature (measured: repeated laplace order updates inflated a unit
+    prior variance to 18). A wide step keeps the difference above the
+    noise floor; truncation error at eps=0.05 is O(eps^2) and
+    negligible against it."""
+    return max(eps, 5e-2) if base == "laplace" else eps
+
+
+def _clamp_d2(d2, base):
+    return np.minimum(d2, 0.0) if base in _LOG_CONCAVE else d2
+
+
+def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
+                   points=257):
+    """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP.
+
+    With V/F/W supplied, the mixture over the factor nodes is computed
+    by the engine's shared field in ONE vectorized pass -- the same
+    mixture a per-node python loop assembles at 30-100x the cost (the
+    full-covariance updates lean on this).
+
+    base is any standardized density the engine accepts, so the moment
+    updates inherit the race layer's density-agnosticism: the Gaussian
+    moment identities need a Gaussian PRIOR, not Gaussian performance.
+    winning.factor.races.failure_base gives the retirement/DNF case."""
     n = len(m)
-    Vz = np.zeros((n, 1))
+    Vz = np.zeros((n, 1)) if V is None else V
+    Fz = _F1 if F is None else F
+    Wz = _W1 if W is None else W
     a = -np.asarray(m, dtype=float)
-    p = win_probabilities_factor(a, Vz, D, _F1, _W1)
-    e = np.zeros(n)
-    e[i] = 1.0
-    Ji = jacobian_vector_product(a, Vz, D, _F1, _W1, e, form="grid")
+    if base == "normal":
+        p = win_probabilities_factor(a, Vz, D, Fz, Wz)
+        e = np.zeros(n)
+        e[i] = 1.0
+        Ji = jacobian_vector_product(a, Vz, D, Fz, Wz, e, form="grid")
+        return -Ji / max(p[i], 1e-300), p[i]
+    from ..factor.polish import race_jacobian_row
+    from ..factor.races import race_probabilities
+    p = race_probabilities(a, V=Vz, D=D, F=Fz, W=Wz, base=base,
+                           points=points)
+    Ji = race_jacobian_row(a, i, V=Vz, D=D, F=Fz, W=Wz, base=base,
+                           points=points)
     return -Ji / max(p[i], 1e-300), p[i]
 
 
-def update_winner(m, v, winner, beta2=1.0, eps=1e-4):
+def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     """Exact-moment posterior (m, v) update given `winner` won the race.
 
     m, v: prior skill means and variances; beta2: performance noise
@@ -49,16 +96,18 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4):
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     D = v + beta2
-    g, p_i = _grad_logp_row(m, D, winner)
+    g, p_i = _grad_logp_row(m, D, winner, base=base)
     m_new = m + v * g
     # diagonal second derivatives by per-coordinate central differences of
     # the gradient row (analytic second-order pass is a known follow-up)
+    eps = _fd_eps(base, eps)
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
-        gp, _ = _grad_logp_row(m + ej, D, winner)
-        gm, _ = _grad_logp_row(m - ej, D, winner)
+        gp, _ = _grad_logp_row(m + ej, D, winner, base=base)
+        gm, _ = _grad_logp_row(m - ej, D, winner, base=base)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
+    d2 = _clamp_d2(d2, base)
     v_new = np.maximum(v + v**2 * d2, 1e-6)
     return m_new, v_new, p_i
 
@@ -84,7 +133,7 @@ def pairwise_update_winner(m, v, winner, beta2=1.0):
     return m, v
 
 
-def update_ranking(m, v, order, beta2=1.0):
+def update_ranking(m, v, order, beta2=1.0, base="normal"):
     """Full-ranking update: the ranking factorizes exactly as a sequence of
     winner-of-remaining events, P(order) = prod_t P(order[t] wins among
     order[t:]); each stage applies the exact winner update on the shrinking
@@ -98,21 +147,66 @@ def update_ranking(m, v, order, beta2=1.0):
     Reference TrueSkill respects that shared structure and beats this
     update on full rankings (RMSE 0.085 vs 0.310 at 1500 races), while the
     exact winner update dominates on winner-only data (0.331 vs 0.815).
-    Exact ranked-race moments with shared noise are the open item."""
+
+    The same defect biases STRUCTURE LEARNING, and the bias is measured
+    (bandits repo, family-vs-outsider world, 2026-08-28): learning a
+    correlation scale by gradient ascent on stagewise-decomposed rankings
+    under the Gaussian base inflates it three-fold (s_hat 1.53 +/- 0.36
+    against 0.56 +/- 0.05 from winner-only events on the same data) --
+    the shared realization across stages masquerades as factor
+    correlation. Stagewise is exact under the Gumbel base only (IIA).
+    For the LIKELIHOOD the fix now exists: order_loglik (this module)
+    mixed over Gaussian factor nodes is the exact correlated ranking
+    likelihood, measured unbiased where this stagewise shortcut was 3x
+    off; the stagewise decomposition stays exact under Gumbel only
+    (Plackett-Luce; winning.likelihood.ranking_loglik_and_score). On the
+    MOMENT-UPDATE side the ladder is now complete:
+    update_ranking_exact (below) is the shared-realization-correct
+    member for independent skills, and update_winner_correlated /
+    update_order_correlated are its factor-correlated mixtures,
+    MC-posterior-verified. Use this stagewise function only for speed
+    on independent worlds, knowing what it costs."""
     m = np.asarray(m, dtype=float).copy()
     v = np.asarray(v, dtype=float).copy()
     order = list(order)
     for t in range(len(order) - 1):
         rest = np.array(order[t:])
         w_local = 0
-        mm, vv, _ = update_winner(m[rest], v[rest], w_local, beta2)
+        mm, vv, _ = update_winner(m[rest], v[rest], w_local, beta2,
+                                  base=base)
         m[rest], v[rest] = mm, vv
     return m, v
 
 
-def _order_pass(m, sd, order, L=2001):
-    """Joint ordered-statistics likelihood for independent Gaussians and its
-    exact gradient, by one forward and one adjoint sweep, O(nL).
+def _base_rows(x, m_j, sd_j, base):
+    """Max-wins density, its m-derivative, and CDF for one player.
+
+    The engine's bases are standardized MIN-wins laws (S, f, fp at z);
+    this module is max-wins, so evaluate at -z: for X = -Y,
+    f_max(z) = f_min(-z), P(X < x) = S_min(-z), and
+    d/dm [f_min(-z)/sd] = fp_min(-z)/sd^2. Gaussian reduces to the
+    former hardcoded rows exactly (fp = -z f gives g z / sd)."""
+    z = (x - m_j) / sd_j
+    if base == "normal":
+        g = np.exp(-0.5 * z * z) / (sd_j * np.sqrt(2 * np.pi))
+        return g, g * z / sd_j, ndtr(z)
+    from ..factor.races import BASES
+    fn = base if callable(base) else BASES[base]
+    S_u, f_u, fp_u = fn(-z)
+    return f_u / sd_j, fp_u / (sd_j * sd_j), np.maximum(S_u, 1e-300)
+
+
+def _order_pass(m, sd, order, L=2001, base="normal"):
+    """Joint ordered-statistics likelihood and its exact gradient, by one
+    forward and one adjoint sweep, O(nL).
+
+    base is any standardized density the race layer accepts (default
+    normal). A failure lump in the base is the point of this parameter:
+    with ranked feedback, a retirement is a LAST-PLACE finish, and the
+    lump lets Bayes split that observation between "slow" and "broke"
+    instead of charging all of it to ability. Winner-only feedback
+    barely sees a failure at all, since a failure simply is not the
+    winner.
 
     Structure: P = g_1^T D T_2 with T_t = C(g_t * T_{t+1}), T_n = F_n,
     C = trapezoidal cumulative integral, D = dx. P is linear in each
@@ -121,8 +215,16 @@ def _order_pass(m, sd, order, L=2001):
     log-scales so 20-player orders (P ~ 1e-19) stay accurate.
     Returns (log P, d log P / d m)."""
     n = len(order)
-    lo = float((m - 8 * sd.max()).min())
-    hi = float((m + 8 * sd.max()).max())
+    pad = 8.0
+    if base != "normal":
+        fn = base if callable(base) else None
+        span = getattr(fn, "span", None)
+        if span is not None:
+            pad = max(pad, float(max(span)))
+        else:
+            pad = max(pad, 12.0)
+    lo = float((m - pad * sd.max()).min())
+    hi = float((m + pad * sd.max()).max())
     x = np.linspace(lo, hi, L)
     dx = x[1] - x[0]
 
@@ -136,14 +238,12 @@ def _order_pass(m, sd, order, L=2001):
 
     g = np.empty((n, L)); dg = np.empty((n, L))
     for t, j in enumerate(order):
-        z = (x - m[j]) / sd[j]
-        g[t] = np.exp(-0.5 * z * z) / (sd[j] * np.sqrt(2 * np.pi))
-        dg[t] = g[t] * z / sd[j]
+        g[t], dg[t], _ = _base_rows(x, m[j], sd[j], base)
 
     # forward sweep: scaled T_t for t = n .. 2
     T = np.empty((n + 1, L)); sT = np.zeros(n + 1)
     j = order[-1]
-    T[n] = ndtr((x - m[j]) / sd[j])
+    T[n] = _base_rows(x, m[j], sd[j], base)[2]
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])
         mx = raw.max()
@@ -167,6 +267,14 @@ def _order_pass(m, sd, order, L=2001):
         w = cum_T(u)                                   # C^T u_t
         # denominator in matching scales: P = <u_t, T_t> e^{su+sT_t}
         denom = float(np.sum(u * T[t]))
+        if denom <= 0.0:
+            # the running product underflowed in this scaling: the order
+            # is numerically impossible at these means/sds, remaining
+            # gradient entries are irrecoverable at this precision.
+            # Degrade like the mx-guard below so mixture-over-nodes
+            # callers never see an exception (reported by the bandits
+            # lane against small-sd reversed orders).
+            return logP, grad
         num = float(np.sum(w * dg[t - 1] * T[t + 1]))
         grad[order[t - 1]] = (num / denom) * np.exp(sT[t + 1] - sT[t])
         u = w * g[t - 1]
@@ -180,7 +288,8 @@ def _order_pass(m, sd, order, L=2001):
     return logP, grad
 
 
-def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3):
+def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
+                         base="normal"):
     """Exact full-ranking update: means from the analytic gradient of the
     ordered-statistics likelihood, variances from a coarse FD of the
     per-coordinate gradient (bounded below).
@@ -189,17 +298,240 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3):
     observed) this reproduces TrueSkill to ~1e-3 per rating -- their EP is
     essentially exact there. The value is in models TrueSkill cannot
     express: beta2 may be a per-player array (consistent vs erratic
-    performers), and the recursion extends to factor-correlated skills."""
+    performers), and the recursion extends to factor-correlated skills.
+
+    CENSORING IS A PARTIAL ORDER. Pass the order over the runners who
+    actually finished and the rest are marginalized out exactly: the
+    likelihood of a partial order equals the sum over every position the
+    omitted runner could have taken (verified to grid resolution in
+    tests), the omitted runner's own belief is left untouched under a
+    diagonal prior, and under a correlated prior it moves only through
+    genuine correlation. That is the right treatment when retirements
+    are independent of ability, where it beats the failure lump
+    (winning.factor.races.failure_base carries the measurements). When
+    retirements are coupled to ability, an under-weighted lump does
+    better; overstating the failure rate is the one badly wrong move."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
-    _, grad = _order_pass(m, sd, order)
+    _, grad = _order_pass(m, sd, order, base=base)
     m_new = m + v * grad
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
-        _, gp = _order_pass(m + ej, sd, order)
-        _, gm = _order_pass(m - ej, sd, order)
+        _, gp = _order_pass(m + ej, sd, order, base=base)
+        _, gm = _order_pass(m - ej, sd, order, base=base)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new
+
+
+def order_loglik(m, sd, order, L=2001, base="normal"):
+    """Exact log-likelihood of a full finishing order for INDEPENDENT
+    Gaussian performances, with its exact gradient in m: the public face
+    of the ordered-statistics pass (one forward and one adjoint sweep,
+    O(nL); explicit stage log-scales keep 20-player orders accurate).
+
+    Promoted to official API because it is load-bearing downstream:
+    mixed over Gaussian factor nodes it IS the exact correlated ranking
+    likelihood -- sum_q w_q exp(order_loglik(m + F_q @ V.T, sqrt(D),
+    order)) -- which measured UNBIASED for structure learning where the
+    Harville/stagewise shortcut inflated the learned correlation
+    threefold (bandits repo, exact_scale_map: s_hat 0.65 +/- 0.35
+    against stagewise 1.53 +/- 0.36 and winner-only 0.24 +/- 0.49 at
+    200 ranked races -- rankings consumed exactly are worth about ten
+    winner-only races each). Min-wins: order lists indices from first
+    (smallest performance) to last.
+
+    Returns (loglik, dlogp_dm).
+    """
+    m = np.asarray(m, dtype=float)
+    sd = np.asarray(sd, dtype=float)
+    return _order_pass(m, sd, np.asarray(order, dtype=int), L=L,
+                       base=base)
+
+
+def _factor_grid(r, Qf=7):
+    """Nodes over the shared factors: GH tensor for r <= 2, Sobol past."""
+    from ..likelihood import _factor_nodes
+    return _factor_nodes(r, Qf=Qf)
+
+
+def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
+                    base="normal"):
+    """Shared engine of the correlated updates. For Gaussian priors,
+    E[s_j | event] = m_j + v_j d log P / d m_j and
+    Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for ANY
+    event; with shared factors, log P is the log-mixture of conditional
+    event probabilities over factor nodes, its gradient the posterior-
+    node-weighted average of conditional gradients, and the diagonal
+    curvature comes from central differences of that mixture gradient
+    (matching update_winner / update_ranking_exact's treatment)."""
+    m = np.asarray(m, dtype=float)
+    v = np.asarray(v, dtype=float)
+    V = np.atleast_2d(np.asarray(V, dtype=float))
+    if V.shape[0] != len(m):
+        V = V.T
+    F, W = _factor_grid(V.shape[1], Qf=Qf)
+    logW = np.log(W)
+    shifts = F @ V.T                                  # (Q, n)
+
+    def mixture(mm):
+        logps = np.empty(len(F))
+        grads = np.empty((len(F), len(mm)))
+        for q in range(len(F)):
+            lp, g = node_logp_grad(mm + shifts[q])
+            logps[q] = lp
+            grads[q] = g
+        a = logW + logps
+        astar = a.max()
+        if not np.isfinite(astar):
+            return np.zeros(len(mm)), -np.inf
+        pw = np.exp(a - astar)
+        logZ = astar + np.log(pw.sum())
+        omega = pw / pw.sum()
+        return omega @ grads, logZ
+
+    G, logZ = mixture(m)
+    m_new = m + v * G
+    eps = _fd_eps(base, eps)
+    d2 = np.empty(len(m))
+    for j in range(len(m)):
+        ej = np.zeros(len(m)); ej[j] = eps
+        gp, _ = mixture(m + ej)
+        gm, _ = mixture(m - ej)
+        d2[j] = (gp[j] - gm[j]) / (2 * eps)
+    d2 = _clamp_d2(d2, base)
+    v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
+    return m_new, v_new, float(logZ)
+
+
+def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
+                             base="normal"):
+    """Exact-moment posterior update from `winner` won, when participants
+    share performance factors: X_j = s_j + (V f)_j + noise_j,
+    f ~ N(0, I_r), noise_j ~ N(0, beta2_j), s_j ~ N(m_j, v_j) (max-wins,
+    matching this module throughout). Conditional on f the race is the
+    independent one update_winner serves; the update mixes those
+    conditionals with posterior node weights. Returns
+    (m_post, v_post, logZ) with logZ = log P(winner) for evidence and
+    model comparison. Verified against rejection-sampled Monte Carlo
+    posteriors in the tests."""
+    D = np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float)
+
+    def node(mm):
+        g, p = _grad_logp_row(mm, D, winner, base=base)
+        return np.log(max(p, 1e-300)), g
+
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base)
+
+
+def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
+                            base="normal"):
+    """The shared-realization-correct full-order update with factor
+    correlation: the factor mixture of update_ranking_exact, closing the
+    open item recorded in update_ranking's caveat. order lists players
+    first to last finisher (max-wins). Returns (m_post, v_post, logZ),
+    logZ = log P(order). Near-impossible orders degrade like
+    order_loglik (finite moments, tiny logZ), never raise."""
+    sd = np.sqrt(np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float))
+    order = np.asarray(order, dtype=int)
+
+    def node(mm):
+        return _order_pass(mm, sd, order, base=base)
+
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base)
+
+
+def _order_pass_batch(Ms, sd, order, L=None, base="normal"):
+    """_order_pass vectorized over a batch of mean vectors (the factor
+    nodes of the full-covariance order update -- the order-heavy online
+    case the bandits lane measured: correlation identification flows
+    through order feedback at +3.4 nats/300 races vs +0.8 winner-only).
+
+    Ms: (Q, n) means; common lattice sized to cover every node at the
+    resolution a single call would use. Per-node scale carrying and
+    underflow guards match the scalar path: an impossible-order node
+    contributes -inf log-likelihood and a zero gradient tail.
+    Returns (logP (Q,), grad (Q, n)).
+    """
+    Ms = np.atleast_2d(np.asarray(Ms, dtype=float))
+    sd = np.asarray(sd, dtype=float)
+    Q, nm = Ms.shape
+    n = len(order)
+    pad = 8.0
+    if base != "normal":
+        span = getattr(base, "span", None)
+        pad = max(pad, float(max(span))) if span is not None else max(pad, 12.0)
+    lo = float((Ms - pad * sd.max()).min())
+    hi = float((Ms + pad * sd.max()).max())
+    if L is None:
+        span_single = float(Ms[0].max() - Ms[0].min()) + 16 * float(sd.max())
+        dx_t = span_single / 2001.0
+        L = int(np.clip(np.ceil((hi - lo) / max(dx_t, 1e-12)), 2001, 8001))
+    x = np.linspace(lo, hi, L)
+    dx = x[1] - x[0]
+
+    def cum(y):                        # trapezoid cumulative, batched (Q, L)
+        c = np.cumsum(y, axis=1) * dx
+        return c - 0.5 * dx * (y + y[:, :1])
+
+    def cum_T(u):
+        c = np.cumsum(u[:, ::-1], axis=1)[:, ::-1] * dx
+        return c - 0.5 * dx * (u + u[:, -1:])
+
+    g = np.empty((n, Q, L)); dg = np.empty((n, Q, L))
+    for t, j in enumerate(order):
+        g[t], dg[t], _ = _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)
+
+    T = np.empty((n + 1, Q, L)); sT = np.zeros((n + 1, Q))
+    j = order[-1]
+    T[n] = _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)[2]
+    alive = np.ones(Q, dtype=bool)
+    for t in range(n - 1, 1, -1):
+        raw = cum(g[t - 1] * T[t + 1])
+        mx = raw.max(axis=1)
+        dead = mx <= 0
+        alive &= ~dead
+        mx = np.where(mx > 0, mx, 1.0)
+        T[t] = raw / mx[:, None]
+        sT[t] = sT[t + 1] + np.where(alive, np.log(mx), 0.0)
+
+    raw_p = (g[0] * T[2]).sum(axis=1) * dx
+    alive &= raw_p > 0
+    logP = np.where(alive,
+                    np.log(np.maximum(raw_p, 1e-300)) + sT[2],
+                    -np.inf)
+    grad = np.zeros((Q, nm))
+    safe_p = np.maximum(raw_p, 1e-300)
+    grad[:, order[0]] = np.where(alive,
+                                 (dg[0] * T[2]).sum(axis=1) * dx / safe_p,
+                                 0.0)
+    u = g[0] * dx
+    for t in range(2, n):
+        w = cum_T(u)
+        denom = (u * T[t]).sum(axis=1)
+        ok = alive & (denom > 0)
+        num = (w * dg[t - 1] * T[t + 1]).sum(axis=1)
+        with np.errstate(over="ignore", invalid="ignore"):
+            val = (num / np.where(ok, denom, 1.0)) * np.exp(sT[t + 1] - sT[t])
+        grad[:, order[t - 1]] = np.where(ok, val, 0.0)
+        alive = ok
+        u = w * g[t - 1]
+        mx = u.max(axis=1)
+        ok2 = mx > 0
+        alive &= ok2
+        u = u / np.where(ok2, mx, 1.0)[:, None]
+        sT_u = np.where(ok2, np.log(np.where(ok2, mx, 1.0)), 0.0)
+        # fold the u-scale into a running offset against sT
+        sT[t + 1] = sT[t + 1]  # scales already relative; denom uses same u
+        if t + 1 <= n:
+            pass
+        # carry: subsequent denom/num both use the SAME rescaled u, so the
+        # ratio is invariant to the rescale; nothing further to track
+    # last coordinate
+    denom = (u * T[n]).sum(axis=1)
+    ok = alive & (denom > 0)
+    num = (u * (-g[n - 1])).sum(axis=1)
+    grad[:, order[-1]] = np.where(ok, num / np.where(ok, denom, 1.0), 0.0)
+    return logP, grad

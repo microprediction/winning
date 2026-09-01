@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>winning — the classic engine</title>
+  <meta name="description" content="Why the classic lattice engine is retained and the shared-field front door is preferred for most purposes: distributions as formulas versus distributions as atoms, with the conversion costs measured." />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    table.cmp { border-collapse: collapse; width: 100%; margin: 1.2rem 0; font-size: 0.95rem; }
+    table.cmp th, table.cmp td { border-bottom: 1px solid #ddd; padding: 0.5rem 0.7rem; text-align: left; vertical-align: top; }
+    table.cmp th { border-bottom: 2px solid #999; }
+    .num { font-variant-numeric: tabular-nums; }
+    code { background: rgba(127,127,127,0.12); padding: 0.05em 0.3em; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
+        <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <h1>The classic engine, and when to prefer it</h1>
+    <p class="lead">The package ships two race engines. The
+    <strong>front door</strong> (<code>race_probabilities</code> /
+    <code>abilities_from_race</code>) is preferred for most purposes; the
+    <strong>classic</strong> engine (<code>winning.classic</code>, the
+    2021 SIAM paper's implementation) is retained, maintained, and for
+    one kind of input it is the only correct choice. The rule that
+    decides between them is not new-versus-old. It is
+    <em>provenance</em>: what format does your distribution arrive in?</p>
+
+    <h2>The two primitives</h2>
+    <p>The engines disagree about what a probability distribution
+    <em>is</em>.</p>
+    <p>To the <strong>front door</strong>, a distribution is a
+    <em>formula</em>: a standardized survival/density callable evaluated
+    exactly, at machine precision, wherever the engine asks. The lattice
+    discretizes only the one-dimensional integral over the winning
+    value, and because that integrand is smooth and dies in both tails,
+    the quadrature is spectrally accurate &mdash; machine precision by
+    33 lattice points on asymmetric, nearly tied fields. Ties have
+    probability zero by construction, so nothing about them needs
+    tracking.</p>
+    <p>To the <strong>classic</strong> engine, the atom vector on the
+    lattice <em>is</em> the distribution. Any probabilities from
+    anywhere &mdash; an empirical histogram of finish times, integer
+    scores, bootstrap output &mdash; are a first-class citizen, with no
+    smoothness assumed. Atoms tie with real, fixed, positive
+    probability, and the engine's <em>multiplicity calculus</em> (the
+    conditional expected number of runners sharing the winning value)
+    prices those dead heats exactly. That calculus is not overhead; it
+    is what exactness means when ties are genuine events.</p>
+
+    <h2>The only error is format conversion</h2>
+    <p>Each engine is exact-or-spectral for its own primitive. Error
+    enters an analysis exactly once: when a distribution crosses from
+    one format to the other.</p>
+    <table class="cmp">
+      <tr><th>Your distribution arrives as&hellip;</th><th>Front door</th><th>Classic</th></tr>
+      <tr>
+        <td>a <strong>formula</strong> (normal, Gumbel, skew-normal, any
+        standardized callable)</td>
+        <td>native; win probabilities at <span class="num">1e-16</span>
+        from 65 points (measured)</td>
+        <td>must be sampled onto atoms first: <span class="num">~1e-3</span>
+        error at 129 points, improving only at second order
+        (measured)</td>
+      </tr>
+      <tr>
+        <td><strong>atoms</strong> (empirical data, integer scores, real
+        dead-heat mass)</td>
+        <td>must be smoothed into a callable, which <em>deletes the
+        dead-heat mass</em> &mdash; a model error no refinement
+        recovers</td>
+        <td>native and exact, ties priced by the multiplicity
+        calculus</td>
+      </tr>
+    </table>
+    <p>That whole table is one sentence: <strong>formulas to the front
+    door, atoms to classic.</strong> Both directions of conversion cost
+    are pinned in the test suite, not just asserted here.</p>
+
+    <h2>Why the front door is preferred for most purposes</h2>
+    <p>Most statistical work starts from a formula &mdash; a parametric
+    noise law with locations to estimate &mdash; and on that side the
+    front door brings everything the classic engine does not have:
+    the five correlation grammars (factor, block, nested, tree) with one
+    <code>O(nLQ)</code> shared-field pass; exact Jacobians whose
+    off-diagonals are the photo-finish tie densities (the substitution
+    graph); removal counterfactuals from the same field; inversion
+    measured to a million alternatives; dense-covariance intake
+    (<code>cov=</code>); and the softmax/Gumbel members in closed form.
+    The classic engine is independent-only and prices one thing:
+    the race it was given.</p>
+
+    <h2>Why classic is retained</h2>
+    <ul>
+      <li><strong>It is the only correct engine for atomic data.</strong>
+      Real dead heats are events with mass; the front door cannot
+      represent them at all.</li>
+      <li><strong>Exotics and betting-market vocabulary.</strong> State
+      prices, dividends, place/show pricing on genuinely discrete
+      results live here.</li>
+      <li><strong>It is the reference implementation of the SIAM 2021
+      paper</strong>, parity-locked across the R and JavaScript ports,
+      and the historical root of everything else in the package.</li>
+    </ul>
+
+    <h2>Fine print</h2>
+    <p>Two places inside the front door do fall back to grid-represented
+    curves rather than exact evaluation: the finite-temperature path
+    (numeric convolution with the Gumbel kernel) and the block/tree
+    kernels' factor shifts (linear interpolation of gridded messages).
+    Those are exactly the spots where cross-language parity sits at
+    <span class="num">1e-6</span>&ndash;<span class="num">1e-7</span>
+    instead of <span class="num">1e-15</span> &mdash; the residue of
+    tabulation inside an otherwise formula-based engine, and consistent
+    with everything above.</p>
+    <p>The deprecation aliases (<code>winning.lattice_calibration</code>
+    and friends) forward to <code>winning.classic</code> unchanged, so
+    pre-2.0 code keeps working while saying, once per import, where its
+    engine now lives.</p>
+  </main>
+  <footer>
+    <a href="https://github.com/microprediction/winning">Source</a> &middot;
+    Part of the <a href="https://repos.microprediction.org/">microprediction family</a> &middot;
+    Authored by <a href="https://home.microprediction.org/">Peter Cotton</a>.
+  </footer>
+</body>
+</html>

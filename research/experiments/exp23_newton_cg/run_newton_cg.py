@@ -3,9 +3,11 @@
 The sixth review asked that the SPD Laplacian/JVP machinery either be
 demonstrated in the solver or explicitly labeled future-capable. This
 demonstrates it: calibration by damped Newton-CG on the mean-zero quotient,
-with each Newton system B'JB delta = B'r solved matrix-free by conjugate
-gradients using the exact-grid JVP (form="grid"), Jacobi (own-slope)
-preconditioned. Compared against the default damped Jacobi iteration on the
+with each Newton system B'JB delta = B'r solved matrix-free by PLAIN
+(unpreconditioned) conjugate gradients using the exact-grid JVP
+(form="grid") on raw-share residuals -- two handicaps relative to the
+production solver's log-domain scaling; see run_newton_cg3.py for the
+correctly formulated attempt. Compared against the default damped Jacobi iteration on the
 same problems.
 
 Run:  python experiments/exp23_newton_cg/run_newton_cg.py

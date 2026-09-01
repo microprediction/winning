@@ -1,6 +1,6 @@
 # mvtnormfast
 
-Drop-in accelerator for `mvtnorm::pmvnorm` on the structured slice:
+Drop-in accelerator for `mvtnorm::pmvnorm()` on the structured slice:
 covariances of the form `VV' + diag(D)` (factor plus diagonal), which
 are the estimable covariances of multinomial probit and the workhorse
 structures of applied work. Conditional on the low-dimensional factor,
@@ -11,7 +11,7 @@ milliseconds, no simulation.
 ```r
 pmvnorm_fast(lower, upper, mean, V = V, D = D)   # structured, fast path
 pmvnorm_fast(lower, upper, mean, sigma = S)      # auto-detect; falls back
-                                                 # to mvtnorm::pmvnorm if S
+                                                 # to mvtnorm::pmvnorm() if S
                                                  # is not exactly structured
 ```
 
@@ -33,5 +33,5 @@ Three regimes, handled automatically:
 
 Dense, genuinely unstructured covariances are not this package's
 business: the exact-decomposition check is strict (reconstruction to
-1e-11 relative), and anything that fails it goes to `mvtnorm::pmvnorm`
+1e-11 relative), and anything that fails it goes to `mvtnorm::pmvnorm()`
 unchanged, so a loose fit can never masquerade as the structured case.

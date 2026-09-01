@@ -1,9 +1,17 @@
+"""Deprecation shim: the classic lattice API lives in winning.classic.
 
-try:
-    from scipy.integrate import quad_vec
-    using_scipy = True
-except ImportError:
-    using_scipy = False
+This module IS winning.classic.scipyinclusion (module aliasing, so private
+attributes and module state work unchanged); new imports should say so.
+"""
+import sys as _sys
+import warnings as _warnings
 
-if __name__=='__main__':
-    print({'using_scipy':using_scipy})
+import winning.classic.scipyinclusion as _real
+
+_warnings.warn(
+    "winning.scipyinclusion moved to winning.classic.scipyinclusion; this top-level alias "
+    "remains for compatibility",
+    DeprecationWarning,
+    stacklevel=2,
+)
+_sys.modules[__name__] = _real

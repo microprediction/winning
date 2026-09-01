@@ -41,6 +41,46 @@ jobs:
       - name: Core tests
         run: python -m pytest -q tests/test_races.py tests/test_probit.py tests_thurstone
 
+  package:
+    # What gets SHIPPED, not what is in the tree. setup.py lists packages
+    # explicitly, so a new subpackage is invisible to users until someone
+    # adds it there -- a failure that no source-tree test can see. Build
+    # the wheel, prove every subpackage made it in, then exercise the
+    # installed copy from outside the repo.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          pip install build twine
+          python -m build
+          twine check dist/*
+      - name: Every subpackage is in the wheel
+        run: |
+          python - <<'PY'
+          import glob, pathlib, zipfile, sys
+          src = {str(p.parent.relative_to('.')).replace('/', '.')
+                 for p in pathlib.Path('winning').rglob('__init__.py')}
+          whl = glob.glob('dist/*.whl')[0]
+          names = zipfile.ZipFile(whl).namelist()
+          shipped = {n[:-len('/__init__.py')].replace('/', '.')
+                     for n in names if n.endswith('__init__.py')}
+          missing = sorted(src - shipped)
+          print('source:', len(src), 'shipped:', len(shipped))
+          if missing:
+              sys.exit(f"not in the wheel (add to setup.py packages): {missing}")
+          PY
+      - name: Smoke the installed wheel
+        run: |
+          python -m venv /tmp/wheelenv
+          /tmp/wheelenv/bin/pip install --upgrade pip
+          /tmp/wheelenv/bin/pip install dist/*.whl
+          cd /tmp && GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            /tmp/wheelenv/bin/python "$GITHUB_WORKSPACE/.github/smoke.py"
+
   lint:
     runs-on: ubuntu-latest
     steps:

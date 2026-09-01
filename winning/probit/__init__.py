@@ -69,13 +69,20 @@ def utilities_from_shares(p, V=None, D=None, Sigma=None, k=None,
 
 
 def removal_shares(utilities, V=None, D=None, Sigma=None, k=None,
-                   points=501):
-    """q[i][j] = P(j chosen | i removed), max-wins, rows summing to one."""
-    from ..factor.core import win_probabilities_factor as _wpf
+                   points=501, mass_tol=1e-3):
+    """q[i][j] = P(j chosen | i removed), max-wins, rows summing to one.
+
+    Routed through the safe top-level implementation (sixth review): the
+    deletion rows out of the shared-field pass are normalized without a
+    coverage window, sharpest-runner refinement or mass check, so
+    removing a dominant favorite could return a plausible row that the
+    lattice never resolved. This entry point inherits all three, and
+    raises rather than normalizing a defective row away."""
+    from ..factor.races import removal_shares as _removal
     u = np.asarray(utilities, dtype=float)
     V, D, F, W = _prepare(len(u), V, D, Sigma, k)
-    _, q = _wpf(-u, V, D, F, W, points=points, return_deletions=True)
-    return q
+    return _removal(-u, V=V, D=D, F=F, W=W, points=points,
+                    mass_tol=mass_tol)
 
 
 # canonical calibrate_* family name; calibrate_factors is reserved for

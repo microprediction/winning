@@ -1,6 +1,6 @@
 [package]
 name = "fastrace"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Compiled kernels for the winning package (factor/block/nested/tree races, classic calibration)"
 license = "MIT"

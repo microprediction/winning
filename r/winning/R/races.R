@@ -23,8 +23,25 @@
   list(S = S, f = f, fp = cc * cc * eu * S * (1 - eu))
 }
 
-.BASES <- list(normal = .base_normal, gumbel = .base_gumbel)
-.SPANS <- list(normal = c(8, 8), gumbel = c(22, 8))
+.base_logistic <- function(z) {
+  cc <- pi / sqrt(3)
+  u <- pmin(pmax(cc * z, -700), 700)
+  S <- 1 / (1 + exp(u))
+  f <- cc * S * (1 - S)
+  list(S = pmax(S, 1e-300), f = f, fp = -cc * f * (1 - 2 * S))
+}
+
+.base_laplace <- function(z) {
+  b <- 1 / sqrt(2)
+  f <- exp(-abs(z) / b) / (2 * b)
+  S <- ifelse(z < 0, 1 - 0.5 * exp(z / b), 0.5 * exp(-z / b))
+  list(S = pmax(S, 1e-300), f = f, fp = -sign(z) * f / b)
+}
+
+.BASES <- list(normal = .base_normal, gumbel = .base_gumbel,
+               logistic = .base_logistic, laplace = .base_laplace)
+.SPANS <- list(normal = c(8, 8), gumbel = c(22, 8),
+               logistic = c(16, 16), laplace = c(18, 18))
 
 .hermite1 <- function(order) {
   off <- sqrt(seq_len(order - 1))
@@ -41,7 +58,9 @@
 # nodes for E over N(0, I_r). Used when the sharpness escalation calls
 # for a low-discrepancy family (see .race_setup); adequate for r <= 4.
 .halton_normal_nodes <- function(r, n) {
-  primes <- c(2, 3, 5, 7)[seq_len(r)]
+  primes <- c(2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
+              47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103,
+              107, 109, 113, 127, 131)[seq_len(r)]
   H <- vapply(primes, function(b) {
     idx <- seq_len(n) + 20L          # drop the first few, standard hygiene
     h <- numeric(n)
@@ -69,16 +88,37 @@
     W <- 1
   } else {
     V <- as.matrix(V)
+    # gauge-fix matching the python reference: a common loading column
+    # shifts every conditional mean equally and cannot move an argmin,
+    # so center V and make node selection and the lattice window
+    # invariant under V -> V + 1 c'
+    V <- sweep(V, 2, colMeans(V))
     if (is.null(F) || is.null(W)) {
       # adaptive order matching the python reference: sharp conditional
-      # races (small D relative to loadings) need more factor nodes
-      sharp <- max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
+      # races (small D relative to loadings) need more factor nodes.
+      # Dispatch on the pairwise-safe bound sqrt(2) max |(PV)_i|/sqrt(D_i),
+      # which bounds the pairwise contrast sharpness from above
+      sharp <- sqrt(2) * max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
       r <- ncol(V)
       if (r >= 2 && sharp > 3.0) {
         # matching the python reference: past this sharpness the factor
         # integrand is a near-step and Gauss-Hermite converges slowly at
         # any order; escalate the FAMILY to a low-discrepancy rule.
         # Python uses scrambled Sobol; here dependency-free Halton.
+        hw <- .halton_normal_nodes(r, 2^13)
+        F <- hw$F
+        W <- hw$W
+      } else if (r == 1 && ceiling(8 * sharp) > 201) {
+        # rank-1 extreme sharpness (matching the python reference):
+        # Gauss-Hermite is the wrong family for a near-step integrand;
+        # an equal-weight midpoint-quantile grid scaled with sharpness
+        # replaces it (TV 0.65 -> 6e-3 at the same node count)
+        Q <- as.integer(min(ceiling(8 * sharp), 4001))
+        F <- matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)
+        W <- rep(1 / Q, Q)
+      } else if (15^r > 1e5) {
+        # high-rank tensor footgun (matching python): past a 1e5-node
+        # tensor budget escalate to low-discrepancy nodes
         hw <- .halton_normal_nodes(r, 2^13)
         F <- hw$F
         W <- hw$W
@@ -154,7 +194,13 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                base = "normal", points = 257,
                                return_slopes = FALSE, structure = NULL,
                                window = "bulk", delta = 1e-12,
-                               qa = 9, qf = 15, nodes = NULL) {
+                               qa = 9, qf = 15, nodes = NULL, cov = NULL) {
+  if (!is.null(cov)) {
+    if (!is.null(structure) || !is.null(V) || !is.null(D))
+      stop("cov= replaces structure=/V=/D=; pass one only")
+    fit <- fit_covariance(cov)
+    V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
+  }
   if (!is.null(structure)) {
     return(.dispatch_probabilities(mu, structure, base = base,
                                    points = points, qa = qa, qf = qf,
@@ -173,6 +219,22 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
         length.out = points)
   }
   dx <- x[2] - x[1]
+  smin <- min(sd)
+  sharp_here <- max(sqrt(rowSums(st$V^2))) / max(smin, 1e-300)
+  if (sharp_here > 25 && dx > 0.5 * smin) {
+    # extreme-sharpness lattice refinement (matching python): refine to
+    # ~2 points per conditional sd, capped, warn when the cap binds
+    need <- ceiling((x[length(x)] - x[1]) / (0.5 * smin)) + 1
+    pts2 <- min(need, 8193)
+    if (pts2 > points) {
+      x <- seq(x[1], x[length(x)], length.out = pts2)
+      dx <- x[2] - x[1]
+      points <- pts2
+    }
+    if (need > 8193)
+      warning("conditional races sharper than the lattice can resolve ",
+              "even at 8193 points; results may carry percent-level error")
+  }
   p <- numeric(n)
   slope <- numeric(n)
   xm <- matrix(x, n, points, byrow = TRUE)
@@ -204,7 +266,13 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
 abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                 base = "normal", points = 257,
                                 n_iter = 60, tol = 1e-8,
-                                structure = NULL, qa = 9, qf = 15) {
+                                structure = NULL, qa = 9, qf = 15, cov = NULL) {
+  if (!is.null(cov)) {
+    if (!is.null(structure) || !is.null(V) || !is.null(D))
+      stop("cov= replaces structure=/V=/D=; pass one only")
+    fit <- fit_covariance(cov)
+    V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
+  }
   if (!is.null(structure)) {
     return(.dispatch_abilities(p, structure, base = base, points = points,
                                qa = qa, qf = qf))
@@ -223,7 +291,12 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     resid <- log(pmax(phat, 1e-300)) - logt
     if (max(abs(resid)) < tol) break
     dlogp <- pmin(sl / pmax(phat, 1e-300), -1e-6)
-    mu <- mu - pmin(pmax(alpha * resid / dlogp, -2), 2)
+    # residual-proportional step cap: a near-certain winner's residual
+    # and own-slope both vanish and their noisy ratio destabilizes the
+    # recentered fixed point (heavy-favorite targets 1e-4..1e-8 stalled;
+    # capped they converge in a handful of iterations)
+    lim <- pmin(2, 10 * abs(resid))
+    mu <- mu - pmin(pmax(alpha * resid / dlogp, -lim), lim)
     mu <- mu - mean(mu)
   }
   mu

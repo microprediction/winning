@@ -15,9 +15,10 @@ polish_race):
                                          to 1 (fully coupled)
     Tree(cluster, loading, D,
          parent, strength)               hierarchy of uniform shared effects
+                                         (leaf loadings are SCALAR: rank-one)
 
 Containments: Independent = Blocks with zero loadings = Factor with empty V;
-Blocks = Tree of depth 1; Nested = Tree with a rank-1 root IF the coupling is
+rank-one Blocks = Tree of depth 1; Nested = Tree with a rank-1 root IF the coupling is
 uniform, and strictly more general when it is not. D is always the
 idiosyncratic VARIANCE, as everywhere in winning.factor.
 """
@@ -127,6 +128,22 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
     if isinstance(structure, Factor):
         return _rp(mu, V=np.asarray(structure.V, float),
                    D=np.asarray(structure.D, float), **kw)
+    # the hierarchical kernels are Gaussian, hard-race, probabilities-only.
+    # They used to accept and discard base=, temperature= and
+    # return_slopes=, answering a different question than the caller asked
+    # (sixth review). Refuse instead.
+    unsupported = [k for k, bad in
+                   (("base", kw.get("base") not in (None, "normal")),
+                    ("temperature", bool(kw.get("temperature"))),
+                    ("return_slopes", bool(kw.get("return_slopes"))))
+                   if bad]
+    if unsupported:
+        raise NotImplementedError(
+            f"{type(structure).__name__} races do not support "
+            f"{', '.join(unsupported)}: the block/nested/tree kernels are "
+            "Gaussian hard races returning probabilities only. Use "
+            "structure=Factor (or V=/D=) for a non-normal base, finite "
+            "temperature or slopes.")
     if isinstance(structure, Blocks):
         return block_race_probabilities(mu, structure.cluster,
                                         structure.loading, structure.D,
@@ -142,4 +159,53 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
                                        structure.loading, structure.D,
                                        structure.parent, structure.strength,
                                        points=points, qa=qa)
+    raise TypeError(f"unknown structure {type(structure).__name__}")
+
+
+def _loading_var(loading, n):
+    """Per-runner shared variance from a loading that may be a scalar
+    per runner (rank one) or an (n, r) matrix (rank r): the rank-r
+    inversion crashed here on a broadcast before this existed."""
+    L = np.asarray(loading, float)
+    if L.ndim == 2:
+        if L.shape[0] != n:
+            L = L.T
+        return (L ** 2).sum(axis=1)
+    return L ** 2
+
+
+def structure_variances(structure):
+    """Total per-runner variance implied by a grammar structure (shared
+    effects plus idiosyncratic): the marginal the generic inverter's
+    independent surrogate preconditioner matches."""
+    D = np.asarray(structure.D, float)
+    if isinstance(structure, Independent):
+        return D.copy()
+    if isinstance(structure, Factor):
+        V = np.asarray(structure.V, float)
+        return D + (V ** 2).sum(axis=1)
+    if isinstance(structure, Blocks):
+        return D + _loading_var(structure.loading, len(D))
+    if isinstance(structure, Nested):
+        tot = D + _loading_var(structure.loading, len(D))
+        if structure.coupling is not None and structure.gamma:
+            g = np.atleast_2d(np.asarray(structure.coupling, float))
+            if g.shape[0] != len(D):
+                g = g.T
+            tot = tot + (float(structure.gamma) ** 2) * (g ** 2).sum(axis=1)
+        return tot
+    if isinstance(structure, Tree):
+        from .blocks import _scalar_loading
+        tot = D + _scalar_loading(structure.loading, "tree races") ** 2
+        parent = np.asarray(structure.parent, int)
+        strength = np.asarray(structure.strength, float)
+        cluster = np.asarray(structure.cluster, int)
+        anc = np.zeros(len(strength))
+        for c in range(len(strength)):
+            u, s = c, 0.0
+            while parent[u] >= 0:
+                s += strength[parent[u]] ** 2
+                u = parent[u]
+            anc[c] = s
+        return tot + anc[cluster]
     raise TypeError(f"unknown structure {type(structure).__name__}")

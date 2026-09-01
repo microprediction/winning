@@ -175,6 +175,12 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   if (!base) throw new Error("unknown base: " + opts.base);
   const N = mu.length, Q = F.length;
   const sd = D.map(Math.sqrt);
+  // gauge-fix matching the python reference: center each factor's
+  // loadings across contestants (a common column cannot move an argmin)
+  const r0 = V[0].length;
+  const colMean = new Array(r0).fill(0);
+  for (const row of V) for (let j = 0; j < r0; j++) colMean[j] += row[j] / N;
+  V = V.map((row) => row.map((v, j) => v - colMean[j]));
   const M = condMeans(mu, V, F);
   const { x, dx } = lattice(M, sd, points, base.spans);
   const L = x.length;

@@ -17,7 +17,7 @@ import os
 
 
 def _rust_modules():
-    from winning import lattice, lattice_calibration
+    from winning.classic import lattice, lattice_calibration
     from winning.factor import races, blocks
     return [lattice, lattice_calibration, races, blocks]
 

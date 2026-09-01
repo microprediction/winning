@@ -22,86 +22,123 @@ from __future__ import annotations
 
 import numpy as np
 
-from .races import race_probabilities, abilities_from_race, _setup
+from .races import (race_probabilities, abilities_from_race, _setup,
+                    forward_grid)
+
+
+def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
+    """Unnormalized lattice masses a_i and their exact derivative on THIS
+    grid: A[i, j] = d a_i / d mu_j.
+
+    Off-diagonal (j != i) the mu_j derivative hits the survival factor,
+    d S_j / d mu_j = +f_j, giving the photo-finish integrand
+    int f_i f_j prod_{k != i,j} S_k. It is factored stably as
+    [f_i prod_{k != i} S_k] * [f_j / S_j]: the first is bounded by f, the
+    second is the hazard, which grows only polynomially (the symmetric
+    square-root split overflows where S vanishes).
+
+    On the diagonal the derivative hits the density instead,
+    d f_i / d mu_i = -f'_i / sd_i^2, so A_ii is INTEGRATED, not imposed
+    by a zero-row-sum identity. In the continuum the two agree; on a
+    finite lattice they do not, and the difference is exactly what makes
+    a zero-sum-imposed diagonal a continuum surrogate rather than the
+    derivative of the sum that was computed.
+
+    rows: restrict to these i (the score needs one row). Returns
+    (a, A[rows], dT) with a the full mass vector and dT = d(1'a)/dmu, the
+    column sums of the FULL A, computed in O(nL) rather than by forming
+    the matrix: with G = sum_i g_i the lattice winner density,
+
+        dT/dmu_j = int f_j (G - g_j)/S_j dx - int f'_j/sd_j^2 R_j dx,
+
+    so one restricted row still gets the exact quotient correction.
+    """
+    n = len(mu)
+    M_all = mu[None, :] + F @ V.T
+    idx = np.arange(n) if rows is None else np.atleast_1d(rows)
+    a = np.zeros(n)
+    A = np.zeros((len(idx), n))
+    dT = np.zeros(n)
+    for q in range(len(F)):
+        z = (x[None, :] - M_all[q][:, None]) / sd[:, None]
+        S, f, fp = fn(z)
+        f = f / sd[:, None]
+        logS = np.log(np.maximum(S, 1e-300))
+        logf = np.log(np.maximum(f, 1e-300))
+        L = logS.sum(axis=0)
+        # g_i = f_i prod_{k != i} S_k -- the winner integrand itself
+        g = np.exp(np.clip(logf + L[None, :] - logS, -745.0, 40.0))
+        haz = np.exp(np.clip(logf - logS, -745.0, 40.0))
+        R = np.exp(np.clip(L[None, :] - logS, -745.0, 40.0))
+        own = -(fp / (sd ** 2)[:, None] * R)                   # d f_i/d mu_i
+        a += W[q] * g.sum(axis=1) * dx
+        A += W[q] * (g[idx] @ haz.T) * dx
+        # own coordinate, differentiated rather than imposed by zero rows
+        A[np.arange(len(idx)), idx] += W[q] * dx * (
+            own[idx].sum(axis=1) - (g[idx] * haz[idx]).sum(axis=1))
+        Gt = g.sum(axis=0)
+        dT += W[q] * dx * (((Gt[None, :] - g) * haz).sum(axis=1)
+                           + own.sum(axis=1))
+    return a, A, dT
 
 
 def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
-                  points=501):
-    """Exact J[i, j] = d p_i / d mu_j for the general race, one field pass.
+                  points=501, window="bulk", delta=1e-12):
+    """Fixed-grid-exact J[i, j] = d p_i / d mu_j, one field pass.
 
-    Off-diagonal, per factor node, J is a GRAM over the lattice:
-        J_ij = sum_a w_a int f_i f_j exp(L - logS_i - logS_j) dx,
-    with L = sum_k logS_k -- so per node it is U U' with
-    U = f * exp(L/2 - logS). Rows sum to zero (a common shift moves
-    nothing), which sets the diagonal. Raising mu_j (slower j, min-wins)
-    raises every other p_i: off-diagonals are positive.
+    Exact for the normalized rectangle sum CONDITIONAL ON THE SELECTED
+    GRID: the lattice comes from races.forward_grid, the same window and
+    refinement race_probabilities uses, so both integrate over the same
+    x, and the normalization is differentiated rather than assumed away.
+    With raw masses a, total T = 1'a and p = a/T,
+
+        J = (A - p 1'A) / T,        A = da/dmu,
+
+    the quotient rule. What it deliberately omits is differentiation of
+    the adaptive window itself (the grid-motion term), which is
+    measurable on very coarse lattices (6e-4 at L=25) and falls below
+    the reported agreement threshold (3e-11) at production resolutions
+    (L >= 101). In the continuum 1'A vanishes and rows sum to zero on
+    their own; on a lattice they do not, and the residual is the
+    difference between a continuum surrogate and the fixed-grid
+    derivative of the function being optimized.
+
+    Raising mu_j (slower j, min-wins) raises every other p_i:
+    off-diagonals are positive.
     """
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
-    n = len(mu)
     M_all = mu[None, :] + F @ V.T
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), points)
+    x, points = forward_grid(M_all, sd, V, fn, left, right, points,
+                             window=window, delta=delta)
     dx = x[1] - x[0]
-    J = np.zeros((n, n))
-    chunk = max(1, int(5e6 / (n * points)))
-    for a in range(0, len(F), chunk):
-        M = M_all[a:a + chunk]
-        Wc = W[a:a + chunk]
-        z = (x[None, None, :] - M[:, :, None]) / sd[None, :, None]
-        S, f, _ = fn(z)
-        f = f / sd[None, :, None]
-        logS = np.log(S)
-        logf = np.log(np.maximum(f, 1e-300))
-        L = logS.sum(axis=1)                                   # (chunk, points)
-        # pair integrand f_i f_j prod_{k != i,j} S_k, factored STABLY as
-        # [f_i prod_{k != i} S_k] * [f_j / S_j]: the first is bounded by f,
-        # the second is the hazard, which grows only polynomially. (The
-        # symmetric square-root split overflows where S vanishes.)
-        P1 = np.exp(np.clip(logf + L[:, None, :] - logS, -745.0, 40.0))
-        P2 = np.exp(np.clip(logf - logS, -745.0, 40.0))
-        for q in range(P1.shape[0]):
-            J += Wc[q] * (P1[q] @ P2[q].T) * dx
-    total = race_probabilities(np.asarray(mu, float), V=V, D=D, F=F, W=W,
-                               base=base, points=points)
-    # J currently holds the off-diagonal integrals (its diagonal entries are
-    # int f_i^2 e^{L - 2 logS_i}, which are NOT dp_i/dmu_i): overwrite the
-    # diagonal from the zero-row-sum identity, then normalise as p is.
-    np.fill_diagonal(J, 0.0)
-    np.fill_diagonal(J, -J.sum(axis=1))
-    # p was normalised by its lattice total; apply the same projection:
-    # d(p/T)/dmu = (J - p 1'J)/T with T ~ 1; the correction is second order
-    # and the zero-sum structure is already exact, so return J as is.
-    return J
+    a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx)
+    T = float(a.sum())
+    p = a / T
+    return (A - np.outer(p, dT)) / T
 
 
 def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
-                      points=257):
+                      points=257, window="bulk", delta=1e-12):
     """One row of the race Jacobian: d p_y / d mu_j for all j, one field
     pass (the estimation score needs only the observed alternative's row,
-    not the full matrix). Same pair factorization as race_jacobian with
-    i fixed at y; rows sum to zero."""
+    not the full matrix).
+
+    Same construction as race_jacobian restricted to i = y, including
+    the shared lattice and the quotient rule, so the score it feeds is
+    the fixed-grid-exact gradient of the objective the forward map
+    defines (grid motion omitted; see race_jacobian)."""
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
-    n = len(mu)
     M_all = mu[None, :] + F @ V.T
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), points)
+    x, points = forward_grid(M_all, sd, V, fn, left, right, points,
+                             window=window, delta=delta)
     dx = x[1] - x[0]
-    row = np.zeros(n)
-    for q in range(len(F)):
-        z = (x[None, :] - M_all[q][:, None]) / sd[:, None]
-        S, f, _ = fn(z)
-        f = f / sd[:, None]
-        logS = np.log(S)
-        L = logS.sum(axis=0)
-        logf = np.log(np.maximum(f, 1e-300))
-        P1y = np.exp(np.clip(logf[y] + L - logS[y], -745.0, 40.0))
-        P2 = np.exp(np.clip(logf - logS, -745.0, 40.0))
-        row += W[q] * (P2 @ P1y) * dx
-    row[y] = 0.0
-    row[y] = -row.sum()
-    return row
+    a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx,
+                                   rows=[int(y)])
+    T = float(a.sum())
+    p_y = float(a[int(y)]) / T
+    return (A[0] - p_y * dT) / T
 
 
 def concentration_matrix(n, name_caps=None, groups=None):

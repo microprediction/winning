@@ -18,8 +18,21 @@ export const BASES = {
     const f = c * eu * S;
     return [S, f, c * c * eu * S * (1 - eu)];
   },
+  logistic(z) {
+    const c = Math.PI / Math.sqrt(3);
+    const u = Math.min(Math.max(c * z, -700), 700);
+    const S = 1 / (1 + Math.exp(u));
+    const f = c * S * (1 - S);
+    return [Math.max(S, 1e-300), f, -c * f * (1 - 2 * S)];
+  },
+  laplace(z) {
+    const b = 1 / Math.sqrt(2);
+    const f = Math.exp(-Math.abs(z) / b) / (2 * b);
+    const S = z < 0 ? 1 - 0.5 * Math.exp(z / b) : 0.5 * Math.exp(-z / b);
+    return [Math.max(S, 1e-300), f, -Math.sign(z) * f / b];
+  },
 };
-const SPANS = { normal: [8, 8], gumbel: [22, 8] };
+const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [18, 18] };
 
 function setup(mu, V, D, F, W, base) {
   const n = mu.length;
@@ -36,10 +49,34 @@ function setup(mu, V, D, F, W, base) {
         sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
       }
       const r = V[0].length;
-      const cap = r === 1 ? 201 : r === 2 ? 41 : 15;
-      const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);
-      const hw = hermiteNodes(r, Q);
-      F = hw.F; W = hw.W;
+      if (r === 1 && Math.ceil(8 * sharp) > 201) {
+        // rank-1 extreme sharpness (matching python/R): equal-weight
+        // midpoint-quantile grid scaled with sharpness replaces GH
+        const Q = Math.min(Math.ceil(8 * sharp), 4001);
+        F = []; W = new Array(Q).fill(1 / Q);
+        for (let q = 0; q < Q; q++) F.push([invNormalRational((q + 0.5) / Q)]);
+      } else if (Math.pow(15, r) > 100000) {
+        // high-rank tensor footgun (matching python/R): Halton fallback
+        const Q = 8192;
+        F = []; W = new Array(Q).fill(1 / Q);
+        const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
+                        43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89];
+        for (let idx = 0; idx < Q; idx++) {
+          const node = [];
+          for (let dim = 0; dim < r; dim++) {
+            const b = primes[dim];
+            let i = idx + 21, f = 1 / b, h = 0;
+            while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
+            node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
+          }
+          F.push(node);
+        }
+      } else {
+        const cap = r === 1 ? 201 : r === 2 ? 41 : 15;
+        const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);
+        const hw = hermiteNodes(r, Q);
+        F = hw.F; W = hw.W;
+      }
     }
   }
   const fn = typeof base === "function" ? base : BASES[base];
@@ -54,6 +91,29 @@ function condMeans(mu, V, F) {
     for (let r = 0; r < fq.length; r++) s += V[i][r] * fq[r];
     return s;
   }));
+}
+
+
+function invNormalRational(p) {
+  // Acklam rational approximation, adequate for node placement
+  const a = [-39.6968302866538, 220.946098424521, -275.928510446969,
+             138.357751867269, -30.6647980661472, 2.50662827745924];
+  const b = [-54.4760987982241, 161.585836858041, -155.698979859887,
+             66.8013118877197, -13.2806815528857];
+  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184,
+             -2.54973253934373, 4.37466414146497, 2.93816398269878];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143,
+             3.75440866190742];
+  const pl = 0.02425;
+  if (p < pl) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+           ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+  if (p > 1 - pl) return -invNormalRational(1 - p);
+  const q = p - 0.5, r2 = q * q;
+  return (((((a[0]*r2+a[1])*r2+a[2])*r2+a[3])*r2+a[4])*r2+a[5])*q /
+         (((((b[0]*r2+b[1])*r2+b[2])*r2+b[3])*r2+b[4])*r2+1);
 }
 
 function bulkWindow(Mall, sd, points, delta) {
@@ -111,7 +171,24 @@ export function raceProbabilities(mu, opts = {}) {
     const lo = mn - st.left * smax, hi = mx + st.right * smax;
     for (let t = 0; t < points; t++) x[t] = lo + t * (hi - lo) / (points - 1);
   }
-  const dx = x[1] - x[0];
+  let dx = x[1] - x[0];
+  {
+    // extreme-sharpness lattice refinement (matching python/R)
+    const smin = Math.min(...sd);
+    let vmax = 0;
+    for (const row of st.V) vmax = Math.max(vmax, Math.sqrt(row.reduce((a, b) => a + b * b, 0)));
+    if (vmax / Math.max(smin, 1e-300) > 25 && dx > 0.5 * smin) {
+      const span = x[x.length - 1] - x[0];
+      const need = Math.ceil(span / (0.5 * smin)) + 1;
+      const pts2 = Math.min(need, 8193);
+      if (pts2 > x.length) {
+        const x0 = x[0];
+        x = new Array(pts2);
+        for (let t = 0; t < pts2; t++) x[t] = x0 + t * span / (pts2 - 1);
+        dx = x[1] - x[0];
+      }
+    }
+  }
   const p = new Array(n).fill(0);
   const slope = new Array(n).fill(0);
   const logS = new Array(n), fArr = new Array(n), fpArr = new Array(n);
@@ -166,7 +243,10 @@ export function abilitiesFromRace(pTarget, opts = {}) {
     if (Math.max(...resid.map(Math.abs)) < tol) break;
     mu = mu.map((m, i) => {
       const dlogp = Math.min(sl[i] / Math.max(phat[i], 1e-300), -1e-6);
-      return m - Math.min(Math.max(alpha * resid[i] / dlogp, -2), 2);
+      // residual-proportional step cap (heavy-favorite stall fix,
+      // mirrored from the python engine)
+      const lim = Math.min(2, 10 * Math.abs(resid[i]));
+      return m - Math.min(Math.max(alpha * resid[i] / dlogp, -lim), lim);
     });
     const mm = mean(mu);
     mu = mu.map(v => v - mm);

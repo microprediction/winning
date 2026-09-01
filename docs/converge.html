@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>winning — watch it converge</title>
+  <meta name="description" content="Pick a covariance ensemble and a field size; the lattice race answers in milliseconds while GHK, Mendell-Elston and frequency simulation spend honest wall time. Live, in your browser, on the parity-locked engine." />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    .panel { border: 1px solid #ddd; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.4rem 0; }
+    .controls { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; margin-bottom: 0.8rem; }
+    .controls label { font-size: 0.9rem; }
+    select, button.go { font-size: 0.95rem; padding: 2px 8px; }
+    input[type="range"] { vertical-align: middle; width: 140px; }
+    .val { font-variant-numeric: tabular-nums; font-weight: 600; color: #4b4bd8; }
+    .legend { font-size: 0.88rem; color: #555; }
+    svg { width: 100%; display: block; }
+    .stat { font-size: 0.92rem; margin-top: 0.4rem; font-variant-numeric: tabular-nums; }
+    .lat { color: #4b4bd8; font-weight: 600; }
+    .mc { color: #c2571a; font-weight: 600; }
+    .ghk { color: #7a3fa8; font-weight: 600; }
+    .me { color: #2e7d32; font-weight: 600; }
+    .ind { color: #999; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
+        <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <h1>Watch it converge</h1>
+    <p class="lead">Pick a covariance ensemble and a field size, and race the
+    field's standard tools on honest wall time &mdash; each method charged only
+    for its own compute, on your machine. The
+    <span class="lat">lattice race</span> prices every contestant at once
+    &mdash; milliseconds for the structured grammars, a second or two of
+    single-threaded JavaScript for the dense fits (the compiled engines
+    are another two orders of magnitude faster).
+    <span class="ghk">GHK</span> must factor one
+    (n&minus;1)-dimensional difference covariance <em>per contestant</em>
+    before its first draw, then simulates its way down.
+    <span class="me">Mendell&ndash;Elston</span>, the analytic
+    sequential-conditioning approximation, finishes fast and then never
+    improves. <span class="mc">Frequency simulation</span> crawls its
+    1/&radic;M slope, and <span class="ind">ignoring the correlation</span>
+    never arrives at all.</p>
+
+    <div class="panel">
+      <div class="controls">
+        <label>ensemble
+          <select id="gen"></select></label>
+        <label>field size <input type="range" id="n" min="10" max="200" value="60" />
+          <span class="val" id="nv">60</span></label>
+        <label>seed <input type="range" id="seed" min="1" max="99" value="7" />
+          <span class="val" id="seedv">7</span></label>
+        <button class="go" id="go">run</button>
+        <span class="legend" id="note"></span>
+      </div>
+      <svg id="chart" viewBox="0 0 940 360"></svg>
+      <p class="stat" id="stats"></p>
+      <p class="legend">Vertical axis: total-variation distance to the lattice
+      answer (log scale). Horizontal axis: wall-clock compute spent by that
+      method (log scale), measured live and excluding rendering. GHK here is
+      the plain protocol: per-contestant fresh Cholesky of the difference
+      covariance, sequential conditioning, pseudorandom draws, shares
+      normalized. Mendell&ndash;Elston propagates truncated-normal moments
+      analytically; its line is flat because its error is bias, not noise.
+      On the dense ensembles all simulation-based arms floor at the small
+      grammar-fit residual instead of zero: that visible gap is the honest
+      boundary of the fitted approximation (largest for the AR(1) chain,
+      whose locality structure is the one family the grammar serves
+      worst).</p>
+    </div>
+
+    <p>The lattice number is the full all-contestant computation, including
+    (for the dense rows) the in-browser eigenfit of the covariance to the
+    race grammar. GHK and Mendell&ndash;Elston price one contestant at a
+    time through that contestant's own difference distribution &mdash; the
+    per-alternative structure is why their clocks start seconds late at
+    large field sizes.</p>
+  </main>
+  <footer>
+    <a href="https://github.com/microprediction/winning">Source</a> &middot;
+    Part of the <a href="https://repos.microprediction.org/">microprediction family</a> &middot;
+    Authored by <a href="https://home.microprediction.org/">Peter Cotton</a>.
+  </footer>
+
+  <script type="module">
+    import { raceProbabilities } from "./js/winning/races.mjs";
+    import "./js/winning/structures.mjs";
+    import { GENERATORS, rng, fitGrammar, structureCov, cholesky, mcBatch,
+             haltonNormalNodes, ghkPrepareOne, ghkSampleOne,
+             mendellElstonOne } from "./js/winning/demo.mjs";
+
+    const sel = document.getElementById("gen");
+    for (const name of Object.keys(GENERATORS)) {
+      const o = document.createElement("option");
+      o.textContent = name; sel.appendChild(o);
+    }
+    const $ = id => document.getElementById(id);
+    $("n").addEventListener("input", () => $("nv").textContent = $("n").value);
+    $("seed").addEventListener("input", () => $("seedv").textContent = $("seed").value);
+
+    const BUDGET = 30000;   // per-method compute budget, ms
+    const SLICE = 11;       // per-arm compute per tick, ms
+    let timer = null;
+
+    function tv(p, q) {
+      let s = 0;
+      for (let i = 0; i < p.length; i++) s += Math.abs(p[i] - q[i]);
+      return Math.max(s / 2, 1e-6);
+    }
+
+    function run() {
+      clearInterval(timer);
+      const n = +$("n").value, seed = +$("seed").value;
+      const gen = GENERATORS[sel.value];
+      const g = gen(n, rng(seed));
+      $("note").textContent = g.note;
+      const rmu = rng(seed + 1000);
+      const mu = Array.from({ length: n }, () => rmu.n() * 0.9);
+
+      // the lattice answer (timed, includes any fit)
+      const t0 = performance.now();
+      let pLat;
+      if (g.structure) {
+        pLat = raceProbabilities(mu, { structure: g.structure, points: 257 });
+      } else {
+        const fit = fitGrammar(g.C, 3, 5);
+        const nodes = haltonNormalNodes(fit.V[0].length, 1024);
+        pLat = raceProbabilities(mu, { V: fit.V, D: fit.D,
+                                       F: nodes.F, W: nodes.W, points: 129 });
+      }
+      const tLat = performance.now() - t0;
+
+      // the structure-ignoring answer (flat bias line)
+      const C = g.structure ? structureCov(g.structure) : g.C;
+      const pInd = raceProbabilities(mu, { D: C.map((r_, i) => C[i][i]),
+                                           points: 257 });
+      const tvInd = tv(pInd, pLat);
+
+      const st = {
+        n, mu, C, pLat, tLat, tvInd,
+        mc: { L: cholesky(C), counts: new Array(n).fill(0), draws: 0,
+              ms: 0, r: rng(seed + 2000), pts: [] },
+        ghk: { probs: new Array(n).fill(null), cursor: 0, sums: new Float64Array(n),
+               reps: new Float64Array(n), sweep: 0, ms: 0, r: rng(seed + 3000),
+               pts: [], repsPerVisit: Math.max(8, Math.floor(20000 / (n * n))) },
+        me: { p: new Array(n).fill(0), cursor: 0, ms: 0, done: false, tv: NaN },
+      };
+
+      timer = setInterval(() => step(st), 40);
+      step(st);
+    }
+
+    function step(st) {
+      const { n, mu, C, pLat } = st;
+
+      // Monte Carlo slice
+      if (st.mc.ms < BUDGET) {
+        const a0 = performance.now();
+        while (performance.now() - a0 < SLICE) {
+          const batch = Math.max(500, Math.min(8000, Math.floor(st.mc.draws / 4) || 500));
+          mcBatch(mu, st.mc.L, st.mc.r, batch, st.mc.counts);
+          st.mc.draws += batch;
+        }
+        st.mc.ms += performance.now() - a0;
+        st.mc.pts.push([st.mc.ms,
+          tv(st.mc.counts.map(c => c / st.mc.draws), pLat)]);
+      }
+
+      // GHK slice: setup Choleskys first (the honest per-alternative cost),
+      // then round-robin sampling sweeps
+      if (st.ghk.ms < BUDGET) {
+        const a0 = performance.now();
+        while (performance.now() - a0 < SLICE) {
+          if (st.ghk.cursor < n) {
+            st.ghk.probs[st.ghk.cursor] = ghkPrepareOne(mu, C, st.ghk.cursor);
+            st.ghk.cursor++;
+          } else {
+            const i = st.ghk.sweep % n;
+            st.ghk.sums[i] += ghkSampleOne(st.ghk.probs[i],
+                                           st.ghk.repsPerVisit, st.ghk.r);
+            st.ghk.reps[i] += st.ghk.repsPerVisit;
+            st.ghk.sweep++;
+          }
+        }
+        st.ghk.ms += performance.now() - a0;
+        if (st.ghk.sweep >= n) {
+          const p = new Array(n);
+          let s = 0;
+          for (let i = 0; i < n; i++) { p[i] = st.ghk.sums[i] / st.ghk.reps[i]; s += p[i]; }
+          for (let i = 0; i < n; i++) p[i] /= s;
+          st.ghk.pts.push([st.ghk.ms, tv(p, pLat)]);
+        }
+      }
+
+      // Mendell-Elston slice: analytic, once through, then done forever
+      if (!st.me.done) {
+        const a0 = performance.now();
+        while (st.me.cursor < n && performance.now() - a0 < SLICE) {
+          st.me.p[st.me.cursor] = mendellElstonOne(mu, C, st.me.cursor);
+          st.me.cursor++;
+        }
+        st.me.ms += performance.now() - a0;
+        if (st.me.cursor >= n) {
+          const s = st.me.p.reduce((a, b) => a + b, 0);
+          st.me.tv = tv(st.me.p.map(v => v / s), pLat);
+          st.me.done = true;
+        }
+      }
+
+      render(st);
+      if (st.mc.ms >= BUDGET && st.ghk.ms >= BUDGET && st.me.done)
+        clearInterval(timer);
+    }
+
+    function render(st) {
+      const W = 940, H = 360, padL = 60, padB = 40, padT = 16, padR = 20;
+      const xmin = Math.log10(10), xmax = Math.log10(BUDGET);
+      const ymin = Math.log10(2e-4), ymax = Math.log10(1);
+      const X = t => padL + (W - padL - padR) *
+        (Math.log10(Math.min(Math.max(t, 10), BUDGET)) - xmin) / (xmax - xmin);
+      const Y = v => padT + (H - padT - padB) *
+        (ymax - Math.log10(Math.min(Math.max(v, 2e-4), 1))) / (ymax - ymin);
+      let sv = "";
+      for (const e of [-1, -2, -3]) {
+        sv += `<line x1="${padL}" x2="${W - padR}" y1="${Y(10 ** e)}" y2="${Y(10 ** e)}" stroke="#eee"/>`;
+        sv += `<text x="${padL - 6}" y="${Y(10 ** e) + 4}" font-size="11" text-anchor="end">1e${e}</text>`;
+      }
+      for (const [t, lab] of [[10, "10 ms"], [100, "0.1 s"],
+                              [1000, "1 s"], [10000, "10 s"]]) {
+        sv += `<line y1="${padT}" y2="${H - padB}" x1="${X(t)}" x2="${X(t)}" stroke="#eee"/>`;
+        sv += `<text y="${H - padB + 16}" x="${X(t)}" font-size="11" text-anchor="middle">${lab}</text>`;
+      }
+      // 1/sqrt(time) guide through the first stable MC point
+      if (st.mc.pts.length > 3) {
+        const [t0g, v0] = st.mc.pts[3];
+        sv += `<line x1="${X(t0g)}" y1="${Y(v0)}" x2="${X(BUDGET)}" y2="${Y(v0 * Math.sqrt(t0g / BUDGET))}"
+                 stroke="#c2571a" stroke-dasharray="3 5" opacity="0.5"/>`;
+      }
+      // structure-ignoring flat line
+      sv += `<line x1="${padL}" x2="${W - padR}" y1="${Y(st.tvInd)}" y2="${Y(st.tvInd)}"
+               stroke="#999" stroke-dasharray="6 4"/>`;
+      sv += `<text x="${W - padR - 4}" y="${Y(st.tvInd) - 5}" font-size="11" fill="#777"
+               text-anchor="end">ignore correlation</text>`;
+      // Mendell-Elston: flat from its completion time (bias, not noise)
+      if (st.me.done) {
+        sv += `<line x1="${X(st.me.ms)}" x2="${W - padR}" y1="${Y(st.me.tv)}" y2="${Y(st.me.tv)}"
+                 stroke="#2e7d32" stroke-dasharray="8 4" stroke-width="2"/>`;
+        sv += `<circle cx="${X(st.me.ms)}" cy="${Y(st.me.tv)}" r="4" fill="#2e7d32"/>`;
+        sv += `<text x="${Math.min(X(st.me.ms) + 8, W - 190)}" y="${Y(st.me.tv) - 7}" font-size="11"
+                 fill="#2e7d32">Mendell&#8211;Elston (analytic bias)</text>`;
+      }
+      // lattice: it ARRIVES at its wall time and sits on the floor (it is
+      // the reference, so its own error plots at the axis floor)
+      const xLat = X(st.tLat), xSolid = Math.min(xLat + 60, W - padR);
+      sv += `<line x1="${xLat}" x2="${xSolid}" y1="${Y(2e-4)}" y2="${Y(2e-4)}"
+               stroke="#4b4bd8" stroke-width="2.5"/>`;
+      sv += `<line x1="${xSolid}" x2="${W - padR}" y1="${Y(2e-4)}" y2="${Y(2e-4)}"
+               stroke="#4b4bd8" stroke-width="2" stroke-dasharray="2 5"/>`;
+      sv += `<circle cx="${X(st.tLat)}" cy="${Y(2e-4)}" r="4" fill="#4b4bd8"/>`;
+      sv += `<text x="${Math.min(X(st.tLat) + 6, W - 250)}" y="${Y(2e-4) - 7}" font-size="11" fill="#4b4bd8">lattice: all ${st.n} priced at ${st.tLat >= 1000 ? (st.tLat / 1000).toFixed(1) + " s" : st.tLat.toFixed(0) + " ms"}</text>`;
+      // paths
+      for (const [pts, color] of [[st.mc.pts, "#c2571a"], [st.ghk.pts, "#7a3fa8"]]) {
+        if (!pts.length) continue;
+        let path = "";
+        for (let i = 0; i < pts.length; i++)
+          path += (i ? "L" : "M") + X(pts[i][0]).toFixed(1) + "," + Y(pts[i][1]).toFixed(1);
+        sv += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>`;
+      }
+      if (st.ghk.pts.length) {
+        const last = st.ghk.pts[st.ghk.pts.length - 1];
+        sv += `<text x="${Math.min(X(last[0]) + 6, W - 60)}" y="${Y(last[1]) + 4}" font-size="11" fill="#7a3fa8">GHK</text>`;
+      } else if (st.ghk.cursor > 0) {
+        sv += `<text x="${X(Math.max(st.ghk.ms, 1))}" y="${H - padB - 8}" font-size="11" fill="#7a3fa8">GHK: factoring ${st.ghk.cursor}/${st.n} difference covariances&#8230;</text>`;
+      }
+      document.getElementById("chart").innerHTML = sv;
+
+      const mcLast = st.mc.pts.length ? st.mc.pts[st.mc.pts.length - 1][1] : NaN;
+      const ghkLast = st.ghk.pts.length ? st.ghk.pts[st.ghk.pts.length - 1][1] : NaN;
+      document.getElementById("stats").innerHTML =
+        `<span class="lat">lattice: ${st.tLat.toFixed(1)} ms</span> &middot; ` +
+        `<span class="ghk">GHK: ${st.ghk.cursor < st.n
+            ? `setup ${st.ghk.cursor}/${st.n}`
+            : `TV ${isFinite(ghkLast) ? ghkLast.toExponential(2) : "—"}`} in ${(st.ghk.ms / 1000).toFixed(1)} s</span> &middot; ` +
+        `<span class="me">Mendell&#8211;Elston: ${st.me.done
+            ? `TV ${st.me.tv.toExponential(2)} in ${(st.me.ms / 1000).toFixed(2)} s, flat forever`
+            : `${st.me.cursor}/${st.n}`}</span> &middot; ` +
+        `<span class="mc">simulation: ${st.mc.draws.toLocaleString()} draws, TV ${isFinite(mcLast) ? mcLast.toExponential(2) : "—"}</span> &middot; ` +
+        `<span class="ind">ignore correlation: TV ${st.tvInd.toExponential(2)}, forever</span>`;
+    }
+
+    document.getElementById("go").addEventListener("click", run);
+    run();
+  </script>
+</body>
+</html>

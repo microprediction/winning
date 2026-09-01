@@ -155,3 +155,223 @@ def test_fast_and_streaming_kernels_agree_exactly():
     except TypeError:
         pytest.skip("fastrace without fast_max_entries")
     assert np.abs(p_fast - p_stream).max() < 1e-14
+
+
+def test_rank_r_blocks_forward_inverts_and_jacobian_refuses():
+    """Rank-r cluster loadings: the forward kernel prices them (verified
+    against Monte Carlo at 1e-3 TV when this was pinned), the inversion
+    round-trips through the variance-matched preconditioner, and the
+    Jacobian refuses cleanly rather than mis-broadcasting."""
+    import warnings
+    from winning.factor.races import race_probabilities, abilities_from_race
+    from winning.factor.structures import Blocks
+    from winning.factor.blocks import block_race_jacobian
+
+    n = 24
+    rng = np.random.default_rng(0)
+    mu = rng.standard_normal(n) * 0.6
+    mu -= mu.mean()
+    lab = np.repeat(np.arange(4), 6)
+    D = 0.5 + 0.5 * rng.random(n)
+    V2 = rng.standard_normal((n, 2)) * 0.5
+
+    B = Blocks(cluster=lab, loading=V2, D=D)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = race_probabilities(mu, structure=B)
+        mu_back = abilities_from_race(p, structure=B)
+        p2 = race_probabilities(mu_back, structure=B)
+    assert 0.5 * np.abs(p2 - p).sum() < 1e-7
+
+    with pytest.raises(NotImplementedError):
+        block_race_jacobian(mu, lab, V2, D)
+
+
+def test_sharp_blocks_warn_that_gh_cannot_converge():
+    """A cluster loading of 4 against idiosyncratic sd 0.22 is sharpness
+    18; the fixed-order hierarchical quadrature measured 5e-2 TV against
+    a 4M-draw referee there, landing on GROUP shares, and raising the
+    order does not converge (9 -> 31 nodes moves the answer by a further
+    8e-2). Until the factor path's family escalation is ported, the
+    kernel must say so."""
+    import warnings
+    from winning.factor.blocks import block_race_probabilities
+
+    n = 24
+    lab = np.repeat(np.arange(4), 6)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        block_race_probabilities(np.zeros(n), lab, np.full(n, 4.0),
+                                 np.full(n, 0.05))
+        assert any("sharpness" in str(x.message) for x in w)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        block_race_probabilities(np.zeros(n), lab, np.full(n, 0.6),
+                                 np.full(n, 0.7))
+        assert not any("sharpness" in str(x.message) for x in w)
+
+
+def test_window_covers_near_common_shock_winner_mass():
+    """Fourteenth review's blocker: a 400-runner single cluster at
+    correlation ~0.99, split into loadings 1.0 and 0.9 with equal mu.
+    The old independent-marginal window lost 28 percent of the winner
+    mass asymmetrically across the loading groups and the silent
+    normalization returned group shares 0.68/0.32 where exchangeability
+    within each group plus the symmetric construction forces the split
+    to stay near 0.50/0.50. The node-aware window prices it exactly."""
+    from winning.factor.blocks import block_race_probabilities
+
+    n = 400
+    p = block_race_probabilities(
+        mu=np.zeros(n), cluster=np.zeros(n, dtype=int),
+        loading=np.r_[np.ones(n // 2), 0.9 * np.ones(n // 2)],
+        D=0.01 * np.ones(n), points=1025, qa=9)
+    assert abs(p[: n // 2].sum() - 0.5) < 1e-4
+    p2 = block_race_probabilities(
+        mu=np.zeros(n), cluster=np.zeros(n, dtype=int),
+        loading=np.r_[np.ones(n // 2), 0.9 * np.ones(n // 2)],
+        D=0.01 * np.ones(n), points=257, qa=9)
+    assert abs(p2[: n // 2].sum() - 0.5) < 1e-3
+
+
+def test_mass_defect_raises_instead_of_normalizing():
+    """A material raw-mass defect means the lattice missed part of the
+    winner distribution; normalizing it away returns confident wrong
+    shares, so the kernels must stop instead."""
+    from winning.factor.blocks import _checked_mass
+
+    ok = np.array([0.5, 0.499])
+    out = _checked_mass(ok.copy(), "test race")
+    assert abs(out.sum() - 1.0) < 1e-12
+    with pytest.raises(RuntimeError, match="captured total mass"):
+        _checked_mass(np.array([0.5, 0.22]), "test race")
+    with pytest.raises(RuntimeError, match="captured total mass"):
+        _checked_mass(np.array([0.9, 0.9]), "test race")
+
+
+def test_zero_strength_tree_traversal_matches_independent():
+    """Traversal-order regression: with all internal strengths zero a
+    tree race IS an independent race, but ordering the message passes by
+    the |strength| path sum (all tied at zero) visited children before
+    their parents and priced a 6-leaf linkage tree at raw mass 3.0.
+    Ordering by hop depth fixes it; both backends must agree."""
+    import winning.factor.blocks as B
+    from winning.factor.races import race_probabilities
+
+    mu = np.array([0.3, 0.1, 0.0, -0.1, -0.2, 0.4])
+    mu -= mu.mean()
+    # depth-2 binary tree over six singleton leaf clusters, zero strengths
+    parent = np.array([6, 8, 8, 7, 6, 7, 10, 9, 9, 10, -1])
+    strength = np.zeros(11)
+    D = np.ones(6)
+    p_ind = race_probabilities(mu, D=D)
+    for use_rust in ([True] if B._HAVE_RUST else []) + [False]:
+        saved = B._HAVE_RUST
+        B._HAVE_RUST = use_rust
+        try:
+            p = B.tree_race_probabilities(mu, np.arange(6), np.zeros(6),
+                                          D, parent, strength)
+        finally:
+            B._HAVE_RUST = saved
+        assert 0.5 * np.abs(p - p_ind).sum() < 1e-9
+
+
+def test_from_linkage_tree_prices_cleanly():
+    """End-to-end: a scipy linkage tree (the HRP entry point, whose
+    floored merges produce exactly the zero strengths of the traversal
+    regression) prices without a mass defect."""
+    scipy_hier = pytest.importorskip("scipy.cluster.hierarchy")
+    from winning.factor.structures import Tree
+    from winning.factor.blocks import tree_race_probabilities
+
+    rng = np.random.default_rng(5)
+    Z = scipy_hier.linkage(rng.standard_normal((12, 4)), method="average")
+    t = Tree.from_linkage(Z)
+    mu = rng.normal(0, 0.8, 12)
+    mu -= mu.mean()
+    p = tree_race_probabilities(mu, t.cluster, t.loading, t.D,
+                                t.parent, t.strength)
+    assert abs(p.sum() - 1.0) < 1e-12
+    assert (p > 0).all()
+
+
+def test_advertised_surface_all_structures():
+    """Every structure the front door advertises must price (and, where
+    advertised, differentiate) without shape errors -- the rank-r block
+    crash slipped through because nothing exercised the full grid."""
+    import warnings
+    from winning.factor.races import race_probabilities
+    from winning.factor.structures import (Independent, Factor, Blocks,
+                                           Nested, Tree)
+
+    n = 12
+    rng = np.random.default_rng(7)
+    mu = rng.standard_normal(n) * 0.5
+    mu -= mu.mean()
+    D = 0.4 + 0.4 * rng.random(n)
+    lab = np.repeat(np.arange(3), 4)
+    v1 = 0.5 * np.ones(n)
+    V2 = rng.standard_normal((n, 2)) * 0.4
+    g = 0.3 * np.ones(n)
+    parent = np.r_[np.full(3, 3), [-1]]
+    structures = [
+        Independent(D),
+        Factor(V=v1.reshape(-1, 1), D=D),
+        Factor(V=V2, D=D),
+        Blocks(cluster=lab, loading=v1, D=D),
+        Blocks(cluster=lab, loading=V2, D=D),
+        Nested(cluster=lab, loading=v1, D=D, coupling=g),
+        Tree(cluster=lab, loading=v1, D=D, parent=parent,
+             strength=np.r_[np.zeros(3), 0.4]),
+    ]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for st in structures:
+            p = race_probabilities(mu, structure=st)
+            assert abs(p.sum() - 1.0) < 1e-9, type(st).__name__
+            assert (p >= 0).all(), type(st).__name__
+
+
+def test_tree_refuses_rank_r_leaf_loadings():
+    """The paper's tree grammar takes SCALAR leaf-cluster loadings (only
+    the block grammar prices rank r). Python mis-broadcast cryptically
+    and the R port silently priced the flattened matrix, so all tree
+    entry points must refuse a matrix loading cleanly; an (n, 1) column
+    is accepted as the scalar it is."""
+    from winning.factor.blocks import (tree_race_probabilities,
+                                       tree_race_jacobian)
+    from winning.factor.races import race_probabilities
+    from winning.factor.structures import Tree
+
+    n = 12
+    rng = np.random.default_rng(7)
+    mu = rng.standard_normal(n) * 0.5
+    mu -= mu.mean()
+    D = 0.4 + 0.4 * rng.random(n)
+    lab = np.repeat(np.arange(3), 4)
+    V2 = rng.standard_normal((n, 2)) * 0.4
+    parent = np.r_[np.full(3, 3), [-1]]
+    strength = np.r_[np.zeros(3), 0.4]
+
+    with pytest.raises(NotImplementedError, match="rank-one"):
+        tree_race_probabilities(mu, lab, V2, D, parent, strength)
+    with pytest.raises(NotImplementedError, match="rank-one"):
+        tree_race_jacobian(mu, lab, V2, D, parent, strength)
+    with pytest.raises(NotImplementedError, match="rank-one"):
+        race_probabilities(mu, structure=Tree(cluster=lab, loading=V2, D=D,
+                                              parent=parent,
+                                              strength=strength))
+    v1col = 0.5 * np.ones((n, 1))
+    p_col = tree_race_probabilities(mu, lab, v1col, D, parent, strength)
+    p_flat = tree_race_probabilities(mu, lab, v1col.ravel(), D, parent,
+                                     strength)
+    assert np.array_equal(p_col, p_flat)
+
+
+def test_mass_check_rejects_nan():
+    """NaN compares false against any tolerance, so without an explicit
+    finiteness test a NaN mass sails through the defect check."""
+    from winning.factor.blocks import _checked_mass
+
+    with pytest.raises(RuntimeError, match="captured total mass"):
+        _checked_mass(np.array([0.5, np.nan]), "test race")

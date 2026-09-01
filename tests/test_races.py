@@ -140,13 +140,30 @@ def test_removal_shares_match_core_ensemble():
     assert np.abs(q.sum(1) - 1).max() < 1e-12
 
 
-def test_probit_removal_is_reflected_core():
+def test_probit_removal_routes_through_the_safe_path():
+    """winning.probit.removal_shares is the max-wins reflection of the
+    SAFE removal, not of the raw core deletion rows (sixth review).
+
+    The core rows normalize whatever the field pass produced, with no
+    coverage window, no sharpest-runner refinement and no mass check, so
+    removing a dominant favourite could return a plausible row the
+    lattice never resolved. On a well-conditioned field the two agree to
+    machine precision, which is what this pins; the difference is the
+    guarantees, not the arithmetic."""
     from winning.probit import removal_shares as probit_removal
     mu, V, D = _problem(n=15)
     q = probit_removal(-mu, V=V, D=D)      # utilities = -abilities
     _, q_core = win_probabilities_factor(mu, V, D, *hermite_nodes(2),
                                          return_deletions=True)
-    assert np.abs(q - q_core).max() == 0.0
+    assert np.abs(q - q_core).max() < 1e-12
+    assert np.abs(q.sum(1) - 1).max() < 1e-12
+
+    # and the guarantee the reroute bought: a dominant favourite whose
+    # removal moves the winner somewhere the raw rows never covered
+    mu2 = mu.copy(); mu2[0] -= 8.0
+    q2 = probit_removal(-mu2, V=V, D=D)
+    assert np.abs(q2.sum(1) - 1).max() < 1e-9
+    assert q2[0, 0] == 0.0 and q2[0].max() > 0.05
 
 
 def test_top_level_front_door():

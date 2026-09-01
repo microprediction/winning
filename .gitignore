@@ -136,11 +136,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-r/winning.Rcheck/
+r/*.Rcheck/
 r/winning_*.tar.gz
 .DS_Store
 r/*.tar.gz
 r/winning.Rcheck/
+r/*.Rcheck/
 
 # overnight rerun scratch
 research/restriction/results/RERUN_STDERR.txt

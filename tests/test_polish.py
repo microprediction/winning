@@ -25,7 +25,12 @@ def test_jacobian_matches_finite_differences(base):
         m2 = mu.copy(); m2[j] += 1e-6
         fd = (race_probabilities(m2, V=V, D=D, base=base) - p0) / 1e-6
         assert np.abs(fd - J[:, j]).max() < 5e-6
-    assert np.abs(J.sum(axis=1)).max() < 1e-12   # shift invariance
+    # Shift invariance now HOLDS rather than being imposed. The diagonal
+    # is integrated (d f_i/d mu_i), not back-filled from a zero-row-sum
+    # identity, so rows summing to zero is a property of the quadrature
+    # rather than an assumption: exact under the normal base, 5e-11 under
+    # gumbel, whose density has the heavier left tail on this lattice.
+    assert np.abs(J.sum(axis=1)).max() < 1e-9
 
 
 def test_polish_hits_caps_and_stays_a_race():
@@ -158,3 +163,65 @@ def test_polish_tree_from_linkage_enforces_caps():
     assert p.max() <= 0.14 + 1e-6
     assert info["max_violation"] < 1e-6
     assert abs(p.sum() - 1.0) < 1e-9
+
+
+def test_jacobian_is_the_derivative_of_the_map_that_was_evaluated():
+    """Sixth review: the estimation score has to be the gradient of the
+    numerical forward map, not of its continuum limit.
+
+    Two properties make that true and neither held before. The Jacobian
+    integrates on races.forward_grid, the same lattice
+    race_probabilities uses, so the masses it forms reproduce the
+    forward map exactly. And it applies the quotient rule for the
+    lattice normalization instead of assuming the total is stationary.
+    """
+    from winning.factor.polish import _raw_and_derivative, race_jacobian_row
+    from winning.factor.races import (_setup, forward_grid, student_base)
+
+    rng = np.random.default_rng(3)
+    n = 8
+    mu = rng.standard_normal(n) * 0.6
+    V = rng.standard_normal((n, 1)) * 0.4
+    D = np.full(n, 0.6)
+
+    mu_s, V_s, D_s, F, W, fn, left, right = _setup(mu, V, D, None, None,
+                                                   "normal")
+    sd = np.sqrt(D_s)
+    x, _ = forward_grid(mu_s[None, :] + F @ V_s.T, sd, V_s, fn, left, right,
+                        257)
+    a, A, dT = _raw_and_derivative(mu_s, V_s, D_s, F, W, fn, sd, x,
+                                  x[1] - x[0])
+
+    # same map: the normalized masses ARE race_probabilities
+    assert np.abs(a / a.sum()
+                  - race_probabilities(mu, V=V, D=D, points=257)).max() < 1e-14
+    # the O(nL) total-derivative shortcut equals the column sums of A
+    assert np.abs(dT - A.sum(axis=0)).max() < 1e-13
+
+    # exact against finite differences of the map itself, on a coarse
+    # lattice where a continuum surrogate is visibly not the derivative:
+    # imposing the diagonal and skipping the quotient costs 1e-8 relative
+    # here (and 1e-5 under student4), against 2e-11 for this one
+    J = race_jacobian(mu, V=V, D=D, points=65)
+    fd = np.zeros((n, n))
+    for j in range(n):
+        e = np.zeros(n); e[j] = 1e-5
+        fd[:, j] = (race_probabilities(mu + e, V=V, D=D, points=65)
+                    - race_probabilities(mu - e, V=V, D=D, points=65)) / 2e-5
+    assert np.abs(J - fd).max() / np.abs(fd).max() < 1e-9
+
+    # and under a heavy tail, where the old span lattice differed from the
+    # forward map's bulk window
+    st = student_base(4)
+    Jt = race_jacobian(mu, V=V, D=D, points=257, base=st)
+    fdt = np.zeros((n, n))
+    for j in range(n):
+        e = np.zeros(n); e[j] = 1e-5
+        fdt[:, j] = (race_probabilities(mu + e, V=V, D=D, points=257, base=st)
+                     - race_probabilities(mu - e, V=V, D=D, points=257,
+                                          base=st)) / 2e-5
+    assert np.abs(Jt - fdt).max() / np.abs(fdt).max() < 5e-6
+
+    # the restricted row is the full row, not an approximation to it
+    row = race_jacobian_row(mu, 2, V=V, D=D, points=257)
+    assert np.abs(row - race_jacobian(mu, V=V, D=D, points=257)[2]).max() < 1e-14

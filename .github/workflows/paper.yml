@@ -1,0 +1,70 @@
+name: paper
+
+# The manuscript makes reproducibility a central claim, so "it builds"
+# should not be something only one laptop knows. Three pdflatex passes
+# (the bibliography is an inline thebibliography by design -- no bibtex),
+# then the check that actually catches breakage: zero unresolved
+# references in the rendered text. A stale \label or a dropped \ref
+# renders as "(?)" and is invisible in the LaTeX exit code.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/latex_src/general_inversion/**"
+      - ".github/workflows/paper.yml"
+  pull_request:
+    paths:
+      - "docs/latex_src/general_inversion/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: TeX Live
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-latex-base texlive-latex-recommended \
+            texlive-latex-extra texlive-fonts-recommended \
+            texlive-science poppler-utils
+      - name: Three passes
+        working-directory: docs/latex_src/general_inversion
+        run: |
+          for pass in 1 2 3; do
+            pdflatex -interaction=nonstopmode -halt-on-error main.tex \
+              > "pass$pass.log" 2>&1 || {
+                echo "pdflatex failed on pass $pass"; tail -60 "pass$pass.log"
+                exit 1; }
+          done
+      - name: No unresolved references
+        working-directory: docs/latex_src/general_inversion
+        run: |
+          n=$(pdftotext main.pdf - | grep -c "(?)" || true)
+          pages=$(pdfinfo main.pdf | awk '/^Pages/ {print $2}')
+          echo "pages: $pages, unresolved references: $n"
+          if [ "$n" -ne 0 ]; then
+            echo "unresolved references in the rendered PDF:"
+            pdftotext main.pdf - | grep -n "(?)" | head -20
+            exit 1
+          fi
+          if [ "$pages" -lt 15 ]; then
+            echo "only $pages pages: the build is truncated"; exit 1
+          fi
+      - name: Undefined citations or duplicate labels
+        working-directory: docs/latex_src/general_inversion
+        run: |
+          if grep -qE "LaTeX Warning: (Citation|There were undefined)" main.log; then
+            grep -E "LaTeX Warning: (Citation|There were undefined)" main.log
+            exit 1
+          fi
+          if grep -q "multiply defined" main.log; then
+            grep -n "multiply defined" main.log; exit 1
+          fi
+          echo "no undefined citations, no duplicate labels"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper
+          path: docs/latex_src/general_inversion/main.pdf

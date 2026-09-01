@@ -2,6 +2,7 @@ name: R CMD check fast packages
 
 on:
   push:
+    branches: [main]
     paths: ["r/mvtnormfast/**", "r/mlogitfast/**", "r/rprobitfast/**"]
   workflow_dispatch:
 
@@ -11,8 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: r-lib/actions/setup-r@v2
+        with:
+          # Linux binaries from the public package manager. Building from
+          # source pulls testthat -> fs, which needs libuv headers the
+          # runner does not carry: "fatal error: uv.h: No such file or
+          # directory", and the whole check fails before it reaches any R
+          # package of ours.
+          use-public-rspm: true
       - name: Install deps
-        run: Rscript -e 'install.packages(c("mvtnorm","testthat"), repos="https://cloud.r-project.org")'
+        run: Rscript -e 'install.packages(c("mvtnorm","testthat"))'
       - name: Check mvtnormfast (as-cran)
         run: |
           cd r

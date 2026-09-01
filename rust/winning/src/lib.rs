@@ -1032,16 +1032,19 @@ pub fn tree_kernel(
         }
     }
 
-    // tree bookkeeping (matches the python: depth_shift by |lam| path sums)
-    let mut depth_shift = vec![0.0f64; nt];
+    // tree bookkeeping (matches the python): traversal order must be TREE
+    // depth in hops, not the |lam| path sum — zero strengths (from_linkage's
+    // floored merges) tie the path sums and a tied sort visits children
+    // before their parents, reading cavities still at their initial value.
+    let mut depth_hops = vec![0usize; nt];
     for t in 0..nt {
-        let mut s_ = 0.0;
+        let mut d_ = 0usize;
         let mut u = t;
         while parent[u] >= 0 {
-            s_ += lam[parent[u] as usize].abs();
+            d_ += 1;
             u = parent[u] as usize;
         }
-        depth_shift[t] = s_;
+        depth_hops[t] = d_;
     }
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); nt];
     for t in 0..nt {
@@ -1052,7 +1055,7 @@ pub fn tree_kernel(
 
     // upward pass: internal nodes, deepest first (stable on ties)
     let mut up: Vec<usize> = (nc..nt).collect();
-    up.sort_by(|&a, &b| depth_shift[b].partial_cmp(&depth_shift[a]).unwrap());
+    up.sort_by_key(|&t| std::cmp::Reverse(depth_hops[t]));
     for &t in &up {
         let mut acc = vec![0.0f64; points];
         for q in 0..qa {
@@ -1076,7 +1079,7 @@ pub fn tree_kernel(
     // downward pass: shallowest first (stable on ties)
     let mut r: Vec<Vec<f64>> = vec![vec![1.0; points]; nt];
     let mut down: Vec<usize> = (0..nt).collect();
-    down.sort_by(|&a, &b| depth_shift[a].partial_cmp(&depth_shift[b]).unwrap());
+    down.sort_by_key(|&t| depth_hops[t]);
     for &t in &down {
         if parent[t] < 0 {
             continue;
@@ -1328,4 +1331,87 @@ pub fn interp1(x: f64, xp: &[f64], fp: &[f64]) -> f64 {
         return fp[j];
     }
     fp[j] + (x - xp[j]) / denom * (fp[j + 1] - fp[j])
+}
+
+/// Top-k membership: q_i = int f_i(x) P(N_{-i}(x) <= k-1) dx on an
+/// equi-spaced lattice, normal base. One shared Poisson-binomial count
+/// program per lattice point (parallel over points), then each runner
+/// removed by stable-direction deconvolution (parallel over runners):
+/// forward where S_i >= F_i, backward where F_i > S_i, so the division
+/// is always by the larger factor and recursion error decays. Mirrors
+/// winning/factor/topk.py, which referees it.
+pub fn top_k_kernel(
+    mu: &[f64],
+    sd: &[f64],
+    k: usize,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> Vec<f64> {
+    let n = mu.len();
+    let dx = (hi - lo) / (points - 1) as f64;
+    let inv_sqrt2pi = 1.0 / (2.0 * std::f64::consts::PI).sqrt();
+
+    // per-point F (below-probability) and density rows, flat (points, n)
+    let mut fmat = vec![0.0f64; points * n];
+    let mut dens = vec![0.0f64; points * n];
+    fmat.par_chunks_mut(n)
+        .zip(dens.par_chunks_mut(n))
+        .enumerate()
+        .for_each(|(l, (frow, drow))| {
+            let x = lo + l as f64 * dx;
+            for i in 0..n {
+                let z = (x - mu[i]) / sd[i];
+                frow[i] = ndtr(z);
+                drow[i] = (-0.5 * z * z).exp() * inv_sqrt2pi / sd[i];
+            }
+        });
+
+    // shared count distribution C[l][0..=n], parallel over lattice points
+    let mut c = vec![0.0f64; points * (n + 1)];
+    c.par_chunks_mut(n + 1).enumerate().for_each(|(l, row)| {
+        row[0] = 1.0;
+        let frow = &fmat[l * n..(l + 1) * n];
+        for (j, &f) in frow.iter().enumerate() {
+            let s = 1.0 - f;
+            for m in (1..=j + 1).rev() {
+                row[m] = row[m] * s + row[m - 1] * f;
+            }
+            row[0] *= s;
+        }
+    });
+
+    // deconvolution + integration, parallel over runners
+    (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let mut acc = 0.0f64;
+            for l in 0..points {
+                let f = fmat[l * n + i];
+                let s = 1.0 - f;
+                let row = &c[l * (n + 1)..(l + 1) * (n + 1)];
+                let cdf = if s >= f {
+                    let s_safe = s.max(1e-300);
+                    let mut q = (row[0] / s_safe).clamp(0.0, 1.0);
+                    let mut tot = q;
+                    for m in 1..k {
+                        q = ((row[m] - f * q) / s_safe).clamp(0.0, 1.0);
+                        tot += q;
+                    }
+                    tot
+                } else {
+                    let f_safe = f.max(1e-300);
+                    let mut q = (row[n] / f_safe).clamp(0.0, 1.0);
+                    let mut tail = q;
+                    for m in (k..n - 1).rev() {
+                        q = ((row[m + 1] - s * q) / f_safe).clamp(0.0, 1.0);
+                        tail += q;
+                    }
+                    1.0 - tail
+                };
+                acc += dens[l * n + i] * cdf.clamp(0.0, 1.0);
+            }
+            acc * dx
+        })
+        .collect()
 }
