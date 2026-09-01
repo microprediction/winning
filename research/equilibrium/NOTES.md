@@ -137,3 +137,12 @@ alone becomes underdetermined by one -- three markets (win/top-10/
 top-20) is the natural exactly-determined set. The engine's
 density-agnosticism means the skewed base already prices; only the
 calibration layer needs the extra column.
+
+## Multi-horizon markets (Peter, 2026-09-01)
+The golf cut is technically a different race: top-70 after TWO rounds,
+win after FOUR. Under random-walk scoring these are marginals of one
+Brownian race at horizons T/2 and T -- same drifts, D scaled by
+horizon -- so cross-horizon joint calibration is the dynamic
+generalization of the multi-market fit, and it ties the order-statistics
+paper to the Atlas note's horizon machinery. exp3 treats all markets at
+one horizon by construction (noted, deliberate simplification).
