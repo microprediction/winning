@@ -121,3 +121,17 @@ choices with Gaussian Processes", arXiv:2403.11782 (2024)
 3. Their "choice from a menu" data IS winner-only race feedback, so
    the moment updates and the D-optimal scheduler apply to their
    problem class directly.
+
+## Measured (exp1_scheduler, 2026-09-01): an honest negative
+Winner-only feedback, fields of 6 from 30, 60 races, 12 seeds, median
+RMSE at 30/60 races:
+  diagonal estimator:  random .680/.543, uncertainty .631/.496,
+                       d_optimal .652/.505
+  full-covariance:     random .667/.540, uncertainty .593/.480,
+                       d_optimal .617/.495
+D-optimal field composition ties or slightly trails plain variance
+targeting under BOTH estimators. The coupling-blind-estimator excuse is
+dead; remaining suspects are the information sparsity of winner-only
+feedback and locally-optimal design at noisy early estimates. Next
+discriminating experiment: full-ORDER feedback, where a race carries
+log(m!)-ish bits instead of log(m).

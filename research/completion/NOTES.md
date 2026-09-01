@@ -55,3 +55,15 @@ are observationally equivalent. Characterizing that equivalence class
 -- what does a full season of race data determine about Sigma, and
 what never? -- looks like the paper-grade question, with Mosteller's
 common-correlation invariance as the k=1 seed of the story.
+
+## Measured (exp1_quotient, 2026-09-01)
+Two fields {1,2,3}, {3,4,5}; truth in-grammar, Var(X1-X4) = 4.41.
+Feasibility sampling (lower bounds on the identified intervals):
+  two cliques:   grammar [0.20, 8.11], unrestricted [0.46, 8.70]
+  three cliques: grammar [3.11, 5.54], unrestricted [0.85, 7.13]
+The cute conjecture SHARPENED, not confirmed: the rank-one grammar
+identifies nothing beyond PSD with two cliques (the within-clique
+split between (v_i-v_j)^2 and d_i+d_j is free -- dimension count 10
+params vs 6 constraints), and even a third overlapping field leaves an
+interval, cut ~2.6x. Identification hangs on clique OVERLAP structure,
+which feeds the design-for-completability idea directly.
