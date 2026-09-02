@@ -63,6 +63,40 @@ pairwise-boundary heuristic the engine can evaluate at scale, and the
 comparison against tuned beam schedules (ToT/REBASE/Gambit) is the
 experiment.
 
+## "Search as Computation Allocation" read in full (2026-09-01)
+Tuisov, arXiv:2607.27871, AAAI-27 formatting; PDF in refs/. What it
+is: the normative scaffolding for exactly our problem class --
+terminal computation-allocation with Bellman characterizations for
+fixed-budget (Eq. 17), priced (Eq. 19), and certificate-seeking
+(Eq. 20) objectives. The engine hooks, now precise:
+- Prop. 3: under simple-regret loss, myopic VOC IS the
+  knowledge-gradient criterion -- the E[max]-increment our potential
+  W differentiates exactly under factor covariance.
+- Eqs. 28-29: under zero-one identification loss, myopic VOC is the
+  improvement in max_z p(z|H) -- and for best-arm identification
+  p(z|H) IS the PoM vector. His Limitations section: "Exact dynamic
+  VOC is itself generally intractable." In the factor-Gaussian case
+  the myopic quantities are engine outputs.
+- Eq. 44 and surroundings (MCTS root VOC): the score "depends on the
+  posterior tail that can cross the current decision boundary and on
+  the value gap across that boundary. A visitation count alone is
+  not sufficient" -- the decision boundary is the tie surface; the
+  photo-finish/local-time geometry again. And the UCT approximation
+  chain (Eq. 47) explicitly "discards the root value gaps, the
+  probability that a local change propagates to the root,
+  CORRELATIONS among backed-up values" -- the wedge named by the
+  paper itself.
+- Prop. 4 / Thm. 2: information gain can rank computations
+  arbitrarily poorly against VOC (one-sided bound only) -- caution
+  for entropy-style acquisition (relevant to LITE's entropy tasks).
+- The certificate-seeking objective is the hard version of our
+  exp1_stopping rule (stop at PoM >= 1-delta).
+- Conclusion asks for "learned, history-dependent approximations of
+  dynamic VOC"; our counter-position: in factor-Gaussian settings
+  the myopic VOC needs no learning -- it is exactly computable at
+  scale -- and the survivor-set/irreversible-kill control extends
+  his computation-set dynamics where killing removes computations.
+
 ## Standing request
 Track new work on adaptive LLM rollout pruning / compute allocation;
 fold anything that derives (rather than tunes) the survivor policy
