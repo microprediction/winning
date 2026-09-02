@@ -102,3 +102,30 @@ Track new work on adaptive LLM rollout pruning / compute allocation;
 fold anything that derives (rather than tunes) the survivor policy
 into this note. Merge with the R&S adjudication (issue 16 agent) when
 it reports -- Frazier/OCBA overlap is deliberate.
+
+## The n=2 free boundary: solved (2026-09-02, exp_rollout_n2/)
+The conjecture holds and the law is one line. With gap volatility
+sigma = sqrt(2(1-rho)) and compute price lambda per path per unit
+time, the value relative to the current leader satisfies a
+one-dimensional Bellman equation on the reflected gap (the leader's
+level is a martingale, so a lone survivor earns nothing; the option
+value is the reflection at zero raising the leader). Measured:
+- The kill boundary exists, rises with remaining budget, and
+  SATURATES: beyond b ~ 0.2 (sigma/lambda)^2 units more budget does
+  not widen the keep zone.
+- Brownian scaling collapses everything:
+  h(b; sigma, lambda) = (sigma^2/lambda) H(b lambda^2 / sigma^2),
+  verified numerically (predicted ratio 4.000, measured 4.17 at
+  DT = 5e-4; converging in DT). The saturated constant is
+  H_inf ~ 0.115 across rho: KILL THE LAGGARD WHEN THE GAP EXCEEDS
+  ~0.115 sigma_gap^2 / lambda. Correlation enters only through
+  sigma^2 = 2(1-rho): near-duplicate rollouts get pruned almost
+  immediately -- the qPO diversity intuition as a control law.
+- Adaptivity is worth 2x: at rho=0.5, b=1, the free-boundary policy
+  earns 0.0308 (Bellman 0.0310 -- solve certified by simulation);
+  the BEST TUNED fixed-gap rule earns 0.0150, the best tuned
+  fixed-time rule is negative, keep-always loses 1.60. The static
+  schedules the LLM-rollout literature tunes leave half the value of
+  the second trajectory on the table even at n=2.
+Next: n > 2 via the pairwise-boundary heuristic priced by the
+engine's PoM/tie machinery, benchmarked against sequential halving.
