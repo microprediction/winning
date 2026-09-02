@@ -47,3 +47,31 @@ SSTA is a large literature: Visweswariah et al. 2004 (canonical form),
 Clark 1961 (already cited in the winning paper), the criticality line
 this paper sits in, and whatever replaced it after 2009 [all U;
 read-in-full required].
+
+## The 2024 confirmation, and the observation that sharpens everything
+Mishagli, Koskin, Blokhina, "Statistical Static Timing Analysis of
+VLSI as the Statistics of Correlated Extremes", arXiv:2401.03559
+(2024) [locator-verified; unread in full]: SSTA reframed explicitly as
+correlated extreme-value statistics, solved by analytic corrections to
+the Gumbel distribution valid for WEAK correlations, with stated
+applicability limits, plus an algorithm for estimating a timing
+graph's covariance. So the framing is live in 2024, and the current
+tool is a weak-correlation expansion where the engine is exact at any
+correlation strength (with the sharpness escalation carrying the
+strong end).
+
+The observation their covariance algorithm hands us: path-delay
+covariance in a timing graph is IN-GRAMMAR BY CONSTRUCTION. A path's
+delay is a sum over its edges, so Cov(path a, path b) = shared-edge
+variance: the covariance is the Gram matrix of path-edge incidence
+vectors weighted by edge variances -- exactly a factor model whose
+loadings are incidence rows, before any fitting. With the industry
+canonical form (few global spatial sources plus per-gate idiosyncratic
+terms) the rank is the number of variation sources, which is small.
+Nothing needs approximating: SSTA criticality under the canonical
+model is a low-rank factor race, natively.
+
+Ties to standing issues: their Gumbel-correction machinery is the
+analytic-extremes toolbox of issue 10 (control variates and exact
+tests), and the tail-exponent-controls-extremes-growth story of issue
+13 is the same mathematics from the base-family side.
