@@ -336,3 +336,53 @@ VeccTMVN where the covariance family suits them [TODO]; the
 CDF-gradient evaluator [DONE]; winning, priced both for one winner
 and the whole vector. TVBS, Vecchia, TLR, FP32 and QMC have
 materially different error regimes -- match accuracy.
+
+## Russo, the jackknife product, and the assembly claim (Peter,
+## 2026-09-02)
+The independent-case cavity is implemented, exactly, in prior work:
+Russo's best-arm paper (COLT 2016; expanded arXiv 2018; journal
+version Operations Research 68(6):1625-1647, 2020 -- cite the
+version after checking which carries Appendix B, Algorithm 4)
+computes ALL posterior probabilities of optimality for independent
+arms by forming G_m = prod_i F_{i,m} on a quadrature grid and
+summing f_{i,m} G_m / F_{i,m} per arm -- and updates the shared
+field incrementally by dividing out an arm's old CDF and multiplying
+in the new one. Distribution-free under independence (his example is
+Beta). CITE RUSSO DIRECTLY. Suggested sentence, verbatim from the
+survey: "Russo (2016, Appendix B, Algorithm 4) computes all
+posterior optimality probabilities for independent arms by forming
+the product of their CDFs on a quadrature grid and dividing out each
+arm's own CDF. We extend this shared-product assembly through factor
+conditioning and reuse the resulting field for derivatives,
+large-scale share inversion, and removal counterfactuals." The
+concession sharpens the paper: the old independent cavity is lifted
+through conditional independence into a correlated all-N engine.
+
+The primitive also has generic names that deflect novelty attacks on
+it: the JACKKNIFE (leave-one-out) PRODUCT (Spouge-Ziegelbauer-
+Gonzalez 2020 for the commutative-semigroup version; prefix/suffix
+products when division fails), the reverse derivative of a single
+product node, and sum-product message passing for the tree case (an
+outgoing message = local factor times all incoming except the
+recipient's). Competing risks holds the min-reflection (cause-
+specific incidence from one shared survival field; Aalen-Johansen;
+Chiang's partial crude probabilities for the deletion ensemble --
+already conceded in the manuscript), and IBM's 2004-06 SSTA work
+computed ALL-edge criticalities from one forward/backward pass at
+industrial scale (approximate, not factor-conditioned -- so timing
+is a market for a better criticality evaluator, not evidence the
+architecture is new). Do NOT claim 2013 blog priority for the
+divide-out step itself without locating archived material containing
+it.
+
+Laplacian caution, sharpened: in random-utility theory probabilities
+are gradients of expected max surplus, the Jacobian is the
+substitution Hessian, translation invariance forces zero row sums,
+monotone substitution gives the sign pattern. The distinctive part
+is computing the conductances and JVPs cheaply from the same field,
+not the structural fact.
+
+The assembly claim, final: factor conditioning + shared
+all-alternative field + derivatives + inverse map + removal
+counterfactuals + large-N implementation. First to assemble; no
+component alone.
