@@ -449,3 +449,16 @@ almost exactly, and the quadratic slope reproduces (25.6x time for
 5x n at fixed R): the gap was never about language, now shown from
 both directions. The v2 wall-clock table can be entirely
 same-toolchain.
+
+## The 2x2, benchmarked both ways (2026-09-02, Peter's ask)
+Engine {Rust, numpy} x per-winner alternative {Rust, numpy}, same
+instances, same Sobol draws, R = 512:
+  n=200 : rust-vs-rust 3.6x   py-vs-py 2.0x
+  n=1000: rust-vs-rust 18.2x  py-vs-py 11.7x
+Language factors: engine 7.3-7.4x, alternative 4.0-4.7x -- Rust
+flatters the ENGINE slightly, because the lattice passes gain more
+from compilation than the alternative's naturally-vectorized matrix
+work. Citation discipline for v2: quote the ratio range (12-18x at
+n=1000 loose accuracy, ~95-148x tight), never the flattering end
+alone, and always with the quadratic slope, which is
+toolchain-independent and is the actual claim.
