@@ -135,5 +135,64 @@ data) -> D (a week, machinery exists) -> E (a week, data public) -> B
 kill test (corpus verification, then the ladder) -> B flagship if the
 ladder passes. F/G/engineering-hazards parked. LITE head-to-head is
 the first external-facing number.
-EOF
-git add research/PLANS.md && git commit -q -m "$(printf 'Research plans: five tracks behind one dividing line\n\nThe argmax of an already-specified model is the target class; factor\nlogit is disqualified there rather than outcompeted. LITE (AISTATS\n2025, code public) and the weakest-link Softmin paper (2608.01261)\nboth locator-verified; kill tests lead every track; SSTA stays\nflagship pending its grammar-ladder kill test; parked and demoted\nlists recorded with reasons.\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>')" && git push origin main 2>&1 | tail -1
+
+---
+
+## Adjudications (2026-09-01; full reports in research/adjudications/)
+Five agents adjudicated the tracks against primary sources. All five
+returned PURSUE, with corrections that change the pitches:
+
+- A (LITE, issue 14): PURSUE. LITE discards ALL off-diagonal
+  covariance (their Assumption 2; confirmed in source) and its
+  guarantees bound convergence to that independence target, not to
+  true PoM. The local research/qpo/ benchmark already quantifies the
+  downstream gap (top-100 recall 0.61 vs 0.94). Decisive: rerun
+  their Table-1 protocol with grammar-form Sigma, TV measured
+  against OUR exact answer as ground truth. Concede upfront: dense
+  SE-kernel posteriors need a factor fit first; saturating
+  closed-loop benchmarks may not reward better probabilities.
+- B (SSTA, issue 17): PURSUE one experiment deep. Clark-based
+  criticality errs by up to 60% (Mogal TCAD 2009, read in full);
+  the accurate incumbent is itself localized MC. EDA-Schema-V2
+  verified but carries deterministic STA only -- a variation model
+  must be added. Primary kill risk confirmed as OURS TO MEASURE: no
+  published path-covariance rank measurement exists (a genuine gap).
+  INSTA (DAC 2025 best paper) shows the field is live.
+- C (weakest-link, issue 15): PURSUE at one-experiment scale, do not
+  over-invest. CORRECTION: 198 specimens, not 200+50 -- our framing
+  did not verify. The pitch is NOT exactness (their n=5 independent
+  race is five lines of Stan): it is that zone-level noise sigma_e
+  REPLACES their fixed k and is identifiable (their
+  non-identifiability holds only at zero zone noise), plus
+  correlated knot clusters -- their stated limitation -- need our
+  factor machinery. Data public (OSU thesis zc77sw48x, bot-gated).
+- D (R&S/Thompson, issue 16): PURSUE narrow. Claim (b) VERIFIED: no
+  procedure anywhere computes the exact joint PoM vector (Bonferroni
+  bounds, pairwise screening, posterior sampling substitute
+  uniformly). Kill risk confirmed: the parallel wing (GSP/PyPRS)
+  abandoned CRN outright; customers are the Bayesian branch and
+  stopping rules. The Negoescu-Frazier-Powell drug testbed (in P3C's
+  own paper) is literally VV'+D with known loadings. Thompson:
+  pursue as evaluator (VAPOR Lemma 8: exact PoM IS expected TS
+  occupancy; VAPOR and ToSFiT declare the object intractable), but
+  VBOS's optimistic tilt is deliberate -- exact-beats-variational
+  must be shown, not assumed.
+- E (model selection, issue 18): PURSUE -- confirmed flagship (and
+  Peter's addendum concurs: data easy, factors interpretable,
+  distinction from softmax immediately comprehensible). CORRECTION
+  to the pitch: question-bootstrap DOES capture cross-model
+  correlation; never claim otherwise. The real wedges are removal
+  counterfactuals (no incumbent), small-P(best) tail resolution
+  (bootstrap zero-counts), and correlation-aware sequential design
+  vs MODEL SELECTOR's naive-Bayes independence, on their own public
+  matrices.
+
+Sequence after adjudication: A and E swap emphasis -- E is the
+flagship demo, A the first external-facing number; both start from
+code that exists. Then D (drug testbed), C (one experiment), B (rank
+measurement first). The probit output layer has its own note now
+(research/applications/probit_output_layer.md): highest technical
+upside, not first to commercialize, parked pending a batched GPU
+kernel. Adjacent new thread: rollout pruning as stochastic control
+(research/design/rollout_control.md) -- merge its KG/OCBA overlap
+with Track D as it develops.
