@@ -123,12 +123,17 @@
     probability &mdash; the (k+1)-column loading matrix, residual
     diagonal, and bounds &mdash; ready for <code>lpRR</code> or any
     rectangle solver, and verified against
-    <code>pmvnorm</code> in this repository's tests. Use it when you
+    <code>pmvnorm</code> in this repository's tests. The complete
+    per-winner protocol also ships compiled
+    (<code>per_winner_reduced_rank_shares</code>, a Rust kernel with
+    a numpy fallback), so the wall-clock comparison below is
+    same-toolchain. Use it when you
     want a second opinion on a single share from machinery
     independent of this package. Pricing the complete vector this way
     costs one call per winner: measured at n = 1000 (rank 2, common
-    draws), 17 seconds at total-variation 0.023 or 148 seconds at
-    0.006, against 0.12 seconds exact for the shared field, with the
+    scrambled-Sobol draws, both sides compiled), eighteen times the
+    engine's exact 0.125 seconds at total-variation 0.036, or 148
+    times at 0.0045, with the
     per-winner cost growing as the square of the field size and
     deep-tail winners falling below the estimator's floor at finite
     sample counts.</p>

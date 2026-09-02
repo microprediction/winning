@@ -1660,3 +1660,49 @@ pub fn forward_kernel_base(
     let slopes: Array1<f64> = Array1::from_iter(p[n..].iter().cloned());
     (p_norm, slopes, total)
 }
+
+/// The per-winner reduced-rank alternative (lpRR protocol): winner i's
+/// max-wins probability as the rectangle P(Y <= 0), Y_j = U_j - U_i,
+/// integrated over common standard-normal draws z (R x (k+1): k factor
+/// coordinates and the winner's own shock). One pass per winner --
+/// O(N^2 R k) for the complete vector, which is the cost the shared
+/// field removes; shipped compiled so wall-clock comparisons are
+/// same-toolchain. Log-domain products; rayon over winners.
+pub fn per_winner_reduced_rank(
+    mu: ndarray::ArrayView1<f64>,
+    v: ndarray::ArrayView2<f64>,
+    d: ndarray::ArrayView1<f64>,
+    z: ndarray::ArrayView2<f64>,
+) -> ndarray::Array1<f64> {
+    use rayon::prelude::*;
+    let n = mu.len();
+    let k = v.ncols();
+    let r_draws = z.nrows();
+    let sqrt_d: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
+    let p: Vec<f64> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let mut acc = 0.0_f64;
+            for r in 0..r_draws {
+                let zr = z.row(r);
+                let ze = zr[k];
+                let mut logp = 0.0_f64;
+                for j in 0..n {
+                    if j == i {
+                        continue;
+                    }
+                    let mut bz = 0.0_f64;
+                    for c in 0..k {
+                        bz += (v[[j, c]] - v[[i, c]]) * zr[c];
+                    }
+                    let arg = (mu[i] - mu[j] - bz + sqrt_d[i] * ze)
+                        / sqrt_d[j];
+                    logp += ndtr(arg).max(1e-300).ln();
+                }
+                acc += logp.exp();
+            }
+            acc / r_draws as f64
+        })
+        .collect();
+    ndarray::Array1::from(p)
+}

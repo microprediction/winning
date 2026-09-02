@@ -20,7 +20,9 @@ cdf_gradient_shares
     factor grammar because the field integrates the idiosyncratic
     dimensions analytically.
 """
-from .reprs import reduced_rank_representation
+from .reprs import (reduced_rank_representation,
+                    per_winner_reduced_rank_shares)
 from .cdf_grad import cdf_gradient_shares
 
-__all__ = ["reduced_rank_representation", "cdf_gradient_shares"]
+__all__ = ["reduced_rank_representation",
+           "per_winner_reduced_rank_shares", "cdf_gradient_shares"]

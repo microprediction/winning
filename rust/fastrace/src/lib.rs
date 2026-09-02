@@ -303,6 +303,31 @@ fn classic_calibrate(
 }
 
 
+
+/// Per-winner reduced-rank alternative (lpRR protocol), compiled:
+/// max-wins winner probabilities, one rectangle per winner over common
+/// draws z of shape (R, k+1). O(N^2 R k) by design -- the benchmark
+/// alternative, not the engine.
+#[pyfunction]
+#[pyo3(name = "per_winner_reduced_rank")]
+fn per_winner_rr<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray2<f64>,
+    d: PyReadonlyArray1<f64>,
+    z: PyReadonlyArray2<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let mu_o: Array1<f64> = mu.as_array().to_owned();
+    let v_o: Array2<f64> = v.as_array().to_owned();
+    let d_o: Array1<f64> = d.as_array().to_owned();
+    let z_o: Array2<f64> = z.as_array().to_owned();
+    let p = py.allow_threads(|| {
+        winning::per_winner_reduced_rank(mu_o.view(), v_o.view(),
+                                         d_o.view(), z_o.view())
+    });
+    Ok(p.into_pyarray_bound(py))
+}
+
 #[pymodule]
 fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(forward_and_slopes, m)?)?;
@@ -317,6 +342,7 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(forward_and_slopes_base, m)?)?;
     m.add_function(wrap_pyfunction!(classic_state_prices, m)?)?;
     m.add_function(wrap_pyfunction!(classic_calibrate, m)?)?;
+    m.add_function(wrap_pyfunction!(per_winner_rr, m)?)?;
     Ok(())
 }
 

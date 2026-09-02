@@ -433,3 +433,19 @@ so the kill-test wall-clocks mixed implementations. Ledger:
   150x at its R=4096 accuracy. The v2 table must name the
   implementation per row and include the pure-python engine column;
   the quadratic-vs-linear slope needs no correction.
+
+## Compiled-vs-compiled: the per-winner alternative in Rust
+## (2026-09-02)
+The lpRR-protocol evaluator now ships compiled
+(winning::per_winner_reduced_rank in the core crate, bound through
+fastrace, wrapped with a numpy fallback as
+winning.alternatives.per_winner_reduced_rank_shares, under test).
+Same-toolchain wall-clock, common scrambled Sobol, k=2:
+  n=50:   1x-4x slower than the exact engine (small fields are fine)
+  n=200:  4x (TV 0.012) to 28x (TV 0.002)
+  n=1000: 18x (TV 0.036) to 148x (TV 0.0045)
+The multiples match the interpreted-tier comparison (18x/150x)
+almost exactly, and the quadratic slope reproduces (25.6x time for
+5x n at fixed R): the gap was never about language, now shown from
+both directions. The v2 wall-clock table can be entirely
+same-toolchain.

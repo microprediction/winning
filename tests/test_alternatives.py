@@ -51,3 +51,11 @@ def test_cdf_gradient_matches_engine():
     tv = 0.5 * np.abs(p_alt - p_engine).sum()
     assert tv < 0.03
     assert abs(p_alt.sum() - 1.0) < 1e-6
+
+
+def test_per_winner_shares_match_engine():
+    from winning.alternatives import per_winner_reduced_rank_shares
+    mu, V, d = _instance(40, 2, 6)
+    p_engine = race_probabilities(-mu, V=-V, D=d)
+    p = per_winner_reduced_rank_shares(mu, V, d, n_samples=2048)
+    assert 0.5 * np.abs(p - p_engine).sum() < 0.01
