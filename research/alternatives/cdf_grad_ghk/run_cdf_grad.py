@@ -1,6 +1,6 @@
 """Kill test A: all shares from one CDF gradient, factor-state GHK.
 
-The adversary of ADVERSARIES.md, built honestly: for U = mu + V F +
+The strongest alternative of ALTERNATIVES.md, built honestly: for U = mu + V F +
 sqrt(d) eps the rectangle probability H(b) = P(U <= b) is estimated
 by GHK with the factor as a Kalman state -- sequential over
 alternatives, each step conditioning the k-dimensional factor
@@ -19,7 +19,7 @@ framing.
 Measured against the shared-field engine (exact for this covariance
 class): total variation, mass defect |sum p - 1|, and wall-clock
 (after JIT compilation, which is reported separately). The
-Rao-Blackwell prediction from ADVERSARIES.md: conditional on the
+Rao-Blackwell prediction from ALTERNATIVES.md: conditional on the
 factor path, the GHK draws simulate idiosyncratic shocks the shared
 field integrates analytically, so at low rank the adversary pays
 Monte Carlo error for nothing. This experiment prices that error.

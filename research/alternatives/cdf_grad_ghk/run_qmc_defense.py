@@ -66,7 +66,9 @@ def adversary(mu, V, d):
 
 if __name__ == "__main__":
     results = {}
-    for k in (4, 8):
+    import sys as _sys
+    ranks = tuple(int(a) for a in _sys.argv[1:]) or (4, 8, 16)
+    for k in ranks:
         rng = np.random.default_rng(200 + k)
         mu, V, d = _cg.make_instance(N, k, 0.5, rng)
         t0 = time.time()

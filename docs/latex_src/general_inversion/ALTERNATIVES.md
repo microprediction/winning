@@ -1,4 +1,7 @@
-# Adversaries: the CDF-gradient route and structured MVN methods
+# Alternatives: the CDF-gradient route and structured MVN methods
+(Renamed from ADVERSARIES.md 2026-09-02 -- "alternatives" is the
+civil and accurate word, and the one the paper should use. The
+in-line "adversary" language below predates the rename.)
 (Peter's analysis, 2026-09-02, recorded verbatim in substance.
 Released version pinned at tag arxiv-2609.01133v1 = paper-r11; all
 changes below are arXiv v2 territory. Kill tests tracked in issue
@@ -249,3 +252,16 @@ probabilities the tail-accuracy claim concerns, the same wall as
 TS-MC and LITE. Lab note: the first run showed TV 0.166 flat in R --
 a data-handoff scramble (jsonlite auto-parses nested lists; do not
 re-wrap), caught because flat-in-R error cannot be Monte Carlo.
+
+## k=16 measured, and the promotion (2026-09-02)
+The evaluator is promoted to a documented reference implementation
+(research/alternatives/cdf_grad_ghk/README.md) so a referee can run
+the comparison. At k=16 the engine still dominates the frontier
+(qmc m=13: TV 0.0022 in 1.5s vs the evaluator's 0.0103 in 1.9s;
+qmc m=10 matches its accuracy at a tenth of the time), but the trend
+is stated honestly in the README: QMC factor error grows with k
+faster than the evaluator's, so a genuine contest may appear near
+k ~ 32-64 at loose accuracy. High-accuracy work belongs to the field
+at any rank by the Rao-Blackwell argument. Language note: these are
+ALTERNATIVES, not adversaries -- the file and directory were renamed
+accordingly, and the paper should use the civil word.

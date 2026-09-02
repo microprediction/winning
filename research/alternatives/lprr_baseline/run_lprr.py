@@ -1,7 +1,7 @@
 """Orchestrates the lpRR complete-vector baseline against the engine.
 
 The strongest factor-aware per-winner baseline (manuscript change 2
-in ADVERSARIES.md): mvtnorm::lpRR on the k+1-column reduced-rank
+in ALTERNATIVES.md): mvtnorm::lpRR on the k+1-column reduced-rank
 difference representation, one call per winner, common Sobol draws.
 The engine's shared field prices the same vector in one pass; lpRR's
 cost is O(R N^2 (k+1)) for the vector against O(QNL). Total
