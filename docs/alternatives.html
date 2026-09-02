@@ -80,7 +80,15 @@
     covariance algebra for very high-dimensional single rectangles.
     <a href="https://cran.r-project.org/package=mlogit">mlogit</a>
     estimates multinomial probit by GHK behind its familiar
-    interface.</p>
+    interface.
+    <a href="https://cran.r-project.org/package=VeccTMVN">VeccTMVN</a>
+    reaches linear cost for a single region by combining Vecchia
+    dependence truncation with minimax tilting, and a 2026
+    doubly-blocked Genz implementation reports order-of-magnitude
+    wall-time gains over the packages above for large single
+    rectangles through cache blocking, SIMD and threading. The
+    pattern across all of them: one region per call, so pricing all
+    N winner events costs N calls however fast each call is.</p>
 
     <h3>Python</h3>
     <p><code>scipy.stats.multivariate_normal.cdf</code> wraps Genz's

@@ -276,3 +276,65 @@ engine at 256 samples). The site gains a top-level Alternatives page
 language, when each is the right choice, and our improvements with
 the not-as-battle-tested caveat stated plainly. Canonical nav updated
 on every page in the same commit per the site rule.
+
+## The code survey (Peter, 2026-09-02): two real overlaps, no
+## collision with the shared field
+Every implementation surveyed computes ONE rectangle per call or
+loops over classes; none forms the common product F_q = prod_j
+Phi(a_jq) and recovers leave-one-out products by division. The two
+real overlaps:
+- mvtnorm::lpRR/slpRR -- the factor-conditioned product-CDF integral
+  FOR ONE WINNER, with analytic derivatives (slpRR). Its source
+  forms inner_jq = Phi(u_j - B_j z_q) - Phi(l_j - B_j z_q),
+  multiplies across j, sums over q: the one-winner integrand. All-N
+  use redoes the O(QNr) product per winner: O(QN^2 r). [Executed:
+  our lpRR baseline measures exactly this.]
+- The ARCHIVED multinomial_probit C++ package (TVBS approximation,
+  BLAS/OpenMP, analytic gradients): the strongest API overlap --
+  returns ALL class probabilities -- but mnp_classpred literally
+  loops for (cl = 0; cl < k; cl++), one difference problem per
+  class, then renormalizes. Archived 2024 with its own accuracy
+  warning; its approxcdf library survives as a fast approximate
+  baseline (reported 2-3 orders over MVNDST at ~3-5 decimals).
+Confirmed conventional: Stata cmmprobit factor(r) reduces PARAMETER
+COUNT not evaluator dimension (documented: winner-specific (J-1)-dim
+Cholesky + GHK); ghkfast() pregenerates points, batches rows sharing
+ONE covariance (winner events do not), documented max dimension 20;
+ghk2() (used by cmp) is faster bookkeeping, same architecture;
+lpmvnorm is an outer loop over rectangles; SciPy's _qmvn processes
+points sequentially; MATLAB batches rows around Genz-Bretz. The
+strongest single-event baselines: the 2026 doubly-blocked Genz
+(blocking/SIMD/threads/BLAS, reported ~100x over mvtnorm and
+tlrmvnmvt at large dimension; one QMCData object, one scalar,
+derivatives listed as future work), tlrmvnmvt, VeccTMVN
+(Vecchia + tilting, linear cost, one region), TruncatedNormal
+(Botev). Even a genuinely O(N) one-event method is O(N^2) applied to
+all N winner cones. [All package descriptions from Peter's survey of
+the sources; verify any quoted line against the repository before it
+enters the paper.]
+
+## The defensible boundary, final form
+Not defensible: first factor-conditioned product-CDF evaluation
+(lpRR); first fast all-class MNP output (Stata predict/TVBS package);
+first analytic derivatives of a factor-aware rectangle (slpRR).
+Defensible, no encroaching implementation found: reuse of ONE
+factor-conditioned field across every winner; all-winner factor
+evaluation linear in N at fixed rank and budget; the matrix-free
+JVP/VJP and the inversion solver built on that field. The safest
+novelty statement, verbatim from the survey: "a shared
+all-alternative evaluator for Gaussian argmax probabilities under
+diagonal-plus-low-rank covariance. Unlike factor-aware rectangle
+routines, which evaluate one focal event per call, it obtains the
+complete winner distribution and associated differential operators
+from a single factor-conditioned product field using leave-one-out
+cavity reuse."
+
+## Benchmark roster for v2 (accuracy-matched, not draw-matched)
+lpRR/slpRR once per winner [DONE]; doubly-blocked Genz once per
+winner [TODO -- most likely to embarrass an underpowered benchmark];
+approxcdf/TVBS and the archived MNP package [TODO]; Stata cmmprobit
+factor(r) + predict, pr [TODO, needs a Stata license]; tlrmvnmvt or
+VeccTMVN where the covariance family suits them [TODO]; the
+CDF-gradient evaluator [DONE]; winning, priced both for one winner
+and the whole vector. TVBS, Vecchia, TLR, FP32 and QMC have
+materially different error regimes -- match accuracy.
