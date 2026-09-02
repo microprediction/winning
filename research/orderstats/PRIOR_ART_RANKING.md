@@ -40,12 +40,27 @@ is MCMC. This is the template quote for the short paper.
   to 1-D outer integrals; ranking-and-selection (Bechhofer 1954)
   uses equicorrelation for SELECTION EVENTS. Nobody composes the
   factor conditioning with the sequential chain for PERMUTATIONS.
-- NEAREST NEIGHBOR, PRIORITY GATE: Ennis & Ennis 2013 (J.
-  Classification 30:124-147, doi:10.1007/s00357-013-9125-8)
-  reportedly expresses a ranking model "in terms of univariate
-  normal distribution functions" for a special RANK-INDUCED
-  dependency structure, not general VV'+D. [UNVERIFIED at full
-  text.] READ IN FULL BEFORE ANY PRIORITY CLAIM.
+- NEAREST NEIGHBOR, GATE SUBSTANTIALLY CLEARED (abstract read
+  verbatim 2026-09-01; full text paywalled): Ennis & Ennis 2013 (J.
+  Classification 30:124-147, doi:10.1007/s00357-013-9125-8).
+  Abstract: "rank-induced dependencies are specified through
+  correlation coefficients among ranked objects that are determined
+  by a vector of rank-induced parameters. The ranking model can be
+  expressed in terms of univariate normal distribution functions...
+  A theorem is proven that shows that the specification given in
+  the paper for the dependencies is THE ONLY WAY that this
+  simplification can be achieved under the process assumptions of
+  the model." So: (a) their dependency structure is a purpose-built
+  rank-induced correlation, NOT a factor model VV'+D; (b) their own
+  uniqueness theorem says univariate reduction cannot be had more
+  generally UNDER THEIR ASSUMPTIONS -- which strengthens our
+  positioning: the factor-conditioning route sidesteps the theorem
+  by paying one quadrature dimension for arbitrary factor structure.
+  Cite prominently, quote the uniqueness sentence, and read the full
+  text before final wording (their theorem's exact scope is the one
+  remaining unknown). Note: distinct from D.M. Ennis's 2013 Journal
+  of Sensory Studies papers (e.g. hedonic mapping) -- same author
+  family, same year, different papers; do not conflate.
 
 ## Rankograms / scale
 Bayesian NMA rank probabilities: posterior resampling; frequentist
