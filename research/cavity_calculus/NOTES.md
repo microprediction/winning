@@ -191,3 +191,29 @@ CL-From-Nothing RLVE Pass8-Rollouts (released per-sample records,
 k=8, 9k prompts; HF). Turnkey regeneration pair if more is wanted:
 LeapLabTHU/limit-of-RLVR pins Qwen2.5-Math-7B base/RL pairs with
 eval code, logs regenerated not shipped.
+
+## exp2_passk measured (2026-09-02): the plug-in extrapolation
+## inside TailSFT's diagnostic costs 13 points at k=8
+Released Pass8-Rollouts (9k prompts x 8 scored samples, Qwen3-4B-
+Thinking, 18 RLVE environments; 3 GB streamed down to a 41 KB
+outcome table). Train on samples 0-3, score on 4-7:
+- Per-prompt held-out pass@4 (a single Bernoulli): plug-in
+  independence 1-(1-s'/4)^4 scores log loss 3.37 (it says
+  "impossible" for every zero-success prompt that then succeeds);
+  hierarchical probit-normal 0.4825; beta-binomial 0.4830. SEVEN
+  TIMES better log loss, 20 percent better Brier, for two fitted
+  parameters.
+- Aggregate extrapolation from the half-sample to k=8: truth 0.682;
+  plug-in 0.549 (13.3 points under); probit 0.663; betabin 0.661.
+  At k=4: plug-in 7.5 points under, probit within 0.9.
+- Family verdict: probit-normal and beta-binomial are a statistical
+  tie here; the probit costs nothing and speaks the engine's
+  language.
+Caveats stated plainly: the bias magnitude depends on the per-prompt
+sample count (4 here; more samples shrink it), and this is Qwen3-4B
+on RLVE, not their OLMo math/code setup -- transfer plausible,
+unshown. The implication for the derived-diagnostic project: the
+f_k(p) = 1-(1-p)^k step inside rho_16 is exactly the plug-in
+predictor measured here, so a posterior-predictive version of their
+own diagnostic is the natural first upgrade, before any Shapley
+machinery enters.
