@@ -99,10 +99,31 @@ def deletion_values(tail, y, wz):
 
 def shapley_banzhaf(tail, y, wz):
     """All Shapley and Banzhaf values by Owen's diagonal, shared field
-    per (z, y, t)."""
-    tg, tw = np.polynomial.legendre.leggauss(QT)
-    tg = 0.5 * (tg + 1.0)
-    tw = 0.5 * tw
+    per (z, y, t).
+
+    The worst t-integrand decays like exp(-t sum_j Fbar_j), a
+    boundary layer whose width varies with y down to ~1/N, so no
+    single change of variables serves every region. Composite
+    quadrature does: panels [0, 1/(2 Neff)], doubling geometrically
+    to 1, eight Gauss-Legendre nodes per panel -- each panel sees at
+    most an e-fold of variation of the worst integrand, and smooth
+    regions are just integrated on more panels than they need. Neff
+    is a high quantile of the field's summed tails; small fields get
+    a single panel and recover plain Gauss-Legendre."""
+    neff = max(1.0, float(np.quantile(tail.sum(axis=1), 0.99)))
+    edges = [0.0]
+    e = 0.5 / neff
+    while e < 1.0:
+        edges.append(e)
+        e *= 2.0
+    edges.append(1.0)
+    g8, w8 = np.polynomial.legendre.leggauss(8)
+    tg_list, tw_list = [], []
+    for a, b in zip(edges[:-1], edges[1:]):
+        tg_list.append(0.5 * (b - a) * (g8 + 1.0) + a)
+        tw_list.append(0.5 * (b - a) * w8)
+    tg = np.concatenate(tg_list)
+    tw = np.concatenate(tw_list)
     n = tail.shape[1]
     phi = np.zeros(n)
     bz = np.zeros(n)

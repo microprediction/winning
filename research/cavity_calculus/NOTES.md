@@ -125,8 +125,13 @@ rankings, three questions. The pairing runs end to end: greedy entry
 selects two of the five duplicates + the specialist; within-group
 Shapley splits the duplicate pair equally (0.356 each, symmetry
 emerging numerically) and pays the specialist most (0.483).
-OPEN ITEM: at n = 2000 the 32-node Gauss-Legendre t-quadrature
-leaves 2.5e-2 efficiency error -- the integrand has a boundary layer
-of width ~1/n at t = 0 (the product behaves as exp(-t sum Fbar)), so
-large-n Shapley needs a warped t-grid or the substitution
-u = t sum(Fbar). Deletions are fine at scale (0.6s at n = 2000).
+RESOLVED (same day): composite geometric t-panels -- [0, 1/(2Neff)]
+doubling to 1, eight Gauss-Legendre nodes per panel -- bring the
+n = 2000 efficiency error from 2.5e-2 to 2.1e-12 at 61s for all 2000
+Shapley values, with n = 5 still at machine precision. Two failed
+attempts recorded in git history for the avoidance of repetition: a
+single exponential warp (wrong direction, worse) and the
+worst-case-uniform substitution t = 1-(1-u)^{1/N} (singular Jacobian
+at u = 1 poisons smooth regions). The layer scale varies with y, so
+no single change of variables serves; panels do. Deletions are 0.6s
+at n = 2000.
