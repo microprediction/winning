@@ -524,7 +524,7 @@ default, under either the Gaussian or the Gumbel base.}
 
 \subsection{Benefits of maintaining the survival field}
 
-Two byproducts are cheap once the field is built, priced per query. Complete all-pairs tables of either have quadratic output size, which no algorithm beats; the code prices requested entries rather than matrices.
+Two byproducts follow once the field is built. Individual entries or removal rows are cheap in principle; the current public routines materialize the full tables, whose output and work are necessarily quadratic.
 
 The first is the density of a dead heat, which is to say the chance that $i$ and $j$
 finish together, per unit of finishing time. It is one more sum over the
