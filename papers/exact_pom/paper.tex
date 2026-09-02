@@ -32,26 +32,24 @@ alone. We observe that in two standard settings the posterior
 covariance is exactly of factor form $\Sigma = WW' + \mathrm{diag}(d)$
 at every step: simulation replicates under common random numbers, and
 per-arm Gaussian observations against a factor prior. In that case
-the whole vector $p$ is a one-dimensional integral per factor node
-and costs $O(nLQ)$ for all $n$ alternatives at once, by machinery
-previously developed for pricing correlated contests. We verify the
-computation against Monte Carlo, then measure two consequences. In a
-stopping problem under common random numbers, rules that stop on
-marginal-only estimates of $p$ hold their nominal error by
-overspending: between $1.5$ and $3.4$ times the replicates of the
-exact rule, which stops earliest in every correlation regime while
-keeping its realized error at the nominal level. In a correlated
-Gaussian bandit, sampling from the exact
-vector reproduces Thompson sampling round for round, as the identity
-between the two requires, and the total-variation gap between the
-variational policy and the object it approximates is measured rather
-than bounded.
+the whole vector $p$ is a one-dimensional integral per factor node,
+computable for all $n$ alternatives at once in time linear in $n$ by
+machinery previously developed for pricing correlated contests, and
+certified here against Monte Carlo. In a stopping problem under
+common random numbers, rules that stop on marginal-only estimates of
+$p$ hold their nominal error by overspending, between $1.5$ and $3.4$
+times the replicates of the exact rule, which stops earliest in every
+correlation regime at the nominal error level. In a correlated
+Gaussian bandit, sampling from the exact vector reproduces Thompson
+sampling round for round, as the identity between the two requires,
+and the total-variation gap between the variational policy and the
+object it approximates is measured rather than bounded.
 \end{abstract}
 
 \section{Introduction}
 
 Let $\theta \in \mathbb{R}^n$ be unknown values of $n$ alternatives
---- simulated systems, bandit arms, candidate molecules --- and let
+(simulated systems, bandit arms, candidate molecules) and let
 $\mathcal{D}$ be data. The posterior probability of optimality is the
 vector
 \begin{equation}
@@ -83,8 +81,8 @@ arms is assumed.'' In ranking and selection, procedures bound the
 probability of correct selection with Bonferroni-type inequalities or
 estimate it by posterior sampling; the joint vector is not evaluated.
 
-This paper makes a narrow claim with broad consequences: in the
-settings these literatures actually study, the posterior covariance
+This paper makes a single observation and develops its consequence.
+In the settings these literatures study, the posterior covariance
 frequently has exact factor form
 \begin{equation}
 \Sigma \;=\; W W' + \mathrm{diag}(d), \qquad W \in
@@ -92,24 +90,16 @@ frequently has exact factor form
 \label{eq:factor}
 \end{equation}
 not as a modeling approximation but as a consequence of the
-observation process --- and for factor-form covariance,
+observation process, and for factor-form covariance
 Equation~\eqref{eq:pom} is computable exactly, for all $i$ at once,
 in time linear in $n$. The computation is not new to this paper: it
 is the correlated-contest pricing pass of \citet{cotton2026}, where
 it is developed together with its derivatives and its inverse and
-benchmarked to $n = 10^6$. What is new here is the observation that
-two canonical posteriors stay inside the factor grammar at every
-update, the identification of the probability-of-optimality
-literature's central object with that pass, and measurements of what
-the exact vector buys where surrogates are currently used.
-
-Section~\ref{sec:computation} states the computation.
-Section~\ref{sec:posteriors} derives the factor form of the two
-posteriors. Section~\ref{sec:surrogates} recalls what the
-marginal-only surrogates compute and the identity connecting
-Equation~\eqref{eq:pom} to Thompson sampling.
-Sections~\ref{sec:stopping} and~\ref{sec:bandit} measure.
-Section~\ref{sec:limits} states what is not claimed.
+benchmarked to $n = 10^6$. This paper adds the derivation that two
+canonical posteriors stay inside the factor grammar at every update,
+the identification of the probability-of-optimality literature's
+central object with that pass, and measurements of what the exact
+vector buys where surrogates are currently used.
 
 \section{The computation}
 \label{sec:computation}
@@ -133,8 +123,8 @@ p_i \;=\; \mathbb{E}_z \int f_{i|z}(x)\,
 \label{eq:cavity}
 \end{equation}
 On a lattice of $L$ points with $Q$ quadrature nodes over $z$, the
-cost is $O(nLQ)$ for the whole vector, with the numerical care ---
-window placement, log-domain products, tail handling --- described in
+cost is $O(nLQ)$ for the whole vector, with the numerical care
+(window placement, log-domain products, tail handling) described in
 \citet{cotton2026}, whose implementation is used unchanged here. Every
 exact vector reported below is certified against Monte Carlo argmax
 frequencies at $2 \times 10^5$ draws; the worst certificate
@@ -229,7 +219,7 @@ Equation~\eqref{eq:wood2} onward is unchanged: the posterior is
 exactly factor-plus-diagonal after every pull, with the same rank
 $\rho$ as the prior.
 
-\section{The surrogates, and the identity they approximate}
+\section{The marginal-only surrogates and the Thompson identity}
 \label{sec:surrogates}
 
 Two computable policies stand in for Equation~\eqref{eq:pom} in
@@ -267,11 +257,10 @@ new policy but a derandomization-ready form of the old one, and the
 regret curves of the two must coincide in expectation. That
 coincidence is measured, not assumed, in Section~\ref{sec:bandit}.
 Under simple-regret loss the one-step value of a measurement is the
-knowledge-gradient quantity \citep{frazier2008}, and
-\citet{tuisov2026} shows this is the normative myopic value of
-computation while noting that the exact dynamic version ``is itself
-generally intractable''; the present paper supplies the exact myopic
-quantities, for factor-Gaussian beliefs, at scale.
+knowledge-gradient quantity \citep{frazier2008}. \citet{tuisov2026}
+shows this is the normative myopic value of computation, noting that
+the exact dynamic version ``is itself generally intractable''; for
+factor-Gaussian beliefs the myopic quantities are exact, at scale.
 
 \section{Stopping under common random numbers}
 \label{sec:stopping}
@@ -366,26 +355,25 @@ up under correlation.}
 \label{tab:bandit}
 \end{table}
 
-\section{Limits of the claim}
+\section{Scope}
 \label{sec:limits}
 
-The claim is exactness for factor-form posteriors, and the two
-derivations of Section~\ref{sec:posteriors} are exact because the
-observation processes there are themselves factor-structured. When
-scenario effects enter a simulation nonlinearly, the low-rank model
-of $\Lambda$ is an approximation and the posterior inherits its
-error; when a Gaussian-process kernel is dense and short-scaled, a
-factor fit must precede the pass and its residual is the price.
+The derivations of Section~\ref{sec:posteriors} are exact because
+the observation processes there are themselves factor-structured.
+When scenario effects enter a simulation nonlinearly, the low-rank
+model of $\Lambda$ is an approximation and the posterior inherits
+its error; when a Gaussian-process kernel is dense and short-scaled,
+a factor fit must precede the pass and its residual is the price.
 Nothing here computes the dynamic value of computation, which
-\citet{tuisov2026} is right to call intractable in general: what is
-supplied is the exact evaluation of the myopic quantities his Bellman
-characterization prices, and of the stopping certificates. The
-optimistic tilt of Equation~\eqref{eq:vbos} is load-bearing in its
-regret analysis; measuring its distance from $p$ quantifies the
-approximation, and does not by itself argue the tilt away. Finally,
-Thompson sampling needs one posterior sample and no vector; the
-vector pays where sampling does not suffice --- stopping,
-allocation, constraints, derandomization --- which is where the
+\citet{tuisov2026} is right to call intractable in general: this
+paper supplies the exact myopic quantities his Bellman
+characterization prices, and the stopping certificates. The
+optimistic tilt of Equation~\eqref{eq:vbos} carries the regret
+analysis of \citet{odonoghue2021}; measuring its distance from $p$
+quantifies the approximation, and does not by itself argue the tilt
+away. Finally, Thompson sampling needs one posterior sample and no
+vector; the vector pays where sampling does not suffice (stopping,
+allocation, constraints, derandomization), which is where the
 measurements above are taken.
 
 \begin{thebibliography}{9}
