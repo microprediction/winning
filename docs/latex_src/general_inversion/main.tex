@@ -136,7 +136,30 @@ and judged impractical.
 The expression of winning probability for the case of independent performances is standard in competing-risks
 calculus: $G=\prod_k S_k$ is the all-causes survival and $f_i/S_i$ the
 cause-specific hazard, so $p_i=\int G\,(f_i/S_i)$ is the classical
-cause-probability formula \citep{kalbfleisch2002}.
+cause-probability formula \citep{kalbfleisch2002}. The same quotient
+surfaces in an entirely different corner of the literature: pricing a
+top-two sampling rule for Bayesian best-arm identification,
+\citet{russo2020} obtains every arm's posterior probability of
+optimality under independent Beta posteriors by storing the product
+of their distribution functions on a quadrature grid and dividing out
+each arm's own factor (Algorithm~4 of the expanded
+preprint).\footnote{Dividing out is meant literally there:
+Algorithm~4 forms the quotient by floating-point division, once per
+arm and again in the incremental update of the stored product ---
+harmless for smooth Beta posteriors on a bounded interval. Our
+implementations never divide. The factor engine subtracts in the log
+domain, which survives the deep tails where a divided-out
+distribution function has already underflowed, and the lattice engine
+of \citet{cotton2021} replaces the quotient with the multiplicity
+calculus, which atomic performance distributions require: at an atom
+of $X_i$ the density-times-quotient form of the integrand is not
+available at all.} That
+the identity appears there as an appendix subroutine and above as
+textbook competing-risks calculus says it is the natural computation
+under independence. Correlation is where the present paper begins:
+the factor-conditioned field, and its reuse for derivatives, share
+inversion at scale, and removal counterfactuals, have no counterpart
+in those settings.
 \citet{fosgerau2013} considering random-utility models treat the expected maximum as potential  and its gradient as probabilities. Choice probability is
 an integral along the common maximum level.
 
@@ -2098,6 +2121,10 @@ the simplex. \emph{Mathematics of Operations Research} 47(1):485--507,
 \bibitem[Pearlmutter(1994)]{pearlmutter1994} B.~A. Pearlmutter.
 Fast exact multiplication by the Hessian. \emph{Neural Computation}
 6(1):147--160, 1994.
+\bibitem[Russo(2020)]{russo2020} D.~Russo. Simple Bayesian algorithms
+for best-arm identification. \emph{Operations Research}
+68(6):1625--1647, 2020. Algorithm~4 appears in the expanded preprint,
+arXiv:1602.08448.
 \bibitem[Solow(1990)]{solow1990} A.~R. Solow.
 A method for approximating multivariate normal orthant probabilities.
 \emph{Journal of Statistical Computation and Simulation} 37:225--229, 1990.
