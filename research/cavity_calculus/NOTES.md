@@ -135,3 +135,31 @@ worst-case-uniform substitution t = 1-(1-u)^{1/N} (singular Jacobian
 at u = 1 poisons smooth regions). The layer scale varies with y, so
 no single change of variables serves; panels do. Deletions are 0.6s
 at n = 2000.
+
+## Pass@k is an extremal portfolio: TailSFT (noted 2026-09-02)
+TailSFT (arXiv:2608.25756, Malladi-Jelassi-Foster-Ash-Krishnamurthy,
+Aug 2026 [U beyond abstract]): supervised fine-tuning that filters
+out already-fit sequences, concentrating learning on the
+UNDER-MODELED TAIL of the data distribution; up to 17 percent
+absolute pass@16 gains on OLMo-3 7B math/coding, up to 4 percent
+pass@1 after GRPO initialized from TailSFT checkpoints, plus a
+diagnostic for when it helps.
+
+Why it is up our alley: pass@k = P(at least one of k correlated
+samples succeeds) = the extremal value of a sample portfolio -- the
+availability-field object of this note with the samples as
+candidates and the model's own correlation as the factor structure.
+The duplicates-versus-specialist experiment (exp1_shapley) is the
+mechanism in miniature: mode mass is the near-duplicate block (high
+pass@1 credit, replaceable draws), tail mass is the rare-upside
+specialist (what actually moves E[max] and pass@k). TailSFT is
+empirical post-training confirmation that shifting mass into the
+tail buys the extremal objective -- training toward the Shapley-
+valuable region rather than the PoM-heavy one. Connects to:
+research/design/rollout_control.md (best-of-N as a race; killing
+duplicates), the posttraining Luce-vs-probit thread (pass@k
+optimization is E[max] under correlated probit, not independent
+Luce), and papers/exact_pom (the vector that prices which samples
+plausibly win). Candidate question for the tracker: does a
+factor-probit model of per-sample success predict WHICH prompts
+TailSFT helps -- their diagnostic, derived rather than fitted?
