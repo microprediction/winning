@@ -42,7 +42,11 @@ polynomial C^{(-i)} excluding i,
    equicorrelation the tractable case. The factor grammar is far
    richer than equicorrelation and scales to enormous n.
 4. NAMED-RANK MATRIX P_ir = P(X_i = X_(r)), r <= K: the n x K
-   rankogram at O(nKLQ). Exactly what network meta-analysis wants
+   rankogram at O(nKLQ). THE CORE COMPUTATION ALREADY SHIPS:
+   winning/factor/topk.py rank_probabilities (count DP +
+   stable-direction deconvolution, tested in tests/test_topk.py) --
+   what remains is positioning and a demo, not code. Exactly what
+   network meta-analysis wants
    (rank probabilities currently from posterior draws/resampling);
    NMA is small-n but validates the output as wanted. Do NOT claim
    novelty for independent k-th order statistics -- permanent
@@ -63,15 +67,49 @@ polynomial C^{(-i)} excluding i,
    Laplacian Jv. "Who tends to follow whom in rank" as an enormous
    graph without constructing edges.
 
-## The sharp boundary (candidate organizing theorem)
-Field-friendly: how many below a threshold; who has rank r; fixed-k
-spacings and range. Still hard: the entire permutation
-P(X_pi1 < ... < X_pin) ((n-1)-dim normal integral; Thurstonian
-papers simulate) and many JOINT order statistics
-P(X_(k1) <= x1, ..., X_(kd) <= xd) -- the conditional count state
-across d+1 intervals grows combinatorially in d, and a 2021 DP paper
-calls even the independent case computationally difficult. The
-conditioning trick does not abolish that.
+## The recursive order cavity (Peter, same date: "I overstated the
+## obstruction")
+A SPECIFIED ordering is one-dimensional after a recursion. Min-wins,
+conditional on a factor node, for the event
+pi_1 < pi_2 < ... < pi_k < everyone else:
+
+    H_1(x) = F_{pi_1}(x),
+    H_m(x) = int_{-inf}^x f_{pi_m}(t) H_{m-1}(t) dt,
+
+so H_m(x) = P(X_{pi_1} < ... < X_{pi_m} < x), and
+
+    P(top-k prefix in that order)
+      = int f_{pi_k}(x) H_{k-1}(x) prod_{j not in pi} S_j(x) dx,
+
+the outside product being the usual survival cavity G/(prod_m
+S_{pi_m}). With k = n the outsiders vanish and ONE SPECIFIED FULL
+PERMUTATION is H_n(inf): O(nL) independent, O(nLQ) factor -- a chain
+of cumulative one-dimensional integrals in place of an
+(n-1)-dimensional orthant integral. k=2 recovers
+A_ij = int f_j F_i prod S_l; k=3 needs one inner H.
+
+IMPLICATION FOR RANK-DATA LIKELIHOODS: an observed ranking (full or
+top-k with ties to "rest") is ONE permutation/prefix -- so a
+correlated Thurstone / factor-Gaussian rank likelihood is evaluated
+exactly by these recursions, no MVN orthant integral, no simulation.
+Next literature search: exact top-k Thurstonian rank-order
+likelihood under factor-correlated errors -- this may knock down
+something still treated as a high-dimensional Gaussian integral.
+Numerical wrinkle: the winner-concentrated lattice window is wrong
+for deep recursions; a full permutation needs the window to follow
+the order to the last finisher (top 2-5 only needs the low order
+statistics' bulk, which the count field locates).
+
+## The sharp boundary, corrected (candidate organizing theorem)
+Field-friendly: counts below a threshold; who has rank r; fixed-k
+spacings and range; ANY specified permutation or top-k prefix (the
+recursion above). Still hard: joint VALUES of several order
+statistics P(X_(k1) <= x1, ..., X_(kd) <= xd) -- the conditional
+count state across d+1 intervals grows combinatorially in d (a 2021
+DP paper calls even the independent case difficult) -- and
+ENUMERATING all top-k tuples, whose output size n(n-1)...(n-k+1) no
+algorithm beats. Queried orderings are cheap; enumerated order
+statistics' joint laws are not.
 
 ## Paper candidate
 "Order Statistics of Large Factor-Correlated Populations by
