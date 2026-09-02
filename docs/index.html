@@ -211,6 +211,21 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         Supersedes the earlier
         <a href="./assets/pdf/factor_probit_share_calibration.pdf">share-calibration
         draft</a>.</li>
+      <li><a href="./assets/pdf/exact_pom_factor_gaussian.pdf">Exact
+        posterior probability of optimality for factor-Gaussian
+        beliefs</a> (2026, draft). The probability that an alternative
+        is truly best, declared intractable in reinforcement learning
+        and approximated there from marginal means and variances alone,
+        is exact and linear-time whenever the posterior covariance is
+        factor-plus-diagonal &mdash; and two standard observation
+        processes, common random numbers and per-arm Gaussian
+        observations, keep it in that form at every update. Measured
+        consequences: stopping on the exact vector holds the nominal
+        error at between a third and two-thirds of the replicate spend
+        of the marginal-only rules, and sampling from the exact vector
+        reproduces Thompson sampling's regret to within replication
+        noise, as the occupancy identity requires. Experiments under
+        <code>research/rs_crn/</code>.</li>
       <li><a href="./assets/pdf/collision_local_times_note.pdf">Computation of
         collision local times: a connection between new scalable probit
         methodology and Atlas models</a> (2026, research note). The

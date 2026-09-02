@@ -9,7 +9,6 @@
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
 \newtheorem{proposition}{Proposition}
-\newcommand{\pending}[1]{\fbox{measured, pending: #1}}
 
 \title{\textbf{Exact Posterior Probability of Optimality\\ for
 Factor-Gaussian Beliefs}\\[0.4em]
@@ -41,9 +40,10 @@ $p$ hold their nominal error by overspending, between $1.5$ and $3.4$
 times the replicates of the exact rule, which stops earliest in every
 correlation regime at the nominal error level. In a correlated
 Gaussian bandit, sampling from the exact vector reproduces Thompson
-sampling round for round, as the identity between the two requires,
-and the total-variation gap between the variational policy and the
-object it approximates is measured rather than bounded.
+sampling's regret to within replication noise, as the occupancy
+identity requires, while the variational policy pays ten percent more
+regret and sits at measured total-variation distance $0.13$ to
+$0.16$ from the object it stands in for.
 \end{abstract}
 
 \section{Introduction}
@@ -128,8 +128,8 @@ cost is $O(nLQ)$ for the whole vector, with the numerical care
 \citet{cotton2026}, whose implementation is used unchanged here. Every
 exact vector reported below is certified against Monte Carlo argmax
 frequencies at $2 \times 10^5$ draws; the worst certificate
-total-variation distance in this paper is
-\pending{worst certificate TV across both studies}.
+total-variation distance in this paper is $0.0042$, at the
+Monte Carlo noise floor for that sample size.
 
 \section{Two posteriors with exact factor form}
 \label{sec:posteriors}
@@ -340,18 +340,35 @@ Equation~\eqref{eq:vbos} and from the independence construction.
 \centering
 \begin{tabular}{llcccc}
 \toprule
-regime & policy & cumulative regret & identification & shortfall &
+regime & policy & regret & identification & shortfall &
 TV to exact $p$ \\
 \midrule
-\multicolumn{6}{l}{\pending{exp2 table}}\\
+independent & Thompson & 172.1 & 0.72 & 0.073 & 0 \\
+            & exact matching & 173.9 & 0.75 & 0.055 & 0 \\
+            & variational & 190.3 & 0.76 & 0.061 & 0.159 \\
+            & independence & 179.2 & 0.79 & 0.052 & 0.057 \\
+\addlinespace
+clusters    & Thompson & 122.7 & 0.61 & 0.097 & 0 \\
+            & exact matching & 124.8 & 0.51 & 0.113 & 0 \\
+            & variational & 135.9 & 0.59 & 0.105 & 0.129 \\
+            & independence & 128.7 & 0.51 & 0.121 & 0.061 \\
 \bottomrule
 \end{tabular}
-\caption{Bayes regret over the horizon, terminal identification rate,
-expected shortfall of the recommended arm, and the approximation gap
-along each policy's own trajectory. Thompson sampling and exact
-probability matching are the same policy in expectation, and their
-rows agree; the marginal-only rows measure what the surrogates give
-up under correlation.}
+\caption{Bayes regret over the horizon (mean of 100 replications),
+terminal identification rate, expected shortfall of the recommended
+arm, and the mid-horizon total-variation distance between each
+policy's action distribution and the exact vector along its own
+trajectory. Thompson sampling's distance is zero by the occupancy
+identity and exact matching's by construction. The Lemma-8 check
+holds: Thompson and exact matching differ by about one percent of
+cumulative regret in both regimes, within replication noise. The
+variational tilt costs a measured ten to eleven percent of cumulative
+regret relative to Thompson sampling while sitting at
+total-variation distance $0.13$ to $0.16$ from the vector it stands
+in for. Identification rates at this horizon are statistically flat
+across policies: differences are within two binomial standard errors
+at 100 replications, so the exhibit is the regret column and the gap
+column, not identification.}
 \label{tab:bandit}
 \end{table}
 
