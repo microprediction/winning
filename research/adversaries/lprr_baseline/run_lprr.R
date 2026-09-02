@@ -11,9 +11,7 @@ args <- commandArgs(trailingOnly = TRUE)
 inst <- fromJSON(args[1])
 R_draws <- as.integer(args[2])
 
-mu <- inst$mu; V <- matrix(unlist(inst$V), nrow = length(mu),
-                           byrow = TRUE)
-d <- inst$d
+mu <- inst$mu; V <- as.matrix(inst$V); d <- inst$d
 N <- length(mu); k <- ncol(V)
 
 # common scrambled Sobol over the k+1 latent dimensions (qrng if
@@ -38,5 +36,9 @@ for (i in 1:N) {
                   mean = 0, B = B, D = Dm, Z = Z, log.p = TRUE)
 }
 secs <- proc.time()[3] - t0
-cat(toJSON(list(logp = logp, seconds = secs,
+# deep-tail winners can return -Inf/NA at finite R; floor them so the
+# JSON stays numeric, and report how many were floored
+n_floored <- sum(!is.finite(logp))
+logp[!is.finite(logp)] <- -745
+cat(toJSON(list(logp = logp, seconds = secs, floored = n_floored,
                 sobol = qrng_available), digits = 12))

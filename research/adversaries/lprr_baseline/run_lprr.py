@@ -60,8 +60,8 @@ if __name__ == "__main__":
             res = json.loads(out.stdout)
             p = np.exp(np.array(res["logp"]))
             row[f"lprr_R{R}"] = dict(
-                seconds=res["seconds"],
-                sobol=bool(res["sobol"]),
+                seconds=float(np.atleast_1d(res["seconds"])[0]),
+                sobol=bool(np.atleast_1d(res["sobol"])[0]),
                 mass=float(p.sum()),
                 tv=float(0.5 * np.abs(p - p_exact).sum()),
                 tv_normalized=float(0.5 * np.abs(p / p.sum()

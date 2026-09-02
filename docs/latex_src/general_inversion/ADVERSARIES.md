@@ -223,3 +223,29 @@ Consequence for v2 and the package: at k >= 4 the engine should
 default to QMC factor nodes (tracked in issue 21); the adversary
 paragraph can now cite both the constructed adversary AND its
 measured defeat by the shipped defense.
+
+## The lpRR complete-vector baseline, measured (2026-09-02,
+## research/adversaries/lprr_baseline/)
+Manuscript change 2 executed: mvtnorm::lpRR (v1.4.1) on the
+k+1-column reduced-rank difference representation, one call per
+winner, common draws across winners (pseudo-random commons; qrng not
+installed -- rerun with scrambled Sobol before the paper table). The
+construction was validated against pmvnorm at N=5 to four decimals,
+so the reduced-rank equivalence is confirmed operational. Complete-
+vector results, k=2, TV against the exact engine:
+  N=50:   engine 0.007s | lpRR R=512 TV 0.0063 in 0.05s
+                        | R=4096 TV 0.0007 in 0.33s
+  N=200:  engine 0.025s | R=512 TV 0.0094 in 0.67s
+                        | R=4096 TV 0.0019 in 5.5s
+  N=1000: engine 0.124s | R=512 TV 0.0229 in 17.4s
+                        | R=4096 TV 0.0061 in 148s
+The O(RN^2) analysis is measured: five times N costs lpRR
+twenty-six times the time (engine: five), AND its accuracy at fixed
+R degrades with N (TV 0.006 -> 0.023 at R=512). At N=1000 the gap is
+140x at worse accuracy or 1200x at TV 0.006. Tail finding: at finite
+R, lpRR returns -Inf for deep-tail winners (floored and counted in
+the harness) -- the per-winner simulator cannot resolve the longshot
+probabilities the tail-accuracy claim concerns, the same wall as
+TS-MC and LITE. Lab note: the first run showed TV 0.166 flat in R --
+a data-handoff scramble (jsonlite auto-parses nested lists; do not
+re-wrap), caught because flat-in-R error cannot be Monte Carlo.
