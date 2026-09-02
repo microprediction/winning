@@ -390,3 +390,29 @@ The assembly claim, final: factor conditioning + shared
 all-alternative field + derivatives + inverse map + removal
 counterfactuals + large-N implementation. First to assemble; no
 component alone.
+
+## Kill test B measured: the block-leaf hybrid is a wash, the dense
+## fit is the surprise (2026-09-02, research/alternatives/block_leaf/)
+Arbitrary dense Wishart blocks (outside the private-factor grammar),
+MC leaves + exact cross-block cavity via one shared log-CDF grid
+(linear in block count), against wall-clock-matched global MC, the
+engine's dense fit, and 2e7-draw truth:
+  n=64  m=8 : hybrid 0.022 | global 0.012 | grammar fit 0.017
+  n=512 m=8 : hybrid 0.036 | global 0.033 | grammar fit 0.010
+  n=512 m=16: hybrid 0.043 | global 0.036 | grammar fit 0.011
+  n=4096 m=8: hybrid 0.078 | global 0.061 (fit not run)
+Per SAMPLE the hybrid wins ~2.4x in variance (at matched normals,
+33.5M each at n=4096: hybrid 0.078 vs projected 0.121 global) -- the
+cross-block Rao-Blackwell is real. Per SECOND it loses narrowly in
+numpy: the sorts and searchsorted passes cost more than the sampling
+they save while global MC is a pure generation pipeline; a compiled
+leaf would likely flip it, and that stays conjecture until compiled.
+THE SURPRISE: the engine's dense fit reaches TV ~0.010 on blocks
+built to be hostile to the grammar, three times better than either
+MC arm at practical budgets -- the fit residual is smaller than MC
+noise, vindicating the dense-Sigma section from the flank it was
+attacked on. Verdict for the survey's "genuinely competitive" rating:
+measured as a wash against plain MC and second to the engine's own
+fit on accuracy; the hybrid earns a place only where fit bias is
+unacceptable (deep tails, singular contrasts) AND the leaf is
+compiled. Kill test B passes for the engine.
