@@ -112,3 +112,21 @@ Track cavity-method prior art (Owen/multilinear-extension lineage,
 extremal-value attribution, availability-field constructions) before
 any novelty claim -- same discipline as the rollout-pruning tracker
 in research/design/rollout_control.md.
+
+## exp1_shapley: the attribution twin, measured (2026-09-02)
+Owen-diagonal Shapley matches exhaustive 2^5 enumeration to 1.7e-16
+(efficiency to 4e-16; value and deletion match 2M-draw MC to four
+decimals). The decisive experiment delivers: with five
+near-duplicates and one rare-upside specialist, PoM ranks the
+duplicate block first collectively (0.30) and the specialist 0.20;
+deletion gives the duplicates 0.008 EACH and the specialist 0.28;
+Shapley pays duplicates 0.127 each and the specialist 0.37. Three
+rankings, three questions. The pairing runs end to end: greedy entry
+selects two of the five duplicates + the specialist; within-group
+Shapley splits the duplicate pair equally (0.356 each, symmetry
+emerging numerically) and pays the specialist most (0.483).
+OPEN ITEM: at n = 2000 the 32-node Gauss-Legendre t-quadrature
+leaves 2.5e-2 efficiency error -- the integrand has a boundary layer
+of width ~1/n at t = 0 (the product behaves as exp(-t sum Fbar)), so
+large-n Shapley needs a warped t-grid or the substitution
+u = t sum(Fbar). Deletions are fine at scale (0.6s at n = 2000).
