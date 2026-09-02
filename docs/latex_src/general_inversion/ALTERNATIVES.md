@@ -416,3 +416,20 @@ measured as a wash against plain MC and second to the engine's own
 fit on accuracy; the hybrid earns a place only where fit bias is
 unacceptable (deep tails, singular contrasts) AND the leaf is
 compiled. Kill test B passes for the engine.
+
+## Benchmark fairness audit (2026-09-02, prompted by Peter)
+The engine dispatches to the Rust kernel when fastrace is importable,
+so the kill-test wall-clocks mixed implementations. Ledger:
+- Accuracy comparisons (TV, tail errors, per-sample efficiency,
+  cost SLOPES) are implementation-free and carry the substance.
+- CDF-gradient vs engine: JAX XLA vs Rust, both compiled, 4 threads
+  each -- roughly fair.
+- Hybrid vs global MC: both numpy -- fair (house precedent:
+  converge.html races JS against JS for this reason).
+- Engine vs lpRR wall-clock WAS confounded. Measured correction with
+  WINNING_PURE=1 (numpy engine, no Rust): n=1000 exact in 0.98s
+  (Rust: 0.13s -- the language factor is ~7x). Same-tier against
+  lpRR: 18x faster than its R=512 run at better-than-its accuracy,
+  150x at its R=4096 accuracy. The v2 table must name the
+  implementation per row and include the pure-python engine column;
+  the quadratic-vs-linear slope needs no correction.
