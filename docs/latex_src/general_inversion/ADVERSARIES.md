@@ -192,3 +192,16 @@ JAX; a GPU implementation moves the crossover down. For v2: the
 "untested" sentence can now cite a measured prototype, and
 sparse/QMC factor nodes are promoted from nicety to the identified
 defense of the high-rank flank.
+
+## Stata's factor(#) is parameterization, not computation (Peter,
+## 2026-09-02)
+Modern Stata's multinomial-probit commands accept factor(#), but the
+manual shows this only PARAMETERIZES the covariance as I + C'C; the
+evaluator still Cholesky-factorizes each (J-1)-dimensional difference
+covariance and runs ordinary GHK. "Factor model" in Stata does not
+mean factor-conditioned low-dimensional integration. [Verify the
+exact manual wording before quoting in v2.] Useful for benchmark
+rhetoric: the flagship applied implementation that KNOWS the factor
+structure still pays the dense per-alternative cost -- the
+structure-exploiting computation is absent from practice, not merely
+from theory.
