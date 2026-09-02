@@ -163,3 +163,31 @@ Luce), and papers/exact_pom (the vector that prices which samples
 plausibly win). Candidate question for the tracker: does a
 factor-probit model of per-sample success predict WHICH prompts
 TailSFT helps -- their diagnostic, derived rather than fitted?
+
+## TailSFT gate check (agent, 2026-09-02): PARTIAL, favorably
+No code, checkpoints, or eval logs released (absence confirmed on
+the abs and HTML pages; GitHub/HF searches empty). BUT their
+diagnostic does not need their model: rho_16 = L/G, coverage lost
+vs gained by STANDARD SFT relative to the BASE model on the
+base-reachable set (base pass@16 in [0.05, 0.95], pass@16 estimated
+from pass@1 by 1-(1-p)^16); decision rule rho_16 > 1. Inputs = base
++ standard-SFT per-prompt pass rates only -- both computable from
+public AI2 checkpoints (allenai/Olmo-3-1025-7B and
+Olmo-3-7B-Think-SFT, Apache-2.0; no hosted API for the base, so
+self-hosted vLLM or Apple-silicon inference; AI2 ships no per-sample
+generative logs).
+
+Reshaped experiment, feasible with public artifacts: generate 16+
+samples/prompt for base and Think-SFT on their eval suite, fit the
+factor-probit success model, compute the tail-value decomposition,
+and test whether it REPRODUCES rho_16's dataset-benchmark ranking
+against the paper's printed per-pair coverage gains. Full per-prompt
+validation against actual TailSFT behavior requires reimplementing
+the recipe or author contact -- gated on a GPU/effort decision.
+
+Fallback runnable TODAY at zero generation cost: correlated probit
+vs beta-binomial independence for pass@k prediction on
+CL-From-Nothing RLVE Pass8-Rollouts (released per-sample records,
+k=8, 9k prompts; HF). Turnkey regeneration pair if more is wanted:
+LeapLabTHU/limit-of-RLVR pins Qwen2.5-Math-7B base/RL pairs with
+eval code, logs regenerated not shipped.
