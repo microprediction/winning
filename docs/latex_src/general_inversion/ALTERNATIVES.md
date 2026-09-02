@@ -230,8 +230,9 @@ measured defeat by the shipped defense.
 ## research/adversaries/lprr_baseline/)
 Manuscript change 2 executed: mvtnorm::lpRR (v1.4.1) on the
 k+1-column reduced-rank difference representation, one call per
-winner, common draws across winners (pseudo-random commons; qrng not
-installed -- rerun with scrambled Sobol before the paper table). The
+winner, common scrambled-Sobol draws across winners (qrng digital
+shift, confirmed by the harness flag 2026-09-02 -- the numbers are
+paper-grade as they stand). The
 construction was validated against pmvnorm at N=5 to four decimals,
 so the reduced-rank equivalence is confirmed operational. Complete-
 vector results, k=2, TV against the exact engine:
