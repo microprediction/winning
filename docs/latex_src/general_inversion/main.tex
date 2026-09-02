@@ -36,7 +36,7 @@ expensive integral per alternative. Inversion, which is to say determining item
 attractiveness consistent with a prescribed choice probability vector, is even more difficult and has been
 considered impractical for correlated contests when $n$ is large. Yet here, for families lying within a grammar including factor, block and hierarchical covariance structures, we exhibit a calibration tested at $n=1{,}000{,}000$ reproducing probabilities to very high accuracy, even in the extreme tail. We must return to much smaller problems for any performance comparison to be possible due to limitations of the prior art. The Geweke--Hajivassiliou--Keane simulator is the standard (and still appropriate for high rank) but is two hundred times slower
 already at $n=200$, and its measured cost grows roughly as $n^{2.8}$ while
-ours is linear. Furthermore our approach applies to any continuous performance distributions within reason: the Thurstone--Mosteller model families
+ours is linear. Furthermore the independent and factor implementations apply to any sufficiently regular continuous performance distribution, while the current block, nested and tree kernels are Gaussian: the Thurstone--Mosteller model families
 thereby become a practical alternative to logit at modern scale.
 \end{abstract}
 
@@ -158,7 +158,7 @@ the identity appears there as an appendix subroutine and above as
 textbook competing-risks calculus says it is the natural computation
 under independence. Correlation is where the present paper begins:
 the factor-conditioned field, and its reuse for derivatives, share
-inversion at scale, and removal counterfactuals, have no counterpart
+inversion at scale, and removal counterfactuals, are not developed
 in those settings.
 \citet{fosgerau2013} considering random-utility models treat the expected maximum as potential  and its gradient as probabilities. Choice probability is
 an integral along the common maximum level.
@@ -203,7 +203,8 @@ scrambled-Sobol nodes.
 
 Our caveats aside regarding the general covariance problem, we provide in the accompanying code a method for fitting arbitrary covariance to the grammar we specify, as developed in \S\ref{sec:general}. However, for truly high rank problems where accuracy is paramount, we make no claim of superiority over GHK; on the contrary, it should remain the appropriate choice if the problem at hand fails to establish otherwise.
 
-\begin{table}[h]\centering\small
+\begin{table}[h]\centering\footnotesize
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lll}
 \toprule
 model & covariance grammar & source \\
@@ -523,7 +524,7 @@ default, under either the Gaussian or the Gumbel base.}
 
 \subsection{Benefits of maintaining the survival field}
 
-Two byproducts are cheap once the field is built.
+Two byproducts are cheap once the field is built, priced per query. Complete all-pairs tables of either have quadratic output size, which no algorithm beats; the code prices requested entries rather than matrices.
 
 The first is the density of a dead heat, which is to say the chance that $i$ and $j$
 finish together, per unit of finishing time. It is one more sum over the
@@ -926,8 +927,8 @@ is symmetric with signed off-diagonals and zero row sums.
 
 They draw no graph and build no
 algorithm from it, their object being convexity moduli for
-prox-functions, and their cross-derivative remains an $(n-2)$-fold
-integral of the joint density.
+prox-functions, and their cross-derivative still integrates over the
+common tie level together with the remaining $n-2$ coordinates.
 
 Our face parametrization reduces
 the same object to a one-dimensional integral of a pair density against
@@ -1210,7 +1211,9 @@ form the residual);
 \item log residual $r_i=\log\hat p_i-t_i$; log-domain slope
 $d_i=\min(\tilde s_i/\hat p_i,\,-10^{-6})$;
 \item damped, clipped preconditioned step
-$\mu_i\leftarrow\mu_i-\operatorname{clip}(\alpha\,r_i/d_i,\pm2)$,
+$\mu_i\leftarrow\mu_i-\operatorname{clip}(\alpha\,r_i/d_i,\pm\ell_i)$
+with the residual-dependent cap $\ell_i=\min\{2,\,10\,|r_i|\}$, so
+no coordinate moves much further than its own residual warrants;
 then recenter $\mu\leftarrow\mu-\bar\mu$.
 \end{enumerate}
 Damping: $\alpha=1$ ($0.7$ at $n=2$, where the undamped update on the
@@ -1390,7 +1393,11 @@ promoted; numerically dead columns are dropped.
 solves the projected problem's own normal equations,
 $(P\!\circ\!P)\,d=\mathrm{diag}(P(\Sigma-V_{\mathrm{all}}V_{\mathrm{all}}')P)$
 subject to $d_i\ge\ell_i$, where the floor is relative to each runner's
-own variance, $\ell_i=10^{-6}\,\Sigma_{ii}$. Relative matters: an
+own variance, $\ell_i=10^{-6}\max\{\Sigma_{ii},\,10^{-6}\bar\Sigma\}$
+with $\bar\Sigma$ the mean diagonal entry; the inner term guards
+exactly-zero rows and sits twelve orders of magnitude below the mean,
+so the floor stays relative wherever a variance exists. Relative
+matters: an
 absolute floor at a multiple of the \emph{mean} variance destroys nearly
 singular contrasts, and $\Sigma=\mathrm{diag}(10^{-8},10^{-8},1)$ makes
 the failure vivid --- it forced $\mathrm{Var}(X_1-X_2)$ from
