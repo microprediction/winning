@@ -61,9 +61,13 @@
     &mdash; milliseconds for the structured grammars, a second or two of
     single-threaded JavaScript for the dense fits (the compiled engines
     are another two orders of magnitude faster).
-    <span class="ghk">GHK</span> must factor one
+    Generic dense <span class="ghk">GHK</span> factors one
     (n&minus;1)-dimensional difference covariance <em>per contestant</em>
-    before its first draw, then simulates its way down.
+    before its first draw, then simulates its way down. (Reduced-rank
+    Genz avoids the dense factorization for factor covariance, but
+    still prices the winner events separately rather than reusing
+    their common product; that is the version benchmarked in the
+    paper.)
     <span class="me">Mendell&ndash;Elston</span>, the analytic
     sequential-conditioning approximation, finishes fast and then never
     improves. <span class="mc">Frequency simulation</span> crawls its
@@ -99,10 +103,12 @@
 
     <p>The lattice number is the full all-contestant computation, including
     (for the dense rows) the in-browser eigenfit of the covariance to the
-    race grammar. GHK and Mendell&ndash;Elston price one contestant at a
-    time through that contestant's own difference distribution &mdash; the
-    per-alternative structure is why their clocks start seconds late at
-    large field sizes.</p>
+    race grammar. GHK and Mendell&ndash;Elston as run here price one
+    contestant at a time through that contestant's own difference
+    distribution &mdash; the per-alternative structure is why their
+    clocks start seconds late at large field sizes. A structure-aware
+    variant can do better than this plain protocol; what no
+    per-contestant method reuses is the shared product field.</p>
   </main>
   <footer>
     <a href="https://github.com/microprediction/winning">Source</a> &middot;

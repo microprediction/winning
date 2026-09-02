@@ -125,3 +125,70 @@ C. tree_smc: depth/branching/sharpness grid; fixed-node tree
    quadrature vs adaptive factor-node rules vs sequential GHK vs
    particle SMC vs tilted/Vecchia -- focused on the sharpness-
    warning regime.
+
+## The Genz/lpRR analysis (Peter, 2026-09-02): sharper than GHK
+The most important prior art is the Marsaglia-Genz-Bretz REDUCED-RANK
+rectangle method, exposed as mvtnorm::lpRR/slpRR. The k+1-rank
+difference construction: for winner i, Y_j = U_j - U_i has covariance
+B_i B_i' + diag(D_{-i}) with B_i of k+1 columns, so ONE factor-race
+share is a standard reduced-rank Genz rectangle probability -- PRIOR
+ART, decisively (Marsaglia 1963 for the reduction; Butler-Moffitt
+1982 for factor quadrature; Stern 1992 for conditional independence
+and the univariate-CDF product; slpRR for the scores). NO novelty
+claims for: factor conditioning; N-dim to (k+1)-dim reduction; the
+CDF product; quadrature of it; smooth one-winner probabilities or
+gradients.
+
+What remains distinctive (and matches the manuscript's own "the
+contribution is the combination"): the COMPLETE N-winner vector from
+one shared product field (per-winner lpRR costs O(RN^2) for the
+vector, shared field O(QNL)); the full Jacobian-vector product from
+the same field via the two shared hazard sums (Lambda = sum g_j/F_j,
+A = sum h_j g_j / F_j) -- no Genz/GHK derivative variant found that
+obtains the complete JVP in linear work (slpRR rows stay quadratic);
+and the combination into scalable inversion. Present the Laplacian
+structure cautiously (roots in random-utility/WDZ and tie-boundary
+theory); the claim is the matrix-free linear-work REALIZATION.
+
+Encroachment ranking (Peter's table, condensed): lpRR/reduced-rank
+and Butler-Moffitt/Stern = high ingredient overlap; slpRR =
+medium-high (derivatives of ONE rectangle); HMR derivatives = medium;
+tile-low-rank/hierarchical Genz and Peterlin's doubly blocked Genz
+(reported ~100x over some packages; still one rectangle, pivoted
+Cholesky) = low math overlap but HIGH wall-time relevance to
+benchmark rhetoric; Botev tilting, Ridgway SMC = low core overlap;
+Mendell-Elston/MACML/EP = different tradeoff.
+
+FOUR CHANGES for the factor-probit manuscript (it cites Butler-
+Moffitt and Stern but lacks the Marsaglia/lpRR treatment the
+general-inversion manuscript already has): (1) add the k+1-rank
+difference construction and the prior-art acknowledgment; (2)
+benchmark per-i lpRR with common scrambled Sobol as the strongest
+factor-aware baseline, complete vectors not single shares; (3) add
+Peterlin's doubly blocked Genz to the wall-time comparisons; (4)
+qualify the website language (docs/converge.html fixed 2026-09-02).
+Avoid "first" until the literature review is formalized. Also
+consider offering "minimally modified GHK that exploits the cavity"
+for readers who prefer that presentation.
+
+## Kill test A: first measured result (2026-09-02, research/
+## adversaries/cdf_grad_ghk/)
+The CDF-gradient adversary built honestly in ~100 lines of JAX:
+factor-state GHK (Kalman state over factors, O(Nk^2) per sample, no
+dense Cholesky), scrambled Sobol R=512 common across the grid,
+reverse-mode N-vector gradient at the diagonal, trapezoid over L=96.
+Two bugs en route worth remembering: mass = 1 is NO diagnostic (it
+is identically 1 for any H); and the convention clash (CDF gradient
+prices the max, engine min-wins). Measured, TV to the exact engine:
+  N=50  k=2: TV 0.0059, 0.43s vs engine 0.008s   (54x engine)
+  N=200 k=2: TV 0.0060, 1.85s vs engine 0.032s   (58x)
+  N=1000 k=2: TV 0.0043, 9.5s vs engine 0.125s   (76x)
+  N=200 k=4: TV 0.0078, 1.86s vs engine 1.81s    (TIED)
+The Rao-Blackwell prediction holds at low rank; THE CROSSOVER IS AT
+RANK ~4, where the engine's tensor quadrature (Q^k nodes) meets the
+adversary's O(LRNk^2). Rank 8+ goes to the adversary unless the
+engine gets sparse-grid/QMC factor nodes. This is unoptimized CPU
+JAX; a GPU implementation moves the crossover down. For v2: the
+"untested" sentence can now cite a measured prototype, and
+sparse/QMC factor nodes are promoted from nicety to the identified
+defense of the high-rank flank.
