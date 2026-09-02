@@ -205,3 +205,21 @@ rhetoric: the flagship applied implementation that KNOWS the factor
 structure still pays the dense per-alternative cost -- the
 structure-exploiting computation is absent from practice, not merely
 from theory.
+
+## The high-rank flank holds: QMC factor nodes (2026-09-02,
+## run_qmc_defense.py)
+The defense was already shipped (winning.factor.qmc_nodes into the
+same shared-field pass). Against the CDF-gradient adversary on the
+kill-test instance, truth = m=17 QMC (131k nodes):
+  k=4: qmc m=10 reaches TV 0.0012 in 0.18s -- ten times faster AND
+       six times more accurate than the adversary (0.0078, 1.90s);
+       m=13 is 65x more accurate at similar time. The default tensor
+       rule (TV 1e-5, 1.87s) caused the apparent rank-4 tie -- the
+       crossover was an artifact of the node rule, not the field.
+  k=8: qmc m=10 is twice as accurate as the adversary at a tenth of
+       the time; every QMC tier dominates. Rao-Blackwell holds at
+       high rank once the factor integral is QMC.
+Consequence for v2 and the package: at k >= 4 the engine should
+default to QMC factor nodes (tracked in issue 21); the adversary
+paragraph can now cite both the constructed adversary AND its
+measured defeat by the shipped defense.
