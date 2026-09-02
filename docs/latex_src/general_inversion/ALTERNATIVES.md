@@ -265,3 +265,14 @@ k ~ 32-64 at loose accuracy. High-accuracy work belongs to the field
 at any rank by the Rao-Blackwell argument. Language note: these are
 ALTERNATIVES, not adversaries -- the file and directory were renamed
 accordingly, and the paper should use the civil word.
+
+## Shipped and published (2026-09-02)
+winning.alternatives now ships reduced_rank_representation (the
+Marsaglia/lpRR bridge, tested against pmvnorm and against the engine
+winner-by-winner) and cdf_gradient_shares (the factor-state
+CDF-gradient evaluator, jax-optional, tested to TV < 0.03 against the
+engine at 256 samples). The site gains a top-level Alternatives page
+(docs/alternatives.html) listing the existing implementations by
+language, when each is the right choice, and our improvements with
+the not-as-battle-tested caveat stated plainly. Canonical nav updated
+on every page in the same commit per the site rule.

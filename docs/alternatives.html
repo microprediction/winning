@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>winning — alternatives</title>
+  <meta name="description" content="The other ways to compute correlated race probabilities: mvtnorm, lpRR, GHK in Stata and R, minimax tilting, tile-low-rank Genz, and the reference improvements shipped as winning.alternatives, with measured comparisons." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="winning" />
+  <meta property="og:title" content="winning — alternatives" />
+  <meta property="og:description" content="Existing implementations in every major language, when each is the right choice, and the reference improvements shipped as winning.alternatives." />
+  <meta property="og:url" content="https://winning.microprediction.org/alternatives.html" />
+  <link rel="stylesheet" href="./academic.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
+        <a href="/alternatives.html">Alternatives</a>
+        <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="content">
+    <h1>Alternatives</h1>
+
+    <p>The probabilities this package computes are multivariate normal
+    rectangle and argmax probabilities, and good software for those
+    predates this project by decades. This page lists the
+    implementations people already use, says when each is the right
+    choice, and describes the reference improvements shipped as
+    <code>winning.alternatives</code> &mdash; which are new, and
+    therefore not as battle-tested as the incumbents they modify.
+    Every comparison number below comes from a committed script under
+    <code>research/alternatives/</code>.</p>
+
+    <h2 id="existing">Existing implementations, by language</h2>
+
+    <h3>R</h3>
+    <p><a href="https://cran.r-project.org/package=mvtnorm">mvtnorm</a>
+    is the stalwart: <code>pmvnorm</code> computes one rectangle
+    probability by Genz&ndash;Bretz randomized quasi&ndash;Monte
+    Carlo, documented for dimensions up to 1000 (up to 20 for the
+    exact Miwa algorithm), at roughly three hundred thousand downloads
+    a month. Recent versions add <code>lpRR</code> and
+    <code>slpRR</code>: reduced-rank rectangle probabilities and their
+    scores for covariance of the form BB&prime; + diagonal, the
+    Marsaglia&ndash;Genz&ndash;Bretz construction. For one specified
+    winner under factor covariance, <code>lpRR</code> computes
+    essentially the same integral this engine does &mdash; the
+    difference appears when every winner is wanted at once, which is
+    the case this package exists for.
+    <a href="https://cran.r-project.org/package=TruncatedNormal">TruncatedNormal</a>
+    implements Botev's minimax exponential tilting, the strongest
+    single rare-orthant estimator we know.
+    <a href="https://cran.r-project.org/package=tlrmvnmvt">tlrmvnmvt</a>
+    combines Genz separation-of-variables with tile-low-rank
+    covariance algebra for very high-dimensional single rectangles.
+    <a href="https://cran.r-project.org/package=mlogit">mlogit</a>
+    estimates multinomial probit by GHK behind its familiar
+    interface.</p>
+
+    <h3>Python</h3>
+    <p><code>scipy.stats.multivariate_normal.cdf</code> wraps Genz's
+    quasi&ndash;Monte Carlo routine for rectangle probabilities. For
+    the full multinomial-probit choice vector there is no standard
+    Python tool; the scattered research implementations of GHK on
+    GitHub are unmaintained. This package fills that slot, and
+    <code>winning.alternatives</code> adds the strongest GHK-family
+    construction we could build for cross-checking it.</p>
+
+    <h3>Stata</h3>
+    <p>GHK's native home: Mata ships <code>ghk()</code> and
+    <code>ghkfast()</code> (the latter caches its simulation points
+    across likelihood iterations), driving <code>cmmprobit</code>,
+    <code>asmprobit</code> and the community <code>mvprobit</code>.
+    One reading note: the <code>factor(#)</code> option parameterizes
+    the covariance as low-rank-plus-diagonal, but the evaluator still
+    Cholesky-factorizes each difference covariance and runs dense
+    GHK &mdash; the factor structure changes the model, not the
+    computation.</p>
+
+    <h2 id="improvements">Our suggested improvements</h2>
+
+    <p>Both ship in <code>winning.alternatives</code>, both are new,
+    and neither has the decades of production hardening the packages
+    above carry. Certify anything important against Monte Carlo
+    argmax frequencies; the module docstrings say how.</p>
+
+    <h3>The reduced-rank bridge</h3>
+    <p><code>reduced_rank_representation(mu, V, D, i)</code> returns
+    the Marsaglia rectangle representation of one winner's
+    probability &mdash; the (k+1)-column loading matrix, residual
+    diagonal, and bounds &mdash; ready for <code>lpRR</code> or any
+    rectangle solver, and verified against
+    <code>pmvnorm</code> in this repository's tests. Use it when you
+    want a second opinion on a single share from machinery
+    independent of this package. Pricing the complete vector this way
+    costs one call per winner: measured at n = 1000 (rank 2, common
+    draws), 17 seconds at total-variation 0.023 or 148 seconds at
+    0.006, against 0.12 seconds exact for the shared field, with the
+    per-winner cost growing as the square of the field size and
+    deep-tail winners falling below the estimator's floor at finite
+    sample counts.</p>
+
+    <h3>The CDF-gradient evaluator</h3>
+    <p><code>cdf_gradient_shares(mu, V, D)</code> computes every
+    winner probability from one rectangle estimator: the identity is
+    that the share vector is the integrated boundary gradient of the
+    maximum's CDF along the diagonal, the estimator is GHK with the
+    factors as a Kalman state (no dense Cholesky), and one
+    reverse-mode sweep per grid point returns all n components, so
+    the whole vector is linear in n. We found no published GHK
+    protocol combining these pieces; as far as we know this is the
+    strongest GHK-family all-share evaluator in existence, and we
+    give it away because the shared field still dominates it:
+    conditional on the factors, its draws simulate idiosyncratic
+    dimensions the field integrates analytically. Measured at n = 200
+    against a 131k-node reference: at ranks 4, 8 and 16 the engine's
+    quasi&ndash;Monte Carlo factor nodes are five to sixty-five times
+    more accurate at equal or less time, and at rank 2 the margin is
+    fifty-fold and up. The evaluator remains useful as an independent
+    cross-check, a GPU starting point, and an honest baseline.
+    It requires <code>jax</code>, and one warning transfers: its
+    output sums to one identically for any estimate of the CDF, so
+    total mass is not a diagnostic of correctness.</p>
+
+    <h2 id="when">Which to use</h2>
+    <p>One rectangle in high dimension with general covariance:
+    mvtnorm, or TruncatedNormal when the probability is rare, or
+    tlrmvnmvt when the dimension is in the thousands. One winner's
+    share under factor covariance: <code>lpRR</code>, or the bridge
+    above. The complete share vector, its Jacobian, removal
+    counterfactuals, or calibration back from observed shares, under
+    factor, block or tree covariance: that combination is what
+    <code>winning.factor</code> is for, and the
+    <a href="/converge.html">convergence demo</a> shows the
+    comparison live.</p>
+  </main>
+</body>
+</html>
