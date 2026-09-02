@@ -134,13 +134,12 @@ The most important prior art is the Marsaglia-Genz-Bretz REDUCED-RANK
 rectangle method, exposed as mvtnorm::lpRR/slpRR. The k+1-rank
 difference construction: for winner i, Y_j = U_j - U_i has covariance
 B_i B_i' + diag(D_{-i}) with B_i of k+1 columns, so ONE factor-race
-share is a standard reduced-rank Genz rectangle probability -- PRIOR
-ART, decisively (Marsaglia 1963 for the reduction; Butler-Moffitt
-1982 for factor quadrature; Stern 1992 for conditional independence
-and the univariate-CDF product; slpRR for the scores). NO novelty
-claims for: factor conditioning; N-dim to (k+1)-dim reduction; the
-CDF product; quadrature of it; smooth one-winner probabilities or
-gradients.
+share is a standard reduced-rank Genz rectangle probability
+(Marsaglia 1963 for the reduction; Butler-Moffitt 1982; Stern 1992;
+slpRR for the scores). None of that was ever claimed as novel -- the
+manuscript says so, and factor conditioning itself is Vasicek-vintage
+(1987) -- so the point of this note is citation coverage, not
+concession: cite lpRR/slpRR where the one-winner integral appears.
 
 What remains distinctive (and matches the manuscript's own "the
 contribution is the combination"): the COMPLETE N-winner vector from
@@ -314,9 +313,8 @@ the sources; verify any quoted line against the repository before it
 enters the paper.]
 
 ## The defensible boundary, final form
-Not defensible: first factor-conditioned product-CDF evaluation
-(lpRR); first fast all-class MNP output (Stata predict/TVBS package);
-first analytic derivatives of a factor-aware rectangle (slpRR).
+(One-winner factor integrals, all-class outputs computed classwise,
+and one-rectangle scores are old; never claimed, not at issue.)
 Defensible, no encroaching implementation found: reuse of ONE
 factor-conditioned field across every winner; all-winner factor
 evaluation linear in N at fixed rank and budget; the matrix-free
