@@ -341,8 +341,11 @@ materially different error regimes -- match accuracy.
 ## 2026-09-02)
 The independent-case cavity is implemented, exactly, in prior work:
 Russo's best-arm paper (COLT 2016; expanded arXiv 2018; journal
-version Operations Research 68(6):1625-1647, 2020 -- cite the
-version after checking which carries Appendix B, Algorithm 4)
+version Operations Research 68(6):1625-1647, 2020; VERIFIED in the
+arXiv PDF 2026-09-02: Algorithm 4 'BernoulliTTPS', line 4 forms
+F_m = prod_i F_{i,m}, line 8 computes alpha_i = sum_m f_{i,m} F_m /
+F_{i,m} -- the shared field and cavity quotient verbatim; PDF kept in
+research/alternatives/refs/)
 computes ALL posterior probabilities of optimality for independent
 arms by forming G_m = prod_i F_{i,m} on a quadrature grid and
 summing f_{i,m} G_m / F_{i,m} per arm -- and updates the shared
