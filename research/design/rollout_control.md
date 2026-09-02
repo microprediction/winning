@@ -129,3 +129,44 @@ value is the reflection at zero raising the leader). Measured:
   the second trajectory on the table even at n=2.
 Next: n > 2 via the pairwise-boundary heuristic priced by the
 engine's PoM/tie machinery, benchmarked against sequential halving.
+
+## n=3 exact, and the heuristic licensed (2026-09-02, exp_rollout_n3/)
+The exchangeable three-path Bellman collapses to two sorted gaps
+(gap-increment correlation is exactly 1/2, a constant of the
+exchangeable case) plus the n=2 table as the kill-worst continuation.
+Measured, rho = 0.5, lambda = 1:
+- CROWDING IS NON-MONOTONE, correcting the plain diminishing-returns
+  guess: a challenger TIED with the leader tightens the third path's
+  kill boundary (0.085 vs the pairwise 0.103), but a moderately
+  trailing challenger LOOSENS it (0.118 at ga = 0.10) before it
+  falls again. The boundary tracks the opportunity cost of the
+  fallback: kill-worst leaves a two-path continuation worth V2(ga),
+  strong when ga is small and worthless past the pairwise boundary.
+- THE PAIRWISE HEURISTIC IS NEAR-OPTIMAL: 0.0458 vs the exact
+  policy's 0.0459 (Bellman 0.0463), a ~1 percent gap. License to use
+  it at scale.
+- RANK ORDER IS NOT KILL ORDER: with a near-duplicate second and an
+  independent third, the correlation-aware rule (which kills the
+  SECOND-place path first) earns +0.022 while kill-worst-first loses
+  0.99 and keep-all loses 2.45. A lone survivor must stop -- a
+  single path is a martingale minus cost (the first vignette run
+  paid for lone survivors to exhaustion and everything went
+  negative; the fix is in the script).
+
+## n=16 under the token-budget accounting (exp_rollout_topn/)
+Hard budget: killing stretches the survivors' horizon. Catchability
+boundary (kill i when gap to leader > c sigma_iL sqrt(affordable
+horizon), one constant, c = 1.0 selected in both configurations)
+against tuned incumbents, 60k replications:
+  spread    catch 2.927 vs halving 2.824 (+3.7%), gambit 2.742
+            (+6.7%), keep-all 1.973 (+48%).
+  clusters  catch 0.955 vs halving 0.939 (+1.8%, four sigma),
+            gambit 0.919, keep-all 0.653.
+Adaptive, correlation-aware pruning beats every tuned static
+schedule everywhere, with the dramatic gaps against fixed-interval
+rules and keep-all; sequential halving is the respectable incumbent.
+The catastrophic failure mode of rank-order killing lives in the
+duplicate regime (the n=3 vignette), not in the aggregate value.
+First cluster config accidentally had idiosyncratic variance >= 1
+(no real duplicates) and showed catch = halving -- worth remembering
+as a null: correlation-awareness pays exactly where correlation is.
