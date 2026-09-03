@@ -142,11 +142,26 @@
     </table>
 
     <p>Seagate and HGST have different platters, heads, firmware and
-    failure physics. Their detrended failures co-moving at +0.40 on a
-    daily basis has only one explanation: a factor shared by the drives
+    failure physics. Their detrended failures co-moving on a daily
+    basis has only one explanation: a factor shared by the drives
     regardless of who made them, which is to say the environment they
     sit in. That is the common cause a durability model needs, and the
     one an independent MTBF calculation cannot see.</p>
+
+    <p>The effect replicates. A second quarter (the fourth of 2024)
+    shows the same signature &mdash; overdispersion surviving detrend,
+    and positive same-day correlation across every manufacturer pair
+    &mdash; though weaker, with the Seagate&ndash;HGST figure at +0.21
+    rather than +0.40. The direction is robust across both quarters;
+    the magnitude varies, so the numbers here are a high-correlation
+    quarter, not a universal constant. One tempting explanation can be
+    ruled out: it is not heat. Datacenter drive temperature barely
+    moves (a couple of degrees around 33&deg;C), does not correlate
+    with the daily failure residual, and removing it leaves the
+    cross-manufacturer correlation untouched. Whatever the shared
+    factor is &mdash; power, maintenance, handling, humidity &mdash; it
+    is not the thermometer, and pinning it down would need the
+    placement and operations data the public release omits.</p>
 
     <h2>What it costs, in durability</h2>
     <p>Erasure-coded storage loses data when the k-th of its drives

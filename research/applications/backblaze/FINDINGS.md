@@ -97,3 +97,32 @@ not same-day common cause -- is answered three ways:
 This upgrades the verdict: the durability-relevant common cause is
 present, environmental (not merely per-batch), and observable in the
 public data even without rack/DC labels -- because it is fleet-wide.
+
+## Replication (Q4 2024) and a rejected hypothesis (temperature)
+Pulled a second quarter (Q4 2024, ~305k drives, 1032 failures) with
+the SMART temperature column, to test replication and to try to
+IDENTIFY the shared factor as thermal.
+- REPLICATES IN SIGN, WEAKER IN MAGNITUDE. Detrended dispersion 1.73
+  (Q1 2025 was 2.88); mean cross-manufacturer detrended correlation
+  +0.06 (Q1 was +0.19), Seagate x HGST +0.21 (Q1 +0.40). So the
+  common-cause effect is present in both quarters and always
+  positive, but its strength varies quarter to quarter -- Q1 2025
+  was a high-correlation quarter, Q4 2024 a milder one. The direction
+  is robust; the magnitude is not a constant.
+- TEMPERATURE IS NOT THE FACTOR (hypothesis rejected). Datacenter
+  drive temperature is nearly constant (31.7-34.0 C, climate-
+  controlled), correlates with the detrended daily failure residual
+  at +0.019 (essentially zero), and partialling it out of the
+  manufacturers' residuals changes their cross-correlation by nothing
+  (+0.063 -> +0.063). Spike days are only marginally warm (+0.45
+  sigma). The shared factor is environmental in the broad sense
+  (it hits all manufacturers on specific days) but it is NOT drive
+  temperature. Identifying it precisely -- power events, maintenance
+  windows, handling, humidity, collection artifacts -- needs
+  placement/operations data the public release does not carry.
+Net: the CORE claim survives and replicates (independence is
+falsified, positive same-day cross-manufacturer correlation in both
+quarters, beyond aging), but two honest corrections -- the magnitude
+varies across quarters, and the tempting thermal explanation is
+false. The durability consequence should be quoted as a RANGE across
+quarters, not the Q1 point.
