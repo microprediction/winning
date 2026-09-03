@@ -69,3 +69,43 @@ coverage.py dump of an open-source suite) and show correlated
 selection beats independent top-k on real bugs. This is the
 demonstrable, data-available, not-Ford software fit -- the answer to
 "we can simulate".
+
+## HONEST RERUN vs the real incumbent (run_test_selection2.py):
+## the +14% was over a straw man, and coverage-greedy is strong
+The prior-art agent's objection was correct and decisive: the TCP
+incumbent is ADDITIONAL-GREEDY COVERAGE (spread coverage, submodular,
+1-1/e), not the independent top-k I first beat. Re-run against it,
+with a latent co-failure factor beyond coverage (strength alpha):
+  alpha=0 (no hidden structure): coverage-greedy 0.692 BEATS the
+    factor model 0.619 (-11%). When failure correlation IS coverage,
+    coverage-greedy is near-optimal and the factor model adds nothing
+    -- it loses.
+  alpha=0.5: coverage-greedy 0.849 vs factor 0.839 (-1%, tie).
+  alpha=1.0 (strong hidden factor): factor 0.838 vs coverage-greedy
+    0.816 (+3%). The factor model wins only when there is substantial
+    co-failure correlation NOT captured by the coverage matrix, and
+    even then marginally.
+RETRACTION: the earlier +10-14%% was against independent top-k, the
+wrong baseline. Against coverage-greedy the advantage evaporates for
+the common case (correlation = coverage) and is small (+3%%) even with
+strong latent structure. Coverage is observable and IS most of the
+correlation, so the incumbent already exploits the main signal.
+
+## Honest verdict on the software-test-selection application
+WEAK, same pattern as Backblaze/Ford. The mechanism (correlated
+selection) is real, but the incumbent (coverage-greedy) already
+captures the dominant part via the observable coverage matrix, and
+the winning engine's value over it is conditional on latent
+co-failure structure beyond coverage AND modest even then. The
+reframe -- software races-to-fail are abstract and SIMULATABLE (the
+right correction to my literalism) -- stands; this particular
+instantiation runs into a strong incumbent. The engine would compute
+P(catch) EXACTLY (vs my crude 2nd-order inclusion-exclusion, which
+underperformed even at alpha=0) and might recover the small gap, but
+it does not change the qualitative verdict.
+Where latent-beyond-coverage structure is genuinely large -- flaky
+tests correlated by shared infra/timing not code; N-version failures
+correlated by input difficulty (Eckhardt-Lee) not shared lines --
+the factor model could matter more, and those are the honest places
+to look next if this track continues. But on plain fault-detecting
+test selection, coverage-greedy is hard to beat.
