@@ -9,9 +9,13 @@
 \usepackage[round,authoryear]{natbib}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 
+\newtheoremstyle{itheads}{\topsep}{\topsep}%
+  {\itshape}{}{\itshape}{.}{ }{\thmname{#1}\thmnumber{ #2}%
+  \thmnote{ (#3)}}
+\theoremstyle{itheads}
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{Posterior-Predictive Pass-at-$k$}\\[0.4em]
+\title{Posterior-Predictive Pass-at-$k$\\[0.4em]
 \large a two-parameter replacement for the independence
 extrapolation in fine-tuning diagnostics}
 \author{Peter Cotton}
