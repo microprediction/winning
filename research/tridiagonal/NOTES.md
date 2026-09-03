@@ -197,3 +197,23 @@ paper (canonical dated copy stays in microprediction/home, first
 committed 2022-04-06); browniansearch/brownianbandit are the
 search-one/prune-many siblings, and the k-shot lattice DP belongs in
 browniansearch when built, using this track's transfer operator.
+
+## Correction to the Go Forth reconciliation above (2026-09-03,
+## later the same day)
+Cleaning the paper for browniansearch surfaced an error in its
+Section 5: the mean-matched outside point's variance is sech^2 of
+the composed rapidity, not sech, and with the correct value the
+no-backtracking theorem FAILS on a positive-measure region --
+verified by exact conditioning and 2m-sample weighted MC
+(browniansearch/verify/check_inside.py). The true result, now in the
+rewritten paper (Go Forth on Bad News, browniansearch/papers/
+go_forth): interior bridge points DOMINATE their mean-matched
+outside rivals (variance ratio cosh(th2+th)/cosh(th2-th) >= 1), the
+bridge middle beats every outside choice iff b^2(1+rho)-4b sqrt(rho)
++2rho < 0 (opens at b*=0.4233 along rho=b), and the corrected maxim
+is: go forth on bad news, revisit the bridge on good news. The rhyme
+with exp2 stated above should be read accordingly -- the boundary
+pile-up of the argmax still explains why OUTSIDE is right on bad
+news, and the bridge's retained variance explains why INSIDE is
+right on good news. The rapidity-spacing suggestion for the OU
+lattice stands.
