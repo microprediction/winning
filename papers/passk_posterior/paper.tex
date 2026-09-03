@@ -70,8 +70,10 @@ optimal prediction: a decision scored by log loss or Brier score is
 a different objective, and the distinction matters below. The device
 this note measures arises when a coverage number is wanted at depth
 $k$ from an estimate $\hat p = s/m$: evaluate the formula at the
-point estimate and report $1-(1-\hat p)^k$. We will call this the
-plug-in. \citet{malladi2026} use it inside a coverage diagnostic,
+point estimate and report $1-(1-\hat p)^k$: the plug-in, in the
+terminology of \citet{verine2026}, who call it the naive plug-in
+estimator. \citet{malladi2026} use it inside a coverage
+diagnostic,
 writing ``we convert pass@1 to an estimated pass@16 value using
 $f_{16}(p):=1-(1-p)^{16}$''; their pass@1 estimates rest on at least
 sixteen samples per problem per evaluation seed across three seeds
@@ -457,9 +459,11 @@ arXiv:2411.00640, 2024.
 How do large language monkeys get their power (laws)?
 arXiv:2502.17578, 2025.
 
-\bibitem[V\'erine et~al.(2026)]{verine2026} A.~V\'erine et~al.
-Estimating pass@$k$ from fewer samples with hierarchical Bayesian
-priors. ICML 2026 workshop, OpenReview, 2026.
+\bibitem[V\'erine et~al.(2026)V\'erine, Le~Bronnec, Allauzen,
+and Negrevergne]{verine2026} A.~V\'erine, F.~Le~Bronnec,
+A.~Allauzen, and B.~Negrevergne. Estimating pass@$k$ from fewer
+samples with hierarchical Bayesian priors. In \emph{1st Workshop on
+Combining Theory and Benchmarks (CTB@ICML 2026)}, 2026.
 
 \end{thebibliography}
 
