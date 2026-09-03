@@ -71,3 +71,42 @@ doubles as the VOC/knowledge-gradient demonstration Tuisov's
 framework prices. Priority in that order; (1) and (3) share data and
 posterior code with the pass@k note, and (2) is where the November
 window matters least because the machinery barrier is highest.
+
+## exp1_ab_stopping: the replay on real logs (2026-09-03)
+Data: HELM Lite public bucket (the leaderboard details datasets are
+gated; HELM is not), GSM per-instance exact-match for seven models,
+four aligned pairs spanning gaps of 0.2 / 0.8 / 1.0 / 13.4 points at
+n = 1000 shared items. Discordance ~30 percent on close pairs: two
+thirds of evaluation compute buys no information about the
+difference, which is the CRN observation in the raw data.
+
+Replay (400 orderings, frontier per rule, forced decisions labeled
+and errors reported among GENUINE early stops -- the run-to-the-end
+artifact where the forced decision equals the full-data sign is
+excluded from the headline):
+- REAL GAP (13.4pt): the paired probability-of-best rule decides at
+  75 items mean with zero realized error, against 210 for the
+  independent-posteriors rule (the separate-eval-reports practice:
+  2.8x) and 89 for sequential McNemar (1.2x). The empty-lane result:
+  respecting shared prompts nearly triples the efficiency of the
+  practice, and the two-model paired rule is the exact CRN special
+  case of the exact_pom stopping machinery.
+- CLOSE GAPS (<= 1pt at n = 1000): NO rule can stop early reliably
+  -- early stops at nominal 95-99 percent carry 27-43 percent
+  realized error for every method, paired included. Two forces:
+  1000 items cannot resolve one-point differences, and posterior
+  thresholds are not frequentist guarantees under optional stopping
+  near the null. This is a measured caution against sequential
+  peeking at leaderboard scale, whoever does the statistics.
+- NEAR-TIE (0.2pt): the honest regime -- rules mostly run out; the
+  full-data "truth" is itself close to arbitrary.
+
+THE IMPLICATION THAT POINTS FORWARD: binary-forced stopping is the
+wrong decision structure for close pairs. The correct rule has a
+third outcome -- better-by-at-least-delta or practically-tied --
+which is indifference-zone selection, and its posterior quantity is
+P(gap > delta): the winner-margin spectrum of the cavity-calculus
+notes, already implemented as the shifted survival field. The
+real-data replay independently motivates the margin machinery.
+Next: add the margin-based three-outcome rule to this replay and
+measure it on the same pairs.
