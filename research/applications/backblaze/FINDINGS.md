@@ -188,3 +188,41 @@ This is the honest downgrade: a real statistical finding
 (overdispersion, predictive) with an interpretation (physical common
 cause / durability) that the data cannot secure and a reporting
 confound partly present. The site note must say so.
+
+## PRIOR-ART VERDICT (agent, 2026-09-03): the finding largely
+## collapses -- known mechanism + documented confound
+- MECHANISM IS PRIOR ART. Ford et al., "Availability in Globally
+  Distributed Storage Systems" (OSDI 2010) defines failure bursts,
+  shows them rack-correlated, and feeds correlation into durability
+  (independence overstates availability by orders of magnitude for
+  replicated and Reed-Solomon data) -- owns (a) bursts (b) durability
+  (c) common cause, at rack scope. Schroeder & Gibson (FAST 2007)
+  owns non-Poisson + long-range autocorrelation of disk failures.
+  Dependent-durability k-out-of-n is owned by the copula literature
+  (Eryilmaz; arXiv:2107.08023; etc.) -- the NB correction is a weaker
+  special case. Our overdispersion is a re-confirmation of Schroeder
+  & Gibson on Backblaze, not new. NO novelty on mechanism.
+- CONFOUND IS DOCUMENTED BY BACKBLAZE. Their failure date = the day a
+  drive "vanishes from the reporting population," reconciled against
+  data-center maintenance ticketing at quarter-end -- administrative,
+  not physical. A WEEKLY THURSDAY maintenance window exists; many
+  removals are cosmetic (firmware, loose cable). Batch pulls touch
+  Seagate and HGST together -> cross-vendor same-day clusters with no
+  physical common cause. Our Q1 spikes are FRIDAY-heavy -- the day
+  after Thursday maintenance, a positive signature of the artifact.
+- NEAREST Backblaze paper (Siemroth & Park 2026, arXiv:2606.29078)
+  is about manufacturer AFR differences, not correlation -- no one
+  has published a Backblaze correlation/burst analysis, but that gap
+  is small and fragile given the confound.
+
+HONEST BOTTOM LINE: the statistical fact (overdispersion) is real but
+known; the physical-common-cause interpretation is very likely a
+Backblaze reporting artifact (administrative failure dates + Thursday
+maintenance); the durability consequence is both prior art and
+conditional on a physicality the data cannot establish. The genuine
+correlated-failure-durability story is Ford 2010's and needs true
+failure timestamps + placement, which Backblaze does not publish.
+The site note is reframed from a claim into an honest investigation
+that lands on the confound and credits the prior art. This is the
+correct outcome of pushing back: not a new finding, a well-documented
+negative and a cleaner statement of where the real problem lives.
