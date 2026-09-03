@@ -12,6 +12,88 @@ MAGNITUDE (p99/p999 of the fan-out) and the argmax/argmin IDENTITY
 (which backend is the straggler; which hedge helps). Passes the
 dividing line at the leaf-race level.
 
+## CORRECTION (2026-09-03, Peter's pushback): first-failure is the
+## stronger fit, and the paper already serves it
+I dispatched three agents on LATENCY (the max race) and
+under-weighted the MIN race. First-failure fixes every kill risk
+that parked the other facets, and it is the engine's native
+convention.
+
+Peter's two points:
+1. "First-failure races in systems." A system's time-to-failure is
+   T_(1) = min_i T_i over components, and the CAUSE is the argmin --
+   which drive, node, or resource goes first. This is competing
+   risks, which is the paper's OWN native interpretation (main.tex
+   line 137: G = prod S_k all-causes survival, f_i/S_i cause-specific
+   hazard, p_i = int G (f_i/S_i) the classical cause-probability
+   formula). The application the systems agents missed is the one the
+   paper's math already is.
+2. "Each caused by many possible paths." A component fails via many
+   competing MODES (head crash OR bearing OR firmware OR ...), T_i =
+   min over modes, and a SYSTEM fails via many cut sets (fault tree).
+   "Many paths" is what makes n large and the correlation structured:
+   paths share stressors (temperature, vibration, load, batch).
+
+Why first-failure beats the latency facets:
+- Native min-wins; no log-space transform, no max-of-sums recursion.
+- The survival/competing-risks model already exists AND the paper
+  claims it -- no modeling gap to argue.
+- RARE events: you cannot estimate the tail of first-failure by
+  counting, so the model is not fighting t-digest (the kill risk
+  that parked facet 2 and bounded facet 1). This is the winning
+  condition, not the losing one.
+- Large n (Backblaze: 340k drives) is the engine's home scale.
+- Correlation is MANUFACTURED and OBSERVABLE: same drive model/batch
+  = same latent defect factor, and the model field is IN the data.
+  Shared power/rack/vibration = block; datacenter = tree. The
+  cleanest factor structure of any application considered.
+
+## k-out-of-n and the count polynomial (the "many paths" machinery)
+Erasure-coded storage loses data when the k-th correlated failure
+occurs before repair: the system life is the k-th order statistic
+T_(k), not just the min. P(T_(k) <= t) = P(N_t >= k) where N_t is
+the failure count by t; conditional on the shared factors N_t is a
+sum of independent Bernoullis (Poisson-binomial), and the
+count-generating polynomial prod_i [S_i(t) + z F_i(t)] with
+coefficient extraction is EXACTLY the shipped top-k machinery
+(winning/factor/topk.py). So the engine already prices: time to
+first failure (min), time to data loss (k-th), which component/mode
+is the weakest link (argmin / criticality), and the removal/addition
+counterfactual (retire the worst batch, add a parity drive -> the
+new T_(k) distribution) -- all from one shared field, all native.
+
+## Real benchmarks (verified/known 2026-09-03)
+- Backblaze Drive Stats: PUBLIC, 2013 through Q1 2026, 340k+ live
+  drives, 530M+ drive-days, daily CSVs with drive MODEL and
+  manufacturer (the correlation factor, in the schema), failure
+  flag, SMART covariates, date, serial. The gold-standard public
+  first-failure dataset, with the factor variable built in.
+- Computer Failure Data Repository (CFDR, USENIX): Los Alamos and
+  other HPC node/component failure logs. [U -- verify current URL.]
+- Schroeder & Gibson, "Disk failures in the real world" (FAST'07)
+  and the DRAM-errors study (SIGMETRICS'09): the canonical analyses,
+  and both document CORRELATED failures (batch, environment) that
+  the independent-exponential MTBF model misses -- the reliability
+  analogue of Slepian: independence mis-states the joint failure
+  tail, and here the mis-statement is what the field already knows
+  is wrong.
+
+## Revised priority
+First-failure / dependent k-out-of-n reliability is the FLAGSHIP
+systems fit, above the latency facets: native convention, a model
+that already exists and that the paper claims, rare-event regime
+where measurement cannot compete, manufactured observable
+correlation, home-scale n, and a gold-standard public benchmark
+(Backblaze) with the factor variable in the data. Decisive
+experiment: fit a factor survival model to Backblaze by
+model/batch/vintage, predict the fleet's first-failure and k-th-
+failure tails and the per-batch criticality, and beat the
+independent-exponential (constant-hazard, uncorrelated) baseline the
+field uses -- the same shape as the fan-out experiment, on data
+where the correlation is labeled. This subsumes the earlier
+weakest-link (Track C) and dependent-k-out-of-n research threads
+into a systems venue with real data.
+
 ## The sharp boundary the three facets drew
 - SINGLE fan-out / scatter-gather (one call group): total latency =
   max of n correlated backend latencies. A genuine race. STRONG fit.
