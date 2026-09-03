@@ -2,10 +2,13 @@
 
 \usepackage[margin=1.1in]{geometry}
 \usepackage{amsmath}
+\usepackage{amsthm}
 \usepackage{booktabs}
 \usepackage{microtype}
 \usepackage[round,authoryear]{natbib}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\newtheorem{proposition}{Proposition}
 
 \title{\textbf{Posterior-Predictive Pass-at-$k$}\\[0.4em]
 \large a two-parameter replacement for the independence
@@ -72,23 +75,73 @@ rollout records and show that the two-parameter empirical-Bayes
 repair, a posterior expectation in place of a plug-in evaluation,
 removes most of it.
 
+\section{The estimation problem}
+
+Each prompt $i$ carries a latent per-attempt success probability
+$p_i$, drawn independently from a difficulty distribution $G$ on
+$[0,1]$; conditional on $p_i$, scored attempts at that prompt are
+independent Bernoulli$(p_i)$ trials. From $m$ training attempts the
+observed success count is $s_i \sim \mathrm{Bin}(m, p_i)$. Two
+estimands are of interest. Per prompt, the probability that a fresh
+batch of $k$ attempts contains a success,
+\begin{equation}
+q_k(p_i) \;=\; 1-(1-p_i)^{k},
+\end{equation}
+which must be predicted from $s_i$ alone; and in aggregate, the
+pass@$k$ the whole prompt population would exhibit,
+\begin{equation}
+\pi_k \;=\; \int_0^1 \bigl(1-(1-p)^k\bigr)\,dG(p).
+\end{equation}
+The conditional independence of attempts given $p_i$ is not the
+assumption under attack: attempts are drawn with independent seeds,
+and the model grants that. What varies across the field is $p_i$
+itself, and everything below is about respecting that variation when
+$s_i$ is a noisy glimpse of it.
+
 \section{The plug-in and its failure mode}
 
-Let a prompt carry a latent per-sample success probability $p$, and
-let $s \sim \mathrm{Bin}(m, p)$ successes be observed among $m$
-training samples. The plug-in predictor of pass@$k$ is
+The plug-in predictor evaluates $q_k$ at the point estimate
+$\hat p_i = s_i/m$:
 \begin{equation}
 \widehat{\mathrm{pass}}_k^{\,\mathrm{plug}}
-\;=\; 1-\Bigl(1-\tfrac{s}{m}\Bigr)^{k}.
+\;=\; 1-\Bigl(1-\tfrac{s_i}{m}\Bigr)^{k}.
 \label{eq:plug}
 \end{equation}
-Two defects follow from the noise in $s/m$. At $s=0$ the prediction
-is exactly zero however small $m$ is, so every eventual success on
-such a prompt costs unbounded log loss. And since $(1-p)^k$ is
-convex in $p$, Jensen's inequality gives
-$\mathbb{E}\,(1-\hat p)^k \ge (1-\mathbb{E}\,\hat p)^k$, so the
-plug-in curve is biased downward in aggregate once $\hat p$ is
-noisy, increasingly so as $k$ grows.
+At $s_i=0$ the prediction is exactly zero at every $k$, however
+small $m$ is, so each eventual success on such a prompt costs
+unbounded log loss. The aggregate defect is one inequality.
+
+\begin{proposition}[The plug-in is biased downward for every
+difficulty]\label{prop:bias}
+Fix $m \ge 1$ and $k \ge 2$, and let $s \sim \mathrm{Bin}(m,p)$.
+Then
+\begin{equation}
+\mathbb{E}\Bigl[\,1-\bigl(1-\tfrac{s}{m}\bigr)^{k}\Bigr]
+\;\le\; 1-(1-p)^k,
+\end{equation}
+with equality only at $p \in \{0,1\}$; at $k=1$ equality holds for
+all $p$. Consequently the aggregate plug-in curve lies below
+$\pi_k$ for every $G$ that is not concentrated on $\{0,1\}$.
+\end{proposition}
+
+\begin{proof}
+Write $\varphi(x) = (1-x)^k$ on $[0,1]$. Its second derivative is
+$\varphi''(x) = k(k-1)(1-x)^{k-2} \ge 0$, strictly positive on
+$[0,1)$ when $k \ge 2$, so $\varphi$ is convex, and strictly convex
+there. The estimate $\hat p = s/m$ satisfies
+$\mathbb{E}\,\hat p = p$. Jensen's inequality gives
+$\mathbb{E}\,\varphi(\hat p) \ge \varphi(\mathbb{E}\,\hat p)
+= (1-p)^k$, and the inequality is strict whenever $\hat p$ is
+nondegenerate, which is exactly $p \in (0,1)$. Negating and adding
+one reverses the inequality into the display. At $k=1$, $\varphi$
+is affine and Jensen holds with equality. The aggregate statement
+follows by integrating the pointwise inequality against $G$.
+\end{proof}
+
+The bias grows with the curvature of $\varphi$, hence with $k$, and
+shrinks with the variance of $\hat p$, hence with $m$: extrapolating
+further from fewer samples costs more, which is the regime
+diagnostics live in.
 
 \section{The posterior predictive}
 
@@ -116,6 +169,39 @@ factor-correlated portfolio of successes conditions to exactly this
 form \citep{cotton2026}. In the exchangeable setting of this note
 the two families are competitors on equal footing, and the study
 below treats them as such.
+
+\begin{proposition}[The posterior predictive is the target]
+\label{prop:bayes}
+Let $Y$ indicate a success among $k$ fresh attempts at the same
+prompt, drawn independently of the training attempts given $p$.
+Under the model, with prior equal to the true difficulty law $G$:
+(i) $\mathbb{E}[Y \mid s] =
+\mathbb{E}[\,1-(1-p)^k \mid s\,]$, so the posterior predictive is
+the exact conditional success probability; (ii) it minimizes
+expected Brier score and expected log loss among all predictors that
+depend on the data only through $s$; (iii) its average over prompts
+is exactly $\pi_k$.
+\end{proposition}
+
+\begin{proof}
+Given $p$, $Y$ is Bernoulli with parameter $q_k(p) = 1-(1-p)^k$ and
+is independent of $s$. The tower property gives
+$\mathbb{E}[Y \mid s]
+= \mathbb{E}\bigl[\mathbb{E}[Y \mid p, s] \bigm| s\bigr]
+= \mathbb{E}[q_k(p) \mid s]$, which is (i). For (ii), the
+conditional expectation minimizes mean squared error among
+$s$-measurable predictors, which is the Brier statement, and the
+true conditional probability minimizes expected log loss because the
+excess log loss of any other predictor is the expectation of a
+Kullback--Leibler divergence, which is nonnegative. For (iii),
+$\mathbb{E}\bigl[\mathbb{E}[q_k(p) \mid s]\bigr]
+= \mathbb{E}\,q_k(p) = \pi_k$, the tower property again.
+\end{proof}
+
+Proposition~\ref{prop:bayes} holds at the true $G$; in practice $G$
+is replaced by a two-parameter family fitted by marginal maximum
+likelihood, and the study below measures what survives that
+substitution.
 
 \section{Numerical study on released rollouts}
 
@@ -171,9 +257,10 @@ beta-binomial posterior & 0.323 & 0.444 & 0.560 & 0.661 \\
 \end{tabular}
 \caption{Aggregate pass@$k$ extrapolated from four samples per
 prompt, against the unbiased estimator of \citet{chen2021} on all
-eight. The plug-in's downward Jensen bias grows with $k$ and
-reaches thirteen points absolute at $k=8$; the posterior
-predictives land within two points.}
+eight. The plug-in's downward bias grows with $k$ as
+Proposition~\ref{prop:bias} requires, reaching thirteen points
+absolute at $k=8$; the posterior predictives land within two
+points.}
 \label{tab:aggregate}
 \end{table}
 
