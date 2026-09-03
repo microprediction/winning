@@ -133,3 +133,18 @@ for the time-of-maximum of a correlated path where the arcsine
 special case does not apply -- and it connects the winning race
 engine to Peter's max-of-Brownian-path paper (whose specific method/
 scope to reconcile with this transfer-operator approach).
+
+## Correction (Peter, 2026-09-03): the track is BAND-DIAGONAL,
+## tridiagonal is just bandwidth 1
+Peter: "I think I really meant band diagonal." Right generalization.
+A precision matrix of bandwidth b means each point depends on its b
+nearest neighbors -- a b-dependent process. The transfer-operator
+trick survives via STATE LIFTING: the vector (X_t, ..., X_{t+b-1})
+IS Markov, so the same forward(-backward) pass runs on the lifted
+state. Cost O(n L^b): still linear in n, exponential only in the
+bandwidth -- fine for b = 2, 3 (AR(p), local kernels), and my exp2
+ELI5 overstated this as a hard wall. Beyond small b, use quadrature/
+low-rank compression of the lifted messages rather than a full grid.
+Incumbent unchanged (banded GMRF / Kalman with state dimension b,
+which has the correlation and not the order statistic). exp1-exp3
+are the b=1 case; the AR(p) lift is the natural exp4.
