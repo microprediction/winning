@@ -148,3 +148,45 @@ low-rank compression of the lifted messages rather than a full grid.
 Incumbent unchanged (banded GMRF / Kalman with state dimension b,
 which has the correlation and not the order statistic). exp1-exp3
 are the b=1 case; the AR(p) lift is the natural exp4.
+
+## Reconciliation with "Go Forth!" (Cotton & Boofhead, JOTA-format
+## working paper, github.com/microprediction/home/workingpapers)
+Read in full (29 pp). What it is: THREE-SHOT OPTIMAL SEARCH on an
+exponentiated OU path f(t) = exp(X_t), X_0 = b ~ N(0,1). Main
+theorem: the optimal third sample is NEVER inside the interval of
+the first two (except the measure-zero tie X_{t1} = b) -- "go
+forth," leave the comfort zone. Two-shot solution in closed form
+(flee to infinity if b<0; t* = -(1/kappa) log b if 0<b<1; stay if
+b>1). Proof machinery: RAPIDITY theta = tanh^-1(e^-kappa dt) makes
+OU bridge correlations compose like relativistic velocity addition
+(bridge mean b tanh(theta2+theta)); an outside point at rapidity
+theta2+theta has the same mean and no less variance (cosh convexity
++ Jensen), so inside is dominated. Also a human diagnostic: only
+23/152 surveyed chose correctly.
+
+RELATION TO THIS TRACK -- the dual, not the same result:
+- Go Forth answers WHERE TO SAMPLE NEXT (optimal search policy on
+  the path); exp2/exp3 answer WHERE THE MAX IS (the argmax law of
+  the path). Same object -- extremes of a Gauss-Markov path --
+  opposite direction of inference.
+- The two RHYME and the rhyme is real: exp2's static law says the
+  max of a positively-correlated stationary path piles up at the
+  BOUNDARY (ends 2.6x at phi=0.9); Go Forth's dynamic theorem says
+  never search INSIDE your bracket. The endpoint pile-up is the
+  static shadow of the no-backtracking policy: mass at the boundary
+  is why the inside is dominated.
+- The paper's utility E[f(t_2)] is chosen to admit closed forms and
+  the paper says k>3 shots gives "lengthy closed form expressions."
+  The transfer operator prices what has NO closed form: P(beat the
+  best seen), quantiles of best-found, expected max over the path,
+  k-shot value functions by DP on the lattice -- i.e., the
+  computational continuation of Go Forth beyond three shots and
+  beyond mean-utility. That connects directly to research/design
+  rollout pruning (same shape: sequential sampling of an evolving
+  Gaussian object with a free boundary).
+- Adopt the RAPIDITY coordinate: uniform-in-theta time spacing is
+  the natural lattice discretization for OU chains (correlations
+  additive), likely reduces grid error in exp1-3.
+- Eval-design echo: the paper's inside-choice "tell" is a one-bit
+  behavioral test of meta-learning -- kin to the evalstats
+  diagnostics program.
