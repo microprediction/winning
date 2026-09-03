@@ -163,6 +163,18 @@
     is not the thermometer, and pinning it down would need the
     placement and operations data the public release omits.</p>
 
+    <h2>Does it predict, or just describe?</h2>
+    <p>A correlation seen in hindsight is worth little if it does not
+    transfer. It does. Fitting a single overdispersion parameter on
+    the fourth quarter of 2024 and carrying it, unchanged, to the
+    first quarter of 2025, the correlated model predicts the held-out
+    daily failure counts with 13% lower log-loss than the independent
+    calculation &mdash; and on the heaviest-failure days, the top
+    decile that erasure coding exists to survive, 37% lower. The
+    independent model is not merely optimistic; it is most wrong
+    exactly where being wrong costs data. One number, learned on one
+    quarter, measurably improves the next.</p>
+
     <h2>What it costs, in durability</h2>
     <p>Erasure-coded storage loses data when the k-th of its drives
     fails before repair &mdash; a k-out-of-n order statistic, not a

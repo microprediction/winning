@@ -126,3 +126,21 @@ quarters, beyond aging), but two honest corrections -- the magnitude
 varies across quarters, and the tempting thermal explanation is
 false. The durability consequence should be quoted as a RANGE across
 quarters, not the Q1 point.
+
+## Out-of-sample payoff (validate.py): the correction is transferable
+## and predicts the tail 37% better
+The final test: is the correlation merely present, or does it PREDICT
+better than independence out of sample? Fit the independent Poisson
+and the overdispersed (negative-binomial, the one-factor marginal)
+rate models on Q4 2024, carry the learned dispersion r=5.2 to Q1
+2025, and score held-out per-day log-loss on the different quarter:
+- overall: correlated beats independent by 13.0% held-out log-loss;
+- TAIL (top-decile failure days -- the clustered heavy days erasure
+  coding must survive): 37.0% better, 7.24 -> 4.56 log-loss.
+The dispersion learned on one quarter transfers to the next, and the
+independent Poisson is worst exactly where it matters (the heavy
+days). This is the result that makes the thread a contribution: not
+"correlation exists" but "a one-parameter common-cause correction,
+fit on one quarter, prices the next quarter's failure-count tail 37%
+better." r=5.2 (finite) is the measured distance from independence
+(r -> infinity).
