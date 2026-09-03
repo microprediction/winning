@@ -4,53 +4,49 @@
 \providecommand\HyField@AuxAddToCoFields[2]{}
 \citation{chen2021}
 \citation{kazdan2025}
+\citation{verine2026}
 \citation{chen2021}
 \citation{malladi2026}
-\citation{barakat2026}
 \citation{chen2021}
 \citation{kazdan2025}
+\citation{verine2026}
 \@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
 \citation{brown2024}
 \citation{schaeffer2025}
 \citation{kazdan2025}
+\citation{verine2026}
 \citation{hariri2025}
 \citation{miller2024}
-\citation{malladi2026}
 \citation{malladi2026}
 \@writefile{toc}{\contentsline {section}{\numberline {2}Related work}{2}{section.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {3}The estimation problem}{2}{section.3}\protected@file@percent }
 \citation{chen2021}
 \@writefile{toc}{\contentsline {section}{\numberline {4}The plug-in and its failure mode}{3}{section.4}\protected@file@percent }
-\newlabel{eq:plug}{{3}{3}{The plug-in and its failure mode}{equation.3}{}}
 \newlabel{prop:bias}{{1}{3}{The plug-in is biased downward for every difficulty}{proposition.1}{}}
 \citation{cotton2026}
 \citation{kazdan2025}
 \@writefile{toc}{\contentsline {section}{\numberline {5}The posterior predictive}{4}{section.5}\protected@file@percent }
-\newlabel{eq:post}{{5}{4}{The posterior predictive}{equation.5}{}}
-\newlabel{prop:bayes}{{2}{4}{The posterior predictive is the target}{proposition.2}{}}
+\newlabel{eq:post}{{4}{4}{The posterior predictive}{equation.4}{}}
+\newlabel{prop:bayes}{{2}{4}{What the posterior predictive is}{proposition.2}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {6}Numerical study on released rollouts}{4}{section.6}\protected@file@percent }
-\citation{chen2021}
-\citation{kazdan2025}
-\citation{chen2021}
 \citation{kazdan2025}
 \citation{kazdan2025}
-\citation{schaeffer2025}
-\citation{chen2021}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Per-prompt scores over nine thousand held-out Bernoulli outcomes, $m=2$ training attempts, $k=6$. The plug-in's log loss is computed with predictions clipped to $[10^{-12}, 1-10^{-12}]$; unclipped it is infinite, and the value is a clipping convention, not a stable measure: clipping at $10^{-6}$, $10^{-3}$, $10^{-2}$ gives $3.11$, $1.63$, $1.14$. The decomposition is the point of the table: shrinkage alone (row two) removes most of the damage, posterior integration improves on row two by a further eleven percent of log loss and seven percent of Brier, and the fixed Jeffreys prior, with no fitted hyperparameters, captures nearly all of the fitted families' gain.}}{5}{table.1}\protected@file@percent }
+\newlabel{tab:perprompt}{{1}{5}{Per-prompt scores over nine thousand held-out Bernoulli outcomes, $m=2$ training attempts, $k=6$. The plug-in's log loss is computed with predictions clipped to $[10^{-12}, 1-10^{-12}]$; unclipped it is infinite, and the value is a clipping convention, not a stable measure: clipping at $10^{-6}$, $10^{-3}$, $10^{-2}$ gives $3.11$, $1.63$, $1.14$. The decomposition is the point of the table: shrinkage alone (row two) removes most of the damage, posterior integration improves on row two by a further eleven percent of log loss and seven percent of Brier, and the fixed Jeffreys prior, with no fitted hyperparameters, captures nearly all of the fitted families' gain}{table.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Aggregate pass@$k$ from two training samples per prompt. The plug-in is $17.4$ points under the reference at $k=6$; the posterior rows are within $1.3$ points. The prior-expectation row is the population estimator of \citet  {kazdan2025}; it nearly coincides with the average of posterior predictions here because the fitted two-parameter family nearly interpolates the three-cell count histogram at $m=2$, a coincidence of this design rather than an identity.}}{5}{table.2}\protected@file@percent }
+\newlabel{tab:aggregate}{{2}{5}{Aggregate pass@$k$ from two training samples per prompt. The plug-in is $17.4$ points under the reference at $k=6$; the posterior rows are within $1.3$ points. The prior-expectation row is the population estimator of \citet {kazdan2025}; it nearly coincides with the average of posterior predictions here because the fitted two-parameter family nearly interpolates the three-cell count histogram at $m=2$, a coincidence of this design rather than an identity}{table.2}{}}
 \citation{malladi2026}
+\citation{malladi2026}
+\citation{verine2026}
 \citation{cotton2026}
-\citation{malladi2026}
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Per-prompt scores over nine thousand held-out Bernoulli outcomes. The plug-in's log loss is dominated by zero-training- success prompts that succeed in the held-out half; the posterior predictive prices those prompts at their shrunken posterior rate instead of zero. The two prior families tie.}}{5}{table.1}\protected@file@percent }
-\newlabel{tab:perprompt}{{1}{5}{Per-prompt scores over nine thousand held-out Bernoulli outcomes. The plug-in's log loss is dominated by zero-training- success prompts that succeed in the held-out half; the posterior predictive prices those prompts at their shrunken posterior rate instead of zero. The two prior families tie}{table.1}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Aggregate pass@$k$ extrapolated from four samples per prompt, against the estimator of \citet  {chen2021} on all eight. The plug-in's downward bias grows with $k$ as Proposition~\ref {prop:bias} requires, reaching thirteen points absolute at $k=8$; the posterior predictives land within two points. By Proposition~\ref {prop:bayes}(iii) these aggregate rows also measure the population estimator of \citet  {kazdan2025} under the same fitted priors; the per-prompt scores of Table~\ref {tab:perprompt} are what conditioning adds beyond it.}}{5}{table.2}\protected@file@percent }
-\newlabel{tab:aggregate}{{2}{5}{Aggregate pass@$k$ extrapolated from four samples per prompt, against the estimator of \citet {chen2021} on all eight. The plug-in's downward bias grows with $k$ as Proposition~\ref {prop:bias} requires, reaching thirteen points absolute at $k=8$; the posterior predictives land within two points. By Proposition~\ref {prop:bayes}(iii) these aggregate rows also measure the population estimator of \citet {kazdan2025} under the same fitted priors; the per-prompt scores of Table~\ref {tab:perprompt} are what conditioning adds beyond it}{table.2}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {7}Scope}{5}{section.7}\protected@file@percent }
-\bibcite{barakat2026}{{1}{2026}{{Barakat et~al.}}{{}}}
-\bibcite{brown2024}{{2}{2024}{{Brown et~al.}}{{}}}
-\bibcite{chen2021}{{3}{2021}{{Chen et~al.}}{{}}}
-\bibcite{cotton2026}{{4}{2026}{{Cotton}}{{}}}
-\bibcite{hariri2025}{{5}{2025}{{Hariri et~al.}}{{}}}
-\bibcite{kazdan2025}{{6}{2025}{{Kazdan et~al.}}{{}}}
-\bibcite{malladi2026}{{7}{2026}{{Malladi et~al.}}{{Malladi, Jelassi, Foster, Ash, and Krishnamurthy}}}
-\bibcite{miller2024}{{8}{2024}{{Miller}}{{}}}
-\bibcite{schaeffer2025}{{9}{2025}{{Schaeffer et~al.}}{{}}}
-\gdef \@abspage@last{6}
+\bibcite{brown2024}{{1}{2024}{{Brown et~al.}}{{}}}
+\bibcite{chen2021}{{2}{2021}{{Chen et~al.}}{{}}}
+\bibcite{cotton2026}{{3}{2026}{{Cotton}}{{}}}
+\bibcite{hariri2025}{{4}{2025}{{Hariri et~al.}}{{}}}
+\bibcite{kazdan2025}{{5}{2025}{{Kazdan et~al.}}{{}}}
+\bibcite{malladi2026}{{6}{2026}{{Malladi et~al.}}{{Malladi, Jelassi, Foster, Ash, and Krishnamurthy}}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Scope}{6}{section.7}\protected@file@percent }
+\bibcite{miller2024}{{7}{2024}{{Miller}}{{}}}
+\bibcite{schaeffer2025}{{8}{2025}{{Schaeffer et~al.}}{{}}}
+\bibcite{verine2026}{{9}{2026}{{V\'erine et~al.}}{{}}}
+\gdef \@abspage@last{7}
