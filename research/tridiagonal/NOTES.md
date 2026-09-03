@@ -107,3 +107,29 @@ Schur-damped race swept over gamma, exact vs MC, showing how the
 win-probability vector moves as the blocks merge. Filed here; belongs
 with the covariance-grammar thinking ([[the-incumbent]]), not
 tridiagonal per se.
+
+## exp3_arcsine: the engine recovers Levy's arcsine law (2026-09-03)
+Peter noted exp2 resembles his work on the max of a Brownian path.
+It does, exactly: the argmax of a RANDOM WALK (phi=1, integrated,
+Markov) has the arcsine time-of-maximum law (Sparre Andersen; Levy
+continuum 1/(pi sqrt(tau(1-tau)))). Ran the transfer-operator argmax
+on a random walk:
+  n=20: max|engine-MC| 0.003, max|engine-arcsine| 0.012
+  n=40: max|engine-MC| 0.004, max|engine-arcsine| 0.008
+The engine matches the FINITE-n walk (MC) to 0.3%% and the CONTINUUM
+arcsine to ~1%% -- correct, because it computes the exact finite-n
+law and arcsine is its n->inf limit, so it tracks the finite walk
+tighter than the continuum does. Endpoint pile-up (n=40: ends 0.093
+vs middle 0.016, ~6x) is the discrete arcsine U-shape.
+
+IMPLICATION / the contribution vs the classical law: arcsine is a
+CLOSED FORM only for driftless, barrier-free, unit-increment,
+n->inf Brownian motion. The transfer operator gives the exact
+argmax (and max value, first-passage) for the cases with NO closed
+form: finite n, DRIFT (asymmetric increments), reflecting/absorbing
+BARRIERS, time-varying or non-Gaussian increments, and general
+Gauss-Markov (mean-reverting) paths. That is a computational engine
+for the time-of-maximum of a correlated path where the arcsine
+special case does not apply -- and it connects the winning race
+engine to Peter's max-of-Brownian-path paper (whose specific method/
+scope to reconcile with this transfer-operator approach).
