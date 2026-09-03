@@ -1,0 +1,37 @@
+{
+  "5": {
+    "independent": 0.397825,
+    "correlated": 0.452075,
+    "random": 0.170525,
+    "mod_ind": 29,
+    "mod_cor": 37
+  },
+  "10": {
+    "independent": 0.591225,
+    "correlated": 0.649525,
+    "random": 0.279875,
+    "mod_ind": 52,
+    "mod_cor": 64
+  },
+  "20": {
+    "independent": 0.7671,
+    "correlated": 0.806425,
+    "random": 0.5058,
+    "mod_ind": 85,
+    "mod_cor": 99
+  },
+  "40": {
+    "independent": 0.862425,
+    "correlated": 0.917225,
+    "random": 0.627475,
+    "mod_ind": 110,
+    "mod_cor": 144
+  },
+  "80": {
+    "independent": 0.9299,
+    "correlated": 0.965325,
+    "random": 0.844125,
+    "mod_ind": 145,
+    "mod_cor": 187
+  }
+}
