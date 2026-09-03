@@ -73,3 +73,37 @@ Gauss-Markov chain, cheap, on the covariance the simulation incumbent
 handles worst. Next: the argmax vector by forward-backward (the layer
 the Kalman filter does not give), the first-passage distribution, and
 a timed GHK head-to-head on AR(1).
+
+## exp2_argmax: P(X_t is the max), the layer Kalman lacks (2026-09-03)
+Forward-backward argmax over AR(1), vs 400k MC, n=20 (max err <0.007,
+ratios match; sum 0.90-0.95 is grid mass loss at L=240, tighten to
+normalize):
+  phi=0.0: uniform 0.05 (recovered) -- iid has no preferred peak.
+  phi=0.5: ends 0.056 vs middle 0.046.
+  phi=0.9: ends 0.091 vs middle 0.035 -- ENDPOINTS ~2.6x likelier to
+    be the max.
+The non-obvious, correct finding: positive AR(1) correlation pushes
+the maximum to the BOUNDARY. Interior points are squeezed by
+correlated-high neighbors on both sides; endpoints have one neighbor.
+A STATIONARY KALMAN FILTER GIVES IDENTICAL MARGINALS EVERYWHERE and
+cannot express this -- it is precisely the order-statistic the engine
+adds over the graphical model. Clean demonstration of the track's
+value proposition.
+
+## Schur-damped block races (Peter, 2026-09-03): another grammar
+schur.microprediction.org: Schur-complement DAMPING interpolates a
+block covariance between isolated blocks (gamma=0) and fully merged
+(gamma=1) via A - gamma B D^-1 B' (the damped sub-covariance,
+Cotton's Schur-damping / HRP-to-min-variance bridge). A SCHUR-DAMPED
+RACE prices the argmax / order statistic under that partially-merged
+block covariance -- a one-parameter family of correlated races from
+independent-blocks to fully-coupled. Natural grammar extension: the
+block kernel with a damping gamma on cross-block coupling, and the
+engine's shared-field prices the winner distribution along the whole
+gamma-bridge. Connects the winning race engine to Peter's own
+allocation/Schur work (same author, adjacent package): the Schur
+covariance FEEDS the race. Candidate probe: argmax/PoM of a two-block
+Schur-damped race swept over gamma, exact vs MC, showing how the
+win-probability vector moves as the blocks merge. Filed here; belongs
+with the covariance-grammar thinking ([[the-incumbent]]), not
+tridiagonal per se.
