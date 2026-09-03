@@ -144,3 +144,47 @@ days). This is the result that makes the thread a contribution: not
 fit on one quarter, prices the next quarter's failure-count tail 37%
 better." r=5.2 (finite) is the measured distance from independence
 (r -> infinity).
+
+## SKEPTIC'S CONFOUND (confound.py): partly administrative, and it
+## matters for the durability claim
+The dangerous alternative: Backblaze's "failure date" may be when a
+drive is MARKED/pulled (a maintenance cadence), not when it
+physically died. If failures are recorded in weekday batches, all
+manufacturers spike on the same ADMIN days -- cross-manufacturer
+correlation with no physical common cause. Tested:
+- WEEKDAY SIGNATURE EXISTS but is mild: weekday/weekend failure ratio
+  1.16 (Q1) and 1.15 (Q4); Q1 is Friday-heavy (17.4 vs Mon 7.7), and
+  3 of 6 Q1 spike days are Fridays. So there IS an administrative
+  cadence in the recording.
+- THE CORRELATION IS PARTLY, NOT WHOLLY, THIS. Removing day-of-week
+  means takes the Q1 cross-manufacturer correlation from +0.19 to
+  +0.12 (a third is weekly-administrative, two-thirds survives); Q4
+  is barely affected (+0.063 -> +0.059).
+- BUT day-of-week removal only kills the WEEKLY component. Irregular
+  bulk-removal batching (episodic, not weekly) would survive it and
+  is indistinguishable from physical co-failure using failure DATES
+  alone.
+
+CONSEQUENCE FOR THE DURABILITY CLAIM (the important part): the k-out-
+of-n / 20x / 37%-tail argument requires the co-timing to be PHYSICAL
+(drives actually failing together, threatening erasure-coded data).
+If the co-timing is administrative (drives failing on different real
+days but RECORDED together), durability is NOT affected -- the data
+was lost or not, spread over real time. Failure-date data cannot
+distinguish physical simultaneity from co-recording, and the
+day-of-week test proves at least some of the clustering is
+administrative. So:
+- SURVIVES: independence is statistically falsified -- the daily
+  count is overdispersed and the negative-binomial correction beats
+  Poisson out-of-sample (13%, 37% tail). That is a fact about the
+  RECORDED distribution regardless of cause.
+- DOES NOT SURVIVE cleanly: the interpretation as a physical
+  environmental common cause, and therefore the durability-risk
+  number, which is now CONDITIONAL on the co-timing being physical --
+  something this dataset cannot establish. A dataset with true
+  failure timestamps and placement (or SMART-based time-of-death) is
+  needed to separate the two.
+This is the honest downgrade: a real statistical finding
+(overdispersion, predictive) with an interpretation (physical common
+cause / durability) that the data cannot secure and a reporting
+confound partly present. The site note must say so.

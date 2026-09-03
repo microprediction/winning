@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Disks do not fail independently: a common-cause factor in the Backblaze data</title>
-  <meta name="description" content="Reliability math assumes disks fail independently. On Backblaze's public drive-failure data, the assumption is falsified: same-day failure clustering survives aging control, spike days span every manufacturer, and Seagate and HGST failures co-move at +0.40 after detrending — a shared environmental factor that independent MTBF misses, and that under-states erasure-coding data-loss risk by up to twentyfold." />
+  <meta name="description" content="Reliability math assumes disks fail independently. On Backblaze's public data the assumption is statistically falsified — the daily failure count is overdispersed and a one-parameter correction predicts the next quarter's tail 37% better — but whether the same-day clustering is a physical common cause or a reporting cadence cannot be settled from failure dates alone, and part of it is administrative. An honest look, with the confound stated." />
   <meta property="og:type" content="article" />
   <meta property="og:site_name" content="winning" />
   <meta property="og:title" content="Disks do not fail independently" />
@@ -118,9 +118,12 @@
       </tbody>
     </table>
 
-    <p>A bad manufacturing batch would concentrate in one model. An
-    event that hits every manufacturer at once, on one day, is not a
-    batch defect &mdash; it is environmental.</p>
+    <p>A bad manufacturing batch would concentrate in one model; an
+    event that touches every manufacturer at once points instead to
+    something they share. What they share, though, is not only their
+    environment &mdash; it is also the process that records their
+    failures, and that is the confound this note takes seriously
+    below.</p>
 
     <h2>The test aging cannot fake</h2>
     <p>The decisive check separates two manufacturers whose drives fail
@@ -162,6 +165,32 @@
     factor is &mdash; power, maintenance, handling, humidity &mdash; it
     is not the thermometer, and pinning it down would need the
     placement and operations data the public release omits.</p>
+
+    <h2>The uncomfortable alternative</h2>
+    <p>Before reading a physical cause into the clustering, consider a
+    duller one. Backblaze's failure date is the day a drive is marked
+    failed, which need not be the day it physically died: if drives are
+    pulled and recorded in batches on a maintenance cadence, every
+    manufacturer will appear to spike on the same administrative days,
+    with no shared physics at all. The data bears this out in part.
+    There is a weekday signature &mdash; failures run about 15% higher
+    on weekdays than weekends, and the first quarter is Friday-heavy,
+    with half its spike days falling on Fridays. Removing the
+    day-of-week pattern cuts the cross-manufacturer correlation from
+    +0.19 to +0.12: roughly a third of it is the weekly calendar, and
+    two thirds survives. But day-of-week removal only catches the
+    <em>weekly</em> part; irregular bulk-removal batching would survive
+    it and is indistinguishable, from failure dates alone, from drives
+    genuinely failing together.</p>
+    <p>This matters most for the durability reading below. That argument
+    needs the co-timing to be <em>physical</em> &mdash; drives actually
+    failing together, which is what threatens erasure-coded data. If the
+    co-timing is administrative &mdash; drives failing on different real
+    days but recorded together &mdash; durability is untouched. Failure
+    dates cannot tell the two apart, and the weekday test shows at least
+    some of the clustering is administrative. So take the next section
+    as conditional: it is what the correlation costs <em>if</em> it is
+    physical, an upper bound the data cannot confirm.</p>
 
     <h2>Does it predict, or just describe?</h2>
     <p>A correlation seen in hindsight is worth little if it does not
