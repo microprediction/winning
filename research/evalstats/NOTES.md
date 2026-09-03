@@ -110,3 +110,30 @@ notes, already implemented as the shifted survival field. The
 real-data replay independently motivates the margin machinery.
 Next: add the margin-based three-outcome rule to this replay and
 measure it on the same pairs.
+
+## Margin (three-outcome) stopping measured (2026-09-03)
+On the easy pair the rule is clean: direction declared at 51-70
+items with error under one percent at every margin tested. On the
+close pairs two honest findings:
+- TIE VERDICTS NEVER FIRE AT n = 1000, and arithmetic says they
+  cannot: certifying |Delta| <= 0.02 at 95 percent needs the gap
+  posterior sd below ~0.01, i.e. roughly 3,000 shared items at 30
+  percent discordance. A thousand-item benchmark cannot certify a
+  two-point tie, full stop. The rule's value at this scale is that
+  it says UNDECIDED 60-80 percent of the time where the binary rules
+  manufactured false directions.
+- Directional stops that do fire near the boundary (true gap within
+  a point of delta) still carry 12-40 percent error: repeated
+  threshold checking near a boundary inflates, posterior or not.
+  The fix is anytime-valid machinery -- confidence sequences /
+  e-processes (Ramdas line [U]) -- or explicit decision-theoretic
+  stopping with losses, not a tighter threshold.
+Three arrows forward: (a) e-process / confidence-sequence versions
+of the paired and margin rules for anytime validity; (b) pooling
+scenarios per model pair (HELM has dozens) to reach tie-certifiable
+sample sizes, which brings back the factor structure across
+scenarios -- the general engine's case rather than the paired
+special case; (c) loss-calibrated Bayesian stopping. The one-line
+summary of the day: paired beats separate-reports 2.8x when there is
+something to find; nothing at n = 1000 can find a one-point gap and
+the margin rule is the only one that says so honestly.
