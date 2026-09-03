@@ -227,6 +227,16 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         reproduces Thompson sampling's regret to within replication
         noise, as the occupancy identity requires. Experiments under
         <code>research/rs_crn/</code>.</li>
+      <li><a href="./assets/pdf/passk_posterior.pdf">Posterior-predictive
+        pass-at-k</a> (2026, note). The independence extrapolation
+        1&minus;(1&minus;p)^k inside post-training diagnostics, applied
+        to noisy per-prompt success estimates, declares zero-success
+        prompts impossible and understates aggregate pass@8 by thirteen
+        points on released rollout records; the two-parameter
+        empirical-Bayes posterior predictive scores seven-fold better
+        per prompt and lands the curve within two points. Probit-normal
+        and beta-binomial priors tie. Scripts and the extracted outcome
+        table under <code>research/cavity_calculus/exp2_passk/</code>.</li>
       <li><a href="./assets/pdf/collision_local_times_note.pdf">Computation of
         collision local times: a connection between new scalable probit
         methodology and Atlas models</a> (2026, research note). The
