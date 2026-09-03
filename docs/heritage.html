@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>One measurement, many names: a heritage of inferring ability from winning</title>
+  <meta name="description" content="How good is each competitor, given only who won? Psychology, economics, statistics, sport, and now AI evaluation have each asked and answered the same question under a different name, from Thurstone's 1927 law of comparative judgment to leaderboard pass@k. One object, a century of work." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="winning" />
+  <meta property="og:title" content="One measurement, many names" />
+  <meta property="og:description" content="Inferring latent ability from who wins: a century of the same computation, rediscovered field by field." />
+  <meta property="og:url" content="https://winning.microprediction.org/heritage.html" />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    .tl { position: relative; margin: 34px 0 10px; padding-left: 34px; }
+    .tl::before { content: ""; position: absolute; left: 9px; top: 6px; bottom: 6px;
+                  width: 2px; background: var(--accent); opacity: .35; border-radius: 1px; }
+    .tl-item { position: relative; margin: 0 0 26px; }
+    .tl-item::before { content: ""; position: absolute; left: -31px; top: 7px;
+                       width: 10px; height: 10px; border-radius: 50%;
+                       background: var(--accent); box-shadow: 0 0 0 3px var(--bg); }
+    .tl-item.mark::before { background: var(--warn); }
+    .tl-year a { color: inherit; text-decoration: none; border-bottom: 1px dotted currentColor; }
+    .tl-year a:hover { border-bottom-style: solid; }
+    .tl-year { font-weight: 700; font-variant-numeric: tabular-nums;
+               color: var(--accent); letter-spacing: .02em; }
+    .tl-item.mark .tl-year { color: var(--warn); }
+    .tl-who { font-weight: 600; }
+    .tl-field { font-size: 0.82rem; color: #777; font-variant-caps: all-small-caps;
+                letter-spacing: .04em; margin-left: 6px; }
+    .tl-item p { margin: 4px 0 0; }
+    .cta { background: #f1f0fb; border: 1px solid var(--border);
+           border-left: 4px solid var(--accent); border-radius: 8px;
+           padding: 16px 20px; margin: 28px 0; }
+    .cta h2 { margin: 0 0 6px; font-size: 1.15rem; border: none; padding: 0; }
+    .cta p { margin: 6px 0 0; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
+        <a href="/alternatives.html">Alternatives</a>
+        <a href="/heritage.html">Heritage</a>
+        <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="content">
+    <h1>One measurement, many names</h1>
+    <p class="subtitle">Inferring ability from who wins, rediscovered field by field
+    for a century.</p>
+
+    <p class="lead">One question keeps getting asked: how good is each competitor,
+    given only the record of who beat whom? A race records the fastest, a market
+    records the most chosen, a test records the ones who passed, a leaderboard
+    records the model that won the item. In every case the outcome is an argmax
+    over hidden qualities plus noise, and the task is to run the argmax
+    backwards. Psychologists, economists, statisticians, sports raters and now
+    AI evaluators have each formalized this, mostly without citing one another.
+    The names differ; the object is the same.</p>
+
+    <p>This package computes that object &mdash; the distribution of the winner of
+    many correlated competitors, and its inverse &mdash; and the timeline below is
+    the lineage it sits in. Highlighted nodes are the ones where two fields turn
+    out to have written the same equation.</p>
+
+    <div class="tl">
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://en.wikipedia.org/wiki/Gustav_Fechner">1860</a></span>
+        &middot; <span class="tl-who">Fechner</span><span class="tl-field">psychophysics</span>
+        <p>Elements of Psychophysics turns a subjective comparison &mdash; which
+        weight feels heavier &mdash; into a measurable quantity by modeling the
+        sensation as a noisy magnitude. The idea that a latent intensity can be
+        recovered from the frequency of a judgment is the seed of everything
+        below.</p>
+      </div>
+
+      <div class="tl-item mark">
+        <span class="tl-year"><a href="https://psycnet.apa.org/record/1928-00527-001">1927</a></span>
+        &middot; <span class="tl-who">Thurstone</span><span class="tl-field">psychology</span>
+        <p>The law of comparative judgment writes each stimulus as a Gaussian
+        "discriminal process" and the probability that one is judged greater than
+        another as the tail of their difference. This is the founding document:
+        latent quality is normal, the observation is an argmax, and the model is
+        inverted to place stimuli on a scale. Every later rating system is a
+        variation on it.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://en.wikipedia.org/wiki/Ernst_Zermelo#Applied_mathematics">1929</a></span>
+        &middot; <span class="tl-who">Zermelo</span><span class="tl-field">statistics</span>
+        <p>Faced with an unfinished chess tournament, Zermelo derives
+        maximum-likelihood strengths from win counts &mdash; the paired-comparison
+        model that Bradley and Terry rediscover independently two decades later,
+        and the direct ancestor of Elo.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://link.springer.com/article/10.1007/BF02289178">1951</a></span>
+        &middot; <span class="tl-who">Mosteller</span><span class="tl-field">psychology</span>
+        <p>Practical estimation of Thurstone's normal model (Case V), and a test
+        of its fit. Psychometrics is now computing, not just theorizing, the
+        inverse.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://www.jstor.org/stable/2334029">1952</a></span>
+        &middot; <span class="tl-who">Bradley &amp; Terry</span><span class="tl-field">statistics</span>
+        <p>The logistic paired-comparison model, arrived at without reference to
+        Zermelo. Swapping Thurstone's Gaussian noise for a logistic difference
+        buys a closed form, and the trade &mdash; tractability for the exact
+        normal model &mdash; is the one this package exists to undo.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://en.wikipedia.org/wiki/Luce%27s_choice_axiom">1959</a></span>
+        &middot; <span class="tl-who">Luce</span><span class="tl-field">psychology</span>
+        <p>The choice axiom: pick among many alternatives in proportion to
+        strengths, independent of irrelevant alternatives. This is the softmax,
+        stated as a behavioral law fifteen years before it becomes an
+        econometric estimator and sixty before it is a neural-network layer.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://en.wikipedia.org/wiki/Rasch_model">1960</a></span>
+        &middot; <span class="tl-who">Rasch</span><span class="tl-field">psychometrics</span>
+        <p>Item response theory: a test taker's ability and an item's difficulty
+        combine through a logistic to give the probability of a correct answer.
+        The measurement machinery of standardized testing, and &mdash; sixty-five
+        years on &mdash; the machinery being reinvented to score language models
+        on benchmarks.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://www.jstor.org/stable/2284468">1973</a></span>
+        &middot; <span class="tl-who">Harville</span><span class="tl-field">sport / statistics</span>
+        <p>Assigning probabilities to the full order of finish of a
+        multi-entry competition, motivated by horse racing. The winner is the
+        argmin of running times; the place and show probabilities are the deeper
+        order statistics. This is the problem this package solves exactly.</p>
+      </div>
+
+      <div class="tl-item mark">
+        <span class="tl-year"><a href="https://en.wikipedia.org/wiki/Discrete_choice#History">1974</a></span>
+        &middot; <span class="tl-who">McFadden</span><span class="tl-field">economics</span>
+        <p>Conditional logit: random utility maximization as an econometric model
+        of choice, which is Thurstone's 1927 model with Gumbel noise in place of
+        Gaussian. The economists rediscover the psychologists' object, industrialize
+        it, and win a Nobel for it (2000). Same argmax, new field.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://www.jstor.org/stable/2346567">1975</a></span>
+        &middot; <span class="tl-who">Plackett</span><span class="tl-field">statistics</span>
+        <p>A model for permutations built by drawing winners without replacement,
+        the ranking companion to Luce's choice axiom. The likelihood of a whole
+        finishing order, in the softmax family.</p>
+      </div>
+
+      <div class="tl-item mark">
+        <span class="tl-year"><a href="https://www.sciencedirect.com/science/article/pii/0022249677900263">1977</a></span>
+        &middot; <span class="tl-who">Yellott</span><span class="tl-field">psychology</span>
+        <p>The unification. Yellott proves that Luce's choice axiom holds for a
+        Thurstone model exactly when the noise is double-exponential (Gumbel) &mdash;
+        that softmax <em>is</em> the Gumbel special case of the Gaussian race.
+        The whole apparent divide between logit and probit is one distribution
+        choice, a fact this package makes computational: one lattice, softmax and
+        multinomial probit as two settings of it.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://en.wikipedia.org/wiki/Elo_rating_system">1978</a></span>
+        &middot; <span class="tl-who">Elo</span><span class="tl-field">sport</span>
+        <p>The chess rating system: a running estimate of each player's latent
+        strength from game outcomes, the paired-comparison model turned into
+        infrastructure. Glicko (1999) adds uncertainty, TrueSkill (2006) adds
+        teams and a Gaussian belief; all are Thurstone kept online.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://rss.onlinelibrary.wiley.com/doi/10.1111/j.2517-6161.1981.tb01153.x">1981</a></span>
+        &middot; <span class="tl-who">Henery</span><span class="tl-field">sport / statistics</span>
+        <p>Permutation probabilities as models for horse races, treating the
+        normal ranking probability directly &mdash; and finding it hard enough to
+        propose an approximation. The exact normal race is now a recognized
+        computational problem, not just a definition.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://www.tandfonline.com/doi/abs/10.1080/00949659208810398">1992</a></span>
+        &middot; <span class="tl-who">Genz</span><span class="tl-field">computational statistics</span>
+        <p>Numerical evaluation of multivariate normal probabilities by
+        separation of variables and quasi&ndash;Monte Carlo &mdash; the workhorse,
+        alongside the GHK simulator from econometrics, for the orthant integrals
+        that the normal race demands. The standard, and still the right tool at
+        high rank; this package's shared field is the linear-time complement for
+        structured covariance.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://en.wikipedia.org/wiki/Bill_Benter">1994</a></span>
+        &middot; <span class="tl-who">Benter</span><span class="tl-field">applied</span>
+        <p>A computer handicapping model &mdash; a multinomial logit over horses,
+        combined with the public's own probabilities &mdash; run for profit to the
+        tune of about a billion dollars at the Hong Kong track. The clearest proof
+        that inverting the race is worth doing well.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://doi.org/10.1137/19M1276261">2021</a></span>
+        &middot; <span class="tl-who">Cotton</span><span class="tl-field">this package</span>
+        <p>Inferring relative ability from winning probability in multi-entrant
+        contests, in the SIAM Journal on Financial Mathematics: the lattice method
+        that represents each competitor's performance as a density and inverts the
+        winner map for arbitrary noise, shipped as
+        <code>winning.classic</code>.</p>
+      </div>
+
+      <div class="tl-item">
+        <span class="tl-year"><a href="https://arxiv.org/abs/2407.21787">2024</a></span>
+        &middot; <span class="tl-who">Brown et&nbsp;al., and a wave after</span><span class="tl-field">AI evaluation</span>
+        <p>Large language models are sampled many times per problem and scored by
+        whether any attempt succeeds &mdash; pass@<em>k</em>, an order statistic of
+        latent per-attempt abilities. The statistics that follow (difficulty
+        priors, factor models of skill, adaptive item selection, leaderboard
+        uncertainty) are item response theory and the theory of comparative
+        judgment, rebuilt for a new examinee and rarely cited as such. The newest
+        field to rediscover the oldest measurement.</p>
+      </div>
+
+      <div class="tl-item mark">
+        <span class="tl-year"><a href="https://arxiv.org/abs/2609.01133">2026</a></span>
+        &middot; <span class="tl-who">Cotton</span><span class="tl-field">this package</span>
+        <p>Scalable inversion of contests with correlated performances: all the
+        win probabilities of a factor-correlated race in one linear-time pass,
+        their derivatives matrix-free, and the map from observed shares back to
+        abilities inverted at a million alternatives. The Thurstone&ndash;Mosteller
+        model, freed from the tractability compromise Bradley, Terry and Luce
+        made, at modern scale.</p>
+      </div>
+
+    </div>
+
+    <div class="cta">
+      <h2>The throughline</h2>
+      <p>Fechner's noisy sensation, Thurstone's discriminal process, McFadden's
+      random utility, the item response ability, the Elo rating and the latent
+      per-attempt success rate of a language model are one variable seen from six
+      doorways. In each, an argmax over hidden qualities is observed and the
+      hidden qualities are recovered. Psychology measured it first; the other
+      fields industrialize it, once a generation, under a new name. This package
+      computes the argmax and its inverse for correlated competitors, and the
+      list above is the company it keeps.</p>
+    </div>
+
+    <p><a href="/">&larr; Back to winning</a> &middot;
+    <a href="/#papers">Papers</a> &middot;
+    <a href="/alternatives.html">Alternatives</a></p>
+  </main>
+</body>
+</html>
