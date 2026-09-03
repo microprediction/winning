@@ -51,3 +51,47 @@ The LinkedIn line "probit finally competes with logit at modern
 scale" is not a tagline; it is the entire thesis and the entire
 market. Every application is one instance of it. Stop apologizing
 per-domain; lead with the universal foil.
+
+## Refinement (Peter): two incumbents, split by covariance structure
+The incumbent is logit ONLY when the covariance is dense/unstructured
+(or assumed away). When it is SPARSE-PRECISION -- tridiagonal (AR(1),
+a Markov chain), a local kernel, a tree/nested graph -- the incumbent
+is a BAYES NET / Gaussian Markov random field / Kalman filter /
+belief propagation. Two regimes, two foils:
+
+  covariance is...        incumbent           winning adds
+  dense / IIA / none      logit (softmax,     the CORRELATION
+                          Bradley-Terry,      (logit has none)
+                          1-(1-p)^k)
+  sparse precision        Bayes net / GMRF /  the ORDER STATISTIC
+  (tridiag, kernel,       Kalman / belief     -- P(this node is the
+  tree, Markov)           propagation         max/argmin/first) --
+                                              which marginal
+                                              inference does NOT give
+  LOW-RANK (factor)       NEITHER handles it  everything: logit
+                          well                ignores the factor,
+                                              GMRF can't cheaply
+                                              represent low-rank
+                                              (dense precision)
+
+## The two halves of the value proposition, made precise
+- vs LOGIT: winning adds the correlation. Logit assumes it away.
+- vs BAYES NET / GMRF: winning adds the ARGMAX / order-statistic
+  layer. The graphical model gives marginals and the joint, but NOT
+  the probability-of-maximum, the first-failure identity, or the
+  k-th order statistic -- those need a separate, usually expensive,
+  computation that winning does exactly over the same structure.
+  (This is why the tree/nested cavity IS message passing: on those
+  covariances winning competes with the Bayes net only on the
+  order-statistic layer, not on the correlation modelling.)
+
+## The home turf, sharpened
+FACTOR / low-rank-plus-diagonal is where BOTH incumbents are weak:
+logit ignores the shared factor, and sparse-precision methods
+(GMRF, Vecchia, Kalman) represent low-rank badly because low rank in
+the covariance is DENSE in the precision. So the cleanest wins are
+low-rank correlation + an order-statistic query -- exactly the
+factor-race the engine is built for. On sparse-precision covariances
+the pitch narrows to "the argmax layer your Bayes net does not give
+you"; on dense/unstructured it is "the correlation your logit throws
+away."
