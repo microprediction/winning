@@ -217,3 +217,17 @@ pile-up of the argmax still explains why OUTSIDE is right on bad
 news, and the bridge's retained variance explains why INSIDE is
 right on good news. The rapidity-spacing suggestion for the OU
 lattice stands.
+
+## Correction (external review of the grass paper, 2026-09-03): the
+## rapidity-spacing suggestion above is WRONG
+Correlations across consecutive OU intervals MULTIPLY,
+rho(t+s) = rho(t) rho(s), so the additive coordinate for interval
+composition is kappa t = -log rho -- NOT the rapidity. The
+tanh-addition identity is an equal-anchor bridge-MEAN-matching
+device, not a composition law. Uniform-in-theta lattice spacing has
+no additivity property; disregard the two "adopt rapidity spacing"
+remarks above. (Also corrected in the paper: the variance
+amplification of interior over mean-matched exterior points is the
+CONSTANT (1+rho)/(1-rho) = e^{2 Theta} across the whole bracket, and
+staying at an observed anchor is optimal above b = e^{2 Theta} --
+the grass claim is conditional, not universal.)
