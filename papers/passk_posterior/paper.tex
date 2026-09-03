@@ -17,32 +17,35 @@ extrapolation in fine-tuning diagnostics}
 \maketitle
 
 \begin{abstract}
-\noindent Pass-at-$k$ diagnostics for post-training frequently
-extrapolate from a per-prompt success estimate $\hat p$ by the
-independence formula $1-(1-\hat p)^k$; the coverage-ratio diagnostic
-of \citet{malladi2026}, for instance, converts pass@1 to pass@16 by
-$f_{16}(p) = 1-(1-p)^{16}$. We measure what the plug-in costs on
-released per-sample rollout records (nine thousand prompts, eight
-scored samples each) and replace it with the posterior-predictive
-quantity $\mathbb{E}[1-(1-p)^k \mid s]$ under a two-parameter
-empirical-Bayes difficulty prior fitted by marginal maximum
-likelihood. Scoring held-out samples, the plug-in attains log loss
-$3.37$ per prompt, driven by prompts with no training successes that
-it declares impossible and that then succeed; the posterior
-predictive attains $0.48$. Extrapolating the aggregate curve from
-half the samples, the plug-in understates pass@8 by thirteen points
-absolute while the posterior predictive lands within two.
-Probit-normal and beta-binomial priors tie to three decimals, so
-nothing hangs on the family. The bias shrinks as the per-prompt
-sample count grows, and the study covers one model on one
-environment suite; both limits are stated where they bind.
+\noindent A prompt that fails a handful of scored attempts is rated
+impossible by the standard pass-at-$k$ extrapolation
+$1-(1-\hat p)^k$, and rated so at every $k$. On nine thousand
+prompts with eight scored samples each, that plug-in step --- the
+same one the coverage diagnostic of \citet{malladi2026} applies as
+$f_{16}(p) = 1-(1-p)^{16}$ --- costs seven-fold in held-out log loss
+and understates aggregate pass@8 by thirteen points. Replacing the
+plug-in evaluation with the posterior expectation
+$\mathbb{E}[1-(1-p)^k \mid s]$ under a two-parameter difficulty
+prior, fitted once across prompts by marginal maximum likelihood,
+removes most of the damage: log loss $0.48$ against $3.37$, the
+extrapolated curve within two points of truth. Probit-normal and
+beta-binomial priors tie to three decimals, so nothing hangs on the
+family. The bias shrinks as the per-prompt sample count grows, and
+the data cover one model on one task suite.
 \end{abstract}
 
 \section{Introduction}
 
-A language model is sampled $k$ times on a prompt and succeeds if
-any sample passes; pass@$k$, the probability of that event averaged
-over prompts, is the working currency of post-training evaluation.
+Language models are improved after pretraining by having them
+attempt problems and scoring the attempts automatically: a unit test
+passes, a final answer matches, a verifier accepts. Training on
+one's own scored attempts is what reinforcement-style post-training
+is, and the evaluations that steer it sample each prompt many times,
+because a model that solves a problem once in sixteen tries can
+often be trained into solving it reliably. Pass@$k$ is the
+probability that at least one of $k$ sampled attempts succeeds,
+averaged over prompts, and it is the working currency of
+post-training evaluation.
 When $n \ge k$ scored samples per prompt are available, the unbiased
 estimator of \citet{chen2021},
 $1-\binom{n-c}{k}/\binom{n}{k}$ with $c$ the correct count, settles
@@ -50,11 +53,13 @@ the matter. The trouble begins when $k$ exceeds the samples at hand
 and the curve must be extrapolated. The common device is the
 independence formula: estimate a per-prompt success rate $\hat p$,
 report $1-(1-\hat p)^k$. It appears inside diagnostics that steer
-training decisions; \citet{malladi2026} write ``we convert pass@1 to
-an estimated pass@16 value using $f_{16}(p):=1-(1-p)^{16}$'' as a
-step of a coverage-ratio rule that decides where their filtered
-fine-tuning method should be applied, and the rule works well in
-their experiments.
+training decisions. \citet{malladi2026}, whose filtered fine-tuning
+method concentrates learning on the prompts a model has not yet
+mastered, decide where the method should be applied by comparing
+coverage --- the set of prompts solvable within sixteen attempts ---
+before and after standard fine-tuning, and write ``we convert pass@1
+to an estimated pass@16 value using $f_{16}(p):=1-(1-p)^{16}$'' as a
+step of that rule. The rule works well in their experiments.
 
 This note is about the extrapolation step, not the diagnostic built
 on it. The formula is exact when $p$ is known; applied to a noisy
@@ -115,9 +120,11 @@ below treats them as such.
 \section{Numerical study on released rollouts}
 
 The data are the publicly released Pass8 rollout records of the RLVE
-training suite: nine thousand prompts across eighteen procedurally
-generated environments, eight scored samples per prompt from
-Qwen3-4B-Thinking, three gigabytes of response text reduced to a
+training suite: procedurally generated reasoning tasks, each with an
+automatic verifier, of the kind used as reinforcement-learning
+environments for language models. They carry nine thousand prompts
+across eighteen environment families, eight scored samples per
+prompt from the Qwen3-4B-Thinking model, three gigabytes of response text reduced to a
 forty-one-kilobyte outcome table.\footnote{Dataset:
 \texttt{CL-From-Nothing/RLVE-Qwen3-4B-Thinking-2507-Pass8-Rollouts}
 on Hugging Face. Extraction and experiment scripts are committed
