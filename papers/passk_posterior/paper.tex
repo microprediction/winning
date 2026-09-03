@@ -82,26 +82,44 @@ removes most of it.
 
 \section{The estimation problem}
 
-Each prompt $i$ carries a latent per-attempt success probability
-$p_i$, drawn independently from a difficulty distribution $G$ on
-$[0,1]$; conditional on $p_i$, scored attempts at that prompt are
-independent Bernoulli$(p_i)$ trials. From $m$ training attempts the
-observed success count is $s_i \sim \mathrm{Bin}(m, p_i)$. Two
-estimands are of interest. Per prompt, the probability that a fresh
-batch of $k$ attempts contains a success,
+The practitioner's situation is this. There are $N$ prompts and a
+compute budget that allows $m$ scored attempts at each, so the data
+are success counts $s_1, \dots, s_N$ with $s_i \in \{0, \dots,
+m\}$. Decisions are then taken about a larger budget $k > m$ that
+will not be spent yet, or ever: whether a prompt is worth training
+on depends on its chance of being solved within $k$ attempts, and
+whether a fine-tuning method helped depends on how many prompts
+cross that bar. \citet{malladi2026} instantiate the situation with
+$k = 16$ extrapolated from pass@1 estimates; any pass@$k$ curve
+reported beyond the sampled depth instantiates it too. The problem
+is to choose the function of $s_i$ that stands in for the
+unavailable deeper measurement, and the quality of a choice is
+measured the way predictions are: per prompt by log loss and Brier
+score against later attempts, in aggregate by the error of the
+reported curve.
+
+The model under which the problem has an exact answer is minimal.
+Each prompt carries a latent per-attempt success probability $p_i$,
+drawn independently from a difficulty distribution $G$ on $[0,1]$;
+conditional on $p_i$, attempts are independent
+$\mathrm{Bernoulli}(p_i)$ trials, so $s_i \sim \mathrm{Bin}(m,
+p_i)$. Two estimands follow. Per prompt, the probability that a
+fresh batch of $k$ attempts contains a success,
 \begin{equation}
 q_k(p_i) \;=\; 1-(1-p_i)^{k},
 \end{equation}
-which must be predicted from $s_i$ alone; and in aggregate, the
-pass@$k$ the whole prompt population would exhibit,
+to be predicted from $s_i$ alone; and in aggregate, the pass@$k$
+the whole population would exhibit,
 \begin{equation}
 \pi_k \;=\; \int_0^1 \bigl(1-(1-p)^k\bigr)\,dG(p).
 \end{equation}
 The conditional independence of attempts given $p_i$ is not the
 assumption under attack: attempts are drawn with independent seeds,
 and the model grants that. What varies across the field is $p_i$
-itself, and everything below is about respecting that variation when
-$s_i$ is a noisy glimpse of it.
+itself, and the whole question is how to respect that variation when
+$s_i$ is a noisy glimpse of it. Evaluating $q_k$ at $s_i/m$ is one
+answer; taking the posterior expectation of $q_k$ is the other; the
+next two sections price them.
 
 \section{The plug-in and its failure mode}
 
