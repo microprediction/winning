@@ -190,3 +190,10 @@ RELATION TO THIS TRACK -- the dual, not the same result:
 - Eval-design echo: the paper's inside-choice "tell" is a one-bit
   behavioral test of meta-learning -- kin to the evalstats
   diagnostics program.
+
+## Go Forth now has a home: github.com/microprediction/browniansearch
+Created 2026-09-03. The paper lives there as the founding working
+paper (canonical dated copy stays in microprediction/home, first
+committed 2022-04-06); browniansearch/brownianbandit are the
+search-one/prune-many siblings, and the k-shot lattice DP belongs in
+browniansearch when built, using this track's transfer operator.
