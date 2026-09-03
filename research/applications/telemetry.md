@@ -106,3 +106,49 @@ closed form) but NARROW and below exact_pom / eval-stats. Worth one
 probe -- the Alibaba fan-out experiment -- which if it shows the
 over-provisioning gap seeds a short note; the hedging decision layer
 is the second step and needs the cost model to be credible.
+
+## Real benchmark data (verified 2026-09-03)
+Alibaba cluster-trace-microservices-v2021 carries EXACTLY the three
+fields the fan-out experiment needs, confirmed from the schema:
+- MS_CallGraph_Table (25 GB, 0.5%-sampled): traceID + rpcID give the
+  fork-join call structure; rt is per-call latency in ms.
+- nodeid gives HOST PLACEMENT -- the shared-host factor loading, the
+  correlation the experiment turns on.
+- MS_MCR_RT_Table: consumerRPC_RT / providerRPC_RT, the aggregate
+  per-microservice response-time marginals.
+- Scale: 10,000+ nodes, 20,000+ microservices, 20M+ call graphs, 12h.
+Stream-and-reduce as with the pass@k rollouts (keep only the leaf
+call groups' (rt, nodeid) tuples). DeathStarBench (SocialNetwork /
+HotelReservation, Gan ASPLOS'19) is the controlled synthetic
+cross-check where the topology and load are known exactly. Google
+2019 Borg trace lacks span DAGs -- not usable for fan-out.
+
+## Clean mathematical representation
+Factor model in LOG-latency (log-normal service times become
+Gaussian, correlation stated where it is natural):
+    log L_i = mu_i + v_i' F + sqrt(d_i) eps_i,
+    F ~ N(0, I_k),  eps_i ~ N(0,1),  Sigma = VV' + diag(D).
+v_i is backend i's exposure to shared factors (a 1 in column h if it
+sits on host h; rack and DC-tree columns for block/hierarchical).
+
+Scatter-gather latency T = max_i L_i. The SLO-violation tail is the
+complement of the max CDF, and conditioning on F makes it the
+shared-field integral the engine computes in O(nLQ):
+    P(T <= t) = E_F prod_i Phi((log t - mu_i - v_i'F)/sqrt(d_i)).
+The straggler identity is the max-wins vector p_i = P(L_i = max_j
+L_j), the cavity computation; the hedge benefit is the min
+counterfactual P(min over a chosen set > t) = E_F prod (1 - Phi(.)),
+with adding/removing a replica an addition/removal counterfactual.
+
+The independence baseline everyone uses is the SAME integral with F
+deleted (k=0): P(T > t) ~ 1 - prod_i (1 - p_i), i.e. 1-(1-p)^n when
+homogeneous. The gap between the two is not empirical -- it is
+SLEPIAN'S INEQUALITY (Slepian 1962): for jointly Gaussian log-
+latencies, P(all log L_i <= log t) is monotone increasing in the
+pairwise covariances. Hence positive correlation (shared host/rack,
+v_i aligned) makes P(T <= t) LARGER and the max tail P(T > t)
+SMALLER than independence predicts. "Independence over-provisions"
+is therefore a theorem, not a measurement: the correlated max tail
+is dominated by the independent one, and the engine computes the
+exact value between the two bounds. That is the clean claim the
+Alibaba experiment then confirms numerically.
