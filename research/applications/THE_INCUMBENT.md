@@ -60,9 +60,10 @@ is a BAYES NET / Gaussian Markov random field / Kalman filter /
 belief propagation. Two regimes, two foils:
 
   covariance is...        incumbent           winning adds
-  dense / IIA / none      logit (softmax,     the CORRELATION
-                          Bradley-Terry,      (logit has none)
-                          1-(1-p)^k)
+  dense / IIA assumed     BASIC logit (MNL,   the CORRELATION (basic
+                          softmax, Bradley-   MNL has IIA; but see
+                          Terry, 1-(1-p)^k)   below -- the FAMILY has
+                                              correlation)
   sparse precision        Bayes net / GMRF /  the ORDER STATISTIC
   (tridiag, kernel,       Kalman / belief     -- P(this node is the
   tree, Markov)           propagation         max/argmin/first) --
@@ -74,8 +75,32 @@ belief propagation. Two regimes, two foils:
                                               represent low-rank
                                               (dense precision)
 
-## The two halves of the value proposition, made precise
-- vs LOGIT: winning adds the correlation. Logit assumes it away.
+## CORRECTION (Peter): logit does NOT assume correlation away
+Sloppy of me. Only BASIC MNL / softmax / Bradley-Terry has IIA
+(iid Gumbel -> no error correlation). The logit FAMILY models
+correlation richly: NESTED logit correlates within nests (closed
+form, restricted to a partition); GEV / cross-nested generalizes the
+nesting; MIXED / random-parameters logit approximates ANY random-
+utility model including full correlation, by SIMULATING the mixing
+integral. Mixed logit is the workhorse for correlated choice and --
+per posttraining-luce-vs-probit-verdict -- it WINS at finite budgets.
+So the foil is not "logit has no correlation"; the foil is a family
+that HAS correlation, by three routes:
+  MNL / softmax        no correlation (IIA), tractable base
+  nested / GEV logit   restricted-structure correlation, closed form
+  mixed logit          general correlation, by SIMULATION (expensive,
+                       strong at finite budgets)
+
+## The two halves of the value proposition, corrected
+- vs BASIC MNL / softmax: winning adds the correlation IIA drops.
+  This is the only place "adds the correlation" is honest.
+- vs the CORRELATED logit family (nested / GEV / mixed): winning
+  does NOT add correlation -- they have it. Winning offers it EXACT
+  and STRUCTURED at SCALE without simulation (mixed logit simulates;
+  nested/GEV restricts the structure), PLUS the argmax / order-
+  statistic / inversion outputs the logit family does not natively
+  give. The competitor is mixed logit's simulation cost and nested
+  logit's structural restriction, not an absence of correlation.
 - vs BAYES NET / GMRF: winning adds the ARGMAX / order-statistic
   layer. The graphical model gives marginals and the joint, but NOT
   the probability-of-maximum, the first-failure identity, or the
