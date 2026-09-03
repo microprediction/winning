@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Disks do not fail independently: a common-cause factor in the Backblaze data</title>
+  <meta name="description" content="Reliability math assumes disks fail independently. On Backblaze's public drive-failure data, the assumption is falsified: same-day failure clustering survives aging control, spike days span every manufacturer, and Seagate and HGST failures co-move at +0.40 after detrending — a shared environmental factor that independent MTBF misses, and that under-states erasure-coding data-loss risk by up to twentyfold." />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="winning" />
+  <meta property="og:title" content="Disks do not fail independently" />
+  <meta property="og:description" content="A common-cause factor hiding in the public Backblaze drive-failure data, and what it does to k-out-of-n durability math." />
+  <meta property="og:url" content="https://winning.microprediction.org/notes-backblaze.html" />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    table.num { border-collapse: collapse; margin: 1.2rem 0; font-size: 0.92rem; }
+    table.num th, table.num td { padding: 5px 14px; text-align: right;
+      border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+    table.num th:first-child, table.num td:first-child { text-align: left; }
+    table.num thead th { border-bottom: 2px solid var(--border); }
+    .callout { background: #f1f0fb; border-left: 3px solid var(--accent);
+      padding: 12px 18px; border-radius: 4px; margin: 18px 0; }
+    .meta { color: #777; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
+        <a href="/alternatives.html">Alternatives</a>
+        <a href="/heritage.html">Heritage</a>
+        <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="content">
+    <h1>Disks do not fail independently</h1>
+    <p class="meta">A common-cause factor in the public Backblaze data,
+    and what it does to durability math. September 2026.</p>
+
+    <p class="lead">Storage reliability rests on an assumption that is
+    almost always left implicit: that drives fail independently. Mean
+    time between failures, the annualized failure rate, and the
+    durability guarantees of erasure coding all multiply per-drive
+    probabilities as if the events were unrelated. This note tests the
+    assumption on Backblaze's public drive-failure data and finds it
+    false in the way that matters most for data loss &mdash; and the
+    correlated alternative is exactly what this package computes.</p>
+
+    <p>A request that fans out and waits for the slowest backend is the
+    maximum of a correlated race; a stored dataset that survives until
+    the k-th of its drives fails is a correlated order statistic. The
+    engine here prices both. Reliability is the min-wins side of it,
+    and the classical competing-risks formula for which cause strikes
+    first is one of its special cases. So the question is empirical:
+    in a real fleet, is the correlation large enough to matter?</p>
+
+    <h2>The data</h2>
+    <p>Backblaze publishes, openly, one record per drive per day:
+    model, a failure flag, and SMART attributes, from 2013 to the
+    present. We use the first quarter of 2025 &mdash; about 340,000
+    drives, 90 days, 1,067 failures across 76 models &mdash; reduced to
+    the daily failure count of each model. The drive model is the
+    correlation variable we can see: drives of the same model share a
+    manufacturing lineage and firmware. What Backblaze does not publish
+    is rack or datacenter placement, so the finer common cause of a
+    shared power or cooling domain is invisible; the correlation found
+    below is therefore a floor, not a ceiling.</p>
+
+    <h2>Independence is falsified, and it is not aging</h2>
+    <p>Under independent constant-hazard failure, a cohort's daily
+    failure count is Poisson, with its variance equal to its mean. The
+    fleet's daily count is over-dispersed by a factor of 3.16. The
+    obvious objection is that this is drift, not correlation: cohorts
+    age and turn over across a quarter, and a rising baseline inflates
+    the variance. But aging is a slow trend and cannot make different
+    drives fail on the same calendar day. Removing a smooth seven-day
+    per-drive hazard trend and adjusting for cohort size leaves the
+    dispersion at 2.88 &mdash; almost all of it is genuine same-day
+    clustering that no trend explains.</p>
+
+    <p>The clustering is visible as discrete events. Six days in the
+    quarter carry more than three standard deviations of excess
+    failures, roughly double the expected count, and each of those days
+    spans between seven and thirteen distinct drive models:</p>
+
+    <table class="num">
+      <thead><tr><th>date</th><th>failures</th><th>expected</th>
+        <th>distinct models</th></tr></thead>
+      <tbody>
+        <tr><td>2025-01-03</td><td>22</td><td>11</td><td>7</td></tr>
+        <tr><td>2025-01-14</td><td>23</td><td>11</td><td>10</td></tr>
+        <tr><td>2025-01-18</td><td>22</td><td>12</td><td>11</td></tr>
+        <tr><td>2025-02-13</td><td>22</td><td>11</td><td>12</td></tr>
+        <tr><td>2025-02-28</td><td>30</td><td>17</td><td>11</td></tr>
+        <tr><td>2025-03-14</td><td>29</td><td>10</td><td>13</td></tr>
+      </tbody>
+    </table>
+
+    <p>A bad manufacturing batch would concentrate in one model. An
+    event that hits every manufacturer at once, on one day, is not a
+    batch defect &mdash; it is environmental.</p>
+
+    <h2>The test aging cannot fake</h2>
+    <p>The decisive check separates two manufacturers whose drives fail
+    by unrelated mechanisms. After removing each manufacturer's own
+    trend, do their daily failure residuals still move together? They
+    do, and positively:</p>
+
+    <table class="num">
+      <thead><tr><th>pair</th><th>same-day correlation</th></tr></thead>
+      <tbody>
+        <tr><td>Seagate &times; HGST</td><td>+0.40</td></tr>
+        <tr><td>Seagate &times; WDC</td><td>+0.24</td></tr>
+        <tr><td>Toshiba &times; HGST</td><td>+0.23</td></tr>
+        <tr><td>Seagate &times; Toshiba</td><td>+0.12</td></tr>
+        <tr><td>Toshiba &times; WDC</td><td>+0.11</td></tr>
+        <tr><td colspan="2" style="border:none; padding-top:2px;">
+          mean off-diagonal: <strong>+0.19</strong></td></tr>
+      </tbody>
+    </table>
+
+    <p>Seagate and HGST have different platters, heads, firmware and
+    failure physics. Their detrended failures co-moving at +0.40 on a
+    daily basis has only one explanation: a factor shared by the drives
+    regardless of who made them, which is to say the environment they
+    sit in. That is the common cause a durability model needs, and the
+    one an independent MTBF calculation cannot see.</p>
+
+    <h2>What it costs, in durability</h2>
+    <p>Erasure-coded storage loses data when the k-th of its drives
+    fails before repair &mdash; a k-out-of-n order statistic, not a
+    single failure. Common cause makes several drives fail together,
+    so it is precisely the tail that erasure coding is designed to
+    protect. Fitting a single shared daily factor to the fleet
+    (a modest loading, well short of the worst individual models) and
+    pricing the probability of k simultaneous failures among twenty
+    correlated drives, against the independent calculation:</p>
+
+    <table class="num">
+      <thead><tr><th>simultaneous failures</th>
+        <th>correlated / independent</th></tr></thead>
+      <tbody>
+        <tr><td>&ge; 2</td><td>1.4&times;</td></tr>
+        <tr><td>&ge; 3</td><td>2.1&times;</td></tr>
+        <tr><td>&ge; 4</td><td>3.8&times;</td></tr>
+        <tr><td>&ge; 6</td><td>19.7&times;</td></tr>
+      </tbody>
+    </table>
+
+    <p>The independent calculation under-states the risk of correlated
+    data loss by up to twentyfold at the depth that matters, and by
+    more within the individual models that carry the strongest common
+    cause. The engine computes the exact value; the point is that it is
+    nowhere near the independent one.</p>
+
+    <div class="callout">
+      Two systems races, one wrong assumption in opposite directions.
+      For the maximum of a fan-out &mdash; tail latency &mdash; positive
+      correlation makes the tail <em>lighter</em>, so the independence
+      formula over-provisions capacity. For the count of failures,
+      common cause makes the tail <em>heavier</em>, so independence
+      under-states durability risk. Both are the same missing factor;
+      the engine prices both.
+    </div>
+
+    <h2>What this does and does not show</h2>
+    <p>It shows that in a real, public fleet the failure correlation is
+    large enough to change durability math, that it is environmental
+    rather than a batch artifact, and that it is visible without any
+    private telemetry. It does not resolve the finer structure &mdash;
+    a rack losing power, a hot aisle &mdash; because the public data
+    carries no placement, so the factor measured here is fleet-wide and
+    the true correlation within a failure domain is larger. The
+    baseline is a constant-hazard null; a survival model with drive age
+    would sharpen the numbers without changing the direction. Every
+    figure above comes from a committed script.</p>
+
+    <p><a href="https://github.com/microprediction/winning/tree/main/research/applications/backblaze">Reproduction
+    scripts and findings &rarr;</a> &middot;
+    <a href="/heritage.html">Heritage</a> &middot;
+    <a href="/">Back to winning</a></p>
+  </main>
+</body>
+</html>
