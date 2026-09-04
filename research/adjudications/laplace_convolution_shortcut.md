@@ -108,3 +108,24 @@ normal row -- exact marginals by closure -- pins it on the
 fresh-noise-per-stage decomposition, not the pricing; recorded in the
 update_ranking docstring so it is not re-read as a bug.
 update_ranking_exact measures 0.94+ coverage on every base.
+
+## Refinement of the update_ranking adjudication (bandits, same day)
+Two defects, not one, in the stagewise path (approx vs exact on
+identical evidence, 12 seeds x 60): (1) over-shrinkage from the
+fresh-noise decomposition is roughly CONSTANT, 21-28% on every
+non-IIA base, and ~0% under gumbel (var ratio 0.977, mean err ratio
+1.002) where IIA makes stagewise exact -- the control that proves the
+double-counting mechanism; (2) the tail-weight coverage ladder is
+driven by the MEAN degrading (RMS err ratio 1.20 normal -> 1.25
+student4), not by extra shrinkage (which is flat to mildly LESS
+severe for heavy tails). Docstring amended accordingly.
+
+## Open lead (unchased): failure_base stagewise beats exact on mean
+failure_base is the most over-shrunk (var ratio 0.718) yet its
+stagewise MEAN beats the exact path (err ratio 0.689; coverage reads
+0.990 because a small interval sits on a better mean). An
+approximation beating the method it approximates usually indicates
+something off in the EXACT path for bimodal bases -- plausibly the
+FD-of-adjoint curvature or the moment projection under a two-lump
+posterior. Worth a look if failure_base rankings matter; not part of
+the convolution fix's gate.

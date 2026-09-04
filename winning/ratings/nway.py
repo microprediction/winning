@@ -325,18 +325,24 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     MC-posterior-verified. Use this stagewise function only for speed
     on independent worlds, knowing what it costs.
 
-    That cost, in CALIBRATION terms (bandits audit, 25 seeds each,
-    2026-09-04, with every stage's marginal priced by the exact
-    predictive curves): posterior intervals are systematically
-    overconfident, degrading monotonically with tail weight --
-    coverage at a 0.95 target: gumbel 0.925 (stagewise is exact under
-    Gumbel/IIA, the residual is the moment projection), normal 0.890,
-    logistic 0.870, laplace 0.850, student-t(4) 0.830; robust z sd up
-    to 1.39. The NORMAL row pins the cause: its marginals are exact by
-    Gaussian closure, so the overconfidence is this decomposition's
-    fresh-noise-per-stage assumption double-counting the shared
-    realization, not a marginal-pricing defect. Do not fix it here;
-    update_ranking_exact measures 0.94+ coverage on every base."""
+    That cost, measured against update_ranking_exact on identical
+    evidence (bandits audit, 2026-09-04, every stage's marginal priced
+    by the exact predictive curves), is TWO separate defects. First,
+    the fresh-noise-per-stage assumption double-counts the shared
+    realization and OVER-SHRINKS variance by a roughly constant 21-28%
+    on any non-IIA base (approx/exact posterior variance 0.765 normal,
+    0.775 logistic, 0.794 laplace, 0.794 student-t(4)) -- and by ~0%
+    under gumbel (0.977, mean error ratio 1.002), where IIA makes the
+    decomposition exact: the control that pins the mechanism. Second,
+    the POINT ESTIMATE degrades with tail weight (RMS mean error vs
+    exact: 1.20 normal rising to 1.25 student-t(4)), and it is this,
+    not extra shrinkage, that drives the coverage ladder at a 0.95
+    target -- gumbel 0.925, normal 0.890, logistic 0.870, laplace
+    0.850, student-t(4) 0.830: a near-constant too-small interval
+    centred on a progressively worse mean. The normal rows show both
+    defects with marginals exact by Gaussian closure, so neither is a
+    marginal-pricing bug. Do not fix them here; update_ranking_exact
+    measures 0.94+ coverage on every base."""
     m = np.asarray(m, dtype=float).copy()
     v = np.asarray(v, dtype=float).copy()
     order = list(order)
