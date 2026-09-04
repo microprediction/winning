@@ -98,11 +98,62 @@
       </table>
       <p>The diagonal iteration's own-slope preconditioner is a byproduct
       of the forward pass it already has to run to get the shares &mdash;
-      free. Each PCG iteration needs an exact
-      Jacobian&ndash;vector product, costing about one more full
-      \(O(nL)\) field pass. The easy problem only needs a dozen of those
-      in total and still loses on the clock, because the diagonal
-      iteration's sweeps are each a fraction of a pass.</p>
+      free. Each PCG iteration needs an exact Jacobian&ndash;vector
+      product instead.</p>
+
+      <p class="faq-q">Since a CG iteration and a sweep both cost one
+      pass over the tie edges, the comparison collapses to inner CG count
+      times Newton steps against sweep count. Losing the clock while
+      winning iterations puts the whole cost in that inner count, and
+      it should split by regime. Jacobi on a Laplacian sets the count by
+      the spectral gap, so if it's flat while sweeps grow with field
+      size, the verdict flips before you reach a million. Does it move
+      with field size across the exp23 variants?</p>
+
+      <h3>Does the ratio move with field size?</h3>
+      <p>A CG iteration and a sweep don't cost the same one pass.
+      Measured directly at \(n=200\), one IBP-form JVP takes
+      <span class="num">11.5</span>&times; as long as one forward pass
+      with slopes. Measured across \(n=200\) to \(n=12{,}800\):</p>
+      <table class="cmp">
+        <tr><th>\(n\)</th><th>forward pass</th><th>JVP (ibp)</th><th>ratio</th></tr>
+        <tr><td class="num">200</td><td class="num">128.7 ms</td><td class="num">1479.7 ms</td><td class="num">11.5&times;</td></tr>
+        <tr><td class="num">800</td><td class="num">507.8 ms</td><td class="num">5885.7 ms</td><td class="num">11.6&times;</td></tr>
+        <tr><td class="num">3,200</td><td class="num">2038.4 ms</td><td class="num">23684.3 ms</td><td class="num">11.6&times;</td></tr>
+        <tr><td class="num">12,800</td><td class="num">8122.5 ms</td><td class="num">96357.1 ms</td><td class="num">11.9&times;</td></tr>
+      </table>
+      <p>Both operations are \(O(n)\) at fixed \(L\), and the ratio
+      between them is flat across a 64&times; range in \(n\). The per-call
+      cost gap doesn't close with field size.</p>
+      <p>The sweep count doesn't move either, at least on the easy
+      problem. Production Jacobi's iteration count, same problem family,
+      same tolerance:</p>
+      <table class="cmp">
+        <tr><th>\(n\)</th><th>200</th><th>800</th><th>3,200</th><th>12,800</th></tr>
+        <tr><td>sweeps</td><td class="num">19</td><td class="num">18</td><td class="num">23</td><td class="num">23</td></tr>
+      </table>
+      <p>That is consistent with the spectral-gap story: this
+      correlation structure comes from a rank-2 factor model, so the
+      tie-density graph's effective diameter doesn't grow with \(n\), and
+      neither does the sweep count needed to converge.</p>
+      <p>What isn't flat is the hybrid solver itself. At \(n=200\) it
+      converges in <span class="num">8</span> Newton steps and
+      <span class="num">15</span> total JVPs. Run unmodified on the same
+      easy problem at \(n=3{,}200\) &mdash; same 10-Newton-step,
+      5-inner-CG-iteration budget &mdash; it does not converge: 10 Newton
+      steps, 20 JVPs, residual stuck at
+      <span class="num">2.4e-1</span> against a
+      <span class="num">1e-8</span> tolerance. Wall clock at that size:
+      production Jacobi <span class="num">46.8</span>s, the hybrid
+      <span class="num">515.6</span>s and still short of tolerance. The
+      gap doesn't narrow going from \(n=200\) to \(n=3{,}200\); it widens.</p>
+      <p>Whether that is the outer Newton step count genuinely growing
+      with \(n\), or the trust-region and step-acceptance constants in
+      <code>run_newton_cg3.py</code> being tuned for \(n=200\) and not
+      rescaled, isn't separated by this run. Exp23 only ever ran round 3
+      at \(n=200\) before this; at \(n=3{,}200\) the unmodified hybrid
+      fails to converge, so the flat-inner-count mechanism doesn't get a
+      chance to produce a flip here.</p>
 
       <h3>Bounded chatter, or growing error?</h3>
       <p>Because the diagonal iteration re-evaluates the field (and
@@ -150,9 +201,11 @@
         same hard case &mdash; measured, not yet explained.
       </div>
       <p>Sources: <a href="https://github.com/microprediction/winning/blob/main/research/experiments/exp23_newton_cg/README.md">the
-      exp23 README</a> for the three-round comparison, and
-      <a href="https://github.com/microprediction/winning/blob/main/research/equilibrium/NOTES.md">the
-      equilibrium notes</a> for the Sinkhorn framing of the diagonal
+      exp23 README</a> for the three-round, \(n=200\) comparison; the
+      field-size numbers above are
+      <a href="https://github.com/microprediction/winning/blob/main/research/experiments/exp23_newton_cg/run_field_size_scaling.py">run_field_size_scaling.py</a>
+      in the same directory. <a href="https://github.com/microprediction/winning/blob/main/research/equilibrium/NOTES.md">The
+      equilibrium notes</a> give the Sinkhorn framing of the diagonal
       iteration as a fixed point.</p>
     </div>
 
