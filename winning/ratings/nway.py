@@ -321,12 +321,14 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     _, grad = _order_pass(m, sd, order, base=base)
     m_new = m + v * grad
+    eps = _fd_eps(base, eps)
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
         _, gp = _order_pass(m + ej, sd, order, base=base)
         _, gm = _order_pass(m - ej, sd, order, base=base)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
+    d2 = _clamp_d2(d2, base)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new
 
