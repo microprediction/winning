@@ -139,6 +139,10 @@ def main():
         if forced:
             groups.append((f"experiment {e}, forced choice", sorted(forced)))
     groups.append(("both experiments pooled", sorted(by)))
+    # the paper's null table pairs a pooled gain with a pooled null, and the
+    # forced-choice row needs both from the same subjects
+    groups.append(("both experiments pooled, forced choice",
+                   sorted(s for s in by if fc.get(s) == "1")))
     full = tuple(range(len(ITEMS)))
     for label, subjects in groups:
         if len(subjects) < 40:

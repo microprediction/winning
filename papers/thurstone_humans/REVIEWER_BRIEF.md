@@ -1,16 +1,24 @@
 # Brief for a new reviewer
 
-Manuscript: `papers/thurstone_humans/paper.tex`, 30 pages, commit `b1d598e` on branch
+Manuscript: `papers/thurstone_humans/paper.tex`, 33 pages, commit `057678d` on branch
 `machine-preference-paradox` of `github.com/microprediction/winning`. Quote a commit hash in
 your report; table and section numbers have moved between rounds and are not stable locators.
 
 Three earlier rounds have been acted on. This note says what is settled, so the fourth round is
 not spent re-deriving it, and what is open, so it is not spent discovering it.
 
-Note before you start: the refit bootstrap, the add-alpha sensitivity and the menu-weighting
-sensitivity are running now and are not in this version. They address items 1, 3 and 4 below.
-Treat the intervals in Tables 6 and 7 as provisional and do not build a recommendation on their
-width.
+Note before you start: the add-alpha and menu-weighting sensitivities are now in the paper, in
+the section titled "Two conventions, and what they change". Smoothing is close to inert except on
+occupational prestige, which is the collection with 143 respondents and ten alternatives.
+Weighting changes magnitude by up to fourfold and never changes sign, and the aggregate reported
+throughout is the most conservative of the three weightings. Item 4 and item 3 are therefore
+closed.
+
+The refit bootstrap has finished and is in the paper. Respondents are resampled and the whole
+pipeline is refit inside every replicate, one hundred replicates or two hundred for the two
+collections under a thousand respondents. Every one of the twelve intervals excludes zero,
+including puzzles, whose earlier interval held the fitted models fixed and covered it. Refitting
+widens most intervals and roughly trebles the width on GSS socialization. Item 1 is closed.
 
 ## What the paper claims
 
@@ -57,20 +65,29 @@ Experiment 2 data is one of the thirty-nine rows).
 
 ## Open, and known. Confirming these is not useful; fixing or costing them is
 
-1. **Ranking intervals hold calibration fixed** and are therefore too narrow, worst in the two
-   smallest collections. A refit bootstrap is running; results will be in
-   `research/restriction/results/sensitivity.txt`.
+1. ~~Ranking intervals hold calibration fixed~~ done. Replaced by refit intervals from
+   `sensitivity.py`; all twelve exclude zero.
 2. **Monte Carlo replicates are 200, 60 on the news row, 400 on Wills.** The 0.05 threshold is
    inside the noise. Verdicts should stop being binary; exceedance counts should be printed.
-3. **Menu weighting is uniform over subsets** and is part of the estimand. Sensitivity over
-   uniform-by-size and pairs-only is running.
-4. **Add-$\alpha$ sensitivity** at $\alpha \in \{0, 1/2, 1\}$ is running. One collection is
-   scorable only because the convention removes a zero training cell.
-5. **The cubic order is prose, not a lemma.** Smoothness in an explicit norm, interior shares
+3. ~~Menu weighting~~ done, and reported. The aggregate is the conservative weighting.
+4. ~~Add-$\alpha$ sensitivity~~ done, and reported. Occupational prestige is the one collection
+   that moves, which is worth knowing when reading its $+0.0390$.
+5. ~~The full menu is inside the restriction estimand~~ measured, and reported in the section
+   "What the score averages over". Excluding $T=S$ raises every gain and lowers none, by $1.33$
+   on Netflix, $1.10$ at $K=4$, $1.04$ at $K=5$ and $1.00$ to two decimals at $K \ge 7$. The
+   published figures include the tie and are the conservative ones.
+6. ~~Size-specific gain vector~~ done. Table 6 gives $(g_2,\dots,g_K)$ for all twelve ranking
+   collections. Nine fall monotonically; occupational prestige peaks at $|T|=4$ at about twice
+   its pairwise figure, and sports participation peaks at $|T|=3$.
+7. ~~No bounded proper score~~ done. Multiclass Brier on the same subsets and folds agrees in
+   sign on twelve of twelve. Its intervals cover zero on the two collections with the smallest
+   log gains, GSS job values and puzzles. The ordering of collections is preserved.
+8. **The cubic order is prose, not a lemma.** Smoothness in an explicit norm, interior shares
    and a nonsingular contrast Jacobian are assumed rather than stated.
-6. **No study-level primary table.** Rows overlap and nest; the count is descriptive and says so.
-7. **One figure has no committed run behind it**, the pooled forced-choice gain of $+0.0265$.
-   The audit prints this.
+9. **No study-level primary table.** Rows overlap and nest; the count is descriptive and says so.
+10. ~~One figure has no committed run behind it~~ closed. `menus_heldout.py` now scores the
+   pooled forced-choice group, and it reproduces the printed row exactly: gain $+0.0265$, null
+   median $-0.0041$, excess $+0.0306$, $p = 0.010$. The audit traces all 504 table figures.
 
 ## Where to look before writing
 
@@ -79,7 +96,10 @@ Experiment 2 data is one of the thirty-nine rows).
   a simulated Gumbel race renormalizing exactly, the cubic order, the concentrated-share
   example. `node run_checks.js` runs the same suite.
 - `research/restriction/demo/check_tables.py` traces every figure the paper quotes from a run to
-  the output that produced it, and lists table figures no committed run accounts for.
+  the output that produced it, and lists table figures no committed run accounts for. All 504
+  currently trace.
+- `research/restriction/estimand.py` produces three of the answers above in one pass:
+  restrictions only, the size vector, and Brier beside log loss.
 - `research/restriction/results/STATUS.md` is the running log, including the errors we found in
   our own work.
 - Each collection under `research/restriction/data/` has a `SOURCE.md` with the fetched access
