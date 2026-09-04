@@ -55,6 +55,8 @@
             <a href="/#languages">Languages</a>
           </span>
         </span>
+        <a href="/alternatives.html">Alternatives</a>
+        <a href="/heritage.html">Heritage</a>
         <a href="/#papers">Papers</a>
         <a href="/ratings.html">Ratings</a>
         <a href="https://github.com/microprediction/winning">GitHub</a>
@@ -199,6 +201,7 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
     <ul>
       <li><a href="./assets/pdf/scalable_contest_inversion.pdf">Scalable inversion of contests with correlated
         performances, including softmax and multinomial probit</a> (2026,
+        <a href="https://arxiv.org/abs/2609.01133">arXiv:2609.01133</a>,
         <a href="https://papers.ssrn.com/abstract=7307363">SSRN working paper</a>).
         All shares of a correlated race in one O(QNL) pass,
         graph-Laplacian derivatives applied matrix-free, and inversion
@@ -210,6 +213,33 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         Supersedes the earlier
         <a href="./assets/pdf/factor_probit_share_calibration.pdf">share-calibration
         draft</a>.</li>
+      <li><a href="./assets/pdf/exact_pom_factor_gaussian.pdf">Exact
+        posterior probability of optimality for factor-Gaussian
+        beliefs</a> (2026, draft). The probability that an alternative
+        is truly best, declared intractable in reinforcement learning
+        and approximated there from marginal means and variances alone,
+        is exact and linear-time whenever the posterior covariance is
+        factor-plus-diagonal &mdash; and two standard observation
+        processes, common random numbers and per-arm Gaussian
+        observations, keep it in that form at every update. Measured
+        consequences: stopping on the exact vector holds the nominal
+        error at between a third and two-thirds of the replicate spend
+        of the marginal-only rules, and sampling from the exact vector
+        reproduces Thompson sampling's regret to within replication
+        noise, as the occupancy identity requires. Experiments under
+        <code>research/rs_crn/</code>.</li>
+      <li><a href="./assets/pdf/passk_posterior.pdf">A posterior predictive
+        for pass@k</a> (2026, note). An independent evaluation of the
+        published empirical-Bayes pass@k estimator on released rollout
+        records, under a design that genuinely extrapolates: two
+        training attempts per prompt, six held out. The plug-in
+        extrapolation understates aggregate pass@6 by seventeen points
+        and its impossibility verdicts are contradicted a third of the
+        time; shrinkage repairs most of the damage, posterior
+        integration a measured further step, and the threshold decision
+        a published diagnostic takes changes materially. Scripts and the
+        outcome table under
+        <code>research/cavity_calculus/exp2_passk/</code>.</li>
       <li><a href="./assets/pdf/collision_local_times_note.pdf">Computation of
         collision local times: a connection between new scalable probit
         methodology and Atlas models</a> (2026, research note). The
@@ -222,6 +252,18 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         Sketches market-implied index leakage (reconstitution turnover
         as rank-boundary local time) via a top-k flux formula, derived
         and not yet implemented.</li>
+      <li><a href="./assets/pdf/softmax_masking_choice_model.pdf">Softmax
+        masking is a choice model: the evidence for linear versus Gaussian
+        renormalization of probability vectors</a> (2026, provisional
+        draft). When an outcome is withdrawn &mdash; scratched, delisted,
+        or masked out of a softmax &mdash; proportional renormalization is
+        the reflex and, in many models, the architecture. Psychology has
+        tested it under restriction since 1957 as the constant-ratio rule;
+        this study scores it out of sample against re-running the Gaussian
+        contest among the survivors, over thirty-nine population
+        comparisons. Gaussian renormalization has the lower held-out log
+        loss in thirty, with the losses concentrated on one-dimensional,
+        strongly confusable stimulus sets.</li>
       <li><a href="./assets/pdf/rating_formula_1.pdf">Rating Formula 1: a case for
         non-Gaussian noise in rating systems</a> (2026). Seventy-five seasons of grands
         prix, a retirement-slab noise density, a qualifying control, and a stratified
@@ -230,6 +272,10 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         from winning probability</a> (SIAM, 2021). The lattice algorithm this package
         grew from: recovering ability densities from a vector of win probabilities,
         as in pari-mutuel markets.</li>
+    </ul>
+
+    <h2 id="older-presentations">Older presentations</h2>
+    <ul>
       <li><a href="./Who_Ya_Gonna_Call.pdf">Who ya gonna call?</a> and
         <a href="./How_to_respond_to_an_RFQ.pdf">How to respond to an RFQ</a>: the same
         order statistic in trading, where the best response to a request for quote is a
@@ -275,14 +321,17 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         same computation: the distribution of the winner of many.</figcaption>
     </figure>
     <p>
-      <code>winning</code> began as the reference implementation of the SIAM paper above
-      and owns the core outright: the lattice machinery once split into the
-      <a href="https://github.com/microprediction/thurstone">thurstone</a> package is
-      vendored back as <code>winning.thurstone</code>, and thurstone is maintained as a
-      compatibility shim whose imports resolve here. Legacy 1.x imports still work.
+      <code>winning</code> began as the reference implementation of the SIAM paper above.
       By Peter Cotton, with sibling packages at
-      <a href="https://www.microprediction.org/">microprediction</a>.
+      <a href="https://www.microprediction.org/">microprediction</a>. The same
+      computation &mdash; inferring latent ability from who wins &mdash; has been
+      rediscovered field by field for a century, from Thurstone's 1927 law of
+      comparative judgment to language-model leaderboards:
+      <a href="./heritage.html">the heritage, as a timeline &rarr;</a>
     </p>
+    <p>Notes: <a href="./notes-backblaze.html">disks do not fail
+      independently</a> &mdash; a common-cause factor in the public
+      Backblaze data, and what it costs erasure-coding durability.</p>
 
     <h2>Get the source</h2>
     <p>

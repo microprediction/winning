@@ -303,6 +303,31 @@ fn classic_calibrate(
 }
 
 
+
+/// Per-winner reduced-rank alternative (lpRR protocol), compiled:
+/// max-wins winner probabilities, one rectangle per winner over common
+/// draws z of shape (R, k+1). O(N^2 R k) by design -- the benchmark
+/// alternative, not the engine.
+#[pyfunction]
+#[pyo3(name = "per_winner_reduced_rank")]
+fn per_winner_rr<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray2<f64>,
+    d: PyReadonlyArray1<f64>,
+    z: PyReadonlyArray2<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let mu_o: Array1<f64> = mu.as_array().to_owned();
+    let v_o: Array2<f64> = v.as_array().to_owned();
+    let d_o: Array1<f64> = d.as_array().to_owned();
+    let z_o: Array2<f64> = z.as_array().to_owned();
+    let p = py.allow_threads(|| {
+        winning::per_winner_reduced_rank(mu_o.view(), v_o.view(),
+                                         d_o.view(), z_o.view())
+    });
+    Ok(p.into_pyarray_bound(py))
+}
+
 #[pymodule]
 fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(forward_and_slopes, m)?)?;
@@ -314,9 +339,55 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(win_probabilities_factor, m)?)?;
     m.add_function(wrap_pyfunction!(tree_race, m)?)?;
     m.add_function(wrap_pyfunction!(top_k, m)?)?;
+    m.add_function(wrap_pyfunction!(forward_and_slopes_base, m)?)?;
     m.add_function(wrap_pyfunction!(classic_state_prices, m)?)?;
     m.add_function(wrap_pyfunction!(classic_calibrate, m)?)?;
+    m.add_function(wrap_pyfunction!(per_winner_rr, m)?)?;
     Ok(())
+}
+
+
+/// Base-generic forward pass: probabilities and own-slopes for any of
+/// the shipped base families; see winning::forward_kernel_base.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn forward_and_slopes_base<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray2<f64>,
+    d: PyReadonlyArray1<f64>,
+    f_nodes: PyReadonlyArray2<f64>,
+    w: PyReadonlyArray1<f64>,
+    points: usize,
+    lo: f64,
+    hi: f64,
+    base_id: u32,
+    params: Vec<f64>,
+) -> PyResult<(
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    f64,
+)> {
+    let mut pa = [0.0f64; 6];
+    for (i, &x) in params.iter().take(6).enumerate() {
+        pa[i] = x;
+    }
+    let spec = winning::BaseSpec { id: base_id, params: pa };
+    let mu_o: Array1<f64> = mu.as_array().to_owned();
+    let v_o: Array2<f64> = v.as_array().to_owned();
+    let d_o: Array1<f64> = d.as_array().to_owned();
+    let f_o: Array2<f64> = f_nodes.as_array().to_owned();
+    let w_o: Array1<f64> = w.as_array().to_owned();
+    let (p, sl, total) = py.allow_threads(|| {
+        winning::forward_kernel_base(
+            mu_o.view(), v_o.view(), d_o.view(), f_o.view(), w_o.view(),
+            points, lo, hi, spec)
+    });
+    Ok((
+        p.into_pyarray_bound(py),
+        sl.into_pyarray_bound(py),
+        total,
+    ))
 }
 
 

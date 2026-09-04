@@ -57,7 +57,8 @@ from .factor.structures import (  # noqa: F401
 )
 from .factor.polish import polish_race, race_jacobian  # noqa: F401
 from .factor.topk import (top_k_probabilities,  # noqa: F401
-                          bottom_k_probabilities)
+                          bottom_k_probabilities,
+                          rank_probabilities)
 from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 

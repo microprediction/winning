@@ -114,3 +114,35 @@ one specific expensive error (wrong skew) that a Gaussian-only engine
 cannot express -- NOT "tune the tail weight". Their earlier 0.088-0.119
 figure must be paired with the 0.026 symmetric-family span if ever
 quoted.
+
+Standing instruction (Peter, 2026-09-01): when the order-statistics
+paper has a draft PDF, add it to the site papers listing.
+MEASURED cornerstone for it: grad of W_k(mu) = E[sum of k smallest]
+equals q^(k) exactly (FD check 1.1e-8, eight runners, k=3) -- W_k is a
+min of affine subset-sums, so concave, so Danskin gives the gradient
+and the Theorem-1 inversion apparatus carries over to top-k shares.
+Note for the computation section: the k=1 rank-one JVP collapse is
+EXCEPTIONAL -- P(N_-ij = 0) is a product (the field over S_i S_j),
+while for general k it is a coefficient, so pair terms need two-runner
+deconvolution; the trace (leakage rate) still collapses via roots of
+unity, where the double sum factorizes per frequency.
+
+## Skew (Peter, 2026-09-01)
+Once (mu, sigma) joint calibration works, skew is the next shape
+parameter: a COMMON skew (one scalar, e.g. shared skew-normal alpha or
+a Gumbel-vs-normal dial) costs one column in the Gauss-Newton system
+and one more market's worth of identification; per-player skew costs n
+more. Dimension count with common skew: 2n-1 parameters, so win+top-20
+alone becomes underdetermined by one -- three markets (win/top-10/
+top-20) is the natural exactly-determined set. The engine's
+density-agnosticism means the skewed base already prices; only the
+calibration layer needs the extra column.
+
+## Multi-horizon markets (Peter, 2026-09-01)
+The golf cut is technically a different race: top-70 after TWO rounds,
+win after FOUR. Under random-walk scoring these are marginals of one
+Brownian race at horizons T/2 and T -- same drifts, D scaled by
+horizon -- so cross-horizon joint calibration is the dynamic
+generalization of the multi-market fit, and it ties the order-statistics
+paper to the Atlas note's horizon machinery. exp3 treats all markets at
+one horizon by construction (noted, deliberate simplification).

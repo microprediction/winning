@@ -105,6 +105,98 @@ BASES = {"normal": _normal, "gumbel": _gumbel_min,
          "logistic": _logistic, "laplace": _laplace}
 _SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails
           "logistic": (16.0, 16.0), "laplace": (18.0, 18.0)}
+_RUST_BASE_IDS = {"gumbel": 1, "logistic": 2, "laplace": 3}
+
+
+def exponential_power_base(beta):
+    """Standardized exponential-power (generalised normal, Subbotin)
+    base: density proportional to exp(-|x/a|^beta), with the scale a
+    fixed for unit variance. beta = 1 is the laplace base, beta = 2 is
+    exactly the normal, and large beta approaches the uniform while
+    keeping full support -- so log S stays finite and the lattice
+    machinery keeps its shape (issue 13: the tail exponent controls how
+    fast the maximum of K draws grows, (log K)^(1/beta), which is the
+    knob on whether systematic components keep deciding large fields).
+    The CDF is the regularised incomplete gamma, evaluated from the
+    tail side for precision. For beta < 2 the density has a kink at
+    zero (its second derivative is singular), and the factory says so
+    to the moment updates via the fd_eps attribute -- the laplace
+    lesson. Very large beta makes near-edges the lattice must resolve;
+    accuracy is measured in the tests at beta = 12."""
+    beta = float(beta)
+    if beta <= 0.0:
+        raise ValueError("exponential_power_base needs beta > 0")
+    from scipy.special import gamma as _gamma, gammaincc
+    a = np.sqrt(_gamma(1.0 / beta) / _gamma(3.0 / beta))
+    c = beta / (2.0 * a * _gamma(1.0 / beta))
+
+    def _expo(z):
+        z = np.asarray(z, dtype=float)
+        t = np.power(np.abs(z) / a, beta)
+        f = c * np.exp(-np.minimum(t, 745.0))
+        half_tail = 0.5 * gammaincc(1.0 / beta, t)  # mass beyond |z|
+        S = np.where(z >= 0.0, half_tail, 1.0 - half_tail)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            fp = -f * beta * np.power(np.abs(z) / a, beta - 1.0) \
+                * np.sign(z) / a
+        fp = np.where(np.isfinite(fp), fp, 0.0)
+        return np.maximum(S, 1e-300), f, fp
+
+    from scipy.special import gammainccinv
+    edge = a * float(gammainccinv(1.0 / beta, 2e-9)) ** (1.0 / beta)
+    _expo.span = (max(10.0, edge + 2.0), max(10.0, edge + 2.0))
+    _expo.rust_base = (4, [beta, a])
+    if beta < 2.0:
+        # kinked density: lattice gradients carry O(dx) noise, and the
+        # moment updates must widen their differencing step exactly as
+        # they do for the named laplace base
+        _expo.fd_eps = 5e-2
+    _expo.log_concave = beta >= 1.0
+    return _expo
+
+
+def skew_logistic_base(alpha):
+    """Standardized Type I generalized logistic base: CDF of the raw
+    variable is (1 + e^{-x})^{-alpha}, so both the density and the
+    distribution function are elementary, the density is smooth and
+    log-concave for every alpha > 0, and alpha = 1 is exactly the
+    logistic base. alpha < 1 skews the race toward heavy LEFT tails
+    (occasional disasters, min-wins), alpha > 1 toward heavy right
+    tails. Standardized to zero mean and unit variance in closed form:
+    mean psi(alpha) - psi(1), variance psi'(alpha) + psi'(1). Returns a
+    callable for base=; a natural one-parameter skew dial for joint
+    market calibration."""
+    alpha = float(alpha)
+    if alpha <= 0.0:
+        raise ValueError("skew_logistic_base needs alpha > 0")
+    from scipy.special import digamma, polygamma
+    m = digamma(alpha) - digamma(1.0)
+    v = polygamma(1, alpha) + polygamma(1, 1.0)
+    c = np.sqrt(v)                          # raw x = m + c z
+
+    def _skew_logistic(z):
+        x = m + c * np.asarray(z, dtype=float)
+        u = np.clip(-x, -700.0, 700.0)
+        eu = np.exp(u)                       # e^{-x}
+        log1p_eu = np.log1p(eu)
+        cdf = np.exp(-alpha * log1p_eu)      # (1 + e^{-x})^{-alpha}
+        S = np.maximum(1.0 - cdf, 1e-300)
+        sig = 1.0 / (1.0 + eu)               # logistic cdf of x
+        f = alpha * eu * np.exp(-(alpha + 1.0) * log1p_eu) * c
+        # d/dz f: chain rule through x = m + c z
+        fp = f * c * ((alpha + 1.0) * (1.0 - sig) - 1.0)
+        return S, f, fp
+
+    # exponential tails on both sides; the left tail fattens as alpha
+    # falls (raw left quantile ~ log of the alpha-th root), so place the
+    # span at the actual 1e-9 quantiles
+    q_lo = (np.log(np.expm1(np.log(1e-9) / -alpha)) if alpha < 60
+            else np.log(1e-9 / alpha))
+    lo_edge = abs((-abs(q_lo) - m)) / c + 2.0
+    hi_edge = abs((np.log(alpha / 1e-9) - m)) / c + 2.0
+    _skew_logistic.span = (max(14.0, lo_edge), max(14.0, hi_edge))
+    _skew_logistic.rust_base = (7, [alpha, m, c])
+    return _skew_logistic
 
 
 def student_base(nu):
@@ -130,6 +222,7 @@ def student_base(nu):
     # accordingly)
     edge = float(_t.isf(1e-7, nu)) / s
     _student.span = (max(12.0, edge), max(12.0, edge))
+    _student.rust_base = (5, [nu, s])
     return _student
 
 
@@ -155,6 +248,7 @@ def skew_normal_base(a):
         return S, f, fp
 
     _skew.span = (10.0, 10.0)
+    _skew.rust_base = (6, [a, m, sd])
     return _skew
 
 
@@ -535,6 +629,19 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             return np.asarray(p)
         except TypeError:
             pass       # older fastrace without window arguments: numpy path
+    spec = _RUST_BASE_IDS.get(base) if isinstance(base, str) \
+        else getattr(base, "rust_base", None)
+    if _HAVE_RUST and spec is not None \
+            and hasattr(_fastrace, "forward_and_slopes_base"):
+        bid, prm = (spec, []) if isinstance(spec, int) else spec
+        p, sl, total = _fastrace.forward_and_slopes_base(
+            np.ascontiguousarray(mu), np.ascontiguousarray(V),
+            np.ascontiguousarray(D), np.ascontiguousarray(F),
+            np.ascontiguousarray(W), points,
+            float(x[0]), float(x[-1]), int(bid), [float(v) for v in prm])
+        if return_slopes:
+            return np.asarray(p), np.asarray(sl) / total
+        return np.asarray(p)
     p = np.zeros(n)
     slope = np.zeros(n)
     chunk = max(1, int(5e6 / (n * points)))
@@ -1154,4 +1261,6 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
         fp = ((1.0 - q) * fp0 + q * fpl) * sd * sd
         return np.maximum(S, 1e-300), f, fp
 
+    if base == "normal":
+        _fail.rust_base = (8, [q, w, off, m1, sd])
     return _fail

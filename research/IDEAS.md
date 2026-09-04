@@ -46,3 +46,17 @@ They keep working there against the shim, nothing is lost, and
 winning/research/demos stays uncluttered. If migration ever happens the
 agreed principle is curation, not dumping: one demo per concept,
 rewritten against winning imports, filed under demos/siam2021/.
+
+## VIX-first joint SPX-VIX calibration (noted 2026-09-03, flagged
+## "may not be relevant" by Peter)
+Zaugg & Grzelak, arXiv:2608.01479 [U beyond abstract]: calibrate
+explicit VIX dynamics first, then derive the latent SPX volatility
+as the process consistent with the calibrated VIX through its
+rolling-window definition -- "an interpretable and tractable
+decomposition of the joint problem" against black-box global
+optimization. The structural rhyme with this repo, if any: invert
+the observable (VIX prices / choice shares) to pin the latent
+(volatility process / abilities), decomposing a joint calibration
+into a tractable stage-wise one. No race/order-statistics content;
+park unless a stochastic-volatility application of the engine ever
+materializes (implied win probabilities from vol surfaces?).

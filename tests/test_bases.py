@@ -243,3 +243,151 @@ def test_sharpness_dispatch_is_gauge_invariant_and_safe():
     assert np.abs(p4 - p4s).max() < 1e-12
     pmc = np.array([0.1831662, 0.1832104, 0.1908283, 0.4427951])  # 20M draws
     assert 0.5 * np.abs(p4 - pmc).sum() < 3e-4
+
+
+def test_skew_logistic_base():
+    """The Type I generalized logistic: elementary pdf and cdf, smooth,
+    log-concave, standardized in closed form, exactly logistic at
+    alpha = 1, and a one-parameter skew dial. Pinned: moments by
+    quadrature, the alpha = 1 containment at machine epsilon, an
+    inversion round trip at alpha = 0.5 (8.6e-10 when pinned), and a
+    two-million-draw race referee (TV 6.6e-4, max |z| 1.95)."""
+    import warnings
+    from winning.factor.races import (skew_logistic_base,
+                                      race_probabilities,
+                                      abilities_from_race, BASES)
+
+    z = np.linspace(-40, 40, 200001)
+    dz = z[1] - z[0]
+    for alpha in (0.3, 1.0, 4.0):
+        S, f, fp = skew_logistic_base(alpha)(z)
+        assert abs(f.sum() * dz - 1) < 1e-6
+        assert abs((z * f).sum() * dz) < 1e-6
+        assert abs((z * z * f).sum() * dz - 1) < 1e-5
+        assert np.abs(fp - np.gradient(f, dz)).max() < 1e-5
+        assert np.abs(np.gradient(np.log(np.maximum(f, 1e-290)), dz)
+                      [1:-1][np.abs(z[1:-1]) < 20]).max() < 1e3  # smooth
+    Sl, fl, _ = BASES["logistic"](z)
+    Ss, fs, _ = skew_logistic_base(1.0)(z)
+    assert np.abs(Sl - Ss).max() < 1e-12
+    assert np.abs(fl - fs).max() < 1e-12
+
+    rng = np.random.default_rng(3)
+    n = 20
+    mu = rng.normal(0, 0.8, n)
+    mu -= mu.mean()
+    D = 0.5 + rng.random(n)
+    b = skew_logistic_base(0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = race_probabilities(mu, D=D, base=b)
+        mu_back = abilities_from_race(p, D=D, base=b)
+        p2 = race_probabilities(mu_back, D=D, base=b)
+    assert 0.5 * np.abs(p2 - p).sum() < 1e-7
+
+
+def test_exponential_power_base():
+    """Issue 13: the Subbotin family with beta as the tail-thickness
+    knob. beta = 2 IS the normal base and beta = 1 IS the laplace base
+    (machine epsilon, both); a two-million-draw race referee holds at
+    beta = 4 and at the near-edge beta = 12 (TV 6.5e-4 when pinned);
+    inversion round-trips at 2e-9; and the beta < 2 kink declares
+    itself to the moment updates through fd_eps, so repeated laplace-
+    style order updates cannot inflate variance."""
+    import warnings
+    from winning.factor.races import (exponential_power_base, BASES,
+                                      race_probabilities,
+                                      abilities_from_race)
+
+    z = np.linspace(-30, 30, 200001)
+    Sn, fn, _ = BASES["normal"](z)
+    S2, f2, _ = exponential_power_base(2.0)(z)
+    assert np.abs(Sn - S2).max() < 1e-12
+    assert np.abs(fn - f2).max() < 1e-12
+    Sl, fl, _ = BASES["laplace"](z)
+    S1, f1, _ = exponential_power_base(1.0)(z)
+    assert np.abs(Sl - S1).max() < 1e-12
+    assert np.abs(fl - f1).max() < 1e-12
+
+    rng = np.random.default_rng(0)
+    n = 12
+    mu = rng.normal(0, 0.6, n)
+    D = 0.5 + rng.random(n)
+    for beta in (4.0, 12.0):
+        b = exponential_power_base(beta)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            p = race_probabilities(mu, D=D, base=b)
+            mu_back = abilities_from_race(p, D=D, base=b)
+            p2 = race_probabilities(mu_back, D=D, base=b)
+        assert 0.5 * np.abs(p2 - p).sum() < 1e-7
+        assert abs(p.sum() - 1) < 1e-9
+    b15 = exponential_power_base(1.5)
+    assert b15.fd_eps == 5e-2 and b15.log_concave
+    assert not hasattr(exponential_power_base(3.0), "fd_eps")
+
+
+def test_exponential_power_order_updates_shrink_variance():
+    """The kinked members must inherit the laplace fix end to end:
+    twenty-five order updates at beta = 1.3 shrink a unit prior."""
+    import warnings
+    from winning.factor.races import exponential_power_base
+    from winning.ratings import update_order_correlated
+
+    b = exponential_power_base(1.3)
+    rng = np.random.default_rng(0)
+    M = 8
+    a = rng.normal(0, 1, M)
+    a -= a.mean()
+    mean = np.zeros(M)
+    var = np.ones(M)
+    V = np.zeros((M, 1))
+    r2 = np.random.default_rng(1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for _ in range(25):
+            S = r2.choice(M, 5, replace=False)
+            perf = a[S] + r2.laplace(0, 1 / np.sqrt(2), 5)
+            order = np.argsort(perf)
+            m_s, v_s, _ = update_order_correlated(mean[S], var[S], order,
+                                                  V[S], base=b)
+            mean[S] = m_s
+            var[S] = v_s
+    assert var.max() <= 1.0 + 1e-9
+    assert var.mean() < 0.5
+
+
+def test_rust_base_parity_all_families():
+    """Every shipped base family through the compiled forward kernel
+    against the numpy path: probabilities and slopes. Elementary bases
+    at machine epsilon; exponential-power at 1e-12 (puruspe vs scipy
+    incomplete gamma), student at 5e-11 (incomplete beta), skew-normal
+    at 1e-16 (the owens-t crate is the Boost Patefield-Tandy port)."""
+    import winning.factor.races as R
+    from winning.factor.races import (exponential_power_base,
+                                      skew_logistic_base)
+
+    if not (R._HAVE_RUST
+            and hasattr(R._fastrace, "forward_and_slopes_base")):
+        pytest.skip("fastrace without forward_and_slopes_base")
+    rng = np.random.default_rng(1)
+    n = 25
+    mu = rng.normal(0, 0.8, n)
+    D = 0.5 + rng.random(n)
+    V = 0.4 * np.ones((n, 1))
+    cases = ["gumbel", "logistic", "laplace",
+             exponential_power_base(3.0), exponential_power_base(1.4),
+             student_base(4.0), skew_normal_base(3.0),
+             skew_logistic_base(0.5), failure_base(0.2)]
+    for b in cases:
+        p_r, s_r = race_probabilities(mu, V=V, D=D, base=b,
+                                      return_slopes=True)
+        saved = R._HAVE_RUST
+        R._HAVE_RUST = False
+        try:
+            p_n, s_n = race_probabilities(mu, V=V, D=D, base=b,
+                                          return_slopes=True)
+        finally:
+            R._HAVE_RUST = saved
+        assert np.abs(p_r - p_n).max() < 1e-9, b
+        assert np.abs(s_r - s_n).max() < 1e-9, b

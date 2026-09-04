@@ -62,7 +62,10 @@ def test_factor_independent_and_gumbel_fallback():
         pg2 = races.race_probabilities(mu, D=D, base="gumbel", points=1001)
     finally:
         races._HAVE_RUST = old
-    assert np.abs(pg - pg2).max() == 0.0
+    # gumbel now has its OWN compiled path (forward_and_slopes_base);
+    # the guard is that it is never priced as normal -- the softmax
+    # identity above -- not bit-identity between backends
+    assert np.abs(pg - pg2).max() < 1e-12
 
 
 def test_tree_race_parity():

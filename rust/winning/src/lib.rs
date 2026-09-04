@@ -1415,3 +1415,294 @@ pub fn top_k_kernel(
         })
         .collect()
 }
+
+// ---------------------------------------------------------------------
+// Base families for the generic forward kernel. Each base supplies
+// log S(z), log f(z) and d log f / dz for the same standardized
+// densities winning/factor/races.py ships; ids and parameter layouts
+// match the python dispatch (races._rust_base_spec). Special functions
+// come from puruspe (regularized incomplete gamma and beta) and the
+// owens-t crate (Patefield-Tandy), not hand-rolled code.
+//   0 normal                      params unused
+//   1 gumbel-min                  params unused
+//   2 logistic                    params unused
+//   3 laplace                     params unused
+//   4 exponential power           [beta, a]
+//   5 student                     [nu, s]
+//   6 skew normal                 [alpha, m, sd]
+//   7 skew logistic               [alpha, m, c]
+//   8 failure lump over normal    [q, width, offset, m1, sd]
+
+const EULER_GAMMA: f64 = 0.577_215_664_901_532_9;
+
+fn softplus(u: f64) -> f64 {
+    if u > 30.0 {
+        u
+    } else {
+        (1.0 + u.exp()).ln()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct BaseSpec {
+    pub id: u32,
+    pub params: [f64; 6],
+}
+
+impl BaseSpec {
+    /// (log S(z), log f(z), d log f / dz)
+    pub fn eval(&self, z: f64) -> (f64, f64, f64) {
+        let p = &self.params;
+        match self.id {
+            0 => (log_ndtr(-z), -0.5 * z * z - LN_SQRT_2PI, -z),
+            1 => {
+                let c = std::f64::consts::PI / 6.0f64.sqrt();
+                let u = (c * z - EULER_GAMMA).min(30.0);
+                let eu = u.exp();
+                ((-eu).max(-690.0), c.ln() + u - eu, c * (1.0 - eu))
+            }
+            2 => {
+                let c = std::f64::consts::PI / 3.0f64.sqrt();
+                let u = (c * z).clamp(-700.0, 700.0);
+                let sp = softplus(u);
+                let sig = 1.0 / (1.0 + (-u).exp());
+                ((-sp).max(-690.0), c.ln() + u - 2.0 * sp,
+                 c * (1.0 - 2.0 * sig))
+            }
+            3 => {
+                let b = 1.0 / 2.0f64.sqrt();
+                let az = z.abs();
+                let lf = -az / b - (2.0 * b).ln();
+                let half = 0.5 * (-az / b).exp();
+                let sv = if z < 0.0 { 1.0 - half } else { half };
+                (sv.max(1e-300).ln(), lf, -z.signum() / b)
+            }
+            4 => {
+                let (beta, a) = (p[0], p[1]);
+                let t = (z.abs() / a).powf(beta);
+                let lf = (beta / (2.0 * a)).ln()
+                    - libm::lgamma(1.0 / beta)
+                    - t.min(745.0);
+                let half_tail = 0.5 * puruspe::gammq(1.0 / beta, t);
+                let sv = if z >= 0.0 { half_tail } else { 1.0 - half_tail };
+                let dl = -beta * (z.abs() / a).powf(beta - 1.0)
+                    * z.signum() / a;
+                let dl = if dl.is_finite() { dl } else { 0.0 };
+                (sv.max(1e-300).ln(), lf, dl)
+            }
+            5 => {
+                let (nu, sc) = (p[0], p[1]);
+                let x = sc * z;
+                let ib = puruspe::betai(0.5 * nu, 0.5,
+                                        nu / (nu + x * x));
+                let sv = if x >= 0.0 { 0.5 * ib } else { 1.0 - 0.5 * ib };
+                let lf = libm::lgamma(0.5 * (nu + 1.0))
+                    - libm::lgamma(0.5 * nu)
+                    - 0.5 * (nu * std::f64::consts::PI).ln()
+                    - 0.5 * (nu + 1.0) * (1.0 + x * x / nu).ln()
+                    + sc.ln();
+                let dl = -(nu + 1.0) * x / (nu + x * x) * sc;
+                (sv.max(1e-300).ln(), lf, dl)
+            }
+            6 => {
+                let (alpha, m, sd) = (p[0], p[1], p[2]);
+                let x = m + sd * z;
+                // S = Phi(-x) + 2 T(x, alpha)
+                let sv = ndtr(-x) + 2.0 * owens_t::owens_t(x, alpha);
+                let l_phi_ax = log_ndtr(alpha * x);
+                let lf = std::f64::consts::LN_2 - 0.5 * x * x
+                    - LN_SQRT_2PI + l_phi_ax + sd.ln();
+                let hazard = (-0.5 * alpha * alpha * x * x
+                    - LN_SQRT_2PI - l_phi_ax)
+                    .exp();
+                let dl = sd * (-x + alpha * hazard);
+                (sv.clamp(1e-300, 1.0).ln(), lf, dl)
+            }
+            7 => {
+                let (alpha, m, c) = (p[0], p[1], p[2]);
+                let x = m + c * z;
+                let sp = softplus(-x);            // log(1 + e^{-x})
+                // S = 1 - (1+e^{-x})^{-alpha}, via expm1 for the far tail
+                let sv = -libm::expm1(-alpha * sp);
+                let lf = alpha.ln() - x - (alpha + 1.0) * sp + c.ln();
+                let sig = 1.0 / (1.0 + (-x.clamp(-700.0, 700.0)).exp());
+                let dl = c * ((alpha + 1.0) * (1.0 - sig) - 1.0);
+                (sv.max(1e-300).ln(), lf, dl)
+            }
+            8 => {
+                let (qf, w, off, m1, sd) = (p[0], p[1], p[2], p[3], p[4]);
+                let u = m1 + sd * z;
+                let s0 = ndtr(-u);
+                let f0 = (-0.5 * u * u).exp() / (2.0 * std::f64::consts::PI).sqrt();
+                let fp0 = -u * f0;
+                let zl = (u - off) / w;
+                let sl = ndtr(-zl);
+                let fl = (-0.5 * zl * zl).exp()
+                    / (w * (2.0 * std::f64::consts::PI).sqrt());
+                let fpl = -zl * fl / w;
+                let sv = (1.0 - qf) * s0 + qf * sl;
+                let f = ((1.0 - qf) * f0 + qf * fl) * sd;
+                let fp = ((1.0 - qf) * fp0 + qf * fpl) * sd * sd;
+                let dl = if f > 1e-300 { fp / f } else { 0.0 };
+                (sv.max(1e-300).ln(), f.max(1e-300).ln(), dl)
+            }
+            _ => panic!("unknown base id"),
+        }
+    }
+}
+
+/// forward_kernel generalized over the base family: identical tiling
+/// and log-domain organization, with the base's log-survival,
+/// log-density and score supplied by BaseSpec.
+#[allow(clippy::too_many_arguments)]
+pub fn forward_kernel_base(
+    mu: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    d: ArrayView1<f64>,
+    f_nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+    base: BaseSpec,
+) -> (Array1<f64>, Array1<f64>, f64) {
+    let n = mu.len();
+    let q = f_nodes.nrows();
+    let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
+    let sd_max = sd.iter().cloned().fold(f64::MIN, f64::max);
+    let mut lo = f64::MAX;
+    let mut hi = f64::MIN;
+    let mut m_all = vec![0.0f64; q * n];
+    for qi in 0..q {
+        for i in 0..n {
+            let mut mi = mu[i];
+            for r in 0..v.ncols() {
+                mi += v[[i, r]] * f_nodes[[qi, r]];
+            }
+            m_all[qi * n + i] = mi;
+            lo = lo.min(mi);
+            hi = hi.max(mi);
+        }
+    }
+    lo -= 12.0 * sd_max;
+    hi += 12.0 * sd_max;
+    if lo_in.is_finite() && hi_in.is_finite() && hi_in > lo_in {
+        lo = lo_in;
+        hi = hi_in;
+    }
+    let dx = (hi - lo) / (points - 1) as f64;
+    let tile = TILE.min((25_000_000usize / n.max(1)).max(4));
+    let p: Vec<f64> = (0..q)
+        .into_par_iter()
+        .map(|qi| {
+            let m = &m_all[qi * n..(qi + 1) * n];
+            let wq = w[qi];
+            let mut acc = vec![0.0f64; 2 * n];
+            let mut logs = vec![0.0f64; n * tile];
+            let mut logg = vec![0.0f64; n * tile];
+            let mut score = vec![0.0f64; n * tile];
+            let mut field = vec![0.0f64; tile];
+            let mut t0 = 0;
+            while t0 < points {
+                let tl = tile.min(points - t0);
+                field[..tl].fill(0.0);
+                for i in 0..n {
+                    let inv_sd = 1.0 / sd[i];
+                    let mi = m[i];
+                    let row_s = &mut logs[i * tile..i * tile + tl];
+                    let row_g = &mut logg[i * tile..i * tile + tl];
+                    let row_c = &mut score[i * tile..i * tile + tl];
+                    for t in 0..tl {
+                        let x = lo + (t0 + t) as f64 * dx;
+                        let z = (x - mi) * inv_sd;
+                        let (ls, lf, dl) = base.eval(z);
+                        row_s[t] = ls;
+                        row_g[t] = lf - sd[i].ln();
+                        row_c[t] = dl;
+                        field[t] += ls;
+                    }
+                }
+                for i in 0..n {
+                    let row_s = &logs[i * tile..i * tile + tl];
+                    let row_g = &logg[i * tile..i * tile + tl];
+                    let row_c = &score[i * tile..i * tile + tl];
+                    let inv_sd = 1.0 / sd[i];
+                    let mut s_acc = 0.0f64;
+                    let mut sl = 0.0f64;
+                    for t in 0..tl {
+                        let e = row_g[t] + field[t] - row_s[t];
+                        if e > -745.0 {
+                            let val = e.exp();
+                            s_acc += val;
+                            // d p_i / d mu_i integrand: -d/dz log f * f *
+                            // rest / sd
+                            sl -= row_c[t] * inv_sd * val;
+                        }
+                    }
+                    acc[i] += wq * s_acc * dx;
+                    acc[n + i] += wq * sl * dx;
+                }
+                t0 += tl;
+            }
+            acc
+        })
+        .reduce(
+            || vec![0.0f64; 2 * n],
+            |mut a, b| {
+                for (x, y) in a.iter_mut().zip(b) {
+                    *x += y;
+                }
+                a
+            },
+        );
+    let total: f64 = p[..n].iter().sum();
+    let p_norm: Array1<f64> = Array1::from_iter(p[..n].iter().map(|x| x / total));
+    let slopes: Array1<f64> = Array1::from_iter(p[n..].iter().cloned());
+    (p_norm, slopes, total)
+}
+
+/// The per-winner reduced-rank alternative (lpRR protocol): winner i's
+/// max-wins probability as the rectangle P(Y <= 0), Y_j = U_j - U_i,
+/// integrated over common standard-normal draws z (R x (k+1): k factor
+/// coordinates and the winner's own shock). One pass per winner --
+/// O(N^2 R k) for the complete vector, which is the cost the shared
+/// field removes; shipped compiled so wall-clock comparisons are
+/// same-toolchain. Log-domain products; rayon over winners.
+pub fn per_winner_reduced_rank(
+    mu: ndarray::ArrayView1<f64>,
+    v: ndarray::ArrayView2<f64>,
+    d: ndarray::ArrayView1<f64>,
+    z: ndarray::ArrayView2<f64>,
+) -> ndarray::Array1<f64> {
+    use rayon::prelude::*;
+    let n = mu.len();
+    let k = v.ncols();
+    let r_draws = z.nrows();
+    let sqrt_d: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
+    let p: Vec<f64> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let mut acc = 0.0_f64;
+            for r in 0..r_draws {
+                let zr = z.row(r);
+                let ze = zr[k];
+                let mut logp = 0.0_f64;
+                for j in 0..n {
+                    if j == i {
+                        continue;
+                    }
+                    let mut bz = 0.0_f64;
+                    for c in 0..k {
+                        bz += (v[[j, c]] - v[[i, c]]) * zr[c];
+                    }
+                    let arg = (mu[i] - mu[j] - bz + sqrt_d[i] * ze)
+                        / sqrt_d[j];
+                    logp += ndtr(arg).max(1e-300).ln();
+                }
+                acc += logp.exp();
+            }
+            acc / r_draws as f64
+        })
+        .collect();
+    ndarray::Array1::from(p)
+}

@@ -1,0 +1,16 @@
+{
+  "hazard": 3.7739586031847824e-05,
+  "dispersion_r": 5.189719697341826,
+  "in_sample": {
+    "poisson": 3.596125530104539,
+    "correlated": 3.1469042151177207
+  },
+  "out_sample": {
+    "poisson": 3.613450864085057,
+    "correlated": 3.1424309212132937
+  },
+  "out_sample_tail": {
+    "poisson": 7.239085444925059,
+    "correlated": 4.561047254608807
+  }
+}

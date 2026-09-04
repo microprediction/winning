@@ -46,11 +46,16 @@ def _fd_eps(base, eps):
     prior variance to 18). A wide step keeps the difference above the
     noise floor; truncation error at eps=0.05 is O(eps^2) and
     negligible against it."""
-    return max(eps, 5e-2) if base == "laplace" else eps
+    if base == "laplace":
+        return max(eps, 5e-2)
+    wide = getattr(base, "fd_eps", None)     # kinked factory bases say so
+    return max(eps, wide) if wide else eps
 
 
 def _clamp_d2(d2, base):
-    return np.minimum(d2, 0.0) if base in _LOG_CONCAVE else d2
+    if base in _LOG_CONCAVE or getattr(base, "log_concave", False):
+        return np.minimum(d2, 0.0)
+    return d2
 
 
 def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
@@ -316,12 +321,14 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     _, grad = _order_pass(m, sd, order, base=base)
     m_new = m + v * grad
+    eps = _fd_eps(base, eps)
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
         _, gp = _order_pass(m + ej, sd, order, base=base)
         _, gm = _order_pass(m - ej, sd, order, base=base)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
+    d2 = _clamp_d2(d2, base)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new
 

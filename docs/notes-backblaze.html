@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Do disks fail independently? A cautionary read of the Backblaze data</title>
+  <meta name="description" content="Reliability math assumes disks fail independently. On Backblaze's public data the assumption is statistically falsified — the daily failure count is overdispersed and a one-parameter correction predicts the next quarter's tail 37% better — but whether the same-day clustering is a physical common cause or a reporting cadence cannot be settled from failure dates alone, and part of it is administrative. An honest look, with the confound stated." />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="winning" />
+  <meta property="og:title" content="Do disks fail independently?" />
+  <meta property="og:description" content="A common-cause factor hiding in the public Backblaze drive-failure data, and what it does to k-out-of-n durability math." />
+  <meta property="og:url" content="https://winning.microprediction.org/notes-backblaze.html" />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    table.num { border-collapse: collapse; margin: 1.2rem 0; font-size: 0.92rem; }
+    table.num th, table.num td { padding: 5px 14px; text-align: right;
+      border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+    table.num th:first-child, table.num td:first-child { text-align: left; }
+    table.num thead th { border-bottom: 2px solid var(--border); }
+    .callout { background: #f1f0fb; border-left: 3px solid var(--accent);
+      padding: 12px 18px; border-radius: 4px; margin: 18px 0; }
+    .meta { color: #777; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
+        <a href="/alternatives.html">Alternatives</a>
+        <a href="/heritage.html">Heritage</a>
+        <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="content">
+    <h1>Do disks fail independently?</h1>
+    <p class="meta">A cautionary read of the public Backblaze data:
+    what looks like a fleet-wide failure factor, and why the honest
+    answer is mostly a maintenance calendar. September 2026.</p>
+
+    <p class="lead">Storage durability math assumes drives fail
+    independently: mean time between failures, the annualized failure
+    rate, and the guarantees of erasure coding all multiply per-drive
+    probabilities as if the events were unrelated. That assumption is
+    known to be wrong, and this package computes the correlated
+    alternative &mdash; a stored dataset that survives until the k-th
+    of its drives fails is a correlated order statistic, and reliability
+    is the min-wins side of the same engine. So the public Backblaze
+    drive-failure data looked like a clean place to show the effect. It
+    turned into a lesson about reading it carefully instead.</p>
+
+    <h2>The tempting observation</h2>
+    <p>Under independent constant-hazard failure, a fleet's daily
+    failure count is Poisson, variance equal to mean. Backblaze's first
+    quarter of 2025 &mdash; about 340,000 drives, 1,067 failures &mdash;
+    is over-dispersed by a factor of three, and the excess survives
+    removing a smooth trend, so it is not simply cohorts aging. Six days
+    carry more than three standard deviations of excess failures, and
+    each spans seven to thirteen distinct drive models across all four
+    manufacturers. Detrended, the manufacturers' daily failure residuals
+    are positively correlated &mdash; Seagate and HGST, which fail by
+    entirely different physics, at +0.40. A shared factor touching every
+    vendor at once is the natural reading, and it is exactly the
+    common-cause structure the engine is built to price.</p>
+
+    <h2>Except it is mostly old, and mostly the calendar</h2>
+    <p>Two problems. First, none of the statistics are new.
+    Schroeder and Gibson showed in 2007 that disk failures are not
+    Poisson and carry long-range autocorrelation; Ford and colleagues
+    at Google, in 2010, defined failure &ldquo;bursts,&rdquo; showed
+    them rack-correlated, and fed the correlation into durability,
+    proving independence overstates availability by orders of magnitude.
+    The dependent k-out-of-n durability math has a mature copula
+    literature. The over-dispersion here is a re-confirmation on a newer
+    dataset, not a discovery.</p>
+
+    <p>Second, and worse, the cross-vendor clustering is very likely an
+    artifact of how the data is recorded. Backblaze's own documentation
+    is explicit: a drive is counted as failed on the day it
+    &ldquo;vanishes from the reporting population,&rdquo; reconciled
+    against data-center maintenance ticketing at quarter-end &mdash; an
+    administrative date, not the day the platter died. Backblaze runs a
+    weekly maintenance window on Thursdays, and many removals are
+    cosmetic: a firmware update, a loose cable. A technician pulling
+    drives in a service window touches whatever sits in that vault
+    &mdash; Seagate and HGST together &mdash; and produces exactly a
+    same-day spike across every manufacturer, with no shared physics at
+    all. The data agrees: failures run about 15% higher on weekdays, the
+    first quarter is Friday-heavy, and half its spike days are Fridays
+    &mdash; the day after Thursday maintenance. Removing the day-of-week
+    pattern cuts the cross-manufacturer correlation from +0.19 to +0.12;
+    the rest could be irregular batch pulls that no weekly control can
+    catch. Failure dates cannot separate drives that failed together
+    from drives that were <em>recorded</em> together.</p>
+
+    <div class="callout">
+      The distinction is everything for durability. Erasure coding is
+      threatened only by drives that physically fail together within a
+      repair window. Drives failing on different real days but recorded
+      on the same maintenance day threaten nothing. The Backblaze
+      failure date, being administrative, cannot tell the two apart, and
+      the evidence says at least part of the clustering is the
+      maintenance calendar. So the tempting durability number &mdash;
+      independence under-stating correlated data loss &mdash; is real
+      arithmetic on a correlation this dataset cannot establish is
+      physical.</div>
+
+    <h2>What actually holds</h2>
+    <p>The recorded daily failure distribution is over-dispersed, and
+    predictably so: a one-parameter negative-binomial correction fit on
+    the fourth quarter of 2024 predicts the first quarter of 2025's
+    daily counts with 13% lower log-loss than Poisson, and 37% lower on
+    the heaviest days. That is a genuine property of the data &mdash;
+    but it describes the recording process at least as much as the
+    drives, and it re-confirms Schroeder and Gibson rather than
+    extending them. The honest conclusion is a negative: the public
+    Backblaze data is the wrong instrument for physical failure
+    correlation, because its failure timestamps are administrative. The
+    real correlated-failure question &mdash; the one that does move
+    durability &mdash; is Ford and colleagues', and answering it needs
+    true time-of-death and placement, which the public release omits.</p>
+
+    <p>The engine still prices correlated durability exactly, given a
+    physical correlated-failure model. What this exercise establishes is
+    only where such a model has to come from, and it is not here. It
+    also, usefully, shows the discipline the claim required: an
+    intriguing correlation, a documented confound, and the willingness
+    to let the confound win.</p>
+
+    <p><a href="https://github.com/microprediction/winning/tree/main/research/applications/backblaze">Reproduction
+    scripts and full findings, including the confound tests &rarr;</a>
+    &middot; <a href="/heritage.html">Heritage</a> &middot;
+    <a href="/">Back to winning</a></p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "quarter": "data_Q4_2024",
+  "raw_disp": 2.9783451297607013,
+  "detrended_disp": 1.7347836084469712,
+  "n_spikes": 2,
+  "mean_cross_corr": 0.06254235516757824,
+  "mean_cross_corr_temp_partialled": 0.06250093269373515,
+  "failure_temp_corr": 0.01897934616421332,
+  "spike_temp_z": [
+    1.5666145988087525,
+    -0.6642192224054247
+  ]
+}

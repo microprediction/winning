@@ -1,0 +1,142 @@
+{
+  "gemma7b_vs_llama2_70b": {
+    "delta_0.01": {
+      "truth": "tied",
+      "mean_items": 623.4325,
+      "outcomes": {
+        "A": 0.1425,
+        "B": 0.2575,
+        "tied": 0.0,
+        "undecided": 0.6
+      },
+      "error": 0.4
+    },
+    "delta_0.02": {
+      "truth": "tied",
+      "mean_items": 721.99,
+      "outcomes": {
+        "A": 0.0975,
+        "B": 0.195,
+        "tied": 0.0,
+        "undecided": 0.7075
+      },
+      "error": 0.2925
+    },
+    "delta_0.03": {
+      "truth": "tied",
+      "mean_items": 809.6875,
+      "outcomes": {
+        "A": 0.065,
+        "B": 0.1325,
+        "tied": 0.0,
+        "undecided": 0.8025
+      },
+      "error": 0.1975
+    }
+  },
+  "llama3_8b_vs_llama65b": {
+    "delta_0.01": {
+      "truth": "A",
+      "mean_items": 660.355,
+      "outcomes": {
+        "A": 0.25,
+        "B": 0.12,
+        "tied": 0.0,
+        "undecided": 0.63
+      },
+      "error": 0.12
+    },
+    "delta_0.02": {
+      "truth": "tied",
+      "mean_items": 746.13,
+      "outcomes": {
+        "A": 0.1775,
+        "B": 0.09,
+        "tied": 0.0,
+        "undecided": 0.7325
+      },
+      "error": 0.2675
+    },
+    "delta_0.03": {
+      "truth": "tied",
+      "mean_items": 801.5325,
+      "outcomes": {
+        "A": 0.1325,
+        "B": 0.0775,
+        "tied": 0.0,
+        "undecided": 0.79
+      },
+      "error": 0.21
+    }
+  },
+  "mistral7b_vs_yi6b": {
+    "delta_0.01": {
+      "truth": "tied",
+      "mean_items": 656.8575,
+      "outcomes": {
+        "A": 0.205,
+        "B": 0.16,
+        "tied": 0.0,
+        "undecided": 0.635
+      },
+      "error": 0.365
+    },
+    "delta_0.02": {
+      "truth": "tied",
+      "mean_items": 734.625,
+      "outcomes": {
+        "A": 0.16,
+        "B": 0.1175,
+        "tied": 0.0,
+        "undecided": 0.7225
+      },
+      "error": 0.2775
+    },
+    "delta_0.03": {
+      "truth": "tied",
+      "mean_items": 781.955,
+      "outcomes": {
+        "A": 0.135,
+        "B": 0.0925,
+        "tied": 0.0,
+        "undecided": 0.7725
+      },
+      "error": 0.2275
+    }
+  },
+  "qwen15_14b_vs_gemma7b": {
+    "delta_0.01": {
+      "truth": "A",
+      "mean_items": 51.2725,
+      "outcomes": {
+        "A": 0.9925,
+        "B": 0.0075,
+        "tied": 0.0,
+        "undecided": 0.0
+      },
+      "error": 0.0075
+    },
+    "delta_0.02": {
+      "truth": "A",
+      "mean_items": 60.6575,
+      "outcomes": {
+        "A": 0.995,
+        "B": 0.005,
+        "tied": 0.0,
+        "undecided": 0.0
+      },
+      "error": 0.005
+    },
+    "delta_0.03": {
+      "truth": "A",
+      "mean_items": 69.8725,
+      "outcomes": {
+        "A": 0.9975,
+        "B": 0.0025,
+        "tied": 0.0,
+        "undecided": 0.0
+      },
+      "error": 0.0025
+    }
+  }
+}

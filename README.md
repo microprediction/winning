@@ -184,9 +184,12 @@ scale):
     title = {Scalable Inversion of Contests with Correlated Performances,
              Including Softmax and Multinomial Probit},
     year = {2026},
+    eprint = {2609.01133},
+    archivePrefix = {arXiv},
+    primaryClass = {stat.ME},
     doi = {10.2139/ssrn.7307363},
-    note = {SSRN working paper},
-    URL = {https://ssrn.com/abstract=7307363}
+    note = {arXiv:2609.01133; also SSRN working paper 7307363},
+    URL = {https://arxiv.org/abs/2609.01133}
     }
 
 For the original independent lattice transform (`winning.classic`):
