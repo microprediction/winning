@@ -58,6 +58,146 @@ def _clamp_d2(d2, base):
     return d2
 
 
+def _beta_per_player(beta2, n):
+    return np.broadcast_to(np.asarray(beta2, dtype=float), (n,)).astype(float)
+
+
+_CURVE_M_MIN, _CURVE_M_MAX = 4097, 32769
+
+
+def _noise_span(base):
+    """(lo, hi) support extent of the MAX-wins standardized noise
+    variable: the min-wins base's (left, right) tails, flipped."""
+    if callable(base):
+        left, right = getattr(base, "span", (12.0, 12.0))
+    else:
+        from ..factor.races import _SPANS
+        left, right = _SPANS.get(base, (12.0, 12.0))
+    return -float(right), float(left)
+
+
+def _predictive_curves(v, beta2, base):
+    """Per-player curves of the PREDICTIVE marginal x_j - m_j =
+    (s_j - m_j) + e_j, with s_j ~ N(m_j, v_j) the Gaussian belief and
+    e_j = sqrt(beta2_j) eps the performance noise (eps the module's
+    max-wins standardized base variable, density f_min(-z)).
+
+    This is the clean-Bayes replacement for folding belief variance
+    into the base's own scale. Belief variance is epistemic, noise
+    variance aleatoric, and their sum lands back in the base family
+    ONLY for the normal (Gaussian convolved with Gaussian is Gaussian).
+    Pricing a laplace race as laplace at variance v + beta2 overstates
+    a near-even favorite by ~4 points of win probability -- measured:
+    engine 0.4966 = pure-laplace-at-summed-variance MC 0.4965, true
+    Gaussian-belief-plus-laplace-noise MC 0.4775 -- and that model gap,
+    not any lattice defect, was the winner-update bias the bandits
+    audit caught (research/adjudications/laplace_race_bias.md). The
+    non-normal moment updates therefore price the true convolution.
+
+    Returns a list of (u, cdf, f, fp, fpp): grid, CDF, density, and the
+    density's first two derivatives, all of the centered marginal. The
+    Gaussian kernel's derivatives are analytic, so fp and fpp involve
+    no numerical differentiation, and the convolution smooths any base
+    kink (laplace, exponential-power beta < 2): the marginal is smooth
+    wherever v_j > 0, which is what licenses analytic curvature in the
+    winner update and ordinary differencing steps in the order paths.
+    Prekopa keeps log-concavity under Gaussian convolution, so
+    _clamp_d2 remains valid for the named bases."""
+    from ..factor.races import BASES
+    v = np.asarray(v, dtype=float)
+    n = len(v)
+    b2 = _beta_per_player(beta2, n)
+    fn = base if callable(base) else BASES[base]
+    z_lo, z_hi = _noise_span(base)
+    curves = []
+    for j in range(n):
+        if not b2[j] > 0.0:
+            raise ValueError("beta2 must be positive to price the "
+                             "predictive marginal")
+        se = float(np.sqrt(b2[j]))
+        ss = float(np.sqrt(max(v[j], 0.0)))
+        lo = z_lo * se - 8.5 * ss
+        hi = z_hi * se + 8.5 * ss
+        du_t = min(se / 24.0, ss / 8.0) if ss > 0 else se / 24.0
+        M = int(np.clip(np.ceil((hi - lo) / max(du_t, 1e-300)) + 1,
+                        _CURVE_M_MIN, _CURVE_M_MAX))
+        u = np.linspace(lo, hi, M)
+        du = u[1] - u[0]
+        S_min, f_min, fp_min = fn(-u / se)
+        fe = f_min / se
+        if ss < 2.5 * du:
+            # belief variance below ~1e-5 of the noise variance at the
+            # grid cap: the kernel is under-resolved, and the marginal
+            # is the base itself to that same negligible order (and the
+            # v^2-weighted moment terms vanish with v anyway)
+            f = fe
+            cdf = np.clip(S_min, 0.0, 1.0)
+            fp = -fp_min / (se * se)
+            fpp = np.gradient(fp, du)
+        else:
+            K = min(int(np.ceil(8.0 * ss / du)), (M - 1) // 2 - 1)
+            t = np.arange(-K, K + 1) * du
+            ker = np.exp(-0.5 * (t / ss) ** 2)
+            ker /= ker.sum() * du                 # exact discrete mass
+            k1 = -(t / ss ** 2) * ker
+            k2 = ((t / ss ** 2) ** 2 - 1.0 / ss ** 2) * ker
+            f = np.convolve(fe, ker, mode="same") * du
+            fp = np.convolve(fe, k1, mode="same") * du
+            fpp = np.convolve(fe, k2, mode="same") * du
+            mass = 0.5 * du * float((f[:-1] + f[1:]).sum())
+            f, fp, fpp = f / mass, fp / mass, fpp / mass
+            cdf = np.concatenate(
+                [[0.0], np.cumsum(0.5 * du * (f[:-1] + f[1:]))])
+            cdf = np.clip(cdf, 0.0, 1.0)
+        curves.append((u, cdf, np.maximum(f, 0.0), fp, fpp))
+    return curves
+
+
+def _winner_moments_curves(m, curves, i, L=4001, need_d2=True):
+    """p_i, the gradient row d log p_i / d m_j, and (need_d2) the
+    diagonal curvature d^2 log p_i / d m_j^2 under the predictive
+    marginals, in one O(nL) pass over the winner's own support (the
+    integrand carries f_i, which vanishes elsewhere). Max-wins.
+
+    The curvature is analytic -- the smooth marginal's own fp/fpp under
+    the integral -- replacing the finite differencing whose step the
+    kinked laplace lattice once forced wide (_fd_eps)."""
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    u_i = curves[i][0]
+    x = np.linspace(m[i] + u_i[0], m[i] + u_i[-1], L)
+    dx = x[1] - x[0]
+    Fs = np.empty((n, L))
+    fs = np.empty((n, L))
+    fps = np.empty((n, L))
+    for j in range(n):
+        u, cdf, f, fp, _ = curves[j]
+        xj = x - m[j]
+        Fs[j] = np.interp(xj, u, cdf, left=0.0, right=1.0)
+        fs[j] = np.interp(xj, u, f, left=0.0, right=0.0)
+        fps[j] = np.interp(xj, u, fp, left=0.0, right=0.0)
+    logF = np.log(np.maximum(Fs, 1e-300))
+    A = logF.sum(axis=0) - logF[i]              # sum over j != i
+    R = np.exp(np.clip(A, -745.0, 0.0))         # prod_{j != i} F_j
+    fi = fs[i]
+    p = max(float((fi * R).sum() * dx), 1e-300)
+    g = np.empty(n)
+    d2 = np.empty(n) if need_d2 else None
+    g[i] = -float((fps[i] * R).sum() * dx) / p
+    if need_d2:
+        fppi = np.interp(x - m[i], curves[i][0], curves[i][4],
+                         left=0.0, right=0.0)
+        d2[i] = float((fppi * R).sum() * dx) / p - g[i] ** 2
+    for j in range(n):
+        if j == i:
+            continue
+        rest = np.exp(np.clip(A - logF[j], -745.0, 0.0))
+        g[j] = -float((fi * fs[j] * rest).sum() * dx) / p
+        if need_d2:
+            d2[j] = float((fi * fps[j] * rest).sum() * dx) / p - g[j] ** 2
+    return p, g, d2
+
+
 def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
                    points=257):
     """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP.
@@ -95,14 +235,24 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     """Exact-moment posterior (m, v) update given `winner` won the race.
 
     m, v: prior skill means and variances; beta2: performance noise
-    variance. WARNING: forms D = v + beta2 and passes it to the
-    base, which is exact only for base="normal"; other bases carry a
-    convolution bias (see research/adjudications/
-    laplace_convolution_shortcut.md). Second derivatives currently by central differences of the
-    gradient row (2 extra JVP-row calls per coordinate would be exact; the
-    diagonal-only FD used here costs two full rows)."""
+    variance (scalar or per-player). The event is priced under the TRUE
+    predictive marginal of each performance: for base="normal" that is
+    the normal at D = v + beta2 (the Gaussian is stable under
+    convolution) and the historical analytic path is unchanged; for
+    every other base the predictive is the Gaussian belief CONVOLVED
+    with the base noise (_predictive_curves), which the former
+    D = v + beta2 shortcut mispriced -- a ~4-point win-probability bias
+    and a 57% winner-variance understatement for laplace (see
+    research/adjudications/laplace_convolution_shortcut.md). On the
+    curve path both derivatives are analytic (the smooth marginal's own
+    fp/fpp under the integral), so eps is unused there."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
+    if base != "normal":
+        curves = _predictive_curves(v, beta2, base)
+        p_i, g, d2 = _winner_moments_curves(m, curves, winner)
+        d2 = _clamp_d2(d2, base)
+        return m + v * g, np.maximum(v + v**2 * d2, 1e-6), p_i
     D = v + beta2
     g, p_i = _grad_logp_row(m, D, winner, base=base)
     m_new = m + v * g
@@ -204,7 +354,20 @@ def _base_rows(x, m_j, sd_j, base):
     return f_u / sd_j, fp_u / (sd_j * sd_j), np.maximum(S_u, 1e-300)
 
 
-def _order_pass(m, sd, order, L=2001, base="normal"):
+def _curve_rows(curve, x, m_j):
+    """Density, its m-derivative, and CDF of one player's predictive
+    marginal on the lattice x: the _base_rows contract served from a
+    _predictive_curves tuple. d/dm f(x - m) = -fp(x - m)."""
+    u, cdf, f, fp, _ = curve
+    xj = np.ravel(x - m_j)
+    shape = np.shape(x - m_j)
+    g = np.interp(xj, u, f, left=0.0, right=0.0).reshape(shape)
+    dg = -np.interp(xj, u, fp, left=0.0, right=0.0).reshape(shape)
+    F = np.interp(xj, u, cdf, left=0.0, right=1.0).reshape(shape)
+    return g, dg, F
+
+
+def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
     """Joint ordered-statistics likelihood and its exact gradient, by one
     forward and one adjoint sweep, O(nL).
 
@@ -216,6 +379,12 @@ def _order_pass(m, sd, order, L=2001, base="normal"):
     barely sees a failure at all, since a failure simply is not the
     winner.
 
+    curves (optional): per-player _predictive_curves tuples. When given,
+    each player's rows come from the true predictive marginal (Gaussian
+    belief convolved with base noise) instead of the base at combined
+    variance sd -- the clean-Bayes path for non-normal bases with
+    uncertain abilities; sd then only pads the lattice.
+
     Structure: P = g_1^T D T_2 with T_t = C(g_t * T_{t+1}), T_n = F_n,
     C = trapezoidal cumulative integral, D = dx. P is linear in each
     player's density row g_t, so with the adjoint u_{t+1} = g_t * (C^T u_t)
@@ -223,16 +392,20 @@ def _order_pass(m, sd, order, L=2001, base="normal"):
     log-scales so 20-player orders (P ~ 1e-19) stay accurate.
     Returns (log P, d log P / d m)."""
     n = len(order)
-    pad = 8.0
-    if base != "normal":
-        fn = base if callable(base) else None
-        span = getattr(fn, "span", None)
-        if span is not None:
-            pad = max(pad, float(max(span)))
-        else:
-            pad = max(pad, 12.0)
-    lo = float((m - pad * sd.max()).min())
-    hi = float((m + pad * sd.max()).max())
+    if curves is not None:
+        lo = min(float(m[j] + curves[j][0][0]) for j in order)
+        hi = max(float(m[j] + curves[j][0][-1]) for j in order)
+    else:
+        pad = 8.0
+        if base != "normal":
+            fn = base if callable(base) else None
+            span = getattr(fn, "span", None)
+            if span is not None:
+                pad = max(pad, float(max(span)))
+            else:
+                pad = max(pad, 12.0)
+        lo = float((m - pad * sd.max()).min())
+        hi = float((m + pad * sd.max()).max())
     x = np.linspace(lo, hi, L)
     dx = x[1] - x[0]
 
@@ -244,14 +417,18 @@ def _order_pass(m, sd, order, L=2001, base="normal"):
         c = np.cumsum(u[::-1])[::-1] * dx
         return c - 0.5 * dx * (u + u[-1])
 
+    def rows(j):
+        if curves is not None:
+            return _curve_rows(curves[j], x, m[j])
+        return _base_rows(x, m[j], sd[j], base)
+
     g = np.empty((n, L)); dg = np.empty((n, L))
     for t, j in enumerate(order):
-        g[t], dg[t], _ = _base_rows(x, m[j], sd[j], base)
+        g[t], dg[t], _ = rows(j)
 
     # forward sweep: scaled T_t for t = n .. 2
     T = np.empty((n + 1, L)); sT = np.zeros(n + 1)
-    j = order[-1]
-    T[n] = _base_rows(x, m[j], sd[j], base)[2]
+    T[n] = rows(order[-1])[2]
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])
         mx = raw.max()
@@ -322,14 +499,21 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
-    _, grad = _order_pass(m, sd, order, base=base)
+    # non-normal bases price the true predictive (Gaussian belief
+    # convolved with base noise) rather than the base at combined
+    # variance -- the convolution-shortcut fix; the smooth marginal also
+    # frees the differencing step from the kinked-lattice widening
+    curves = None if base == "normal" else _predictive_curves(v, beta2,
+                                                              base)
+    _, grad = _order_pass(m, sd, order, base=base, curves=curves)
     m_new = m + v * grad
-    eps = _fd_eps(base, eps)
+    if curves is None:
+        eps = _fd_eps(base, eps)
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
-        _, gp = _order_pass(m + ej, sd, order, base=base)
-        _, gm = _order_pass(m - ej, sd, order, base=base)
+        _, gp = _order_pass(m + ej, sd, order, base=base, curves=curves)
+        _, gm = _order_pass(m - ej, sd, order, base=base, curves=curves)
         d2[j] = (gp[j] - gm[j]) / (2 * eps)
     d2 = _clamp_d2(d2, base)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
@@ -404,7 +588,10 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
 
     G, logZ = mixture(m)
     m_new = m + v * G
-    eps = _fd_eps(base, eps)
+    # no _fd_eps widening here: both callers route every non-normal base
+    # through _predictive_curves nodes, whose Gaussian-smoothed marginals
+    # have no kink for the differencing step to trip on
+    eps = float(eps)
     d2 = np.empty(len(m))
     for j in range(len(m)):
         ej = np.zeros(len(m)); ej[j] = eps
@@ -426,12 +613,25 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
     conditionals with posterior node weights. Returns
     (m_post, v_post, logZ) with logZ = log P(winner) for evidence and
     model comparison. Verified against rejection-sampled Monte Carlo
-    posteriors in the tests."""
-    D = np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float)
+    posteriors in the tests.
 
-    def node(mm):
-        g, p = _grad_logp_row(mm, D, winner, base=base)
-        return np.log(max(p, 1e-300)), g
+    Conditional on f, each performance's predictive is the Gaussian
+    belief convolved with the base noise; non-normal bases price that
+    convolution per node (curves shared across nodes -- the factor only
+    shifts means), closing the same shortcut update_winner closed."""
+    if base != "normal":
+        curves = _predictive_curves(v, beta2, base)
+
+        def node(mm):
+            p, g, _ = _winner_moments_curves(mm, curves, winner,
+                                             need_d2=False)
+            return np.log(p), g
+    else:
+        D = np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float)
+
+        def node(mm):
+            g, p = _grad_logp_row(mm, D, winner, base=base)
+            return np.log(max(p, 1e-300)), g
 
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base)
 
@@ -443,17 +643,23 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     open item recorded in update_ranking's caveat. order lists players
     first to last finisher (max-wins). Returns (m_post, v_post, logZ),
     logZ = log P(order). Near-impossible orders degrade like
-    order_loglik (finite moments, tiny logZ), never raise."""
+    order_loglik (finite moments, tiny logZ), never raise.
+
+    Non-normal bases price each conditional order under the true
+    predictive marginals (Gaussian belief convolved with base noise;
+    curves shared across factor nodes), as update_ranking_exact does."""
     sd = np.sqrt(np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float))
     order = np.asarray(order, dtype=int)
+    curves = None if base == "normal" else _predictive_curves(v, beta2,
+                                                              base)
 
     def node(mm):
-        return _order_pass(mm, sd, order, base=base)
+        return _order_pass(mm, sd, order, base=base, curves=curves)
 
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base)
 
 
-def _order_pass_batch(Ms, sd, order, L=None, base="normal"):
+def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     """_order_pass vectorized over a batch of mean vectors (the factor
     nodes of the full-covariance order update -- the order-heavy online
     case the bandits lane measured: correlation identification flows
@@ -463,6 +669,9 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal"):
     resolution a single call would use. Per-node scale carrying and
     underflow guards match the scalar path: an impossible-order node
     contributes -inf log-likelihood and a zero gradient tail.
+    curves (optional): per-player _predictive_curves tuples, as in
+    _order_pass -- the full-covariance path passes the belief-split's
+    diagonal remainder psi as the Gaussian part.
     Returns (logP (Q,), grad (Q, n)).
     """
     Ms = np.atleast_2d(np.asarray(Ms, dtype=float))
@@ -473,8 +682,14 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal"):
     if base != "normal":
         span = getattr(base, "span", None)
         pad = max(pad, float(max(span))) if span is not None else max(pad, 12.0)
-    lo = float((Ms - pad * sd.max()).min())
-    hi = float((Ms + pad * sd.max()).max())
+    if curves is not None:
+        ext_lo = min(float(curves[j][0][0]) for j in order)
+        ext_hi = max(float(curves[j][0][-1]) for j in order)
+        lo = float(Ms.min()) + ext_lo
+        hi = float(Ms.max()) + ext_hi
+    else:
+        lo = float((Ms - pad * sd.max()).min())
+        hi = float((Ms + pad * sd.max()).max())
     if L is None:
         span_single = float(Ms[0].max() - Ms[0].min()) + 16 * float(sd.max())
         dx_t = span_single / 2001.0
@@ -490,13 +705,17 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal"):
         c = np.cumsum(u[:, ::-1], axis=1)[:, ::-1] * dx
         return c - 0.5 * dx * (u + u[:, -1:])
 
+    def rows(j):
+        if curves is not None:
+            return _curve_rows(curves[j], x[None, :], Ms[:, j][:, None])
+        return _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)
+
     g = np.empty((n, Q, L)); dg = np.empty((n, Q, L))
     for t, j in enumerate(order):
-        g[t], dg[t], _ = _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)
+        g[t], dg[t], _ = rows(j)
 
     T = np.empty((n + 1, Q, L)); sT = np.zeros((n + 1, Q))
-    j = order[-1]
-    T[n] = _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)[2]
+    T[n] = rows(order[-1])[2]
     alive = np.ones(Q, dtype=bool)
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])

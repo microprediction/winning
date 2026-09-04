@@ -50,3 +50,41 @@ Gate any behavioural change on bandits/tests/audit_ratings_bulletproof.py
 plus a race-layer MC test. NOTE: the winning inversion PAPER and its
 Gaussian factor path are unaffected -- this is only the non-Gaussian
 RATING-update use.
+
+## RESOLVED: option (a) implemented (2026-09-04, Peter's call)
+winning.ratings.nway._predictive_curves builds each player's TRUE
+predictive marginal N(0, v_j) convolved with the base noise (grid
+convolution against analytic Gaussian-derivative kernels, so the
+density's first two derivatives carry no numerical differencing), and
+every non-normal moment update prices it:
+
+  update_winner            analytic gradient AND curvature via
+                           _winner_moments_curves (no FD at all)
+  update_ranking / _exact  curve rows through _order_pass
+  update_winner/order_
+    correlated             curve nodes (curves shared across factor
+                           nodes; the factor only shifts means)
+  update_order_full        _order_kernel builds curves from the
+                           belief-split's psi + beta2
+
+The normal branch is untouched (bit-stable). Prekopa keeps
+log-concavity under Gaussian convolution, so _clamp_d2 remains valid;
+the convolution also smooths the laplace kink, making _fd_eps's wide
+differencing step unnecessary on curve paths (dropped there).
+
+Measured (research/adjudications/predictive_referee.py, 4M x 6 MC of
+the generative model, three configs including two the bandits harness
+did not pick; pass mark 0.003):
+
+  update_winner laplace   dmean 0.047 -> 0.0001   dvar 0.277 -> 0.0004
+  logistic / gumbel / student4 all <= 0.001 on means and variances
+  update_ranking_exact    all bases <= 0.0007 dmean, <= 0.0007 dvar
+  correlated (V != 0)     laplace/logistic <= 0.0013
+  winner p (laplace, config A): 0.4776 = generative MC 0.4776
+  winner posterior var:   0.4910 vs MC 0.4909 (was 0.2133, the 57%)
+
+Regression: 46 existing ratings/base tests pass; normal rows at their
+historical accuracy. Pinned in tests/test_predictive_curves.py
+(Gaussian-closure consistency + MC-referenced laplace winner/order
+values). Remaining gate: bandits audit_ratings_bulletproof P6/P8
+re-run on their side.

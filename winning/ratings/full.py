@@ -141,8 +141,9 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
     k = A.shape[0]
     Sobs = A @ S @ A.T
     B, psi = _belief_split(Sobs)
-    D = psi + np.broadcast_to(np.asarray(beta2, dtype=float),
-                              (k,)).astype(float)
+    beta2b = np.broadcast_to(np.asarray(beta2, dtype=float),
+                             (k,)).astype(float)
+    D = psi + beta2b
     if V is None:
         Vaug = B
     else:
@@ -161,7 +162,7 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
     def mixture(mo):
         pts = mo[None, :] + shifts
         if kernel is not None:
-            logps, grads = kernel(pts, D, Vaug, F, W)
+            logps, grads = kernel(pts, D, Vaug, F, W, psi, beta2b)
             if logps is None:            # kernel handled the mixture
                 return grads
         else:
@@ -217,7 +218,7 @@ def _winner_kernel(winner, k, points=801, base="normal"):
     e = np.zeros(k)
     e[int(winner)] = 1.0
 
-    def kernel(pts, D, Vaug, F, W):
+    def kernel(pts, D, Vaug, F, W, psi=None, beta2=None):
         mo = pts[0] - (F @ Vaug.T)[0]
         a = -mo
         p = win_probabilities_factor(a, Vaug, D, F, W)
@@ -230,14 +231,27 @@ def _winner_kernel(winner, k, points=801, base="normal"):
 
 
 def _order_kernel(order, base="normal"):
-    """Vectorized ordered-statistics kernel across factor nodes."""
-    from .nway import _order_pass_batch
+    """Vectorized ordered-statistics kernel across factor nodes.
+
+    Non-normal bases price each observation coordinate's predictive as
+    the belief-split's diagonal Gaussian remainder psi convolved with
+    the base noise (curves built once per update -- psi and beta2 are
+    fixed across the mixture's mean shifts), not as the base at
+    combined variance: the convolution-shortcut fix, full-covariance
+    edition."""
+    from .nway import _order_pass_batch, _predictive_curves
 
     order = np.asarray(order, dtype=int)
+    cache = {}
 
-    def kernel(pts, D, Vaug, F, W):
+    def kernel(pts, D, Vaug, F, W, psi=None, beta2=None):
+        curves = None
+        if base != "normal" and psi is not None:
+            if "curves" not in cache:
+                cache["curves"] = _predictive_curves(psi, beta2, base)
+            curves = cache["curves"]
         return _order_pass_batch(pts, np.sqrt(np.maximum(D, 1e-300)), order,
-                                 base=base)
+                                 base=base, curves=curves)
 
     return kernel
 
