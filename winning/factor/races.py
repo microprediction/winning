@@ -126,7 +126,7 @@ def exponential_power_base(beta):
     beta = float(beta)
     if beta <= 0.0:
         raise ValueError("exponential_power_base needs beta > 0")
-    from scipy.special import gamma as _gamma, gammainc, gammaincc
+    from scipy.special import gamma as _gamma, gammaincc
     a = np.sqrt(_gamma(1.0 / beta) / _gamma(3.0 / beta))
     c = beta / (2.0 * a * _gamma(1.0 / beta))
 
