@@ -95,7 +95,10 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     """Exact-moment posterior (m, v) update given `winner` won the race.
 
     m, v: prior skill means and variances; beta2: performance noise
-    variance. Second derivatives currently by central differences of the
+    variance. WARNING: forms D = v + beta2 and passes it to the
+    base, which is exact only for base="normal"; other bases carry a
+    convolution bias (see research/adjudications/
+    laplace_convolution_shortcut.md). Second derivatives currently by central differences of the
     gradient row (2 extra JVP-row calls per coordinate would be exact; the
     diagonal-only FD used here costs two full rows)."""
     m = np.asarray(m, dtype=float)

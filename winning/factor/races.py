@@ -6,6 +6,12 @@
     race_probabilities(mu, V=V, base="gumbel")      correlated Luce
     race_probabilities(mu, base="logistic")         logistic noise
     race_probabilities(mu, base="laplace")          robust double-exponential
+
+    NOTE: D is the base's own dispersion (performance-noise variance).
+    Folding a Gaussian ABILITY-belief variance into D (D = v + beta2)
+    is exact only for base="normal", the one base stable under
+    convolution; for other bases the true predictive is a Gaussian-
+    smoothed base, not a wider base, so that shortcut is biased.
     race_probabilities(mu, base=student_base(4))    fat tails, unit variance
     race_probabilities(mu, base=skew_normal_base(2))  the heritage family
     race_probabilities(mu, base=failure_base(0.1))  performance + DNF lump
