@@ -112,31 +112,30 @@ PAIRS_C = [(0, 2), (1, 3), (2, 4), (3, 5), (4, 6), (5, 7), (6, 8), (7, 9),
 
 
 def rouder_c():
+    """Reads the derived per-block confusion counts, not the raw deposit: see
+    derive_rouder.py and rouder_chunk.py. The deposit itself is not redistributed."""
+    from rouder_chunk import load_counts
     K = 12
     rows = collections.defaultdict(lambda: np.zeros(K))
     pair = collections.defaultdict(lambda: np.zeros(2))
-    for path in sorted(glob.glob(str(HERE / "data" / "rouder_chunk" / "c0" / "C1CS*"))):
-        blocks = collections.defaultdict(list)
-        for line in open(path):
-            t = line.split()
-            if len(t) != 7:
-                continue
-            blocks[int(t[1][3:])].append((int(t[4]), int(t[5])))
-        for trials in blocks.values():
-            seen = {x for st, rp in trials for x in (st, rp)}
+    per_subject = load_counts().get("C", {})
+    for blocks_list in per_subject.values():
+        blocks = {blk: c for blk, c in blocks_list}
+        for counts in blocks.values():
+            seen = {i for i in range(K) if counts[i].sum() or counts[:, i].sum()}
             if len(seen) > 4:                       # a full-twelve block
-                for st, rp in trials:
-                    if 0 <= st < K and 0 <= rp < K:
-                        rows[st][rp] += 1
+                for st in range(K):
+                    rows[st] += counts[st]
                 continue
             fits = [q for q in PAIRS_C if seen <= set(q)]
             if len(fits) != 1:
                 continue
             i, j = fits[0]
-            for st, rp in trials:
-                if st not in (i, j) or rp not in (i, j):
-                    continue
-                pair[(st, i, j)][0 if rp == st else 1] += 1
+            for st in (i, j):
+                for rp in (i, j):
+                    n = counts[st, rp]
+                    if n:
+                        pair[(st, i, j)][0 if rp == st else 1] += n
     cells = []
     for (st, i, j), n in pair.items():
         if n.sum() < 20 or rows[st].sum() < 20:

@@ -36,8 +36,11 @@ PREFLIB = HERE / "preflib"
 ALPHA = 0.5           # add-alpha, applied identically wherever shares are formed
 
 
-def slopes(R):
-    """(observed lambda, race-implied lambda) for one ranks matrix."""
+def slopes_totals(R):
+    """(num_o, num_r, den, npair) for one ranks matrix, before dividing into a slope.
+    Several files of one source (see heldout_score.preflib_sets: a PrefLib file is a
+    separate design) can be pooled by summing these, each calibrated on its own,
+    rather than by ever mixing their raw shares."""
     n, K = R.shape
     cts = np.bincount(R.argmin(axis=1), minlength=K).astype(float)
     p = (cts + ALPHA) / (n + ALPHA * K)
@@ -65,19 +68,49 @@ def slopes(R):
             npair += 1
     if den <= 0 or npair == 0:
         return None
+    return num_o, num_r, den, npair
+
+
+def slopes(R):
+    """(observed lambda, race-implied lambda) for one ranks matrix."""
+    t = slopes_totals(R)
+    if t is None:
+        return None
+    num_o, num_r, den, npair = t
+    return num_o / den, num_r / den, npair
+
+
+def slopes_grouped(Rs):
+    """Same statistic, pooled over several separately calibrated files of one source."""
+    num_o = num_r = den = 0.0
+    npair = 0
+    for R in Rs:
+        t = slopes_totals(R)
+        if t is None:
+            return None
+        no, nr, d, np_ = t
+        num_o += no; num_r += nr; den += d; npair += np_
+    if den <= 0 or npair == 0:
+        return None
     return num_o / den, num_r / den, npair
 
 
 def run(name, R, nboot):
-    base = slopes(R)
+    return run_grouped(name, [R], nboot)
+
+
+def run_grouped(name, Rs, nboot):
+    base = slopes_grouped(Rs)
     if base is None:
         return None
     lo_, lr_, npair = base
-    n = R.shape[0]
+    n = sum(R.shape[0] for R in Rs)
+    K = Rs[0].shape[1]
     rng = np.random.default_rng(3)
     bo, br, bd, brt = [], [], [], []
     for _ in range(nboot):
-        s = slopes(R[rng.integers(0, n, n)])
+        resampled = [R[rng.integers(0, len(R), len(R))] for R in Rs]
+        s = slopes_grouped(resampled)
         if s is None:
             continue
         bo.append(s[0]); br.append(s[1]); bd.append(s[0] - s[1])
@@ -86,22 +119,36 @@ def run(name, R, nboot):
     if len(bo) < 20:
         return None
     q = lambda v: (float(np.quantile(v, 0.025)), float(np.quantile(v, 0.975)))
-    return {"name": name, "n": n, "K": R.shape[1], "pairs": npair,
+    return {"name": name, "n": n, "K": K, "pairs": npair,
             "obs": lo_, "race": lr_, "resid": lo_ - lr_,
             "obs_ci": q(bo), "resid_ci": q(bd),
             "ratio": (lo_ / lr_) if lr_ else float("nan"),
             "ratio_ci": q(brt) if len(brt) >= 20 else (float("nan"), float("nan"))}
 
 
+import re
+GROUP_RE = re.compile(r"^(Netflix|Dots|Puzzles) \d+$")
+
+
 def main():
     nboot = int(sys.argv[1]) if len(sys.argv) > 1 else 300
     data = load_all()
+    groups = {}
+    singles = {}
+    for k, v in sorted(data.items()):
+        m = GROUP_RE.match(k)
+        if m:
+            groups.setdefault(m.group(1), []).append(v)
+        else:
+            singles[k] = v
     print(f"{'dataset':<20}{'n':>7}{'K':>3}{'pairs':>6}"
           f"{'observed lambda':>26}{'race':>8}{'residual (obs-race)':>26}"
           f"{'ratio obs/race':>22}")
     rows = []
-    for name, R in sorted(data.items()):
-        r = run(name, R, nboot)
+    items = list(singles.items()) + [(name, None) for name in groups]
+    for name, R in sorted(items):
+        r = (run_grouped(name, groups[name], nboot) if name in groups
+             else run(name, R, nboot))
         if r is None:
             print(f"{name:<20}  not computable")
             continue

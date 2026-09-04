@@ -52,15 +52,17 @@ def predictions(p):
     return out, err
 
 
-def run(R, alpha=0.5, folds=5, seed=0, weight="subsets"):
-    """Held-out gain under one smoothing convention and one menu weighting."""
+def accumulate(R, alpha=0.5, folds=5, seed=0):
+    """Per-size held-out totals (L, G, C) for one already-calibrated collection.
+    No weighting is applied here, so several collections' accumulators can be summed
+    before weighting is chosen, which is what combining separately calibrated files
+    of one source requires."""
     rng = np.random.default_rng(seed)
     n, K = R.shape
     if n > MAX_RESP:
         R = R[rng.choice(n, MAX_RESP, replace=False)]
         n = MAX_RESP
     fold = np.array_split(rng.permutation(n), folds)
-    # accumulate by subset size so any weighting can be applied afterwards
     L = np.zeros(K + 1)
     G = np.zeros(K + 1)
     C = np.zeros(K + 1)
@@ -79,6 +81,11 @@ def run(R, alpha=0.5, folds=5, seed=0, weight="subsets"):
             L[len(S)] += float(-np.log(lu[win]).sum())
             G[len(S)] += float(-np.log(ra[win]).sum())
             C[len(S)] += len(win)
+    return L, G, C
+
+
+def weighted(L, G, C, weight):
+    K = len(C) - 1
     sizes = [r for r in range(2, K + 1) if C[r] > 0]
     if not sizes:
         return None
@@ -94,6 +101,28 @@ def run(R, alpha=0.5, folds=5, seed=0, weight="subsets"):
     raise ValueError(weight)
 
 
+def run(R, alpha=0.5, folds=5, seed=0, weight="subsets"):
+    """Held-out gain under one smoothing convention and one menu weighting."""
+    acc = accumulate(R, alpha=alpha, folds=folds, seed=seed)
+    if acc is None:
+        return None
+    return weighted(*acc, weight)
+
+
+def run_grouped(Rs, alpha=0.5, folds=5, seed=0, weight="subsets"):
+    """Same as run(), but Rs is several files of one source: each is calibrated and
+    scored on its own, and the per-size totals are pooled before weighting."""
+    Ktot = max(R.shape[1] for R in Rs)
+    L = np.zeros(Ktot + 1); G = np.zeros(Ktot + 1); C = np.zeros(Ktot + 1)
+    for R in Rs:
+        acc = accumulate(R, alpha=alpha, folds=folds, seed=seed)
+        if acc is None:
+            return None
+        l, g, c = acc
+        L[:len(l)] += l; G[:len(g)] += g; C[:len(c)] += c
+    return weighted(L, G, C, weight)
+
+
 def bootstrap_refit(R, reps=200, alpha=0.5, seed=0):
     """Resample respondents and rerun calibration and scoring inside each replicate."""
     rng = np.random.default_rng(seed)
@@ -104,6 +133,24 @@ def bootstrap_refit(R, reps=200, alpha=0.5, seed=0):
         g = run(R[idx], alpha=alpha, seed=b)
         if g is not None:
             out.append(g)
+    return _summarize_boot(out)
+
+
+def bootstrap_refit_grouped(Rs, reps=200, alpha=0.5, seed=0):
+    """Grouped refit bootstrap: every replicate resamples respondents independently
+    within each file, then reruns calibration and scoring per file and pools before
+    weighting, exactly as run_grouped does on the observed data."""
+    rng = np.random.default_rng(seed)
+    out = []
+    for b in range(reps):
+        resampled = [R[rng.integers(0, len(R), len(R))] for R in Rs]
+        g = run_grouped(resampled, alpha=alpha, seed=b)
+        if g is not None:
+            out.append(g)
+    return _summarize_boot(out)
+
+
+def _summarize_boot(out):
     if len(out) < 20:
         return None
     out = np.sort(np.asarray(out))
@@ -116,34 +163,63 @@ def bootstrap_refit(R, reps=200, alpha=0.5, seed=0):
     return float(lo), float(hi), len(out), kind
 
 
+import re
+GROUP_RE = re.compile(r"^(Netflix|Dots|Puzzles) \d+$")
+
+
+def grouped_names(data, wanted):
+    """One entry per source. See heldout_score.preflib_sets: a PrefLib file is a
+    separate design, so Netflix/Dots/Puzzles are combined here from their per-file
+    scores rather than from pooled raw data."""
+    groups = {}
+    out = []
+    for k in sorted(data):
+        m = GROUP_RE.match(k)
+        if m:
+            groups.setdefault(m.group(1), []).append(k)
+        else:
+            out.append(k)
+    names = [n for n in out if not wanted or n in wanted]
+    for label, keys in groups.items():
+        if not wanted or label in wanted:
+            names.append(label)
+    return sorted(names), groups
+
+
 def main():
     reps = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     wanted = sys.argv[2:]
     data = load_all()
-    names = [k for k in sorted(data) if not wanted or k in wanted]
+    names, groups = grouped_names(data, wanted)
+
+    def Rs_for(name):
+        if name in groups:
+            return [data[k] for k in groups[name]]
+        return [data[name]]
 
     print("Smoothing and menu weighting. Gain in nats per prediction.\n")
     print(f"{'dataset':<24}{'a=0':>9}{'a=1/2':>9}{'a=1':>9}"
           f"{'  |  ':>5}{'subsets':>9}{'by size':>9}{'pairs':>9}")
     for name in names:
-        R = data[name]
+        Rs = Rs_for(name)
         row = []
         for a in (0.0, 0.5, 1.0):
-            g = run(R, alpha=a)
+            g = run_grouped(Rs, alpha=a)
             row.append("n/a" if g is None else f"{g:+.4f}")
         wts = []
         for w in ("subsets", "size", "pairs"):
-            g = run(R, alpha=0.5, weight=w)
+            g = run_grouped(Rs, alpha=0.5, weight=w)
             wts.append("n/a" if g is None else f"{g:+.4f}")
+        tag = "  (grouped)" if name in groups else ""
         print(f"{name:<24}{row[0]:>9}{row[1]:>9}{row[2]:>9}{'  |  ':>5}"
-              f"{wts[0]:>9}{wts[1]:>9}{wts[2]:>9}", flush=True)
+              f"{wts[0]:>9}{wts[1]:>9}{wts[2]:>9}{tag}", flush=True)
 
     print(f"\n\nRespondent bootstrap with the whole pipeline refit inside each replicate, "
           f"{reps} replicates.\n")
     print(f"{'dataset':<24}{'gain':>9}{'refit interval':>24}{'reps':>6}{'kind':>8}")
     for name in names:
-        R = data[name]
-        g = run(R)
+        Rs = Rs_for(name)
+        g = run_grouped(Rs)
         if g is None:
             print(f"{name:<24}{'n/a':>9}")
             continue
@@ -151,7 +227,8 @@ def main():
         # interval are the 2.5th and 97.5th order statistics, so a few hundred
         # replicates puts them on the second or third most extreme draw.
         budget = reps
-        bs = bootstrap_refit(R, reps=budget)
+        bs = (bootstrap_refit_grouped(Rs, reps=budget) if name in groups
+              else bootstrap_refit(Rs[0], reps=budget))
         if bs is None:
             print(f"{name:<24}{g:>+9.4f}{'  too few usable replicates':>24}")
             continue

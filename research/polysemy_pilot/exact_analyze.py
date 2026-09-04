@@ -12,38 +12,41 @@ HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 from exact_restrict import CELLS, MODELS, PHRASINGS, match_items
 
+# Both functions delegate to winning.factor.core, the package's own adaptive
+# log-domain lattice (points sized to the field, tails to 8 sigma, tol=1e-9 Newton-style
+# inversion). Round-trip error on well-conditioned targets is 1e-10 to 1e-11, under ten
+# milliseconds; the fixed-grid solver this replaced floored at 1e-3 to 1e-4 and a naive
+# tightened version of it still only reached 1e-8. winning.factor.core is min-wins
+# internally, so locations and scores are negated at the boundary to keep the max-wins
+# convention (highest draw wins) this research code and the paper both use.
+# `winning.factor.core` lives in the repository's top-level winning/ tree, which is
+# not the package `pip install winning` gives (that resolves to src/winning, the
+# ratings-layer renovation, and has no factor module). Insert the repo root ahead of
+# site-packages so this always finds the right one regardless of the caller's cwd.
+_REPO_ROOT = HERE.parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+from winning.factor.core import win_probabilities as _win_probabilities_min
+from winning.factor.core import abilities_from_probabilities as _abilities_min
+
+
 def win_probs_np(a):
-    """P(X_i = max), X_i ~ N(a_i, 1). Adaptive grid covering all locations."""
-    a = np.asarray(a, float)
-    lo, hi = a.min() - 9.0, a.max() + 9.0
-    X = np.linspace(lo, hi, max(2401, int((hi - lo) / 0.01)))
-    DX = X[1] - X[0]
-    z = X[None, :] - a[:, None]                     # (n, grid)
-    pdf = np.exp(-0.5 * z * z) / math.sqrt(2 * math.pi)
-    from scipy_free_cdf import Phi_np
-    cdf = Phi_np(z)
-    logcdf = np.log(np.clip(cdf, 1e-300, 1.0))
-    tot = logcdf.sum(axis=0, keepdims=True)
-    others = np.exp(tot - logcdf)                    # prod of cdfs excluding i
-    p = (pdf * others).sum(axis=1) * DX
-    return p / p.sum()
+    """P(X_i = max), X_i ~ N(a_i, 1) iid."""
+    return _win_probabilities_min(-np.asarray(a, dtype=float))
 
 
-def calibrate_np(target, iters=4000, tol=1e-3):
-    t = np.log(np.clip(np.asarray(target, float), 1e-9, 1.0))
-    a = np.zeros(len(target))
-    lr = 0.5
-    prev_err = np.inf
-    for k in range(iters):
-        p = np.log(np.clip(win_probs_np(a), 1e-12, 1.0))
-        err = float(np.abs(t - p).max())
-        if err < tol:
-            break
-        if err > prev_err:            # oscillating: damp
-            lr *= 0.7
-        prev_err = err
-        a += lr * (t - p)
-        a -= a.mean()
+def calibrate_np(target, iters=500, tol=1e-9):
+    """Invert shares to locations under the max-wins Gaussian race.
+
+    Returns (a, err) as before: locations with mean zero, and the maximum absolute
+    log-share residual, so every existing caller and its err > 0.05 acceptance gate
+    is unchanged.
+    """
+    p = np.asarray(target, dtype=float)
+    p = p / p.sum()
+    a = -_abilities_min(p, n_iter=iters, tol=tol)
+    model = np.maximum(win_probs_np(a), 1e-15)
+    err = float(np.abs(np.log(model) - np.log(np.maximum(p, 1e-300))).max())
     return a, err
 
 

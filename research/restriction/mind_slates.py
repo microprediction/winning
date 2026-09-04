@@ -123,17 +123,24 @@ def main():
     null = np.array(sorted(null))
     med = float(np.median(null))
     pv = (float((null >= r["gain"]).sum()) + 1) / (len(null) + 1)
-    # slate-level bootstrap: resample the distinct slates, not the pairs, since 6,000
-    # pairs are drawn from a few hundred slates and overlap heavily
-    slate_ids = sorted({b for _, _, _, _, _, b, _ in prep} |
-                       {s for _, _, _, _, _, _, s in prep})
-    pos = {s: i for i, s in enumerate(slate_ids)}
+    # slate-level bootstrap: resample the displayed (larger) slates, since a reader
+    # sees the larger slate and the nested smaller one is read off it, not sampled
+    # independently. Resampling on both ends of a pair, as an earlier version did,
+    # needs a convention for how a pair's weight depends on two draw counts that
+    # was never stated; resampling the displayed slate alone is unambiguous.
+    # Multiplicities are kept: a slate drawn twice replicates its pairs twice. An
+    # earlier version wrapped the draw in set(), discarding duplicates and
+    # understating resampling variance.
+    slate_ids = sorted({b for _, _, _, _, _, b, _ in prep})
+    by_slate = {b: [x for x in prep if x[5] == b] for b in slate_ids}
     rngb = np.random.default_rng(21)
     bs = []
     for _ in range(300):
-        pick = set(np.array(slate_ids, dtype=object)[
-            rngb.integers(0, len(slate_ids), len(slate_ids))])
-        sub = [x for x in prep if x[5] in pick and x[6] in pick]
+        counts = np.bincount(rngb.integers(0, len(slate_ids), len(slate_ids)),
+                             minlength=len(slate_ids))
+        sub = []
+        for b, k in zip(slate_ids, counts):
+            sub.extend(by_slate[b] * int(k))
         s = score(sub)
         if s:
             bs.append(s["gain"])
