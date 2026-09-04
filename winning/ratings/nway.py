@@ -323,7 +323,20 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     member for independent skills, and update_winner_correlated /
     update_order_correlated are its factor-correlated mixtures,
     MC-posterior-verified. Use this stagewise function only for speed
-    on independent worlds, knowing what it costs."""
+    on independent worlds, knowing what it costs.
+
+    That cost, in CALIBRATION terms (bandits audit, 25 seeds each,
+    2026-09-04, with every stage's marginal priced by the exact
+    predictive curves): posterior intervals are systematically
+    overconfident, degrading monotonically with tail weight --
+    coverage at a 0.95 target: gumbel 0.925 (stagewise is exact under
+    Gumbel/IIA, the residual is the moment projection), normal 0.890,
+    logistic 0.870, laplace 0.850, student-t(4) 0.830; robust z sd up
+    to 1.39. The NORMAL row pins the cause: its marginals are exact by
+    Gaussian closure, so the overconfidence is this decomposition's
+    fresh-noise-per-stage assumption double-counting the shared
+    realization, not a marginal-pricing defect. Do not fix it here;
+    update_ranking_exact measures 0.94+ coverage on every base."""
     m = np.asarray(m, dtype=float).copy()
     v = np.asarray(v, dtype=float).copy()
     order = list(order)

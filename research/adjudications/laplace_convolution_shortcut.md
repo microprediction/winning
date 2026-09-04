@@ -88,3 +88,23 @@ historical accuracy. Pinned in tests/test_predictive_curves.py
 (Gaussian-closure consistency + MC-referenced laplace winner/order
 values). Remaining gate: bandits audit_ratings_bulletproof P6/P8
 re-run on their side.
+
+## Gate result (bandits audit rerun, 2026-09-04): PASSED
+All P8 marks met (laplace dvar 0.2772 -> 0.0022, logistic 0.0103 ->
+0.0023, gumbel 0.0032 -> 0.0006, normal unchanged); all three
+non-normal bases moved, ruling out special-casing. P6 clean on every
+base incl. student_base(4.0) frac|z|>10 0.073 -> 0.0000 (the
+unpowered lead cleared untargeted). P7 exact order paths agree to
+0.0000 (student4 2e-4). A FRESH referee on configs disjoint from
+anything this side had seen (near-ties, unequal variances, belief
+variance 3.0, 8-runner field): worst deviation per base <= 0.0029 --
+laplace statistically indistinguishable from normal. Committed at
+bandits/tests/audit_fresh_configs.py.
+
+Residual, adjudicated NOT a defect: update_ranking (the documented
+stagewise moment approximation) is overconfident, monotonically worse
+with tail weight (coverage 0.890 normal ... 0.830 student4). The
+normal row -- exact marginals by closure -- pins it on the
+fresh-noise-per-stage decomposition, not the pricing; recorded in the
+update_ranking docstring so it is not re-read as a bug.
+update_ranking_exact measures 0.94+ coverage on every base.
