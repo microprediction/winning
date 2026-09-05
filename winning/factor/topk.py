@@ -30,6 +30,15 @@ mixture of independent ones.
 The identity sum_i q_i = k is exact (k slots, each filled), and is
 enforced the way the hierarchical kernels enforce unit mass: a material
 defect raises rather than being normalized away.
+
+Inversion runs the other way at any depth: abilities_from_topk
+calibrates mean-zero locations to a top-k curve (place and show
+markets, not just win), and loc_scale_from_topk_pair calibrates the
+two-parameter family (mu_i, sigma_i) jointly to TWO curves -- win plus
+place identifies per-runner scale, on the exact stacked
+(dq/dmu, dq/dsigma) Jacobians below. Cumulative targets only: the
+exact-rank marginal is non-monotone in ability and its standalone
+inverse is two-branched (see the inversion section).
 """
 from __future__ import annotations
 
@@ -40,9 +49,12 @@ from .blocks import TINY, roots_hermitenorm
 
 try:
     import fastrace as _fastrace
-    _HAVE_RUST = hasattr(_fastrace, "top_k")
+    _RUST_OK = hasattr(_fastrace, "top_k")
+    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
+        "WINNING_PURE", "").strip() in ("", "0")
 except ImportError:                                  # pragma: no cover
     _fastrace = None
+    _RUST_OK = False
     _HAVE_RUST = False
 
 
@@ -440,6 +452,452 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513):
         Jm[i] = row_mu
         Js[i] = row_sd
     return Jm, Js
+
+
+# ---- Inversion: locations from top-k memberships ----
+#
+# The cumulative target is the invertible one. dq^{(k)}/dmu is minus a
+# graph Laplacian on the rank-k boundary (top_k_jacobian_row), negative
+# definite on the mean-zero quotient, so mu -> q^{(k)} is injective up
+# to translation and the same damped own-slope iteration that inverts
+# the win race inverts any k. The EXACT-rank marginal P(R_i = k) is
+# refused as a standalone target on purpose: it is non-monotone in
+# mu_i (a favorite and a plodder can share one exactly-2nd
+# probability), so its inverse is two-branched per runner. Convert
+# instead: exactly-2nd plus win is top-2.
+
+
+def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12):
+    """One numpy forward pass returning the raw memberships AND the own
+    translation slopes
+
+        dq_i/dmu_i = -int f'(z_i)/sd_i^2 P(N_{-i}(x) <= k-1) dx,
+
+    the cavity cdf the forward pass already holds against the derivative
+    of the runner's own density -- one extra weighted sum, no second
+    field pass."""
+    lo, hi = _count_window(mu, sd, k, base_rows, delta=delta)
+    x = np.linspace(lo, hi, points)
+    dx = x[1] - x[0]
+    z = (x[:, None] - mu[None, :]) / sd[None, :]
+    S, f, fp = base_rows(z)
+    F = np.clip(1.0 - S, 0.0, 1.0)
+    C = _count_distribution(F)
+    cdf = _leave_one_out_cdf(C, F, k)          # (n, L)
+    dens = (f / sd[None, :]).T
+    q = (dens * cdf).sum(axis=1) * dx
+    slopes = -((fp / (sd ** 2)[None, :]).T * cdf).sum(axis=1) * dx
+    return q, slopes
+
+
+def _validated_topk_target(q, k, n, target_floor):
+    """The abilities_from_race contract, restated for k slots: zeros and
+    negatives raise (no finite inverse) unless deliberately floored;
+    the slot identity sum q = k is imposed by proportional
+    renormalization; and a membership at or above one AFTER that
+    renormalization raises, because certainty of placing has no finite
+    inverse either."""
+    target = np.asarray(q, dtype=float)
+    if len(target) != n:
+        raise ValueError(f"target has {len(target)} entries for {n} runners")
+    if target_floor is not None:
+        if not target_floor > 0:
+            raise ValueError("target_floor must be positive")
+        floored = target < target_floor
+        target = np.maximum(target, target_floor)
+    else:
+        floored = np.zeros(n, dtype=bool)
+        if np.any(target <= 0):
+            raise ValueError(
+                "all target memberships must be positive: a zero top-k "
+                "probability has no finite inverse (the supremum is "
+                "approached as that runner's contrast diverges). Pass "
+                "target_floor= to floor small entries deliberately, or "
+                "supply a pseudocount upstream.")
+    target = target * (k / target.sum())
+    if np.any(target >= 1.0):
+        raise ValueError(
+            "after renormalizing to k slots, a target membership is >= 1: "
+            "certain membership has no finite inverse, and a market vector "
+            "this lopsided is outside the model's range (check the "
+            "overround treatment and the dead-heat convention of the "
+            "place quotes).")
+    return target, floored
+
+
+def _topk_inverse_return(mu, converged, resid_max, iters, floored, tol,
+                         return_info, caller):
+    if not converged and not return_info:
+        import warnings
+        warnings.warn(
+            f"{caller} did not converge: max |logit residual| "
+            f"{resid_max:.2e} after {iters} iterations (tol {tol:.0e}). "
+            "The target may sit outside the model's feasible set (place "
+            "markets carry overround and dead-heat conventions). Pass "
+            "return_info=True for the diagnostics instead of this "
+            "warning.", RuntimeWarning, stacklevel=3)
+    if return_info:
+        return mu, {"converged": bool(converged),
+                    "max_logit_residual": float(resid_max),
+                    "iterations": int(iters), "floored": floored}
+    return mu
+
+
+def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
+                        qa=15, n_iter=80, tol=1e-8, target_floor=None,
+                        return_info=False):
+    """Invert the top-k race: mean-zero mu with
+    top_k_probabilities(mu, k) = q. k = 1 recovers abilities_from_race.
+
+    Residuals live in LOGIT space rather than the win-inversion's log
+    space: for k >= 2 the favorites saturate toward q = 1, where log
+    residuals lose all sensitivity while both dq/dmu and q(1-q) vanish
+    together and their ratio stays informative. Same target contract as
+    abilities_from_race (zeros raise, target_floor= opts into flooring,
+    non-convergence warns unless return_info=True), plus the slot
+    identity: targets are renormalized to sum to k, and an entry >= 1
+    after that renormalization raises. V= admits factor rank <= 2 by
+    the usual node mixture. When k > n/2 the information lives in the
+    longshots; inverting the complement (bottom_k_probabilities) is the
+    same call at n - k on 1 - q."""
+    mu_probe = np.asarray(q, dtype=float)
+    n = len(mu_probe)
+    k = int(k)
+    if not 1 <= k <= n - 1:
+        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    target, floored = _validated_topk_target(q, k, n, target_floor)
+    D = np.ones(n) if D is None else np.asarray(D, float)
+    sd = np.sqrt(D)
+    base_rows = BASES[base] if not callable(base) else base
+
+    if V is not None:
+        Vm = np.asarray(V, float)
+        if Vm.ndim == 1:
+            Vm = Vm[:, None]
+        if Vm.shape[1] > 2:
+            raise NotImplementedError(
+                "abilities_from_topk mixes Gauss-Hermite factor nodes and "
+                "is implemented for factor rank <= 2 (issue #12).")
+        Vm = Vm - Vm.mean(axis=0, keepdims=True)
+        an, aw = roots_hermitenorm(qa)
+        aw = aw / aw.sum()
+        if Vm.shape[1] == 1:
+            nodes, w = an[:, None], aw
+        else:
+            nodes = np.array([[a, b] for a in an for b in an])
+            w = np.array([u * v for u in aw for v in aw])
+            w = w / w.sum()
+    else:
+        nodes, w, Vm = None, None, None
+
+    logit_t = np.log(target) - np.log1p(-target)
+    logt = np.log(target)
+    mu = -(logt - logt.mean()) / 2.0
+    # N = 2 damping, inherited from the win inversion: K_2 is bipartite
+    # and the undamped Jacobi update two-cycles on the quotient.
+    alpha = 1.0 if n > 2 else 0.7
+    resid_max = np.inf
+    iters = 0
+    for it in range(n_iter):
+        iters = it + 1
+        if nodes is None:
+            qraw, sl = _topk_with_slopes(mu, sd, k, base_rows, points)
+        else:
+            qraw = np.zeros(n)
+            sl = np.zeros(n)
+            for j in range(len(nodes)):
+                qj, sj = _topk_with_slopes(mu + Vm @ nodes[j], sd, k,
+                                           base_rows, points)
+                qraw += w[j] * qj
+                sl += w[j] * sj
+        qhat = _checked_topk(qraw, k, "top-k inversion")
+        resid = (np.log(np.maximum(qhat, 1e-300))
+                 - np.log(np.maximum(1.0 - qhat, 1e-300))) - logit_t
+        resid_max = float(np.abs(resid).max())
+        if resid_max < tol:
+            break
+        dlogit = np.minimum(sl / np.maximum(qhat * (1.0 - qhat), 1e-300),
+                            -1e-6)
+        # residual-proportional step cap, as in the win inversion: no
+        # coordinate moves much further than its own residual warrants.
+        lim = np.minimum(2.0, 10.0 * np.abs(resid))
+        mu = mu - np.clip(alpha * resid / dlogit, -lim, lim)
+        mu -= mu.mean()
+    return _topk_inverse_return(mu, resid_max < tol, resid_max, iters,
+                                floored, tol, return_info,
+                                "abilities_from_topk")
+
+
+def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
+                             points=513, n_iter=60, tol=1e-8, ridge=0.0,
+                             mu0=None, return_info=False):
+    """Joint (loc, scale) calibration from two membership curves: find
+    per-runner (mu_i, sigma_i) with top_k_probabilities(mu, k1) = q1 and
+    top_k_probabilities(mu, k2) = q2. The market pair is (win, place):
+    k1 = 1, k2 = 2 or 3.
+
+    The counting closes exactly. Two curves carry 2n numbers with two
+    identities (sum q = k each); the unknowns carry two gauges,
+    translation of mu and the joint rescaling (mu, sigma) -> (c mu,
+    c sigma) -- the Euler identity mu . row_mu + sigma . row_sigma = 0
+    that top_k_jacobian_row_sigma checks IS that second gauge. So the
+    Newton system on the double quotient is square, and it runs on the
+    exact stacked Jacobians (dq/dmu, dq/dsigma) from top_k_jacobians in
+    (mu, log sigma) coordinates, Levenberg-damped, logit residuals as
+    in abilities_from_topk. Gauge fix on return: mean-zero mu,
+    geometric-mean-one sigma.
+
+    A nearly uniform pair leaves sigma genuinely unidentified (any
+    common scale prices the same); the Levenberg floor keeps the step
+    finite there and the info dict reports the achieved residual.
+    ridge= adds sqrt(ridge) * log sigma_i rows to the residual -- a
+    deliberate prior toward a common scale for noisy market boards
+    (after the gauge it penalizes only the DISPERSION of log sigma, and
+    it biases the otherwise exactly identified solution, so it is off
+    by default). Convention: ridge multiplies the SQUARED penalty, so a
+    reference that scales the ridge RESIDUALS by w corresponds to
+    ridge = w**2 here -- e.g. the T2 pipeline's w = 0.05 is
+    ridge = 0.0025 (measured: ridge = 0.05 is a 20x stronger prior that
+    biases clean-board parameters by ~0.03). mu0= supplies initial locations in physical units and
+    skips the internal warm start.
+    Avoid k = n/2 as a depth when the field is nearly level: with a
+    symmetric base and equal locations, reflection symmetry makes
+    half-field membership exactly scale-blind (q = 1/2 at any spread),
+    so that curve carries no scale information at all. A
+    market pair outside the family's range converges to its
+    least-squares fit and reports converged=False. Independent races
+    only, like the Jacobians it stacks. O(n^2 L min(k, n-k)) per
+    iteration."""
+    t1 = np.asarray(q1, dtype=float)
+    n = len(t1)
+    k1, k2 = int(k1), int(k2)
+    if k1 == k2:
+        raise ValueError(
+            "k1 == k2 gives one curve twice: scale is unidentified "
+            "without a second, different membership depth")
+    for kk in (k1, k2):
+        if not 1 <= kk <= n - 1:
+            raise ValueError(f"k must be in [1, n-1]; got k={kk}, n={n}")
+    target1, _ = _validated_topk_target(q1, k1, n, None)
+    target2, _ = _validated_topk_target(q2, k2, n, None)
+    lt1 = np.log(target1) - np.log1p(-target1)
+    lt2 = np.log(target2) - np.log1p(-target2)
+
+    sd = np.ones(n) if D0 is None else np.sqrt(np.asarray(D0, float))
+    if mu0 is not None:
+        mu = np.asarray(mu0, dtype=float) - np.mean(mu0)
+    else:
+        ka, ta = (k1, target1) if k1 < k2 else (k2, target2)
+        mu, _info0 = abilities_from_topk(ta, ka, D=sd ** 2, base=base,
+                                         points=points, return_info=True)
+    sqr = float(np.sqrt(max(ridge, 0.0)))
+
+    def logits(m, s):
+        qh1 = top_k_probabilities(m, k1, D=s ** 2, base=base, points=points)
+        qh2 = top_k_probabilities(m, k2, D=s ** 2, base=base, points=points)
+        qh1 = np.clip(qh1, 1e-300, 1.0 - 1e-15)
+        qh2 = np.clip(qh2, 1e-300, 1.0 - 1e-15)
+        r = np.concatenate([np.log(qh1) - np.log1p(-qh1) - lt1,
+                            np.log(qh2) - np.log1p(-qh2) - lt2,
+                            sqr * np.log(s)])
+        return r, qh1, qh2
+
+    r, qh1, qh2 = logits(mu, sd)
+    cost = float(r @ r)
+    resid_max = float(np.abs(r[:2 * n]).max())
+    lam = 1e-6
+    iters = 0
+    for it in range(n_iter):
+        iters = it + 1
+        if resid_max < tol:
+            break
+        blocks = []
+        for kk, qh in ((k1, qh1), (k2, qh2)):
+            Jm, Js = top_k_jacobians(mu, kk, D=sd ** 2, base=base,
+                                     points=points)
+            g = 1.0 / np.maximum(qh * (1.0 - qh), 1e-300)
+            # chain to (mu, log sigma) and to logit residuals
+            blocks.append(np.hstack([Jm * g[:, None],
+                                     (Js * sd[None, :]) * g[:, None]]))
+        # ridge rows: d(sqr log sigma)/d(log sigma) = sqr, zero in mu
+        blocks.append(np.hstack([np.zeros((n, n)), sqr * np.eye(n)]))
+        J = np.vstack(blocks)
+        JtJ = J.T @ J
+        Jtr = J.T @ r
+        accepted = False
+        for _ in range(8):
+            try:
+                step = np.linalg.solve(JtJ + lam * np.eye(2 * n), -Jtr)
+            except np.linalg.LinAlgError:
+                lam *= 8.0
+                continue
+            mu_n = mu + step[:n]
+            ls_n = np.clip(np.log(sd) + step[n:], -3.0, 3.0)
+            # re-gauge exactly: ranks are invariant to (mu, sd) ->
+            # (mu - a, sd)/c, so neither move changes the residual
+            c = np.exp(ls_n.mean())
+            sd_n = np.exp(ls_n - ls_n.mean())
+            mu_n = (mu_n - mu_n.mean()) / c
+            try:
+                r_n, q1_n, q2_n = logits(mu_n, sd_n)
+            except RuntimeError:
+                lam *= 8.0
+                continue
+            cost_n = float(r_n @ r_n)
+            if cost_n < cost:
+                mu, sd, r, qh1, qh2, cost = mu_n, sd_n, r_n, q1_n, q2_n, cost_n
+                resid_max = float(np.abs(r[:2 * n]).max())
+                lam = max(lam / 3.0, 1e-10)
+                accepted = True
+                break
+            lam *= 8.0
+        if not accepted:
+            break
+    # with a ridge the penalized optimum generally keeps a nonzero fit
+    # residual by design: an LM stall there is the answer, not a failure
+    converged = resid_max < tol or (sqr > 0.0 and not accepted)
+    out = _topk_inverse_return(mu, converged, resid_max, iters,
+                               np.zeros(n, dtype=bool), tol, return_info,
+                               "loc_scale_from_topk_pair")
+    if return_info:
+        return out[0], sd, out[1]
+    return out, sd
+
+
+def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
+                                  points=513, n_iter=60, tol=1e-8,
+                                  ridge=0.0, mu0=None, return_info=False):
+    """The two-marginal transform stated in market terms: win
+    probabilities plus EXACTLY-SECOND probabilities, jointly inverted
+    for per-runner (mu_i, sigma_i).
+
+    The exact-rank marginal is not invertible alone (two-branched), but
+    paired with the win curve it is: P(2nd) + P(win) = P(top-2), and
+    (win, top-2) is the well-posed pair loc_scale_from_topk_pair
+    solves. Each marginal is renormalized to unit mass first (the
+    market overround treatment), so the top-2 target sums to its two
+    slots by construction. ridge= and mu0= pass through."""
+    p1 = np.asarray(p_win, dtype=float)
+    p2 = np.asarray(p_second, dtype=float)
+    if len(p1) != len(p2):
+        raise ValueError("p_win and p_second must have equal length")
+    if np.any(p1 <= 0) or np.any(p2 <= 0):
+        raise ValueError(
+            "all win and second probabilities must be positive: a zero "
+            "entry has no finite inverse (floor small entries upstream)")
+    p1 = p1 / p1.sum()
+    p2 = p2 / p2.sum()
+    return loc_scale_from_topk_pair(p1, 1, p1 + p2, 2, D0=D0, base=base,
+                                    points=points, n_iter=n_iter, tol=tol,
+                                    ridge=ridge, mu0=mu0,
+                                    return_info=return_info)
+
+
+def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points):
+    """P(R_i = r) for every i, plus its full mu-Jacobian:
+
+        dP(R_i = r)/dmu_j = int f_i f_j [ P(N_{-ij} = r-1)
+                                        - P(N_{-ij} = r-2) ] dx,  j != i
+
+    (the r = 1 case drops the second term and recovers the win
+    Jacobian), with the diagonal from translation invariance."""
+    n = len(mu)
+    lo, hi = _count_window(mu, sd, n - 1, base_rows)
+    x = np.linspace(lo, hi, points)
+    dx = x[1] - x[0]
+    z = (x[:, None] - mu[None, :]) / sd[None, :]
+    S, f, _ = base_rows(z)
+    F = np.clip(1.0 - S, 0.0, 1.0)
+    dens = f / sd[None, :]
+    C = _count_distribution(F)
+    p = np.empty(n)
+    J = np.zeros((n, n))
+    for i in range(n):
+        Qi = _loo_pmf(C, F, i)
+        p[i] = (Qi[:, r - 1] * dens[:, i]).sum() * dx
+        hi_pair = _pair_pmf_at(Qi, F, i, r)          # P(N_{-ij} = r-1)
+        row = (hi_pair * dens.T * dens[:, i][None, :]).sum(axis=1) * dx
+        if r >= 2:
+            lo_pair = _pair_pmf_at(Qi, F, i, r - 1)  # P(N_{-ij} = r-2)
+            row -= (lo_pair * dens.T
+                    * dens[:, i][None, :]).sum(axis=1) * dx
+        row[i] = 0.0
+        row[i] = -row.sum()
+        J[i] = row
+    return p, J
+
+
+def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
+                                 points=513, n_iter=60, tol=1e-8,
+                                 return_info=False):
+    """Invert one EXACT-rank marginal -- P(finish exactly r-th) -- for
+    mean-zero locations at frozen scales, by Levenberg-damped
+    Gauss-Newton on log residuals.
+
+    This is the deliberately two-branched problem: P(R_i = r) is
+    non-monotone in mu_i for r >= 2, so several ability vectors can
+    share one marginal, and mu0= (physical units) selects the branch --
+    supply it from the win odds or any prior ordering. Without mu0 the
+    solver starts from zeros and converges to SOME consistent field,
+    with no promise it is the one you meant. The target is renormalized
+    to unit mass (every rank is taken by someone). For the well-posed
+    alternative, combine with the win curve: see
+    loc_scale_from_win_and_second and abilities_from_topk."""
+    target = np.asarray(p, dtype=float)
+    n = len(target)
+    r = int(r)
+    if not 1 <= r <= n:
+        raise ValueError(f"rank must be in [1, n]; got r={r}, n={n}")
+    if np.any(target <= 0):
+        raise ValueError(
+            "all rank probabilities must be positive: a zero entry has "
+            "no finite inverse (floor small entries upstream)")
+    target = target / target.sum()
+    logt = np.log(target)
+    D = np.ones(n) if D is None else np.asarray(D, float)
+    sd = np.sqrt(D)
+    base_rows = BASES[base] if not callable(base) else base
+    mu = (np.zeros(n) if mu0 is None
+          else np.asarray(mu0, dtype=float) - np.mean(mu0))
+
+    phat, J = _rank_marginal_with_jacobian(mu, sd, r, base_rows, points)
+    resid = np.log(np.maximum(phat, 1e-300)) - logt
+    cost = float(resid @ resid)
+    resid_max = float(np.abs(resid).max())
+    lam = 1e-6
+    iters = 0
+    for it in range(n_iter):
+        iters = it + 1
+        if resid_max < tol:
+            break
+        Jlog = J / np.maximum(phat, 1e-300)[:, None]
+        A = Jlog.T @ Jlog
+        g = Jlog.T @ resid
+        accepted = False
+        for _ in range(8):
+            try:
+                step = np.linalg.solve(A + lam * np.eye(n), -g)
+            except np.linalg.LinAlgError:
+                lam *= 8.0
+                continue
+            mu_n = mu + step
+            mu_n -= mu_n.mean()
+            p_n, J_n = _rank_marginal_with_jacobian(mu_n, sd, r,
+                                                    base_rows, points)
+            r_n = np.log(np.maximum(p_n, 1e-300)) - logt
+            cost_n = float(r_n @ r_n)
+            if cost_n < cost:
+                mu, phat, J, resid, cost = mu_n, p_n, J_n, r_n, cost_n
+                resid_max = float(np.abs(resid).max())
+                lam = max(lam / 3.0, 1e-10)
+                accepted = True
+                break
+            lam *= 8.0
+        if not accepted:
+            break
+    return _topk_inverse_return(mu, resid_max < tol, resid_max, iters,
+                                np.zeros(n, dtype=bool), tol, return_info,
+                                "abilities_from_rank_marginal")
 
 
 def rank_probabilities(mu, D=None, base="normal", points=513, V=None,

@@ -8,9 +8,9 @@ import { dirname, join } from "path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const eng = p => import(join(here, "..", "docs", "js", "winning", p));
-const [races, blocks, structures, classic, polish] = await Promise.all([
+const [races, blocks, structures, classic, polish, topk] = await Promise.all([
   eng("races.mjs"), eng("blocks.mjs"), eng("structures.mjs"),
-  eng("classic.mjs"), eng("polish.mjs"),
+  eng("classic.mjs"), eng("polish.mjs"), eng("topk.mjs"),
 ]);
 
 const vec = JSON.parse(readFileSync(join(here, "vectors.json"), "utf8"));
@@ -63,6 +63,45 @@ const runs = {
   polish_tree_p: () =>
     polish.polishRace({ p0: pt, structure: structures.treeFromLinkage(inp.linkage_Z),
                         points: 257, nameCaps: 0.14 }).p,
+  topk2_normal: () => topk.topKProbabilities(mu, 2, { D, points: 257 }),
+  topk4_gumbel: () => topk.topKProbabilities(mu, 4,
+    { D: gumD, base: "gumbel", points: 1001 }),
+  topk2_jacobian_mu: () =>
+    topk.topKJacobians(mu, 2, { D, points: 257 }).Jmu,
+  topk2_jacobian_sigma: () =>
+    topk.topKJacobians(mu, 2, { D, points: 257 }).Jsigma,
+  invert_topk2: () => topk.abilitiesFromTopk(
+    vec.scenarios.topk2_normal.value, 2, { D, points: 257 }),
+  loc_scale_win: () => topk.topKProbabilities(mu, 1,
+    { D: inp.sd_true.map(s => s * s), points: 257 }),
+  loc_scale_place: () => topk.topKProbabilities(mu, 3,
+    { D: inp.sd_true.map(s => s * s), points: 257 }),
+  loc_scale_mu: () => topk.locScaleFromTopkPair(
+    vec.scenarios.loc_scale_win.value, 1,
+    vec.scenarios.loc_scale_place.value, 3, { points: 257 }).mu,
+  loc_scale_sd: () => topk.locScaleFromTopkPair(
+    vec.scenarios.loc_scale_win.value, 1,
+    vec.scenarios.loc_scale_place.value, 3, { points: 257 }).sd,
+  rank_marginals: () => topk.rankProbabilities(mu, { D, points: 257 }),
+  win_second_mu: () => topk.locScaleFromWinAndSecond(
+    vec.scenarios.rank_marginals.value.map(r => r[0]),
+    vec.scenarios.rank_marginals.value.map(r => r[1]),
+    { points: 257 }).mu,
+  win_second_sd: () => topk.locScaleFromWinAndSecond(
+    vec.scenarios.rank_marginals.value.map(r => r[0]),
+    vec.scenarios.rank_marginals.value.map(r => r[1]),
+    { points: 257 }).sd,
+  loc_scale_ridge_mu: () => topk.locScaleFromTopkPair(
+    vec.scenarios.loc_scale_win.value, 1,
+    vec.scenarios.loc_scale_place.value, 3,
+    { ridge: 0.05, points: 257 }).mu,
+  loc_scale_ridge_sd: () => topk.locScaleFromTopkPair(
+    vec.scenarios.loc_scale_win.value, 1,
+    vec.scenarios.loc_scale_place.value, 3,
+    { ridge: 0.05, points: 257 }).sd,
+  invert_second: () => topk.abilitiesFromRankMarginal(
+    vec.scenarios.rank_marginals.value.map(r => r[1]), 2,
+    { mu0: vec.scenarios.invert_topk2.value, D, points: 257 }),
 };
 
 let fails = 0;

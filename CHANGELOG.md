@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Place/show calibration: `abilities_from_topk` inverts a top-k
+  membership curve (any depth, logit residuals against the saturated
+  favorites, factor rank <= 2); exact-rank targets are refused as
+  standalone inputs (two-branched) with `abilities_from_rank_marginal`
+  as the eyes-open branch-picking alternative.
+- Two-parameter calibration: `loc_scale_from_topk_pair` and the
+  market-facing `loc_scale_from_win_and_second` jointly identify per
+  runner (location, scale) from two membership curves on the exact
+  stacked (dq/dmu, dq/dsigma) Jacobians — square on the double gauge
+  quotient (translation, joint rescaling), optional log-sigma ridge
+  (`ridge=` multiplies the squared penalty) and warm start (`mu0=`).
+- JS and R ports of the full top-k module (forward, both Jacobians,
+  rank marginals, all three inversions), parity-locked: 15 new embedded
+  scenarios match the python reference at ~1e-15 in both languages.
+- `winning.factor.topk` now honors `WINNING_PURE` like races/blocks.
+- `winning.thurstone` renamed `winning.research` (honest labeling of
+  research-grade machinery); the old name remains as a
+  `DeprecationWarning` alias that also serves submodule imports.
+
 - Dense-covariance front door: `race_probabilities(mu, cov=Sigma)` and
   `winning.factor.core.fit_covariance(Sigma, k, m)` package the paper's
   dense pipeline (certified quotient factor fit, blocks and residual

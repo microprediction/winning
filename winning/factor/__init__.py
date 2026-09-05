@@ -13,6 +13,15 @@ from .races import (  # noqa: F401
     removal_shares,
     tie_densities,
 )
+from .topk import (  # noqa: F401
+    abilities_from_rank_marginal,
+    abilities_from_topk,
+    bottom_k_probabilities,
+    loc_scale_from_topk_pair,
+    loc_scale_from_win_and_second,
+    rank_probabilities,
+    top_k_probabilities,
+)
 from .core import (  # noqa: F401
     abilities_from_win_probabilities,
     factor_model_contrast,

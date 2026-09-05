@@ -78,7 +78,53 @@ runs <- list(
   },
   polish_tree_p = function()
     polish_race(p0 = pt, structure = tree_from_linkage(as.matrix(inp$linkage_Z)),
-                points = 257, name_caps = 0.14)$p
+                points = 257, name_caps = 0.14)$p,
+  topk2_normal = function() top_k_probabilities(mu, 2, D = D, points = 257),
+  topk4_gumbel = function()
+    top_k_probabilities(mu, 4, D = rep(pi^2 / 6, length(mu)),
+                        base = "gumbel", points = 1001),
+  topk2_jacobian_mu = function()
+    top_k_jacobians(mu, 2, D = D, points = 257)$Jmu,
+  topk2_jacobian_sigma = function()
+    top_k_jacobians(mu, 2, D = D, points = 257)$Jsigma,
+  invert_topk2 = function()
+    abilities_from_topk(vec$scenarios$topk2_normal$value, 2, D = D,
+                        points = 257),
+  loc_scale_win = function()
+    top_k_probabilities(mu, 1, D = inp$sd_true^2, points = 257),
+  loc_scale_place = function()
+    top_k_probabilities(mu, 3, D = inp$sd_true^2, points = 257),
+  loc_scale_mu = function()
+    loc_scale_from_topk_pair(vec$scenarios$loc_scale_win$value, 1,
+                             vec$scenarios$loc_scale_place$value, 3,
+                             points = 257)$mu,
+  loc_scale_sd = function()
+    loc_scale_from_topk_pair(vec$scenarios$loc_scale_win$value, 1,
+                             vec$scenarios$loc_scale_place$value, 3,
+                             points = 257)$sd,
+  rank_marginals = function() rank_probabilities(mu, D = D, points = 257),
+  win_second_mu = function()
+    loc_scale_from_win_and_second(
+      as.matrix(vec$scenarios$rank_marginals$value)[, 1],
+      as.matrix(vec$scenarios$rank_marginals$value)[, 2],
+      points = 257)$mu,
+  win_second_sd = function()
+    loc_scale_from_win_and_second(
+      as.matrix(vec$scenarios$rank_marginals$value)[, 1],
+      as.matrix(vec$scenarios$rank_marginals$value)[, 2],
+      points = 257)$sd,
+  loc_scale_ridge_mu = function()
+    loc_scale_from_topk_pair(vec$scenarios$loc_scale_win$value, 1,
+                             vec$scenarios$loc_scale_place$value, 3,
+                             ridge = 0.05, points = 257)$mu,
+  loc_scale_ridge_sd = function()
+    loc_scale_from_topk_pair(vec$scenarios$loc_scale_win$value, 1,
+                             vec$scenarios$loc_scale_place$value, 3,
+                             ridge = 0.05, points = 257)$sd,
+  invert_second = function()
+    abilities_from_rank_marginal(
+      as.matrix(vec$scenarios$rank_marginals$value)[, 2], 2,
+      mu0 = vec$scenarios$invert_topk2$value, D = D, points = 257)
 )
 
 fails <- 0

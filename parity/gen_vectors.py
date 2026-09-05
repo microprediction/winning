@@ -27,6 +27,12 @@ from winning.factor.blocks import (block_race_probabilities,
                                    abilities_from_block_race)
 from winning.factor.structures import Tree
 from winning.factor.polish import race_jacobian, polish_race
+from winning.factor.topk import (top_k_probabilities, top_k_jacobians,
+                                 abilities_from_topk,
+                                 loc_scale_from_topk_pair,
+                                 loc_scale_from_win_and_second,
+                                 abilities_from_rank_marginal,
+                                 rank_probabilities)
 from winning.lattice import skew_normal_density, state_prices_from_offsets
 from winning.lattice_calibration import dividend_implied_ability
 
@@ -62,7 +68,11 @@ def make_inputs(seed=2026):
     p_target = rng.dirichlet(np.ones(n))
     p_target = np.round(p_target / p_target.sum(), 12)
     p_target = (p_target / p_target.sum()).tolist()
+    # drawn AFTER every earlier draw so the seeded stream prefix -- and
+    # with it every pre-topk scenario value -- is unchanged
+    sd_true = np.round(np.exp(rng.uniform(-0.25, 0.25, size=n)), 12)
     return {
+        "sd_true": sd_true.tolist(),
         "n": n, "mu": mu.tolist(), "V1": V1.tolist(), "V2": V2.tolist(),
         "D": D.tolist(), "cluster": cluster, "loading": loading.tolist(),
         "loading2": loading2.tolist(), "coupling": coupling.tolist(),
@@ -138,6 +148,42 @@ def build(inputs):
     ppt, _, _ = polish_race(p0=pt, structure=tree, points=257,
                             name_caps=0.14)
     sc("polish_tree_p", ppt, 5e-4)
+
+    # top-k memberships: forward, both Jacobians, inversion, and the
+    # two-curve (loc, scale) calibration. Inversion targets are the
+    # embedded forward outputs (the classic_state_prices pattern), so
+    # every port inverts identical floats.
+    sdt = np.asarray(inputs["sd_true"])
+    q2 = top_k_probabilities(mu, 2, D=D, points=257)
+    sc("topk2_normal", q2)
+    sc("topk4_gumbel", top_k_probabilities(
+        mu, 4, D=np.full(len(mu), np.pi ** 2 / 6.0), base="gumbel",
+        points=1001))
+    Jm, Js = top_k_jacobians(mu, 2, D=D, points=257)
+    sc("topk2_jacobian_mu", Jm, 1e-9)
+    sc("topk2_jacobian_sigma", Js, 1e-9)
+    sc("invert_topk2", abilities_from_topk(q2, 2, D=D, points=257), 1e-7)
+    q_win = top_k_probabilities(mu, 1, D=sdt ** 2, points=257)
+    q_place = top_k_probabilities(mu, 3, D=sdt ** 2, points=257)
+    sc("loc_scale_win", q_win)
+    sc("loc_scale_place", q_place)
+    mu_ls, sd_ls = loc_scale_from_topk_pair(q_win, 1, q_place, 3,
+                                            points=257)
+    sc("loc_scale_mu", mu_ls, 1e-6)
+    sc("loc_scale_sd", sd_ls, 1e-6)
+    sc("rank_marginals", rank_probabilities(mu, D=D, points=257))
+    R = rank_probabilities(mu, D=D, points=257)
+    mu_ws, sd_ws = loc_scale_from_win_and_second(R[:, 0], R[:, 1],
+                                                 points=257)
+    sc("win_second_mu", mu_ws, 1e-6)
+    sc("win_second_sd", sd_ws, 1e-6)
+    mu_lr, sd_lr = loc_scale_from_topk_pair(q_win, 1, q_place, 3,
+                                            ridge=0.05, points=257)
+    sc("loc_scale_ridge_mu", mu_lr, 1e-6)
+    sc("loc_scale_ridge_sd", sd_lr, 1e-6)
+    sc("invert_second", abilities_from_rank_marginal(
+        R[:, 1], 2, mu0=np.asarray(out["invert_topk2"]["value"]), D=D,
+        points=257), 1e-6)
     return out
 
 
