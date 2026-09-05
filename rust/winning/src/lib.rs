@@ -1409,6 +1409,34 @@ pub fn top_k_window_kernel(
 /// identical arithmetic (each row is independent either way).
 const TOPK_PAR_WORK: usize = 1_000_000;
 
+static RAYON_PID: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0);
+
+/// Run f where rayon parallel regions are safe: on the global pool
+/// normally, on a fresh local pool in a FORKED CHILD. The global
+/// pool's worker threads do not survive fork(2), so a child process
+/// that inherits a warmed pool deadlocks forever on its first
+/// parallel region -- measured as intermittent hangs in fork-based
+/// multiprocessing consumers of these kernels (2026-09-05).
+/// Detection: the pid that first claimed the pool is remembered; a
+/// different pid means the static was inherited across a fork and the
+/// inherited pool is unusable.
+pub fn with_usable_rayon<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    use std::sync::atomic::Ordering;
+    let cur = std::process::id();
+    match RAYON_PID.compare_exchange(0, cur, Ordering::SeqCst, Ordering::SeqCst) {
+        Ok(_) => f(),
+        Err(p) if p == cur => f(),
+        Err(_) => {
+            // forked child: never touch the inherited global pool
+            let pool = rayon::ThreadPoolBuilder::new()
+                .build()
+                .expect("rayon pool for forked child");
+            pool.install(f)
+        }
+    }
+}
+
 fn topk_field(
     mu: &[f64],
     sd: &[f64],

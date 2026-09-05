@@ -31,10 +31,10 @@ fn forward_and_slopes<'py>(
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
     let w_o: Array1<f64> = w.as_array().to_owned();
-    let (p, sl, total) = py.allow_threads(|| {
+    let (p, sl, total) = py.allow_threads(|| with_usable_rayon(|| {
         forward_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                        w_o.view(), points, lo, hi)
-    });
+    }));
     Ok((p.into_pyarray_bound(py), sl.into_pyarray_bound(py), total))
 }
 
@@ -58,10 +58,10 @@ fn win_probabilities_factor<'py>(
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
     let w_o: Array1<f64> = w.as_array().to_owned();
-    let (p, _sl, total) = py.allow_threads(|| {
+    let (p, _sl, total) = py.allow_threads(|| with_usable_rayon(|| {
         forward_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                        w_o.view(), points, lo, hi)
-    });
+    }));
     Ok((p.into_pyarray_bound(py), total))
 }
 
@@ -91,10 +91,10 @@ fn jacobian_vector_product<'py>(
     let w_o: Array1<f64> = w.as_array().to_owned();
     let h_o: Array1<f64> = h.as_array().to_owned();
     let grid = form == "grid";
-    let out = py.allow_threads(|| {
+    let out = py.allow_threads(|| with_usable_rayon(|| {
         jvp_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                    w_o.view(), h_o.view(), points, grid)
-    });
+    }));
     Ok(out.into_pyarray_bound(py))
 }
 
@@ -121,10 +121,10 @@ fn win_probabilities_factor_separated<'py>(
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
     let w_o: Array1<f64> = w.as_array().to_owned();
-    let (p, total) = py.allow_threads(|| {
+    let (p, total) = py.allow_threads(|| with_usable_rayon(|| {
         separated_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                          w_o.view(), points, rm, rs)
-    });
+    }));
     Ok((p.into_pyarray_bound(py), total))
 }
 
@@ -145,7 +145,7 @@ fn ghk_all_shares<'py>(
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
-    let out = py.allow_threads(|| {
+    let out = py.allow_threads(|| with_usable_rayon(|| {
         let n = mu_o.len();
         let k = v_o.ncols();
         let mut sigma = vec![0.0f64; n * n];
@@ -166,7 +166,7 @@ fn ghk_all_shares<'py>(
             .collect();
         let total: f64 = p.iter().sum();
         Array1::from_iter(p.into_iter().map(|x| x / total))
-    });
+    }));
     Ok(out.into_pyarray_bound(py))
 }
 
@@ -192,10 +192,10 @@ fn block_race<'py>(
     let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
     let an: Array1<f64> = a_nodes.as_array().to_owned();
     let aw: Array1<f64> = a_weights.as_array().to_owned();
-    let p = py.allow_threads(|| {
+    let p = py.allow_threads(|| with_usable_rayon(|| {
         block_kernel(mu_o.view(), sd_o.view(), v_o.view(), &st, an.view(),
                      aw.view(), points, lo, hi, fast_max_entries)
-    });
+    }));
     Ok(p.into_pyarray_bound(py))
 }
 
@@ -220,10 +220,10 @@ fn block_race_r<'py>(
     let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
     let nd: Array2<f64> = nodes.as_array().to_owned();
     let ww: Array1<f64> = weights.as_array().to_owned();
-    let p = py.allow_threads(|| {
+    let p = py.allow_threads(|| with_usable_rayon(|| {
         block_kernel_r(mu_o.view(), sd_o.view(), v_o.view(), &st, nd.view(),
                        ww.view(), points, lo, hi)
-    });
+    }));
     Ok(p.into_pyarray_bound(py))
 }
 
@@ -253,9 +253,9 @@ fn tree_race<'py>(
     let lm: Vec<f64> = lam.as_array().to_vec();
     let an: Vec<f64> = a_nodes.as_array().to_vec();
     let aw: Vec<f64> = a_weights.as_array().to_vec();
-    let p = py.allow_threads(|| {
+    let p = py.allow_threads(|| with_usable_rayon(|| {
         tree_kernel(&mu_o, &sd_o, &v_o, &st, &pa, &lm, &an, &aw, points, lo, hi)
-    });
+    }));
     Ok(Array1::from_vec(p).into_pyarray_bound(py))
 }
 
@@ -321,10 +321,10 @@ fn per_winner_rr<'py>(
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
     let z_o: Array2<f64> = z.as_array().to_owned();
-    let p = py.allow_threads(|| {
+    let p = py.allow_threads(|| with_usable_rayon(|| {
         winning::per_winner_reduced_rank(mu_o.view(), v_o.view(),
                                          d_o.view(), z_o.view())
-    });
+    }));
     Ok(p.into_pyarray_bound(py))
 }
 
@@ -381,11 +381,11 @@ fn forward_and_slopes_base<'py>(
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f_nodes.as_array().to_owned();
     let w_o: Array1<f64> = w.as_array().to_owned();
-    let (p, sl, total) = py.allow_threads(|| {
+    let (p, sl, total) = py.allow_threads(|| with_usable_rayon(|| {
         winning::forward_kernel_base(
             mu_o.view(), v_o.view(), d_o.view(), f_o.view(), w_o.view(),
             points, lo, hi, spec)
-    });
+    }));
     Ok((
         p.into_pyarray_bound(py),
         sl.into_pyarray_bound(py),
@@ -408,7 +408,7 @@ fn top_k_window(
 ) -> PyResult<(f64, f64)> {
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
-    Ok(py.allow_threads(|| winning::top_k_window_kernel(&m, &s, k, delta, pad_sds)))
+    Ok(py.allow_threads(|| with_usable_rayon(|| winning::top_k_window_kernel(&m, &s, k, delta, pad_sds))))
 }
 
 /// Top-k memberships and their own translation slopes, normal base;
@@ -426,7 +426,7 @@ fn top_k_slopes<'py>(
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (q, sl) =
-        py.allow_threads(|| winning::top_k_slopes_kernel(&m, &s, k, lo, hi, points));
+        py.allow_threads(|| with_usable_rayon(|| winning::top_k_slopes_kernel(&m, &s, k, lo, hi, points)));
     Ok((
         Array1::from_vec(q).into_pyarray_bound(py),
         Array1::from_vec(sl).into_pyarray_bound(py),
@@ -448,7 +448,7 @@ fn top_k_jacobians<'py>(
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (jm, js) =
-        py.allow_threads(|| winning::top_k_jacobians_kernel(&m, &s, k, lo, hi, points));
+        py.allow_threads(|| with_usable_rayon(|| winning::top_k_jacobians_kernel(&m, &s, k, lo, hi, points)));
     Ok((
         Array1::from_vec(jm).into_pyarray_bound(py),
         Array1::from_vec(js).into_pyarray_bound(py),
@@ -468,6 +468,6 @@ fn top_k<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
-    let q = py.allow_threads(|| winning::top_k_kernel(&m, &s, k, lo, hi, points));
+    let q = py.allow_threads(|| with_usable_rayon(|| winning::top_k_kernel(&m, &s, k, lo, hi, points)));
     Ok(Array1::from_vec(q).into_pyarray_bound(py))
 }

@@ -113,3 +113,30 @@ def test_classic_state_prices_parity_with_ties_and_stragglers():
     assert np.abs(np.array(sr) - np.array(sp)).max() < 1e-10
     # the tied pair must carry equal prices
     assert abs(sr[0] - sr[1]) < 1e-12
+
+
+def test_forked_child_does_not_deadlock():
+    """A forked child inherits the parent's warmed rayon pool, whose
+    worker threads do not survive fork(2): before the with_usable_rayon
+    guard, the child's first parallel region hung forever (measured as
+    intermittent hangs in a fork-based consumer, 2026-09-05).
+    The guard detects the foreign pid and installs a fresh local pool."""
+    import multiprocessing as mp
+    import os
+    if os.name != "posix":
+        pytest.skip("fork start method is POSIX-only")
+    mu = RNG.normal(0, 1.2, 120)
+    sd = np.ones(120)
+    # warm the parent's global rayon pool through a parallel-branch call
+    fastrace.top_k(mu, sd, 40, -12.0, 12.0, 513)
+    ctx = mp.get_context("fork")
+    p = ctx.Process(target=fastrace.top_k,
+                    args=(mu, sd, 40, -12.0, 12.0, 513))
+    p.start()
+    p.join(timeout=30)
+    alive = p.is_alive()
+    if alive:
+        p.terminate()
+        p.join()
+    assert not alive, "forked child deadlocked in a rayon parallel region"
+    assert p.exitcode == 0
