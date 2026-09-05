@@ -184,6 +184,9 @@ def build(inputs):
     sc("invert_second", abilities_from_rank_marginal(
         R[:, 1], 2, mu0=np.asarray(out["invert_topk2"]["value"]), D=D,
         points=257), 1e-6)
+    Jm_f, Js_f = top_k_jacobians(mu, 2, D=D, V=V1, points=257)
+    sc("topk2_jacobian_mu_factor", Jm_f, 1e-9)
+    sc("topk2_jacobian_sigma_factor", Js_f, 1e-9)
     return out
 
 

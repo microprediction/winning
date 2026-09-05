@@ -17,7 +17,11 @@ fitted to the grammar on the way in.
 
 - `winning.factor` — the engine: all-share forward pass, inversion,
   exact Jacobians and tie densities, covariance fitting
-  (`fit_covariance`), constrained polish.
+  (`fit_covariance`), constrained polish; place at any depth
+  (`top_k_probabilities`, `rank_probabilities`) with calibration to
+  place curves (`abilities_from_topk`) and joint per-runner
+  (location, scale) from win + place
+  (`loc_scale_from_win_and_second`).
 - `winning.probit` — the same machine in the probit literature's
   max-wins, utilities-and-shares conventions.
 - `winning.classic` — the original SIAM-paper lattice ability

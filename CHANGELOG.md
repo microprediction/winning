@@ -25,6 +25,12 @@
   13 -> 2.4 ms/race; kernels match numpy at 1e-12 on the shared window.
 - loc/scale warm start runs at loose tolerance (the LM loop refines);
   mirrored in the JS and R ports so parity trajectories agree.
+- `top_k_jacobians` accepts factor correlation (`V=`, rank <= 2) as an
+  exact Gauss-Hermite mixture of independent Jacobians, in python and
+  both ports; `loc_scale_from_topk_pair` REFUSES fixed loadings with
+  the dimension count (no rescaling gauge means two curves carry
+  2n - 2 numbers against 2n - 1 unknowns — a third depth would close
+  it as overdetermined least squares).
 - `winning.thurstone` renamed `winning.research` (honest labeling of
   research-grade machinery); the old name remains as a
   `DeprecationWarning` alias that also serves submodule imports.

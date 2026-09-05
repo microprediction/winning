@@ -220,6 +220,41 @@ def test_loc_scale_gumbel_and_field_size():
         assert np.abs(np.asarray(sd_h) - sd_g).max() < 1e-3, base
 
 
+def test_factor_jacobians_match_finite_differences():
+    """The correlated Jacobians are exact node mixtures of independent
+    ones (the factor shift commutes with d/dmu and d/dsigma); central
+    differences of the correlated forward map referee both blocks."""
+    from winning.factor.topk import top_k_jacobians, top_k_probabilities
+    mu = np.array([-0.8, -0.2, 0.1, 0.5, 0.9])
+    v = np.array([0.5, 0.5, -0.1, -0.4, -0.5])
+    D = np.array([1.1, 0.8, 1.0, 0.9, 1.2])
+    k = 2
+    Jm, Js = top_k_jacobians(mu, k, D=D, V=v)
+    h = 1e-5
+    for j in range(len(mu)):
+        mp = mu.copy(); mp[j] += h
+        mm = mu.copy(); mm[j] -= h
+        fd = (top_k_probabilities(mp, k, D=D, V=v)
+              - top_k_probabilities(mm, k, D=D, V=v)) / (2 * h)
+        assert np.abs(fd - Jm[:, j]).max() < 2e-6, ("mu", j)
+        sd = np.sqrt(D)
+        sp = sd.copy(); sp[j] += h
+        sm = sd.copy(); sm[j] -= h
+        fd_s = (top_k_probabilities(mu, k, D=sp ** 2, V=v)
+                - top_k_probabilities(mu, k, D=sm ** 2, V=v)) / (2 * h)
+        assert np.abs(fd_s - Js[:, j]).max() < 2e-6, ("sigma", j)
+
+
+def test_loc_scale_refuses_fixed_loadings():
+    """With V fixed the rescaling gauge is gone and two curves are one
+    equation short: the pair solver refuses with the dimension count
+    rather than fitting a flat direction."""
+    from winning.factor.topk import loc_scale_from_topk_pair
+    with pytest.raises(NotImplementedError, match="under-identified"):
+        loc_scale_from_topk_pair([0.5, 0.3, 0.2], 1, [0.8, 0.7, 0.5], 2,
+                                 V=[0.4, 0.0, -0.4])
+
+
 def test_rust_inversion_kernels_match_numpy():
     """The compiled slope and Jacobian kernels against the numpy path
     on the identical window: machine precision, the

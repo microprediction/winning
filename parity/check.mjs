@@ -102,6 +102,10 @@ const runs = {
   invert_second: () => topk.abilitiesFromRankMarginal(
     vec.scenarios.rank_marginals.value.map(r => r[1]), 2,
     { mu0: vec.scenarios.invert_topk2.value, D, points: 257 }),
+  topk2_jacobian_mu_factor: () =>
+    topk.topKJacobians(mu, 2, { D, V: V1, points: 257 }).Jmu,
+  topk2_jacobian_sigma_factor: () =>
+    topk.topKJacobians(mu, 2, { D, V: V1, points: 257 }).Jsigma,
 };
 
 let fails = 0;

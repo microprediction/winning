@@ -124,7 +124,11 @@ runs <- list(
   invert_second = function()
     abilities_from_rank_marginal(
       as.matrix(vec$scenarios$rank_marginals$value)[, 2], 2,
-      mu0 = vec$scenarios$invert_topk2$value, D = D, points = 257)
+      mu0 = vec$scenarios$invert_topk2$value, D = D, points = 257),
+  topk2_jacobian_mu_factor = function()
+    top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jmu,
+  topk2_jacobian_sigma_factor = function()
+    top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jsigma
 )
 
 fails <- 0

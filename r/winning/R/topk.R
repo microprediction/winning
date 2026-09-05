@@ -190,11 +190,25 @@ bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 }
 
 top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
-                            points = 513) {
+                            points = 513, V = NULL, qa = 15) {
   n <- length(mu)
   k <- as.integer(k)
   if (k < 1 || k > n - 1)
     stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  if (!is.null(V)) {
+    # exact node mixture: the factor shift commutes with d/dmu, d/dsigma
+    fac <- .topk_factor_nodes(V, n, qa)
+    Jm <- matrix(0, n, n)
+    Js <- matrix(0, n, n)
+    for (q in seq_len(nrow(fac$nodes))) {
+      shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
+      node <- top_k_jacobians(mu + shift, k, D = D, base = base,
+                              points = points)
+      Jm <- Jm + fac$w[q] * node$Jmu
+      Js <- Js + fac$w[q] * node$Jsigma
+    }
+    return(list(Jmu = Jm, Jsigma = Js))
+  }
   Dv <- if (is.null(D)) rep(1, n) else D
   sd <- sqrt(Dv)
   fn <- if (is.function(base)) base else .BASES[[base]]

@@ -2,6 +2,18 @@
 
 **Type:** enhancement
 
+**STATUS (2026-09-05): REALIZED in `winning.factor.topk`, beyond this
+draft's scope.** The engine now ships exact rank-k forward pricing
+(`top_k_probabilities`, `rank_probabilities`, cavity count
+deconvolution, no Monte Carlo), both Jacobians (mu and sigma,
+factor-correlated via exact node mixtures), and the inversions this
+draft never asked for: `abilities_from_topk`,
+`loc_scale_from_topk_pair` / `loc_scale_from_win_and_second`, and
+`abilities_from_rank_marginal` — with JS/R parity ports and fastrace
+kernels. Exotics (exacta/trifecta counting) remain unported, as this
+draft suggested. Do not post as-is; if posted to the thurstone repo,
+reframe as a pointer to the winning implementation.
+
 thurstone currently prices only the winner (`Race.state_prices`, `winner_of_many`).
 winning 1.x also priced finishing positions and combinations, which is where the
 lattice model most visibly beats the Harville formula (see the SIAM paper's

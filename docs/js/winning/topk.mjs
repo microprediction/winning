@@ -257,11 +257,35 @@ export function bottomKProbabilities(mu, k, opts = {}) {
 }
 
 export function topKJacobians(mu, k, opts = {}) {
-  const { D = null, base = "normal", points = 513 } = opts;
+  const { D = null, base = "normal", points = 513, V = null,
+          qa = 15 } = opts;
   const n = mu.length;
   k = Math.trunc(k);
   if (!(k >= 1 && k <= n - 1))
     throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
+  if (V) {
+    // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
+    const { Vm, nodes, w } = factorNodes(V, n, qa);
+    const Jmu = [], Jsigma = [];
+    for (let i = 0; i < n; i++) {
+      Jmu.push(new Array(n).fill(0));
+      Jsigma.push(new Array(n).fill(0));
+    }
+    for (let q = 0; q < nodes.length; q++) {
+      const shifted = mu.map((m, i) => {
+        let s = m;
+        for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
+        return s;
+      });
+      const node = topKJacobians(shifted, k, { D, base, points });
+      for (let i = 0; i < n; i++)
+        for (let j = 0; j < n; j++) {
+          Jmu[i][j] += w[q] * node.Jmu[i][j];
+          Jsigma[i][j] += w[q] * node.Jsigma[i][j];
+        }
+    }
+    return { Jmu, Jsigma };
+  }
   const Dv = D || new Array(n).fill(1);
   const sd = Dv.map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];

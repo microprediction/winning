@@ -192,6 +192,30 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
     return (dens * cdf).sum(axis=1) * dx
 
 
+def _factor_nodes(V, n, qa, caller):
+    """Column-centered loadings plus the Gauss-Hermite node mixture
+    (rank <= 2; the common column is gauge), shared by every correlated
+    entry point so the quadrature is identical across them."""
+    Vm = np.asarray(V, float)
+    if Vm.ndim == 1:
+        Vm = Vm[:, None]
+    if Vm.shape[1] > 2:
+        raise NotImplementedError(
+            f"{caller} mixes Gauss-Hermite factor nodes and is "
+            "implemented for factor rank <= 2; higher rank needs the "
+            "scrambled-Sobol escalation (issue #12).")
+    Vm = Vm - Vm.mean(axis=0, keepdims=True)
+    an, aw = roots_hermitenorm(qa)
+    aw = aw / aw.sum()
+    if Vm.shape[1] == 1:
+        nodes, w = an[:, None], aw
+    else:
+        nodes = np.array([[a, b] for a in an for b in an])
+        w = np.array([u * v for u in aw for v in aw])
+        w = w / w.sum()
+    return Vm, nodes, w
+
+
 def _checked_topk(raw, k, kind, mass_tol=5e-3):
     t = float(raw.sum())
     if not np.isfinite(t) or abs(t - k) > mass_tol * k:
@@ -229,25 +253,7 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
                                 is_normal=is_normal)
         return _checked_topk(raw, k, "top-k race")
 
-    Vm = np.asarray(V, float)
-    if Vm.ndim == 1:
-        Vm = Vm[:, None]
-    r = Vm.shape[1]
-    if r > 2:
-        raise NotImplementedError(
-            "top_k_probabilities mixes Gauss-Hermite factor nodes and is "
-            "implemented for factor rank <= 2; higher rank needs the "
-            "scrambled-Sobol escalation (issue #12).")
-    Vm = Vm - Vm.mean(axis=0, keepdims=True)   # common column is gauge
-    an, aw = roots_hermitenorm(qa)
-    aw = aw / aw.sum()
-    if r == 1:
-        nodes = an[:, None]
-        w = aw
-    else:
-        nodes = np.array([[a, b] for a in an for b in an])
-        w = np.array([u * v for u in aw for v in aw])
-        w = w / w.sum()
+    Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_probabilities")
     raw = np.zeros(n)
     for q in range(len(nodes)):
         shift = Vm @ nodes[q]
@@ -422,17 +428,34 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     return row_mu, row_sd
 
 
-def top_k_jacobians(mu, k, D=None, base="normal", points=513):
+def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
+                    qa=15):
     """Full (n, n) matrices (dq/dmu, dq/dsigma). The lattice, the
     field rows and the shared count distribution are built ONCE and
     reused across rows -- the row helper rebuilds them per call, which
     at n = 150 spent more time on redundant count programs than on the
-    pair terms themselves."""
+    pair terms themselves.
+
+    V= admits factor rank <= 2 EXACTLY: conditional on the factor draw
+    the race is independent and the shift by V f_q leaves d/dmu and
+    d/dsigma untouched, so the correlated Jacobians are the same
+    Gauss-Hermite mixture as the forward pass,
+    J = sum_q w_q J_ind(mu + V f_q, sigma)."""
     mu = np.asarray(mu, float)
     n = len(mu)
     k = int(k)
     if not 1 <= k <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    if V is not None:
+        Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_jacobians")
+        Jm = np.zeros((n, n))
+        Js = np.zeros((n, n))
+        for j in range(len(nodes)):
+            Jm_q, Js_q = top_k_jacobians(mu + Vm @ nodes[j], k, D=D,
+                                         base=base, points=points)
+            Jm += w[j] * Jm_q
+            Js += w[j] * Js_q
+        return Jm, Js
     D = np.ones(n) if D is None else np.asarray(D, float)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
@@ -597,22 +620,7 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     base_rows = BASES[base] if not callable(base) else base
 
     if V is not None:
-        Vm = np.asarray(V, float)
-        if Vm.ndim == 1:
-            Vm = Vm[:, None]
-        if Vm.shape[1] > 2:
-            raise NotImplementedError(
-                "abilities_from_topk mixes Gauss-Hermite factor nodes and "
-                "is implemented for factor rank <= 2 (issue #12).")
-        Vm = Vm - Vm.mean(axis=0, keepdims=True)
-        an, aw = roots_hermitenorm(qa)
-        aw = aw / aw.sum()
-        if Vm.shape[1] == 1:
-            nodes, w = an[:, None], aw
-        else:
-            nodes = np.array([[a, b] for a in an for b in an])
-            w = np.array([u * v for u in aw for v in aw])
-            w = w / w.sum()
+        Vm, nodes, w = _factor_nodes(V, n, qa, "abilities_from_topk")
     else:
         nodes, w, Vm = None, None, None
 
@@ -658,7 +666,7 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
 
 def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
                              points=513, n_iter=60, tol=1e-8, ridge=0.0,
-                             mu0=None, return_info=False):
+                             mu0=None, V=None, return_info=False):
     """Joint (loc, scale) calibration from two membership curves: find
     per-runner (mu_i, sigma_i) with top_k_probabilities(mu, k1) = q1 and
     top_k_probabilities(mu, k2) = q2. The market pair is (win, place):
@@ -691,11 +699,32 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     Avoid k = n/2 as a depth when the field is nearly level: with a
     symmetric base and equal locations, reflection symmetry makes
     half-field membership exactly scale-blind (q = 1/2 at any spread),
-    so that curve carries no scale information at all. A
+    so that curve carries no scale information at all.
+
+    Correlation (V=) is REFUSED here, and the reason is dimension
+    counting, not laziness: fixing the loadings destroys the joint
+    rescaling gauge (scaling (mu, sigma) by c now changes the mix of
+    factor and idiosyncratic noise), so the unknowns after the
+    translation gauge number 2n - 1 while two curves carry only
+    2n - 2 informative numbers -- a data-dependent flat direction
+    survives and the exact fit is a one-parameter family. A third
+    membership depth closes it (3n - 3 >= 2n - 1 for n >= 2, an
+    overdetermined least-squares fit); until that solver exists,
+    calibrate correlated fields at fixed scales with
+    abilities_from_topk(V=...), whose Jacobians (top_k_jacobians V=)
+    are already exact node mixtures. A
     market pair outside the family's range converges to its
     least-squares fit and reports converged=False. Independent races
     only, like the Jacobians it stacks. O(n^2 L min(k, n-k)) per
     iteration."""
+    if V is not None:
+        raise NotImplementedError(
+            "loc_scale_from_topk_pair with fixed factor loadings is "
+            "under-identified: without the joint rescaling gauge, two "
+            "curves carry 2n - 2 numbers against 2n - 1 unknowns and a "
+            "flat direction survives (see the docstring). Use "
+            "abilities_from_topk(V=...) at fixed scales, or wait for "
+            "the three-curve least-squares solver.")
     t1 = np.asarray(q1, dtype=float)
     n = len(t1)
     k1, k2 = int(k1), int(k2)
@@ -968,22 +997,7 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     if V is None:
         P = one_node(mu)
     else:
-        Vm = np.asarray(V, float)
-        if Vm.ndim == 1:
-            Vm = Vm[:, None]
-        if Vm.shape[1] > 2:
-            raise NotImplementedError(
-                "rank_probabilities mixes Gauss-Hermite factor nodes and "
-                "is implemented for factor rank <= 2 (issue #12).")
-        Vm = Vm - Vm.mean(axis=0, keepdims=True)
-        an, aw = roots_hermitenorm(qa)
-        aw = aw / aw.sum()
-        if Vm.shape[1] == 1:
-            nodes, w = an[:, None], aw
-        else:
-            nodes = np.array([[a, b] for a in an for b in an])
-            w = np.array([u * v for u in aw for v in aw])
-            w = w / w.sum()
+        Vm, nodes, w = _factor_nodes(V, n, qa, "rank_probabilities")
         P = np.zeros((n, n))
         for q in range(len(nodes)):
             P += w[q] * one_node(mu + Vm @ nodes[q])
