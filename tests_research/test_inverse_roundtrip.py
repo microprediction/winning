@@ -1,6 +1,6 @@
 import numpy as np
 
-from winning.thurstone import AbilityCalibrator
+from winning.research import AbilityCalibrator
 
 
 def test_roundtrip_ability_prices(base):

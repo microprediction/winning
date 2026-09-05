@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from winning.thurstone.density import Density
-from winning.thurstone.laplacian import (
+from winning.research.density import Density
+from winning.research.laplacian import (
     LaplacianOperator,
     invert_outright_probabilities,
     laplacian_dense,
@@ -10,7 +10,7 @@ from winning.thurstone.laplacian import (
     laplacian_weights,
     outright_win_probabilities,
 )
-from winning.thurstone.lattice import UniformLattice
+from winning.research.lattice import UniformLattice
 
 LATTICE = UniformLattice(L=400, unit=0.05)
 

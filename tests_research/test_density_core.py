@@ -27,7 +27,7 @@ def test_convolution_preserves_mean(base):
 
 def test_large_shift_does_not_change_length(base):
     K = base.cdf().shape[0]
-    from winning.thurstone.density import Density
+    from winning.research.density import Density
 
     # internal integer shift should keep length
     shifted = Density(base.lattice, base.p).shift_integer(K + 100)  # zero-ish

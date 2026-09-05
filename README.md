@@ -26,7 +26,7 @@ fitted to the grammar on the way in.
 - `winning.methods` / `winning.bench` — every rival method behind one
   interface, and a seeded accuracy-time benchmark grid:
   `python -m winning.bench.runner`.
-- `winning.thurstone` — the density-agnostic research engine for
+- `winning.research` — the density-agnostic research engine for
   arbitrary bases.
 
 [![CI](https://github.com/microprediction/winning/workflows/CI/badge.svg)](https://github.com/microprediction/winning/actions)
@@ -168,7 +168,8 @@ A 2.0 renovation explored splitting the numerical
 core into the separate thurstone package with winning as an
 applications layer; the decision went the other way. `winning` owns the
 core — heritage and name — the thurstone implementation is vendored
-here as `winning.thurstone`, and the thurstone package is a
+here as `winning.research` (named for what it is; `winning.thurstone` is a
+deprecation shim), and the thurstone package is a
 compatibility shim whose imports resolve to this one. The renovation's
 migration notes and unported ideas are preserved in
 [planning/](planning) and [attic/](attic).

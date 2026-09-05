@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.testing import assert_allclose
 
-from winning.thurstone import AbilityCalibrator, Density
+from winning.research import AbilityCalibrator, Density
 
 
 def draw_from_density(d: Density, rng, n=50_000):

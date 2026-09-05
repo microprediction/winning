@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from winning.thurstone import Density, UniformLattice
-from winning.thurstone.order_stats import expected_payoff_with_multiplicity, winner_of_many
-from winning.thurstone.pricing import expected_payoff_vs_rest
+from winning.research import Density, UniformLattice
+from winning.research.order_stats import expected_payoff_with_multiplicity, winner_of_many
+from winning.research.pricing import expected_payoff_vs_rest
 
 
 def spike_density(lattice: UniformLattice, idx: int) -> Density:

@@ -1,6 +1,6 @@
 import numpy as np
 
-from winning.thurstone import AbilityCalibrator, MultiRayGlobalCalibrator
+from winning.research import AbilityCalibrator, MultiRayGlobalCalibrator
 
 
 def test_multiray_probability_fit(base):
@@ -31,7 +31,7 @@ def test_multiray_probability_fit(base):
         a = beta_true[j] + Z_true @ V_true[j]
         # Build densities for state pricing
         dens = [base.shift_fractional(float(ai / base.lattice.unit)) for ai in a]
-        from winning.thurstone.pricing import Race
+        from winning.research.pricing import Race
 
         p_obs = np.array(Race(dens).state_prices(), dtype=float)
         cal_j = AbilityCalibrator(base)

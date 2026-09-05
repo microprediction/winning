@@ -7,7 +7,7 @@ physical units.
 import numpy as np
 import pytest
 
-from winning.thurstone import (
+from winning.research import (
     Density,
     FactorRace,
     Race,
@@ -17,7 +17,7 @@ from winning.thurstone import (
     hermite_nodes,
     solve_abilities,
 )
-from winning.thurstone.inference import densities_from_offsets
+from winning.research.inference import densities_from_offsets
 
 LAT = UniformLattice(L=400, unit=0.05)
 RNG = np.random.default_rng(7)
@@ -269,7 +269,7 @@ def test_factor_model_equicorrelated_is_exact_at_k1():
 
 
 def test_gaussian_nodes_deterministic_given_seed():
-    from winning.thurstone import gaussian_nodes
+    from winning.research import gaussian_nodes
     F1, W1 = gaussian_nodes(5, n=512, seed=3)
     F2, W2 = gaussian_nodes(5, n=512, seed=3)
     assert np.array_equal(F1, F2) and np.array_equal(W1, W2)

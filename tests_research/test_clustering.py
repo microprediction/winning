@@ -1,6 +1,6 @@
 from numpy.testing import assert_allclose
 
-from winning.thurstone import AbilityCalibrator
+from winning.research import AbilityCalibrator
 
 
 def test_right_hanger_gets_zero_share(base):

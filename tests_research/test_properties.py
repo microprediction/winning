@@ -6,8 +6,8 @@ pytest.importorskip("hypothesis")
 import hypothesis as h
 import hypothesis.strategies as st
 
-from winning.thurstone import AbilityCalibrator
-from winning.thurstone.inference import implicit_state_prices
+from winning.research import AbilityCalibrator
+from winning.research.inference import implicit_state_prices
 
 
 @st.composite

@@ -1,6 +1,6 @@
 import pytest
 
-from winning.thurstone import AbilityCalibrator
+from winning.research import AbilityCalibrator
 
 # Skip if pytest-benchmark plugin is not installed
 pytest.importorskip("pytest_benchmark")
