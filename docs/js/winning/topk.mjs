@@ -442,8 +442,10 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
     mu = mu0.map(v => v - m0);
   } else {
     const [ka, ta] = k1 < k2 ? [k1, t1] : [k2, t2];
+    // warm start only: the LM loop refines, loose tolerance by design
     mu = abilitiesFromTopk(ta, ka,
-      { D: sd.map(v => v * v), base, points, returnInfo: true }).mu;
+      { D: sd.map(v => v * v), base, points, nIter: 20, tol: 1e-3,
+        returnInfo: true }).mu;
   }
   const sqr = Math.sqrt(Math.max(ridge, 0));
 

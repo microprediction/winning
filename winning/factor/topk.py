@@ -58,7 +58,8 @@ except ImportError:                                  # pragma: no cover
     _HAVE_RUST = False
 
 
-def _count_window(mu, sd, k, base_rows, delta=1e-12, pad_sds=2.0):
+def _count_window(mu, sd, k, base_rows, delta=1e-12, pad_sds=2.0,
+                  is_normal=False):
     """Lattice window for the top-k integrand.
 
     Below the window at most delta of a single runner has finished
@@ -67,7 +68,14 @@ def _count_window(mu, sd, k, base_rows, delta=1e-12, pad_sds=2.0):
     mu* - sqrt(2 mu* ln(1/delta)) >= k forces P(N <= k-1) <= delta).
     Both ends by bisection on the monotone mean count, bracketed by
     geometric expansion first, in the node-aware style of the
-    hierarchical kernels."""
+    hierarchical kernels. is_normal=True routes to the compiled search
+    when fastrace ships it: the ~260 sequential bracket/bisection
+    evaluations dominate small-field solves in python (measured ~2.6 ms
+    of a ~5 ms forward at n = 9)."""
+    if is_normal and _HAVE_RUST and hasattr(_fastrace, "top_k_window"):
+        return _fastrace.top_k_window(
+            np.ascontiguousarray(mu, dtype=float),
+            np.ascontiguousarray(sd, dtype=float), int(k), delta, pad_sds)
     smax = max(float(sd.max()), 1e-12)
 
     def mean_count(x):
@@ -167,7 +175,8 @@ def _leave_one_out_cdf(C, F, k, chunk=256):
 
 def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
                       is_normal=False):
-    lo, hi = _count_window(mu, sd, k, base_rows, delta=delta)
+    lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
+                           is_normal=is_normal)
     if is_normal and _HAVE_RUST:
         return np.asarray(_fastrace.top_k(
             np.ascontiguousarray(mu, dtype=float),
@@ -427,7 +436,15 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513):
     D = np.ones(n) if D is None else np.asarray(D, float)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
-    lo, hi = _count_window(mu, sd, k, base_rows)
+    lo, hi = _count_window(mu, sd, k, base_rows,
+                           is_normal=(base == "normal"))
+    if (base == "normal" and _HAVE_RUST
+            and hasattr(_fastrace, "top_k_jacobians")):
+        jm, js = _fastrace.top_k_jacobians(
+            np.ascontiguousarray(mu, dtype=float),
+            np.ascontiguousarray(sd, dtype=float), k, lo, hi, points)
+        return (np.asarray(jm, dtype=float).reshape(n, n),
+                np.asarray(js, dtype=float).reshape(n, n))
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -467,16 +484,25 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513):
 # instead: exactly-2nd plus win is top-2.
 
 
-def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12):
-    """One numpy forward pass returning the raw memberships AND the own
+def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
+                      is_normal=False):
+    """One forward pass returning the raw memberships AND the own
     translation slopes
 
         dq_i/dmu_i = -int f'(z_i)/sd_i^2 P(N_{-i}(x) <= k-1) dx,
 
     the cavity cdf the forward pass already holds against the derivative
     of the runner's own density -- one extra weighted sum, no second
-    field pass."""
-    lo, hi = _count_window(mu, sd, k, base_rows, delta=delta)
+    field pass. is_normal=True routes through the compiled kernel when
+    fastrace ships it (the python window is computed either way, so the
+    quadrature grid is identical)."""
+    lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
+                           is_normal=is_normal)
+    if is_normal and _HAVE_RUST and hasattr(_fastrace, "top_k_slopes"):
+        q, sl = _fastrace.top_k_slopes(
+            np.ascontiguousarray(mu, dtype=float),
+            np.ascontiguousarray(sd, dtype=float), k, lo, hi, points)
+        return np.asarray(q, dtype=float), np.asarray(sl, dtype=float)
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -601,13 +627,15 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     for it in range(n_iter):
         iters = it + 1
         if nodes is None:
-            qraw, sl = _topk_with_slopes(mu, sd, k, base_rows, points)
+            qraw, sl = _topk_with_slopes(mu, sd, k, base_rows, points,
+                                         is_normal=(base == "normal"))
         else:
             qraw = np.zeros(n)
             sl = np.zeros(n)
             for j in range(len(nodes)):
                 qj, sj = _topk_with_slopes(mu + Vm @ nodes[j], sd, k,
-                                           base_rows, points)
+                                           base_rows, points,
+                                           is_normal=(base == "normal"))
                 qraw += w[j] * qj
                 sl += w[j] * sj
         qhat = _checked_topk(qraw, k, "top-k inversion")
@@ -656,7 +684,7 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     it biases the otherwise exactly identified solution, so it is off
     by default). Convention: ridge multiplies the SQUARED penalty, so a
     reference that scales the ridge RESIDUALS by w corresponds to
-    ridge = w**2 here -- e.g. the T2 pipeline's w = 0.05 is
+    ridge = w**2 here -- e.g. a reference using w = 0.05 matches
     ridge = 0.0025 (measured: ridge = 0.05 is a 20x stronger prior that
     biases clean-board parameters by ~0.03). mu0= supplies initial locations in physical units and
     skips the internal warm start.
@@ -688,8 +716,11 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
         mu = np.asarray(mu0, dtype=float) - np.mean(mu0)
     else:
         ka, ta = (k1, target1) if k1 < k2 else (k2, target2)
+        # warm start only: the LM loop refines, so a loose tolerance
+        # here buys iterations without moving the final answer
         mu, _info0 = abilities_from_topk(ta, ka, D=sd ** 2, base=base,
-                                         points=points, return_info=True)
+                                         points=points, n_iter=20,
+                                         tol=1e-3, return_info=True)
     sqr = float(np.sqrt(max(ridge, 0.0)))
 
     def logits(m, s):

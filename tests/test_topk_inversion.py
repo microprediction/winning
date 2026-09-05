@@ -220,6 +220,36 @@ def test_loc_scale_gumbel_and_field_size():
         assert np.abs(np.asarray(sd_h) - sd_g).max() < 1e-3, base
 
 
+def test_rust_inversion_kernels_match_numpy():
+    """The compiled slope and Jacobian kernels against the numpy path
+    on the identical window: machine precision, the
+    test_rust_matches_numpy contract extended to the inversion's hot
+    passes."""
+    import winning.factor.topk as T
+    if not (T._HAVE_RUST and hasattr(T._fastrace, "top_k_slopes")
+            and hasattr(T._fastrace, "top_k_jacobians")):
+        pytest.skip("fastrace without the inversion kernels")
+    from winning.factor.races import BASES
+    rng = np.random.default_rng(2)
+    n, k = 40, 7
+    mu = rng.normal(0, 1.1, n)
+    sd = np.sqrt(0.4 + rng.random(n))
+    lo, hi = T._count_window(mu, sd, k, BASES["normal"])
+    q_r, sl_r = T._fastrace.top_k_slopes(mu, sd, k, lo, hi, 513)
+    q_np, sl_np = T._topk_with_slopes(mu, sd, k, BASES["normal"], 513)
+    assert np.abs(np.asarray(q_r) - q_np).max() < 1e-12
+    assert np.abs(np.asarray(sl_r) - sl_np).max() < 1e-12
+    jm_r, js_r = T._fastrace.top_k_jacobians(mu, sd, k, lo, hi, 513)
+    saved = T._HAVE_RUST
+    T._HAVE_RUST = False
+    try:
+        Jm, Js = T.top_k_jacobians(mu, k, D=sd ** 2, points=513)
+    finally:
+        T._HAVE_RUST = saved
+    assert np.abs(np.asarray(jm_r).reshape(n, n) - Jm).max() < 1e-12
+    assert np.abs(np.asarray(js_r).reshape(n, n) - Js).max() < 1e-12
+
+
 def test_win_and_second_adapter():
     """The market-facing statement: win plus EXACTLY-second marginals
     (columns one and two of the rank marginals) identify (loc, scale)

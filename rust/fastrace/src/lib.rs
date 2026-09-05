@@ -339,6 +339,9 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(win_probabilities_factor, m)?)?;
     m.add_function(wrap_pyfunction!(tree_race, m)?)?;
     m.add_function(wrap_pyfunction!(top_k, m)?)?;
+    m.add_function(wrap_pyfunction!(top_k_slopes, m)?)?;
+    m.add_function(wrap_pyfunction!(top_k_window, m)?)?;
+    m.add_function(wrap_pyfunction!(top_k_jacobians, m)?)?;
     m.add_function(wrap_pyfunction!(forward_and_slopes_base, m)?)?;
     m.add_function(wrap_pyfunction!(classic_state_prices, m)?)?;
     m.add_function(wrap_pyfunction!(classic_calibrate, m)?)?;
@@ -390,6 +393,67 @@ fn forward_and_slopes_base<'py>(
     ))
 }
 
+
+/// Top-k lattice window (lo, hi), normal base; see
+/// winning::top_k_window_kernel.
+#[pyfunction]
+#[pyo3(signature = (mu, sd, k, delta=1e-12, pad_sds=2.0))]
+fn top_k_window(
+    py: Python<'_>,
+    mu: PyReadonlyArray1<f64>,
+    sd: PyReadonlyArray1<f64>,
+    k: usize,
+    delta: f64,
+    pad_sds: f64,
+) -> PyResult<(f64, f64)> {
+    let m: Vec<f64> = mu.as_array().to_vec();
+    let s: Vec<f64> = sd.as_array().to_vec();
+    Ok(py.allow_threads(|| winning::top_k_window_kernel(&m, &s, k, delta, pad_sds)))
+}
+
+/// Top-k memberships and their own translation slopes, normal base;
+/// see winning::top_k_slopes_kernel (the inversion preconditioner).
+#[pyfunction]
+fn top_k_slopes<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    sd: PyReadonlyArray1<f64>,
+    k: usize,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let m: Vec<f64> = mu.as_array().to_vec();
+    let s: Vec<f64> = sd.as_array().to_vec();
+    let (q, sl) =
+        py.allow_threads(|| winning::top_k_slopes_kernel(&m, &s, k, lo, hi, points));
+    Ok((
+        Array1::from_vec(q).into_pyarray_bound(py),
+        Array1::from_vec(sl).into_pyarray_bound(py),
+    ))
+}
+
+/// Both top-k Jacobians (dq/dmu, dq/dsigma) as row-major flat (n*n)
+/// arrays, normal base; see winning::top_k_jacobians_kernel.
+#[pyfunction]
+fn top_k_jacobians<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    sd: PyReadonlyArray1<f64>,
+    k: usize,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let m: Vec<f64> = mu.as_array().to_vec();
+    let s: Vec<f64> = sd.as_array().to_vec();
+    let (jm, js) =
+        py.allow_threads(|| winning::top_k_jacobians_kernel(&m, &s, k, lo, hi, points));
+    Ok((
+        Array1::from_vec(jm).into_pyarray_bound(py),
+        Array1::from_vec(js).into_pyarray_bound(py),
+    ))
+}
 
 /// Top-k membership probabilities, normal base; see winning::top_k_kernel.
 #[pyfunction]

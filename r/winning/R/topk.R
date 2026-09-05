@@ -342,8 +342,10 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
     mu <- as.numeric(mu0) - mean(mu0)
   } else {
     if (k1 < k2) { ka <- k1; ta <- t1 } else { ka <- k2; ta <- t2 }
+    # warm start only: the LM loop refines, loose tolerance by design
     mu <- abilities_from_topk(ta, ka, D = sd^2, base = base,
-                              points = points, return_info = TRUE)$mu
+                              points = points, n_iter = 20, tol = 1e-3,
+                              return_info = TRUE)$mu
   }
   sqr <- sqrt(max(ridge, 0))
 

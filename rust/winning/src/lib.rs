@@ -1333,6 +1333,323 @@ pub fn interp1(x: f64, xp: &[f64], fp: &[f64]) -> f64 {
     fp[j] + (x - xp[j]) / denom * (fp[j + 1] - fp[j])
 }
 
+/// The top-k lattice window, normal base: mirrors
+/// winning/factor/topk.py::_count_window -- geometric bracket growth
+/// then bisection on the monotone mean count, Chernoff-slack upper
+/// target capped just below saturation.
+pub fn top_k_window_kernel(
+    mu: &[f64],
+    sd: &[f64],
+    k: usize,
+    delta: f64,
+    pad_sds: f64,
+) -> (f64, f64) {
+    let n = mu.len();
+    let smax = sd.iter().cloned().fold(f64::MIN, f64::max).max(1e-12);
+    let mean_count = |x: f64| -> f64 {
+        let mut t = 0.0;
+        for i in 0..n {
+            t += ndtr((x - mu[i]) / sd[i]);
+        }
+        t
+    };
+    let mu_min = mu.iter().cloned().fold(f64::MAX, f64::min);
+    let mu_max = mu.iter().cloned().fold(f64::MIN, f64::max);
+    let mut lo = mu_min - 9.0 * smax;
+    let mut step = 9.0 * smax;
+    for _ in 0..60 {
+        if mean_count(lo) <= delta {
+            break;
+        }
+        lo -= step;
+        step *= 2.0;
+    }
+    let target_hi = (k as f64
+        + 2.0 * (1.0 / delta).ln()
+        + (2.0 * (k + 1) as f64 * (1.0 / delta).ln()).sqrt())
+    .min(n as f64 - 1e-4);
+    let mut hi = mu_max + 9.0 * smax;
+    step = 9.0 * smax;
+    for _ in 0..60 {
+        if mean_count(hi) >= target_hi {
+            break;
+        }
+        hi += step;
+        step *= 2.0;
+    }
+    let (mut a, mut b) = (lo, hi);
+    for _ in 0..70 {
+        let m = 0.5 * (a + b);
+        if mean_count(m) < delta {
+            a = m;
+        } else {
+            b = m;
+        }
+    }
+    let xlo = a;
+    a = xlo;
+    b = hi;
+    for _ in 0..70 {
+        let m = 0.5 * (a + b);
+        if mean_count(m) < target_hi {
+            a = m;
+        } else {
+            b = m;
+        }
+    }
+    (xlo - pad_sds * smax, b + pad_sds * smax)
+}
+
+/// Shared setup for the top-k kernels: per-point below-probabilities
+/// F, densities f(z)/sd, standardized coordinates z (all flat
+/// (points, n)), and the Poisson-binomial count distribution C (flat
+/// (points, n+1)). Parallel over lattice points.
+/// Below this many count-program operations (points * n^2) the rayon
+/// dispatch overhead exceeds the work: small fields run serial, with
+/// identical arithmetic (each row is independent either way).
+const TOPK_PAR_WORK: usize = 1_000_000;
+
+fn topk_field(
+    mu: &[f64],
+    sd: &[f64],
+    lo: f64,
+    dx: f64,
+    points: usize,
+) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    let n = mu.len();
+    let par = points * n * n >= TOPK_PAR_WORK;
+    let inv_sqrt2pi = 1.0 / (2.0 * std::f64::consts::PI).sqrt();
+    let mut fmat = vec![0.0f64; points * n];
+    let mut dens = vec![0.0f64; points * n];
+    let mut zmat = vec![0.0f64; points * n];
+    let fill = |l: usize, frow: &mut [f64], drow: &mut [f64], zrow: &mut [f64]| {
+        let x = lo + l as f64 * dx;
+        for i in 0..n {
+            let z = (x - mu[i]) / sd[i];
+            frow[i] = ndtr(z);
+            drow[i] = (-0.5 * z * z).exp() * inv_sqrt2pi / sd[i];
+            zrow[i] = z;
+        }
+    };
+    if par {
+        fmat.par_chunks_mut(n)
+            .zip(dens.par_chunks_mut(n))
+            .zip(zmat.par_chunks_mut(n))
+            .enumerate()
+            .for_each(|(l, ((frow, drow), zrow))| fill(l, frow, drow, zrow));
+    } else {
+        for (l, ((frow, drow), zrow)) in fmat
+            .chunks_mut(n)
+            .zip(dens.chunks_mut(n))
+            .zip(zmat.chunks_mut(n))
+            .enumerate()
+        {
+            fill(l, frow, drow, zrow);
+        }
+    }
+    let mut c = vec![0.0f64; points * (n + 1)];
+    let count = |l: usize, row: &mut [f64]| {
+        row[0] = 1.0;
+        let frow = &fmat[l * n..(l + 1) * n];
+        for (j, &f) in frow.iter().enumerate() {
+            let s = 1.0 - f;
+            for m in (1..=j + 1).rev() {
+                row[m] = row[m] * s + row[m - 1] * f;
+            }
+            row[0] *= s;
+        }
+    };
+    if par {
+        c.par_chunks_mut(n + 1)
+            .enumerate()
+            .for_each(|(l, row)| count(l, row));
+    } else {
+        for (l, row) in c.chunks_mut(n + 1).enumerate() {
+            count(l, row);
+        }
+    }
+    (fmat, dens, zmat, c)
+}
+
+/// Full leave-one-out pmf at one lattice point: Q[m] = P(N_{-i} = m),
+/// m = 0..n-1, by stable-direction deconvolution of the count row.
+#[inline]
+fn loo_pmf_row(row: &[f64], fi: f64, n: usize, q: &mut [f64]) {
+    let si = 1.0 - fi;
+    if si >= fi {
+        let s_safe = si.max(1e-300);
+        q[0] = (row[0] / s_safe).clamp(0.0, 1.0);
+        for m in 1..n {
+            q[m] = ((row[m] - fi * q[m - 1]) / s_safe).clamp(0.0, 1.0);
+        }
+    } else {
+        let f_safe = fi.max(1e-300);
+        q[n - 1] = (row[n] / f_safe).clamp(0.0, 1.0);
+        for m in (0..n - 1).rev() {
+            q[m] = ((row[m + 1] - si * q[m + 1]) / f_safe).clamp(0.0, 1.0);
+        }
+    }
+}
+
+/// One pair coefficient P(N_{-ij} = k-1) from the leave-i pmf, stable
+/// direction: forward k-1 steps or backward n-1-k steps.
+#[inline]
+fn pair_coefficient(qrow: &[f64], fj: f64, n: usize, k: usize) -> f64 {
+    let sj = 1.0 - fj;
+    if sj >= fj {
+        let s_safe = sj.max(1e-300);
+        let mut q = (qrow[0] / s_safe).clamp(0.0, 1.0);
+        for m in 1..k {
+            q = ((qrow[m] - fj * q) / s_safe).clamp(0.0, 1.0);
+        }
+        q
+    } else {
+        let f_safe = fj.max(1e-300);
+        let mut qb = (qrow[n - 1] / f_safe).clamp(0.0, 1.0);
+        let mut m = n as isize - 3;
+        while m >= k as isize - 1 {
+            qb = ((qrow[(m + 1) as usize] - sj * qb) / f_safe).clamp(0.0, 1.0);
+            m -= 1;
+        }
+        qb
+    }
+}
+
+/// Top-k memberships AND their own translation slopes, normal base:
+/// slope_i = -int f'(z_i)/sd_i^2 P(N_{-i} <= k-1) dx, the inversion
+/// preconditioner of winning/factor/topk.py::_topk_with_slopes.
+pub fn top_k_slopes_kernel(
+    mu: &[f64],
+    sd: &[f64],
+    k: usize,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> (Vec<f64>, Vec<f64>) {
+    let n = mu.len();
+    let dx = (hi - lo) / (points - 1) as f64;
+    let par = points * n * n >= TOPK_PAR_WORK;
+    let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let one = |i: usize| {
+            let mut acc_q = 0.0f64;
+            let mut acc_sl = 0.0f64;
+            for l in 0..points {
+                let f = fmat[l * n + i];
+                let s = 1.0 - f;
+                let row = &c[l * (n + 1)..(l + 1) * (n + 1)];
+                let cdf = if s >= f {
+                    let s_safe = s.max(1e-300);
+                    let mut q = (row[0] / s_safe).clamp(0.0, 1.0);
+                    let mut tot = q;
+                    for m in 1..k {
+                        q = ((row[m] - f * q) / s_safe).clamp(0.0, 1.0);
+                        tot += q;
+                    }
+                    tot.clamp(0.0, 1.0)
+                } else {
+                    let f_safe = f.max(1e-300);
+                    let mut q = (row[n] / f_safe).clamp(0.0, 1.0);
+                    let mut tail = q;
+                    for m in (k..n - 1).rev() {
+                        q = ((row[m + 1] - s * q) / f_safe).clamp(0.0, 1.0);
+                        tail += q;
+                    }
+                    (1.0 - tail).clamp(0.0, 1.0)
+                };
+                let d = dens[l * n + i];
+                acc_q += d * cdf;
+                // -f'(z)/sd^2 = z f(z)/sd^2 = z (f(z)/sd) / sd
+                acc_sl += zmat[l * n + i] * d / sd[i] * cdf;
+            }
+            (acc_q * dx, acc_sl * dx)
+    };
+    let pairs: Vec<(f64, f64)> = if par {
+        (0..n).into_par_iter().map(one).collect()
+    } else {
+        (0..n).map(one).collect()
+    };
+    (pairs.iter().map(|p| p.0).collect(), pairs.iter().map(|p| p.1).collect())
+}
+
+/// Both top-k Jacobians (dq/dmu, dq/dsigma), row-major flat (n, n),
+/// normal base: off-diagonals are the cutoff tie densities against the
+/// pair count coefficient, mu diagonal from translation invariance,
+/// sigma diagonal off the forward membership factor. Mirrors
+/// winning/factor/topk.py::top_k_jacobians, which referees it.
+pub fn top_k_jacobians_kernel(
+    mu: &[f64],
+    sd: &[f64],
+    k: usize,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> (Vec<f64>, Vec<f64>) {
+    let n = mu.len();
+    let dx = (hi - lo) / (points - 1) as f64;
+    let par = points * n * n >= TOPK_PAR_WORK;
+    let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let one_row = |i: usize| {
+            let mut qi = vec![0.0f64; points * n];
+            for l in 0..points {
+                loo_pmf_row(
+                    &c[l * (n + 1)..(l + 1) * (n + 1)],
+                    fmat[l * n + i],
+                    n,
+                    &mut qi[l * n..(l + 1) * n],
+                );
+            }
+            let mut row_mu = vec![0.0f64; n];
+            let mut row_sd = vec![0.0f64; n];
+            for j in 0..n {
+                if j == i {
+                    continue;
+                }
+                let mut sm = 0.0f64;
+                let mut ss = 0.0f64;
+                for l in 0..points {
+                    let pair = pair_coefficient(
+                        &qi[l * n..(l + 1) * n],
+                        fmat[l * n + j],
+                        n,
+                        k,
+                    );
+                    let kern = pair * dens[l * n + i];
+                    sm += kern * dens[l * n + j];
+                    ss += kern * zmat[l * n + j] * dens[l * n + j];
+                }
+                row_mu[j] = sm * dx;
+                row_sd[j] = ss * dx;
+            }
+            row_mu[i] = -row_mu.iter().sum::<f64>();
+            let mut own = 0.0f64;
+            for l in 0..points {
+                let qrow = &qi[l * n..(l + 1) * n];
+                let mut cdf = 0.0f64;
+                for m in 0..k {
+                    cdf += qrow[m];
+                }
+                let z = zmat[l * n + i];
+                // -(z f'(z) + f(z))/sd^2 = (z^2 - 1) f(z)/sd^2, and
+                // dens = f(z)/sd already carries one 1/sd
+                own += (z * z - 1.0) * dens[l * n + i] / sd[i] * cdf;
+            }
+            row_sd[i] = own * dx;
+            (row_mu, row_sd)
+    };
+    let rows: Vec<(Vec<f64>, Vec<f64>)> = if par {
+        (0..n).into_par_iter().map(one_row).collect()
+    } else {
+        (0..n).map(one_row).collect()
+    };
+    let mut jm = vec![0.0f64; n * n];
+    let mut js = vec![0.0f64; n * n];
+    for (i, (rm, rs)) in rows.into_iter().enumerate() {
+        jm[i * n..(i + 1) * n].copy_from_slice(&rm);
+        js[i * n..(i + 1) * n].copy_from_slice(&rs);
+    }
+    (jm, js)
+}
+
 /// Top-k membership: q_i = int f_i(x) P(N_{-i}(x) <= k-1) dx on an
 /// equi-spaced lattice, normal base. One shared Poisson-binomial count
 /// program per lattice point (parallel over points), then each runner
@@ -1350,41 +1667,13 @@ pub fn top_k_kernel(
 ) -> Vec<f64> {
     let n = mu.len();
     let dx = (hi - lo) / (points - 1) as f64;
-    let inv_sqrt2pi = 1.0 / (2.0 * std::f64::consts::PI).sqrt();
+    let par = points * n * n >= TOPK_PAR_WORK;
+    // shared field rows and count distribution (serial under the small-
+    // field threshold, identical arithmetic)
+    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
 
-    // per-point F (below-probability) and density rows, flat (points, n)
-    let mut fmat = vec![0.0f64; points * n];
-    let mut dens = vec![0.0f64; points * n];
-    fmat.par_chunks_mut(n)
-        .zip(dens.par_chunks_mut(n))
-        .enumerate()
-        .for_each(|(l, (frow, drow))| {
-            let x = lo + l as f64 * dx;
-            for i in 0..n {
-                let z = (x - mu[i]) / sd[i];
-                frow[i] = ndtr(z);
-                drow[i] = (-0.5 * z * z).exp() * inv_sqrt2pi / sd[i];
-            }
-        });
-
-    // shared count distribution C[l][0..=n], parallel over lattice points
-    let mut c = vec![0.0f64; points * (n + 1)];
-    c.par_chunks_mut(n + 1).enumerate().for_each(|(l, row)| {
-        row[0] = 1.0;
-        let frow = &fmat[l * n..(l + 1) * n];
-        for (j, &f) in frow.iter().enumerate() {
-            let s = 1.0 - f;
-            for m in (1..=j + 1).rev() {
-                row[m] = row[m] * s + row[m - 1] * f;
-            }
-            row[0] *= s;
-        }
-    });
-
-    // deconvolution + integration, parallel over runners
-    (0..n)
-        .into_par_iter()
-        .map(|i| {
+    // deconvolution + integration per runner
+    let one = |i: usize| {
             let mut acc = 0.0f64;
             for l in 0..points {
                 let f = fmat[l * n + i];
@@ -1412,8 +1701,12 @@ pub fn top_k_kernel(
                 acc += dens[l * n + i] * cdf.clamp(0.0, 1.0);
             }
             acc * dx
-        })
-        .collect()
+    };
+    if par {
+        (0..n).into_par_iter().map(one).collect()
+    } else {
+        (0..n).map(one).collect()
+    }
 }
 
 // ---------------------------------------------------------------------

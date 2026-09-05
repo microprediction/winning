@@ -17,6 +17,14 @@
   rank marginals, all three inversions), parity-locked: 15 new embedded
   scenarios match the python reference at ~1e-15 in both languages.
 - `winning.factor.topk` now honors `WINNING_PURE` like races/blocks.
+- fastrace kernels for the inversion hot passes: `top_k_slopes`,
+  `top_k_jacobians` and `top_k_window` (the python bisection was ~2.6 ms
+  of a ~5 ms small-field forward), with the rayon fan-out gated on a
+  work estimate so small fields run serial. Measured at n = 9:
+  loc_scale_from_win_and_second 48 -> 4.5 ms/race, abilities_from_topk
+  13 -> 2.4 ms/race; kernels match numpy at 1e-12 on the shared window.
+- loc/scale warm start runs at loose tolerance (the LM loop refines);
+  mirrored in the JS and R ports so parity trajectories agree.
 - `winning.thurstone` renamed `winning.research` (honest labeling of
   research-grade machinery); the old name remains as a
   `DeprecationWarning` alias that also serves submodule imports.
