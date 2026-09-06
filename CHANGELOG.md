@@ -25,6 +25,18 @@
   13 -> 2.4 ms/race; kernels match numpy at 1e-12 on the shared window.
 - loc/scale warm start runs at loose tolerance (the LM loop refines);
   mirrored in the JS and R ports so parity trajectories agree.
+- Julia joins the parity lock: `julia/winning` (dependency-free but for
+  stdlib LinearAlgebra) ports the factor races (forward, slopes,
+  inversion, adaptive quadrature) and the complete top-k module; all 24
+  in-scope scenarios of `parity/check.jl` match the python reference at
+  machine precision. Blocks/nested/tree, polish and the classic lattice
+  remain the Julia roadmap.
+- fastrace rank-marginal kernels (`rank_marginals`,
+  `rank_marginal_jacobian`); `abilities_from_rank_marginal` drops from
+  14.5 to 2.7 ms/race at n = 9. The pinning test caught an r = n defect
+  in every language: the Jacobian's P(N = n-1) term is identically zero
+  but was computed as window-sensitive deconvolution junk; all four
+  implementations now use the identity.
 - `top_k_jacobians` accepts factor correlation (`V=`, rank <= 2) as an
   exact Gauss-Hermite mixture of independent Jacobians, in python and
   both ports; `loc_scale_from_topk_pair` REFUSES fixed loadings with

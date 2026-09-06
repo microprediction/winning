@@ -145,7 +145,10 @@ dependency-free JavaScript port at machine-precision parity with the
 Python, for browser demos; [r/winning](r/winning) is a pure-R package;
 [rust/fastrace](rust/fastrace) holds the optional compiled kernels —
 build with `pip install maturin && maturin develop --release`, and
-`winning.methods` uses them automatically. Julia is on the roadmap.
+`winning.methods` uses them automatically. [julia/winning](julia/winning)
+is a dependency-free Julia package covering the factor races and the
+full top-k module (`julia parity/check.jl` pins it to the reference);
+the covariance grammar and classic lattice are its remaining roadmap.
 
 ## Rating systems (research line)
 
