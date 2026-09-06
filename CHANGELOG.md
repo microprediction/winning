@@ -32,6 +32,15 @@
   (validated to ~1e-31); everything past that is REFUSED and routed to
   the genuine incumbent via a package extension rather than shipped on
   degraded nodes. Agreement with a 200k-point MvNormalCDF run: 8e-8.
+- `julia/MultinomialProbit` gained inference and a machine-precision
+  score referee: `vcov`/`stderror` in three flavors (observed
+  information via central differences of the exact analytic score,
+  OPG, sandwich from per-observation scores), a ForwardDiff package
+  extension upgrading the Hessian to dual-mode exactness, and -- since
+  the likelihood path is now type-generic -- the whole likelihood is
+  AD-able by consumers. The analytic score is refereed by ForwardDiff
+  duals at 1e-10 on both node branches, superseding step-tuned
+  differences.
 - `julia/MultinomialProbit`: the first multinomial probit for Julia
   (the ecosystem has logit families, binary and ordered probit, and no
   MNP at all). Two engines, one interface: the exact

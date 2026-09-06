@@ -26,10 +26,12 @@
 # nodes, the dependency-free escalation of the R port.
 module MultinomialProbit
 
+import LinearAlgebra
 using LinearAlgebra: SymTridiagonal, eigen, cholesky, Symmetric
 using Random: Xoshiro
 
-export MNProbit, fit!, loglikelihood, predict_proba,
+export MNProbit, fit!, loglikelihood, predict_proba, coef, vcov,
+    stderror, score_matrix, loglik_hessian,
     choice_loglik_and_score, ghk_choice_prob
 
 const TINY = 1e-300
@@ -232,7 +234,7 @@ Returns (loglik, dmu, dV). Port of winning/likelihood.py."""
 function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
                                  choice::AbstractVector;
                                  D = nothing, Qf = 7, Qz = 7,
-                                 nodes = nothing)
+                                 nodes = nothing, per_obs = false)
     T, J = size(mu)
     r = size(V, 2)
     Dv = D === nothing ? ones(J) : Float64.(collect(D))
@@ -251,6 +253,7 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
     loglik = zero(ET)
     dmu = zeros(ET, T, J)
     dV = zeros(ET, J, r)
+    GV = per_obs ? zeros(ET, T, J, r) : zeros(ET, 0, 0, 0)
     for k in 1:J
         idx = findall(==(k), choice)
         isempty(idx) && continue
@@ -282,8 +285,13 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
             hc = vec(sum(H, dims = 1))
             dV[k, :] .+= hc
             dV[j, :] .-= hc
+            if per_obs
+                GV[idx, k, :] .+= H
+                GV[idx, j, :] .-= H
+            end
         end
     end
+    per_obs && return loglik, dmu, dV, GV
     return loglik, dmu, dV
 end
 
@@ -488,6 +496,85 @@ function fit!(m::MNProbit; method = :exact, maxiter = 400,
 end
 
 loglikelihood(m::MNProbit) = m.loglik
+coef(m::MNProbit) = copy(m.theta)
+
+"""Per-observation score matrix G (T x nparams) at theta, from the
+analytic gradients."""
+function score_matrix(m::MNProbit, theta = m.theta)
+    beta, V = _unpack(m, theta)
+    mu = _mu(m, beta)
+    _, dmu, _, GV = choice_loglik_and_score(mu, V, m.choice;
+                                            per_obs = true)
+    np = m.p + length(m.pos)
+    G = zeros(m.T, np)
+    for pp in 1:m.p
+        G[:, pp] .= vec(sum(dmu .* m.X[:, :, pp], dims = (2, 3)))
+    end
+    for (kk, (row, col)) in enumerate(m.pos)
+        G[:, m.p + kk] .= GV[:, row, col]
+    end
+    return G
+end
+
+# armed by the ForwardDiff package extension: exact dual-mode
+# derivative of the analytic score (forward-over-analytic)
+const HESSIAN_ENGINE = Ref{Union{Nothing,Function}}(nothing)
+
+"""Hessian of the log-likelihood at theta: central differences of the
+ANALYTIC score by default (the score is exact, so this is ~1e-8);
+loading ForwardDiff arms a machine-precision dual-mode engine."""
+function loglik_hessian(m::MNProbit, theta = m.theta; h = 1e-5)
+    eng = HESSIAN_ENGINE[]
+    eng !== nothing && return eng(m, theta)
+    np = length(theta)
+    Hs = zeros(np, np)
+    for i in 1:np
+        tp = copy(theta); tp[i] += h
+        tm = copy(theta); tm[i] -= h
+        gp = -_nll_grad(m, tp)[2]
+        gm = -_nll_grad(m, tm)[2]
+        Hs[:, i] .= (gp .- gm) ./ (2h)
+    end
+    return (Hs .+ Hs') ./ 2
+end
+
+"""Parameter covariance at the fit: method = :hessian (observed
+information, default), :opg (outer product of per-observation
+scores), or :sandwich (H^-1 B H^-1, robust)."""
+function vcov(m::MNProbit; method = :hessian)
+    Hs = loglik_hessian(m)
+    Hinv = inv(-Hs)
+    method == :hessian && return (Hinv .+ Hinv') ./ 2
+    G = score_matrix(m)
+    B = G' * G
+    method == :opg && return inv(B)
+    method == :sandwich && return Hinv * B * Hinv
+    error("method must be :hessian, :opg or :sandwich")
+end
+
+stderror(m::MNProbit; method = :hessian) =
+    sqrt.(max.(LinearAlgebra.diag(vcov(m; method = method)), 0.0))
+
+function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
+    println(io, "MNProbit  J=", m.J, " T=", m.T, " r=", m.r,
+            "  method=", m.method,
+            "  logLik=", round(m.loglik, digits = 3),
+            m.converged ? "" : "  (NOT converged)")
+    isnan(m.loglik) && return
+    se = try
+        stderror(m)
+    catch
+        fill(NaN, length(m.theta))
+    end
+    names = vcat(["beta[$i]" for i in 1:m.p],
+                 ["v[$row,$col]" for (row, col) in m.pos])
+    println(io, rpad("param", 12), rpad("estimate", 12), "se")
+    for i in eachindex(m.theta)
+        println(io, rpad(names[i], 12),
+                rpad(string(round(m.theta[i], digits = 4)), 12),
+                round(se[i], digits = 4))
+    end
+end
 
 """Choice probabilities under the fitted parameters, by the same
 factor-conditional product integrals (normalized across alternatives)."""

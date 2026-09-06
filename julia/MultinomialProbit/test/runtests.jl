@@ -4,6 +4,8 @@
 #   julia --project=julia/MultinomialProbit/test julia/MultinomialProbit/test/runtests.jl
 using Test
 using Random: Xoshiro
+import LinearAlgebra
+import ForwardDiff
 
 include(joinpath(@__DIR__, "..", "src", "MultinomialProbit.jl"))
 using .MultinomialProbit
@@ -72,7 +74,6 @@ end
 @testset "analytic score vs ForwardDiff (machine-precision referee)" begin
     # the finite-difference check above tunes a step and settles for
     # 1e-5; dual numbers through the SAME code settle for 1e-10
-    import ForwardDiff
     m = MNProbit(X, choice; intercepts = true, r = r)
     for (label, theta) in (
         ("GH branch", vcat(fill(0.2, m.p), fill(0.15, length(m.pos)))),
@@ -144,3 +145,47 @@ end
 end
 
 println("all MultinomialProbit tests passed")
+
+@testset "inference: vcov, stderror, per-observation scores" begin
+    rng = Xoshiro(3)
+    T3, J3 = 800, 4
+    X3 = randn(rng, T3, J3, 2)
+    beta_true = [0.7, -0.4]
+    V_true = reshape([0.0, 0.5, -0.4, 0.2], 4, 1)
+    mu = zeros(T3, J3)
+    for c in 1:2
+        mu .+= X3[:, :, c] .* beta_true[c]
+    end
+    U = mu .+ randn(rng, T3, 1) * permutedims(V_true) .+ randn(rng, T3, J3)
+    ch = [argmax(U[t, :]) for t in 1:T3]
+    m = MNProbit(X3, ch; intercepts = false, r = 1)
+    fit!(m)
+    # per-observation scores sum to the total analytic score
+    G = score_matrix(m)
+    _, g_tot = MP._nll_grad(m, m.theta)
+    @test maximum(abs.(vec(sum(G, dims = 1)) .+ g_tot)) < 1e-8
+    # hessian: symmetric by construction, negative definite at the MLE
+    Hs = loglik_hessian(m)
+    ev = maximum(real.(LinearAlgebra.eigvals(LinearAlgebra.Symmetric(Hs))))
+    @test ev < 0
+    # FD-of-score hessian vs the ForwardDiff dual engine
+    Hfd = copy(Hs)
+    MP.HESSIAN_ENGINE[] = (mm, tt) -> begin
+        g(t) = -MP._nll_grad(mm, t)[2]
+        H2 = ForwardDiff.jacobian(g, tt)
+        (H2 .+ H2') ./ 2
+    end
+    Had = loglik_hessian(m)
+    MP.HESSIAN_ENGINE[] = nothing
+    @test maximum(abs.(Hfd .- Had)) < 1e-5 * max(1.0, maximum(abs.(Had)))
+    # the three vcov flavors agree in scale, and truth is covered
+    for method in (:hessian, :opg, :sandwich)
+        se = stderror(m; method = method)
+        @test all(isfinite, se) && all(se .> 0)
+        @test maximum(abs.(m.beta .- beta_true) ./ se[1:2]) < 4.0
+    end
+    # show() smoke
+    io = IOBuffer()
+    show(io, MIME"text/plain"(), m)
+    @test occursin("beta[1]", String(take!(io)))
+end

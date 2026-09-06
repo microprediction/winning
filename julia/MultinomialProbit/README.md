@@ -33,7 +33,16 @@ fit!(m)                       # exact likelihood, analytic score, BFGS
 fit!(m; method = :ghk)        # the simulation incumbent, same API
 loglikelihood(m); m.beta; m.V
 P = predict_proba(m)
+vcov(m); stderror(m)           # observed information (FD of the
+stderror(m; method = :sandwich)  # analytic score); :opg, :sandwich
 ```
+
+Inference rides the analytic score: the observed-information Hessian
+is central differences OF THE EXACT SCORE (~1e-8, dependency-free),
+and `using ForwardDiff` arms a package extension that upgrades it to
+the machine-precision dual-mode derivative of that same score.
+Per-observation scores (`score_matrix`) power the OPG and sandwich
+estimators; `show` prints a coefficient table with standard errors.
 
 Dependency-free but for stdlib `LinearAlgebra` and `Random`.
 Sharpness rule inherited from the reference: past

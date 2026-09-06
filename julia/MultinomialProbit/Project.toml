@@ -7,5 +7,12 @@ version = "0.1.0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
+[weakdeps]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+
+[extensions]
+ForwardDiffHessianExt = "ForwardDiff"
+
 [compat]
+ForwardDiff = "0.10, 1"
 julia = "1.9"
