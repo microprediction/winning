@@ -6,15 +6,16 @@
 \usage{
 race_probabilities(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   base = "normal", points = 257, return_slopes = FALSE, structure = NULL,
-  window = "bulk", delta = 1e-12, qa = 9, qf = 15, nodes = NULL)
+  window = "bulk", delta = 1e-12, qa = 9, qf = 15, nodes = NULL,
+  cov = NULL)
 
 abilities_from_race(p, V = NULL, D = NULL, F = NULL, W = NULL,
   base = "normal", points = 257, n_iter = 60, tol = 1e-08,
-  structure = NULL, qa = 9, qf = 15)
+  structure = NULL, qa = 9, qf = 15, cov = NULL)
 
 calibrate_abilities(p, V = NULL, D = NULL, F = NULL, W = NULL,
   base = "normal", points = 257, n_iter = 60, tol = 1e-08,
-  structure = NULL, qa = 9, qf = 15)
+  structure = NULL, qa = 9, qf = 15, cov = NULL)
 }
 \arguments{
 \item{mu}{numeric abilities; performances are times, so lower is better
@@ -36,6 +37,9 @@ d p_i / d mu_i}
 \item{delta}{omitted winner mass bound for the bulk window}
 \item{qa, qf}{quadrature orders used by structure dispatch}
 \item{nodes}{deprecated alias for list(F, W)}
+\item{cov}{dense covariance matrix, fitted to the grammar by
+\code{\link{fit_covariance}} on the way in; replaces
+structure=/V=/D=}
 \item{n_iter}{maximum damped-Newton iterations}
 \item{tol}{convergence tolerance on max |log p - log target|}
 }

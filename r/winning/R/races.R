@@ -307,8 +307,9 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
 calibrate_abilities <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                 base = "normal", points = 257,
                                 n_iter = 60, tol = 1e-8,
-                                structure = NULL, qa = 9, qf = 15) {
+                                structure = NULL, qa = 9, qf = 15,
+                                cov = NULL) {
   abilities_from_race(p, V = V, D = D, F = F, W = W, base = base,
                       points = points, n_iter = n_iter, tol = tol,
-                      structure = structure, qa = qa, qf = qf)
+                      structure = structure, qa = qa, qf = qf, cov = cov)
 }
