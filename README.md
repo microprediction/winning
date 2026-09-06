@@ -149,6 +149,13 @@ build with `pip install maturin && maturin develop --release`, and
 is a dependency-free Julia package covering the factor races and the
 full top-k module (`julia parity/check.jl` pins it to the reference);
 the covariance grammar and classic lattice are its remaining roadmap.
+Two Julia-facing applications ride it:
+[julia/MultinomialProbit](julia/MultinomialProbit) — the first
+multinomial probit for Julia, exact likelihood with analytic score
+plus a common-random-numbers GHK for head-to-heads — and
+[julia/MvNormalCDFFast](julia/MvNormalCDFFast) — deterministic MVN
+rectangle probabilities for factor covariance, falling back to
+MvNormalCDF.jl on refused cases.
 
 ## Rating systems (research line)
 

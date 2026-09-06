@@ -1,0 +1,16 @@
+name = "MvNormalCDFFast"
+uuid = "078bd55d-a100-44a7-b0d7-a81d078718e3"
+authors = ["Peter Cotton <peter.cotton@microprediction.com>"]
+version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[weakdeps]
+MvNormalCDF = "37188c8d-bc69-4638-b057-733e744175ec"
+
+[extensions]
+MvNormalCDFFallbackExt = "MvNormalCDF"
+
+[compat]
+julia = "1.9"

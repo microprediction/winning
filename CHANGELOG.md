@@ -25,6 +25,13 @@
   13 -> 2.4 ms/race; kernels match numpy at 1e-12 on the shared window.
 - loc/scale warm start runs at loose tolerance (the LM loop refines);
   mirrored in the JS and R ports so parity trajectories agree.
+- `julia/MvNormalCDFFast`: deterministic MVN rectangle probabilities
+  for factor-structured covariance, the MvNormalCDF.jl companion (port
+  of `winning.fastmvn`, fixture-pinned). Exact GH at rank <= 2 and
+  sharpness <= 3 with a deterministic Laplace-recentered tail path
+  (validated to ~1e-31); everything past that is REFUSED and routed to
+  the genuine incumbent via a package extension rather than shipped on
+  degraded nodes. Agreement with a 200k-point MvNormalCDF run: 8e-8.
 - `julia/MultinomialProbit`: the first multinomial probit for Julia
   (the ecosystem has logit families, binary and ordered probit, and no
   MNP at all). Two engines, one interface: the exact
