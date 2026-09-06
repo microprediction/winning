@@ -1,0 +1,374 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage[round,authoryear]{natbib}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\newtheorem{proposition}{Proposition}
+
+\title{\textbf{Win Nodes for Bayes Nets}\\[0.4em]
+\large exact order-statistic queries on Gaussian graphical models,
+where the marginal layer cannot express the answer}
+\author{Peter Cotton}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent A Gaussian graphical model's inference stack --- the Kalman
+filter and smoother, belief propagation, expectation propagation,
+variational message passing --- returns marginals, joint moments and
+samples. None of those objects answers the questions a user of a
+correlated field most often asks: which component is the maximum,
+what is the law of the maximum, when is a threshold first crossed,
+which components sit in the top $k$. We formalize these as the
+queries of a \emph{win node} --- an $n$-ary deterministic node
+$W=\arg\min_i X_i$ (or $\arg\max$, or its order-statistic relatives)
+attached to a set of Gaussian variables --- and show that for the two
+structures that dominate applications the node is computable exactly,
+in linear work, with derivatives. For factor-structured fields
+$X=\mu+Vf+\mathrm{diag}(\sqrt{D})\,\epsilon$ one shared survival-field
+pass prices all $n$ win probabilities at cost $O(nLQ)$, and the
+Jacobian of the win vector in the locations is a weighted graph
+Laplacian applied in the same linear work, so the node is trainable
+and invertible. For chains and banded fields --- precision bandwidth
+$b$, the Gauss--Markov case --- a transfer-operator pass restricted
+below a threshold gives the max-CDF and first-passage law in $O(nL)$
+per threshold and the argmax marginals in $O(nL^2)$, lifting to
+bandwidth $b$ at $O(nL^{b+1})$. The queries are not expressible from
+marginals even in principle: a stationary AR(1) chain at
+$\phi=0.9$ has identical marginals at every index while its maximum
+is $2.6\times$ likelier to sit at an endpoint than in the middle ---
+a fact the filter cannot state and the win node computes in
+milliseconds, verified against $4\times10^5$-path Monte Carlo. The
+observed win node --- conditioning on who won --- recovers as its
+exact likelihood message the factor-conditional product of normal
+CDFs with analytic score, of which TrueSkill's pairwise
+greater-than factor is the two-variable special case. Everything
+measured here ships as open source with cross-language parity tests.
+\end{abstract}
+
+\section{Four queries the marginal layer cannot answer}
+
+Let $X=(X_1,\dots,X_n)$ be jointly Gaussian, the setting of the
+Kalman filter, the Gaussian Markov random field, and the Gaussian
+belief-propagation stack. The inference layer of every mainstream
+graphical-model toolkit returns, in some combination: marginal means
+and variances, pairwise or joint covariances, posterior samples, and
+evidence. The following queries are functionals of the joint law
+that are not functions of any collection of low-dimensional
+marginals:
+
+\begin{enumerate}
+\item \textbf{Argmax marginals.} $a_t=\Pr(X_t=\max_s X_s)$ for every
+$t$: which sensor reads the extreme, which time index carries the
+peak, which entrant wins.
+\item \textbf{The law of the maximum.} $F_M(u)=\Pr(\max_t X_t\le u)$
+and its moments: the excursion probability $1-F_M(u)$ of spatial
+statistics.
+\item \textbf{First passage.} The distribution of the first index
+$\tau=\min\{t:X_t>u\}$: sequential monitoring, degradation to
+failure, barrier crossing.
+\item \textbf{Top-$k$ membership.} $\Pr(X_i \text{ among the } k
+\text{ smallest})$: place and show, portfolio inclusion, admission.
+\end{enumerate}
+
+That these are not marginal functionals is not a technicality. Take
+the stationary AR(1) chain, $X_{t+1}=\phi X_t+\sqrt{1-\phi^2}\,
+\epsilon_t$ with $X_1\sim N(0,1)$: every marginal is $N(0,1)$ at
+every index, and a stationary Kalman filter reports exactly that,
+forever. The argmax marginals at $\phi=0.9$, $n=20$, computed by the
+method of Section~\ref{sec:chain} and verified against
+$4\times10^5$-path Monte Carlo to $0.007$, put mass $0.091$ on each
+endpoint and $0.035$ in the middle: the maximum of a positively
+correlated stationary path is $2.6\times$ likelier to sit at the
+boundary. Interior points are squeezed by correlated-high neighbours
+on both sides; endpoints have one neighbour. The marginal layer is
+constitutionally silent about this, because the fact lives in the
+joint.
+
+We call the object that answers these queries a \emph{win node}: a
+deterministic $n$-ary node $W=\arg\min_i X_i$ (min-wins; negate for
+utilities) adjoined to the Gaussian variables, together with its
+order-statistic relatives ($\max$-value, first passage, top-$k$).
+The contribution of this paper is not the node's definition, which
+is trivial, but the observation that for the two coupling structures
+that dominate practice the node's forward query, its derivatives,
+and its use as an observation are all exact and cheap --- and that
+this holds \emph{jointly}, which is what makes the node a
+first-class graphical-model citizen rather than a Monte Carlo
+afterthought.
+
+The ingredients are classical and we say so once: the
+one-dimensional winning-time integral is the random-utility
+representation of \citet{domencich1975}, the shared survival field
+is competing-risks calculus, the transfer operator on a Markov chain
+is the sum-product algorithm, and the derivative identity of
+Section~\ref{sec:factor} was reached for general joint laws by
+\citet{muller2019} through the surplus function. The claims here are
+the organization and the measured exactness: one field pass per
+query for all $n$ components at once, linear-work derivatives, and
+the chain/band order-statistic layer with its boundary corrections.
+
+\section{Related machinery, and where each stops short}
+
+\textbf{Expectation propagation with pairwise win factors.}
+TrueSkill \citep{herbrich2007} is precisely a Bayes net with win
+nodes: its factor graph attaches greater-than factors to performance
+differences and propagates moment-matched messages. But its win node
+is binary; multi-entrant events are handled by chaining pairwise
+approximations, and the factor itself is approximated by EP moment
+matching. Section~\ref{sec:observed} gives the exact $n$-ary
+likelihood message, of which the TrueSkill factor is the $n=2$
+special case.
+
+\textbf{Message-passing toolkits.} Modern Gaussian message-passing
+systems --- reactive factor-graph engines and GMRF libraries backed
+by sparse Cholesky --- compute marginals, free energies and samples
+for very large models. Their query vocabularies do not include the
+four functionals above; the win node is proposed as an addition to
+that vocabulary, not as a competitor to the toolkits.
+
+\textbf{Excursion functionals by simulation.} For latent Gaussian
+models, \citet{bolin2015} compute excursion sets and exceedance
+probabilities by sequential importance sampling, and their
+\texttt{excursions} package is the standard tool. On chains and
+bands the same functionals admit the deterministic exact pass of
+Section~\ref{sec:chain}; the simulation route remains the honest
+recourse for general sparsity, and our software says so at the
+refusal boundary.
+
+\textbf{Per-orthant simulation.} GHK evaluates one orthant
+probability per alternative by sequential importance sampling.
+\citet{ridgway2016} showed that on an AR(1) covariance GHK's
+normalized variance grows exponentially in dimension --- exactly the
+correlated-chain case where the restricted transfer operator is both
+exact and linear in $n$. High correlation is where the exact pass is
+most accurate and the simulator is worst; Section~\ref{sec:measured}
+measures the former.
+
+\section{The win node on factor-structured fields}
+\label{sec:factor}
+
+Let $X=\mu+Vf+\mathrm{diag}(\sqrt{D})\,\epsilon$ with $f\sim
+N(0,I_r)$ and independent $\epsilon$. Conditional on $f$ the
+components are independent, so with $F_j$, $S_j=1-F_j$ and $f_j$ the
+conditional CDF, survival and density of $X_j$,
+\begin{equation}
+a_i \;=\; \Pr(X_i=\min_j X_j)
+\;=\; \mathbb{E}_f\!\int f_i(x)\prod_{j\ne i}S_j(x)\,dx .
+\label{eq:win}
+\end{equation}
+The product is shared: build the log survival field
+$L(x)=\sum_j\log S_j(x)$ once on a lattice of $L$ points, and every
+leave-one-out product is a subtraction, $\prod_{j\ne i}S_j=
+e^{L-\log S_i}$. One pass prices all $n$ win probabilities at
+$O(nL)$ per factor node, $O(nLQ)$ overall for a $Q$-node quadrature
+over $f$; ranks $r\le 2$ use Gauss--Hermite tensors and the
+sharpness escalation documented with the software. Top-$k$
+membership replaces the survival product by a Poisson--binomial
+count program over the $F_j$ with stable-direction deconvolution,
+same cost profile.
+
+Derivatives come from the divergence theorem. Component $i$ wins on
+the cone $R_i=\{x:x_i\le x_k\,\forall k\}$; translating $\mu_j$
+moves probability across the photo-finish face $F_{ij}$ only, so for
+$j\neq i$
+\begin{equation}
+\frac{\partial a_i}{\partial \mu_j}
+\;=\;\frac{1}{\sqrt2}\int_{F_{ij}}q_\mu\,dS\;\ge 0,
+\qquad
+\frac{\partial a_i}{\partial \mu_i}=-\sum_{j\ne i}
+\frac{\partial a_i}{\partial \mu_j},
+\label{eq:flux}
+\end{equation}
+the tie density: the Jacobian is symmetric with zero row sums ---
+minus a weighted graph Laplacian on the photo-finish graph --- and
+factors through the field, $w_{ij}=\int G\,A_iA_j\,dx$ with hazards
+$A_i=f_i/S_i$ and $G=\prod_kS_k$, so the dense matrix is applied in
+$O(nL)$ without forming an edge. The same construction with the
+count program in place of the survival product yields both top-$k$
+Jacobians $(\partial q/\partial\mu,\ \partial q/\partial\sigma)$,
+whose exactness check is the scale-gauge Euler identity $\mu\cdot
+\partial_\mu q+\sigma\cdot\partial_\sigma q=0$. Full derivations and
+the inversion theory are in \citet{cotton2026}; here they make the
+win node \emph{trainable}: a node whose output can be matched to
+observed win frequencies by Newton methods with exact gradients.
+
+\section{The observed win node: conditioning on who won}
+\label{sec:observed}
+
+A query node becomes a Bayes-net citizen when it can be observed.
+Condition on $W=k$: the likelihood of the observation, as a function
+of the locations, is obtained by conditioning on the factor
+\emph{and} the winner's own noise $z$,
+\begin{equation}
+\Pr(W=k\mid\mu)\;=\;\mathbb{E}_{f,z}\prod_{j\ne k}
+\Phi\!\left(\frac{\mu_k-\mu_j+(Vf)_k-(Vf)_j+z\sqrt{D_k}}
+{\sqrt{D_j}}\right),
+\label{eq:obslik}
+\end{equation}
+a smooth low-dimensional integral of univariate normal CDFs. Its
+score is analytic --- posterior node weights times Mills ratios ---
+so the message the observed win node passes back to its Gaussian
+parents carries exact first-order information at one extra pass over
+arrays the likelihood already computes. At $n=2$ and $r=0$,
+\eqref{eq:obslik} is $\Phi\!\left((\mu_k-\mu_j)/\sqrt{D_k+D_j}
+\right)$: TrueSkill's greater-than factor. The $n$-ary node needs no
+pairwise chaining and no moment-matching approximation of the factor
+itself; moment approximations enter only if the user chooses a
+Gaussian posterior family, exactly as in EP. This likelihood and
+score are the estimation core of the multinomial-probit software
+described below, validated against finite differences and against
+dual-number automatic differentiation at $10^{-10}$.
+
+\section{The order-statistic layer on chains and bands}
+\label{sec:chain}
+
+Now let the coupling be Markov: precision bandwidth $b$, the
+Gauss--Markov chain at $b=1$. Write the chain as $X_1\sim
+N(\mu_1,\sigma_0^2)$, $X_{t+1}\mid X_t\sim N(\mu_{t+1}+\phi_t
+(X_t-\mu_t),s_t^2)$; a tridiagonal precision matrix delivers these
+parameters directly, because its Cholesky factor is bidiagonal and
+each row is a conditional regression.
+
+\textbf{Max-CDF and first passage.} Restrict the transfer operator
+below $u$: with $T_t$ the transition kernel on the lattice and
+$\pi_u$ the initial sub-density cut at $u$,
+\begin{equation}
+\Pr(\max_{s\le t}X_s\le u)\;=\;\mathbf{1}^\top
+\Big(\prod_{s<t}T_s^{(u)}\Big)\pi_u,
+\qquad T^{(u)}(x'\mid x)=T(x'\mid x)\,\mathbf 1\{x'\le u\},
+\end{equation}
+one forward pass, $O(nL)$ per threshold with banded kernels. The
+survivor-mass decrements of the same pass are the first-passage law;
+integrating the survival of the max over a threshold grid (by
+trapezoid; the rectangle rule costs $O(\Delta u)$ and we measured
+the bias at $+0.053$ before correcting it) gives $\mathbb E[\max]$.
+A hard cell cutoff at $u$ costs $O(\Delta x)$; assigning the
+boundary cell its fractional occupancy restores $O(\Delta x^2)$, the
+difference between $10^{-2}$ and $2\times10^{-4}$ agreement with the
+i.i.d.\ closed form at 400 lattice points.
+
+\textbf{Argmax marginals.} For each lattice threshold $u_k$, a
+forward pass restricted strictly below $u_k$ reaching $X_t=u_k$
+gives $\alpha_t(k)=\Pr(X_1,\dots,X_{t-1}<u_k,\ X_t=u_k)$, and a
+backward conditional pass gives $\beta_t(k)=\Pr(X_{t+1},\dots,X_n<
+u_k\mid X_t=u_k)$; then
+\begin{equation}
+\Pr(X_t=\max_s X_s)\;=\;\sum_k \alpha_t(k)\,\beta_t(k),
+\end{equation}
+integrating out the value of the maximum. With transitions
+precomputed the double pass is BLAS slices, $O(nL^2)$ total.
+
+\textbf{Bandwidth $b$ by state lifting.} The vector
+$(X_t,\dots,X_{t+b-1})$ is Markov, so the same restricted passes run
+on the lifted state at $O(nL^{b+1})$: linear in $n$, exponential
+only in the bandwidth. At $b=2$ (AR(2), including the cyclical
+regime with complex roots that has no $b=1$ analogue) the lift
+reproduces the $b=1$ pass to $5.6\times10^{-16}$ when the second
+coefficient vanishes, and matches Monte Carlo at the grid limit
+otherwise.
+
+\section{Measured}
+\label{sec:measured}
+
+All numbers are from committed, seeded scripts in the public
+repository; Monte Carlo appears only as a referee.
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+query & setting & exact vs.\ referee & cost \\
+\midrule
+max-CDF & AR(1), $n{=}50$, $\phi{=}0.99$ & $5\times10^{-3}$ (MC $4{\times}10^5$) & 3 ms \\
+max-CDF & i.i.d.\ closed form, $n{=}12$ & $2\times10^{-4}$ & --- \\
+argmax & AR(1), $\phi{=}0.9$, $n{=}20$ & $7\times10^{-3}$ (MC) & ms \\
+argmax & random walk, $n{=}40$ & $4\times10^{-3}$ (MC); arcsine $8\times10^{-3}$ & ms \\
+band $b{=}2$ & AR(2) incl.\ cyclical & $1.1\times10^{-2}$ (grid-limited) & 230 ms/thr \\
+$b{=}2$ embed & $\phi_2{=}0$ vs $b{=}1$ & $5.6\times10^{-16}$ & --- \\
+first passage & inhomogeneous chain, $n{=}10$ & $5\times10^{-3}$ (MC) & $O(nL)$ \\
+$\mathbb E[\max]$ & same & $5\times10^{-3}$ (MC band) & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Three structural findings ride on the numbers. The boundary
+pile-up law: positive serial correlation pushes the argmax of a
+stationary path to the endpoints ($2.6\times$ at $\phi=0.9$),
+invisible to marginals. The finite-$n$ arcsine refinement: on a
+random walk the transfer operator matches the finite-$n$ argmax law
+to $0.3\%$ while the continuum arcsine density is $1\%$ away,
+because the engine computes the exact finite law of which arcsine is
+the limit --- and it does so equally for the drifted, barriered and
+mean-reverting cases that have no closed form. And the accuracy
+profile is complementary to simulation: the exact pass is tightest
+at high correlation, exactly where \citet{ridgway2016} shows the GHK
+family degrading exponentially.
+
+\section{Software}
+
+The factor win node, its top-$k$ relatives, both Jacobian blocks and
+the calibration inverses ship in the \texttt{winning} package
+(Python reference with R, JavaScript, Julia and Rust ports pinned to
+embedded parity vectors, most at $10^{-15}$). The observed win node
+--- likelihood \eqref{eq:obslik} with analytic score --- is the
+estimation core of \texttt{MultinomialProbit.jl}, whose score is
+additionally refereed by forward-mode automatic differentiation
+through the same code path. The chain and band order-statistic layer
+is \texttt{GMRFExtremes.jl}, which reads a Gauss--Markov chain off a
+tridiagonal precision and dispatches directly on GMRF library types;
+wider bandwidth and general sparsity are refused with a pointer to
+the lifted pass and to \citet{bolin2015} respectively, never
+approximated silently.
+
+\section{What is claimed, and what is not}
+
+Not claimed: the win-node concept (TrueSkill's factor graph has a
+binary one), the winning-time integral, the transfer operator, the
+derivative identity for general laws \citep{muller2019}, or the
+excursion functionals \citep{bolin2015}. Claimed: the $n$-ary win
+node as an exact, linear-work, differentiable graphical-model query
+on factor and banded structures; the restricted-pass order-statistic
+layer with its boundary-occupancy correction and band lift; the
+exact $n$-ary observed-win likelihood message with analytic score;
+and the measured record above, including the boundary pile-up law
+and the finite-$n$ arcsine refinement as worked consequences.
+
+\begin{thebibliography}{9}
+
+\bibitem[Bolin and Lindgren(2015)]{bolin2015} D.~Bolin and
+F.~Lindgren. Excursion and contour uncertainty regions for latent
+Gaussian models. \emph{J.\ R.\ Statist.\ Soc.\ B} 77(1):85--106,
+2015.
+
+\bibitem[Cotton(2026)]{cotton2026} P.~Cotton. Scalable inversion of
+contests with correlated performances, including softmax and
+multinomial probit. arXiv:2609.01133, 2026.
+
+\bibitem[Domencich and McFadden(1975)]{domencich1975} T.~Domencich
+and D.~McFadden. \emph{Urban Travel Demand: A Behavioral Analysis}.
+North-Holland, 1975.
+
+\bibitem[Herbrich et~al.(2007)Herbrich, Minka, and
+Graepel]{herbrich2007} R.~Herbrich, T.~Minka, and T.~Graepel.
+TrueSkill: a Bayesian skill rating system. In \emph{Advances in
+Neural Information Processing Systems~19}, 2007.
+
+\bibitem[M\"uller et~al.(2019)M\"uller, Nesterov, and
+Shikhman]{muller2019} D.~M\"uller, Y.~Nesterov, and V.~Shikhman.
+Discrete choice prox-functions on the simplex. arXiv:1909.05591,
+2019.
+
+\bibitem[Ridgway(2016)]{ridgway2016} J.~Ridgway. Computation of
+Gaussian orthant probabilities in high dimension. \emph{Statistics
+and Computing} 26:899--916, 2016. (arXiv:1411.1314.)
+
+\end{thebibliography}
+
+\end{document}
