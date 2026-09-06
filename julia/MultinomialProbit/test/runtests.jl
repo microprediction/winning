@@ -1,7 +1,7 @@
 # Fixture parity (python winning.likelihood/mnprobit is the spec),
-# score-vs-finite-differences, GHK-vs-exact agreement, and an
-# end-to-end fit recovery.  julia --project=julia/MultinomialProbit
-#                                 julia/MultinomialProbit/test/runtests.jl
+# score vs finite differences AND vs ForwardDiff duals, GHK-vs-exact
+# agreement, and an end-to-end fit recovery.
+#   julia --project=julia/MultinomialProbit/test julia/MultinomialProbit/test/runtests.jl
 using Test
 using Random: Xoshiro
 
@@ -66,6 +66,26 @@ end
         fd = (choice_loglik_and_score(mu, Vp, choice)[1] -
               choice_loglik_and_score(mu, Vm, choice)[1]) / (2h)
         @test abs(fd - dV[row, col]) < 1e-5
+    end
+end
+
+@testset "analytic score vs ForwardDiff (machine-precision referee)" begin
+    # the finite-difference check above tunes a step and settles for
+    # 1e-5; dual numbers through the SAME code settle for 1e-10
+    import ForwardDiff
+    m = MNProbit(X, choice; intercepts = true, r = r)
+    for (label, theta) in (
+        ("GH branch", vcat(fill(0.2, m.p), fill(0.15, length(m.pos)))),
+        ("Halton branch", vcat(fill(0.1, m.p), fill(2.5, length(m.pos)))),
+    )
+        f(t) = begin
+            beta = t[1:m.p]
+            V = MP._unpack(m, t)[2]
+            choice_loglik_and_score(MP._mu(m, beta), V, m.choice)[1]
+        end
+        g_ad = ForwardDiff.gradient(f, theta)
+        nll, g_an = MP._nll_grad(m, theta)
+        @test maximum(abs.(g_ad .+ g_an)) < 1e-10 * max(1.0, maximum(abs.(g_ad)))
     end
 end
 

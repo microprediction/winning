@@ -41,8 +41,12 @@ Sharpness rule inherited from the reference: past
 under-integrates a near-step integrand and an optimizer will exploit
 the holes; evaluation escalates to Halton nodes automatically.
 
-Tests: `julia --project=julia/MultinomialProbit
+Tests: `julia --project=julia/MultinomialProbit/test
 julia/MultinomialProbit/test/runtests.jl` — python-fixture parity
-(likelihood, both score blocks, forward probabilities at 1e-9),
-analytic score vs central differences, GHK vs the exact engine, and
-an end-to-end planted-parameter fit.
+(likelihood, both score blocks, forward probabilities at 1e-9), the
+analytic score against central differences AND against ForwardDiff
+dual numbers at 1e-10 on both node branches (the likelihood path is
+type-generic, so AD flows through the same code the fit runs;
+ForwardDiff is a test-only dependency — the package itself stays
+dependency-free), GHK vs the exact engine, and an end-to-end
+planted-parameter fit.

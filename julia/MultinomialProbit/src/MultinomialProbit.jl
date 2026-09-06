@@ -84,15 +84,15 @@ const _CS = (2.26052863220117276590e0, 9.39603524938001434673e0,
              1.20489539808096656605e1, 1.70814450747565897222e1,
              9.60896809063285878198e0, 3.36907645100081516050e0)
 
-@inline function _polevl(x::Float64, C)
-    y = C[1]
+@inline function _polevl(x::Real, C)
+    y = zero(x) + C[1]
     @inbounds for i in 2:length(C)
         y = y * x + C[i]
     end
     return y
 end
 
-@inline function _p1evl(x::Float64, C)
+@inline function _p1evl(x::Real, C)
     # leading coefficient 1 implied: y = ((x + C[1]) x + C[2]) x ...
     y = x + C[1]
     @inbounds for i in 2:length(C)
@@ -101,13 +101,13 @@ end
     return y
 end
 
-@inline function _cephes_erf(x::Float64)
+@inline function _cephes_erf(x::Real)
     abs(x) > 1.0 && return 1.0 - _cephes_erfc(x)
     z = x * x
     return x * _polevl(z, _CT) / _p1evl(z, _CU)
 end
 
-@inline function _cephes_erfc(a::Float64)
+@inline function _cephes_erfc(a::Real)
     x = abs(a)
     x < 1.0 && return 1.0 - _cephes_erf(a)
     z = -a * a
@@ -125,7 +125,7 @@ end
     return y
 end
 
-function ndtr(a::Float64)
+function ndtr(a::Real)
     isinf(a) && return a > 0 ? 1.0 : 0.0
     x = a * _SQRTH
     z = abs(x)
@@ -233,12 +233,12 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
                                  choice::AbstractVector;
                                  D = nothing, Qf = 7, Qz = 7,
                                  nodes = nothing)
-    mu = Float64.(mu)
     T, J = size(mu)
     r = size(V, 2)
     Dv = D === nothing ? ones(J) : Float64.(collect(D))
     s = sqrt.(Dv)
     V = V .- sum(V, dims = 1) ./ J          # gauge: differences decide
+    ET = promote_type(eltype(mu), eltype(V), Float64)
     sharp = sqrt(2) * maximum(sqrt.(vec(sum(V .^ 2, dims = 2)))) /
             sqrt(minimum(Dv))
     F, W = nodes === nothing ?
@@ -248,17 +248,17 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
     Q = length(W)
     Vf = Fq * V'                             # (Q, J)
 
-    loglik = 0.0
-    dmu = zeros(T, J)
-    dV = zeros(J, r)
+    loglik = zero(ET)
+    dmu = zeros(ET, T, J)
+    dV = zeros(ET, J, r)
     for k in 1:J
         idx = findall(==(k), choice)
         isempty(idx) && continue
         rivals = [j for j in 1:J if j != k]
         Ti = length(idx)
-        acc = zeros(Ti, Q)
-        A = Dict{Int,Matrix{Float64}}()
-        logPhi = Dict{Int,Matrix{Float64}}()
+        acc = zeros(ET, Ti, Q)
+        A = Dict{Int,Matrix{ET}}()
+        logPhi = Dict{Int,Matrix{ET}}()
         for j in rivals
             shift = Vf[:, k] .- Vf[:, j] .+ zq .* s[k]      # (Q,)
             Aj = ((mu[idx, k] .- mu[idx, j]) .+ shift') ./ s[j]  # (Ti, Q)
@@ -390,7 +390,7 @@ end
 
 function _unpack(m::MNProbit, theta)
     beta = theta[1:m.p]
-    V = zeros(m.J, m.r)
+    V = zeros(eltype(theta), m.J, m.r)
     for (kk, (row, col)) in enumerate(m.pos)
         V[row, col] = theta[m.p + kk]
     end
@@ -398,7 +398,7 @@ function _unpack(m::MNProbit, theta)
 end
 
 function _mu(m::MNProbit, beta)
-    mu = zeros(m.T, m.J)
+    mu = zeros(eltype(beta), m.T, m.J)
     for pp in 1:m.p
         mu .+= m.X[:, :, pp] .* beta[pp]
     end
