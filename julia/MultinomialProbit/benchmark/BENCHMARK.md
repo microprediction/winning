@@ -20,15 +20,21 @@ Measured (2026-09-06, Apple Silicon, single process):
 | R mlogit GHK (recorded)      | -1215.7 (own report) | 22.2 s | — |
 | R mlogit_fast (recorded)     | -1214.6 (own report) | 17.2 s | — |
 | python MNProbit exact        | **-1212.82 ± 0.10** | 21.8 s | yes |
-| julia MNProbit `:exact`      | -1214.82 ± 0.06 | 87.9 s | yes |
-| julia MNProbit `:ghk` (200 draws, CRN) | -1214.89 ± 2.26 | 396.1 s | no (60-iter cap) |
+| julia MNProbit `:exact`      | -1214.82 ± 0.06 | **13.5 s** | yes |
+| julia MNProbit `:ghk` (200 draws, CRN) | -1214.89 ± 2.26 | 65.3 s | no (60-iter cap) |
 
 Readings, in honesty order:
 
-1. The julia exact engine lands in the R-exact band and beats its own
-   in-package GHK on every axis at once: 4.5x the speed, a 40x tighter
-   referee band, and convergence. That is the point of shipping both
-   engines behind one keyword.
+1. The julia exact engine lands in the R-exact band, is the fastest
+   wall clock in the table, and beats its own in-package GHK on every
+   axis at once: ~5x the speed, a 40x tighter referee band, and
+   convergence. (First-published julia timings were 87.9 s / 396.1 s;
+   profiling attributed the gap to the dependency-free series normal
+   CDF at 78 ns/call vs scipy's compiled Cephes at 10 ns -- the
+   per-evaluation ratio equaled the primitive's ratio, acquitting the
+   rest of the port. The series was replaced by a Julia port of the
+   Cephes rationals themselves, oracle-tested to 4e-15, in all three
+   Julia packages.)
 2. The 2-nat gap to python's optimum is real and unexplained only in
    part: past sharpness 3 the two implementations escalate to
    DIFFERENT node families (python scrambled Sobol, julia
