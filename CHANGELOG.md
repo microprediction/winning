@@ -25,6 +25,15 @@
   13 -> 2.4 ms/race; kernels match numpy at 1e-12 on the shared window.
 - loc/scale warm start runs at loose tolerance (the LM loop refines);
   mirrored in the JS and R ports so parity trajectories agree.
+- `julia/MultinomialProbit`: the first multinomial probit for Julia
+  (the ecosystem has logit families, binary and ordered probit, and no
+  MNP at all). Two engines, one interface: the exact
+  factor-conditional likelihood with analytic score (port of
+  `winning.likelihood`/`winning.mnprobit`, pinned to python fixtures at
+  1e-9) and common-random-numbers GHK (port of the rust core's
+  simulator) for reference and head-to-heads. Dependency-free;
+  self-contained BFGS; Halton escalation past sharpness 3 as in
+  `r/mlogitfast`.
 - Julia joins the parity lock: `julia/winning` (dependency-free but for
   stdlib LinearAlgebra) ports the factor races (forward, slopes,
   inversion, adaptive quadrature) and the complete top-k module; all 24
