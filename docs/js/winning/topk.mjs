@@ -602,14 +602,16 @@ function rankMarginalWithJacobian(mu, sd, r, fn, points) {
     let pi = 0;
     for (let t = 0; t < L; t++) pi += Qi[t][r - 1] * dens[t][i];
     p[i] = pi * dx;
-    const hiPair = pairPmfAt(Qi, F, i, r);
+    // P(N_{-ij} = n-1) is identically zero (only n-2 others exist);
+    // deconvolving it injects window-edge-sensitive junk
+    const hiPair = r <= n - 1 ? pairPmfAt(Qi, F, i, r) : null;
     const loPair = r >= 2 ? pairPmfAt(Qi, F, i, r - 1) : null;
     const row = new Array(n).fill(0);
     for (let j = 0; j < n; j++) {
       if (j === i) continue;
       let s = 0;
       for (let t = 0; t < L; t++) {
-        let c = hiPair[j][t];
+        let c = hiPair ? hiPair[j][t] : 0;
         if (loPair) c -= loPair[j][t];
         s += c * dens[t][j] * dens[t][i];
       }

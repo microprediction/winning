@@ -140,3 +140,31 @@ def test_forked_child_does_not_deadlock():
         p.join()
     assert not alive, "forked child deadlocked in a rayon parallel region"
     assert p.exitcode == 0
+
+
+def test_rank_marginal_kernels_parity():
+    """The compiled rank-marginal and rank-Jacobian kernels against the
+    numpy path on identical windows, heteroscedastic field."""
+    import winning.factor.topk as T
+    if not (T._HAVE_RUST and hasattr(fastrace, "rank_marginals")
+            and hasattr(fastrace, "rank_marginal_jacobian")):
+        pytest.skip("fastrace without the rank kernels")
+    n = 11
+    mu = RNG.normal(size=n)
+    D = 0.5 + RNG.random(n)
+    P_r = T.rank_probabilities(mu, D=D)
+    old = _toggle(T, False)
+    try:
+        P_p = T.rank_probabilities(mu, D=D)
+    finally:
+        T._HAVE_RUST = old
+    assert np.abs(P_r - P_p).max() < 1e-12
+    from winning.factor.races import BASES
+    sd = np.sqrt(D)
+    for r in (1, 2, 5, n):
+        pr, jr = T._rank_marginal_with_jacobian(mu, sd, r, BASES["normal"],
+                                                513, is_normal=True)
+        pp, jp = T._rank_marginal_with_jacobian(mu, sd, r, BASES["normal"],
+                                                513, is_normal=False)
+        assert np.abs(pr - pp).max() < 1e-12, r
+        assert np.abs(jr - jp).max() < 1e-12, r

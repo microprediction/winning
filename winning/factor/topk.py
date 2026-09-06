@@ -853,16 +853,26 @@ def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
                                     return_info=return_info)
 
 
-def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points):
+def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
+                                 is_normal=False):
     """P(R_i = r) for every i, plus its full mu-Jacobian:
 
         dP(R_i = r)/dmu_j = int f_i f_j [ P(N_{-ij} = r-1)
                                         - P(N_{-ij} = r-2) ] dx,  j != i
 
     (the r = 1 case drops the second term and recovers the win
-    Jacobian), with the diagonal from translation invariance."""
+    Jacobian), with the diagonal from translation invariance.
+    is_normal=True routes through the compiled kernel on the same
+    python-computed window."""
     n = len(mu)
-    lo, hi = _count_window(mu, sd, n - 1, base_rows)
+    lo, hi = _count_window(mu, sd, n - 1, base_rows, is_normal=is_normal)
+    if (is_normal and _HAVE_RUST
+            and hasattr(_fastrace, "rank_marginal_jacobian")):
+        p, jac = _fastrace.rank_marginal_jacobian(
+            np.ascontiguousarray(mu, dtype=float),
+            np.ascontiguousarray(sd, dtype=float), int(r), lo, hi, points)
+        return (np.asarray(p, dtype=float),
+                np.asarray(jac, dtype=float).reshape(n, n))
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -875,8 +885,15 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points):
     for i in range(n):
         Qi = _loo_pmf(C, F, i)
         p[i] = (Qi[:, r - 1] * dens[:, i]).sum() * dx
-        hi_pair = _pair_pmf_at(Qi, F, i, r)          # P(N_{-ij} = r-1)
-        row = (hi_pair * dens.T * dens[:, i][None, :]).sum(axis=1) * dx
+        if r <= n - 1:
+            hi_pair = _pair_pmf_at(Qi, F, i, r)      # P(N_{-ij} = r-1)
+            row = (hi_pair * dens.T
+                   * dens[:, i][None, :]).sum(axis=1) * dx
+        else:
+            # only n-2 others exist: P(N_{-ij} = n-1) is identically
+            # zero, and computing it by deconvolution injects clamped
+            # junk that is hypersensitive to the window edge
+            row = np.zeros(n)
         if r >= 2:
             lo_pair = _pair_pmf_at(Qi, F, i, r - 1)  # P(N_{-ij} = r-2)
             row -= (lo_pair * dens.T
@@ -920,7 +937,9 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
     mu = (np.zeros(n) if mu0 is None
           else np.asarray(mu0, dtype=float) - np.mean(mu0))
 
-    phat, J = _rank_marginal_with_jacobian(mu, sd, r, base_rows, points)
+    is_n = base == "normal"
+    phat, J = _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
+                                           is_normal=is_n)
     resid = np.log(np.maximum(phat, 1e-300)) - logt
     cost = float(resid @ resid)
     resid_max = float(np.abs(resid).max())
@@ -943,7 +962,8 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
             mu_n = mu + step
             mu_n -= mu_n.mean()
             p_n, J_n = _rank_marginal_with_jacobian(mu_n, sd, r,
-                                                    base_rows, points)
+                                                    base_rows, points,
+                                                    is_normal=is_n)
             r_n = np.log(np.maximum(p_n, 1e-300)) - logt
             cost_n = float(r_n @ r_n)
             if cost_n < cost:
@@ -980,7 +1000,14 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     base_rows = BASES[base] if not callable(base) else base
 
     def one_node(m):
-        lo, hi = _count_window(m, sd, n - 1, base_rows)
+        lo, hi = _count_window(m, sd, n - 1, base_rows,
+                               is_normal=(base == "normal"))
+        if (base == "normal" and _HAVE_RUST
+                and hasattr(_fastrace, "rank_marginals")):
+            flat = _fastrace.rank_marginals(
+                np.ascontiguousarray(m, dtype=float),
+                np.ascontiguousarray(sd, dtype=float), lo, hi, points)
+            return np.asarray(flat, dtype=float).reshape(n, n)
         x = np.linspace(lo, hi, points)
         dx = x[1] - x[0]
         z = (x[:, None] - m[None, :]) / sd[None, :]

@@ -341,6 +341,8 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(top_k, m)?)?;
     m.add_function(wrap_pyfunction!(top_k_slopes, m)?)?;
     m.add_function(wrap_pyfunction!(top_k_window, m)?)?;
+    m.add_function(wrap_pyfunction!(rank_marginals, m)?)?;
+    m.add_function(wrap_pyfunction!(rank_marginal_jacobian, m)?)?;
     m.add_function(wrap_pyfunction!(top_k_jacobians, m)?)?;
     m.add_function(wrap_pyfunction!(forward_and_slopes_base, m)?)?;
     m.add_function(wrap_pyfunction!(classic_state_prices, m)?)?;
@@ -393,6 +395,46 @@ fn forward_and_slopes_base<'py>(
     ))
 }
 
+
+/// Full rank marginals as a row-major flat (n*n) array, normal base;
+/// see winning::rank_marginals_kernel.
+#[pyfunction]
+fn rank_marginals<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    sd: PyReadonlyArray1<f64>,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let m: Vec<f64> = mu.as_array().to_vec();
+    let s: Vec<f64> = sd.as_array().to_vec();
+    let p = py.allow_threads(|| with_usable_rayon(
+        || winning::rank_marginals_kernel(&m, &s, lo, hi, points)));
+    Ok(Array1::from_vec(p).into_pyarray_bound(py))
+}
+
+/// One exact-rank marginal (r ONE-BASED) and its flat (n*n)
+/// mu-Jacobian, normal base; see winning::rank_jacobian_kernel.
+#[pyfunction]
+fn rank_marginal_jacobian<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    sd: PyReadonlyArray1<f64>,
+    r: usize,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let m: Vec<f64> = mu.as_array().to_vec();
+    let s: Vec<f64> = sd.as_array().to_vec();
+    let (p, j) = py.allow_threads(|| with_usable_rayon(
+        || winning::rank_jacobian_kernel(&m, &s, r, lo, hi, points)));
+    Ok((
+        Array1::from_vec(p).into_pyarray_bound(py),
+        Array1::from_vec(j).into_pyarray_bound(py),
+    ))
+}
 
 /// Top-k lattice window (lo, hi), normal base; see
 /// winning::top_k_window_kernel.

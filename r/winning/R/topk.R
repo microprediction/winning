@@ -469,7 +469,10 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
   for (i in 1:n) {
     Qi <- .loo_pmf(C, g$F, i)
     p[i] <- sum(Qi[, r] * dens[i, ]) * g$dx
-    pair <- .pair_pmf_at(Qi, g$F, i, r)
+    # P(N_{-ij} = n-1) is identically zero (only n-2 others exist);
+    # deconvolving it injects window-edge-sensitive junk
+    pair <- if (r <= n - 1) .pair_pmf_at(Qi, g$F, i, r)
+            else matrix(0, n, length(g$x))
     if (r >= 2) pair <- pair - .pair_pmf_at(Qi, g$F, i, r - 1)
     kern <- pair * matrix(dens[i, ], n, ncol(pair), byrow = TRUE)
     row <- rowSums(kern * dens) * g$dx

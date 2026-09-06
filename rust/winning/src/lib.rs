@@ -1678,6 +1678,119 @@ pub fn top_k_jacobians_kernel(
     (jm, js)
 }
 
+/// Full rank marginals, normal base: P[i][r] = P(runner i finishes in
+/// position r+1) = int f_i(x) P(N_{-i}(x) = r) dx, row-major flat
+/// (n, n). The cavity pmf against each runner's own density; mirrors
+/// winning/factor/topk.py::rank_probabilities' inner node.
+pub fn rank_marginals_kernel(
+    mu: &[f64],
+    sd: &[f64],
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> Vec<f64> {
+    let n = mu.len();
+    let dx = (hi - lo) / (points - 1) as f64;
+    let par = points * n * n >= TOPK_PAR_WORK;
+    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let one = |i: usize| {
+        let mut qi = vec![0.0f64; n];
+        let mut row = vec![0.0f64; n];
+        for l in 0..points {
+            loo_pmf_row(&c[l * (n + 1)..(l + 1) * (n + 1)],
+                        fmat[l * n + i], n, &mut qi);
+            let d = dens[l * n + i];
+            for m in 0..n {
+                row[m] += qi[m] * d;
+            }
+        }
+        for m in 0..n {
+            row[m] *= dx;
+        }
+        row
+    };
+    let rows: Vec<Vec<f64>> = if par {
+        (0..n).into_par_iter().map(one).collect()
+    } else {
+        (0..n).map(one).collect()
+    };
+    let mut out = vec![0.0f64; n * n];
+    for (i, r) in rows.into_iter().enumerate() {
+        out[i * n..(i + 1) * n].copy_from_slice(&r);
+    }
+    out
+}
+
+/// One exact-rank marginal and its full mu-Jacobian, normal base:
+/// p_i = P(R_i = r) (r is ONE-BASED) with
+/// dp_i/dmu_j = int f_i f_j [P(N_{-ij} = r-1) - P(N_{-ij} = r-2)] dx
+/// for j != i and the diagonal from translation invariance. Mirrors
+/// winning/factor/topk.py::_rank_marginal_with_jacobian.
+pub fn rank_jacobian_kernel(
+    mu: &[f64],
+    sd: &[f64],
+    r: usize,
+    lo: f64,
+    hi: f64,
+    points: usize,
+) -> (Vec<f64>, Vec<f64>) {
+    let n = mu.len();
+    let dx = (hi - lo) / (points - 1) as f64;
+    let par = points * n * n >= TOPK_PAR_WORK;
+    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let one = |i: usize| {
+        let mut qi = vec![0.0f64; points * n];
+        for l in 0..points {
+            loo_pmf_row(&c[l * (n + 1)..(l + 1) * (n + 1)],
+                        fmat[l * n + i], n,
+                        &mut qi[l * n..(l + 1) * n]);
+        }
+        let mut p_i = 0.0f64;
+        for l in 0..points {
+            p_i += qi[l * n + r - 1] * dens[l * n + i];
+        }
+        p_i *= dx;
+        let mut row = vec![0.0f64; n];
+        for j in 0..n {
+            if j == i {
+                continue;
+            }
+            let mut s = 0.0f64;
+            for l in 0..points {
+                let qrow = &qi[l * n..(l + 1) * n];
+                let fj = fmat[l * n + j];
+                // P(N_{-ij} = n-1) is identically zero (only n-2
+                // others exist); deconvolving it injects clamped junk
+                // hypersensitive to the window edge
+                let mut coef = if r <= n - 1 {
+                    pair_coefficient(qrow, fj, n, r)
+                } else {
+                    0.0
+                };
+                if r >= 2 {
+                    coef -= pair_coefficient(qrow, fj, n, r - 1);
+                }
+                s += coef * dens[l * n + j] * dens[l * n + i];
+            }
+            row[j] = s * dx;
+        }
+        row[i] = -row.iter().sum::<f64>();
+        (p_i, row)
+    };
+    let rows: Vec<(f64, Vec<f64>)> = if par {
+        (0..n).into_par_iter().map(one).collect()
+    } else {
+        (0..n).map(one).collect()
+    };
+    let mut p = vec![0.0f64; n];
+    let mut jac = vec![0.0f64; n * n];
+    for (i, (pi, row)) in rows.into_iter().enumerate() {
+        p[i] = pi;
+        jac[i * n..(i + 1) * n].copy_from_slice(&row);
+    }
+    (p, jac)
+}
+
 /// Top-k membership: q_i = int f_i(x) P(N_{-i}(x) <= k-1) dx on an
 /// equi-spaced lattice, normal base. One shared Poisson-binomial count
 /// program per lattice point (parallel over points), then each runner
