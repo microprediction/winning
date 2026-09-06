@@ -25,6 +25,15 @@
   13 -> 2.4 ms/race; kernels match numpy at 1e-12 on the shared window.
 - loc/scale warm start runs at loose tolerance (the LM loop refines);
   mirrored in the JS and R ports so parity trajectories agree.
+- `julia/GMRFExtremes`: the order-statistic layer for Gauss-Markov
+  chains and tridiagonal-precision GMRFs -- argmax marginals, max-CDF,
+  expected max, first passage, excursion probabilities -- by
+  restricted transfer-operator passes (exact where Bolin-Lindgren's R
+  `excursions` simulates). Fractional-occupancy boundary cells for
+  O(dx^2); refusal contract on wider bandwidth and general sparsity;
+  dispatch on GaussianMarkovRandomFields.jl types via extension.
+  MC-refereed at 400k paths; reproduces the tridiagonal track's
+  boundary-pile-up and discrete-arcsine laws.
 - `julia/MvNormalCDFFast`: deterministic MVN rectangle probabilities
   for factor-structured covariance, the MvNormalCDF.jl companion (port
   of `winning.fastmvn`, fixture-pinned). Exact GH at rank <= 2 and

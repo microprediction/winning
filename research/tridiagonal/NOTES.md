@@ -250,3 +250,15 @@ Open from this file's earlier promises: the GHK-degradation
 head-to-head on AR(1) (Ridgway's exponential-variance regime), the
 argmax forward-backward on the lifted state (exp2's law for AR(p)),
 and quadrature/low-rank message compression past b ~ 3.
+
+## The argmax layer shipped as a package (2026-09-06)
+julia/GMRFExtremes generalizes exp1-exp3 off stationary AR(1) to any
+Gauss-Markov chain (non-stationary mu/phi/s, or a tridiagonal
+precision via its bidiagonal Cholesky) and ships argmax marginals,
+max-CDF/expected max, first passage and excursion probabilities with
+a GaussianMarkovRandomFields.jl dispatch extension -- the
+contribution named in planning/julia_bayesnet_contribution.md. Its
+tests re-derive the exp2 boundary pile-up (ratio gate 2.0-3.4 at
+phi = 0.9) and the exp3 discrete arcsine U-shape as living
+regressions. The exp4 lifted-state argmax (bandwidth 2) remains the
+open item, now with a named home when built.

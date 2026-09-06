@@ -1,0 +1,17 @@
+name = "GMRFExtremes"
+uuid = "f0f2715e-ad36-47bb-aeb8-1cb0a8ac9d1e"
+authors = ["Peter Cotton <peter.cotton@microprediction.com>"]
+version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
+[weakdeps]
+GaussianMarkovRandomFields = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
+
+[extensions]
+GMRFDispatchExt = "GaussianMarkovRandomFields"
+
+[compat]
+julia = "1.9"

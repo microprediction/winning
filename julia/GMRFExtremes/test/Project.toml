@@ -1,0 +1,4 @@
+[deps]
+GaussianMarkovRandomFields = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
