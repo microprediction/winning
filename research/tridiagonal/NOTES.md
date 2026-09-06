@@ -262,3 +262,22 @@ tests re-derive the exp2 boundary pile-up (ratio gate 2.0-3.4 at
 phi = 0.9) and the exp3 discrete arcsine U-shape as living
 regressions. The exp4 lifted-state argmax (bandwidth 2) remains the
 open item, now with a named home when built.
+
+## exp5_sp500_argmax: the drifted argmax law on 98 years of real data
+## (2026-09-06)
+The day of the market's yearly high, ^GSPC daily closes 1927-2026
+(Yahoo chart API, fetched at run time), 98 full years. Empirical
+decile law of the within-year argmax is the arcsine U-shape tilted
+hard to year-end: deciles (1, 10) carry (0.163, 0.408). Engine
+(GMRFExtremes argmax_marginals on the standardized 63-block drifted
+walk, delta = 2 mu/sigma = 0.041/step): drifted law log-likelihood
+-191.1 over the 98 years vs closed-form driftless arcsine -198.4 and
+uniform -225.7 -- the drift correction, which has no closed form, is
+worth 7.3 nats. Honest residual: the empirical year-end pile-up
+(0.408) exceeds the drifted-Gaussian prediction (0.269); the gap
+measures what the homoskedastic Gaussian walk misses (vol
+clustering, momentum). Methodological note that cost an hour: at
+daily resolution n = 252 the argmax grid cannot afford to resolve
+the step scale and near-tie mass leaks (0.907 total); the 4-day
+block aggregation is EXACT for the argmax's block and makes the law
+scale-free. This is the win-nodes paper's real example.

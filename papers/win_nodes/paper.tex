@@ -2,6 +2,7 @@
 
 \usepackage[margin=1.1in]{geometry}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{amsthm}
 \usepackage{booktabs}
 \usepackage{microtype}
@@ -31,7 +32,10 @@ are all exact and computable in time linear in $n$. The queries are
 not functions of the marginals: a stationary AR(1) chain has
 identical marginals at every index while its maximum is $2.6\times$
 likelier to sit at an endpoint than in the middle, a fact the win
-node computes in milliseconds and Monte Carlo confirms.
+node computes in milliseconds and Monte Carlo confirms. On
+ninety-eight years of daily S\&P~500 closes, the drifted-walk argmax
+law computed by the same pass explains the day of the yearly high
+better than the closed-form arcsine null by $7.3$ nats.
 \end{abstract}
 
 \section{Queries that are not marginal functionals}
@@ -277,6 +281,50 @@ same pass handles the drifted, barriered and mean-reverting cases
 that have no closed form. The accuracy profile is complementary to
 simulation: the exact pass is tightest at high correlation, exactly
 where \citet{ridgway2016} shows the GHK family degrading.
+
+\section{The day of the market's yearly high}
+\label{sec:sp500}
+
+A century of prices gives the argmax query a real test. An equity
+index is approximately a drifted random walk in the log, so the
+trading day of the yearly high should follow the discrete arcsine
+U-shape tilted by drift: the drifted case is exactly the one with no
+closed form. We took daily S\&P~500 closes from 1927 to 2026,
+kept the 98 complete years, and recorded the within-year position of
+each year's maximum close.
+
+The engine side is one chain. Pooled daily log returns give drift
+$\hat\mu=2.45\times10^{-4}$ and volatility
+$\hat\sigma=1.19\times10^{-2}$; aggregating to 63 four-day blocks
+(the block containing the yearly high is the block of the daily
+argmax, so the aggregation is exact for this query) and
+standardizing leaves a walk with drift $\delta=2\hat\mu/\hat\sigma
+=0.041$ per step. One call to the argmax pass of
+Section~\ref{sec:chain} returns the law; setting $\delta=0$ returns
+the arcsine null.
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+decile of the year & empirical & drifted walk & arcsine null \\
+\midrule
+first  & 0.163 & 0.136 & 0.197 \\
+middle eight (avg.) & 0.054 & 0.074 & 0.076 \\
+last   & 0.408 & 0.269 & 0.197 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The U-shape is present in the data and tilted to year-end, as
+positive drift requires. Over the 98 observed argmax days the
+drifted law attains log-likelihood $-191.1$ against $-198.4$ for the
+arcsine null and $-225.7$ for uniform: the drift correction is worth
+$7.3$ nats, and it is the part with no closed form. The residual is
+also informative. The empirical year-end share ($0.408$) exceeds the
+drifted-Gaussian prediction ($0.269$), and that gap measures what a
+homoskedastic Gaussian walk misses about equity returns; the win
+node prices the model it is given, and richer chains (mean-reverting
+or time-varying volatility) go through the same pass.
 
 \section{Software}
 
