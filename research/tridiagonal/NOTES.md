@@ -231,3 +231,22 @@ amplification of interior over mean-matched exterior points is the
 CONSTANT (1+rho)/(1-rho) = e^{2 Theta} across the whole bracket, and
 staying at an observed anchor is optimal above b = e^{2 Theta} --
 the grass claim is conditional, not universal.)
+
+## exp4_bandlift: the band-diagonal lift, measured (2026-09-05)
+The correction above is now realized: bandwidth 2 (stationary
+unit-variance AR(2), Yule-Walker sig^2 and rho1) via the lifted state
+Z_t = (X_t, X_{t-1}), one einsum per step against an (a, c, b)
+kernel, O(n L^{b+1}).
+- Embedding: phi = (0.9, 0) on the SAME L=200 grid reproduces exp1's
+  bandwidth-1 pass to 5.6e-16 -- the lift is exact, not approximate.
+- Genuine bandwidth-2 vs 400k MC (n=50, L=200, grid-limited like
+  exp1): smooth (0.5, 0.3) max err 0.011; persistent (0.6, 0.35)
+  0.012; CYCLICAL (1.6, -0.8) 0.011 -- complex roots, oscillatory
+  autocorrelation, the regime with no bandwidth-1 analogue at all.
+  ~230 ms per threshold.
+- Linear in n confirmed on the lifted pass: n=50 -> 200 scales x3.1
+  (kernel precompute amortizes the gap to the ideal x4).
+Open from this file's earlier promises: the GHK-degradation
+head-to-head on AR(1) (Ridgway's exponential-variance regime), the
+argmax forward-backward on the lifted state (exp2's law for AR(p)),
+and quadrature/low-rank message compression past b ~ 3.
