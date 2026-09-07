@@ -26,16 +26,14 @@ questions a user of a correlated field most often asks: which
 component is the maximum, when is a threshold first crossed, who
 wins. We formalize these as the queries of a \emph{win node}, an
 $n$-ary node $W=\arg\min_i X_i$ adjoined to Gaussian variables, and
-observe that for factor-structured and banded-precision fields the
-node's forward query, its derivatives, and its use as an observation
-are all exact and computable in time linear in $n$. The queries are
-not functions of the marginals: a stationary AR(1) chain has
-identical marginals at every index while its maximum is $2.6\times$
-likelier to sit at an endpoint than in the middle, a fact the win
-node computes in milliseconds and Monte Carlo confirms. On
-ninety-eight years of daily S\&P~500 closes, the drifted-walk argmax
-law computed by the same pass explains the day of the yearly high
-better than the closed-form arcsine null by $7.3$ nats.
+give exact linear-work passes for them on chains and banded
+precisions, where the graphical-model libraries stop at marginals.
+A rating model supplies the demonstration: latent ability paths with
+match results as evidence give a Laplace posterior that is a
+Gauss--Markov chain, and the peak-career query on 129{,}559 ATP
+matches returns a bimodal law for Nadal and a non-interval credible
+set for Agassi, neither of which any summary of the marginals
+contains.
 \end{abstract}
 
 \section{Queries that are not marginal functionals}
@@ -123,51 +121,29 @@ Section~\ref{sec:checks} measures the former.
 \section{The win node on factor-structured fields}
 \label{sec:factor}
 
-Let $X=\mu+Vf+\mathrm{diag}(\sqrt{D})\,\epsilon$ with $f\sim
-N(0,I_r)$ and independent $\epsilon$. Conditional on $f$ the
-components are independent. With $F_j$, $S_j=1-F_j$ and $f_j$ the
-conditional CDF, survival and density of $X_j$,
+The factor case is settled and we use it rather than develop it. Let
+$X=\mu+Vf+\mathrm{diag}(\sqrt{D})\,\epsilon$ with $f\sim N(0,I_r)$.
+Conditional on $f$ the components are independent, so
 \begin{equation}
 a_i \;=\; \Pr(X_i=\min_j X_j)
-\;=\; \mathbb{E}_f\!\int f_i(x)\prod_{j\ne i}S_j(x)\,dx .
+\;=\; \mathbb{E}_f\!\int f_i(x)\prod_{j\ne i}S_j(x)\,dx ,
 \label{eq:win}
 \end{equation}
-In English: component $i$ wins by finishing at some value $x$ with
-everyone else still above it, averaged over the shared luck.
+with $S_j$ the conditional survival of $X_j$. In English: component
+$i$ wins by finishing at some value $x$ with everyone else still
+above it, averaged over the shared luck. The product is shared, so
+building $L(x)=\sum_j\log S_j(x)$ once on a lattice of $L$ points
+prices every component by the subtraction $e^{L-\log S_i}$, at
+$O(nLQ)$ for a $Q$-node quadrature.
 
-The product is shared. Build the log survival field
-$L(x)=\sum_j\log S_j(x)$ once on a lattice of $L$ points; each
-leave-one-out product is the subtraction $e^{L-\log S_i}$. One pass
-prices all $n$ win probabilities at $O(nL)$ per factor node, so
-$O(nLQ)$ for a $Q$-node quadrature over $f$. Top-$k$ membership
-replaces the survival product with a Poisson--binomial count program
-over the $F_j$, deconvolved per component in the stable direction,
-at the same cost profile.
-
-Derivatives come from the divergence theorem. Component $i$ wins on
-the cone $R_i=\{x:x_i\le x_k\ \forall k\}$, and translating $\mu_j$
-moves probability across the shared face $F_{ij}$ only, so for
-$j\neq i$
-\begin{equation}
-\frac{\partial a_i}{\partial \mu_j}
-\;=\;\frac{1}{\sqrt2}\int_{F_{ij}}q_\mu\,dS\;\ge 0,
-\qquad
-\frac{\partial a_i}{\partial \mu_i}=-\sum_{j\ne i}
-\frac{\partial a_i}{\partial \mu_j}.
-\label{eq:flux}
-\end{equation}
-In English: the derivative is the tie density, the Jacobian is
-symmetric with zero row sums, and it is therefore minus a weighted
-graph Laplacian on the photo-finish graph. The weights factor
-through the field, $w_{ij}=\int G\,A_iA_j\,dx$ with hazards
-$A_i=f_i/S_i$ and $G=\prod_kS_k$, so the dense matrix is applied in
-$O(nL)$ without forming an edge. The count-program analogue yields
-both top-$k$ Jacobians $(\partial q/\partial\mu,\ \partial
-q/\partial\sigma)$, checked by the scale-gauge Euler identity
-$\mu\cdot\partial_\mu q+\sigma\cdot\partial_\sigma q=0$. Derivations
-and the inversion theory are in \citet{cotton2026}. Here they make
-the node trainable: its output can be matched to observed win
-frequencies by Newton methods with exact gradients.
+The derivative is the tie density on the face where $i$ and $j$
+dead-heat, so the Jacobian is minus a weighted graph Laplacian and
+applies in $O(nL)$ without forming an edge \citep{muller2019,
+cotton2026}. \citet{cotton2026b} develops this case as the posterior
+probability of optimality for factor-Gaussian beliefs, including the
+comparison against marginal-only surrogates and the bandit and
+stopping consequences. We take it as given here and spend the paper
+on the structure it does not cover.
 
 \section{Conditioning on who won}
 \label{sec:observed}
@@ -282,49 +258,68 @@ that have no closed form. The accuracy profile is complementary to
 simulation: the exact pass is tightest at high correlation, exactly
 where \citet{ridgway2016} shows the GHK family degrading.
 
-\section{The day of the market's yearly high}
-\label{sec:sp500}
+\section{When was the player at their peak?}
+\label{sec:tennis}
 
-A century of prices gives the argmax query a real test. An equity
-index is approximately a drifted random walk in the log, so the
-trading day of the yearly high should follow the discrete arcsine
-U-shape tilted by drift: the drifted case is exactly the one with no
-closed form. We took daily S\&P~500 closes from 1927 to 2026,
-kept the 98 complete years, and recorded the within-year position of
-each year's maximum close.
+A rating model is a Bayes net whose evidence is wins, and it produces
+exactly the posterior this paper queries. Give one player a latent
+ability path $\theta_1,\dots,\theta_T$ across the years of a career
+and put a random-walk prior on it. Each match against an opponent of
+ability $a_o$ contributes $\log\Phi(\pm(\theta_t-a_o))$ by
+\eqref{eq:obslik} at $n=2$, a term touching one year, so the
+likelihood's Hessian is diagonal. The prior's precision is
+tridiagonal, the Laplace posterior precision is their sum, and the
+career posterior is therefore a Gauss--Markov chain of the kind
+Section~\ref{sec:chain} reads.
 
-The engine side is one chain. Pooled daily log returns give drift
-$\hat\mu=2.45\times10^{-4}$ and volatility
-$\hat\sigma=1.19\times10^{-2}$; aggregating to 63 four-day blocks
-(the block containing the yearly high is the block of the daily
-argmax, so the aggregation is exact for this query) and
-standardizing leaves a walk with drift $\delta=2\hat\mu/\hat\sigma
-=0.041$ per step. One call to the argmax pass of
-Section~\ref{sec:chain} returns the law; setting $\delta=0$ returns
-the arcsine null.
+The data are 129{,}559 ATP matches from 1985 to 2024 and the 1{,}453
+players with at least fifteen of them. Static abilities for the field
+come from a MAP fit of the probit Bradley--Terry likelihood. One
+player at a time then has that constant replaced by a yearly path,
+fitted under the random-walk prior with the innovation scale chosen
+by the Laplace marginal likelihood. Opponents stay at their static
+strength, which is a conditioning step rather than a joint fit.
+
+Reading the peak off the fitted path is what a rating table invites.
+The argmax marginals answer the question that was asked.
 
 \begin{center}
-\begin{tabular}{lccc}
+\begin{tabular}{lccl}
 \toprule
-decile of the year & empirical & drifted walk & arcsine null \\
+player & fitted peak & $\Pr(\text{that year})$ & 80\% credible set \\
 \midrule
-first  & 0.163 & 0.136 & 0.197 \\
-middle eight (avg.) & 0.054 & 0.074 & 0.076 \\
-last   & 0.408 & 0.269 & 0.197 \\
+Federer  & 2006 & 0.52 & 2005--2006 \\
+Nadal    & 2013 & 0.27 & six years within 2008--2019 \\
+Djokovic & 2015 & 0.43 & 2013--2015 \\
+Sampras  & 1994 & 0.47 & 1994--1996 \\
+Agassi   & 1995 & 0.55 & 1995, 2002--2003 \\
+Murray   & 2016 & 0.59 & three years within 2009--2016 \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The U-shape is present in the data and tilted to year-end, as
-positive drift requires. Over the 98 observed argmax days the
-drifted law attains log-likelihood $-191.1$ against $-198.4$ for the
-arcsine null and $-225.7$ for uniform: the drift correction is worth
-$7.3$ nats, and it is the part with no closed form. The residual is
-also informative. The empirical year-end share ($0.408$) exceeds the
-drifted-Gaussian prediction ($0.269$), and that gap measures what a
-homoskedastic Gaussian walk misses about equity returns; the win
-node prices the model it is given, and richer chains (mean-reverting
-or time-varying volatility) go through the same pass.
+The point answers are the ones a reader would expect, and stating
+them alone would overclaim. Federer's 2006 carries $0.52$ against
+$0.41$ for 2005. Nadal's most likely peak year carries $0.27$, and
+his law is bimodal: $0.267$ at 2013 and $0.220$ at 2018, with the
+years between them small. Agassi's credible set is not an interval.
+It holds 1995 and the 2002--2003 resurgence and excludes the years
+in between, which is a statement about the joint law and not about
+any year's marginal.
+
+The mechanism behind the second feature is visible in the same fit.
+At equal posterior mean, the year with fewer matches carries more
+argmax mass, because fewer matches leave a wider posterior and a
+wider posterior has more room to hold the maximum. Nadal's 2010 has
+posterior mean $2.042$ from 80 matches and probability $0.066$; his
+2012 has mean $2.051$ from 48 matches and probability $0.088$. A
+table of yearly ratings with error bars does not contain that
+comparison, because the comparison is between joint events.
+
+Two hundred thousand draws from each posterior referee the exact
+pass, with maximum discrepancy $0.0019$ across all six careers and
+every year. The Gaussian posterior is approximate, as it is in every
+rating system that reports one. The query on that posterior is not.
 
 \section{Software}
 
@@ -349,12 +344,12 @@ bandwidth $b$ costs $O(nL^{b+1})$ and is practical for $b\le 3$;
 general sparse precision gets neither treatment here, and the
 excursion functionals then belong to the sampling methods of
 \citet{bolin2015}. The win-node concept itself is not new: TrueSkill
-carries a binary one, and \citet{muller2019} derived the tie-density
-derivative for general laws. New here are the $n$-ary node as an
-exact, linear-work, differentiable query on factor and banded
-structures, the restricted-pass order-statistic layer with its
-boundary corrections and band lift, and the exact $n$-ary
-observed-win message. We leave to future work the lifted-state
+carries a binary one, \citet{muller2019} derived the tie-density
+derivative for general laws, and the factor query is
+\citet{cotton2026b}. New here are the restricted-pass
+order-statistic layer for chains and bands, with its boundary
+corrections and state lift, and the exact $n$-ary observed-win
+message that supplies its evidence. We leave to future work the lifted-state
 argmax at $b\ge2$ and message compression past $b\approx3$.
 
 \begin{thebibliography}{9}
@@ -367,6 +362,10 @@ Gaussian models. \emph{J.\ R.\ Statist.\ Soc.\ B} 77(1):85--106,
 \bibitem[Cotton(2026)]{cotton2026} P.~Cotton. Scalable inversion of
 contests with correlated performances, including softmax and
 multinomial probit. arXiv:2609.01133, 2026.
+
+\bibitem[Cotton(2026b)]{cotton2026b} P.~Cotton. Exact posterior
+probability of optimality for factor-Gaussian beliefs. Working paper,
+2026.
 
 \bibitem[Domencich and McFadden(1975)]{domencich1975} T.~Domencich
 and D.~McFadden. \emph{Urban Travel Demand: A Behavioral Analysis}.

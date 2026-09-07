@@ -122,11 +122,13 @@ function marginal_sd(c::GaussMarkovChain)
     return sqrt.(v)
 end
 
-"""Read the (backward-indexed) Gauss-Markov chain off a TRIDIAGONAL
-precision matrix: the Cholesky of a tridiagonal Q is bidiagonal, so
-U (X - mu) = z gives X_t | X_{t+1} ~ N(mu_t - (U[t,t+1]/U[t,t])
-(X_{t+1} - mu_{t+1}), 1/U[t,t]^2) -- a chain running n -> 1, returned
-index-reversed so it runs forward. REFUSES non-tridiagonal precision:
+"""Read the Gauss-Markov chain off a TRIDIAGONAL precision matrix.
+The Cholesky of a tridiagonal Q is bidiagonal, so U (X - mu) = z gives
+X_t | X_{t+1} ~ N(mu_t - (U[t,t+1]/U[t,t]) (X_{t+1} - mu_{t+1}),
+1/U[t,t]^2): conditionals running from the last index to the first.
+Factorizing the index-reversed problem therefore returns a chain in
+the CALLER's index order, which is what every query reports against.
+REFUSES non-tridiagonal precision:
 wider bandwidth is a different (lifted) algorithm, and general
 sparsity belongs to sampling methods (see Bolin-Lindgren excursions);
 neither is approximated silently."""
@@ -145,11 +147,16 @@ function chain_from_precision(mu::AbstractVector, Q::AbstractMatrix;
             abs(i - j) > 1 && abs(Q[i, j]) > tol && error(_refusal_msg())
         end
     end
-    F = cholesky(Symmetric(Matrix(Q)))
+    # The bidiagonal Cholesky reads conditionals X_t | X_{t+1}, i.e. a
+    # chain running from the LAST index to the first. Reversing both
+    # arguments first therefore returns the chain in the CALLER's index
+    # order, which is what every downstream query reports against.
+    muv = reverse(Float64.(collect(mu)))
+    Qv = Matrix(Q)[end:-1:1, end:-1:1]
+    F = cholesky(Symmetric(Qv))
     U = F.U                                # upper bidiagonal
-    # backward chain: X_t | X_{t+1}; reverse to a forward chain over
-    # the index order n, n-1, ..., 1
-    mur = reverse(Float64.(collect(mu)))
+    # chain position k is caller index k, so the means pass through
+    mur = Float64.(collect(mu))
     phi = zeros(n - 1)
     s = zeros(n - 1)
     for k in 1:(n - 1)

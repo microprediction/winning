@@ -280,4 +280,44 @@ clustering, momentum). Methodological note that cost an hour: at
 daily resolution n = 252 the argmax grid cannot afford to resolve
 the step scale and near-tie mass leaks (0.907 total); the 4-day
 block aggregation is EXACT for the argmax's block and makes the law
-scale-free. This is the win-nodes paper's real example.
+scale-free. MISFILED, corrected 2026-09-06: this was written as the win-nodes
+paper's example and does not belong there. It contains no graphical
+model, no observations and no posterior -- it is an argmax law of a
+PRIOR, which is brownian-max material for the browniansearch line
+(see the Go Forth reconciliation above), not Bayes-net material. The
+paper's example is exp6. Keep this as what it is: a validation of the
+drifted argmax law against real data.
+
+## exp6_career_peak: the win-nodes paper's actual example (2026-09-06)
+A Bayes net whose evidence is wins. Latent yearly ability path per
+player with a random-walk prior; each ATP match contributes
+log Phi(+-(theta_t - a_opp)), one year per term, so the likelihood
+Hessian is diagonal, the prior precision tridiagonal, and the Laplace
+posterior precision is TRIDIAGONAL -- a Gauss-Markov chain, which is
+exactly chain_from_precision's input. 129,559 matches 1985-2024,
+1,453 players (static field abilities by MAP probit Bradley-Terry;
+opponents then held fixed, a conditioning step not a joint fit); tau
+by Laplace marginal likelihood.
+
+Fitted peaks land on the historically argued seasons (Federer 2006,
+Djokovic 2015, Sampras 1994, Agassi 1995, Murray 2016), so the point
+answers are credible and the uncertainty is the finding:
+  Federer  2006 P 0.52 (2005 carries 0.41)
+  Nadal    2013 P 0.267 -- BIMODAL with 2018 at 0.220
+  Agassi   1995 P 0.551, 80% credible set {1995, 2002, 2003}, NOT an
+           interval: the 2002-03 resurgence is a genuine rival peak
+  Djokovic 0.428, Sampras 0.465, Murray 0.593
+MC referee 200k posterior draws per career: max |exact - MC| 0.0019.
+
+The mechanism, visible in the same fit: at equal posterior mean the
+SPARSER year carries more argmax mass (Nadal 2010, mean 2.042, 80
+matches, P 0.066 vs 2012, mean 2.051, 48 matches, P 0.088). Fewer
+matches leave a wider posterior and a wider posterior has more room
+to hold the maximum. No error-barred rating table contains that
+comparison.
+
+Package bug this experiment caught: chain_from_precision returned the
+chain in REVERSED index order, and the existing test could not detect
+it because a stationary chain's argmax law is symmetric. Fixed by
+factorizing the reversed problem; a drifted-chain test now pins the
+orientation.

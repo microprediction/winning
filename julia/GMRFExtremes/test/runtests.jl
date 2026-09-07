@@ -46,9 +46,22 @@ end
     end
     P1 = argmax_marginals(c1)
     P2 = argmax_marginals(c2)
-    # the precision route reverses index order; a stationary chain is
-    # exchange-symmetric so the laws must agree elementwise reversed
-    @test maximum(abs.(P1 .- reverse(P2))) < 1e-9
+    @test maximum(abs.(P1 .- P2)) < 1e-9
+end
+
+@testset "precision route preserves index order" begin
+    # a stationary chain's argmax law is symmetric, so it cannot detect
+    # an orientation flip. Drift breaks the symmetry and pins it.
+    n = 12
+    phi, s2 = 0.7, 0.5
+    d = vcat([1.0], fill(1 + phi^2, n - 2), [1.0]) ./ s2
+    o = fill(-phi / s2, n - 1)
+    Q = spdiagm(-1 => o, 0 => d, 1 => o)
+    mu = collect(0.25 .* (1:n))            # rising: late indices favoured
+    c = chain_from_precision(mu, Q)
+    P = argmax_marginals(c)
+    @test P[n] > 5 * P[1]
+    @test argmax(P) == n
 end
 
 @testset "Monte Carlo referee" begin
