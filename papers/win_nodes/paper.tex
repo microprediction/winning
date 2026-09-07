@@ -82,10 +82,12 @@ representation of \citet{domencich1975}; the shared survival field
 is competing-risks calculus; the transfer operator on a Markov chain
 is the sum-product algorithm; the derivative identity of
 Section~\ref{sec:factor} was reached for general joint laws by
-\citet{muller2019}. What is new is the organization: one field pass
-per query for all $n$ components, linear-work derivatives, and the
-chain and band order-statistic layer with its boundary corrections,
-all measured below.
+\citet{muller2019}. The lattice engine that evaluates and inverts
+these objects at scale, with its covariance grammar and tie-density
+Jacobians, is \citet{cotton2026}, on which this paper builds
+throughout. What is new here is the chain and band order-statistic
+layer with its boundary corrections, and the demonstration that a
+rating posterior is one of its inputs.
 
 \section{Adjacent machinery}
 
@@ -121,7 +123,9 @@ Section~\ref{sec:checks} measures the former.
 \section{The win node on factor-structured fields}
 \label{sec:factor}
 
-The factor case is settled and we use it rather than develop it. Let
+The factor case is settled and we use it rather than develop it.
+The shared-field construction and its lattice discipline are
+\citet[\S3]{cotton2026}. Let
 $X=\mu+Vf+\mathrm{diag}(\sqrt{D})\,\epsilon$ with $f\sim N(0,I_r)$.
 Conditional on $f$ the components are independent, so
 \begin{equation}
@@ -136,10 +140,11 @@ building $L(x)=\sum_j\log S_j(x)$ once on a lattice of $L$ points
 prices every component by the subtraction $e^{L-\log S_i}$, at
 $O(nLQ)$ for a $Q$-node quadrature.
 
-The derivative is the tie density on the face where $i$ and $j$
-dead-heat, so the Jacobian is minus a weighted graph Laplacian and
-applies in $O(nL)$ without forming an edge \citep{muller2019,
-cotton2026}. \citet{cotton2026b} develops this case as the posterior
+\citet[\S5]{cotton2026} shows the derivative to be the tie density
+on the face where $i$ and $j$ dead-heat, so the Jacobian is minus a
+weighted graph Laplacian and applies in $O(nL)$ without forming an
+edge; \citet{muller2019} reach the same identity for general joint
+laws through the surplus function. \citet{cotton2026b} develops this case as the posterior
 probability of optimality for factor-Gaussian beliefs, including the
 comparison against marginal-only surrogates and the bandit and
 stopping consequences. We take it as given here and spend the paper
@@ -170,10 +175,12 @@ $\Phi\!\left((\mu_k-\mu_j)/\sqrt{D_k+D_j}\right)$, which is
 TrueSkill's greater-than factor. The $n$-ary node needs no pairwise
 chaining and no moment approximation of the factor itself; moment
 approximations enter only if the user chooses a Gaussian posterior
-family, exactly as in expectation propagation. This likelihood and
-score are the estimation core of the multinomial-probit software
-below, validated against finite differences and against dual-number
-automatic differentiation at $10^{-10}$.
+family, exactly as in expectation propagation. The likelihood is the multinomial
+probit likelihood, and it with its analytic score is the estimation
+core of \citet[\S5]{cotton2026}; we use it to generate a posterior
+rather than as a contribution. The implementation here agrees with
+finite differences and with dual-number automatic differentiation at
+$10^{-10}$.
 
 \section{The order-statistic layer on chains and bands}
 \label{sec:chain}
@@ -185,8 +192,9 @@ N(\mu_{t+1}+\phi_t(X_t-\mu_t),s_t^2)$. A tridiagonal precision
 matrix delivers these parameters directly: its Cholesky factor is
 bidiagonal, and each row is a conditional regression.
 
-\emph{Max-CDF and first passage.} Restrict the transfer operator
-below $u$. With $T_t$ the transition kernel on the lattice and
+\emph{Max-CDF and first passage.} The lattice conventions are those
+of \citet[\S3]{cotton2026}. Restrict the transfer operator below
+$u$. With $T_t$ the transition kernel on the lattice and
 $\pi_u$ the initial sub-density cut at $u$,
 \begin{equation}
 \Pr(\max_{s\le t}X_s\le u)\;=\;\mathbf{1}^\top
@@ -324,9 +332,9 @@ rating system that reports one. The query on that posterior is not.
 \section{Software}
 
 The factor win node, its top-$k$ relatives, both Jacobian blocks and
-the calibration inverses ship in the \texttt{winning} package: a
-Python reference with R, JavaScript, Julia and Rust ports pinned to
-embedded parity vectors, most at $10^{-15}$. The observed win node,
+the calibration inverses ship in the \texttt{winning} package of
+\citet{cotton2026}: a Python reference with R, JavaScript, Julia and
+Rust ports pinned to embedded parity vectors, most at $10^{-15}$. The observed win node,
 likelihood \eqref{eq:obslik} with analytic score, is the estimation
 core of \texttt{MultinomialProbit.jl}, whose score is additionally
 refereed by forward-mode automatic differentiation through the same
@@ -345,11 +353,12 @@ general sparse precision gets neither treatment here, and the
 excursion functionals then belong to the sampling methods of
 \citet{bolin2015}. The win-node concept itself is not new: TrueSkill
 carries a binary one, \citet{muller2019} derived the tie-density
-derivative for general laws, and the factor query is
-\citet{cotton2026b}. New here are the restricted-pass
-order-statistic layer for chains and bands, with its boundary
-corrections and state lift, and the exact $n$-ary observed-win
-message that supplies its evidence. We leave to future work the lifted-state
+derivative for general laws, the lattice engine and its Jacobians are
+\citet{cotton2026}, and the factor query is \citet{cotton2026b}.
+Equation~\eqref{eq:obslik} is the multinomial probit likelihood and
+is classical. New here are the restricted-pass order-statistic layer
+for chains and bands, with its boundary corrections and state lift,
+and the peak-career result of Section~\ref{sec:tennis}. We leave to future work the lifted-state
 argmax at $b\ge2$ and message compression past $b\approx3$.
 
 \begin{thebibliography}{9}
@@ -359,9 +368,10 @@ F.~Lindgren. Excursion and contour uncertainty regions for latent
 Gaussian models. \emph{J.\ R.\ Statist.\ Soc.\ B} 77(1):85--106,
 2015.
 
-\bibitem[Cotton(2026)]{cotton2026} P.~Cotton. Scalable inversion of
+\bibitem[Cotton(2026a)]{cotton2026} P.~Cotton. Scalable inversion of
 contests with correlated performances, including softmax and
-multinomial probit. arXiv:2609.01133, 2026.
+multinomial probit. arXiv:2609.01133, 2026. Reference implementation
+and parity-locked ports: \texttt{github.com/microprediction/winning}.
 
 \bibitem[Cotton(2026b)]{cotton2026b} P.~Cotton. Exact posterior
 probability of optimality for factor-Gaussian beliefs. Working paper,
