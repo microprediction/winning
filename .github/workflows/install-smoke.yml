@@ -66,3 +66,57 @@ jobs:
           python -c "import winning; print(winning.__version__)"
       - name: Smoke test the installed wheel
         run: python .github/smoke.py
+
+  # The same discipline for the other two published artifacts: install
+  # what a user installs, on a runner with no source checkout that
+  # could shadow it. Neither runs on the PyPI workflow_run trigger.
+  crate:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build a project against the published crate
+        run: |
+          cargo new --lib /tmp/crate_smoke
+          cd /tmp/crate_smoke
+          cargo add winning
+          cat > src/lib.rs <<'RS'
+          #[test]
+          fn published_crate_prices_a_race() {
+              let mu = [0.0_f64, 0.4, -0.3];
+              let sd = [1.0_f64, 1.0, 1.0];
+              let q = winning::top_k_kernel(&mu, &sd, 1, -12.0, 12.0, 513);
+              let total: f64 = q.iter().sum();
+              assert!((total - 1.0).abs() < 5e-3, "win probabilities sum to {total}");
+              assert!(q[1] < q[2], "the slower runner must win less often");
+          }
+          RS
+          cargo test --release
+
+  julia:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [MultinomialProbit, MvNormalCDFFast, GMRFExtremes]
+    steps:
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Add ${{ matrix.package }} from General and run its tests
+        shell: julia --color=yes {0}
+        run: |
+          using Pkg
+          name = "${{ matrix.package }}"
+          # registration is still in flight for some of these; a package
+          # the registry does not have yet is reported, not failed
+          registered = any(Pkg.Registry.reachable_registries()) do reg
+              any(e -> e.name == name, values(reg.pkgs))
+          end
+          if !registered
+              @info "$name is not in the General registry yet; nothing to smoke test"
+              exit(0)
+          end
+          Pkg.add(name)
+          Pkg.test(name)
