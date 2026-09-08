@@ -17,8 +17,8 @@ Before any submission:
 - the house quote-verification pass (papers/quote-verification.md
   culture) on Bolin-Lindgren, Ridgway, Muller-Nesterov-Shikhman and
   the TrueSkill citation;
-- a figure: the phi = 0.9 endpoint pile-up bar chart next to the
-  flat marginal line (the one-plot pitch);
+- (done) the figure: Nadal's posterior path over his argmax law,
+  nadal.pdf, built by exp6_career_peak/make_figure.py;
 - reconcile scope wording with the prior-art audit
   (papers/prior-art-inversion-and-shared-field.md) -- the claims
   section was written to its standard but has not been audited.

@@ -5,6 +5,7 @@
 \usepackage{amssymb}
 \usepackage{amsthm}
 \usepackage{booktabs}
+\usepackage{graphicx}
 \usepackage{microtype}
 \usepackage[round,authoryear]{natbib}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
@@ -253,11 +254,42 @@ $\mathbb E[\max]$ & same & $5\times10^{-3}$ (MC band) & --- \\
 \end{tabular}
 \end{center}
 
-Two consequences follow from the table rather than merely
-illustrating it. First, the boundary pile-up law: positive serial
+\emph{Tail thresholds.} At a low threshold the max-CDF is an orthant
+probability, $\Pr(X_1\le u,\dots,X_n\le u)$, and as $u$ falls it
+becomes a rare event. A direct sampler needs about $1/p$ draws to see
+it at all, and the GHK family that computes such orthants degrades in
+the same regime \citep{ridgway2016}. The restricted pass costs the
+same whatever $p$ is: 66 ms per threshold here.
+
+\begin{center}
+\begin{tabular}{lllll}
+\toprule
+$u$ & exact, $L{=}400$ & exact, $L{=}800$ & $10^6$ draws & draws for
+10\% error \\
+\midrule
+$0.0$  & $6.471\times10^{-3}$ & $6.465\times10^{-3}$ & $6.432\times10^{-3}$ & $1.5\times10^{4}$ \\
+$-1.0$ & $1.753\times10^{-5}$ & $1.752\times10^{-5}$ & $1.60\times10^{-5}$ (16 hits) & $5.7\times10^{6}$ \\
+$-1.5$ & $3.067\times10^{-7}$ & $3.079\times10^{-7}$ & no hits & $3.2\times10^{8}$ \\
+$-2.0$ & $2.520\times10^{-9}$ & $2.521\times10^{-9}$ & no hits & $4.0\times10^{10}$ \\
+$-2.5$ & $9.380\times10^{-12}$ & $9.418\times10^{-12}$ & no hits & $1.1\times10^{13}$ \\
+$-3.0$ & $1.576\times10^{-14}$ & $1.578\times10^{-14}$ & no hits & $6.3\times10^{15}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Stationary AR(1), $n=50$, $\phi=0.9$. Simulation agrees where it has
+hits and returns zero where it does not, which is an absence of
+information rather than a small error. Below $u=-1.5$ no referee is
+available at all, and the evidence for the exact values is that they
+are stable under grid refinement: the two passes agree to three or
+four significant figures at every threshold, including
+$1.58\times10^{-14}$.
+
+Two consequences follow from the argmax table rather than merely
+illustrating it. The boundary pile-up law is one: positive serial
 correlation pushes the argmax of a stationary path to the endpoints,
 $2.6\times$ at $\phi=0.9$, and no marginal summary can express this.
-Second, the finite-$n$ arcsine refinement: on a random walk the
+The finite-$n$ arcsine refinement is the other. On a random walk the
 transfer operator matches the finite-$n$ argmax law to $0.3\%$ while
 the continuum arcsine density sits $1\%$ away, because the engine
 computes the exact finite law of which arcsine is the limit. The
@@ -266,7 +298,7 @@ that have no closed form. The accuracy profile is complementary to
 simulation: the exact pass is tightest at high correlation, exactly
 where \citet{ridgway2016} shows the GHK family degrading.
 
-\section{When was the player at their peak?}
+\section{Peak seasons from win evidence}
 \label{sec:tennis}
 
 A rating model is a Bayes net whose evidence is wins, and it produces
@@ -315,7 +347,20 @@ It holds 1995 and the 2002--2003 resurgence and excludes the years
 in between, which is a statement about the joint law and not about
 any year's marginal.
 
-The mechanism behind the second feature is visible in the same fit.
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{nadal.pdf}
+\caption{Rafael Nadal's posterior ability path from 1{,}317 matches
+(top) and the law of its argmax (bottom). The path is one broad
+plateau and the argmax law is bimodal, at 2013 and 2018, with the
+seasons between them carrying almost no mass. The band in the top
+panel does not contain that statement, and no summary of the yearly
+marginals does either.}
+\label{fig:nadal}
+\end{figure}
+
+Figure~\ref{fig:nadal} puts the two objects on one time axis. The
+mechanism behind the second feature is visible in the same fit.
 At equal posterior mean, the year with fewer matches carries more
 argmax mass, because fewer matches leave a wider posterior and a
 wider posterior has more room to hold the maximum. Nadal's 2010 has
