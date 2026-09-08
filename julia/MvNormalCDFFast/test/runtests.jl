@@ -3,8 +3,7 @@
 #   julia --project=julia/MvNormalCDFFast/test julia/MvNormalCDFFast/test/runtests.jl
 using Test
 
-include(joinpath(@__DIR__, "..", "src", "MvNormalCDFFast.jl"))
-using .MvNormalCDFFast
+using MvNormalCDFFast
 const MF = MvNormalCDFFast
 
 include(joinpath(@__DIR__, "minijson.jl"))
@@ -45,15 +44,10 @@ end
 
 using MvNormalCDF
 
-@testset "armed fallback routes to the incumbent" begin
-    # arm the hook exactly as the package extension does
-    MF.DENSE_FALLBACK[] = (lower, upper, mean, sigma) -> begin
-        n = size(sigma, 1)
-        mu = mean === nothing ? zeros(n) : Float64.(collect(mean))
-        lo = lower === nothing ? fill(-Inf, n) : Float64.(collect(lower))
-        up = upper === nothing ? fill(Inf, n) : Float64.(collect(upper))
-        MvNormalCDF.mvnormcdf(mu, Float64.(Matrix(sigma)), lo, up)
-    end
+@testset "the package extension arms the fallback" begin
+    # `using MvNormalCDF` above loads MvNormalCDFFallbackExt, so the
+    # hook is armed by the extension itself rather than by hand
+    @test MF.DENSE_FALLBACK[] !== nothing
     S4 = [1.0 0.6 0.1 0.0; 0.6 1.0 0.5 0.3; 0.1 0.5 1.0 0.7; 0.0 0.3 0.7 1.0]
     p, e = MF.mvnormcdf(zeros(4), S4, fill(-Inf, 4), zeros(4))
     @test 0 < p < 1

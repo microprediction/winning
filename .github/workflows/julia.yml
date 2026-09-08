@@ -1,0 +1,28 @@
+name: Julia
+
+on:
+  push:
+    branches: [main]
+    paths: ['julia/**', '.github/workflows/julia.yml']
+  pull_request:
+    paths: ['julia/**', '.github/workflows/julia.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [winning, MultinomialProbit, MvNormalCDFFast, GMRFExtremes]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v2
+      - name: Test ${{ matrix.package }}
+        shell: julia --color=yes {0}
+        run: |
+          using Pkg
+          Pkg.develop(path = "julia/${{ matrix.package }}")
+          Pkg.test("${{ matrix.package }}")

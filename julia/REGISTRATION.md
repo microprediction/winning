@@ -15,13 +15,22 @@ done):
    flagged for manual review, not refusal; the R and PyPI precedent is
    the argument).
 3. Requirements the packages already meet: Project.toml with uuid,
-   version, [compat] on julia; OSI license in the repo (MIT);
+   version, [compat] on julia; a copy of the MIT LICENSE INSIDE each
+   package subdirectory (AutoMerge does not look at the repo root);
    `MvNormalCDFFast`'s weakdep has an upper-boundable [compat] — add
    `MvNormalCDF = "0.2, 0.3"` style bounds when registering, the
    automerge bot requires compat entries for all deps.
-4. Tag pattern after merge: TagBot handles it if installed; otherwise
-   `git tag julia/MultinomialProbit-v0.1.0 && git push --tags`.
+4. Tags for subdirectory packages are named after the PACKAGE, not
+   the path: `MultinomialProbit-v0.1.0`. Install TagBot
+   (github.com/JuliaRegistries/TagBot), which gets the subdir naming
+   right and only tags once a version is actually registered.
 
 Order: MultinomialProbit and MvNormalCDFFast can register
 independently; register `julia/winning` whenever its API settles
 (blocks/tree/classic still on its roadmap).
+
+## Updating a pending registration
+
+Keep the version number the same and re-trigger on a newer commit:
+the existing PR updates in place. Changing the version, name or repo
+URL opens a NEW PR, and the old one then has to be closed by hand.

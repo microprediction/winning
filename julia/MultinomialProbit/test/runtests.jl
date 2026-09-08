@@ -7,8 +7,7 @@ using Random: Xoshiro
 import LinearAlgebra
 import ForwardDiff
 
-include(joinpath(@__DIR__, "..", "src", "MultinomialProbit.jl"))
-using .MultinomialProbit
+using MultinomialProbit
 const MP = MultinomialProbit
 
 # minimal JSON reader (same recipe as parity/check.jl)

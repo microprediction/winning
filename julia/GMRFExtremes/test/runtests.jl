@@ -6,8 +6,7 @@ using Test
 using Random: Xoshiro
 using SparseArrays: spdiagm
 
-include(joinpath(@__DIR__, "..", "src", "GMRFExtremes.jl"))
-using .GMRFExtremes
+using GMRFExtremes
 const GE = GMRFExtremes
 
 function stationary_ar1(phi, n; mu = 0.0)
@@ -116,28 +115,21 @@ end
     @test_throws ErrorException chain_from_precision(zeros(n), Q)
 end
 
-@testset "GaussianMarkovRandomFields dispatch (the extension's glue)" begin
-    # include-style loading cannot trigger package extensions, so this
-    # exercises the extension's SUBSTANCE -- their accessors, their
-    # constructor, our gating -- with the same glue the ext ships
+@testset "GaussianMarkovRandomFields dispatch extension" begin
+    # `using GaussianMarkovRandomFields` loads GMRFDispatchExt, so the
+    # GMRF methods below are the extension's own, not local glue
     using GaussianMarkovRandomFields
     GMF = GaussianMarkovRandomFields
-    gmrf_chain(g) = begin
-        Q = GMF.precision_matrix(g)
-        chain_from_precision(GMF.mean(g),
-                             Q isa AbstractMatrix ? Q : Matrix(Q))
-    end
     phi, n = 0.8, 12
     d = vcat([1.0], fill(1 + phi^2, n - 2), [1.0]) ./ (1 - phi^2)
     o = fill(-phi / (1 - phi^2), n - 1)
     Q = spdiagm(-1 => o, 0 => d, 1 => o)
     g = GMF.GMRF(zeros(n), Q)
-    c = gmrf_chain(g)
     ref = stationary_ar1(phi, n)
     for u in (0.5, 1.5)
-        @test abs(max_cdf(c, u) - max_cdf(ref, u)) < 1e-8
+        @test abs(max_cdf(g, u) - max_cdf(ref, u)) < 1e-8
     end
-    am = argmax_marginals(c)
+    am = argmax_marginals(g)
     @test abs(sum(am) - 1) < 1e-9
     @test abs(am[1] - am[end]) < 0.01
 end
