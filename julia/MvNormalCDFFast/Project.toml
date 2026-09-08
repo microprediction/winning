@@ -14,4 +14,4 @@ MvNormalCDFFallbackExt = "MvNormalCDF"
 
 [compat]
 MvNormalCDF = "0.2, 0.3"
-julia = "1.9"
+julia = "1.10"
