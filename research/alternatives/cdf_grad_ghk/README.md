@@ -78,5 +78,5 @@ certify against Monte Carlo argmax counts.
     python run_qmc_defense.py     # ranks 4, 8, 16 vs QMC factor nodes
 
 Requires jax (CPU) and scipy. Full context: the manuscript-side
-discussion in docs/latex_src/general_inversion/ALTERNATIVES.md and
+discussion in papers/general_inversion/ALTERNATIVES.md and
 issue 20.

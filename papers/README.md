@@ -1,6 +1,12 @@
 # Papers
 
-Six manuscript projects live in this repository. Status as of
+**One folder per paper**, as in the other repositories: every
+manuscript owns a directory here holding its source, its build
+products and its own status notes. Directories starting with an
+underscore are not manuscripts. Sources live here rather than under
+`docs/`, which serves published PDFs from `docs/assets/pdf/`.
+
+Seven manuscript projects live in this repository. Status as of
 2026-08-29. The root `README.md` historically described only the
 factor-probit paper; this file is the index.
 
@@ -10,7 +16,7 @@ factor-probit paper; this file is the index.
 | [`passk_posterior`](passk_posterior) | A Posterior Predictive for Pass@k | **Note** (2026-09-02). Independent evaluation of the published per-prompt empirical-Bayes pass@k estimator (Verine et al.; population version Kazdan et al.) on released Pass8 rollouts under a genuinely extrapolative split, with smoothing-vs-integration decomposition, calibration by count, and a reachability-decision demonstration; three review rounds actioned same day. Experiment in `research/cavity_calculus/exp2_passk/` (run_passk2.py). |
 | [`win_nodes`](win_nodes) | Win Nodes for Bayes Nets: exact order-statistic queries on Gaussian graphical models | **Draft** (2026-09-06). The n-ary win node (factor fields: shared-field pass + Laplacian Jacobian; chains/bands: restricted transfer operator), the exact observed-win likelihood (TrueSkill's factor at n=2), and the measured order-statistic laws. Numbers trace to `research/tridiagonal/` and `julia/GMRFExtremes/`. Pre-submission checklist in its README. |
 | [`exact_pom`](exact_pom) | Exact Posterior Probability of Optimality for Factor-Gaussian Beliefs | **Draft** (2026-09-01). The PoM vector VAPOR/ToSFiT declare intractable is exact for factor-form posteriors; CRN and per-arm-observation posteriors derived as exactly factor-plus-diagonal; stopping and bandit experiments in `research/rs_crn/`. Quote-verified sources in `research/rs_crn/NOTES.md`. No venue chosen. |
-| [`../docs/latex_src/general_inversion`](../docs/latex_src/general_inversion) | Scalable Inversion of Contests with Correlated Performances, Including Softmax and Multinomial Probit | **arXiv:2609.01133** (permanent id assigned 2026-09-01) and **SSRN preprint**, abstract id 7307363, doi:10.2139/ssrn.7307363 (that record was repurposed from the calibration paper on 2026-08-29). No journal venue chosen. Most active manuscript (nine review rounds actioned); claim-to-script manifest in `CLAIMS.md`; tables pinned at tag `paper-r1`. |
+| [`general_inversion`](general_inversion) | Scalable Inversion of Contests with Correlated Performances, Including Softmax and Multinomial Probit | **arXiv:2609.01133** (permanent id assigned 2026-09-01) and **SSRN preprint**, abstract id 7307363, doi:10.2139/ssrn.7307363 (that record was repurposed from the calibration paper on 2026-08-29). No journal venue chosen. Most active manuscript (nine review rounds actioned); claim-to-script manifest in `CLAIMS.md`; tables pinned at tag `paper-r1`. |
 | [`thurstone_humans`](thurstone_humans) | `paper.tex`: Softmax Masking Is a Choice Model … ; `paper_long.tex`: Thurstone is the Model of Choice | **Informal review loop, no venue.** Three review rounds acted on (`REVIEWER_BRIEF.md`, `response_to_third_review.md`). Two divergent manuscripts — see caveat below. |
 | [`machine_preference`](machine_preference) | Choice-Set Restriction in Machines and People | **No venue, no status file.** First version Nov 2024, this version 15 Aug 2026. |
 | [`f1_ratings`](f1_ratings) | Rating Formula 1: a case for non-Gaussian noise in rating systems | **No venue, no status file.** Oldest by commit (2026-07-09) and **has no bibliography at all** — see caveat. |

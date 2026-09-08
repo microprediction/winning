@@ -304,7 +304,7 @@ def _setup(mu, V, D, F, W, base):
                 # order (measured: the 25-node rule still loses ~1e-2 TV
                 # at sharp ~ 10, while scrambled Sobol reaches the QMC
                 # reference's own noise). Escalate the FAMILY, not the
-                # order. See docs/latex_src/general_inversion/break.py,
+                # order. See papers/general_inversion/break.py,
                 # section H; identical rule in the R port (Halton there,
                 # to stay dependency-free).
                 from .core import qmc_nodes

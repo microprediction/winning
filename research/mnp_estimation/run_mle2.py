@@ -25,7 +25,7 @@ interrupted or resumed and still yields complete paired replications.
     python run_mle2.py --reps 40 --out results_40.json --resume
 
 Timings from this script are only meaningful on a quiet machine; see
-docs/latex_src/general_inversion/retime.py, which refuses to measure on
+papers/general_inversion/retime.py, which refuses to measure on
 a busy one. The RMSE columns are unaffected by machine load.
 """
 import argparse

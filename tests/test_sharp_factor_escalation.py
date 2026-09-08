@@ -2,7 +2,7 @@
 family, not a deeper Gauss-Hermite rule.
 
 Found by the adversarial battery behind the general-inversion paper
-(docs/latex_src/general_inversion/break.py, section H): at implied
+(papers/general_inversion/break.py, section H): at implied
 correlations beyond ~0.9 the conditional race is a near-step in factor
 space, Gauss-Hermite converges slowly at any order (the 25-node rule
 still lost ~1e-2 TV), and the default silently returned percent-level

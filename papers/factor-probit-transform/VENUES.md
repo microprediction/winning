@@ -8,7 +8,7 @@
 - **SSRN** — *no record.* The SSRN record that formerly held this paper
   (abstract id 7307363, doi:10.2139/ssrn.7307363) was revised on
   2026-08-29 to hold the general inversion paper instead
-  (`docs/latex_src/general_inversion`), a deliberate decision: that
+  (`papers/general_inversion`), a deliberate decision: that
   paper is the successor line of work, and JCGS is this paper's home.
   So this manuscript currently has no preprint posting. If a preprint
   is ever wanted, it needs a NEW record and will get a new DOI; do not
@@ -16,7 +16,7 @@
 
 ## SSRN record 7307363 — state after 2026-08-30 revision
 
-Holds the INVERSION paper (docs/latex_src/general_inversion) by the
+Holds the INVERSION paper (papers/general_inversion) by the
 2026-08-29 decision. Second revision submitted 2026-08-30 while the
 first was still in the moderation queue, so the moderator sees the
 final version once: 18-page PDF (post fourth review, style sweep, and
