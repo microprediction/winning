@@ -2,6 +2,10 @@
 
 **Type:** enhancement
 
+**STATUS (2026-09-08): REALIZED.** `densities_from_events` and
+`state_prices_from_events` are in `winning/classic/lattice.py`, with
+`tests/test_densities_from_events.py` covering them. Do not post.
+
 winning 1.x could build a contestant's performance density from a *current score*
 plus a list of distributions of *future scoring events* (`densities_from_events`,
 `state_prices_from_events` in `lattice.py`) — the natural model for in-play golf,

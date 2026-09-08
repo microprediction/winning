@@ -2,6 +2,11 @@
 
 **Type:** enhancement (or `winning` application module — discuss)
 
+**STATUS (2026-09-08): REALIZED.** `winning/classic/lattice_copula.py`
+ships the Gaussian copula for correlated contestants, with
+`tests/test_lattice_copula.py` covering it. Do not post; if the
+FACTOR-grammar version is wanted, that is a different issue.
+
 The independence assumption is the lattice model's main restriction. winning 1.x had
 a scipy-based extension (`lattice_copula.py`) integrating over a common Gaussian
 factor with `quad_vec`:

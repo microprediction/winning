@@ -2,6 +2,11 @@
 
 **Type:** question / maintenance
 
+**STATUS (2026-09-08): SUBSTANTIALLY REALIZED.** `tests/` now carries
+47 modules including the classic lattice, copula, event-density,
+Harville and golden-value suites, plus a cross-language parity
+harness the original never had. Do not post as written.
+
 winning 1.x had 17 test modules exercising the original implementation, including
 edge cases thurstone's suite does not yet cover directly:
 
