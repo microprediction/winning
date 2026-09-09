@@ -11,7 +11,7 @@ import numpy as np
 # No claims of computational efficiency here!
 
 
-PLACING_NAMES = ['win','place2','place3','place4']   # aka win/place/show/top4
+PLACING_NAMES = ['win','place2','place3','place4']   # top-1 through top-4
 N_SAMPLES = 5000                                     # Default number of Monte Carlo paths
 
 

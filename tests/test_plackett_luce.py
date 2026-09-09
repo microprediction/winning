@@ -10,15 +10,15 @@ import itertools
 
 import numpy as np
 
-from winning.factor.races import (harville_order_logprob,
-                                  harville_place_probabilities,
+from winning.factor.races import (plackett_luce_order_logprob,
+                                  plackett_luce_topk_probabilities,
                                   softmax_probabilities)
 
 
 def test_order_probabilities_sum_to_one():
     rng = np.random.default_rng(0)
     mu = rng.normal(size=4)
-    total = sum(np.exp(harville_order_logprob(mu, perm))
+    total = sum(np.exp(plackett_luce_order_logprob(mu, perm))
                 for perm in itertools.permutations(range(4)))
     assert abs(total - 1.0) < 1e-12
 
@@ -38,7 +38,7 @@ def test_matches_gumbel_race_frequencies():
     worst = 0.0
     for perm, c in counts.items():
         p_hat = c / M
-        p = np.exp(harville_order_logprob(mu, list(perm)))
+        p = np.exp(plackett_luce_order_logprob(mu, list(perm)))
         worst = max(worst, abs(p_hat - p))
     assert worst < 3e-3
 
@@ -50,10 +50,10 @@ def test_place_probabilities_match_enumeration():
     for k in (1, 2, 3):
         target = np.zeros(5)
         for perm in itertools.permutations(range(5)):
-            pr = np.exp(harville_order_logprob(mu, perm))
+            pr = np.exp(plackett_luce_order_logprob(mu, perm))
             for pos in range(k):
                 target[perm[pos]] += pr
-        got = harville_place_probabilities(p, k=k)
+        got = plackett_luce_topk_probabilities(p, k=k)
         assert np.abs(got - target).max() < 1e-12
         assert abs(got.sum() - k) < 1e-9
 
@@ -68,10 +68,10 @@ def test_mixed_pl_matches_conditional_average():
     from winning.factor.core import hermite_nodes
     F, W = hermite_nodes(2, 15)
     order = [2, 0, 4, 1, 3]
-    lp = harville_order_logprob(mu, order, V=V, F=F, W=W)
+    lp = plackett_luce_order_logprob(mu, order, V=V, F=F, W=W)
     ref = 0.0
     for q in range(len(F)):
-        ref += W[q] * np.exp(harville_order_logprob(mu + F[q] @ V.T, order))
+        ref += W[q] * np.exp(plackett_luce_order_logprob(mu + F[q] @ V.T, order))
     assert abs(np.exp(lp) - ref) < 1e-14
 
 
@@ -81,18 +81,18 @@ def test_place_sums_exact_under_near_certain_favorite():
     # drifted to k + 3e-3; complements are now sums of the others
     p = np.array([1 - 1e-13, 3e-14, 3e-14, 4e-14])
     for k in (2, 3):
-        out = harville_place_probabilities(p, k=k)
+        out = plackett_luce_topk_probabilities(p, k=k)
         assert abs(out.sum() - k) < 1e-9
         assert (out <= 1 + 1e-12).all()
     # and the deeper variant: two large entries exhausting the field
     # (denom2 cancellation), plus a 300-field fuzz of extreme spreads
     p2 = np.array([0.7, 0.3 - 4e-15, 1e-15, 1e-15, 1e-15, 1e-15])
     p2 = p2 / p2.sum()
-    assert abs(harville_place_probabilities(p2, 3).sum() - 3) < 1e-9
+    assert abs(plackett_luce_topk_probabilities(p2, 3).sum() - 3) < 1e-9
     rng = np.random.default_rng(0)
     for _ in range(50):
         n = int(rng.integers(3, 12))
         logp = rng.normal(size=n) * rng.uniform(1, 15)
         q = np.exp(logp - logp.max()); q /= q.sum()
         for k in (2, 3):
-            assert abs(harville_place_probabilities(q, k).sum() - k) < 1e-8
+            assert abs(plackett_luce_topk_probabilities(q, k).sum() - k) < 1e-8

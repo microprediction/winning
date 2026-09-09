@@ -669,7 +669,7 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
                              mu0=None, V=None, return_info=False):
     """Joint (loc, scale) calibration from two membership curves: find
     per-runner (mu_i, sigma_i) with top_k_probabilities(mu, k1) = q1 and
-    top_k_probabilities(mu, k2) = q2. The market pair is (win, place):
+    top_k_probabilities(mu, k2) = q2. The market pair is (top-1, top-2):
     k1 = 1, k2 = 2 or 3.
 
     The counting closes exactly. Two curves carry 2n numbers with two

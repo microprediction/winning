@@ -31,4 +31,4 @@ from .core import (  # noqa: F401
     qmc_nodes,
     win_probabilities_factor,
 )
-from .exotics import ordered_probabilities, harville_prefix_logprob  # noqa: F401
+from .permutations import ordered_probabilities, plackett_luce_prefix_logprob  # noqa: F401

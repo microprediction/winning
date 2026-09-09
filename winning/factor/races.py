@@ -1032,7 +1032,7 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
     return W @ P
 
 
-def harville_order_logprob(mu, order, temperature=1.0, V=None, F=None,
+def plackett_luce_order_logprob(mu, order, temperature=1.0, V=None, F=None,
                            W=None):
     """log P(full finishing order) under (mixed) Plackett--Luce: Harville's
     formula, the stagewise winner-of-remaining product that is EXACT for
@@ -1076,13 +1076,13 @@ def harville_order_logprob(mu, order, temperature=1.0, V=None, F=None,
     return float(m + np.log(np.dot(np.asarray(W), np.exp(logs - m))))
 
 
-def harville_place_probabilities(p, k=3):
+def plackett_luce_topk_probabilities(p, k=3):
     """P(finish in the top k) for every runner, from win probabilities,
     by Harville's conditioning: after removing a finisher, the rest
     renormalize (exact under Luce/Gumbel, the classical racing formula;
-    its known favorite-longshot bias in real place markets is the
+    its known favorite-longshot bias in real top-k markets is the
     Gaussian/Gamma ordering effect Henery and Stern model). k in
-    {1, 2, 3} (win, place, show)."""
+    {1, 2, 3} (top 1, 2, 3)."""
     p = np.asarray(p, dtype=float)
     p = p / p.sum()
     n = len(p)
@@ -1094,7 +1094,7 @@ def harville_place_probabilities(p, k=3):
     # three digits to cancellation and the exact identity sum(top-k) = k
     # drifted to k + 3e-3 (caught by the gap-stress battery)
     rest = np.array([p[np.arange(n) != j].sum() for j in range(n)])
-    # second place: j first, i second -- P2[j, i] = p_j p_i / rest_j
+    # second: j first, i second -- P2[j, i] = p_j p_i / rest_j
     P2 = (p / np.maximum(rest, 1e-300))[:, None] * p[None, :]
     np.fill_diagonal(P2, 0.0)
     out += P2.sum(axis=0)
@@ -1102,7 +1102,7 @@ def harville_place_probabilities(p, k=3):
         return out
     if k != 3:
         raise ValueError("k must be 1, 2 or 3")
-    # third place: j first, l second, i third
+    # third: j first, l second, i third
     for j in range(n):
         pj = p[j]
         rem1 = rest[j]
@@ -1270,3 +1270,8 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
     if base == "normal":
         _fail.rust_base = (8, [q, w, off, m1, sd])
     return _fail
+
+
+# Deprecated aliases (Plackett--Luce is the preferred name).
+harville_order_logprob = plackett_luce_order_logprob
+harville_place_probabilities = plackett_luce_topk_probabilities

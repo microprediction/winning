@@ -7,7 +7,7 @@ stagewise shortcut inflated learned correlation threefold.
 """
 import numpy as np
 
-from winning.factor.races import harville_order_logprob
+from winning.factor.races import plackett_luce_order_logprob
 from winning.likelihood import ranking_loglik_and_score
 
 
@@ -40,7 +40,7 @@ def test_score_matches_finite_differences():
     assert abs(fd - dV[1, 0]) < 1e-4
 
 
-def test_common_shift_invariance_and_harville_consistency():
+def test_common_shift_invariance_and_plackett_luce_consistency():
     rng = np.random.default_rng(1)
     T, J = 4, 5
     mu = rng.normal(size=(T, J))
@@ -50,7 +50,7 @@ def test_common_shift_invariance_and_harville_consistency():
                                               orders)
     assert abs(ll - ll_shift) < 1e-12
     # V = 0 reduces to independent Harville (max-wins negation)
-    ll_h = sum(harville_order_logprob(-mu[t], orders[t]) for t in range(T))
+    ll_h = sum(plackett_luce_order_logprob(-mu[t], orders[t]) for t in range(T))
     assert abs(ll - ll_h) < 1e-12
 
 

@@ -1,9 +1,9 @@
-"""Anchors and identities for ordered_probabilities / harville_prefix_logprob.
+"""Anchors and identities for ordered_probabilities / plackett_luce_prefix_logprob.
 Exact identities wherever possible; Monte Carlo nowhere."""
 import numpy as np
 import pytest
 
-from winning.factor.exotics import ordered_probabilities, harville_prefix_logprob
+from winning.factor.permutations import ordered_probabilities, plackett_luce_prefix_logprob
 from winning.factor.races import race_probabilities, softmax_probabilities
 from winning.factor.topk import top_k_probabilities
 
@@ -60,7 +60,7 @@ def test_gumbel_base_is_harville():
             for l in range(6):
                 if len({i, j, l}) < 3:
                     continue
-                h = np.exp(harville_prefix_logprob(mu, [i, j, l], temperature=tau))
+                h = np.exp(plackett_luce_prefix_logprob(mu, [i, j, l], temperature=tau))
                 assert abs(q[i, j, l] - h) < 3e-3 * max(h, 1e-3)
 
 
@@ -68,7 +68,7 @@ def test_prefix_k1_is_softmax():
     mu = np.array([0.3, -0.5, 0.9, 0.0])
     p = softmax_probabilities(mu, temperature=0.8)
     for i in range(4):
-        assert abs(np.exp(harville_prefix_logprob(mu, [i], temperature=0.8)) - p[i]) < 1e-12
+        assert abs(np.exp(plackett_luce_prefix_logprob(mu, [i], temperature=0.8)) - p[i]) < 1e-12
 
 
 def test_tempered_k1_matches_race_probabilities():
@@ -81,7 +81,7 @@ def test_tempered_k1_matches_race_probabilities():
 
 def test_rust_matches_numpy_path():
     import winning.factor.races as R
-    from winning.factor import exotics as E
+    from winning.factor import permutations as E
     if not (R._HAVE_RUST and hasattr(R._fastrace, "ordered_prefixes")):
         pytest.skip("fastrace without ordered_prefixes")
     rng = np.random.default_rng(5)

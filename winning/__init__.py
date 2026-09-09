@@ -44,8 +44,8 @@ from .factor import (  # noqa: F401
 )
 from .factor.races import (  # noqa: F401
     abilities_from_softmax,
-    harville_order_logprob,
-    harville_place_probabilities,
+    plackett_luce_order_logprob,
+    plackett_luce_topk_probabilities,
     softmax_probabilities,
 )
 from .factor.structures import (  # noqa: F401
@@ -63,4 +63,9 @@ from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 
 __version__ = "1.4.0"
-from .factor.exotics import ordered_probabilities, harville_prefix_logprob  # noqa: F401
+from .factor.permutations import ordered_probabilities, plackett_luce_prefix_logprob  # noqa: F401
+
+# Deprecated aliases (Plackett--Luce is the preferred name).
+harville_order_logprob = plackett_luce_order_logprob
+harville_place_probabilities = plackett_luce_topk_probabilities
+harville_prefix_logprob = plackett_luce_prefix_logprob

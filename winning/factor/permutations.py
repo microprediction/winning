@@ -34,7 +34,7 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     l third), zero on repeated indices. k=1 reproduces race_probabilities;
     summing out[i, :, :] + out[:, i, :] + out[:, :, i] reproduces
     top_k_probabilities(mu, 3). Under base="gumbel" (D = tau^2 pi^2/6) the
-    result is Harville's stagewise product, exp(harville_prefix_logprob).
+    result is Harville's stagewise product, exp(plackett_luce_prefix_logprob).
     """
     if k not in (1, 2, 3):
         raise ValueError("k must be 1, 2 or 3")
@@ -126,11 +126,11 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     return out / total
 
 
-def harville_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
+def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
                             W=None):
     """log P(the first len(prefix) finishers are `prefix`, in that order)
     under (mixed) Plackett--Luce, with every stage's denominator over ALL
-    runners still standing. harville_order_logprob takes its order as the
+    runners still standing. plackett_luce_order_logprob takes its order as the
     complete field; this is the prefix (exacta, trifecta) version.
     Exact for the Gumbel base and only there."""
     mu = np.asarray(mu, dtype=float)
@@ -160,3 +160,7 @@ def harville_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
                      for q in range(len(F))])
     m = logs.max()
     return float(m + np.log(np.dot(np.asarray(W), np.exp(logs - m))))
+
+
+# Deprecated alias (Plackett--Luce is the preferred name).
+harville_prefix_logprob = plackett_luce_prefix_logprob

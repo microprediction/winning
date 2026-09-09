@@ -331,7 +331,7 @@ fn per_winner_rr<'py>(
 
 /// Ordered k-prefix (exacta / trifecta) probabilities on the field lattice:
 /// (flat n^k array in C order, pre-normalization total). Mirrors
-/// winning.factor.exotics.ordered_probabilities.
+/// winning.factor.permutations.ordered_probabilities.
 #[pyfunction]
 #[pyo3(signature = (mu, v, d, f, w, points=501, lo=f64::NAN, hi=f64::NAN, k=3))]
 #[allow(clippy::too_many_arguments)]
