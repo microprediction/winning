@@ -328,9 +328,41 @@ fn per_winner_rr<'py>(
     Ok(p.into_pyarray_bound(py))
 }
 
+
+/// Ordered k-prefix (exacta / trifecta) probabilities on the field lattice:
+/// (flat n^k array in C order, pre-normalization total). Mirrors
+/// winning.factor.exotics.ordered_probabilities.
+#[pyfunction]
+#[pyo3(signature = (mu, v, d, f, w, points=501, lo=f64::NAN, hi=f64::NAN, k=3))]
+#[allow(clippy::too_many_arguments)]
+fn ordered_prefixes<'py>(
+    py: Python<'py>,
+    mu: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray2<f64>,
+    d: PyReadonlyArray1<f64>,
+    f: PyReadonlyArray2<f64>,
+    w: PyReadonlyArray1<f64>,
+    points: usize,
+    lo: f64,
+    hi: f64,
+    k: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
+    let mu_o: Array1<f64> = mu.as_array().to_owned();
+    let v_o: Array2<f64> = v.as_array().to_owned();
+    let d_o: Array1<f64> = d.as_array().to_owned();
+    let f_o: Array2<f64> = f.as_array().to_owned();
+    let w_o: Array1<f64> = w.as_array().to_owned();
+    let (out, total) = py.allow_threads(|| with_usable_rayon(|| {
+        ordered_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
+                       w_o.view(), points, lo, hi, k)
+    }));
+    Ok((Array1::from(out).into_pyarray_bound(py), total))
+}
+
 #[pymodule]
 fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(forward_and_slopes, m)?)?;
+    m.add_function(wrap_pyfunction!(ordered_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(block_race, m)?)?;
     m.add_function(wrap_pyfunction!(block_race_r, m)?)?;
     m.add_function(wrap_pyfunction!(jacobian_vector_product, m)?)?;

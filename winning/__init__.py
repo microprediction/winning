@@ -63,3 +63,4 @@ from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 
 __version__ = "1.4.0"
+from .factor.exotics import ordered_probabilities, harville_prefix_logprob  # noqa: F401

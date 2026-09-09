@@ -2140,3 +2140,152 @@ pub fn per_winner_reduced_rank(
         .collect();
     ndarray::Array1::from(p)
 }
+
+
+/// Ordered k-prefix probabilities, k in {1, 2, 3}: the field-pass removal
+/// identity taken k-1 levels deep,
+///   P(i, j, l) = Int f_l prod_{m not in ijl} S_m [ Int_{y<z} f_j F_i dy ] dz,
+/// on the same lattice as forward_kernel (window [lo, hi] with `points`
+/// nodes). Independent-conditional normal performances, mixed over the
+/// factor nodes. Returns (flat n^k array in C order, pre-normalisation
+/// total mass) -- the caller checks the total against the continuum
+/// identity (= 1) before normalising.
+#[allow(clippy::too_many_arguments)]
+pub fn ordered_kernel(
+    mu: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    d: ArrayView1<f64>,
+    f_nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+    k: usize,
+) -> (Vec<f64>, f64) {
+    let n = mu.len();
+    let q = f_nodes.nrows();
+    let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
+    let sd_max = sd.iter().cloned().fold(f64::MIN, f64::max);
+    let log_norm: Vec<f64> = sd.iter().map(|s| s.ln() + LN_SQRT_2PI).collect();
+    let mut lo = f64::MAX;
+    let mut hi = f64::MIN;
+    let mut m_all = vec![0.0f64; q * n];
+    for qi in 0..q {
+        for i in 0..n {
+            let mut mi = mu[i];
+            for r in 0..v.ncols() {
+                mi += v[[i, r]] * f_nodes[[qi, r]];
+            }
+            m_all[qi * n + i] = mi;
+            lo = lo.min(mi);
+            hi = hi.max(mi);
+        }
+    }
+    lo -= 8.0 * sd_max;
+    hi += 8.0 * sd_max;
+    if lo_in.is_finite() && hi_in.is_finite() && hi_in > lo_in {
+        lo = lo_in;
+        hi = hi_in;
+    }
+    let dx = (hi - lo) / (points - 1) as f64;
+    let size = n.pow(k as u32);
+    let mut out = vec![0.0f64; size];
+    for qi in 0..q {
+        let m = &m_all[qi * n..(qi + 1) * n];
+        let wq = w[qi];
+        let mut logs = vec![0.0f64; n * points];
+        let mut logg = vec![0.0f64; n * points];
+        let mut cdf = vec![0.0f64; n * points];
+        let mut field = vec![0.0f64; points];
+        for i in 0..n {
+            let inv_sd = 1.0 / sd[i];
+            let ln_i = log_norm[i];
+            let mi = m[i];
+            for t in 0..points {
+                let x = lo + t as f64 * dx;
+                let z = (x - mi) * inv_sd;
+                let ls = log_ndtr(-z);
+                logs[i * points + t] = ls;
+                logg[i * points + t] = -0.5 * z * z - ln_i;
+                cdf[i * points + t] = ndtr(z);
+                field[t] += ls;
+            }
+        }
+        let logs = &logs;
+        let logg = &logg;
+        let cdf = &cdf;
+        let field = &field;
+        let slabs: Vec<Vec<f64>> = (0..n)
+            .into_par_iter()
+            .map(|i| match k {
+                1 => {
+                    let mut s = 0.0f64;
+                    for t in 0..points {
+                        let e = logg[i * points + t] + field[t] - logs[i * points + t];
+                        if e > -745.0 {
+                            s += e.exp();
+                        }
+                    }
+                    vec![s * dx]
+                }
+                2 => {
+                    let mut row = vec![0.0f64; n];
+                    for j in 0..n {
+                        if j == i {
+                            continue;
+                        }
+                        let mut s = 0.0f64;
+                        for t in 0..points {
+                            let e = logg[j * points + t] + field[t]
+                                - logs[i * points + t] - logs[j * points + t];
+                            if e > -745.0 {
+                                s += e.exp() * cdf[i * points + t];
+                            }
+                        }
+                        row[j] = s * dx;
+                    }
+                    row
+                }
+                _ => {
+                    let mut slab = vec![0.0f64; n * n];
+                    let mut inner = vec![0.0f64; points];
+                    for j in 0..n {
+                        if j == i {
+                            continue;
+                        }
+                        let mut c = 0.0f64;
+                        for t in 0..points {
+                            let g = logg[j * points + t].exp() * cdf[i * points + t];
+                            c += g;
+                            inner[t] = (c - 0.5 * g) * dx;
+                        }
+                        for l in 0..n {
+                            if l == i || l == j {
+                                continue;
+                            }
+                            let mut s = 0.0f64;
+                            for t in 0..points {
+                                let e = logg[l * points + t] + field[t]
+                                    - logs[i * points + t] - logs[j * points + t]
+                                    - logs[l * points + t];
+                                if e > -745.0 {
+                                    s += e.exp() * inner[t];
+                                }
+                            }
+                            slab[j * n + l] = s * dx;
+                        }
+                    }
+                    slab
+                }
+            })
+            .collect();
+        let stride = size / n;
+        for (i, slab) in slabs.iter().enumerate() {
+            for (o, s) in out[i * stride..(i + 1) * stride].iter_mut().zip(slab.iter()) {
+                *o += wq * s;
+            }
+        }
+    }
+    let total: f64 = out.iter().sum();
+    (out, total)
+}
