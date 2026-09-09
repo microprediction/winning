@@ -62,7 +62,7 @@ from .factor.topk import (top_k_probabilities,  # noqa: F401
 from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 from .factor.permutations import ordered_probabilities, plackett_luce_prefix_logprob  # noqa: F401
 
 # Deprecated aliases (Plackett--Luce is the preferred name).

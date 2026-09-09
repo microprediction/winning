@@ -2,7 +2,27 @@
 
 ## Unreleased
 
-- Place/show calibration: `abilities_from_topk` inverts a top-k
+- Ordered finishing prefixes: `ordered_probabilities(mu, k, ...)` prices
+  every ordered k-prefix (exacta/trifecta-style permutations) from one
+  shared field pass, with a Rust kernel (`ordered_prefixes`);
+  `plackett_luce_prefix_logprob` and `plackett_luce_order_logprob` give
+  the stagewise Plackett--Luce likelihood. Lives in
+  `winning.factor.permutations`.
+- Terminology, with deprecated aliases so nothing breaks: the
+  ordered-prefix module is `winning.factor.permutations` (was
+  `exotics`); `harville_*` are now `plackett_luce_*` (Harville 1973 is
+  the Plackett--Luce model for ordered finishing); and
+  `plackett_luce_topk_probabilities` replaces `place_probabilities`
+  (win/place/show is US racing jargon that does not travel). The old
+  names keep working with a deprecation intent.
+- Rust parity and tooling: `test_rust_parity.py` now verifies the whole
+  39-scenario parity contract instead of ~7 hand-written cases (top-k,
+  loc_scale, win/second and the inversions were never checked against
+  Rust); all match numpy to tolerance. `winning.use_rust()` now toggles
+  all six compiled modules (it had omitted `topk` and `permutations`).
+  `fastrace` bumped to 0.2.0 for the top-k and ordered-prefix kernels.
+
+- Top-k calibration: `abilities_from_topk` inverts a top-k
   membership curve (any depth, logit residuals against the saturated
   favorites, factor rank <= 2); exact-rank targets are refused as
   standalone inputs (two-branched) with `abilities_from_rank_marginal`
