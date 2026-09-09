@@ -168,3 +168,37 @@ def test_rank_marginal_kernels_parity():
                                                 513, is_normal=False)
         assert np.abs(pr - pp).max() < 1e-12, r
         assert np.abs(jr - jp).max() < 1e-12, r
+
+
+def test_all_parity_scenarios_rust_matches_numpy():
+    """The whole parity contract, Rust vs numpy in one process.
+
+    Reuses parity/gen_vectors.build() -- the same 39 scenarios check.jl,
+    check.mjs and check.R verify -- and runs it on both paths. Loops the
+    contract so the Rust test cannot silently fall behind the others."""
+    import os
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "parity"))
+    import gen_vectors as gv
+    import winning
+
+    winning.use_rust(True)
+    if not winning.rust_active():
+        pytest.skip("fastrace not active")
+    rust = gv.build(gv.make_inputs())
+    winning.use_rust(False)
+    try:
+        num = gv.build(gv.make_inputs())
+    finally:
+        winning.use_rust(True)
+
+    bad = []
+    for name in sorted(rust):
+        vr = np.atleast_1d(np.asarray(rust[name]["value"], float)).ravel()
+        vn = np.atleast_1d(np.asarray(num[name]["value"], float)).ravel()
+        tol = float(rust[name].get("tol", 1e-9))
+        d = float(np.abs(vr - vn).max()) if vr.size else 0.0
+        if d > tol:
+            bad.append(f"{name}: |rust-numpy|={d:.2e} > tol {tol:.0e}")
+    assert len(rust) >= 39, f"only {len(rust)} scenarios built"
+    assert not bad, "Rust != numpy on:\n  " + "\n  ".join(bad)
