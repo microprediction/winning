@@ -42,7 +42,7 @@ new winning wraps.
 
 ## 2. What stays in this repo (citation continuity)
 
-- The SIAM paper PDFs (`docs/Horse_Race_Problem__SIAM_.pdf`, `..._updated.pdf`) and the
+- The SIAM paper PDFs (`docs/Inferring_Relative_Ability_SIAM.pdf`, `Inferring_Relative_Ability_SIAM_updated.pdf`) and the
   full LaTeX source (`docs/latex_src/`).
 - The BibTeX block in the README (Cotton 2021, SIAM J. Financial Mathematics 12(1),
   DOI 10.1137/19M1276261).

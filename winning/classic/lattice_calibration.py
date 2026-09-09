@@ -140,7 +140,7 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
     This is the main routine.
 
     See the paper for details, in the /doc folder
-    https://github.com/microprediction/winning/blob/main/docs/Horse_Race_Problem__SIAM_updated.pdf
+    https://github.com/microprediction/winning/blob/main/docs/Inferring_Relative_Ability_SIAM_updated.pdf
 
         offset_samples   Optionally supply a list of offsets which are used in the interpolation table  a_i -> p_i
 
