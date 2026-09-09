@@ -32,7 +32,7 @@ setup(
     extras_require={"test": ["pytest", "pandas", "matplotlib"],
                     "benchmarks": ["pandas"],
                     # compiled kernels (rust/fastrace); pure python without
-                    "fast": ["fastrace"]},
+                    "fast": ["fastrace>=0.2.0"]},
     entry_points={
         "console_scripts": [
             "winning=winning.__main__:main",
