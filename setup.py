@@ -24,7 +24,7 @@ setup(
         "Programming Language :: Python :: 3.13",
     ],
     python_requires=">=3.10",
-    packages=["winning", "winning.classic", "winning.factor", "winning.methods", "winning.bench", "winning.research", "winning.probit", "winning.ratings"],
+    packages=["winning", "winning.classic", "winning.factor", "winning.methods", "winning.bench", "winning.research", "winning.probit", "winning.ratings", "winning.alternatives"],
     test_suite='pytest',
     tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],
     include_package_data=True,

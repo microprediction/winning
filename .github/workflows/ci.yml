@@ -39,7 +39,7 @@ jobs:
       - name: Install core only
         run: pip install -e . pytest
       - name: Core tests
-        run: python -m pytest -q tests/test_races.py tests/test_probit.py tests_thurstone
+        run: python -m pytest -q tests/test_races.py tests/test_probit.py tests_research
 
   package:
     # What gets SHIPPED, not what is in the tree. setup.py lists packages
