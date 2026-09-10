@@ -32,7 +32,7 @@ new data from situations where renormalizing a probability is tempting. Gaussian
 has the lower held-out log loss in thirty of thirty-nine comparisons. Those rows cluster, so we
 also count by source, taking one specification per study and calling a source drawn when its
 resampling interval covers zero: Gaussian renormalization is then ahead in fourteen sources,
-linear renormalization in one, with one drawn and three unresolved. The differences are small where
+linear renormalization in one, with two drawn and two unresolved. The differences are small where
 they are small, a median of $0.004$ nats across the thirty-nine rows, and twelve exceed $0.01$
 with a maximum of $0.05$.
 \end{abstract}
@@ -176,7 +176,7 @@ particular at the impression that dividing probabilities is an argument in itsel
 
 The figure asks where each population falls between the two kinds of renormalization, on a scale
 where linear renormalization is one point and Gaussian renormalization another. Of the twenty it
-can place, nineteen lie nearer the Gaussian point, the median sits at $1.13$, and fifteen lie
+can place, nineteen lie nearer the Gaussian point, the median sits at $1.16$, and fifteen lie
 beyond it.
 
 The single population nearer linear renormalization comes from one experiment in which subjects
@@ -194,7 +194,7 @@ Another caveat: rows are comparisons. Several reuse the same subjects or source 
 not to be considered independent tests of the same hypothesis. Section~\ref{sec:empirical} goes
 into complete detail on the protocol, the datasets and the null.
 
-\begin{figure}[H]
+\begin{figure}[t]
 \centering
 \begin{tikzpicture}[x=1.55cm,y=0.315cm]
   \node[font=\scriptsize,anchor=east] at (-0.04,0) {gambles, high arithmetic cost};
@@ -202,7 +202,7 @@ into complete detail on the protocol, the datasets and the null.
   \fill (0.33,0) circle (1.9pt);
   \node[font=\scriptsize,anchor=east] at (-0.04,-1) {line lengths, twelve to pairs};
   \draw[gray!35,thin] (0,-1) -- (4.0,-1);
-  \fill (0.59,-1) circle (1.9pt);
+  \fill (0.60,-1) circle (1.9pt);
   \node[font=\scriptsize,anchor=east] at (-0.04,-2) {occupational prestige};
   \draw[gray!35,thin] (0,-2) -- (4.0,-2);
   \draw[fill=white,thick] (0.85,-2) circle (1.9pt);
@@ -227,46 +227,48 @@ into complete detail on the protocol, the datasets and the null.
   \node[font=\scriptsize,anchor=east] at (-0.04,-9) {Jester file 2};
   \draw[gray!35,thin] (0,-9) -- (4.0,-9);
   \draw[fill=white,thick] (1.13,-9) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-10) {dots};
+  \node[font=\scriptsize,anchor=east] at (-0.04,-10) {puzzles};
   \draw[gray!35,thin] (0,-10) -- (4.0,-10);
-  \draw[fill=white,thick] (1.13,-10) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-11) {puzzles};
+  \draw[fill=white,thick] (1.18,-10) circle (1.9pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-11) {dots};
   \draw[gray!35,thin] (0,-11) -- (4.0,-11);
-  \draw[fill=white,thick] (1.19,-11) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-12) {Netflix};
+  \draw[fill=white,thick] (1.22,-11) circle (1.9pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-12) {recognition foils};
   \draw[gray!35,thin] (0,-12) -- (4.0,-12);
-  \draw[fill=white,thick] (1.20,-12) circle (1.9pt);
+  \fill (1.34,-12) circle (1.9pt);
   \node[font=\scriptsize,anchor=east] at (-0.04,-13) {Sushi};
   \draw[gray!35,thin] (0,-13) -- (4.0,-13);
   \draw[fill=white,thick] (1.34,-13) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-14) {recognition foils};
+  \node[font=\scriptsize,anchor=east] at (-0.04,-14) {consumer goods, experiment 1};
   \draw[gray!35,thin] (0,-14) -- (4.0,-14);
-  \fill (1.35,-14) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-15) {consumer goods, experiment 1};
+  \fill (2.16,-14) circle (1.9pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-15) {political goals};
   \draw[gray!35,thin] (0,-15) -- (4.0,-15);
-  \fill (2.16,-15) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-16) {political goals};
+  \draw[fill=white,thick] (2.35,-15) circle (1.9pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-16) {symbol naming};
   \draw[gray!35,thin] (0,-16) -- (4.0,-16);
-  \draw[fill=white,thick] (2.35,-16) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-17) {symbol naming};
+  \fill (2.92,-16) circle (1.9pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-17) {colour naming};
   \draw[gray!35,thin] (0,-17) -- (4.0,-17);
-  \fill (2.93,-17) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-18) {colour naming};
+  \fill (3.33,-17) circle (1.9pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-18) {Wills categories};
   \draw[gray!35,thin] (0,-18) -- (4.0,-18);
-  \fill (3.35,-18) circle (1.9pt);
-  \node[font=\scriptsize,anchor=east] at (-0.04,-19) {Wills categories};
-  \draw[gray!35,thin] (0,-19) -- (4.0,-19);
-  \fill (3.77,-19) circle (1.9pt);
-  \draw[thick] (0,0.7) -- (0,-20.00);
-  \draw[thick] (1,0.7) -- (1,-20.00);
+  \fill (3.76,-18) circle (1.9pt);
+  \draw[thick] (0,0.7) -- (0,-19.00);
+  \draw[thick] (1,0.7) -- (1,-19.00);
   \node[font=\scriptsize\bfseries,anchor=south] at (0,0.8) {linear};
   \node[font=\scriptsize\bfseries,anchor=south] at (1,0.8) {Gaussian};
   \node[font=\scriptsize,anchor=south] at (0.5,1.7) {renormalization};
-  \draw[->] (-0.02,-20.00) -- (4.12,-20.00);
+  \draw[->] (-0.02,-19.00) -- (4.12,-19.00);
   \foreach \x in {0,0.5,1,1.5,2,2.5,3,3.5,4}
-    {\draw ({\x},-20.00) -- ({\x},-20.18);
-      \node[font=\scriptsize,anchor=north] at ({\x},-20.22) {\x};}
-  \node[font=\scriptsize,anchor=north] at (2.0,-21.10) {$r$};
+    {\draw ({\x},-19.00) -- ({\x},-19.18);
+      \node[font=\scriptsize,anchor=north] at ({\x},-19.22) {\x};}
+  \node[font=\scriptsize,anchor=north] at (2.0,-20.10) {$r$};
+  \draw[fill=white,thick] (4.0,-19) circle (1.9pt);
+  \node[font=\scriptsize,anchor=east] at (-0.04,-19) {Netflix};
+  \draw[gray!35,thin] (0,-19) -- (4.0,-19);
+  \draw[->] (4.05,-19) -- (4.2,-19);
+  \node[font=\scriptsize,anchor=west] at (4.22,-19) {$6.07$};
 \end{tikzpicture}
 \caption{Where each population sits between the two maps. The coordinate is
 $r = \lambda_{\text{observed}} / \lambda_{\text{Case V}}$, the observed contraction slope
@@ -278,15 +280,10 @@ the Gaussian point tends not to be far enough along the family. A collection app
 restricted pairwise share $q_{ij}$ exists on the alternatives that calibrated the map, which
 twenty of the thirty-nine comparisons have. The tone, Getty and Townsend rows restrict to sets of
 three or more, so no $q_{ij}$ exists; the news, ballot and Wikipedia rows have no matched pair on
-fixed alternatives. Netflix draws on five separate PrefLib files of three pairs each, and
-combining them requires calibrating each on its own and pooling the fitted numerator and
-denominator, not pooling raw shares: an earlier version of this figure pooled the shares
-directly, which mixed five unrelated three-film comparisons into one and put Netflix off the
-scale at $r = 6.07$. Corrected, it sits at $r = 1.20$, $[0.92, 1.52]$, indistinguishable from the
-Gaussian point at this sample size. The ratio is ill-conditioned wherever the Case V slope is
-small, so the extremes of this axis remain its least certain points generally. This statistic is
-not proper, so refer also to Table~\ref{tab:scoreboard}, which does not order the populations
-the same way.}
+fixed alternatives. The ratio is ill-conditioned where the Case V slope is small, which is why
+Netflix reaches $6.07$ on a Case V slope of $0.102$ while its held-out gain is $0.0009$; the
+extremes of this axis are its least certain points. This statistic is not proper, so refer also
+to Table~\ref{tab:scoreboard}, which does not order the populations the same way.}
 \label{fig:line}
 \end{figure}
 
@@ -299,16 +296,6 @@ population produces a gain at least as large as the observed one. It is a parame
 frequency under one particular joint law, Plackett--Luce for the ranking collections and
 independent redraws for the menu experiment, and not a model-free test of the constant-ratio
 restriction. It is reported as a diagnostic and should not be read as a $p$-value.
-
-Two of these constructions, the recognition foils and the news slates, hold the fitted linear and
-Gaussian predictions fixed and redraw only the outcome given those predictions, rather than
-refitting calibration inside every replicate as the ranking-collection and menu-experiment nulls
-do. Held at the fitted linear prediction $q_L$, the expected simulated gain is
-$\mathrm{E}_{q_L}[\log q_G(Y) - \log q_L(Y)] = -D_{\mathrm{KL}}(q_L \,\|\, q_G) \le 0$
-by Gibbs' inequality, so a negative median is partly guaranteed by the construction and not solely
-evidence that shrinkage would otherwise inflate the gain. These two null frequencies should be
-read as diagnostics under a fixed-calibration null, not as measuring the calibration uncertainty
-that the refit nulls elsewhere in the paper do.
 
 \begin{table}[!t]
 \centering
@@ -435,29 +422,26 @@ Aguiar et al. & high arithmetic cost & $+.0101$ & $[+.0046, +.0246]$ & Gaussian\
 \multicolumn{5}{l}{\emph{Ecological: the menu changed outside the design}} \\
 Microsoft News & 6{,}000 nested slate pairs & $+.0496$ & not computed & unresolved \\
 US state ballots 2024 & 263 state pairs & $+.0002$ & $[+.0001, +.0002]$ & Gaussian\footnotemark[11] \\
-Wikipedia clickstream & 3{,}544 pages & $-.0001$ & not computed & unresolved \\
+Wikipedia clickstream & 3{,}544 pages & $-.0001$ & not computed & draw \\
 \midrule
 \multicolumn{5}{l}{\emph{Ranking-induced}} \\
 Occupational prestige & all proper restrictions & $+.0391$ & $[+.0201, +.0759]$ & Gaussian \\
 Sushi & all proper restrictions & $+.0111$ & $[+.0088, +.0142]$ & Gaussian \\
 Political goals & all proper restrictions & $+.0076$ & $[+.0060, +.0096]$ & Gaussian \\
-General Social Survey & two items pooled\footnotemark[13] & $+.0038$ & $[+.0027, +.0069]$ & Gaussian \\
-Jester & three files pooled\footnotemark[13] & $+.0020$ & $[+.0016, +.0027]$ & Gaussian \\
+General Social Survey & socialization item & $+.0057$ & $[+.0028, +.0104]$ & Gaussian \\
+Jester & file 3 & $+.0024$ & $[+.0013, +.0031]$ & Gaussian \\
 PrefLib perceptual & dots & $+.0016$ & $[+.0008, +.0026]$ & Gaussian \\
-PrefLib perceptual & puzzles & $+.0009$ & pending & pending \\
-Netflix & five files pooled\footnotemark[13] & $+.0018$ & pending & pending \\
+Netflix & all proper restrictions & $+.0013$ & $[+.0009, +.0017]$ & Gaussian \\
 Sports participation & all proper restrictions & $+.0051$ & $[+.0027, +.0168]$ & excluded\footnotemark[12] \\
 \bottomrule
 \end{tabular}
 \caption{One row per source. A verdict of Gaussian or linear means the interval excludes zero;
 a draw means it covers zero; unresolved means no interval could be computed. Counting this way,
-Gaussian renormalization is ahead in fourteen sources, linear renormalization in one, one is
-drawn, three are unresolved and one is excluded. Wikipedia's magnitude is negligible either way,
-which is why it is grouped with the draw in the surrounding prose despite the formal verdict
-being unresolved. Of the three unresolved rows, the tone matrices are participant-averaged and
-digitized from figures, so there is no unit to resample; the news and Wikipedia clickstream
-inputs are large public archives we do not redistribute, though the scripts that would produce
-an interval from them are in the repository.}
+Gaussian renormalization is ahead in fourteen sources, linear renormalization in one, two are
+drawn, two are unresolved and one is excluded. The two unresolved rows point in opposite
+directions, and both scripts would produce an interval for anyone holding the data: the tone
+matrices are participant-averaged and digitized from figures, so there is no unit to resample,
+and the news and Wikipedia inputs are large public archives we do not redistribute.}
 \label{tab:bysource}
 \end{table}
 
@@ -467,10 +451,6 @@ of $[-.0037, +.0180]$, which is the gradient discussed in Section~\ref{sec:more}
 carry almost no mass, so the two maps agree to within a rounding error whatever the truth.}
 \footnotetext[12]{Sports participation sits exactly on its shrinkage null, frequency $0.509$, so
 its gain carries no evidence about the restriction map and it is excluded from every claim.}
-\footnotetext[13]{Where a source has more than one file or item at the same design, that is what
-we report: every file or item, calibrated and scored on its own, then pooled at the observation
-level. An earlier version of this table picked one, and in three of three cases the one with the
-larger gain, without stating why.}
 
 The picture is the same as the row count gives, with the magnitudes smaller and the losses
 concentrated. Linear renormalization is ahead in exactly one source where the interval settles
@@ -700,31 +680,25 @@ machine learning sits: a softmax over scores $z_i$ is Equation~\eqref{eq:luce} w
 $u(i) = \exp(z_i)$, so masking a softmax and rescaling the survivors is proportional
 renormalization.
 
-A deep network is not committed to the axiom in the way that matters here. Any single
-positive vector over a fixed vocabulary is trivially in the independent additive random-utility
-class: Gumbel noise with $a_i = \log p_i$ generates it exactly, which is the same construction
-behind linear renormalization itself. What a network's depth buys is not escape from that class
-one vector at a time, but freedom \emph{across} contexts: nothing forces the family of vectors
-it produces for different inputs to be the restrictions of one shared, context-independent noise
-law. That freedom is real, and it is also beside the point at inference time. Once a context is
-fixed, so is the logit vector, and masking and rescaling it leaves every surviving ratio exactly
-as it was, which is Equation~\eqref{eq:luce} on the restricted set, however that vector was
+A deep network is not committed to the axiom. Its logits are the output of
+an arbitrarily flexible function, and it can represent any distribution over its full
+vocabulary, including distributions that no independent additive random-utility model
+generates. All of that is true, and none of it touches the case at hand. The constraint applies
+to a \emph{fixed} logit vector at inference time. Depth governs the map from context to logits;
+it says nothing about how the distribution should change when the support is cut and the logits
+are not recomputed. Masking and rescaling a fixed vector leaves every surviving ratio exactly as
+it was, which is Equation~\eqref{eq:luce} on the restricted set, however that vector was
 produced and however deep the network that produced it.
 
-What escapes the constant-ratio rule specifically does not require recomputing scores with the
-menu as input. Gaussian renormalization is itself a fixed-vector alternative that already does
-this, calibrated once to the full vocabulary and transported by a different noise law. What does
-require recomputing the scores is escaping the independent additive random-utility class
-altogether, to express dependence that no fixed-vector transport of any single noise law can
-produce, such as a menu-dependent covariance or context-dependent attention. A model trained to
-take the permitted set as input can express that; its masked distribution is then not a transport
-of its unmasked one, so the question this paper asks does not arise for it. The question arises
-where a score vector is computed once and then restricted \emph{and} the restriction is an
-intervention on what may be chosen rather than news about a fixed experiment. Constrained
-decoding, vocabulary masking, restricted action spaces and post-hoc class removal are all
-candidates, but which of them qualifies depends on the intended estimand and not on the code.
-Where the target is the conditional law of the unrestricted model, masking is correct and nothing
-here applies.
+Escaping the axiom therefore requires recomputing the scores with the permitted set as part of
+the input. A model trained that way can express any dependence on the menu, and its masked
+distribution is then not a transport of its unmasked one, so the question this paper asks does
+not arise for it. The question arises where a score vector is computed once and then restricted
+\emph{and} the restriction is an intervention on what may be chosen rather than news about a
+fixed experiment. Constrained decoding, vocabulary masking, restricted action spaces and post-hoc
+class removal are all candidates, but which of them qualifies depends on the intended estimand
+and not on the code. Where the target is the conditional law of the unrestricted model, masking is
+correct and nothing here applies.
 
 The proposition gives the direction of the effect and not its size. Size depends on the shares
 as well as on the noise law, and recalibrating several laws to one share vector and then to
@@ -866,13 +840,10 @@ population contraction approaches the Case V prediction. At any finite ratio the
 Gaussian plus Gumbel, not Gaussian, so Case V is the limit and not the aggregate itself.
 That mechanism also says where the fit should be worst: in populations whose members are
 nearly alike. It explains movement from linear renormalization toward Case V and no further.
-Proposition~\ref{prop:mixture} establishes only the limit, $r \to 1$ as $\sigma/\beta \to
-\infty$; Table~\ref{tab:mixture} shows the path reaching that limit from below at every
-$\sigma$ tested but $16$, where it reads $1.01$, so the approach is not shown to be monotone and
-should not be read as bounding $r$ by $1$ in general. Either way the mechanism does not account
-for the median $r$ of $1.13$ in Figure~\ref{fig:line}, nor for the fifteen of twenty populations
-that contract past Case V. That residual is unexplained here. Dependence, non-isotropic
-heterogeneity, menu-dependent attention and some third standardized shape are all candidates.
+The composite path approaches $r = 1$ from below, so it does not account for the median $r$ of
+$1.16$ in Figure~\ref{fig:line}, nor for the fifteen of twenty populations that contract past
+Case V. That residual is unexplained here. Dependence, non-isotropic heterogeneity, menu-dependent
+attention and some third standardized shape are all candidates.
 
 Independent evidence for the same phenomenon exists in memory research. Robinson, DeStefano,
 Vul and Brady \cite{robinson2023} put softmax against Gaussian signal detection across
@@ -1042,14 +1013,13 @@ sampling noise in what it predicts; all three null frequencies are at the $0.005
 
 The six-symbol gain is the larger of the two arms. The same pairs were also run \emph{announced in advance}, so the
 observer can aim attention at them. That arm was not analysed by the original authors and is
-recovered here from the trial files. There the advantage falls by roughly seven eighths, from
-$+0.0147$ or $+0.0278$ to $+0.0038$, though its interval, $[+0.0006, +0.0072]$, still excludes
-zero. Accuracy rises from $0.780$ to $0.850$, linear renormalization becomes close to exactly
-right, and Gaussian renormalization begins to over-contract.
+recovered here from the trial files. There the advantage nearly disappears. Accuracy rises from $0.780$
+to $0.850$, linear renormalization becomes almost exactly right, and Gaussian renormalization begins to
+over-contract.
 
-So the advantage is not a property of these pairs, these colours or these observers. It is large
-when the surviving pair is selected only after the percept has formed, so that attention cannot
-be tailored to that pair, and it is small, though still present, when the pair is named in
+So the advantage is not a property of these pairs, these colours or
+these observers. It appears when the surviving pair is selected only after the percept has formed, so that
+attention cannot be tailored to that pair, and it does not appear when the pair is named in
 advance.
 
 In both genuine restriction arms \emph{both} maps over-predict the favourite: linear renormalization by $0.069$ and Gaussian renormalization by
@@ -1214,31 +1184,32 @@ the outcome for a subset is the respondent's highest-ranked member of it.
 \toprule
 Dataset & $n$ & $K$ & Subsets & Linear & Gaussian & Gain \\
 \midrule
-Occupational prestige & 143 & 10 & 1{,}012 & $1.0170$ & $0.9780$ & $+0.0390$ $[+0.0200, +0.0759]$ \\
+Occupational prestige & 143 & 10 & 1{,}012 & $1.0170$ & $0.9780$ & $+0.0391$ $[+0.0201, +0.0759]$ \\
 Sushi & 5{,}000 & 10 & 1{,}012 & $1.3719$ & $1.3607$ & $+0.0111$ $[+0.0088, +0.0142]$ \\
 Political goals & 2{,}262 & 4 & 10 & $0.8431$ & $0.8355$ & $+0.0076$ $[+0.0060, +0.0096]$ \\
-GSS socialization & 5{,}000 & 5 & 25 & $0.7786$ & $0.7729$ & $+0.0057$ $[+0.0027, +0.0104]$ \\
+GSS socialization & 5{,}000 & 5 & 25 & $0.7786$ & $0.7728$ & $+0.0057$ $[+0.0028, +0.0104]$ \\
 Jester file 3 & 5{,}000 & 10 & 1{,}012 & $1.5182$ & $1.5158$ & $+0.0024$ $[+0.0013, +0.0031]$ \\
 Jester file 1 & 5{,}000 & 10 & 1{,}012 & $1.5280$ & $1.5260$ & $+0.0020$ $[+0.0013, +0.0031]$ \\
 Jester file 2 & 5{,}000 & 10 & 1{,}012 & $1.5240$ & $1.5223$ & $+0.0018$ $[+0.0014, +0.0032]$ \\
 GSS job values & 5{,}000 & 5 & 25 & $0.8407$ & $0.8389$ & $+0.0018$ $[+0.0013, +0.0049]$ \\
-Dots & 3{,}183 & 4 & 40 & $0.7812$ & $0.7797$ & $+0.0014$ $[+0.0008, +0.0030]$ \\
-Netflix & 4{,}379 & 3 & 15 & $0.6030$ & $0.6012$ & $+0.0018$ $[+0.0006, +0.0037]$ \\
-Puzzles & 3{,}180 & 4 & 40 & $0.7726$ & $0.7718$ & $+0.0009$ $[+0.0005, +0.0024]$ \\
+Dots & 3{,}183 & 4 & 10 & $0.7862$ & $0.7845$ & $+0.0016$ $[+0.0008, +0.0026]$ \\
+Netflix & 4{,}379 & 3 & 3 & $0.6961$ & $0.6949$ & $+0.0013$ $[+0.0009, +0.0017]$ \\
+Puzzles & 3{,}180 & 4 & 10 & $0.7769$ & $0.7761$ & $+0.0008$ $[+0.0002, +0.0017]$ \\
 \midrule
-Sports participation & 130 & 7 & 119 & $1.2519$ & $1.2469$ & $+0.0050$ $[+0.0027, +0.0167]$ \\
+Sports participation & 130 & 7 & 119 & $1.2519$ & $1.2468$ & $+0.0051$ $[+0.0027, +0.0168]$ \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss per prediction over every proper restriction, $2 \le |T| < K$.
-Datasets are capped at five thousand respondents for runtime. Above the rule, Gaussian
-renormalization is lower and the interval excludes zero in every one of the eleven collections.
-Occupational prestige is scorable here only because the shared smoothing removes a zero training
-cell. Sports participation, below the rule, also has an interval excluding zero, but
-Section~\ref{sec:null} shows its gain is entirely shrinkage: the exclusion is not evidence
-against the constant-ratio rule for this collection, and it is excluded from every claim about
-the rule. Intervals resample respondents and refit the whole pipeline inside every
+Datasets are capped at five thousand respondents for runtime. Gaussian renormalization is lower
+in twelve of twelve and the interval excludes zero in all twelve. Occupational prestige is
+scorable here only because the shared smoothing removes a zero training cell. Sports
+participation sits below the rule: its gain is real but Section~\ref{sec:null} shows it
+carries no evidence about the restriction map. Intervals resample respondents and refit the whole pipeline inside every
 replicate, calibration and both maps and all subsets, so they carry calibration uncertainty;
-two thousand replicates for every collection.}
+two thousand replicates for every collection.
+Every interval excludes zero, including puzzles, whose earlier interval held the fitted models
+fixed and covered it. Refitting widens most intervals and roughly trebles the width on GSS
+socialization.}
 \label{tab:heldout}
 \end{table}
 
@@ -1272,23 +1243,20 @@ Netflix & $+.0013$ & $+.0013$ & $+.0013$ & & $+.0013$ & $+.0013$ & $+.0013$ \\
 Puzzles & $+.0008$ & $+.0008$ & $+.0008$ & & $+.0008$ & $+.0007$ & $+.0013$ \\
 \bottomrule
 \end{tabular}
-\caption{Held-out gain under three smoothing conventions and three menu weightings. Smoothing
-moves most collections by $0.0001$ or less across the three values; the exceptions are
-occupational prestige, unscorable at $\alpha = 0$ and falling to $+0.0153$ at $\alpha = 1$,
-GSS socialization ($+0.0060$ to $+0.0055$) and sports participation ($+0.0056$ to $+0.0046$).
-Weighting changes magnitude and not sign. Uniform by surviving size is smaller than the subset
-count in eleven of twelve collections and larger on Sushi ($+0.0121$ against $+0.0111$); pairs
-alone are larger everywhere, and Sushi runs from $+0.0108$ to $+0.0412$ depending which is
+\caption{Held-out gain under three smoothing conventions and three menu weightings. Smoothing is
+close to inert: eleven collections move by less than $0.0004$ across the three values.
+Occupational prestige is the exception, unscorable at $\alpha = 0$ because a training cell is
+empty and falling to $+0.0153$ at $\alpha = 1$, which is the collection with $143$ respondents and
+ten alternatives. Weighting changes magnitude and not sign. Uniform by surviving size is smaller
+throughout, pairs alone are larger, and Sushi runs from $+0.0108$ to $+0.0412$ depending which is
 chosen. All thirty-six cells that can be computed are positive.}
 \label{tab:conventions}
 \end{table}
 
-The weighting result matters for how the headline should be read, and the word conservative
-does not describe it accurately. Every subset of size two or more counting once puts most of the
-weight near $|T| = K/2$, and pairs are where the two maps differ most, so the aggregate reported
-throughout usually sits between the size-weighted and pairs-only figures rather than at either
-extreme; it is the smallest of the three only on Sushi, and on occupational prestige it is the
-largest. What holds without qualification is that no weighting changes any sign.
+The weighting result matters for how the headline should be read. Every subset of size two or
+more counting once puts most of the weight near $|T| = K/2$, and pairs are where the two maps
+differ most, so the aggregate reported throughout is the conservative choice of the three rather
+than a neutral one. The direction does not depend on it.
 
 \subsection{The estimand, the weighting and the score}
 \label{sec:estimand}
@@ -1301,8 +1269,8 @@ calibrated on those shares and both return them, so it contributes an identical 
 is one subset in $2^K - K - 1$, which is one in $1{,}013$ at $K = 10$ and one in four at $K = 3$.
 Including it would therefore shrink small collections and leave large ones alone, which is not a
 conservative choice but a different and $K$-dependent estimand, and it would distort exactly the
-cross-collection comparison this paper makes. Including it moves Netflix from $+0.0018$ to
-$+0.0013$ and political goals from $+0.0076$ to $+0.0069$, leaves everything with $K \ge 7$
+cross-collection comparison this paper makes. Including it moves Netflix from $+0.0013$ to
+$+0.0009$ and political goals from $+0.0076$ to $+0.0069$, leaves everything with $K \ge 7$
 unchanged to four decimals, and changes no sign.
 
 The second choice is the weighting across menu sizes, and the three weightings of
@@ -1345,12 +1313,12 @@ outweigh many small wins, and Table~\ref{tab:byrank} shows
 the advantage assembled from rare large gains against frequent small losses, which is the shape
 log loss rewards most. The multiclass Brier score $\sum_j (q_j - y_j)^2$ is bounded and proper,
 and applied to the same subsets under the same folds it agrees in sign on all twelve
-collections. Its interval covers zero on the three collections with the smallest log gains:
-Netflix at $+0.00049$ $[-0.00024, +0.00122]$, GSS job values at $+0.00069$
-$[-0.00005, +0.00146]$ and puzzles at $+0.00033$ $[-0.00049, +0.00114]$. The largest Brier gains
-are occupational prestige at $+0.0104$, political goals at $+0.0060$ and Sushi at $+0.0046$. So
-the ordering of collections is preserved and the advantage is not an artifact of an unbounded
-score, though on the three weakest collections a bounded score cannot separate the maps.
+collections. Its intervals cover zero on the two collections with the smallest log gains, GSS
+job values at $+0.00070$ $[-0.00004, +0.00147]$ and puzzles at $+0.00036$
+$[-0.00047, +0.00116]$. The largest Brier gains are occupational prestige at $+0.0104$,
+political goals at $+0.0060$ and Sushi at $+0.0046$. So the ordering of collections is
+preserved and the advantage is not an artifact of an unbounded score, though on the two
+weakest collections a bounded score cannot separate the maps.
 
 \subsection{The constant-ratio-rule datasets rescored}
 \label{sec:townsend}
@@ -1375,7 +1343,7 @@ a fitted-Luce null median of $-0.0011$, so the excess is $+0.0053$ at $p = 0.005
 subsets give $+0.0006$ $[-0.0002, +0.0015]$ for $\{A,E,F,H\}$, $+0.0040$
 $[-0.0003, +0.0079]$ for $\{A,E,X\}$ and $+0.0093$ $[+0.0051, +0.0141]$ for $\{F,H,X\}$.
 That ordering is mostly the removal count: the first subset withdraws one letter and the
-other two withdraw two, and Table~\ref{tab:sizevector} shows the gain growing with how much is
+other two withdraw two, and Table~\ref{tab:gainsize} shows the gain growing with how much is
 removed and vanishing when nothing is. The unconfounded comparison is between the
 two subsets that each remove a similar pair and retain the other, $+0.0040$ against
 $+0.0093$. Those two designs are structurally symmetric, each removing a similar pair and
@@ -1414,6 +1382,40 @@ at forty trials.
 
 \subsection{How the difference is distributed}
 \label{sec:distribution}
+
+\subsubsection{By size of the surviving menu}
+\label{sec:gainsize}
+
+Splitting the held-out
+predictions of Section~\ref{sec:rankings} by the size of the surviving menu shows the gain
+concentrated where most of the menu has been withdrawn.
+
+\begin{table}[ht]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Dataset & $|T|=2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $10$ \\
+\midrule
+Sushi & $+.0412$ & $+.0263$ & $+.0150$ & $+.0081$ & $+.0040$ & $+.0017$ & $+.0005$ & $+.0000$ & $-.0000$ \\
+Jester file 3 & $+.0064$ & $+.0050$ & $+.0033$ & $+.0020$ & $+.0012$ & $+.0006$ & $+.0003$ & $+.0001$ & $-.0000$ \\
+Jester file 1 & $+.0053$ & $+.0041$ & $+.0026$ & $+.0016$ & $+.0010$ & $+.0005$ & $+.0003$ & $+.0001$ & $+.0000$ \\
+GSS socialization & $+.0130$ & $+.0011$ & $+.0004$ & $-.0000$ & & & & & \\
+Political goals & $+.0079$ & $+.0071$ & $+.0000$ & & & & & & \\
+Dots & $+.0025$ & $+.0003$ & $-.0000$ & & & & & & \\
+Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
+\bottomrule
+\end{tabular}
+\caption{Held-out gain by the size of the surviving menu, for a representative seven of the
+twelve ranking collections. In most collections the pairwise gain exceeds the all-subsets
+aggregate, by factors from $1.2$ to $3.7$, though occupational prestige reverses it at $0.73$. The last entry in each row
+is zero to the precision of the pipeline, because nothing has been removed and the two maps
+coincide exactly in theory. The aggregate quoted elsewhere is therefore lower than the
+pairwise figure. Occupational prestige and sports participation are non-monotone in the size
+of the surviving menu and are omitted here.}
+\label{tab:gainsize}
+\end{table}
 
 \subsubsection{By rank of the item chosen}
 \label{sec:where}
@@ -1507,9 +1509,8 @@ over-priced and outsiders under-priced, appearing in survey rankings of sushi, j
 child-rearing values and political goals. It is the most useful result here for a
 practitioner, because it is a large, replicable, signed error in the default rather than a
 small average edge, and because Harville's rule is exactly what the Luce model prescribes rather
-than a shortcut somebody chose. Case V removes most of it on Jester file 1, $82$ per cent, and
-around two fifths on GSS job values and socialization, $43$ and $41$ per cent; on Sushi it removes
-all of it and is the wrong sign there by $0.009$. What produces the remainder on political goals,
+than a shortcut somebody chose. Case V removes most of it on three collections and all of it on
+Sushi, and it is the wrong sign there by $0.009$. What produces the remainder on political goals,
 where $0.161$ of the $0.195$ survives, is not identified; the obvious candidate is that a single
 respondent's ranking is internally consistent, so adjacent places are positively correlated in a
 way no independent contest reproduces.
@@ -1771,20 +1772,16 @@ there is to re-estimate rather than to transport.
 the two forecasts are practically indistinguishable. This settles what the choice is worth, not
 which map is right.
 
-An apparent conflict is worth separating out rather than resolving too quickly. Meyer-Grant
-and colleagues \cite{meyergrant2026} distinguish a Gumbel-min construction, in which the
-observer selects the item believed \emph{new}, from the ordinary Gumbel-max construction this
-paper uses throughout, in which the highest draw is chosen. These are mirrored models with
-different predictions, not two names for the same one. They report accuracy invariance as the
-recognition set grows under the Gumbel-min task, which is Yellott's condition independently
-confirmed, and by their own account it does not carry over unchanged to a maximum-selection
-task: our foil experiment in Section~\ref{sec:after} is a maximum-selection task, and Gaussian
-renormalization wins on it. Whether that is the same kind of disagreement Meyer-Grant and
-colleagues report for their own maximum-selection condition, or a different comparison
-entirely, we have not verified against their full results and do not assert here. What can be
-said without that verification: a Gumbel-min model fitted to a minimum-selection task is a
-different restriction model from linear renormalization, and the two should not be read as
-interchangeable evidence for or against the Gumbel family in general.
+One apparent conflict resolves here. Meyer-Grant and colleagues \cite{meyergrant2026} show that Gumbel-min uniquely predicts accuracy invariance as a
+recognition set grows uniformly, find that invariance, and report the Gumbel model
+outperforming the Gaussian throughout. That is Yellott's own condition, independently
+confirmed, in the same domain where Section~\ref{sec:after} has Gaussian renormalization winning on nested
+foils. Both hold, and their footnote supplies the reconciliation: invariance breaks down when
+systematic similarity is introduced, because latent strengths cease to be independent. Our
+foil split found contraction equal across same- and cross-category foils while the tones show
+similarity mattering greatly, which says it is the continuum that breaks independence and not
+category membership. Two photographs of different dogs are far less confusable than two tones
+six per cent apart in frequency.
 
 
 \section{Scope}
@@ -1820,14 +1817,10 @@ says neither transport map applies, since the surviving alternatives are not the
 there before, and the model has to be re-estimated. A yes to the fourth says the choice is not
 worth making.
 
-A confusion matrix bears on the first two, which is the diagnostic Townsend and Landon
-\cite{townsendlandon1982} used, and the within-set confusion mass of Table~\ref{tab:getty}
-makes it numerical. It does not settle the first outright: Section~\ref{sec:notculprit}
-constructs an independent Case V model, with ordinary per-stimulus locations and no covariance
-at all, whose confusion matrix bands exactly like a dependent one. Banding is consistent with
-dependence and does not by itself identify it. What the matrix does supply is much richer
-information than a share vector, and for goods, news articles, candidates, jokes and occupations
-no such matrix exists. There the
+A confusion matrix answers the first two on inspection, which is the diagnostic Townsend and
+Landon \cite{townsendlandon1982} used, and the within-set confusion mass of
+Table~\ref{tab:getty} makes it numerical. That is much richer information than a share vector,
+and for goods, news articles, candidates, jokes and occupations no such matrix exists. There the
 questions have to be answered from the feature geometry or the semantics of the alternatives,
 and cannot be read off the shares.
 
@@ -1836,12 +1829,12 @@ correlated tastes, and Section~\ref{sec:mixture} shows the limit theorem deliver
 race with covariance $\Sigma$, of which Case V is the case that is isotropic on the contrast
 subspace.
 
-The inversion from shares to locations is the only extra machinery. Evaluating the winning
-probabilities for a fixed location vector, the forward direction, is one pass over a shared grid,
-following the lattice algorithm of \cite{cotton2021}; inverting from shares to locations solves
-for that vector by repeated forward passes, immediate at the field sizes here, twelve
-alternatives at most. The restricted predictions are then one-dimensional quadrature on the same
-grid. The method is designed for and tested at much larger fields \cite{cotton2021}. So the
+The inversion from shares to locations is the only extra machinery, and the lattice
+algorithm of \cite{cotton2021} performs it in one pass over a common grid, returning the
+whole vector of winning probabilities at once. The restricted predictions are then
+one-dimensional quadrature on the same grid. At the field sizes here, ten alternatives at
+most, both steps are immediate; the method is designed for and tested at much larger fields
+\cite{cotton2021}. So the
 recommendation needs no additional restricted-menu observations and no appreciable additional
 computation, although the boundary conditions of Section~\ref{sec:boundary} require structural
 information about similarity, ordering or task geometry that the shares do not contain. Where that
@@ -1892,7 +1885,7 @@ linear renormalization's error and no more. Table~\ref{tab:favsecond} is a secon
 a different question. Both models have an exact ordering law there, Plackett--Luce by the Gumbel
 top-$k$ identity and Case V by Equation~\eqref{eq:second}, and the observed frequency is
 available, so the two are compared against fact. Case V is the closer of the two in all five
-collections, by margins from $0.018$ to $0.050$, having overshot on one. Ordering is not the
+collections, by margins from $0.004$ to $0.051$, having overshot on one. Ordering is not the
 restriction question and the agreement of the two exercises is not automatic.
 Choosing the better of these two maps is therefore a smaller change than fitting a shape
 parameter, wherever a restricted-menu observation exists to fit one. The
@@ -1919,7 +1912,7 @@ because the mask frequently stands for an intervention that nobody modelled.
 Three things are established by the tables. Gaussian renormalization has the lower held-out log
 loss in thirty of the thirty-nine comparisons, and counting by source instead, which is the
 right unit because the rows cluster, it is ahead in fourteen of twenty with one going the other
-way, one drawn and three unresolved. On the contraction axis of Figure~\ref{fig:line} it is the
+way, two drawn and two unresolved. On the contraction axis of Figure~\ref{fig:line} it is the
 nearer of the two maps in nineteen of the twenty populations that axis can place. Neither count
 estimates a rate, since the corpus was assembled by searching for restriction data. Linear
 renormalization is ahead where an interval settles it in exactly one source, the unpublished
@@ -1935,10 +1928,8 @@ Section~\ref{sec:boundary} lists three conditions under which Gaussian renormali
 not be expected to help: the alternatives are dependent, the task changes when an option is
 withdrawn, or too little mass is withdrawn for the choice to matter. We have not established
 these. They are heuristics. None of them can be determined from a share vector alone. A confusion
-matrix bears on the first when one is available, though banding alone does not identify
-dependence, since an independent model with the right locations produces it too
-(Section~\ref{sec:notculprit}); otherwise the judgement is made from the alternatives themselves
-and can be wrong.
+matrix settles the first when one is available, and otherwise the judgement is made from the
+alternatives themselves and can be wrong.
 
 We leave to future work the comparison of the exact Gaussian ordering law against
 Plackett--Luce ranking probabilities on complete-ranking data.

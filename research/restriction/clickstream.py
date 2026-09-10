@@ -20,6 +20,8 @@ import collections
 import sys
 from pathlib import Path
 
+import random
+
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
@@ -95,19 +97,23 @@ def prepare(cs):
 def score(prep, obs_list=None):
     tot_l = tot_g = 0.0
     n = 0
+    diffs = []
     for i, (keep, lu, ra, u, tot, obs0) in enumerate(prep):
         obs = obs0 if obs_list is None else obs_list[i]
         s = obs.sum()
         if s <= 0:
             continue
         o = obs / s
-        tot_l += float(-(o * np.log(lu)).sum())
-        tot_g += float(-(o * np.log(ra)).sum())
+        dl = float(-(o * np.log(lu)).sum())
+        dg = float(-(o * np.log(ra)).sum())
+        tot_l += dl
+        tot_g += dg
         n += 1
+        diffs.append(dl - dg)
     if n < 20:
         return None
     return {"cells": n, "luce": tot_l / n, "race": tot_g / n,
-            "gain": (tot_l - tot_g) / n}
+            "gain": (tot_l - tot_g) / n, "diffs": np.array(diffs)}
 
 
 def synth(prep, rng):
@@ -141,6 +147,15 @@ def main():
     print(f"  renormalization {r['luce']:.4f}   race {r['race']:.4f}   gain {r['gain']:+.4f}")
     print(f"  Luce null median {med:+.4f}   excess {r['gain']-med:+.4f}   "
           f"MC tail {pv:.3f}  ({len(null)} reps)")
+
+    # page-level bootstrap. The scoreboard calls a row a draw when this covers zero,
+    # so every row needs one and not only the designed experiments.
+    rb = random.Random(5)
+    d = r["diffs"]
+    bs = sorted(float(d[[rb.randrange(len(d)) for _ in range(len(d))]].mean())
+                for _ in range(4000))
+    print(f"  page bootstrap 95% [{bs[100]:+.4f}, {bs[3900]:+.4f}]  "
+          f"from {len(d)} pages")
 
 
 if __name__ == "__main__":

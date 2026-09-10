@@ -107,10 +107,18 @@ def report(label, cells, reps, seed=0):
     med = float(np.median(null))
     pv = (float((null >= r["gain"]).sum()) + 1) / (len(null) + 1)
     tg = sorted({c[6] for c in cells})
+    by_target = {t: [c for c in cells if c[6] == t] for t in tg}
     bs = []
     for _ in range(300):
-        pick = set(np.array(tg, dtype=object)[rng.integers(0, len(tg), len(tg))])
-        s = score([c for c in cells if c[6] in pick])
+        # a proper cluster bootstrap: resample targets WITH replacement and keep the
+        # multiplicity, replicating a target's cells as many times as it was drawn.
+        # An earlier version wrapped the draw in set(), which discarded duplicates and
+        # understated resampling variance, producing an interval too narrow to trust.
+        counts = np.bincount(rng.integers(0, len(tg), len(tg)), minlength=len(tg))
+        resampled = []
+        for t, k in zip(tg, counts):
+            resampled.extend(by_target[t] * int(k))
+        s = score(resampled)
         if s:
             bs.append(s["gain"])
     bs = sorted(bs)

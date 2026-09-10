@@ -20,6 +20,8 @@ import csv
 import sys
 from pathlib import Path
 
+import random
+
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
@@ -87,6 +89,7 @@ def predict(shares_big, menu_small):
 def score(states, party, max_gap, synth=None):
     pairs = 0
     tot_l = tot_g = tot_w = 0.0
+    diffs = []
     names = sorted(states)
     for A in names:
         mA = set(states[A])
@@ -112,14 +115,17 @@ def score(states, party, max_gap, synth=None):
             if w.sum() <= 0:
                 continue
             w = w / w.sum()
-            tot_l += float(-(w * np.log(lu)).sum())
-            tot_g += float(-(w * np.log(ra)).sum())
+            dl = float(-(w * np.log(lu)).sum())
+            dg = float(-(w * np.log(ra)).sum())
+            tot_l += dl
+            tot_g += dg
             tot_w += 1.0
             pairs += 1
+            diffs.append(dl - dg)
     if pairs < 5:
         return None
     return {"pairs": pairs, "luce": tot_l / tot_w, "race": tot_g / tot_w,
-            "gain": (tot_l - tot_g) / tot_w}
+            "gain": (tot_l - tot_g) / tot_w, "diffs": np.array(diffs)}
 
 
 def luce_synth(states, rng):
@@ -164,6 +170,15 @@ def main():
           f"gain {r['gain']:+.4f}")
     print(f"  Luce null median {med:+.4f}   excess {r['gain']-med:+.4f}   "
           f"MC tail {pv:.3f}  ({len(null)} reps)")
+
+    # pair-level bootstrap. The scoreboard calls a row a draw when this covers zero,
+    # so every row needs one and not only the designed experiments.
+    rb = random.Random(5)
+    d = r["diffs"]
+    bs = sorted(float(d[[rb.randrange(len(d)) for _ in range(len(d))]].mean())
+                for _ in range(4000))
+    print(f"  pair bootstrap 95% [{bs[100]:+.4f}, {bs[3900]:+.4f}]  "
+          f"from {len(d)} pairs")
 
 
 if __name__ == "__main__":

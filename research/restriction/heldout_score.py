@@ -14,9 +14,16 @@ subset as the outcome and accumulate log loss under both accounts.
 
 No pairwise or subset outcome enters either calibration, the evaluation covers all
 subset sizes rather than pairs alone, and log loss is proper, so a correct forecast
-cannot be improved by distorting it. Uncertainty comes from resampling respondents.
+cannot be improved by distorting it.
 
-Usage:  python heldout_score.py
+This module's own score()/main() are superseded and not what the paper's Table 3
+reports. Their bootstrap resamples already-computed respondent losses with
+calibration held fixed; estimand.py and sensitivity.py refit calibration inside
+every replicate, which is what the paper describes and what its numbers are. Kept
+here for the shared loaders, load_all() and preflib_sets(): every other script in
+this directory imports them from this file.
+
+Usage:  python heldout_score.py   (superseded diagnostic; see estimand.py instead)
 """
 import itertools
 import math
@@ -153,23 +160,22 @@ def read_soc(path):
 
 
 def preflib_sets():
+    """Each PrefLib file is a separate design: 'alternative 1' does not name the same
+    stimulus in different files. Netflix alternative 1 is a different film in every file
+    (Shrek in one, Spy Game in another); dots and puzzles vary similarly past the first
+    slot. Stacking files with the same K, as an earlier version of this function did,
+    silently pooled unrelated choice problems. Every file is its own collection.
+    """
     out = {}
     for tag, label in (("dots", "Dots"), ("puzzle", "Puzzles"),
                        ("netflix", "Netflix")):
-        mats = []
+        i = 0
         for f in sorted(PREFLIB.glob(f"*{tag}*")):
             M = read_soc(f)
-            if M is not None and M.shape[0] >= 50:
-                mats.append(M)
-        if not mats:
-            continue
-        # keep files separate when widths differ; otherwise stack
-        widths = {m.shape[1] for m in mats}
-        if len(widths) == 1:
-            out[label] = np.vstack(mats)
-        else:
-            for i, m in enumerate(mats):
-                out[f"{label} {i+1}"] = m
+            if M is None or M.shape[0] < 50:
+                continue
+            i += 1
+            out[f"{label} {i}"] = M
     return out
 
 

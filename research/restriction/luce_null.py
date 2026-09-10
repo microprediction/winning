@@ -27,6 +27,7 @@ the referee's remedy for zero cells is to smooth both accounts identically.
 Usage:  python luce_null.py [n_reps] [dataset substring]
 """
 import itertools
+import re
 import sys
 import time
 from pathlib import Path
@@ -42,9 +43,18 @@ from heldout_score import load_all, MAX_RESP
 FLOOR = 1e-6
 
 
+# The estimand is restrictions, so the full menu is excluded. There the two maps are
+# calibrated on the same shares, return those shares, and contribute an identical zero.
+# Its weight is 1 in 2^K - K - 1, which is nothing at K=10 and a quarter at K=3, so
+# including it shrinks small-K collections and not large ones. Set RESTRICTIONS_ONLY
+# false to recover the earlier published estimand.
+RESTRICTIONS_ONLY = True
+
+
 def subsets_of(K):
+    top = K if RESTRICTIONS_ONLY else K + 1
     out = []
-    for r in range(2, K + 1):
+    for r in range(2, top):
         out.extend(itertools.combinations(range(K), r))
     return out
 
@@ -55,11 +65,11 @@ def pl_ranks(u, n, rng):
     return (-s).argsort(axis=1).argsort(axis=1) + 1.0
 
 
-def gain(R, subs, folds=5, seed=0, alpha=0.0):
-    """Mean held-out log-loss advantage of the race over renormalization.
-
-    Returns None when the pipeline cannot run, which for alpha=0 includes a zero
-    training share, exactly the condition that excludes occupational prestige."""
+def gain_totals(R, subs, folds=5, seed=0, alpha=0.0):
+    """(tot_l, tot_g, cnt) for one collection, before dividing into a mean. Several
+    collections' totals can be summed before dividing, which is how files of one
+    PrefLib source (see heldout_score.preflib_sets) are combined without ever mixing
+    their raw shares."""
     rng = np.random.default_rng(seed)
     n, K = R.shape
     if n > MAX_RESP:
@@ -88,7 +98,44 @@ def gain(R, subs, folds=5, seed=0, alpha=0.0):
             tot_l += -np.log(luce[win]).sum()
             tot_g += -np.log(race[win]).sum()
             cnt += len(win)
+    return tot_l, tot_g, cnt
+
+
+def gain(R, subs, folds=5, seed=0, alpha=0.0):
+    """Mean held-out log-loss advantage of the race over renormalization.
+
+    Returns None when the pipeline cannot run, which for alpha=0 includes a zero
+    training share, exactly the condition that excludes occupational prestige."""
+    t = gain_totals(R, subs, folds=folds, seed=seed, alpha=alpha)
+    if t is None:
+        return None
+    tot_l, tot_g, cnt = t
     return (tot_l - tot_g) / cnt
+
+
+def gain_grouped(Rs, subs_by_R, folds=5, seed=0, alpha=0.0):
+    """Same statistic, pooled over several separately calibrated files."""
+    tot_l = tot_g = 0.0
+    cnt = 0
+    for R, subs in zip(Rs, subs_by_R):
+        t = gain_totals(R, subs, folds=folds, seed=seed, alpha=alpha)
+        if t is None:
+            return None
+        l, g, c = t
+        tot_l += l; tot_g += g; cnt += c
+    return (tot_l - tot_g) / cnt
+
+
+def _null_summary(name, n, K, obs, null, t0):
+    null = np.array(sorted(null))
+    if len(null) < 5:
+        return None
+    p_val = float((null >= obs).sum() + 1) / (len(null) + 1)
+    return {"name": name, "n": n, "K": K, "obs": obs,
+            "null_med": float(np.median(null)),
+            "null_95": float(null[int(0.95 * (len(null) - 1))]),
+            "excess": obs - float(np.median(null)),
+            "p": p_val, "reps": len(null), "secs": time.time() - t0}
 
 
 def run(name, R, reps, alpha):
@@ -110,34 +157,74 @@ def run(name, R, reps, alpha):
         g = gain(Rb, subs, seed=1000 + b, alpha=alpha)
         if g is not None:
             null.append(g)
-    null = np.array(sorted(null))
-    if len(null) < 5:
+    return _null_summary(name, n, K, obs, null, t0)
+
+
+def run_grouped(name, Rs, reps, alpha):
+    """Several files of one source: each gets its own subsets and its own null worths
+    (a different film's shares in every Netflix file), and every replicate draws one
+    simulated ranking per file before pooling the gain, matching how the observed
+    gain is pooled."""
+    subs_by_R = [subsets_of(R.shape[1]) for R in Rs]
+    ns = [min(R.shape[0], MAX_RESP) for R in Rs]
+    obs = gain_grouped(Rs, subs_by_R, alpha=alpha)
+    if obs is None:
         return None
-    p_val = float((null >= obs).sum() + 1) / (len(null) + 1)
-    return {"name": name, "n": n, "K": K, "obs": obs,
-            "null_med": float(np.median(null)),
-            "null_95": float(null[int(0.95 * (len(null) - 1))]),
-            "excess": obs - float(np.median(null)),
-            "p": p_val, "reps": len(null), "secs": time.time() - t0}
+    us = []
+    for R in Rs:
+        u = np.bincount(R.argmin(axis=1), minlength=R.shape[1]).astype(float)
+        u = np.maximum(u, 0.5)
+        us.append(u / u.sum())
+    null = []
+    rng = np.random.default_rng(12345)
+    t0 = time.time()
+    for b in range(reps):
+        Rbs = [pl_ranks(u, n, rng) for u, n in zip(us, ns)]
+        g = gain_grouped(Rbs, subs_by_R, seed=1000 + b, alpha=alpha)
+        if g is not None:
+            null.append(g)
+    return _null_summary(name, sum(ns), max(R.shape[1] for R in Rs), obs, null, t0)
+
+
+GROUP_RE = re.compile(r"^(Netflix|Dots|Puzzles) \d+$")
+
+
+def group_data(data, want):
+    """One entry per source. See heldout_score.preflib_sets: a PrefLib file is a
+    separate design, so Netflix/Dots/Puzzles enter here as their per-file matrices
+    and are combined by run_grouped rather than pooled beforehand."""
+    groups = {}
+    singles = {}
+    for k, v in data.items():
+        if want and want.lower() not in k.lower():
+            continue
+        m = GROUP_RE.match(k)
+        if m:
+            groups.setdefault(m.group(1), []).append(v)
+        else:
+            singles[k] = v
+    return singles, groups
 
 
 def main():
     reps = int(sys.argv[1]) if len(sys.argv) > 1 else 60
     want = sys.argv[2] if len(sys.argv) > 2 else ""
-    data = {k: v for k, v in load_all().items() if want.lower() in k.lower()}
+    singles, groups = group_data(load_all(), want)
     for alpha in (0.0, 0.5):
         print(f"\n=== add-alpha = {alpha} "
               f"({'paper pipeline' if alpha == 0 else 'both accounts smoothed'}) ===")
         print(f"{'dataset':<22}{'n':>6}{'K':>3}{'observed':>10}{'null med':>10}"
               f"{'null 95%':>10}{'excess':>9}{'p':>7}{'reps':>6}")
-        for name, R in sorted(data.items()):
-            r = run(name, R, reps, alpha)
+        rows = [(name, run(name, R, reps, alpha)) for name, R in sorted(singles.items())]
+        rows += [(name, run_grouped(name, Rs, reps, alpha))
+                 for name, Rs in sorted(groups.items())]
+        for name, r in sorted(rows):
             if r is None:
                 print(f"{name:<22}  not scorable at this alpha")
                 continue
             print(f"{r['name']:<22}{r['n']:>6}{r['K']:>3}{r['obs']:>+10.4f}"
                   f"{r['null_med']:>+10.4f}{r['null_95']:>+10.4f}"
-                  f"{r['excess']:>+9.4f}{r['p']:>7.3f}{r['reps']:>6}",
+                  f"{r['excess']:>+9.4f}{r['p']:>7.4f}{r['reps']:>6}",
                   flush=True)
 
 

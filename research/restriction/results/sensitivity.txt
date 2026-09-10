@@ -17,7 +17,16 @@ Sushi                     +0.0113  +0.0111  +0.0109  |    +0.0111  +0.0108  +0.0
 
 Respondent bootstrap with the whole pipeline refit inside each replicate, 200 replicates.
 
-dataset                      gain               refit 95%  reps
-Dots                      +0.0015      [+0.0006, +0.0026]    30
-GSS job values            +0.0017      [+0.0018, +0.0046]    30
-GSS socialization         +0.0055      [+0.0017, +0.0102]    30
+dataset                      gain          refit interval  reps    kind
+Dots                      +0.0015      [+0.0006, +0.0024]   100     95%
+GSS job values            +0.0017      [+0.0014, +0.0044]   100     95%
+GSS socialization         +0.0055      [+0.0022, +0.0101]   100     95%
+Jester file 1             +0.0020      [+0.0009, +0.0030]   100     95%
+Jester file 2             +0.0018      [+0.0012, +0.0031]   100     95%
+Jester file 3             +0.0024      [+0.0014, +0.0031]   100     95%
+Netflix                   +0.0009      [+0.0006, +0.0012]   100     95%
+Occupational prestige     +0.0390      [+0.0207, +0.0801]   200     95%
+Political goals           +0.0069      [+0.0054, +0.0086]   100     95%
+Puzzles                   +0.0007      [+0.0002, +0.0015]   100     95%
+Sports participation      +0.0050      [+0.0027, +0.0158]   200     95%
+Sushi                     +0.0111      [+0.0079, +0.0140]   100     95%

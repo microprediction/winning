@@ -35,7 +35,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "polysemy_pilot"))
 from exact_analyze import calibrate_np, win_probs_np
 
-DATA = HERE / "data" / "rouder_chunk" / "c0"
+COUNTS = HERE / "data" / "rouder_chunk" / "counts.npz"
 FLOOR = 1e-6
 ALPHA = 0.5
 K = 12
@@ -68,26 +68,34 @@ def offered(observed, candidates):
     return min(fits, key=len) if fits else None
 
 
+def load_counts():
+    """Per-block confusion counts, derived from the deposit by derive_rouder.py.
+
+    The deposit itself is not redistributed: it carries no licence. What is committed is
+    the count array, which is what this analysis reads.
+    """
+    z = np.load(COUNTS, allow_pickle=False)
+    out = collections.defaultdict(lambda: collections.defaultdict(list))
+    for c, subj, cond, blk in zip(z["counts"], z["subject"], z["condition"], z["block"]):
+        out[str(cond)][str(subj)].append((int(blk), c))
+    return out
+
+
 def build(cond):
     groups = []
-    for path in sorted(glob.glob(str(DATA / f"C1{cond}S*"))):
-        rows = read(path)
-        if not rows:
-            continue
-        blocks = collections.defaultdict(list)
-        for blk, st, rp in rows:
-            blocks[blk].append((st, rp))
+    per_subject = load_counts().get(cond, {})
+    for path in sorted(per_subject):
+        blocks = {blk: c for blk, c in per_subject[path]}
         master = np.zeros((K, K))
         restricted = collections.defaultdict(lambda: np.zeros((K, K)))
-        for blk, trials in blocks.items():
-            seen = {x for st, rp in trials for x in (st, rp)}
+        for blk, counts in blocks.items():
+            seen = {i for i in range(K) if counts[i].sum() or counts[:, i].sum()}
             S = offered(seen, CANDIDATES[cond])
             if S is None:
                 continue
             target = master if S == FULL else restricted[S]
-            for st, rp in trials:
-                target[st, rp] += 1
-        sub = Path(path).name
+            target += counts
+        sub = path
         for S, counts in restricted.items():
             idx = sorted(S)
             for st in idx:
