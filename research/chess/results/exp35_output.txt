@@ -1,0 +1,48 @@
+split seed 0: 59399 games, 639 players; train 29699 val 14849 TEST 14851
+  glicko2 pooled   tau 0.3  val 0.6348  TEST 0.6323
+  glicko2 per TC   tau 0.3  val 0.6273  TEST 0.6234
+  factor           ridge 10.0  val 0.6132  TEST 0.6073
+
+  factor vs glicko2 per TC: -0.0161 [-0.0192,-0.0130]  P(better) 1.000
+  factor vs glicko2 pooled: -0.0250 [-0.0286,-0.0214]  P(better) 1.000
+  glicko2 pooled vs glicko2 per TC: +0.0089 [+0.0059,+0.0118]  P(better) 0.000
+split seed 0: 59399 games, 639 players; train 29699 val 14849 TEST 14851
+  our scalar ridge  1.0  val 0.6169
+  our scalar ridge  3.0  val 0.6169
+  our scalar ridge 10.0  val 0.6169
+
+our scalar TEST 0.6117  (ridge 1.0)
+
+DECOMPOSITION (seed 0, all arms same protocol):
+  glicko2 pooled  0.6323
+  glicko2 per TC  0.6234   <- Lichess architecture
+  our scalar      0.6117
+  factor          0.6073
+
+  estimator effect (our scalar - glicko2 pooled): -0.0206
+  structure effect (factor - our scalar):         -0.0044
+  vs Lichess       (factor - glicko2 per TC):     -0.0161
+=== SPLIT SEED 11 ===
+split seed 11: 59399 games, 639 players; train 29699 val 14849 TEST 14851
+  glicko2 pooled   TEST 0.6304
+  glicko2 per TC   TEST 0.6241
+  our scalar       TEST 0.6131  (knob 1.0)
+  factor           TEST 0.6104  (knob 3.0)
+  --- headline ---
+  factor vs glicko2 per TC: -0.0137 [-0.0167,-0.0105]  P(better) 1.000
+  --- decomposition ---
+  our scalar vs glicko2 pooled: -0.0173 [-0.0206,-0.0140]  P(better) 1.000
+  factor vs our scalar: -0.0027 [-0.0047,-0.0006]  P(better) 0.995
+  glicko2 pooled vs glicko2 per TC: +0.0063 [+0.0033,+0.0092]  P(better) 0.000
+=== SPLIT SEED 22 ===
+split seed 22: 59399 games, 639 players; train 29699 val 14849 TEST 14851
+  glicko2 pooled   TEST 0.6365
+  glicko2 per TC   TEST 0.6294
+  our scalar       TEST 0.6145  (knob 1.0)
+  factor           TEST 0.6112  (knob 10.0)
+  --- headline ---
+  factor vs glicko2 per TC: -0.0182 [-0.0212,-0.0151]  P(better) 1.000
+  --- decomposition ---
+  our scalar vs glicko2 pooled: -0.0219 [-0.0251,-0.0187]  P(better) 1.000
+  factor vs our scalar: -0.0033 [-0.0047,-0.0020]  P(better) 1.000
+  glicko2 pooled vs glicko2 per TC: +0.0071 [+0.0040,+0.0102]  P(better) 0.000
