@@ -20,3 +20,4 @@ from . import moments  # noqa: F401
 from . import audit  # noqa: F401
 from . import referee  # noqa: F401
 from . import calibration  # noqa: F401
+from . import factor  # noqa: F401

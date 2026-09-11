@@ -311,6 +311,11 @@ class Report:
 
 
 def _git_sha():
+    # an exported tree (git archive, a wheel) has no .git: the caller may
+    # name the commit it was exported from
+    env = os.environ.get("WINNING_VERIFY_SHA")
+    if env:
+        return env
     try:
         import subprocess
         here = os.path.dirname(os.path.abspath(__file__))

@@ -267,9 +267,9 @@ def _loglik_terms(theta, st, base="normal"):
         if base == "normal" and K == 2:
             # closed form: P(x_0 > x_1) = Phi((mu_0 - mu_1) / sqrt 2)
             t = (Ms[:, 0] - Ms[:, 1]) / np.sqrt(2.0)
-            l = log_ndtr(t)
-            h = np.exp(-0.5 * t * t - _LOG_SQRT_2PI - l) / np.sqrt(2.0)
-            lp[idx] = l
+            lpv = log_ndtr(t)
+            h = np.exp(-0.5 * t * t - _LOG_SQRT_2PI - lpv) / np.sqrt(2.0)
+            lp[idx] = lpv
             dmu[ri[:, 0]] = h
             dmu[ri[:, 1]] = -h
             continue
@@ -278,12 +278,105 @@ def _loglik_terms(theta, st, base="normal"):
         for c0 in range(0, len(idx), chunk):
             sl = slice(c0, c0 + chunk)
             if n_ord >= 2:
-                l, gr = _order_pass_batch(Ms[sl], np.ones(K), order, base=base)
+                lpv, gr = _order_pass_batch(Ms[sl], np.ones(K), order, base=base)
             else:
-                l, gr = _winner_batch(Ms[sl], base=base)
-            lp[idx[sl]] = np.where(np.isfinite(l), l, _LP_FLOOR)
+                lpv, gr = _winner_batch(Ms[sl], base=base)
+            lp[idx[sl]] = np.where(np.isfinite(lpv), lpv, _LP_FLOOR)
             dmu[ri[sl]] = gr
     return lp, dmu
+
+
+def _hessian_blocks(theta, st, base="normal"):
+    """Per-event Hessians of the log-likelihood in mu-space, one (K, K)
+    block per event, by central differences of the analytic gradient
+    with both perturbed copies of a group stacked into ONE lattice pass
+    so they share the grid (the batch pass sizes its lattice from the
+    means it is given). The K = 2 normal block is analytic. Returns a
+    list aligned with st's events of (K, K) arrays."""
+    from .nway import _fd_eps
+    mu = np.asarray(st.Z @ theta, dtype=float).ravel()
+    blocks = [None] * st.n_events
+    for (K, n_ord), idx in st.groups.items():
+        ri = st.starts[idx][:, None] + np.arange(K)[None, :]
+        Ms = mu[ri]
+        E = len(idx)
+        if base == "normal" and K == 2:
+            t = (Ms[:, 0] - Ms[:, 1]) / np.sqrt(2.0)
+            lpv = log_ndtr(t)
+            h = np.exp(-0.5 * t * t - _LOG_SQRT_2PI - lpv)
+            hp = -h * (h + t)                       # d/dt of phi/Phi
+            c = hp / 2.0
+            for e_local, e in enumerate(idx):
+                blocks[e] = c[e_local] * np.array([[1.0, -1.0], [-1.0, 1.0]])
+            continue
+        hstep = _fd_eps(base, 1e-3)
+        order = np.arange(n_ord)
+        H = np.zeros((E, K, K))
+        chunk = max(1, _WORK_BUDGET // (2 * K * 4001))
+        for c0 in range(0, E, chunk):
+            sl = slice(c0, c0 + chunk)
+            Mc = Ms[sl]
+            Ec = Mc.shape[0]
+            for j in range(K):
+                ej = np.zeros(K); ej[j] = hstep
+                both = np.vstack([Mc + ej, Mc - ej])
+                if n_ord >= 2:
+                    _, g = _order_pass_batch(both, np.ones(K), order, base=base)
+                else:
+                    _, g = _winner_batch(both, base=base)
+                H[sl, :, j] = (g[:Ec] - g[Ec:]) / (2.0 * hstep)
+        H = 0.5 * (H + np.transpose(H, (0, 2, 1)))
+        for e_local, e in enumerate(idx):
+            blocks[e] = H[e_local]
+    return blocks
+
+
+def _penalised_hessian(theta, st, lam, w, base="normal"):
+    """Hessian of the penalised negative log-posterior, diag(lam) -
+    Z' blockdiag(w_e H_e) Z, as a sparse matrix."""
+    blocks = _hessian_blocks(theta, st, base)
+    rows, cols, vals = [], [], []
+    for e, H in enumerate(blocks):
+        K = st.sizes[e]
+        r0 = st.starts[e]
+        ii, jj = np.meshgrid(np.arange(K), np.arange(K), indexing="ij")
+        rows.append((r0 + ii).ravel()); cols.append((r0 + jj).ravel())
+        vals.append((-w[e] * H).ravel())
+    Bd = sparse.csr_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
+                           shape=(st.n_rows, st.n_rows))
+    Lam = sparse.diags(lam) + st.ZT @ (Bd @ st.Z)
+    return sparse.csr_matrix(Lam)
+
+
+def _diag_inverse(Lam, se_for=None, dense_max=2000):
+    """Diagonal of the inverse of a symmetric positive definite sparse
+    matrix: dense Cholesky below dense_max, sparse LU column solves
+    above (optionally only the columns in se_for). Singular directions
+    (a zero ridge on an unidentified coefficient) give inf."""
+    n = Lam.shape[0]
+    cols = np.arange(n) if se_for is None else np.asarray(se_for, dtype=int)
+    try:
+        if n <= dense_max:
+            from scipy.linalg import cho_factor, cho_solve
+            A = Lam.toarray()
+            cf = cho_factor(A)
+            inv = cho_solve(cf, np.eye(n))
+            return np.diag(inv)[cols]
+        from scipy.sparse.linalg import splu
+        lu = splu(Lam.tocsc())
+        out = np.empty(len(cols))
+        for k0 in range(0, len(cols), 256):
+            cc = cols[k0:k0 + 256]
+            Eye = np.zeros((n, len(cc)))
+            Eye[cc, np.arange(len(cc))] = 1.0
+            X = lu.solve(Eye)
+            out[k0:k0 + len(cc)] = X[cc, np.arange(len(cc))]
+        return out
+    except Exception:  # noqa: BLE001 -- singular: report inf, do not raise
+        import warnings
+        warnings.warn("penalised Hessian is singular (a zero ridge on an "
+                      "unidentified direction?); standard errors are inf")
+        return np.full(len(cols), np.inf)
 
 
 def _as_ridge(ridge, n_feat):
@@ -330,7 +423,8 @@ def _fit(st, ridge, weights, base, n_iter, theta0):
 # ---------------------------------------------------------------------------
 
 def fit_design_ratings(events, n_feat, ridge=1.0, weights=None, base="normal",
-                       n_iter=300, theta0=None, return_info=False):
+                       n_iter=300, theta0=None, return_info=False,
+                       return_se=False):
     """MAP coefficients theta (n_feat,) of ability mu = Z theta from
     ranked contests.
 
@@ -357,11 +451,47 @@ def fit_design_ratings(events, n_feat, ridge=1.0, weights=None, base="normal",
     drift and must be tuned per arm for the same reason.
 
     base: the standardised noise density (winning.factor.races.BASES or
-    a callable), unit scale. Returns theta, or (theta, info) with
-    return_info=True."""
+    a callable), unit scale. Returns theta; with return_se=True the
+    Laplace standard errors follow (theta, se); with return_info=True
+    the optimiser's info dict comes last."""
     st = _Stacked(_design_triplets(events, n_feat), n_feat)
     theta, info = _fit(st, ridge, weights, base, n_iter, theta0)
-    return (theta, info) if return_info else theta
+    out = (theta,)
+    if return_se:
+        lam = _as_ridge(ridge, n_feat)
+        w = np.ones(st.n_events) if weights is None else np.asarray(weights, float).ravel()
+        out += (np.sqrt(_diag_inverse(_penalised_hessian(theta, st, lam, w, base))),)
+    if return_info:
+        out += (info,)
+    return out[0] if len(out) == 1 else out
+
+
+def design_se(theta, events, n_feat, ridge=1.0, weights=None, base="normal",
+              se_for=None):
+    """Laplace standard errors of design coefficients: sqrt of the
+    diagonal of the inverse penalised Hessian at theta (the posterior
+    under the Gaussian prior the ridge encodes, precision lam per
+    coefficient). The Hessian is exact for K = 2 under the normal base
+    and central differences of the analytic gradient elsewhere."""
+    theta = np.asarray(theta, dtype=float).ravel()
+    st = _Stacked(_design_triplets(events, n_feat), n_feat)
+    lam = _as_ridge(ridge, n_feat)
+    w = (np.ones(st.n_events) if weights is None
+         else np.asarray(weights, dtype=float).ravel())
+    Lam = _penalised_hessian(theta, st, lam, w, base)
+    return np.sqrt(_diag_inverse(Lam, se_for=se_for))
+
+
+def factor_se(B, events, ridge=1.0, weights=None, base="normal"):
+    """Laplace standard errors of factor ratings, shaped like B."""
+    B = np.asarray(B, dtype=float)
+    n_entities, n_cov = B.shape
+    st = _Stacked(_factor_triplets(events, n_entities, n_cov), n_entities * n_cov)
+    lam = _as_ridge(_factor_ridge(ridge, n_entities, n_cov), n_entities * n_cov)
+    w = (np.ones(st.n_events) if weights is None
+         else np.asarray(weights, dtype=float).ravel())
+    Lam = _penalised_hessian(B.reshape(-1), st, lam, w, base)
+    return np.sqrt(_diag_inverse(Lam)).reshape(n_entities, n_cov)
 
 
 def design_loglik(theta, events, base="normal"):
@@ -388,7 +518,8 @@ def _factor_ridge(ridge, n_entities, n_cov):
 
 
 def fit_factor_ratings(events, n_entities, n_cov, ridge=1.0, weights=None,
-                       base="normal", n_iter=300, B0=None, return_info=False):
+                       base="normal", n_iter=300, B0=None, return_info=False,
+                       return_se=False):
     """Ability as a vector over observed conditions: entity i's ability
     in a contest with covariate x is B[i] . x. Returns B, shape
     (n_entities, n_cov).
@@ -407,15 +538,24 @@ def fit_factor_ratings(events, n_entities, n_cov, ridge=1.0, weights=None,
     (n_entities * n_cov,) vector. A scalar cannot express "levels free,
     offsets shrunk" and is the confound the module docstring records.
 
-    weights, base, n_iter: as fit_design_ratings. B0 warm-starts."""
+    weights, base, n_iter: as fit_design_ratings. B0 warm-starts.
+    return_se=True adds the Laplace standard errors shaped like B."""
     n_entities, n_cov = int(n_entities), int(n_cov)
     st = _Stacked(_factor_triplets(events, n_entities, n_cov),
                   n_entities * n_cov)
     theta0 = None if B0 is None else np.asarray(B0, float).reshape(-1)
-    theta, info = _fit(st, _factor_ridge(ridge, n_entities, n_cov), weights,
-                       base, n_iter, theta0)
+    ridge_full = _factor_ridge(ridge, n_entities, n_cov)
+    theta, info = _fit(st, ridge_full, weights, base, n_iter, theta0)
     B = theta.reshape(n_entities, n_cov)
-    return (B, info) if return_info else B
+    out = (B,)
+    if return_se:
+        lam = _as_ridge(ridge_full, n_entities * n_cov)
+        w = np.ones(st.n_events) if weights is None else np.asarray(weights, float).ravel()
+        se = np.sqrt(_diag_inverse(_penalised_hessian(theta, st, lam, w, base)))
+        out += (se.reshape(n_entities, n_cov),)
+    if return_info:
+        out += (info,)
+    return out[0] if len(out) == 1 else out
 
 
 def factor_loglik(B, events, base="normal"):

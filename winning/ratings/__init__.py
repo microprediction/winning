@@ -14,5 +14,6 @@ from .tracker import (AbilityTracker, AbilityState,  # noqa: F401
 from .factor_ratings import (fit_design_ratings, design_loglik,  # noqa: F401
                              factor_design, fit_factor_ratings,
                              factor_loglik, factor_abilities,
+                             design_se, factor_se,
                              predict_factor, sweep_offset_ridge,
                              covariate_contrast_report)

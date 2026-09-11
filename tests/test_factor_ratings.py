@@ -302,3 +302,46 @@ def test_walk_forward_passes_groups_and_returns_evidence():
     assert out["n_scored"] == 8
     assert np.isfinite(out["log_loss_model"]) and np.isfinite(out["evidence"])
     assert out["evidence"] == out["tracker"].evidence
+
+
+# -- Laplace standard errors ---------------------------------------------------
+
+def test_penalised_hessian_matches_finite_differences_and_is_spd():
+    from winning.ratings.factor_ratings import _as_ridge, _penalised_hessian
+    rng = np.random.default_rng(21)
+    for base in ("normal", "logistic"):
+        evs = mixed_events(rng, N_FEAT)
+        st = _Stacked(_design_triplets(evs, N_FEAT), N_FEAT)
+        theta = rng.normal(size=N_FEAT) * 0.5
+        lam = _as_ridge(1.0, N_FEAT); w = rng.random(st.n_events) + 0.5
+
+        def grad(th):
+            lp, dmu = _loglik_terms(th, st, base)
+            return lam * th - np.asarray(st.ZT @ (dmu * w[st.row_event])).ravel()
+        Hfd = np.empty((N_FEAT, N_FEAT))
+        for j in range(N_FEAT):
+            e = np.zeros(N_FEAT); e[j] = 1e-4
+            Hfd[:, j] = (grad(theta + e) - grad(theta - e)) / 2e-4
+        H = _penalised_hessian(theta, st, lam, w, base).toarray()
+        assert np.abs(H - Hfd).max() < 1e-3 * np.abs(Hfd).max()
+        assert np.abs(H - H.T).max() < 1e-12
+        assert np.linalg.eigvalsh(H).min() > 0.5           # ridge 1 plus curvature
+
+
+def test_laplace_se_shapes_paths_and_calibration():
+    from winning.ratings.factor_ratings import design_se, factor_se
+    rng = np.random.default_rng(22)
+    B, evs = factor_world(rng, 20, 5, 300, off_sd=0.5, n_cov=2)
+    ridge = np.array([1.0, 3.0])
+    Bh, se, info = fit_factor_ratings(evs, 20, 2, ridge=ridge, return_se=True, return_info=True)
+    assert Bh.shape == se.shape == (20, 2) and np.isfinite(se).all() and (se > 0).all()
+    assert np.abs(factor_se(Bh, evs, ridge=ridge) - se).max() == 0.0
+    # the same through the design form
+    dev = [(factor_design(s, x, 20, 2), o) for s, o, x in evs]
+    th, se_d = fit_design_ratings(dev, 40, ridge=np.tile(ridge, 20), return_se=True)
+    assert np.abs(se_d.reshape(20, 2) - se).max() < 1e-8
+    assert np.abs(design_se(th, dev, 40, ridge=np.tile(ridge, 20)) - se_d).max() == 0.0
+    # calibration on the world the ridge prior does not exactly describe:
+    # z^2 near one (pilot 1.00 / 1.02); a broken Hessian gives 0.1 or 10
+    z = (Bh - B) / se
+    assert 0.6 < np.mean(z ** 2) < 1.6

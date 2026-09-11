@@ -27,14 +27,17 @@ DEFAULT_SEEDS = 25
 # per-profile sample sizes and grid switches
 PARAMS = {
     "smoke": {"ks_n": 20_000, "ks_bases": "named", "p8_draws": 50_000,
-              "referee_draws": 100_000, "referee_draws_full": 1_000_000, "sbc_worlds": 8},
+              "referee_draws": 100_000, "referee_draws_full": 1_000_000, "sbc_worlds": 8,
+              "factor_worlds": 4},
     "fast": {"ks_n": 200_000, "ks_bases": "all", "p8_draws": 100_000,
-             "referee_draws": 200_000, "referee_draws_full": 1_000_000, "sbc_worlds": 80},
+             "referee_draws": 200_000, "referee_draws_full": 1_000_000, "sbc_worlds": 80,
+             "factor_worlds": 10},
     "full": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 400_000,
-             "referee_draws": 2_000_000, "referee_draws_full": 2_000_000, "sbc_worlds": 200},
+             "referee_draws": 2_000_000, "referee_draws_full": 2_000_000, "sbc_worlds": 200,
+             "factor_worlds": 30},
     "exhaustive": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 4_000_000,
                    "referee_draws": 4_000_000, "referee_draws_full": 4_000_000,
-                   "sbc_worlds": 400},
+                   "sbc_worlds": 400, "factor_worlds": 60},
 }
 
 # check name -> {"tolerance", "set_by", "date", "basis"}
@@ -221,6 +224,14 @@ MARKS = {
                                      "measured": True,
                                      "set_by": "planning pilots", "date": "2026-09-11",
                                      "basis": "exact conjugate filter; MEASURED until F1 is fixed"},
+
+    # the MAP factor fitter's derivatives against finite differences
+    "factor.gradient_fd": {"tolerance": 1e-4, "set_by": "planning pilots", "date": "2026-09-11",
+                           "basis": "tests/test_factor_ratings.py: 4e-6 relative"},
+    "factor.hessian_fd": {"tolerance": 1e-3, "set_by": "planning pilots", "date": "2026-09-11",
+                          "basis": "5.7e-5 / 12 relative on the mixed events"},
+    "factor.hessian_spd": {"tolerance": 1e-10, "set_by": "planning pilots", "date": "2026-09-11",
+                           "basis": "symmetric to fp; ridge keeps it positive definite"},
 }
 
 # documented approximation costs: name -> {"envelope", "cite", "why"};

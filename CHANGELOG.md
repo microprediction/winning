@@ -33,6 +33,31 @@
   returns the evidence.
 - `order_loglik`'s docstring said min-wins; the function is max-wins
   like the rest of the module, and now says so.
+- `winning.ratings.verify`: the ratings layer's own verification suite,
+  deterministic under a root seed, with smoke / fast / full / exhaustive
+  profiles (`python -m winning.ratings.verify --profile full --workers 4
+  --out reports/`). Exact identities every Bayesian moment update must
+  satisfy (the martingale of the posterior mean, the law of total
+  variance with and without the curvature clamp, normalisation),
+  enumerated over every outcome and weighted by the engine's own
+  probabilities; reductions between code paths, closed forms, coarsening
+  of partial orders, gauge / permutation / scale / team invariances,
+  predict-versus-evidence; simulation-based calibration of the filters
+  on pairwise contrasts; Monte Carlo referees on fixed and seed-drawn
+  configurations; and the bandits property audit (P1-P8) ported with
+  fixed seeds (its legacy world reproduces the historical digits). Every
+  tolerance lives in `marks.py` with provenance; verdicts distinguish
+  UNDERPOWERED and documented EXPECTED_APPROX from ok; the fast profile
+  gates CI and the full profile runs nightly (`ratings-verify.yml`).
+  Adjudicated runs are recorded in `research/adjudications/ratings_verify.md`.
+- `winning.ratings.simulate`: one home for synthetic worlds and base
+  noise; every base factory carries an exact `.sample`.
+- Laplace standard errors for the MAP factor ratings:
+  `fit_factor_ratings(..., return_se=True)`, `fit_design_ratings(...,
+  return_se=True)`, `factor_se`, `design_se`, from the Hessian of the
+  penalised objective (analytic for two-player normal, central
+  differences of the analytic gradient elsewhere); calibrated on the
+  ridge prior (verifier `factor.se_calibration`).
 - `python -m winning` (and the `winning` console script setup.py has
   declared since the start) now exists: it prints the installed version
   and runs `winning.contract.verify()`, exit status 1 on failure. The
