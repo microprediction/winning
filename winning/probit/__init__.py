@@ -10,7 +10,7 @@ winning.factor.races, where the reflection is the caller's business).
     shares(utilities, V=V, D=D)          all N choice probabilities
     utilities_from_shares(p, V=V, D=D)   the paper's calibration
     shares(utilities, Sigma=Sigma, k=2)  supplied covariance: fits the
-                                         certified contrast factor model
+                                         contrast-space factor model
                                          first (return_fit=True to get
                                          the fitted V, D back)
 """
@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..factor.core import (abilities_from_probabilities_factor,
-                           factor_model_contrast, hermite_nodes,
+                           factor_model_projected, hermite_nodes,
                            win_probabilities_factor)
 
 __all__ = ["shares", "utilities_from_shares", "calibrate_utilities",
@@ -28,9 +28,32 @@ __all__ = ["shares", "utilities_from_shares", "calibrate_utilities",
 
 
 def fit_factor_model(Sigma, k):
-    """Certified contrast-space factor fit: Sigma ~ V V' + diag(D) on the
-    choice-relevant quotient. Returns (V, D)."""
-    return factor_model_contrast(np.asarray(Sigma, dtype=float), k)
+    """Contrast-space factor fit: Sigma ~ V V' + diag(D) on the
+    choice-relevant quotient, i.e. minimising ||P (Sigma - V V' - diag D)
+    P||_F with P the centring projection. Returns (V, D) with V centred
+    (P V = V) and canonicalised (SVD, sign convention), so results are
+    reproducible at the covariance level; the fit is a certified
+    alternation (factor_model_projected), not a global certificate.
+
+    Until 2026-09-11 this called factor_model_contrast, which applies
+    ordinary principal-factor analysis to P Sigma P although the
+    idiosyncratic part in contrast space, P diag(D) P, is not diagonal:
+    for an INDEPENDENT race (Sigma = I, k = 1) it invented a factor from
+    the centring artefact and moved the shares by 0.03-0.05 (issue #27).
+    The projected fit returns V = 0, D = diag(Sigma) there, exactly.
+    """
+    Sigma = np.asarray(Sigma, dtype=float)
+    n = len(Sigma)
+    V, D = factor_model_projected(Sigma, k)
+    P = np.eye(n) - np.ones((n, n)) / n
+    V = P @ V
+    A, sv, _ = np.linalg.svd(V, full_matrices=False)
+    V = A[:, :k] * sv[:k]
+    for j in range(V.shape[1]):
+        i0 = np.argmax(np.abs(V[:, j]))
+        if V[i0, j] < 0:
+            V[:, j] = -V[:, j]
+    return V, D
 
 
 def _prepare(n, V, D, Sigma, k):
