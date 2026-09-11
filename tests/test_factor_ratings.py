@@ -49,7 +49,9 @@ def test_event_loglik_matches_single_event_engine_calls(base):
         Zd = Z.toarray() if sparse.issparse(Z) else Z
         mu = Zd @ theta
         if len(order) >= 2:
-            ref, _ = order_loglik(mu, np.ones(len(mu)), order, base=base)
+            # the fitter's lattice length is fixed at 4001 (smooth objective);
+            # compare on the same lattice, since both are discretisations
+            ref, _ = order_loglik(mu, np.ones(len(mu)), order, base=base, L=4001)
         else:
             ref = float(np.log(race_probabilities(
                 -mu, D=np.ones(len(mu)), base=base)[int(order[0])]))

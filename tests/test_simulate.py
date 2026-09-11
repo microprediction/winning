@@ -25,10 +25,13 @@ BASES = [("normal", "normal"), ("gumbel", "gumbel"), ("logistic", "logistic"),
 
 @pytest.mark.parametrize("name,base", BASES, ids=[b[0] for b in BASES])
 def test_sampler_matches_its_own_survival_function(name, base):
-    # DKW: an exact sampler's Kolmogorov distance at n = 50,000 is below
-    # 7.5e-3 with probability 0.999; a sign or scale slip is > 0.1
+    # DKW: an exact sampler's Kolmogorov distance at n = 50,000 exceeds
+    # 1e-2 with probability 5e-5; a sign or scale slip is > 0.1. (The
+    # scipy-backed samplers consume the stream differently across
+    # platforms, so the draw is not the same everywhere: 7.7e-3 on a
+    # windows runner against an earlier 7.5e-3 mark.)
     rng = np.random.default_rng(hash(name) % 2**32)
-    assert check_sampler(base, rng, n=50_000) < 7.5e-3
+    assert check_sampler(base, rng, n=50_000) < 1e-2
 
 
 def test_named_bases_are_standardized_and_gumbel_flips_the_right_way():

@@ -90,6 +90,13 @@ from .nway import _base_rows, _order_pass_batch
 _LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
 _WORK_BUDGET = 4_000_000        # floats per (K, chunk, L) lattice work array
 _LP_FLOOR = -700.0              # a numerically impossible order, kept finite
+# the lattice length is FIXED rather than sized from the batch: an
+# auto-sized length flips by one point under a 1e-5 change of the means,
+# which makes the discretised objective jump by its lattice mass and a
+# finite-difference gradient check read 1.6e-3 where the analytic
+# gradient is right (CI, 2026-09-11, ubuntu and windows; not on macOS).
+# With a fixed length the objective is smooth in the coefficients.
+_LATTICE_L = 4001
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +240,7 @@ def _winner_batch(Ms, base="normal"):
         pad = max(pad, float(max(span))) if span is not None else max(pad, 12.0)
     lo = float(Ms.min()) - pad
     hi = float(Ms.max()) + pad
-    L = int(np.clip(np.ceil((hi - lo) / (16.0 / 2001.0)), 2001, 8001))
+    L = _LATTICE_L
     x = np.linspace(lo, hi, L)
     dx = x[1] - x[0]
     g = np.empty((K, E, L))
@@ -273,12 +280,13 @@ def _loglik_terms(theta, st, base="normal"):
             dmu[ri[:, 0]] = h
             dmu[ri[:, 1]] = -h
             continue
-        chunk = max(1, _WORK_BUDGET // (K * 4001))
+        chunk = max(1, _WORK_BUDGET // (K * _LATTICE_L))
         order = np.arange(n_ord)
         for c0 in range(0, len(idx), chunk):
             sl = slice(c0, c0 + chunk)
             if n_ord >= 2:
-                lpv, gr = _order_pass_batch(Ms[sl], np.ones(K), order, base=base)
+                lpv, gr = _order_pass_batch(Ms[sl], np.ones(K), order, L=_LATTICE_L,
+                                            base=base)
             else:
                 lpv, gr = _winner_batch(Ms[sl], base=base)
             lp[idx[sl]] = np.where(np.isfinite(lpv), lpv, _LP_FLOOR)
@@ -312,7 +320,7 @@ def _hessian_blocks(theta, st, base="normal"):
         hstep = _fd_eps(base, 1e-3)
         order = np.arange(n_ord)
         H = np.zeros((E, K, K))
-        chunk = max(1, _WORK_BUDGET // (2 * K * 4001))
+        chunk = max(1, _WORK_BUDGET // (2 * K * _LATTICE_L))
         for c0 in range(0, E, chunk):
             sl = slice(c0, c0 + chunk)
             Mc = Ms[sl]
@@ -321,7 +329,8 @@ def _hessian_blocks(theta, st, base="normal"):
                 ej = np.zeros(K); ej[j] = hstep
                 both = np.vstack([Mc + ej, Mc - ej])
                 if n_ord >= 2:
-                    _, g = _order_pass_batch(both, np.ones(K), order, base=base)
+                    _, g = _order_pass_batch(both, np.ones(K), order, L=_LATTICE_L,
+                                             base=base)
                 else:
                     _, g = _winner_batch(both, base=base)
                 H[sl, :, j] = (g[:Ec] - g[Ec:]) / (2.0 * hstep)
