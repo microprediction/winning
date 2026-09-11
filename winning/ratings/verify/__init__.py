@@ -16,3 +16,4 @@ from .core import (CHECKS, PROFILES, VERDICTS, Check, Context,  # noqa: F401
                    Report, Result, check, seed_for, verify)
 from . import marks  # noqa: F401
 from . import identities  # noqa: F401  (registers checks)
+from . import moments  # noqa: F401

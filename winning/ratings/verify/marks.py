@@ -42,6 +42,142 @@ MARKS = {
         "tolerance_by_n": {20_000: 2.4e-2, 200_000: 7.5e-3, 1_000_000: 3.3e-3},
         "set_by": "planning pilots", "date": "2026-09-11",
         "basis": "DKW 0.01 quantile x 2; pilots at n=2e5: 1.3e-3..2.7e-3"},
+
+    # enumerated moment identities: max-abs residual of the sums over
+    # all outcomes weighted by the engine's own P(y); I2 relative to v,
+    # I1 and I3 absolute. Exact up to lattice mass and the curvature
+    # method's own error.
+    "identity.moments": {
+        # I1 (score identity) and I3 (normalisation): lattice mass only.
+        # I2 (Bartlett) by curvature method -- analytic (update_winner's
+        # curve path), fd (absolute central differences at eps 1e-3 in
+        # nway._mixture_update / update_ranking_exact), fd_rel (0.15 sd
+        # steps in full._mixture_update_full). Pilots 2026-09-11 (K3-K5):
+        # normal analytic/fd winner 2e-11 / 2e-9 (8e-9 at beta2 0.25); fd_rel winner 1.1e-4..2.4e-4;
+        # curve analytic winner 4e-6, fd 1.4e-5..1.8e-4 (student4 K5), fd_rel orders
+        # 1.9e-4..2.3e-4; orders normal fd 2.2e-5, curve fd 9.9e-5.
+        "floors": {"I1.normal.winner": 1e-8, "I3.normal.winner": 1e-8,
+                   "I1.curve.winner": 5e-5, "I3.curve.winner": 5e-5,
+                   "I1.normal.order": 1e-4, "I3.normal.order": 1e-4,
+                   "I1.curve.order": 5e-4, "I3.curve.order": 5e-4,
+                   "I2.normal.analytic.winner": 1e-8,
+                   "I2.normal.fd.winner": 5e-8,
+                   "I2.normal.fd_rel.winner": 5e-4,
+                   "I2.curve.analytic.winner": 5e-5,
+                   "I2.curve.fd.winner": 5e-4,
+                   "I2.curve.fd_rel.winner": 5e-4,
+                   "I2.normal.fd.order": 1e-4,
+                   "I2.normal.fd_rel.order": 5e-4,
+                   "I2.curve.fd.order": 5e-4,
+                   "I2.curve.fd_rel.order": 1e-3},
+        "set_by": "planning pilots", "date": "2026-09-11",
+        "basis": "statistics design pass and smoke/fast pilots; floors at "
+                 "3-10x the measured residual of each curvature method"},
+
+    # exact reductions: bit-level agreement of paths that share the
+    # same lattice (V = 0 mixtures run one node; market full/diag are
+    # the same conjugate algebra)
+    "identity.reductions.exact": {"tolerance": 1e-9, "set_by": "planning pilots",
+                                  "date": "2026-09-11",
+                                  "basis": "pinned at 1e-12 in tests/test_correlated_updates.py"},
+    # V = 0 correlated vs independent VARIANCES: the independent winner
+    # update's curvature is analytic on the curve path (eps 1e-4
+    # differences under normal) while the mixture differences at 1e-3;
+    # measured normal 4.2e-9, curve up to 4.2e-4 (student4)
+    "identity.reductions.v0_v.normal": {"tolerance": 5e-8, "set_by": "planning pilots",
+                                        "date": "2026-09-11", "basis": "two FD steps, 4.2e-9"},
+    "identity.reductions.v0_v.curve": {"tolerance": 1e-3, "set_by": "planning pilots",
+                                       "date": "2026-09-11",
+                                       "basis": "analytic vs FD curvature, up to 4.2e-4"},
+    # full-covariance path with a diagonal belief vs the diagonal path:
+    # same gradient under normal (m exact to lattice); on curve bases
+    # the batched pass sizes a finer lattice than the single pass, so m
+    # and evidence differ by the single pass's discretisation (measured
+    # 2e-5..2.5e-4, v up to 3.6e-3 on the failure lump); curvature by a
+    # 0.15 sd step against an absolute 1e-3 step
+    "identity.reductions.full_m.normal": {"tolerance": 1e-5, "set_by": "planning pilots",
+                                          "date": "2026-09-11",
+                                          "basis": "tests/test_bases.py pins atol 1e-5"},
+    "identity.reductions.full_m.curve": {"tolerance": 5e-4, "set_by": "planning pilots",
+                                         "date": "2026-09-11",
+                                         "basis": "single-pass lattice at L=2001 on wide spans"},
+    "identity.reductions.full_v.normal": {"tolerance": 1e-3, "set_by": "planning pilots",
+                                          "date": "2026-09-11",
+                                          "basis": "eps_rel FD truncation ~1e-4"},
+    "identity.reductions.full_v.curve": {"tolerance": 5e-3, "set_by": "planning pilots",
+                                         "date": "2026-09-11",
+                                         "basis": "lattice discretisation plus FD; 3.6e-3 on failure"},
+    "identity.reductions.full_evidence.normal": {"tolerance": 1e-6, "set_by": "planning pilots",
+                                                 "date": "2026-09-11",
+                                                 "basis": "same lattice mass; 801 vs 3001 field points"},
+    "identity.reductions.full_evidence.curve": {"tolerance": 5e-4, "set_by": "planning pilots",
+                                                "date": "2026-09-11",
+                                                "basis": "single-pass lattice mass on wide spans, 2.5e-4"},
+    # correlated with V through the two paths: Gauss-Hermite 7 vs 9 nodes
+    "identity.reductions.full_vs_correlated_V": {"tolerance": 1e-3, "set_by": "planning pilots",
+                                                 "date": "2026-09-11",
+                                                 "basis": "different node rules; measured 5.5e-5, 1.3e-4"},
+    "identity.closed_form_k2.m": {"tolerance": 1e-8, "set_by": "planning pilots",
+                                  "date": "2026-09-11",
+                                  "basis": "dm/sd 2e-15 on every path at prior sd 1..30"},
+    "identity.closed_form_k2.v.analytic": {"tolerance": 1e-8, "set_by": "planning pilots",
+                                           "date": "2026-09-11", "basis": "dv/v 1e-11"},
+    "identity.closed_form_k2.v.fd": {"tolerance": 1e-5, "set_by": "planning pilots",
+                                     "date": "2026-09-11",
+                                     "basis": "absolute FD step 1e-3, truncation O(eps^2)"},
+    "identity.closed_form_k2.v.fd_rel": {"tolerance": 1e-3, "set_by": "planning pilots",
+                                         "date": "2026-09-11",
+                                         "basis": "dv/v 5e-5..3.4e-4 at prior sd 1..30, beta2 0.25..4"},
+    "identity.closed_form_k2.logp": {"tolerance": 1e-8, "set_by": "planning pilots",
+                                     "date": "2026-09-11", "basis": "lattice mass at K=2"},
+    "identity.coarsening.loglik": {"tolerance": 1e-4, "set_by": "planning pilots",
+                                   "date": "2026-09-11",
+                                   "basis": "tests/test_bases.py pins 1e-4"},
+    "identity.coarsening.m": {"tolerance": 1e-4, "set_by": "planning pilots",
+                              "date": "2026-09-11", "basis": "lattice mass 1e-5, 10x"},
+    "identity.coarsening.v": {"tolerance": 1e-3, "set_by": "planning pilots",
+                              "date": "2026-09-11", "basis": "lattice mass plus FD 1e-6, 10x"},
+    "identity.coarsening.exact": {"tolerance": 0.0, "set_by": "planning pilots",
+                                  "date": "2026-09-11",
+                                  "basis": "the omitted entrant's row is never touched"},
+    "identity.coarsening.subfield": {"tolerance": 1e-5, "set_by": "planning pilots",
+                                     "date": "2026-09-11",
+                                     "basis": "lattice window sized by all means; same mass"},
+    "identity.invariances.gauge.diag": {"tolerance": 1e-9, "set_by": "planning pilots",
+                                        "date": "2026-09-11",
+                                        "basis": "lattice windows follow the means exactly"},
+    "identity.invariances.gauge.full": {"tolerance": 1e-6, "set_by": "planning pilots",
+                                        "date": "2026-09-11",
+                                        "basis": "batched lattice endpoints round with the shift; 6.5e-8"},
+    "identity.invariances.permutation.diag": {"tolerance": 1e-9, "set_by": "planning pilots",
+                                              "date": "2026-09-11",
+                                              "basis": "symmetric node sets; same lattice"},
+    "identity.invariances.permutation.full": {"tolerance": 1e-6, "set_by": "planning pilots",
+                                              "date": "2026-09-11",
+                                              "basis": "eigendecomposition split, equivariant to fp"},
+    "identity.invariances.scale_m": {"tolerance": 1e-8, "set_by": "planning pilots",
+                                     "date": "2026-09-11",
+                                     "basis": "lattice built in sd units; evidence scale-free"},
+    # variances under scaling: the full path differences at relative
+    # steps and is covariant to fp (6.5e-8); the diagonal paths use
+    # ABSOLUTE steps (1e-4 winner, 1e-3 orders), so their curvature
+    # error grows as the scale shrinks (1.6e-4 at c = 0.1 on logistic
+    # orders) -- a documented cost, candidate for relative steps
+    "identity.invariances.scale_v.full": {"tolerance": 1e-6, "set_by": "planning pilots",
+                                          "date": "2026-09-11", "basis": "relative FD steps"},
+    "identity.invariances.scale_v.diag": {"tolerance": 1e-3, "set_by": "planning pilots",
+                                          "date": "2026-09-11",
+                                          "basis": "absolute FD steps; 1.6e-4 at c=0.1"},
+    "identity.invariances.exact": {"tolerance": 1e-12, "set_by": "planning pilots",
+                                   "date": "2026-09-11", "basis": "identical code path"},
+    "identity.predict_evidence.normal": {"tolerance": 1e-8, "set_by": "planning pilots",
+                                         "date": "2026-09-11", "basis": "pilot 1e-16"},
+    "identity.predict_evidence.blocked": {"tolerance": 1e-5, "set_by": "planning pilots",
+                                          "date": "2026-09-11",
+                                          "basis": "3.4e-6 with three groups (Sobol vs engine nodes)"},
+    "identity.evidence.exact": {"tolerance": 1e-8, "set_by": "planning pilots",
+                                "date": "2026-09-11",
+                                "basis": "tests/test_history_and_teams.py pins 1e-8 / 1e-10"},
 }
 
 # documented approximation costs: name -> {"envelope", "cite", "why"};
