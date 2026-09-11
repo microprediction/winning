@@ -72,6 +72,13 @@ with warnings.catch_warnings(record=True) as caught:
         "the legacy winning.lattice alias should warn"
     )
 
+# the console script / python -m winning: version line plus the contract,
+# exercised as a subprocess so the entry point itself is tested
+import subprocess
+import sys
+
+subprocess.run([sys.executable, "-m", "winning"], check=True)
+
 # ratings layer loads and runs one update
 from winning.ratings.history import rate_history
 
@@ -80,6 +87,26 @@ ratings, logZ = rate_history(
 )
 assert set(ratings) == {"a", "b", "c"}
 assert np.isfinite(logZ)
+
+# factor ratings: a level plus one offset, fitted through the ranking
+# likelihood on the installed wheel, and priced by the race engine
+from winning.ratings import fit_factor_ratings, predict_factor
+
+events = [([0, 1, 2], [0, 1, 2], [1.0, 0.0]),
+          ([1, 2, 0], [0, 2, 1], [1.0, 1.0]),
+          ([2, 0, 1], [1, 2, 0], [1.0, 0.0])]
+B = fit_factor_ratings(events, n_entities=3, n_cov=2, ridge=[1.0, 10.0])
+assert B.shape == (3, 2) and np.isfinite(B).all()
+pf = predict_factor(B, [0, 1, 2], [1.0, 1.0])
+assert abs(float(pf.sum()) - 1.0) < 1e-9
+
+# block correlation: same-group entrants share a performance component
+from winning.ratings import AbilityTracker
+
+trk = AbilityTracker(rho=0.3, drift=0.0)
+trk.observe(["a", "b", "c", "d"], 0.0, order=[0, 2, 1, 3],
+            groups=["x", "x", "y", "y"])
+assert np.isfinite(trk.evidence)
 
 print(
     f"smoke OK: {winning.__version__} | contract green | round trip {err:.1e} "

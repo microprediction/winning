@@ -553,8 +553,9 @@ def order_loglik(m, sd, order, L=2001, base="normal"):
     threefold (bandits repo, exact_scale_map: s_hat 0.65 +/- 0.35
     against stagewise 1.53 +/- 0.36 and winner-only 0.24 +/- 0.49 at
     200 ranked races -- rankings consumed exactly are worth about ten
-    winner-only races each). Min-wins: order lists indices from first
-    (smallest performance) to last.
+    winner-only races each). Max-wins, like the rest of this module:
+    order lists indices from first (largest performance) to last, and
+    P([hi, lo]) = Phi((m_hi - m_lo) / sqrt 2) for two unit-sd players.
 
     Returns (loglik, dlogp_dm).
     """
