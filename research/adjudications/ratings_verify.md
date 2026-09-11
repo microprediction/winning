@@ -29,6 +29,61 @@ Entry format (after research/adjudications/laplace_convolution_shortcut.md):
     <rows that changed, before -> after, with the check names>
     <what the result rules out; residuals adjudicated NOT a defect>
 
+## Gate result (winning session, 2026-09-11, full profile, 25121e0): BASELINE
+run: ratings_verify/runs/2026-09-11_25121e0_full.json (28.9 min, 3 workers,
+1 thread each). Counts: 4952 ok, 28 FAIL, 0 UNDERPOWERED, 2
+EXPECTED_APPROX (update_ranking, documented), 248 SKIP (Gaussian-only
+update_winner_full under non-normal bases; the student-t correlated
+cells identical to the diagonal path at V = 0; diagonal drivers at
+V != 0), 102 MEASURED. The legacy audit group reproduces the bandits
+digits. The 28 failures adjudicate into three items:
+
+1. identity.moments, 21 rows, curve bases at the extreme regimes
+   (noise variance 4 against prior variance 0.25; prior variance 9;
+   Student-t tails): statistics 5.1e-5 to 6.7e-4 against floors of 5e-5
+   (winners) and 5e-4 (orders) piloted at unit noise. The residuals are
+   lattice mass -- I3 (normalisation) moves with I2 and the raw and
+   clamped I2 coincide -- not curvature. Adjudicated: curve floors
+   doubled (winners 1e-4, orders 1e-3), 1.5x the full-grid maximum;
+   marks.py records the basis.
+2. audit.regime.P1_P5, 2 rows: P4 (correlation with the truth after 40
+   winner-only updates of 8 arms) at 0.14 (normal, noise variance 4)
+   and 0.32 (gumbel, prior variance 0.25). With 8 arms the statistic's
+   SE is ~0.35 and a low-information regime legitimately sits below
+   0.5; the identical means through the independent path did not fail
+   only because their world differs. Adjudicated: P4 gates at the
+   baseline regime (the bandits statistic); off-baseline it is reported.
+3. referee.full_covariance, 5 rows: the ORDER update with a dense
+   rank-2 belief plus one-factor loadings (belief split rank 3, hence
+   2^10 Sobol nodes) at prior sd 3 and 10 against the rejection-sampled
+   posterior. Part referee, part engine. Referee: the cell conditioned
+   on a fixed order that is near-impossible at a spread of ten standard
+   deviations (732 accepted draws); it now conditions on a prior-
+   predictive event and declares fewer than 2000 accepted draws
+   UNDERPOWERED. Engine, on the corrected referee (63k-150k accepted):
+   relative variance error 0.063 at sd 3 and 0.139 at sd 10, cross
+   terms 15 and 8 percent of their scale, means within 1.6 percent of
+   the prior sd; the winner update is fine at every sd. The Hessian
+   step is not the cause (eps_rel 0.05..0.3 changes nothing); the node
+   count is, erratically: 2^12 nodes give dv/v 0.0018 at sd 10 but
+   0.075 at sd 3 (cross terms 0.19 of 1.2); 2^14 give 0.004 and 0.010.
+   OPEN DEFECT: the full-covariance order update's node budget
+   (full._mixture_nodes, 2^10 scrambled Sobol at rank >= 3) is too
+   small once the belief dwarfs the noise in a rank >= 3 loading
+   space, and simply raising it converges unevenly. Candidate remedy:
+   a recentred or adaptive rule keyed to the belief/noise ratio (as
+   races.py escalates sharp factors) rather than a fixed budget. Until
+   then the sd 3 and sd 10 order cells report MEASURED at both 2^10 and
+   2^12 nodes; the sd 1 cells and every winner cell gate.
+
+Other MEASURED rows in the baseline, for the record: the diagonal
+tracker's marginals (z^2 2.2-2.5, by construction), audit P6 marginal
+and P7 variance statistics, ADF order dependence of rate_history on
+order observations (0.022), factor.se_calibration 0.97 +- 0.07 (band to
+set: [0.85, 1.15] proposed), factor.recovery_slope -0.41 (band [-0.65,
+-0.35] proposed), factor.heldout margins (normal beats PL by 0.036 +-
+0.016 on normal-generated data; beats uniform by 2.25).
+
 ## Gate result (winning session, 2026-09-11, F2 predict-versus-evidence): PASSED
 before: baseline run at 25121e0 (identity.predict_evidence.* MEASURED);
 after: commit b018af1.

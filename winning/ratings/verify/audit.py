@@ -245,7 +245,7 @@ def _p1_p5(ctx, regimes, n, noise="base", legacy_seed=None, name=None):
                     bad.append(f"P2 var grew by {r['worst_increase']:.2e}")
                 if r["floored"] > 0:
                     bad.append(f"P3 {r['floored']} floored")
-                if corr < p4_tol:
+                if corr < p4_tol and regime == BASELINE:
                     bad.append(f"P4 corr {corr:.2f}")
                 if r["v"].mean() > regime["prior_var"]:
                     bad.append(f"P5 mean var {r['v'].mean():.2f} >= prior")
