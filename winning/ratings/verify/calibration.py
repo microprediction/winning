@@ -162,7 +162,7 @@ def _run_history(ctx, kind, R, E=12, T=60, K=5, prior_var=1.0, beta2=1.0):
             races.append(race)
         # timescale huge: no drift (both models static)
         _, _, st = rate_history(races, ids=list(range(E)), timescale=1e12, prior_var=prior_var,
-                                beta2=beta2, return_state=True)
+                                beta2=beta2, lengths_scale=1.0, return_state=True)
         m, S = st["m"], st["S"]
         i, j = np.triu_indices(E, 1)
         keep = met[i, j]

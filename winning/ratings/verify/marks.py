@@ -190,6 +190,10 @@ MARKS = {
     "identity.predict_evidence.other": {"tolerance": 1e-4, "set_by": "F2 adjudication",
                                         "date": "2026-09-11",
                                         "basis": "lattice mass normalisation; before-fix 0.016..0.116"},
+    "identity.history_conjugate.exact": {"tolerance": 1e-8, "set_by": "F1 adjudication",
+                                         "date": "2026-09-11",
+                                         "basis": "a conjugate full-state filter equals the joint "
+                                                  "posterior to fp; before the fix: mean off 1.2"},
     "identity.evidence.exact": {"tolerance": 1e-8, "set_by": "planning pilots",
                                 "date": "2026-09-11",
                                 "basis": "tests/test_history_and_teams.py pins 1e-8 / 1e-10"},
@@ -227,10 +231,15 @@ MARKS = {
                                      "set_by": "planning pilots", "date": "2026-09-11",
                                      "basis": "diagonal ADF: contrasts calibrated or slightly "
                                               "conservative; overconfidence above 1.10 fails"},
-    "calibration.history.contrast": {"z2_band": (0.92, 1.08), "coverage_band": (0.93, 0.97),
-                                     "measured": True,
-                                     "set_by": "planning pilots", "date": "2026-09-11",
-                                     "basis": "exact conjugate filter; MEASURED until F1 is fixed"},
+    # rate_history is a full-state conjugate filter since the F1 fix, so
+    # its contrasts are exactly calibrated in expectation (the sharp
+    # test is identity.history_conjugate, exact to 1e-15); the band is
+    # what R = 80 worlds can power (per-world sd ~0.4). Before the fix:
+    # z^2 1.32 +- 0.09, coverage 0.913; after: 0.963 +- 0.061, 0.956.
+    "calibration.history.contrast": {"z2_band": (0.85, 1.15), "coverage_band": (0.925, 0.975),
+                                     "measured": False,
+                                     "set_by": "F1 adjudication", "date": "2026-09-11",
+                                     "basis": "exact conjugate filter; powered band at R=80"},
 
     # the MAP factor fitter's derivatives against finite differences
     "factor.gradient_fd": {"tolerance": 1e-4, "set_by": "planning pilots", "date": "2026-09-11",

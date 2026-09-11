@@ -480,3 +480,68 @@ def evidence_bookkeeping(ctx):
     out.append(_res(ctx, f"{ctx.name}.predict_gauge", float(np.abs(p1 - p2).max()),
                     "identity.evidence.exact"))
     return out
+
+
+# ---------------------------------------------------------------------------
+# the batch history filter against the closed-form joint posterior (F1)
+# ---------------------------------------------------------------------------
+
+def _conjugate_joint(E, races, prior_var, beta2):
+    """Closed-form joint posterior of a static conjugate model over any
+    list of score races: precision I / prior_var + sum_r A_r' P_r A_r /
+    beta2, linear term sum_r A_r' P_r x_r / beta2 (prior mean zero)."""
+    Lam = np.eye(E) / prior_var
+    h = np.zeros(E)
+    for r in races:
+        ids = np.asarray(r["runners"], dtype=int); K = len(ids)
+        x = np.asarray(r["scores"], dtype=float)
+        P = np.eye(K) - np.ones((K, K)) / K
+        A = np.zeros((K, E)); A[np.arange(K), ids] = 1.0
+        Lam += A.T @ P @ A / beta2
+        h += A.T @ (P @ x) / beta2
+    S = np.linalg.inv(Lam)
+    return S @ h, S
+
+
+@check("identity.history_conjugate", profiles=("fast",), group="identity", cost_s=3.0)
+def history_conjugate(ctx):
+    """rate_history on overlapping fields of score observations with no
+    drift equals the closed-form joint posterior (mean, covariance,
+    total evidence additive and order-invariant): the identity a full-
+    state conjugate filter satisfies exactly, and the sub-block update
+    (F1) does not. Order observations are measured for order dependence."""
+    from ..history import rate_history
+    out = []
+    E, T, K = 10, 24, 4
+    rng = ctx.rng("world")
+    s = rng.normal(0, 1, E)
+    races = []
+    for t in range(T):
+        ids = rng.choice(E, K, replace=False)
+        x = s[ids] + rng.normal(size=K)
+        races.append({"t": 0.0, "runners": ids.tolist(), "scores": x.tolist()})
+    mx, Sx = _conjugate_joint(E, races, 1.0, 1.0)
+    _, z1, st = rate_history(races, ids=list(range(E)), timescale=1e12, prior_var=1.0,
+                             beta2=1.0, lengths_scale=1.0, return_state=True)
+    out.append(_res(ctx, f"{ctx.name}.scores_mean", _rel(st["m"], mx, 1.0),
+                    "identity.history_conjugate.exact"))
+    out.append(_res(ctx, f"{ctx.name}.scores_cov", _rel(st["S"], Sx, 1.0),
+                    "identity.history_conjugate.exact"))
+    perm = rng.permutation(T)
+    _, z2, st2 = rate_history([races[i] for i in perm], ids=list(range(E)), timescale=1e12,
+                              prior_var=1.0, beta2=1.0, lengths_scale=1.0, return_state=True)
+    out.append(_res(ctx, f"{ctx.name}.scores_order_invariance",
+                    max(_rel(st["m"], st2["m"], 1.0), _rel(st["S"], st2["S"], 1.0), abs(z1 - z2)),
+                    "identity.history_conjugate.exact"))
+    # order observations: the moment update is an ADF projection, so
+    # order dependence is measured, not asserted
+    oraces = [{"t": 0.0, "runners": r["runners"], "order": list(np.argsort(-np.asarray(r["scores"])))}
+              for r in races[:12]]
+    _, z3, st3 = rate_history(oraces, ids=list(range(E)), timescale=1e12, return_state=True)
+    _, z4, st4 = rate_history([oraces[i] for i in rng.permutation(12)], ids=list(range(E)),
+                              timescale=1e12, return_state=True)
+    out.append(Result(f"{ctx.name}.orders_order_dependence", "identity", "MEASURED",
+                      statistic=max(_rel(st3["m"], st4["m"], 1.0), abs(z3 - z4)),
+                      detail="ADF order dependence of rate_history on order observations "
+                             "(mean spread and evidence difference over a permutation)"))
+    return out
