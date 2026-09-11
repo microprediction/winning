@@ -92,3 +92,48 @@ def test_predict_gauge_invariant():
     p2 = trk.predict(ids, 1.0)
     assert np.max(np.abs(p1 - p2)) < 1e-10
     assert abs(p1.sum() - 1.0) < 1e-6
+
+
+def test_predict_prices_the_same_model_as_the_evidence_on_every_base():
+    # fit and price under one model: the probability predict() gives the
+    # observed winner equals the evidence increment the winner update
+    # returns -- on non-normal bases through the belief-noise convolution
+    # (the shortcut D = beta2 + v was off by up to 0.12 nats here)
+    ids = list("abcdef"); groups = ["x", "x", "y", "y", None, "z"]
+    for base in ("normal", "gumbel", "logistic", "laplace"):
+        for rho in (0.0, 0.4):
+            trk = AbilityTracker(base=base, rho=rho, drift=0.0, init_var=1.0, Qf=5)
+            rng = np.random.default_rng(3)
+            for i, mm in zip(ids, rng.normal(0, 0.7, 6)):
+                trk.state[i] = AbilityState(float(mm), float(rng.uniform(0.5, 1.5)), 0.0)
+            g = groups if rho > 0 else None
+            p = trk.predict(ids, 0.0, groups=g)
+            e0 = trk.evidence
+            trk.observe(ids, 0.0, winner=2, groups=g)
+            assert abs(np.log(p[2]) - (trk.evidence - e0)) < 1e-4, (base, rho)
+            assert abs(p.sum() - 1.0) < 1e-9
+
+
+def test_predictive_win_probabilities_match_monte_carlo():
+    from winning.ratings.nway import predictive_win_probabilities
+    from winning.ratings.simulate import sample_noise
+    from winning.factor.races import student_base
+    rng = np.random.default_rng(0)
+    m = np.array([0.5, 0.0, -0.3, 0.2]); v = np.array([0.8, 1.2, 0.5, 1.0])
+    N = 1_000_000
+    p = predictive_win_probabilities(m, v, beta2=0.7, base="laplace")
+    x = m + np.sqrt(v) * rng.normal(size=(N, 4)) + np.sqrt(0.7) * sample_noise(rng, "laplace", (N, 4))
+    assert np.abs(p - np.bincount(x.argmax(1), minlength=4) / N).max() < 3e-3
+    S = np.array([[1.0, 0.4, 0.1, 0.0], [0.4, 0.9, 0.2, 0.1],
+                  [0.1, 0.2, 0.7, 0.3], [0.0, 0.1, 0.3, 1.1]])
+    V = np.array([[0.5], [-0.5], [0.5], [-0.5]])
+    base = student_base(4.0)
+    p = predictive_win_probabilities(m, S=S, beta2=1.0, base=base, V=V)
+    L = np.linalg.cholesky(S)
+    x = m + rng.normal(size=(N, 4)) @ L.T + rng.normal(size=(N, 1)) @ V.T + sample_noise(rng, base, (N, 4))
+    assert np.abs(p - np.bincount(x.argmax(1), minlength=4) / N).max() < 3e-3
+    from winning.ratings.history import predict_race
+    st = {"m": m, "S": S, "t": None, "index": {i: i for i in range(4)},
+          "prior_mean": 0.0, "prior_var": 1.0}
+    pr, _ = predict_race(st, [0, 1, 2, 3], V=V, beta2=1.0, base=base)
+    assert np.abs(pr - p).max() == 0.0

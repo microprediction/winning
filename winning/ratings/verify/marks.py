@@ -183,6 +183,13 @@ MARKS = {
     "identity.predict_evidence.blocked": {"tolerance": 1e-5, "set_by": "planning pilots",
                                           "date": "2026-09-11",
                                           "basis": "3.4e-6 with three groups (Sobol vs engine nodes)"},
+    # non-normal bases: predict prices the belief-noise convolution on
+    # the updates' own node rule (predictive_win_probabilities); the
+    # residual is the normalisation of the lattice mass (3-4e-6 measured
+    # after the fix; 0.016-0.116 before it, the convolution shortcut)
+    "identity.predict_evidence.other": {"tolerance": 1e-4, "set_by": "F2 adjudication",
+                                        "date": "2026-09-11",
+                                        "basis": "lattice mass normalisation; before-fix 0.016..0.116"},
     "identity.evidence.exact": {"tolerance": 1e-8, "set_by": "planning pilots",
                                 "date": "2026-09-11",
                                 "basis": "tests/test_history_and_teams.py pins 1e-8 / 1e-10"},

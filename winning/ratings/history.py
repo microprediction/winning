@@ -254,6 +254,13 @@ def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257,
         for b, j in known:
             Sf[a, b] = S[i, j]
     B = np.broadcast_to(np.asarray(beta2, dtype=float), (k,)).astype(float)
+    if base != "normal":
+        # non-normal noise: the belief split into a lattice-borne
+        # diagonal part convolved with the base noise plus quadratured
+        # loadings, as the updates price it (nway.predictive_win_probabilities)
+        from .nway import predictive_win_probabilities
+        p = predictive_win_probabilities(mu, S=Sf, beta2=B, base=base, V=V, points=points)
+        return p, 1.0 / np.maximum(p, 1e-12)
     C = Sf + np.diag(B)
     if V is not None:
         Vm = np.atleast_2d(np.asarray(V, dtype=float))

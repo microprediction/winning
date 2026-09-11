@@ -57,7 +57,7 @@ from scipy.special import ndtr, ndtri
 
 from .nway import (update_winner, update_ranking, update_ranking_exact,
                    update_winner_correlated, update_order_correlated,
-                   _order_pass, _predictive_curves)
+                   predictive_win_probabilities, _order_pass, _predictive_curves)
 from .market import update_market
 from ..factor.races import race_probabilities
 
@@ -251,6 +251,11 @@ class AbilityTracker:
         model that observe() fits -- the same V, never a different one."""
         m, v = self._gather(ids, t)
         V, b2 = self._blocks(groups, len(m))
+        if self.base != "normal":
+            # the belief convolved with the base noise, on the updates'
+            # own node rule: predict and evidence agree on every base
+            return predictive_win_probabilities(m, v, beta2=b2, base=self.base, V=V,
+                                                Qf=self.Qf, points=points)
         return race_probabilities(-m, V=V, D=b2 + v, base=self.base, points=points)
 
     # -- observation ---------------------------------------------------------

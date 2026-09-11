@@ -198,6 +198,72 @@ def _winner_moments_curves(m, curves, i, L=4001, need_d2=True):
     return p, g, d2
 
 
+def predictive_win_probabilities(m, v=None, beta2=1.0, base="normal", V=None,
+                                 S=None, Qf=7, nodes_log2=10, points=257,
+                                 L=4001):
+    """Win probabilities of a field under the belief AND the noise: skill
+    s ~ N(m, v) (or N(m, S) with a full covariance), performance
+    x = s + (V f) + sqrt(beta2) eps with eps the base noise. This is the
+    predictive the winner updates condition on, so predict and evidence
+    agree (fit and price under one model).
+
+    Normal base: the Gaussian is closed under convolution, so this is
+    race_probabilities on the summed covariance, exact. Any other base:
+    the belief is split into a diagonal part psi and loadings B
+    (S = B B' + diag(psi); a diagonal belief costs no nodes), each
+    entrant's marginal is the N(0, psi_j) belief CONVOLVED with the base
+    noise (_predictive_curves) -- not the base at combined variance,
+    the shortcut that mispriced a near-even favorite by four points --
+    and the field is priced by the ordered-statistics pass at every
+    factor node of [B, V] and mixed. Max-wins m; returns probabilities
+    normalised to one (the lattice mass is within ~1e-5 of one).
+    """
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    b2 = _beta_per_player(beta2, n)
+    if S is not None:
+        S = np.asarray(S, dtype=float)
+    else:
+        S = np.diag(np.asarray(v, dtype=float))
+    Vm = None
+    if V is not None:
+        Vm = np.atleast_2d(np.asarray(V, dtype=float))
+        if Vm.shape[0] != n:
+            Vm = Vm.T
+    from ..factor.races import race_probabilities
+    if base == "normal":
+        C = S + np.diag(b2)
+        if Vm is not None:
+            C = C + Vm @ Vm.T
+        return race_probabilities(-m, cov=C, points=points)
+    from .full import _belief_split, _mixture_nodes
+    off = S - np.diag(np.diag(S))
+    if np.abs(off).max() <= 1e-12 * max(float(np.diag(S).mean()), 1e-300):
+        B, psi = np.zeros((n, 0)), np.maximum(np.diag(S), 0.0)
+    else:
+        B, psi = _belief_split(S)
+    curves = _predictive_curves(psi, b2, base)
+    loads = B if Vm is None else np.hstack([B, Vm])
+    r = loads.shape[1]
+    if r == 0:
+        F, W = np.zeros((1, 1)), np.ones(1)
+        loads = np.zeros((n, 1))
+    elif S is not None and B.shape[1] > 0:
+        F, W = _mixture_nodes(r, nodes_log2, Qf=9)
+    else:
+        F, W = _factor_grid(r, Qf=Qf)          # the diagonal updates' rule
+    shifts = F @ loads.T
+    p = np.zeros(n)
+    for q in range(len(W)):
+        mm = m + shifts[q]
+        pq = np.empty(n)
+        for i in range(n):
+            pq[i], _, _ = _winner_moments_curves(mm, curves, i, L=L, need_d2=False)
+        p += W[q] * pq
+    p = np.maximum(p, 1e-300)
+    return p / p.sum()
+
+
 def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
                    points=257):
     """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP.
