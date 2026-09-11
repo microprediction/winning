@@ -44,7 +44,16 @@ def fit_factor_model(Sigma, k):
     """
     Sigma = np.asarray(Sigma, dtype=float)
     n = len(Sigma)
-    V, D = factor_model_projected(Sigma, k)
+    # the alternation is nonconvex and its default start (a constant
+    # idiosyncratic variance) can stall short of the exact solution on
+    # some platforms even for a diagonal Sigma (CI, 2026-09-11: residual
+    # 3e-3 on ubuntu, 1e-15 on macOS); starting from D0 = diag(Sigma)
+    # reaches a diagonal exactly in one sweep, so both starts are run
+    # and the lower projected residual kept
+    from ..factor.core import _projected_sq
+    fits = [factor_model_projected(Sigma, k, D0=np.diag(Sigma)),
+            factor_model_projected(Sigma, k)]
+    V, D = min(fits, key=lambda vd: _projected_sq(Sigma, vd[0], vd[1]))
     P = np.eye(n) - np.ones((n, n)) / n
     V = P @ V
     A, sv, _ = np.linalg.svd(V, full_matrices=False)
