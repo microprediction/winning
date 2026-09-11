@@ -43,6 +43,33 @@ structure*. The structure's own number, 0.003–0.004 with intervals
 excluding zero on all three splits, is the claim this library's factor
 API actually supports.
 
+## Robustness
+
+**Colour is not the confound** (`exp36`). Our arms model white
+advantage; standard Glicko-2 does not, so a referee's first question
+is whether the estimator column is really colour bookkeeping. It is
+not: colour is worth −0.0016 of the −0.0206 gap, and a colour-blind
+fit still beats colour-blind Glicko-2 by **−0.0190** like-for-like.
+The honest footnote is that ~8% of the estimator column is colour.
+
+**Open, and ranked by what a referee hits first:**
+
+1. **Batch vs online.** Our estimator sees the training set at once and
+   can revisit; Glicko-2 processes each game once because a production
+   system must. Part of the estimator column is that privilege. The
+   deployment-realistic comparison is online-vs-online, now runnable
+   via `winning.ratings.AbilityTracker`.
+2. **One month of 2013.** 639 players, early-adopter Lichess, a rating
+   system that has since changed.
+3. **Draws dropped** (3.3% here, far more in classical and at
+   strength). The Arena work has a proper three-way tie model; this
+   does not.
+4. **The ≥100-game threshold** keeps the dense subpopulation, where
+   rating is easiest — Lichess must rate everyone. This one carries a
+   prediction: pooling should help sparse players *most*, so the
+   factor margin should widen as the threshold drops. If it narrows,
+   that is evidence against the mechanism.
+
 ## Why stratification helps them and not us
 
 The two facts look contradictory and are not:
