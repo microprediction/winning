@@ -126,6 +126,18 @@ def factor_model_contrast(C: np.ndarray, k: int, n_iter: int = 200,
     fit, not be refit against diag(C). Loadings are centered (P V) and
     canonicalized by SVD with a sign convention, making results reproducible
     at the covariance level rather than the supplied-V level.
+
+    CAVEAT (issue #27, 2026-09-11): this is a heuristic, and on inputs
+    close to a diagonal it is wrong, not merely approximate. Principal-
+    factor analysis assumes the idiosyncratic part is diagonal, but in
+    contrast space it is P diag(D) P, which is not; for C = I with k = 1
+    the iteration reads the centring artefact as a factor and the
+    resulting race is materially correlated (shares off by 0.03-0.05).
+    The public covariance intake (winning.probit.fit_factor_model,
+    fit_covariance) uses factor_model_projected, which minimises the
+    projected residual exactly. This function is retained because the
+    boundary experiments (research/experiments/exp14_boundaries) cite
+    it; prefer factor_model_projected for anything new.
     """
     C = np.asarray(C, dtype=float)
     n = len(C)
