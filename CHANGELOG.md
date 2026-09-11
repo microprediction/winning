@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed `winning.probit.fit_factor_model`, and so `shares(..., Sigma=,
+  k=)` and `utilities_from_shares(..., Sigma=, k=)`: the contrast
+  heuristic applied principal-factor analysis to P Sigma P although the
+  idiosyncratic part in contrast space, P diag(D) P, is not diagonal,
+  so an independent race (Sigma = I, k = 1) came back with an invented
+  factor and shares off by 0.03-0.05. The wrapper now uses the
+  projected fit (`factor_model_projected`), which reproduces the
+  contrast covariance exactly; the issue's example agrees with
+  independent quadrature to 3e-10. Found independently while
+  evaluating Bernd Johannes Wuebben's gaussian-correlated-choice (#27).
 - Ordered finishing prefixes: `ordered_probabilities(mu, k, ...)` prices
   every ordered k-prefix (exacta/trifecta-style permutations) from one
   shared field pass, with a Rust kernel (`ordered_prefixes`);
