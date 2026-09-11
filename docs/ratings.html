@@ -107,7 +107,14 @@
       0.006&ndash;0.009 to Glicko-2 &mdash; but partial pooling beats it:
       within one estimator, pooling the level across conditions and
       shrinking the offsets beats both the scalar and a per-condition
-      rating, and the advantage grows with cell sparsity. With one shared
+      rating, and the advantage grows with cell sparsity. The two
+      stratification numbers reconcile: the time-control signal is real,
+      and stratification is the lossy way to extract it, helping a weak
+      base estimator (Glicko-2 pooled, 0.6323) and costing a strong one
+      (this estimator's scalar, 0.6117, loses 0.0006 when stratified)
+      because its price is sparse-cell variance. Partial pooling extracts
+      the same signal without that price, which is why the shrunk-offset
+      form is the recommendation whatever the base estimator. With one shared
       penalty the same factor arm loses (+0.0037), so
       <code>sweep_offset_ridge</code> tunes the offset penalty on a
       validation slice and reports when the optimum sits at the scalar

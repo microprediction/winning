@@ -108,6 +108,13 @@ trk.observe(["a", "b", "c", "d"], 0.0, order=[0, 2, 1, 3],
             groups=["x", "x", "y", "y"])
 assert np.isfinite(trk.evidence)
 
+# the ratings verifier's smoke profile on the installed wheel: samplers
+# against their densities and the exact reductions, deterministic seeds
+from winning.ratings.verify import verify as verify_ratings
+
+rep = verify_ratings(profile="smoke", verbose=False)
+assert rep.exit_code == 0, rep.to_markdown()
+
 print(
     f"smoke OK: {winning.__version__} | contract green | round trip {err:.1e} "
     f"| gumbel-softmax {rel:.1e}"

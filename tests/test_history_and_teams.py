@@ -7,24 +7,7 @@ from winning.ratings.teams import (update_team_margins_full,
                                    update_team_winner_full)
 
 
-def _make_history(rng, n_h, n_races, drift_ts, easing=None):
-    s = rng.normal(size=n_h)
-    races, truth_at_end = [], None
-    lam = np.exp(-1.0 / drift_ts)
-    from winning.factor.races import race_probabilities
-    for t in range(n_races):
-        s = lam * s + np.sqrt(1 - lam ** 2) * rng.normal(size=n_h)
-        runners = list(rng.choice(n_h, size=6, replace=False))
-        st = s[runners]
-        y_mkt = st + 0.3 * rng.normal(size=6)
-        p_mkt = race_probabilities(-y_mkt)
-        perf = st + rng.normal(size=6)
-        gaps = perf.max() - perf                       # performance deficit
-        L = gaps if easing is None else easing(gaps)   # observed lengths
-        races.append(dict(t=float(t), runners=runners, p_market=p_mkt,
-                          margins=L / 0.2))            # lengths at 5/unit
-        truth_at_end = s.copy()
-    return races, truth_at_end
+from winning.ratings.simulate import history_world as _make_history  # noqa: E402
 
 
 def test_history_filter_tracks_drifting_abilities():

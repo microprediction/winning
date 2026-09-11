@@ -27,24 +27,15 @@ from winning.ratings.nway import (_grad_logp_row, order_loglik,
                                   update_winner_correlated)
 from winning.ratings.tracker import (AbilityTracker, block_loadings,
                                      tune_block_rho, walk_forward)
+from winning.ratings.simulate import (block_world, factor_world,
+                                      mixed_events)
 
 
 N_FEAT = 7
 
 
 def _mixed_events(rng):
-    """One of every event shape: K=2 full and winner-only (closed form
-    under the normal base), K=4 full, K=5 and K=4 partial, K=3
-    winner-only, and a sparse design."""
-    evs = [(rng.normal(size=(2, N_FEAT)), [1, 0]),
-           (rng.normal(size=(2, N_FEAT)), [0]),
-           (rng.normal(size=(4, N_FEAT)), [2, 0, 3, 1]),
-           (rng.normal(size=(5, N_FEAT)), [4, 1]),
-           (rng.normal(size=(3, N_FEAT)), [1]),
-           (rng.normal(size=(4, N_FEAT)), [1, 3])]
-    Zs = rng.normal(size=(4, N_FEAT)) * (rng.random((4, N_FEAT)) < 0.5)
-    evs.append((sparse.csr_matrix(Zs), [3, 2, 1, 0]))
-    return evs
+    return mixed_events(rng, N_FEAT)
 
 
 @pytest.mark.parametrize("base", ["normal", "logistic"])
@@ -94,17 +85,7 @@ def test_winner_batch_matches_engine_gradient_row():
         assert np.abs(g[e] - ge).max() < 1e-10
 
 
-def _factor_world(rng, n_ent, K, n_events, off_sd=0.4, n_cov=2):
-    B = np.column_stack([rng.normal(size=n_ent)]
-                        + [rng.normal(size=n_ent) * off_sd
-                           for _ in range(n_cov - 1)])
-    evs = []
-    for _ in range(n_events):
-        sub = rng.choice(n_ent, K, replace=False)
-        x = np.concatenate([[1.0], (rng.random(n_cov - 1) < 0.5).astype(float)])
-        perf = B[sub] @ x + rng.normal(size=K)
-        evs.append((sub, np.argsort(-perf), x))
-    return B, evs
+_factor_world = factor_world
 
 
 def test_fit_matches_reference_loop_and_both_forms_agree():
@@ -302,19 +283,7 @@ def test_blocked_scores_and_prices_paths_run_and_keep_marginals():
     assert np.isfinite(trk.evidence)
 
 
-def _block_world(seed, n_ent=12, n_contests=40, rho=0.5):
-    rng = np.random.default_rng(seed)
-    s = rng.normal(size=n_ent)
-    contests = []
-    for k in range(n_contests):
-        ids = rng.choice(n_ent, 6, replace=False)
-        z = rng.normal(size=2)
-        x = (s[ids] + np.sqrt(rho) * z[[0, 0, 0, 1, 1, 1]]
-             + np.sqrt(1 - rho) * rng.normal(size=6))
-        contests.append({"runners": [str(i) for i in ids], "t": float(k),
-                         "order": list(np.argsort(-x)),
-                         "groups": ["A"] * 3 + ["B"] * 3})
-    return contests
+_block_world = block_world
 
 
 def test_tune_block_rho_selects_the_true_correlation_by_evidence():

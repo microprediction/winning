@@ -32,10 +32,15 @@ per-observation CSV behind it):
   0.014-0.018 nats, every interval excluding zero; roughly four fifths
   of that is the estimator (0.017-0.022) and one fifth the factor
   structure (0.003-0.004, intervals excluding zero on every split).
-  Stratification does help Glicko-2 (+0.006 to +0.009), so the finding
-  is that partial pooling beats it within a good estimator, not that
-  conditioning is useless -- the spec's section 2.2 said otherwise and
-  is formally corrected.
+  Stratification does help Glicko-2 (+0.006 to +0.009) while it costs
+  this estimator's scalar 0.0006 (bandits/results/exp30_chess_tc.csv):
+  its payoff runs inversely to the base estimator's quality, because
+  its price is sparse-cell variance and its benefit is capped by what
+  pooling already captures. Partial pooling extracts the same signal
+  without that price and wins in both regimes, so the shrunk-offset
+  form is the recommendation whatever the base estimator -- the spec's
+  section 2.2 ("stratification does not beat a scalar") is formally
+  corrected to this.
 - The per-feature ridge is the mechanism, not a nicety. One shared
   ridge made the factor arm LOSE on chess time control (+0.0037);
   levels free and offsets shrunk turned the same data into a decisive
