@@ -52,6 +52,41 @@ not: colour is worth −0.0016 of the −0.0206 gap, and a colour-blind
 fit still beats colour-blind Glicko-2 by **−0.0190** like-for-like.
 The honest footnote is that ~8% of the estimator column is colour.
 
+**The result is not an artifact of the dense subpopulation**
+(`exp37`), but the mechanism's own prediction failed. Rerunning at
+thresholds of 100/50/25/10 games per player:
+
+| threshold | players | games | margin vs Lichess | sparse-player margin |
+|---|---|---|---|---|
+| 100 | 639 | 59,399 | −0.0161 | — |
+| 50 | 1,095 | 83,444 | −0.0170 | −0.0160 |
+| 25 | 1,571 | 97,844 | −0.0190 | −0.0222 |
+| 10 | 2,373 | 109,129 | −0.0157 | −0.0169 |
+
+The margin survives a near-4× widening of the population — 639 to
+2,373 players, 59k to 109k games — sitting between −0.016 and −0.019
+throughout, with every interval excluding zero. That is the robustness
+question answered.
+
+**But the registered prediction was that the margin would WIDEN
+monotonically as the threshold dropped**, because pooling should pay
+most where per-player data is scarcest. It does not. It is flat within
+noise (the intervals are ~0.006 wide and overlap heavily), it is not
+monotone, and the restricted-to-sparse margin beats the all-player
+margin in only two of three thresholds. The tuned offset ridge shows
+no trend either (10, 3, 10, 10), where the prediction said more
+shrinkage should be correct as density falls.
+
+The registered falsification was a *narrowing* margin, and that did
+not happen — so the pooling account is not refuted. But it is not
+confirmed by this test, and the honest statement is that **the factor
+advantage is roughly constant in population density rather than
+concentrated among data-poor players.** One caveat that is a genuine
+limitation rather than an excuse: a 10-game minimum is still not
+sparse. The regime where shrinkage should dominate — players with one
+to nine games — is excluded at every threshold here, so this tests
+robustness properly and the mechanism only weakly.
+
 **Open, and ranked by what a referee hits first:**
 
 1. **Batch vs online.** Our estimator sees the training set at once and
