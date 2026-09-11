@@ -107,7 +107,12 @@
       0.006&ndash;0.009 to Glicko-2 &mdash; but partial pooling beats it:
       within one estimator, pooling the level across conditions and
       shrinking the offsets beats both the scalar and a per-condition
-      rating, and the advantage grows with cell sparsity. The two
+      rating. On Arena the advantage grows with cell sparsity; on chess
+      it is roughly constant across player-density thresholds from 100
+      games down to 10 (2,373 players, 109k games, every interval
+      excluding zero), so it is not concentrated among data-poor
+      players, with the caveat that a 10-game minimum excludes the
+      genuinely sparse regime. The two
       stratification numbers reconcile: the time-control signal is real,
       and stratification is the lossy way to extract it, helping a weak
       base estimator (Glicko-2 pooled, 0.6323) and costing a strong one

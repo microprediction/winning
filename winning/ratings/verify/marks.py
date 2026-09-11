@@ -27,13 +27,14 @@ DEFAULT_SEEDS = 25
 # per-profile sample sizes and grid switches
 PARAMS = {
     "smoke": {"ks_n": 20_000, "ks_bases": "named", "p8_draws": 50_000,
-              "referee_draws": 100_000, "referee_draws_full": 1_000_000},
+              "referee_draws": 100_000, "referee_draws_full": 1_000_000, "sbc_worlds": 8},
     "fast": {"ks_n": 200_000, "ks_bases": "all", "p8_draws": 100_000,
-             "referee_draws": 200_000, "referee_draws_full": 1_000_000},
+             "referee_draws": 200_000, "referee_draws_full": 1_000_000, "sbc_worlds": 80},
     "full": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 400_000,
-             "referee_draws": 2_000_000, "referee_draws_full": 2_000_000},
+             "referee_draws": 2_000_000, "referee_draws_full": 2_000_000, "sbc_worlds": 200},
     "exhaustive": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 4_000_000,
-                   "referee_draws": 4_000_000, "referee_draws_full": 4_000_000},
+                   "referee_draws": 4_000_000, "referee_draws_full": 4_000_000,
+                   "sbc_worlds": 400},
 }
 
 # check name -> {"tolerance", "set_by", "date", "basis"}
@@ -206,6 +207,20 @@ MARKS = {
                     "date": "2026-09-04", "basis": "max |dv| / v <= 0.006 + 4 SE (relative)"},
     "referee.cross": {"tolerance": 0.02, "set_by": "tests/test_full_covariance_updates.py",
                       "date": "2026-09-04", "basis": "cross terms within 0.02 + 4 SE"},
+
+    # simulation-based calibration of the filters on contrasts: bands
+    # pre-registered from the planning pilot (tracker contrast mean z^2
+    # 0.86 scores / 0.92 orders at drift 0, E=12, T=60, K=5); a full-
+    # state conjugate filter is exact and gets the exact band once F1 is
+    # fixed ("measured": True keeps rate_history MEASURED until then)
+    "calibration.tracker.contrast": {"z2_band": (0.75, 1.10), "coverage_band": (0.92, 0.985),
+                                     "set_by": "planning pilots", "date": "2026-09-11",
+                                     "basis": "diagonal ADF: contrasts calibrated or slightly "
+                                              "conservative; overconfidence above 1.10 fails"},
+    "calibration.history.contrast": {"z2_band": (0.92, 1.08), "coverage_band": (0.93, 0.97),
+                                     "measured": True,
+                                     "set_by": "planning pilots", "date": "2026-09-11",
+                                     "basis": "exact conjugate filter; MEASURED until F1 is fixed"},
 }
 
 # documented approximation costs: name -> {"envelope", "cite", "why"};

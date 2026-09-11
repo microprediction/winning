@@ -21,8 +21,13 @@ per-observation CSV behind it):
   one scalar rating on either data set (P 0.81-0.88 on Arena; +0.0006
   n.s. on chess), while the factor form, one level estimated from every
   contest with offsets shrunk toward it, beats both: -0.0051 [-0.0071,
-  -0.0030] nats per game against the stratified arm on chess, monotone
-  in cell sparsity. Against the production system the decomposition
+  -0.0030] nats per game against the stratified arm on chess. On
+  Arena the advantage is monotone in cell sparsity; on chess it is
+  roughly constant across player-density thresholds from 100 games to
+  10 (research/chess exp37: 639 to 2,373 players, every interval
+  excluding zero), so "pooling helps sparse entities most" is not
+  confirmed there -- a 10-game minimum excludes the genuinely sparse
+  regime. Against the production system the decomposition
   matters (bandits exp35, three independent splits of the 59,399 games;
   bandits/results/exp35_glicko2_seed{0,11,22}.csv and
   results/exp35_output.txt): Glicko-2 pooled 0.6323 / 0.6304 / 0.6365,

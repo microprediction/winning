@@ -19,3 +19,4 @@ from . import identities  # noqa: F401  (registers checks)
 from . import moments  # noqa: F401
 from . import audit  # noqa: F401
 from . import referee  # noqa: F401
+from . import calibration  # noqa: F401
