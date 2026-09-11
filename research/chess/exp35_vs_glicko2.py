@@ -44,19 +44,29 @@ from winning import race_probabilities
 from winning.ratings.factor_ratings import fit_design_ratings as linear_ability_map
 
 def _load_glicko():
-    root = os.path.expanduser("~/github/winning/src/winning")
-    if not os.path.isdir(root):
-        root = os.path.expanduser("~/github/winning/winning")
+    """Glicko-2 lives in src/winning/, a separate source tree from the
+    installed package, so `import winning.glicko2` does not work. It is
+    loaded by path. (A previous edit "simplified" this to a direct
+    import; the shim is load-bearing, and exp30 passing after the move
+    did not catch it because exp30 does not use Glicko-2.)"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo = os.path.dirname(os.path.dirname(here))
+    roots = [os.path.join(repo, "src", "winning"),
+             os.path.expanduser("~/github/winning/src/winning")]
+    root = next((r for r in roots if os.path.isdir(r)), None)
+    if root is None:
+        raise ImportError(f"glicko2 source tree not found in {roots}")
     pkg = types.ModuleType("wsrc"); pkg.__path__ = [root]
     sys.modules["wsrc"] = pkg
     for n in ("ratingsystem", "glicko2"):
-        p = os.path.join(root, n + ".py")
-        spec = importlib.util.spec_from_file_location(f"wsrc.{n}", p)
+        spec = importlib.util.spec_from_file_location(
+            f"wsrc.{n}", os.path.join(root, n + ".py"))
         m = importlib.util.module_from_spec(spec)
         sys.modules[f"wsrc.{n}"] = m; setattr(pkg, n, m)
         spec.loader.exec_module(m)
-    from winning.glicko2 import Glicko2Rating
+    from wsrc.glicko2 import Glicko2Rating
     return Glicko2Rating
+
 
 Glicko2Rating = _load_glicko()
 CACHE = os.path.expanduser("~/.cache/winning/lichess_2013_01_headers.parquet")
