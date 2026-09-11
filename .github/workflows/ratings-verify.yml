@@ -1,0 +1,66 @@
+name: ratings-verify
+
+# The ratings layer's own verification suite (winning.ratings.verify):
+# the FAST profile gates every push through tests/test_ratings_verify.py
+# in ci.yml; this workflow runs the FULL profile nightly and on demand,
+# fails on any FAIL (exit 1) or UNDERPOWERED (exit 2), and uploads the
+# JSON and markdown reports as an artifact. Adjudicated runs are
+# committed by hand under research/adjudications/ratings_verify/runs/.
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "verify profile"
+        default: "full"
+        type: choice
+        options: [smoke, fast, full, exhaustive]
+      only:
+        description: "glob on check names (optional)"
+        default: ""
+      workers:
+        description: "process workers"
+        default: "4"
+
+env:
+  OMP_NUM_THREADS: "1"
+  OPENBLAS_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install core only (the verifier needs nothing beyond numpy and scipy)
+        run: pip install -e .
+      - name: Run the profile
+        run: |
+          P="${{ github.event.inputs.profile || 'full' }}"
+          W="${{ github.event.inputs.workers || '4' }}"
+          O="${{ github.event.inputs.only }}"
+          mkdir -p reports
+          set +e
+          if [ -n "$O" ]; then
+            python -m winning.ratings.verify --profile "$P" --workers "$W" --out reports --only $O
+          else
+            python -m winning.ratings.verify --profile "$P" --workers "$W" --out reports
+          fi
+          CODE=$?
+          set -e
+          cat reports/*.md >> "$GITHUB_STEP_SUMMARY" || true
+          echo "verify exit code $CODE"
+          exit $CODE
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ratings-verify-${{ github.event.inputs.profile || 'full' }}-${{ github.run_id }}
+          path: reports/
+          retention-days: 90

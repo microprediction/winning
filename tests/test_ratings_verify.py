@@ -42,7 +42,7 @@ def test_registry_is_well_formed():
         assert c.cost_s > 0
     for name, m in marks.MARKS.items():
         assert {"set_by", "date", "basis"} <= set(m), name
-        assert ("tolerance" in m) or ("tolerance_by_n" in m) or ("thresholds" in m), name
+        assert set(m) - {"set_by", "date", "basis"}, f"{name}: no mark payload"
 
 
 def test_results_round_trip_through_json_and_markdown(tmp_path):

@@ -12,7 +12,7 @@ from __future__ import annotations
 import itertools
 
 import numpy as np
-from scipy.special import log_ndtr, logsumexp, ndtr
+from scipy.special import log_ndtr, logsumexp
 
 from .core import Result, check
 from .moments import _base_obj, _order_evidence
@@ -238,7 +238,7 @@ def coarsening(ctx):
     every order with that winner; the omitted entrant is untouched
     under a diagonal prior and the ranked entrants match the sub-field
     computation."""
-    from ..nway import update_winner, update_ranking_exact, order_loglik
+    from ..nway import update_winner, update_ranking_exact
     out = []
     K = 5
     for bname in (["normal", "logistic"] if ctx.profile != "smoke" else ["normal"]):
@@ -299,7 +299,6 @@ def _all_drivers(base, beta2=1.0):
     from ..nway import (update_winner, update_ranking_exact,
                         update_winner_correlated, update_order_correlated)
     from ..full import update_winner_full, update_order_full
-    K = None
 
     def _w(m, v, ev):
         mm, vv, p = update_winner(m, v, ev[0], beta2=beta2, base=base)

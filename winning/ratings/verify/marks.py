@@ -26,10 +26,14 @@ DEFAULT_SEEDS = 25
 
 # per-profile sample sizes and grid switches
 PARAMS = {
-    "smoke": {"ks_n": 20_000, "ks_bases": "named"},
-    "fast": {"ks_n": 200_000, "ks_bases": "all"},
-    "full": {"ks_n": 1_000_000, "ks_bases": "all"},
-    "exhaustive": {"ks_n": 1_000_000, "ks_bases": "all"},
+    "smoke": {"ks_n": 20_000, "ks_bases": "named", "p8_draws": 50_000,
+              "referee_draws": 100_000, "referee_draws_full": 1_000_000},
+    "fast": {"ks_n": 200_000, "ks_bases": "all", "p8_draws": 100_000,
+             "referee_draws": 200_000, "referee_draws_full": 1_000_000},
+    "full": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 400_000,
+             "referee_draws": 2_000_000, "referee_draws_full": 2_000_000},
+    "exhaustive": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 4_000_000,
+                   "referee_draws": 4_000_000, "referee_draws_full": 4_000_000},
 }
 
 # check name -> {"tolerance", "set_by", "date", "basis"}
@@ -178,8 +182,50 @@ MARKS = {
     "identity.evidence.exact": {"tolerance": 1e-8, "set_by": "planning pilots",
                                 "date": "2026-09-11",
                                 "basis": "tests/test_history_and_teams.py pins 1e-8 / 1e-10"},
+
+    # the ported audit (bandits thresholds, pre-registered there)
+    "audit.P2": {"tolerance": 1e-6, "set_by": "bandits audit", "date": "2026-09-04",
+                 "basis": "Prekopa: variance is non-increasing on log-concave bases"},
+    "audit.P4": {"tolerance": 0.5, "set_by": "bandits audit", "date": "2026-09-04",
+                 "basis": "corr(m, truth) after 40 updates of 8 arms"},
+    "audit.P6": {"thresholds": {"robust": 0.35, "tail": 0.01, "coverage": 0.12},
+                 "set_by": "bandits audit", "date": "2026-09-04",
+                 "basis": "|robust sd - 1|, frac |z| > 10, |coverage - 0.95|"},
+    "audit.P7": {"tolerance": 0.05, "set_by": "bandits audit", "date": "2026-09-04",
+                 "basis": "max mean spread across paths on identical evidence"},
+    "audit.P8": {"dm": 0.005, "dv": 0.02, "set_by": "bandits audit + fresh configs",
+                 "date": "2026-09-04",
+                 "basis": "rejection MC; dm mark 0.005 + 4 SE (audit_fresh_configs), dv 0.02"},
+
+    # Monte Carlo referees: the referee's own marks (research/
+    # adjudications/predictive_referee.py and bandits audit_fresh_configs),
+    # plus 4 SE from the accepted sample
+    "referee.mean": {"tolerance": 0.005, "set_by": "predictive_referee + fresh configs",
+                     "date": "2026-09-04", "basis": "max |dm| <= 0.005 + 4 SE"},
+    "referee.var": {"tolerance": 0.006, "set_by": "predictive_referee",
+                    "date": "2026-09-04", "basis": "max |dv| / v <= 0.006 + 4 SE (relative)"},
+    "referee.cross": {"tolerance": 0.02, "set_by": "tests/test_full_covariance_updates.py",
+                      "date": "2026-09-04", "basis": "cross terms within 0.02 + 4 SE"},
 }
 
 # documented approximation costs: name -> {"envelope", "cite", "why"};
 # a statistic inside the envelope reports EXPECTED_APPROX, outside FAILs
-EXPECTED_APPROX = {}
+EXPECTED_APPROX = {
+    # update_ranking is a stagewise APPROXIMATION whose overconfidence
+    # on non-IIA bases is documented and measured (12 seeds x 60
+    # updates against update_ranking_exact on identical evidence):
+    #   base      var ratio  mean err ratio  coverage
+    #   gumbel      0.977        1.002         0.925   <- IIA: exact
+    #   normal      0.765        1.202         0.890
+    #   logistic    0.775        1.226         0.870
+    #   laplace     0.794        1.229         0.850
+    #   student4    0.794        1.254         0.830
+    # A near-constant 21-28 percent over-shrinkage plus a point estimate
+    # that degrades with tail weight. The envelope bounds it: robust sd
+    # in [0.9, 1.6], coverage in [0.78, 0.95]; beyond it, FAIL.
+    "audit.P6.update_ranking": {
+        "envelope": {"robust": (0.9, 1.6), "coverage": (0.78, 0.95)},
+        "cite": "winning/ratings/nway.py update_ranking docstring; "
+                "research/adjudications/laplace_convolution_shortcut.md",
+        "why": "stagewise decomposition: documented approximation cost"},
+}

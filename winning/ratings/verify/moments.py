@@ -50,7 +50,6 @@ def winner_drivers(base, V, beta2):
     """(name, fn) with fn(m, v, w) -> (m', v', logp[, S'])."""
     from ..nway import update_winner, update_winner_correlated
     from ..full import update_winner_full
-    K = None
     drivers = []
     if V is None:
         def _w(m, v, w):
@@ -246,7 +245,7 @@ def moments(ctx):
         if K_orders >= 2:
             ko = int(K_orders)
             Vo = None if V is None else V[:ko]
-            events.append((f"order", [list(p) for p in itertools.permutations(range(ko))],
+            events.append(("order", [list(p) for p in itertools.permutations(range(ko))],
                            order_drivers(base, Vo, beta2), m[:ko], v[:ko]))
         for event, outcomes, drivers, mm, vv in events:
             for dname, fn in drivers:

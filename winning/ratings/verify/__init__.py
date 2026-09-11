@@ -17,3 +17,5 @@ from .core import (CHECKS, PROFILES, VERDICTS, Check, Context,  # noqa: F401
 from . import marks  # noqa: F401
 from . import identities  # noqa: F401  (registers checks)
 from . import moments  # noqa: F401
+from . import audit  # noqa: F401
+from . import referee  # noqa: F401
