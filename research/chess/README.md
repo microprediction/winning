@@ -70,17 +70,28 @@ second encodes "I don't know much about this player."
 (`exp37`), but the mechanism's own prediction failed. Rerunning at
 thresholds of 100/50/25/10 games per player:
 
-| threshold | players | games | margin vs Lichess | sparse-player margin |
-|---|---|---|---|---|
-| 100 | 639 | 59,399 | −0.0161 | — |
-| 50 | 1,095 | 83,444 | −0.0170 | −0.0160 |
-| 25 | 1,571 | 97,844 | −0.0190 | −0.0222 |
-| 10 | 2,373 | 109,129 | −0.0157 | −0.0169 |
+| threshold | players | games | obs/param | margin vs Lichess | sparse-player margin |
+|---|---|---|---|---|---|
+| 100 | 639 | 59,399 | 30.9 | −0.0161 | — |
+| 50 | 1,095 | 83,444 | 25.4 | −0.0170 | −0.0160 |
+| 25 | 1,571 | 97,844 | 20.7 | −0.0190 | −0.0222 |
+| 10 | 2,373 | 109,129 | 15.3 | −0.0157 | −0.0169 |
 
 The margin survives a near-4× widening of the population — 639 to
 2,373 players, 59k to 109k games — sitting between −0.016 and −0.019
 throughout, with every interval excluding zero. That is the robustness
 question answered.
+
+The `obs/param` column is the quantitative sparsity axis, and it is
+what makes `exp37` and `exp38` comparable rather than two experiments
+loosely both about "sparsity". Note what `exp37` actually varies:
+lowering the threshold on a *single small month* admits less active
+players while the community stays tightly connected, so it moves
+density only from 30.9 down to 15.3. Modern Lichess sits at **4.61** —
+3.3× beyond `exp37`'s sparsest measured point, and sparse for a
+different reason (players rarely meet, rather than rarely play). So
+`exp37`'s null does not settle what `exp38` will find; it bounds the
+range where the margin is known to be flat.
 
 **But the registered prediction was that the margin would WIDEN
 monotonically as the threshold dropped**, because pooling should pay

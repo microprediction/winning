@@ -75,12 +75,20 @@ here, which is why this is worth running:
       pooling thesis (exp28e: advantage monotone in cell sparsity)
       predicts the margin WIDENS, because pooling pays most when data
       per cell is scarce, and this is the scarcest regime yet tested.
-      But exp37 tested exactly that prediction in chess and it FAILED
-      -- the margin did not widen as players got sparser. I do not get
-      to claim both. I predict the margin does NOT widen, siding with
-      the measured chess evidence over the theory, and if it widens
-      then exp37's null was the anomaly and the pooling story is
-      stronger than the chess data has so far shown.
+      But exp37 tested that prediction in chess and it FAILED -- the
+      margin did not widen as players got sparser. I do not get to
+      claim both. I predict the margin does NOT widen, siding with the
+      measured chess evidence over the theory, and if it widens then
+      exp37's null was the anomaly and the pooling story is stronger
+      than the chess data has so far shown.
+      The tension is real but NOT a straight contradiction, and the
+      difference matters. exp37 lowered the threshold on one small
+      month, which admits less active players while the community
+      stays tightly connected; it moved obs/param only from 30.9 to
+      15.3. This sits at 4.61 -- 3.3x beyond exp37's sparsest measured
+      point, and sparse for a different reason (players rarely MEET
+      rather than rarely play). exp37's null bounds the range where
+      the margin is known flat; it does not extend to here.
       Working against both: classical has nearly vanished, so there is
       less time-control structure of any kind left to find.
   P3. The estimator/structure split still favours the estimator
