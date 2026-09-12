@@ -44,8 +44,9 @@ picked. The consistent fit-and-price CONTROL (winner log-loss unchanged
 under rho) was not carried to its test window and remains open.
 
 Cost: one factor dimension per group of two or more in the contest; two or
-fewer ride a 7^r Gauss-Hermite tensor, more ride 1024 Sobol nodes (about
-15 s per K = 8 field with four groups on one core). Singletons cost nothing.
+fewer ride a 7^r Gauss-Hermite tensor (Qf), more ride 2**nodes_log2 Sobol
+nodes (about 15 s per K = 8 field with four groups on one core; 15-29 s
+for a 20-entrant field with ten pairs). Singletons cost nothing.
 """
 from __future__ import annotations
 
@@ -179,7 +180,17 @@ class AbilityTracker:
                        in common (block_loadings); active only for contests
                        observed or predicted with ``groups``.
     Qf               : Gauss-Hermite nodes per factor dimension for the
-                       block-correlated updates (r <= 2).
+                       block-correlated updates at rank r <= 2 (two groups
+                       of two or more in a contest).
+    nodes_log2       : log2 of the scrambled-Sobol node count at r >= 3,
+                       where Qf is inert. Cost per blocked update goes as
+                       nodes x K^2 and is the real ceiling on block
+                       correlation at double-digit group counts: an F1-shaped
+                       field (20 entrants, 10 two-car teams, r = 10) costs
+                       15-29 s per update at the default 1024 nodes, and
+                       neither update_order_full with a block-diagonal
+                       covariance nor the winner update is cheaper (bandits
+                       measurement, 2026-09-11).
 
     ``evidence`` accumulates log P(observation) over everything observed --
     market prices, scores, orders and winners, independent or blocked -- the
@@ -191,14 +202,14 @@ class AbilityTracker:
                  init_var: float = 4.0, beta2: float = 1.0, tau2: float = 0.25,
                  base: str = "normal", order_method: str = "exact",
                  n_aug: int = 60, burn: int = 20, seed: int = 0,
-                 rho: float = 0.0, Qf: int = 7):
+                 rho: float = 0.0, Qf: int = 7, nodes_log2: int = 10):
         self.drift = float(drift); self.drift_exp = float(drift_exp)
         self.init_var = float(init_var)
         self.beta2 = float(beta2); self.tau2 = float(tau2)
         self.base = base
         if not 0.0 <= float(rho) < 1.0:
             raise ValueError("rho must lie in [0, 1)")
-        self.rho = float(rho); self.Qf = int(Qf)
+        self.rho = float(rho); self.Qf = int(Qf); self.nodes_log2 = int(nodes_log2)
         self.evidence = 0.0
         # order-only observations (no margins) -- 'exact' = winning's exact
         # win-node ranking factor (nway.update_ranking_exact; validated against the
@@ -255,7 +266,8 @@ class AbilityTracker:
             # the belief convolved with the base noise, on the updates'
             # own node rule: predict and evidence agree on every base
             return predictive_win_probabilities(m, v, beta2=b2, base=self.base, V=V,
-                                                Qf=self.Qf, points=points)
+                                                Qf=self.Qf, nodes_log2=self.nodes_log2,
+                                                points=points)
         return race_probabilities(-m, V=V, D=b2 + v, base=self.base, points=points)
 
     # -- observation ---------------------------------------------------------
@@ -301,7 +313,7 @@ class AbilityTracker:
             order = list(order)
             if V is not None:
                 m, v, lz = update_order_correlated(m, v, order, V, beta2=b2, Qf=self.Qf,
-                                                   base=self.base)
+                                                   base=self.base, nodes_log2=self.nodes_log2)
             else:
                 lz = _order_evidence(m, v, order, self.beta2, self.base)
                 if self.order_method == "exact":
@@ -315,7 +327,7 @@ class AbilityTracker:
         elif winner is not None:                                   # winner-only fallback (see order note)
             if V is not None:
                 m, v, lz = update_winner_correlated(m, v, int(winner), V, beta2=b2, Qf=self.Qf,
-                                                    base=self.base)
+                                                    base=self.base, nodes_log2=self.nodes_log2)
             else:
                 m, v, p = update_winner(m, v, int(winner), beta2=self.beta2, base=self.base)
                 lz = float(np.log(max(float(p), 1e-300)))

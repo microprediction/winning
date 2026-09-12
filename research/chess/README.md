@@ -168,6 +168,9 @@ failures are kept because they are the transfer conditions:
 | `exp31_chess_giant_killers.py` | registered, unrun |
 | `exp32_style_heteroskedastic.py` | the K=2 factor projection |
 | `exp35_vs_glicko2.py` | the real Glicko-2 comparison |
+| `exp36_colour_confound.py` | is the estimator column just colour? |
+| `exp37_sparse_players.py` | robustness across density thresholds |
+| `exp38_modern_month.py` | 2024-01 replication: registered, unrun |
 | `results/` | per-game losses and raw outputs |
 
 Data is one month of the Lichess open database
@@ -177,6 +180,32 @@ it. Estimators import `winning.ratings.factor_ratings`; the originals
 used the bandits reference implementation and were swapped on the
 move, with `exp30` re-run afterwards to confirm the numbers reproduce.
 
-**Open:** all of this is one month of 2013. A modern month has orders
-of magnitude more players and a Lichess rating system that has since
-evolved. That replication is the obvious next step and is not done.
+**Open:** the modern replication is **registered and data-ready, not
+yet run** (`exp38_modern_month.py`). 2024-01 is cached as a contiguous
+4,000,000-game prefix — 765,053 players, 4,389 with ≥100 games against
+639 in 2013. Two things are already known from the cache alone, before
+any model is fitted:
+
+- **Classical chess has collapsed.** The time-control mix went from
+  classical 34% / blitz 38% / bullet 27% in 2013-01 to classical
+  **0.6%** / blitz 48% / bullet 37% in 2024-01 — 24,756 games out of
+  four million. The 2013 design used classical as the model's base
+  category, which is no longer defensible, so `exp38` moves the base
+  to blitz. This changes no games and no split, and fitted ability
+  differences are invariant to the reference level, so it cannot
+  favour an arm.
+- **The dimension itself is thinner now.** A population concentrated
+  into two adjacent fast controls has less time-control style
+  structure to find than one spread across three. `exp38` therefore
+  pre-registers a *smaller* margin than 2013's −0.0161, and says so
+  before running rather than after.
+
+`loader.py` now streams the HTTP response straight into the zstd
+decoder and takes a cap, because a modern month is ~32 GB compressed
+and the original loader read the whole file into memory. The cache
+filename records the cap
+(`lichess_2024_01_first4000000_headers.parquet`) so a truncated month
+cannot be mistaken for a whole one.
+
+    python research/chess/loader.py 2024-01 4000000
+    python research/chess/exp38_modern_month.py

@@ -251,7 +251,7 @@ def predictive_win_probabilities(m, v=None, beta2=1.0, base="normal", V=None,
     elif S is not None and B.shape[1] > 0:
         F, W = _mixture_nodes(r, nodes_log2, Qf=9)
     else:
-        F, W = _factor_grid(r, Qf=Qf)          # the diagonal updates' rule
+        F, W = _factor_grid(r, Qf=Qf, nodes_log2=nodes_log2)   # the diagonal updates' rule
     shifts = F @ loads.T
     p = np.zeros(n)
     for q in range(len(W)):
@@ -631,14 +631,15 @@ def order_loglik(m, sd, order, L=2001, base="normal"):
                        base=base)
 
 
-def _factor_grid(r, Qf=7):
-    """Nodes over the shared factors: GH tensor for r <= 2, Sobol past."""
+def _factor_grid(r, Qf=7, nodes_log2=10):
+    """Nodes over the shared factors: Gauss-Hermite tensor (Qf per
+    dimension) at r <= 2, 2**nodes_log2 scrambled Sobol nodes past."""
     from ..likelihood import _factor_nodes
-    return _factor_nodes(r, Qf=Qf)
+    return _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2)
 
 
 def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
-                    base="normal"):
+                    base="normal", nodes_log2=10):
     """Shared engine of the correlated updates. For Gaussian priors,
     E[s_j | event] = m_j + v_j d log P / d m_j and
     Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for ANY
@@ -652,7 +653,7 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     V = np.atleast_2d(np.asarray(V, dtype=float))
     if V.shape[0] != len(m):
         V = V.T
-    F, W = _factor_grid(V.shape[1], Qf=Qf)
+    F, W = _factor_grid(V.shape[1], Qf=Qf, nodes_log2=nodes_log2)
     logW = np.log(W)
     shifts = F @ V.T                                  # (Q, n)
 
@@ -690,13 +691,15 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
 
 
 def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
-                             base="normal"):
+                             base="normal", nodes_log2=10):
     """Exact-moment posterior update from `winner` won, when participants
     share performance factors: X_j = s_j + (V f)_j + noise_j,
     f ~ N(0, I_r), noise_j ~ N(0, beta2_j), s_j ~ N(m_j, v_j) (max-wins,
     matching this module throughout). Conditional on f the race is the
     independent one update_winner serves; the update mixes those
-    conditionals with posterior node weights. Returns
+    conditionals with posterior node weights. Nodes: Qf Gauss-Hermite
+    per factor dimension at rank r <= 2; 2**nodes_log2 scrambled Sobol
+    at r >= 3 (Qf is inert there). Returns
     (m_post, v_post, logZ) with logZ = log P(winner) for evidence and
     model comparison. Verified against rejection-sampled Monte Carlo
     posteriors in the tests.
@@ -719,15 +722,18 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
             g, p = _grad_logp_row(mm, D, winner, base=base)
             return np.log(max(p, 1e-300)), g
 
-    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
 
 
 def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
-                            base="normal"):
+                            base="normal", nodes_log2=10):
     """The shared-realization-correct full-order update with factor
     correlation: the factor mixture of update_ranking_exact, closing the
     open item recorded in update_ranking's caveat. order lists players
-    first to last finisher (max-wins). Returns (m_post, v_post, logZ),
+    first to last finisher (max-wins). Nodes as in
+    update_winner_correlated (Qf at rank <= 2, 2**nodes_log2 Sobol at
+    rank >= 3). Returns (m_post, v_post, logZ),
     logZ = log P(order). Near-impossible orders degrade like
     order_loglik (finite moments, tiny logZ), never raise.
 
@@ -742,7 +748,8 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     def node(mm):
         return _order_pass(mm, sd, order, base=base, curves=curves)
 
-    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
 
 
 def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
