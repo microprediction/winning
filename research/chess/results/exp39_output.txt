@@ -1,0 +1,18 @@
+exp39 seed 0: 59399 games, 639 players; train 29699 val 14849 TEST 14851
+  glicko2 per TC   TEST 0.6234  (tau 0.3)
+  published D=1    TEST 0.6073  (ridge 10.0)
+  tempered D=s     TEST 0.6072  (s* 1.1)
+  laplace D=1+var  TEST 0.6087  (median level se 0.3022)
+
+  --- P1: was our arm overconfident? ---
+  tempered         vs published        -0.0001 [-0.0004,+0.0002]  P(better) 0.735
+  --- P3: does the Laplace diagonal capture it? ---
+  laplace          vs published        +0.0015 [+0.0003,+0.0026]  P(better) 0.005
+  --- P2: the margin over Lichess's architecture ---
+  published        vs glicko2 per TC   -0.0161 [-0.0192,-0.0129]  P(better) 1.000
+  tempered         vs glicko2 per TC   -0.0162 [-0.0191,-0.0132]  P(better) 1.000
+  laplace          vs glicko2 per TC   -0.0146 [-0.0172,-0.0120]  P(better) 1.000
+
+  P1 wants s* > 1 and tempered better: s* = 1.1, delta -0.0001 -> CONFIRMED
+  P2 wants the margin to WIDEN past -0.0161: tempered -0.0162, laplace -0.0146 -> CONFIRMED
+  per-game losses -> /private/tmp/claude-501/-Users-petercotton-github-posttraining/19bed513-f044-41b0-b1d3-9ddfe4b23f45/scratchpad/wt-exp38/research/chess/results/exp39_calibration_seed0.csv
