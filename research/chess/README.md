@@ -90,8 +90,9 @@ players while the community stays tightly connected, so it moves
 density only from 30.9 down to 15.3. Modern Lichess sits at **4.61** —
 3.3× beyond `exp37`'s sparsest measured point, and sparse for a
 different reason (players rarely meet, rather than rarely play). So
-`exp37`'s null does not settle what `exp38` will find; it bounds the
-range where the margin is known to be flat.
+`exp37`'s null bounds the range where the margin is known to be flat —
+it does not extend to the modern regime, and as it turned out that
+regime could not be tested at all (see `exp38` below).
 
 **But the registered prediction was that the margin would WIDEN
 monotonically as the threshold dropped**, because pooling should pay
@@ -120,7 +121,12 @@ robustness properly and the mechanism only weakly.
    deployment-realistic comparison is online-vs-online, now runnable
    via `winning.ratings.AbilityTracker`.
 2. **One month of 2013.** 639 players, early-adopter Lichess, a rating
-   system that has since changed.
+   system that has since changed. This is now known to be *harder to
+   close than it looks*: `exp38` found the modern site cannot pose the
+   question at all, because its players no longer mix time controls
+   (0.3% with within-player contrast against 52% in 2013). The
+   limitation is therefore not "we only tried one month" but "the
+   result holds on a population that no longer exists at scale here."
 3. **Draws dropped** (3.3% here, far more in classical and at
    strength). The Arena work has a proper three-way tie model; this
    does not.
@@ -195,7 +201,7 @@ failures are kept because they are the transfer conditions:
 | `exp35_vs_glicko2.py` | the real Glicko-2 comparison |
 | `exp36_colour_confound.py` | is the estimator column just colour? |
 | `exp37_sparse_players.py` | robustness across density thresholds |
-| `exp38_modern_month.py` | 2024-01 replication: registered, unrun |
+| `exp38_modern_month.py` | 2024-01 replication: INFEASIBLE, covariate unidentifiable |
 | `exp39_predictive_calibration.py` | our overconfidence vs Glicko-2's RD: registered, unrun |
 | `results/` | per-game losses and raw outputs |
 
@@ -206,20 +212,60 @@ it. Estimators import `winning.ratings.factor_ratings`; the originals
 used the bandits reference implementation and were swapped on the
 move, with `exp30` re-run afterwards to confirm the numbers reproduce.
 
-**Open:** the modern replication is **registered and data-ready, not
-yet run** (`exp38_modern_month.py`). 2024-01 is cached as a contiguous
-4,000,000-game prefix — 765,053 players, 4,389 with ≥100 games against
-639 in 2013. Two things are already known from the cache alone, before
-any model is fitted:
+**Open — and the modern replication is now settled as INFEASIBLE, not
+pending** (`exp38_modern_month.py`, run it and it stops with the
+verdict). The time-control covariate is **unidentifiable** on 2024-01
+at every threshold tried, so no arm was fitted. This is emphatically
+*not* evidence against the 2013 result; nothing about the factor
+rating's accuracy was measured. It is a fact about modern Lichess.
+
+**Players no longer mix time controls.** A factor rating over time
+control needs within-player contrast; otherwise the offsets are
+confounded with the level and only the level is identified.
+
+| threshold | players | games | bullet % | ≥20 games in ≥2 controls |
+|---|---|---|---|---|
+| 100 | 3,780 | 53,248 | 93.1% | 11 (**0.3%**) |
+| 50 | 19,665 | 289,714 | 80.7% | 66 (0.3%) |
+| 25 | 66,745 | 901,679 | 65.2% | 347 (0.5%) |
+| 10 | 194,843 | 2,072,055 | 51.7% | 904 (0.5%) |
+| **2013-01** | 632 | 59,399 | — | 327 (**52.0%**) |
+
+Fifty-two percent then, half a percent now. Watch the bullet column
+too: lowering the threshold makes the *population* more diverse (93% →
+52% bullet) while *individuals* stay specialised. Between-player
+diversity without within-player contrast is precisely what killed
+opening family in `exp29` — self-selection destroying the variation
+identification needs.
+
+**More data makes it worse, not better.** Contrast *falls* as activity
+rises: the ≥100-game players are the most active and the most
+specialised (93.1% bullet, 0.3% contrast — the worst row). On modern
+Lichess the more you play the more you specialise, because bullet is
+what lets you play hundreds of games a month. And restricting to
+players who *do* mix controls fails from the other side — 904 such
+players share just 2,839 games, obs/param **1.05**, one observation
+per parameter, even though their time-control mix is finally healthy
+(57% bullet / 42% blitz).
+
+So the headline's limitation is sharper than "one month of 2013": it
+holds on a population where players mixed time controls, and that
+population no longer exists at scale on this site. Testing it on
+modern data needs either a site whose players still mix, or a
+covariate modern players do not self-select into.
+
+One correction worth keeping visible, since the wrong version was
+committed first: the "classical 0.6% / blitz 48% / bullet 37%" mix
+below describes the **raw month**, not the analysed sample. After the
+≥100-game filter the analysis population is **93.1% bullet**, because
+the threshold selects bullet specialists. "Blitz is the plurality" was
+true of the month and false of the data — a statistic computed before
+the sample was selected, used to characterise the sample.
 
 - **Classical chess has collapsed.** The time-control mix went from
   classical 34% / blitz 38% / bullet 27% in 2013-01 to classical
   **0.6%** / blitz 48% / bullet 37% in 2024-01 — 24,756 games out of
-  four million. The 2013 design used classical as the model's base
-  category, which is no longer defensible, so `exp38` moves the base
-  to blitz. This changes no games and no split, and fitted ability
-  differences are invariant to the reference level, so it cannot
-  favour an arm.
+  four million, *in the raw month* (see the correction above).
 - **The dimension itself is thinner now.** A population concentrated
   into two adjacent fast controls has less time-control style
   structure to find than one spread across three.
