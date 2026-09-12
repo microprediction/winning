@@ -141,6 +141,36 @@ Residual, MEASURED: rate_history's order-observation path is an ADF
 projection and stays order-dependent (mean spread 0.022 under a
 permutation of 12 races).
 
+## Gate result (winning session, 2026-09-12, recentred factor nodes): PASSED -- open defect closed
+The baseline's open defect (full-covariance order update under a diffuse
+dense belief, rank >= 3 loading space on 2^10 Sobol nodes) is closed by
+node placement, not node count. Diagnosis in order: the effective node
+count was 13-35 percent at every scale, a Rao-Blackwellised Hessian
+(per-node differences plus the between-node gradient covariance) changed
+nothing, and the means carried the same error as the variances, so the
+loss was the quasi-Monte-Carlo integration error of a cloud drawn for
+the prior while the factor posterior sat elsewhere. Both mixture engines
+(full._mixture_update_full for kernels that report per-node likelihoods;
+nway._mixture_update at rank >= 3) now recentre and rescale the cloud on
+the factor posterior after one pass at the prior nodes, with the
+importance correction in the weights (nway._recentre_nodes, inflation
+1.2): one extra kernel pass, about a tenth of the update's cost.
+referee.full_covariance order cells, relative variance error / cross
+terms, prior-predictive events, 2^10 nodes:
+
+    prior sd   before            after             (2^12 before -> after)
+    1          0.0159 / 0.004    0.0059 / 0.002
+    3          0.054  / 0.18     0.024  / 0.059    (0.075 -> 0.0094)
+    10         0.134  / 2.7      0.0079 / 0.14     (0.0018 -> 0.0034)
+
+Every cell now gates at the referee's marks (0.006 + 4 SE relative on
+variances); the 2^12 rows stay as the remedy ladder. Effective node
+count after recentring about 80 percent. Fast profile unchanged (749 ok,
+0 FAIL); the diagonal correlated path at rank 3 was already within 0.01
+of the sampler in the typical regime and keeps its results at the
+fourth decimal. tests/test_full_covariance_updates.py pins the prior-sd-
+10 cell against the sampler.
+
 ## Gate result (winning session, 2026-09-12, relative finite-difference steps): PASSED
 The diagonal moment updates (update_winner's normal path,
 update_ranking_exact, the correlated mixture) differenced their

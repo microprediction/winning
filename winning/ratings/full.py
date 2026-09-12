@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .nway import _grad_logp_row, _order_pass
+from .nway import _recentre_nodes
 
 
 def _psd_repair(S, floor_frac=1e-8):
@@ -158,6 +158,21 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
     logW = np.log(np.maximum(W, 1e-300))
     shifts = F @ Vaug.T
     mu_obs = A @ m
+    if rank >= 3 and kernel is not None:
+        # scrambled-Sobol branch: recentre and rescale the node cloud on
+        # the factor posterior (one kernel pass at the prior nodes), with
+        # the importance correction folded into the weights. Under a
+        # diffuse dense belief the posterior over the factors sits away
+        # from the prior the nodes were drawn for and 1024 nodes carried
+        # 13-35 percent effective weight; the verifier's referee measured
+        # relative variance errors of 0.13 at prior sd 10 and 0.05 at 3
+        # (2026-09-11). Recentred: 0.0075 and 0.03 at the same nodes, the
+        # effective count near 80 percent. Kernels that mix internally
+        # (the Gaussian winner pass) are left on the prior nodes.
+        logps0, _ = kernel(mu_obs[None, :] + shifts, D, Vaug, F, W, psi, beta2b)
+        if logps0 is not None:
+            F, logW = _recentre_nodes(F, logW, logps0)
+            shifts = F @ Vaug.T
 
     def mixture(mo):
         pts = mo[None, :] + shifts

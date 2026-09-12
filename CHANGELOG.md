@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The mixture engines behind the correlated and full-covariance updates
+  recentre and rescale their scrambled-Sobol node cloud (rank >= 3) on
+  the factor posterior after one pass at the prior nodes, with the
+  importance correction in the weights. Under a diffuse dense belief the
+  prior-centred cloud carried 13-35 percent effective weight and the
+  order update's variances were 13 percent off at prior sd 10 (verifier
+  baseline); recentred they are within a percent at the same node count,
+  for about a tenth more work per update.
 - The diagonal moment updates (`update_winner`, `update_ranking_exact`,
   the correlated mixture) now difference their curvature at steps
   relative to each coordinate's predictive sd, as the full-covariance
