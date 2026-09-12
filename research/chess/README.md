@@ -52,6 +52,20 @@ not: colour is worth −0.0016 of the −0.0206 gap, and a colour-blind
 fit still beats colour-blind Glicko-2 by **−0.0190** like-for-like.
 The honest footnote is that ~8% of the estimator column is colour.
 
+**Only one of the two estimators carries its own uncertainty**
+(`exp39`, registered, unrun). Glicko-2 propagates rating deviation
+into every prediction — `win_probabilities` passes each player's RD
+into `gaussian_win_probabilities`, so a player it knows little about
+is pulled toward 0.5. Our arm does not: it prices a MAP point estimate
+with a fixed `D = 1`. The asymmetry is real and should be stated
+before anyone else finds it. It most likely runs *against* us, since a
+proper scoring rule penalises overconfidence, which would make
+−0.0161 an understatement — but that is a belief about a sign, not a
+measurement, and it is not claimed here until `exp39` runs. The
+validation-tuned ridge is not a defence: shrinking the *mean* and
+widening the *predictive* are different operations, and only the
+second encodes "I don't know much about this player."
+
 **The result is not an artifact of the dense subpopulation**
 (`exp37`), but the mechanism's own prediction failed. Rerunning at
 thresholds of 100/50/25/10 games per player:
@@ -171,6 +185,7 @@ failures are kept because they are the transfer conditions:
 | `exp36_colour_confound.py` | is the estimator column just colour? |
 | `exp37_sparse_players.py` | robustness across density thresholds |
 | `exp38_modern_month.py` | 2024-01 replication: registered, unrun |
+| `exp39_predictive_calibration.py` | our overconfidence vs Glicko-2's RD: registered, unrun |
 | `results/` | per-game losses and raw outputs |
 
 Data is one month of the Lichess open database
