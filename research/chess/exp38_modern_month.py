@@ -1,5 +1,69 @@
 """exp38: does the Lichess result replicate on a modern month?
 
+=====================================================================
+VERDICT: NOT RUN. INFEASIBLE ON MODERN LICHESS, established by pre-run
+diagnostics rather than by a null. The time-control covariate is
+UNIDENTIFIABLE in 2024-01 at every threshold tried, for two
+independent and compounding reasons.
+
+(1) NO WITHIN-PLAYER CONTRAST. A factor rating over time control needs
+players who play more than one control; otherwise the offsets are
+confounded with the player's level and only the level is identified.
+
+    threshold  players   games    bullet%   >=20 games in >=2 controls
+        100      3,780    53,248    93.1%        11  ( 0.3%)
+         50     19,665   289,714    80.7%        66  ( 0.3%)
+         25     66,745   901,679    65.2%       347  ( 0.5%)
+         10    194,843 2,072,055    51.7%       904  ( 0.5%)
+    2013-01        632    59,399       --       327  (52.0%)
+
+    Fifty-two percent in 2013 against half a percent now. Note also
+    what the bullet column does: lowering the threshold makes the
+    POPULATION more time-control diverse (93% -> 52% bullet) while
+    individuals stay specialised. Between-player diversity without
+    within-player contrast is exactly the signature that killed
+    opening family in exp29 -- self-selection destroying the
+    within-player covariate variation identification needs.
+
+(2) MORE DATA WOULD MAKE IT WORSE, NOT BETTER. The obvious fix is a
+bigger sample so players cross the >=20-in-2 bar. The data says the
+opposite: contrast FALLS as activity rises. The >=100-game players are
+the most active and also the most specialised -- 93.1% bullet and 0.3%
+with contrast, the worst row in the table. On modern Lichess the more
+someone plays, the more they specialise, because bullet is what lets
+you play hundreds of games a month. Downloading the rest of the month
+buys more of the least useful players.
+
+The obvious escape -- restrict to players who DO mix controls -- fails
+from the other side. Those players exist but barely play each other:
+
+    904 multi-control players share only 2,839 games, obs/param 1.05
+    3,860 (at >=10 in >=2)    11,007 games, obs/param 0.95
+    2013 exp30: 632 players,  59,399 games, obs/param 30.9
+
+    One observation per parameter. The time-control mix is finally
+    healthy there (57% bullet / 42% blitz) and the design is still
+    unfittable.
+
+WHAT THIS IS AND IS NOT. This is NOT evidence against the 2013 result,
+and the falsification clause below was written precisely to stop me
+reading it that way. No arm was fitted, so nothing was measured about
+the factor rating's accuracy. What was measured is that modern Lichess
+cannot pose the question: the covariate has no within-player variation
+to exploit. That is a covariate-level and data-level negative, in the
+sense of exp29's opening-family failure, not a domain-level one.
+
+The honest status of the headline is therefore unchanged and its
+limitation is sharper than "one month of 2013": the result holds on a
+population where players mixed time controls, and that population no
+longer exists at scale on this site. Testing it on modern data needs
+either a site whose players still mix controls, or a covariate that
+modern players do not self-select into.
+
+Everything below is the original registration, kept intact because the
+predictions were made before the diagnostics were run.
+=====================================================================
+
 The largest hole in the chess result: everything so far is 2013-01,
 639 players, an early-adopter population, and a rating system Lichess
 has since changed. This replicates on 2024-01.
@@ -26,6 +90,21 @@ base is therefore blitz -- the plurality -- with offsets for bullet
 and classical. The classical offset is expected to be poorly
 estimated; that is a fact about modern Lichess, and it is reported
 rather than hidden by dropping the category.
+
+    CORRECTION, found later and left here because the original claim
+    was committed and is misleading. Those 2024 percentages are the
+    RAW month. They are not the population this experiment analyses.
+    After the >=100-game filter the ANALYSIS population is
+
+        bullet 93.1%   blitz 6.9%   classical 0.01%
+
+    because the threshold selects bullet specialists -- you can play
+    hundreds of one-minute games in a month and not hundreds of
+    classical ones. So "blitz is the plurality" was true of the month
+    and false of the data, and the base category should have been
+    bullet. This is moot given the VERDICT above, but the reasoning
+    error is the point: I characterised the sample using a statistic
+    computed before the sample was selected.
 
 Note what this change does NOT do: it does not alter which games enter
 the comparison, and every arm -- Glicko-2 pooled, Glicko-2 per time
@@ -114,8 +193,9 @@ here, which is why this is worth running:
 Run:  python research/chess/exp38_modern_month.py
 """
 from __future__ import annotations
-import importlib.util, os, sys, types
+import collections, importlib.util, os, sys, types
 import numpy as np, pandas as pd
+from scipy import sparse
 from winning import race_probabilities
 from winning.ratings.factor_ratings import fit_design_ratings as linear_ability_map
 
@@ -174,11 +254,38 @@ tci = pd.Series(tcn).map({t: i for i, t in enumerate(TCS)}).values
 w = df.white.map(pidx).values; b = df.black.map(pidx).values
 won = (df.result == "1-0").values
 n = len(df)
+P, NG = 3, 1 + len(TCS)          # defined BEFORE first use (was a bug)
 print(f"2024-01 (first 4M games): {n} dense decisive games, {Mp} players")
 print(f"  TC mix: {pd.Series(tcn).value_counts(normalize=True).round(4).to_dict()}")
 _w = Mp * P + NG
 print(f"  obs/param {n/_w:.2f} (2013 was 30.92) -- {30.92/(n/_w):.1f}x sparser;"
       f" this is NOT a density-matched replication")
+
+# ---- the identifiability gate: run BEFORE fitting anything ----------
+# A factor rating over time control needs WITHIN-player contrast. exp29
+# established that a covariate players self-select into is
+# unidentifiable however much data there is, so this is checked rather
+# than assumed. exp30's 2013 population: 327 of 632 players (52%).
+_bytc = collections.defaultdict(collections.Counter)
+for _wp, _bp, _tt in zip(df.white.values, df.black.values, tcn):
+    _bytc[_wp][_tt] += 1; _bytc[_bp][_tt] += 1
+_contrast = [p for p, c in _bytc.items()
+             if sum(1 for _k, v in c.items() if v >= 20) >= 2]
+_frac = len(_contrast) / max(len(_bytc), 1)
+print(f"  players with >=20 games in >=2 controls: {len(_contrast)}/{len(_bytc)}"
+      f" ({_frac:.1%})   [2013: 327/632 = 52.0%]")
+if _frac < 0.10:
+    raise SystemExit(
+        "\nSTOP: the time-control covariate is UNIDENTIFIABLE here.\n"
+        f"Only {_frac:.1%} of players have contrast, against 52% in 2013.\n"
+        "Fitting would produce a null that says nothing about the factor\n"
+        "rating and everything about modern Lichess's self-selection --\n"
+        "exp29's opening-family failure in a new costume. See the VERDICT\n"
+        "block at the top of this file for the full diagnostics, including\n"
+        "why more data makes this worse rather than better.\n"
+        "NOT a refutation of the 2013 result; no arm was fitted.")
+# ---------------------------------------------------------------------
+
 rng = np.random.default_rng(SEED); perm = rng.permutation(n)
 ntr, nva = int(n * .50), int(n * .25)
 tr = np.sort(perm[:ntr])
@@ -186,7 +293,6 @@ va = np.sort(perm[ntr:ntr + nva])
 te = np.sort(perm[ntr + nva:])
 print(f"  split seed {SEED}: train {len(tr)} val {len(va)} TEST {len(te)}",
       flush=True)
-P, NG = 3, 1 + len(TCS)
 
 
 def xvec(t):
@@ -209,14 +315,36 @@ def glicko(fit, ev_, tau, per_tc):
 
 
 def ours(fit, ev_, lam, scalar=False):
+    """Design rows are built SPARSE, and at this scale that is not an
+    optimisation -- it is the difference between running and not.
+
+    A dense (2, width) block per game costs
+    len(fit) x 2 x width x 8 bytes. At 2013's 639 players that is
+    width 1,921 and ~0.9 GB: survivable. Here width is 3 x 3,847 + 4 =
+    11,545 and the training half alone is 4.92 GB, rebuilt for every
+    point of the ridge grid, on a 17 GB machine.
+
+    Each row has at most five non-zeros (three player columns, the
+    intercept, one time-control offset), so the block is 0.035% dense
+    and the same design costs 2.6 MB as CSR -- 1,924x smaller. Memory
+    then scales with GAMES x NON-ZEROS rather than GAMES x PARAMETERS,
+    which is the only form in which a rating over a large population
+    is representable at all. fit_design_ratings accepts sparse Z and
+    assembles one CSR internally, so nothing downstream changes.
+    """
     pp = 1 if scalar else P
     width = Mp * pp + NG
     evs = []
     for t in fit:
-        x = xvec(t)[:pp]; Z = np.zeros((2, width))
-        Z[0, w[t] * pp:w[t] * pp + pp] = x
-        Z[1, b[t] * pp:b[t] * pp + pp] = x
-        Z[0, Mp * pp] = 1.0; Z[0, Mp * pp + 1 + tci[t]] = 1.0
+        x = xvec(t)[:pp]
+        rows = [0] * pp + [1] * pp
+        cols = ([w[t] * pp + k for k in range(pp)]
+                + [b[t] * pp + k for k in range(pp)])
+        vals = list(x) + list(x)
+        rows += [0, 0]
+        cols += [Mp * pp, Mp * pp + 1 + tci[t]]
+        vals += [1.0, 1.0]
+        Z = sparse.csr_matrix((vals, (rows, cols)), shape=(2, width))
         evs.append((Z, np.array([0, 1]) if won[t] else np.array([1, 0])))
     v = np.full(width, 1.0)
     if not scalar:
