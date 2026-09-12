@@ -246,35 +246,25 @@ def full_covariance(ctx):
                 out += _compare(ctx, f"{ctx.name}.{kind}.sd{prior_sd}", mm, np.diag(SS), ref,
                                 reg, SS=SS)
                 continue
-            # the order update under a diffuse dense belief: the default
-            # 2^10 Sobol nodes are too few once the belief split leaves a
-            # rank-3 loading space and the prior dwarfs the noise (baseline
-            # adjudication 2026-09-11: dv/v 0.14 at prior sd 10, 0.06 at 3).
-            # Default nodes and 2^12 nodes both MEASURED (open defect,
-            # ledger); only the sd 1 cell gates.
+            # the order update under a diffuse dense belief: on prior-centred
+            # nodes the 2^10 Sobol cloud carried 13-35 percent effective
+            # weight and the baseline measured relative variance errors of
+            # 0.13 at prior sd 10 and 0.05 at 3 (2026-09-11). The mixture
+            # engines now recentre the cloud on the factor posterior
+            # (nway._recentre_nodes): 0.0079 and 0.024 at the same nodes,
+            # so every cell gates; the 2^12 row is kept as the remedy ladder.
             mm, SS, _ = update_order_full(m, S, ev, V=V)
-            if prior_sd <= 1.0:
-                out += _compare(ctx, f"{ctx.name}.{kind}.sd{prior_sd}", mm, np.diag(SS), ref,
-                                reg, SS=SS)
-                continue
-            mc_v = np.diag(ref["cov"])
-            out.append(Result(f"{ctx.name}.{kind}.sd{prior_sd}.default_nodes", "referee",
-                              "MEASURED", regime=reg, n=total,
-                              statistic=float((np.abs(np.diag(SS) - mc_v) / mc_v).max()),
-                              detail="open defect: 2^10 Sobol nodes under a diffuse dense "
-                                     "belief (ledger 2026-09-11); relative variance error",
-                              extras={"dm_over_sd": float(np.abs(mm - ref["mean"]).max() / prior_sd),
-                                      "cross": float(np.abs((SS - ref["cov"])[~np.eye(K, dtype=bool)]).max())}))
-            # 2^12 nodes repair the sd 10 cell (dv/v 0.002) but not sd 3
-            # (0.075; 2^14 gives 0.010): QMC convergence is erratic in this
-            # regime, so the larger budget is reported, not gated
-            mm, SS, _ = update_order_full(m, S, ev, V=V, nodes_log2=12)
-            out.append(Result(f"{ctx.name}.{kind}.sd{prior_sd}.nodes12", "referee",
-                              "MEASURED", regime={**reg, "nodes_log2": 12}, n=total,
-                              statistic=float((np.abs(np.diag(SS) - mc_v) / mc_v).max()),
-                              detail="the same cell at 2^12 nodes (open defect, ledger)",
-                              extras={"dm_over_sd": float(np.abs(mm - ref["mean"]).max() / prior_sd),
-                                      "cross": float(np.abs((SS - ref["cov"])[~np.eye(K, dtype=bool)]).max())}))
+            out += _compare(ctx, f"{ctx.name}.{kind}.sd{prior_sd}", mm, np.diag(SS), ref,
+                            reg, SS=SS)
+            if prior_sd > 1.0:
+                mc_v = np.diag(ref["cov"])
+                mm, SS, _ = update_order_full(m, S, ev, V=V, nodes_log2=12)
+                out.append(Result(f"{ctx.name}.{kind}.sd{prior_sd}.nodes12", "referee",
+                                  "MEASURED", regime={**reg, "nodes_log2": 12}, n=total,
+                                  statistic=float((np.abs(np.diag(SS) - mc_v) / mc_v).max()),
+                                  detail="the same cell at 2^12 nodes (remedy ladder)",
+                                  extras={"dm_over_sd": float(np.abs(mm - ref["mean"]).max() / prior_sd),
+                                          "cross": float(np.abs((SS - ref["cov"])[~np.eye(K, dtype=bool)]).max())}))
     return out
 
 

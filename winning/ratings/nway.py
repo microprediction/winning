@@ -645,6 +645,31 @@ def _factor_grid(r, Qf=7, nodes_log2=10):
     return _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2)
 
 
+_RECENTRE_INFLATE = 1.2
+
+
+def _recentre_nodes(F, logW, logp):
+    """Recentre and rescale a node cloud on the posterior over the
+    factors it integrates: given prior nodes F with log-weights logW and
+    the per-node log-likelihoods logp of the observation, return the
+    nodes moved to the posterior mean and scaled to its (inflated)
+    posterior sd, with the importance correction log N(F'; 0, I) -
+    log N(F'; mu, sd) folded into the weights, so every later mixture
+    over the new cloud is an unbiased quadrature of the same integrals
+    with far more of the nodes where the posterior mass is."""
+    a = logW + logp
+    a = a - a.max()
+    w = np.exp(a)
+    w /= w.sum()
+    mu = w @ F
+    sd = _RECENTRE_INFLATE * np.sqrt(np.maximum(w @ (F * F) - mu * mu, 1e-6))
+    sd = np.clip(sd, 0.1, 5.0)
+    F2 = mu + sd * F
+    logW2 = (logW - 0.5 * np.sum(F2 * F2, axis=1)
+             + 0.5 * np.sum(((F2 - mu) / sd) ** 2, axis=1) + np.sum(np.log(sd)))
+    return F2, logW2
+
+
 def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
                     base="normal", nodes_log2=10):
     """Shared engine of the correlated updates. For Gaussian priors,
@@ -663,6 +688,12 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     F, W = _factor_grid(V.shape[1], Qf=Qf, nodes_log2=nodes_log2)
     logW = np.log(W)
     shifts = F @ V.T                                  # (Q, n)
+    if V.shape[1] >= 3:
+        # Sobol branch: recentre the cloud on the factor posterior (see
+        # _recentre_nodes; the full-covariance path does the same)
+        logp0 = np.array([node_logp_grad(m + shifts[q])[0] for q in range(len(F))])
+        F, logW = _recentre_nodes(F, logW, logp0)
+        shifts = F @ V.T
 
     def mixture(mm):
         logps = np.empty(len(F))

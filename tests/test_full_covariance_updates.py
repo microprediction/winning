@@ -146,3 +146,31 @@ def test_relabelling_equivariance():
     m2, S2, _ = update_winner_full(m[perm], S[np.ix_(perm, perm)],
                                    int(inv[1]), V=V[perm], beta2=1.0)
     assert np.abs(m2 - m1[perm]).max() < 5e-3
+
+
+def test_diffuse_dense_order_update_matches_mc_at_default_nodes():
+    # a rank-2 dense belief at prior sd 10 with one-factor loadings: the
+    # belief split leaves a rank-3 loading space on 2^10 Sobol nodes,
+    # where the prior-centred cloud carried 13-35 percent effective
+    # weight and the variances were 13 percent off (verifier baseline,
+    # 2026-09-11); the recentred cloud brings them within a percent
+    rng = np.random.default_rng(20260912)
+    K, prior_sd = 4, 10.0
+    B = rng.normal(0, 0.5, (K, 2)) * prior_sd
+    S = B @ B.T + np.diag(prior_sd ** 2 * rng.uniform(0.3, 1.0, K))
+    m = rng.normal(0, prior_sd, K)
+    V = (0.6 * (-1.0) ** np.arange(K))[:, None]
+    L = np.linalg.cholesky(S)
+    x0 = m + rng.normal(size=K) @ L.T + rng.normal(size=1) @ V.T + rng.normal(size=K)
+    order = list(map(int, np.argsort(-x0)))
+    kept = []
+    for _ in range(6):
+        z = rng.normal(size=(250_000, K)); s = m + z @ L.T
+        x = s + rng.normal(size=(250_000, 1)) @ V.T + rng.normal(size=(250_000, K))
+        keep = (np.argsort(-x, axis=1) == np.asarray(order)[None, :]).all(axis=1)
+        kept.append(s[keep])
+    sk = np.concatenate(kept)
+    mc_m, mc_v = sk.mean(0), sk.var(0)
+    mm, SS, _ = update_order_full(m, S, order, V=V)
+    assert np.abs(mm - mc_m).max() / prior_sd < 0.02
+    assert (np.abs(np.diag(SS) - mc_v) / mc_v).max() < 0.03
