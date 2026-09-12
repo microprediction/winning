@@ -186,11 +186,14 @@ limit; `covariate_contrast_report` checks that the covariate is
 assigned rather than chosen, since a null on a self-selected covariate
 means unidentifiable, not absent. Block correlation
 (`AbilityTracker(rho=...)` with `groups`, `tune_block_rho`) gives
-same-team entrants a shared performance component, fitted and priced
-under one model, with the correlation share selected by the filter's
-own evidence — on Formula 1 it prices the same-team 1–2 finish that no
-scalar or pairwise rating can express. The measurements and the
-open control are on the [ratings page](https://winning.microprediction.org/ratings.html).
+same-group entrants a shared per-contest shock, fitted and priced under
+one model, with the correlation share selected by the filter's own
+evidence; the component is redrawn every contest, and a persistent
+group advantage belongs in the means instead. The Formula 1 test that
+motivated it withdrew its predictive claim (the correlation is in the
+data; the held-out winner log-loss got worse), and the [ratings
+page](https://winning.microprediction.org/ratings.html) says so without
+claiming a mechanism.
 
 ## History
 

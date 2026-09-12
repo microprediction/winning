@@ -147,25 +147,34 @@
 covariate_contrast_report(events, n_entities, n_cov=3)["ratio"]   # near 1: assigned; far above: chosen
 B = fit_factor_ratings(events, n_entities, n_cov=3, ridge=[1.0, 30.0, 30.0])
 predict_factor(B, subset=[3, 7], x=[1, 0, 1])                       # win probabilities under blitz</code></pre>
-    <p>The second entry point is block correlation, where the engine is
-      doing something no scalar or pairwise rating can express. Teammates
-      share a car, a crew shares a boat: same-group entrants have a
-      shared component of performance, and at twenty entrants that
-      restructures the whole ordering distribution. <code>AbilityTracker</code>
-      accepts <code>groups</code> with a contest and a correlation share
-      <code>rho</code>, variance-preserving so every marginal keeps its
-      scale; observation and prediction use the same loadings, and
-      <code>tune_block_rho</code> selects <code>rho</code> by the filter's
-      own evidence, the sum of log P(observation) every update returns,
-      without consulting any target event. On Formula 1 the same-team 1&ndash;2
-      rate is 0.274 observed against 0.123 under independence and 0.190
-      at <code>rho</code> = 0.4, a joint log-loss improvement of
-      &minus;0.0714 [&minus;0.1228, &minus;0.0235]; training evidence
-      prefers 0.4 to independence by 28.8 nats over 158 races, the value
-      that validation on the joint event also picked. One measurement is
-      open: the consistent fit-and-price control (winner log-loss
-      unchanged under <code>rho</code>) has not been carried to its test
-      window.</p>
+    <p>The second entry point is block correlation: same-group entrants
+      share a component of performance that is redrawn at every contest,
+      and at twenty entrants that restructures the whole ordering
+      distribution. <code>AbilityTracker</code> accepts <code>groups</code>
+      with a contest and a correlation share <code>rho</code>,
+      variance-preserving so every marginal keeps its scale; observation
+      and prediction use the same loadings, and <code>tune_block_rho</code>
+      selects <code>rho</code> by the filter's own evidence without
+      consulting any target event. The shared component is a mean-zero
+      draw redrawn at every contest; a persistent group advantage is a
+      different object and belongs in the means (a group column in the
+      design of <code>fit_design_ratings</code>). The Formula 1 test that
+      motivated the feature is the caution: the correlation is in the
+      data (training evidence prefers <code>rho</code> = 0.4 to
+      independence by 28.7 nats over 158 races; same-team 1&ndash;2 finishes
+      0.274 observed against 0.123 under independence), yet fitted and
+      priced consistently under the blocked likelihood the held-out
+      winner log-loss was worse by +0.053 [+0.019, +0.087] over 106 races,
+      and the joint same-team advantage fell to &minus;0.019 [&minus;0.052,
+      +0.011] and is withdrawn. The signature is confident mis-ranking
+      rather than blurring: the mean probability on the actual winner
+      barely moves while the spread of log probabilities widens, so the
+      loss sits in a minority of confident misses; the two mechanisms
+      tested on that output (persistent team quality forced through the
+      per-race draw; smearing toward uniform) were both rejected, so none
+      is claimed. No performance claim is made for the feature in either
+      direction; the open question is a persistent group term in the mean
+      fitted alongside <code>rho</code>.</p>
 <pre><code>from winning.ratings import AbilityTracker, tune_block_rho
 
 sel = tune_block_rho(contests, rho_grid=(0.0, 0.2, 0.4, 0.6), drift=0.03)

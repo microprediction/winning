@@ -27,21 +27,35 @@ observed and its noise:
 If only a finishing order is known (no magnitudes), the exact N-way Thurstone
 factor (``nway``) is used for that observer instead.
 
-BLOCK CORRELATION (same-group entrants). Teammates share a car; a crew shares
-a boat. Pass ``groups`` with a contest and set ``rho`` and every observer
-prices the blocked model, variance-preserving: x_j = s_j + sqrt(rho beta2)
-z_g(j) + sqrt((1 - rho) beta2) eps_j, so each marginal keeps variance beta2
-and only the joint changes. Fit and prediction use the same V, which is the
-consistency an earlier measurement lacked (fitted independent, priced
-correlated: a +0.017 winner-control residual). rho is selected by the
-filter's own evidence, ``tune_block_rho`` -- the sum of log P(observation)
-every update already returns -- which never sees a target event. Measured on
-Formula 1 (bandits exp33/exp34): same-team 1-2 rate 0.274 observed against
-0.123 under independence and 0.190 at rho = 0.4; joint log-loss -0.0714
-[-0.1228, -0.0235]; training evidence prefers rho = 0.4 to independence by
-28.8 nats over 158 races, the same value validation on the joint event
-picked. The consistent fit-and-price CONTROL (winner log-loss unchanged
-under rho) was not carried to its test window and remains open.
+BLOCK CORRELATION (same-group entrants). Pass ``groups`` with a contest and
+set ``rho`` and every observer prices the blocked model, variance-
+preserving: x_j = s_j + sqrt(rho beta2) z_g(j) + sqrt((1 - rho) beta2) eps_j,
+so each marginal keeps variance beta2 and only the joint changes. Fit and
+prediction use the same V. rho is selected by the filter's own evidence,
+``tune_block_rho`` -- the sum of log P(observation) every update already
+returns -- which never sees a target event.
+
+WHAT THE CODE DOES, and what is measured. The shared component z_g is
+redrawn at every contest, a mean-zero draw common to the group's members
+in that contest; a persistent group advantage is a different object and
+belongs in the means (a group column in the design of fit_design_ratings,
+or a shared offset), whatever this term is set to. The Formula 1
+measurement that motivated the feature (bandits exp33 / exp34,
+2026-09-12) is the caution: teammates share a car and the data carry the
+correlation (training evidence prefers rho = 0.4 to independence by 28.7
+nats over 158 races; same-team 1-2 finishes 0.274 observed against 0.123
+under independence), yet fitted and priced consistently under the blocked
+likelihood the winner log-loss on 106 held-out races was WORSE by +0.053
+[+0.019, +0.087], and the joint same-team advantage fell to -0.019
+[-0.052, +0.011] and is withdrawn. The signature is confident
+mis-ranking rather than blurring: the mean probability on the actual
+winner barely moves (0.319 to 0.311) while the spread of log
+probabilities widens, so the loss sits in a minority of confident misses.
+Two mechanisms were tested and rejected on that output -- damage does not
+concentrate in races won by persistently strong teams, and predictions
+do not smear toward uniform -- so no mechanism is claimed. No performance
+claim is made for this feature in either direction; the open question is
+a persistent group term in the mean fitted alongside rho.
 
 Cost: one factor dimension per group of two or more in the contest; two or
 fewer ride a 7^r Gauss-Hermite tensor (Qf), more ride 2**nodes_log2 Sobol
@@ -390,9 +404,12 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     either end of the grid is a capped rival, not a tuned one; widen the
     grid. ``params`` go to AbilityTracker (drift, beta2, base, Qf, ...).
 
-    Two independent criteria picked the same value on Formula 1: this
-    evidence and validation on the same-team 1-2 statistic both chose 0.4.
-    Cost: one blocked walk per grid point (module docstring)."""
+    On Formula 1 this evidence preferred rho = 0.4 to independence by
+    28.7 nats -- the correlation is in the data -- and the blocked model
+    still predicted held-out winners worse (module docstring). A
+    likelihood ratio says the structure is present, not that pricing it
+    this way predicts better. Cost: one blocked walk per grid point
+    (module docstring)."""
     evidence = []
     for rho in rho_grid:
         trk = AbilityTracker(rho=float(rho), **params)
