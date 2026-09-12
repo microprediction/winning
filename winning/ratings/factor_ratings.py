@@ -441,7 +441,13 @@ def fit_design_ratings(events, n_feat, ridge=1.0, weights=None, base="normal",
     scipy.sparse, one row per entrant; order lists row indices best
     first -- the full finishing order, a partial order (the unlisted
     rows are marginalised exactly), or a single row for winner-only
-    feedback. K = 2 under the normal base is closed form; every other
+    feedback. Sparse Z is the intended form at population scale, not
+    merely accepted: every event's rows are assembled into one CSR
+    design, so memory goes as contests x non-zeros rather than
+    contests x parameters, and a dense design is simply
+    unrepresentable past a few thousand entities (a Lichess month at
+    width 11,545 was 4.9 GB dense against 2.6 MB sparse, with
+    bit-identical coefficients). K = 2 under the normal base is closed form; every other
     shape runs the engine's ordered-statistics lattice pass, batched
     across events of the same size.
 
