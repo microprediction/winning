@@ -228,8 +228,12 @@ any model is fitted:
   in the *pairing* structure, so no threshold repairs it — restricting
   to the top 639 players by volume makes it *worse* (obs/param 3.84),
   because they are drawn from a 6× larger pool. Nor does more data, at
-  any affordable scale: obs/param scales as games^0.50, so matching
-  30.92 would take ~150–200M games, more than the entire month.
+  any affordable scale: obs/param scales empirically as games^0.50, so
+  even the *full* month (~30× this prefix) projects to ≈25, short of
+  30.92. Matching it outright projects past the month's total size —
+  though that figure extrapolates ~45× beyond the measured range, so
+  the claim worth keeping is the weaker one: downloading the rest of
+  the month would not close the gap.
 
   So `exp38` is not a like-for-like replication and is not written as
   one. It tests the pooling claim in a regime ~7× sparser than the one

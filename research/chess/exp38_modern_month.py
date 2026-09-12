@@ -50,11 +50,18 @@ repairs it -- restricting to the top 639 players by volume makes it
 worse, not better (obs/param 3.84), because the pool they are drawn
 from is 6x larger.
 
-Nor does more data repair it at any affordable scale. obs/param scales
-empirically as games^0.50 here, so matching 30.92 would need roughly
-150-200M games -- more than the entire month. The community grew far
-faster than any individual's game count, and that is a permanent fact
-about modern Lichess, not a property of this 4M prefix.
+Nor does more data repair it at any affordable scale. Across prefixes
+of the cached month obs/param scales empirically as games^0.50, so the
+FULL month (~95-100M games, about 30x this prefix) projects to roughly
+25 -- still short of 30.92, and that is a 30x extrapolation from a fit
+whose two smallest points are thin. Matching 30.92 outright projects
+to 150-200M games, more than the month contains, but that figure
+extrapolates ~45x beyond the measured range and should be read as an
+order of magnitude rather than a number. The robust claim is the
+weaker one: downloading the rest of the month would not close this
+gap. The community grew far faster than any individual's game count,
+and that is a permanent fact about modern Lichess, not a property of
+this 4M prefix.
 
 So this experiment tests the pooling claim in a regime ~7x sparser
 than the one it was established in. That is a harder test, not a
