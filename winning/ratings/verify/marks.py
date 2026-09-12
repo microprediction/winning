@@ -172,16 +172,17 @@ MARKS = {
     "identity.invariances.scale_m": {"tolerance": 1e-8, "set_by": "planning pilots",
                                      "date": "2026-09-11",
                                      "basis": "lattice built in sd units; evidence scale-free"},
-    # variances under scaling: the full path differences at relative
-    # steps and is covariant to fp (6.5e-8); the diagonal paths use
-    # ABSOLUTE steps (1e-4 winner, 1e-3 orders), so their curvature
-    # error grows as the scale shrinks (1.6e-4 at c = 0.1 on logistic
-    # orders) -- a documented cost, candidate for relative steps
+    # variances under scaling: every path now differences at steps
+    # relative to the coordinate's predictive sd. The diagonal paths
+    # used ABSOLUTE steps (1e-4 winner, 1e-3 orders) until 2026-09-12,
+    # with curvature error growing as the scale shrank (1.6e-4 at
+    # c = 0.1 on logistic orders); after the change they are covariant
+    # to 2.8e-12, the full path to 6.5e-8 (batched lattice endpoints)
     "identity.invariances.scale_v.full": {"tolerance": 1e-6, "set_by": "planning pilots",
                                           "date": "2026-09-11", "basis": "relative FD steps"},
-    "identity.invariances.scale_v.diag": {"tolerance": 1e-3, "set_by": "planning pilots",
-                                          "date": "2026-09-11",
-                                          "basis": "absolute FD steps; 1.6e-4 at c=0.1"},
+    "identity.invariances.scale_v.diag": {"tolerance": 1e-8, "set_by": "relative-step adjudication",
+                                          "date": "2026-09-12",
+                                          "basis": "relative FD steps; measured 2.8e-12 (was 1.6e-4)"},
     "identity.invariances.exact": {"tolerance": 1e-12, "set_by": "planning pilots",
                                    "date": "2026-09-11", "basis": "identical code path"},
     "identity.predict_evidence.normal": {"tolerance": 1e-8, "set_by": "planning pilots",
@@ -259,6 +260,17 @@ MARKS = {
                           "basis": "5.7e-5 / 12 relative on the mixed events"},
     "factor.hessian_spd": {"tolerance": 1e-10, "set_by": "planning pilots", "date": "2026-09-11",
                            "basis": "symmetric to fp; ridge keeps it positive definite"},
+
+    # the MAP fitter's behavioural checks, bands set from the baseline
+    # run (2026-09-11, 25121e0): Laplace SBC on the ridge prior z^2
+    # 0.972 +- 0.075 at 30 worlds; recovery slope -0.41 over n in
+    # {200, 800, 3200}; leakage guard positive control 0.087 +- 0.012
+    "factor.se_calibration": {"z2_band": (0.85, 1.15), "set_by": "baseline adjudication",
+                              "date": "2026-09-12",
+                              "basis": "Laplace posterior calibrated on its prior; 30 worlds x 40 z"},
+    "factor.recovery_slope": {"band": (-0.65, -0.35), "set_by": "baseline adjudication",
+                              "date": "2026-09-12",
+                              "basis": "RMSE ~ n^-1/2 for a regular MAP; measured -0.41"},
 }
 
 # documented approximation costs: name -> {"envelope", "cite", "why"};

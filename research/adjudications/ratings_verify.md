@@ -141,6 +141,33 @@ Residual, MEASURED: rate_history's order-observation path is an ADF
 projection and stays order-dependent (mean spread 0.022 under a
 permutation of 12 races).
 
+## Gate result (winning session, 2026-09-12, relative finite-difference steps): PASSED
+The diagonal moment updates (update_winner's normal path,
+update_ranking_exact, the correlated mixture) differenced their
+curvature at ABSOLUTE steps (1e-4 winner, 1e-3 orders, 5e-2 on kinked
+bases), so the posterior variances were only approximately covariant
+under a common rescaling of means, prior sds and noise sds, where the
+full-covariance path's relative steps were exact. Steps are now eps
+times each coordinate's predictive sd (the historical step at unit
+scale). identity.invariances.scale_v.diag: 1.6e-4 -> 2.8e-12 (mark
+1e-3 -> 1e-8, set with the change since the identity is exact). Every
+other fast identity holds unchanged (693 ok, 0 FAIL); the enumerated
+moment identities' residuals are within their floors at every cell.
+The legacy audit cells are unchanged to three decimals: update_winner
+robust sd / coverage normal 0.940 / 0.975, gumbel 0.872 / 0.985,
+logistic 0.936 / 0.980, laplace 0.942 / 0.975, student4 0.944 / 0.970,
+failure 0.899 / 0.985 (25 seeds, as in the baseline); the
+update_order_correlated cells pass at their 14 seeds on every base.
+
+## Gate result (winning session, 2026-09-12, factor-fitter bands): set from the baseline
+factor.se_calibration gates at z^2 in [0.85, 1.15] (baseline 0.972 +-
+0.075: the Laplace posterior is calibrated on its own prior);
+factor.recovery_slope at [-0.65, -0.35] (baseline -0.41, the n^-1/2 law
+of a regular MAP). factor.heldout stays MEASURED: its margins are
+world-specific, and its falsification clause (normal trailing
+Plackett-Luce on normal-generated data by more than two paired SE)
+already fails on its own.
+
 ## Open items entering the ledger as MEASURED (2026-09-11)
 
 - identity.invariances.scale_v on the diagonal paths: absolute

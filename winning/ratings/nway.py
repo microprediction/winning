@@ -323,14 +323,20 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     g, p_i = _grad_logp_row(m, D, winner, base=base)
     m_new = m + v * g
     # diagonal second derivatives by per-coordinate central differences of
-    # the gradient row (analytic second-order pass is a known follow-up)
+    # the gradient row (analytic second-order pass is a known follow-up).
+    # The step is RELATIVE, eps times the coordinate's predictive sd: an
+    # absolute step made the variances only approximately scale-covariant
+    # (verifier, 2026-09-11: 1.6e-4 at a tenth of unit scale) where the
+    # full-covariance path's relative steps are covariant to 1e-8; at
+    # unit scale this is the historical step.
     eps = _fd_eps(base, eps)
+    step = eps * np.sqrt(D)
     d2 = np.empty(len(m))
     for j in range(len(m)):
-        ej = np.zeros(len(m)); ej[j] = eps
+        ej = np.zeros(len(m)); ej[j] = step[j]
         gp, _ = _grad_logp_row(m + ej, D, winner, base=base)
         gm, _ = _grad_logp_row(m - ej, D, winner, base=base)
-        d2[j] = (gp[j] - gm[j]) / (2 * eps)
+        d2[j] = (gp[j] - gm[j]) / (2 * step[j])
     d2 = _clamp_d2(d2, base)
     v_new = np.maximum(v + v**2 * d2, 1e-6)
     return m_new, v_new, p_i
@@ -594,12 +600,13 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     m_new = m + v * grad
     if curves is None:
         eps = _fd_eps(base, eps)
+    step = eps * sd                      # relative to the predictive sd (scale-covariant)
     d2 = np.empty(len(m))
     for j in range(len(m)):
-        ej = np.zeros(len(m)); ej[j] = eps
+        ej = np.zeros(len(m)); ej[j] = step[j]
         _, gp = _order_pass(m + ej, sd, order, base=base, curves=curves)
         _, gm = _order_pass(m - ej, sd, order, base=base, curves=curves)
-        d2[j] = (gp[j] - gm[j]) / (2 * eps)
+        d2[j] = (gp[j] - gm[j]) / (2 * step[j])
     d2 = _clamp_d2(d2, base)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new
@@ -678,13 +685,13 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     # no _fd_eps widening here: both callers route every non-normal base
     # through _predictive_curves nodes, whose Gaussian-smoothed marginals
     # have no kink for the differencing step to trip on
-    eps = float(eps)
+    step = float(eps) * np.sqrt(v + _beta_per_player(beta2, len(m)))   # relative steps
     d2 = np.empty(len(m))
     for j in range(len(m)):
-        ej = np.zeros(len(m)); ej[j] = eps
+        ej = np.zeros(len(m)); ej[j] = step[j]
         gp, _ = mixture(m + ej)
         gm, _ = mixture(m - ej)
-        d2[j] = (gp[j] - gm[j]) / (2 * eps)
+        d2[j] = (gp[j] - gm[j]) / (2 * step[j])
     d2 = _clamp_d2(d2, base)
     v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
     return m_new, v_new, float(logZ)

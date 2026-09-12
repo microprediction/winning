@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The diagonal moment updates (`update_winner`, `update_ranking_exact`,
+  the correlated mixture) now difference their curvature at steps
+  relative to each coordinate's predictive sd, as the full-covariance
+  path already did, so posterior variances are covariant under a
+  common rescaling of means, prior sds and noise sds (verifier:
+  2.8e-12, was 1.6e-4 at a tenth of unit scale). At unit scale this is
+  the historical step; results move at the fourth decimal.
+- Verifier marks set from the baseline run for the factor fitter's
+  calibration and recovery checks.
 - `Qf` was silently ignored by the correlated updates at factor rank
   >= 3 (`_factor_nodes` hard-coded 1024 Sobol nodes there), so it did
   nothing in exactly the regime a user would reach for it (found by the
