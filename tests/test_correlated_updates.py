@@ -109,3 +109,26 @@ def test_laplace_updates_shrink_variance():
     assert var.max() <= 1.0 + 1e-9, var.max()
     assert var.mean() < 0.35, var.mean()
     assert np.corrcoef(-mean, a)[0, 1] > 0.8
+
+
+def test_node_count_parameters_apply_where_documented():
+    # rank >= 3: Qf is inert (it was silently ignored: the Sobol count
+    # was hard-coded at 1024), nodes_log2 is the knob, and the default
+    # reproduces the historical count
+    rng = np.random.default_rng(4)
+    m = rng.normal(size=4); v = np.full(4, 0.9)
+    V = rng.normal(0, 0.4, (4, 3))
+    a = update_winner_correlated(m, v, 1, V, Qf=3)
+    b = update_winner_correlated(m, v, 1, V, Qf=7)
+    assert np.abs(a[0] - b[0]).max() == 0.0 and a[2] == b[2]
+    c = update_winner_correlated(m, v, 1, V, nodes_log2=8)
+    d = update_winner_correlated(m, v, 1, V)
+    e = update_winner_correlated(m, v, 1, V, nodes_log2=10)
+    assert np.abs(c[0] - d[0]).max() > 0.0                # the knob acts
+    assert np.abs(c[0] - d[0]).max() < 2e-2               # and converges
+    assert np.abs(d[0] - e[0]).max() == 0.0 and d[2] == e[2]
+    # rank <= 2: Qf is the knob
+    V2 = V[:, :2]
+    f = update_winner_correlated(m, v, 1, V2, Qf=3)
+    g = update_winner_correlated(m, v, 1, V2, Qf=7)
+    assert np.abs(f[0] - g[0]).max() > 0.0

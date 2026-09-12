@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `Qf` was silently ignored by the correlated updates at factor rank
+  >= 3 (`_factor_nodes` hard-coded 1024 Sobol nodes there), so it did
+  nothing in exactly the regime a user would reach for it (found by the
+  bandits session: Qf 2..7 bit-identical at r = 10). The node count at
+  rank >= 3 is now `nodes_log2` (default 10, the historical count) on
+  `update_winner_correlated`, `update_order_correlated`, `update_race`,
+  `ranking_loglik_and_score`, `predictive_win_probabilities` and
+  `AbilityTracker`; docstrings say which parameter applies at which
+  rank, and the tracker's records the measured cost ceiling of block
+  correlation at double-digit group counts (15-29 s per update for a
+  20-entrant field with ten pairs).
 - Factor ratings (`winning.ratings.factor_ratings`): an entity's
   ability as a vector over observed conditions, MAP through the exact
   ranking likelihood. `fit_factor_ratings(events, n_entities, n_cov,

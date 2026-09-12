@@ -124,13 +124,17 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     return loglik, dmu, dV
 
 
-def _factor_nodes(r, Qf=7):
+def _factor_nodes(r, Qf=7, nodes_log2=10):
     """(F, W) over the factor space alone (no own-noise dimension): the
     Gumbel members condition only on f, the winner integral being closed
-    form. GH tensor for r <= 2, Sobol beyond."""
+    form. Gauss-Hermite tensor with Qf nodes per dimension at r <= 2;
+    2**nodes_log2 scrambled Sobol nodes at r >= 3, where Qf is inert
+    (it was silently ignored there until 2026-09-11: the count was
+    hard-coded at 1024, so the parameter did nothing in exactly the
+    regime a user would reach for it)."""
     if r > 2:
         from scipy.stats import qmc
-        n = 2 ** 10
+        n = 2 ** int(nodes_log2)
         u = qmc.Sobol(r, scramble=True, seed=0).random(n)
         return ndtri(np.clip(u, 1e-12, 1 - 1e-12)), np.full(n, 1.0 / n)
     xf, wf = _gh1(Qf)
@@ -144,7 +148,8 @@ def _factor_nodes(r, Qf=7):
     return F, W / W.sum()
 
 
-def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7):
+def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
+                             nodes_log2=10):
     """Mixed Plackett--Luce log-likelihood of (partial) rankings, with
     analytic score in mu and V: the likelihood member the ranking-bias
     result demanded.
@@ -181,7 +186,7 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7):
     T, J = mu.shape
     r = V.shape[1]
     tau = float(temperature)
-    F, W = _factor_nodes(r, Qf=Qf)
+    F, W = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2)
     Q = len(F)
     shift = (F @ V.T)                       # (Q, J)
     loglik = 0.0
