@@ -34,18 +34,82 @@ same split. Changing the reference level of a saturated set of
 category offsets cannot favour an arm, because the fitted ability
 differences are invariant to it.
 
-PRE-REGISTERED PREDICTIONS:
+THIS IS NOT A DENSITY-MATCHED REPLICATION, and pretending otherwise
+would make the result uninterpretable. Measured before running:
+
+                    total games   dense players   dense games   obs/param
+    2013-01             121,332             639        59,399       30.92
+    2024-01 (4M)      3,293,889           3,847        53,248        4.61
+
+The dense-subgraph filter keeps **50.7%** of 2013's month and **1.6%**
+of 2024's. 2013 Lichess was a small, tightly connected community where
+the active players met each other repeatedly; by 2024 the site is so
+large that even its most active players rarely meet twice. The
+sparsity is in the PAIRING structure, not in activity, so no threshold
+repairs it -- restricting to the top 639 players by volume makes it
+worse, not better (obs/param 3.84), because the pool they are drawn
+from is 6x larger.
+
+Nor does more data repair it at any affordable scale. Across prefixes
+of the cached month obs/param scales empirically as games^0.50, so the
+FULL month (~95-100M games, about 30x this prefix) projects to roughly
+25 -- still short of 30.92, and that is a 30x extrapolation from a fit
+whose two smallest points are thin. Matching 30.92 outright projects
+to 150-200M games, more than the month contains, but that figure
+extrapolates ~45x beyond the measured range and should be read as an
+order of magnitude rather than a number. The robust claim is the
+weaker one: downloading the rest of the month would not close this
+gap. The community grew far faster than any individual's game count,
+and that is a permanent fact about modern Lichess, not a property of
+this 4M prefix.
+
+So this experiment tests the pooling claim in a regime ~7x sparser
+than the one it was established in. That is a harder test, not a
+lesser one, and it is the reason the predictions below are genuinely
+uncertain rather than a formality.
+
+PRE-REGISTERED PREDICTIONS, and two of my own results are in tension
+here, which is why this is worth running:
   P1. The factor rating still beats glicko2-per-TC, CI excluding zero.
-  P2. The margin is SMALLER than 2013's 0.0161. Two reasons pull that
-      way: with classical nearly gone the population is more
-      homogeneous in time control, so there is less style structure to
-      find; and a 7x larger player pool means more data per parameter
-      for every arm, which helps the competitor too.
+  P2. DIRECTION UNCERTAIN, stated as a fork rather than a guess. The
+      pooling thesis (exp28e: advantage monotone in cell sparsity)
+      predicts the margin WIDENS, because pooling pays most when data
+      per cell is scarce, and this is the scarcest regime yet tested.
+      But exp37 tested that prediction in chess and it FAILED -- the
+      margin did not widen as players got sparser. I do not get to
+      claim both. I predict the margin does NOT widen, siding with the
+      measured chess evidence over the theory, and if it widens then
+      exp37's null was the anomaly and the pooling story is stronger
+      than the chess data has so far shown.
+      The tension is real but NOT a straight contradiction, and the
+      difference matters. exp37 lowered the threshold on one small
+      month, which admits less active players while the community
+      stays tightly connected; it moved obs/param only from 30.9 to
+      15.3. This sits at 4.61 -- 3.3x beyond exp37's sparsest measured
+      point, and sparse for a different reason (players rarely MEET
+      rather than rarely play). exp37's null bounds the range where
+      the margin is known flat; it does not extend to here.
+      Working against both: classical has nearly vanished, so there is
+      less time-control structure of any kind left to find.
   P3. The estimator/structure split still favours the estimator
       (2013: ~80% estimator, ~20% structure).
-  FALSIFICATION: if the factor rating does not beat glicko2-per-TC on
-  modern data, the headline is a 2013 artifact and must be restated as
-  such.
+
+  FALSIFICATION, and the distinction that makes it meaningful: if the
+  factor rating does not beat glicko2-per-TC, that is NOT automatically
+  "the 2013 headline was an artifact." Sparsity and era are two
+  different explanations and the decomposition separates them:
+
+    - if `our scalar` still beats `glicko2 pooled` (the ESTIMATOR
+      column survives) but `factor` no longer beats `our scalar` (the
+      STRUCTURE column vanishes), the cause is sparsity plus the
+      collapse of classical -- there is not enough per-player data to
+      identify three parameters where one will do. The estimator claim
+      stands; the factor claim is bounded to denser regimes.
+    - if BOTH columns vanish, the 2013 result does not survive to the
+      modern era and the headline must be restated as a 2013 finding.
+
+  Reporting a sparsity failure as an era failure, or vice versa, is
+  the specific error this paragraph exists to prevent.
 
 Run:  python research/chess/exp38_modern_month.py
 """
@@ -112,6 +176,9 @@ won = (df.result == "1-0").values
 n = len(df)
 print(f"2024-01 (first 4M games): {n} dense decisive games, {Mp} players")
 print(f"  TC mix: {pd.Series(tcn).value_counts(normalize=True).round(4).to_dict()}")
+_w = Mp * P + NG
+print(f"  obs/param {n/_w:.2f} (2013 was 30.92) -- {30.92/(n/_w):.1f}x sparser;"
+      f" this is NOT a density-matched replication")
 rng = np.random.default_rng(SEED); perm = rng.permutation(n)
 ntr, nva = int(n * .50), int(n * .25)
 tr = np.sort(perm[:ntr])
@@ -172,12 +239,19 @@ for lbl, per in (("glicko2 pooled", False), ("glicko2 per TC", True)):
     best = min(((glicko(tr, va, t, per).mean(), t) for t in (0.3, 0.5)))
     res[lbl] = glicko(tr, te, best[1], per)
     print(f"  {lbl:16s} TEST {res[lbl].mean():.4f}  (tau {best[1]})", flush=True)
-best = min(((ours(tr, va, l, True).mean(), l) for l in (1.0, 3.0)))
+# Grids are wider than 2013's. At obs/param 4.6 rather than 30.9 the
+# optimal penalty must land much higher, and a grid that silently
+# pins at its edge would understate every arm it constrains.
+SCALAR_GRID = (0.3, 1.0, 3.0, 10.0, 30.0)
+FACTOR_GRID = (3.0, 10.0, 30.0, 100.0, 300.0)
+best = min(((ours(tr, va, l, True).mean(), l) for l in SCALAR_GRID))
 res["our scalar"] = ours(tr, te, best[1], True)
-print(f"  {'our scalar':16s} TEST {res['our scalar'].mean():.4f}", flush=True)
-best = min(((ours(tr, va, l).mean(), l) for l in (3.0, 10.0, 30.0)))
+edge = "  <-- GRID EDGE" if best[1] in (SCALAR_GRID[0], SCALAR_GRID[-1]) else ""
+print(f"  {'our scalar':16s} TEST {res['our scalar'].mean():.4f}  "
+      f"(ridge {best[1]}){edge}", flush=True)
+best = min(((ours(tr, va, l).mean(), l) for l in FACTOR_GRID))
 res["factor"] = ours(tr, te, best[1])
-edge = "  <-- grid edge" if best[1] in (3.0, 30.0) else ""
+edge = "  <-- GRID EDGE" if best[1] in (FACTOR_GRID[0], FACTOR_GRID[-1]) else ""
 print(f"  {'factor':16s} TEST {res['factor'].mean():.4f}  (ridge {best[1]})"
       f"{edge}", flush=True)
 

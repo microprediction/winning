@@ -52,21 +52,46 @@ not: colour is worth −0.0016 of the −0.0206 gap, and a colour-blind
 fit still beats colour-blind Glicko-2 by **−0.0190** like-for-like.
 The honest footnote is that ~8% of the estimator column is colour.
 
+**Only one of the two estimators carries its own uncertainty**
+(`exp39`, registered, unrun). Glicko-2 propagates rating deviation
+into every prediction — `win_probabilities` passes each player's RD
+into `gaussian_win_probabilities`, so a player it knows little about
+is pulled toward 0.5. Our arm does not: it prices a MAP point estimate
+with a fixed `D = 1`. The asymmetry is real and should be stated
+before anyone else finds it. It most likely runs *against* us, since a
+proper scoring rule penalises overconfidence, which would make
+−0.0161 an understatement — but that is a belief about a sign, not a
+measurement, and it is not claimed here until `exp39` runs. The
+validation-tuned ridge is not a defence: shrinking the *mean* and
+widening the *predictive* are different operations, and only the
+second encodes "I don't know much about this player."
+
 **The result is not an artifact of the dense subpopulation**
 (`exp37`), but the mechanism's own prediction failed. Rerunning at
 thresholds of 100/50/25/10 games per player:
 
-| threshold | players | games | margin vs Lichess | sparse-player margin |
-|---|---|---|---|---|
-| 100 | 639 | 59,399 | −0.0161 | — |
-| 50 | 1,095 | 83,444 | −0.0170 | −0.0160 |
-| 25 | 1,571 | 97,844 | −0.0190 | −0.0222 |
-| 10 | 2,373 | 109,129 | −0.0157 | −0.0169 |
+| threshold | players | games | obs/param | margin vs Lichess | sparse-player margin |
+|---|---|---|---|---|---|
+| 100 | 639 | 59,399 | 30.9 | −0.0161 | — |
+| 50 | 1,095 | 83,444 | 25.4 | −0.0170 | −0.0160 |
+| 25 | 1,571 | 97,844 | 20.7 | −0.0190 | −0.0222 |
+| 10 | 2,373 | 109,129 | 15.3 | −0.0157 | −0.0169 |
 
 The margin survives a near-4× widening of the population — 639 to
 2,373 players, 59k to 109k games — sitting between −0.016 and −0.019
 throughout, with every interval excluding zero. That is the robustness
 question answered.
+
+The `obs/param` column is the quantitative sparsity axis, and it is
+what makes `exp37` and `exp38` comparable rather than two experiments
+loosely both about "sparsity". Note what `exp37` actually varies:
+lowering the threshold on a *single small month* admits less active
+players while the community stays tightly connected, so it moves
+density only from 30.9 down to 15.3. Modern Lichess sits at **4.61** —
+3.3× beyond `exp37`'s sparsest measured point, and sparse for a
+different reason (players rarely meet, rather than rarely play). So
+`exp37`'s null does not settle what `exp38` will find; it bounds the
+range where the margin is known to be flat.
 
 **But the registered prediction was that the margin would WIDEN
 monotonically as the threshold dropped**, because pooling should pay
@@ -171,6 +196,7 @@ failures are kept because they are the transfer conditions:
 | `exp36_colour_confound.py` | is the estimator column just colour? |
 | `exp37_sparse_players.py` | robustness across density thresholds |
 | `exp38_modern_month.py` | 2024-01 replication: registered, unrun |
+| `exp39_predictive_calibration.py` | our overconfidence vs Glicko-2's RD: registered, unrun |
 | `results/` | per-game losses and raw outputs |
 
 Data is one month of the Lichess open database
@@ -196,9 +222,38 @@ any model is fitted:
   favour an arm.
 - **The dimension itself is thinner now.** A population concentrated
   into two adjacent fast controls has less time-control style
-  structure to find than one spread across three. `exp38` therefore
-  pre-registers a *smaller* margin than 2013's −0.0161, and says so
-  before running rather than after.
+  structure to find than one spread across three.
+- **Modern Lichess is far SPARSER, not richer** — the finding that
+  most changes what `exp38` can claim, and the opposite of what I
+  first assumed:
+
+  | | total games | dense players | dense games | obs/param |
+  |---|---|---|---|---|
+  | 2013-01 | 121,332 | 639 | 59,399 | **30.92** |
+  | 2024-01 (4M prefix) | 3,293,889 | 3,847 | 53,248 | **4.61** |
+
+  The dense-subgraph filter keeps 50.7% of 2013's month and 1.6% of
+  2024's. 2013 Lichess was a small, tightly connected community whose
+  active players met each other repeatedly; modern Lichess is so large
+  that even its most active players rarely meet twice. The sparsity is
+  in the *pairing* structure, so no threshold repairs it — restricting
+  to the top 639 players by volume makes it *worse* (obs/param 3.84),
+  because they are drawn from a 6× larger pool. Nor does more data, at
+  any affordable scale: obs/param scales empirically as games^0.50, so
+  even the *full* month (~30× this prefix) projects to ≈25, short of
+  30.92. Matching it outright projects past the month's total size —
+  though that figure extrapolates ~45× beyond the measured range, so
+  the claim worth keeping is the weaker one: downloading the rest of
+  the month would not close the gap.
+
+  So `exp38` is not a like-for-like replication and is not written as
+  one. It tests the pooling claim in a regime ~7× sparser than the one
+  that established it. Its falsification clause separates the two
+  explanations a negative could have — if the estimator column
+  survives and only the structure column dies, that is sparsity and
+  the factor claim is bounded to denser regimes; if both die, the
+  headline is a 2013 finding. Reporting one as the other is the
+  specific error the registration exists to prevent.
 
 `loader.py` now streams the HTTP response straight into the zstd
 decoder and takes a cap, because a modern month is ~32 GB compressed
