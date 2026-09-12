@@ -1,0 +1,15 @@
+59399 dense decisive games, 639 players; TC mix {'blitz': 0.396, 'bullet': 0.373, 'classical': 0.231}
+  scalar+colour      TEST 0.6117
+    offset ridge    3.0  val 0.6133
+    offset ridge   10.0  val 0.6132
+    offset ridge   30.0  val 0.6143
+    offset ridge  100.0  val 0.6157
+    offset ridge  300.0  val 0.6164
+  factor+colour      TEST 0.6073  (offset ridge 10.0)
+  stratified-by-TC   TEST 0.6123   (Lichess practice)
+  factor vs scalar       -0.0045 [-0.0057,-0.0032]  P(better) 1.000
+  stratified vs scalar   +0.0006 [-0.0024,+0.0036]  P(better) 0.345
+  factor vs STRATIFIED   -0.0051 [-0.0071,-0.0030]  P(better) 1.000
+
+  offset spreads: bullet sd 0.1374   blitz sd 0.1328   (P3: bullet > blitz)
+per-game losses written to results/exp30_chess_tc.csv

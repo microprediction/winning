@@ -91,4 +91,4 @@ jobs:
       - name: Ruff
         run: |
           pip install ruff
-          ruff check winning/factor winning/probit src
+          ruff check winning/factor winning/probit winning/ratings/verify winning/ratings/simulate.py src

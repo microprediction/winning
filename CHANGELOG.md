@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+- Factor ratings (`winning.ratings.factor_ratings`): an entity's
+  ability as a vector over observed conditions, MAP through the exact
+  ranking likelihood. `fit_factor_ratings(events, n_entities, n_cov,
+  ridge=...)` takes `(subset, order, x)` events (full, partial or
+  winner-only orders; contest-level or per-entrant covariates) and a
+  ridge that is scalar, per-covariate or per-coefficient -- the
+  per-covariate form ("levels free, offsets shrunk") is the measured
+  mechanism, and a shared penalty is recorded as a confound.
+  `fit_design_ratings(events, n_feat, ...)` is the general form over
+  `(Z, order)` design rows, dense or sparse, with per-event recency
+  `weights=` and `base=`. Likelihoods run batched by field size on the
+  engine's lattice pass (closed form at K = 2 under the normal base).
+  Also `factor_loglik` / `design_loglik` for validation scoring,
+  `predict_factor`, `factor_design` for mixing entity blocks with
+  shared columns, `sweep_offset_ridge` (tunes the offset penalty on a
+  validation slice and flags the scalar limit) and
+  `covariate_contrast_report` (the exogeneity check: observed spread
+  of per-entity covariate shares against the no-choice null).
+- Block correlation in `AbilityTracker`: `rho=` and per-contest
+  `groups` give same-group entrants a shared performance component,
+  variance-preserving (`block_loadings`), on every observer -- prices
+  inverted under the blocked model, scores through the full-covariance
+  conjugate node, orders and winners through the correlated moment
+  updates -- and `predict(..., groups=)` prices the same model. The
+  tracker now accumulates `evidence`, the sum of log P(observation)
+  over everything it consumed (including the independent order path,
+  which did not return it before); `tune_block_rho` selects `rho` by
+  that marginal likelihood. `walk_forward` passes `groups` through and
+  returns the evidence.
+- `order_loglik`'s docstring said min-wins; the function is max-wins
+  like the rest of the module, and now says so.
+- `winning.ratings.verify`: the ratings layer's own verification suite,
+  deterministic under a root seed, with smoke / fast / full / exhaustive
+  profiles (`python -m winning.ratings.verify --profile full --workers 4
+  --out reports/`). Exact identities every Bayesian moment update must
+  satisfy (the martingale of the posterior mean, the law of total
+  variance with and without the curvature clamp, normalisation),
+  enumerated over every outcome and weighted by the engine's own
+  probabilities; reductions between code paths, closed forms, coarsening
+  of partial orders, gauge / permutation / scale / team invariances,
+  predict-versus-evidence; simulation-based calibration of the filters
+  on pairwise contrasts; Monte Carlo referees on fixed and seed-drawn
+  configurations; and the bandits property audit (P1-P8) ported with
+  fixed seeds (its legacy world reproduces the historical digits). Every
+  tolerance lives in `marks.py` with provenance; verdicts distinguish
+  UNDERPOWERED and documented EXPECTED_APPROX from ok; the fast profile
+  gates CI and the full profile runs nightly (`ratings-verify.yml`).
+  Adjudicated runs are recorded in `research/adjudications/ratings_verify.md`.
+- `winning.ratings.simulate`: one home for synthetic worlds and base
+  noise; every base factory carries an exact `.sample`.
+- Laplace standard errors for the MAP factor ratings:
+  `fit_factor_ratings(..., return_se=True)`, `fit_design_ratings(...,
+  return_se=True)`, `factor_se`, `design_se`, from the Hessian of the
+  penalised objective (analytic for two-player normal, central
+  differences of the analytic gradient elsewhere); calibrated on the
+  ridge prior (verifier `factor.se_calibration`).
+- `python -m winning` (and the `winning` console script setup.py has
+  declared since the start) now exists: it prints the installed version
+  and runs `winning.contract.verify()`, exit status 1 on failure. The
+  install smoke test exercises it as a subprocess.
+
 - Fixed `winning.probit.fit_factor_model`, and so `shares(..., Sigma=,
   k=)` and `utilities_from_shares(..., Sigma=, k=)`: the contrast
   heuristic applied principal-factor analysis to P Sigma P although the

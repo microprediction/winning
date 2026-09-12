@@ -1,0 +1,26 @@
+
+=== threshold 100: 59399 games, 639 players ===
+  glicko2 per TC 0.6234   factor 0.6073  (ridge 10.0)
+  ALL      margin -0.0161 [-0.0192,-0.0130]
+
+=== threshold 50: 83444 games, 1095 players ===
+  glicko2 per TC 0.6225   factor 0.6055  (ridge 3.0)
+  ALL      margin -0.0170 [-0.0197,-0.0144]
+  SPARSE   margin -0.0160 [-0.0213,-0.0107]   n=5985
+
+=== threshold 25: 97844 games, 1571 players ===
+  glicko2 per TC 0.6256   factor 0.6066  (ridge 10.0)
+  ALL      margin -0.0190 [-0.0215,-0.0164]
+  SPARSE   margin -0.0222 [-0.0265,-0.0178]   n=9591
+
+=== threshold 10: 109129 games, 2373 players ===
+  glicko2 per TC 0.6227   factor 0.6070  (ridge 10.0)
+  ALL      margin -0.0157 [-0.0183,-0.0131]
+  SPARSE   margin -0.0169 [-0.0210,-0.0128]   n=12440
+
+=== P1: does the margin widen as the threshold drops? ===
+ threshold  players  games  margin_all  ridge  margin_sparse
+       100      639  59399   -0.016104   10.0            NaN
+        50     1095  83444   -0.017021    3.0      -0.016004
+        25     1571  97844   -0.018983   10.0      -0.022156
+        10     2373 109129   -0.015721   10.0      -0.016926

@@ -171,6 +171,27 @@ remaining the ceiling wherever they exist. The `ThurstoneRating` API
 documented there ships with a future release; it is not importable from
 the current package.
 
+The shipped Gaussian line, `winning.ratings`, goes past one number per
+entity in two directions, both measured before they were built. Factor
+ratings (`fit_factor_ratings`) estimate a level plus offsets over
+conditions observed on the contest — time control, task category —
+with a ridge penalty per covariate: the level pools every contest and
+the offsets are shrunk toward it, which beat both a scalar rating and
+a separate rating per category within the same estimator on Chatbot
+Arena and on Lichess, and beat Lichess's own per-time-control Glicko-2
+by 0.014–0.018 nats per game across three splits — four fifths of that
+from the estimator, one fifth from the factor structure.
+`sweep_offset_ridge` tunes the offset penalty and reports the scalar
+limit; `covariate_contrast_report` checks that the covariate is
+assigned rather than chosen, since a null on a self-selected covariate
+means unidentifiable, not absent. Block correlation
+(`AbilityTracker(rho=...)` with `groups`, `tune_block_rho`) gives
+same-team entrants a shared performance component, fitted and priced
+under one model, with the correlation share selected by the filter's
+own evidence — on Formula 1 it prices the same-team 1–2 finish that no
+scalar or pairwise rating can express. The measurements and the
+open control are on the [ratings page](https://winning.microprediction.org/ratings.html).
+
 ## History
 
 Versions 1.x were the SIAM paper's reference implementation. That

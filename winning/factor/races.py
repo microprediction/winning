@@ -158,6 +158,13 @@ def exponential_power_base(beta):
         # they do for the named laplace base
         _expo.fd_eps = 5e-2
     _expo.log_concave = beta >= 1.0
+
+    def _expo_sample(rng, size=None):
+        # density proportional to exp(-|x/a|^beta): the generalised
+        # normal with shape beta and scale a (min-wins; symmetric)
+        from scipy.stats import gennorm
+        return gennorm.rvs(beta, scale=a, size=size, random_state=rng)
+    _expo.sample = _expo_sample
     return _expo
 
 
@@ -202,6 +209,13 @@ def skew_logistic_base(alpha):
     hi_edge = abs((np.log(alpha / 1e-9) - m)) / c + 2.0
     _skew_logistic.span = (max(14.0, lo_edge), max(14.0, hi_edge))
     _skew_logistic.rust_base = (7, [alpha, m, c])
+
+    def _skew_logistic_sample(rng, size=None):
+        # raw x has CDF (1 + e^{-x})^{-alpha}: invert, then standardize
+        u = rng.random(size)
+        x = -np.log(np.expm1(-np.log(u) / alpha))
+        return (x - m) / c
+    _skew_logistic.sample = _skew_logistic_sample
     return _skew_logistic
 
 
@@ -229,6 +243,7 @@ def student_base(nu):
     edge = float(_t.isf(1e-7, nu)) / s
     _student.span = (max(12.0, edge), max(12.0, edge))
     _student.rust_base = (5, [nu, s])
+    _student.sample = lambda rng, size=None: rng.standard_t(nu, size) / s
     return _student
 
 
@@ -255,6 +270,11 @@ def skew_normal_base(a):
 
     _skew.span = (10.0, 10.0)
     _skew.rust_base = (6, [a, m, sd])
+
+    def _skew_sample(rng, size=None):
+        x = _sn.rvs(a, size=size, random_state=rng)
+        return (x - m) / sd
+    _skew.sample = _skew_sample
     return _skew
 
 
@@ -1269,6 +1289,17 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
 
     if base == "normal":
         _fail.rust_base = (8, [q, w, off, m1, sd])
+
+    def _fail_sample(rng, size=None):
+        # min-wins: with probability q the lump N(off, w^2) in the slow
+        # tail, otherwise the running base; then the (optional)
+        # standardization u = m1 + sd z inverted
+        from ..ratings.simulate import sample_min
+        u0 = sample_min(rng, base, size)
+        lump = off + w * rng.standard_normal(np.shape(u0))
+        u = np.where(rng.random(np.shape(u0)) < q, lump, u0)
+        return (u - m1) / sd
+    _fail.sample = _fail_sample
     return _fail
 
 

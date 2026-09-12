@@ -82,6 +82,97 @@
       updates, the correlated-race generalization of the TrueSkill-style
       factor. This page describes the density line.</p>
 
+    <h2>Factor ratings and block correlation in winning.ratings</h2>
+    <p>The shipped <code>winning.ratings</code> line carries two entry
+      points beyond one number per entity. <code>fit_factor_ratings</code>
+      estimates an entity's ability as a level plus offsets over
+      conditions observed on the contest &mdash; time control, task
+      category, surface &mdash; by MAP through the exact ranking
+      likelihood, with one ridge penalty per covariate. The penalty
+      vector is the mechanism, not a convenience: the level is estimated
+      from every contest the entity enters, and the offsets are shrunk
+      toward it, so an entity with few contests under some condition
+      falls back on its level rather than on zero. Measured on 65,178
+      Chatbot Arena battles and 59,399 Lichess games. On chess, a
+      partially pooled factor rating beats Lichess's deployed
+      architecture (Glicko-2 maintained separately per time control) by
+      0.014&ndash;0.018 nats of held-out log loss across three independent
+      splits, every interval excluding zero. The win decomposes, and the
+      headline should not travel without the decomposition: roughly four
+      fifths is the estimator (a batch Thurstonian MAP fit against
+      Glicko-2's online update, 0.017&ndash;0.022) and roughly one fifth is
+      the factor structure (0.003&ndash;0.004, intervals excluding zero on
+      all three splits), which is the part this API implements.
+      Stratification is not futile here &mdash; it is worth
+      0.006&ndash;0.009 to Glicko-2 &mdash; but partial pooling beats it:
+      within one estimator, pooling the level across conditions and
+      shrinking the offsets beats both the scalar and a per-condition
+      rating. On Arena the advantage grows with cell sparsity; on chess
+      it is roughly constant across player-density thresholds from 100
+      games down to 10 (2,373 players, 109k games, every interval
+      excluding zero), so it is not concentrated among data-poor
+      players, with the caveat that a 10-game minimum excludes the
+      genuinely sparse regime. The two
+      stratification numbers reconcile: the time-control signal is real,
+      and stratification is the lossy way to extract it, helping a weak
+      base estimator (Glicko-2 pooled, 0.6323) and costing a strong one
+      (this estimator's scalar, 0.6117, loses 0.0006 when stratified)
+      because its price is sparse-cell variance. Partial pooling extracts
+      the same signal without that price, which is why the shrunk-offset
+      form is the recommendation whatever the base estimator. With one shared
+      penalty the same factor arm loses (+0.0037), so
+      <code>sweep_offset_ridge</code> tunes the offset penalty on a
+      validation slice and reports when the optimum sits at the scalar
+      limit, which means the condition axis is unidentifiable in that
+      data. The gain is real, bounded and channel-limited: about three
+      percent of what a rating extracts over uniform on binary
+      comparisons, sixteen percent on cardinal scores.</p>
+    <p>Two conditions decide whether the factor form transfers, and
+      both are checkable before fitting. Abilities must be static
+      relative to the covariate: on Formula 1, constructor identity
+      looked worth &minus;0.25 nats against a driver-only baseline until
+      the baseline was given a tuned recency half-life, after which it
+      was worth +0.04, because an omitted time dimension flatters any
+      richer parameterisation. The covariate must be exogenously varied:
+      chess opening family gives a null result because players are their
+      openings (per-player tactical share sd 0.415 against a no-choice
+      binomial null of 0.058), not because the axis is absent.
+      <code>covariate_contrast_report</code> computes that ratio; a null
+      on a self-selected covariate is a statement about identification,
+      not about the axis.</p>
+<pre><code>from winning.ratings import fit_factor_ratings, predict_factor, covariate_contrast_report
+
+# events: (subset, order, x) -- entity indices, finishing order best first,
+# x = [1, bullet, blitz] read off the contest
+covariate_contrast_report(events, n_entities, n_cov=3)["ratio"]   # near 1: assigned; far above: chosen
+B = fit_factor_ratings(events, n_entities, n_cov=3, ridge=[1.0, 30.0, 30.0])
+predict_factor(B, subset=[3, 7], x=[1, 0, 1])                       # win probabilities under blitz</code></pre>
+    <p>The second entry point is block correlation, where the engine is
+      doing something no scalar or pairwise rating can express. Teammates
+      share a car, a crew shares a boat: same-group entrants have a
+      shared component of performance, and at twenty entrants that
+      restructures the whole ordering distribution. <code>AbilityTracker</code>
+      accepts <code>groups</code> with a contest and a correlation share
+      <code>rho</code>, variance-preserving so every marginal keeps its
+      scale; observation and prediction use the same loadings, and
+      <code>tune_block_rho</code> selects <code>rho</code> by the filter's
+      own evidence, the sum of log P(observation) every update returns,
+      without consulting any target event. On Formula 1 the same-team 1&ndash;2
+      rate is 0.274 observed against 0.123 under independence and 0.190
+      at <code>rho</code> = 0.4, a joint log-loss improvement of
+      &minus;0.0714 [&minus;0.1228, &minus;0.0235]; training evidence
+      prefers 0.4 to independence by 28.8 nats over 158 races, the value
+      that validation on the joint event also picked. One measurement is
+      open: the consistent fit-and-price control (winner log-loss
+      unchanged under <code>rho</code>) has not been carried to its test
+      window.</p>
+<pre><code>from winning.ratings import AbilityTracker, tune_block_rho
+
+sel = tune_block_rho(contests, rho_grid=(0.0, 0.2, 0.4, 0.6), drift=0.03)
+trk = AbilityTracker(rho=sel["rho"], drift=0.03)
+trk.observe(ids, t, order=order, groups=teams)
+trk.predict(ids, t, groups=teams)</code></pre>
+
     <h2>Benchmark protocol</h2>
     <p>Twelve datasets: Formula 1, ATP and WTA tennis, chess, sumo,
       football, Halo 2, horse racing, and synthetic worlds with known

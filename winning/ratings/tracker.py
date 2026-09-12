@@ -26,6 +26,26 @@ observed and its noise:
     unit -- winning stays domain-agnostic.
 If only a finishing order is known (no magnitudes), the exact N-way Thurstone
 factor (``nway``) is used for that observer instead.
+
+BLOCK CORRELATION (same-group entrants). Teammates share a car; a crew shares
+a boat. Pass ``groups`` with a contest and set ``rho`` and every observer
+prices the blocked model, variance-preserving: x_j = s_j + sqrt(rho beta2)
+z_g(j) + sqrt((1 - rho) beta2) eps_j, so each marginal keeps variance beta2
+and only the joint changes. Fit and prediction use the same V, which is the
+consistency an earlier measurement lacked (fitted independent, priced
+correlated: a +0.017 winner-control residual). rho is selected by the
+filter's own evidence, ``tune_block_rho`` -- the sum of log P(observation)
+every update already returns -- which never sees a target event. Measured on
+Formula 1 (bandits exp33/exp34): same-team 1-2 rate 0.274 observed against
+0.123 under independence and 0.190 at rho = 0.4; joint log-loss -0.0714
+[-0.1228, -0.0235]; training evidence prefers rho = 0.4 to independence by
+28.8 nats over 158 races, the same value validation on the joint event
+picked. The consistent fit-and-price CONTROL (winner log-loss unchanged
+under rho) was not carried to its test window and remains open.
+
+Cost: one factor dimension per group of two or more in the contest; two or
+fewer ride a 7^r Gauss-Hermite tensor, more ride 1024 Sobol nodes (about
+15 s per K = 8 field with four groups on one core). Singletons cost nothing.
 """
 from __future__ import annotations
 
@@ -35,7 +55,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 from scipy.special import ndtr, ndtri
 
-from .nway import update_winner, update_ranking, update_ranking_exact
+from .nway import (update_winner, update_ranking, update_ranking_exact,
+                   update_winner_correlated, update_order_correlated,
+                   predictive_win_probabilities, _order_pass, _predictive_curves)
 from .market import update_market
 from ..factor.races import race_probabilities
 
@@ -88,6 +110,50 @@ def order_augmented(m, v, order, beta2, rng, n_aug=60, burn=20):
     return E, np.maximum(sA2 / cnt - E * E, 1e-9)
 
 
+def block_loadings(groups, rho, beta2=1.0):
+    """Variance-preserving block loadings for a field with group labels.
+
+    Returns (V, beta2_vec): V is (n, G) with sqrt(rho * beta2) on the members
+    of each group of size >= 2 (one column per such group; None when there
+    are none or rho == 0), and beta2_vec (n,) is the idiosyncratic variance,
+    (1 - rho) * beta2 for grouped entrants and beta2 for singletons, so every
+    marginal keeps variance beta2 whatever rho is. A label of None means "no
+    group". Adding shared noise ON TOP of unit noise instead (lambda z + eps)
+    inflates the total to 1 + lambda^2 while the means were fitted at unit
+    variance, and the marginals flatten mechanically -- measured at +0.077
+    on a winner control before this parameterisation cut it to +0.017.
+    """
+    groups = list(groups)
+    n = len(groups)
+    b2 = np.full(n, float(beta2))
+    if not 0.0 <= rho < 1.0:
+        raise ValueError("rho must lie in [0, 1)")
+    members: Dict[object, List[int]] = {}
+    for j, g in enumerate(groups):
+        if g is None:
+            continue
+        members.setdefault(g, []).append(j)
+    multi = [ix for ix in members.values() if len(ix) >= 2]
+    if rho <= 0.0 or not multi:
+        return None, b2
+    V = np.zeros((n, len(multi)))
+    for k, ix in enumerate(multi):
+        V[ix, k] = np.sqrt(rho * beta2)
+        b2[ix] = (1.0 - rho) * beta2
+    return V, b2
+
+
+def _order_evidence(m, v, order, beta2, base):
+    """log P(order) under the prior predictive N(m, v) + base noise: the
+    evidence the independent order update does not return itself."""
+    m = np.asarray(m, dtype=float); v = np.asarray(v, dtype=float)
+    sd = np.sqrt(v + beta2)
+    curves = None if base == "normal" else _predictive_curves(v, beta2, base)
+    lp, _ = _order_pass(m, sd, np.asarray(order, dtype=int), base=base,
+                        curves=curves)
+    return float(lp)
+
+
 @dataclass
 class AbilityState:
     """Marginal belief for one entity: mean, variance, last-seen time."""
@@ -109,16 +175,31 @@ class AbilityTracker:
                        results observer's noise.
     tau2             : market observer's noise.
     base             : lattice base density name.
+    rho              : share of performance variance same-group entrants have
+                       in common (block_loadings); active only for contests
+                       observed or predicted with ``groups``.
+    Qf               : Gauss-Hermite nodes per factor dimension for the
+                       block-correlated updates (r <= 2).
+
+    ``evidence`` accumulates log P(observation) over everything observed --
+    market prices, scores, orders and winners, independent or blocked -- the
+    filter's marginal likelihood, for tuning rho (tune_block_rho) or any
+    other knob without a held-out target.
     """
 
     def __init__(self, drift: float = 0.02, drift_exp: float = 0.5,
                  init_var: float = 4.0, beta2: float = 1.0, tau2: float = 0.25,
                  base: str = "normal", order_method: str = "exact",
-                 n_aug: int = 60, burn: int = 20, seed: int = 0):
+                 n_aug: int = 60, burn: int = 20, seed: int = 0,
+                 rho: float = 0.0, Qf: int = 7):
         self.drift = float(drift); self.drift_exp = float(drift_exp)
         self.init_var = float(init_var)
         self.beta2 = float(beta2); self.tau2 = float(tau2)
         self.base = base
+        if not 0.0 <= float(rho) < 1.0:
+            raise ValueError("rho must lie in [0, 1)")
+        self.rho = float(rho); self.Qf = int(Qf)
+        self.evidence = 0.0
         # order-only observations (no margins) -- 'exact' = winning's exact
         # win-node ranking factor (nway.update_ranking_exact; validated against the
         # order_augmented Gibbs in tests); 'moment' = the fast biased moment-match;
@@ -152,43 +233,93 @@ class AbilityTracker:
         for k, i in enumerate(ids):
             self.state[i] = AbilityState(float(m[k]), float(max(v[k], 1e-9)), float(t))
 
+    def _blocks(self, groups, n):
+        if groups is None:
+            return None, self.beta2
+        groups = list(groups)
+        if len(groups) != n:
+            raise ValueError("groups must have one label per entrant")
+        V, b2 = block_loadings(groups, self.rho, self.beta2)
+        return V, (self.beta2 if V is None else b2)
+
     # -- prediction ----------------------------------------------------------
-    def predict(self, ids: Sequence[str], t: float, points: int = 257) -> np.ndarray:
+    def predict(self, ids: Sequence[str], t: float, points: int = 257,
+                groups: Optional[Sequence] = None) -> np.ndarray:
         """Predictive win probabilities among `ids` at t, belief uncertainty
-        marginalised into the performance variance (same factor forward map)."""
+        marginalised into the performance variance (same factor forward map).
+        With ``groups`` and rho > 0 the field is priced under the blocked
+        model that observe() fits -- the same V, never a different one."""
         m, v = self._gather(ids, t)
-        return race_probabilities(-m, D=self.beta2 + v, base=self.base, points=points)
+        V, b2 = self._blocks(groups, len(m))
+        if self.base != "normal":
+            # the belief convolved with the base noise, on the updates'
+            # own node rule: predict and evidence agree on every base
+            return predictive_win_probabilities(m, v, beta2=b2, base=self.base, V=V,
+                                                Qf=self.Qf, points=points)
+        return race_probabilities(-m, V=V, D=b2 + v, base=self.base, points=points)
 
     # -- observation ---------------------------------------------------------
     def observe(self, ids: Sequence[str], t: float, scores: Optional[Sequence[float]] = None,
                 order: Optional[Sequence[int]] = None, winner: Optional[int] = None,
-                prices: Optional[Sequence[float]] = None) -> None:
+                prices: Optional[Sequence[float]] = None,
+                groups: Optional[Sequence] = None) -> None:
         """Fold one contest's evidence. BOTH observers (market prices, results)
-        are contrast evidence through the same conjugate update."""
+        are contrast evidence through the same conjugate update. ``groups``
+        (one label per entrant, None for ungrouped) switches every observer to
+        the block-correlated model when rho > 0; log P(observation) is added
+        to ``self.evidence`` on every path."""
         m, v = self._gather(ids, t)
+        V, b2 = self._blocks(groups, len(m))
         if prices is not None:                                     # market observer
-            m, v, _ = update_market(m, v, np.asarray(prices, float), tau2=self.tau2)
+            # prices are inverted under the same (blocked or independent)
+            # performance model the outcome is priced with
+            model = {} if V is None else {"V": V, "D": b2}
+            m, v, lz = update_market(m, v, np.asarray(prices, float), tau2=self.tau2, **model)
+            self.evidence += lz
         if scores is not None:                                     # results observer, MAGNITUDES
             # The consistent path whenever performance magnitudes are observed.
             # Transformed performances are a linear-Gaussian observation
             # of ability, so update_market's conjugate contrast update is exact --
             # verified unbiased (single race, performance-noise-only) and calibrated
             # under drift on synthetic data.
-            m, v, _ = update_market(m, v, np.asarray(scores, float), tau2=self.beta2, invert=_neg)
+            if V is None:
+                m, v, lz = update_market(m, v, np.asarray(scores, float), tau2=self.beta2, invert=_neg)
+            else:
+                # correlated contrast noise P (V V' + diag b2) P: the full-covariance
+                # conjugate node on a diagonal prior, marginals kept (same ADF
+                # projection the independent path makes)
+                from .history import update_margins_full
+                m, S, lz = update_margins_full(m, np.diag(v), scores=-np.asarray(scores, float),
+                                               V=V, beta2=b2)
+                v = np.maximum(np.diag(S).copy(), 1e-6)
+            self.evidence += lz
         elif order is not None:                                    # ORDER-ONLY fallback
             # Ranks censor the magnitudes. 'exact' uses winning's exact win-node
             # ranking factor (matches the Gibbs reference); 'moment' is the fast
             # biased moment-match; 'augmented' is the slow Gibbs reference itself.
             # With magnitudes available, `scores` is the right path, not this.
-            if self.order_method == "exact":
-                m, v = update_ranking_exact(m, v, list(order), beta2=self.beta2, base=self.base)
-            elif self.order_method == "augmented":
-                m, v = order_augmented(m, v, list(order), self.beta2, self.rng,
-                                       n_aug=self.n_aug, burn=self.burn)
+            order = list(order)
+            if V is not None:
+                m, v, lz = update_order_correlated(m, v, order, V, beta2=b2, Qf=self.Qf,
+                                                   base=self.base)
             else:
-                m, v = update_ranking(m, v, list(order), beta2=self.beta2, base=self.base)
+                lz = _order_evidence(m, v, order, self.beta2, self.base)
+                if self.order_method == "exact":
+                    m, v = update_ranking_exact(m, v, order, beta2=self.beta2, base=self.base)
+                elif self.order_method == "augmented":
+                    m, v = order_augmented(m, v, order, self.beta2, self.rng,
+                                           n_aug=self.n_aug, burn=self.burn)
+                else:
+                    m, v = update_ranking(m, v, order, beta2=self.beta2, base=self.base)
+            self.evidence += lz
         elif winner is not None:                                   # winner-only fallback (see order note)
-            m, v, _ = update_winner(m, v, int(winner), beta2=self.beta2, base=self.base)
+            if V is not None:
+                m, v, lz = update_winner_correlated(m, v, int(winner), V, beta2=b2, Qf=self.Qf,
+                                                    base=self.base)
+            else:
+                m, v, p = update_winner(m, v, int(winner), beta2=self.beta2, base=self.base)
+                lz = float(np.log(max(float(p), 1e-300)))
+            self.evidence += lz
         self._store(ids, m, v, t)
 
     def rating(self, i: str) -> Optional[Tuple[float, float]]:
@@ -211,15 +342,18 @@ def walk_forward(contests: Sequence[dict], warmup: int = 20, market_arm: bool = 
     """Walk-forward: predict each contest from the history strictly before it
     (log-loss), then fold it in. Same return shape as ``history.walk_forward``,
     O(entrants) per contest. Each contest: 'runners', optional 't', a result as
-    'scores'(transformed performances)/'order'/'winner', optional 'p_market'.
+    'scores'(transformed performances)/'order'/'winner', optional 'p_market',
+    optional 'groups' (block correlation, see AbilityTracker). The tracker's
+    accumulated ``evidence`` is returned alongside.
     """
     trk = AbilityTracker(**params)
     ll_model = ll_market = 0.0; n_scored = 0
     recs: List[dict] = []
     for i, c in enumerate(contests):
         ids = c["runners"]; t = float(c.get("t", 0.0)); w = _winner_of(c)
+        groups = c.get("groups")
         if i >= warmup and w is not None:
-            p = trk.predict(ids, t)
+            p = trk.predict(ids, t, groups=groups)
             ll_model += float(np.log(max(p[w], 1e-12)))
             rec = {"i": i, "p_model": p, "winner": w}
             if c.get("p_market") is not None:
@@ -228,6 +362,36 @@ def walk_forward(contests: Sequence[dict], warmup: int = 20, market_arm: bool = 
             recs.append(rec); n_scored += 1
         trk.observe(ids, t, scores=c.get("scores"), order=c.get("order"),
                     winner=c.get("winner"),
-                    prices=(c.get("p_market") if market_arm else None))
+                    prices=(c.get("p_market") if market_arm else None),
+                    groups=groups)
     return {"log_loss_model": ll_model, "log_loss_market": ll_market,
-            "n_scored": n_scored, "records": recs, "tracker": trk}
+            "n_scored": n_scored, "records": recs, "tracker": trk,
+            "evidence": trk.evidence}
+
+
+def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6),
+                   market_arm: bool = True, **params) -> dict:
+    """Select the block correlation by the filter's marginal likelihood: one
+    walk per rho over contests carrying 'groups', summing log P(observation)
+    from every update (nothing held out, no target event consulted). Returns
+    rho_grid, evidence (per rho), rho (the argmax) and at_edge -- a rho at
+    either end of the grid is a capped rival, not a tuned one; widen the
+    grid. ``params`` go to AbilityTracker (drift, beta2, base, Qf, ...).
+
+    Two independent criteria picked the same value on Formula 1: this
+    evidence and validation on the same-team 1-2 statistic both chose 0.4.
+    Cost: one blocked walk per grid point (module docstring)."""
+    evidence = []
+    for rho in rho_grid:
+        trk = AbilityTracker(rho=float(rho), **params)
+        for c in contests:
+            trk.observe(c["runners"], float(c.get("t", 0.0)),
+                        scores=c.get("scores"), order=c.get("order"),
+                        winner=c.get("winner"),
+                        prices=(c.get("p_market") if market_arm else None),
+                        groups=c.get("groups"))
+        evidence.append(trk.evidence)
+    best = int(np.argmax(evidence))
+    return {"rho_grid": tuple(float(r) for r in rho_grid),
+            "evidence": np.asarray(evidence), "rho": float(rho_grid[best]),
+            "at_edge": best in (0, len(rho_grid) - 1)}

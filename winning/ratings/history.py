@@ -29,9 +29,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .full import _psd_repair, update_market_full, update_order_full, \
-    update_winner_full
-from .market import update_race
+from .full import _psd_repair
 
 
 def diffuse(m, v, dt=1.0, timescale=200.0, prior_mean=0.0, prior_var=1.0):
@@ -56,15 +54,6 @@ def diffuse_full(m, S, dt=1.0, timescale=200.0, prior_mean=0.0,
     return m, S
 
 
-def _margin_obs(margins, ref, n, lengths_scale):
-    """Performance contrasts from finishing margins. margins[i] is
-    runner i's distance behind the reference (winner: 0), in lengths;
-    lengths_scale converts lengths to performance units (max-wins:
-    further behind = lower performance)."""
-    y = -np.asarray(margins, dtype=float) * float(lengths_scale)
-    return y - y.mean()
-
-
 def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
                         lengths_scale=1.0, meas_var=0.0, scores=None,
                         transform=None):
@@ -73,74 +62,30 @@ def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
     contrast space. Two input conventions: margins= (lengths behind the
     winner, LOWER is better, negated internally) or scores= (points /
     goals / times-negated, HIGHER is better, used as-is after scaling).
-    Returns (m_post, S_post, logZ)."""
+    transform= applies a sub-linear margin transform (a compression
+    scale c for c*asinh(L/c), or a callable) with its Jacobian added to
+    logZ, so evidence-based tuning of c stays honest: raw lengths are
+    superlinear in performance deficit (eased finishers, collapsing
+    pace), and staying Gaussian on TRANSFORMED margins is the
+    long-right-tail model placed in the measurement map. Returns
+    (m_post, S_post, logZ). The team form with an assignment matrix is
+    teams.update_team_margins_full; this is A = I."""
+    from .teams import _cardinal_observation, _lift_contrast_update, _noise_cov
     m = np.asarray(m, dtype=float)
-    S = _psd_repair(np.asarray(S, dtype=float))
     n = len(m)
-    if (margins is None) == (scores is None):
-        raise ValueError("pass exactly one of margins= or scores=")
-    log_jac = 0.0
-    if scores is not None:
-        y = np.asarray(scores, dtype=float) * float(lengths_scale)
-        y = y - y.mean()
-    else:
-        Lm = np.asarray(margins, dtype=float)
-        if transform is not None:
-            # sub-linear margin transform (Peter): raw lengths are
-            # superlinear in performance deficit (eased horses,
-            # collapsing pace), so staying Gaussian on TRANSFORMED
-            # margins IS the long-right-tail model, placed in the
-            # measurement map. asinh(L/c)*c has derivative 1 at zero
-            # (close finishes stay linear-Gaussian, lengths_scale keeps
-            # its meaning) and is logarithmic in the tail (blowouts
-            # discounted). Evidence-based tuning of c REQUIRES the
-            # change-of-variables Jacobian added to logZ -- without it,
-            # more compressive transforms win spuriously by shrinking
-            # the data -- so it is included here.
-            if callable(transform):
-                c = None
-                Lt = np.asarray(transform(Lm), dtype=float)
-                dL = 1e-6 * (1.0 + np.abs(Lm))
-                deriv = (np.asarray(transform(Lm + dL), dtype=float)
-                         - Lt) / dL
-            else:
-                c = float(transform)
-                Lt = c * np.arcsinh(Lm / c)
-                deriv = 1.0 / np.sqrt(1.0 + (Lm / c) ** 2)
-            log_jac = float(np.sum(np.log(np.maximum(
-                deriv * float(lengths_scale), 1e-300))))
-            Lm = Lt
-        y = _margin_obs(Lm, 0, n, lengths_scale)
-    P = np.eye(n) - np.ones((n, n)) / n
-    B = np.broadcast_to(np.asarray(beta2, dtype=float), (n,)).astype(float)
-    Cn = np.diag(B + float(meas_var))
-    if V is not None:
-        Vm = np.atleast_2d(np.asarray(V, dtype=float))
-        if Vm.shape[0] != n:
-            Vm = Vm.T
-        Cn = Cn + Vm @ Vm.T
-    N = P @ Cn @ P                       # contrast noise covariance
-    M = P @ S @ P + N                    # innovation covariance (contrasts)
-    lam, U = np.linalg.eigh(M)
-    keep = lam > 1e-10 * max(lam.max(), 1e-300)
-    Uk = U[:, keep]
-    r = y - P @ m
-    z = Uk.T @ r
-    # Kalman gain restricted to the observed subspace
-    K = S @ P @ (Uk * (1.0 / lam[keep])) @ Uk.T
-    m_new = m + K @ r
-    S_new = _psd_repair(S - K @ (P @ S))
-    logZ = float(-0.5 * (np.sum(z * z / lam[keep])
-                         + np.sum(np.log(lam[keep]))
-                         + keep.sum() * np.log(2.0 * np.pi))) + log_jac
-    return m_new, S_new, logZ
+    y, log_jac = _cardinal_observation(margins, scores, lengths_scale, transform)
+    Cn = _noise_cov(n, beta2, meas_var, V)
+    return _lift_contrast_update(m, S, np.eye(n), y, Cn, log_jac)
 
 
 def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
                  timescale=200.0, tau2=0.25, beta2=1.0, lengths_scale=0.2,
                  meas_var=0.0, transform=None, state=None,
                  return_state=False, base="normal"):
-    """Forward filter over a racing history (full-covariance belief).
+    """Forward filter over a racing history (full-covariance belief),
+    every observation lifted through the full state (a proper
+    full-state filter: exact for conjugate observations, including the
+    cross-covariances between a race's entrants and everyone else).
 
     races: iterable of dicts with keys
       't'        -- time (any unit consistent with timescale)
@@ -178,7 +123,10 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
         m = np.full(n, float(prior_mean))
         S = np.eye(n) * float(prior_var)
         t_last = None
+    from .teams import (update_team_margins_full, update_team_market_full,
+                        update_team_order_full, update_team_winner_full)
     total_logZ = 0.0
+    n_all = len(index)
     for race in races:
         t = float(race.get("t", 0.0))
         if t_last is not None and t > t_last:
@@ -186,32 +134,45 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
                                 prior_mean=prior_mean, prior_var=prior_var)
         t_last = t
         idx = np.array([index[r] for r in race["runners"]])
-        mk, Sk = m[idx], S[np.ix_(idx, idx)]
+        # every observation goes through the FULL state via the race's
+        # selection matrix: the entrants' block is what the observation
+        # sees, but the Kalman lift S A' moves every entity's mean and
+        # every cross-covariance. Updating the sub-block alone and
+        # writing it back left entrant/non-entrant covariances stale --
+        # exact on disjoint fields, wrong on overlapping ones even for
+        # conjugate scores (means off by 1.2 after 60 races of 5 among
+        # 12 on a static world; contrast coverage 0.37), and the
+        # evidence order-dependent (verifier, 2026-09-11).
+        A = np.zeros((len(idx), n_all)); A[np.arange(len(idx)), idx] = 1.0
         V = race.get("V")
         if race.get("p_market") is not None:
-            mk, Sk, lz = update_market_full(
-                mk, Sk, race["p_market"], tau2=tau2,
+            m, S, lz = update_team_market_full(
+                m, S, A, race["p_market"], tau2=tau2,
                 **({} if V is None else
                    {"V": np.atleast_2d(np.asarray(V, float)),
                     "D": np.full(len(idx), beta2)}))
             total_logZ += lz
         if race.get("margins") is not None or race.get("scores") is not None:
-            mk, Sk, lz = update_margins_full(
-                mk, Sk, margins=race.get("margins"),
+            m, S, lz = update_team_margins_full(
+                m, S, A, margins=race.get("margins"),
                 scores=race.get("scores"), V=V, beta2=beta2,
                 lengths_scale=lengths_scale, meas_var=meas_var,
                 transform=transform)
             total_logZ += lz
         elif race.get("order") is not None:
-            mk, Sk, lz = update_order_full(mk, Sk, race["order"], V=V,
-                                           beta2=beta2, base=base)
+            m, S, lz = update_team_order_full(m, S, A, race["order"], V=V,
+                                              beta2=beta2, base=base)
             total_logZ += lz
         elif race.get("winner") is not None:
-            mk, Sk, lz = update_winner_full(mk, Sk, race["winner"], V=V,
-                                            beta2=beta2, base=base)
+            if base != "normal":
+                raise NotImplementedError(
+                    "winner-only observations are Gaussian only in the "
+                    "full-covariance filter (the shared-field winner pass is "
+                    "analytic in the Gaussian log domain); pass the finishing "
+                    "order, where a non-normal base carries information")
+            m, S, lz = update_team_winner_full(m, S, A, race["winner"], V=V,
+                                               beta2=beta2)
             total_logZ += lz
-        m[idx] = mk
-        S[np.ix_(idx, idx)] = Sk
         S = _psd_repair(S)
     sd = np.sqrt(np.maximum(np.diag(S), 0.0))
     ratings = {rid: (float(m[i]), float(sd[i])) for rid, i in index.items()}
@@ -254,6 +215,13 @@ def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257,
         for b, j in known:
             Sf[a, b] = S[i, j]
     B = np.broadcast_to(np.asarray(beta2, dtype=float), (k,)).astype(float)
+    if base != "normal":
+        # non-normal noise: the belief split into a lattice-borne
+        # diagonal part convolved with the base noise plus quadratured
+        # loadings, as the updates price it (nway.predictive_win_probabilities)
+        from .nway import predictive_win_probabilities
+        p = predictive_win_probabilities(mu, S=Sf, beta2=B, base=base, V=V, points=points)
+        return p, 1.0 / np.maximum(p, 1e-12)
     C = Sf + np.diag(B)
     if V is not None:
         Vm = np.atleast_2d(np.asarray(V, dtype=float))
@@ -307,7 +275,6 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
     ll_model = ll_market = 0.0
     n_scored = 0
     for i, race in enumerate(races):
-        hist = [race] if state is not None else races[:i + 1]
         if i >= warmup and (race.get("winner") is not None
                             or race.get("order") is not None
                             or race.get("margins") is not None):

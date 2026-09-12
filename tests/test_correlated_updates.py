@@ -7,12 +7,7 @@ from winning.ratings.nway import (update_order_correlated, update_ranking_exact,
                                   update_winner, update_winner_correlated)
 
 
-def _simulate(rng, M, m, v, V, beta2):
-    n = len(m)
-    s = m + np.sqrt(v) * rng.normal(size=(M, n))
-    f = rng.normal(size=(M, V.shape[1]))
-    X = s + f @ V.T + np.sqrt(beta2) * rng.normal(size=(M, n))
-    return s, X
+from winning.ratings.simulate import correlated_draws as _simulate  # noqa: E402
 
 
 def test_winner_update_matches_mc_posterior():
