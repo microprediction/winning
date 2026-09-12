@@ -189,11 +189,11 @@ means unidentifiable, not absent. Block correlation
 same-group entrants a shared per-contest shock, fitted and priced under
 one model, with the correlation share selected by the filter's own
 evidence; the component is redrawn every contest, and a persistent
-group advantage belongs in the means instead. The Formula 1 test that
-motivated it withdrew its predictive claim (the correlation is in the
-data; the held-out winner log-loss got worse), and the [ratings
-page](https://winning.microprediction.org/ratings.html) says so without
-claiming a mechanism.
+group advantage belongs in the means instead. Whether it predicts
+better on the Formula 1 data that motivated it is being re-measured on
+the corrected engine; the [ratings
+page](https://winning.microprediction.org/ratings.html) carries the
+provisional numbers and no claim either way.
 
 ## History
 

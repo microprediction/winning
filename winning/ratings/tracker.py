@@ -39,23 +39,20 @@ WHAT THE CODE DOES, and what is measured. The shared component z_g is
 redrawn at every contest, a mean-zero draw common to the group's members
 in that contest; a persistent group advantage is a different object and
 belongs in the means (a group column in the design of fit_design_ratings,
-or a shared offset), whatever this term is set to. The Formula 1
-measurement that motivated the feature (bandits exp33 / exp34,
-2026-09-12) is the caution: teammates share a car and the data carry the
-correlation (training evidence prefers rho = 0.4 to independence by 28.7
-nats over 158 races; same-team 1-2 finishes 0.274 observed against 0.123
-under independence), yet fitted and priced consistently under the blocked
-likelihood the winner log-loss on 106 held-out races was WORSE by +0.053
-[+0.019, +0.087], and the joint same-team advantage fell to -0.019
-[-0.052, +0.011] and is withdrawn. The signature is confident
-mis-ranking rather than blurring: the mean probability on the actual
-winner barely moves (0.319 to 0.311) while the spread of log
-probabilities widens, so the loss sits in a minority of confident misses.
-Two mechanisms were tested and rejected on that output -- damage does not
-concentrate in races won by persistently strong teams, and predictions
-do not smear toward uniform -- so no mechanism is claimed. No performance
-claim is made for this feature in either direction; the open question is
-a persistent group term in the mean fitted alongside rho.
+or a shared offset), whatever this term is set to. What stands about the
+Formula 1 data that motivated the feature (bandits exp33 / exp34): the
+descriptive fact that same-team 1-2 finishes occur at 0.274 against 0.123
+under independence. Whether pricing that correlation through this term
+predicts better is NOT established in either direction: a first
+consistent fit-and-price run (2026-09-12) read the held-out winner
+log-loss WORSE by +0.053 [+0.019, +0.087] over 106 races with the joint
+advantage at -0.019 [-0.052, +0.011], but that run's blocked arm was
+integrated by the engine before the node cloud was recentred (commit
+7260624), with a 2-5 percent variance error in exactly its prior-sd
+regime while the independent arm, with zero loadings, was exact; it is
+being rerun on the corrected engine and those numbers are provisional
+until it lands. No performance claim is made for this feature; the open
+question is a persistent group term in the mean fitted alongside rho.
 
 Cost: one factor dimension per group of two or more in the contest; two or
 fewer ride a 7^r Gauss-Hermite tensor (Qf), more ride 2**nodes_log2 Sobol
@@ -405,11 +402,11 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     grid. ``params`` go to AbilityTracker (drift, beta2, base, Qf, ...).
 
     On Formula 1 this evidence preferred rho = 0.4 to independence by
-    28.7 nats -- the correlation is in the data -- and the blocked model
-    still predicted held-out winners worse (module docstring). A
-    likelihood ratio says the structure is present, not that pricing it
-    this way predicts better. Cost: one blocked walk per grid point
-    (module docstring)."""
+    28.7 nats -- the correlation is in the data -- while held-out winner
+    prediction is being re-measured on the corrected engine (module
+    docstring). A likelihood ratio says the structure is present, not
+    that pricing it this way predicts better. Cost: one blocked walk per
+    grid point (module docstring)."""
     evidence = []
     for rho in rho_grid:
         trk = AbilityTracker(rho=float(rho), **params)
