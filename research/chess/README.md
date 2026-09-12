@@ -211,9 +211,34 @@ any model is fitted:
   favour an arm.
 - **The dimension itself is thinner now.** A population concentrated
   into two adjacent fast controls has less time-control style
-  structure to find than one spread across three. `exp38` therefore
-  pre-registers a *smaller* margin than 2013's −0.0161, and says so
-  before running rather than after.
+  structure to find than one spread across three.
+- **Modern Lichess is far SPARSER, not richer** — the finding that
+  most changes what `exp38` can claim, and the opposite of what I
+  first assumed:
+
+  | | total games | dense players | dense games | obs/param |
+  |---|---|---|---|---|
+  | 2013-01 | 121,332 | 639 | 59,399 | **30.92** |
+  | 2024-01 (4M prefix) | 3,293,889 | 3,847 | 53,248 | **4.61** |
+
+  The dense-subgraph filter keeps 50.7% of 2013's month and 1.6% of
+  2024's. 2013 Lichess was a small, tightly connected community whose
+  active players met each other repeatedly; modern Lichess is so large
+  that even its most active players rarely meet twice. The sparsity is
+  in the *pairing* structure, so no threshold repairs it — restricting
+  to the top 639 players by volume makes it *worse* (obs/param 3.84),
+  because they are drawn from a 6× larger pool. Nor does more data, at
+  any affordable scale: obs/param scales as games^0.50, so matching
+  30.92 would take ~150–200M games, more than the entire month.
+
+  So `exp38` is not a like-for-like replication and is not written as
+  one. It tests the pooling claim in a regime ~7× sparser than the one
+  that established it. Its falsification clause separates the two
+  explanations a negative could have — if the estimator column
+  survives and only the structure column dies, that is sparsity and
+  the factor claim is bounded to denser regimes; if both die, the
+  headline is a 2013 finding. Reporting one as the other is the
+  specific error the registration exists to prevent.
 
 `loader.py` now streams the HTTP response straight into the zstd
 decoder and takes a cap, because a modern month is ~32 GB compressed
