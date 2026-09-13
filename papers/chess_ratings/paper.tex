@@ -1,0 +1,278 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage[round,authoryear]{natbib}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\makeatletter
+\renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}%
+  {3.25ex \@plus1ex \@minus.2ex}{-1em}%
+  {\normalfont\normalsize\itshape}}
+\makeatother
+
+\title{\textbf{Beating a deployed rating system}\\[0.4em]
+\large Partial Pooling Against Per-Category Glicko-2 on Lichess}
+\author{Peter Cotton}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Lichess maintains a separate Glicko-2 rating for each time
+control, which is stratification: condition on the category, estimate
+within it, and accept the sparse-cell variance that follows. We compare
+it with a partially pooled alternative on 59{,}399 decisive games from
+one month of the site's open database, in which a player's ability is a
+level estimated from all of their games plus shrunk bullet and blitz
+offsets. The pooled rating is better by $0.0137$ to $0.0182$ nats of
+held-out log loss across three independent splits, every interval
+excluding zero, and roughly four fifths of that margin is the
+estimator, a batch fit against an online update, with one fifth the
+factor structure itself. Stratification helps Glicko-2 and hurts our
+scalar, because its benefit is capped by what pooling already captures
+while its cost is not. Opening family is unidentifiable because players
+choose openings, opponent-strength curvature is real but almost
+entirely shared, and modern Lichess no longer poses the question, with
+$0.3\%$ of players mixing time controls against $52\%$ in 2013.
+\end{abstract}
+
+\section{Introduction}
+
+A rating is conventionally a number. Elo \citep{elo1978},
+Glicko \citep{glickman1999}, TrueSkill \citep{herbrich2007} and their
+descendants all summarise a competitor by a scalar, optionally with an
+uncertainty attached. When a rating needs to reflect that ability
+varies by context, say a player strong at speed chess and ordinary at
+slow, the standard remedy is to stratify: keep one rating per
+category. Lichess does exactly this, maintaining independent Glicko-2
+ratings for bullet, blitz and classical.
+
+Stratification is a choice with a price. Each category's rating is
+estimated only from that category's games, so a player with many blitz
+games and few bullet games gets a well-estimated blitz rating and a
+noisy bullet one, and nothing the blitz games reveal about their
+general strength is allowed to inform the bullet number. The
+alternative is partial pooling: estimate the level from everything and
+let only the \emph{deviations} be category-specific, shrunk toward
+zero. Ability becomes a vector $\mu_i(x) = d_i \cdot x$ with
+$x = [1, \mathbf{1}\{\text{bullet}\}, \mathbf{1}\{\text{blitz}\}]$,
+and a per-feature penalty leaves the level free while shrinking the
+offsets.
+
+The question is which is better, measured against the deployed system
+rather than a textbook baseline, and what the difference is made of.
+
+\section{Data and protocol}
+
+One month of the Lichess open database (2013-01, CC0), reduced to
+headers. We keep decisive games between players with at least 100 games in the
+month, 59{,}399 games among 639 players; draws are dropped. Each game is labelled with its
+time control.
+
+Games are split 50/25/25 into fitting, validation and scored sets, and
+every arm sees the same games. Glicko-2's $\tau$ is tuned on the
+validation split exactly as our ridge is; neither side is given a free
+parameter the other lacks. Held-out mean log loss is reported on the
+scored quarter only, and intervals come from a paired bootstrap over
+20{,}000 resamples. Three independent splits are reported throughout,
+because a single split on this kind of data is not evidence.
+
+Four arms are compared. \emph{Glicko-2 pooled} ignores time control.
+\emph{Glicko-2 per time control} is Lichess's deployed architecture.
+\emph{Our scalar} is a batch Thurstonian maximum-a-posteriori fit with
+one parameter per player, and exists to separate the estimator from the
+structure. \emph{Our factor} adds the shrunk offsets.
+
+\section{Result}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+arm & seed 0 & seed 11 & seed 22 \\
+\midrule
+Glicko-2 pooled & 0.6323 & 0.6304 & 0.6365 \\
+Glicko-2 per time control \emph{(Lichess)} & 0.6234 & 0.6241 & 0.6294 \\
+our scalar & 0.6117 & 0.6131 & 0.6145 \\
+\textbf{our factor} & \textbf{0.6073} & \textbf{0.6104} & \textbf{0.6112} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The pooled factor rating beats the deployed architecture on
+every split. Decomposed:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+comparison & seed 0 & seed 11 & seed 22 \\
+\midrule
+\textbf{factor vs Lichess} & $-0.0161$ & $-0.0137$ & $-0.0182$ \\
+estimator (scalar vs Glicko-2 pooled) & $-0.0206$ & $-0.0173$ & $-0.0219$ \\
+structure (factor vs our scalar) & $-0.0044$ & $-0.0027$ & $-0.0033$ \\
+stratification's value to Glicko-2 & $+0.0089$ & $+0.0063$ & $+0.0071$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Every interval excludes zero on every split, with
+$P(\text{better}) \ge 0.995$.
+
+The headline should not be quoted without the decomposition. Roughly
+four fifths of the margin is the estimator, a batch fit that sees the
+training games at once against an online update that sees each game
+once, and one fifth is the factor structure. The structure's own
+contribution, $0.003$ to $0.004$ with intervals excluding zero on all
+three splits, is the part that answers the question posed. The estimator column is a real advantage but
+a different claim, and it is partly a privilege: a production system
+must process games once, and ours need not.
+
+\section{Why stratification helps Glicko-2 and not the batch estimator}
+
+Two facts in the table look contradictory and are not. Stratifying
+Glicko-2 \emph{gains} $0.0063$--$0.0089$. Stratifying our scalar
+\emph{loses} $0.0006$. Partial pooling of the same information gains
+$0.0027$--$0.0044$.
+
+Stratification's payoff runs inversely to the quality of the base
+estimator. Its benefit is the category information; its cost is
+sparse-cell variance. When the base estimator is weak, the benefit
+dominates. When the base estimator is strong, the pooled level already
+captures most of what the category would have told you, and only the
+variance cost remains. Partial pooling extracts the same signal without
+paying that cost, which is why it wins in both regimes and is the
+unconditional recommendation. A practitioner reporting that
+stratification helped them has reported something about their base
+estimator, not found a counterexample.
+
+\section{The covariates that did not work}
+
+The time-control result is not evidence that any covariate would do,
+and the failures are more informative than the success.
+
+\paragraph{Opening family fails, and the mechanism generalises.} A fair
+fit, with the offset ridge swept to the scalar limit, collapses exactly
+onto the scalar. The axis is nonetheless real: among 790 players with at
+least 20 games in each family, the style differential carries a true
+standard deviation of about 4.7 win-rate points, roughly four sigma
+above binomial noise. It is \emph{unidentifiable, not absent}. Players
+choose their openings, so the within-player contrast that
+identification requires barely exists: the tactical share is bimodal
+with deciles $0.00/0.10/0.86/0.98/1.00$ and a standard deviation of
+$0.415$, against $0.058$ under a no-choice null. A factor rating needs
+a covariate that varies within a player for reasons other than the
+player's preference.
+
+\paragraph{Opponent strength is real but shared.} The signed
+opponent-strength gap passes the exogeneity requirement by
+construction, since pairing hands every player a spread of opponents.
+Fitted against a deliberately fair baseline, a scalar plus one global
+curvature coefficient rather than a bare scalar, the per-player offsets are identifiable, with a tuned ridge interior at
+$10.0$ and surviving offset standard deviation $0.1316$. But the gain
+is $-0.00056$ with interval $[-0.00117, +0.00005]$, spanning zero, and
+eight times smaller than time control. The global coefficient is
+$-0.584$: one shared parameter absorbs nearly all of the
+opposition-strength signal, leaving only per-player deviations for the
+factor arm. Against a bare scalar this axis would have looked strong,
+and that comparison would have been a straw man.
+
+So of three identifiable covariates, level, time control and opponent
+strength, the factor treatment pays on one.
+
+\section{Robustness}
+
+\paragraph{Colour is not the confound.} Our arms model the white
+advantage and standard Glicko-2 does not, so the estimator column
+invites the suspicion that it is colour bookkeeping. It is not: colour
+is worth $-0.0016$ of the $-0.0206$ gap, and a colour-blind fit still
+beats colour-blind Glicko-2 by $-0.0190$ like for like.
+
+\paragraph{The result is not an artifact of the dense subpopulation, but
+the mechanism's own prediction failed.} Rerunning at inclusion
+thresholds of $100/50/25/10$ games moves observations per parameter
+from $30.9$ to $15.3$ and the margin stays between $-0.016$ and
+$-0.019$ throughout, every interval excluding zero. The robustness
+question is answered. The registered prediction, however, was that
+pooling should pay \emph{most} where data is scarcest and the margin
+should widen. It does not: it is flat within noise and not monotone.
+The factor advantage is roughly constant in population density rather than concentrated among data-poor players,
+which leaves the pooling account unrefuted but unconfirmed by the one
+test that could have confirmed it.
+
+\paragraph{Our arm is not winning by being overconfident.} Glicko-2
+propagates rating deviation into every prediction; our arm prices a
+point estimate with fixed noise, so only one side carries its own
+uncertainty. Giving ours a validation-tuned temperature returns
+$s^\star = 1.1$ and improves held-out loss by $0.0001$, with an
+interval spanning zero; the margin moves from $-0.0161$ to $-0.0162$.
+The arm was already calibrated and the asymmetry costs nothing. For
+completeness, pricing instead with a per-player predictive variance
+taken from the diagonal of the inverse penalised Hessian is
+significantly \emph{worse}, by $+0.0015$.
+
+\section{Limitations}
+
+\paragraph{Batch against online.} Our estimator revisits the training set;
+Glicko-2 processes each game once because a deployed system must. Part
+of the estimator column is that privilege, and the deployment-realistic
+comparison, online against online, is not run here.
+
+\paragraph{Draws are dropped.} They are 3.3\% of games in this pool and far more at
+longer time controls and higher strength. A three-way outcome model
+is the right treatment.
+
+\paragraph{One month of 2013.}
+The obvious next step is a modern month, and it cannot currently be
+taken. In 2024-01 the time-control covariate is unidentifiable: only
+$0.3\%$ of players have at least 20 games in two or more time controls,
+against $52\%$ in 2013, at every inclusion threshold we tried. Contrast
+falls as activity rises, since the most active players are the most
+specialised, 93.1\% bullet, so more data makes identification worse
+rather than better, and restricting to the players who do mix controls
+fails from the other side, leaving 904 players sharing 2{,}839 games
+at roughly one observation per parameter. This is not evidence against
+the result; no arm was fitted. It means the result holds on a
+population where players mixed time controls, and that population no
+longer exists at scale on this site.
+
+\section{Conclusion}
+
+A partially pooled vector rating beats a rating system in production,
+on its own data, by $0.0137$ to $0.0182$ nats. Most of that is the
+estimator and about a fifth is the pooling, and both parts are worth
+stating separately. The wider claim the data supports is narrower than
+``ratings should be vectors'': it is that \emph{conditioning} is the
+expensive way to use category information and \emph{pooling} is the
+cheap one, that the gap between them is largest for whoever has the
+weaker base estimator, and that the covariate must vary within a player
+for reasons the player does not choose. Opening choice fails that
+condition, opponent strength satisfies it while carrying almost no
+per-player signal, and time control satisfied it in 2013 and no longer
+does.
+
+\begin{thebibliography}{9}
+\bibitem[Elo(1978)]{elo1978} A.~E. Elo. \emph{The Rating of Chessplayers,
+Past and Present}. Arco, New York, 1978.
+\bibitem[Glickman(1999)]{glickman1999} M.~E. Glickman. Parameter
+estimation in large dynamic paired comparison experiments.
+\emph{Journal of the Royal Statistical Society C} 48(3) (1999) 377--394.
+\bibitem[Glickman(2012)]{glickman2012} M.~E. Glickman. Example of the
+Glicko-2 system. Boston University technical note, 2012.
+\bibitem[Herbrich et~al.(2007)Herbrich, Minka, and Graepel]{herbrich2007}
+R.~Herbrich, T.~Minka, T.~Graepel. TrueSkill(TM): a Bayesian skill
+rating system. \emph{Advances in Neural Information Processing Systems}
+19 (2007) 569--576.
+\bibitem[James and Stein(1961)]{james1961} W.~James, C.~Stein.
+Estimation with quadratic loss. \emph{Proceedings of the Fourth Berkeley
+Symposium on Mathematical Statistics and Probability} 1 (1961) 361--379.
+\bibitem[Efron and Morris(1975)]{efron1975} B.~Efron, C.~Morris. Data
+analysis using Stein's estimator and its generalizations. \emph{Journal
+of the American Statistical Association} 70(350) (1975) 311--319.
+\bibitem[Thurstone(1927)]{thurstone1927} L.~L. Thurstone. A law of
+comparative judgment. \emph{Psychological Review} 34(4) (1927) 273--286.
+\end{thebibliography}
+
+\end{document}
