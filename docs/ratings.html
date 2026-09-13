@@ -159,20 +159,20 @@ predict_factor(B, subset=[3, 7], x=[1, 0, 1])                       # win probab
       draw redrawn at every contest; a persistent group advantage is a
       different object and belongs in the means (a group column in the
       design of <code>fit_design_ratings</code>). On the Formula 1 data
-      that motivated the feature, the correlation is there (training
-      evidence prefers <code>rho</code> = 0.4 to independence by 28.7 nats
+      that motivated the feature the correlation is real (training
+      evidence prefers <code>rho</code> = 0.4 to independence by 24.7 nats
       over 158 races; same-team 1&ndash;2 finishes 0.274 observed against
-      0.123 under independence). Whether pricing it through this term
-      predicts better is not established in either direction: a first
-      consistent fit-and-price run read the held-out winner log-loss
-      worse by +0.053 [+0.019, +0.087] over 106 races, but its blocked arm
-      was integrated before the engine's node cloud was recentred on the
-      factor posterior, with a 2&ndash;5 percent variance error in that
-      arm's regime while the independent arm was exact, so the comparison
-      is being rerun on the corrected engine and those numbers are
-      provisional. No performance claim is made for the feature; the open
-      question is a persistent group term in the mean fitted alongside
-      <code>rho</code>.</p>
+      0.123 under independence). Pricing it through this term does not
+      predict better there: fitted and priced under one model on the
+      current engine, the blocked arm's held-out winner log-loss is worse
+      by +0.0427 [+0.0089, +0.0769] over 106 races, against the 0.005 bound
+      the control was held to, and its joint log-loss advantage is
+      &minus;0.0224 [&minus;0.0558, +0.0081], spanning zero. The engine
+      repairs of September 2026 moved the winner gap by about a fifth and
+      left the independent arm bit-identical; they do not account for it.
+      The feature ships as a modelling option, not a measured improvement;
+      the open question is a persistent group term in the mean fitted
+      alongside <code>rho</code>.</p>
 <pre><code>from winning.ratings import AbilityTracker, tune_block_rho
 
 sel = tune_block_rho(contests, rho_grid=(0.0, 0.2, 0.4, 0.6), drift=0.03)

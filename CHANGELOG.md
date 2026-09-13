@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Block-correlation docs (tracker docstring, README, ratings page) now
+  record the measured Formula 1 verdict on the current engine in place
+  of the provisional numbers: fitted and priced under one model, the
+  blocked arm's held-out winner log-loss is worse by +0.0427 [+0.0089,
+  +0.0769] against a 0.005 bound and its joint advantage -0.0224 spans
+  zero (bandits exp34 rerun, main 62f80c0). The engine repairs moved the
+  gap by about a fifth and left the independent arm bit-identical. The
+  feature ships as a modelling option, not a measured improvement.
+- `return_se` docstrings caution that the Laplace standard errors are
+  for inference, not for tempering predictions: pricing at
+  1 + Var(mu) measured worse on Lichess (+0.0015 [+0.0003, +0.0026],
+  bandits exp39).
 - The mixture engines behind the correlated and full-covariance updates
   recentre and rescale their scrambled-Sobol node cloud (rank >= 3) on
   the factor posterior after one pass at the prior nodes, with the
