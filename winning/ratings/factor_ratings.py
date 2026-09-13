@@ -2,8 +2,8 @@
 conditions, fitted by MAP through the engine's ranking likelihood.
 
 Model. Entrant j of a contest has ability mu_j = z_j . theta, with z_j
-an observed feature row and theta shared across the data set -- the
-DESIGN form (fit_design_ratings). The factor rating is the special
+an observed feature row and theta shared across the data set: the
+design form (fit_design_ratings). The factor rating is the special
 case in which entity i owns a coefficient row B_i over a covariate
 vector x observed on the contest: a level plus offsets, mu = B_i . x
 (fit_factor_ratings). Conditional on the features the performances are
@@ -14,64 +14,71 @@ gradient pushed through the design, dL/dtheta = Z' dL/dmu.
 Measured in the bandits programme (Chatbot Arena, 65,178 battles over
 53 models; Lichess, 59,399 games over 639 players; the spec is
 bandits/specs/factor_ratings_api.md and every number below has a
-per-observation CSV behind it):
+per-observation CSV behind it).
 
-- Pooling, not conditioning, is the active ingredient. Within one
-  estimator a separate rating per category does not significantly beat
-  one scalar rating on either data set (P 0.81-0.88 on Arena; +0.0006
-  n.s. on chess), while the factor form, one level estimated from every
-  contest with offsets shrunk toward it, beats both: -0.0051 [-0.0071,
-  -0.0030] nats per game against the stratified arm on chess. On
-  Arena the advantage is monotone in cell sparsity; on chess it is
-  roughly constant across player-density thresholds from 100 games to
-  10 (research/chess exp37: 639 to 2,373 players, every interval
-  excluding zero), so "pooling helps sparse entities most" is not
-  confirmed there -- a 10-game minimum excludes the genuinely sparse
-  regime. Against the production system the decomposition
-  matters (bandits exp35, three independent splits of the 59,399 games;
-  bandits/results/exp35_glicko2_seed{0,11,22}.csv and
-  results/exp35_output.txt): Glicko-2 pooled 0.6323 / 0.6304 / 0.6365,
-  Glicko-2 per time control (Lichess's architecture) 0.6234 / 0.6241 /
-  0.6294, this estimator's scalar 0.6117 / 0.6131 / 0.6145, factor
-  0.6073 / 0.6104 / 0.6112. Factor beats Lichess's architecture by
-  0.014-0.018 nats, every interval excluding zero; roughly four fifths
-  of that is the estimator (0.017-0.022) and one fifth the factor
-  structure (0.003-0.004, intervals excluding zero on every split).
-  Stratification does help Glicko-2 (+0.006 to +0.009) while it costs
-  this estimator's scalar 0.0006 (bandits/results/exp30_chess_tc.csv):
-  its payoff runs inversely to the base estimator's quality, because
-  its price is sparse-cell variance and its benefit is capped by what
-  pooling already captures. Partial pooling extracts the same signal
-  without that price and wins in both regimes, so the shrunk-offset
-  form is the recommendation whatever the base estimator -- the spec's
-  section 2.2 ("stratification does not beat a scalar") is formally
-  corrected to this.
-- The per-feature ridge is the mechanism, not a nicety. One shared
-  ridge made the factor arm LOSE on chess time control (+0.0037);
-  levels free and offsets shrunk turned the same data into a decisive
-  win (-0.0045 [-0.0057, -0.0032]). ridge= therefore takes a vector,
-  and sweep_offset_ridge tunes the offset penalty on a validation
-  slice, reporting when the optimum sits at the scalar limit (the
-  axis is then unidentifiable in that data).
-- Dimension is selectable from data the user may see: on Arena the
-  test loss troughs at a level plus two offsets and validation
-  troughs at the same place; d = 4 and 5 are significantly worse.
-- The gain is real, bounded and channel-limited: ~3% of what a rating
-  extracts over uniform on binary comparisons (eight times what a
-  saturated per-matchup model achieves), sixteen percent on cardinal
-  benchmark scores.
+Pooling, not conditioning, is the active ingredient. Within one
+estimator a separate rating per category does not significantly beat
+one scalar rating on either data set (P 0.81-0.88 on Arena; +0.0006
+n.s. on chess). The factor form, one level estimated from every
+contest with offsets shrunk toward it, beats both: -0.0051 [-0.0071,
+-0.0030] nats per game against the stratified arm on chess.
+
+On Arena the advantage is monotone in cell sparsity. On chess it is
+roughly constant across player-density thresholds from 100 games to
+10 (research/chess exp37: 639 to 2,373 players, every interval
+excluding zero), so "pooling helps sparse entities most" is not
+confirmed there; a 10-game minimum excludes the genuinely sparse
+regime.
+
+Against the production system the decomposition matters (bandits
+exp35, three independent splits of the 59,399 games;
+bandits/results/exp35_glicko2_seed{0,11,22}.csv and
+results/exp35_output.txt). Glicko-2 pooled scores 0.6323 / 0.6304 /
+0.6365, Glicko-2 per time control (Lichess's architecture) 0.6234 /
+0.6241 / 0.6294, this estimator's scalar 0.6117 / 0.6131 / 0.6145,
+and the factor form 0.6073 / 0.6104 / 0.6112. Factor beats Lichess's
+architecture by 0.014-0.018 nats, every interval excluding zero;
+roughly four fifths of that is the estimator (0.017-0.022) and one
+fifth the factor structure (0.003-0.004, intervals excluding zero on
+every split).
+
+Stratification does help Glicko-2 (+0.006 to +0.009) while it costs
+this estimator's scalar 0.0006 (bandits/results/exp30_chess_tc.csv).
+Its payoff falls as the base estimator improves, because its price is
+sparse-cell variance and its benefit is capped by what pooling already
+captures. Partial pooling extracts the same signal without that price
+and wins in both regimes, so the shrunk-offset form is the
+recommendation whatever the base estimator. The spec's section 2.2
+("stratification does not beat a scalar") is corrected to this.
+
+The per-feature ridge is the mechanism, not a nicety. One shared ridge
+made the factor arm lose on chess time control (+0.0037); levels free
+and offsets shrunk turned the same data into a decisive win (-0.0045
+[-0.0057, -0.0032]). ridge= therefore takes a vector, and
+sweep_offset_ridge tunes the offset penalty on a validation slice,
+reporting when the optimum is at the scalar limit (the axis is then
+unidentifiable in that data).
+
+Dimension is selectable from data the user may see: on Arena the test
+loss troughs at a level plus two offsets and validation troughs at the
+same place; d = 4 and 5 are significantly worse. The gain is real,
+bounded and channel-limited: about 3% of what a rating extracts over
+uniform on binary comparisons (eight times what a saturated
+per-matchup model achieves), sixteen percent on cardinal benchmark
+scores.
 
 Two transfer conditions, both checkable before fitting. Abilities must
 be static relative to the covariate: on Formula 1, constructor
 identity looked worth -0.25 nats against a driver-only baseline until
 the baseline was given a tuned recency half-life, after which it was
-worth +0.04 -- an omitted time dimension flatters any richer
+worth +0.04. An omitted time dimension flatters any richer
 parameterisation, so tune weights= for every arm before comparing.
+
 And the covariate must be exogenously varied: chess opening family
-gives a null result because players ARE their openings (per-player
+gives a null result because players are their openings (per-player
 tactical share sd 0.415 against a no-choice binomial null of 0.058),
-not because the axis is absent (it is real at ~4 sigma). A null on a
-self-selected covariate means unidentifiable, not absent;
+not because the axis is absent (it is real at about 4 sigma). A null
+on a self-selected covariate means unidentifiable, not absent;
 covariate_contrast_report is the one-line check.
 
 Max-wins throughout: order lists rows best first, higher theta is
@@ -472,7 +479,7 @@ def fit_design_ratings(events, n_feat, ridge=1.0, weights=None, base="normal",
 
     The standard errors are for inference about the coefficients, not
     for tempering predictions. Pricing at noise variance 1 + Var(mu)
-    from these diagonals measured WORSE on held-out Lichess games
+    from these diagonals measured worse on held-out Lichess games
     (+0.0015 [+0.0003, +0.0026] nats per game, bandits exp39) while the
     untempered MAP predictions were already calibrated (validation-tuned
     temper 1.1, worth -0.0001). A candidate cause, untested: the diagonal

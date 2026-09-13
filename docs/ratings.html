@@ -86,43 +86,43 @@
     <p>The shipped <code>winning.ratings</code> line carries two entry
       points beyond one number per entity. <code>fit_factor_ratings</code>
       estimates an entity's ability as a level plus offsets over
-      conditions observed on the contest &mdash; time control, task
-      category, surface &mdash; by MAP through the exact ranking
-      likelihood, with one ridge penalty per covariate. The penalty
-      vector is the mechanism, not a convenience: the level is estimated
-      from every contest the entity enters, and the offsets are shrunk
-      toward it, so an entity with few contests under some condition
-      falls back on its level rather than on zero. Measured on 65,178
-      Chatbot Arena battles and 59,399 Lichess games. On chess, a
-      partially pooled factor rating beats Lichess's deployed
+      conditions observed on the contest (time control, task category,
+      surface) by MAP through the exact ranking likelihood, with one
+      ridge penalty per covariate. The penalty vector is the mechanism,
+      not a convenience: the level is estimated from every contest the
+      entity enters, and the offsets are shrunk toward it, so an entity
+      with few contests under some condition falls back on its level
+      rather than on zero.</p>
+    <p>Measured on 65,178 Chatbot Arena battles and 59,399 Lichess games.
+      On chess, a partially pooled factor rating beats Lichess's deployed
       architecture (Glicko-2 maintained separately per time control) by
       0.014&ndash;0.018 nats of held-out log loss across three independent
       splits, every interval excluding zero. The win decomposes, and the
-      headline should not travel without the decomposition: roughly four
-      fifths is the estimator (a batch Thurstonian MAP fit against
+      headline should not be quoted without the decomposition: roughly
+      four fifths is the estimator (a batch Thurstonian MAP fit against
       Glicko-2's online update, 0.017&ndash;0.022) and roughly one fifth is
       the factor structure (0.003&ndash;0.004, intervals excluding zero on
-      all three splits), which is the part this API implements.
-      Stratification is not futile here &mdash; it is worth
-      0.006&ndash;0.009 to Glicko-2 &mdash; but partial pooling beats it:
-      within one estimator, pooling the level across conditions and
-      shrinking the offsets beats both the scalar and a per-condition
-      rating. On Arena the advantage grows with cell sparsity; on chess
-      it is roughly constant across player-density thresholds from 100
-      games down to 10 (2,373 players, 109k games, every interval
-      excluding zero), so it is not concentrated among data-poor
-      players, with the caveat that a 10-game minimum excludes the
-      genuinely sparse regime. The two
-      stratification numbers reconcile: the time-control signal is real,
-      and stratification is the lossy way to extract it, helping a weak
-      base estimator (Glicko-2 pooled, 0.6323) and costing a strong one
-      (this estimator's scalar, 0.6117, loses 0.0006 when stratified)
+      all three splits), which is the part this API implements.</p>
+    <p>Stratification is not futile here, since it is worth
+      0.006&ndash;0.009 to Glicko-2, but partial pooling beats it: within
+      one estimator, pooling the level across conditions and shrinking
+      the offsets beats both the scalar and a per-condition rating. On
+      Arena the advantage grows with cell sparsity. On chess it is
+      roughly constant across player-density thresholds from 100 games
+      down to 10 (2,373 players, 109k games, every interval excluding
+      zero), so it is not concentrated among data-poor players, with the
+      caveat that a 10-game minimum excludes the genuinely sparse
+      regime.</p>
+    <p>The two stratification numbers reconcile: the time-control signal
+      is real, and stratification is the lossy way to extract it, helping
+      a weak base estimator (Glicko-2 pooled, 0.6323) and costing a strong
+      one (this estimator's scalar, 0.6117, loses 0.0006 when stratified)
       because its price is sparse-cell variance. Partial pooling extracts
       the same signal without that price, which is why the shrunk-offset
-      form is the recommendation whatever the base estimator. With one shared
-      penalty the same factor arm loses (+0.0037), so
+      form is the recommendation whatever the base estimator. With one
+      shared penalty the same factor arm loses (+0.0037), so
       <code>sweep_offset_ridge</code> tunes the offset penalty on a
-      validation slice and reports when the optimum sits at the scalar
+      validation slice and reports when the optimum is at the scalar
       limit, which means the condition axis is unidentifiable in that
       data. The gain is real, bounded and channel-limited: about three
       percent of what a rating extracts over uniform on binary
@@ -156,23 +156,24 @@ predict_factor(B, subset=[3, 7], x=[1, 0, 1])                       # win probab
       and prediction use the same loadings, and <code>tune_block_rho</code>
       selects <code>rho</code> by the filter's own evidence without
       consulting any target event. The shared component is a mean-zero
-      draw redrawn at every contest; a persistent group advantage is a
-      different object and belongs in the means (a group column in the
-      design of <code>fit_design_ratings</code>). On the Formula 1 data
-      that motivated the feature the correlation is real (training
-      evidence prefers <code>rho</code> = 0.4 to independence by 24.7 nats
-      over 158 races; same-team 1&ndash;2 finishes 0.274 observed against
-      0.123 under independence). Pricing it through this term does not
-      predict better there: fitted and priced under one model on the
-      current engine, the blocked arm's held-out winner log-loss is worse
-      by +0.0427 [+0.0089, +0.0769] over 106 races, against the 0.005 bound
-      the control was held to, and its joint log-loss advantage is
-      &minus;0.0224 [&minus;0.0558, +0.0081], spanning zero. The engine
-      repairs of September 2026 moved the winner gap by about a fifth and
-      left the independent arm bit-identical; they do not account for it.
-      The feature ships as a modelling option, not a measured improvement;
-      the open question is a persistent group term in the mean fitted
-      alongside <code>rho</code>.</p>
+      draw; a persistent group advantage is a different object and
+      belongs in the means (a group column in the design of
+      <code>fit_design_ratings</code>).</p>
+    <p>On the Formula 1 data that motivated the feature the correlation
+      is real: training evidence prefers <code>rho</code> = 0.4 to
+      independence by 24.7 nats over 158 races, and same-team 1&ndash;2
+      finishes occur at 0.274 against 0.123 under independence. Pricing
+      it through this term does not predict better there. Fitted and
+      priced under one model on the current engine, the blocked arm's
+      held-out winner log-loss is worse by +0.0427 [+0.0089, +0.0769]
+      over 106 races, against the 0.005 bound the control was held to,
+      and its joint log-loss advantage is &minus;0.0224 [&minus;0.0558,
+      +0.0081], spanning zero.</p>
+    <p>The engine repairs of September 2026 moved the winner gap by about
+      a fifth and left the independent arm bit-identical; they do not
+      account for it. The feature ships as a modelling option, not a
+      measured improvement. The open question is a persistent group term
+      in the mean fitted alongside <code>rho</code>.</p>
 <pre><code>from winning.ratings import AbilityTracker, tune_block_rho
 
 sel = tune_block_rho(contests, rho_grid=(0.0, 0.2, 0.4, 0.6), drift=0.03)
