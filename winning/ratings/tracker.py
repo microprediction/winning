@@ -1,58 +1,59 @@
 """Scalable message-passing dynamic ratings: per-entity marginal beliefs.
 
 The finished form of the per-entity Bayesian filter (cf. the
-``research.kalman_tracker`` scaffold), wired to winning's FACTOR calibration
-(``race_probabilities`` / ``abilities_from_race``) throughout -- one model for
+``research.kalman_tracker`` scaffold), wired to winning's factor calibration
+(``race_probabilities`` / ``abilities_from_race``) throughout: one model for
 predict and for every observation, so the update is internally consistent.
-State is one (mean, var) per entity: no joint covariance, so a contest touches
-only its entrants -- O(entrants), no eigendecomposition. The scalable
+State is one (mean, var) per entity with no joint covariance, so a contest
+touches only its entrants: O(entrants), no eigendecomposition. The scalable
 alternative to the dense ``rate_history`` / ``walk_forward``.
 
 Temporal model (per entity; there is no natural ability level):
-  - the MEAN is pegged to the last value -- ability does not revert;
-  - the VARIANCE grows between contests sub-diffusively,
+  - the mean is pegged to the last value; ability does not revert;
+  - the variance grows between contests sub-diffusively,
         v <- v + drift * dt**alpha,   alpha < 1,
-    so the std grows slower than sqrt(dt) -- no OU ceiling / stationary level.
+    so the std grows slower than sqrt(dt); no OU ceiling or stationary level.
 
-Observations -- BOTH sources are CONTRAST evidence (no absolute level; only
-within-contest contrasts are identified) and fold through the SAME conjugate
+Observations. Both sources are contrast evidence (no absolute level; only
+within-contest contrasts are identified) and fold through the same conjugate
 contrast-space update (``market.update_market``), differing only in what is
 observed and its noise:
-  - MARKET observer: prices are a noisy read of ability contrasts;
+  - Market observer: prices are a noisy read of ability contrasts;
     y = abilities_from_race(prices), noise tau2.
-  - RESULTS observer: transformed finishing performances (min-wins) are a noisy
-    read of ability contrasts; y = -(transformed scores), noise beta2. Any
-    raw-result -> performance transform is the CALLER's, on the factor ability
-    unit -- winning stays domain-agnostic.
+  - Results observer: transformed finishing performances (min-wins) are a
+    noisy read of ability contrasts; y = -(transformed scores), noise beta2.
+    Any raw-result -> performance transform is the caller's, on the factor
+    ability unit; winning stays domain-agnostic.
 If only a finishing order is known (no magnitudes), the exact N-way Thurstone
 factor (``nway``) is used for that observer instead.
 
-BLOCK CORRELATION (same-group entrants). Pass ``groups`` with a contest and
+Block correlation (same-group entrants). Pass ``groups`` with a contest and
 set ``rho`` and every observer prices the blocked model, variance-
 preserving: x_j = s_j + sqrt(rho beta2) z_g(j) + sqrt((1 - rho) beta2) eps_j,
 so each marginal keeps variance beta2 and only the joint changes. Fit and
 prediction use the same V. rho is selected by the filter's own evidence,
-``tune_block_rho`` -- the sum of log P(observation) every update already
-returns -- which never sees a target event.
+``tune_block_rho``, the sum of log P(observation) every update already
+returns, which never sees a target event.
 
-WHAT THE CODE DOES, and what is measured. The shared component z_g is
-redrawn at every contest, a mean-zero draw common to the group's members
-in that contest; a persistent group advantage is a different object and
-belongs in the means (a group column in the design of fit_design_ratings,
-or a shared offset), whatever this term is set to. On the Formula 1 data
-that motivated the feature (bandits exp33 / exp34) the correlation is
-real: same-team 1-2 finishes occur at 0.274 against 0.123 under
-independence, and training evidence prefers rho = 0.4 to independence by
-24.7 nats over 158 races. Pricing it through this term does NOT predict
-better there. Fitted and priced under one model on the current engine
-(main 62f80c0, 2026-09-12), the blocked arm's held-out winner log-loss is
-WORSE by +0.0427 [+0.0089, +0.0769] over 106 races, against the 0.005
-bound the control was held to, and its joint log-loss advantage is
--0.0224 [-0.0558, +0.0081], P 0.919, spanning zero. The engine repairs of
-PRs #35 and #37 moved the winner gap from +0.0527 by about a fifth and
-left the independent arm bit-identical (zero loadings make the factor
-shift vanish); they do not account for the gap. The feature ships as a
-modelling option, not a measured improvement; the open question is a
+The shared component z_g is redrawn at every contest, a mean-zero draw
+common to the group's members in that contest. A persistent group advantage
+is a different object and belongs in the means (a group column in the design
+of fit_design_ratings, or a shared offset), whatever this term is set to.
+
+On the Formula 1 data that motivated the feature (bandits exp33 / exp34) the
+correlation is real: same-team 1-2 finishes occur at 0.274 against 0.123
+under independence, and training evidence prefers rho = 0.4 to independence
+by 24.7 nats over 158 races. Pricing it through this term does not predict
+better there. Fitted and priced under one model on the current engine (main
+62f80c0, 2026-09-12), the blocked arm's held-out winner log-loss is worse by
++0.0427 [+0.0089, +0.0769] over 106 races, against the 0.005 bound the
+control was held to. Its joint log-loss advantage is -0.0224 [-0.0558,
++0.0081], P 0.919, spanning zero.
+
+The engine repairs of PRs #35 and #37 moved the winner gap from +0.0527 by
+about a fifth and left the independent arm bit-identical (zero loadings make
+the factor shift vanish); they do not account for the gap. The feature ships
+as a modelling option, not a measured improvement. The open question is a
 persistent group term in the mean fitted alongside rho.
 
 Cost: one factor dimension per group of two or more in the contest; two or
@@ -88,9 +89,9 @@ def _truncnorm(mean, sd, lo, hi, rng):
 
 
 def order_augmented(m, v, order, beta2, rng, n_aug=60, burn=20):
-    """Consistent censored-order update by DATA AUGMENTATION.
+    """Consistent censored-order update by data augmentation.
 
-    Observing only the finishing ORDER censors the performance magnitudes; a
+    Observing only the finishing order censors the performance magnitudes; a
     single Gaussian moment-match of the (non-Gaussian) rank posterior --
     ``nway.update_ranking`` -- is only approximately consistent. This reinstates
     the censored magnitudes and Gibbs-samples the joint (ability a, latent
@@ -102,7 +103,7 @@ def order_augmented(m, v, order, beta2, rng, n_aug=60, burn=20):
 
     returning the posterior (mean, var) of a. This is the principled treatment
     of the censored observation (proper Bayes, no Gaussian projection of the
-    rank posterior). It is SLOW -- a Gibbs sweep per contest -- and exists only
+    rank posterior). It is slow, a Gibbs sweep per contest, and exists only
     for order-only sports; whenever performance magnitudes are observed, feed
     ``scores`` instead -- the exact linear-Gaussian update.
     """
@@ -131,7 +132,7 @@ def block_loadings(groups, rho, beta2=1.0):
     are none or rho == 0), and beta2_vec (n,) is the idiosyncratic variance,
     (1 - rho) * beta2 for grouped entrants and beta2 for singletons, so every
     marginal keeps variance beta2 whatever rho is. A label of None means "no
-    group". Adding shared noise ON TOP of unit noise instead (lambda z + eps)
+    group". Adding shared noise on top of unit noise instead (lambda z + eps)
     inflates the total to 1 + lambda^2 while the means were fitted at unit
     variance, and the marginals flatten mechanically -- measured at +0.077
     on a winner control before this parameterisation cut it to +0.017.
@@ -287,7 +288,7 @@ class AbilityTracker:
                 order: Optional[Sequence[int]] = None, winner: Optional[int] = None,
                 prices: Optional[Sequence[float]] = None,
                 groups: Optional[Sequence] = None) -> None:
-        """Fold one contest's evidence. BOTH observers (market prices, results)
+        """Fold one contest's evidence. Both observers (market prices, results)
         are contrast evidence through the same conjugate update. ``groups``
         (one label per entrant, None for ungrouped) switches every observer to
         the block-correlated model when rho > 0; log P(observation) is added
@@ -300,7 +301,7 @@ class AbilityTracker:
             model = {} if V is None else {"V": V, "D": b2}
             m, v, lz = update_market(m, v, np.asarray(prices, float), tau2=self.tau2, **model)
             self.evidence += lz
-        if scores is not None:                                     # results observer, MAGNITUDES
+        if scores is not None:                                     # results observer, magnitudes
             # The consistent path whenever performance magnitudes are observed.
             # Transformed performances are a linear-Gaussian observation
             # of ability, so update_market's conjugate contrast update is exact --
@@ -317,7 +318,7 @@ class AbilityTracker:
                                                V=V, beta2=b2)
                 v = np.maximum(np.diag(S).copy(), 1e-6)
             self.evidence += lz
-        elif order is not None:                                    # ORDER-ONLY fallback
+        elif order is not None:                                    # order-only fallback
             # Ranks censor the magnitudes. 'exact' uses winning's exact win-node
             # ranking factor (matches the Gibbs reference); 'moment' is the fast
             # biased moment-match; 'augmented' is the slow Gibbs reference itself.
