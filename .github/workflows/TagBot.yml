@@ -1,0 +1,31 @@
+name: TagBot
+on:
+  issue_comment:
+    types:
+      - created
+  workflow_dispatch:
+    inputs:
+      lookback:
+        description: "[DEPRECATED] No longer has any effect"
+        default: "3"
+jobs:
+  TagBot:
+    if: github.event_name == 'workflow_dispatch' || github.actor == 'JuliaTagBot'
+    runs-on: ubuntu-latest
+    steps:
+      # The Julia packages live in subdirectories, so each gets its own
+      # step and its tags are named after the package, not the path:
+      # MultinomialProbit-v0.1.0, GMRFExtremes-v0.1.0. The repo's bare
+      # v-tags belong to the Python releases.
+      - uses: JuliaRegistries/TagBot@cded32665b34ca0496d3ac10a67d08ddfc726963 # v1.25.11
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          subdir: julia/MultinomialProbit
+      - uses: JuliaRegistries/TagBot@cded32665b34ca0496d3ac10a67d08ddfc726963 # v1.25.11
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          subdir: julia/GMRFExtremes
+      - uses: JuliaRegistries/TagBot@cded32665b34ca0496d3ac10a67d08ddfc726963 # v1.25.11
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          subdir: julia/MvNormalCDFFast
