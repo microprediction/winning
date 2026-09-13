@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `winning.ratings.orders`: `order_from_positions`, `order_from_performance`,
+  `order_from_times` and `positions_from_order` name the conversion into
+  the best-first `order` every ranked update takes. A rank array
+  (position of entrant i) is the inverse permutation, passes every
+  runtime check, coincides with the order at K = 2 and is silently wrong
+  at K >= 3, where it produces a plausible walk that learns much less
+  (reported by the bandits session, hit twice). The ranked-update
+  docstrings now say so and point at the module's self-test.
 - Block-correlation docs (tracker docstring, README, ratings page) now
   record the measured Formula 1 verdict on the current engine in place
   of the provisional numbers: fitted and priced under one model, the

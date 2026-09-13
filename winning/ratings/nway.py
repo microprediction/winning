@@ -1,13 +1,13 @@
 """Exact N-way Thurstone rating updates.
 
-TrueSkill-style systems propagate skill beliefs through PAIRWISE probit
+TrueSkill-style systems propagate skill beliefs through pairwise probit
 factors because N-way race factors lacked tractable moments. The shared
 survival field supplies those moments exactly:
 
     E[s_j | i wins]  = m_j + v_j d log p_i / d m_j
     Var[s_j | i wins] = v_j + v_j^2 d^2 log p_i / d m_j^2
 
-and because the choice Jacobian is symmetric, ONE O(QNL) Jacobian-vector
+and because the choice Jacobian is symmetric, one O(QNL) Jacobian-vector
 product returns the gradient row for every player simultaneously. Both
 identities are verified against brute-force Monte Carlo in the tests.
 
@@ -66,7 +66,7 @@ _CURVE_M_MIN, _CURVE_M_MAX = 4097, 32769
 
 
 def _noise_span(base):
-    """(lo, hi) support extent of the MAX-wins standardized noise
+    """(lo, hi) support extent of the max-wins standardized noise
     variable: the min-wins base's (left, right) tails, flipped."""
     if callable(base):
         left, right = getattr(base, "span", (12.0, 12.0))
@@ -77,7 +77,7 @@ def _noise_span(base):
 
 
 def _predictive_curves(v, beta2, base):
-    """Per-player curves of the PREDICTIVE marginal x_j - m_j =
+    """Per-player curves of the predictive marginal x_j - m_j =
     (s_j - m_j) + e_j, with s_j ~ N(m_j, v_j) the Gaussian belief and
     e_j = sqrt(beta2_j) eps the performance noise (eps the module's
     max-wins standardized base variable, density f_min(-z)).
@@ -85,7 +85,7 @@ def _predictive_curves(v, beta2, base):
     This is the clean-Bayes replacement for folding belief variance
     into the base's own scale. Belief variance is epistemic, noise
     variance aleatoric, and their sum lands back in the base family
-    ONLY for the normal (Gaussian convolved with Gaussian is Gaussian).
+    only for the normal (Gaussian convolved with Gaussian is Gaussian).
     Pricing a laplace race as laplace at variance v + beta2 overstates
     a near-even favorite by ~4 points of win probability -- measured:
     engine 0.4966 = pure-laplace-at-summed-variance MC 0.4965, true
@@ -201,7 +201,7 @@ def _winner_moments_curves(m, curves, i, L=4001, need_d2=True):
 def predictive_win_probabilities(m, v=None, beta2=1.0, base="normal", V=None,
                                  S=None, Qf=7, nodes_log2=10, points=257,
                                  L=4001):
-    """Win probabilities of a field under the belief AND the noise: skill
+    """Win probabilities of a field under the belief and the noise: skill
     s ~ N(m, v) (or N(m, S) with a full covariance), performance
     x = s + (V f) + sqrt(beta2) eps with eps the base noise. This is the
     predictive the winner updates condition on, so predict and evidence
@@ -211,7 +211,7 @@ def predictive_win_probabilities(m, v=None, beta2=1.0, base="normal", V=None,
     race_probabilities on the summed covariance, exact. Any other base:
     the belief is split into a diagonal part psi and loadings B
     (S = B B' + diag(psi); a diagonal belief costs no nodes), each
-    entrant's marginal is the N(0, psi_j) belief CONVOLVED with the base
+    entrant's marginal is the N(0, psi_j) belief convolved with the base
     noise (_predictive_curves) -- not the base at combined variance,
     the shortcut that mispriced a near-even favorite by four points --
     and the field is priced by the ordered-statistics pass at every
@@ -269,13 +269,13 @@ def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
     """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP.
 
     With V/F/W supplied, the mixture over the factor nodes is computed
-    by the engine's shared field in ONE vectorized pass -- the same
+    by the engine's shared field in one vectorized pass, the same
     mixture a per-node python loop assembles at 30-100x the cost (the
     full-covariance updates lean on this).
 
     base is any standardized density the engine accepts, so the moment
     updates inherit the race layer's density-agnosticism: the Gaussian
-    moment identities need a Gaussian PRIOR, not Gaussian performance.
+    moment identities need a Gaussian prior, not Gaussian performance.
     winning.factor.races.failure_base gives the retirement/DNF case."""
     n = len(m)
     Vz = np.zeros((n, 1)) if V is None else V
@@ -301,11 +301,11 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     """Exact-moment posterior (m, v) update given `winner` won the race.
 
     m, v: prior skill means and variances; beta2: performance noise
-    variance (scalar or per-player). The event is priced under the TRUE
+    variance (scalar or per-player). The event is priced under the true
     predictive marginal of each performance: for base="normal" that is
     the normal at D = v + beta2 (the Gaussian is stable under
     convolution) and the historical analytic path is unchanged; for
-    every other base the predictive is the Gaussian belief CONVOLVED
+    every other base the predictive is the Gaussian belief convolved
     with the base noise (_predictive_curves), which the former
     D = v + beta2 shortcut mispriced -- a ~4-point win-probability bias
     and a 57% winner-variance understatement for laplace (see
@@ -324,7 +324,7 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     m_new = m + v * g
     # diagonal second derivatives by per-coordinate central differences of
     # the gradient row (analytic second-order pass is a known follow-up).
-    # The step is RELATIVE, eps times the coordinate's predictive sd: an
+    # The step is relative, eps times the coordinate's predictive sd: an
     # absolute step made the variances only approximately scale-covariant
     # (verifier, 2026-09-11: 1.6e-4 at a tenth of unit scale) where the
     # full-covariance path's relative steps are covariant to 1e-8; at
@@ -369,28 +369,31 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     order[t:]); each stage applies the exact winner update on the shrinking
     field (stage-wise exact moment matching).
 
-    order: indices from first to last finisher.
+    order: entrant indices from first to last finisher, best first.
+    A rank array (position of entrant i) is the inverse permutation and is
+    silently wrong at K >= 3; convert it with order_from_positions (see
+    winning.ratings.orders for the convention and a self-test).
 
-    HONEST CAVEAT (measured, season_ranked): this sequential decomposition
+    Caveat (measured, season_ranked): this sequential decomposition
     treats each stage as a fresh race with fresh noise, but a real
-    ranking's stages share ONE performance realization per player.
+    ranking's stages share one performance realization per player.
     Reference TrueSkill respects that shared structure and beats this
     update on full rankings (RMSE 0.085 vs 0.310 at 1500 races), while the
     exact winner update dominates on winner-only data (0.331 vs 0.815).
 
-    The same defect biases STRUCTURE LEARNING, and the bias is measured
+    The same defect biases structure learning, and the bias is measured
     (bandits repo, family-vs-outsider world, 2026-08-28): learning a
     correlation scale by gradient ascent on stagewise-decomposed rankings
     under the Gaussian base inflates it three-fold (s_hat 1.53 +/- 0.36
     against 0.56 +/- 0.05 from winner-only events on the same data) --
     the shared realization across stages masquerades as factor
     correlation. Stagewise is exact under the Gumbel base only (IIA).
-    For the LIKELIHOOD the fix now exists: order_loglik (this module)
+    For the likelihood the fix now exists: order_loglik (this module)
     mixed over Gaussian factor nodes is the exact correlated ranking
     likelihood, measured unbiased where this stagewise shortcut was 3x
     off; the stagewise decomposition stays exact under Gumbel only
     (Plackett-Luce; winning.likelihood.ranking_loglik_and_score). On the
-    MOMENT-UPDATE side the ladder is now complete:
+    moment-update side the ladder is now complete:
     update_ranking_exact (below) is the shared-realization-correct
     member for independent skills, and update_winner_correlated /
     update_order_correlated are its factor-correlated mixtures,
@@ -399,14 +402,14 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
 
     That cost, measured against update_ranking_exact on identical
     evidence (bandits audit, 2026-09-04, every stage's marginal priced
-    by the exact predictive curves), is TWO separate defects. First,
+    by the exact predictive curves), is two separate defects. First,
     the fresh-noise-per-stage assumption double-counts the shared
-    realization and OVER-SHRINKS variance by a roughly constant 21-28%
+    realization and over-shrinks variance by a roughly constant 21-28%
     on any non-IIA base (approx/exact posterior variance 0.765 normal,
     0.775 logistic, 0.794 laplace, 0.794 student-t(4)) -- and by ~0%
     under gumbel (0.977, mean error ratio 1.002), where IIA makes the
     decomposition exact: the control that pins the mechanism. Second,
-    the POINT ESTIMATE degrades with tail weight (RMS mean error vs
+    the point estimate degrades with tail weight (RMS mean error vs
     exact: 1.20 normal rising to 1.25 student-t(4)), and it is this,
     not extra shrinkage, that drives the coverage ladder at a 0.95
     target -- gumbel 0.925, normal 0.890, logistic 0.870, laplace
@@ -430,7 +433,7 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
 def _base_rows(x, m_j, sd_j, base):
     """Max-wins density, its m-derivative, and CDF for one player.
 
-    The engine's bases are standardized MIN-wins laws (S, f, fp at z);
+    The engine's bases are standardized min-wins laws (S, f, fp at z);
     this module is max-wins, so evaluate at -z: for X = -Y,
     f_max(z) = f_min(-z), P(X < x) = S_min(-z), and
     d/dm [f_min(-z)/sd] = fp_min(-z)/sd^2. Gaussian reduces to the
@@ -464,7 +467,7 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
 
     base is any standardized density the race layer accepts (default
     normal). A failure lump in the base is the point of this parameter:
-    with ranked feedback, a retirement is a LAST-PLACE finish, and the
+    with ranked feedback, a retirement is a last-place finish, and the
     lump lets Bayes split that observation between "slow" and "broke"
     instead of charging all of it to ability. Winner-only feedback
     barely sees a failure at all, since a failure simply is not the
@@ -568,7 +571,10 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
                          base="normal"):
     """Exact full-ranking update: means from the analytic gradient of the
     ordered-statistics likelihood, variances from a coarse FD of the
-    per-coordinate gradient (bounded below).
+    per-coordinate gradient (bounded below). order lists entrants first to
+    last finisher, best first. A rank array (position of entrant i) is the inverse permutation and is
+    silently wrong at K >= 3; convert it with order_from_positions (see
+    winning.ratings.orders for the convention and a self-test).
 
     On TrueSkill's home model (independent per-player noise, full order
     observed) this reproduces TrueSkill to ~1e-3 per rating -- their EP is
@@ -576,7 +582,7 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     express: beta2 may be a per-player array (consistent vs erratic
     performers), and the recursion extends to factor-correlated skills.
 
-    CENSORING IS A PARTIAL ORDER. Pass the order over the runners who
+    Censoring is a partial order. Pass the order over the runners who
     actually finished and the rest are marginalized out exactly: the
     likelihood of a partial order equals the sum over every position the
     omitted runner could have taken (verified to grid resolution in
@@ -613,15 +619,18 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
 
 
 def order_loglik(m, sd, order, L=2001, base="normal"):
-    """Exact log-likelihood of a full finishing order for INDEPENDENT
+    """Exact log-likelihood of a full finishing order for independent
     Gaussian performances, with its exact gradient in m: the public face
     of the ordered-statistics pass (one forward and one adjoint sweep,
     O(nL); explicit stage log-scales keep 20-player orders accurate).
+    order lists entrants first to last finisher, best first. A rank array (position of entrant i) is the inverse permutation and is
+    silently wrong at K >= 3; convert it with order_from_positions (see
+    winning.ratings.orders for the convention and a self-test).
 
-    Promoted to official API because it is load-bearing downstream:
-    mixed over Gaussian factor nodes it IS the exact correlated ranking
+    Promoted to official API because the correlated updates depend on it:
+    mixed over Gaussian factor nodes it is the exact correlated ranking
     likelihood -- sum_q w_q exp(order_loglik(m + F_q @ V.T, sqrt(D),
-    order)) -- which measured UNBIASED for structure learning where the
+    order)) -- which measured unbiased for structure learning where the
     Harville/stagewise shortcut inflated the learned correlation
     threefold (bandits repo, exact_scale_map: s_hat 0.65 +/- 0.35
     against stagewise 1.53 +/- 0.36 and winner-only 0.24 +/- 0.49 at
@@ -674,7 +683,7 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
                     base="normal", nodes_log2=10):
     """Shared engine of the correlated updates. For Gaussian priors,
     E[s_j | event] = m_j + v_j d log P / d m_j and
-    Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for ANY
+    Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for any
     event; with shared factors, log P is the log-mixture of conditional
     event probabilities over factor nodes, its gradient the posterior-
     node-weighted average of conditional gradients, and the diagonal
@@ -768,8 +777,11 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
                             base="normal", nodes_log2=10):
     """The shared-realization-correct full-order update with factor
     correlation: the factor mixture of update_ranking_exact, closing the
-    open item recorded in update_ranking's caveat. order lists players
-    first to last finisher (max-wins). Nodes as in
+    open item recorded in update_ranking's caveat. order lists entrants
+    first to last finisher, best first (max-wins). A rank array (position of entrant i) is the inverse permutation and is
+    silently wrong at K >= 3; convert it with order_from_positions (see
+    winning.ratings.orders for the convention and a self-test).
+    Nodes as in
     update_winner_correlated (Qf at rank <= 2, 2**nodes_log2 Sobol at
     rank >= 3). Returns (m_post, v_post, logZ),
     logZ = log P(order). Near-impossible orders degrade like
@@ -882,12 +894,11 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
         ok2 = mx > 0
         alive &= ok2
         u = u / np.where(ok2, mx, 1.0)[:, None]
-        sT_u = np.where(ok2, np.log(np.where(ok2, mx, 1.0)), 0.0)
         # fold the u-scale into a running offset against sT
         sT[t + 1] = sT[t + 1]  # scales already relative; denom uses same u
         if t + 1 <= n:
             pass
-        # carry: subsequent denom/num both use the SAME rescaled u, so the
+        # carry: subsequent denom/num both use the same rescaled u, so the
         # ratio is invariant to the rescale; nothing further to track
     # last coordinate
     denom = (u * T[n]).sum(axis=1)

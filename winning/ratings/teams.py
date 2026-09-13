@@ -48,7 +48,7 @@ def _cardinal_observation(margins=None, scores=None, lengths_scale=1.0,
     is better, negated) or scores= (HIGHER is better, used as-is after
     scaling). transform: None, a compression scale c for c*asinh(L/c),
     or a callable on raw margins; the Jacobian keeps evidence-based
-    tuning of c honest (a more compressive transform shrinks the data
+    tuning of c comparable across transforms (a more compressive transform shrinks the data
     and would otherwise win spuriously)."""
     if (margins is None) == (scores is None):
         raise ValueError("pass exactly one of margins= or scores=")
