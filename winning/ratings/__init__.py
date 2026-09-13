@@ -10,6 +10,8 @@ from .history import (rate_history, diffuse, diffuse_full,  # noqa: F401
                       walk_forward)
 from .teams import (update_team_winner_full, update_team_order_full,  # noqa: F401
                     update_team_margins_full, update_team_market_full)
+from .orders import (order_from_positions, order_from_performance,  # noqa: F401
+                     order_from_times, positions_from_order)
 from .tracker import (AbilityTracker, AbilityState,  # noqa: F401
                       order_augmented, block_loadings, tune_block_rho)
 from .factor_ratings import (fit_design_ratings, design_loglik,  # noqa: F401

@@ -61,9 +61,9 @@ def _psd_repair(S, floor_frac=1e-8):
 def _belief_split(S, tol=1e-8, max_rank=8):
     """Represent S = B B' + diag(psi) with psi >= 0.
 
-    This is the load-bearing construction of the full-covariance
-    updates. Putting ALL of S into the loading matrix (an earlier
-    Cholesky version did) makes the belief ride QUADRATURE, where the
+    The full-covariance updates depend on this construction. Putting
+    all of S into the loading matrix (an earlier Cholesky version did)
+    makes the belief ride quadrature, where the
     diagonal members ride the LATTICE analytically -- measurably worse
     marginals at every prior scale, and catastrophic under a diffuse
     prior. Splitting instead sends the diagonal part to the lattice as
@@ -300,7 +300,11 @@ def update_winner_full(m, S, winner, V=None, beta2=1.0, nodes_log2=10,
 def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
                       eps=None, eps_rel=0.15, base="normal"):
     """Full-order observation against a full-covariance belief
-    (max-wins, order best-first). Returns (m_post, S_post, logZ);
+    (max-wins, order lists entrants first to last finisher, best first).
+    A rank array (position of entrant i) is the inverse permutation and is
+    silently wrong at K >= 3; convert it with order_from_positions (see
+    winning.ratings.orders for the convention and a self-test).
+    Returns (m_post, S_post, logZ);
     near-impossible orders degrade like order_loglik.
 
     Belief split as in update_winner_full (a diagonal belief costs no

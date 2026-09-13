@@ -64,7 +64,7 @@ def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
     goals / times-negated, HIGHER is better, used as-is after scaling).
     transform= applies a sub-linear margin transform (a compression
     scale c for c*asinh(L/c), or a callable) with its Jacobian added to
-    logZ, so evidence-based tuning of c stays honest: raw lengths are
+    logZ, so evidence-based tuning of c compares like with like: raw lengths are
     superlinear in performance deficit (eased finishers, collapsing
     pace), and staying Gaussian on TRANSFORMED margins is the
     long-right-tail model placed in the measurement map. Returns
