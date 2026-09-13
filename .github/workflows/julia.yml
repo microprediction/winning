@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [winning, MultinomialProbit, MvNormalCDFFast, GMRFExtremes]
+        package: [winning, MultinomialProbit, FactorMvNormalCDF, GMRFExtremes]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2

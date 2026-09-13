@@ -1,7 +1,7 @@
 # Registering the Julia packages in General (Peter's checklist)
 
 Three packages live as subdirectories of this repo: `julia/winning`,
-`julia/MultinomialProbit`, `julia/MvNormalCDFFast`. The General
+`julia/MultinomialProbit`, `julia/FactorMvNormalCDF`, `julia/GMRFExtremes`. The General
 registry supports SUBDIRECTORY registration, so no repo split is
 needed. Steps (owner-only, which is why this is a checklist and not
 done):
@@ -17,15 +17,19 @@ done):
 3. Requirements the packages already meet: Project.toml with uuid,
    version, [compat] on julia; a copy of the MIT LICENSE INSIDE each
    package subdirectory (AutoMerge does not look at the repo root);
-   `MvNormalCDFFast`'s weakdep has an upper-boundable [compat] — add
-   `MvNormalCDF = "0.2, 0.3"` style bounds when registering, the
-   automerge bot requires compat entries for all deps.
+   `FactorMvNormalCDF` depends on MvNormalCDF with the compat bound
+   `MvNormalCDF = "0.2, 0.3"`; the automerge bot requires compat
+   entries for all deps. The package was first submitted as
+   MvNormalCDFFast (General #167315); the registry reviewer asked for
+   a name that says what distinguishes it, and the MvNormalCDF
+   maintainer (MvNormalCDF.jl#20) asked for a companion package that
+   exports its own names and delegates on refusal, which this is.
 4. Tags for subdirectory packages are named after the PACKAGE, not
    the path: `MultinomialProbit-v0.1.0`. Install TagBot
    (github.com/JuliaRegistries/TagBot), which gets the subdir naming
    right and only tags once a version is actually registered.
 
-Order: MultinomialProbit and MvNormalCDFFast can register
+Order: MultinomialProbit and FactorMvNormalCDF can register
 independently; register `julia/winning` whenever its API settles
 (blocks/tree/classic still on its roadmap).
 

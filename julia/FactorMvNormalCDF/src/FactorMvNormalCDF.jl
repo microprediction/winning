@@ -1,5 +1,5 @@
-# MvNormalCDFFast.jl: deterministic MVN rectangle probabilities for
-# factor-structured covariance -- the MvNormalCDF.jl drop-in for the
+# FactorMvNormalCDF.jl: deterministic MVN rectangle probabilities for
+# factor-structured covariance, the companion of MvNormalCDF.jl for the
 # V V' + diag(D) slice. Port of winning/fastmvn.py (itself a port of
 # the R package mvtnormfast); the python reference is the spec and the
 # embedded fixtures pin this port to it.
@@ -8,19 +8,19 @@
 # independent, so P(a <= X <= b) is an r-dimensional smooth integral
 # of a product of univariate normal CDFs: exact Gauss-Hermite
 # quadrature at rank <= 2 and sharpness <= 3, with a deterministic
-# Laplace-recentered evaluation for deep tails. THE REFUSAL CONTRACT:
-# past rank 2 or sharpness 3 the reference escalates to scrambled
-# Sobol, and plain Halton measurably degrades there (1e-4 at rank 6),
-# so rather than ship degraded nodes this package REFUSES and falls
-# back to the genuine incumbent -- load MvNormalCDF.jl and the
-# fallback activates via a package extension; without it, the error
-# says exactly what to do. An inexact factorization must never
-# masquerade as the structured case.
-module MvNormalCDFFast
+# Laplace-recentered evaluation for deep tails. The exact path claims
+# only what it computes exactly. Past rank 2 or sharpness 3 the
+# reference escalates to scrambled Sobol and plain Halton measurably
+# degrades there (1e-4 at rank 6), so those cases, and any covariance
+# that does not verify as factor-plus-diagonal, are delegated to
+# MvNormalCDF.mvnormcdf, a dependency, and every call is answered. An
+# inexact factorization never masquerades as the structured case.
+module FactorMvNormalCDF
 
 using LinearAlgebra: SymTridiagonal, eigen, Symmetric, diag, norm
+import MvNormalCDF
 
-export mvn_cdf_fast, mvn_cdf_fast_info, mvnormcdf, factorize_covariance
+export mvn_cdf_fast, mvn_cdf_fast_info, mvnormcdf_factor, factorize_covariance
 
 const TINY = 1e-300
 
@@ -198,18 +198,15 @@ function factorize_covariance(sigma::AbstractMatrix; max_rank = 6,
     return nothing
 end
 
-# the extension populates this hook when MvNormalCDF is loaded;
-# it returns (p, e) in the incumbent's convention
-const DENSE_FALLBACK = Ref{Union{Nothing,Function}}(nothing)
-
-function _dense_fallback(lower, upper, mean, sigma)
-    fb = DENSE_FALLBACK[]
-    fb === nothing && error(
-        "covariance is not factor-plus-diagonal to tolerance (or needs " *
-        "rank > 2 / sharpness > 3, where this package refuses rather " *
-        "than ship degraded quadrature). Load the incumbent for the " *
-        "dense path:  using MvNormalCDF")
-    return fb(lower, upper, mean, sigma)
+# Delegation to the incumbent for every case outside the exact path;
+# returns (p, e) in MvNormalCDF's convention. Keyword arguments (m, rng)
+# are forwarded so a caller controls the QMC budget there.
+function _dense_fallback(lower, upper, mean, sigma; kwargs...)
+    n = size(sigma, 1)
+    mu = mean === nothing ? zeros(n) : Float64.(collect(mean))
+    lo = lower === nothing ? fill(-Inf, n) : Float64.(collect(lower))
+    up = upper === nothing ? fill(Inf, n) : Float64.(collect(upper))
+    return MvNormalCDF.mvnormcdf(mu, Float64.(Matrix(sigma)), lo, up; kwargs...)
 end
 
 function _cell_expectation(F, W, V, s, mu, lo, up)
@@ -227,12 +224,12 @@ function _cell_expectation(F, W, V, s, mu, lo, up)
     return total
 end
 
-function _impl(lower, upper, mean, sigma, V, D)
+function _impl(lower, upper, mean, sigma, V, D; kwargs...)
     if V === nothing || D === nothing
         sigma === nothing && error("supply sigma, or V and D")
         fd = factorize_covariance(sigma)
         fd === nothing &&
-            return _dense_fallback(lower, upper, mean, sigma)[1], "fallback"
+            return _dense_fallback(lower, upper, mean, sigma; kwargs...)[1], "fallback"
         V, D = fd
     end
     Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
@@ -247,7 +244,7 @@ function _impl(lower, upper, mean, sigma, V, D)
     sharp = _sharpness(Vm, Dv)
     if r > 2 || sharp > 3.0
         sigma_d = Vm * Vm' .+ [i == j ? Dv[i] : 0.0 for i in 1:n, j in 1:n]
-        return _dense_fallback(lo, up, mu, sigma_d)[1], "fallback"
+        return _dense_fallback(lo, up, mu, sigma_d; kwargs...)[1], "fallback"
     end
     Q = Int(clamp(ceil(8.0 * sharp), 15, r == 1 ? 201 : 41))
     F, W = _gh_nodes(r, Q)
@@ -288,30 +285,32 @@ function _impl(lower, upper, mean, sigma, V, D)
 end
 
 """P(lower <= X <= upper), X ~ N(mean, V V' + diag(D)). Supply (V, D),
-or sigma for an exact-decomposition search; refused cases fall back to
-MvNormalCDF.jl when it is loaded."""
+or sigma for an exact-decomposition search. Cases outside the exact
+path go to MvNormalCDF.mvnormcdf; keyword arguments (m, rng) are
+forwarded to it."""
 mvn_cdf_fast(; lower = nothing, upper = nothing, mean = nothing,
-             sigma = nothing, V = nothing, D = nothing) =
-    _impl(lower, upper, mean, sigma, V, D)[1]
+             sigma = nothing, V = nothing, D = nothing, kwargs...) =
+    _impl(lower, upper, mean, sigma, V, D; kwargs...)[1]
 
-"""As mvn_cdf_fast, returning (p, method)."""
+"""As mvn_cdf_fast, returning (p, method) with method one of "factor",
+"factor-recentered" or "fallback"."""
 mvn_cdf_fast_info(; lower = nothing, upper = nothing, mean = nothing,
-                  sigma = nothing, V = nothing, D = nothing) =
-    _impl(lower, upper, mean, sigma, V, D)
+                  sigma = nothing, V = nothing, D = nothing, kwargs...) =
+    _impl(lower, upper, mean, sigma, V, D; kwargs...)
 
-"""MvNormalCDF-compatible signature: mvnormcdf(mu, Sigma, a, b)
-returning (p, e). The error estimate e is the difference between the
-working quadrature and a lower-order one -- honest and usually
-conservative on the exact path; fallback results carry the
-incumbent's own error."""
-function mvnormcdf(mu::AbstractVector, sigma::AbstractMatrix,
-                   a::AbstractVector, b::AbstractVector)
+"""MvNormalCDF's signature under this package's own name:
+mvnormcdf_factor(mu, Sigma, a, b; kwargs...) returning (p, e). On the
+exact path e is the difference between the working quadrature and a
+lower-order one, usually conservative; delegated results carry
+MvNormalCDF's own estimate, and kwargs (m, rng) go to it."""
+function mvnormcdf_factor(mu::AbstractVector, sigma::AbstractMatrix,
+                          a::AbstractVector, b::AbstractVector; kwargs...)
     fd = factorize_covariance(sigma)
-    fd === nothing && return _dense_fallback(a, b, mu, sigma)
+    fd === nothing && return _dense_fallback(a, b, mu, sigma; kwargs...)
     V, D = fd
     r = size(V, 2)
     sharp = _sharpness(V, D)
-    (r > 2 || sharp > 3.0) && return _dense_fallback(a, b, mu, sigma)
+    (r > 2 || sharp > 3.0) && return _dense_fallback(a, b, mu, sigma; kwargs...)
     p, _ = _impl(a, b, mu, nothing, V, D)
     # error estimate: re-evaluate at reduced order
     s = sqrt.(D)

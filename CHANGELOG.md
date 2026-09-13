@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- `julia/MvNormalCDFFast` is now `julia/FactorMvNormalCDF` (new UUID),
+  with MvNormalCDF.jl as a hard dependency: every case outside the
+  exact factor path (rank > 2, sharpness > 3, or a covariance that is
+  not factor-plus-diagonal) is delegated to `MvNormalCDF.mvnormcdf`
+  with `m` and `rng` forwarded, so every call is answered. The package
+  exports its own names only; `mvnormcdf_factor` carries MvNormalCDF's
+  signature. The name follows the General registry review of the first
+  submission (#167315) and the arrangement agreed with the MvNormalCDF
+  maintainer (MvNormalCDF.jl#20): companion package, own exports,
+  delegation on refusal.
 - `julia/winning` gains a test suite: `Pkg.test` runs the parity
   scenarios against `parity/vectors.json` plus intrinsic invariants,
   through `test/parity.jl`, which `parity/check.jl` now also calls. The

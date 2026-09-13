@@ -1,9 +1,9 @@
-"""Fixtures for MvNormalCDFFast.jl from the python reference
+"""Fixtures for FactorMvNormalCDF.jl from the python reference
 (winning.fastmvn is the spec). Exact-path cases pinned tight; the
 deep-tail cases loose (the reference uses Sobol there, the Julia port
 deterministic recentered GH).
 
-Run:  python julia/MvNormalCDFFast/gen_fixtures.py
+Run:  python julia/FactorMvNormalCDF/gen_fixtures.py
 """
 import json
 import os

@@ -16,6 +16,7 @@ factor, blocks, nested, tree), or a dense `cov=` that is fitted to the
 grammar on the way in.
 
 [![CI](https://github.com/microprediction/winning/workflows/CI/badge.svg)](https://github.com/microprediction/winning/actions)
+[![Julia](https://github.com/microprediction/winning/actions/workflows/julia.yml/badge.svg)](https://github.com/microprediction/winning/actions/workflows/julia.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ![The fastest time, the best offer and the most popular product are the same order statistic](docs/assets/images/winning-pic.png)
@@ -216,9 +217,10 @@ and a common-random-numbers GHK for head-to-heads.
 queries on Gauss-Markov chains, argmax marginals, max CDF, first
 passage and expected maximum, and takes a chain from
 GaussianMarkovRandomFields.jl through its precision matrix.
-[julia/MvNormalCDFFast](julia/MvNormalCDFFast) computes deterministic
-MVN rectangle probabilities for factor covariance and hands every other
-covariance to MvNormalCDF.jl; its registration is in progress.
+[julia/FactorMvNormalCDF](julia/FactorMvNormalCDF) computes
+deterministic MVN rectangle probabilities for factor covariance and
+hands every other covariance to MvNormalCDF.jl, which it depends on;
+its registration is in progress.
 
 ## History
 

@@ -28,4 +28,4 @@ jobs:
       - uses: JuliaRegistries/TagBot@cded32665b34ca0496d3ac10a67d08ddfc726963 # v1.25.11
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          subdir: julia/MvNormalCDFFast
+          subdir: julia/FactorMvNormalCDF
