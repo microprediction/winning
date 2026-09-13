@@ -195,8 +195,9 @@ rho fitted on one window does not transfer: the blocked arm's held-out
 winner log-loss is worse by +0.043 [+0.009, +0.077], while correctly
 specified on synthetic data it beats independence on every score. The
 [ratings page](https://winning.microprediction.org/ratings.html) has the
-numbers and the caveat that on ranked data a variance-preserving rho
-comparison is partly a noise-scale comparison.
+numbers and the caveat that under an order likelihood rho and beta2
+trade off, so a rho tuned at fixed beta2 is a blended estimate
+(`tune_block_rho` can sweep both).
 
 ## History
 

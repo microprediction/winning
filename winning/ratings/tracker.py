@@ -63,15 +63,25 @@ difference variance stays at 2 beta2 and within-team falls to 2 (1 - rho)
 beta2. The term is sound; the F1 result is about an unstable rho, and
 persistent team quality still belongs in the means.
 
-Comparing rho values on ranked data. The variance-preserving convention
-couples rho to the ordering noise: an equal-loading shock cannot change a
-finishing order (it cancels), so the idiosyncratic variance (1 - rho) beta2
-both correlates entrants and cuts the noise that does order them. A
-global factor sqrt(0.4) 1 with idiosyncratic variance 0.6 and independence
-with variance 0.6 return the same logZ to 4e-15 at K = 17, and that
-confound was 28 percent of the F1 damage. Hold the idiosyncratic variance
-fixed when comparing rho values, or report both comparisons; tune_block_rho
-as shipped compares at fixed marginal variance. Per-race CSVs: bandits
+Comparing rho values on ranked data. An order likelihood sees difference
+variances, and the two normalisations move different halves of them. At
+fixed marginal variance (the convention here: idiosyncratic (1 - rho) beta2)
+the within-group difference variance shrinks to 2 (1 - rho) beta2 while
+between-group stays at 2 beta2; at fixed idiosyncratic variance within-group
+stays at 2 beta2 while between-group grows to 2 (1 + rho) beta2. Neither is
+neutral. A shared component changes the ratio of within- to between-group
+difference scale, that ratio is the model's content, and an equal-loading
+global factor is the degenerate case that cancels entirely (independence at
+idiosyncratic 0.6 and a global sqrt(0.4) factor at 0.6 return the same logZ
+to 4e-15 at K = 17).
+
+So rho and beta2 are not separately identified in the way two arguments
+suggest, and a rho selected at fixed beta2 is a blended estimate. On F1 that
+coupling was 28 percent of the damage: with zero loadings beta2 has an
+interior optimum (1.0 in sample, 1.3 held out) while variance preservation
+forced the blocked arm to 0.6. tune_block_rho(beta2_grid=...) sweeps both
+axes; the fixed-marginal default stays, as the standard factor convention.
+Per-race CSVs: bandits
 results/exp34{b_2x2,c_noise_scale,d_recovery,g_crossover,h_order}.
 
 Cost: one factor dimension per group of two or more in the contest; two or
@@ -421,34 +431,47 @@ def walk_forward(contests: Sequence[dict], warmup: int = 20, market_arm: bool = 
 
 
 def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6),
-                   market_arm: bool = True, **params) -> dict:
+                   market_arm: bool = True, beta2_grid=None, **params) -> dict:
     """Select the block correlation by the filter's marginal likelihood: one
-    walk per rho over contests carrying 'groups', summing log P(observation)
-    from every update (nothing held out, no target event consulted). Returns
-    rho_grid, evidence (per rho), rho (the argmax) and at_edge -- a rho at
-    either end of the grid is a capped rival, not a tuned one; widen the
-    grid. ``params`` go to AbilityTracker (drift, beta2, base, Qf, ...).
+    walk per grid point over contests carrying 'groups', summing
+    log P(observation) from every update (nothing held out, no target event
+    consulted). Returns rho_grid, evidence (per rho, or a (rho, beta2)
+    matrix when ``beta2_grid`` is given), rho and beta2 (the argmax), and
+    at_edge: an argmax at either end of a grid is a capped rival, not a
+    tuned one; widen the grid. ``params`` go to AbilityTracker (drift,
+    beta2, base, Qf, ...); with ``beta2_grid`` pass beta2 through the grid.
 
     On Formula 1 this evidence preferred rho = 0.4 to independence by
     24.7 nats while held-out prediction got worse (module docstring): a
     likelihood ratio says the structure is present in the fit window, not
-    that it transfers. Two cautions. The evidence is summed at fixed
-    marginal variance, so on ranked observations part of what a larger
-    rho buys is a smaller idiosyncratic noise (module docstring); compare
-    at fixed idiosyncratic variance as well before trusting the argmax.
-    And a rho that moves between seasons is not tuned by a longer window.
-    Cost: one blocked walk per grid point (module docstring)."""
-    evidence = []
-    for rho in rho_grid:
-        trk = AbilityTracker(rho=float(rho), **params)
+    that it transfers. rho and beta2 trade off under an order likelihood
+    (module docstring), so a rho selected at fixed beta2 is a blended
+    estimate; ``beta2_grid`` sweeps both and the argmax pair is the
+    estimate. A rho that moves between seasons is not tuned by a longer
+    window. Cost: one blocked walk per grid point (module docstring)."""
+    def walk(rho, extra):
+        trk = AbilityTracker(rho=float(rho), **extra, **params)
         for c in contests:
             trk.observe(c["runners"], float(c.get("t", 0.0)),
                         scores=c.get("scores"), order=c.get("order"),
                         winner=c.get("winner"),
                         prices=(c.get("p_market") if market_arm else None),
                         groups=c.get("groups"))
-        evidence.append(trk.evidence)
-    best = int(np.argmax(evidence))
-    return {"rho_grid": tuple(float(r) for r in rho_grid),
-            "evidence": np.asarray(evidence), "rho": float(rho_grid[best]),
-            "at_edge": best in (0, len(rho_grid) - 1)}
+        return trk.evidence
+
+    rho_grid = tuple(float(r) for r in rho_grid)
+    if beta2_grid is None:
+        evidence = np.asarray([walk(rho, {}) for rho in rho_grid])
+        best = int(np.argmax(evidence))
+        return {"rho_grid": rho_grid, "beta2_grid": None, "evidence": evidence,
+                "rho": rho_grid[best], "beta2": float(params.get("beta2", 1.0)),
+                "at_edge": best in (0, len(rho_grid) - 1)}
+    if "beta2" in params:
+        raise ValueError("pass beta2 through beta2_grid, not params, when sweeping both")
+    beta2_grid = tuple(float(b) for b in beta2_grid)
+    evidence = np.asarray([[walk(rho, {"beta2": b2}) for b2 in beta2_grid]
+                           for rho in rho_grid])
+    i, j = np.unravel_index(int(np.argmax(evidence)), evidence.shape)
+    return {"rho_grid": rho_grid, "beta2_grid": beta2_grid, "evidence": evidence,
+            "rho": rho_grid[i], "beta2": beta2_grid[j],
+            "at_edge": i in (0, len(rho_grid) - 1) or j in (0, len(beta2_grid) - 1)}

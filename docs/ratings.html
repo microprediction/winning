@@ -191,15 +191,18 @@ predict_factor(B, subset=[3, 7], x=[1, 0, 1])                       # win probab
       log-loss. The term is sound; the Formula 1 result is about an
       unstable rho, and persistent team quality still belongs in the
       means.</p>
-    <p>One caveat is about the API rather than the data. An equal-loading
-      shock cannot change a finishing order, so under the
-      variance-preserving convention the idiosyncratic variance
-      (1 &minus; rho) beta2 both correlates entrants and cuts the noise
-      that orders them; a global factor with idiosyncratic variance 0.6
-      and independence with variance 0.6 return the same evidence to
-      4e-15 at seventeen entrants, and that confound was 28 percent of
-      the Formula 1 damage. On ranked data, hold the idiosyncratic
-      variance fixed when comparing rho values, or report both.</p>
+    <p>One caveat is about the API rather than the data. An order
+      likelihood sees difference variances, and a shared component
+      changes the ratio of within-group to between-group difference
+      scale whichever way it is normalised: at fixed marginal variance
+      the within-group scale shrinks, at fixed idiosyncratic variance the
+      between-group scale grows, and an equal-loading global factor
+      cancels entirely (independence at idiosyncratic variance 0.6 and a
+      global factor at 0.6 return the same evidence to 4e-15 at seventeen
+      entrants). So rho and beta2 trade off, a rho selected at fixed
+      beta2 is a blended estimate, and on Formula 1 that coupling was 28
+      percent of the damage. <code>tune_block_rho</code> takes a
+      <code>beta2_grid</code> to sweep both.</p>
 <pre><code>from winning.ratings import AbilityTracker, tune_block_rho
 
 sel = tune_block_rho(contests, rho_grid=(0.0, 0.2, 0.4, 0.6), drift=0.03)

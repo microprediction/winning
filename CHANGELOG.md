@@ -9,12 +9,14 @@
   loss comes from a rho that moves between seasons (same-team 1-2 rate
   0.632 in 2015, 0.045 in 2021), with the damage on the fit channel.
   Docs rewritten accordingly. New caution wherever rho is documented:
-  under the variance-preserving convention an equal-loading shock
-  cannot change a finishing order, so on ranked data a rho comparison
-  at fixed marginal variance is partly a noise-scale comparison (a
-  global factor at idiosyncratic 0.6 and independence at 0.6 return the
-  same evidence to 4e-15); hold the idiosyncratic variance fixed or
-  report both. `tune_block_rho` compares at fixed marginal variance.
+  under an order likelihood rho and beta2 trade off, because a shared
+  component changes the ratio of within- to between-group difference
+  scale whichever way it is normalised (an equal-loading global factor
+  cancels entirely: independence at idiosyncratic 0.6 and a global
+  factor at 0.6 return the same evidence to 4e-15), so a rho selected
+  at fixed beta2 is a blended estimate. `tune_block_rho` gains
+  `beta2_grid` for a joint sweep, returning the evidence matrix and the
+  argmax pair; the single-axis default is unchanged.
 - `winning.ratings.orders`: `order_from_positions`, `order_from_performance`,
   `order_from_times` and `positions_from_order` name the conversion into
   the best-first `order` every ranked update takes. A rank array
