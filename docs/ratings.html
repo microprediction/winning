@@ -82,6 +82,17 @@
       updates, the correlated-race generalization of the TrueSkill-style
       factor. This page describes the density line.</p>
 
+    <p>Every ranked update takes <code>order</code>, the entrant indices
+      from first to last finisher. A rank array, the position of each
+      entrant, is the inverse permutation; both are valid permutations,
+      they coincide at two entrants, and at three or more the rank array
+      is silently wrong and yields a plausible walk that barely updates.
+      <code>order_from_positions</code>, <code>order_from_performance</code>
+      and <code>order_from_times</code> name the conversion at the call
+      site and raise on ties, and <code>positions_from_order</code>
+      inverts. The self-test is to repeat one order thirty times from a
+      flat prior and check that the means fall along it.</p>
+
     <h2>Factor ratings and block correlation in winning.ratings</h2>
     <p>The shipped <code>winning.ratings</code> line carries two entry
       points beyond one number per entity. <code>fit_factor_ratings</code>
