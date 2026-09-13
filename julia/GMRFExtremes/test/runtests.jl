@@ -4,7 +4,8 @@
 #   julia --project=julia/GMRFExtremes julia/GMRFExtremes/test/runtests.jl
 using Test
 using Random: Xoshiro
-using SparseArrays: spdiagm
+using SparseArrays: spdiagm, sparse
+using LinearAlgebra: SymTridiagonal, diag
 
 using GMRFExtremes
 const GE = GMRFExtremes
@@ -46,6 +47,31 @@ end
     P1 = argmax_marginals(c1)
     P2 = argmax_marginals(c2)
     @test maximum(abs.(P1 .- P2)) < 1e-9
+end
+
+@testset "SymTridiagonal precision: the same chain in O(n)" begin
+    rng = Xoshiro(7)
+    n = 40
+    d = 2.0 .+ rand(rng, n)
+    e = 0.6 .* (rand(rng, n - 1) .- 0.5)          # diagonally dominant, SPD
+    mu = randn(rng, n)
+    Qs = SymTridiagonal(d, e)
+    c_sym = chain_from_precision(mu, Qs)
+    c_dense = chain_from_precision(mu, Matrix(Qs))
+    c_sparse = chain_from_precision(mu, sparse(Qs))
+    for c in (c_dense, c_sparse)
+        @test abs(c.sd0 - c_sym.sd0) < 1e-12
+        @test maximum(abs.(c.phi .- c_sym.phi)) < 1e-12
+        @test maximum(abs.(c.s .- c_sym.s)) < 1e-12
+    end
+    # the chain's marginals are the precision's inverse diagonal
+    sd_ref = sqrt.(diag(inv(Matrix(Qs))))
+    @test maximum(abs.(GE.marginal_sd(c_sym) .- sd_ref)) < 1e-10
+    # O(n): a chain the dense path could not allocate
+    big = 200_000
+    cbig = chain_from_precision(zeros(big), SymTridiagonal(fill(2.0, big), fill(-0.9, big - 1)))
+    @test length(cbig) == big
+    @test_throws ErrorException chain_from_precision(zeros(3), SymTridiagonal([1.0, 0.1, 1.0], [0.9, 0.9]))
 end
 
 @testset "precision route preserves index order" begin
