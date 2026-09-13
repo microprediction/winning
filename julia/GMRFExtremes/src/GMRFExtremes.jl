@@ -19,7 +19,7 @@
 # GMRF type via a package extension.
 module GMRFExtremes
 
-using LinearAlgebra: cholesky, Symmetric, diag
+using LinearAlgebra: SymTridiagonal
 using SparseArrays: SparseMatrixCSC, findnz
 
 export GaussMarkovChain, chain_from_precision, max_cdf, expected_max,
@@ -128,10 +128,13 @@ X_t | X_{t+1} ~ N(mu_t - (U[t,t+1]/U[t,t]) (X_{t+1} - mu_{t+1}),
 1/U[t,t]^2): conditionals running from the last index to the first.
 Factorizing the index-reversed problem therefore returns a chain in
 the CALLER's index order, which is what every query reports against.
-REFUSES non-tridiagonal precision:
+Non-tridiagonal precision is refused:
 wider bandwidth is a different (lifted) algorithm, and general
 sparsity belongs to sampling methods (see Bolin-Lindgren excursions);
-neither is approximated silently."""
+neither is approximated silently. A `SymTridiagonal` is accepted
+directly and costs O(n) time and memory; a dense or sparse matrix is
+checked for bandwidth (its upper triangle is used) and then routed the
+same way, so a GMRF's sparse precision is never densified."""
 function chain_from_precision(mu::AbstractVector, Q::AbstractMatrix;
                               tol = 0.0)
     n = length(mu)
@@ -147,28 +150,43 @@ function chain_from_precision(mu::AbstractVector, Q::AbstractMatrix;
             abs(i - j) > 1 && abs(Q[i, j]) > tol && error(_refusal_msg())
         end
     end
-    # The bidiagonal Cholesky reads conditionals X_t | X_{t+1}, i.e. a
-    # chain running from the LAST index to the first. Reversing both
-    # arguments first therefore returns the chain in the CALLER's index
-    # order, which is what every downstream query reports against.
-    muv = reverse(Float64.(collect(mu)))
-    Qv = Matrix(Q)[end:-1:1, end:-1:1]
-    F = cholesky(Symmetric(Qv))
-    U = F.U                                # upper bidiagonal
+    dv = [Float64(Q[i, i]) for i in 1:n]
+    ev = [Float64(Q[i, i + 1]) for i in 1:(n - 1)]
+    return chain_from_precision(mu, SymTridiagonal(dv, ev))
+end
+
+function chain_from_precision(mu::AbstractVector, Q::SymTridiagonal)
+    n = length(mu)
+    size(Q, 1) == n || error("Q must be n x n")
+    n >= 1 || error("empty chain")
+    # The bidiagonal Cholesky R' R = Q reads conditionals X_t | X_{t+1},
+    # a chain running from the LAST index to the first. Factorizing the
+    # index-reversed matrix therefore returns the chain in the CALLER's
+    # index order, which is what every downstream query reports against.
+    dr = reverse(Float64.(collect(Q.dv)))
+    er = reverse(Float64.(collect(Q.ev)))
+    r = zeros(n)                       # diagonal of R
+    sup = zeros(max(n - 1, 0))         # superdiagonal of R
+    dr[1] > 0 || error("precision is not positive definite")
+    r[1] = sqrt(dr[1])
+    for t in 1:(n - 1)
+        sup[t] = er[t] / r[t]
+        v = dr[t + 1] - sup[t]^2
+        v > 0 || error("precision is not positive definite")
+        r[t + 1] = sqrt(v)
+    end
     # chain position k is caller index k, so the means pass through
     mur = Float64.(collect(mu))
-    phi = zeros(n - 1)
-    s = zeros(n - 1)
+    phi = zeros(max(n - 1, 0))
+    s = zeros(max(n - 1, 0))
     for k in 1:(n - 1)
-        t = n - k                          # original index of the child
-        phi[k] = -U[t, t + 1] / U[t, t]
-        s[k] = 1.0 / U[t, t]
+        t = n - k                      # reversed index of the child
+        phi[k] = -sup[t] / r[t]
+        s[k] = 1.0 / r[t]
     end
-    # the reversed chain starts at X_n, whose MARGINAL sd is
-    # sqrt((Q^{-1})[n, n]) -- one triangular solve
-    en = zeros(n)
-    en[n] = 1.0
-    sd0 = sqrt((F \ en)[n])
+    # the reversed chain starts at X_n, whose marginal variance is the
+    # last Schur complement, (Qv^{-1})[n, n] = 1 / R[n, n]^2
+    sd0 = 1.0 / r[n]
     return GaussMarkovChain(mur, sd0, phi, s)
 end
 
