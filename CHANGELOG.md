@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `julia/winning` gains a test suite: `Pkg.test` runs the parity
+  scenarios against `parity/vectors.json` plus intrinsic invariants,
+  through `test/parity.jl`, which `parity/check.jl` now also calls. The
+  Julia CI matrix had failed on `winning` since 2026-09-08 for want of a
+  `test/runtests.jl`. A TagBot workflow with one `subdir` step per Julia
+  package tags registered versions as `<Package>-v<version>`; the
+  README lists the two packages now in General and the third pending.
 - Block correlation on Formula 1, resolved (bandits exp34b-h): the term
   is sound (correctly specified on synthetic data it beats independence
   on ability recovery, winner and joint log-loss), the teammate

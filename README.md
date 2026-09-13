@@ -147,17 +147,26 @@ dependency-free JavaScript port at machine-precision parity with the
 Python, for browser demos; [r/winning](r/winning) is a pure-R package;
 [rust/fastrace](rust/fastrace) holds the optional compiled kernels —
 build with `pip install maturin && maturin develop --release`, and
-`winning.methods` uses them automatically. [julia/winning](julia/winning)
-is a dependency-free Julia package covering the factor races and the
-full top-k module (`julia parity/check.jl` pins it to the reference);
-the covariance grammar and classic lattice are its remaining roadmap.
-Two Julia-facing applications ride it:
-[julia/MultinomialProbit](julia/MultinomialProbit) — the first
-multinomial probit for Julia, exact likelihood with analytic score
-plus a common-random-numbers GHK for head-to-heads — and
-[julia/MvNormalCDFFast](julia/MvNormalCDFFast) — deterministic MVN
-rectangle probabilities for factor covariance, falling back to
-MvNormalCDF.jl on refused cases.
+`winning.methods` uses them automatically.
+
+[julia/winning](julia/winning) is a dependency-free Julia package
+covering the factor races and the full top-k module; `Pkg.test` and
+`julia parity/check.jl` pin it to the Python reference. The covariance
+grammar and classic lattice are its remaining roadmap, and it is not
+yet registered.
+
+Three Julia-facing applications ride it, two of them in the General
+registry (`] add MultinomialProbit`, `] add GMRFExtremes`).
+[julia/MultinomialProbit](julia/MultinomialProbit) is the first
+multinomial probit for Julia: exact likelihood with analytic score,
+plus a common-random-numbers GHK for head-to-heads.
+[julia/GMRFExtremes](julia/GMRFExtremes) answers order-statistic
+queries on Gauss-Markov chains (argmax marginals, max CDF, first
+passage, expected maximum) and accepts a chain from
+GaussianMarkovRandomFields.jl through its precision matrix.
+[julia/MvNormalCDFFast](julia/MvNormalCDFFast) computes deterministic
+MVN rectangle probabilities for factor covariance, falling back to
+MvNormalCDF.jl on refused cases; its registration is pending a name.
 
 ## Rating systems (research line)
 
