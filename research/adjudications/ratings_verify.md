@@ -198,6 +198,28 @@ world-specific, and its falsification clause (normal trailing
 Plackett-Luce on normal-generated data by more than two paired SE)
 already fails on its own.
 
+## Gate result (winning session, 2026-09-13, nightly full profile): exit 2 twice, budget raised
+
+The first two scheduled full runs (2026-09-12 08:18 UTC, 2026-09-13
+08:42 UTC, runs 34,7xx on `ratings-verify.yml`) each ended `4991 ok, 0
+FAIL, 1 UNDERPOWERED, 2 EXPECTED_APPROX, 248 SKIP, 96 MEASURED` in about
+31 minutes at 4 workers, exit code 2. The one UNDERPOWERED row is
+`factor.se_calibration.z2`: 0.972 +- 0.075 over 30 worlds against the
+band [0.85, 1.15]. The statistic is inside the band on both nights; the
+verdict is UNDERPOWERED because 3 se (0.225) exceeds the half-band
+(0.15), so at the profile's budget the mark could never be decided. The
+mark was set at the baseline from exactly this 30-world measurement,
+which is the instrument defect: a band narrower than the check's own
+power at its budget.
+
+Remedy: budget, not mark. `factor_worlds` in the full profile goes from
+30 to 100 (se falls to about 0.041, 3 se 0.12 under the half-band) and
+in the exhaustive profile from 60 to 150; the band is unchanged. Cost
+on one worker rose from about 2 to 17 minutes measured locally, which
+the nightly's four workers and 60-minute timeout absorb. Verified
+locally at the new budget before merging: z^2 0.972, verdict ok. The nightly's failure-on-exit-2 stays as designed: an
+undecidable mark is a finding, not a pass.
+
 ## Open items entering the ledger as MEASURED (2026-09-11)
 
 - identity.invariances.scale_v on the diagonal paths: absolute
