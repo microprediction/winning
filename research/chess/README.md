@@ -203,8 +203,20 @@ failures are kept because they are the transfer conditions:
   two entrants a shared factor enters the margin only through
   (v_i − v_j)², a ~2% variance perturbation. This is the honest
   statement of where correlation does *not* pay.
-- **`exp31` — the giant-killer axis is registered and unrun.** Opponent
-  strength passes the exogeneity check by construction.
+- **`exp31` — the giant-killer axis is identifiable but a whisper.**
+  Opponent strength passes the exogeneity check by construction, and
+  it duly survives: the tuned offset ridge is **10.0, interior**
+  (300 = the scalar limit and 3.0 are both worse) with per-player
+  curvature offsets of sd 0.1316, so the registered falsification did
+  not fire. But the gain is **−0.00056 [−0.00117, +0.00005], P 0.965**
+  — interval spanning zero, and 8× smaller than time control's
+  −0.0045. The reason is `exp31`'s own fair baseline: the shared
+  curvature coefficient is **−0.584**, so a single global term absorbs
+  almost all of the opposition-strength signal and leaves only
+  per-player *deviations* for the factor arm. Against a bare scalar
+  this axis would have looked far stronger — and that comparison would
+  have been a straw man. Third identifiable covariate found; only its
+  shared part carries weight.
 
 > **Transfer conditions, both checkable before fitting.** A factor
 > rating needs (a) abilities static relative to the covariate — on
@@ -220,7 +232,7 @@ failures are kept because they are the transfer conditions:
 |---|---|
 | `exp29*.py` | opening family: the failure and its two diagnostics |
 | `exp30_chess_time_control.py` | the working dimension |
-| `exp31_chess_giant_killers.py` | registered, unrun |
+| `exp31_chess_giant_killers.py` | opponent-strength axis: identifiable, a whisper |
 | `exp32_style_heteroskedastic.py` | the K=2 factor projection |
 | `exp35_vs_glicko2.py` | the real Glicko-2 comparison |
 | `exp36_colour_confound.py` | is the estimator column just colour? |

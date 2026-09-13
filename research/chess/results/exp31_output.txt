@@ -1,0 +1,10 @@
+59386 games, 638 players; |gap| deciles 0.05 0.28 0.66
+  scalar + global curve   TEST 0.6082   (global curvature coef -0.584)
+    offset ridge    3.0  val 0.6085
+    offset ridge   10.0  val 0.6076
+    offset ridge   30.0  val 0.6076
+    offset ridge  100.0  val 0.6078
+    offset ridge  300.0  val 0.6080
+  factor (per-player)     TEST 0.6076  (offset ridge 10.0)
+  factor - baseline: -0.0006 [-0.0012,+0.0000]  P(better) 0.965
+  surviving curvature-offset sd: 0.1316

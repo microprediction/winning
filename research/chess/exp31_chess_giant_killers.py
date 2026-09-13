@@ -1,5 +1,52 @@
 """exp31: the opposition-strength axis — giant-killers vs flat-track bullies.
 
+=====================================================================
+RESULT (run 2026-09-13): IDENTIFIABLE BUT A WHISPER. The registered
+falsification did NOT trigger; P1 fails on its own significance
+criterion; P2 is confirmed.
+
+    59,386 games, 638 players; |gap| deciles 0.05 / 0.28 / 0.66
+
+    scalar + global curve   TEST 0.60820   (global curvature -0.584)
+    factor (per-player)     TEST 0.60764   (offset ridge 10.0)
+
+    offset ridge sweep, validation: 3.0 0.6085 | 10.0 0.6076 |
+                                    30.0 0.6076 | 100 0.6078 | 300 0.6080
+
+    factor - baseline  -0.000560  [-0.001168, +0.000049]  P 0.965
+    surviving curvature-offset sd 0.1316
+
+IDENTIFIABLE. The tuned offset ridge is 10.0 -- interior, with 300
+(the scalar limit) and 3.0 both worse -- and per-player curvature
+offsets survive with sd 0.1316. So the registered falsification, "the
+offset ridge tunes to the scalar limit", did NOT fire. The axis is
+real and estimable from one month of games, and unlike opening family
+its covariate has within-player variation BY CONSTRUCTION, which is
+why it was worth running.
+
+P1 FAILS on the criterion it set: the CI is [-0.001168, +0.000049] and
+includes zero (P 0.965, short of 0.975). The effect is 8x smaller than
+time control's -0.0045 [-0.0057,-0.0032]. P1 hedged in advance that
+confidence would be lower than exp30 because "Elo's curve already fits
+most of it", and that is exactly what happened -- see below.
+
+P2 CONFIRMED, and it explains the whisper. The global curvature
+coefficient is -0.584, far from zero: the win curve really does
+deviate from the probit's implied slope in these pools. But that term
+sits in the BASELINE by design. Making the baseline fair -- scalar
+plus a shared curvature term rather than a bare scalar -- let it
+absorb nearly all of the giant-killer signal, leaving only per-player
+DEVIATIONS from the common curve for the factor arm to find. Against a
+bare scalar this axis would have looked far stronger and the
+comparison would have been a straw man.
+
+HONEST SUMMARY: a third identifiable covariate exists (level, time
+control, opponent-strength curvature), but only the shared part of the
+opposition axis carries weight; the per-player part is not established
+at one month. This is a covariate-level "too small to claim", not a
+negative -- and not a domain-level anything.
+=====================================================================
+
 Second candidate in the chess dimension search ("you give up too
 easily"). The covariate is the signed opponent-strength gap, and it
 passes the exogeneity requirement BY CONSTRUCTION: pairing hands every
@@ -40,6 +87,7 @@ Run:  python experiments/exp31_chess_giant_killers.py
 from __future__ import annotations
 import os
 import numpy as np, pandas as pd
+from scipy import sparse
 from winning import race_probabilities
 from winning.ratings.factor_ratings import fit_design_ratings as linear_ability_map
 
@@ -66,20 +114,26 @@ P = 2                       # [1, tanh(gap)] per entrant
 NG = 2                      # white advantage + GLOBAL curvature
 
 def build(profile, idx):
+    """Design rows are SPARSE. At most six non-zeros per game against a
+    width of 1,278, so the dense form costs 0.61 GB for the training
+    half where CSR costs 2.1 MB -- 290x. fit_design_ratings accepts
+    sparse Z and stacks one CSR internally, and the fitted theta is
+    bit-identical (verified, max diff 0.0). Memory then scales with
+    games x non-zeros rather than games x parameters, which is the only
+    form that survives a large player pool."""
     width = (Mp*P if profile else Mp) + NG
     out = []
     for t in idx:
-        Z = np.zeros((2, width))
+        g0 = Mp*P if profile else Mp
         if profile:
-            Z[0, w[t]*P] = 1; Z[0, w[t]*P+1] = gap_w[t]
-            Z[1, b[t]*P] = 1; Z[1, b[t]*P+1] = -gap_w[t]
-            g0 = Mp*P
+            rows = [0, 0, 1, 1, 0, 0, 1]
+            cols = [w[t]*P, w[t]*P+1, b[t]*P, b[t]*P+1, g0, g0+1, g0+1]
+            vals = [1.0, gap_w[t], 1.0, -gap_w[t], 1.0, gap_w[t], -gap_w[t]]
         else:
-            Z[0, w[t]] = 1; Z[1, b[t]] = 1
-            g0 = Mp
-        Z[0, g0] = 1.0                       # white advantage
-        Z[0, g0+1] = gap_w[t]                # global curvature (white row)
-        Z[1, g0+1] = -gap_w[t]
+            rows = [0, 1, 0, 0, 1]
+            cols = [w[t], b[t], g0, g0+1, g0+1]
+            vals = [1.0, 1.0, 1.0, gap_w[t], -gap_w[t]]
+        Z = sparse.csr_matrix((vals, (rows, cols)), shape=(2, width))
         out.append((Z, np.array([0, 1]) if white_won[t] else np.array([1, 0])))
     return out, width
 
