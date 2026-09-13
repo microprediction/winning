@@ -292,7 +292,12 @@ class AbilityTracker:
         are contrast evidence through the same conjugate update. ``groups``
         (one label per entrant, None for ungrouped) switches every observer to
         the block-correlated model when rho > 0; log P(observation) is added
-        to ``self.evidence`` on every path."""
+        to ``self.evidence`` on every path.
+
+        ``order`` lists entrants first to last finisher, best first. A rank
+        array (position of entrant i) is the inverse permutation and is
+        silently wrong at K >= 3; convert it with order_from_positions
+        (winning.ratings.orders)."""
         m, v = self._gather(ids, t)
         V, b2 = self._blocks(groups, len(m))
         if prices is not None:                                     # market observer
