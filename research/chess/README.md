@@ -52,19 +52,43 @@ not: colour is worth −0.0016 of the −0.0206 gap, and a colour-blind
 fit still beats colour-blind Glicko-2 by **−0.0190** like-for-like.
 The honest footnote is that ~8% of the estimator column is colour.
 
-**Only one of the two estimators carries its own uncertainty**
-(`exp39`, registered, unrun). Glicko-2 propagates rating deviation
-into every prediction — `win_probabilities` passes each player's RD
-into `gaussian_win_probabilities`, so a player it knows little about
-is pulled toward 0.5. Our arm does not: it prices a MAP point estimate
-with a fixed `D = 1`. The asymmetry is real and should be stated
-before anyone else finds it. It most likely runs *against* us, since a
-proper scoring rule penalises overconfidence, which would make
-−0.0161 an understatement — but that is a belief about a sign, not a
-measurement, and it is not claimed here until `exp39` runs. The
-validation-tuned ridge is not a defence: shrinking the *mean* and
-widening the *predictive* are different operations, and only the
-second encodes "I don't know much about this player."
+**Only one of the two estimators carries its own uncertainty — and it
+turns out not to matter** (`exp39`). Glicko-2 propagates rating
+deviation into every prediction (`win_probabilities` passes each
+player's RD into `gaussian_win_probabilities`), while our arm prices a
+MAP point estimate at a fixed `D = 1`. The asymmetry is real, so a
+referee is right to ask whether the margin is an artifact of one side
+being allowed to be overconfident. It is not.
+
+All three factor arms share one fitted θ and differ **only** in how
+they price, so nothing here confounds a fit change with a price
+change:
+
+| arm | TEST | vs published |
+|---|---|---|
+| Glicko-2 per TC *(Lichess)* | 0.6234 | — |
+| published, `D = 1` | 0.6073 | — |
+| tempered, `D = s*` (s\* = 1.1) | 0.6072 | −0.0001 [−0.0004,+0.0002] **n.s.** |
+| Laplace, `D = 1 + Var(μ)` | 0.6087 | **+0.0015** [+0.0003,+0.0026] |
+
+**All three registered predictions failed, which is the useful
+outcome.** I predicted our arm was overconfident, that tempering would
+help, and that the margin would widen. The validation-tuned temper is
+s\* = 1.1 — barely off 1 — and buys 0.0001, indistinguishable from
+zero. The margin is unmoved: −0.0161 published against −0.0162
+tempered. So **our arm is already well calibrated at `D = 1`**, and
+per `exp39`'s registered falsification the claim that the published
+margin is *conservative because we carry no uncertainty* is dropped
+and should not be repeated. The margin itself is untouched; only the
+editorialising about its direction goes.
+
+The Laplace arm is significantly **worse** (+0.0015). A candidate
+explanation, untested: the diagonal approximation ignores covariance
+between coefficients, which overstates Var(μ_w − μ_b) whenever they
+are positively correlated, so it over-tempers — and it inflates
+per-player rather than uniformly, which is what distinguishes it from
+the harmless s = 1.1. Worth knowing before anyone reaches for
+`return_se=True` as a free calibration upgrade.
 
 **The result is not an artifact of the dense subpopulation**
 (`exp37`), but the mechanism's own prediction failed. Rerunning at
@@ -202,7 +226,7 @@ failures are kept because they are the transfer conditions:
 | `exp36_colour_confound.py` | is the estimator column just colour? |
 | `exp37_sparse_players.py` | robustness across density thresholds |
 | `exp38_modern_month.py` | 2024-01 replication: INFEASIBLE, covariate unidentifiable |
-| `exp39_predictive_calibration.py` | our overconfidence vs Glicko-2's RD: registered, unrun |
+| `exp39_predictive_calibration.py` | uncertainty asymmetry: measured, does not matter |
 | `results/` | per-game losses and raw outputs |
 
 Data is one month of the Lichess open database
