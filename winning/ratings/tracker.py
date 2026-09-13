@@ -41,20 +41,38 @@ is a different object and belongs in the means (a group column in the design
 of fit_design_ratings, or a shared offset), whatever this term is set to.
 
 On the Formula 1 data that motivated the feature (bandits exp33 / exp34) the
-correlation is real: same-team 1-2 finishes occur at 0.274 against 0.123
-under independence, and training evidence prefers rho = 0.4 to independence
-by 24.7 nats over 158 races. Pricing it through this term does not predict
-better there. Fitted and priced under one model on the current engine (main
-62f80c0, 2026-09-12), the blocked arm's held-out winner log-loss is worse by
-+0.0427 [+0.0089, +0.0769] over 106 races, against the 0.005 bound the
-control was held to. Its joint log-loss advantage is -0.0224 [-0.0558,
-+0.0081], P 0.919, spanning zero.
+correlation is real and is not a noise-scale artefact: same-team 1-2
+finishes occur at 0.274 against 0.123 under independence, and at matched
+idiosyncratic noise the team structure is worth +29.2 nats of training
+evidence where pure noise reduction loses 5.2. It does not transfer.
+Fitted and priced under one model on the current engine (main 62f80c0),
+the blocked arm's held-out winner log-loss is worse by +0.0427 [+0.0089,
++0.0769] over 106 races, its joint advantage -0.0224 [-0.0558, +0.0081]
+spans zero, and on the held-out order functional no contrast reaches
+significance (+0.072 nats per race against +0.156 inside the fit window).
 
-The engine repairs of PRs #35 and #37 moved the winner gap from +0.0527 by
-about a fifth and left the independent arm bit-identical (zero loadings make
-the factor shift vanish); they do not account for the gap. The feature ships
-as a modelling option, not a measured improvement. The open question is a
-persistent group term in the mean fitted alongside rho.
+The cause is a rho that moves between seasons. The same-team 1-2 rate is
+0.632 in 2015 and 0.045 in 2021 (chi-square 28.3 on 12 df, p = 0.005), so
+a rho fitted on one window is wrong on the next, and the damage is on the
+fit channel: with the price held fixed, fitting mu under an over-strong rho
+costs +2.86 [+0.16, +5.58] nats of winner log-loss. Correctly specified
+on synthetic data (K = 6 in three teams, rho = 0.4) the blocked arm beats
+independence on mu RMSE (-0.0132), winner (-0.0055) and joint (-0.0215)
+log-loss: the shared shock cancels within a team, so between-team
+difference variance stays at 2 beta2 and within-team falls to 2 (1 - rho)
+beta2. The term is sound; the F1 result is about an unstable rho, and
+persistent team quality still belongs in the means.
+
+Comparing rho values on ranked data. The variance-preserving convention
+couples rho to the ordering noise: an equal-loading shock cannot change a
+finishing order (it cancels), so the idiosyncratic variance (1 - rho) beta2
+both correlates entrants and cuts the noise that does order them. A
+global factor sqrt(0.4) 1 with idiosyncratic variance 0.6 and independence
+with variance 0.6 return the same logZ to 4e-15 at K = 17, and that
+confound was 28 percent of the F1 damage. Hold the idiosyncratic variance
+fixed when comparing rho values, or report both comparisons; tune_block_rho
+as shipped compares at fixed marginal variance. Per-race CSVs: bandits
+results/exp34{b_2x2,c_noise_scale,d_recovery,g_crossover,h_order}.
 
 Cost: one factor dimension per group of two or more in the contest; two or
 fewer ride a 7^r Gauss-Hermite tensor (Qf), more ride 2**nodes_log2 Sobol
@@ -136,6 +154,9 @@ def block_loadings(groups, rho, beta2=1.0):
     inflates the total to 1 + lambda^2 while the means were fitted at unit
     variance, and the marginals flatten mechanically -- measured at +0.077
     on a winner control before this parameterisation cut it to +0.017.
+    On ranked observations the convention couples rho to the ordering
+    noise, since an equal-loading shock cannot change an order (module
+    docstring).
     """
     groups = list(groups)
     n = len(groups)
@@ -409,11 +430,14 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     grid. ``params`` go to AbilityTracker (drift, beta2, base, Qf, ...).
 
     On Formula 1 this evidence preferred rho = 0.4 to independence by
-    28.7 nats -- the correlation is in the data -- while held-out winner
-    prediction is being re-measured on the corrected engine (module
-    docstring). A likelihood ratio says the structure is present, not
-    that pricing it this way predicts better. Cost: one blocked walk per
-    grid point (module docstring)."""
+    24.7 nats while held-out prediction got worse (module docstring): a
+    likelihood ratio says the structure is present in the fit window, not
+    that it transfers. Two cautions. The evidence is summed at fixed
+    marginal variance, so on ranked observations part of what a larger
+    rho buys is a smaller idiosyncratic noise (module docstring); compare
+    at fixed idiosyncratic variance as well before trusting the argmax.
+    And a rho that moves between seasons is not tuned by a longer window.
+    Cost: one blocked walk per grid point (module docstring)."""
     evidence = []
     for rho in rho_grid:
         trk = AbilityTracker(rho=float(rho), **params)

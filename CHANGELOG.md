@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Block correlation on Formula 1, resolved (bandits exp34b-h): the term
+  is sound (correctly specified on synthetic data it beats independence
+  on ability recovery, winner and joint log-loss), the teammate
+  correlation is real at matched noise (+29.2 nats), and the held-out
+  loss comes from a rho that moves between seasons (same-team 1-2 rate
+  0.632 in 2015, 0.045 in 2021), with the damage on the fit channel.
+  Docs rewritten accordingly. New caution wherever rho is documented:
+  under the variance-preserving convention an equal-loading shock
+  cannot change a finishing order, so on ranked data a rho comparison
+  at fixed marginal variance is partly a noise-scale comparison (a
+  global factor at idiosyncratic 0.6 and independence at 0.6 return the
+  same evidence to 4e-15); hold the idiosyncratic variance fixed or
+  report both. `tune_block_rho` compares at fixed marginal variance.
 - `winning.ratings.orders`: `order_from_positions`, `order_from_performance`,
   `order_from_times` and `positions_from_order` name the conversion into
   the best-first `order` every ranked update takes. A rank array
