@@ -107,21 +107,27 @@ the module docstrings give the measured cost of crossing over.
 - `winning.factor`: the engine. The all-share forward pass, inversion,
   exact Jacobians and tie densities, covariance fitting
   (`fit_covariance`), and constrained polish.
+
 - `winning.factor` also prices finishing positions: top-k membership at
   any depth (`top_k_probabilities`, `rank_probabilities`), calibration
   of those curves (`abilities_from_topk`), joint location and scale per
   runner from the win and place curves (`loc_scale_from_win_and_second`),
   ordered-prefix probabilities (`ordered_probabilities`), and the
   Plackett-Luce likelihood (`winning.factor.permutations`).
+
 - `winning.probit`: the same machine in the probit literature's
   max-wins, utilities-and-shares conventions.
+
 - `winning.classic`: the original SIAM-paper lattice ability transform,
   in racing vocabulary (dividends, state prices, dead heats).
+
 - `winning.ratings`: dynamic and factor ratings on the same engine,
   described next.
+
 - `winning.methods` and `winning.bench`: every rival method behind one
   interface, and a seeded accuracy-time benchmark grid,
   `python -m winning.bench.runner`.
+
 - `winning.research`: the density-agnostic research engine for
   arbitrary bases.
 
