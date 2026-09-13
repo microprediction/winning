@@ -41,20 +41,48 @@ is a different object and belongs in the means (a group column in the design
 of fit_design_ratings, or a shared offset), whatever this term is set to.
 
 On the Formula 1 data that motivated the feature (bandits exp33 / exp34) the
-correlation is real: same-team 1-2 finishes occur at 0.274 against 0.123
-under independence, and training evidence prefers rho = 0.4 to independence
-by 24.7 nats over 158 races. Pricing it through this term does not predict
-better there. Fitted and priced under one model on the current engine (main
-62f80c0, 2026-09-12), the blocked arm's held-out winner log-loss is worse by
-+0.0427 [+0.0089, +0.0769] over 106 races, against the 0.005 bound the
-control was held to. Its joint log-loss advantage is -0.0224 [-0.0558,
-+0.0081], P 0.919, spanning zero.
+correlation is real and is not a noise-scale artefact: same-team 1-2
+finishes occur at 0.274 against 0.123 under independence, and at matched
+idiosyncratic noise the team structure is worth +29.2 nats of training
+evidence where pure noise reduction loses 5.2. It does not transfer.
+Fitted and priced under one model on the current engine (main 62f80c0),
+the blocked arm's held-out winner log-loss is worse by +0.0427 [+0.0089,
++0.0769] over 106 races, its joint advantage -0.0224 [-0.0558, +0.0081]
+spans zero, and on the held-out order functional no contrast reaches
+significance (+0.072 nats per race against +0.156 inside the fit window).
 
-The engine repairs of PRs #35 and #37 moved the winner gap from +0.0527 by
-about a fifth and left the independent arm bit-identical (zero loadings make
-the factor shift vanish); they do not account for the gap. The feature ships
-as a modelling option, not a measured improvement. The open question is a
-persistent group term in the mean fitted alongside rho.
+The cause is a rho that moves between seasons. The same-team 1-2 rate is
+0.632 in 2015 and 0.045 in 2021 (chi-square 28.3 on 12 df, p = 0.005), so
+a rho fitted on one window is wrong on the next, and the damage is on the
+fit channel: with the price held fixed, fitting mu under an over-strong rho
+costs +2.86 [+0.16, +5.58] nats of winner log-loss. Correctly specified
+on synthetic data (K = 6 in three teams, rho = 0.4) the blocked arm beats
+independence on mu RMSE (-0.0132), winner (-0.0055) and joint (-0.0215)
+log-loss: the shared shock cancels within a team, so between-team
+difference variance stays at 2 beta2 and within-team falls to 2 (1 - rho)
+beta2. The term is sound; the F1 result is about an unstable rho, and
+persistent team quality still belongs in the means.
+
+Comparing rho values on ranked data. An order likelihood sees difference
+variances, and the two normalisations move different halves of them. At
+fixed marginal variance (the convention here: idiosyncratic (1 - rho) beta2)
+the within-group difference variance shrinks to 2 (1 - rho) beta2 while
+between-group stays at 2 beta2; at fixed idiosyncratic variance within-group
+stays at 2 beta2 while between-group grows to 2 (1 + rho) beta2. Neither is
+neutral. A shared component changes the ratio of within- to between-group
+difference scale, that ratio is the model's content, and an equal-loading
+global factor is the degenerate case that cancels entirely (independence at
+idiosyncratic 0.6 and a global sqrt(0.4) factor at 0.6 return the same logZ
+to 4e-15 at K = 17).
+
+So rho and beta2 are not separately identified in the way two arguments
+suggest, and a rho selected at fixed beta2 is a blended estimate. On F1 that
+coupling was 28 percent of the damage: with zero loadings beta2 has an
+interior optimum (1.0 in sample, 1.3 held out) while variance preservation
+forced the blocked arm to 0.6. tune_block_rho(beta2_grid=...) sweeps both
+axes; the fixed-marginal default stays, as the standard factor convention.
+Per-race CSVs: bandits
+results/exp34{b_2x2,c_noise_scale,d_recovery,g_crossover,h_order}.
 
 Cost: one factor dimension per group of two or more in the contest; two or
 fewer ride a 7^r Gauss-Hermite tensor (Qf), more ride 2**nodes_log2 Sobol
@@ -136,6 +164,9 @@ def block_loadings(groups, rho, beta2=1.0):
     inflates the total to 1 + lambda^2 while the means were fitted at unit
     variance, and the marginals flatten mechanically -- measured at +0.077
     on a winner control before this parameterisation cut it to +0.017.
+    On ranked observations the convention couples rho to the ordering
+    noise, since an equal-loading shock cannot change an order (module
+    docstring).
     """
     groups = list(groups)
     n = len(groups)
@@ -400,31 +431,47 @@ def walk_forward(contests: Sequence[dict], warmup: int = 20, market_arm: bool = 
 
 
 def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6),
-                   market_arm: bool = True, **params) -> dict:
+                   market_arm: bool = True, beta2_grid=None, **params) -> dict:
     """Select the block correlation by the filter's marginal likelihood: one
-    walk per rho over contests carrying 'groups', summing log P(observation)
-    from every update (nothing held out, no target event consulted). Returns
-    rho_grid, evidence (per rho), rho (the argmax) and at_edge -- a rho at
-    either end of the grid is a capped rival, not a tuned one; widen the
-    grid. ``params`` go to AbilityTracker (drift, beta2, base, Qf, ...).
+    walk per grid point over contests carrying 'groups', summing
+    log P(observation) from every update (nothing held out, no target event
+    consulted). Returns rho_grid, evidence (per rho, or a (rho, beta2)
+    matrix when ``beta2_grid`` is given), rho and beta2 (the argmax), and
+    at_edge: an argmax at either end of a grid is a capped rival, not a
+    tuned one; widen the grid. ``params`` go to AbilityTracker (drift,
+    beta2, base, Qf, ...); with ``beta2_grid`` pass beta2 through the grid.
 
     On Formula 1 this evidence preferred rho = 0.4 to independence by
-    28.7 nats -- the correlation is in the data -- while held-out winner
-    prediction is being re-measured on the corrected engine (module
-    docstring). A likelihood ratio says the structure is present, not
-    that pricing it this way predicts better. Cost: one blocked walk per
-    grid point (module docstring)."""
-    evidence = []
-    for rho in rho_grid:
-        trk = AbilityTracker(rho=float(rho), **params)
+    24.7 nats while held-out prediction got worse (module docstring): a
+    likelihood ratio says the structure is present in the fit window, not
+    that it transfers. rho and beta2 trade off under an order likelihood
+    (module docstring), so a rho selected at fixed beta2 is a blended
+    estimate; ``beta2_grid`` sweeps both and the argmax pair is the
+    estimate. A rho that moves between seasons is not tuned by a longer
+    window. Cost: one blocked walk per grid point (module docstring)."""
+    def walk(rho, extra):
+        trk = AbilityTracker(rho=float(rho), **extra, **params)
         for c in contests:
             trk.observe(c["runners"], float(c.get("t", 0.0)),
                         scores=c.get("scores"), order=c.get("order"),
                         winner=c.get("winner"),
                         prices=(c.get("p_market") if market_arm else None),
                         groups=c.get("groups"))
-        evidence.append(trk.evidence)
-    best = int(np.argmax(evidence))
-    return {"rho_grid": tuple(float(r) for r in rho_grid),
-            "evidence": np.asarray(evidence), "rho": float(rho_grid[best]),
-            "at_edge": best in (0, len(rho_grid) - 1)}
+        return trk.evidence
+
+    rho_grid = tuple(float(r) for r in rho_grid)
+    if beta2_grid is None:
+        evidence = np.asarray([walk(rho, {}) for rho in rho_grid])
+        best = int(np.argmax(evidence))
+        return {"rho_grid": rho_grid, "beta2_grid": None, "evidence": evidence,
+                "rho": rho_grid[best], "beta2": float(params.get("beta2", 1.0)),
+                "at_edge": best in (0, len(rho_grid) - 1)}
+    if "beta2" in params:
+        raise ValueError("pass beta2 through beta2_grid, not params, when sweeping both")
+    beta2_grid = tuple(float(b) for b in beta2_grid)
+    evidence = np.asarray([[walk(rho, {"beta2": b2}) for b2 in beta2_grid]
+                           for rho in rho_grid])
+    i, j = np.unravel_index(int(np.argmax(evidence)), evidence.shape)
+    return {"rho_grid": rho_grid, "beta2_grid": beta2_grid, "evidence": evidence,
+            "rho": rho_grid[i], "beta2": beta2_grid[j],
+            "at_edge": i in (0, len(rho_grid) - 1) or j in (0, len(beta2_grid) - 1)}

@@ -190,12 +190,14 @@ same-group entrants a shared per-contest shock, fitted and priced under
 one model, with the correlation share selected by the filter's own
 evidence; the component is redrawn every contest, and a persistent
 group advantage belongs in the means instead. On the Formula 1 data that
-motivated it, pricing the correlation this way does not predict better:
-the blocked arm's held-out winner log-loss is worse by +0.043 [+0.009,
-+0.077] on the current engine and its joint advantage spans zero; the
+motivated it the correlation is real but moves between seasons, so a
+rho fitted on one window does not transfer: the blocked arm's held-out
+winner log-loss is worse by +0.043 [+0.009, +0.077], while correctly
+specified on synthetic data it beats independence on every score. The
 [ratings page](https://winning.microprediction.org/ratings.html) has the
-numbers. The feature ships as a modelling option, not a measured
-improvement.
+numbers and the caveat that under an order likelihood rho and beta2
+trade off, so a rho tuned at fixed beta2 is a blended estimate
+(`tune_block_rho` can sweep both).
 
 ## History
 

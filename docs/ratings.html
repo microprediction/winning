@@ -171,20 +171,38 @@ predict_factor(B, subset=[3, 7], x=[1, 0, 1])                       # win probab
       belongs in the means (a group column in the design of
       <code>fit_design_ratings</code>).</p>
     <p>On the Formula 1 data that motivated the feature the correlation
-      is real: training evidence prefers <code>rho</code> = 0.4 to
-      independence by 24.7 nats over 158 races, and same-team 1&ndash;2
-      finishes occur at 0.274 against 0.123 under independence. Pricing
-      it through this term does not predict better there. Fitted and
-      priced under one model on the current engine, the blocked arm's
-      held-out winner log-loss is worse by +0.0427 [+0.0089, +0.0769]
-      over 106 races, against the 0.005 bound the control was held to,
-      and its joint log-loss advantage is &minus;0.0224 [&minus;0.0558,
-      +0.0081], spanning zero.</p>
-    <p>The engine repairs of September 2026 moved the winner gap by about
-      a fifth and left the independent arm bit-identical; they do not
-      account for it. The feature ships as a modelling option, not a
-      measured improvement. The open question is a persistent group term
-      in the mean fitted alongside <code>rho</code>.</p>
+      is real and is not a noise-scale artefact: same-team 1&ndash;2
+      finishes occur at 0.274 against 0.123 under independence, and at
+      matched idiosyncratic noise the team structure is worth +29.2 nats
+      of training evidence where pure noise reduction loses 5.2. It does
+      not transfer. Fitted and priced under one model on the current
+      engine, the blocked arm's held-out winner log-loss is worse by
+      +0.0427 [+0.0089, +0.0769] over 106 races, its joint advantage
+      &minus;0.0224 [&minus;0.0558, +0.0081] spans zero, and on the
+      held-out order functional no contrast reaches significance.</p>
+    <p>The cause is a rho that moves between seasons: the same-team
+      1&ndash;2 rate is 0.632 in 2015 and 0.045 in 2021 (chi-square 28.3
+      on 12 degrees of freedom, p = 0.005), so a rho fitted on one window
+      is wrong on the next, and the damage is on the fit channel, where
+      fitting abilities under an over-strong rho costs +2.86 [+0.16,
+      +5.58] nats with the price held fixed. Correctly specified on
+      synthetic data (six entrants in three teams, rho = 0.4) the blocked
+      arm beats independence on ability recovery, winner and joint
+      log-loss. The term is sound; the Formula 1 result is about an
+      unstable rho, and persistent team quality still belongs in the
+      means.</p>
+    <p>One caveat is about the API rather than the data. An order
+      likelihood sees difference variances, and a shared component
+      changes the ratio of within-group to between-group difference
+      scale whichever way it is normalised: at fixed marginal variance
+      the within-group scale shrinks, at fixed idiosyncratic variance the
+      between-group scale grows, and an equal-loading global factor
+      cancels entirely (independence at idiosyncratic variance 0.6 and a
+      global factor at 0.6 return the same evidence to 4e-15 at seventeen
+      entrants). So rho and beta2 trade off, a rho selected at fixed
+      beta2 is a blended estimate, and on Formula 1 that coupling was 28
+      percent of the damage. <code>tune_block_rho</code> takes a
+      <code>beta2_grid</code> to sweep both.</p>
 <pre><code>from winning.ratings import AbilityTracker, tune_block_rho
 
 sel = tune_block_rho(contests, rho_grid=(0.0, 0.2, 0.4, 0.6), drift=0.03)

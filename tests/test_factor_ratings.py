@@ -297,6 +297,26 @@ def test_tune_block_rho_selects_the_true_correlation_by_evidence():
     assert ev[1] > ev[0] + 1.0 and ev[1] > ev[2] + 1.0
 
 
+def test_tune_block_rho_joint_sweep_matches_single_axis_rows():
+    contests = _block_world(0, n_contests=20)
+    single = tune_block_rho(contests, rho_grid=(0.0, 0.5), drift=0.0,
+                            init_var=1.0, Qf=5, beta2=1.0)
+    joint = tune_block_rho(contests, rho_grid=(0.0, 0.5), beta2_grid=(0.7, 1.0),
+                           drift=0.0, init_var=1.0, Qf=5)
+    assert joint["evidence"].shape == (2, 2)
+    assert np.allclose(joint["evidence"][:, 1], single["evidence"])
+    assert single["beta2"] == 1.0 and single["beta2_grid"] is None
+    assert joint["rho"] in (0.0, 0.5) and joint["beta2"] in (0.7, 1.0)
+    assert joint["evidence"][joint["rho_grid"].index(joint["rho"]),
+                             joint["beta2_grid"].index(joint["beta2"])] == joint["evidence"].max()
+    try:
+        tune_block_rho(contests, rho_grid=(0.0,), beta2_grid=(1.0,), beta2=1.0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("beta2 in params and beta2_grid together must raise")
+
+
 def test_walk_forward_passes_groups_and_returns_evidence():
     contests = _block_world(1, n_contests=12)
     out = walk_forward(contests, warmup=4, rho=0.5, drift=0.0, init_var=1.0,
