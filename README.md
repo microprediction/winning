@@ -189,11 +189,13 @@ means unidentifiable, not absent. Block correlation
 same-group entrants a shared per-contest shock, fitted and priced under
 one model, with the correlation share selected by the filter's own
 evidence; the component is redrawn every contest, and a persistent
-group advantage belongs in the means instead. Whether it predicts
-better on the Formula 1 data that motivated it is being re-measured on
-the corrected engine; the [ratings
-page](https://winning.microprediction.org/ratings.html) carries the
-provisional numbers and no claim either way.
+group advantage belongs in the means instead. On the Formula 1 data that
+motivated it, pricing the correlation this way does not predict better:
+the blocked arm's held-out winner log-loss is worse by +0.043 [+0.009,
++0.077] on the current engine and its joint advantage spans zero; the
+[ratings page](https://winning.microprediction.org/ratings.html) has the
+numbers. The feature ships as a modelling option, not a measured
+improvement.
 
 ## History
 

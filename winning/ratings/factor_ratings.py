@@ -468,7 +468,16 @@ def fit_design_ratings(events, n_feat, ridge=1.0, weights=None, base="normal",
     base: the standardised noise density (winning.factor.races.BASES or
     a callable), unit scale. Returns theta; with return_se=True the
     Laplace standard errors follow (theta, se); with return_info=True
-    the optimiser's info dict comes last."""
+    the optimiser's info dict comes last.
+
+    The standard errors are for inference about the coefficients, not
+    for tempering predictions. Pricing at noise variance 1 + Var(mu)
+    from these diagonals measured WORSE on held-out Lichess games
+    (+0.0015 [+0.0003, +0.0026] nats per game, bandits exp39) while the
+    untempered MAP predictions were already calibrated (validation-tuned
+    temper 1.1, worth -0.0001). A candidate cause, untested: the diagonal
+    ignores coefficient covariance and overstates the variance of a
+    difference of two abilities."""
     st = _Stacked(_design_triplets(events, n_feat), n_feat)
     theta, info = _fit(st, ridge, weights, base, n_iter, theta0)
     out = (theta,)
@@ -554,7 +563,8 @@ def fit_factor_ratings(events, n_entities, n_cov, ridge=1.0, weights=None,
     offsets shrunk" and is the confound the module docstring records.
 
     weights, base, n_iter: as fit_design_ratings. B0 warm-starts.
-    return_se=True adds the Laplace standard errors shaped like B."""
+    return_se=True adds the Laplace standard errors shaped like B; see
+    fit_design_ratings on why not to price with them."""
     n_entities, n_cov = int(n_entities), int(n_cov)
     st = _Stacked(_factor_triplets(events, n_entities, n_cov),
                   n_entities * n_cov)

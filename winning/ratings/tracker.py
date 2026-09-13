@@ -39,20 +39,21 @@ WHAT THE CODE DOES, and what is measured. The shared component z_g is
 redrawn at every contest, a mean-zero draw common to the group's members
 in that contest; a persistent group advantage is a different object and
 belongs in the means (a group column in the design of fit_design_ratings,
-or a shared offset), whatever this term is set to. What stands about the
-Formula 1 data that motivated the feature (bandits exp33 / exp34): the
-descriptive fact that same-team 1-2 finishes occur at 0.274 against 0.123
-under independence. Whether pricing that correlation through this term
-predicts better is NOT established in either direction: a first
-consistent fit-and-price run (2026-09-12) read the held-out winner
-log-loss WORSE by +0.053 [+0.019, +0.087] over 106 races with the joint
-advantage at -0.019 [-0.052, +0.011], but that run's blocked arm was
-integrated by the engine before the node cloud was recentred (commit
-7260624), with a 2-5 percent variance error in exactly its prior-sd
-regime while the independent arm, with zero loadings, was exact; it is
-being rerun on the corrected engine and those numbers are provisional
-until it lands. No performance claim is made for this feature; the open
-question is a persistent group term in the mean fitted alongside rho.
+or a shared offset), whatever this term is set to. On the Formula 1 data
+that motivated the feature (bandits exp33 / exp34) the correlation is
+real: same-team 1-2 finishes occur at 0.274 against 0.123 under
+independence, and training evidence prefers rho = 0.4 to independence by
+24.7 nats over 158 races. Pricing it through this term does NOT predict
+better there. Fitted and priced under one model on the current engine
+(main 62f80c0, 2026-09-12), the blocked arm's held-out winner log-loss is
+WORSE by +0.0427 [+0.0089, +0.0769] over 106 races, against the 0.005
+bound the control was held to, and its joint log-loss advantage is
+-0.0224 [-0.0558, +0.0081], P 0.919, spanning zero. The engine repairs of
+PRs #35 and #37 moved the winner gap from +0.0527 by about a fifth and
+left the independent arm bit-identical (zero loadings make the factor
+shift vanish); they do not account for the gap. The feature ships as a
+modelling option, not a measured improvement; the open question is a
+persistent group term in the mean fitted alongside rho.
 
 Cost: one factor dimension per group of two or more in the contest; two or
 fewer ride a 7^r Gauss-Hermite tensor (Qf), more ride 2**nodes_log2 Sobol
