@@ -34,10 +34,10 @@ PARAMS = {
              "factor_worlds": 10},
     "full": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 400_000,
              "referee_draws": 2_000_000, "referee_draws_full": 2_000_000, "sbc_worlds": 200,
-             "factor_worlds": 30},
+             "factor_worlds": 100},
     "exhaustive": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 4_000_000,
                    "referee_draws": 4_000_000, "referee_draws_full": 4_000_000,
-                   "sbc_worlds": 400, "factor_worlds": 60},
+                   "sbc_worlds": 400, "factor_worlds": 150},
 }
 
 # check name -> {"tolerance", "set_by", "date", "basis"}
