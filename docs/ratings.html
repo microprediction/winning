@@ -53,7 +53,7 @@
 
     <p>This page describes the package's rating line: systems that
       maintain a belief about each contestant in a multi-entrant contest
-      &mdash; a race, a tournament, a leaderboard &mdash; and update it
+      (a race, a tournament, a leaderboard) and update it
       from observed finishing orders. The design differs from the
       TrueSkill family in two respects. Beliefs are whole densities on a
       lattice rather than parametric (&mu;, &sigma;) pairs, and each
@@ -67,7 +67,7 @@
     <p>A contestant's ability is represented as a density on a lattice,
       with no parametric family imposed: skewed and multimodal beliefs
       are representable, and the race noise is a kernel of the modeller's
-      choosing &mdash; Gaussian, Student-t, or a mixture with a uniform
+      choosing: Gaussian, Student-t, or a mixture with a uniform
       "retirement" component for contests whose entrants can fail
       outright. The update applies the exact likelihood of the observed
       finish order, computed by an O(N) forward chain, and a single
@@ -184,8 +184,8 @@ trk.predict(ids, t, groups=teams)</code></pre>
     <h2>Benchmark protocol</h2>
     <p>Twelve datasets: Formula 1, ATP and WTA tennis, chess, sumo,
       football, Halo 2, horse racing, and synthetic worlds with known
-      generating truth. The protocol is prequential &mdash; each event is
-      predicted before it is observed &mdash; and each table carries a
+      generating truth. The protocol is prequential, each event
+      predicted before it is observed, and each table carries a
       uniform floor, an oracle where the truth is known, and the
       bookmaker market as a ceiling where odds exist. The tables live in
       <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">BENCHMARKS.md</a>
@@ -197,7 +197,7 @@ trk.predict(ids, t, groups=teams)</code></pre>
       a uniform disaster component beats every Gaussian system tested on
       1,158 grands prix, and the same estimator, handed qualifying
       sessions in which no retirement process exists, drives its own
-      disaster mass to near zero &mdash; the component is measuring the
+      disaster mass to near zero: the component is measuring the
       physics, not absorbing slack. Against the 88 races with genuinely
       pre-qualifying bookmaker odds, however, no rating system built on
       public results and grid data adds statistical power to the market:
