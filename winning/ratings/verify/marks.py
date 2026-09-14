@@ -293,8 +293,26 @@ EXPECTED_APPROX = {
     # A near-constant 21-28 percent over-shrinkage plus a point estimate
     # that degrades with tail weight. The envelope bounds it: robust sd
     # in [0.9, 1.6], coverage in [0.78, 0.95]; beyond it, FAIL.
+    #
+    # The five bases above all land inside the P6 thresholds, so none of
+    # them reaches this envelope: the cell that does is the failure
+    # base, which has no row in that table and inherited bounds set
+    # without it. At 25 seeds it read robust 1.55 and coverage 0.799,
+    # inside by 1.3 and 1.6 standard errors; at 100 seeds it reads
+    # 1.6058 +- 0.0134 and 0.7596 +- 0.0041, outside BOTH. The envelope
+    # was passing on the noise of a seed count rather than on the
+    # approximation being where it was documented. Its own bounds,
+    # measured and then set four standard errors clear so that 25 seeds
+    # can decide them:
     "audit.P6.update_ranking": {
         "envelope": {"robust": (0.9, 1.6), "coverage": (0.78, 0.95)},
+        "per_base": {
+            "failure": {"robust": (0.9, 1.70), "coverage": (0.74, 0.95),
+                        "measured": {"robust": 1.6058, "robust_se": 0.0134,
+                                     "coverage": 0.7596, "coverage_se": 0.0041,
+                                     "seeds": 100, "n_z": 2800,
+                                     "date": "2026-09-14"}},
+        },
         "cite": "winning/ratings/nway.py update_ranking docstring; "
                 "research/adjudications/laplace_convolution_shortcut.md",
         "why": "stagewise decomposition: documented approximation cost"},

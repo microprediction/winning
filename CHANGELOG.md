@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- The verifier's documented-approximation envelope for
+  `update_ranking` was passing on a seed count. At the shipped 25 seeds
+  the failure base reads robust sd 1.55 and coverage 0.799, inside both
+  bounds; at 100 seeds it reads 1.6058 and 0.7596, outside both, so a
+  better-powered run of unchanged code would have failed. The envelope
+  branch also returned before P6's power test, and that test measures
+  against the 0.35 threshold rather than the envelope edge seven times
+  closer, so the cell could report the cost as documented with no power
+  to say otherwise. And the envelope's basis table lists five bases, none
+  of which reaches it; the only cell that does is the failure base, which
+  has no row there. The failure base now has its own envelope set four
+  standard errors clear of the 100-seed measurement, the power test runs
+  against the bound in force, an envelope verdict that cannot be resolved
+  reports UNDERPOWERED, and every envelope verdict carries its margin.
 - The verifier's P8 referee gates on `dm > mark + 4 se`, so what it
   enforces is the mark plus the referee's own Monte Carlo noise, and
   that allowance is budget-dependent while the report printed the
