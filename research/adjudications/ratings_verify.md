@@ -198,6 +198,51 @@ world-specific, and its falsification clause (normal trailing
 Plackett-Luce on normal-generated data by more than two paired SE)
 already fails on its own.
 
+## Mark power audit (winning session, 2026-09-14): P8's mark was the smaller half of its own threshold
+
+A mark nobody has attacked is the same object as a tuning sweep nobody
+checked, and the question to ask of one is not whether the tolerance is
+right but what would have to be true for it to fire, and whether that
+can happen at the profile's budget. The committed baseline run records
+statistic, standard error and tolerance for every cell, so the question
+is arithmetic on that file rather than a re-run.
+
+Of 172 marked cells carrying a usable standard error, none is toothless:
+the largest gap between a statistic and its bound is 16 standard errors,
+and the median is 5.4. The failure is in the other direction and in one
+family.
+
+P8 gates on `dm > mark + 4 se`, so what it enforces is the mark plus the
+referee's own Monte Carlo noise. That allowance is budget-dependent and
+the report printed the nominal mark at every profile. Measured, worst
+base of six:
+
+| draws | noise allowance | enforced | against a mark of |
+|---|---|---|---|
+| 100,000 (fast) | 0.0132 | 0.0182 | 0.005 |
+| 400,000 (full) | 0.0069 | 0.0116 | 0.005 |
+| 4,000,000 (exhaustive) | 0.0021 | 0.0071 | 0.005 |
+
+So a reader of marks.py believing a 0.005 error in the posterior mean
+would be caught was wrong by 3.6x at the profile that gates CI, and the
+mark was the smaller term of its own threshold everywhere. The report
+compounded it by pairing the statistic `max(dm, dv)` with `dm`'s
+tolerance, two numbers that do not correspond.
+
+Remedy, and no mark moves. `dm` and `dv` become separate results, each
+statistic against its own bound. The reported tolerance is the enforced
+threshold, with the mark and the noise allowance in the detail line, so
+a report says what it enforced rather than what was written down. The
+full profile draws 1,000,000 rather than 400,000, where the allowance
+falls to 0.0044 and the mark binds for the first time; the cost is half
+a second over six bases. The fast profile keeps its budget and now
+reports the 0.018 it actually enforces.
+
+What generalises: a gate of the form `statistic > mark + k * noise` has
+two terms and only one of them is in marks.py. Where the noise term
+dominates, the mark is decoration. Next under the same method: the
+EXPECTED_APPROX envelopes and the P6 contrast bands.
+
 ## Gate result (winning session, 2026-09-13, nightly full profile): exit 2 twice, budget raised
 
 The first two scheduled full runs (2026-09-12 08:18 UTC, 2026-09-13

@@ -172,3 +172,52 @@ def test_top_level_front_door():
     p = winning.race_probabilities(mu, V=V, D=D)
     mu_hat = winning.calibrate_abilities(p, V=V, D=D)
     assert np.abs(mu_hat - mu).max() < 1e-4
+
+
+# -- finite temperature: the convolved base, checked against its own moments --
+
+def test_tempered_base_has_the_analytic_moments():
+    """sd*e + tau*g has mean -gamma*tau and variance sd^2 + pi^2 tau^2/6.
+
+    The kernel is convolved on its own zero-centred grid. Evaluating it
+    on the signal's asymmetric grid and taking numpy's central slice
+    displaced the convolved base by that grid's midpoint, -11 tau: a
+    common shift cancels in a race, so win probabilities stayed nearly
+    right while the density was wrong, and the truncation the shift
+    caused did not cancel.
+    """
+    from winning.factor.races import _tempered_curves, BASES
+    euler = 0.5772156649015329
+    fn = BASES["normal"]
+    for sd in (1.0, 0.5, 0.1):
+        for tau in (0.25, 1.0, 2.0):
+            u, _S, f, _fp = _tempered_curves(sd, tau, fn, 12.0, 12.0)
+            du = u[1] - u[0]
+            m1 = float((u * f).sum() * du)
+            m2 = float((u * u * f).sum() * du)
+            assert abs(f.sum() * du - 1.0) < 1e-10
+            assert abs(m1 + euler * tau) < 1e-4, (sd, tau, m1)
+            want = np.sqrt(sd ** 2 + (np.pi * tau) ** 2 / 6.0)
+            assert abs(np.sqrt(max(m2 - m1 * m1, 0.0)) - want) < 1e-3, (sd, tau)
+
+
+def test_temperature_approaches_softmax_as_the_base_narrows():
+    """A narrow base leaves the tau-Gumbel alone, whose race is softmax.
+
+    Closed form, no quadrature in the target, so this is the referee for
+    exactly the regime the moment identity above is protecting.
+    """
+    mu = np.array([0.6, 0.2, 0.0, -0.1, -0.3, -0.4])
+    for tau in (0.25, 0.5, 1.0, 2.0):
+        z = -mu / tau
+        z = z - z.max()
+        target = np.exp(z) / np.exp(z).sum()
+        p = race_probabilities(mu, D=np.full(len(mu), 1e-4),
+                               temperature=tau, points=1001)
+        assert np.abs(p - target).max() < 1e-3, tau
+
+
+def test_a_base_too_narrow_to_resolve_is_refused():
+    mu = np.array([0.3, 0.0, -0.3])
+    with pytest.raises(ValueError, match="too narrow"):
+        race_probabilities(mu, D=np.full(3, 1e-12), temperature=1.0)

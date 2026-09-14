@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- `race_probabilities(..., temperature=tau)` convolved each base with
+  the tau-scaled min-Gumbel kernel on the base's own asymmetric grid and
+  took numpy's central slice, which aligns a kernel's middle sample with
+  zero lag. The grid runs from -12 sd - 30 tau to 12 sd + 8 tau, so its
+  midpoint is -11 tau and the convolved base came out shifted by that
+  much: its mean read 8.16 where the exact value is -0.577. A common
+  shift cancels in a race, which is why win probabilities stayed nearly
+  right, but the shifted density is then truncated against a grid that
+  no longer reaches it, and that does not cancel. The kernel now has its
+  own zero-centred grid and the full convolution is sliced at the lag
+  that matches. Against a 600,000-draw reference the worst error on the
+  reported grid falls from 6.7e-2 to 5.9e-5, and every cell at base sd
+  0.5 or below improves by between 26x and 1146x; unit scale was already
+  at Monte Carlo noise and is unchanged. A base too narrow to resolve on
+  the tempered grid now raises instead of returning NaN, naming
+  `softmax_probabilities` as the closed form for that limit. Reported by
+  the bandits session.
 - `winning.probit` chose its own quadrature nodes and evaluated through
   `winning.factor.core` directly, so its three entry points missed both
   of the race layer's escalations and its window. A fixed Gauss-Hermite

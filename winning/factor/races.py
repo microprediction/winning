@@ -862,18 +862,48 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
 
 
 def _tempered_curves(sd_i, tau, fn, left, right, m=4001):
-    """Survival, density, density-derivative of sd*e + tau*g on a grid."""
+    """Survival, density, density-derivative of sd*e + tau*g on a grid.
+
+    The kernel gets its own grid, symmetric about zero. numpy's
+    mode="same" keeps the central slice of the full convolution, which
+    aligns the kernel's MIDDLE SAMPLE with zero lag, so a kernel
+    evaluated on the signal's own asymmetric grid displaces the result
+    by that grid's midpoint. The min-Gumbel needs 30 tau to the left
+    and 8 to the right, and on [-left sd - 30 tau, right sd + 8 tau]
+    the midpoint is -11 tau: the convolved base came out shifted by
+    +11 tau. A common shift cancels in a race, which is why the win
+    probabilities were nearly right, but the shifted density is then
+    truncated against a grid that does not reach it, and that does not
+    cancel. It bit hardest where 12 sd < 3 tau put the mode off the
+    grid entirely: at sd 0.1, tau 1 the convolved mean read 8.16
+    against an exact -0.577.
+    """
     lo = -left * sd_i - 30.0 * tau
     hi = right * sd_i + 8.0 * tau
     u = np.linspace(lo, hi, m)
     du = u[1] - u[0]
     _, f_base, _ = fn(u[None, None, :] / sd_i)
     f_base = f_base[0, 0] / sd_i
-    v = np.exp(np.minimum(u / tau, 30.0))
+    half = int(np.ceil(30.0 * tau / du))
+    k = np.arange(-half, half + 1) * du                # symmetric, zero-centred
+    v = np.exp(np.minimum(k / tau, 30.0))
     f_gum = v * np.exp(-v) / tau                       # min-Gumbel, scale tau
-    f_eta = np.convolve(f_base, f_gum, mode="same") * du
+    # full convolution, sliced where the kernel's zero lag sits: entry j
+    # of the full product is at u[0] + k[0] + j du, so u[i] is j = i +
+    # half. Slicing by hand rather than by mode="same" also survives a
+    # kernel longer than the signal, which happens once tau exceeds the
+    # base's own width.
+    f_eta = np.convolve(f_base, f_gum, mode="full")[half:half + m] * du
     f_eta = np.maximum(f_eta, 0.0)
     total = f_eta.sum() * du
+    if not np.isfinite(total) or total <= 0.0:
+        raise ValueError(
+            f"base sd {sd_i:g} is too narrow to resolve on the tempered "
+            f"grid at temperature {tau:g}: the grid spans the Gumbel "
+            f"kernel, so a base this much narrower than tau falls between "
+            f"its samples. At that ratio the race is the softmax in the "
+            f"limit; use winning.factor.races.softmax_probabilities, which "
+            f"is the closed form, rather than this quadrature.")
     f_eta /= total
     cdf = np.cumsum(f_eta) * du
     S = np.maximum(1.0 - cdf, 1e-300)

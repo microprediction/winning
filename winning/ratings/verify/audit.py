@@ -416,10 +416,27 @@ def p8(ctx):
         mc_m, mc_v = A[win].mean(0), A[win].var(0)
         dm = float(np.abs(mm - mc_m).max()); dv = float(np.abs(vv - mc_v).max())
         se = float(np.sqrt(mc_v.max() / max(win.sum(), 1)))
-        bad = dm > th["dm"] + 4 * se or dv > th["dv"]
-        out.append(Result(f"{ctx.name}.{bname}", "audit", "ok" if not bad else "FAIL",
-                          statistic=max(dm, dv), se=se, tolerance=th["dm"],
+        # The gate allows the referee's own noise on top of the mark, so
+        # what it enforces is mark + 4 se, not the mark. That allowance
+        # is budget-dependent and was worth 2.6x more at the fast draw
+        # count than at the exhaustive one, while the report printed the
+        # nominal mark either way. Report what is enforced, and pair
+        # each statistic with its own bound rather than printing
+        # max(dm, dv) against dm's.
+        eff = th["dm"] + 4 * se
+        out.append(Result(f"{ctx.name}.{bname}.dm", "audit",
+                          "ok" if dm <= eff else "FAIL",
+                          statistic=dm, se=se, tolerance=eff,
                           regime={"base": bname}, n=int(win.sum()),
-                          detail="" if not bad else f"dm {dm:.4f} dv {dv:.4f}",
-                          extras={"dm": dm, "dv": dv, "p_hat": float(win.mean())}))
+                          detail=f"mark {th['dm']:g} plus 4 se {4 * se:.4f}"
+                                 + ("" if dm <= eff else f"; dm {dm:.4f}"),
+                          extras={"dm": dm, "mark": th["dm"],
+                                  "noise_allowance": 4 * se,
+                                  "p_hat": float(win.mean())}))
+        out.append(Result(f"{ctx.name}.{bname}.dv", "audit",
+                          "ok" if dv <= th["dv"] else "FAIL",
+                          statistic=dv, tolerance=th["dv"],
+                          regime={"base": bname}, n=int(win.sum()),
+                          detail="" if dv <= th["dv"] else f"dv {dv:.4f}",
+                          extras={"dv": dv, "p_hat": float(win.mean())}))
     return out
