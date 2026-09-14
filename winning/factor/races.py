@@ -567,7 +567,21 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     paper's dense-Sigma section for measured accuracy by ensemble).
     temperature > 0 returns the softmin expectation E[softmin(X/tau)],
     computed exactly as the hard race with each base convolved with the
-    tau-scaled min-Gumbel kernel."""
+    tau-scaled min-Gumbel kernel.
+
+    Cost against factor rank, and the lever for it. The node rule below
+    picks a Gauss-Hermite tensor while it fits a 1e5-node budget and
+    scrambled Sobol past that, so the node count caps and the cost stops
+    growing with rank: measured at K = 8, a forward pass takes 12 ms at
+    rank 3 (3,375 nodes), 86 ms at rank 4 (50,625) and 65 ms at ranks 5
+    and 6, where the budget caps it at 8,192. Rank 4 is the most
+    expensive because its tensor sits just under the budget, and it buys
+    that: total variation against a 65,536-node reference is 1.3e-6
+    there against 1.5e-5 for the capped rule. Pass F, W from
+    winning.factor.core.qmc_nodes(r, m=13) to take the capped cost at
+    rank 4 and the capped accuracy with it. Inversion runs the forward
+    pass per Newton step, so it scales the same way from 17 ms at rank
+    1."""
     if cov is not None:
         if structure is not None or V is not None or D is not None:
             raise ValueError("cov= replaces structure=/V=/D=; pass one only")
