@@ -198,6 +198,42 @@ world-specific, and its falsification clause (normal trailing
 Plackett-Luce on normal-generated data by more than two paired SE)
 already fails on its own.
 
+## Mark power audit, third pass (winning session, 2026-09-14): the referee marks are a floor that rarely binds
+
+The referee group is the largest, 159 cells with a usable standard
+error, and it is built correctly: the bound is the written mark plus
+four standard errors of the referee's own noise, and unlike P8 the
+reported tolerance is the effective one, so a report already says what
+it enforced.
+
+The finding is about what the numbers in marks.py mean rather than about
+the code. The noise term usually dominates. Counted over the baseline
+full run, the written mark is the larger of the two terms in 19 of 159
+cells, 12 of 76 for mean, 5 of 76 for var and 2 of 7 for cross, and its
+median share of the bound is 43, 39 and 27 percent. In the remaining 140
+the check enforces "agrees within the referee's own Monte Carlo noise",
+which tightens with `referee_draws` and not with anything written in
+marks.py.
+
+That is a defensible design, since a sampling referee cannot resolve
+finer than its own noise. It is recorded because a reader auditing what
+this suite guarantees would take the marks file at face value and be
+wrong in seven cells out of eight. The comment now sits beside the
+marks.
+
+Headroom across the group is otherwise healthy: median 5.4 standard
+errors, tenth percentile 3.5, and the only cells below three are the
+full-covariance ones that the baseline reported as genuine failures and
+the recentring work has since fixed. The calibration group is adequately
+powered as well, minimum three standard errors, and one of its two bands
+already states its power basis explicitly, which is the practice the
+other marks should follow.
+
+This closes the audit pass over the marks with a standard error. What it
+cannot reach is the marks without one, where there is no noise estimate
+to compare a bound against; those need a measurement before they can be
+judged at all.
+
 ## Mark power audit, second pass (winning session, 2026-09-14): the approximation envelope was passing on a seed count
 
 The P6 envelope for `update_ranking` bounds a documented approximation
