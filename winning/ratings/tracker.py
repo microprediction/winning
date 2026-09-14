@@ -101,6 +101,7 @@ from .nway import (update_winner, update_ranking, update_ranking_exact,
                    update_winner_correlated, update_order_correlated,
                    predictive_win_probabilities, _order_pass, _predictive_curves)
 from .market import update_market
+from .tuning import select
 from ..factor.races import race_probabilities
 
 
@@ -436,9 +437,11 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     walk per grid point over contests carrying 'groups', summing
     log P(observation) from every update (nothing held out, no target event
     consulted). Returns rho_grid, evidence (per rho, or a (rho, beta2)
-    matrix when ``beta2_grid`` is given), rho and beta2 (the argmax), and
-    at_edge: an argmax at either end of a grid is a capped rival, not a
-    tuned one; widen the grid. ``params`` go to AbilityTracker (drift,
+    matrix when ``beta2_grid`` is given), rho and beta2 (the argmax),
+    at_edge (an argmax at either end of a grid is a capped rival, not a
+    tuned one; widen the grid), and on the single-axis path inert, true
+    when the grid does not move the evidence, so that the selection is a
+    tie-break rather than a tuning (winning.ratings.tuning). ``params`` go to AbilityTracker (drift,
     beta2, base, Qf, ...); with ``beta2_grid`` pass beta2 through the grid.
 
     On Formula 1 this evidence preferred rho = 0.4 to independence by
@@ -463,9 +466,12 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     if beta2_grid is None:
         evidence = np.asarray([walk(rho, {}) for rho in rho_grid])
         best = int(np.argmax(evidence))
+        _, report = select({r: -e for r, e in zip(rho_grid, evidence)},
+                           "rho", order=list(rho_grid))
         return {"rho_grid": rho_grid, "beta2_grid": None, "evidence": evidence,
                 "rho": rho_grid[best], "beta2": float(params.get("beta2", 1.0)),
-                "at_edge": best in (0, len(rho_grid) - 1)}
+                "at_edge": best in (0, len(rho_grid) - 1),
+                "inert": report.inert, "report": report}
     if "beta2" in params:
         raise ValueError("pass beta2 through beta2_grid, not params, when sweeping both")
     beta2_grid = tuple(float(b) for b in beta2_grid)

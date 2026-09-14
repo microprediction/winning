@@ -12,6 +12,8 @@ from .teams import (update_team_winner_full, update_team_order_full,  # noqa: F4
                     update_team_margins_full, update_team_market_full)
 from .orders import (order_from_positions, order_from_performance,  # noqa: F401
                      order_from_times, positions_from_order)
+from .tuning import (select, select_grid, require_live,  # noqa: F401
+                     TuningReport)
 from .tracker import (AbilityTracker, AbilityState,  # noqa: F401
                       order_augmented, block_loadings, tune_block_rho)
 from .factor_ratings import (fit_design_ratings, design_loglik,  # noqa: F401

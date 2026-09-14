@@ -129,9 +129,9 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
         return _rp(mu, V=np.asarray(structure.V, float),
                    D=np.asarray(structure.D, float), **kw)
     # the hierarchical kernels are Gaussian, hard-race, probabilities-only.
-    # They used to accept and discard base=, temperature= and
-    # return_slopes=, answering a different question than the caller asked
-    # (sixth review). Refuse instead.
+    # Accepting and discarding base=, temperature= or return_slopes=
+    # would answer a different question than the caller asked
+    # (sixth review), so they are refused.
     unsupported = [k for k, bad in
                    (("base", kw.get("base") not in (None, "normal")),
                     ("temperature", bool(kw.get("temperature"))),

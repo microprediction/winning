@@ -150,9 +150,9 @@ build one from whatever form the data arrive in.
 observed on the contest, such as time control or task category, with
 one ridge penalty per covariate: the level pools every contest and the
 offsets shrink toward it. On Lichess it beats the site's own
-per-time-control Glicko-2 by 0.014 to 0.018 nats per game across three
-splits, and on both Lichess and Chatbot Arena it beats a single rating
-and a separate rating per category. `sweep_offset_ridge` tunes the
+per-time-control Glicko-2 by 0.008 to 0.012 nats per game across three
+splits with both sides tuned, and on both Lichess and Chatbot Arena it
+beats a single rating and a separate rating per category. `sweep_offset_ridge` tunes the
 penalty, and `covariate_contrast_report` tells you whether a covariate
 was assigned or chosen, which decides how much a null result means.
 

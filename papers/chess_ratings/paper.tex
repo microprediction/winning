@@ -13,7 +13,7 @@
   {\normalfont\normalsize\itshape}}
 \makeatother
 
-\title{\textbf{Beating a deployed rating system}\\[0.4em]
+\title{\textbf{Beating a Deployed Rating System}\\[0.4em]
 \large Partial Pooling Against Per-Category Glicko-2 on Lichess}
 \author{Peter Cotton}
 \date{\today}
@@ -28,13 +28,12 @@ within it, and accept the sparse-cell variance that follows. We compare
 it with a partially pooled alternative on 59{,}399 decisive games from
 one month of the site's open database, in which a player's ability is a
 level estimated from all of their games plus shrunk bullet and blitz
-offsets. The pooled rating is better by $0.0137$ to $0.0182$ nats of
-held-out log loss across three independent splits, every interval
-excluding zero, and roughly four fifths of that margin is the
-estimator, a batch fit against an online update, with one fifth the
-factor structure itself. Stratification helps Glicko-2 and hurts our
-scalar, because its benefit is capped by what pooling already captures
-while its cost is not. Opening family is unidentifiable because players
+offsets. With both systems tuned on the same validation split, the
+pooled rating is better by $0.008$ to $0.012$ nats of held-out log loss
+across three independent splits, every interval excluding zero; the
+estimator accounts for $-0.0080$ of that and the factor structure for
+$-0.0033$. Once Glicko-2's recency parameter is tuned rather than left
+at its default, stratification is worth nothing to either side. Opening family is unidentifiable because players
 choose openings, opponent-strength curvature is real but almost
 entirely shared, and modern Lichess no longer poses the question, with
 $0.3\%$ of players mixing time controls against $52\%$ in 2013.
@@ -74,9 +73,14 @@ month, 59{,}399 games among 639 players; draws are dropped. Each game is labelle
 time control.
 
 Games are split 50/25/25 into fitting, validation and scored sets, and
-every arm sees the same games. Glicko-2's $\tau$ is tuned on the
-validation split exactly as our ridge is; neither side is given a free
-parameter the other lacks. Held-out mean log loss is reported on the
+every arm sees the same games. Both systems have their material
+parameters tuned on the validation split: Glicko-2's rating period and
+initial deviation, our level and offset ridges. Glicko-2's $\tau$ is
+not one of them, because it is inert here: it enters only the
+volatility iteration, and sweeping it from $0.02$ to $1.0$ returns
+bit-identical loss, so a comparison that tunes $\tau$ and stops leaves
+the competitor at library defaults while its own side has a parameter
+that bites. Held-out mean log loss is reported on the
 scored quarter only, and intervals come from a paired bootstrap over
 20{,}000 resamples. Three independent splits are reported throughout,
 because a single split on this kind of data is not evidence.
@@ -94,10 +98,10 @@ structure. \emph{Our factor} adds the shrunk offsets.
 \toprule
 arm & seed 0 & seed 11 & seed 22 \\
 \midrule
-Glicko-2 pooled & 0.6323 & 0.6304 & 0.6365 \\
-Glicko-2 per time control \emph{(Lichess)} & 0.6234 & 0.6241 & 0.6294 \\
-our scalar & 0.6117 & 0.6131 & 0.6145 \\
-\textbf{our factor} & \textbf{0.6073} & \textbf{0.6104} & \textbf{0.6112} \\
+Glicko-2 pooled & 0.6193 & 0.6206 & 0.6233 \\
+Glicko-2 per time control \emph{(Lichess)} & 0.6177 & 0.6191 & 0.6232 \\
+our scalar & 0.6117 & 0.6134 & 0.6140 \\
+\textbf{our factor} & \textbf{0.6073} & \textbf{0.6111} & \textbf{0.6108} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -110,10 +114,10 @@ every split. Decomposed:
 \toprule
 comparison & seed 0 & seed 11 & seed 22 \\
 \midrule
-\textbf{factor vs Lichess} & $-0.0161$ & $-0.0137$ & $-0.0182$ \\
-estimator (scalar vs Glicko-2 pooled) & $-0.0206$ & $-0.0173$ & $-0.0219$ \\
-structure (factor vs our scalar) & $-0.0044$ & $-0.0027$ & $-0.0033$ \\
-stratification's value to Glicko-2 & $+0.0089$ & $+0.0063$ & $+0.0071$ \\
+\textbf{factor vs Lichess} & $-0.0104$ & $-0.0080$ & $-0.0124$ \\
+estimator (scalar vs Glicko-2 pooled) & $-0.0076$ & $-0.0072$ & $-0.0093$ \\
+structure (factor vs our scalar) & $-0.0044$ & $-0.0023$ & $-0.0032$ \\
+stratification's value to Glicko-2 & $-0.0016$ & $-0.0015$ & $-0.0001$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -121,32 +125,44 @@ stratification's value to Glicko-2 & $+0.0089$ & $+0.0063$ & $+0.0071$ \\
 \noindent Every interval excludes zero on every split, with
 $P(\text{better}) \ge 0.995$.
 
-The headline should not be quoted without the decomposition. Roughly
-four fifths of the margin is the estimator, a batch fit that sees the
-training games at once against an online update that sees each game
-once, and one fifth is the factor structure. The structure's own
-contribution, $0.003$ to $0.004$ with intervals excluding zero on all
-three splits, is the part that answers the question posed. The estimator column is a real advantage but
-a different claim, and it is partly a privilege: a production system
-must process games once, and ours need not.
+The headline should not be quoted without the decomposition. The
+estimator contributes $-0.0080$, a batch fit that sees the training
+games at once against an online update that sees each game once, and
+the factor structure $-0.0033$. The structure's own contribution, with
+intervals excluding zero on all three splits, is the part that answers
+the question posed, and it is the column insensitive to how well the
+competitor is tuned: tuning Glicko-2's rating period moves the
+estimator column by three fifths and the structure column by a
+twentieth. The estimator column is also partly a
+privilege rather than a better method, because a production system must
+process each game once and ours need not.
 
-\section{Why stratification helps Glicko-2 and not the batch estimator}
+One caveat bounds the margin from the wrong side. Glicko-2's
+rating period selects the largest value offered on every arm and every
+split, so the margin reported here is an upper bound on the true one.
+The parameter saturates rather than running away, moving validation
+loss by $0.6203$, $0.6200$, $0.6199$ across three decades, because past
+a point it switches deviation inflation off entirely; the residual is
+therefore bounded near $0.0001$ rather than unknown.
 
-Two facts in the table look contradictory and are not. Stratifying
-Glicko-2 \emph{gains} $0.0063$--$0.0089$. Stratifying our scalar
-\emph{loses} $0.0006$. Partial pooling of the same information gains
-$0.0027$--$0.0044$.
+\section{Stratification buys neither side anything}
 
-Stratification's payoff runs inversely to the quality of the base
-estimator. Its benefit is the category information; its cost is
-sparse-cell variance. When the base estimator is weak, the benefit
-dominates. When the base estimator is strong, the pooled level already
-captures most of what the category would have told you, and only the
-variance cost remains. Partial pooling extracts the same signal without
-paying that cost, which is why it wins in both regimes and is the
-unconditional recommendation. A practitioner reporting that
-stratification helped them has reported something about their base
-estimator, not found a counterexample.
+Stratifying Glicko-2 appears to gain $0.0063$ to $0.0089$ while
+stratifying our scalar loses $0.0006$, and the contrast invites an
+argument about which base estimator benefits. The gain is an artifact
+of leaving Glicko-2's rating period at its default. With the period
+tuned, stratification is worth $-0.0016$, $-0.0015$ and
+$-0.0001$ on the three splits, which is nothing, and partial pooling
+of the same information still gains $0.0023$ to $0.0044$.
+
+The reading is simpler than the contrast suggests. Per-category
+ratings were not buying Glicko-2 category information; they were
+protecting it from deviations that inflated too fast for a dense
+single-month window, and a tuned period removes the need for that
+protection. Conditioning on the category earns nothing once the base
+estimator's recency is set correctly, while partial pooling of the same
+information still pays. A practitioner who finds that stratification
+helps should check the recency setting of the system it helped.
 
 \section{The covariates that did not work}
 
@@ -187,15 +203,22 @@ strength, the factor treatment pays on one.
 \paragraph{Colour is not the confound.} Our arms model the white
 advantage and standard Glicko-2 does not, so the estimator column
 invites the suspicion that it is colour bookkeeping. It is not: colour
-is worth $-0.0016$ of the $-0.0206$ gap, and a colour-blind fit still
-beats colour-blind Glicko-2 by $-0.0190$ like for like.
+is worth $-0.0016$ of the estimator gap, and a colour-blind fit still
+beats colour-blind Glicko-2 like for like. Both figures come from runs
+against Glicko-2 at its default rating period and are not recomputed
+here; the share attributable to colour is small either way, and the gap
+it is a share of is $-0.0080$.
 
 \paragraph{The result is not an artifact of the dense subpopulation, but
 the mechanism's own prediction failed.} Rerunning at inclusion
 thresholds of $100/50/25/10$ games moves observations per parameter
-from $30.9$ to $15.3$ and the margin stays between $-0.016$ and
-$-0.019$ throughout, every interval excluding zero. The robustness
-question is answered. The registered prediction, however, was that
+from $30.9$ to $15.3$ and the margin is flat throughout, every interval
+excluding zero. Those margins also come from runs against Glicko-2 at
+its default period and will shrink by roughly the headline's
+proportion when recomputed, since they share its baseline; the
+robustness
+question concerns their flatness across thresholds, which does not
+depend on the level. The registered prediction, however, was that
 pooling should pay \emph{most} where data is scarcest and the margin
 should widen. It does not: it is flat within noise and not monotone.
 The factor advantage is roughly constant in population density rather than concentrated among data-poor players,
@@ -241,14 +264,14 @@ longer exists at scale on this site.
 \section{Conclusion}
 
 A partially pooled vector rating beats a rating system in production,
-on its own data, by $0.0137$ to $0.0182$ nats. Most of that is the
-estimator and about a fifth is the pooling, and both parts are worth
-stating separately. The wider claim the data supports is narrower than
-``ratings should be vectors'': it is that \emph{conditioning} is the
-expensive way to use category information and \emph{pooling} is the
-cheap one, that the gap between them is largest for whoever has the
-weaker base estimator, and that the covariate must vary within a player
-for reasons the player does not choose. Opening choice fails that
+on its own data, by $0.008$ to $0.012$ nats once both systems are
+tuned. The estimator contributes $-0.0080$ and the pooling $-0.0033$,
+and both parts are worth stating separately. The wider claim the data
+supports is narrower than ``ratings should be vectors'': it is that
+\emph{conditioning} earns nothing once a base estimator's recency is
+set correctly, that \emph{pooling} the same information still pays,
+and that the covariate must vary within a player for reasons the player
+does not choose. Opening choice fails that
 condition, opponent strength satisfies it while carrying almost no
 per-player signal, and time control satisfied it in 2013 and no longer
 does.

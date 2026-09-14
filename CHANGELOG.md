@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- `winning.ratings.tuning`: `select` returns a swept parameter's argmin
+  together with whether the sweep did anything, separating INERT (the
+  grid does not move the metric, so the choice is a tie-break and must
+  not be reported as tuned), AT GRID EDGE, and edge-but-SATURATED (the
+  curve has converged, benign). `select_grid` profiles each axis of a
+  product grid separately and `require_live` raises where a fairness
+  claim depends on the tuning being real. `sweep_offset_ridge` and
+  `tune_block_rho` now report `inert` from it.
+- The chess measurements are corrected. Glicko-2's `tau` was swept and
+  cited as evidence of symmetric tuning, but it is inert over one month
+  of games, and the parameters that do move its loss were never swept.
+  With both sides tuned the factor form still beats Glicko-2 per time
+  control on all three splits (0.008 to 0.012 nats, intervals excluding
+  zero), the estimator is worth -0.0080 rather than -0.0199, the factor
+  structure is unchanged at -0.0033, and stratification's value to
+  Glicko-2 flips from +0.0074 to -0.0011, so it helps neither side. The
+  module docstring, README and ratings page are corrected;
+  `papers/chess_ratings` is marked under correction pending a rewrite.
 - `julia/MvNormalCDFFast` is now `julia/FactorMvNormalCDF` (new UUID),
   with MvNormalCDF.jl as a hard dependency: every case outside the
   exact factor path (rank > 2, sharpness > 3, or a covariance that is
