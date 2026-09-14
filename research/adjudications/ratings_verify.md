@@ -198,6 +198,51 @@ world-specific, and its falsification clause (normal trailing
 Plackett-Luce on normal-generated data by more than two paired SE)
 already fails on its own.
 
+## Mark power audit, second pass (winning session, 2026-09-14): the approximation envelope was passing on a seed count
+
+The P6 envelope for `update_ranking` bounds a documented approximation
+cost: robust sd in [0.9, 1.6] and coverage in [0.78, 0.95], beyond which
+the cell fails. Three things were wrong with it, and the first is the
+one that matters.
+
+**It was passing on noise.** At the shipped 25 seeds the failure base
+reads robust 1.55 and coverage 0.799, inside both bounds by 1.3 and 1.6
+standard errors. At 100 seeds it reads 1.6058 +- 0.0134 and 0.7596 +-
+0.0041, outside both. Four times the data moves the statistic across
+both edges, so the nightly was passing on where 700 z-values happened to
+land rather than on the approximation being where it was documented, and
+a better-powered run of unchanged code would have reported a failure.
+
+**The power test could not see it.** P6 already asks whether three
+standard errors fit inside the bound, which is the right question, but
+the envelope branch returns before that test is reached, and the test
+measures against the P6 threshold of 0.35 rather than against the
+envelope edge, which for this cell sits seven times closer. So the cell
+could report the cost as documented while having no power to say
+otherwise.
+
+**The envelope was set without this base.** Its basis table lists
+gumbel, normal, logistic, laplace and student4, whose robust sds measure
+1.06 to 1.21 here and sit comfortably inside the P6 thresholds, so none
+of them ever reaches the envelope. The only cell that reaches it is the
+failure base, which has no row in that table and inherited bounds fitted
+without it.
+
+Remedy. The failure base gets its own envelope, robust in [0.9, 1.70]
+and coverage in [0.74, 0.95], set four standard errors clear of the
+100-seed measurement so that 25 seeds can decide it, with the measured
+values, their standard errors, the seed count and the date recorded
+beside it. The power test runs on the envelope branch and against the
+edge actually in force; an envelope verdict that cannot be resolved
+reports UNDERPOWERED rather than EXPECTED_APPROX. Every envelope verdict
+now carries its margin in standard errors. Verified: the failure cell
+reports EXPECTED_APPROX at 5.1 standard errors of margin, and the five
+documented bases stay ok.
+
+What generalises, alongside the P8 finding above: a bound is only as
+good as the power to test it, and a bound inherited by a case that was
+not measured when it was set is a guess with a citation attached.
+
 ## Mark power audit (winning session, 2026-09-14): P8's mark was the smaller half of its own threshold
 
 A mark nobody has attacked is the same object as a tuning sweep nobody
