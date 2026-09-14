@@ -31,7 +31,7 @@ sets the constant ratio rule, Luce's choice axiom, against Thurstone's Case V; i
 new data from situations where renormalizing a probability is tempting. Gaussian renormalization
 has the lower held-out log loss in thirty of thirty-nine comparisons. Those rows cluster, so we
 also count by source, taking one specification per study and calling a source drawn when its
-resampling interval covers zero: Gaussian renormalization is then ahead in fourteen sources,
+resampling interval covers zero: Gaussian renormalization is then ahead in fifteen sources,
 linear renormalization in one, with one drawn and three unresolved. The differences are small where
 they are small, a median of $0.004$ nats across the thirty-nine rows, and twelve exceed $0.01$
 with a maximum of $0.05$.
@@ -341,9 +341,9 @@ Jester file 3 & ranking-induced & $+.0024$ & $\le .005$ & Jester \\
 Jester file 1 & ranking-induced & $+.0020$ & $\le .005$ & Jester \\
 Jester file 2 & ranking-induced & $+.0018$ & $\le .005$ & Jester \\
 GSS job values & ranking-induced & $+.0018$ & $\le .005$ & GSS \\
-Dots & ranking-induced & $+.0016$ & $\le .005$ & perceptual \\
-Netflix & ranking-induced & $+.0013$ & $\le .005$ & film \\
-Puzzles & ranking-induced & $+.0008$ & $\le .005$ & perceptual \\
+Netflix & ranking-induced & $+.0018$ & $\le .005$ & film \\
+Dots & ranking-induced & $+.0014$ & $\le .005$ & perceptual \\
+Puzzles & ranking-induced & $+.0009$ & $\le .005$ & perceptual \\
 Letters, five to four, $\{A,E,F,H\}$ & observed menus & $+.0006$ & $.129$ & Townsend--Landon \\
 US state ballots 2024 & observed ballots & $+.0002$ & $.005$ & ballots \\
 Gambles, low arithmetic cost & observed menus & $+.0002$ & $.667$ & Aguiar \\
@@ -443,15 +443,15 @@ Sushi & all proper restrictions & $+.0111$ & $[+.0088, +.0142]$ & Gaussian \\
 Political goals & all proper restrictions & $+.0076$ & $[+.0060, +.0096]$ & Gaussian \\
 General Social Survey & two items pooled\footnotemark[13] & $+.0038$ & $[+.0027, +.0069]$ & Gaussian \\
 Jester & three files pooled\footnotemark[13] & $+.0020$ & $[+.0016, +.0027]$ & Gaussian \\
-PrefLib perceptual & dots & $+.0016$ & $[+.0008, +.0026]$ & Gaussian \\
-PrefLib perceptual & puzzles & $+.0009$ & pending & pending \\
-Netflix & five files pooled\footnotemark[13] & $+.0018$ & pending & pending \\
+PrefLib perceptual & dots & $+.0014$ & $[+.0008, +.0030]$ & Gaussian \\
+PrefLib perceptual & puzzles & $+.0009$ & $[+.0005, +.0024]$ & Gaussian \\
+Netflix & five files pooled\footnotemark[13] & $+.0018$ & $[+.0006, +.0037]$ & Gaussian \\
 Sports participation & all proper restrictions & $+.0051$ & $[+.0027, +.0168]$ & excluded\footnotemark[12] \\
 \bottomrule
 \end{tabular}
 \caption{One row per source. A verdict of Gaussian or linear means the interval excludes zero;
 a draw means it covers zero; unresolved means no interval could be computed. Counting this way,
-Gaussian renormalization is ahead in fourteen sources, linear renormalization in one, one is
+Gaussian renormalization is ahead in fifteen sources, linear renormalization in one, one is
 drawn, three are unresolved and one is excluded. Wikipedia's magnitude is negligible either way,
 which is why it is grouped with the draw in the surrounding prose despite the formal verdict
 being unresolved. Of the three unresolved rows, the tone matrices are participant-averaged and
@@ -1267,15 +1267,16 @@ Jester file 3 & $+.0024$ & $+.0024$ & $+.0024$ & & $+.0024$ & $+.0024$ & $+.0064
 Jester file 1 & $+.0020$ & $+.0020$ & $+.0019$ & & $+.0020$ & $+.0019$ & $+.0053$ \\
 Jester file 2 & $+.0018$ & $+.0018$ & $+.0017$ & & $+.0018$ & $+.0017$ & $+.0048$ \\
 GSS job values & $+.0019$ & $+.0018$ & $+.0018$ & & $+.0018$ & $+.0017$ & $+.0021$ \\
-Dots & $+.0017$ & $+.0016$ & $+.0016$ & & $+.0016$ & $+.0014$ & $+.0025$ \\
-Netflix & $+.0013$ & $+.0013$ & $+.0013$ & & $+.0013$ & $+.0013$ & $+.0013$ \\
-Puzzles & $+.0008$ & $+.0008$ & $+.0008$ & & $+.0008$ & $+.0007$ & $+.0013$ \\
+Netflix & $+.0019$ & $+.0018$ & $+.0016$ & & $+.0018$ & $+.0018$ & $+.0018$ \\
+Dots & $+.0015$ & $+.0014$ & $+.0014$ & & $+.0014$ & $+.0012$ & $+.0023$ \\
+Puzzles & $+.0010$ & $+.0009$ & $+.0008$ & & $+.0009$ & $+.0007$ & $+.0015$ \\
 \bottomrule
 \end{tabular}
 \caption{Held-out gain under three smoothing conventions and three menu weightings. Smoothing
 moves most collections by $0.0001$ or less across the three values; the exceptions are
 occupational prestige, unscorable at $\alpha = 0$ and falling to $+0.0153$ at $\alpha = 1$,
-GSS socialization ($+0.0060$ to $+0.0055$) and sports participation ($+0.0056$ to $+0.0046$).
+GSS socialization ($+0.0060$ to $+0.0055$), sports participation ($+0.0056$ to $+0.0046$) and
+Netflix ($+0.0019$ to $+0.0016$).
 Weighting changes magnitude and not sign. Uniform by surviving size is smaller than the subset
 count in eleven of twelve collections and larger on Sushi ($+0.0121$ against $+0.0111$); pairs
 alone are larger everywhere, and Sushi runs from $+0.0108$ to $+0.0412$ depending which is
@@ -1326,9 +1327,9 @@ Jester file 3 & $+.0064$ & $+.0050$ & $+.0033$ & $+.0020$ & $+.0012$ & $+.0006$ 
 Jester file 1 & $+.0053$ & $+.0041$ & $+.0026$ & $+.0016$ & $+.0010$ & $+.0005$ & $+.0003$ & $+.0001$ & $+.0000$ \\
 Jester file 2 & $+.0048$ & $+.0037$ & $+.0024$ & $+.0015$ & $+.0009$ & $+.0005$ & $+.0002$ & $+.0001$ & $+.0000$ \\
 GSS job values & $+.0021$ & $+.0020$ & $+.0009$ & $-.0000$ & & & & & \\
-Dots & $+.0025$ & $+.0003$ & $-.0000$ & & & & & & \\
-Netflix & $+.0013$ & $+.0000$ & & & & & & & \\
-Puzzles & $+.0013$ & $+.0000$ & $-.0000$ & & & & & & \\
+Dots & $+.0023$ & $+.0002$ & $-.0000$ & & & & & & \\
+Netflix & $+.0018$ & $-.0000$ & & & & & & & \\
+Puzzles & $+.0015$ & $-.0000$ & $-.0000$ & & & & & & \\
 \bottomrule
 \end{tabular}
 \caption{Held-out gain by the size of the surviving menu, all twelve ranking collections.
@@ -1551,9 +1552,9 @@ GSS job values & $+0.0018$ & $-0.0049$ & $+0.0067$ & $0.0005$ \\
 Jester file 3 & $+0.0024$ & $-0.0015$ & $+0.0039$ & $0.0005$ \\
 Jester file 1 & $+0.0020$ & $-0.0014$ & $+0.0034$ & $0.0005$ \\
 Jester file 2 & $+0.0018$ & $-0.0014$ & $+0.0032$ & $0.0005$ \\
-Dots & $+0.0016$ & $-0.0015$ & $+0.0031$ & $0.0005$ \\
-Puzzles & $+0.0008$ & $-0.0012$ & $+0.0020$ & $0.0005$ \\
-Netflix & $+0.0013$ & $-0.0001$ & $+0.0013$ & $0.0005$ \\
+Dots & $+0.0014$ & $-0.0012$ & $+0.0026$ & $0.0005$ \\
+Puzzles & $+0.0009$ & $-0.0010$ & $+0.0019$ & $0.0015$ \\
+Netflix & $+0.0018$ & $-0.0016$ & $+0.0033$ & $0.0005$ \\
 \midrule
 Sports participation & $+0.0051$ & $+0.0051$ & $-0.0000$ & $0.509$ \\
 \bottomrule
