@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `winning.probit` chose its own quadrature nodes and evaluated through
+  `winning.factor.core` directly, so its three entry points missed both
+  of the race layer's escalations and its window. A fixed Gauss-Hermite
+  rule has no sharpness branch: at K = 8 with loadings 1.5 at rank 2
+  `shares` carried total variation 1.2e-3 where the adaptive rule
+  carries 2.8e-6. It has no node budget either, so the pruned tensor
+  reached 24 s per forward pass at rank 6 against 55 ms capped. And the
+  core lattice spans the abilities rather than the winner bulk, which
+  cost 5x at rank 3 for the same answer. `shares`,
+  `utilities_from_shares` and `removal_shares` now route through
+  `race_probabilities` and `abilities_from_race`. Two tests asserted
+  bit-exact agreement with a hand-built node set, which pinned the node
+  rule rather than the reflection claim; they compare against the race
+  entry point at two ulp, and the escalation and the cap have
+  regression tests.
 - `winning.ratings.tuning`: `select` returns a swept parameter's argmin
   together with whether the sweep did anything, separating INERT (the
   grid does not move the metric, so the choice is a tie-break and must

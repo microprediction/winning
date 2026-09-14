@@ -19,9 +19,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..factor.core import (abilities_from_probabilities_factor,
-                           factor_model_projected, hermite_nodes,
-                           win_probabilities_factor)
+from ..factor.core import factor_model_projected
+from ..factor.races import abilities_from_race, race_probabilities
 
 __all__ = ["shares", "utilities_from_shares", "calibrate_utilities",
            "removal_shares", "fit_factor_model"]
@@ -66,6 +65,18 @@ def fit_factor_model(Sigma, k):
 
 
 def _prepare(n, V, D, Sigma, k):
+    """Validate the factor description; nodes and lattice are the race
+    layer's business.
+
+    These entry points used to build hermite_nodes(V.shape[1]) here and
+    evaluate through winning.factor.core directly, which cost them both
+    of the race layer's escalations and its window. A fixed
+    Gauss-Hermite rule has no sharpness branch, so at K = 8 with
+    loadings 1.5 at rank 2 this path carried total variation 1.2e-3
+    where the adaptive rule carries 2.8e-6; it has no node budget, so
+    the pruned tensor reached 24 s per forward pass at rank 6 against
+    55 ms capped; and the core lattice spans the abilities rather than
+    the winner bulk, which cost 5x at rank 3 for the same answer."""
     if Sigma is not None:
         if k is None:
             raise ValueError("supply the factor rank k with Sigma")
@@ -77,16 +88,15 @@ def _prepare(n, V, D, Sigma, k):
         raise ValueError(
             f"V has {V.shape[0]} rows but there are {n} alternatives")
     D = np.ones(n) if D is None else np.asarray(D, dtype=float)
-    F, W = hermite_nodes(V.shape[1])
-    return V, D, F, W
+    return V, D
 
 
 def shares(utilities, V=None, D=None, Sigma=None, k=None, points=501,
            return_fit=False):
     """Choice probabilities of the factor probit model (max-wins)."""
     u = np.asarray(utilities, dtype=float)
-    V, D, F, W = _prepare(len(u), V, D, Sigma, k)
-    p = win_probabilities_factor(-u, V, D, F, W, points=points)
+    V, D = _prepare(len(u), V, D, Sigma, k)
+    p = race_probabilities(-u, V=V, D=D, points=points)
     return (p, V, D) if return_fit else p
 
 
@@ -94,10 +104,8 @@ def utilities_from_shares(p, V=None, D=None, Sigma=None, k=None,
                           points=501, tol=1e-6):
     """Mean-zero utilities reproducing the observed shares (max-wins)."""
     p = np.asarray(p, dtype=float)
-    V, D, F, W = _prepare(len(p), V, D, Sigma, k)
-    a = abilities_from_probabilities_factor(p, V, D, F, W, tol=tol,
-                                            points=points)
-    return -a
+    V, D = _prepare(len(p), V, D, Sigma, k)
+    return -abilities_from_race(p, V=V, D=D, points=points, tol=tol)
 
 
 def removal_shares(utilities, V=None, D=None, Sigma=None, k=None,
@@ -112,9 +120,8 @@ def removal_shares(utilities, V=None, D=None, Sigma=None, k=None,
     raises rather than normalizing a defective row away."""
     from ..factor.races import removal_shares as _removal
     u = np.asarray(utilities, dtype=float)
-    V, D, F, W = _prepare(len(u), V, D, Sigma, k)
-    return _removal(-u, V=V, D=D, F=F, W=W, points=points,
-                    mass_tol=mass_tol)
+    V, D = _prepare(len(u), V, D, Sigma, k)
+    return _removal(-u, V=V, D=D, points=points, mass_tol=mass_tol)
 
 
 # canonical calibrate_* family name; calibrate_factors is reserved for

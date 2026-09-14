@@ -2,7 +2,8 @@
 
 import numpy as np
 
-from winning.factor import hermite_nodes, win_probabilities_factor
+from winning.factor.core import qmc_nodes
+from winning.factor.races import race_probabilities
 from winning.probit import fit_factor_model, shares, utilities_from_shares
 
 
@@ -15,11 +16,44 @@ def _problem(n=30, k=2, seed=5):
 
 
 def test_reflection_is_exact():
+    # the claim is that max-wins shares are the min-wins race read
+    # backwards, against the same entry point the race layer offers;
+    # pinning it to core with a hand-built node set instead pinned the
+    # node rule, which is the race layer's to choose
     u, V, D = _problem()
-    F, W = hermite_nodes(2)
     p = shares(u, V=V, D=D)
-    q = win_probabilities_factor(-u, V, D, F, W)
-    assert np.abs(p - q).max() == 0.0
+    q = race_probabilities(-u, V=V, D=D)
+    # two ulp, not bit-exact: the two calls reach the same lattice
+    # through different array objects. A path divergence is orders
+    # larger, so the bound is still a real guard.
+    assert np.abs(p - q).max() < 1e-15
+
+
+def test_probit_inherits_the_adaptive_node_rule():
+    # sharp loadings escalate the node family; a fixed Gauss-Hermite
+    # rule here carried total variation 1.2e-3 against 2.8e-6
+    rng = np.random.default_rng(5)
+    n = 8
+    mu = rng.normal(0, 1, n); mu -= mu.mean()
+    V = rng.normal(0, 1.5, (n, 2)); D = np.ones(n)
+    ref_F, ref_W = qmc_nodes(2, m=16)
+    ref = race_probabilities(mu, V=V, D=D, F=ref_F, W=ref_W, points=501)
+    p = shares(-mu, V=V, D=D, points=501)
+    assert 0.5 * np.abs(p - ref).sum() < 1e-5
+
+
+def test_probit_node_count_is_capped_in_rank():
+    # the pruned tensor is 15**r without a budget: 24 s per call at
+    # rank 6 against a capped 0.3 s
+    import time
+    rng = np.random.default_rng(6)
+    n = 8
+    mu = rng.normal(0, 1, n); mu -= mu.mean(); D = np.ones(n)
+    V = rng.normal(0, 0.35, (n, 6))
+    t0 = time.perf_counter()
+    p = shares(-mu, V=V, D=D, points=257)
+    assert time.perf_counter() - t0 < 5.0
+    assert abs(p.sum() - 1.0) < 1e-8
 
 
 def test_higher_utility_means_larger_share():
@@ -42,7 +76,7 @@ def test_sigma_path_matches_explicit_fit():
     Vf, Df = fit_factor_model(Sigma, 2)
     p_sigma, V_ret, D_ret = shares(u, Sigma=Sigma, k=2, return_fit=True)
     p_explicit = shares(u, V=Vf, D=Df)
-    assert np.abs(p_sigma - p_explicit).max() == 0.0
+    assert np.abs(p_sigma - p_explicit).max() < 1e-15
     assert np.abs(V_ret - Vf).max() == 0.0
 
 
