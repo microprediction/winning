@@ -231,7 +231,18 @@ MARKS = {
 
     # Monte Carlo referees: the referee's own marks (research/
     # adjudications/predictive_referee.py and bandits audit_fresh_configs),
-    # plus 4 SE from the accepted sample
+    # plus 4 SE from the accepted sample.
+    #
+    # The 4 SE term usually dominates, so these numbers are a floor that
+    # rarely binds rather than the guarantee the suite enforces. Counted
+    # over the baseline full run, the written mark is the larger term in
+    # 19 of 159 cells: 12 of 76 for mean, 5 of 76 for var, 2 of 7 for
+    # cross, and its median share of the bound is 43, 39 and 27 percent.
+    # In the rest the check enforces "agrees within the referee's own
+    # noise", which tightens with referee_draws and not with anything
+    # written here. The reported tolerance is the effective one, so a
+    # report says which it was; marks.py on its own overstates what is
+    # guaranteed.
     "referee.mean": {"tolerance": 0.005, "set_by": "predictive_referee + fresh configs",
                      "date": "2026-09-04", "basis": "max |dm| <= 0.005 + 4 SE"},
     "referee.var": {"tolerance": 0.006, "set_by": "predictive_referee",
