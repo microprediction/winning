@@ -105,31 +105,38 @@
       with few contests under some condition falls back on its level
       rather than on zero.</p>
     <p>Measured on 65,178 Chatbot Arena battles and 59,399 Lichess games.
-      On chess, a partially pooled factor rating beats Lichess's deployed
+      On chess, with both sides tuned on the same validation split, a
+      partially pooled factor rating beats Lichess's deployed
       architecture (Glicko-2 maintained separately per time control) by
-      0.014&ndash;0.018 nats of held-out log loss across three independent
+      0.008&ndash;0.012 nats of held-out log loss across three independent
       splits, every interval excluding zero. The win decomposes, and the
-      headline should not be quoted without the decomposition: roughly
-      four fifths is the estimator (a batch Thurstonian MAP fit against
-      Glicko-2's online update, 0.017&ndash;0.022) and roughly one fifth is
-      the factor structure (0.003&ndash;0.004, intervals excluding zero on
-      all three splits), which is the part this API implements.</p>
-    <p>Stratification is not futile here, since it is worth
-      0.006&ndash;0.009 to Glicko-2, but partial pooling beats it: within
-      one estimator, pooling the level across conditions and shrinking
-      the offsets beats both the scalar and a per-condition rating. On
+      headline should not be quoted without the decomposition: the
+      estimator, a batch Thurstonian fit against Glicko-2's online
+      update, is worth &minus;0.0080 and the factor structure
+      &minus;0.0033, and the structure is the part this API
+      implements.</p>
+    <p>An earlier and larger version of these numbers is withdrawn.
+      Glicko-2's <code>tau</code> was swept and reported as tuned, but it
+      is inert over one month of games, so the sweep was a tie-break,
+      while the parameters that do move its loss were never swept.
+      Tuning both sides symmetrically cost the headline a third and the
+      estimator column three fifths. Glicko-2's period still selects at
+      the top of its grid, so the corrected margin is an upper bound on
+      the advantage.</p>
+    <p>Stratification helps neither side once both are tuned: it is
+      worth &minus;0.0011 to Glicko-2 and costs this estimator's scalar
+      0.0006. Partial pooling beats both: within one estimator, pooling
+      the level across conditions and shrinking the offsets beats both
+      the scalar and a per-condition rating. On
       Arena the advantage grows with cell sparsity. On chess it is
       roughly constant across player-density thresholds from 100 games
       down to 10 (2,373 players, 109k games, every interval excluding
       zero), so it is not concentrated among data-poor players, with the
       caveat that a 10-game minimum excludes the genuinely sparse
       regime.</p>
-    <p>The two stratification numbers reconcile: the time-control signal
-      is real, and stratification is the lossy way to extract it, helping
-      a weak base estimator (Glicko-2 pooled, 0.6323) and costing a strong
-      one (this estimator's scalar, 0.6117, loses 0.0006 when stratified)
-      because its price is sparse-cell variance. Partial pooling extracts
-      the same signal without that price, which is why the shrunk-offset
+    <p>The time-control signal is real and stratification is the lossy
+      way to extract it, paying sparse-cell variance for a benefit that
+      partial pooling already captures. That is why the shrunk-offset
       form is the recommendation whatever the base estimator. With one
       shared penalty the same factor arm loses (+0.0037), so
       <code>sweep_offset_ridge</code> tunes the offset penalty on a

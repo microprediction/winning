@@ -31,25 +31,29 @@ confirmed there; a 10-game minimum excludes the genuinely sparse
 regime.
 
 Against the production system the decomposition matters (bandits
-exp35, three independent splits of the 59,399 games;
-bandits/results/exp35_glicko2_seed{0,11,22}.csv and
-results/exp35_output.txt). Glicko-2 pooled scores 0.6323 / 0.6304 /
-0.6365, Glicko-2 per time control (Lichess's architecture) 0.6234 /
-0.6241 / 0.6294, this estimator's scalar 0.6117 / 0.6131 / 0.6145,
-and the factor form 0.6073 / 0.6104 / 0.6112. Factor beats Lichess's
-architecture by 0.014-0.018 nats, every interval excluding zero;
-roughly four fifths of that is the estimator (0.017-0.022) and one
-fifth the factor structure (0.003-0.004, intervals excluding zero on
-every split).
+exp35 and exp41, three independent splits of the 59,399 games;
+research/chess/results/exp41_output.txt). With both sides tuned on the
+same validation split, Glicko-2 per time control (Lichess's
+architecture) scores 0.6177 / 0.6191 / 0.6232 and the factor form
+0.6073 / 0.6111 / 0.6108, so the factor form wins by 0.008 to 0.012
+nats with every interval excluding zero. The estimator is worth
+-0.0080 of that and the factor structure -0.0033.
 
-Stratification does help Glicko-2 (+0.006 to +0.009) while it costs
-this estimator's scalar 0.0006 (bandits/results/exp30_chess_tc.csv).
-Its payoff falls as the base estimator improves, because its price is
-sparse-cell variance and its benefit is capped by what pooling already
-captures. Partial pooling extracts the same signal without that price
-and wins in both regimes, so the shrunk-offset form is the
-recommendation whatever the base estimator. The spec's section 2.2
-("stratification does not beat a scalar") is corrected to this.
+An earlier and larger version of these numbers is withdrawn. Glicko-2's
+tau was swept and reported as tuned, but it is inert over one month of
+games: the sweep returned bit-identical loss and the tie-break took the
+first grid value, while period and initial_rd, which do move the metric,
+were never swept at all. Tuning both sides symmetrically cost the
+headline a third and the estimator column three fifths. Glicko-2's
+period still selects at the top of its grid, so the corrected margin is
+an upper bound on the advantage. See winning.ratings.tuning.
+
+Stratification helps neither side once both are tuned: it is worth
+-0.0011 to Glicko-2, against +0.0074 before the correction, and costs
+this estimator's scalar 0.0006. Partial pooling remains the
+recommendation, and its reason is unchanged, that it extracts the
+category signal without paying sparse-cell variance. The spec's section
+2.2 ("stratification does not beat a scalar") is corrected to this.
 
 The per-feature ridge is the mechanism, not a nicety. One shared ridge
 made the factor arm lose on chess time control (+0.0037); levels free
@@ -93,6 +97,7 @@ from scipy.optimize import minimize
 from scipy.special import log_ndtr
 
 from .nway import _base_rows, _order_pass_batch
+from .tuning import select
 
 _LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
 _WORK_BUDGET = 4_000_000        # floats per (K, chunk, L) lattice work array
@@ -629,7 +634,9 @@ def sweep_offset_ridge(train_events, val_events, n_entities, n_cov,
     B (its ratings), at_scalar_limit (the argmin is the top of the
     grid: the offsets are being driven to zero, so the condition axis
     is unidentifiable in this data and the factor form collapses onto
-    the scalar rating -- the chess-openings outcome), and at_edge
+    the scalar rating -- the chess-openings outcome), inert (the grid
+    does not move validation loss, so the selection is a tie-break and
+    not a tuning; see winning.ratings.tuning), report, and at_edge
     (either end: widen the grid before trusting the number).
 
     The protocol this encodes: every arm's own knob tuned on the same
@@ -645,10 +652,13 @@ def sweep_offset_ridge(train_events, val_events, n_entities, n_cov,
         losses.append(-float(np.mean(factor_loglik(B, val_events, base))))
         fits.append(B)
     best = int(np.argmin(losses))
+    _, report = select({g: L for g, L in zip(grid, losses)},
+                       "offset_ridge", order=list(grid))
     return {"offset_grid": grid, "val_loss": np.asarray(losses),
             "offset_ridge": grid[best], "B": fits[best],
             "at_scalar_limit": best == len(grid) - 1,
-            "at_edge": best in (0, len(grid) - 1)}
+            "at_edge": best in (0, len(grid) - 1),
+            "inert": report.inert, "report": report}
 
 
 def covariate_contrast_report(events, n_entities, n_cov):
