@@ -2,8 +2,9 @@
 
 Note, no venue.
 
-Numbers come from `research/chess`: exp41 for the tuned comparison and
-its tables (`results/exp41_output.txt`), exp31 for opponent strength,
+Numbers come from `research/chess`: exp41 for the tuned comparison
+and its tables (`results/exp41_output.txt`), exp40 for the prequential
+comparison, exp31 for opponent strength,
 exp39 for the calibration check, exp36 for colour and exp37 for the
 density sweep.
 

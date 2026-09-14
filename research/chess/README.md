@@ -18,39 +18,51 @@ time control.
 
 | arm | seed 0 | seed 11 | seed 22 |
 |---|---|---|---|
-| Glicko-2 pooled | 0.6323 | 0.6304 | 0.6365 |
-| **Glicko-2 per time control** *(Lichess)* | 0.6234 | 0.6241 | 0.6294 |
-| our scalar | 0.6117 | 0.6131 | 0.6145 |
-| **our factor** | **0.6073** | **0.6104** | **0.6112** |
+| Glicko-2 pooled | 0.6193 | 0.6206 | 0.6233 |
+| **Glicko-2 per time control** *(Lichess)* | 0.6177 | 0.6191 | 0.6232 |
+| our scalar | 0.6117 | 0.6134 | 0.6140 |
+| **our factor** | **0.6073** | **0.6111** | **0.6108** |
 
-Held-out log loss; three independent splits; Glicko-2's `tau` tuned on
-validation exactly as our ridge is; every arm predicts the same games
-from the same information.
+Held-out log loss; three independent splits; every arm predicts the
+same games from the same information. Both systems are tuned on the
+validation split on the parameters that move their loss, Glicko-2 on
+rating period and initial deviation and ours on the level and offset
+ridges (`exp41`). Glicko-2's `tau` is not one of them: it is inert over
+a single month, so selecting it is a tie-break rather than a tuning,
+and `winning.ratings.tuning` reports that condition on any sweep.
 
 | comparison | seed 0 | seed 11 | seed 22 |
 |---|---|---|---|
-| **factor vs Lichess** | **−0.0161** | **−0.0137** | **−0.0182** |
-| estimator (our scalar vs Glicko-2 pooled) | −0.0206 | −0.0173 | −0.0219 |
-| structure (factor vs our scalar) | −0.0044 | −0.0027 | −0.0033 |
-| stratification's value to Glicko-2 | +0.0089 | +0.0063 | +0.0071 |
+| **factor vs Lichess** | **−0.0104** | **−0.0080** | **−0.0124** |
+| estimator (our scalar vs Glicko-2 pooled) | −0.0076 | −0.0072 | −0.0093 |
+| structure (factor vs our scalar) | −0.0044 | −0.0023 | −0.0032 |
+| stratification's value to Glicko-2 | −0.0016 | −0.0015 | −0.0001 |
 
 Every interval excludes zero on every split, P(better) ≥ 0.995.
 
-**Do not quote the headline without the decomposition.** Roughly four
-fifths of the margin is the *estimator* — a batch Thurstonian MAP fit
-against Glicko-2's online update — and one fifth is the *factor
-structure*. The structure's own number, 0.003–0.004 with intervals
-excluding zero on all three splits, is the claim this library's factor
-API actually supports.
+**Do not quote the headline without the decomposition.** The estimator
+contributes −0.0080, a batch Thurstonian MAP fit against Glicko-2's
+online update, and the factor structure −0.0033. The structure's own
+number, with intervals excluding zero on all three splits, is the claim
+this library's factor API actually supports, and it is the column
+insensitive to how well the competitor is tuned: tuning Glicko-2's
+rating period moves the estimator column by three fifths and the
+structure column by a twentieth.
+
+Glicko-2's rating period selects the largest value offered on every arm
+and split, so the headline is an upper bound. It saturates rather than
+running away, moving validation loss by 0.6203, 0.6200, 0.6199 across
+three decades, so the residual is bounded near 0.0001.
 
 ## Robustness
 
 **Colour is not the confound** (`exp36`). Our arms model white
 advantage; standard Glicko-2 does not, so a referee's first question
 is whether the estimator column is really colour bookkeeping. It is
-not: colour is worth −0.0016 of the −0.0206 gap, and a colour-blind
-fit still beats colour-blind Glicko-2 by **−0.0190** like-for-like.
-The honest footnote is that ~8% of the estimator column is colour.
+not: colour is worth −0.0016 of the estimator gap, and a colour-blind
+fit still beats colour-blind Glicko-2 like-for-like. Both figures come
+from runs against Glicko-2 at its default rating period and are not
+recomputed; the gap they are a share of is −0.0080.
 
 **Only one of the two estimators carries its own uncertainty — and it
 turns out not to matter** (`exp39`). Glicko-2 propagates rating
@@ -64,23 +76,24 @@ All three factor arms share one fitted θ and differ **only** in how
 they price, so nothing here confounds a fit change with a price
 change:
 
-| arm | TEST | vs published |
+| arm | TEST | vs the `D = 1` arm |
 |---|---|---|
-| Glicko-2 per TC *(Lichess)* | 0.6234 | — |
-| published, `D = 1` | 0.6073 | — |
+| Glicko-2 per TC *(Lichess)*, period at its default | 0.6234 | — |
+| `D = 1` | 0.6073 | — |
 | tempered, `D = s*` (s\* = 1.1) | 0.6072 | −0.0001 [−0.0004,+0.0002] **n.s.** |
 | Laplace, `D = 1 + Var(μ)` | 0.6087 | **+0.0015** [+0.0003,+0.0026] |
+
+The Glicko-2 row is from a run at its default rating period, so it is
+not comparable with the tuned tables above; the three factor arms are.
 
 **All three registered predictions failed, which is the useful
 outcome.** I predicted our arm was overconfident, that tempering would
 help, and that the margin would widen. The validation-tuned temper is
 s\* = 1.1 — barely off 1 — and buys 0.0001, indistinguishable from
-zero. The margin is unmoved: −0.0161 published against −0.0162
-tempered. So **our arm is already well calibrated at `D = 1`**, and
-per `exp39`'s registered falsification the claim that the published
-margin is *conservative because we carry no uncertainty* is dropped
-and should not be repeated. The margin itself is untouched; only the
-editorialising about its direction goes.
+zero, and the margin against Glicko-2 moves by 0.0001. So **our arm is
+already well calibrated at `D = 1`**, and per `exp39`'s registered
+falsification the claim that the margin is *conservative because we
+carry no uncertainty* is dropped and should not be repeated.
 
 The Laplace arm is significantly **worse** (+0.0015). A candidate
 explanation, untested: the diagonal approximation ignores covariance
@@ -101,9 +114,12 @@ thresholds of 100/50/25/10 games per player:
 | 25 | 1,571 | 97,844 | 20.7 | −0.0190 | −0.0222 |
 | 10 | 2,373 | 109,129 | 15.3 | −0.0157 | −0.0169 |
 
-The margin survives a near-4× widening of the population — 639 to
-2,373 players, 59k to 109k games — sitting between −0.016 and −0.019
-throughout, with every interval excluding zero. That is the robustness
+The margin survives a near-4× widening of the population, 639 to 2,373
+players and 59k to 109k games, staying flat with every interval
+excluding zero. These runs use Glicko-2 at its default rating period
+and are not recomputed, so the level will shrink by roughly the
+headline's proportion; the claim at issue is flatness across
+thresholds, which does not depend on the level. That is the robustness
 question answered.
 
 The `obs/param` column is the quantitative sparsity axis, and it is
@@ -129,54 +145,74 @@ shrinkage should be correct as density falls.
 
 The registered falsification was a *narrowing* margin, and that did
 not happen — so the pooling account is not refuted. But it is not
-confirmed by this test, and the honest statement is that **the factor
-advantage is roughly constant in population density rather than
-concentrated among data-poor players.** One caveat that is a genuine
-limitation rather than an excuse: a 10-game minimum is still not
-sparse. The regime where shrinkage should dominate — players with one
+confirmed by this test: **the factor advantage is roughly constant in
+population density rather than concentrated among data-poor players.**
+A 10-game minimum is still not sparse. The regime where shrinkage should dominate — players with one
 to nine games — is excluded at every threshold here, so this tests
 robustness properly and the mechanism only weakly.
 
+**Settled: batch versus online** (`exp40`). Our estimator sees the
+training set at once and Glicko-2 processes each game once, because a
+production system must, so part of the estimator column is that
+privilege. Run prequentially over the month through
+`winning.ratings.AbilityTracker`, with both systems tuned on recency
+and initial uncertainty and the grids extended until the selection is
+interior, our tracker beats Glicko-2 pooled by −0.0029
+[−0.0043, −0.0014] and the deployed per-time-control architecture by
+−0.0023 [−0.0046, −0.0001].
+
+Against the batch estimator column of −0.0080, that puts −0.0051 down
+to revisiting the training set, 64% of it, and leaves −0.0029 as a
+better estimator under the deployment-realistic protocol. The two
+surviving components, estimator −0.0029 and structure −0.0033, are
+about the same size. Absolute losses are not comparable with the batch
+tables above, which use a random split scored from a frozen state;
+compare arms within `results/exp40_output.txt`.
+
 **Open, and ranked by what a referee hits first:**
 
-1. **Batch vs online.** Our estimator sees the training set at once and
-   can revisit; Glicko-2 processes each game once because a production
-   system must. Part of the estimator column is that privilege. The
-   deployment-realistic comparison is online-vs-online, now runnable
-   via `winning.ratings.AbilityTracker`.
-2. **One month of 2013.** 639 players, early-adopter Lichess, a rating
+1. **One month of 2013.** 639 players, early-adopter Lichess, a rating
    system that has since changed. This is now known to be *harder to
    close than it looks*: `exp38` found the modern site cannot pose the
    question at all, because its players no longer mix time controls
    (0.3% with within-player contrast against 52% in 2013). The
    limitation is therefore not "we only tried one month" but "the
    result holds on a population that no longer exists at scale here."
-3. **Draws dropped** (3.3% here, far more in classical and at
+2. **Draws dropped** (3.3% here, far more in classical and at
    strength). The Arena work has a proper three-way tie model; this
    does not.
-4. **The ≥100-game threshold** keeps the dense subpopulation, where
+3. **The ≥100-game threshold** keeps the dense subpopulation, where
    rating is easiest — Lichess must rate everyone. This one carries a
    prediction: pooling should help sparse players *most*, so the
    factor margin should widen as the threshold drops. If it narrows,
    that is evidence against the mechanism.
 
-## Why stratification helps them and not us
+## Stratification buys neither side anything
 
-The two facts look contradictory and are not:
+Stratifying Glicko-2 appears to gain 0.0063 to 0.0089 while stratifying
+our scalar loses 0.0006, and the contrast invites an argument about
+which base estimator benefits. The gain is an artifact of leaving
+Glicko-2's rating period at its default. With the period tuned,
+stratification is worth −0.0016, −0.0015 and −0.0001 on the three
+splits, and partial pooling of the same information still gains 0.0023
+to 0.0044.
 
-| base estimator | stratifying it |
+| what is stratified | value |
 |---|---|
-| Glicko-2 pooled, 0.6323 (weak) | **gains** 0.0089 |
-| our scalar, 0.6117 (strong) | **loses** 0.0006 |
-| our scalar → pooled factor | **gains** 0.0044 |
+| Glicko-2, period at its default | **gains** 0.0089 |
+| Glicko-2, period tuned (`exp41`) | −0.0011, nothing |
+| our scalar | **loses** 0.0006 |
+| our scalar → pooled factor | **gains** 0.0033 |
 
-Stratification's payoff runs inversely to the quality of the base
-estimator: its cost is sparse-cell variance and its benefit is capped
-by what pooling already captures. Partial pooling extracts the same
-signal without the variance cost, which is why it wins in both
-regimes — and why the shrunk-offset form is the unconditional
-recommendation. A user reporting that stratification helped them has
-told you about their base estimator, not found a counterexample.
+Per-category ratings were not buying Glicko-2 category information;
+they were protecting it from deviations that inflated too fast for a
+dense single-month window, and a tuned period removes the need for
+that protection. Conditioning on the category earns nothing once the
+base estimator's recency is set correctly, while partial pooling of the
+same information still pays. `exp40` reproduces this online, where
+stratification is worth −0.0005 to Glicko-2 and +0.0015 to us, neither
+significant. A user reporting that stratification helped them should
+check the recency setting of the system it helped.
 
 ## The dimension search, including its failures
 
@@ -201,8 +237,8 @@ failures are kept because they are the transfer conditions:
   improvement sits entirely in the style-mismatched half (−0.0003),
   exactly where the mechanism puts it, but it is not established. At
   two entrants a shared factor enters the margin only through
-  (v_i − v_j)², a ~2% variance perturbation. This is the honest
-  statement of where correlation does *not* pay.
+  (v_i − v_j)², a ~2% variance perturbation. That is where correlation
+  does *not* pay.
 - **`exp31` — the giant-killer axis is identifiable but a whisper.**
   Opponent strength passes the exogeneity check by construction, and
   it duly survives: the tuned offset ridge is **10.0, interior**
@@ -239,6 +275,8 @@ failures are kept because they are the transfer conditions:
 | `exp37_sparse_players.py` | robustness across density thresholds |
 | `exp38_modern_month.py` | 2024-01 replication: INFEASIBLE, covariate unidentifiable |
 | `exp39_predictive_calibration.py` | uncertainty asymmetry: measured, does not matter |
+| `exp40_online_vs_batch.py` | online against online: two thirds of the estimator column was batch privilege |
+| `exp41_tuning_parity.py` | the baseline was under-tuned; corrected tables |
 | `results/` | per-game losses and raw outputs |
 
 Data is one month of the Lichess open database
