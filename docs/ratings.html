@@ -115,17 +115,21 @@
       update, is worth &minus;0.0080 and the factor structure
       &minus;0.0033, and the structure is the part this API
       implements.</p>
-    <p>An earlier and larger version of these numbers is withdrawn.
-      Glicko-2's <code>tau</code> was swept and reported as tuned, but it
-      is inert over one month of games, so the sweep was a tie-break,
-      while the parameters that do move its loss were never swept.
-      Tuning both sides symmetrically cost the headline a third and the
-      estimator column three fifths. Glicko-2's period still selects at
-      the top of its grid, so the corrected margin is an upper bound on
-      the advantage.</p>
+    <p>Both sides have to be tuned on parameters that bite, and
+      Glicko-2's <code>tau</code> does not: it enters only the volatility
+      iteration, sweeping it returns bit-identical loss, and selecting it
+      is a tie-break rather than a tuning. Tuning on its rating period
+      and initial deviation instead moves the headline by a third and
+      the estimator column by three fifths, which is the sensitivity to
+      carry when reading any such comparison. The period selects at the
+      top of its grid here, so the margin is an upper bound, though it
+      saturates rather than running away and the residual is bounded
+      near 0.0001.</p>
     <p>Stratification helps neither side once both are tuned: it is
       worth &minus;0.0011 to Glicko-2 and costs this estimator's scalar
-      0.0006. Partial pooling beats both: within one estimator, pooling
+      0.0006. Left at its default rating period Glicko-2 appears to gain
+      +0.0074 from stratification, which is a property of the default
+      rather than of the category information. Partial pooling beats both: within one estimator, pooling
       the level across conditions and shrinking the offsets beats both
       the scalar and a per-condition rating. On
       Arena the advantage grows with cell sparsity. On chess it is

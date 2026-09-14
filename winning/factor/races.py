@@ -372,10 +372,10 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     accuracy near 6e-11. Bisection on a monotone function; cost negligible.
 
     The envelope uses the CALLER'S base survival (fn), not the normal one.
-    An earlier version hardcoded the normal survival for every base, which
-    clipped polynomial tails: a Student-t(2.5) race at n=40 lost 5e-3 of
-    total variation against the span window (fifth review). With the base
-    supplied, the window adapts to the tail it is actually integrating.
+    Hardcoding the normal survival for every base clips polynomial tails:
+    a Student-t(2.5) race at n=40 loses 5e-3 of total variation against
+    the span window (fifth review). With the base supplied, the window
+    adapts to the tail it is actually integrating.
 
     Two things make the quantile claim literally true (sixth review).
     The interval is BRACKETED before it is bisected -- nine sigma holds
@@ -540,8 +540,8 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                 "simulation.", RuntimeWarning, stacklevel=2)
     # A correctly bracketed window can still be unusable: a polynomial
     # tail pushes the delta-quantile so far out that the points are
-    # spread too thin to resolve the bulk. That used to hide behind a
-    # truncated window; now that the window is honest, say so.
+    # spread too thin to resolve the bulk. A truncated window hides
+    # that; an honest one has to say so.
     if (x[-1] - x[0]) / max(len(x) - 1, 1) > 0.5 * smin:
         import warnings
         warnings.warn(

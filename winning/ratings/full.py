@@ -10,9 +10,9 @@ THE CONSTRUCTION, and the standing rule behind it: whatever part of the
 belief is DIAGONAL in observation coordinates belongs on the lattice as
 idiosyncratic variance, where it is integrated analytically and
 exactly; quadrature nodes are spent only on genuinely shared structure.
-An earlier version put the whole belief covariance into the loading
-matrix by Cholesky, so the belief rode quadrature -- and a corner-space
-audit measured all four consequences: marginals ~5x worse than the
+Putting the whole belief covariance into the loading matrix by
+Cholesky makes the belief ride quadrature, and a corner-space audit
+measures four consequences: marginals ~5x worse than the
 diagonal members even at prior ratio 1, posterior variance inflated 7x
 under a diffuse prior, a hard overflow crash on the order path past
 ratio ~20, and relabelling non-invariance (Cholesky is not

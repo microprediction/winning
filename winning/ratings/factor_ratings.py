@@ -39,18 +39,22 @@ architecture) scores 0.6177 / 0.6191 / 0.6232 and the factor form
 nats with every interval excluding zero. The estimator is worth
 -0.0080 of that and the factor structure -0.0033.
 
-An earlier and larger version of these numbers is withdrawn. Glicko-2's
-tau was swept and reported as tuned, but it is inert over one month of
-games: the sweep returned bit-identical loss and the tie-break took the
-first grid value, while period and initial_rd, which do move the metric,
-were never swept at all. Tuning both sides symmetrically cost the
-headline a third and the estimator column three fifths. Glicko-2's
-period still selects at the top of its grid, so the corrected margin is
-an upper bound on the advantage. See winning.ratings.tuning.
+Both sides have to be tuned on parameters that bite, and Glicko-2's tau
+does not: it enters only the volatility iteration, sweeping it returns
+bit-identical loss, and selecting it is therefore a tie-break rather
+than a tuning. Its rating period and initial deviation are the
+parameters that move its loss. Tuning on those instead moves the
+headline by a third and the estimator column by three fifths, which is
+the sensitivity to carry when reading any such comparison
+(winning.ratings.tuning). Glicko-2's period selects at the top of its
+grid here, so the margin is an upper bound, though it saturates rather
+than running away and the residual is bounded near 0.0001.
 
 Stratification helps neither side once both are tuned: it is worth
--0.0011 to Glicko-2, against +0.0074 before the correction, and costs
-this estimator's scalar 0.0006. Partial pooling remains the
+-0.0011 to Glicko-2 and costs this estimator's scalar 0.0006. Left at
+its default rating period Glicko-2 appears to gain +0.0074 from
+stratification, which is a property of the default rather than of the
+category information. Partial pooling remains the
 recommendation, and its reason is unchanged, that it extracts the
 category signal without paying sparse-cell variance. The spec's section
 2.2 ("stratification does not beat a scalar") is corrected to this.

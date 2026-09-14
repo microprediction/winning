@@ -15,8 +15,9 @@ volatility barely moves over a single month, and sweeping 0.02 to 1.0
 returned bit-identical held-out loss. Every grid began at 0.3, so the
 tie-break picked 0.3 every time and nothing looked lower. The
 parameters that governed the competitor's behaviour were never swept
-at all, and correcting it cost the published result a third of its
-headline and three fifths of one column.
+at all. Tuning both sides on the parameters that do move their loss
+moves that comparison's headline by a third and one of its columns by
+three fifths.
 
 ``select`` returns the argmin together with the three ways a sweep can
 mislead.

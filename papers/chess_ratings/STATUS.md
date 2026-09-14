@@ -1,39 +1,26 @@
 # Status
 
-Note, no venue. Numbers from `research/chess`, principally exp35 for
-the arena and chess fits, exp41 for the tuned comparison
-(`results/exp41_output.txt`), exp31 for opponent strength, exp37 for
-the density sweep and exp39 for the calibration check.
+Note, no venue.
 
-## Correction, 2026-09-13
+Numbers come from `research/chess`: exp41 for the tuned comparison and
+its tables (`results/exp41_output.txt`), exp31 for opponent strength,
+exp39 for the calibration check, exp36 for colour and exp37 for the
+density sweep.
 
-The first version of this note, committed the same day, reported a
-headline of 0.0137 to 0.0182 nats and an estimator column of −0.0199,
-and argued that stratification helps a weak base estimator and not a
-strong one. Those figures came from a comparison in which Glicko-2 was
-under-tuned. Its `tau` was swept and the selected value cited as
-evidence of symmetric tuning, but `tau` is inert over a single month:
-the sweep returned bit-identical loss and the selection was a tie-break
-on the first grid entry. Its rating period and initial deviation, which
-do move its loss, were never swept, and our own arms had the level
-ridge pinned.
+Both systems are tuned on the validation split, Glicko-2 on its rating
+period and initial deviation and our arms on their level and offset
+ridges. Glicko-2's `tau` is not tuned because it is inert over a single
+month: sweeping it returns bit-identical held-out loss, so selecting it
+would be a tie-break. `winning.ratings.tuning` reports that condition
+on any sweep.
 
-With both sides tuned on the same validation split:
+The colour and density figures come from runs against Glicko-2 at its
+default rating period and are not recomputed. They will shrink by
+roughly the headline's proportion, since they share its baseline. The
+density claim at issue is flatness across inclusion thresholds, which
+does not depend on the level.
 
-| row | first version | corrected | change |
-|---|---|---|---|
-| headline | −0.0160 | −0.0103 | 36% smaller |
-| estimator | −0.0199 | −0.0080 | 60% smaller |
-| structure | −0.0035 | −0.0033 | unchanged |
-| stratification's value to Glicko-2 | +0.0074 | −0.0011 | sign flip |
-
-The result survives. The factor form beats Glicko-2 per time control on
-all three splits with intervals excluding zero, and the factor
-structure, which is the note's subject, is unchanged. The stratification
-section is rewritten, because the contrast it argued from was an
-artifact of the default rating period.
-
-The colour and density figures are not recomputed and say so in place.
-
-The guard that catches this class of defect ships as
-`winning.ratings.tuning`.
+Glicko-2's rating period selects the largest value offered, on every
+arm and split, so the headline is an upper bound. The parameter
+saturates rather than running away, so the residual is bounded near
+0.0001.
