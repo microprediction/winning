@@ -32,7 +32,7 @@ PARAMS = {
     "fast": {"ks_n": 200_000, "ks_bases": "all", "p8_draws": 100_000,
              "referee_draws": 200_000, "referee_draws_full": 1_000_000, "sbc_worlds": 80,
              "factor_worlds": 10},
-    "full": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 400_000,
+    "full": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 1_000_000,
              "referee_draws": 2_000_000, "referee_draws_full": 2_000_000, "sbc_worlds": 200,
              "factor_worlds": 100},
     "exhaustive": {"ks_n": 1_000_000, "ks_bases": "all", "p8_draws": 4_000_000,
@@ -220,6 +220,11 @@ MARKS = {
                  "basis": "|robust sd - 1|, frac |z| > 10, |coverage - 0.95|"},
     "audit.P7": {"tolerance": 0.05, "set_by": "bandits audit", "date": "2026-09-04",
                  "basis": "max mean spread across paths on identical evidence"},
+    # The P8 gate enforces dm <= this + 4 se, the referee's own noise,
+    # so the number below binds only where the budget makes 4 se
+    # smaller than it. At 400,000 draws the allowance was 0.0069 and
+    # the mark was the smaller half of its own threshold; the full
+    # profile draws 1,000,000, where the allowance is 0.0044.
     "audit.P8": {"dm": 0.005, "dv": 0.02, "set_by": "bandits audit + fresh configs",
                  "date": "2026-09-04",
                  "basis": "rejection MC; dm mark 0.005 + 4 SE (audit_fresh_configs), dv 0.02"},
