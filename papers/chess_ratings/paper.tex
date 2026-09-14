@@ -32,8 +32,10 @@ offsets. With both systems tuned on the same validation split, the
 pooled rating is better by $0.008$ to $0.012$ nats of held-out log loss
 across three independent splits, every interval excluding zero; the
 estimator accounts for $-0.0080$ of that and the factor structure for
-$-0.0033$. Once Glicko-2's recency parameter is tuned rather than left
-at its default, stratification is worth nothing to either side. Opening family is unidentifiable because players
+$-0.0033$, and two thirds of the estimator contribution is the
+privilege of a batch fit rather than a better method. Once Glicko-2's
+recency parameter is tuned rather than left at its default,
+stratification is worth nothing to either side. Opening family is unidentifiable because players
 choose openings, opponent-strength curvature is real but almost
 entirely shared, and modern Lichess no longer poses the question, with
 $0.3\%$ of players mixing time controls against $52\%$ in 2013.
@@ -135,7 +137,8 @@ competitor is tuned: tuning Glicko-2's rating period moves the
 estimator column by three fifths and the structure column by a
 twentieth. The estimator column is also partly a
 privilege rather than a better method, because a production system must
-process each game once and ours need not.
+process each game once and ours need not, and two thirds of it is that
+privilege.
 
 One caveat bounds the margin from the wrong side. Glicko-2's
 rating period selects the largest value offered on every arm and every
@@ -225,6 +228,20 @@ The factor advantage is roughly constant in population density rather than conce
 which leaves the pooling account unrefuted but unconfirmed by the one
 test that could have confirmed it.
 
+\paragraph{Two thirds of the estimator column is batch privilege.} Our
+estimator revisits the training set and Glicko-2 processes each game
+once, because a production system must. Run prequentially over the
+month, with both systems tuned on recency and initial uncertainty and
+the grids extended until the selection is interior, our tracker beats
+Glicko-2 pooled by $-0.0029$ $[-0.0043, -0.0014]$ and the deployed
+per-time-control architecture by $-0.0023$ $[-0.0046, -0.0001]$.
+Against the batch estimator column of $-0.0080$, that puts $-0.0051$
+down to revisiting the training set and leaves $-0.0029$ as a better
+estimator under the deployment-realistic protocol, about the same size
+as the factor structure. Stratification is worth nothing to either
+system there either, $-0.0005$ to Glicko-2 and $+0.0015$ to ours,
+reproducing the batch finding on a different protocol.
+
 \paragraph{Our arm is not winning by being overconfident.} Glicko-2
 propagates rating deviation into every prediction; our arm prices a
 point estimate with fixed noise, so only one side carries its own
@@ -237,11 +254,6 @@ taken from the diagonal of the inverse penalised Hessian is
 significantly \emph{worse}, by $+0.0015$.
 
 \section{Limitations}
-
-\paragraph{Batch against online.} Our estimator revisits the training set;
-Glicko-2 processes each game once because a deployed system must. Part
-of the estimator column is that privilege, and the deployment-realistic
-comparison, online against online, is not run here.
 
 \paragraph{Draws are dropped.} They are 3.3\% of games in this pool and far more at
 longer time controls and higher strength. A three-way outcome model
@@ -266,7 +278,10 @@ longer exists at scale on this site.
 A partially pooled vector rating beats a rating system in production,
 on its own data, by $0.008$ to $0.012$ nats once both systems are
 tuned. The estimator contributes $-0.0080$ and the pooling $-0.0033$,
-and both parts are worth stating separately. The wider claim the data
+and both parts are worth stating separately. Two thirds of the
+estimator contribution is the privilege of revisiting the training set,
+and the third that survives a prequential comparison is about the size
+of the pooling. The wider claim the data
 supports is narrower than ``ratings should be vectors'': it is that
 \emph{conditioning} earns nothing once a base estimator's recency is
 set correctly, that \emph{pooling} the same information still pays,

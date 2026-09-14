@@ -50,8 +50,17 @@ the sensitivity to carry when reading any such comparison
 grid here, so the margin is an upper bound, though it saturates rather
 than running away and the residual is bounded near 0.0001.
 
+Two thirds of the estimator column is the privilege of a batch fit.
+Run prequentially over the month with both sides tuned, the online
+tracker still beats Glicko-2 pooled by -0.0029 [-0.0043, -0.0014] and
+the deployed per-time-control architecture by -0.0023 [-0.0046,
+-0.0001], so -0.0051 of the batch column is revisiting the training set
+and -0.0029 is a better estimator. That leaves the two surviving
+components, estimator and structure, about the same size.
+
 Stratification helps neither side once both are tuned: it is worth
--0.0011 to Glicko-2 and costs this estimator's scalar 0.0006. Left at
+-0.0011 to Glicko-2 and costs this estimator's scalar 0.0006, and
+online it is worth -0.0005 and +0.0015, neither significant. Left at
 its default rating period Glicko-2 appears to gain +0.0074 from
 stratification, which is a property of the default rather than of the
 category information. Partial pooling remains the
