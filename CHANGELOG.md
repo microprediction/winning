@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- The verifier's P8 referee gates on `dm > mark + 4 se`, so what it
+  enforces is the mark plus the referee's own Monte Carlo noise, and
+  that allowance is budget-dependent while the report printed the
+  nominal mark at every profile. Measured across six bases, the enforced
+  threshold was 0.0182 at the fast draw count, 0.0116 at full and 0.0071
+  at exhaustive, against a documented 0.005: the mark was the smaller
+  term of its own threshold everywhere, and a reader of `marks.py` was
+  wrong by 3.6x at the profile that gates CI. The report also paired the
+  statistic `max(dm, dv)` with `dm`'s tolerance. No mark moves: `dm` and
+  `dv` are now separate results, each statistic against its own bound;
+  the reported tolerance is the enforced one, with the mark and the
+  noise allowance in the detail line; and the full profile draws
+  1,000,000 rather than 400,000, where the allowance falls to 0.0044 and
+  the mark binds. Adjudication in
+  `research/adjudications/ratings_verify.md`.
 - `race_probabilities(..., temperature=tau)` convolved each base with
   the tau-scaled min-Gumbel kernel on the base's own asymmetric grid and
   took numpy's central slice, which aligns a kernel's middle sample with
