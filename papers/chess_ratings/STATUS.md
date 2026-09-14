@@ -1,39 +1,39 @@
-# Status: under correction (2026-09-13)
+# Status
 
-The numbers in `paper.tex` are superseded. Do not quote them.
+Note, no venue. Numbers from `research/chess`, principally exp35 for
+the arena and chess fits, exp41 for the tuned comparison
+(`results/exp41_output.txt`), exp31 for opponent strength, exp37 for
+the density sweep and exp39 for the calibration check.
 
-The comparison tuned Glicko-2's `tau` on a validation split and cited
-that as evidence that neither side carried a free parameter the other
-lacked. In that implementation `tau` enters only the volatility
-iteration, volatility barely moves over one month, and a sweep from
-0.02 to 1.0 returns bit-identical held-out loss. The selection was a
-tie-break on the first grid entry, and `period` and `initial_rd`, which
-do move the loss, were never swept. Our own arms were tuned
-asymmetrically too, with the level ridge pinned at 1.0.
+## Correction, 2026-09-13
 
-Retuning both sides symmetrically (bandits exp41,
-`research/chess/results/exp41_output.txt`):
+The first version of this note, committed the same day, reported a
+headline of 0.0137 to 0.0182 nats and an estimator column of −0.0199,
+and argued that stratification helps a weak base estimator and not a
+strong one. Those figures came from a comparison in which Glicko-2 was
+under-tuned. Its `tau` was swept and the selected value cited as
+evidence of symmetric tuning, but `tau` is inert over a single month:
+the sweep returned bit-identical loss and the selection was a tie-break
+on the first grid entry. Its rating period and initial deviation, which
+do move its loss, were never swept, and our own arms had the level
+ridge pinned.
 
-| row | published | corrected | change |
+With both sides tuned on the same validation split:
+
+| row | first version | corrected | change |
 |---|---|---|---|
 | headline | −0.0160 | −0.0103 | 36% smaller |
 | estimator | −0.0199 | −0.0080 | 60% smaller |
 | structure | −0.0035 | −0.0033 | unchanged |
 | stratification's value to Glicko-2 | +0.0074 | −0.0011 | sign flip |
 
-The result survives: the factor arm still beats Glicko-2 per time
-control on all three splits with intervals excluding zero. Three claims
-do not. The estimator column and the four-fifths split are wrong; the
-section arguing that stratification helps a weak estimator rests on a
-number that has changed sign, and with both sides tuned stratification
-helps neither; and the fairness sentence in the protocol section is
-false as written.
+The result survives. The factor form beats Glicko-2 per time control on
+all three splits with intervals excluding zero, and the factor
+structure, which is the note's subject, is unchanged. The stratification
+section is rewritten, because the contrast it argued from was an
+artifact of the default rating period.
 
-Glicko-2's `period` selects at the top of its grid on every split in
-the corrected run, so the corrected headline is itself an upper bound
-on the margin.
+The colour and density figures are not recomputed and say so in place.
 
-A replacement draft is being prepared against the corrected runs, along
-with exp40, which compares online against online and speaks to how much
-of the estimator column is batch privilege. The guard that catches this
-class of defect now ships as `winning.ratings.tuning`.
+The guard that catches this class of defect ships as
+`winning.ratings.tuning`.

@@ -75,11 +75,12 @@ time control.
 Games are split 50/25/25 into fitting, validation and scored sets, and
 every arm sees the same games. Both systems have their material
 parameters tuned on the validation split: Glicko-2's rating period and
-initial deviation, our level and offset ridges. An earlier version of
-this comparison tuned Glicko-2's $\tau$ instead, which is inert in this
-implementation and returns bit-identical loss from $0.02$ to $1.0$, so
-the competitor ran at library defaults while our side had a working
-knob; the numbers below are the corrected ones. Held-out mean log loss is reported on the
+initial deviation, our level and offset ridges. Glicko-2's $\tau$ is
+not one of them, because it is inert here: it enters only the
+volatility iteration, and sweeping it from $0.02$ to $1.0$ returns
+bit-identical loss, so a comparison that tunes $\tau$ and stops leaves
+the competitor at library defaults while its own side has a parameter
+that bites. Held-out mean log loss is reported on the
 scored quarter only, and intervals come from a paired bootstrap over
 20{,}000 resamples. Three independent splits are reported throughout,
 because a single split on this kind of data is not evidence.
@@ -129,13 +130,14 @@ estimator contributes $-0.0080$, a batch fit that sees the training
 games at once against an online update that sees each game once, and
 the factor structure $-0.0033$. The structure's own contribution, with
 intervals excluding zero on all three splits, is the part that answers
-the question posed, and it is the part that did not move when the
-tuning was corrected: the estimator column fell by three fifths and the
-structure column by a twentieth. The estimator column is also partly a
+the question posed, and it is the column insensitive to how well the
+competitor is tuned: tuning Glicko-2's rating period moves the
+estimator column by three fifths and the structure column by a
+twentieth. The estimator column is also partly a
 privilege rather than a better method, because a production system must
 process each game once and ours need not.
 
-One caveat bounds the corrected margin from the wrong side. Glicko-2's
+One caveat bounds the margin from the wrong side. Glicko-2's
 rating period selects the largest value offered on every arm and every
 split, so the margin reported here is an upper bound on the true one.
 The parameter saturates rather than running away, moving validation
@@ -145,15 +147,15 @@ therefore bounded near $0.0001$ rather than unknown.
 
 \section{Stratification buys neither side anything}
 
-An earlier version of this comparison reported that stratifying
-Glicko-2 gains $0.0063$ to $0.0089$ while stratifying our scalar loses
-$0.0006$, and built an argument on the contrast. That gain was an
-artifact of leaving Glicko-2's rating period at its default. With the
-period tuned, stratification is worth $-0.0016$, $-0.0015$ and
+Stratifying Glicko-2 appears to gain $0.0063$ to $0.0089$ while
+stratifying our scalar loses $0.0006$, and the contrast invites an
+argument about which base estimator benefits. The gain is an artifact
+of leaving Glicko-2's rating period at its default. With the period
+tuned, stratification is worth $-0.0016$, $-0.0015$ and
 $-0.0001$ on the three splits, which is nothing, and partial pooling
 of the same information still gains $0.0023$ to $0.0044$.
 
-The corrected reading is simpler than the one it replaces. Per-category
+The reading is simpler than the contrast suggests. Per-category
 ratings were not buying Glicko-2 category information; they were
 protecting it from deviations that inflated too fast for a dense
 single-month window, and a tuned period removes the need for that
@@ -202,18 +204,19 @@ strength, the factor treatment pays on one.
 advantage and standard Glicko-2 does not, so the estimator column
 invites the suspicion that it is colour bookkeeping. It is not: colour
 is worth $-0.0016$ of the estimator gap, and a colour-blind fit still
-beats colour-blind Glicko-2 like for like. Those two figures were
-measured against the untuned Glicko-2 and are not recomputed here; the
-share attributable to colour is small either way, but the absolute gap
-it is a share of is now $-0.0080$ rather than $-0.0206$.
+beats colour-blind Glicko-2 like for like. Both figures come from runs
+against Glicko-2 at its default rating period and are not recomputed
+here; the share attributable to colour is small either way, and the gap
+it is a share of is $-0.0080$.
 
 \paragraph{The result is not an artifact of the dense subpopulation, but
 the mechanism's own prediction failed.} Rerunning at inclusion
 thresholds of $100/50/25/10$ games moves observations per parameter
 from $30.9$ to $15.3$ and the margin is flat throughout, every interval
-excluding zero. Those margins were measured against the untuned
-Glicko-2 and will shrink by roughly the same proportion as the
-headline when recomputed, since they share its baseline; the robustness
+excluding zero. Those margins also come from runs against Glicko-2 at
+its default period and will shrink by roughly the headline's
+proportion when recomputed, since they share its baseline; the
+robustness
 question concerns their flatness across thresholds, which does not
 depend on the level. The registered prediction, however, was that
 pooling should pay \emph{most} where data is scarcest and the margin
