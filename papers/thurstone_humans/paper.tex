@@ -86,13 +86,15 @@ variable produced by a different experiment, and that is what $P_S$ alone cannot
 write $P_S(i)$ rather than $P(i \mid S)$ throughout, because the conditioning bar is exactly the
 confusion at issue.
 
-A related problem arises in the computation of permutation probabilities, but here we focus on
-the case where the original vector is a market share of sorts, as with the population popularity
-of an item on a menu. That data is the more controversial in some respects, because it can speak
-to the discovery or delineation of underlying mechanics from revealed preferences. In contrast it
-is somewhat self-evident that the right answer for contest winning probabilities can often be
-strongly suggested by the generative model at hand, finishing time distributions being the
-obvious example.
+The same rescaling question arises for a race: a horse scratches, and the exacta and trifecta
+odds on the field must be recomputed. There it is not controversial, because a generative
+model already answers it. Finishing times have a distribution, scratching a horse means
+conditioning that distribution on one fewer competitor, and the new odds follow by
+recomputing the race under that distribution rather than by rescaling the old odds at all. The
+case this paper is about has no such generative story to fall back on: a market share, or the
+popularity of an item on a menu, is a revealed preference, not the output of a distribution
+whose conditioning is already understood, which is exactly why the choice of renormalization
+is a live, controversial modelling decision here and not there.
 
 When a menu item is removed, quite a lot of machinery exists for carefully estimating the
 probabilities that should be ascribed to the reduced menu. Depending on the data available,
@@ -147,7 +149,10 @@ The first holds the ratios of the shares fixed, the second holds the latent
 locations fixed. The underlying physics is quite different, so even small persistent statistical
 advantages of one over the other may be suggestive of structure, and of interest to the
 psychology community but also, we hope, to the broader machine learning audience whose choice of
-linear renormalization is often tacit.
+linear renormalization is often tacit. The tacit assumption is not harmless: Xu et al.\
+\cite{xu2023rlhf} trace perverse incentives in reinforcement learning from human feedback to
+exactly this assumption, since the reward models it fits inherit Independence of Irrelevant
+Alternatives from the same constant-ratio rule discussed below.
 
 Each competitor in this two horse race is elementary and, not surprisingly, has assumed many
 names. We treat them as synonyms. We equate proportional renormalization, linear renormalization,
@@ -170,9 +175,10 @@ and Proposition~\ref{prop:contraction} makes the direction of their disagreement
 
 \section{Scoreboard}
 
-Lest we be accused of burying the lead, Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} come
-first. They are aimed at anyone whose strong inclination is Luce's choice axiom, and in
-particular at the impression that dividing probabilities is an argument in itself.
+Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} give the full result before the
+populations behind them are introduced one by one in Sections~\ref{sec:prior}
+and~\ref{sec:empirical}; a study name met here for the first time, such as Getty or Wills, is
+defined there.
 
 The figure asks where each population falls between the two kinds of renormalization, on a scale
 where linear renormalization is one point and Gaussian renormalization another. Of the twenty it
@@ -270,8 +276,10 @@ into complete detail on the protocol, the datasets and the null.
 \end{tikzpicture}
 \caption{Where each population sits between the two maps. The coordinate is
 $r = \lambda_{\text{observed}} / \lambda_{\text{Case V}}$, the observed contraction slope
-divided by the slope Case V implies for that population's own shares, so linear renormalization
-is at $r = 0$ by construction and Gaussian renormalization at $r = 1$. Filled circles are
+divided by the slope Case V implies for that population's own shares; $\lambda$ is defined
+formally in Section~\ref{sec:mixture} (Table~\ref{tab:mixture}), fitted here on pairs. Linear
+renormalization is at $r = 0$ by construction and Gaussian renormalization at $r = 1$. Filled
+circles are
 restricted menus the observer actually faced, open circles are ranking-induced. Most populations
 lie beyond $r = 1$: choice contracts by more than Case V predicts, so as a general observation
 the Gaussian point tends not to be far enough along the family. A collection appears when a
@@ -1612,7 +1620,10 @@ three verdicts and half had two. Renormalizing the three-verdict shares onto the
 predicts Guilty at $54.9$ per cent against an observed $38$, and after deliberation $61.1$
 against $31$. Both defaults fail, because the ordering \emph{reverses}: Guilty leads Not
 guilty with three verdicts and trails it with two. Contraction moves odds toward one and
-never crosses over, so Gaussian renormalization fails here too, and only slightly less. Not proven is a near
+never crosses over, so Gaussian renormalization fails here too, and only slightly less. Neither
+map is built to produce a reversal at all; Boissonnet and Ghersengorin \cite{boissonnet2025}
+axiomatize a choice model identified precisely from reversals of this kind, which is the live
+theoretical account for what this row shows and neither renormalization here attempts. Not proven is a near
 substitute for Not guilty, so deleting it returns its mass to that neighbour rather than
 proportionally, which is Debreu's objection in a courtroom, on a fixed stimulus. Townsend and
 Landon's diagnosis \cite{townsendlandon1982} is the same one: their rule fails on the subset
@@ -2210,6 +2221,16 @@ fetal surveillance education program.
 Rachel Ormston, James Chalmers, Fiona Leverick, Vanessa Munro, and Lorraine Murray.
 \emph{Scottish Jury Research: Findings from a Large Scale Mock Jury Study}.
 Scottish Government, 2019. ISBN 978-1-83960-194-1.
+
+\bibitem{boissonnet2025}
+Niels Boissonnet and Alexis Ghersengorin.
+Grabbing the forbidden fruit: restriction-sensitive choice.
+arXiv:2509.11673, 2025.
+
+\bibitem{xu2023rlhf}
+Wanqiao Xu, Shi Dong, Xiuyuan Lu, Grace Lam, Zheng Wen, and Benjamin Van Roy.
+RLHF and IIA: perverse incentives.
+arXiv:2312.01057, 2023.
 
 \bibitem{meyergrant2026}
 Constantin G. Meyer-Grant, David Kellen, Samuel M. Harding, and Henrik Singmann.
