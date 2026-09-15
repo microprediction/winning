@@ -78,6 +78,19 @@ def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
     return _lift_contrast_update(m, S, np.eye(n), y, Cn, log_jac)
 
 
+def _lineup(runner):
+    """A runner is either a bare id or a LINE-UP: a sequence of member
+    ids whose abilities add. teams.py already speaks this language ("a
+    row per team, weights over its members; a rider-horse pair is a row
+    with two ones") -- this is what lets a race carry a shared effect as
+    an ordinary member, e.g. a home-advantage pseudo-entity that joins
+    the host's row in every contest and is then estimated, diffused and
+    shrunk exactly like a team ability."""
+    if isinstance(runner, (str, bytes)) or not hasattr(runner, "__len__"):
+        return [runner]
+    return list(runner)
+
+
 def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
                  timescale=200.0, tau2=0.25, beta2=1.0, lengths_scale=0.2,
                  meas_var=0.0, transform=None, state=None,
@@ -89,7 +102,8 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
 
     races: iterable of dicts with keys
       't'        -- time (any unit consistent with timescale)
-      'runners'  -- list of runner identifiers
+      'runners'  -- list of runner identifiers; an entry may instead be
+                    a SEQUENCE of ids (a line-up), whose abilities add
       and any of:
       'p_market' -- market win probabilities (pre-race)
       'margins'  -- lengths behind the winner, aligned with runners
@@ -114,9 +128,10 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
         if all_ids is None:
             seen = []
             for race in races:
-                for rid in race["runners"]:
-                    if rid not in seen:
-                        seen.append(rid)
+                for runner in race["runners"]:
+                    for rid in _lineup(runner):
+                        if rid not in seen:
+                            seen.append(rid)
             all_ids = seen
         index = {rid: i for i, rid in enumerate(all_ids)}
         n = len(index)
@@ -133,7 +148,8 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
             m, S = diffuse_full(m, S, dt=t - t_last, timescale=timescale,
                                 prior_mean=prior_mean, prior_var=prior_var)
         t_last = t
-        idx = np.array([index[r] for r in race["runners"]])
+        lineups = [_lineup(r) for r in race["runners"]]
+        idx = np.array([index[mem[0]] for mem in lineups])
         # every observation goes through the FULL state via the race's
         # selection matrix: the entrants' block is what the observation
         # sees, but the Kalman lift S A' moves every entity's mean and
@@ -143,7 +159,10 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
         # conjugate scores (means off by 1.2 after 60 races of 5 among
         # 12 on a static world; contrast coverage 0.37), and the
         # evidence order-dependent (verifier, 2026-09-11).
-        A = np.zeros((len(idx), n_all)); A[np.arange(len(idx)), idx] = 1.0
+        A = np.zeros((len(lineups), n_all))
+        for a, mem in enumerate(lineups):
+            for rid in mem:
+                A[a, index[rid]] += 1.0
         V = race.get("V")
         if race.get("p_market") is not None:
             m, S, lz = update_team_market_full(
@@ -206,14 +225,24 @@ def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257,
                             prior_mean=state.get("prior_mean", 0.0),
                             prior_var=state.get("prior_var", 1.0))
     k = len(runners)
-    mu = np.full(k, float(state.get("prior_mean", 0.0)))
-    Sf = np.eye(k) * float(state.get("prior_var", 1.0))
-    known = [(a, state["index"][r]) for a, r in enumerate(runners)
-             if r in state["index"]]
-    for a, i in known:
-        mu[a] = m[i]
-        for b, j in known:
-            Sf[a, b] = S[i, j]
+    pm = float(state.get("prior_mean", 0.0))
+    pv = float(state.get("prior_var", 1.0))
+    # each runner's performance is the SUM of its members' abilities, so
+    # its mean adds and its (co)variance is the double sum over members;
+    # members the state has never seen enter at the population prior,
+    # independent of everything else. Bare-id runners reduce to the
+    # scalar case exactly.
+    lineups = [_lineup(r) for r in runners]
+    known = [[state["index"][rid] for rid in mem if rid in state["index"]]
+             for mem in lineups]
+    unseen = [len(mem) - len(kn) for mem, kn in zip(lineups, known)]
+    mu = np.array([sum(m[i] for i in kn) + u * pm
+                   for kn, u in zip(known, unseen)], dtype=float)
+    Sf = np.zeros((k, k))
+    for a in range(k):
+        for b in range(k):
+            Sf[a, b] = sum(S[i, j] for i in known[a] for j in known[b])
+        Sf[a, a] += unseen[a] * pv
     B = np.broadcast_to(np.asarray(beta2, dtype=float), (k,)).astype(float)
     if base != "normal":
         # non-normal noise: the belief split into a lattice-borne
@@ -302,8 +331,9 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
             feed.pop("p_market", None)
         _, _, state = rate_history([feed], state=state, return_state=True,
                                    **params) if state is not None else             rate_history([feed], return_state=True,
-                         ids=sorted({r for rc in races
-                                     for r in rc["runners"]}),
+                         ids=sorted({rid for rc in races
+                                     for r in rc["runners"]
+                                     for rid in _lineup(r)}),
                          **params)
     return {"log_loss_model": ll_model, "log_loss_market": ll_market,
             "n_scored": n_scored, "records": recs}
