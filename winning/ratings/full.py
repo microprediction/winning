@@ -53,8 +53,21 @@ def _psd_repair(S, floor_frac=1e-8):
             "produced it overflowed (typically a near-impossible "
             "observation under a very diffuse prior)")
     S = 0.5 * (S + S.T)
-    lam, U = np.linalg.eigh(S)
     floor = floor_frac * max(float(np.trace(S)) / len(S), 1e-12)
+    # When every eigenvalue already clears the floor the rebuild below is
+    # an identity (U diag(lam) U' == S), so prove that with a Cholesky of
+    # S - floor I and skip it. Cholesky is ~10x cheaper than eigh at the
+    # sizes this filter runs (4.8 ms -> 0.47 ms at n=367), and the filter
+    # calls this five times per contest. Exact same return on the fast
+    # path; the exact repair still runs whenever the floor is live.
+    T = S.copy()
+    T[np.diag_indices_from(T)] -= floor
+    try:
+        np.linalg.cholesky(T)
+        return S
+    except np.linalg.LinAlgError:
+        pass
+    lam, U = np.linalg.eigh(S)
     return (U * np.maximum(lam, floor)) @ U.T
 
 
