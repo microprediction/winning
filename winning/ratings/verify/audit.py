@@ -194,19 +194,31 @@ def _p6_verdict(ctx, dname, bname, s, thin=None):
     th = ctx.mark("audit.P6")["thresholds"]
     bad = (abs(s["robust"] - 1.0) > th["robust"] or s["tail"] >= th["tail"]
            or abs(s["coverage"] - 0.95) > th["coverage"])
+    # three standard errors must fit inside whatever bound is in force,
+    # and a 1 percent tail needs 300 z-values to be seen at all
+    se_sd = 1.0 / np.sqrt(2.0 * s["n_z"]); se_cov = np.sqrt(0.0475 / s["n_z"])
     if thin is None:
-        # power: three standard errors must fit inside the threshold, and
-        # a 1 percent tail needs 300 z-values to be seen at all
-        se_sd = 1.0 / np.sqrt(2.0 * s["n_z"]); se_cov = np.sqrt(0.0475 / s["n_z"])
         thin = (3 * se_sd > th["robust"]) or (3 * se_cov > th["coverage"]) or (s["n_z"] < 300)
     env = marks.EXPECTED_APPROX.get(f"audit.P6.{dname}")
     if bad and env is not None:
-        e = env["envelope"]
+        e = env.get("per_base", {}).get(bname) or env["envelope"]
         inside = (e["robust"][0] <= s["robust"] <= e["robust"][1]
                   and e["coverage"][0] <= s["coverage"] <= e["coverage"][1])
+        # The thin test above measures three standard errors against the
+        # P6 THRESHOLD, which is 0.35 wide. On this branch the operative
+        # bound is the envelope edge, and for update_ranking that edge
+        # sits seven times closer, so a cell could report the
+        # approximation as documented while having no power to say
+        # otherwise. Measure against the edge that is actually in force.
+        margin_sd = min(s["robust"] - e["robust"][0], e["robust"][1] - s["robust"])
+        margin_cov = min(s["coverage"] - e["coverage"][0],
+                         e["coverage"][1] - s["coverage"])
+        near = f"{margin_sd / se_sd:.1f} se of the sd edge, {margin_cov / se_cov:.1f} of coverage"
+        if inside and (3 * se_sd > margin_sd or 3 * se_cov > margin_cov):
+            return "UNDERPOWERED", f"inside the envelope but within {near}"
         if inside:
-            return "EXPECTED_APPROX", env["why"]
-        return "FAIL", "outside the documented envelope"
+            return "EXPECTED_APPROX", f"{env['why']} ({near})"
+        return "FAIL", f"outside the documented envelope ({near})"
     if bad:
         return "FAIL", f"robust sd {s['robust']:.2f} cover {s['coverage']:.2f} tail {s['tail']:.3f}"
     if thin:
