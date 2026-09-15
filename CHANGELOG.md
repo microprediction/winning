@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- `race_probabilities` takes a closed form for a two-runner normal race.
+  The lattice path sized its 257-point grid with 160 scalar bisections
+  in Python before any compiled kernel ran, and on a head-to-head filter
+  that window search, not the forward pass, was the largest cost. A pair
+  is a single Gaussian contrast: with `Sigma = V V' + diag(D)`,
+  `p0 = Phi((mu1 - mu0) / sd)` where `sd^2 = S00 + S11 - 2 S01`, and the
+  returned slopes are the own-slope the inverter preconditions with.
+  Matches the lattice to 1e-16 on random pairs with and without loadings
+  (the lattice's own discretisation error is ~1e-9) and finite-difference
+  slopes to 8 dp; `abilities_from_race` inherits it unchanged. Guarded to
+  `n == 2` and `base == "normal"` after the structure and temperature
+  dispatches, so every other race is the same code as before. On 24,089
+  NCAAB games over 367 teams the dense walk-forward went from a projected
+  46 minutes to 74 seconds.
+- `_psd_repair` proves the eigenvalue floor with a Cholesky of
+  `S - floor I` and returns `S` when it holds, which is when the eigen
+  rebuild was an identity; the exact repair still runs whenever the
+  floor is live. 4.8 ms to 0.47 ms at n = 367, and the dense filter calls
+  it five times per contest.
+- `rate_history`, `predict_race` and `walk_forward` accept a LINE-UP as
+  a runner: a sequence of ids whose abilities add, the "row with two
+  ones" `teams.py` already documents. A shared effect such as home
+  advantage is then an ordinary member (`[home, "__HOME__"]` on the
+  host's row) that is estimated, diffused and shrunk like a team. Bare
+  ids are unchanged.
+- `CLAUDE.md`: instructions for coding agents — which filter for which
+  field size (a 367-entity history on the dense filter saturated every
+  core; `AbilityTracker` never builds that matrix), the caller-owned
+  results-to-performance transform and how to calibrate it, why prices
+  invert under the outcome model, `tuning.select` for every sweep, the
+  verify gate, the diagnostics that locate a mis-scaling, and the
+  resource cage.
+
 - The verifier's documented-approximation envelope for
   `update_ranking` was passing on a seed count. At the shipped 25 seeds
   the failure base reads robust sd 1.55 and coverage 0.799, inside both
