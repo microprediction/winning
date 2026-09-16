@@ -121,7 +121,9 @@ follows by changing the denominator alone, which leaves every ratio $p_i/p_j$ wi
 as it was in $S$. For a two-item menu the predicted share preferring $i$ is $p_i/(p_i+p_j)$.
 This is proportional, or \emph{linear}, renormalization. The invariance it imposes is Independence of Irrelevant
 Alternatives, and applied to a reduced set of response alternatives it is what Clarke
-\cite{clarke1957} named the \emph{constant-ratio rule}.
+\cite{clarke1957} named the \emph{constant-ratio rule}. Testing for departures from it directly,
+rather than through a restriction protocol, is its own literature; Corr\^{e}a et al.\
+\cite{correa2025} give a recent Bayesian treatment for similarity choices.
 
 We suggest that Gaussian renormalization is equally natural, if not more so. Read the shares as
 the winning probabilities of a contest among independent Gaussian performances, which has
@@ -541,8 +543,8 @@ concentrating the withdrawn mass onto whichever survivor most resembles the remo
 rather than spreading it proportionally. Townsend and Landon attribute that to Debreu's
 similarity objection, and Rouder brackets the same failure from the other side, finding real
 behaviour better than a guessing correction predicts. And every claim of conformity that was later
-retested with a test that had power was overturned. Holloway reversed his own 1968 conclusion in
-1971 \cite{holloway1968,holloway1971}, and Morgan's likelihood-ratio test rejected the rule on
+retested with a test that had power was overturned. Holloway reversed his own 1970 conclusion in
+1971 \cite{holloway1970,holloway1971}, and Morgan's likelihood-ratio test rejected the rule on
 both of the datasets he applied it to, Clarke's and Egan's \cite{egan1957,morgan1974}.
 
 The reason the question stayed open is stated in the literature itself. Clarke returned to it in
@@ -604,7 +606,12 @@ vector in one pass over a shared grid.
 Any noise law fixed in advance up to location gives a map with nothing left to choose, so the
 class supplies many zero-parameter candidates and not two. We compare two of them because they
 are the conventional ones. Gumbel gives linear renormalization, which is the unconsidered default
-and the architecture of a masked softmax. Unit-variance Gaussian gives Case V, which is the classical
+and the architecture of a masked softmax. Kempton and Burrell \cite{kemptonburrell2025} measure
+the same renormalization directly in language-model decoding: truncating a softmax for top-$k$,
+nucleus or temperature sampling and rescaling the survivors distorts the relative probabilities
+among them, sometimes by two orders of magnitude, purely from the renormalization step and
+before any question of which map is more accurate is even asked. Unit-variance Gaussian gives
+Case V, which is the classical
 model of a latent contest and the one Thurstone proposed.\footnote{The asymmetry between the two
 is notable. Case V is a model somebody proposed and defended. Linear renormalization is the
 Gumbel-noise member of the same class, and it is not adopted because anyone argues that choice
@@ -2137,10 +2144,10 @@ James P. Egan.
 Monitoring task in speech communication.
 \emph{Journal of the Acoustical Society of America}, 29(4):482--489, 1957.
 
-\bibitem{holloway1968}
-Charles M. Holloway.
-Passing the strongly voiced components of noisy speech.
-\emph{Quarterly Journal of Experimental Psychology}, 20:336--350, 1968.
+\bibitem{holloway1970}
+C. M. Holloway.
+Consonant recognition with two levels of decision complexity.
+\emph{Quarterly Journal of Experimental Psychology}, 22(3):467--474, 1970.
 
 \bibitem{holloway1971}
 Charles M. Holloway.
@@ -2231,6 +2238,19 @@ arXiv:2509.11673, 2025.
 Wanqiao Xu, Shi Dong, Xiuyuan Lu, Grace Lam, Zheng Wen, and Benjamin Van Roy.
 RLHF and IIA: perverse incentives.
 arXiv:2312.01057, 2023.
+
+\bibitem{kemptonburrell2025}
+Tom Kempton and Stuart Burrell.
+Local normalization distortion and the thermodynamic formalism of decoding strategies for
+large language models.
+In \emph{Findings of the Association for Computational Linguistics: EMNLP 2025}, pages
+22216--22231, 2025.
+
+\bibitem{correa2025}
+Hugo Sales Corr\^{e}a, Suryanarayana Sankagiri, Daniel Ratton Figueiredo, and Matthias
+Grossglauser.
+Measuring IIA violations in similarity choices with Bayesian models.
+arXiv:2508.14615, 2025.
 
 \bibitem{meyergrant2026}
 Constantin G. Meyer-Grant, David Kellen, Samuel M. Harding, and Henrik Singmann.
