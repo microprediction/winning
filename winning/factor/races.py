@@ -53,7 +53,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import ndtr, ndtri
 
-from .core import hermite_nodes
+from .core import as_idio, as_loadings, hermite_nodes
 
 try:                                       # compiled kernels (rust/fastrace)
     import fastrace as _fastrace
@@ -281,12 +281,12 @@ def skew_normal_base(a):
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
-    D = np.ones(n) if D is None else np.asarray(D, dtype=float)
+    D = np.ones(n) if D is None else as_idio(D, n)
     if V is None:
         V = np.zeros((n, 1))
         F, W = np.zeros((1, 1)), np.ones(1)
     else:
-        V = np.atleast_2d(np.asarray(V, dtype=float))
+        V = as_loadings(V, n)
         # Gauge-fix the loadings: V -> PV, subtracting each factor's mean
         # loading across contestants. A common loading column c adds the
         # same c'f to every performance and cannot move an argmin, so the
@@ -553,6 +553,76 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     return x, points
 
 
+def _fit_cov(cov, structure, V, D, stacklevel=2):
+    """Fit a dense cov= to the factor grammar, with the accuracy warnings.
+
+    Shared by race_probabilities and ordered_probabilities so the two
+    front doors accept the same covariance descriptions on the same
+    terms -- and warn about the same fits.
+    """
+    if structure is not None or V is not None or D is not None:
+        raise ValueError("cov= replaces structure=/V=/D=; pass one only")
+    from .core import fit_covariance
+    import warnings
+    V, D, F, W, report = fit_covariance(cov, return_report=True)
+    if report.get("contrast_residual_max", 0.0) > 0.05:
+        warnings.warn(
+            "cov= carries a nearly singular contrast the fit did not "
+            "hold: the worst pairwise difference variance is off by "
+            f"{report['contrast_residual_max']:.2f} of its own size. "
+            "Global residual norms cannot see this (choice "
+            "probabilities become infinitely sensitive as a contrast "
+            "variance approaches zero), so head-to-head probabilities "
+            "between the affected pair may be badly wrong even though "
+            "the covariance residual looks small.",
+            RuntimeWarning, stacklevel=stacklevel)
+    if report["projected_residual_max"] > 0.05:
+        warnings.warn(
+            "cov= is imperfectly served by the grammar fit (worst "
+            "choice-relevant residual entry "
+            f"{report['projected_residual_max']:.2f} of the average "
+            "variance; short-length-scale/locality covariances are the "
+            "known hard family). Probabilities may carry percent-level "
+            "bias; see the paper's dense-covariance section.",
+            RuntimeWarning, stacklevel=stacklevel)
+    elif report["rank"] > 12 and report["sharpness"] > 5:
+        warnings.warn(
+            "cov= fits well but needs a high-rank, sharp factor "
+            f"integral (rank {report['rank']}, sharpness "
+            f"{report['sharpness']:.0f}); the default node budget may "
+            "leave percent-level quadrature error. Pass more nodes "
+            "(fit_covariance(..., nodes_log2=14)) or price by "
+            "simulation for near-singular smooth covariances.",
+            RuntimeWarning, stacklevel=stacklevel)
+    return V, D, F, W
+
+
+def _factor_of_structure(structure, verb):
+    """The (V, D) of a structure that the factor kernels can price directly.
+
+    Independent and Factor ARE the factor form. The block/nested/tree
+    kernels are separate O(N)-per-point recursions with no (V, D) of
+    matching rank, so a verb that has only the factor lattice refuses
+    them by name instead of pricing a different race (issue #66 asked
+    why the grammars are not uniform across the family; this says where
+    the boundary is).
+    """
+    from .structures import Factor, Independent
+    if isinstance(structure, Independent):
+        return None, np.asarray(structure.D, float)
+    if isinstance(structure, Factor):
+        return (np.asarray(structure.V, float),
+                np.asarray(structure.D, float))
+    raise NotImplementedError(
+        f"{verb} prices the factor lattice, so structure="
+        f"{type(structure).__name__} is not available on it -- only "
+        "Independent and Factor, which are the factor form itself. The "
+        "block/nested/tree kernels are win-race recursions with no "
+        "equivalent ordered-prefix pass; fit the structure to a factor "
+        "model (winning.factor.core.fit_covariance on its covariance) "
+        "if you need ordered prefixes under it.")
+
+
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                        points=257, temperature=0.0, return_slopes=False,
                        structure=None, window="bulk", delta=1e-12, cov=None):
@@ -561,6 +631,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     Pass `structure=` (Independent/Factor/Blocks/Nested/Tree from
     winning.factor.structures) to describe the covariance declaratively --
     one race, five grammars; V=/D= remain as sugar for the factor case.
+    V is (n, rank), one row per contestant; a scalar, a length-n vector
+    (rank one) and an (rank, n) matrix are all normalised to it, and any
+    other shape raises rather than reaching the compiled kernel.
     Pass `cov=` (a dense covariance or correlation matrix) to have it
     fitted to the grammar first via winning.factor.core.fit_covariance
     (approximate: the fit residual is the price of density; see the
@@ -583,42 +656,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     pass per Newton step, so it scales the same way from 17 ms at rank
     1."""
     if cov is not None:
-        if structure is not None or V is not None or D is not None:
-            raise ValueError("cov= replaces structure=/V=/D=; pass one only")
-        from .core import fit_covariance
-        V, D, F, W, report = fit_covariance(cov, return_report=True)
-        if report.get("contrast_residual_max", 0.0) > 0.05:
-            import warnings
-            warnings.warn(
-                "cov= carries a nearly singular contrast the fit did not "
-                "hold: the worst pairwise difference variance is off by "
-                f"{report['contrast_residual_max']:.2f} of its own size. "
-                "Global residual norms cannot see this (choice "
-                "probabilities become infinitely sensitive as a contrast "
-                "variance approaches zero), so head-to-head probabilities "
-                "between the affected pair may be badly wrong even though "
-                "the covariance residual looks small.",
-                RuntimeWarning, stacklevel=2)
-        if report["projected_residual_max"] > 0.05:
-            import warnings
-            warnings.warn(
-                "cov= is imperfectly served by the grammar fit (worst "
-                "choice-relevant residual entry "
-                f"{report['projected_residual_max']:.2f} of the average "
-                "variance; short-length-scale/locality covariances are the "
-                "known hard family). Probabilities may carry percent-level "
-                "bias; see the paper's dense-covariance section.",
-                RuntimeWarning, stacklevel=2)
-        elif report["rank"] > 12 and report["sharpness"] > 5:
-            import warnings
-            warnings.warn(
-                "cov= fits well but needs a high-rank, sharp factor "
-                f"integral (rank {report['rank']}, sharpness "
-                f"{report['sharpness']:.0f}); the default node budget may "
-                "leave percent-level quadrature error. Pass more nodes "
-                "(fit_covariance(..., nodes_log2=14)) or price by "
-                "simulation for near-singular smooth covariances.",
-                RuntimeWarning, stacklevel=2)
+        V, D, F, W = _fit_cov(cov, structure, V, D, stacklevel=3)
     if structure is not None:
         from .structures import dispatch_probabilities
         return dispatch_probabilities(mu, structure, base=base,
@@ -1081,9 +1119,7 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
         z -= z.max()
         w = np.exp(z)
         return w / w.sum()
-    V = np.atleast_2d(np.asarray(V, dtype=float))
-    if V.shape[0] != len(mu):
-        V = V.T
+    V = as_loadings(V, len(mu))
     if F is None or W is None:
         D_impl = np.full(len(mu), _GUMBEL_UNIT_D * tau * tau)
         _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
@@ -1128,9 +1164,7 @@ def plackett_luce_order_logprob(mu, order, temperature=1.0, V=None, F=None,
 
     if V is None:
         return _one(-mu / tau)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
-    if V.shape[0] != len(mu):
-        V = V.T
+    V = as_loadings(V, len(mu))
     if F is None or W is None:
         D_impl = np.full(len(mu), _GUMBEL_UNIT_D * tau * tau)
         _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
