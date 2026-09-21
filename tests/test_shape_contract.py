@@ -591,7 +591,8 @@ def test_every_spelling_agrees_on_the_pure_numpy_path_too(name, monkeypatch):
     are patched.
     """
     for mod in ("winning.factor.races", "winning.factor.permutations",
-                "winning.factor.topk", "winning.factor.blocks"):
+                "winning.factor.topk", "winning.factor.blocks",
+                "winning.factor.core"):
         # each of these four carries its OWN module-level _HAVE_RUST
         monkeypatch.setattr(importlib.import_module(mod), "_HAVE_RUST", False)
     test_every_spelling_of_the_same_loadings_agrees(name)

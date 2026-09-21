@@ -3,6 +3,17 @@ import numpy as np
 
 from ..shapes import as_loadings
 
+try:                                       # compiled kernels (rust/fastrace)
+    import fastrace as _fastrace
+    _RUST_OK = hasattr(_fastrace, "per_winner_reduced_rank")
+    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
+        "WINNING_PURE", "").strip() in ("", "0")
+except ImportError:                       # pragma: no cover
+    _fastrace = None
+    _RUST_OK = False
+    _HAVE_RUST = False
+
+
 
 
 def reduced_rank_representation(mu, V, D, i):
@@ -44,10 +55,9 @@ def per_winner_reduced_rank_shares(mu, V, D, n_samples=512, seed=11):
     n, k = V.shape
     Z = norm.ppf(qmc.Sobol(d=k + 1, scramble=True,
                            seed=seed).random(n_samples))
-    try:
-        import fastrace
-        p = fastrace.per_winner_reduced_rank(mu, V, D, Z)
-    except (ImportError, AttributeError):
+    if _HAVE_RUST:                       # honours WINNING_PURE and use_rust()
+        p = _fastrace.per_winner_reduced_rank(mu, V, D, Z)
+    else:
         sd = np.sqrt(D)
         p = np.empty(n)
         for i in range(n):

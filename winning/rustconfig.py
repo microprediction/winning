@@ -18,8 +18,11 @@ import os
 
 def _rust_modules():
     from winning.classic import lattice, lattice_calibration
-    from winning.factor import races, blocks, topk, permutations
-    return [lattice, lattice_calibration, races, blocks, topk, permutations]
+    from winning.factor import races, blocks, topk, permutations, core
+    from winning.methods import native
+    from winning.alternatives import reprs
+    return [lattice, lattice_calibration, races, blocks, topk, permutations,
+            core, native, reprs]
 
 
 def use_rust(enabled=True):
