@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- `race_probabilities` now takes the closed form for a two-runner normal
+  race instead of building the lattice. A pair is a single Gaussian
+  contrast, so with `Sigma = V V' + diag(D)` the answer is
+  `p0 = Phi((mu1 - mu0)/sd)`, `sd^2 = S00 + S11 - 2 S01`. The identity was
+  always exact -- the engine agreed with it to 2.6e-12 -- but nothing
+  dispatched to it, so a pair paid 7.0 ms against 1.1 us for the `ndtr`
+  call, about 6,000x, and most of that was the grid-window bisection
+  running in Python before any compiled kernel. The inverse was already
+  asymmetric with this: `core.py` shortcuts `N == 2`.
+
+  Both tails are computed directly, `ndtr(u)` and `ndtr(-u)`, rather than
+  as `1 - ndtr(u)`: the subtraction rounds the loser to exactly zero at a
+  9 sd contrast where the true value is 1.1e-19, and the pair then depends
+  on which runner is listed first. That defect was found by review of the
+  first cut while all 775 verifier checks passed, and it is what the
+  extreme-tail test pins.
+
+  Measured over 2000 random pairs at rank 1-4: max deviation from the
+  analytic value 2.2e-16, permutation equivariance exact, normalisation
+  exact, own-slopes against finite differences 1.3e-11. Guarded to
+  `n == 2` and `base == "normal"`, after the structure and temperature
+  dispatches, so every other race is unchanged.
 - The loading-shape contract is now ONE function, `winning.shapes.as_loadings`,
   and every public verb in the package goes through it. It was previously
   re-implemented at twenty-odd call sites in three incompatible ways:
