@@ -668,6 +668,36 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                               float(temperature), points, return_slopes)
     sd = np.sqrt(D)
     n = len(mu)
+    if base == "normal" and n == 2:
+        # A two-runner normal race is a SINGLE Gaussian contrast, so the
+        # lattice has a closed form and does not need to be built. With
+        # Sigma = V V' + diag(D), X0 - X1 is normal with variance
+        # Sig00 + Sig11 - 2 Sig01, and min-wins gives
+        # p0 = Phi((mu1 - mu0) / sd_d).
+        #
+        # This is not only cheaper but TIGHTER: measured against this
+        # closed form the 257-point path carries ~1e-9 of discretization
+        # error. It also skips _bulk_window, whose 160 scalar bisections
+        # run in Python BEFORE any compiled kernel is reached -- on the
+        # head-to-head filter (every contest is a pair) that window
+        # search, not the forward pass, was the single largest cost.
+        Sig = V @ V.T + np.diag(D)
+        var_d = float(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1])
+        sd_d = np.sqrt(max(var_d, 1e-300))
+        u = float((mu[1] - mu[0]) / sd_d)
+        # Each tail directly: 1 - ndtr(u) rounds the loser to exactly 0 at
+        # a 9 sd contrast where the true value is 1.1e-19, and the pair
+        # then depends on which runner is listed first. ndtr(u), ndtr(-u)
+        # keep full relative precision in both tails and are exactly
+        # permutation-equivariant (found in review).
+        p = np.array([float(ndtr(u)), float(ndtr(-u))])
+        if return_slopes:
+            # dp_i/dmu_i, the own-slope the inverter preconditions with;
+            # equal for both runners on a pair, and negative because the
+            # race is min-wins.
+            dens = float(np.exp(-0.5 * u * u) / np.sqrt(2.0 * np.pi)) / sd_d
+            return p, np.array([-dens, -dens])
+        return p
     if _HAVE_RUST and base == "normal" and n * len(F) > 2e7:
         # at scale, materializing the Q x n conditional-means matrix (only
         # ever used for the window) costs gigabytes and dominates runtime;
