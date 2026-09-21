@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Regression test for the `ordered_probabilities` points floor reported
+  in #66: a negative-correlation block (regular simplex, rank k-1) at
+  k=3 prefixes succeeds at `points=501` and raises below it for every
+  k = 2..5. The test also pins WHY lowering `points` did not help: a
+  request below `need = ceil(span / (sd_min/8)) + 1` is silently
+  promoted to `need` (184/216/258/320 for k = 2..5), so 65 and 257
+  points give bit-identical results at k >= 4. `need` was calibrated
+  for the win race's spectral lattice; the 3-prefix kernel's inner
+  cumsum is first-order and 8 points per sd leaves 2-5e-3 of mass
+  against a 1e-3 tolerance. No code change; the test names the fix.
 - A `D` entry of exactly zero reached the lattice and died as
   `OverflowError: cannot convert float infinity to integer` in
   `forward_grid`'s grid sizing, which divides by the smallest sd. A zero
