@@ -800,6 +800,111 @@ def test_every_verb_taking_a_belief_variance_is_swept():
         "test drives:\n  " + "\n  ".join(missing))
 
 
+# ------------------------------------------------- the pair (n == 2) sweep
+# The drivers above all use a 5-runner field, so the n == 2 path -- which
+# `race_probabilities` now answers with a closed form rather than the
+# lattice -- was covered only by checks run BY HAND when that landed.
+# Hand-checking is what this file exists to replace, so the pair gets the
+# same three contract checks as every other field size.
+#
+# A pair is the size at which the shapes are most confusable: at rank one
+# V is (2, 1), D is (2,), mu is (2,) and the belief variance is (2,) --
+# four arguments of identical shape.
+PAIR_MU = np.array([0.15, -0.15])
+PAIR_V = np.array([0.7, -0.3])          # non-constant, so it moves the race
+PAIR_D = np.array([0.9, 1.1])
+PAIR_P = np.array([0.6, 0.4])
+PAIR_ORDER = np.array([1, 0])
+
+
+def _pair(mod, attr):
+    return getattr(importlib.import_module(mod), attr)
+
+
+# Degenerate at a pair, so deliberately absent from PAIR_DRIVERS:
+#   removal_shares -- removing one of two runners leaves one who wins with
+#   probability 1, so the answer is the constant permutation matrix
+#   [[0,1],[1,0]] and V cannot enter it. Verified, not assumed: the
+#   loadings-move-the-answer check below failed on it, which is the guard
+#   doing its job rather than a defect in the verb.
+PAIR_DRIVERS = {
+    "races.race_probabilities":
+        lambda V: _pair("winning.factor.races", "race_probabilities")(
+            PAIR_MU, V=V, D=PAIR_D, points=257),
+    "races.abilities_from_race":
+        lambda V: _pair("winning.factor.races", "abilities_from_race")(
+            PAIR_P, V=V, D=PAIR_D, points=257),
+    "races.tie_densities":
+        lambda V: _pair("winning.factor.races", "tie_densities")(
+            PAIR_MU, V=V, D=PAIR_D, points=501),
+    "polish.race_jacobian":
+        lambda V: _pair("winning.factor.polish", "race_jacobian")(
+            PAIR_MU, V=V, D=PAIR_D, points=257),
+    "polish.race_jacobian_row":
+        lambda V: _pair("winning.factor.polish", "race_jacobian_row")(
+            PAIR_MU, 1, V=V, D=PAIR_D, points=257),
+    "permutations.ordered_probabilities":
+        lambda V: _pair("winning.factor.permutations",
+                        "ordered_probabilities")(
+            PAIR_MU, k=2, V=V, D=PAIR_D, points=301),
+    "topk.top_k_probabilities":
+        lambda V: _pair("winning.factor.topk", "top_k_probabilities")(
+            PAIR_MU, 1, V=V, D=PAIR_D, points=257),
+    "probit.shares":
+        lambda V: _pair("winning.probit", "shares")(
+            PAIR_MU, V=V, D=PAIR_D),
+    "nway.update_winner_correlated":
+        lambda V: _pair("winning.ratings.nway", "update_winner_correlated")(
+            PAIR_MU, PAIR_D, 1, V),
+    "market.update_race":
+        lambda V: _pair("winning.ratings.market", "update_race")(
+            PAIR_MU, PAIR_D, p_market=PAIR_P, V=V),
+}
+
+
+@pytest.mark.parametrize("name", sorted(PAIR_DRIVERS))
+def test_pair_every_spelling_of_the_same_loadings_agrees(name):
+    call = PAIR_DRIVERS[name]
+    ref = _flat(call(PAIR_V.reshape(2, 1)))
+    tol = 32 * np.finfo(float).eps * max(1.0, float(np.abs(ref).max()))
+    for key, spelling in (("bare vector (n,)", PAIR_V),
+                          ("transposed (rank, n)", PAIR_V.reshape(1, 2))):
+        got = _flat(call(spelling))
+        assert got.shape == ref.shape, f"{name}: {key} changed the shape"
+        bad = np.abs(got - ref).max()
+        assert bad <= tol, f"{name}: {key} differs by {bad:.3e}"
+
+
+@pytest.mark.parametrize("name", sorted(PAIR_DRIVERS))
+def test_pair_the_loadings_actually_move_the_answer(name):
+    """At n == 2 the blind-oracle risk is sharpest: a pair with zero
+    loadings is still a perfectly well-formed race, so an equality that
+    holds for the wrong reason looks entirely normal."""
+    call = PAIR_DRIVERS[name]
+    a = _flat(call(PAIR_V.reshape(2, 1)))
+    b = _flat(call(np.zeros((2, 1))))
+    assert np.abs(a - b).max() > 1e-6, (
+        f"{name}: loadings do not move the pair, so the agreement above "
+        "proves nothing about this verb")
+
+
+@pytest.mark.parametrize("name", sorted(PAIR_DRIVERS))
+@pytest.mark.parametrize("bad", ["short", "cube"])
+def test_pair_a_mis_shaped_V_raises_and_names_the_contract(name, bad):
+    call = PAIR_DRIVERS[name]
+    V = {"short": np.full(4, 0.3), "cube": np.full((2, 2, 1), 0.3)}[bad]
+    with pytest.raises(ValueError, match=r"one row per contestant"):
+        call(V)
+
+
+def test_pair_every_factor_verb_that_accepts_two_runners_is_swept():
+    """Guard the guard: if a verb above stops accepting a pair, this says
+    so rather than letting the entry quietly become dead weight."""
+    for name, call in sorted(PAIR_DRIVERS.items()):
+        out = _flat(call(PAIR_V.reshape(2, 1)))
+        assert out.size, f"{name}: returned nothing usable at n == 2"
+
+
 def test_no_module_reimplements_the_contract_with_atleast_2d():
     """The static half. `np.atleast_2d` on a loadings variable is the
     exact construct that caused #66: it turns (n,) into (1, n) silently.
