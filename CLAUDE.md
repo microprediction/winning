@@ -89,9 +89,11 @@ normalisation, gauge/permutation/scale/team invariances, predict-versus-
 evidence, calibration, referees. Run it in addition to targeted regression
 tests for any new interface — it encodes the engine's identities, not the
 contract of code you just added, and a change can pass all 775 checks while
-destroying a Gaussian tail (a review of the first cut of the pairwise closed
-form found exactly that — that code is not in this branch, see the resource
-section, but the lesson about the verifier's reach stands).
+destroying a Gaussian tail. A review of the first cut of the pairwise
+closed form found exactly that: `1 - ndtr(u)` rounds the loser to exactly
+zero at a 9 sd contrast where the true value is 1.1e-19, which also made
+the answer depend on which runner was listed first. Every one of the 775
+checks passed while it did.
 `--profile full` is ~30 min; adjudicated runs are recorded in
 `research/adjudications/ratings_verify.md`. Marks live in
 `verify/marks.py` only and are set *before* the fix they judge.
@@ -129,13 +131,7 @@ running anything on a history:
   lose all progress output.
 
 Profile before optimising. Two confident diagnoses of a hot spot were both
-wrong; `cProfile` was right. A two-runner normal race is a single Gaussian
-contrast and does NOT need the lattice — but the closed form for it is not
-in this branch. It was written on `pair-closed-form`, whose PR (#64) was
-closed; the commits survive only as the local tag
-`lost/pair-closed-form-pr64`. Until it lands, a pairwise sport does reach
-the lattice, and that window search is the largest cost on a head-to-head
-filter. Measure before assuming otherwise.
+wrong; `cProfile` was right.
 
 ## Parameter shapes go through `winning.shapes`
 
