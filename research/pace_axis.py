@@ -38,7 +38,7 @@ from typing import Dict, List, Sequence
 
 import numpy as np
 from lab_variants import DistanceThurstoneRating, _scaled_density, run_lab
-from thurstone import Density, Race
+from winning.research import Density, Race
 
 from winning import ThurstoneRating
 from winning.benchmarks.metrics import Metrics

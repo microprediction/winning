@@ -21,7 +21,7 @@ import os
 from collections import defaultdict
 
 import numpy as np
-from thurstone import AbilityCalibrator, Density, UniformLattice
+from winning.research import AbilityCalibrator, Density, UniformLattice
 
 from place_probabilities import logloss_at
 from win_place_calibration import CLIP, rank_matrix

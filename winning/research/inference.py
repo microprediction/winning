@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-import warnings
-
 import numpy as np
 
 from .clustering import ClusterSplitter
@@ -63,13 +61,6 @@ class AbilityCalibrator:
     )
 
     def __post_init__(self):
-        warnings.warn(
-            "winning.research.AbilityCalibrator is the retired research "
-            "engine. On the inverse problem winning.calibrate_abilities is "
-            "36-38x faster (0.026 s vs 1.01 s at n=40), round-trips to 1.3e-9 "
-            "against 3.8e-5, and dispatches to the compiled kernels; this "
-            "class does none of that. Use calibrate_abilities(p, V=, D=).",
-            DeprecationWarning, stacklevel=2)
         if self.offset_grid is None:
             L = self.base.lattice.L
             self.offset_grid = list(range(int(-L / 2), int(L / 2)))[::-1]

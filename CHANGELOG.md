@@ -5,9 +5,10 @@
 - `winning.thurstone` is gone. It was a deprecation alias for
   `winning.research`, itself the retired research engine, so an import
   of `thurstone` crossed two deprecation layers to reach code that is
-  36-38x slower than `calibrate_abilities` on the inverse problem
-  (1.01 s vs 0.026 s at n=40), round-trips to 3.8e-5 against 1.3e-9,
-  and has no Rust dispatch. The external `thurstone` shim package
+  ~38x slower than `calibrate_abilities` on the inverse problem
+  (1.01 s vs 0.026 s at n=40) and round-trips to 3.8e-5 against
+  1.3e-9 -- the allocation session's measurement on its inputs, not
+  reproduced in this repo -- and has no Rust dispatch. The external `thurstone` shim package
   imports this alias and will now fail; that is the point. Nothing
   inside `winning` imported it. `winning.research.AbilityCalibrator`
   stays but now warns on construction, naming the front door and the
@@ -528,8 +529,10 @@
   2n - 2 numbers against 2n - 1 unknowns — a third depth would close
   it as overdetermined least squares).
 - `winning.thurstone` renamed `winning.research` (honest labeling of
-  research-grade machinery); the old name remains as a
-  `DeprecationWarning` alias that also serves submodule imports.
+  research-grade machinery); the old name remained as a
+  `DeprecationWarning` alias that also served submodule imports.
+  (Superseded: the alias is removed by the entry at the top of this
+  section.)
 
 - Dense-covariance front door: `race_probabilities(mu, cov=Sigma)` and
   `winning.factor.core.fit_covariance(Sigma, k, m)` package the paper's

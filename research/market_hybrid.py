@@ -32,7 +32,7 @@ from __future__ import annotations
 from typing import List, Sequence
 
 import numpy as np
-from thurstone import AbilityCalibrator, Density
+from winning.research import AbilityCalibrator, Density
 
 from winning.thurstonerating import ThurstoneRating
 

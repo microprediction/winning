@@ -39,7 +39,7 @@ The exact top-k lattice machinery built here is thurstone issue 01 realized.
 from __future__ import annotations
 
 import numpy as np
-from thurstone import AbilityCalibrator, Density, UniformLattice
+from winning.research import AbilityCalibrator, Density, UniformLattice
 
 from place_probabilities import logloss_at
 

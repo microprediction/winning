@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import numpy as np
 from place_probabilities import logloss_at
-from thurstone import AbilityCalibrator, Density, UniformLattice
+from winning.research import AbilityCalibrator, Density, UniformLattice
 
 TARGETS = (1, 2, 3, 4, 5, 6)
 S = 4096
