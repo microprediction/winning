@@ -14,6 +14,56 @@ _TINY = 1e-300
 _PFLOOR = 1e-15
 
 
+def as_loadings(V, n):
+    """Factor loadings as the (n, rank) matrix every kernel here contracts for.
+
+    A bare vector of length n is rank-one loadings, one per contestant.
+    np.atleast_2d reads it as (1, n) instead -- ONE contestant carrying
+    n factors -- and nothing downstream catches the difference: the
+    gauge-fix subtracts the single row from itself, so the loadings
+    silently become zero, the rank is read as n, and the compiled kernel
+    then indexes n rows that are not there. That surfaced as an ndarray
+    panic rather than an exception (issue #66), and a panic is not an
+    Exception, so a sweep wrapped in try/except aborted on it.
+
+    A scalar is the same loading for every contestant, and an (rank, n)
+    matrix is transposed -- the convention the tempered paths already
+    applied by hand. Anything else raises here, naming the expected
+    shape, so the compiled side is not reachable with a mis-shaped array.
+    """
+    A = np.asarray(V, dtype=float)
+    if A.ndim == 0:
+        return np.full((n, 1), float(A))
+    if A.ndim == 1 and A.size == n:
+        return A.reshape(n, 1)
+    if A.ndim == 2:
+        if A.shape[0] == n:
+            return A
+        if A.shape[1] == n:
+            return A.T
+    raise ValueError(
+        f"V must carry one row per contestant: expected a scalar, a "
+        f"vector of length {n}, or an ({n}, rank) matrix; got shape "
+        f"{A.shape}")
+
+
+def as_idio(D, n):
+    """Idiosyncratic VARIANCES as the length-n vector the kernels contract for.
+
+    A scalar is the same variance for everyone; a wrong length raises
+    here rather than reaching a broadcast error several frames down or
+    the compiled kernel (companion to as_loadings; issue #66).
+    """
+    A = np.asarray(D, dtype=float)
+    if A.ndim == 0:
+        return np.full(n, float(A))
+    if A.shape == (n,):
+        return A
+    raise ValueError(
+        f"D must be one idiosyncratic variance per contestant: expected "
+        f"a scalar or shape ({n},); got shape {A.shape}")
+
+
 def _lattice(mu: np.ndarray, sigma: float, points: int = 3001) -> np.ndarray:
     """Lattice adapted to the field: covers every competitor's density."""
     lo = float(np.min(mu)) - 8.0 * sigma
@@ -690,10 +740,10 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         raise ValueError("all target probabilities must be positive")
     p = p / p.sum()
     logp = np.log(p)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
-    D = np.asarray(D, dtype=float)
-    sd = np.sqrt(D)
     N = len(p)
+    V = as_loadings(V, N)
+    D = as_idio(D, N)
+    sd = np.sqrt(D)
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
     ident = p > floor
@@ -807,9 +857,9 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     """
     mu = np.asarray(mu, dtype=float)
     h = np.asarray(h, dtype=float)
-    sd = np.sqrt(np.asarray(D, dtype=float))
     N = len(mu)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
+    sd = np.sqrt(as_idio(D, N))
+    V = as_loadings(V, N)
     V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass
     M_all = mu[None, :] + F @ V.T
     x = np.linspace(M_all.min() - 8 * sd.max(), M_all.max() + 8 * sd.max(), points)

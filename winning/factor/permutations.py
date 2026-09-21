@@ -22,12 +22,14 @@ renormalising away a lattice that failed to capture the field.
 """
 import numpy as np
 
-from .races import _setup, _tempered_curves, _HAVE_RUST, _fastrace
+from .core import as_loadings
+from .races import (_fit_cov, _factor_of_structure, _setup, _tempered_curves,
+                    _HAVE_RUST, _fastrace)
 
 
 def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
                           base="normal", points=501, temperature=0.0,
-                          mass_tol=1e-3):
+                          mass_tol=1e-3, structure=None, cov=None):
     """Joint probability of every ordered k-prefix, k in {1, 2, 3}.
 
     Returns an array of shape (n,)*k; out[i, j, l] = P(i first, j second,
@@ -35,9 +37,23 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     summing out[i, :, :] + out[:, i, :] + out[:, :, i] reproduces
     top_k_probabilities(mu, 3). Under base="gumbel" (D = tau^2 pi^2/6) the
     result is Harville's stagewise product, exp(plackett_luce_prefix_logprob).
+
+    Covariance descriptions: V=/D= sugar, structure=Independent/Factor,
+    or cov= for a dense matrix fitted to the factor grammar first -- so a
+    covariance written once for the inverse can be reused here without
+    being re-expressed. structure=Blocks/Nested/Tree RAISES: those are
+    separate win-race recursions with no ordered-prefix pass, and this
+    call would otherwise silently price a different race than
+    race_probabilities does with the same argument.
     """
     if k not in (1, 2, 3):
         raise ValueError("k must be 1, 2 or 3")
+    if cov is not None:
+        V, D, F, W = _fit_cov(cov, structure, V, D, stacklevel=3)
+    elif structure is not None:
+        if V is not None or D is not None:
+            raise ValueError("structure= replaces V=/D=; pass one only")
+        V, D = _factor_of_structure(structure, "ordered_probabilities")
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
     n = len(mu)
@@ -150,9 +166,7 @@ def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
 
     if V is None:
         return _one(-mu / tau)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
-    if V.shape[0] != len(mu):
-        V = V.T
+    V = as_loadings(V, len(mu))
     if F is None or W is None:
         D_impl = np.full(len(mu), (np.pi ** 2 / 6.0) * tau * tau)
         _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")

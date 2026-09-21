@@ -7,7 +7,8 @@ the front-door verbs (race_probabilities, calibrate_abilities, race_jacobian,
 polish_race):
 
     Independent(D)                       Sigma = diag(D)
-    Factor(V, D)                         Sigma = V V' + diag(D)
+    Factor(V, D)                         Sigma = V V' + diag(D); the keyword
+                                         names are V and D, and V is (n, rank)
     Blocks(cluster, loading, D)          block-diagonal rank-1 + diag
     Nested(cluster, loading, D,
            coupling, gamma=1.0)          Factor(1) x Blocks: gamma dials the
@@ -39,6 +40,15 @@ class Independent:
 
 @dataclass(frozen=True)
 class Factor:
+    """Sigma = V V' + diag(D). The field names ARE the keywords.
+
+    Factor(V=..., D=...), not Factor(loadings=..., idio=...) -- the
+    natural guess raises TypeError (issue #66). V is (n, rank), one row
+    per contestant; a bare length-n vector is accepted as rank-one
+    loadings wherever the race verbs normalise it. D is the
+    idiosyncratic VARIANCE, as everywhere in winning.factor.
+    """
+
     V: object
     D: object
 

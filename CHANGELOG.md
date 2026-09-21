@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+- Factor loadings given as a bare length-n vector were read by
+  `np.atleast_2d` as `(1, n)` -- one contestant carrying n factors --
+  rather than as n rank-one loadings. Nothing downstream caught the
+  difference: the gauge-fix subtracted the single row from itself, so
+  the loadings became zero and the rank was read as n. With `fastrace`
+  the compiled kernel then indexed n rows that were not there and
+  panicked out of ndarray; a panic is not an `Exception`, so a sweep
+  wrapped in `try/except Exception` aborted instead of skipping the
+  race. Without `fastrace` there was no symptom at all: the call
+  returned the INDEPENDENT race, to 4e-15, discarding the correlation
+  it was given. `winning.factor.core.as_loadings` now normalises
+  loadings to `(n, rank)` at the Python boundary -- a scalar is a
+  common column, a length-n vector is rank one, an `(rank, n)` matrix
+  is transposed, and anything else raises a `ValueError` naming the
+  expected shape -- and `as_idio` does the same for `D`. Both run in
+  `_setup`, so `race_probabilities`, `abilities_from_race`,
+  `ordered_probabilities`, `polish_race`, the tempered paths,
+  `jacobian_vector_product` and
+  `abilities_from_probabilities_factor` inherit one contract and the
+  compiled side is no longer reachable with a mis-shaped array.
+  Reported in #66.
+- The tests could not have found the above. Every one of them spells
+  loadings `(n, 1)` or `(n, r)`, so no equivalent spelling was ever
+  compared against another; and the shapes that do appear are usually
+  CONSTANT columns, which the gauge-fix sends to zero, so a factor race
+  that had silently become the independent race looked right.
+  `tests/test_loading_shapes.py` pins the representation invariance
+  with non-constant loadings, on both the compiled and the numpy path,
+  and asserts up front that the loadings move the race at all.
+- `ordered_probabilities` took neither `structure=` nor `cov=` while
+  `race_probabilities` and `abilities_from_race` took both, so a
+  covariance described declaratively for the inverse had to be
+  re-expressed as `V=`/`D=` for the forward ordered-prefix call. It now
+  accepts both, sharing the forward call's fit-and-warn path.
+  `structure=Blocks/Nested/Tree` raises `NotImplementedError` naming the
+  grammar: those are win-race recursions with no ordered-prefix pass,
+  and pricing them through a factor fit would answer a different
+  question than the argument asks. Also from #66.
+- `structures.Factor` now documents that its keyword names are `V` and
+  `D`; `Factor(loadings=..., idio=...)` is the natural guess and raises
+  `TypeError`. Also from #66.
+
 - The verifier's documented-approximation envelope for
   `update_ranking` was passing on a seed count. At the shipped 25 seeds
   the failure base reads robust sd 1.55 and coverage 0.799, inside both
