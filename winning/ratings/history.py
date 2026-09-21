@@ -29,6 +29,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..shapes import as_loadings
+
+
 from .full import _psd_repair
 
 
@@ -149,7 +152,7 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
             m, S, lz = update_team_market_full(
                 m, S, A, race["p_market"], tau2=tau2,
                 **({} if V is None else
-                   {"V": np.atleast_2d(np.asarray(V, float)),
+                   {"V": as_loadings(V, len(idx)),
                     "D": np.full(len(idx), beta2)}))
             total_logZ += lz
         if race.get("margins") is not None or race.get("scores") is not None:
@@ -224,9 +227,7 @@ def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257,
         return p, 1.0 / np.maximum(p, 1e-12)
     C = Sf + np.diag(B)
     if V is not None:
-        Vm = np.atleast_2d(np.asarray(V, dtype=float))
-        if Vm.shape[0] != k:
-            Vm = Vm.T
+        Vm = as_loadings(V, k)
         C = C + Vm @ Vm.T
     p = race_probabilities(-mu, cov=C, points=points, base=base)
     return p, 1.0 / np.maximum(p, 1e-12)

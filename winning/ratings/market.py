@@ -25,6 +25,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..shapes import as_variance
+
+
+from ..shapes import as_loadings
+
+
 from .nway import (update_order_correlated, update_ranking_exact,
                    update_winner, update_winner_correlated)
 
@@ -45,7 +51,7 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
     Gaussian evidence of the observation, for weighting market trust.
     """
     m = np.asarray(m, dtype=float)
-    v = np.asarray(v, dtype=float)
+    v = as_variance(v, len(m))
     n = len(m)
     if invert is None:
         from ..factor.races import abilities_from_race
@@ -97,7 +103,7 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
     omitted. Returns (m_post, v_post, info) with info holding the logZ
     of each applied source."""
     m = np.asarray(m, dtype=float).copy()
-    v = np.asarray(v, dtype=float).copy()
+    v = as_variance(v, len(m)).copy()
     info = {}
     if p_market is not None:
         if V is not None and not market_model:
@@ -108,9 +114,7 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
             # outcome model (loadings V, idio beta2); pass market_model
             # kwargs or invert= to price the market differently.
             from ..factor.races import abilities_from_race
-            Vm = np.atleast_2d(np.asarray(V, dtype=float))
-            if Vm.shape[0] != len(m):
-                Vm = Vm.T
+            Vm = as_loadings(V, len(m))
             Dm = np.broadcast_to(np.asarray(beta2, dtype=float),
                                  (len(m),)).astype(float)
             market_model = {"invert":

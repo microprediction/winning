@@ -39,6 +39,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..shapes import as_loadings
+
+
 from .nway import _recentre_nodes
 
 
@@ -147,9 +150,7 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
     if V is None:
         Vaug = B
     else:
-        Vv = np.atleast_2d(np.asarray(V, dtype=float))
-        if Vv.shape[0] != k:
-            Vv = Vv.T
+        Vv = as_loadings(V, k)
         Vaug = np.hstack([B, Vv])
     rank = Vaug.shape[1]
     F, W = _mixture_nodes(rank, nodes_log2)

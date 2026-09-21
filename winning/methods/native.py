@@ -10,6 +10,8 @@ where each carried correctness anchors before entering any comparison.
 from __future__ import annotations
 
 import numpy as np
+
+
 from scipy.special import log_ndtr, ndtr, ndtri
 from scipy.stats import qmc
 
@@ -201,7 +203,7 @@ def stern(mu, V, D, budget=1024, seed=0):
     statistical behavior (R^{-1/2} in the remainder draws) is unchanged
     by the shared-field assembly used here."""
     mu = np.asarray(mu, dtype=float)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
+    V = np.asarray(V, dtype=float)
     D = np.asarray(D, dtype=float)
     n = len(mu)
     rng = np.random.default_rng(seed)

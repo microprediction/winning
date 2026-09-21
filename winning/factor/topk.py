@@ -44,6 +44,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..shapes import as_loadings
+
+
 from .races import BASES
 from .blocks import TINY, roots_hermitenorm
 
@@ -196,9 +199,7 @@ def _factor_nodes(V, n, qa, caller):
     """Column-centered loadings plus the Gauss-Hermite node mixture
     (rank <= 2; the common column is gauge), shared by every correlated
     entry point so the quadrature is identical across them."""
-    Vm = np.asarray(V, float)
-    if Vm.ndim == 1:
-        Vm = Vm[:, None]
+    Vm = as_loadings(V, n)
     if Vm.shape[1] > 2:
         raise NotImplementedError(
             f"{caller} mixes Gauss-Hermite factor nodes and is "

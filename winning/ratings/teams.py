@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..shapes import as_loadings
+
+
 from .full import (_mixture_update_full, _order_kernel, _psd_repair,
                    _winner_kernel)
 
@@ -107,9 +110,7 @@ def _noise_cov(k, beta2, meas_var=0.0, V=None):
     B = np.broadcast_to(np.asarray(beta2, dtype=float), (k,)).astype(float)
     Cn = np.diag(B + float(meas_var))
     if V is not None:
-        Vm = np.atleast_2d(np.asarray(V, dtype=float))
-        if Vm.shape[0] != k:
-            Vm = Vm.T
+        Vm = as_loadings(V, k)
         Cn = Cn + Vm @ Vm.T
     return Cn
 

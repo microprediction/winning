@@ -23,6 +23,9 @@ evidence and model comparison.
 from __future__ import annotations
 
 import numpy as np
+
+from ..shapes import as_loadings, as_variance
+
 from scipy.special import ndtr
 
 from ..factor.core import jacobian_vector_product, win_probabilities_factor
@@ -224,12 +227,10 @@ def predictive_win_probabilities(m, v=None, beta2=1.0, base="normal", V=None,
     if S is not None:
         S = np.asarray(S, dtype=float)
     else:
-        S = np.diag(np.asarray(v, dtype=float))
+        S = np.diag(as_variance(v, n))
     Vm = None
     if V is not None:
-        Vm = np.atleast_2d(np.asarray(V, dtype=float))
-        if Vm.shape[0] != n:
-            Vm = Vm.T
+        Vm = as_loadings(V, n)
     from ..factor.races import race_probabilities
     if base == "normal":
         C = S + np.diag(b2)
@@ -313,7 +314,7 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     curve path both derivatives are analytic (the smooth marginal's own
     fp/fpp under the integral), so eps is unused there."""
     m = np.asarray(m, dtype=float)
-    v = np.asarray(v, dtype=float)
+    v = as_variance(v, len(m))
     if base != "normal":
         curves = _predictive_curves(v, beta2, base)
         p_i, g, d2 = _winner_moments_curves(m, curves, winner)
@@ -346,7 +347,7 @@ def pairwise_update_winner(m, v, winner, beta2=1.0):
     """Classical decomposition: winner beats each loser, independent
     two-player Thurstone (probit) EP updates applied sequentially."""
     m = np.asarray(m, dtype=float).copy()
-    v = np.asarray(v, dtype=float).copy()
+    v = as_variance(v, len(m)).copy()
     for j in range(len(m)):
         if j == winner:
             continue
@@ -419,7 +420,7 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     marginal-pricing bug. Do not fix them here; update_ranking_exact
     measures 0.94+ coverage on every base."""
     m = np.asarray(m, dtype=float).copy()
-    v = np.asarray(v, dtype=float).copy()
+    v = as_variance(v, len(m)).copy()
     order = list(order)
     for t in range(len(order) - 1):
         rest = np.array(order[t:])
@@ -594,7 +595,7 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     retirements are coupled to ability, an under-weighted lump does
     better; overstating the failure rate is the one badly wrong move."""
     m = np.asarray(m, dtype=float)
-    v = np.asarray(v, dtype=float)
+    v = as_variance(v, len(m))
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     # non-normal bases price the true predictive (Gaussian belief
     # convolved with base noise) rather than the base at combined
@@ -691,9 +692,7 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     (matching update_winner / update_ranking_exact's treatment)."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
-    if V.shape[0] != len(m):
-        V = V.T
+    V = as_loadings(V, len(m))
     F, W = _factor_grid(V.shape[1], Qf=Qf, nodes_log2=nodes_log2)
     logW = np.log(W)
     shifts = F @ V.T                                  # (Q, n)
@@ -755,6 +754,7 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
     belief convolved with the base noise; non-normal bases price that
     convolution per node (curves shared across nodes -- the factor only
     shifts means), closing the same shortcut update_winner closed."""
+    v = as_variance(v, len(np.asarray(m)))
     if base != "normal":
         curves = _predictive_curves(v, beta2, base)
 
@@ -790,7 +790,8 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     Non-normal bases price each conditional order under the true
     predictive marginals (Gaussian belief convolved with base noise;
     curves shared across factor nodes), as update_ranking_exact does."""
-    sd = np.sqrt(np.asarray(v, dtype=float) + np.asarray(beta2, dtype=float))
+    v = as_variance(v, len(np.asarray(m)))
+    sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     order = np.asarray(order, dtype=int)
     curves = None if base == "normal" else _predictive_curves(v, beta2,
                                                               base)

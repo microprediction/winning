@@ -2,6 +2,88 @@
 
 ## Unreleased
 
+- The loading-shape contract is now ONE function, `winning.shapes.as_loadings`,
+  and every public verb in the package goes through it. It was previously
+  re-implemented at twenty-odd call sites in three incompatible ways:
+  `np.atleast_2d` alone (silently misread a length-n vector as one
+  contestant with n factors -- #66), `np.atleast_2d` plus a hand-rolled
+  transpose (seven sites in `winning.ratings`, correct but unvalidated),
+  and an explicit row-count check (`winning.probit`, which REJECTED the
+  spelling the rest accepted). Measured before the change, on a field of
+  5 with non-constant rank-one loadings: `winning.factor` panicked out of
+  ndarray or silently priced the independent race; `fastmvn`,
+  `likelihood` (2), `methods` (12) and `probit` raised useless errors
+  ("not enough values to unpack", "tuple index out of range", "setting an
+  array element with a sequence") several frames below the call. All of
+  them now accept a scalar, an `(n,)` vector, an `(n, rank)` matrix and a
+  `(rank, n)` matrix as the same race, and raise one `ValueError` naming
+  `(n, rank)` for anything else. `as_idio` does the same for `D`.
+  `winning.methods.registry.register` enforces it for all twelve
+  integration methods at once, since they share one signature.
+- `as_loadings` returns a C-contiguous array for every spelling. The bare
+  transpose view handed BLAS an F-ordered matrix, and the `(rank, n)`
+  spelling then answered the `(n, rank)` one to 1 ULP rather than exactly.
+- `winning.factor.core.win_probabilities_factor` and
+  `winning.factor.topk`'s five correlated entry points did not normalise
+  loadings at all; `topk` additionally refused a `(rank, n)` matrix as
+  "factor rank > 2". Found by the sweep below, not by a user.
+- `tests/test_shape_contract.py`: the harness that would have caught #66.
+  It DISCOVERS every public function taking a `V` and fails if one is
+  neither driven nor exempted with a stated reason, so a new entry point
+  cannot join the package without joining the sweep. For each of the 46
+  it drives, it checks that every spelling of the same loadings gives the
+  same answer, that a mis-shape raises the one contract error, and -- the
+  guard the old suite lacked -- that the loadings move the answer at all
+  before any equality is believed. A static check keeps `np.atleast_2d`
+  off loadings package-wide. With the #66 bug reinstated, 231 of its 288
+  checks fail; the suite as it stood passed 462 of 462 with that bug
+  present.
+- `python/fastmvn` vendors `winning/fastmvn.py` byte-for-byte, and that
+  file now says `from .shapes import as_idio, as_loadings` -- which
+  resolves to `winning.shapes` in one tree and `fastmvn.shapes` in the
+  other, so the vendored copy stays identical. `winning/shapes.py` is
+  vendored alongside it and a second sync test pins the two against each
+  other, so the shape contract cannot drift between the packages.
+- Belief variances are validated, which closes a second brittleness in
+  the same signatures. `v` (belief variance) and `V` (loadings) differ
+  by case alone in five public verbs, and at rank one they have the SAME
+  shape, so exchanging them was silent: measured at 1.09 on the
+  posterior mean in `update_winner_correlated`, 0.71 in
+  `update_order_correlated`, 0.053 in `predictive_win_probabilities`,
+  and a `sqrt` of a negative -- NaN, with a RuntimeWarning and nothing
+  else -- in `simulate.correlated_draws`. Exchanging `m` and `v` was
+  silent too, and nothing in the package rejected a negative variance
+  anywhere. `winning.shapes.as_variance` now requires finite entries of
+  the right length that are non-negative to a relative 1e-12; every
+  public verb taking a belief variance uses it, and `as_idio` shares the
+  check. The discriminator is free: loadings are gauge-fixed to mean
+  zero, so a non-trivial loading vector always carries a negative entry
+  and a variance never can. All eleven measured swap and
+  negative-variance cases now raise a `ValueError` naming the likely
+  cause.
+- That check is a TOLERANCE, not `>= 0`. A variance that is negative
+  only by round-off IS zero, and a strict test would have turned a
+  1e-18 eigenvalue residue out of `fit_covariance` into an exception in
+  a caller that was doing nothing wrong. Entries within 1e-12 of zero
+  (relative to the largest entry) are clipped to zero; anything below
+  that raises. Loading entries are O(0.1-1), so the swap is still
+  caught with twelve orders of margin.
+- The sweep skips a verb whose optional backend is absent, visibly and by
+  name, rather than failing or quietly vanishing: CI installs only
+  `.[test]` (pytest, pandas, matplotlib), so `cdf_gradient_shares` has no
+  jax there. `driver(..., requires="jax")` turns that into five named
+  SKIPs whose reason says the contract is unverified in that environment,
+  not waived.
+- The sweep's discovery guard now decides "optional backend absent" from
+  the CAUSE, not a list of module names. The first version allowlisted two
+  paths that did not exist, so `winning.bench.season_ranked` needing
+  `trueskill` failed CI on five platforms while passing locally, where
+  trueskill happens to be installed. `winning` itself needs only numpy and
+  scipy, so a `No module named X` where X is neither a hard dependency nor
+  a `winning.*` module is an optional backend: recorded, warned about by
+  name, and not fatal. Any other import failure still fails, because a
+  module that stops importing takes its verbs out of the sweep silently.
+
 - Factor loadings given as a bare length-n vector were read by
   `np.atleast_2d` as `(1, n)` -- one contestant carrying n factors --
   rather than as n rank-one loadings. Nothing downstream caught the
