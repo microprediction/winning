@@ -19,6 +19,9 @@ accelerates the block field pass transparently.
 from __future__ import annotations
 
 import numpy as np
+
+from ..shapes import as_loadings
+
 from scipy.special import ndtr, roots_hermitenorm
 
 TINY = 1e-300
@@ -149,9 +152,7 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     cluster with its own independent r-dim effect. Conditional independence
     given the effect makes the field a per-cluster r-dim quadrature."""
     mu = np.asarray(mu, float); sd = np.asarray(sd, float)
-    V = np.atleast_2d(np.asarray(V, float))
-    if V.shape[0] != len(mu):
-        V = V.T
+    V = as_loadings(V, len(mu))
     r = V.shape[1]
     cluster = np.asarray(cluster)
     n = len(mu)

@@ -26,6 +26,9 @@ EXPLOIT THE HOLES (observed: a runaway to ||w|| ~ 300 with a fake
 from __future__ import annotations
 
 import numpy as np
+
+from .shapes import as_loadings
+
 from numpy.polynomial.hermite_e import hermegauss
 from scipy.special import ndtr, ndtri
 
@@ -71,8 +74,8 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     dV : (J, r) gradient in the loadings.
     """
     mu = np.asarray(mu, dtype=float)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
     T, J = mu.shape
+    V = as_loadings(V, J)
     r = V.shape[1]
     D = np.ones(J) if D is None else np.asarray(D, dtype=float)
     s = np.sqrt(D)
@@ -182,8 +185,8 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     dV : (J, r)
     """
     mu = np.asarray(mu, dtype=float)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
     T, J = mu.shape
+    V = as_loadings(V, J)
     r = V.shape[1]
     tau = float(temperature)
     F, W = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2)

@@ -10,58 +10,12 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import log_ndtr, ndtr, ndtri
 
+# the package-wide shape contract; re-exported here because
+# winning.factor.core is where the factor kernels look for it
+from ..shapes import as_idio, as_loadings  # noqa: F401
+
 _TINY = 1e-300
 _PFLOOR = 1e-15
-
-
-def as_loadings(V, n):
-    """Factor loadings as the (n, rank) matrix every kernel here contracts for.
-
-    A bare vector of length n is rank-one loadings, one per contestant.
-    np.atleast_2d reads it as (1, n) instead -- ONE contestant carrying
-    n factors -- and nothing downstream catches the difference: the
-    gauge-fix subtracts the single row from itself, so the loadings
-    silently become zero, the rank is read as n, and the compiled kernel
-    then indexes n rows that are not there. That surfaced as an ndarray
-    panic rather than an exception (issue #66), and a panic is not an
-    Exception, so a sweep wrapped in try/except aborted on it.
-
-    A scalar is the same loading for every contestant, and an (rank, n)
-    matrix is transposed -- the convention the tempered paths already
-    applied by hand. Anything else raises here, naming the expected
-    shape, so the compiled side is not reachable with a mis-shaped array.
-    """
-    A = np.asarray(V, dtype=float)
-    if A.ndim == 0:
-        return np.full((n, 1), float(A))
-    if A.ndim == 1 and A.size == n:
-        return A.reshape(n, 1)
-    if A.ndim == 2:
-        if A.shape[0] == n:
-            return A
-        if A.shape[1] == n:
-            return A.T
-    raise ValueError(
-        f"V must carry one row per contestant: expected a scalar, a "
-        f"vector of length {n}, or an ({n}, rank) matrix; got shape "
-        f"{A.shape}")
-
-
-def as_idio(D, n):
-    """Idiosyncratic VARIANCES as the length-n vector the kernels contract for.
-
-    A scalar is the same variance for everyone; a wrong length raises
-    here rather than reaching a broadcast error several frames down or
-    the compiled kernel (companion to as_loadings; issue #66).
-    """
-    A = np.asarray(D, dtype=float)
-    if A.ndim == 0:
-        return np.full(n, float(A))
-    if A.shape == (n,):
-        return A
-    raise ValueError(
-        f"D must be one idiosyncratic variance per contestant: expected "
-        f"a scalar or shape ({n},); got shape {A.shape}")
 
 
 def _lattice(mu: np.ndarray, sigma: float, points: int = 3001) -> np.ndarray:
@@ -647,6 +601,8 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     (|1 - total| is a resolution diagnostic).
     """
     mu = np.asarray(mu, dtype=float)
+    V = as_loadings(V, len(mu))      # before keep: rows are contestants
+    D = as_idio(D, len(mu))
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
@@ -654,7 +610,7 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     # gauge-fix: a common loading column shifts every conditional mean
     # equally and cannot move an argmin, so center V for a lattice window
     # and numerics invariant under V -> V + 1c' (eighth review)
-    V = V - np.asarray(V, dtype=float).mean(axis=0)
+    V = V - V.mean(axis=0)
     M_all = mu[None, :] + F @ V.T                      # (nodes, N) cond. means
     pad = 8.0 * sd.max()
     grid = np.arange(points) / (points - 1)            # common normalized coord

@@ -95,6 +95,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
+
+from ..shapes import as_variance
+
 from scipy.special import ndtr, ndtri
 
 from .nway import (update_winner, update_ranking, update_ranking_exact,
@@ -136,7 +139,8 @@ def order_augmented(m, v, order, beta2, rng, n_aug=60, burn=20):
     for order-only sports; whenever performance magnitudes are observed, feed
     ``scores`` instead -- the exact linear-Gaussian update.
     """
-    m = np.asarray(m, float); v = np.asarray(v, float); n = len(m); sb = np.sqrt(beta2)
+    m = np.asarray(m, float); n = len(m)
+    v = as_variance(v, n); sb = np.sqrt(beta2)
     pv = 1.0 / (1.0 / v + 1.0 / beta2)                    # var of a | pi (conjugate)
     a = m.copy(); pi = np.empty(n); pi[list(order)] = np.sort(-a)   # init respecting order
     sA = np.zeros(n); sA2 = np.zeros(n); cnt = 0

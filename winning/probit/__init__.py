@@ -19,6 +19,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..shapes import as_idio, as_loadings
+
+
 from ..factor.core import factor_model_projected
 from ..factor.races import abilities_from_race, race_probabilities
 
@@ -83,11 +86,8 @@ def _prepare(n, V, D, Sigma, k):
         V, D = fit_factor_model(Sigma, k)
     if V is None:
         V = np.zeros((n, 1))
-    V = np.atleast_2d(np.asarray(V, dtype=float))
-    if V.shape[0] != n:
-        raise ValueError(
-            f"V has {V.shape[0]} rows but there are {n} alternatives")
-    D = np.ones(n) if D is None else np.asarray(D, dtype=float)
+    V = as_loadings(V, n)
+    D = np.ones(n) if D is None else as_idio(D, n)
     return V, D
 
 

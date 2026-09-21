@@ -21,6 +21,9 @@ those calls fall back to scipy.stats.multivariate_normal.cdf unchanged.
 from __future__ import annotations
 
 import numpy as np
+
+from .shapes import as_idio, as_loadings
+
 from numpy.polynomial.hermite_e import hermegauss
 from scipy.special import ndtr, ndtri
 from scipy.stats import norm
@@ -139,9 +142,12 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
             p = mvn.cdf(up, lower_limit=lo)
             return float(p), "scipy-fallback"
         V, D = fd
-    V = np.atleast_2d(np.asarray(V, dtype=float))
-    n = V.shape[0]
+    # n comes from D when it is a vector: deriving it from V instead
+    # lets a 1-D V redefine the dimension of the integral it describes
     D = np.asarray(D, dtype=float)
+    n = D.shape[0] if D.ndim == 1 else np.shape(V)[0]
+    V = as_loadings(V, n)
+    D = as_idio(D, n)
     mu = np.zeros(n) if mean is None else np.asarray(mean, dtype=float)
     lo = np.full(n, -np.inf) if lower is None else \
         np.broadcast_to(np.asarray(lower, float), (n,)).astype(float)
