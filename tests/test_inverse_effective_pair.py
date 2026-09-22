@@ -95,9 +95,10 @@ def test_three_or_more_substantive_runners_still_converge(n, k):
 
 
 def test_fields_below_the_threshold_are_untouched():
-    """The damping keys on the target's top-two share, so an ordinary field
-    must take exactly the sweeps it took before: 13 at n=8, 7 at n=150 on
-    these seeds (the function counts sweeps from 1). A change here means the threshold moved."""
+    """An ordinary field takes exactly the sweeps measured: 10 at n=8 (13
+    before the sweeps learned to read their own contraction, #149) and 7
+    at n=150 on these seeds (the function counts sweeps from 1). A change
+    here means the gate or the damping rule moved; say which."""
     rng = np.random.default_rng(0)
     p = np.exp(rng.normal(size=8) * 0.8); p /= p.sum(); D = 0.5 + rng.random(8)
     _, info8, r8 = _solve(p, D)
@@ -105,7 +106,7 @@ def test_fields_below_the_threshold_are_untouched():
     _, info150, r150 = _solve(p, D)
     assert np.sort(p)[-2:].sum() < 0.8
     assert info8["converged"] and info150["converged"]
-    assert info8["iterations"] == 13 and info150["iterations"] == 7
+    assert info8["iterations"] == 10 and info150["iterations"] == 7
     assert max(r8, r150) < 1e-6
 
 

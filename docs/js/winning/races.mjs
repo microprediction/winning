@@ -49,7 +49,7 @@ function setup(mu, V, D, F, W, base) {
         sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
       }
       const r = V[0].length;
-      if (r === 1 && Math.ceil(8 * sharp) > 201) {
+      if (r === 1 && Math.ceil(8 * sharp) > 80) {
         // rank-1 extreme sharpness (matching python/R): equal-weight
         // midpoint-quantile grid scaled with sharpness replaces GH
         const Q = Math.min(Math.ceil(8 * sharp), 4001);
@@ -228,28 +228,78 @@ export function raceProbabilities(mu, opts = {}) {
 }
 
 export function abilitiesFromRace(pTarget, opts = {}) {
-  const { nIter = 60, tol = 1e-8, structure = null } = opts;
+  const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
+          F = null, W = null, base = "normal" } = opts;
   if (structure) return dispatchAbilities(pTarget, structure, opts);
   let target = pTarget.slice();
   const s = target.reduce((a, b) => a + b, 0);
   target = target.map(v => v / s);
+  const n = target.length;
   const logt = target.map(Math.log);
   const lm = mean(logt);
-  let mu = logt.map(v => -(v - lm) / 2);
-  const alpha = target.length > 2 ? 1.0 : 0.7;
+  // the field's contrast scale (matching python/R): median idiosyncratic
+  // variance plus the mean factor variance under the represented nodes
+  const Dn = D ? D.slice() : new Array(n).fill(1);
+  const Vn = V ? V.map(row => (Array.isArray(row) ? row.slice() : [row])) : Array.from({ length: n }, () => [0]);
+  const r = Vn[0].length;
+  const colMean = Array.from({ length: r }, (_, c) => mean(Vn.map(row => row[c])));
+  const Vc = Vn.map(row => row.map((v, c) => v - colMean[c]));
+  let CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) => (a === b ? 1 : 0)));
+  if (V && F) {
+    const Q = F.length;
+    const Wq = W ? W.map(w => w / W.reduce((a, b) => a + b, 0)) : new Array(Q).fill(1 / Q);
+    const Fm = Array.from({ length: r }, (_, c) => F.reduce((acc, f, q) => acc + Wq[q] * f[c], 0));
+    CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>
+      F.reduce((acc, f, q) => acc + Wq[q] * (f[a] - Fm[a]) * (f[b] - Fm[b]), 0)));
+  }
+  const sigV = (i, j) => Vc[i].reduce((acc, va, a) => acc + va * CovF[a].reduce((acc2, cab, b) => acc2 + cab * Vc[j][b], 0), 0);
+  const med = (arr) => { const z = arr.slice().sort((a, b) => a - b); const h = Math.floor(z.length / 2); return z.length % 2 ? z[h] : 0.5 * (z[h - 1] + z[h]); };
+  const scale = Math.sqrt(med(Dn) + mean(Dn.map((_, i) => sigV(i, i))));
+  if (n === 2 && base === "normal") {
+    // a pair is one Gaussian contrast: closed form (matching python/R)
+    const sdD = Math.sqrt(Math.max(sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1) + Dn[0] + Dn[1], 1e-300));
+    const gap = sdD * invNormalRational(target[0]);
+    return [-0.5 * gap, 0.5 * gap];
+  }
+  let mu = logt.map(v => -(v - lm) / 2 * scale);
+  // damping: a pair, or two runners holding nearly all the mass, two-cycles
+  // undamped; the sweeps then adapt to the contraction they observe
+  // (matching python's _jacobi_sweeps)
+  const top2 = n > 2 ? target.slice().sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0) : 1;
+  let alpha = (n === 2 || top2 > 0.8) ? 0.7 : 1.0;
+  let prev = null;
+  let prevStep = null;
   for (let it = 0; it < nIter; it++) {
-    const { p: phat, slopes: sl } = raceProbabilities(mu, { ...opts, returnSlopes: true, structure: null });
-    const resid = phat.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
-    if (Math.max(...resid.map(Math.abs)) < tol) break;
-    mu = mu.map((m, i) => {
-      const dlogp = Math.min(sl[i] / Math.max(phat[i], 1e-300), -1e-6);
-      // residual-proportional step cap (heavy-favorite stall fix,
-      // mirrored from the python engine)
-      const lim = Math.min(2, 10 * Math.abs(resid[i]));
-      return m - Math.min(Math.max(alpha * resid[i] / dlogp, -lim), lim);
+    const { p: praw, slopes: sl } = raceProbabilities(mu, { ...opts, returnSlopes: true, structure: null });
+    const phat = praw.map(v => Math.max(v, 1e-300));
+    let resid = phat.map((v, i) => Math.log(v) - logt[i]);
+    let dlogp = sl.map((v, i) => Math.min(v / phat[i], -1e-6));
+    let rmax = Math.max(...resid.map(Math.abs));
+    let rrms = Math.sqrt(mean(resid.map(v => v * v)));
+    if (rmax < tol) break;
+    if (prev && alpha > 0.1 && rmax >= prev.rmax && rrms >= prev.rrms) {
+      alpha = Math.max(0.5 * alpha, 0.1);
+      ({ mu, resid, dlogp, rmax, rrms } = prev);
+      prevStep = null;
+    }
+    prev = { mu, resid, dlogp, rmax, rrms };
+    // residual-proportional step cap in the field's scale
+    let step = resid.map((v, i) => {
+      const lim = Math.min(2, 10 * Math.abs(v)) * scale;
+      return Math.min(Math.max(alpha * v / dlogp[i], -lim), lim);
     });
-    const mm = mean(mu);
-    mu = mu.map(v => v - mm);
+    const sm = mean(step);
+    step = step.map(v => v - sm);
+    if (prevStep) {
+      const den = prevStep.reduce((a, b) => a + b * b, 0);
+      const rho = den > 0 ? step.reduce((a, b, i) => a + b * prevStep[i], 0) / den : 0;
+      if (rho < 0) {
+        const lam = 1 - (1 - rho) / alpha;
+        alpha = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
+      }
+    }
+    prevStep = step;
+    mu = mu.map((m, i) => m - step[i]);
   }
   return mu;
 }

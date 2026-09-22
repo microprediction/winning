@@ -97,4 +97,4 @@ def test_calls_that_need_the_factor_form_keep_the_fit_and_warn():
     with pytest.warns(RuntimeWarning):
         wf.race_probabilities(mu, cov=C, points=257, temperature=0.3)
     with pytest.warns(RuntimeWarning):
-        wf.abilities_from_race(p, cov=C, points=257)
+        wf.abilities_from_race(p, cov=C, points=257, base="gumbel")

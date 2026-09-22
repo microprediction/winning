@@ -55,15 +55,10 @@ from scipy.special import ndtr, ndtri
 
 from .core import as_idio, as_loadings, hermite_nodes
 
-try:                                       # compiled kernels (rust/fastrace)
-    import fastrace as _fastrace
-    _RUST_OK = hasattr(_fastrace, "forward_and_slopes")
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except ImportError:
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('forward_and_slopes')
 
 _EULER = 0.5772156649015329
 
@@ -606,9 +601,12 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
             "factor quadrature cannot resolve it; the residual checks are "
             "satisfied and do not see this. Expect percent-level error in "
             "the probabilities (6.6e-3 measured on an exactly 3-factor "
-            "correlation at n=8). If the covariance is genuinely dense, "
-            "winning.methods.qmc_ghk is ~10x more accurate and faster "
-            "(max-wins convention: pass -mu, V=chol(cov)).",
+            "correlation at n=8). The forward normal race and "
+            "abilities_from_race route this case to GHK automatically; "
+            "this call cannot (slopes, ordered prefixes, a temperature or "
+            "a non-normal base need the factor form). For win "
+            "probabilities alone: winning.methods.get_method('qmc_ghk')"
+            "(-mu, numpy.linalg.cholesky(cov), numpy.zeros(n)) (max-wins).",
             RuntimeWarning, stacklevel=stacklevel)
     if report.get("contrast_residual_max", 0.0) > 0.05:
         warnings.warn(
@@ -642,27 +640,61 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     return V, D, F, W, degraded
 
 
-def _race_dense(mu, cov, budget=1024, seed=0):
+def _race_dense(mu, cov, budget=4096, seed=0, return_slopes=False,
+                log=False):
     """The dense-covariance race by scrambled-Sobol GHK: exact structure not
     required, deterministic at a fixed seed, smooth in its inputs.
 
-    Measured against 4M-path Monte Carlo on dense correlations at n=16 and
-    n=30: 4.7e-4 / 5.0e-4 at 1024 nodes in 24 / 67 ms, where the fitted
-    lattice was 8.9e-3 / 6.5e-3 in 219 / 495 ms and no amount of extra
-    fitting closed the gap (more factors send D to its floor and the
-    quadrature error returns; a fractional D floor bottoms out at ~2e-3).
-    The methods are max-wins, so the min-wins mu is negated.
+    GHK conditions the runners sequentially, so its error depends on the
+    order they are listed in, and a fixed point set made the answer
+    label-dependent (#162: 8.8e-3 between two labelings of one 8-runner
+    field). The runners are therefore sorted into a canonical order --
+    by ability, ties by covariance row -- before the estimate and the
+    answer is mapped back, which makes the route exactly permutation-
+    equivariant. That order also happens to be the accurate one: on the
+    #162 field, versus 12M-path Monte Carlo, 5.6e-3 as listed became
+    2.4e-3 sorted at 1024 nodes; 4096 nodes gives 7.2e-4 in 13 ms
+    (2^14: 1.6e-4 in 46 ms), so 4096 is the budget, well inside the
+    2e-3 the #118 pins hold it to. Earlier measurement on dense
+    correlations at n=16 / n=30 against 4M-path Monte Carlo: 4.7e-4 /
+    5.0e-4 at 1024 nodes where the fitted lattice was 8.9e-3 / 6.5e-3
+    and no amount of extra fitting closed the gap (more factors send D
+    to its floor and the quadrature error returns).
+    The methods are max-wins, so the min-wins mu is negated and the
+    own-slopes (return_slopes=True: dp_i/dmu_i, negative) with it.
+    log=True returns (log p, d log p_i / d mu_i) instead, finite where p
+    underflows: on a near-singular n=30 correlation a runner displaced
+    from its near-duplicates has log p = -16000 at the inverse's warm
+    start, and that is a real value the Newton step recovers from, not
+    a zero.
     """
     from ..methods.native import qmc_ghk
     C = np.asarray(cov, dtype=float)
+    m = np.asarray(mu, dtype=float)
     n = len(C)
+    order = np.lexsort((C.sum(axis=1), m))
+    Cs = C[np.ix_(order, order)]
     try:
-        L = np.linalg.cholesky(C)
+        L = np.linalg.cholesky(Cs)
     except np.linalg.LinAlgError:
-        L = np.linalg.cholesky(C + 1e-10 * float(np.trace(C)) / n * np.eye(n))
-    p, _ = qmc_ghk(-np.asarray(mu, dtype=float), L, np.full(n, 1e-12),
-                   budget=int(budget), seed=int(seed))
-    return np.asarray(p, dtype=float)
+        L = np.linalg.cholesky(Cs + 1e-10 * float(np.trace(Cs)) / n * np.eye(n))
+    ps, info = qmc_ghk(-m[order], L, np.full(n, 1e-12), budget=int(budget),
+                       seed=int(seed), return_slopes=return_slopes)
+    p = np.empty(n)
+    p[order] = np.asarray(ps, dtype=float)
+    if log:
+        lp = np.empty(n)
+        lp[order] = np.asarray(info["logp"], dtype=float)
+        if not return_slopes:
+            return lp
+        dl = np.empty(n)
+        dl[order] = -np.asarray(info["dlogp"], dtype=float)
+        return lp, dl
+    if return_slopes:
+        sl = np.empty(n)
+        sl[order] = -np.asarray(info["slopes"], dtype=float)
+        return p, sl
+    return p
 
 
 def _factor_of_structure(structure, verb):
@@ -723,6 +755,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     rank 4 and the capped accuracy with it. Inversion runs the forward
     pass per Newton step, so it scales the same way from 17 ms at rank
     1."""
+    nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
         # be answered without the fit at all; everything else (slopes for
@@ -757,10 +790,28 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         # run in Python BEFORE any compiled kernel is reached -- on the
         # head-to-head filter (every contest is a pair) that window
         # search, not the forward pass, was the single largest cost.
-        Sig = V @ V.T + np.diag(D)
-        var_d = float(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1])
+        #
+        # Under the nodes the caller supplied, if any: F, W then stand
+        # for the factor law, (V, F) -> (V / c, c F) is the same race, and
+        # the contrast variance is (V0 - V1)' Cov_W(F) (V0 - V1) with a
+        # node mean shifting the contrast (#149's invariant, forward
+        # side: V alone gave 0.51 for an exact 0.70 at c = 0.03). The
+        # default rule's nodes, and a covariance fit's, stand for the
+        # standard normal itself, so its covariance is the identity, not
+        # the pruned tensor's (3e-5 short of it: a fitted equicorrelated
+        # pair priced 3.6e-5 off its analytic value through the nodes).
+        dV = V[0] - V[1]
+        if nodes_given:
+            Fm = W @ F
+            Fc = F - Fm
+            CovF = Fc.T @ (Fc * W[:, None])
+            var_d = float(dV @ CovF @ dV + D[0] + D[1])
+            shift = float(dV @ Fm)
+        else:
+            var_d = float(dV @ dV + D[0] + D[1])
+            shift = 0.0
         sd_d = np.sqrt(max(var_d, 1e-300))
-        u = float((mu[1] - mu[0]) / sd_d)
+        u = float((mu[1] - mu[0] + shift) / sd_d)
         # Each tail directly: 1 - ndtr(u) rounds the loser to exactly 0 at
         # a 9 sd contrast where the true value is 1.1e-19, and the pair
         # then depends on which runner is listed first. ndtr(u), ndtr(-u)
@@ -865,13 +916,24 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     dict (return_info=True) reports which entries were floored, whether
     the iteration converged, and the achieved residual. Non-convergence
     warns rather than returning silently."""
+    dense = None
+    nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
-        # The inverse needs the factor form (own-slopes for the Newton
-        # preconditioner), so it cannot route around a degraded fit the
-        # way the forward race does; it takes the fit WITH its warnings.
-        # It used to call fit_covariance directly and say nothing.
-        V, D, F, W, _ = _fit_cov(cov, structure, V, D, stacklevel=2,
-                                 will_route=False)
+        # The forward race routes a degraded fit to GHK (#161); the inverse
+        # has to invert THAT map or the two front doors describe different
+        # races (#164: 4e-3 to 8e-3 apart on exact rank-1/3/5 fixtures).
+        # The fit still serves: its lattice inverse is the warm start and
+        # its own-slopes the Newton preconditioner, and the sweeps below
+        # then polish mu against the dense map itself until the residual
+        # is met. Where the fit is healthy or the call is not routable
+        # (non-normal base, temperature) the fit IS the model, with its
+        # warnings -- it used to call fit_covariance directly and say
+        # nothing.
+        routable = (base == "normal" and not temperature)
+        V, D, F, W, degraded = _fit_cov(cov, structure, V, D, stacklevel=2,
+                                        will_route=routable)
+        if degraded and routable:
+            dense = np.asarray(cov, dtype=float)
     if structure is not None:
         from .structures import Factor, Independent
         if isinstance(structure, Independent):
@@ -916,16 +978,31 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # inverse diverged (gap 1.28 for an exact 0.17 at loadings 0.99).
     # Scaling both by the typical contrast sd fixes every such case and
     # leaves fields near unit scale exactly as they were.
+    #
+    # The factor part is measured on the factor distribution actually
+    # represented: with caller-supplied nodes, the covariance of F under W
+    # (#149: (V, F) -> (V/c, cF) is the same forward map, and reading the
+    # scale off V alone put the start 33x off and diverged at c = 0.03).
+    # The default nodes have unit covariance, where this is mean ||V_i||^2.
     _Dn = np.ones(n_t) if D is None else as_idio(D, n_t)
     _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
     _Vc = _Vn - _Vn.mean(axis=0)
-    scale = float(np.sqrt(np.median(_Dn) + (_Vc ** 2).sum(axis=1).mean()))
-    if n_t == 2 and base == "normal" and not temperature:
+    if V is not None and nodes_given:
+        _Fq = np.asarray(F, dtype=float).reshape(len(F), -1)
+        _Wq = (np.ones(len(_Fq)) / len(_Fq) if W is None
+               else np.asarray(W, dtype=float) / float(np.sum(W)))
+        _Fm = _Wq @ _Fq
+        _CovF = (_Fq - _Fm).T @ ((_Fq - _Fm) * _Wq[:, None])
+    else:
+        _CovF = np.eye(_Vc.shape[1])
+    _SigV = _Vc @ _CovF @ _Vc.T
+    scale = float(np.sqrt(np.median(_Dn) + np.diag(_SigV).mean()))
+    if n_t == 2 and base == "normal" and not temperature and dense is None:
         # A pair is a single Gaussian contrast, so the inverse is closed
         # form (the mirror of the forward closed form): with
         # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0) / sd_d), so
         # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
-        Sig = _Vc @ _Vc.T + np.diag(_Dn)
+        Sig = _SigV + np.diag(_Dn)
         sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
         gap = sd_d * float(ndtri(target[0]))
         mu = np.array([-0.5 * gap, 0.5 * gap])
@@ -949,30 +1026,117 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # a 150-runner field.
     _top2 = float(np.sort(target)[-2:].sum()) if len(target) > 2 else 1.0
     alpha = 0.7 if (len(target) == 2 or _top2 > 0.8) else 1.0
-    resid_max = np.inf
-    iters = 0
-    for it in range(n_iter):
-        iters = it + 1
-        phat, sl = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
+
+    if dense is not None:
+        # Invert the routed map itself (#164), by the same own-slope
+        # Newton sweeps as the lattice: GHK accumulates dp_i/dmu_i in its
+        # conditioning pass (see methods.native._ghk_prob), so the routed
+        # map has slopes of its own. The degraded fit is used for nothing
+        # here -- its own-slopes are useless with D on its floor (the
+        # conditional race is a near-step: the lattice inverse of the
+        # rank-1 fixture ran to a log residual of 690), and a fit lifted
+        # off the floor stalls at 0.19 on a dense n=30 correlation. The
+        # scale is read off the covariance directly.
+        scale = float(np.sqrt(np.mean(np.diag(dense))))
+        mu = -(logt - logt.mean()) / 2.0 * scale
+
+        def _dense_fwd(m):
+            lp, dl = _race_dense(m, dense, return_slopes=True, log=True)
+            return lp - logt, np.minimum(dl, -1e-6)
+
+        mu, converged, resid_max, iters = _jacobi_sweeps(
+            mu, _dense_fwd, scale, alpha, max(n_iter, 120), tol)
+        return _inverse_return(mu, converged, resid_max, iters, floored,
+                               tol, return_info)
+
+    def _lattice(m):
+        phat, sl = race_probabilities(m, V=V, D=D, F=F, W=W, base=base,
                                       points=points, temperature=temperature,
                                       return_slopes=True)
-        resid = np.log(np.maximum(phat, 1e-300)) - logt
+        phat = np.maximum(phat, 1e-300)
+        return np.log(phat) - logt, np.minimum(sl / phat, -1e-6)
+
+    mu, converged, resid_max, iters = _jacobi_sweeps(
+        mu, _lattice, scale, alpha, n_iter, tol)
+    return _inverse_return(mu, converged, resid_max, iters, floored,
+                           tol, return_info)
+
+
+def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
+    """Own-slope-preconditioned coordinate (Jacobi) sweeps on the mean-zero
+    quotient: mu <- mu - alpha * resid / dres, capped, recentered.
+
+    `forward(mu)` returns (resid, dres): the residual in whatever space
+    the caller inverts in (log p for the win race, logit q for top-k),
+    model minus target, and its own-slopes, negative and bounded away
+    from zero. Convergence is max |resid| < tol. The step cap is
+    residual-proportional: a near-certain winner has residual AND
+    own-slope both vanishing, and their ratio is an O(0.1) noise step
+    that recentering sloshes into every other coordinate (measured:
+    heavy-favorite targets in the 1e-4..1e-8 window stalled at 200
+    iterations; capped, they converge in 4-6). No coordinate moves much
+    further than its own residual warrants, in the field's scale.
+
+    Damping adapts to the contraction actually observed (#149). The fixed
+    gates in the callers (a pair, a dominant pair) catch the two-cycle
+    they were written for, but heterogeneous variances produce the same
+    negative Jacobi eigenvalue with no share threshold to see it:
+    p = [.6, .2, .2], D = [.03, .03, 1] has a top-two share of 0.8
+    exactly and contracted by only 0.92 a sweep undamped (60 sweeps,
+    1.7e-4 short) against 0.3 a sweep at 0.7 (17 sweeps). Consecutive
+    steps estimate the dominant mode: their normalised inner product rho
+    is the factor 1 - alpha (1 - lambda) that mode contracts by, so
+    lambda = 1 - (1 - rho) / alpha, and the Richardson choice for a
+    spectrum spanning [lambda, 0] is alpha = 2 / (2 - lambda), clipped
+    to [0.1, 1] -- 2/3 for the pair's -1, which is why the fixed 0.7
+    was right where it applied. The estimate is applied whenever
+    consecutive steps oppose (rho < 0); a monotone iteration is
+    untouched. Measured: the dominant pair 19 -> 17 sweeps, the
+    heterogeneous case 60+ -> 19, an ordinary n=8 field 13 -> 10, n=150
+    unchanged at 7. A sweep that does not reduce the residual (max-norm
+    AND rms: coordinates trade the max-norm between them while the rms
+    falls) is undone and retaken at half the damping, the safety net for
+    the nonlinear regime the estimate does not describe; at the floor
+    the step is taken as is.
+
+    Known limit: two near-duplicate runners inside a large field (a
+    dense n=30 correlation with a 1e-5 gap between neighbours, contrast
+    sd 0.014) trade one residual between themselves, a mode no diagonal
+    preconditioner contracts. A per-coordinate version of this rule was
+    measured and did not reach it either, while costing sweeps
+    everywhere else (n=150: 7 -> 13); the inverse reports
+    non-convergence there (2.7e-4 in probability) rather than
+    pretending. A block step on the pair would close it."""
+    resid_max = np.inf
+    resid_rms = np.inf
+    iters = 0
+    prev = None
+    prev_step = None
+    for it in range(n_iter):
+        iters = it + 1
+        resid, dlogp = forward(mu)
         resid_max = float(np.abs(resid).max())
+        resid_rms = float(np.sqrt(np.mean(resid * resid)))
         if resid_max < tol:
             break
-        dlogp = np.minimum(sl / np.maximum(phat, 1e-300), -1e-6)
-        # residual-proportional step cap: a near-certain winner has
-        # residual AND own-slope both vanishing, and their ratio is an
-        # O(0.1) noise step that recentering sloshes into every other
-        # coordinate (measured: heavy-favorite targets in the 1e-4..1e-8
-        # window stalled at 200 iterations; capped, they converge in
-        # 4-6). No coordinate moves much further than its own residual
-        # warrants.
+        if (prev is not None and alpha > 0.1 and resid_max >= prev[3]
+                and resid_rms >= prev[4]):
+            alpha = max(0.5 * alpha, 0.1)
+            mu, resid, dlogp, resid_max, resid_rms = prev
+            prev_step = None
+        prev = (mu, resid, dlogp, resid_max, resid_rms)
         lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
-        mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
-        mu -= mu.mean()
-    return _inverse_return(mu, resid_max < tol, resid_max, iters, floored,
-                           tol, return_info)
+        step = np.clip(alpha * resid / dlogp, -lim, lim)
+        step -= step.mean()
+        if prev_step is not None:
+            den = float(prev_step @ prev_step)
+            rho = float(step @ prev_step) / den if den > 0 else 0.0
+            if rho < 0.0:
+                lam = 1.0 - (1.0 - rho) / alpha
+                alpha = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
+        prev_step = step
+        mu = mu - step
+    return mu, resid_max < tol, resid_max, iters
 
 
 def _inverse_return(mu, converged, resid_max, iters, floored, tol,
