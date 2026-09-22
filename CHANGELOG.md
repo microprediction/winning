@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Pinned: `abilities_from_race` does not converge when TWO runners hold
+  nearly all the mass, at any field size. With two dominant runners and
+  the rest at 1e-4 the residual is 7.5e-3 at n=10 and 1.1e-2 at n=30;
+  with three or more substantive runners the same negligible tail
+  converges in 15-28 iterations. More iterations make it worse
+  (oscillation), the boundary is smooth (12 -> 41 iterations as the rest
+  shrink from 0.20 to 0.02 each), and it is scale-independent. n=2 has a
+  closed form; an EFFECTIVE pair goes to the lattice, where the
+  coordinate-Newton moves one favourite's probability nearly one-for-one
+  with the other's and oscillates. Under the skew-normal base it
+  returned the two favourites swapped and only warned. This is a
+  late-contest field with two contenders left, not a toy.
+  `tests/test_inverse_effective_pair.py` carries the defect as strict
+  xfails (n=3, 10, 30) and pins the mechanism. Likely fix: couple the
+  dominant pair's update (2x2 Newton block) or damp when the effective
+  field is two. No code change here.
+
 - `winning.thurstone` is gone. It was a deprecation alias for
   `winning.research`, itself the retired research engine, so an import
   of `thurstone` crossed two deprecation layers to reach code that is
