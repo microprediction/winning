@@ -49,7 +49,7 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     if k not in (1, 2, 3):
         raise ValueError("k must be 1, 2 or 3")
     if cov is not None:
-        V, D, F, W = _fit_cov(cov, structure, V, D, stacklevel=3)
+        V, D, F, W, _ = _fit_cov(cov, structure, V, D, stacklevel=3)
     elif structure is not None:
         if V is not None or D is not None:
             raise ValueError("structure= replaces V=/D=; pass one only")

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- `race_probabilities(cov=)` is now correct where it was warned. When the
+  grammar fit is degraded -- either failure class: it reproduces `cov`
+  badly (the residual warnings), or it reproduces `cov` by degenerating
+  to full rank with `D` on its floor (the #118 case, which the residual
+  checks cannot see) -- the forward normal race with no slopes is routed
+  to scrambled-Sobol GHK (`winning.methods.qmc_ghk`, 1024 nodes, fixed
+  seed) instead of the fitted lattice. Measured against 4M-path Monte
+  Carlo on dense correlations: 4.7e-4 at n=16 and 5.0e-4 at n=30 where
+  the fitted lattice was 8.9e-3 and 6.5e-3, in a tenth of the time,
+  deterministic, and smooth in its inputs (a common shift moves it by
+  3e-17). No amount of extra fitting closed that gap -- more factors send
+  `D` to the floor and the quadrature error returns; a fractional `D`
+  floor bottoms out at ~2e-3. A healthy fit (exact rank 3 at n=40) is
+  untouched and still equals the V=/D= lattice answer. Calls that need
+  the factor form -- `return_slopes=True`, a non-normal base, a
+  temperature, `abilities_from_race`, `ordered_probabilities` -- keep the
+  fit with its warnings; `abilities_from_race(cov=)` used to call
+  `fit_covariance` directly and warned on nothing, and now warns like the
+  rest. The #118 pins flip from strict xfail to passing at GHK's
+  accuracy; the mechanism test stays, so the routing stays necessary.
+
 - The shape sweep now covers `n == 2` as well as `n == 5`. Ten factor
   verbs that accept a pair get the same three contract checks, which
   matters because the pair is where the arguments are most confusable: at
