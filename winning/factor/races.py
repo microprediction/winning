@@ -907,7 +907,30 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         return _inverse_return(mu, converged, resid_max, iters, floored,
                                tol, return_info)
     logt = np.log(target)
-    mu = -(logt - logt.mean()) / 2.0
+    n_t = len(target)
+    # The field's contrast scale. The warm start below and the step cap in
+    # the loop were written in unit-variance units; on a field whose
+    # performance sd is 0.1-0.2 (a pair of near-identical high loadings,
+    # or D ~ 0.005 at n = 2-3) that start is many sd off, the forward
+    # saturates to [1, 0, ...], and a capped step of 2 is 10-20 sd -- the
+    # inverse diverged (gap 1.28 for an exact 0.17 at loadings 0.99).
+    # Scaling both by the typical contrast sd fixes every such case and
+    # leaves fields near unit scale exactly as they were.
+    _Dn = np.ones(n_t) if D is None else as_idio(D, n_t)
+    _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
+    _Vc = _Vn - _Vn.mean(axis=0)
+    scale = float(np.sqrt(np.median(_Dn) + (_Vc ** 2).sum(axis=1).mean()))
+    if n_t == 2 and base == "normal" and not temperature:
+        # A pair is a single Gaussian contrast, so the inverse is closed
+        # form (the mirror of the forward closed form): with
+        # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0) / sd_d), so
+        # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
+        Sig = _Vc @ _Vc.T + np.diag(_Dn)
+        sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
+        gap = sd_d * float(ndtri(target[0]))
+        mu = np.array([-0.5 * gap, 0.5 * gap])
+        return _inverse_return(mu, True, 0.0, 0, floored, tol, return_info)
+    mu = -(logt - logt.mean()) / 2.0 * scale
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
     # a local two-cycle. Fixed damping 0.7 restores contraction.
@@ -945,7 +968,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         # window stalled at 200 iterations; capped, they converge in
         # 4-6). No coordinate moves much further than its own residual
         # warrants.
-        lim = np.minimum(2.0, 10.0 * np.abs(resid))
+        lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
         mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
     return _inverse_return(mu, resid_max < tol, resid_max, iters, floored,

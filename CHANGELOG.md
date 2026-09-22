@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- `abilities_from_race` converges on small-scale fields, and the normal
+  pair is now closed form. Two names with near-identical high loadings
+  (b = 0.99, `D = 1 - b^2`, one contrast with sd 0.199) came back with
+  gap 1.2755 for an exact 0.1679 and a forward map of [1, 0] after 60
+  non-converging sweeps; b = 0.80 and 0.95 were exact. Measured, the
+  same divergence appeared at n = 2 and n = 3 with `D` = 0.005 / 0.001
+  and no loadings at all, while n >= 4 held -- so it was scale, not the
+  pair: the warm start `-(log p - mean)/2` and the step cap of 2 were
+  written in unit-variance units, and on a field with sd 0.1-0.2 that
+  start is many sd off, the forward saturates, and a capped step is
+  10-20 sd. Both now scale with the field's contrast sd
+  (`sqrt(median(D) + mean ||V_i - mean||^2)`): every failing case
+  converges in 12-21 sweeps, and fields near unit scale are untouched
+  (the pinned sweep counts did not move). Separately, the normal pair
+  with no temperature takes the inverse closed form, mirroring the
+  forward one from #83: `mu1 - mu0 = sd_d Phi^-1(p0)`, exact, zero
+  sweeps. Handed over by a client whose two-name factor race hit it;
+  #149's effective-pair case was already fixed by #150.
 - `race_probabilities(cov=)` is now correct where it was warned. When the
   grammar fit is degraded -- either failure class: it reproduces `cov`
   badly (the residual warnings), or it reproduces `cov` by degenerating
