@@ -20,13 +20,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..rustconfig import load_fastrace
 from ..shapes import as_loadings
 
 from scipy.special import ndtr, roots_hermitenorm
 
 TINY = 1e-300
-
-from ..rustconfig import load_fastrace
 
 # compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
 _fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('block_race')
