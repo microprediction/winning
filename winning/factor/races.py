@@ -833,7 +833,21 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
     # a local two-cycle. Fixed damping 0.7 restores contraction.
-    alpha = 1.0 if len(target) > 2 else 0.7
+    #
+    # The same two-cycle appears at ANY N when two runners hold nearly all
+    # the mass: the tail barely couples to them, so the pair's Jacobi
+    # eigenvalue tends to -1 as the tail vanishes and the two favourites
+    # overshoot each other every sweep. Measured (normal base, 500
+    # points): two dominant runners with the rest at 1e-4 fail at N = 3,
+    # 10 and 30 (residual 1e-2 after 60 sweeps; 500 sweeps is WORSE),
+    # while three substantive runners converge in 15-28. Keying the
+    # damping on the target's top-two share fixes those in 19-20 sweeps
+    # and leaves every other field's sweep count unchanged (a share of
+    # 0.86 took 40 undamped sweeps and 14 damped; below 0.8 the undamped
+    # step is already fastest). "0.7 always" would triple the sweeps on
+    # a 150-runner field.
+    _top2 = float(np.sort(target)[-2:].sum()) if len(target) > 2 else 1.0
+    alpha = 0.7 if (len(target) == 2 or _top2 > 0.8) else 1.0
     resid_max = np.inf
     iters = 0
     for it in range(n_iter):
