@@ -281,7 +281,7 @@ def skew_normal_base(a):
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
-    D = np.ones(n) if D is None else as_idio(D, n)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     if V is None:
         V = np.zeros((n, 1))
         F, W = np.zeros((1, 1)), np.ones(1)
@@ -572,6 +572,33 @@ def _fit_cov(cov, structure, V, D, stacklevel=2):
     from .core import fit_covariance
     import warnings
     V, D, F, W, report = fit_covariance(cov, return_report=True)
+    C = np.asarray(cov, dtype=float)
+    n = len(C)
+    diag = np.diag(C)
+    floor = 1e-6 * np.maximum(diag, 1e-6 * float(diag.mean()))
+    bound = int((D <= 2.0 * floor).sum())
+    if bound or report["rank"] >= n:
+        # The residual checks below judge how well V V' + D reproduces
+        # cov, and they do fire on a dense cov the grammar fits badly. The
+        # case they MISS is the opposite one: the fit reproduces cov to
+        # ~1e-6 by going to full rank with D on its floor, and the
+        # conditional race is then a near-step the factor nodes cannot
+        # resolve. An exactly 3-factor correlation at n = 8 does this
+        # (k + blocks + m directions sum to n) and prices 6.6e-3 off its
+        # own exact V/D answer with every residual check silent. The
+        # signal for that is the fit's shape, not its residual.
+        warnings.warn(
+            f"cov= fit degenerated: rank {report['rank']} of {n}"
+            + (f", idiosyncratic floor bound on {bound} of {n} entries"
+               if bound else "")
+            + ". The conditional race is near-deterministic there and the "
+            "factor quadrature cannot resolve it; the residual checks are "
+            "satisfied and do not see this. Expect percent-level error in "
+            "the probabilities (6.6e-3 measured on an exactly 3-factor "
+            "correlation at n=8). If the covariance is genuinely dense, "
+            "winning.methods.qmc_ghk is ~10x more accurate and faster "
+            "(max-wins convention: pass -mu, V=chol(cov)).",
+            RuntimeWarning, stacklevel=stacklevel)
     if report.get("contrast_residual_max", 0.0) > 0.05:
         warnings.warn(
             "cov= carries a nearly singular contrast the fit did not "
