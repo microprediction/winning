@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Pinned: `race_probabilities(cov=C)` does not reproduce an exactly
+  structured C at small n. An exact r-factor correlation has an exact
+  V/D, yet `cov=` is 5.3e-3 / 6.6e-3 / 8.4e-3 off the V/D answer for
+  r = 1 / 3 / 5 at n = 8, invariant to `points`. The mechanism is not a
+  one-factor collapse: `fit_covariance` stacks k=3 factors + block
+  loadings + m=5 eigendirections + floored D, validated at large n; at
+  n = 8 the stages sum to n and it degenerates into a FULL-rank fit with
+  D on its 1e-6 floor. The residual is then ~1e-6, so no warning fires
+  -- they judge fit quality -- but with D ~ 0 the factor-node quadrature
+  cannot resolve the near-step conditional race. `tests/
+  test_cov_exact_structure.py` carries the defect as a strict xfail and
+  pins the mechanism (full rank, floor bound, residual small) so the fix
+  goes to the fit's rank selection, not to the race. Reported by the
+  allocation session against a 3M-path simulation; no code change here.
 - The compiled kernels now reach the ratings hot path. `rust_active()`
   returned True while `update_winner_full` ran pure numpy for 97% of its
   time: the two `factor.core` kernels that ARE that 97%
