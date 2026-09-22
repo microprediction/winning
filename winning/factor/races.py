@@ -329,13 +329,20 @@ def _setup(mu, V, D, F, W, base):
                 # to stay dependency-free).
                 from .core import qmc_nodes
                 F, W = qmc_nodes(r, m=13)
-            elif r == 1 and np.ceil(8.0 * sharp) > 201:
-                # rank-1 extreme sharpness (gap-stress find): Gauss-
-                # Hermite's clustered nodes and wild weights are the
-                # wrong family for a near-step integrand -- at sharp 100
-                # the 201-node GH rule carried TV 0.65 where an
-                # equal-weight midpoint-quantile grid of the SAME size
-                # carried 6e-3. Scale the grid with sharpness, capped.
+            elif r == 1 and np.ceil(8.0 * sharp) > 80:
+                # rank-1 sharpness (gap-stress find): Gauss-Hermite's
+                # clustered nodes and wild weights are the wrong family
+                # for a near-step integrand -- at sharp 100 the 201-node
+                # GH rule carried TV 0.65 where an equal-weight midpoint-
+                # quantile grid of the SAME size carried 6e-3. The
+                # handover used to be at Q > 201 (sharp > 25); measured
+                # on an 8-runner field against 3M-path truth, GH was
+                # already 2.8e-3 off at sharp 15 (Q = 120) and 4.0e-3 at
+                # sharp 21 (Q = 169) -- erratic, not slowly worsening --
+                # while the midpoint grid at the same Q sat at the truth
+                # floor (3.4e-4) throughout. GH is sound to about Q = 85
+                # (sharp 10.5: 8.3e-4), so the grid takes over at Q > 80.
+                # Scale the grid with sharpness, capped.
                 Q = int(min(np.ceil(8.0 * sharp), 4001))
                 u = (np.arange(Q) + 0.5) / Q
                 F = ndtri(u)[:, None]

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- The rank-1 node rule hands over from Gauss-Hermite to the midpoint-
+  quantile grid at Q > 80 (sharpness ~10) instead of Q > 201 (sharpness
+  ~25). Swept on an 8-runner rank-1 field against 3M-path truth (se
+  ~3e-4): GH at its scaled order was 7.3e-4 at sharpness 6.7 and 8.3e-4
+  at 10.5, then 2.8e-3 at 14.9 (Q = 120) and 4.0e-3 at 21.1 (Q = 169)
+  -- erratic past Q ~ 100 rather than slowly worsening (Q = 201 gives
+  4e-5 at 14.9 and 2.4e-3 at 21.1) -- while the midpoint grid at the
+  same Q sat at the truth floor (3.3-3.5e-4) throughout, and is also at
+  least as good as GH below the threshold (6.1e-4 vs 9.0e-4 at 6.7). So
+  the default rule was ten times LESS accurate at sharpness 21 than at
+  47, because only the sharper field had escalated. Found while
+  prototyping GHK-style importance sampling in factor space, which at
+  rank one does not beat the grid: a single truncation removes little,
+  and per-winner draws multiply the lattice passes by n.
+  `tests/test_rank1_node_handover.py` pins the former gap at the floor
+  and GH's regime below it.
+
 - `abilities_from_race` now converges when two runners hold nearly all
   the mass, at any field size. The solver already damped the N = 2 case
   (alpha 0.7) because the K_2 Jacobi update has eigenvalue -1 and
