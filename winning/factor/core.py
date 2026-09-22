@@ -14,6 +14,17 @@ from scipy.special import log_ndtr, ndtr, ndtri
 # winning.factor.core is where the factor kernels look for it
 from ..shapes import as_idio, as_loadings  # noqa: F401
 
+try:                                       # compiled kernels (rust/fastrace)
+    import fastrace as _fastrace
+    _RUST_OK = (hasattr(_fastrace, "win_probabilities_factor")
+                and hasattr(_fastrace, "jacobian_vector_product"))
+    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
+        "WINNING_PURE", "").strip() in ("", "0")
+except ImportError:
+    _fastrace = None
+    _RUST_OK = False
+    _HAVE_RUST = False
+
 _TINY = 1e-300
 _PFLOOR = 1e-15
 
@@ -606,6 +617,21 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
+    if (_HAVE_RUST and not return_deletions and not per_node_interval
+            and N > 1 and len(F) >= 2):
+        # The compiled kernel is the same lattice on the same global
+        # window; it agrees with the numpy path below to ~5e-17 and runs
+        # 3-5x faster at ratings-sized fields (K = 8-50). Deletions and
+        # per-node windows are numpy-only, so those requests fall through.
+        # len(F) >= 2: at a single factor node the two paths are equal
+        # (1.1x) and the argument copies eat it; nway's per-node loop makes
+        # 119 such calls and ran slower with rust on. Two nodes and up win.
+        p, total = _fastrace.win_probabilities_factor(
+            np.ascontiguousarray(mu), np.ascontiguousarray(V),
+            np.ascontiguousarray(D), np.ascontiguousarray(F, dtype=float),
+            np.ascontiguousarray(W, dtype=float), int(points))
+        p = np.asarray(p, dtype=float)
+        return (p, float(total)) if return_total else p
     sd = np.sqrt(D)
     # gauge-fix: a common loading column shifts every conditional mean
     # equally and cannot move an argmin, so center V for a lattice window
@@ -814,6 +840,21 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     mu = np.asarray(mu, dtype=float)
     h = np.asarray(h, dtype=float)
     N = len(mu)
+    if _HAVE_RUST and normalized and N > 1 and len(F) >= 2:
+        # rust returns the normalized product (matches numpy to ~5e-17
+        # for both forms); the unnormalized variant is numpy-only.
+        # len(F) >= 2: the compiled JVP carries ~0.5 ms of fixed cost per
+        # call, so at a SINGLE factor node numpy is faster (0.42 vs 0.59
+        # ms at K = 8) and rust only wins from two nodes up (1.2x at 2,
+        # 2.9x at 15, 3.2x at 50). nway.update_winner_correlated calls
+        # this 119 times with one node each; without the guard it ran
+        # 25% slower with rust on.
+        return np.asarray(_fastrace.jacobian_vector_product(
+            np.ascontiguousarray(mu), np.ascontiguousarray(as_loadings(V, N)),
+            np.ascontiguousarray(as_idio(D, N)),
+            np.ascontiguousarray(F, dtype=float),
+            np.ascontiguousarray(W, dtype=float),
+            np.ascontiguousarray(h), int(points), str(form)), dtype=float)
     sd = np.sqrt(as_idio(D, N))
     V = as_loadings(V, N)
     V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass

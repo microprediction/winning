@@ -21,10 +21,15 @@ from ..factor.core import (
 )
 from .registry import register
 
-try:
+try:                                       # compiled kernels (rust/fastrace)
     import fastrace as _fastrace
+    _RUST_OK = hasattr(_fastrace, "win_probabilities_factor")
+    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
+        "WINNING_PURE", "").strip() in ("", "0")
 except ImportError:                       # pragma: no cover
     _fastrace = None
+    _RUST_OK = False
+    _HAVE_RUST = False
 
 
 def _nodes(k):
@@ -38,7 +43,7 @@ def lattice(mu, V, D, budget=None, seed=None):
     factor-generalized). budget = lattice points L (default 501)."""
     L = int(budget) if budget else 501
     F, W = _nodes(V.shape[1])
-    if _fastrace is not None:
+    if _HAVE_RUST:                       # honours WINNING_PURE and use_rust()
         p, total = _fastrace.win_probabilities_factor(
             -np.asarray(mu, float), np.asarray(V, float),
             np.asarray(D, float), np.ascontiguousarray(F),

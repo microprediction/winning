@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- The compiled kernels now reach the ratings hot path. `rust_active()`
+  returned True while `update_winner_full` ran pure numpy for 97% of its
+  time: the two `factor.core` kernels that ARE that 97%
+  (`win_probabilities_factor`, 24-31%; `jacobian_vector_product`,
+  68-72%) had no dispatch, and `core` was not in
+  `rustconfig._rust_modules()`, the hand-kept list the one switch
+  toggles. Both kernels now dispatch to fastrace, which matches numpy
+  to ~5e-17 on both JVP forms. Measured, same inputs, switch off vs on:
+  `update_winner_full` 34.1 -> 14.4 ms at K=8 (2.4x) and 197.8 -> 72.2
+  ms at K=20 (2.7x), agreement 1e-15.
+
+  Dispatch requires two or more factor nodes. At a single node the
+  compiled JVP is SLOWER (0.59 vs 0.42 ms at K=8, a ~0.5 ms fixed cost)
+  and the forward is a wash once the argument copies are counted;
+  `nway.update_winner_correlated` calls both 119 times with one node
+  each and ran 25% slower with rust on before the guard. With it, that
+  path is bit-for-bit unchanged (1.00x, max diff 0). Rust wins from two
+  nodes (1.2x) to fifty (3.2x). Deletions, per-node windows and the
+  unnormalized JVP have no compiled form and fall through to numpy.
+
+  `methods.native` and `alternatives.reprs` imported fastrace directly
+  and tested `is not None`, so `use_rust(False)` and `WINNING_PURE` never
+  reached them; both now carry the standard flag and are registered.
+  `tests/test_rust_dispatch_core.py` pins rust == numpy for both core
+  kernels, that one node stays on numpy, that the switch reaches every
+  registered module, and -- the guard that would have caught all three
+  -- that every module importing fastrace is in `_rust_modules()`.
+  The structural speedup for correlated updates, one batched kernel call
+  instead of 119 per-node calls, is nway's algorithm and is not done here.
+
 - `race_probabilities` now takes the closed form for a two-runner normal
   race instead of building the lattice. A pair is a single Gaussian
   contrast, so with `Sigma = V V' + diag(D)` the answer is
