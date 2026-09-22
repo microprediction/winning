@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- `winning.thurstone` is gone. It was a deprecation alias for
+- `winning.thurstone` now fails honestly: importing it raises an
+  `ImportError` that names `winning.research` (where the code went),
+  `calibrate_abilities` (what to prefer, and why) and the external
+  `thurstone` package (the usual route in), instead of a bare
+  `No module named 'winning.thurstone'`. It was a deprecation alias for
   `winning.research`, itself the retired research engine, so an import
   of `thurstone` crossed two deprecation layers to reach code that is
   ~38x slower than `calibrate_abilities` on the inverse problem

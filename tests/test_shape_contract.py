@@ -504,8 +504,13 @@ def _split_import_failures(unimportable):
     down on five platforms while passing locally where trueskill happens
     to be installed. A name list cannot be kept true; the rule can.
     """
+    # modules that refuse to import ON PURPOSE, with a message saying why
+    TOMBSTONES = {"winning.thurstone": "removed; raises ImportError with "
+                                       "migration guidance (see its source)"}
     optional, real = {}, {}
     for mod, err in unimportable.items():
+        if mod in TOMBSTONES:
+            continue
         m = _MISSING.search(err)
         missing = m.group(1).split(".")[0] if m else None
         if (missing and missing not in HARD_DEPS
