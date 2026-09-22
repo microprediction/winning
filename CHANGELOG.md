@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- `abilities_from_race` now converges when two runners hold nearly all
+  the mass, at any field size. The solver already damped the N = 2 case
+  (alpha 0.7) because the K_2 Jacobi update has eigenvalue -1 and
+  two-cycles -- but keyed on N == 2 literally, so an EFFECTIVE pair at
+  any N got alpha = 1 and two-cycled the same way: with two dominant
+  runners and the rest at 1e-4 the residual after 60 sweeps was 5.8e-2
+  at N = 3, 7.5e-3 at N = 10 and 1.1e-2 at N = 30, 500 sweeps was worse
+  (oscillation), and under the skew-normal base a 3-player field with
+  one missing price came back with the two favourites SWAPPED while
+  only warning. Three substantive runners always converged. The damping
+  is now keyed on the target's top-two share (> 0.8): the failing cases
+  converge in 19-20 sweeps to ~4e-9, and every field below the
+  threshold takes exactly the sweeps it took before -- "0.7 always"
+  would have tripled the sweeps on a 150-runner field. Measured before
+  choosing: four damping rules on the failing, degrading, ordinary and
+  large fields. `tests/test_inverse_effective_pair.py` pins the fixed
+  cases, the favourites' order, the skew round-trip, the untouched
+  sweep counts below the threshold, and that three or more contenders
+  still converge. Found migrating a client whose late-contest fields are
+  exactly this regime.
+
+- `winning.thurstone` is gone. It was a deprecation alias for
 - `winning.thurstone` now fails honestly: importing it raises an
   `ImportError` that names `winning.research` (where the code went),
   `calibrate_abilities` (what to prefer, and why) and the external
