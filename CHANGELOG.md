@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- The shape sweep now covers `n == 2` as well as `n == 5`. Ten factor
+  verbs that accept a pair get the same three contract checks, which
+  matters because the pair is where the arguments are most confusable: at
+  rank one `V` is `(2, 1)` and `D`, `mu` and the belief variance are all
+  `(2,)`. When the two-runner closed form landed, its spellings were
+  checked BY HAND, which is what this file exists to replace.
+
+  What the sweep actually guards is narrower than it first appears, and
+  worth stating: sabotaging the closed form to read `V` with
+  `np.atleast_2d` -- the original #66 bug, planted in the new code --
+  does NOT fail the sweep, because `_setup` normalises `V` upstream and
+  the call is a no-op on an already-`(2, rank)` array. The real risk is
+  an `n == 2` fast path added ABOVE `_setup`, bypassing the contract to
+  skip its cost; sabotaging THAT fails three checks at once.
+
+  `removal_shares` is deliberately absent from the pair set: removing one
+  of two runners leaves one who wins with probability 1, so the result is
+  the constant permutation matrix and the loadings cannot enter it. The
+  loadings-move-the-answer guard found that rather than it being assumed.
 - Regression test for the `ordered_probabilities` points floor reported
   in #66: a negative-correlation block (regular simplex, rank k-1) at
   k=3 prefixes succeeds at `points=501` and raises below it for every
