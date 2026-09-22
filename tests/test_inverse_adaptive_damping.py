@@ -84,3 +84,25 @@ def test_topk_k2_is_unchanged_in_kind():
     mu, info = abilities_from_topk(q, 2, D=D, points=257, return_info=True)
     assert info["converged"] and info["iterations"] <= 20, info
     assert np.abs(mu - (mu0 - mu0.mean())).max() < 1e-6
+
+
+@pytest.mark.parametrize("c", [0.1, 10.0])
+def test_pair_closed_form_reads_relative_weights(c):
+    """#170: W and c W are the same factor law; the forward pair closed form
+    treated the absolute scale as mass (0.72 -> 0.61 at c = 10) while the
+    inverse normalised, so the round trip 'converged' 5.6e-2 off."""
+    mu = np.array([0.0, 1.0])
+    V = np.array([[0.0], [1.0]])
+    D = np.array([1.0, 1.0])
+    F = np.array([[-1.0], [1.0]])
+    W = np.array([0.5, 0.5])
+    p = race_probabilities(mu, V=V, D=D, F=F, W=W)
+    pc = race_probabilities(mu, V=V, D=D, F=F, W=c * W)
+    assert np.abs(pc - p).max() < 1e-14
+    m, info = abilities_from_race(p, V=V, D=D, F=F, W=c * W, return_info=True)
+    assert info["converged"]
+    assert np.abs(race_probabilities(m, V=V, D=D, F=F, W=c * W) - p).max() < 1e-12
+    # the general lattice at n = 3 has always read relative weights
+    mu3, V3, D3 = np.array([0.0, 0.5, 1.0]), np.array([[0.0], [0.5], [1.0]]), np.ones(3)
+    p3 = race_probabilities(mu3, V=V3, D=D3, F=F, W=W)
+    assert np.abs(race_probabilities(mu3, V=V3, D=D3, F=F, W=c * W) - p3).max() < 1e-14

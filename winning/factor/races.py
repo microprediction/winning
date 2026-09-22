@@ -802,9 +802,13 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         # pair priced 3.6e-5 off its analytic value through the nodes).
         dV = V[0] - V[1]
         if nodes_given:
-            Fm = W @ F
+            # relative weights, as the lattice reads them (#170: W and cW
+            # are the same factor law; unnormalised, a x10 weight moved
+            # the pair 0.72 -> 0.61 and its inverse "converged" 5.6e-2 off)
+            Wn = W / float(np.sum(W))
+            Fm = Wn @ F
             Fc = F - Fm
-            CovF = Fc.T @ (Fc * W[:, None])
+            CovF = Fc.T @ (Fc * Wn[:, None])
             var_d = float(dV @ CovF @ dV + D[0] + D[1])
             shift = float(dV @ Fm)
         else:
