@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- A `D` entry of exactly zero reached the lattice and died as
+  `OverflowError: cannot convert float infinity to integer` in
+  `forward_grid`'s grid sizing, which divides by the smallest sd. A zero
+  variance is legal as a belief (`as_variance`: a perfectly known
+  quantity) but not as performance noise on a lattice, so `as_idio` gains
+  `positive=True`, the lattice kernels (`_setup`, `win_probabilities_
+  factor`, `jacobian_vector_product`, `abilities_from_probabilities_
+  factor`) use it, and the error now says what the zero is and what to
+  do.
+- `cov=` warns on the case its residual checks cannot see. Those checks
+  judge how well `V V' + D` reproduces `cov`, and they do fire on a dense
+  correlation the grammar fits badly (dense n=16: projected residual
+  8.3e-2). What they miss is the opposite failure: the fit reproduces
+  `cov` to ~1e-6 by going to full rank with `D` on its floor, and the
+  conditional race is then a near-step the factor nodes cannot resolve
+  -- an exactly 3-factor correlation at n=8 prices 6.6e-3 off its own
+  exact V/D answer this way (#118). The new warning keys on the fit's
+  shape (full rank, or the floor bound) and names the alternative. Pushing the fit further does not help -- more factors
+  drive `D` to the floor and the quadrature error returns; a fractional
+  `D` floor bottoms out at ~2e-3. `winning.methods.qmc_ghk` on the same
+  inputs is 4.7e-4 / 5.0e-4 at 1024 nodes in 24 / 67 ms, deterministic
+  and smooth in its inputs (a common shift moves it 3e-17), against the
+  fitted lattice's 8.9e-3 / 6.5e-3 in 219 / 495 ms; the warning names
+  it. Routing `cov=` to it on degeneration is the natural next step and
+  is not done here. An exactly low-rank `cov` at n >= 30 fits at its
+  true rank with `D` healthy and does not warn.
 - The rank-1 node rule hands over from Gauss-Hermite to the midpoint-
   quantile grid at Q > 80 (sharpness ~10) instead of Q > 201 (sharpness
   ~25). Swept on an 8-runner rank-1 field against 3M-path truth (se

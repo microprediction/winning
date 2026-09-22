@@ -613,7 +613,7 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     """
     mu = np.asarray(mu, dtype=float)
     V = as_loadings(V, len(mu))      # before keep: rows are contestants
-    D = as_idio(D, len(mu))
+    D = as_idio(D, len(mu), positive=True)
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
@@ -724,7 +724,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     logp = np.log(p)
     N = len(p)
     V = as_loadings(V, N)
-    D = as_idio(D, N)
+    D = as_idio(D, N, positive=True)
     sd = np.sqrt(D)
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
@@ -851,11 +851,11 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
         # 25% slower with rust on.
         return np.asarray(_fastrace.jacobian_vector_product(
             np.ascontiguousarray(mu), np.ascontiguousarray(as_loadings(V, N)),
-            np.ascontiguousarray(as_idio(D, N)),
+            np.ascontiguousarray(as_idio(D, N, positive=True)),
             np.ascontiguousarray(F, dtype=float),
             np.ascontiguousarray(W, dtype=float),
             np.ascontiguousarray(h), int(points), str(form)), dtype=float)
-    sd = np.sqrt(as_idio(D, N))
+    sd = np.sqrt(as_idio(D, N, positive=True))
     V = as_loadings(V, N)
     V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass
     M_all = mu[None, :] + F @ V.T
