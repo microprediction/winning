@@ -560,12 +560,17 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     return x, points
 
 
-def _fit_cov(cov, structure, V, D, stacklevel=2):
+def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     """Fit a dense cov= to the factor grammar, with the accuracy warnings.
 
     Shared by race_probabilities and ordered_probabilities so the two
     front doors accept the same covariance descriptions on the same
-    terms -- and warn about the same fits.
+    terms -- and warn about the same fits. Returns (V, D, F, W, degraded):
+    `degraded` is True when either failure class is present -- the fit
+    reproduces cov badly (residual warnings), or it reproduces cov by
+    degenerating to full rank with D on its floor (quadrature cannot
+    resolve it). A caller that can route around a degraded fit passes
+    will_route=True and gets no warnings, because it will not use the fit.
     """
     if structure is not None or V is not None or D is not None:
         raise ValueError("cov= replaces structure=/V=/D=; pass one only")
@@ -577,7 +582,13 @@ def _fit_cov(cov, structure, V, D, stacklevel=2):
     diag = np.diag(C)
     floor = 1e-6 * np.maximum(diag, 1e-6 * float(diag.mean()))
     bound = int((D <= 2.0 * floor).sum())
-    if bound or report["rank"] >= n:
+    degenerate = bool(bound or report["rank"] >= n)
+    misfit = (report.get("contrast_residual_max", 0.0) > 0.05
+              or report["projected_residual_max"] > 0.05)
+    degraded = degenerate or misfit
+    if will_route and degraded:
+        return V, D, F, W, True
+    if degenerate:
         # The residual checks below judge how well V V' + D reproduces
         # cov, and they do fire on a dense cov the grammar fits badly. The
         # case they MISS is the opposite one: the fit reproduces cov to
@@ -628,7 +639,30 @@ def _fit_cov(cov, structure, V, D, stacklevel=2):
             "(fit_covariance(..., nodes_log2=14)) or price by "
             "simulation for near-singular smooth covariances.",
             RuntimeWarning, stacklevel=stacklevel)
-    return V, D, F, W
+    return V, D, F, W, degraded
+
+
+def _race_dense(mu, cov, budget=1024, seed=0):
+    """The dense-covariance race by scrambled-Sobol GHK: exact structure not
+    required, deterministic at a fixed seed, smooth in its inputs.
+
+    Measured against 4M-path Monte Carlo on dense correlations at n=16 and
+    n=30: 4.7e-4 / 5.0e-4 at 1024 nodes in 24 / 67 ms, where the fitted
+    lattice was 8.9e-3 / 6.5e-3 in 219 / 495 ms and no amount of extra
+    fitting closed the gap (more factors send D to its floor and the
+    quadrature error returns; a fractional D floor bottoms out at ~2e-3).
+    The methods are max-wins, so the min-wins mu is negated.
+    """
+    from ..methods.native import qmc_ghk
+    C = np.asarray(cov, dtype=float)
+    n = len(C)
+    try:
+        L = np.linalg.cholesky(C)
+    except np.linalg.LinAlgError:
+        L = np.linalg.cholesky(C + 1e-10 * float(np.trace(C)) / n * np.eye(n))
+    p, _ = qmc_ghk(-np.asarray(mu, dtype=float), L, np.full(n, 1e-12),
+                   budget=int(budget), seed=int(seed))
+    return np.asarray(p, dtype=float)
 
 
 def _factor_of_structure(structure, verb):
@@ -690,7 +724,15 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     pass per Newton step, so it scales the same way from 17 ms at rank
     1."""
     if cov is not None:
-        V, D, F, W = _fit_cov(cov, structure, V, D, stacklevel=3)
+        # The forward normal race with no slopes is the one case that can
+        # be answered without the fit at all; everything else (slopes for
+        # the inverter, a non-normal base, a tempered race) needs the
+        # factor form and keeps the fit with its warnings.
+        routable = (base == "normal" and not temperature and not return_slopes)
+        V, D, F, W, degraded = _fit_cov(cov, structure, V, D, stacklevel=3,
+                                        will_route=routable)
+        if degraded and routable:
+            return _race_dense(mu, cov)
     if structure is not None:
         from .structures import dispatch_probabilities
         return dispatch_probabilities(mu, structure, base=base,
@@ -824,10 +866,12 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     the iteration converged, and the achieved residual. Non-convergence
     warns rather than returning silently."""
     if cov is not None:
-        if structure is not None or V is not None or D is not None:
-            raise ValueError("cov= replaces structure=/V=/D=; pass one only")
-        from .core import fit_covariance
-        V, D, F, W = fit_covariance(cov)
+        # The inverse needs the factor form (own-slopes for the Newton
+        # preconditioner), so it cannot route around a degraded fit the
+        # way the forward race does; it takes the fit WITH its warnings.
+        # It used to call fit_covariance directly and say nothing.
+        V, D, F, W, _ = _fit_cov(cov, structure, V, D, stacklevel=2,
+                                 will_route=False)
     if structure is not None:
         from .structures import Factor, Independent
         if isinstance(structure, Independent):

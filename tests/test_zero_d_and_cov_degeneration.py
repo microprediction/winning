@@ -84,8 +84,11 @@ def test_cov_warns_when_the_fit_degenerates():
     V/D answer -- the case the residual checks cannot see."""
     C = _exact_factor_corr(8, 3, seed=8)
     mu = np.linspace(-0.5, 0.5, 8)
+    # the forward normal race now ROUTES around a degraded fit and says
+    # nothing; a call that needs the factor form (slopes) keeps the fit
+    # and must still warn
     with pytest.warns(RuntimeWarning, match=r"cov= fit degenerated.*qmc_ghk"):
-        wf.race_probabilities(mu, cov=C, points=257)
+        wf.race_probabilities(mu, cov=C, points=257, return_slopes=True)
 
 
 def test_a_badly_fitted_dense_cov_is_caught_by_the_residual_check():
@@ -95,7 +98,7 @@ def test_a_badly_fitted_dense_cov_is_caught_by_the_residual_check():
     C = _dense_corr(16, 16)
     mu = np.linspace(-0.5, 0.5, 16)
     with pytest.warns(RuntimeWarning, match=r"imperfectly served|nearly singular"):
-        wf.race_probabilities(mu, cov=C, points=257)
+        wf.race_probabilities(mu, cov=C, points=257, return_slopes=True)
 
 
 def test_cov_does_not_warn_on_a_healthy_low_rank_fit():
