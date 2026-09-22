@@ -36,7 +36,7 @@ def _ensure_matplotlib():
     if not MATPLOTLIB_AVAILABLE:
         raise ImportError(
             "Matplotlib is required for visualization functions. "
-            "Install with: pip install 'thurstone[viz]' or pip install matplotlib"
+            "Install with: pip install matplotlib"
         )
 
 

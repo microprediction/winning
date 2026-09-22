@@ -21,7 +21,7 @@ Still open from the review (bigger items, need Peter or new work):
 - REPRODUCIBILITY: RESOLVED per Peter 2026-08-24 ("just use whatever is
   the latest at winning package"). The local repo is consistent with
   the paper: setup.py 1.1.0, tag v1.1.0 exists and contains
-  winning/factor, README describes winning.thurstone (vendored home) +
+  winning/factor, README describes winning.research (the retired engine; winning.thurstone alias removed) +
   winning.factor. The reviewer saw the stale PUBLIC state -- origin/main
   is behind local. Remaining action: push main + tags publicly (and to
   PyPI) so the public repo matches; git ssh, not gh CLI. Note v1.1.0 is

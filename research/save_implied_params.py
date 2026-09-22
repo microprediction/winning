@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 
 import numpy as np
-from thurstone import AbilityCalibrator, Density, UniformLattice
+from winning.research import AbilityCalibrator, Density, UniformLattice
 
 from win_place_calibration import CLIP, GRID, exact_win_topk, fit_loc_scale
 

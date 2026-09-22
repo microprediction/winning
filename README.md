@@ -231,8 +231,12 @@ paths such as `winning.lattice_calibration` still work, pointing at the
 new home with a `DeprecationWarning`.
 
 The 2.0 renovation built a density-agnostic engine as a separate
-`thurstone` package. It now lives here as `winning.research`, the
-`thurstone` package imports from this one, and the renovation's
+`thurstone` package. It lives here as `winning.research`, the retired
+research engine: kept for the pipelines built on it, but for
+calibration use `calibrate_abilities`, which is materially faster and
+more accurate and uses the compiled kernels. The `winning.thurstone`
+alias is gone; the external `thurstone` shim must import
+`winning.research` directly. The renovation's
 migration notes are preserved in [planning/](planning) and
 [attic/](attic).
 

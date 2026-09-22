@@ -1,3 +1,21 @@
+"""The retired research engine (formerly ``winning.thurstone``).
+
+Kept for the pipelines built on it -- the lookup-curve fitters, the
+Kalman and dynamic trackers, the Laplacian tools -- none of which has a
+one-line replacement yet. For the inverse problem itself, use the front
+door: ``winning.calibrate_abilities(p, V=, D=)`` is materially faster
+and more accurate and dispatches to the compiled kernels, which nothing
+here does. See CHANGELOG for the measured gap.
+"""
+import warnings as _warnings
+
+_warnings.warn(
+    "winning.research is the retired research engine; for calibration "
+    "use winning.calibrate_abilities(p, V=, D=), which is materially "
+    "faster and more accurate and uses the compiled kernels. This "
+    "package stays for the pipelines that still need it.",
+    DeprecationWarning, stacklevel=2)
+
 from .conventions import (
     ALT_A,
     ALT_L,
