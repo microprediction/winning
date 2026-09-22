@@ -108,7 +108,7 @@
         hw <- .halton_normal_nodes(r, 2^13)
         F <- hw$F
         W <- hw$W
-      } else if (r == 1 && ceiling(8 * sharp) > 201) {
+      } else if (r == 1 && ceiling(8 * sharp) > 80) {
         # rank-1 extreme sharpness (matching the python reference):
         # Gauss-Hermite is the wrong family for a near-step integrand;
         # an equal-weight midpoint-quantile grid scaled with sharpness
@@ -281,23 +281,72 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   if (any(target <= 0)) stop("all target probabilities must be positive")
   target <- target / sum(target)
   logt <- log(target)
-  mu <- -(logt - mean(logt)) / 2
-  alpha <- if (length(target) > 2) 1.0 else 0.7
+  n <- length(target)
+  # the field's contrast scale (matching the python reference): median
+  # idiosyncratic variance plus the mean factor variance under the nodes
+  # actually represented, so (V, F) -> (V / c, c F) is invariant
+  Dn <- if (is.null(D)) rep(1, n) else as.numeric(D)
+  Vn <- if (is.null(V)) matrix(0, n, 1) else as.matrix(V)
+  if (nrow(Vn) != n && ncol(Vn) == n) Vn <- t(Vn)
+  Vc <- sweep(Vn, 2, colMeans(Vn))
+  if (!is.null(V) && !is.null(F)) {
+    Fq <- as.matrix(F)
+    Wq <- if (is.null(W)) rep(1 / nrow(Fq), nrow(Fq)) else as.numeric(W) / sum(W)
+    Fc <- sweep(Fq, 2, colSums(Fq * Wq))
+    CovF <- t(Fc) %*% (Fc * Wq)
+  } else {
+    CovF <- diag(ncol(Vc))
+  }
+  SigV <- Vc %*% CovF %*% t(Vc)
+  scale <- sqrt(median(Dn) + mean(diag(SigV)))
+  if (n == 2 && identical(base, "normal")) {
+    # a pair is one Gaussian contrast: closed form (matching python)
+    sd_d <- sqrt(max(SigV[1, 1] + SigV[2, 2] - 2 * SigV[1, 2] + Dn[1] + Dn[2],
+                     1e-300))
+    gap <- sd_d * qnorm(target[1])
+    return(c(-0.5 * gap, 0.5 * gap))
+  }
+  mu <- -(logt - mean(logt)) / 2 * scale
+  # damping: a pair, or two runners holding nearly all the mass, two-cycles
+  # undamped; the sweeps then adapt to the contraction they observe
+  # (matching python's _jacobi_sweeps: Richardson from consecutive steps,
+  # undo-and-halve on a sweep that does not contract)
+  top2 <- if (n > 2) sum(sort(target, decreasing = TRUE)[1:2]) else 1
+  alpha <- if (n == 2 || top2 > 0.8) 0.7 else 1.0
+  prev <- NULL
+  prev_step <- NULL
   for (it in seq_len(n_iter)) {
     ps <- race_probabilities(mu, V = V, D = D, F = F, W = W, base = base,
                              points = points, return_slopes = TRUE)
-    phat <- ps$p
-    sl <- ps$slopes
-    resid <- log(pmax(phat, 1e-300)) - logt
-    if (max(abs(resid)) < tol) break
-    dlogp <- pmin(sl / pmax(phat, 1e-300), -1e-6)
-    # residual-proportional step cap: a near-certain winner's residual
-    # and own-slope both vanish and their noisy ratio destabilizes the
-    # recentered fixed point (heavy-favorite targets 1e-4..1e-8 stalled;
-    # capped they converge in a handful of iterations)
-    lim <- pmin(2, 10 * abs(resid))
-    mu <- mu - pmin(pmax(alpha * resid / dlogp, -lim), lim)
-    mu <- mu - mean(mu)
+    phat <- pmax(ps$p, 1e-300)
+    resid <- log(phat) - logt
+    dlogp <- pmin(ps$slopes / phat, -1e-6)
+    rmax <- max(abs(resid))
+    rrms <- sqrt(mean(resid^2))
+    if (rmax < tol) break
+    if (!is.null(prev) && alpha > 0.1 && rmax >= prev$rmax && rrms >= prev$rrms) {
+      alpha <- max(0.5 * alpha, 0.1)
+      mu <- prev$mu; resid <- prev$resid; dlogp <- prev$dlogp
+      rmax <- prev$rmax; rrms <- prev$rrms
+      prev_step <- NULL
+    }
+    prev <- list(mu = mu, resid = resid, dlogp = dlogp, rmax = rmax, rrms = rrms)
+    # residual-proportional step cap in the field's scale: a near-certain
+    # winner's residual and own-slope both vanish and their noisy ratio
+    # destabilizes the recentered fixed point
+    lim <- pmin(2, 10 * abs(resid)) * scale
+    step <- pmin(pmax(alpha * resid / dlogp, -lim), lim)
+    step <- step - mean(step)
+    if (!is.null(prev_step)) {
+      den <- sum(prev_step^2)
+      rho <- if (den > 0) sum(step * prev_step) / den else 0
+      if (rho < 0) {
+        lam <- 1 - (1 - rho) / alpha
+        alpha <- min(max(2 / (2 - lam), 0.1), 1)
+      }
+    }
+    prev_step <- step
+    mu <- mu - step
   }
   mu
 }

@@ -65,7 +65,9 @@ python research/factor_ghk/hybrid_a.py --rank 1 --n 8 --D 0.05 0.01 --paths 3000
 # the open question: rank 3, two sharpness levels, decent budgets (~10-20 min)
 python research/factor_ghk/hybrid_a.py --rank 3 --n 8 --D 0.1 0.05 --R 32 128 512 --paths 3000000 --csv r3.csv
 
-# rank 5 (slow: R=128 at rank 5 is ~5 LPs x 128 draws x 8 winners; budget accordingly)
+# rank 5 (slow: R=128 at rank 5 is ~5 LPs x 128 draws x 8 winners; budget accordingly).
+# The fixed Gauss-Hermite baselines use orders chosen by rank (Q = 7, 11 here) so the
+# pruned tensor stays under ~3e5 nodes; Q=41 at rank 5 was 116M nodes before pruning (#155).
 python research/factor_ghk/hybrid_a.py --rank 5 --n 8 --D 0.1 --R 32 128 --paths 3000000 --csv r5.csv
 ```
 

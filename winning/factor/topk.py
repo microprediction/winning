@@ -47,18 +47,13 @@ import numpy as np
 from ..shapes import as_loadings
 
 
-from .races import BASES
+from .races import _jacobi_sweeps, BASES
 from .blocks import TINY, roots_hermitenorm
 
-try:
-    import fastrace as _fastrace
-    _RUST_OK = hasattr(_fastrace, "top_k")
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except ImportError:                                  # pragma: no cover
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('top_k')
 
 
 def _count_window(mu, sd, k, base_rows, delta=1e-12, pad_sds=2.0,
@@ -628,21 +623,26 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     logit_t = np.log(target) - np.log1p(-target)
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
-    # N = 2 damping, inherited from the win inversion: K_2 is bipartite
-    # and the undamped Jacobi update two-cycles on the quotient.
-    alpha = 1.0 if n > 2 else 0.7
-    resid_max = np.inf
-    iters = 0
-    for it in range(n_iter):
-        iters = it + 1
+    # Damping, as in abilities_from_race: the photo-finish graph of a pair
+    # is bipartite and the undamped Jacobi update two-cycles; the same
+    # two-cycle appears at any n when two runners hold nearly all the
+    # win mass (#151: k = 1 kept `n > 2` after #150 fixed the win race
+    # and failed on the same fields), so the k = 1 gate is the win
+    # race's top-two share. For k >= 2 the slot identity spreads the
+    # mass and the gate is the pair. The sweeps then adapt the damping
+    # to the contraction they observe (see races._jacobi_sweeps).
+    _top2 = float(np.sort(target)[-2:].sum()) if (k == 1 and n > 2) else 1.0
+    alpha = 0.7 if (n == 2 or (k == 1 and _top2 > 0.8)) else 1.0
+
+    def _forward(m):
         if nodes is None:
-            qraw, sl = _topk_with_slopes(mu, sd, k, base_rows, points,
+            qraw, sl = _topk_with_slopes(m, sd, k, base_rows, points,
                                          is_normal=(base == "normal"))
         else:
             qraw = np.zeros(n)
             sl = np.zeros(n)
             for j in range(len(nodes)):
-                qj, sj = _topk_with_slopes(mu + Vm @ nodes[j], sd, k,
+                qj, sj = _topk_with_slopes(m + Vm @ nodes[j], sd, k,
                                            base_rows, points,
                                            is_normal=(base == "normal"))
                 qraw += w[j] * qj
@@ -650,16 +650,12 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
         qhat = _checked_topk(qraw, k, "top-k inversion")
         resid = (np.log(np.maximum(qhat, 1e-300))
                  - np.log(np.maximum(1.0 - qhat, 1e-300))) - logit_t
-        resid_max = float(np.abs(resid).max())
-        if resid_max < tol:
-            break
         dlogit = np.minimum(sl / np.maximum(qhat * (1.0 - qhat), 1e-300),
                             -1e-6)
-        # residual-proportional step cap, as in the win inversion: no
-        # coordinate moves much further than its own residual warrants.
-        lim = np.minimum(2.0, 10.0 * np.abs(resid))
-        mu = mu - np.clip(alpha * resid / dlogit, -lim, lim)
-        mu -= mu.mean()
+        return resid, dlogit
+
+    mu, _, resid_max, iters = _jacobi_sweeps(mu, _forward, 1.0, alpha,
+                                             n_iter, tol)
     return _topk_inverse_return(mu, resid_max < tol, resid_max, iters,
                                 floored, tol, return_info,
                                 "abilities_from_topk")

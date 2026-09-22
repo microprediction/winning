@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 
 
-from scipy.special import log_ndtr, ndtr, ndtri
+from scipy.special import log_ndtr, logsumexp, ndtr, ndtri
 from scipy.stats import qmc
 
 from ..factor.core import (
@@ -21,15 +21,10 @@ from ..factor.core import (
 )
 from .registry import register
 
-try:                                       # compiled kernels (rust/fastrace)
-    import fastrace as _fastrace
-    _RUST_OK = hasattr(_fastrace, "win_probabilities_factor")
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except ImportError:                       # pragma: no cover
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('win_probabilities_factor')
 
 
 def _nodes(k):
@@ -44,8 +39,13 @@ def lattice(mu, V, D, budget=None, seed=None):
     L = int(budget) if budget else 501
     F, W = _nodes(V.shape[1])
     if _HAVE_RUST:                       # honours WINNING_PURE and use_rust()
+        # gauge-fix as the numpy path does inside win_probabilities_factor:
+        # the kernel does not center V, and a common loading widened its
+        # window and lost resolution (#114: shift 100 -> 5e-2 error)
+        Vc = np.asarray(V, float)
+        Vc = Vc - Vc.mean(axis=0)
         p, total = _fastrace.win_probabilities_factor(
-            -np.asarray(mu, float), np.asarray(V, float),
+            -np.asarray(mu, float), np.ascontiguousarray(Vc),
             np.asarray(D, float), np.ascontiguousarray(F),
             np.ascontiguousarray(W), L)
         return p, {"backend": "fastrace", "L": L, "prenorm_defect": abs(1 - total)}
@@ -104,7 +104,18 @@ def factor_rqmc(mu, V, D, budget=2**14, seed=11):
     return p / p.sum(), {"points": int(budget)}
 
 
-def _ghk_prob(mu, Sigma, i, R, u):
+def _ghk_prob(mu, Sigma, i, R, u, return_slope=False):
+    """log P(U_i is the maximum) by GHK sequential conditioning, in log
+    space throughout so a runner far behind gets a finite log probability
+    rather than an underflow to zero (the inverse under cov= Newton-steps
+    on log residuals, and a warm start 3 sd out used to return P = 0).
+    With return_slope=True also log dP_i/dmu_i, accumulated in the same
+    pass as the score of the conditional product, sum_t phi(b_t) /
+    (Phi(b_t) L_tt), holding the truncated draws fixed: the exact
+    derivative of the estimator also carries the draws' dependence on mu
+    through the truncation, which this omits, so it is an own-slope for
+    a preconditioner, not a gradient for an optimiser (measured 5-25%
+    above central differences)."""
     n = len(mu)
     others = [j for j in range(n) if j != i]
     a = mu[others] - mu[i]
@@ -116,12 +127,37 @@ def _ghk_prob(mu, Sigma, i, R, u):
     R = u.shape[0]
     z = np.zeros((R, n - 1))
     logprob = np.zeros(R)
+    score = np.zeros(R)
     for t in range(n - 1):
         b = (-a[t] - z[:, :t] @ L[t, :t]) / L[t, t]
-        Fb = ndtr(b)
-        logprob += np.log(np.maximum(Fb, 1e-300))
-        z[:, t] = ndtri(np.clip(u[:, t] * Fb, 1e-300, 1 - 1e-16))
-    return float(np.exp(logprob).mean())
+        lF = log_ndtr(b)
+        logprob += lF
+        if return_slope:
+            score += np.exp(-0.5 * b * b - 0.5 * np.log(2.0 * np.pi) - lF) / L[t, t]
+        z[:, t] = ndtri(np.clip(u[:, t] * np.exp(lF), 1e-300, 1 - 1e-16))
+    logP = float(logsumexp(logprob) - np.log(R))
+    if return_slope:
+        logS = float(logsumexp(logprob + np.log(np.maximum(score, 1e-300)))
+                     - np.log(R))
+        return logP, logS
+    return logP
+
+
+def _ghk_assemble(logs):
+    """Normalise per-runner log probabilities (and log slopes) from
+    _ghk_prob into (p, slopes, logp, dlogp) without leaving log space until
+    the end: logp is the normalised log probability, finite for a runner
+    whose p underflows, and dlogp = d log p_i / d mu_i (max-wins,
+    positive) likewise."""
+    lp = np.array([l[0] for l in logs])
+    shift = lp.max()
+    p = np.exp(lp - shift)
+    total = p.sum()
+    logp = lp - shift - np.log(total)
+    if len(logs[0]) == 1:
+        return p / total, None, logp, None
+    ls = np.array([l[1] for l in logs])
+    return p / total, np.exp(ls - shift) / total, logp, np.exp(ls - lp)
 
 
 @register("ghk")
@@ -129,21 +165,33 @@ def ghk(mu, V, D, budget=1000, seed=9):
     """Per-alternative GHK / Genz separation-of-variables, pseudorandom."""
     n = len(mu)
     Sigma = V @ V.T + np.diag(D)
-    p = np.array([
-        _ghk_prob(mu, Sigma, i, budget,
-                  np.random.default_rng(seed + i).random((int(budget), n - 1)))
+    p, _, _, _ = _ghk_assemble([
+        (_ghk_prob(mu, Sigma, i, budget,
+                   np.random.default_rng(seed + i).random((int(budget), n - 1))),)
         for i in range(n)])
-    return p / p.sum(), {"draws": int(budget)}
+    return p, {"draws": int(budget)}
 
 
 @register("qmc_ghk")
-def qmc_ghk(mu, V, D, budget=1024, seed=13):
-    """GHK with scrambled-Sobol uniforms (Genz-Bretz style)."""
+def qmc_ghk(mu, V, D, budget=1024, seed=13, return_slopes=False):
+    """GHK with scrambled-Sobol uniforms (Genz-Bretz style). The info dict
+    carries "logp", the normalised log probabilities, finite where p
+    underflows; with return_slopes=True also "slopes" (dp_i/dmu_i, this
+    max-wins convention, positive) and "dlogp" (d log p_i / dmu_i)."""
     n = len(mu)
     Sigma = V @ V.T + np.diag(D)
     u = qmc.Sobol(d=n - 1, scramble=True, seed=seed).random(int(budget))
-    p = np.array([_ghk_prob(mu, Sigma, i, budget, u) for i in range(n)])
-    return p / p.sum(), {"draws": int(budget)}
+    info = {"draws": int(budget)}
+    if return_slopes:
+        p, sl, logp, dlogp = _ghk_assemble(
+            [_ghk_prob(mu, Sigma, i, budget, u, True) for i in range(n)])
+        info["slopes"] = sl
+        info["dlogp"] = dlogp
+    else:
+        p, _, logp, _ = _ghk_assemble(
+            [(_ghk_prob(mu, Sigma, i, budget, u),) for i in range(n)])
+    info["logp"] = logp
+    return p, info
 
 
 def _tilt_grad(par, L, u):

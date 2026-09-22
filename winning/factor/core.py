@@ -14,16 +14,10 @@ from scipy.special import log_ndtr, ndtr, ndtri
 # winning.factor.core is where the factor kernels look for it
 from ..shapes import as_idio, as_loadings  # noqa: F401
 
-try:                                       # compiled kernels (rust/fastrace)
-    import fastrace as _fastrace
-    _RUST_OK = (hasattr(_fastrace, "win_probabilities_factor")
-                and hasattr(_fastrace, "jacobian_vector_product"))
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except ImportError:
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('win_probabilities_factor', 'jacobian_vector_product')
 
 _TINY = 1e-300
 _PFLOOR = 1e-15
@@ -578,16 +572,23 @@ def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
     w = w / np.sqrt(2.0 * np.pi)
     if k == 1:
         return x[:, None], w
-    grids = np.meshgrid(*([x] * k), indexing="ij")
-    F = np.column_stack([g.ravel() for g in grids])
-    W = np.ones(len(F))
-    for d in range(k):
-        W *= w[np.searchsorted(x, F[:, d])]
-    keep = W > prune * W.max()
-    W = W[keep]
+    # Build the product one dimension at a time and prune as it grows: a
+    # partial product whose weight cannot reach the threshold whatever
+    # the remaining factors contribute (each at most w.max()) is dropped
+    # then, so the k-fold tensor is never materialised. The kept set and
+    # its order are exactly those of the full tensor pruned once (#155:
+    # Q=41 at rank 5 is 116M nodes, 9 GiB, before pruning to 3e5).
+    wmax = float(w.max())
+    F = x[:, None]
+    W = w.copy()
+    for d in range(1, k):
+        F = np.column_stack([np.repeat(F, Q, axis=0), np.tile(x, len(F))])
+        W = (W[:, None] * w[None, :]).ravel()
+        keep = W * wmax ** (k - 1 - d) > prune * wmax ** k
+        F, W = F[keep], W[keep]
     # renormalize: pruning drops ~1e-7 of mass, and direct weighted
     # mixtures (mixed softmax, moment updates) consume W as-is
-    return F[keep], W / W.sum()
+    return F, W / W.sum()
 
 
 def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
@@ -617,6 +618,13 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
+    # gauge-fix: a common loading column shifts every conditional mean
+    # equally and cannot move an argmin, so center V for a lattice window
+    # and numerics invariant under V -> V + 1c' (eighth review). Done
+    # BEFORE the compiled dispatch: the kernel does not center, and an
+    # uncentered column widened its window by the common shift (#114:
+    # a shift of 100 moved the answer by 3e-2 with rust on, 3e-16 off).
+    V = V - V.mean(axis=0)
     if (_HAVE_RUST and not return_deletions and not per_node_interval
             and N > 1 and len(F) >= 2):
         # The compiled kernel is the same lattice on the same global
@@ -633,10 +641,6 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
         p = np.asarray(p, dtype=float)
         return (p, float(total)) if return_total else p
     sd = np.sqrt(D)
-    # gauge-fix: a common loading column shifts every conditional mean
-    # equally and cannot move an argmin, so center V for a lattice window
-    # and numerics invariant under V -> V + 1c' (eighth review)
-    V = V - V.mean(axis=0)
     M_all = mu[None, :] + F @ V.T                      # (nodes, N) cond. means
     pad = 8.0 * sd.max()
     grid = np.arange(points) / (points - 1)            # common normalized coord
@@ -840,24 +844,32 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     mu = np.asarray(mu, dtype=float)
     h = np.asarray(h, dtype=float)
     N = len(mu)
+    D = as_idio(D, N, positive=True)
+    V = as_loadings(V, N)
+    V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass (#114)
     if _HAVE_RUST and normalized and N > 1 and len(F) >= 2:
-        # rust returns the normalized product (matches numpy to ~5e-17
-        # for both forms); the unnormalized variant is numpy-only.
+        # The compiled kernel returns the RAW directional derivative of the
+        # unnormalized rectangle sum (#124: it matched numpy's
+        # normalized=False to 2e-16 and missed normalized=True by 3.5e-4
+        # at 25 points). The quotient rule below needs the unnormalized
+        # masses a and their total T, which the compiled forward returns
+        # as (a/T, T) in one pass cheaper than the JVP itself.
         # len(F) >= 2: the compiled JVP carries ~0.5 ms of fixed cost per
         # call, so at a SINGLE factor node numpy is faster (0.42 vs 0.59
         # ms at K = 8) and rust only wins from two nodes up (1.2x at 2,
         # 2.9x at 15, 3.2x at 50). nway.update_winner_correlated calls
         # this 119 times with one node each; without the guard it ran
         # 25% slower with rust on.
-        return np.asarray(_fastrace.jacobian_vector_product(
-            np.ascontiguousarray(mu), np.ascontiguousarray(as_loadings(V, N)),
-            np.ascontiguousarray(as_idio(D, N, positive=True)),
-            np.ascontiguousarray(F, dtype=float),
-            np.ascontiguousarray(W, dtype=float),
-            np.ascontiguousarray(h), int(points), str(form)), dtype=float)
-    sd = np.sqrt(as_idio(D, N, positive=True))
-    V = as_loadings(V, N)
-    V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass
+        args = (np.ascontiguousarray(mu), np.ascontiguousarray(V),
+                np.ascontiguousarray(D),
+                np.ascontiguousarray(F, dtype=float),
+                np.ascontiguousarray(W, dtype=float))
+        raw = np.asarray(_fastrace.jacobian_vector_product(
+            *args, np.ascontiguousarray(h), int(points), str(form)),
+            dtype=float)
+        pn, T = _fastrace.win_probabilities_factor(*args, int(points))
+        return (raw - np.asarray(pn, dtype=float) * raw.sum()) / float(T)
+    sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
     x = np.linspace(M_all.min() - 8 * sd.max(), M_all.max() + 8 * sd.max(), points)
     dx = x[1] - x[0]

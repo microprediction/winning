@@ -2,6 +2,113 @@
 
 ## Unreleased
 
+- The compiled kernels now take the gauge-fixed loadings and return the
+  normalised derivative, as the numpy spec does (#114, #124). The
+  kernel does not center `V`; the numpy path subtracts each factor's
+  mean loading (a common shock cannot move an argmin) before building
+  its lattice window, and the compiled dispatch in `factor.core` and
+  `methods.native.lattice` passed `V` uncentered -- a common shift of
+  100 moved the forward by 3e-2 and the JVP by 1e-1 with rust on, 3e-16
+  off. Centering now happens before the dispatch. The compiled JVP also
+  returned the raw derivative of the unnormalised rectangle sum where
+  `normalized=True` promises the quotient-rule derivative; the two
+  differ by 3.5e-4 at 25 lattice points (the parity test ran at 3001,
+  where the total mass is 1 to 1e-13 and the difference is invisible).
+  The quotient is now applied from the compiled forward's masses, and
+  the rust JVP sums to zero on the simplex as the numpy one does.
+- `WINNING_PURE` is decided before the extension loads (#113). Nine
+  modules each imported `fastrace` and then consulted the environment;
+  under pure mode the extension still ran its loader, so a wheel with an
+  ABI or dependent-library failure could take the package down when the
+  user had asked for python. `rustconfig.load_fastrace(*kernels)` is
+  now the one door: it returns `(None, False, False)` without importing
+  under `WINNING_PURE`, and otherwise the module, whether it has every
+  named kernel, and the active flag. `factor.permutations` gets its own
+  ceiling (it borrowed `races`' flags, and `use_rust(True)` defaulted a
+  missing `_RUST_OK` to True, reporting a kernel it could not call). A
+  test asserts no module imports `fastrace` directly and that
+  `import winning` under pure mode leaves it out of `sys.modules`.
+- The `cov=` GHK route is permutation-equivariant and inverted by the
+  same map (#162, #164). GHK conditions the runners in the order given,
+  so one 8-runner field priced 8.8e-3 apart under two labelings and
+  5.6e-3 from a 12M-path Monte Carlo reference at 1024 nodes; the route
+  now sorts the runners canonically (by ability, ties by covariance
+  row) before the estimate and maps back, which makes relabeling exact
+  and, as it happens, halves the error, and spends 4096 nodes: 7.2e-4
+  on that field in 13 ms (16384: 1.6e-4 in 46 ms). `abilities_from_race
+  (cov=)` used to iterate against the fitted lattice while the forward
+  returned GHK, so the two front doors described different races, 4e-3
+  to 8e-3 apart on exact rank-1/3/5 fixtures. GHK now accumulates
+  `d log p_i / d mu_i` in its conditioning pass (the score of the
+  conditional product, holding the truncated draws fixed: 5-25% above
+  central differences, a preconditioner not a gradient) and the inverse
+  Newton-steps against the routed map itself with those slopes, in log
+  space throughout (`qmc_ghk` returns `info["logp"]`, finite where `p`
+  underflows: a runner displaced from its near-duplicates on a
+  near-singular n=30 correlation has log p = -16000 at the warm start,
+  a real value the step recovers from). The three fixtures and the
+  #162 field round-trip to 1e-9 in 24-36 sweeps; a dense n=16
+  correlation in 43. The degenerate fit's own-slopes are used for
+  nothing: with `D` on its floor the conditional race is a near-step
+  and the lattice inverse of the rank-1 fixture ran to a log residual
+  of 690.
+- The inverse damps by the contraction it observes and reads its scale
+  off the nodes it is given; `abilities_from_topk(k=1)` shares both
+  (#149, #151). Heterogeneous variances make the pair's negative
+  Jacobi eigenvalue with no top-two share to gate on (`p = [.6, .2,
+  .2]`, `D = [.03, .03, 1]`: share 0.8 exactly, 60 sweeps and 1.7e-4
+  short; `[.45, .3, .25]` with `D = [.1, 30, 1]`: share 0.75). The
+  sweeps now estimate the dominant mode from consecutive steps and take
+  the Richardson damping for it, 2 / (2 - lambda) -- 2/3 at the pair's
+  -1, which is why the fixed 0.7 was right where it applied -- and undo
+  a sweep that contracts neither the max nor the rms residual. Both
+  cases converge in 19; the dominant pair goes 19 -> 17, an ordinary
+  n=8 field 13 -> 10, n=150 stays at 7. The warm start and step cap's
+  scale is the median idiosyncratic variance plus the factor variance
+  under the represented nodes, so `(V, F) -> (V / c, c F)`, the same
+  forward map, gives the same inverse in the same 13 sweeps (reading
+  `V` alone put the start 33x off at c = 0.03 and returned `[0, 4e-10,
+  1]` for `[.6, .25, .15]`); the pair closed forms, forward and
+  inverse, use the same node covariance when nodes are supplied (the
+  forward gave 0.51 for an exact 0.70 at c = 0.03). `abilities_from_
+  topk(q, 1)`, documented as `abilities_from_race`, kept the `n > 2`
+  gate after #150 and failed on the same fields; it now runs the same
+  sweeps with the win race's gate at k = 1 and the pair's at k >= 2.
+  Known limit, stated in the sweeps' docstring: two near-duplicate
+  runners inside a large field trade one residual between themselves,
+  a mode no diagonal preconditioner contracts; a per-coordinate damping
+  was measured and did not reach it while costing sweeps everywhere
+  else, so the inverse reports non-convergence there (2.7e-4 in
+  probability) rather than pretending.
+- R and browser ports carry the rank-one handover at 80 and the
+  inverse's safeguards (#153): the node-aware scale, the top-two gate,
+  the adaptive damping and the pair closed form, each marked "matching
+  python". A test reads the handover threshold out of all three files
+  and asserts they agree, and that the port files carry the safeguards.
+- `hermite_nodes` builds the product rule one dimension at a time and
+  prunes as it grows (#155): a partial product that cannot reach the
+  threshold whatever the remaining factors contribute is dropped then,
+  so the k-fold tensor is never materialised. Q=41 at rank 5 was 116M
+  nodes and ~9 GiB before pruning; it is now 0.2 s and 1.06M nodes, and
+  the kept set, its order and its weights are exactly the tensor's
+  pruned once (tested at ranks 2-4). The factor_ghk experiment's fixed
+  Gauss-Hermite orders are now chosen by rank to keep the pruned tensor
+  under ~3e5 nodes.
+- The `cov=` degeneration warning names a recipe that runs (#158): it
+  recommended `winning.methods.qmc_ghk` (not an attribute) with
+  `V=chol(cov)` and no `D` (TypeError). It now says the forward normal
+  race and `abilities_from_race` route the case automatically, which
+  calls cannot (slopes, ordered prefixes, a temperature, a non-normal
+  base), and gives `get_method('qmc_ghk')(-mu, cholesky(cov), zeros(n))`
+  for win probabilities alone; a test executes the recipe out of the
+  warning text.
+- The `winning.thurstone` tombstone and the `winning.research`
+  deprecation say that `calibrate_abilities` is the NORMAL race by
+  default, name `base=` for the other built-in races, and say that a
+  custom research `Density` has no front-door equivalent and calibrates
+  a different model (#126). The dangling changelog bullet left by
+  #150's rebase is folded (#127).
+
 - `abilities_from_race` converges on small-scale fields, and the normal
   pair is now closed form. Two names with near-identical high loadings
   (b = 0.99, `D = 1 - b^2`, one contrast with sd 0.199) came back with
@@ -134,7 +241,6 @@
   still converge. Found migrating a client whose late-contest fields are
   exactly this regime.
 
-- `winning.thurstone` is gone. It was a deprecation alias for
 - `winning.thurstone` now fails honestly: importing it raises an
   `ImportError` that names `winning.research` (where the code went),
   `calibrate_abilities` (what to prefer, and why) and the external

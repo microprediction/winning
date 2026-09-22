@@ -41,3 +41,22 @@ def rust_active():
 
 def pure_requested_by_env():
     return os.environ.get("WINNING_PURE", "").strip() not in ("", "0")
+
+
+def load_fastrace(*needs):
+    """Import the compiled kernels for one module: (module, ok, active).
+
+    The environment is consulted FIRST (#113): under WINNING_PURE the
+    extension is never imported, so a broken wheel (ABI mismatch, missing
+    dependent library) cannot take the package down when the user has
+    asked for pure python. `ok` says the extension has every kernel the
+    caller names; `active` is `ok` and not pure. use_rust() flips
+    `active` at runtime and keeps `ok` as its ceiling."""
+    if pure_requested_by_env():
+        return None, False, False
+    try:
+        import fastrace as mod
+    except ImportError:
+        return None, False, False
+    ok = all(hasattr(mod, name) for name in needs)
+    return mod, ok, ok

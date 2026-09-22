@@ -23,8 +23,13 @@ renormalising away a lattice that failed to capture the field.
 import numpy as np
 
 from .core import as_loadings
-from .races import (_fit_cov, _factor_of_structure, _setup, _tempered_curves,
-                    _HAVE_RUST, _fastrace)
+from ..rustconfig import load_fastrace
+from .races import _fit_cov, _factor_of_structure, _setup, _tempered_curves
+
+# this module's own ceiling (#113): it used to borrow races' flags, and
+# use_rust(True) defaults a missing _RUST_OK to True, which reported a
+# kernel this module cannot call on an extension that lacks it
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace("ordered_prefixes")
 
 
 def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
