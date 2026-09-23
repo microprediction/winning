@@ -318,6 +318,12 @@ def skew_normal_base(a):
 # reported a calibration costing the same at rank 2 and rank 3 because
 # both escalated -- and it is ONE runner's exposure that decides it, the
 # statistic being a max.
+#
+# Ranks 1-3 are where the traffic is, which is why only they are tabled
+# here. `r` is the rank of the V handed in, and that is normally a fitted
+# factor model: a caller studying a five-factor market still races under
+# a k-factor estimate with k of 1, 2 or 3, so the population's rank is
+# not the one that reaches this rule.
 GH_RULE = {1: (201, float("inf")), 2: (41, 3.75), 3: (31, 4.75)}
 GH_RULE_DEFAULT = (15, 3.0)
 
@@ -800,6 +806,15 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     growing with rank: measured at K = 8 on a mild field, a forward pass
     takes 12 ms at rank 3, 86 ms at rank 4 and 65 ms at ranks 5 and 6,
     where the budget caps it.
+
+    The rank here is the rank of the V you PASS, which is usually a
+    FITTED one -- and a fitted factor model is nearly always low rank
+    even when the population it came from is not. A caller whose market
+    has five factors, but who races under a k-factor estimate from a
+    short panel, is running at rank 1, 2 or 3 and lives entirely on this
+    rule's cheap side. Read the table for the rank you race at, not the
+    rank of the thing you are modelling; it is easy to size this wrong
+    in the pessimistic direction (done, in review, by the author).
 
     The other axis is `sharp`, how many idiosyncratic standard deviations
     the factor swings the field by. A realistic correlated field crosses
