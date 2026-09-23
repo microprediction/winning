@@ -100,7 +100,12 @@
       # which bounds the pairwise contrast sharpness from above
       sharp <- sqrt(2) * max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
       r <- ncol(V)
-      if (r >= 2 && sharp > 3.0) {
+      # per-rank (Gauss-Hermite order cap, sharpness past which even that
+      # order loses to the low-discrepancy family); see GH_RULE in the
+      # python reference for the measurements behind each number
+      cap <- if (r == 1) 201 else if (r == 2) 41 else if (r == 3) 31 else 15
+      sharp_max <- if (r == 2) 3.75 else if (r == 3) 4.75 else 3.0
+      if (r >= 2 && sharp > sharp_max) {
         # matching the python reference: past this sharpness the factor
         # integrand is a near-step and Gauss-Hermite converges slowly at
         # any order; escalate the FAMILY to a low-discrepancy rule.
@@ -116,14 +121,13 @@
         Q <- as.integer(min(ceiling(8 * sharp), 4001))
         F <- matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)
         W <- rep(1 / Q, Q)
-      } else if (15^r > 1e5) {
+      } else if (cap^r > 1e5) {
         # high-rank tensor footgun (matching python): past a 1e5-node
         # tensor budget escalate to low-discrepancy nodes
         hw <- .halton_normal_nodes(r, 2^13)
         F <- hw$F
         W <- hw$W
       } else {
-        cap <- if (r == 1) 201 else if (r == 2) 41 else 15
         Q <- as.integer(min(max(ceiling(8 * sharp), 15), cap))
         hw <- hermite_nodes(ncol(V), order = Q)
         F <- hw$F

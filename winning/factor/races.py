@@ -273,6 +273,55 @@ def skew_normal_base(a):
     return _skew
 
 
+# The factor-node rule, per rank: (Gauss-Hermite order cap, the sharpness
+# past which even that order loses to scrambled Sobol at 2^13). `sharp` is
+# the pairwise bound computed in _setup -- how many idiosyncratic standard
+# deviations the factor swings the field by -- so it says how close the
+# conditional race is to a step, which is what decides the family.
+#
+# One threshold of 3.0 for every rank used to stand here, and at rank 3 it
+# was defending against a Gauss-Hermite cap of 15 that was itself WORSE
+# than the Sobol rule it escalated to: at sharp 4, Q=15 carries total
+# variation 4.4e-4 against Sobol's 1.3e-4, while Q=31 -- 4067 nodes after
+# pruning, half of Sobol's 8192, and 29791 before it, inside the same
+# budget -- carries 1.8e-5. The cap was the defect, not the family.
+#
+# Each threshold is the last sharpness at which Gauss-Hermite beat Sobol on
+# EVERY field, over 8 seeds, against the mean of three 2^15 scrambles
+# (n = 50; ratio = GH error / Sobol error, so below 1 is a GH win):
+#
+#   rank 2, 413 GH nodes            rank 3, 4067 GH nodes
+#   sharp  median  worst   wins     sharp  median  worst   wins
+#    2.7    0.12   0.16     8/8      3.1    0.15   0.22     8/8
+#    3.2    0.15   0.23     8/8      3.7    0.17   0.23     8/8
+#    3.7    0.18   0.75     8/8      4.2    0.26   0.35     8/8
+#    4.3    0.38   1.73     7/8      4.7    0.40   0.73     8/8
+#                                    5.3    0.62   1.35     6/8
+#
+# Field-to-field spread at fixed sharpness is wide -- at rank 3, sharp 5.3
+# the median says Gauss-Hermite wins by 1.6x while the worst field loses by
+# 1.35x -- so these are set by the worst case, not the median. An earlier
+# cut of this table used 3-seed medians and put rank 3 at 6.0; a one-seed
+# regression test found a field losing at 5.6.
+#
+# Rank >= 4 keeps the old 3.0: its tensor is 10929 nodes at Q=15, already
+# dearer than Sobol's 8192, so there is no cheap side to reach for. At
+# sharp 4, n = 250 it buys total variation 3.3e-4 against 5.0e-4 for 3.49s
+# against 2.58s -- a trade, not a win, and not one to make silently.
+#
+# Rank 1 never escalates on sharpness (the branch is guarded r >= 2); it
+# hands over to an equal-weight midpoint-quantile grid at Q > 80 instead.
+#
+# What this is worth, measured at n = 250: a rank-3 field at sharp 4 takes
+# 1.50s where the escalation took 3.04s, for total variation 2.1e-5 where
+# it was 1.6e-4. A realistic correlated field lands there -- a caller
+# reported a calibration costing the same at rank 2 and rank 3 because
+# both escalated -- and it is ONE runner's exposure that decides it, the
+# statistic being a max.
+GH_RULE = {1: (201, float("inf")), 2: (41, 3.75), 3: (31, 4.75)}
+GH_RULE_DEFAULT = (15, 3.0)
+
+
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
@@ -313,15 +362,16 @@ def _setup(mu, V, D, F, W, base):
                           * np.max(np.sqrt((V ** 2).sum(axis=1))
                                    / np.sqrt(np.maximum(D, 1e-300))))
             r = V.shape[1]
-            if r >= 2 and sharp > 3.0:
-                # past this sharpness the integrand is a near-step in
-                # factor space and Gauss-Hermite converges slowly at ANY
-                # order (measured: the 25-node rule still loses ~1e-2 TV
-                # at sharp ~ 10, while scrambled Sobol reaches the QMC
-                # reference's own noise). Escalate the FAMILY, not the
-                # order. See papers/general_inversion/break.py,
-                # section H; identical rule in the R port (Halton there,
-                # to stay dependency-free).
+            cap, sharp_max = GH_RULE.get(r, GH_RULE_DEFAULT)
+            if r >= 2 and sharp > sharp_max:
+                # Past this sharpness the integrand is a near-step in
+                # factor space and Gauss-Hermite loses to scrambled
+                # Sobol even at the order the tensor budget affords.
+                # Escalate the FAMILY, not the order. See GH_RULE for
+                # the measurements behind each rank's number, and
+                # papers/general_inversion/break.py section H; identical
+                # rule in the R and browser ports (Halton there, to stay
+                # dependency-free).
                 from .core import qmc_nodes
                 F, W = qmc_nodes(r, m=13)
             elif r == 1 and np.ceil(8.0 * sharp) > 80:
@@ -342,16 +392,17 @@ def _setup(mu, V, D, F, W, base):
                 u = (np.arange(Q) + 0.5) / Q
                 F = ndtri(u)[:, None]
                 W = np.full(Q, 1.0 / Q)
-            elif 15 ** r > 100_000:
+            elif cap ** r > 100_000:
                 # high-rank ecology footgun (bandits, 120 horses x 12
-                # stable factors): the tensor grid is 15^r nodes BEFORE
+                # stable factors): the tensor grid is cap^r nodes BEFORE
                 # pruning -- 2.6e9 at r=8, 944 TiB at r=12, a hard kill.
                 # Past a 1e5-node tensor budget the rule escalates to
                 # scrambled Sobol, as the likelihood module always did.
+                # (The budget is measured on the order actually reachable,
+                # the cap, so raising a cap cannot quietly breach it.)
                 from .core import qmc_nodes
                 F, W = qmc_nodes(r, m=13)
             else:
-                cap = 201 if r == 1 else (41 if r == 2 else 15)
                 Q = int(np.clip(np.ceil(8.0 * sharp), 15, cap))
                 F, W = hermite_nodes(r, Q=Q)
     fn = base if callable(base) else BASES[base]
@@ -742,19 +793,24 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     computed exactly as the hard race with each base convolved with the
     tau-scaled min-Gumbel kernel.
 
-    Cost against factor rank, and the lever for it. The node rule below
-    picks a Gauss-Hermite tensor while it fits a 1e5-node budget and
-    scrambled Sobol past that, so the node count caps and the cost stops
-    growing with rank: measured at K = 8, a forward pass takes 12 ms at
-    rank 3 (3,375 nodes), 86 ms at rank 4 (50,625) and 65 ms at ranks 5
-    and 6, where the budget caps it at 8,192. Rank 4 is the most
-    expensive because its tensor sits just under the budget, and it buys
-    that: total variation against a 65,536-node reference is 1.3e-6
-    there against 1.5e-5 for the capped rule. Pass F, W from
-    winning.factor.core.qmc_nodes(r, m=13) to take the capped cost at
-    rank 4 and the capped accuracy with it. Inversion runs the forward
-    pass per Newton step, so it scales the same way from 17 ms at rank
-    1."""
+    Cost is set by the FIELD as much as by the rank. The node rule
+    (GH_RULE, above _setup) picks a Gauss-Hermite tensor while it fits a
+    1e5-node budget and the field is not too sharp, and scrambled Sobol
+    at 8,192 nodes otherwise, so the node count caps and the cost stops
+    growing with rank: measured at K = 8 on a mild field, a forward pass
+    takes 12 ms at rank 3, 86 ms at rank 4 and 65 ms at ranks 5 and 6,
+    where the budget caps it.
+
+    The other axis is `sharp`, how many idiosyncratic standard deviations
+    the factor swings the field by. A realistic correlated field crosses
+    its rank's threshold and takes the capped 8,192 nodes whatever its
+    rank -- a caller reported a calibration costing the same at rank 2
+    and rank 3 for exactly this reason, and it is ONE runner's exposure
+    that decides it, since the statistic is a max. So rank is the wrong
+    thing to optimise for real inputs; if the capped cost is too high,
+    pass F, W from winning.factor.core.qmc_nodes(r, m=11) for a quarter
+    of the nodes at about five times the error. Inversion runs the
+    forward pass per Newton step, so it scales the same way."""
     nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
