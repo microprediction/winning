@@ -106,3 +106,54 @@ def test_pair_closed_form_reads_relative_weights(c):
     mu3, V3, D3 = np.array([0.0, 0.5, 1.0]), np.array([[0.0], [0.5], [1.0]]), np.ones(3)
     p3 = race_probabilities(mu3, V=V3, D=D3, F=F, W=W)
     assert np.abs(race_probabilities(mu3, V=V3, D=D3, F=F, W=c * W) - p3).max() < 1e-14
+
+
+@pytest.mark.parametrize("n", [16, 30, 40])
+def test_dense_correlation_inverse_converges(n):
+    """#178: a dense short-length-scale correlation puts two runners 1e-5
+    apart, whose contrast sd is 0.014 -- nearly unidentified, so the
+    own-slope preconditioner (which sees each runner's own marginal, not
+    the contrast) understates the step by the same factor every sweep.
+    The iteration is monotone, riding one mode; extrapolation sums it.
+
+    Before: the damping's undo-and-halve ratcheted to its floor on an
+    early transient and never recovered, and the inverse reported
+    non-convergence after 120 sweeps at 3.2e-1 of log residual -- while
+    the same sweeps with no damping at all converged in 93."""
+    from winning.factor import race_probabilities as _rp
+    rng = np.random.default_rng(n)
+    x = np.sort(rng.random(n))
+    C = np.exp(-np.abs(x[:, None] - x[None, :]) / 0.15)
+    mu0 = np.linspace(-0.5, 0.5, n)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = _rp(mu0, cov=C, points=257)
+        mu, info = abilities_from_race(p, cov=C, points=257, return_info=True)
+        q = _rp(mu, cov=C, points=257)
+    assert info["converged"], info
+    assert info["iterations"] <= 100
+    assert np.abs(q - p).max() < 1e-8
+
+
+def test_caution_is_temporary_but_the_richardson_value_is_not():
+    """#178: the two must not share one number. A sweep that fails to
+    contract is a transient and its penalty is restored on the next good
+    sweep; the Richardson damping is a fact about the Jacobian that a
+    good sweep does not repeal. Restoring THAT is what stops the
+    heterogeneous cases converging, so this pins both directions at once:
+    the dense field needs the recovery, the heterogeneous pair needs the
+    Richardson value to stick."""
+    from winning.factor import race_probabilities as _rp
+    rng = np.random.default_rng(30)
+    x = np.sort(rng.random(30))
+    C = np.exp(-np.abs(x[:, None] - x[None, :]) / 0.15)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = _rp(np.linspace(-0.5, 0.5, 30), cov=C, points=257)
+        needs_recovery = abilities_from_race(p, cov=C, points=257,
+                                             return_info=True)[1]
+    needs_sticky = abilities_from_race(np.array([0.6, 0.2, 0.2]),
+                                       D=np.array([0.03, 0.03, 1.0]),
+                                       points=500, return_info=True)[1]
+    assert needs_recovery["converged"] and needs_sticky["converged"]
+    assert needs_sticky["iterations"] <= 25
