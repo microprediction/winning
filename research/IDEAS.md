@@ -110,3 +110,12 @@ matter for selecting among generated samples, not for the evidence
 weight of past samples; text similarity beyond the answer carries
 nothing. The duplicate-as-random-effect model is the wrong encoding;
 an urn over answers is the open follow-up.
+
+## Contest design on the ability axis (2026-09-23)
+Prize schedules, handicaps and participation in an iterative contest
+where effort moves a contestant along the ability axis, so the marginal
+incentive is d E[prize]/d mu_i = sum_k (w_k - w_{k+1}) x tie density at
+boundary k -- the Lazear-Rosen first-order condition for N heterogeneous
+contestants and a full prize vector, priced exactly by
+rank_probabilities. Toy, literature foil and results in
+research/contest_design/.
