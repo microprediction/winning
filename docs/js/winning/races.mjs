@@ -49,13 +49,34 @@ function setup(mu, V, D, F, W, base) {
         sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
       }
       const r = V[0].length;
-      if (r === 1 && Math.ceil(8 * sharp) > 80) {
+      // per-rank (Gauss-Hermite order cap, sharpness past which even that
+      // order loses to the low-discrepancy family); see GH_RULE in the
+      // python reference for the measurements behind each number
+      const cap = r === 1 ? 201 : r === 2 ? 41 : r === 3 ? 31 : 15;
+      const sharpMax = r === 2 ? 3.75 : r === 3 ? 4.75 : 3.0;
+      if (r >= 2 && sharp > sharpMax) {
+        // escalate the FAMILY, not the order (matching python/R)
+        const Q = 8192;
+        F = []; W = new Array(Q).fill(1 / Q);
+        const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
+                        43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89];
+        for (let idx = 0; idx < Q; idx++) {
+          const node = [];
+          for (let dim = 0; dim < r; dim++) {
+            const b = primes[dim];
+            let i = idx + 21, f = 1 / b, h = 0;
+            while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
+            node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
+          }
+          F.push(node);
+        }
+      } else if (r === 1 && Math.ceil(8 * sharp) > 80) {
         // rank-1 extreme sharpness (matching python/R): equal-weight
         // midpoint-quantile grid scaled with sharpness replaces GH
         const Q = Math.min(Math.ceil(8 * sharp), 4001);
         F = []; W = new Array(Q).fill(1 / Q);
         for (let q = 0; q < Q; q++) F.push([invNormalRational((q + 0.5) / Q)]);
-      } else if (Math.pow(15, r) > 100000) {
+      } else if (Math.pow(cap, r) > 100000) {
         // high-rank tensor footgun (matching python/R): Halton fallback
         const Q = 8192;
         F = []; W = new Array(Q).fill(1 / Q);
@@ -72,7 +93,6 @@ function setup(mu, V, D, F, W, base) {
           F.push(node);
         }
       } else {
-        const cap = r === 1 ? 201 : r === 2 ? 41 : 15;
         const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);
         const hw = hermiteNodes(r, Q);
         F = hw.F; W = hw.W;

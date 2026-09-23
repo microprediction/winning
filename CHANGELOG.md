@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+- The factor-node rule is per rank, and rank 3 gets the order it needed
+  (#156). One sharpness threshold of 3.0 served every rank, and at rank 3
+  it was defending against a Gauss-Hermite cap of 15 that was itself worse
+  than the scrambled-Sobol rule it escalated to: at sharp 4 the cap
+  carries total variation 4.4e-4 against Sobol's 1.3e-4, while Q=31 --
+  4067 nodes after pruning, half of Sobol's 8192, and 29791 before it,
+  inside the same 1e5 budget -- carries 1.8e-5. The cap was the defect,
+  not the family. `GH_RULE` now pairs each rank with its cap and the
+  sharpness past which even that order loses: rank 2 (41, 3.75), rank 3
+  (31, 4.75), rank 4 and up unchanged at (15, 3.0), because a rank-4
+  tensor is already 10929 nodes and there is no cheap side to reach for.
+  The tensor budget is measured on the cap rather than on a hard-coded 15,
+  so raising a cap cannot quietly breach it.
+
+  Measured at n = 250: a rank-3 field at sharp 4 takes 1.50s where the
+  escalation took 3.04s, for total variation 2.1e-5 where it was 1.6e-4 --
+  twice as fast and several times more accurate. This is the common case,
+  not an edge case: a caller reported a calibration costing the same 76s
+  at rank 2 and rank 3 because a realistic correlated field crosses the
+  threshold at every rank. In correlation terms the old threshold is a
+  communality of 0.82, and it is ONE runner's exposure that decides it,
+  the statistic being a max -- which is also why the same field could cost
+  four times more from one draw to the next.
+
+  Both thresholds are the last sharpness at which Gauss-Hermite beat Sobol
+  on EVERY field over 8 seeds, not the median one. That distinction is the
+  whole of it: an earlier cut of this table used 3-seed medians and put
+  rank 3 at 6.0, and the regression test written to defend it immediately
+  found a field losing at 5.6. At rank 3, sharp 5.3 the median says
+  Gauss-Hermite wins by 1.6x while the worst of eight fields loses by
+  1.35x. The table in `races.py` carries the win rates.
+
+  The R and browser ports carry the same table, and a test reads the caps
+  and thresholds out of all three files and asserts they agree, as the
+  rank-one handover test does. Not changed, and not measured here:
+  `fastmvn._nodes_for` and `likelihood.nodes_for_likelihood` have their
+  own `sharp > 3.0` rules over different integrands -- and `fastmvn`
+  spells `sharp` without the sqrt(2), so three places compare different
+  statistics to the same constant.
+
+- `parity/vectors.json` is regenerated. The committed file had gone stale:
+  eleven iterative scenarios (the inversions, the polish and loc-scale
+  solvers) differed when regenerated on `main` itself, all below the
+  checkers' tolerances, which is why both ports still passed.
+
 - The compiled kernels now take the gauge-fixed loadings and return the
   normalised derivative, as the numpy spec does (#114, #124). The
   kernel does not center `V`; the numpy path subtracts each factor's
