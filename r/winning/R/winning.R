@@ -13,14 +13,19 @@ hermite_nodes <- function(k, order = 15, prune = 1e-7) {
   x1 <- h$nodes
   w1 <- h$weights
   if (k == 1) return(list(F = matrix(x1, ncol = 1), W = w1))
-  # match the reference ordering (first coordinate slowest); prune the
-  # product grid WITHOUT renormalizing, exactly as the reference
+  # match the reference ordering (first coordinate slowest), and prune the
+  # product grid THEN renormalize, as the reference does: pruning drops
+  # ~1e-7 of the mass and a direct weighted mixture consumes W as-is. This
+  # comment used to claim the reference did not renormalize, which stopped
+  # being true without the port following; the weights summed to
+  # 1 - 2e-9 here against exactly 1 there, found by the surface audit.
   idx <- as.matrix(do.call(expand.grid, rep(list(seq_along(x1)), k)))[, k:1,
                                                                      drop = FALSE]
   F <- matrix(x1[idx], nrow(idx), k)
   W <- apply(matrix(w1[idx], nrow(idx), k), 1, prod)
   keep <- W > prune * max(W)
-  list(F = unname(F[keep, , drop = FALSE]), W = W[keep])
+  Wk <- W[keep]
+  list(F = unname(F[keep, , drop = FALSE]), W = Wk / sum(Wk))
 }
 
 #' All win probabilities of a factor Gaussian race (min wins)

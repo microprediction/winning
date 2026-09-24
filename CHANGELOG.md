@@ -2,6 +2,73 @@
 
 ## Unreleased
 
+- Cross-language divergence is now detected rather than stumbled upon.
+  The parity comparison has existed for a long time and had **never been
+  gated**: `parity/check.R` and `parity/check.mjs` were run by hand, which
+  is why three divergences reached `main` before anyone noticed -- the
+  rank-one handover (#153), the pair closed form's weight normalisation
+  (#171) and the inverse's damping (#178), each ported only after the
+  fact. A CI job now runs both checkers on every pull request, and first
+  asserts the committed vectors still describe the python reference: a
+  python change that moves a scenario without regenerating them leaves the
+  ports compared against yesterday's answers, which was true of eleven
+  scenarios when the job was written.
+
+  `tests/test_port_surface.py` covers what no scenario can, since the
+  failures that hurt were code nobody called. Every public race verb
+  carries a declared status per port -- covered by parity, present but
+  uncovered, or absent with a reason -- and a new verb fails the suite
+  until someone decides. Every keyword of `race_probabilities` and
+  `abilities_from_race` must be exercised by a scenario or waived by name.
+  The rule that matters is that a declared gap must be a LOUD gap: `cov=`
+  may be waived only because the browser now rejects the key, having
+  previously accepted it and returned the independent race. Sabotage-
+  tested: an undeclared public verb, a port dropping a verb it claims, a
+  new unexercised keyword and the browser quietly accepting `cov` again
+  each fail.
+
+  Two gaps the audit found and closed rather than waived: `bottom_k_
+  probabilities` and `hermite_nodes` are exported by all three engines and
+  were exercised by none, and the inverse had never been run under a
+  non-normal base in any port. Scenarios added for all three, and
+  `hermite_nodes` immediately earned its keep -- the ports pruned the
+  product grid without renormalising, so their weights summed to
+  1 - 2e-9 against exactly 1 in python. The R comment asserted it matched
+  "exactly as the reference", which stopped being true when python started
+  renormalising and the ports did not follow. Both fixed; 44 scenarios now
+  agree to 1e-15 there.
+
+- Port audit against the python reference, prompted by three divergences
+  the 39 parity scenarios did not catch (#153's handover, #171's pair
+  weights, #178's damping). Every decision constant in the three race
+  engines was extracted and compared: 27 of 27 agree. Two real defects
+  turned up outside that set.
+
+  `race_probabilities(cov=)` in the browser port **silently returned the
+  independent race**. `cov` is not among the keys the options object
+  destructures, and a javascript object swallows a key nobody reads, so
+  the answer was bit-identical to `D = 1` -- including for an all-zero
+  covariance matrix. Unknown option keys now throw, in both
+  `raceProbabilities` and `abilitiesFromRace`, with `cov` named
+  explicitly and pointed at `fitGrammar`. Python and R get this from
+  their languages (TypeError, unused argument); only an options object
+  needs it spelled out, and a test pins all three.
+
+  R's `fit_covariance` died with "subscript out of bounds" on an n = 8
+  exact-rank-3 correlation -- the #118 fixture. The greedy allocation
+  (k global + m eigendirections + one per block) can ask for more
+  columns than there are eigenvectors, 10 at n = 8, and where python's
+  `_top_eigen` truncates silently, `seq_len()` ran off the end. Clamped
+  to n. On a healthy fit R now agrees with python to 4.5e-4, which is
+  the Halton-versus-Sobol node families, not a rule difference.
+
+  Known and deliberate gaps, recorded rather than closed: the ports have
+  no GHK dense route (#161/#164), no temperature, and no ordered
+  prefixes, so `cov=` on a DEGRADED fit differs by design -- 4.6e-3 on
+  that fixture, where python routes to GHK and the ports price the fit.
+  The browser port also accepts a narrower set of `V` shapes than
+  `as_loadings` does; it raises rather than mispricing, so it is safe.
+
 - The inverse's damping can go back up, and a monotone mode is summed
   rather than waited out (#178). `_jacobi_sweeps` gave two mechanisms one
   number: the Richardson damping, a persistent fact about the Jacobian's

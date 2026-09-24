@@ -125,6 +125,14 @@ runs <- list(
     abilities_from_rank_marginal(
       as.matrix(vec$scenarios$rank_marginals$value)[, 2], 2,
       mu0 = vec$scenarios$invert_topk2$value, D = D, points = 257),
+  invert_gumbel = function()
+    abilities_from_race(pt, D = rep(pi^2 / 6, length(mu)), base = "gumbel",
+                        points = 1001),
+  bottomk2_normal = function() bottom_k_probabilities(mu, 2, D = D, points = 257),
+  bottomk2_factor = function()
+    bottom_k_probabilities(mu, 2, V = V1, D = D, points = 257),
+  hermite2_nodes = function() hermite_nodes(2, order = 9)$F,
+  hermite2_weights = function() hermite_nodes(2, order = 9)$W,
   topk2_jacobian_mu_factor = function()
     top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jmu,
   topk2_jacobian_sigma_factor = function()

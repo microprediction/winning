@@ -37,6 +37,29 @@ def test_ports_carry_the_inverse_safeguards():
             assert marker in text, (path.name, marker)
 
 
+def test_browser_port_rejects_unknown_options():
+    """A JS object silently swallows a key nobody reads: `raceProbabilities`
+    does not support `cov`, and passing it returned the INDEPENDENT race --
+    bit-identical even for an all-zero covariance matrix. Unknown keys now
+    throw, which is the only defence a keyword-object API has. Python and R
+    get this from their languages (TypeError / unused argument)."""
+    text = JS.read_text()
+    assert "KNOWN_OPTS" in text and "checkOpts" in text
+    assert 'k === "cov"' in text, "the cov key needs its own message"
+    for fn in ("raceProbabilities", "abilitiesFromRace"):
+        i = text.index(f"export function {fn}(")
+        assert "checkOpts(opts, " in text[i:i + 900], fn
+
+
+def test_python_and_r_reject_unknown_arguments_by_language():
+    """The guard above only matters for JS; pin that the other two really
+    do raise, so nobody 'harmonises' by loosening them."""
+    import numpy as np
+    import pytest as _pytest
+    from winning.factor import race_probabilities
+    with _pytest.raises(TypeError):
+        race_probabilities(np.array([0.0, 1.0]), D=np.ones(2), not_an_option=1)
+
 def test_ports_split_persistent_damping_from_transient_caution():
     """#178: the Richardson value and the safety net's caution are two
     numbers in all three engines, and the persistent one is NOT named
