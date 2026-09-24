@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Closing the port gaps the surface audit made visible, starting with the
+  one that was silent. R serves `cov=` and has no GHK, so where python
+  routes a degraded fit to scrambled-Sobol GHK, R prices the fit -- 4.6e-3
+  apart on the n=8 exactly-rank-3 correlation -- and `fit.R` contained no
+  `warning()` at all. `fit_covariance` now reports the two failure classes
+  python keys on (the fit degenerating to full rank or driving D onto its
+  floor, and a bad residual), and `race_probabilities`/`abilities_from_race`
+  warn on them, naming the measured gap and saying the two packages
+  disagree here by design. A healthy fit is still priced in silence, and
+  agrees with python to 4.5e-4 (Halton against Sobol nodes). Tested on
+  both sides: R's own suite, and the surface test, which now requires the
+  R warning exactly as it requires the browser's guard -- a waiver for
+  `cov=` is only allowed while every port says what it is doing.
+
+  The browser keeps rejecting the key rather than gaining a fit: its
+  `fitGrammar` is a reduced pipeline (blocks omitted for latency), so
+  wiring it in would trade one silent divergence for another.
+
 - Cross-language divergence is now detected rather than stumbled upon.
   The parity comparison has existed for a long time and had **never been
   gated**: `parity/check.R` and `parity/check.mjs` were run by hand, which

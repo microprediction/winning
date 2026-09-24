@@ -194,6 +194,18 @@
 #' @param nodes deprecated alias for list(F, W)
 #' @return probabilities summing to one, or list(p, slopes)
 #' @export
+.warn_degraded_cov <- function(fit, where) {
+  # matching winning.factor.races._fit_cov: the same two failure classes,
+  # and the same advice, except that python can route around it here
+  if (!isTRUE(fit$degraded)) return(invisible(NULL))
+  warning(sprintf(
+    "%s: the cov= grammar fit is degraded (rank %d of %d%s). The %s race is then a near-step the factor nodes cannot resolve, and the covariance residual checks do not see it -- expect percent-level error (4.6e-3 measured against the python reference on an exactly 3-factor correlation at n=8). The python package routes this case to scrambled-Sobol GHK and this port has none, so the two DISAGREE here by design; use winning (python) race_probabilities(cov=) if that matters.",
+    where, fit$rank, fit$n,
+    if (fit$bound > 0) sprintf(", idiosyncratic floor bound on %d of %d entries", fit$bound, fit$n) else "",
+    "conditional"), call. = FALSE)
+  invisible(NULL)
+}
+
 race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                base = "normal", points = 257,
                                return_slopes = FALSE, structure = NULL,
@@ -203,6 +215,7 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
     fit <- fit_covariance(cov)
+    .warn_degraded_cov(fit, "race_probabilities")
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
@@ -275,6 +288,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
     fit <- fit_covariance(cov)
+    .warn_degraded_cov(fit, "abilities_from_race")
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
