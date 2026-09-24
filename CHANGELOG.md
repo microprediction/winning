@@ -69,6 +69,54 @@
   The browser port also accepts a narrower set of `V` shapes than
   `as_loadings` does; it raises rather than mispricing, so it is safe.
 
+- The inverse's damping can go back up, and a monotone mode is summed
+  rather than waited out (#178). `_jacobi_sweeps` gave two mechanisms one
+  number: the Richardson damping, a persistent fact about the Jacobian's
+  spectrum, and a safety net that undoes a sweep failing to contract and
+  halves the damping, a response to a transient. Sharing `alpha` meant an
+  early transient drove it to the 0.1 floor with nothing able to raise it
+  again. On a dense short-length-scale correlation at n = 30 the residual
+  fell to 5.7e-1 by sweep 10, ROSE back to 1.1 by sweep 30 as the floor
+  took hold, then crawled at 0.981 a sweep and was still 3.2e-1 short at
+  120 -- while the same sweeps with no damping at all converged in 93.
+  They are now `alpha_base` (persistent) times `penalty` (transient,
+  restored a third of the way back on each contracting sweep). Restoring
+  `alpha_base` instead does not work: a contracting sweep does not repeal
+  a negative eigenvalue, and the #149 heterogeneous cases then stop
+  converging at all. Both directions are pinned by one test.
+
+  The remaining mode is not the oscillation the damping was built for.
+  Measured on the stalled iterate, the cosine between consecutive steps
+  is exactly 1.0 and the residual falls monotonically: two runners 1.5e-5
+  apart have a contrast sd of 0.014, so their difference is nearly
+  unidentified and the own-slope preconditioner -- which sees each
+  runner's own marginal, not the contrast -- understates the step by the
+  same factor every sweep. Eigenvalue near +1, not -1, so damping was the
+  wrong medicine. Collinear steps decaying geometrically are a geometric
+  series, so the step is scaled by 1 / (1 - ratio) and the pair measured
+  fresh: Aitken extrapolation in the iterate. It is gated to residuals
+  above 1e3 tolerances, because nearer than that the ratio is noise and a
+  hundredfold extrapolation overshoots (the top-k pair at n = 10 stalled
+  at 1.3e-6 that way).
+
+  Dense n = 16 / 30 / 40 now converge in 43 / 65 / 69 sweeps to ~1e-10 in
+  probability where all three failed at 120. Unchanged: the pinned counts
+  (n = 8: 10 sweeps, n = 150: 7), the heterogeneous cases (19, 18), the
+  effective pairs (17) and the `(V, F) -> (V/c, cF)` invariance (14).
+
+  **The "known limit" recorded against this case in the previous entry is
+  withdrawn.** It was described there as two near-duplicate runners
+  trading a residual, a mode no diagonal preconditioner could contract.
+  That was wrong on the mechanism -- the iteration is monotone, not
+  oscillating -- and wrong on the conclusion, since removing the damping
+  entirely already converged.
+
+  R and browser ports carry the split and the extrapolation. The
+  persistent term is `alpha_base`/`alphaBase`, not `base`: `base` is the
+  density argument in every port, and shadowing it made the R inverse die
+  inside `.BASES[[base]]`. A test asserts both names and the shared gate
+  across the three files.
+
 - The factor-node rule is per rank, and rank 3 gets the order it needed
   (#156). One sharpness threshold of 3.0 served every rank, and at rank 3
   it was defending against a Gauss-Hermite cap of 15 that was itself worse
@@ -186,12 +234,12 @@
   topk(q, 1)`, documented as `abilities_from_race`, kept the `n > 2`
   gate after #150 and failed on the same fields; it now runs the same
   sweeps with the win race's gate at k = 1 and the pair's at k >= 2.
-  Known limit, stated in the sweeps' docstring: two near-duplicate
-  runners inside a large field trade one residual between themselves,
-  a mode no diagonal preconditioner contracts; a per-coordinate damping
-  was measured and did not reach it while costing sweeps everywhere
-  else, so the inverse reports non-convergence there (2.7e-4 in
-  probability) rather than pretending.
+  Known limit, stated in the sweeps' docstring -- WITHDRAWN, see the
+  #178 entry above: two near-duplicate runners inside a large field were
+  said to trade one residual between themselves, a mode no diagonal
+  preconditioner contracts. The mechanism was misread (the iteration is
+  monotone, not oscillating) and the conclusion was wrong: the damping
+  itself was causing the stall.
 - R and browser ports carry the rank-one handover at 80 and the
   inverse's safeguards (#153): the node-aware scale, the top-two gate,
   the adaptive damping and the pair closed form, each marked "matching

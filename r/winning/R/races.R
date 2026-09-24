@@ -317,6 +317,12 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   # undo-and-halve on a sweep that does not contract)
   top2 <- if (n > 2) sum(sort(target, decreasing = TRUE)[1:2]) else 1
   alpha <- if (n == 2 || top2 > 0.8) 0.7 else 1.0
+  # alpha_base: the Richardson value, a persistent fact about the Jacobian.
+  # penalty: caution after a sweep that failed to contract, a transient,
+  # restored on the next good sweep. One number for both can only ratchet
+  # down (matching python's _jacobi_sweeps; see #178).
+  alpha_base <- alpha   # NB: `base` is the density argument
+  penalty <- 1
   prev <- NULL
   prev_step <- NULL
   for (it in seq_len(n_iter)) {
@@ -328,29 +334,49 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     rmax <- max(abs(resid))
     rrms <- sqrt(mean(resid^2))
     if (rmax < tol) break
-    if (!is.null(prev) && alpha > 0.1 && rmax >= prev$rmax && rrms >= prev$rrms) {
-      alpha <- max(0.5 * alpha, 0.1)
-      mu <- prev$mu; resid <- prev$resid; dlogp <- prev$dlogp
-      rmax <- prev$rmax; rrms <- prev$rrms
-      prev_step <- NULL
+    if (!is.null(prev) && rmax >= prev$rmax && rrms >= prev$rrms) {
+      if (penalty > 0.1) {
+        penalty <- max(0.5 * penalty, 0.1)
+        mu <- prev$mu; resid <- prev$resid; dlogp <- prev$dlogp
+        rmax <- prev$rmax; rrms <- prev$rrms
+        prev_step <- NULL
+      }
+    } else if (!is.null(prev) && penalty < 1) {
+      penalty <- min(1, penalty / 0.75)
     }
     prev <- list(mu = mu, resid = resid, dlogp = dlogp, rmax = rmax, rrms = rrms)
+    alpha <- alpha_base * penalty
     # residual-proportional step cap in the field's scale: a near-certain
     # winner's residual and own-slope both vanish and their noisy ratio
     # destabilizes the recentered fixed point
     lim <- pmin(2, 10 * abs(resid)) * scale
     step <- pmin(pmax(alpha * resid / dlogp, -lim), lim)
     step <- step - mean(step)
+    extrapolated <- FALSE
     if (!is.null(prev_step)) {
-      den <- sum(prev_step^2)
-      rho <- if (den > 0) sum(step * prev_step) / den else 0
-      if (rho < 0) {
-        lam <- 1 - (1 - rho) / alpha
-        alpha <- min(max(2 / (2 - lam), 0.1), 1)
+      na <- sqrt(sum(prev_step^2))
+      nb <- sqrt(sum(step^2))
+      if (na > 0) {
+        dot <- sum(step * prev_step)
+        rho <- dot / (na * na)
+        cosn <- if (nb > 0) dot / (na * nb) else 0
+        ratio <- nb / na
+        if (rho < 0) {
+          lam <- 1 - (1 - rho) / alpha
+          alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
+                   rmax > 1e3 * tol) {
+          # collinear steps decaying geometrically: sum the tail (Aitken)
+          mu <- mu - step / (1 - ratio)
+          prev_step <- NULL
+          extrapolated <- TRUE
+        }
       }
     }
-    prev_step <- step
-    mu <- mu - step
+    if (!extrapolated) {
+      prev_step <- step
+      mu <- mu - step
+    }
   }
   mu
 }

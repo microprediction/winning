@@ -1152,41 +1152,62 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
     iterations; capped, they converge in 4-6). No coordinate moves much
     further than its own residual warrants, in the field's scale.
 
-    Damping adapts to the contraction actually observed (#149). The fixed
-    gates in the callers (a pair, a dominant pair) catch the two-cycle
-    they were written for, but heterogeneous variances produce the same
-    negative Jacobi eigenvalue with no share threshold to see it:
-    p = [.6, .2, .2], D = [.03, .03, 1] has a top-two share of 0.8
+    Damping adapts to the contraction actually observed (#149), and it
+    separates two things the first cut of this conflated (#178). The
+    fixed gates in the callers (a pair, a dominant pair) catch the
+    two-cycle they were written for, but heterogeneous variances produce
+    the same negative Jacobi eigenvalue with no share threshold to see
+    it: p = [.6, .2, .2], D = [.03, .03, 1] has a top-two share of 0.8
     exactly and contracted by only 0.92 a sweep undamped (60 sweeps,
-    1.7e-4 short) against 0.3 a sweep at 0.7 (17 sweeps). Consecutive
+    1.7e-4 short) against 0.3 a sweep damped (17 sweeps). Consecutive
     steps estimate the dominant mode: their normalised inner product rho
     is the factor 1 - alpha (1 - lambda) that mode contracts by, so
     lambda = 1 - (1 - rho) / alpha, and the Richardson choice for a
     spectrum spanning [lambda, 0] is alpha = 2 / (2 - lambda), clipped
-    to [0.1, 1] -- 2/3 for the pair's -1, which is why the fixed 0.7
-    was right where it applied. The estimate is applied whenever
-    consecutive steps oppose (rho < 0); a monotone iteration is
-    untouched. Measured: the dominant pair 19 -> 17 sweeps, the
-    heterogeneous case 60+ -> 19, an ordinary n=8 field 13 -> 10, n=150
-    unchanged at 7. A sweep that does not reduce the residual (max-norm
-    AND rms: coordinates trade the max-norm between them while the rms
-    falls) is undone and retaken at half the damping, the safety net for
-    the nonlinear regime the estimate does not describe; at the floor
-    the step is taken as is.
+    to [0.1, 1] -- 2/3 for the pair's -1, which is why the fixed 0.7 was
+    right where it applied.
 
-    Known limit: two near-duplicate runners inside a large field (a
-    dense n=30 correlation with a 1e-5 gap between neighbours, contrast
-    sd 0.014) trade one residual between themselves, a mode no diagonal
-    preconditioner contracts. A per-coordinate version of this rule was
-    measured and did not reach it either, while costing sweeps
-    everywhere else (n=150: 7 -> 13); the inverse reports
-    non-convergence there (2.7e-4 in probability) rather than
-    pretending. A block step on the pair would close it."""
+    That Richardson value is a PERSISTENT fact about the Jacobian, so it
+    is held in `base`. A sweep that contracts neither the max nor the rms
+    residual is a different event -- a nonlinear transient the mode
+    estimate does not describe -- and is met by undoing the sweep and
+    halving a separate `penalty`, which each contracting sweep then
+    restores a third of the way back toward 1. Multiplying the two keeps
+    caution temporary. One number for both could only ratchet down: on a
+    dense n = 30 correlation the residual fell to 5.7e-1 by sweep 10,
+    rose back to 1.1 by sweep 30 as the floor took hold, then crawled at
+    0.981 a sweep and was still 3.2e-1 short at 120, while the same
+    sweeps undamped converged in 93. Restoring `alpha_base` on a good sweep
+    instead is worse than either: it fights the Richardson value, which
+    the contraction did not repeal, and the heterogeneous cases above
+    stop converging at all.
+
+    A monotone iteration riding one mode is summed rather than waited
+    out: when consecutive steps are collinear (cosine > 0.999) and their
+    norms decay geometrically by a factor in (0.5, 0.999), the remaining
+    steps are a geometric series, so the step is scaled by
+    1 / (1 - ratio) and the pair is measured fresh afterwards. Only
+    while the residual is still a thousand tolerances out: within reach
+    of `tol` the steps are small enough that the ratio is noise, and a
+    hundredfold extrapolation of noise overshoots -- the top-k pair at
+    n = 10 stalled at 1.3e-6 that way, converging at 1e-8 once gated. That is
+    Aitken extrapolation in the iterate, and it is what a near-duplicate
+    pair needs: two runners 1e-5 apart in a dense field have a contrast
+    sd of 0.014, so their difference is nearly unidentified and the
+    own-slope preconditioner -- which sees each runner's own marginal,
+    not the contrast -- understates the step by the same factor every
+    sweep. That mode is monotone, not oscillating (measured: cosine
+    between consecutive steps exactly 1.0), so damping was the wrong
+    medicine for it and extrapolation is the right one. Dense n = 16 /
+    30 / 40 take 31 / 66 / 53 sweeps where they took 120 without
+    converging."""
     resid_max = np.inf
     resid_rms = np.inf
     iters = 0
     prev = None
     prev_step = None
+    alpha_base = float(alpha)  # the Richardson value: persistent
+    penalty = 1.0              # caution after a bad sweep: transient
     for it in range(n_iter):
         iters = it + 1
         resid, dlogp = forward(mu)
@@ -1194,21 +1215,33 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
         resid_rms = float(np.sqrt(np.mean(resid * resid)))
         if resid_max < tol:
             break
-        if (prev is not None and alpha > 0.1 and resid_max >= prev[3]
-                and resid_rms >= prev[4]):
-            alpha = max(0.5 * alpha, 0.1)
-            mu, resid, dlogp, resid_max, resid_rms = prev
-            prev_step = None
+        if prev is not None and resid_max >= prev[3] and resid_rms >= prev[4]:
+            if penalty > 0.1:
+                penalty = max(0.5 * penalty, 0.1)
+                mu, resid, dlogp, resid_max, resid_rms = prev
+                prev_step = None
+        elif prev is not None and penalty < 1.0:
+            penalty = min(1.0, penalty / 0.75)
         prev = (mu, resid, dlogp, resid_max, resid_rms)
+        alpha = alpha_base * penalty
         lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
         step = np.clip(alpha * resid / dlogp, -lim, lim)
         step -= step.mean()
         if prev_step is not None:
-            den = float(prev_step @ prev_step)
-            rho = float(step @ prev_step) / den if den > 0 else 0.0
-            if rho < 0.0:
-                lam = 1.0 - (1.0 - rho) / alpha
-                alpha = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
+            na = float(np.linalg.norm(prev_step))
+            nb = float(np.linalg.norm(step))
+            if na > 0.0:
+                rho = float(step @ prev_step) / (na * na)
+                cos = float(step @ prev_step) / (na * nb) if nb > 0 else 0.0
+                ratio = nb / na
+                if rho < 0.0:
+                    lam = 1.0 - (1.0 - rho) / alpha
+                    alpha_base = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
+                elif (cos > 0.999 and 0.5 < ratio < 0.999
+                      and resid_max > 1e3 * tol):
+                    mu = mu - step / (1.0 - ratio)   # sum the geometric tail
+                    prev_step = None
+                    continue
         prev_step = step
         mu = mu - step
     return mu, resid_max < tol, resid_max, iters
