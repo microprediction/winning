@@ -110,15 +110,12 @@ jobs:
         run: |
           pip install -e ".[test]"
           Rscript -e 'install.packages("jsonlite", repos="https://cloud.r-project.org")'
-      - name: Vectors match the python reference
-        run: |
-          WINNING_PURE=1 python parity/gen_vectors.py
-          git diff --exit-code --stat parity/vectors.json || {
-            echo "::error::parity/vectors.json is stale: python has moved and"
-            echo "::error::the vectors were not regenerated. Run"
-            echo "::error::  WINNING_PURE=1 python parity/gen_vectors.py"
-            echo "::error::and commit the result, after checking both ports."
-            exit 1; }
+      - name: Vectors still describe the python reference
+        # Not byte-equality: regenerating on another platform moves the
+        # iterative scenarios in the last digits (BLAS reduction order), as
+        # this job demonstrated on its first run. Each scenario is compared
+        # at the same tolerance the ports must meet.
+        run: WINNING_PURE=1 python parity/check_vectors.py
       - name: R port
         run: Rscript parity/check.R
       - name: Browser port
