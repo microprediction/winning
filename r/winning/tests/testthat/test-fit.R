@@ -128,3 +128,20 @@ test_that("degradation is judged against the clamp close_fit actually uses", {
   expect_true(fit$degraded)
   expect_true(is.finite(fit$contrast_residual))
 })
+
+test_that("a two-runner covariance fits instead of throwing", {
+  # The closing solve is against P o P = a I + b 11' with a = 1 - 2/n, and
+  # at n = 2 that a is exactly zero, so the matrix is rank one and solve()
+  # threw for EVERY 2x2 input, public cov= calls included (#181). Python
+  # has had the two-runner branch all along.
+  for (rho in c(0, 0.6, 0.95, -0.4)) {
+    C <- matrix(c(1, rho, rho, 1), 2, 2)
+    fit <- fit_covariance(C, k = 1L, m = 1L, nodes = 32L)
+    expect_equal(length(fit$D), 2L)
+    expect_true(all(fit$D > 0))
+    p <- race_probabilities(c(0, 0.5), cov = C)
+    expect_equal(sum(p), 1, tolerance = 1e-12)
+    expect_true(p[1] > p[2])            # min-wins: the lower mu wins more
+  }
+  expect_silent(fit_covariance(diag(2), k = 1L, m = 1L, nodes = 32L))
+})
