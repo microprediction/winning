@@ -81,6 +81,49 @@ jobs:
           cd /tmp && GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             /tmp/wheelenv/bin/python "$GITHUB_WORKSPACE/.github/smoke.py"
 
+  parity:
+    # The cross-language comparison has always existed and has never been
+    # gated: it was run by hand, which is why three divergences reached main
+    # before anyone noticed (#153, #171, #178). Two things are checked here.
+    #
+    # 1. The committed vectors still describe the python reference. If a
+    #    python change moves any scenario and the vectors were not
+    #    regenerated, the committed file is stale and the ports are being
+    #    compared against yesterday's answers -- which was true of eleven
+    #    scenarios when this job was written.
+    # 2. R and the browser reproduce those vectors within each scenario's
+    #    own tolerance. A scenario a port does not implement is a failure,
+    #    not a skip; both checkers already treat it that way.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "release"
+      - name: Install
+        run: |
+          pip install -e ".[test]"
+          Rscript -e 'install.packages("jsonlite", repos="https://cloud.r-project.org")'
+      - name: Vectors match the python reference
+        run: |
+          WINNING_PURE=1 python parity/gen_vectors.py
+          git diff --exit-code --stat parity/vectors.json || {
+            echo "::error::parity/vectors.json is stale: python has moved and"
+            echo "::error::the vectors were not regenerated. Run"
+            echo "::error::  WINNING_PURE=1 python parity/gen_vectors.py"
+            echo "::error::and commit the result, after checking both ports."
+            exit 1; }
+      - name: R port
+        run: Rscript parity/check.R
+      - name: Browser port
+        run: node parity/check.mjs
+
   lint:
     runs-on: ubuntu-latest
     steps:

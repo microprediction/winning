@@ -27,7 +27,9 @@ from winning.factor.blocks import (block_race_probabilities,
                                    abilities_from_block_race)
 from winning.factor.structures import Tree
 from winning.factor.polish import race_jacobian, polish_race
-from winning.factor.topk import (top_k_probabilities, top_k_jacobians,
+from winning.factor.core import hermite_nodes
+from winning.factor.topk import (bottom_k_probabilities,
+                                 top_k_probabilities, top_k_jacobians,
                                  abilities_from_topk,
                                  loc_scale_from_topk_pair,
                                  loc_scale_from_win_and_second,
@@ -187,6 +189,18 @@ def build(inputs):
     Jm_f, Js_f = top_k_jacobians(mu, 2, D=D, V=V1, points=257)
     sc("topk2_jacobian_mu_factor", Jm_f, 1e-9)
     sc("topk2_jacobian_sigma_factor", Js_f, 1e-9)
+    # exported by all three engines and covered by none of the above until
+    # the surface audit found them (tests/test_port_surface.py)
+    # the inverse under a non-normal base: the forward had gumbel cover
+    # from the start, the inverse never did (found by the surface audit)
+    sc("invert_gumbel", abilities_from_race(
+        pt, D=np.full(len(mu), np.pi ** 2 / 6.0), base="gumbel",
+        points=1001), 1e-6)
+    sc("bottomk2_normal", bottom_k_probabilities(mu, 2, D=D, points=257))
+    sc("bottomk2_factor", bottom_k_probabilities(mu, 2, V=V1, D=D, points=257))
+    Fh, Wh = hermite_nodes(2, Q=9)
+    sc("hermite2_nodes", Fh, 1e-12)
+    sc("hermite2_weights", Wh, 1e-12)
     return out
 
 

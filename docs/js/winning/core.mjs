@@ -120,7 +120,11 @@ export function hermiteNodes(k, order = 15, prune = 1e-7) {
   for (let i = 0; i < W.length; i++) {
     if (W[i] > prune * wmax) { keepF.push(F[i]); keepW.push(W[i]); }
   }
-  return { F: keepF, W: keepW };
+  // renormalize after pruning, as the reference does: it drops ~1e-7 of
+  // the mass and a direct weighted mixture consumes W as-is. The port
+  // omitted this and its weights summed to 1 - 2e-9 (surface audit).
+  const wsum = keepW.reduce((a, b) => a + b, 0);
+  return { F: keepF, W: keepW.map(w => w / wsum) };
 }
 
 /* ---- small dense linear algebra ------------------------------------ */
