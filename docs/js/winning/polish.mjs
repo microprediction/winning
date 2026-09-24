@@ -1,11 +1,12 @@
 // Polish a race onto linear constraints -- port of winning/factor/polish.py
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
-import { mean } from "./core.mjs";
+import { mean, checkOpts, OPT_HINTS } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./blocks.mjs";
 
 export function raceJacobian(mu, opts = {}) {
+  checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 501, structure = null,
           qa = 9, qf = 15 } = opts;
   if (structure) {
@@ -29,6 +30,12 @@ export function raceJacobian(mu, opts = {}) {
 }
 
 import { hermiteNodes } from "./core.mjs";
+
+/* Each exported call declares its own option keys; see checkOpts in
+   core.mjs for why an options object needs this at all. */
+const RACE_JACOBIAN_OPTS = new Set(["V", "D", "base", "points", "qa", "qf", "structure"]);
+const POLISH_RACE_OPTS = new Set(["V", "D", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0In", "fdFallback"]);
+
 function raceJacobianExplicit(mu, V, D, base, points) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
@@ -159,6 +166,7 @@ function bfgsMin(x0, obj, grad, maxit = 80) {
 }
 
 export function polishRace(opts = {}) {
+  checkOpts(opts, POLISH_RACE_OPTS, "polishRace", OPT_HINTS);
   const { p0 = null, mu0: mu0In = null, V = null, D = null, base = "normal",
           points = 257, nameCaps = null, groups = null, A = null, b = null,
           structure = null, fdFallback = true } = opts;

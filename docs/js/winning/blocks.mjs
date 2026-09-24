@@ -1,5 +1,16 @@
 // Block, nested and tree races -- port of winning/factor/blocks.py.
-import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped } from "./core.mjs";
+import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts, OPT_HINTS } from "./core.mjs";
+
+/* Each exported call declares its own option keys; see checkOpts in
+   core.mjs for why an options object needs this at all. */
+const BLOCK_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "nodes"]);
+const NESTED_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "qf", "coupling", "gamma"]);
+const TREE_RACE_PROBABILITIES_OPTS = new Set(["points", "qa"]);
+const BLOCK_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
+const NESTED_RACE_JACOBIAN_OPTS = new Set(["points", "qa", "qf", "coupling", "gamma"]);
+const TREE_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
+const ABILITIES_FROM_BLOCK_RACE_OPTS = new Set(["points", "qa", "maxIter", "tol"]);
+
 
 function clusterIndex(cluster) {
   const lv = [...new Set(cluster)].sort((a, b) => (a > b ? 1 : a < b ? -1 : 0));
@@ -155,6 +166,7 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
 }
 
 export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
+  checkOpts(opts, BLOCK_RACE_PROBABILITIES_OPTS, "blockRaceProbabilities", OPT_HINTS);
   const { points = 257, qa = 9, nodes = null } = opts;
   const sd = D.map(Math.sqrt);
   const p = blockMax(mu.map(v => -v), sd, cluster, loading, points, qa, nodes);
@@ -162,6 +174,7 @@ export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
 }
 
 export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
+  checkOpts(opts, NESTED_RACE_PROBABILITIES_OPTS, "nestedRaceProbabilities", OPT_HINTS);
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
   if (!coupling || gamma === 0)
     return blockRaceProbabilities(mu, cluster, loading, D, { points, qa });
@@ -292,6 +305,7 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
 }
 
 export function treeRaceProbabilities(mu, cluster, loading, D, parent, strength, opts = {}) {
+  checkOpts(opts, TREE_RACE_PROBABILITIES_OPTS, "treeRaceProbabilities", OPT_HINTS);
   const { points = 257, qa = 9 } = opts;
   const I = treeInternals(mu, cluster, loading, D, parent, strength, points, qa);
   const pO = new Array(I.n).fill(0);
@@ -333,6 +347,7 @@ function withinBlockTerm(J, I, negate = true) {
 }
 
 export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
+  checkOpts(opts, BLOCK_RACE_JACOBIAN_OPTS, "blockRaceJacobian", OPT_HINTS);
   const { points = 257, qa = 9 } = opts;
   const m = mu.map(v => -v);
   const sd = D.map(Math.sqrt);
@@ -391,6 +406,7 @@ export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
 }
 
 export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
+  checkOpts(opts, NESTED_RACE_JACOBIAN_OPTS, "nestedRaceJacobian", OPT_HINTS);
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
   if (!coupling || gamma === 0)
     return blockRaceJacobian(mu, cluster, loading, D, { points, qa });
@@ -415,6 +431,7 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
 }
 
 export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts = {}) {
+  checkOpts(opts, TREE_RACE_JACOBIAN_OPTS, "treeRaceJacobian", OPT_HINTS);
   const { points = 257, qa = 9 } = opts;
   const I = treeInternals(mu, cluster, loading, D, parent, strength, points, qa);
   const P = I.x.length;
@@ -442,6 +459,7 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
 }
 
 export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) {
+  checkOpts(opts, ABILITIES_FROM_BLOCK_RACE_OPTS, "abilitiesFromBlockRace", OPT_HINTS);
   const { points = 257, qa = 9, tol = 1e-10, maxIter = 25 } = opts;
   let pT = pTarget.slice();
   let s = pT.reduce((a, b) => a + b, 0);

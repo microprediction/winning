@@ -161,3 +161,36 @@ export function interpClamped(x, xp, fp) {
   if (d <= 0) return fp[lo];
   return fp[lo] + (x - xp[lo]) / d * (fp[lo + 1] - fp[lo]);
 }
+
+/* ---- options-object guards ---------------------------------------- *
+ * A javascript object silently swallows a key nobody reads, so an API
+ * whose options are an object cannot rely on the language to reject a
+ * misspelling or an option belonging to a different call. That is not
+ * hypothetical here: raceProbabilities({cov}) returned the INDEPENDENT
+ * race, identical even for an all-zero covariance matrix; rankProbabilities
+ * ({V}) returned the independent rank matrix, plausible and doubly
+ * stochastic and for the wrong model; locScaleFromTopkPair({V}) reported
+ * converged: true where python raises NotImplementedError because the
+ * problem is underidentified.
+ *
+ * Every exported function taking an options object declares its OWN keys.
+ * A shared union is not enough: one let each race API accept the other's
+ * options and ignore them.
+ */
+export function checkOpts(opts, known, where, hints = {}) {
+  for (const k of Object.keys(opts)) {
+    if (known.has(k)) continue;
+    if (hints[k]) throw new Error(`${where}: ${hints[k]}`);
+    throw new Error(
+      `${where}: unknown option '${k}'. Known: ${[...known].join(", ")}.`);
+  }
+}
+
+/* Reasons that are worth more than "unknown option", shared by the modules
+ * that can receive these keys. */
+export const OPT_HINTS = {
+  cov: "cov= is not supported in the browser port. Fit the covariance " +
+       "first -- fitGrammar(C, k, m) in demo.mjs returns {V, D} for this " +
+       "call -- or use the python package, whose race_probabilities(cov=) " +
+       "also routes a degraded fit to GHK.",
+};
