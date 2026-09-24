@@ -382,6 +382,17 @@ def test_port_race_exports_are_all_declared():
         + "\n  ".join(js_undeclared))
 
 
+def test_the_deployed_factor_race_copy_matches_its_source():
+    """docs/assets/js/factor_race.mjs is what three doc pages actually
+    load, and it is a COPY of js/factor/factor_race.mjs. It had silently
+    missed the loading gauge fix (#139) and would have missed the tail fix
+    (#182) the same way. Byte-identical or it is not a copy."""
+    src = (ROOT / "js/factor/factor_race.mjs").read_bytes()
+    deployed = (ROOT / "docs/assets/js/factor_race.mjs").read_bytes()
+    assert src == deployed, (
+        "docs/assets/js/factor_race.mjs has drifted from "
+        "js/factor/factor_race.mjs; copy the source over it")
+
 def test_every_browser_options_api_validates_its_options():
     """#186 guarded two entry points of twenty, and the reviewer walked
     into the rest within a day: rankProbabilities swallowed V and returned

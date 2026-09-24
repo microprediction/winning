@@ -120,7 +120,18 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   d_clamp <- 1e-3 * mean(diag(C))
   close_fit <- function(Vc) {
     rhs <- diag(P %*% (C - Vc %*% t(Vc)) %*% P)
-    Dc <- pmax(solve(P * P, rhs), d_clamp)
+    # The closing solve is against P o P = a I + b 11' with a = 1 - 2/n,
+    # b = 1/n^2. At n = 2 that a is exactly ZERO, so the matrix is rank
+    # one and solve() threw for EVERY 2x2 covariance, public cov= calls
+    # included (#181). The python reference has had the two-runner branch
+    # all along: one contrast, so the total is spread evenly.
+    if (n <= 2L) {
+      a <- 1 - 2 / n
+      b <- 1 / (n * n)
+      Dc <- pmax(rep(max(sum(rhs), 0) / (a + n * b) / n, n), d_clamp)
+    } else {
+      Dc <- pmax(solve(P * P, rhs), d_clamp)
+    }
     Rm <- P %*% (C - Vc %*% t(Vc) - diag(Dc)) %*% P
     list(D = Dc, res = max(abs(Rm)))
   }

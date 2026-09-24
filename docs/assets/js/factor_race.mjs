@@ -99,30 +99,71 @@ const BASES = {
  * central differences, log-survival interpolated linearly (log-linear
  * tails). Python parity vs scipy is ~1e-6, not machine precision. */
 function tabulatedBase(pdfStd, spans) {
+  // Two tiers. The inner one is fine enough for the bulk; the outer one
+  // exists because clamping the lookup at the table edge made the density
+  // FLAT beyond it, so a runner 100 sd behind kept the endpoint density
+  // and the race reported a false longshot floor -- 3.5e-7 at gaps 80 and
+  // 100 where the truth keeps falling (#182). Heavy tails are exactly
+  // where that matters: a Student-t4 survival decays polynomially, so
+  // there is no span past which the omitted mass is negligible, and the
+  // old normalisation divided by the INNER mass alone, which is the same
+  // error again.
   const HALF = 40, NPTS = 16001, DX = 2 * HALF / (NPTS - 1);
+  const OUTER = 4000, NOUT = 8001, DXO = (OUTER - HALF) / (NOUT - 1);
   let g = null;
   const build = () => {
-    const f = new Float64Array(NPTS), ls = new Float64Array(NPTS);
+    const f = new Float64Array(NPTS);
     for (let k = 0; k < NPTS; k++) f[k] = pdfStd(-HALF + k * DX);
+    const fR = new Float64Array(NOUT), fL = new Float64Array(NOUT);
+    for (let k = 0; k < NOUT; k++) {
+      fR[k] = pdfStd(HALF + k * DXO);
+      fL[k] = pdfStd(-OUTER + k * DXO);
+    }
+    // one cumulative sweep across all three pieces, left to right, so the
+    // survival is normalised by the WHOLE computed mass
     let C = 0;
-    const cum = new Float64Array(NPTS);
+    const cumL = new Float64Array(NOUT);
+    for (let k = 1; k < NOUT; k++) { C += 0.5 * (fL[k - 1] + fL[k]) * DXO; cumL[k] = C; }
+    const cum = new Float64Array(NPTS); cum[0] = C;
     for (let k = 1; k < NPTS; k++) { C += 0.5 * (f[k - 1] + f[k]) * DX; cum[k] = C; }
-    for (let k = 0; k < NPTS; k++)
-      ls[k] = Math.log(Math.max((C - cum[k]) / C, 1e-300));
-    const fp = new Float64Array(NPTS);
-    for (let k = 1; k < NPTS - 1; k++) fp[k] = (f[k + 1] - f[k - 1]) / (2 * DX);
-    g = { f, ls, fp };
+    const cumR = new Float64Array(NOUT); cumR[0] = C;
+    for (let k = 1; k < NOUT; k++) { C += 0.5 * (fR[k - 1] + fR[k]) * DXO; cumR[k] = C; }
+    const T = C;
+    const lsOf = (c) => {
+      const a = new Float64Array(c.length);
+      for (let k = 0; k < c.length; k++)
+        a[k] = Math.log(Math.max((T - c[k]) / T, 1e-300));
+      return a;
+    };
+    const dOf = (arr, h) => {
+      const a = new Float64Array(arr.length);
+      for (let k = 1; k < arr.length - 1; k++) a[k] = (arr[k + 1] - arr[k - 1]) / (2 * h);
+      return a;
+    };
+    g = { f, ls: lsOf(cum), fp: dOf(f, DX),
+          fR, lsR: lsOf(cumR), fpR: dOf(fR, DXO),
+          fL, lsL: lsOf(cumL), fpL: dOf(fL, DXO) };
   };
   return {
     spans,
     eval(z, sd) {
       if (!g) build();
-      let t = (z + HALF) / DX;
-      if (t < 0) t = 0;
-      if (t > NPTS - 2) t = NPTS - 2;
+      let arrF, arrLs, arrFp, t;
+      // Both wings clamp at BOTH ends: the left wing's top index is
+      // NOUT - 1 at z = -HALF exactly, and reading arr[k + 1] there gave
+      // NaN, which the race then carried into the whole field.
+      if (z >= HALF) {
+        t = (z - HALF) / DXO; arrF = g.fR; arrLs = g.lsR; arrFp = g.fpR;
+        t = Math.min(Math.max(t, 0), NOUT - 2);   // past 4000 sd a floor
+      } else if (z <= -HALF) {                    // remains, now ~1e-13
+        t = (z + OUTER) / DXO; arrF = g.fL; arrLs = g.lsL; arrFp = g.fpL;
+        t = Math.min(Math.max(t, 0), NOUT - 2);   // rather than 3.5e-7
+      } else {
+        t = (z + HALF) / DX; arrF = g.f; arrLs = g.ls; arrFp = g.fp;
+      }
       const k = Math.floor(t), a = t - k;
       const lerp = (arr) => arr[k] + a * (arr[k + 1] - arr[k]);
-      return { ls: lerp(g.ls), fx: lerp(g.f) / sd, ds: -lerp(g.fp) / (sd * sd) };
+      return { ls: lerp(arrLs), fx: lerp(arrF) / sd, ds: -lerp(arrFp) / (sd * sd) };
     },
   };
 }
@@ -175,6 +216,12 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   if (!base) throw new Error("unknown base: " + opts.base);
   const N = mu.length, Q = F.length;
   const sd = D.map(Math.sqrt);
+  // gauge-fix matching the python reference: center each factor's
+  // loadings across contestants (a common column cannot move an argmin)
+  const r0 = V[0].length;
+  const colMean = new Array(r0).fill(0);
+  for (const row of V) for (let j = 0; j < r0; j++) colMean[j] += row[j] / N;
+  V = V.map((row) => row.map((v, j) => v - colMean[j]));
   const M = condMeans(mu, V, F);
   const { x, dx } = lattice(M, sd, points, base.spans);
   const L = x.length;

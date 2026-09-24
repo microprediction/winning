@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- R's `fit_covariance` threw for every 2x2 covariance (#181). The closing
+  solve is against `P o P = a I + b 11'` with `a = 1 - 2/n`, and at n = 2
+  that `a` is exactly zero, so the matrix is rank one and `solve()` failed
+  on any two-runner input, public `cov=` calls included. The python
+  reference has had the two-runner branch all along -- one contrast, so
+  the total is spread evenly -- and R now has it too, matching python to
+  1e-14 at rho = 0, 0.6 and 0.95.
+
+- The browser factor race no longer invents a longshot floor (#182), and
+  its deployed copy is the same file as its source (#139). `tabulatedBase`
+  clamped the lookup at the table edge for the density as well as the
+  survival, so beyond 40 sd the density stopped decaying: a Student-t4
+  two-runner race reported 3.5e-7 for gaps of 80 and 100 alike. Heavy
+  tails are where that bites, since a t4 survival decays polynomially and
+  no span makes the omitted mass negligible -- and the old normalisation
+  divided by the inner mass alone, which is the same error twice. There is
+  now a coarse outer tier to 4000 sd and one cumulative sweep across all
+  of it, so the tail falls as it should: 4.9e-7, 8.8e-8, 2.6e-8, 1.0e-8,
+  5.7e-10 at gaps 40 to 200, a ratio of 18 from 100 to 200 against the
+  2^4 = 16 that t4's exponent predicts.
+
+  `docs/assets/js/factor_race.mjs` is what three doc pages load and is a
+  copy of `js/factor/factor_race.mjs`. It had silently missed the loading
+  gauge fix (#139) and would have missed this one the same way, so a test
+  now requires the two to be byte-identical.
+
 - Every browser entry point validates its own options, not two of twenty.
   The guard added for `cov=` covered `raceProbabilities` and
   `abilitiesFromRace`; review walked into the rest inside a day, which is
