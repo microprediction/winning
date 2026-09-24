@@ -426,3 +426,16 @@ irrevocable. Three fields; standard deviations are in the log lines
 of results.json and are small relative to the gaps discussed except
 for winner-take-all at lam <= .25, where the identity of the
 survivors moves the total by a third.
+
+## Analytic results (2026-09-24)
+Closed forms and their checks live in theory/THEORY.md and
+theory/verify_theory.py. Headlines: total incentive of any schedule is
+the prize vector dotted with the expected luck of each finishing
+position (Stein), which is the normal order statistics in a symmetric
+field; the symmetric Nash effort is kappa (w . E[Z]) / N exactly; two
+unequal players exert identical effort phi(d/sqrt2)/sqrt2; a second
+prize helps iff the runner-up is luckier than the winner, threshold
+d* = 2.17 noise units for one leader over two chasers and lower in
+equilibrium; and the discouragement round solves a quadratic in the
+ability gap, with nobody within sqrt(2) z_c = 3.64 units of the leader
+ever quitting at a half-percent participation cost.
