@@ -136,5 +136,19 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   a2 <- close_fit(Veig)
   if (a2$res < a1$res) { Vall <- Veig; D <- a2$D } else D <- a1$D
   hw <- .halton_normal_nodes(ncol(Vall), nodes)
-  list(V = Vall, D = D, F = hw$F, W = hw$W)
+  # The two failure classes the python reference keys on, reported so a
+  # caller can see them: the fit degenerates to full rank or drives D onto
+  # its floor (the conditional race is then a near-step the factor nodes
+  # cannot resolve, and the residual checks are silent about it), or it
+  # reproduces cov badly. Python routes either case to GHK; this package
+  # has no GHK, so it prices the fit and says so -- see the warning in
+  # race_probabilities(). A gap that does not announce itself is the one
+  # failure mode that looks like an answer.
+  floor <- 1e-6 * pmax(diag(C), 1e-6 * mean(diag(C)))
+  list(V = Vall, D = D, F = hw$F, W = hw$W,
+       rank = ncol(Vall), n = n,
+       bound = sum(D <= 2 * floor),
+       residual = max(a1$res, 0),
+       degraded = (sum(D <= 2 * floor) > 0 || ncol(Vall) >= n ||
+                   min(a1$res, a2$res) > 0.05 * mean(diag(C))))
 }

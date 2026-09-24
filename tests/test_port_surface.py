@@ -173,8 +173,6 @@ def _call_args(src, verb):
 # keyword -> reason it is not exercised by a parity scenario
 OPTION_WAIVERS = {
     "race_probabilities": {
-        "cov": "python routes a degraded fit to GHK and the ports have no "
-               "GHK; the browser must REJECT the key (see the loud-gap test)",
         "temperature": "softmin is python only",
         "structure": "covered by the grammar scenarios, which call the "
                      "dispatch directly",
@@ -184,7 +182,6 @@ OPTION_WAIVERS = {
         "delta": "a numerical floor, not a mode",
     },
     "abilities_from_race": {
-        "cov": "as race_probabilities",
         "temperature": "softmin is python only",
         "structure": "covered by invert_blocks",
         "F": "the node rule chooses F",
@@ -217,11 +214,11 @@ def test_every_keyword_is_exercised_or_waived(verb):
 
 
 def test_a_declared_option_gap_is_a_loud_gap():
-    """The rule this whole file exists for. `cov=` is waived because the
-    ports cannot serve it -- which is only acceptable if they SAY SO. The
-    browser swallowed the key and returned the independent race, identical
-    even for an all-zero covariance; python and R raise by language, the
-    browser needs the guard."""
+    """The rule this whole file exists for. `cov=` is now served by R --
+    it routes a degraded fit to GHK as python does, pinned by the
+    cov_degraded_route scenario -- and is still absent from the browser,
+    which must therefore REJECT the key. It used to swallow it and return
+    the independent race, identical even for an all-zero covariance."""
     races = (ROOT / "docs/js/winning/races.mjs").read_text()
     assert "KNOWN_OPTS" in races and "checkOpts" in races
     assert 'k === "cov"' in races, "cov needs to be named in the guard"
@@ -231,6 +228,19 @@ def test_a_declared_option_gap_is_a_loud_gap():
     for fn in ("raceProbabilities", "abilitiesFromRace"):
         i = races.index(f"export function {fn}(")
         assert "checkOpts(opts, " in races[i:i + 900], f"{fn} must check"
+
+    # R serves cov= but has no GHK, so it prices the fit where python
+    # routes -- 4.6e-3 apart on the n=8 fixture, and it used to say
+    # nothing at all. fit.R reports the two failure classes and races.R
+    # warns on them.
+    r_fit = (ROOT / "r/winning/R/fit.R").read_text()
+    r_races = (ROOT / "r/winning/R/races.R").read_text()
+    assert "degraded =" in r_fit, "fit.R must report the degradation"
+    assert ".warn_degraded_cov" in r_races
+    assert "warning(" in r_races
+    for fn in ("race_probabilities <- function", "abilities_from_race <- function"):
+        i = r_races.index(fn)
+        assert ".warn_degraded_cov(fit," in r_races[i:i + 1400], fn
 
 
 def test_python_and_r_reject_unknown_keywords_by_language():
