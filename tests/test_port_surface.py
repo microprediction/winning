@@ -45,58 +45,131 @@ def _camel(name):
 
 # verb -> (R status, js status, reason for any gap or uncovered presence)
 SURFACE = {
-    # the race itself, and its inverses
-    "race_probabilities":            (PARITY, PARITY, ""),
-    "abilities_from_race":           (PARITY, PARITY, ""),
-    "calibrate_abilities":           (PRESENT, GAP,
-                                      "alias of abilities_from_race, which "
-                                      "carries the parity scenario; the "
-                                      "browser exposes the one name"),
-    "win_probabilities_factor":      (PRESENT, GAP,
-                                      "the browser calls the race through "
-                                      "raceProbabilities only"),
-    # top-k family
-    "top_k_probabilities":           (PARITY, PARITY, ""),
-    "bottom_k_probabilities":        (PARITY, PARITY, ""),
-    "abilities_from_topk":           (PARITY, PARITY, ""),
-    "abilities_from_rank_marginal":  (PARITY, PARITY, ""),
-    "rank_probabilities":            (PARITY, PARITY, ""),
-    "loc_scale_from_topk_pair":      (PARITY, PARITY, ""),
-    "loc_scale_from_win_and_second": (PARITY, PARITY, ""),
-    # quadrature
-    "hermite_nodes":                 (PARITY, PARITY, ""),
-    "qmc_nodes":                     (GAP, GAP,
-                                      "scrambled Sobol needs scipy; the "
-                                      "ports use dependency-free Halton at "
-                                      "the same 2^13 budget, which is a "
-                                      "declared numerical difference"),
-    # python-only engine internals and research verbs
-    "abilities_from_win_probabilities": (GAP, GAP, "research alias"),
-    "factor_model_contrast":         (GAP, GAP, "fitting, not racing"),
-    "factor_model_projected":        (GAP, GAP, "fitting, not racing"),
-    "jacobian_vector_product":       (GAP, GAP,
-                                      "used by the ratings filters, which "
-                                      "have no port"),
-    "ordered_probabilities":         (GAP, GAP,
-                                      "the ordered-prefix kernel is python "
-                                      "only; see the cov= note in races.py"),
-    "plackett_luce_prefix_logprob":  (GAP, GAP, "python only"),
-    "removal_shares":                (GAP, GAP, "python only"),
-    "tie_densities":                 (GAP, GAP, "python only"),
-    # the block grammars
-    "block_race_probabilities":      (PARITY, PARITY, ""),
-    "nested_race_probabilities":     (PARITY, PARITY, ""),
-    "tree_race_probabilities":       (PARITY, PARITY, ""),
-    "block_race_jacobian":           (PARITY, PARITY, ""),
-    "nested_race_jacobian":          (PARITY, PARITY, ""),
-    "tree_race_jacobian":            (PARITY, PARITY, ""),
-    "abilities_from_block_race":     (PARITY, PARITY, ""),
+    "abilities_from_block_race":           (PARITY, PARITY, ""),
+    "abilities_from_probabilities":        (GAP, GAP,
+                                        "alias of a verb that carries the parity scenario"),
+    "abilities_from_probabilities_factor": (PRESENT, GAP,
+                                        "alias of a verb that carries the parity scenario"),
+    "abilities_from_race":                 (PARITY, PARITY, ""),
+    "abilities_from_rank_marginal":        (PARITY, PARITY, ""),
+    "abilities_from_softmax":              (GAP, GAP,
+                                        "alias of a verb that carries the parity scenario"),
+    "abilities_from_topk":                 (PARITY, PARITY, ""),
+    "abilities_from_win_probabilities":    (GAP, GAP,
+                                        "python only"),
+    "block_race_jacobian":                 (PARITY, PARITY, ""),
+    "block_race_probabilities":            (PARITY, PARITY, ""),
+    "bottom_k_probabilities":              (PARITY, PARITY, ""),
+    "calibrate_abilities":                 (PRESENT, GAP,
+                                        "alias of abilities_from_race, which carries the"
+                                        " scenario; the browser exposes the one name"),
+    "concentration_matrix":                (PRESENT, PRESENT,
+                                        "exported by all three and exercised by none:"
+                                        " a scenario would be worth adding"),
+    "exponential_power_base":              (GAP, GAP,
+                                        "a base density, not a verb: the ports carry normal,"
+                                        "gumbel, logistic and laplace inline and take a"
+                                        "callable for the rest"),
+    "factor_model":                        (GAP, GAP,
+                                        "covariance fitting, reached through cov= rather than"
+                                        "called"),
+    "factor_model_contrast":               (GAP, GAP,
+                                        "python only"),
+    "factor_model_projected":              (GAP, GAP,
+                                        "python only"),
+    "failure_base":                        (GAP, GAP,
+                                        "a base density, not a verb: the ports carry normal,"
+                                        "gumbel, logistic and laplace inline and take a"
+                                        "callable for the rest"),
+    "fit_covariance":                      (PRESENT, GAP,
+                                        "covariance fitting, reached through cov= rather than"
+                                        "called"),
+    "harville_order_logprob":              (GAP, GAP,
+                                        "order-statistics likelihood, python only"),
+    "harville_place_probabilities":        (GAP, GAP,
+                                        "order-statistics likelihood, python only"),
+    "harville_prefix_logprob":             (GAP, GAP,
+                                        "order-statistics likelihood, python only"),
+    "hermite_nodes":                       (PARITY, PARITY, ""),
+    "jacobian_vector_product":             (GAP, GAP,
+                                        "python only"),
+    "loc_scale_from_topk_pair":            (PARITY, PARITY, ""),
+    "loc_scale_from_win_and_second":       (PARITY, PARITY, ""),
+    "nested_race_jacobian":                (PARITY, PARITY, ""),
+    "nested_race_probabilities":           (PARITY, PARITY, ""),
+    "ordered_probabilities":               (GAP, GAP,
+                                        "python only"),
+    "plackett_luce_order_logprob":         (GAP, GAP,
+                                        "order-statistics likelihood, python only"),
+    "plackett_luce_prefix_logprob":        (GAP, GAP,
+                                        "order-statistics likelihood, python only"),
+    "plackett_luce_topk_probabilities":    (GAP, GAP,
+                                        "order-statistics likelihood, python only"),
+    "polish_race":                         (PARITY, PARITY, ""),
+    "qmc_nodes":                           (GAP, GAP,
+                                        "python only"),
+    "race_jacobian":                       (PARITY, PARITY, ""),
+    "race_jacobian_row":                   (GAP, GAP,
+                                        "a single Jacobian row, an internal of the full"
+                                        "Jacobian"),
+    "race_probabilities":                  (PARITY, PARITY, ""),
+    "rank_probabilities":                  (PARITY, PARITY, ""),
+    "removal_shares":                      (GAP, GAP,
+                                        "python only"),
+    "skew_logistic_base":                  (GAP, GAP,
+                                        "a base density, not a verb: the ports carry normal,"
+                                        "gumbel, logistic and laplace inline and take a"
+                                        "callable for the rest"),
+    "skew_normal_base":                    (GAP, GAP,
+                                        "a base density, not a verb: the ports carry normal,"
+                                        "gumbel, logistic and laplace inline and take a"
+                                        "callable for the rest"),
+    "softmax_probabilities":               (GAP, GAP,
+                                        "python only"),
+    "student_base":                        (GAP, GAP,
+                                        "a base density, not a verb: the ports carry normal,"
+                                        "gumbel, logistic and laplace inline and take a"
+                                        "callable for the rest"),
+    "tie_densities":                       (GAP, GAP,
+                                        "python only"),
+    "top_k_jacobian":                      (GAP, GAP,
+                                        "python only"),
+    "top_k_jacobian_row":                  (GAP, GAP,
+                                        "a single Jacobian row, an internal of the full"
+                                        "Jacobian"),
+    "top_k_jacobian_row_sigma":            (GAP, GAP,
+                                        "a single Jacobian row, an internal of the full"
+                                        "Jacobian"),
+    "top_k_jacobians":                     (PARITY, PARITY, ""),
+    "top_k_probabilities":                 (PARITY, PARITY, ""),
+    "tree_race_jacobian":                  (PARITY, PARITY, ""),
+    "tree_race_probabilities":             (PARITY, PARITY, ""),
+    "win_probabilities":                   (GAP, GAP,
+                                        "alias of a verb that carries the parity scenario"),
+    "win_probabilities_factor":            (PRESENT, GAP,
+                                        "python only"),
 }
+
+
+# every module of the factor package, not just the top-level facade: the
+# first cut inspected `winning.factor` and `winning.factor.blocks` only, so
+# top_k_jacobians, race_jacobian, polish_race and fit_covariance -- three of
+# them exported by R, two by the browser -- had no declared status at all
+# while this file claimed to cover the surface (#187).
+import winning.factor.core as wfc          # noqa: E402
+import winning.factor.permutations as wfp  # noqa: E402
+import winning.factor.polish as wfo        # noqa: E402
+import winning.factor.races as wfr         # noqa: E402
+import winning.factor.topk as wft          # noqa: E402
+
+_HELPERS = {"as_loadings", "as_idio", "as_variance", "load_fastrace",
+            "forward_grid", "roots_hermitenorm", "ndtr", "ndtri",
+            "log_ndtr", "logsumexp"}
 
 
 def _public_verbs():
     seen = {}
-    for mod in (wf, wfb):
+    for mod in (wf, wfb, wfc, wfp, wfo, wfr, wft):
         for name in dir(mod):
             if name.startswith("_"):
                 continue
@@ -105,7 +178,7 @@ def _public_verbs():
                 continue
             if not getattr(obj, "__module__", "").startswith("winning.factor"):
                 continue
-            if name in ("as_loadings", "as_idio", "as_variance", "load_fastrace"):
+            if name in _HELPERS:
                 continue            # shape/dispatch helpers, not race verbs
             seen[name] = obj
     return seen
@@ -220,14 +293,21 @@ def test_a_declared_option_gap_is_a_loud_gap():
     which must therefore REJECT the key. It used to swallow it and return
     the independent race, identical even for an all-zero covariance."""
     races = (ROOT / "docs/js/winning/races.mjs").read_text()
-    assert "KNOWN_OPTS" in races and "checkOpts" in races
     assert 'k === "cov"' in races, "cov needs to be named in the guard"
-    assert "cov" not in re.search(r"const KNOWN_OPTS = new Set\(\[(.*?)\]\)",
-                                  races, re.S).group(1), \
-        "cov must not be in the accepted set"
-    for fn in ("raceProbabilities", "abilitiesFromRace"):
+    # each API validates its OWN signature: one shared union let each accept
+    # the other's options and ignore them (#186)
+    for const in ("FORWARD_OPTS", "INVERSE_OPTS"):
+        allowed = re.search(rf"const {const} = new Set\(\[(.*?)\]\)",
+                            races, re.S).group(1)
+        assert "cov" not in allowed, f"cov must not be in {const}"
+    fwd = re.search(r"const FORWARD_OPTS = new Set\(\[(.*?)\]\)", races, re.S).group(1)
+    inv = re.search(r"const INVERSE_OPTS = new Set\(\[(.*?)\]\)", races, re.S).group(1)
+    assert "nIter" not in fwd and "tol" not in fwd, "inverse-only keys leaked forward"
+    assert "returnSlopes" not in inv and "window" not in inv, "forward-only keys leaked"
+    for fn, const in (("raceProbabilities", "FORWARD_OPTS"),
+                      ("abilitiesFromRace", "INVERSE_OPTS")):
         i = races.index(f"export function {fn}(")
-        assert "checkOpts(opts, " in races[i:i + 900], f"{fn} must check"
+        assert f"checkOpts(opts, {const}," in races[i:i + 900], f"{fn} must check {const}"
 
     # R serves cov= but has no GHK, so it prices the fit where python
     # routes -- 4.6e-3 apart on the n=8 fixture, and it used to say
@@ -249,3 +329,49 @@ def test_python_and_r_reject_unknown_keywords_by_language():
     import numpy as np
     with pytest.raises(TypeError):
         wf.race_probabilities(np.array([0.0, 1.0]), D=np.ones(2), nope=1)
+
+
+# an R or browser export that answers to no python verb: the registry is
+# driven from python, so without this a port could grow a race verb the
+# audit never sees (#187)
+PORT_ONLY = {
+    "R": {"ability_implied_dividends", "ability_implied_state_prices",
+          "dividend_implied_ability", "dividends_from_prices",
+          "prices_from_dividends", "solve_for_implied_offsets",
+          "state_price_implied_ability", "state_prices_from_offsets",
+          "skew_normal_density", "tree_from_hclust", "tree_from_linkage",
+          "Blocks", "Factor", "Independent", "Nested", "Tree",
+          "hermite_nodes", "win_probabilities_factor"},
+    # browser-only: a reduced covariance fitter for the demo pages (blocks
+    # omitted for latency, so NOT the package's fit_covariance), and the
+    # dependency-free node family the ports use where python has Sobol
+    "js": {"fitGrammar", "haltonNormalNodes"},
+}
+
+
+def _race_like(name):
+    """The ports also export linear algebra and plumbing (cholesky, solve,
+    mean, ndtr). Only names that read as race verbs are audited."""
+    return any(k in name.lower() for k in
+               ("race", "probabilit", "abilit", "topk", "top_k", "rank",
+                "jacobian", "polish", "covariance", "nodes", "grammar"))
+
+
+def test_port_race_exports_are_all_declared():
+    r_exports = set(re.findall(r"^export\((\w+)\)", R_NS, re.M))
+    js_exports = set(re.findall(r"export function (\w+)", JS_SRC))
+    known_py = set(SURFACE)
+    r_undeclared = sorted(
+        n for n in r_exports
+        if _race_like(n) and n not in known_py and n not in PORT_ONLY["R"])
+    js_undeclared = sorted(
+        n for n in js_exports
+        if _race_like(n) and n not in {_camel(v) for v in known_py}
+        and n not in {_camel(v) for v in PORT_ONLY["R"]}
+        and n not in PORT_ONLY["js"])
+    assert not r_undeclared, (
+        "R exports race verbs with no declared status:\n  "
+        + "\n  ".join(r_undeclared))
+    assert not js_undeclared, (
+        "the browser exports race verbs with no declared status:\n  "
+        + "\n  ".join(js_undeclared))

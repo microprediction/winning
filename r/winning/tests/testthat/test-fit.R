@@ -98,3 +98,33 @@ test_that("GHK is permutation-equivariant and its slopes have the right sign", {
   back <- numeric(n); back[perm] <- gp
   expect_equal(back, g$p, tolerance = 1e-12)
 })
+
+
+test_that("GHK has no dimension cliff", {
+  # a 30-prime table made the public cov= route throw at 32 runners, on
+  # inputs that returned a factor-fit answer before (#190)
+  expect_equal(.first_primes(5), c(2, 3, 5, 7, 11))
+  expect_equal(length(.first_primes(64)), 64)
+  for (n in c(31, 32, 40)) {
+    g <- .ghk_race(rep(0, n), diag(n))
+    expect_equal(sum(g$p), 1, tolerance = 1e-10)
+    expect_equal(g$p, rep(1 / n, n), tolerance = 1e-6)   # exchangeable
+  }
+})
+
+test_that("degradation is judged against the clamp close_fit actually uses", {
+  # the test compared D against 1e-6 * diag while close_fit clamped at
+  # 1e-3 * mean(diag), so a clamp-bound fit counted zero bound entries and
+  # was priced instead of routed, restoring the divergence #188 closed
+  set.seed(3)
+  n <- 8
+  V <- matrix(rnorm(n * 3), n, 3)
+  S <- V %*% t(V) + diag(0.05 + runif(n))
+  s <- sqrt(diag(S))
+  C <- S / outer(s, s)
+  fit <- fit_covariance(C)
+  expect_true(fit$bound > 0)                    # was 0 before the fix
+  expect_equal(fit$clamp, 1e-3 * mean(diag(C)))
+  expect_true(fit$degraded)
+  expect_true(is.finite(fit$contrast_residual))
+})

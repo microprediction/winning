@@ -23,11 +23,29 @@
 # scrambled Sobol, so the two agree to the node families' own difference
 # rather than exactly; .ghk_race() documents the measured figure.
 
+.first_primes <- function(d) {
+  # generated, not tabulated: a fixed table put a hard cliff in the public
+  # cov= route, which stopped at 31 runners and then threw (#190)
+  if (d < 1L) return(integer(0))
+  out <- integer(d)
+  out[1] <- 2L
+  k <- 1L
+  cand <- 3L
+  while (k < d) {
+    isp <- TRUE
+    lim <- floor(sqrt(cand))
+    for (q in out[seq_len(k)]) {
+      if (q > lim) break
+      if (cand %% q == 0L) { isp <- FALSE; break }
+    }
+    if (isp) { k <- k + 1L; out[k] <- cand }
+    cand <- cand + 2L
+  }
+  out
+}
+
 .halton_unit <- function(d, n, skip = 20L) {
-  primes <- c(2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53,
-              59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113)
-  if (d > length(primes))
-    stop("GHK needs more Halton dimensions than this table holds")
+  primes <- .first_primes(d)
   out <- matrix(0, n, d)
   for (j in seq_len(d)) {
     b <- primes[j]
@@ -96,6 +114,17 @@
 #' Measured against the python package's scrambled-Sobol route on its own
 #' n=8 fixtures: agreement is the node families' difference, which the
 #' tests pin. Halton here keeps the package dependency-free, as elsewhere.
+#'
+#' Halton needs one prime per contestant less one, and those primes are
+#' generated rather than tabulated: a 30-entry table made the public cov=
+#' route throw at 32 runners, on inputs that had returned a factor-fit
+#' answer before (#190). High-dimensional projections are the known
+#' weakness of the family, so the agreement was measured rather than
+#' assumed -- against python on exactly-rank-3 correlations, max|R - py| is
+#' 2.7e-4 at n=16, 5.6e-4 at n=32 and 3.6e-4 at n=48 (0.1s, 0.3s, 0.8s).
+#' It degrades gently and stays far inside the 4.6e-3 that pricing the
+#' degraded fit costs, so there is no size at which falling back would be
+#' the better answer.
 #' @keywords internal
 .ghk_race <- function(mu, C, budget = 4096L, want_slopes = FALSE) {
   C <- as.matrix(C)

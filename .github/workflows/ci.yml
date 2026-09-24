@@ -120,6 +120,11 @@ jobs:
         run: Rscript parity/check.R
       - name: Browser port
         run: node parity/check.mjs
+      - name: Browser API guards
+        # behavioural, not source markers: #186 shipped because the tests
+        # read the source and a shared allowlist let each API accept the
+        # other's options and ignore them
+        run: node parity/check_js_api.mjs
 
   lint:
     runs-on: ubuntu-latest

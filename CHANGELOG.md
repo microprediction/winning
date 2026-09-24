@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+- Six defects in the same day's work, all found by review within hours of
+  merging, all fixed here. Recorded plainly because the pattern is the
+  lesson: a safety net built quickly has holes, and four of these six were
+  in the net rather than the engine.
+
+  **The GHK route crashed above 31 runners** (#190). `.halton_unit` held a
+  30-prime table and called `stop()` past it, so a degraded `cov=` at n=32
+  terminated a call that used to return a factor-fit answer. Primes are
+  generated now. The family's high-dimensional projections were the real
+  question, so the agreement was measured rather than assumed: max|R -
+  python| is 2.7e-4 at n=16, 5.6e-4 at n=32 and 3.6e-4 at n=48, all far
+  inside the 4.6e-3 that pricing the degraded fit costs.
+
+  **R routed on a predicate that missed two of python's three failure
+  classes** (#189). `close_fit` clamps `D` at `1e-3 * mean(diag(C))` while
+  the degradation test compared it against `1e-6 * diag(C)` -- three orders
+  of magnitude apart, so a clamp-bound fit counted ZERO bound entries and
+  was priced rather than routed, silently restoring the divergence #188
+  had just closed. The clamp is now reported by `close_fit` and tested
+  against, and the pairwise-contrast residual python also keys on is
+  computed. On the n=8 fixture `bound` goes 0 -> 8.
+
+  **A `ports` typo made a scenario skip everywhere and still pass**
+  (#191). `"r"` or `"bogus"` matched neither checker, both printed a skip,
+  and CI exited 0: a committed fixture became a no-op. The names are a
+  closed set now, validated when vectors are written and again when they
+  are checked.
+
+  **A NaN passed the staleness gate** (#185). `d = max|a - b|` is NaN if
+  either side is, and IEEE makes both `d <= tol` and `d > tol` false, so
+  the row printed STALE and the process exited 0 -- a false negative for
+  precisely the catastrophic regression the gate exists for. Non-finiteness
+  is now its own failure, on either side and on the tolerance.
+
+  **Each browser API accepted the other's options** (#186).
+  `raceProbabilities({nIter: 1})` and `abilitiesFromRace({returnSlopes:
+  true})` returned plausible answers while ignoring the key, because one
+  shared allowlist served both -- recreating the exact failure mode the
+  guard was added to remove. Separate allowlists, and the inverse hands the
+  forward an explicit object instead of spreading its own options through.
+  `parity/check_js_api.mjs` now CALLS these, in the gated job: the previous
+  tests read the source for markers, which is why this shipped.
+
+  **The surface registry covered two modules of seven** (#187).
+  `top_k_jacobians`, `race_jacobian`, `polish_race` and `fit_covariance` --
+  three exported by R, two by the browser -- had no declared status while
+  this file claimed to cover the surface. Discovery now walks every factor
+  module (53 verbs, up from 28), and a second test audits the other
+  direction: an R or browser export that answers to no python verb must be
+  declared too. It immediately found two undeclared browser exports.
+
 - R serves the `cov=` route itself, forward and inverse (#173 in part).
   The warning added above said the packages disagree by design; they now
   agree. `r/winning/R/ghk.R` ports the GHK the python package routes a
