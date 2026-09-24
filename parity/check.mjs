@@ -102,6 +102,8 @@ const runs = {
   invert_second: () => topk.abilitiesFromRankMarginal(
     vec.scenarios.rank_marginals.value.map(r => r[1]), 2,
     { mu0: vec.scenarios.invert_topk2.value, D, points: 257 }),
+  rank_marginals_factor: () =>
+    topk.rankProbabilities(mu, { D, V: V1, points: 257 }),
   invert_gumbel: () => races.abilitiesFromRace(pt, {
     D: mu.map(() => Math.PI ** 2 / 6), base: "gumbel", points: 1001 }),
   bottomk2_normal: () => topk.bottomKProbabilities(mu, 2, { D, points: 257 }),

@@ -4,8 +4,31 @@
 // winning/factor/topk.py -- the cavity count distribution with
 // stable-direction deconvolution; see the python module docstring for
 // the derivations and the two-branch refusal of exact-rank targets.
-import { TINY, hermite1, solve } from "./core.mjs";
+import { TINY, hermite1, solve, checkOpts, OPT_HINTS } from "./core.mjs";
 import { BASES } from "./races.mjs";
+
+/* Each exported call declares its own option keys; see checkOpts in
+   core.mjs for why an options object needs this at all. */
+
+/* python refuses V here rather than not implementing it, and the reason is
+   worth carrying: the browser used to solve the independent model and
+   report converged: true (#200). */
+const LOC_SCALE_HINTS = {
+  V: "loc/scale calibration with fixed factor loadings is " +
+     "under-identified: without the joint rescaling gauge, two curves " +
+     "carry 2n - 2 numbers against 2n - 1 unknowns and a flat direction " +
+     "survives. Use abilitiesFromTopk({V}) at fixed scales. Python raises " +
+     "NotImplementedError here for the same reason.",
+};
+const TOP_K_PROBABILITIES_OPTS = new Set(["V", "D", "base", "points", "qa"]);
+const BOTTOM_K_PROBABILITIES_OPTS = new Set(["V", "D", "base", "points", "qa"]);
+const TOP_K_JACOBIANS_OPTS = new Set(["V", "D", "base", "points", "qa"]);
+const RANK_PROBABILITIES_OPTS = new Set(["V", "D", "base", "points", "qa"]);
+const ABILITIES_FROM_TOPK_OPTS = new Set(["V", "D", "base", "points", "qa", "nIter", "tol", "targetFloor", "returnInfo"]);
+const LOC_SCALE_FROM_TOPK_PAIR_OPTS = new Set(["D0", "base", "points", "nIter", "tol", "ridge", "mu0", "returnInfo"]);
+const LOC_SCALE_FROM_WIN_AND_SECOND_OPTS = new Set(["D0", "base", "points", "nIter", "tol", "ridge", "mu0", "returnInfo"]);
+const ABILITIES_FROM_RANK_MARGINAL_OPTS = new Set(["D", "base", "points", "nIter", "tol", "mu0", "returnInfo"]);
+
 
 const clip01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -225,6 +248,7 @@ function factorNodes(V, n, qa) {
 }
 
 export function topKProbabilities(mu, k, opts = {}) {
+  checkOpts(opts, TOP_K_PROBABILITIES_OPTS, "topKProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
   const n = mu.length;
   k = Math.trunc(k);
@@ -249,6 +273,7 @@ export function topKProbabilities(mu, k, opts = {}) {
 }
 
 export function bottomKProbabilities(mu, k, opts = {}) {
+  checkOpts(opts, BOTTOM_K_PROBABILITIES_OPTS, "bottomKProbabilities", OPT_HINTS);
   const n = mu.length;
   k = Math.trunc(k);
   if (!(k >= 1 && k <= n - 1))
@@ -257,6 +282,7 @@ export function bottomKProbabilities(mu, k, opts = {}) {
 }
 
 export function topKJacobians(mu, k, opts = {}) {
+  checkOpts(opts, TOP_K_JACOBIANS_OPTS, "topKJacobians", OPT_HINTS);
   const { D = null, base = "normal", points = 513, V = null,
           qa = 15 } = opts;
   const n = mu.length;
@@ -324,21 +350,49 @@ export function topKJacobians(mu, k, opts = {}) {
 }
 
 export function rankProbabilities(mu, opts = {}) {
-  const { D = null, base = "normal", points = 513 } = opts;
+  checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
+  const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
   const n = mu.length;
   const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
-  const { dx, F, f } = topkGrid(mu, sd, n - 1, fn, points);
-  const C = countDistribution(F);
-  const P = [];
-  for (let i = 0; i < n; i++) {
-    const Qi = looPmf(C, F, i);
-    const row = new Array(n).fill(0);
-    for (let t = 0; t < F.length; t++) {
-      const d = f[t][i] / sd[i];
-      for (let m = 0; m < n; m++) row[m] += Qi[t][m] * d;
+
+  // one factor node: the cavity count pmf against each runner's own
+  // density, as in python's rank_probabilities.one_node
+  const oneNode = (m) => {
+    const { dx, F, f } = topkGrid(m, sd, n - 1, fn, points);
+    const C = countDistribution(F);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const Qi = looPmf(C, F, i);
+      const row = new Array(n).fill(0);
+      for (let t = 0; t < F.length; t++) {
+        const d = f[t][i] / sd[i];
+        for (let mm = 0; mm < n; mm++) row[mm] += Qi[t][mm] * d;
+      }
+      out.push(row.map(v => v * dx));
     }
-    P.push(row.map(v => v * dx));
+    return out;
+  };
+
+  // Loadings used to be destructured away and the independent rank matrix
+  // returned -- plausible, doubly stochastic, and for the wrong model
+  // (#199). The mixture is the same one topKProbabilities takes.
+  let P;
+  if (!V) {
+    P = oneNode(mu);
+  } else {
+    const { Vm, nodes, w } = factorNodes(V, n, qa);
+    P = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let q = 0; q < nodes.length; q++) {
+      const shifted = mu.map((m, i) => {
+        let acc = m;
+        for (let c = 0; c < nodes[q].length; c++) acc += Vm[i][c] * nodes[q][c];
+        return acc;
+      });
+      const node = oneNode(shifted);
+      for (let i = 0; i < n; i++)
+        for (let mm = 0; mm < n; mm++) P[i][mm] += w[q] * node[i][mm];
+    }
   }
   const rows = P.map(r => r.reduce((a, b) => a + b, 0));
   const cols = new Array(n).fill(0);
@@ -374,6 +428,7 @@ function validatedTarget(q, k, n, targetFloor) {
 }
 
 export function abilitiesFromTopk(q, k, opts = {}) {
+  checkOpts(opts, ABILITIES_FROM_TOPK_OPTS, "abilitiesFromTopk", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa = 15,
           nIter = 80, tol = 1e-8, targetFloor = null,
           returnInfo = false } = opts;
@@ -444,6 +499,7 @@ export function abilitiesFromTopk(q, k, opts = {}) {
 }
 
 export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
+  checkOpts(opts, LOC_SCALE_FROM_TOPK_PAIR_OPTS, "locScaleFromTopkPair", { ...OPT_HINTS, ...LOC_SCALE_HINTS });
   const { D0 = null, base = "normal", points = 513, nIter = 60,
           tol = 1e-8, ridge = 0.0, mu0 = null,
           returnInfo = false } = opts;
@@ -575,6 +631,7 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
 }
 
 export function locScaleFromWinAndSecond(pWin, pSecond, opts = {}) {
+  checkOpts(opts, LOC_SCALE_FROM_WIN_AND_SECOND_OPTS, "locScaleFromWinAndSecond", { ...OPT_HINTS, ...LOC_SCALE_HINTS });
   // win plus EXACTLY-second marginals: P(2nd) + P(win) = P(top-2),
   // the well-posed pair. Each marginal renormalized to unit mass.
   const n = pWin.length;
@@ -624,6 +681,7 @@ function rankMarginalWithJacobian(mu, sd, r, fn, points) {
 }
 
 export function abilitiesFromRankMarginal(p, r, opts = {}) {
+  checkOpts(opts, ABILITIES_FROM_RANK_MARGINAL_OPTS, "abilitiesFromRankMarginal", OPT_HINTS);
   // invert one EXACT-rank marginal at frozen scales: two-branched for
   // r >= 2, mu0 selects the branch. See the python docstring.
   const { mu0 = null, D = null, base = "normal", points = 513,

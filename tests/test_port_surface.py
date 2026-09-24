@@ -293,7 +293,12 @@ def test_a_declared_option_gap_is_a_loud_gap():
     which must therefore REJECT the key. It used to swallow it and return
     the independent race, identical even for an all-zero covariance."""
     races = (ROOT / "docs/js/winning/races.mjs").read_text()
-    assert 'k === "cov"' in races, "cov needs to be named in the guard"
+    core = (ROOT / "docs/js/winning/core.mjs").read_text()
+    # the guard and its reasons moved to core.mjs when every module needed
+    # them; `cov` still has to carry a reason rather than "unknown option"
+    assert "export function checkOpts" in core
+    assert "cov:" in core and "fitGrammar" in core, \
+        "cov needs a reason, not just a rejection"
     # each API validates its OWN signature: one shared union let each accept
     # the other's options and ignore them (#186)
     for const in ("FORWARD_OPTS", "INVERSE_OPTS"):
@@ -375,3 +380,31 @@ def test_port_race_exports_are_all_declared():
     assert not js_undeclared, (
         "the browser exports race verbs with no declared status:\n  "
         + "\n  ".join(js_undeclared))
+
+
+def test_every_browser_options_api_validates_its_options():
+    """#186 guarded two entry points of twenty, and the reviewer walked
+    into the rest within a day: rankProbabilities swallowed V and returned
+    the independent rank matrix (#199), locScaleFromTopkPair swallowed V
+    and reported converged where python raises (#200). Any export taking
+    an options object must call checkOpts, and with its OWN allowlist."""
+    offenders = []
+    for path in sorted((ROOT / "docs/js/winning").glob("*.mjs")):
+        text = path.read_text()
+        for m in re.finditer(r"export function (\w+)\([^)]*opts\s*=\s*\{\}\s*\)\s*\{",
+                             text):
+            body = text[m.end():m.end() + 600]
+            if "checkOpts(opts," not in body:
+                offenders.append(f"{path.name}::{m.group(1)}")
+    assert not offenders, (
+        "browser exports taking an options object without validating it -- "
+        "an object swallows a key nobody reads:\n  " + "\n  ".join(offenders))
+
+
+def test_browser_allowlists_are_per_function():
+    """A shared union is what let each API take the other's options."""
+    names = set()
+    for path in (ROOT / "docs/js/winning").glob("*.mjs"):
+        names |= set(re.findall(r"const (\w+_OPTS) = new Set\(", path.read_text()))
+    assert len(names) >= 18, f"only {len(names)} allowlists for 20 entry points: {sorted(names)}"
+    assert "KNOWN_OPTS" not in names, "the shared union is back"

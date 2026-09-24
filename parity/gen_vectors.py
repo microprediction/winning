@@ -208,6 +208,12 @@ def build(inputs):
     sc("loc_scale_mu", mu_ls, 1e-6)
     sc("loc_scale_sd", sd_ls, 1e-6)
     sc("rank_marginals", rank_probabilities(mu, D=D, points=257))
+    # with loadings: the browser used to swallow V here and return the
+    # INDEPENDENT rank matrix, plausible and doubly stochastic and for the
+    # wrong model (#199). R does not take V in this verb yet (#202), so
+    # this one is declared for the browser until it does.
+    sc("rank_marginals_factor",
+       rank_probabilities(mu, D=D, V=V1, points=257), ports=["js"])
     R = rank_probabilities(mu, D=D, points=257)
     mu_ws, sd_ws = loc_scale_from_win_and_second(R[:, 0], R[:, 1],
                                                  points=257)

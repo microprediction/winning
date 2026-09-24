@@ -1,6 +1,11 @@
 // The classic state-price lattice calibration -- port of
 // winning/lattice.py + lattice_calibration.py, dead heats included.
-import { ndtr, npdf, interpClamped, mean } from "./core.mjs";
+import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS } from "./core.mjs";
+
+/* Each exported call declares its own option keys; see checkOpts in
+   core.mjs for why an options object needs this at all. */
+const SOLVE_FOR_IMPLIED_OFFSETS_OPTS = new Set(["offsetSamples", "guess", "nIter"]);
+
 
 export function pdfToCdf(f) {
   const c = new Array(f.length);
@@ -119,6 +124,7 @@ export function statePricesFromOffsets(density, offsets) {
 }
 
 export function solveForImpliedOffsets(prices, density, opts = {}) {
+  checkOpts(opts, SOLVE_FOR_IMPLIED_OFFSETS_OPTS, "solveForImpliedOffsets", OPT_HINTS);
   const L = impliedL(density);
   let { offsetSamples = null, guess = null, nIter = 3 } = opts;
   if (!offsetSamples) {
