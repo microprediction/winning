@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -169,16 +169,8 @@ function bulkWindow(Mall, sd, points, delta) {
   return out;
 }
 
-// Options are read by name, and an object silently swallows a key nobody
-// reads -- `cov` is not supported here and used to return the INDEPENDENT
-// race, bit-identical even for an all-zero covariance. Unknown keys throw.
-//
-// One shared allowlist is not enough: a union let each API accept the
-// other's options and ignore them, so raceProbabilities({nIter: 1}) and
-// abilitiesFromRace({returnSlopes: true}) returned a plausible answer to a
-// question nobody asked (#186). Each API validates its own signature, and
-// the inverse hands the forward an explicit object rather than spreading
-// its own options through.
+/* Each race API declares its OWN keys: one shared union let each accept
+   the other's options and ignore them (#186). See checkOpts in core.mjs. */
 const FORWARD_OPTS = new Set([
   "V", "D", "F", "W", "base", "points", "returnSlopes", "window", "delta",
   "structure", "qa", "qf",
@@ -188,27 +180,11 @@ const INVERSE_OPTS = new Set([
   "nIter", "tol", "targetFloor", "returnInfo",
 ]);
 
-function checkOpts(opts, known, where) {
-  for (const k of Object.keys(opts)) {
-    if (known.has(k)) continue;
-    if (k === "cov") {
-      throw new Error(
-        where + ": cov= is not supported in the browser port. Fit the " +
-        "covariance first -- fitGrammar(C, k, m) in demo.mjs returns " +
-        "{V, D} for this call -- or use the python package, whose " +
-        "race_probabilities(cov=) also routes a degraded fit to GHK.");
-    }
-    throw new Error(
-      where + ": unknown option '" + k + "'. Known: " +
-      [...known].join(", ") + ".");
-  }
-}
-
 export function raceProbabilities(mu, opts = {}) {
   const { V = null, D = null, F = null, W = null, base = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
-  checkOpts(opts, FORWARD_OPTS, "raceProbabilities");
+  checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
   if (structure) {
     return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
   }
@@ -286,7 +262,7 @@ export function raceProbabilities(mu, opts = {}) {
 export function abilitiesFromRace(pTarget, opts = {}) {
   const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
           F = null, W = null, base = "normal", points = 257 } = opts;
-  checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace");
+  checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
   if (structure) return dispatchAbilities(pTarget, structure, opts);
   let target = pTarget.slice();
   const s = target.reduce((a, b) => a + b, 0);

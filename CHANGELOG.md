@@ -28,6 +28,35 @@
   gauge fix (#139) and would have missed this one the same way, so a test
   now requires the two to be byte-identical.
 
+- Every browser entry point validates its own options, not two of twenty.
+  The guard added for `cov=` covered `raceProbabilities` and
+  `abilitiesFromRace`; review walked into the rest inside a day, which is
+  fair, because a javascript object swallows a key nobody reads and
+  eighteen exports were still relying on the language to catch what it
+  cannot. `checkOpts` now lives in `core.mjs` with the reasons worth
+  giving, and each of the twenty declares its own key set. A test fails
+  if any options-object export does not call it, and
+  `parity/check_js_api.mjs` CALLS all twenty-one cases rather than reading
+  the source for markers -- which is how the first round shipped.
+
+  Two of those swallowed keys were changing the answer:
+
+  `rankProbabilities` ignored `V` and `qa` and returned the INDEPENDENT
+  rank matrix (#199) -- plausible, doubly stochastic, and for the wrong
+  model. It now takes the same factor-node mixture `topKProbabilities`
+  does, matching python to 2e-16 with and without loadings; the loadings
+  move that fixture's matrix by 0.096, which is the error that used to be
+  silent. A parity scenario pins it, declared for the browser because R's
+  `rank_probabilities` does not take `V` yet (#202) -- the metadata says
+  so in the open rather than the scenario being left out.
+
+  `locScaleFromTopkPair` and `locScaleFromWinAndSecond` ignored `V` and
+  could report `converged: true` (#200). Python RAISES there, because with
+  fixed loadings two curves carry 2n - 2 numbers against 2n - 1 unknowns
+  and a flat direction survives the lost rescaling gauge. The browser
+  carries that reason now instead of turning a required refusal into a
+  confident answer.
+
 - Six defects in the same day's work, all found by review within hours of
   merging, all fixed here. Recorded plainly because the pattern is the
   lesson: a safety net built quickly has holes, and four of these six were

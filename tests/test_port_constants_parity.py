@@ -44,10 +44,14 @@ def test_browser_port_rejects_unknown_options():
     throw, which is the only defence a keyword-object API has. Python and R
     get this from their languages (TypeError / unused argument)."""
     text = JS.read_text()
+    core = (ROOT / "docs/js/winning/core.mjs").read_text()
     assert "checkOpts" in text
     assert "FORWARD_OPTS" in text and "INVERSE_OPTS" in text, \
         "one shared allowlist let each API accept the other's keys (#186)"
-    assert 'k === "cov"' in text, "the cov key needs its own message"
+    # the guard itself and the reason for `cov` live in core.mjs, shared by
+    # every module since #199/#200 showed two guarded of twenty
+    assert "export function checkOpts" in core
+    assert "cov:" in core, "the cov key needs its own message"
     for fn in ("raceProbabilities", "abilitiesFromRace"):
         i = text.index(f"export function {fn}(")
         assert "checkOpts(opts, " in text[i:i + 900], fn
