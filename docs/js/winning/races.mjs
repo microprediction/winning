@@ -169,10 +169,37 @@ function bulkWindow(Mall, sd, points, delta) {
   return out;
 }
 
+// Options are read by name, and an object silently swallows a key nobody
+// reads -- `cov` is not supported here and used to return the INDEPENDENT
+// race, bit-identical even for an all-zero covariance. Unknown keys now
+// throw. Keep this the union over raceProbabilities and abilitiesFromRace,
+// since the latter forwards its own options through.
+const KNOWN_OPTS = new Set([
+  "V", "D", "F", "W", "base", "points", "returnSlopes", "window", "delta",
+  "structure", "qa", "qf", "nIter", "tol", "targetFloor", "returnInfo",
+]);
+
+function checkOpts(opts, where) {
+  for (const k of Object.keys(opts)) {
+    if (KNOWN_OPTS.has(k)) continue;
+    if (k === "cov") {
+      throw new Error(
+        where + ": cov= is not supported in the browser port. Fit the " +
+        "covariance first -- fitGrammar(C, k, m) in demo.mjs returns " +
+        "{V, D} for this call -- or use the python package, whose " +
+        "race_probabilities(cov=) also routes a degraded fit to GHK.");
+    }
+    throw new Error(
+      where + ": unknown option '" + k + "'. Known: " +
+      [...KNOWN_OPTS].join(", ") + ".");
+  }
+}
+
 export function raceProbabilities(mu, opts = {}) {
   const { V = null, D = null, F = null, W = null, base = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
+  checkOpts(opts, "raceProbabilities");
   if (structure) {
     return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
   }
@@ -250,6 +277,7 @@ export function raceProbabilities(mu, opts = {}) {
 export function abilitiesFromRace(pTarget, opts = {}) {
   const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
           F = null, W = null, base = "normal" } = opts;
+  checkOpts(opts, "abilitiesFromRace");
   if (structure) return dispatchAbilities(pTarget, structure, opts);
   let target = pTarget.slice();
   const s = target.reduce((a, b) => a + b, 0);

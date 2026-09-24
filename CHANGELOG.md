@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Port audit against the python reference, prompted by three divergences
+  the 39 parity scenarios did not catch (#153's handover, #171's pair
+  weights, #178's damping). Every decision constant in the three race
+  engines was extracted and compared: 27 of 27 agree. Two real defects
+  turned up outside that set.
+
+  `race_probabilities(cov=)` in the browser port **silently returned the
+  independent race**. `cov` is not among the keys the options object
+  destructures, and a javascript object swallows a key nobody reads, so
+  the answer was bit-identical to `D = 1` -- including for an all-zero
+  covariance matrix. Unknown option keys now throw, in both
+  `raceProbabilities` and `abilitiesFromRace`, with `cov` named
+  explicitly and pointed at `fitGrammar`. Python and R get this from
+  their languages (TypeError, unused argument); only an options object
+  needs it spelled out, and a test pins all three.
+
+  R's `fit_covariance` died with "subscript out of bounds" on an n = 8
+  exact-rank-3 correlation -- the #118 fixture. The greedy allocation
+  (k global + m eigendirections + one per block) can ask for more
+  columns than there are eigenvectors, 10 at n = 8, and where python's
+  `_top_eigen` truncates silently, `seq_len()` ran off the end. Clamped
+  to n. On a healthy fit R now agrees with python to 4.5e-4, which is
+  the Halton-versus-Sobol node families, not a rule difference.
+
+  Known and deliberate gaps, recorded rather than closed: the ports have
+  no GHK dense route (#161/#164), no temperature, and no ordered
+  prefixes, so `cov=` on a DEGRADED fit differs by design -- 4.6e-3 on
+  that fixture, where python routes to GHK and the ports price the fit.
+  The browser port also accepts a narrower set of `V` shapes than
+  `as_loadings` does; it raises rather than mispricing, so it is safe.
+
 - The factor-node rule is per rank, and rank 3 gets the order it needed
   (#156). One sharpness threshold of 3.0 served every rank, and at rank 3
   it was defending against a Gauss-Hermite cap of 15 that was itself worse

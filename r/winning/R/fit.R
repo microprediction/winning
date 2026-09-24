@@ -123,7 +123,13 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # second arm: pure eigen fit at the same total rank (greedy
   # factor+blocks allocation is the wrong shape for globally smooth
   # covariance); smaller choice-relevant residual wins, pipeline on ties
-  rank <- ncol(Vall)
+  # clamp to n: the greedy allocation (k global + m eigendirections +
+  # one per block) can ask for more columns than there are eigenvectors
+  # -- k=3, m=5 and 2 blocks is 10 at n=8 -- and the python reference's
+  # _top_eigen truncates silently where seq_len() here ran off the end
+  # of eC$vectors ("subscript out of bounds", an n=8 exact-rank-3
+  # correlation, the #118 fixture)
+  rank <- min(ncol(Vall), n)
   eC <- eigen(C, symmetric = TRUE)
   Veig <- eC$vectors[, seq_len(rank), drop = FALSE] *
     rep(sqrt(pmax(eC$values[seq_len(rank)], 0)), each = n)
