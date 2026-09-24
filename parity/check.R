@@ -35,6 +35,15 @@ pt <- inp$p_target
 density <- skew_normal_density(L = inp$classic_L, unit = inp$classic_unit,
                                a = inp$classic_a)
 
+.parity_degraded_cov <- function(n, rank) {
+  # must match parity/gen_vectors.py::_degraded_cov, which uses numpy's
+  # default_rng(3); the matrix itself is carried in the inputs instead of
+  # being regenerated, so this reads it from the vectors file
+  C <- as.matrix(vec$inputs$degraded_cov)
+  stopifnot(nrow(C) == n)
+  C
+}
+
 runs <- list(
   independent_normal = function() race_probabilities(mu, D = D, points = 257),
   factor1_normal = function() race_probabilities(mu, V = V1, D = D, points = 257),
@@ -125,6 +134,15 @@ runs <- list(
     abilities_from_rank_marginal(
       as.matrix(vec$scenarios$rank_marginals$value)[, 2], 2,
       mu0 = vec$scenarios$invert_topk2$value, D = D, points = 257),
+  cov_degraded_route = function() {
+    C <- .parity_degraded_cov(8, 3)
+    race_probabilities(seq(-0.6, 0.6, length.out = 8), cov = C)
+  },
+  cov_degraded_inverse = function() {
+    C <- .parity_degraded_cov(8, 3)
+    p0 <- race_probabilities(seq(-0.6, 0.6, length.out = 8), cov = C)
+    abilities_from_race(p0, cov = C)
+  },
   invert_gumbel = function()
     abilities_from_race(pt, D = rep(pi^2 / 6, length(mu)), base = "gumbel",
                         points = 1001),
@@ -142,6 +160,13 @@ runs <- list(
 fails <- 0
 for (name in names(vec$scenarios)) {
   sc <- vec$scenarios[[name]]
+  # a scenario may declare which ports implement it; the others say so
+  # rather than failing, which is how partial coverage stays visible
+  if (!is.null(sc$ports) && !("R" %in% unlist(sc$ports))) {
+    cat(sprintf("skip  %-22s declared for: %s\n", name,
+                paste(unlist(sc$ports), collapse = ", ")))
+    next
+  }
   ref <- unlist(sc$value)
   got <- tryCatch(unlist(runs[[name]]()), error = function(e) e)
   if (inherits(got, "error")) {

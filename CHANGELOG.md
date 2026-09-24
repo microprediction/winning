@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- R serves the `cov=` route itself, forward and inverse (#173 in part).
+  The warning added above said the packages disagree by design; they now
+  agree. `r/winning/R/ghk.R` ports the GHK the python package routes a
+  degraded fit to, with both properties that route learned the hard way:
+  the runners are sorted into a canonical order before the estimate and
+  mapped back, so the answer is exactly permutation-equivariant where a
+  fixed point set was 8.8e-3 label-dependent; and everything stays in log
+  space, because a runner far behind underflows to zero and the inverse
+  Newton-steps on log residuals. Halton uniforms keep the package
+  dependency-free where python uses scrambled Sobol.
+
+  Measured against the python route on its own n=8 fixture: 3.4e-5 at
+  4096 nodes, against 4.6e-3 for the fit R used to price -- a factor of
+  135 -- and exactly equivariant. GHK accumulates d log p / d mu in its
+  conditioning pass, so the inverse Newton-steps against the routed map
+  with those slopes rather than against the fit; routing only the forward
+  would make the two front doors describe different races, which is
+  python's #164. The round trip closes to 2.6e-10.
+
+  The degraded-fit warning stays for the paths that cannot route -- the
+  slopes, a non-normal base -- exactly as in python.
+
+- The parity harness can express partial coverage. A scenario may declare
+  which ports implement it, and the others print a visible skip instead of
+  a failure; before this, a capability one port lacked could only be
+  expressed by leaving the scenario out entirely, which is how the
+  browser's silent `cov=` survived. Two scenarios pin the route
+  cross-language (R: 3.4e-5 forward, 1.4e-10 on the inverse; the browser
+  declares the skip), and `bottom_k_probabilities`, `hermite_nodes` and
+  the inverse under a non-normal base are now covered in all three.
+
 - Closing the port gaps the surface audit made visible, starting with the
   one that was silent. R serves `cov=` and has no GHK, so where python
   routes a degraded fit to scrambled-Sobol GHK, R prices the fit -- 4.6e-3

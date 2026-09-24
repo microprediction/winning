@@ -116,6 +116,12 @@ const runs = {
 
 let fails = 0;
 for (const [name, sc] of Object.entries(vec.scenarios)) {
+  // a scenario may declare which ports implement it; the others say so
+  // rather than failing, which is how partial coverage stays visible
+  if (sc.ports && !sc.ports.includes("js")) {
+    console.log(`skip  ${name.padEnd(22)} declared for: ${sc.ports.join(", ")}`);
+    continue;
+  }
   const ref = [].concat(...[].concat(sc.value));   // flatten to 1-d
   let got;
   const t0 = Date.now();

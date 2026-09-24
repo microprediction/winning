@@ -13,6 +13,7 @@ Run:  WINNING_PURE=1 python parity/gen_vectors.py
 from __future__ import annotations
 
 import json
+import warnings
 import os
 
 import numpy as np
@@ -73,7 +74,13 @@ def make_inputs(seed=2026):
     # drawn AFTER every earlier draw so the seeded stream prefix -- and
     # with it every pre-topk scenario value -- is unchanged
     sd_true = np.round(np.exp(rng.uniform(-0.25, 0.25, size=n)), 12)
+    _rng = np.random.default_rng(3)
+    _V = _rng.normal(size=(8, 3))
+    _d = 0.05 + _rng.random(8)
+    _S = _V @ _V.T + np.diag(_d)
+    _s = np.sqrt(np.diag(_S))
     return {
+        "degraded_cov": (_S / np.outer(_s, _s)).tolist(),
         "sd_true": sd_true.tolist(),
         "n": n, "mu": mu.tolist(), "V1": V1.tolist(), "V2": V2.tolist(),
         "D": D.tolist(), "cluster": cluster, "loading": loading.tolist(),
@@ -83,6 +90,18 @@ def make_inputs(seed=2026):
         "linkage_Z": _linkage_Z(n),
         "classic_L": 500, "classic_unit": 0.01, "classic_a": 1.5,
     }
+
+
+def _degraded_cov(n, rank, seed):
+    """A correlation the grammar fit degenerates on: exactly rank + diagonal,
+    which the pipeline reproduces by going to full rank with D on its floor
+    (the #118 fixture)."""
+    rng = np.random.default_rng(seed)
+    V = rng.normal(size=(n, rank))
+    d = 0.05 + rng.random(n)
+    S = V @ V.T + np.diag(d)
+    s = np.sqrt(np.diag(S))
+    return S / np.outer(s, s)
 
 
 def build(inputs):
@@ -100,8 +119,14 @@ def build(inputs):
 
     out = {}
 
-    def sc(name, value, tol=TOL_DEFAULT):
+    def sc(name, value, tol=TOL_DEFAULT, ports=None):
+        """ports=None means every port must reproduce this scenario. A list
+        names the ports that implement it; the others print a declared skip
+        rather than a failure, so partial coverage is visible instead of
+        being expressed by leaving the scenario out altogether."""
         out[name] = {"value": np.asarray(value).tolist(), "tol": tol}
+        if ports is not None:
+            out[name]["ports"] = list(ports)
 
     sc("independent_normal", race_probabilities(mu, D=D, points=257))
     sc("factor1_normal", race_probabilities(mu, V=V1, D=D, points=257))
@@ -191,6 +216,19 @@ def build(inputs):
     sc("topk2_jacobian_sigma_factor", Js_f, 1e-9)
     # exported by all three engines and covered by none of the above until
     # the surface audit found them (tests/test_port_surface.py)
+    # The cov= route: both python and R answer a DEGRADED grammar fit with
+    # GHK rather than pricing the fit, and the browser has no GHK and
+    # rejects the key, so this one is declared R-only. Halton against
+    # scrambled Sobol is the tolerance here.
+    cov_deg = np.asarray(inputs["degraded_cov"], dtype=float)
+    mu8 = np.linspace(-0.6, 0.6, 8)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sc("cov_degraded_route", race_probabilities(mu8, cov=cov_deg),
+           2e-4, ports=["R"])
+        sc("cov_degraded_inverse", abilities_from_race(
+            race_probabilities(mu8, cov=cov_deg), cov=cov_deg), 2e-3,
+           ports=["R"])
     # the inverse under a non-normal base: the forward had gumbel cover
     # from the start, the inverse never did (found by the surface audit)
     sc("invert_gumbel", abilities_from_race(

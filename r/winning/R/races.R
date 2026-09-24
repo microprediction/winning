@@ -206,6 +206,76 @@
   invisible(NULL)
 }
 
+.jacobi_sweeps <- function(mu, forward, scale, alpha, n_iter, tol) {
+  # Own-slope-preconditioned coordinate sweeps on the mean-zero quotient,
+  # matching python's races._jacobi_sweeps. `forward(mu)` returns
+  # list(resid, dres): the residual in whatever space the caller inverts
+  # in, model minus target, and its own-slopes (negative).
+  #
+  # alpha_base is the Richardson value, a persistent fact about the
+  # Jacobian; penalty is caution after a sweep that failed to contract, a
+  # transient, restored on the next good sweep. One number for both can
+  # only ratchet down (#178). A monotone iteration riding one mode is
+  # summed rather than waited out (Aitken), above 1e3 tolerances only.
+  alpha_base <- alpha
+  penalty <- 1
+  prev <- NULL
+  prev_step <- NULL
+  rmax <- Inf
+  for (it in seq_len(n_iter)) {
+    fw <- forward(mu)
+    resid <- fw$resid
+    dlogp <- fw$dres
+    rmax <- max(abs(resid))
+    rrms <- sqrt(mean(resid^2))
+    if (rmax < tol) break
+    if (!is.null(prev) && rmax >= prev$rmax && rrms >= prev$rrms) {
+      if (penalty > 0.1) {
+        penalty <- max(0.5 * penalty, 0.1)
+        mu <- prev$mu; resid <- prev$resid; dlogp <- prev$dlogp
+        rmax <- prev$rmax; rrms <- prev$rrms
+        prev_step <- NULL
+      }
+    } else if (!is.null(prev) && penalty < 1) {
+      penalty <- min(1, penalty / 0.75)
+    }
+    prev <- list(mu = mu, resid = resid, dlogp = dlogp, rmax = rmax, rrms = rrms)
+    alpha <- alpha_base * penalty
+    # residual-proportional step cap in the field's scale: a near-certain
+    # winner's residual and own-slope both vanish and their noisy ratio
+    # destabilizes the recentered fixed point
+    lim <- pmin(2, 10 * abs(resid)) * scale
+    step <- pmin(pmax(alpha * resid / dlogp, -lim), lim)
+    step <- step - mean(step)
+    extrapolated <- FALSE
+    if (!is.null(prev_step)) {
+      na <- sqrt(sum(prev_step^2))
+      nb <- sqrt(sum(step^2))
+      if (na > 0) {
+        dot <- sum(step * prev_step)
+        rho <- dot / (na * na)
+        cosn <- if (nb > 0) dot / (na * nb) else 0
+        ratio <- nb / na
+        if (rho < 0) {
+          lam <- 1 - (1 - rho) / alpha
+          alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
+                   rmax > 1e3 * tol) {
+          # collinear steps decaying geometrically: sum the tail (Aitken)
+          mu <- mu - step / (1 - ratio)
+          prev_step <- NULL
+          extrapolated <- TRUE
+        }
+      }
+    }
+    if (!extrapolated) {
+      prev_step <- step
+      mu <- mu - step
+    }
+  }
+  list(mu = mu, converged = rmax < tol, resid = rmax)
+}
+
 race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                base = "normal", points = 257,
                                return_slopes = FALSE, structure = NULL,
@@ -215,6 +285,12 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
     fit <- fit_covariance(cov)
+    # the forward normal race with no slopes is the one case answerable
+    # without the fit at all; everything else needs the factor form and
+    # keeps the fit with its warning (matching python)
+    routable <- identical(base, "normal") && !return_slopes
+    if (isTRUE(fit$degraded) && routable)
+      return(.ghk_race(mu, cov)$p)
     .warn_degraded_cov(fit, "race_probabilities")
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
@@ -284,11 +360,16 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                 base = "normal", points = 257,
                                 n_iter = 60, tol = 1e-8,
                                 structure = NULL, qa = 9, qf = 15, cov = NULL) {
+  dense <- NULL
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
     fit <- fit_covariance(cov)
-    .warn_degraded_cov(fit, "abilities_from_race")
+    if (isTRUE(fit$degraded) && identical(base, "normal")) {
+      dense <- as.matrix(cov)
+    } else {
+      .warn_degraded_cov(fit, "abilities_from_race")
+    }
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
@@ -325,74 +406,34 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     return(c(-0.5 * gap, 0.5 * gap))
   }
   mu <- -(logt - mean(logt)) / 2 * scale
-  # damping: a pair, or two runners holding nearly all the mass, two-cycles
-  # undamped; the sweeps then adapt to the contraction they observe
-  # (matching python's _jacobi_sweeps: Richardson from consecutive steps,
-  # undo-and-halve on a sweep that does not contract)
   top2 <- if (n > 2) sum(sort(target, decreasing = TRUE)[1:2]) else 1
   alpha <- if (n == 2 || top2 > 0.8) 0.7 else 1.0
-  # alpha_base: the Richardson value, a persistent fact about the Jacobian.
-  # penalty: caution after a sweep that failed to contract, a transient,
-  # restored on the next good sweep. One number for both can only ratchet
-  # down (matching python's _jacobi_sweeps; see #178).
-  alpha_base <- alpha   # NB: `base` is the density argument
-  penalty <- 1
-  prev <- NULL
-  prev_step <- NULL
-  for (it in seq_len(n_iter)) {
-    ps <- race_probabilities(mu, V = V, D = D, F = F, W = W, base = base,
+  if (!is.null(dense)) {
+    # Invert the routed map itself, not the fit: GHK yields d log p / d mu
+    # in its conditioning pass, so the same sweeps apply. Inverting the fit
+    # while the forward returns GHK would make the two front doors describe
+    # different races, which is python's #164.
+    scale <- sqrt(mean(diag(dense)))
+    mu <- -(logt - mean(logt)) / 2 * scale
+    fwd <- function(m) {
+      g <- .ghk_race(m, dense, want_slopes = TRUE)
+      list(resid = g$logp - logt, dres = pmin(g$dlogp, -1e-6))
+    }
+    out <- .jacobi_sweeps(mu, fwd, scale, alpha, max(n_iter, 120), tol)
+    if (!out$converged)
+      warning(sprintf("abilities_from_race did not converge: max |log residual| %.2e (tol %.0e)", out$resid, tol), call. = FALSE)
+    return(out$mu)
+  }
+  fwd <- function(m) {
+    ps <- race_probabilities(m, V = V, D = D, F = F, W = W, base = base,
                              points = points, return_slopes = TRUE)
     phat <- pmax(ps$p, 1e-300)
-    resid <- log(phat) - logt
-    dlogp <- pmin(ps$slopes / phat, -1e-6)
-    rmax <- max(abs(resid))
-    rrms <- sqrt(mean(resid^2))
-    if (rmax < tol) break
-    if (!is.null(prev) && rmax >= prev$rmax && rrms >= prev$rrms) {
-      if (penalty > 0.1) {
-        penalty <- max(0.5 * penalty, 0.1)
-        mu <- prev$mu; resid <- prev$resid; dlogp <- prev$dlogp
-        rmax <- prev$rmax; rrms <- prev$rrms
-        prev_step <- NULL
-      }
-    } else if (!is.null(prev) && penalty < 1) {
-      penalty <- min(1, penalty / 0.75)
-    }
-    prev <- list(mu = mu, resid = resid, dlogp = dlogp, rmax = rmax, rrms = rrms)
-    alpha <- alpha_base * penalty
-    # residual-proportional step cap in the field's scale: a near-certain
-    # winner's residual and own-slope both vanish and their noisy ratio
-    # destabilizes the recentered fixed point
-    lim <- pmin(2, 10 * abs(resid)) * scale
-    step <- pmin(pmax(alpha * resid / dlogp, -lim), lim)
-    step <- step - mean(step)
-    extrapolated <- FALSE
-    if (!is.null(prev_step)) {
-      na <- sqrt(sum(prev_step^2))
-      nb <- sqrt(sum(step^2))
-      if (na > 0) {
-        dot <- sum(step * prev_step)
-        rho <- dot / (na * na)
-        cosn <- if (nb > 0) dot / (na * nb) else 0
-        ratio <- nb / na
-        if (rho < 0) {
-          lam <- 1 - (1 - rho) / alpha
-          alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
-        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
-                   rmax > 1e3 * tol) {
-          # collinear steps decaying geometrically: sum the tail (Aitken)
-          mu <- mu - step / (1 - ratio)
-          prev_step <- NULL
-          extrapolated <- TRUE
-        }
-      }
-    }
-    if (!extrapolated) {
-      prev_step <- step
-      mu <- mu - step
-    }
+    list(resid = log(phat) - logt, dres = pmin(ps$slopes / phat, -1e-6))
   }
-  mu
+  out <- .jacobi_sweeps(mu, fwd, scale, alpha, n_iter, tol)
+  if (!out$converged)
+    warning(sprintf("abilities_from_race did not converge: max |log residual| %.2e (tol %.0e)", out$resid, tol), call. = FALSE)
+  out$mu
 }
 
 #' @rdname abilities_from_race
