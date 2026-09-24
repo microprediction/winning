@@ -129,6 +129,16 @@ function tabulatedBase(pdfStd, spans) {
     const cumR = new Float64Array(NOUT); cumR[0] = C;
     for (let k = 1; k < NOUT; k++) { C += 0.5 * (fR[k - 1] + fR[k]) * DXO; cumR[k] = C; }
     const T = C;
+    // Euler-Maclaurin end correction. The cumulative was a plain
+    // trapezoid, which is O(h^2) and left the survival ~1e-5 out against
+    // scipy's exact sf -- a hundred times python's own lattice error, and
+    // the standing failure in test_parity.mjs. Subtracting
+    // (h^2/12)(f'(x) - f'(a)) raises it to O(h^4) for the cost of one
+    // multiply per point, using the derivative already tabulated below.
+    const correct = (c, fpArr, h, fp0) => {
+      for (let k = 0; k < c.length; k++)
+        c[k] -= (h * h / 12) * (fpArr[k] - fp0);
+    };
     const lsOf = (c) => {
       const a = new Float64Array(c.length);
       for (let k = 0; k < c.length; k++)
@@ -140,9 +150,16 @@ function tabulatedBase(pdfStd, spans) {
       for (let k = 1; k < arr.length - 1; k++) a[k] = (arr[k + 1] - arr[k - 1]) / (2 * h);
       return a;
     };
-    g = { f, ls: lsOf(cum), fp: dOf(f, DX),
-          fR, lsR: lsOf(cumR), fpR: dOf(fR, DXO),
-          fL, lsL: lsOf(cumL), fpL: dOf(fL, DXO) };
+    const fp = dOf(f, DX), fpR = dOf(fR, DXO), fpL = dOf(fL, DXO);
+    // one continuous sweep, so each piece corrects against the derivative
+    // at the far-left start of the whole range
+    const fp0 = fpL[0];
+    correct(cumL, fpL, DXO, fp0);
+    correct(cum, fp, DX, fp0);
+    correct(cumR, fpR, DXO, fp0);
+    g = { f, ls: lsOf(cum), fp,
+          fR, lsR: lsOf(cumR), fpR,
+          fL, lsL: lsOf(cumL), fpL };
   };
   return {
     spans,
@@ -187,10 +204,28 @@ BASES.skew = skewNormalBase(3);
 {
   // Student-t, nu = 4, standardized (sd = sqrt(2))
   const SQ2 = Math.SQRT2;
+  // spans: how far past the extreme conditional mean the lattice runs, in
+  // units of the largest sd. Student-t4 keeps real mass a long way out, so
+  // 12 truncated it and the forward sat 1.01e-5 from scipy -- a hundred
+  // times the python reference's own lattice error, and the standing
+  // failure in test_parity.mjs. Measured against that fixture, at the
+  // default 501 points:
+  //
+  //   span   forward error   inverse over 501..4001 points
+  //     12       1.01e-5     2.9e-7 .. 2.3e-6
+  //     20       1.75e-6     2.9e-7 .. 5.0e-7
+  //     24       8.42e-7     2.9e-7 .. 3.5e-7
+  //     32       2.37e-7     2.9e-7 .. 5.3e-7
+  //     40       1.39e-7     NaN at 501, 1001 and 4001
+  //
+  // Both ends cost: too narrow drops tail mass, too wide spreads a fixed
+  // point budget until the bulk is under-resolved, and past ~40 the
+  // inverse returns NaN outright (its own fragility, not this constant --
+  // reported separately). 24 sits where both are good with margin.
   BASES.t4 = tabulatedBase(
     (z) => { const u = SQ2 * z;
       return SQ2 * (3 / 8) * Math.pow(1 + u * u / 4, -2.5); },
-    [12, 12]);
+    [24, 24]);
 }
 
 function condMeans(mu, V, F) {
