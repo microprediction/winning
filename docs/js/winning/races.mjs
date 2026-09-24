@@ -287,6 +287,12 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   // (matching python's _jacobi_sweeps)
   const top2 = n > 2 ? target.slice().sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0) : 1;
   let alpha = (n === 2 || top2 > 0.8) ? 0.7 : 1.0;
+  // alphaBase: the Richardson value, persistent (NB: `base` is the density
+  // argument). penalty: caution after a sweep that failed to contract, a
+  // transient, restored on the next good sweep. One number for both can
+  // only ratchet down (matching python, #178).
+  let alphaBase = alpha;
+  let penalty = 1;
   let prev = null;
   let prevStep = null;
   for (let it = 0; it < nIter; it++) {
@@ -297,12 +303,17 @@ export function abilitiesFromRace(pTarget, opts = {}) {
     let rmax = Math.max(...resid.map(Math.abs));
     let rrms = Math.sqrt(mean(resid.map(v => v * v)));
     if (rmax < tol) break;
-    if (prev && alpha > 0.1 && rmax >= prev.rmax && rrms >= prev.rrms) {
-      alpha = Math.max(0.5 * alpha, 0.1);
-      ({ mu, resid, dlogp, rmax, rrms } = prev);
-      prevStep = null;
+    if (prev && rmax >= prev.rmax && rrms >= prev.rrms) {
+      if (penalty > 0.1) {
+        penalty = Math.max(0.5 * penalty, 0.1);
+        ({ mu, resid, dlogp, rmax, rrms } = prev);
+        prevStep = null;
+      }
+    } else if (prev && penalty < 1) {
+      penalty = Math.min(1, penalty / 0.75);
     }
     prev = { mu, resid, dlogp, rmax, rrms };
+    alpha = alphaBase * penalty;
     // residual-proportional step cap in the field's scale
     let step = resid.map((v, i) => {
       const lim = Math.min(2, 10 * Math.abs(v)) * scale;
@@ -310,16 +321,30 @@ export function abilitiesFromRace(pTarget, opts = {}) {
     });
     const sm = mean(step);
     step = step.map(v => v - sm);
+    let extrapolated = false;
     if (prevStep) {
-      const den = prevStep.reduce((a, b) => a + b * b, 0);
-      const rho = den > 0 ? step.reduce((a, b, i) => a + b * prevStep[i], 0) / den : 0;
-      if (rho < 0) {
-        const lam = 1 - (1 - rho) / alpha;
-        alpha = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
+      const na = Math.sqrt(prevStep.reduce((a, b) => a + b * b, 0));
+      const nb = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
+      if (na > 0) {
+        const dot = step.reduce((a, b, i) => a + b * prevStep[i], 0);
+        const rho = dot / (na * na);
+        const cosn = nb > 0 ? dot / (na * nb) : 0;
+        const ratio = nb / na;
+        if (rho < 0) {
+          const lam = 1 - (1 - rho) / alpha;
+          alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && rmax > 1e3 * tol) {
+          // collinear steps decaying geometrically: sum the tail (Aitken)
+          mu = mu.map((m, i) => m - step[i] / (1 - ratio));
+          prevStep = null;
+          extrapolated = true;
+        }
       }
     }
-    prevStep = step;
-    mu = mu.map((m, i) => m - step[i]);
+    if (!extrapolated) {
+      prevStep = step;
+      mu = mu.map((m, i) => m - step[i]);
+    }
   }
   return mu;
 }

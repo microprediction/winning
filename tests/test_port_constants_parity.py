@@ -35,3 +35,26 @@ def test_ports_carry_the_inverse_safeguards():
         text = path.read_text()
         for marker in markers:
             assert marker in text, (path.name, marker)
+
+
+def test_ports_split_persistent_damping_from_transient_caution():
+    """#178: the Richardson value and the safety net's caution are two
+    numbers in all three engines, and the persistent one is NOT named
+    `base` -- that is the density argument in every port, and shadowing
+    it made the R inverse die in `.BASES[[base]]`."""
+    for path, persistent, transient in [
+        (R, "alpha_base", "penalty"),
+        (JS, "alphaBase", "penalty"),
+        (PY, "alpha_base", "penalty"),
+    ]:
+        text = path.read_text()
+        assert persistent in text, path.name
+        assert transient in text, path.name
+
+
+def test_ports_carry_the_geometric_extrapolation():
+    """The near-duplicate-pair mode is monotone, so it is summed rather
+    than damped; all three engines do it, on the same gate."""
+    for path in (PY, R, JS):
+        text = path.read_text()
+        assert "0.999" in text and "1e3 * tol" in text.replace("1e3 * tol", "1e3 * tol"), path.name
