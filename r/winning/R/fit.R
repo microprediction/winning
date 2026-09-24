@@ -113,9 +113,14 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   keep <- colSums(Vall ^ 2) > 1e-10 * sum(diag(C)) / n
   if (!any(keep)) keep[1] <- TRUE
   Vall <- Vall[, keep, drop = FALSE]
+  # the clamp is reported, not re-derived: the degradation test used to
+  # compare D against 1e-6 * diag while close_fit clamped at 1e-3 * mean,
+  # three orders of magnitude apart, so a clamp-bound fit counted zero
+  # bound entries and was priced instead of routed (#189)
+  d_clamp <- 1e-3 * mean(diag(C))
   close_fit <- function(Vc) {
     rhs <- diag(P %*% (C - Vc %*% t(Vc)) %*% P)
-    Dc <- pmax(solve(P * P, rhs), 1e-3 * mean(diag(C)))
+    Dc <- pmax(solve(P * P, rhs), d_clamp)
     Rm <- P %*% (C - Vc %*% t(Vc) - diag(Dc)) %*% P
     list(D = Dc, res = max(abs(Rm)))
   }
@@ -144,11 +149,23 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # has no GHK, so it prices the fit and says so -- see the warning in
   # race_probabilities(). A gap that does not announce itself is the one
   # failure mode that looks like an answer.
-  floor <- 1e-6 * pmax(diag(C), 1e-6 * mean(diag(C)))
+  bound <- sum(D <= 2 * d_clamp)
+  # the pairwise-contrast residual python also keys on: a near-singular
+  # difference variance the fit did not hold makes head-to-head
+  # probabilities badly wrong while the global residual stays small
+  Sig <- Vall %*% t(Vall) + diag(D)
+  cv_fit <- outer(diag(Sig), diag(Sig), "+") - 2 * Sig
+  cv_true <- outer(diag(C), diag(C), "+") - 2 * C
+  scale_cv <- pmax(cv_true, 1e-12 * mean(diag(C)))
+  contrast_res <- max(abs(cv_fit - cv_true) / scale_cv)
+  residual <- min(a1$res, a2$res)
   list(V = Vall, D = D, F = hw$F, W = hw$W,
        rank = ncol(Vall), n = n,
-       bound = sum(D <= 2 * floor),
-       residual = max(a1$res, 0),
-       degraded = (sum(D <= 2 * floor) > 0 || ncol(Vall) >= n ||
-                   min(a1$res, a2$res) > 0.05 * mean(diag(C))))
+       bound = bound,
+       clamp = d_clamp,
+       residual = residual,
+       contrast_residual = contrast_res,
+       degraded = (bound > 0 || ncol(Vall) >= n ||
+                   contrast_res > 0.05 ||
+                   residual > 0.05 * mean(diag(C))))
 }

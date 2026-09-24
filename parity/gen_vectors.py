@@ -124,8 +124,17 @@ def build(inputs):
         names the ports that implement it; the others print a declared skip
         rather than a failure, so partial coverage is visible instead of
         being expressed by leaving the scenario out altogether."""
-        out[name] = {"value": np.asarray(value).tolist(), "tol": tol}
+        arr = np.asarray(value, dtype=float)
+        if not np.isfinite(arr).all():
+            raise ValueError(f"scenario {name!r} has non-finite values; a "
+                             "parity fixture must be a number")
+        out[name] = {"value": arr.tolist(), "tol": tol}
         if ports is not None:
+            unknown = sorted(set(ports) - {"R", "js"})
+            if unknown or not ports:
+                raise ValueError(
+                    f"scenario {name!r}: ports={ports!r} names no checker "
+                    "that would run it (valid: 'R', 'js')")
             out[name]["ports"] = list(ports)
 
     sc("independent_normal", race_probabilities(mu, D=D, points=257))

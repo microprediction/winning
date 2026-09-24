@@ -171,17 +171,26 @@ function bulkWindow(Mall, sd, points, delta) {
 
 // Options are read by name, and an object silently swallows a key nobody
 // reads -- `cov` is not supported here and used to return the INDEPENDENT
-// race, bit-identical even for an all-zero covariance. Unknown keys now
-// throw. Keep this the union over raceProbabilities and abilitiesFromRace,
-// since the latter forwards its own options through.
-const KNOWN_OPTS = new Set([
+// race, bit-identical even for an all-zero covariance. Unknown keys throw.
+//
+// One shared allowlist is not enough: a union let each API accept the
+// other's options and ignore them, so raceProbabilities({nIter: 1}) and
+// abilitiesFromRace({returnSlopes: true}) returned a plausible answer to a
+// question nobody asked (#186). Each API validates its own signature, and
+// the inverse hands the forward an explicit object rather than spreading
+// its own options through.
+const FORWARD_OPTS = new Set([
   "V", "D", "F", "W", "base", "points", "returnSlopes", "window", "delta",
-  "structure", "qa", "qf", "nIter", "tol", "targetFloor", "returnInfo",
+  "structure", "qa", "qf",
+]);
+const INVERSE_OPTS = new Set([
+  "V", "D", "F", "W", "base", "points", "structure", "qa", "qf",
+  "nIter", "tol", "targetFloor", "returnInfo",
 ]);
 
-function checkOpts(opts, where) {
+function checkOpts(opts, known, where) {
   for (const k of Object.keys(opts)) {
-    if (KNOWN_OPTS.has(k)) continue;
+    if (known.has(k)) continue;
     if (k === "cov") {
       throw new Error(
         where + ": cov= is not supported in the browser port. Fit the " +
@@ -191,7 +200,7 @@ function checkOpts(opts, where) {
     }
     throw new Error(
       where + ": unknown option '" + k + "'. Known: " +
-      [...KNOWN_OPTS].join(", ") + ".");
+      [...known].join(", ") + ".");
   }
 }
 
@@ -199,7 +208,7 @@ export function raceProbabilities(mu, opts = {}) {
   const { V = null, D = null, F = null, W = null, base = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
-  checkOpts(opts, "raceProbabilities");
+  checkOpts(opts, FORWARD_OPTS, "raceProbabilities");
   if (structure) {
     return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
   }
@@ -276,8 +285,8 @@ export function raceProbabilities(mu, opts = {}) {
 
 export function abilitiesFromRace(pTarget, opts = {}) {
   const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
-          F = null, W = null, base = "normal" } = opts;
-  checkOpts(opts, "abilitiesFromRace");
+          F = null, W = null, base = "normal", points = 257 } = opts;
+  checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace");
   if (structure) return dispatchAbilities(pTarget, structure, opts);
   let target = pTarget.slice();
   const s = target.reduce((a, b) => a + b, 0);
@@ -324,7 +333,7 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   let prev = null;
   let prevStep = null;
   for (let it = 0; it < nIter; it++) {
-    const { p: praw, slopes: sl } = raceProbabilities(mu, { ...opts, returnSlopes: true, structure: null });
+    const { p: praw, slopes: sl } = raceProbabilities(mu, { V, D, F, W, base, points, returnSlopes: true, structure: null });
     const phat = praw.map(v => Math.max(v, 1e-300));
     let resid = phat.map((v, i) => Math.log(v) - logt[i]);
     let dlogp = sl.map((v, i) => Math.min(v / phat[i], -1e-6));
