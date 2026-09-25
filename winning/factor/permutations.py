@@ -175,6 +175,21 @@ def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
     if F is None or W is None:
         D_impl = np.full(len(mu), (np.pi ** 2 / 6.0) * tau * tau)
         _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
+    else:
+        # _setup is where the relative-weight rule is decided, and this
+        # branch skips it because the caller supplied the law. Without
+        # this the returned log-probability shifted by log(sum W): the
+        # same factor law spelled W = [5, 5] instead of [0.5, 0.5] read
+        # -1.5071 as +0.7955, exactly log(10) apart (#208).
+        W = np.asarray(W, float)
+        wtot = float(W.sum())
+        if not np.isfinite(wtot) or wtot <= 0.0:
+            raise ValueError(
+                f"W must be positive weights: they total {wtot!r}. They "
+                "are relative, so any positive multiple of a valid rule "
+                "is the same factor law, but a zero or negative total is "
+                "not one.")
+        W = W / wtot
     logs = np.array([_one(-(mu + np.asarray(F)[q] @ V.T) / tau)
                      for q in range(len(F))])
     m = logs.max()

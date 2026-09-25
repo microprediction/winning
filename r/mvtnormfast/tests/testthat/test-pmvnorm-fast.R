@@ -1,5 +1,8 @@
-source(file.path("..", "..", "R", "pmvnorm_fast.R"))
-
+# Run by R CMD check through tests/testthat.R, so the package is
+# already attached and its internals are in scope. These files used
+# to source(file.path("..", "..", "R", ...)) instead, which only
+# works from the repo and fails inside a check -- which is how they
+# went unrun (#142).
 test_that("factor case matches mvtnorm within its own error bound", {
   set.seed(11)
   n <- 30

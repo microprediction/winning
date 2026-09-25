@@ -16,7 +16,10 @@ import math
 from typing import List, Sequence
 
 import numpy as np
-from thurstone import Density, Race, UniformLattice
+# the external `thurstone` package is retired and winning.thurstone is a
+# tombstone; the research engine it aliased lives at winning.research,
+# which is exactly the migration that tombstone prescribes
+from winning.research import Density, Race, UniformLattice
 
 _GRID_POINTS_PER_BETA = 10  # lattice unit = beta / 10
 _SUPPORT_Z = 6.0
