@@ -12,7 +12,7 @@ from scipy.special import log_ndtr, ndtr, ndtri
 
 # the package-wide shape contract; re-exported here because
 # winning.factor.core is where the factor kernels look for it
-from ..shapes import as_idio, as_loadings  # noqa: F401
+from ..shapes import as_idio, as_loadings, as_weights  # noqa: F401
 
 from ..rustconfig import load_fastrace
 

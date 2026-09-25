@@ -207,6 +207,49 @@ export const OPT_HINTS = {
  * a function` and a RAGGED V was silently truncated to the first row's
  * width, producing an all-NaN answer with no complaint (#232).
  */
+/* Idiosyncratic VARIANCES as the length-n vector the kernels contract
+ * for, mirroring winning/shapes.py::as_idio. A scalar is the same
+ * variance for every contestant; a wrong length, a non-finite entry or a
+ * negative variance raises here rather than reaching the lattice.
+ *
+ * The browser normalised V and left D alone, so a scalar threw
+ * `D.slice is not a function`, and -- the dangerous one -- a D with ONE
+ * EXTRA entry was accepted and returned a normalised, plausible,
+ * materially wrong answer: [0.888, 0.102, 0.010] where the race is
+ * [0.507, 0.312, 0.181]. Short, zero, negative and NaN entries all
+ * propagated NaN through forward and inverse alike (#254).
+ *
+ * `positive` is for the lattice kernels, which cannot represent an
+ * exact zero variance.
+ */
+export function asIdio(D, n, where = "D", positive = true) {
+  if (D == null) return new Array(n).fill(1);
+  let v;
+  if (typeof D === "number") {
+    v = new Array(n).fill(D);
+  } else if (Array.isArray(D)) {
+    if (D.length !== n)
+      throw new Error(
+        `${where} must be one idiosyncratic variance per contestant; ` +
+        `got ${D.length} for ${n}`);
+    v = D.slice();
+  } else {
+    throw new Error(`${where}: expected a number or array`);
+  }
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(v[i]))
+      throw new Error(`${where} has a non-finite entry at ${i}`);
+    if (v[i] < 0)
+      throw new Error(
+        `${where}[${i}] = ${v[i]} is a negative variance`);
+    if (positive && v[i] === 0)
+      throw new Error(
+        `${where} must be strictly positive here: entry ${i} is zero, ` +
+        "which the lattice cannot represent");
+  }
+  return v;
+}
+
 export function asLoadings(V, n, where = "V") {
   if (V == null) return null;
   if (typeof V === "number") {

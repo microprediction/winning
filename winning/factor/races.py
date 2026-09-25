@@ -53,7 +53,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import ndtr, ndtri
 
-from .core import as_idio, as_loadings, hermite_nodes
+from .core import as_idio, as_loadings, as_weights, hermite_nodes
 
 from ..rustconfig import load_fastrace
 
@@ -424,14 +424,7 @@ def _setup(mu, V, D, F, W, base):
     # above already sums to one, so this changes nothing the library
     # generates; it makes the caller's spelling not matter, which is the
     # contract everywhere else.
-    W = np.asarray(W, float)
-    wtot = float(W.sum())
-    if not np.isfinite(wtot) or wtot <= 0.0:
-        raise ValueError(
-            f"W must be positive weights: they total {wtot!r}. They are "
-            "relative, so any positive multiple of a valid rule is the "
-            "same factor law, but a zero or negative total is not one.")
-    return mu, V, D, np.asarray(F, float), W / wtot, fn, left, right
+    return mu, V, D, np.asarray(F, float), as_weights(W), fn, left, right
 
 
 
@@ -1557,6 +1550,13 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
     if F is None or W is None:
         D_impl = np.full(len(mu), _GUMBEL_UNIT_D * tau * tau)
         _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
+    else:
+        # _setup is where the relative-weight rule is decided, and this
+        # branch skips it because the caller supplied the law. Without
+        # this the answer scaled with sum(W): the same law spelled
+        # [5, 5] returned TEN TIMES the probabilities, and the ordered
+        # log-probability log(10) higher (#263).
+        W = as_weights(W)
     F = np.asarray(F, dtype=float)
     W = np.asarray(W, dtype=float)
     M = -(mu[None, :] + F @ V.T) / tau
@@ -1602,6 +1602,13 @@ def plackett_luce_order_logprob(mu, order, temperature=1.0, V=None, F=None,
     if F is None or W is None:
         D_impl = np.full(len(mu), _GUMBEL_UNIT_D * tau * tau)
         _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
+    else:
+        # _setup is where the relative-weight rule is decided, and this
+        # branch skips it because the caller supplied the law. Without
+        # this the answer scaled with sum(W): the same law spelled
+        # [5, 5] returned TEN TIMES the probabilities, and the ordered
+        # log-probability log(10) higher (#263).
+        W = as_weights(W)
     logs = np.array([_one(-(mu + np.asarray(F)[q] @ V.T) / tau)
                      for q in range(len(F))])
     m = logs.max()
