@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- A coordinate with no idiosyncratic variance is treated as
+  deterministic, in all three structured-MVN ports (#206). Given the
+  factor draw such a coordinate is a CONSTANT, `X_i = mu_i + v_i . f`, so
+  its conditional cell is an INDICATOR, not a gaussian interval. Every
+  port divided by `s_i = 0` anyway. Off the boundary that happened to give
+  the right answer; on an inclusive boundary it is `0/0`, so the
+  documented `P(X_1 <= 0) = 1` for `X_1` identically zero came back as
+  `nan` from python and Julia, and as "missing value where TRUE/FALSE
+  needed" from R.
+
+  A constant that lies outside its own interval now returns exactly
+  `0.0` with method `outside-support`, rather than the `1e-300` the cell
+  floor gave it and a trip through the recentered path looking for a
+  probability that is not there. Checked against one-dimensional
+  quadrature for the harder case where `D_i = 0` but `V_i != 0`, so the
+  coordinate is constant only GIVEN the factor and the indicator
+  restricts the factor region instead: filter 0.32379233, quadrature
+  0.32379181.
+
+- Julia broadcasts a scalar bound, as the specification does (#184).
+  `winning.fastmvn` broadcasts with `np.broadcast_to` and the R port with
+  `rep_len`, but `julia/FactorMvNormalCDF` called `collect` on the
+  argument. A scalar `Float64` is not iterable, so the ordinary joint-CDF
+  spelling `mvn_cdf_fast(V=V, D=D, upper=0.0)` threw before evaluating
+  anything, on the structured and the delegated dense path alike. A
+  length that is neither 1 nor `n` now raises with both numbers named,
+  rather than recycling silently.
+
 - Quadrature weights are RELATIVE, in every verb that takes them (#208).
   `W` and `c*W` describe the same factor law, and every verb normalises
   its own result, so the common scale cancels -- except in the
