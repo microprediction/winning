@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- The browser's race Jacobian differentiates the lattice its own forward
+  integrates on (#212, partly). It built its OWN grid -- a plain span
+  window, no adaptive placement, no refinement -- while
+  `raceProbabilities` uses an adaptive bulk window plus a refinement when
+  the spacing exceeds half the narrowest performance sd. So the two
+  parted company exactly where the lattice is coarse relative to the
+  field.
+
+  Measured against finite differences of its own forward, on a
+  four-runner race whose variances span 4005x:
+
+  | points | before | after | python |
+  |---|---:|---:|---:|
+  | 257 | 1.02e-3 | 1.51e-5 | 1.74e-8 |
+  | 1025 | 1.51e-10 | 1.51e-10 | 1.91e-9 |
+
+  A sweep of 40 random fields puts the median at 1.4e-11 and shows the
+  degradation appearing only past a variance ratio of about 1000, which
+  is why it went unnoticed.
+
+  `forwardGrid` is now exported from `races.mjs` and both verbs call it,
+  mirroring python's `forward_grid`. This does NOT close #212: the issue
+  also asks for the own-density derivative to be integrated rather than
+  the diagonal imposed by a zero-row-sum identity, and for the
+  normalisation's quotient-rule term. I ported both and measured the
+  result WORSE on an unresolvable field -- 1.33 against 0.355 -- so the
+  port has a defect I have not found, and shipping it would have traded
+  a clean 68x improvement for a regression. The remaining terms stay
+  open, with the measurement above as the baseline. R has the same
+  divergence and is untouched.
+
 - GMRFExtremes answers a threshold out in the tail (#197). The grid was
   built from the chain's means and marginal sds alone, so a threshold
   above the last cell left the occupancy identically one and every
