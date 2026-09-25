@@ -1,5 +1,7 @@
 // Block, nested and tree races -- port of winning/factor/blocks.py.
-import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts, OPT_HINTS } from "./core.mjs";
+import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
+         OPT_HINTS, asLoadings, firstPrimes } from "./core.mjs";
+import { invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -93,7 +95,26 @@ function clusterNodes(r, qa) {
     const s = w.reduce((x, y) => x + y, 0);
     return { nodes, w: w.map(v => v / s) };
   }
-  throw new Error("rank >= 3 cluster effects: supply nodes explicitly");
+  // rank >= 3: the tensor grid explodes, so escalate the FAMILY, as
+  // races.mjs does for high-rank loadings and as python does with
+  // scrambled Sobol. The old message told the caller to "supply nodes
+  // explicitly", which no nested verb accepts -- checkOpts rejects a
+  // `nodes` option before pricing -- so it was a remediation that could
+  // not be followed (#264).
+  const Q = 8192;
+  const nodes = [], w = new Array(Q).fill(1 / Q);
+  const primes = firstPrimes(r);
+  for (let idx = 0; idx < Q; idx++) {
+    const node = [];
+    for (let dim = 0; dim < r; dim++) {
+      const b = primes[dim];
+      let i = idx + 21, f = 1 / b, h = 0;
+      while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
+      node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
+    }
+    nodes.push(node);
+  }
+  return { nodes, w };
 }
 
 function fieldPass(muO, sdO, shifts, cO, nC, x) {
@@ -178,7 +199,11 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
   if (!coupling || gamma === 0)
     return blockRaceProbabilities(mu, cluster, loading, D, { points, qa });
-  const g = Array.isArray(coupling[0]) ? coupling : coupling.map(v => [v]);
+  // The shared contract, as python's atleast_2d-plus-transpose does
+  // it: a (rank, n) coupling is the SAME race as (n, rank). This
+  // normalised by hand and never transposed, so the transposed
+  // spelling was read as rank n and refused (#264).
+  const g = asLoadings(coupling, mu.length, "coupling");
   const k = g[0].length;
   let fn, fw;
   if (k === 1) {
@@ -410,7 +435,11 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
   if (!coupling || gamma === 0)
     return blockRaceJacobian(mu, cluster, loading, D, { points, qa });
-  const g = Array.isArray(coupling[0]) ? coupling : coupling.map(v => [v]);
+  // The shared contract, as python's atleast_2d-plus-transpose does
+  // it: a (rank, n) coupling is the SAME race as (n, rank). This
+  // normalised by hand and never transposed, so the transposed
+  // spelling was read as rank n and refused (#264).
+  const g = asLoadings(coupling, mu.length, "coupling");
   const k = g[0].length;
   let fn, fw;
   if (k === 1) {

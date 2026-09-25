@@ -121,7 +121,7 @@ function condMeans(mu, V, F) {
 }
 
 
-function invNormalRational(p) {
+export function invNormalRational(p) {
   // Acklam rational approximation, adequate for node placement
   const a = [-39.6968302866538, 220.946098424521, -275.928510446969,
              138.357751867269, -30.6647980661472, 2.50662827745924];
