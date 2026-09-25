@@ -145,3 +145,123 @@ test_that("a two-runner covariance fits instead of throwing", {
   }
   expect_silent(fit_covariance(diag(2), k = 1L, m = 1L, nodes = 32L))
 })
+
+# --- a one-runner covariance (#273) -----------------------------------
+#
+# race_probabilities(mu) already returned 1 for a single runner.
+# cov = matrix(v, 1, 1) crashed instead: .factor_model_projected is asked
+# for min(k, n - 1) = 0 factors and hands back a 0 x 0 matrix, which then
+# fails to multiply. Python divided by zero at the same field, since its
+# inner solver divides by (1 - 2/n) + n/n^2 = 0 at n = 1.
+#
+# There is nothing for a factor to correlate with one runner, so the
+# whole variance is idiosyncratic and the fit is exact at rank zero.
+
+test_that("a one-runner race with a covariance is certain", {
+  p <- race_probabilities(2.0, cov = matrix(4.0, 1, 1))
+  expect_length(p, 1L)
+  expect_lt(abs(p[1] - 1), 1e-12)
+})
+
+test_that("it agrees with the plain one-runner race", {
+  expect_lt(abs(race_probabilities(2.0) -
+                race_probabilities(2.0, cov = matrix(4.0, 1, 1))), 1e-12)
+})
+
+test_that("the one-runner fit reports rank zero and no residual", {
+  f <- fit_covariance(matrix(4.0, 1, 1))
+  expect_identical(f$rank, 0L)
+  expect_identical(f$degraded, FALSE)
+  expect_lt(abs(f$D[1] - 4.0), 1e-9)
+  expect_lt(abs(sum(f$W) - 1), 1e-12)
+})
+
+test_that("larger fields are untouched", {
+  for (n in c(2L, 3L, 5L)) {
+    C <- diag(n) + 0.2 * (matrix(1, n, n) - diag(n))
+    p <- race_probabilities(seq(0, 1, length.out = n), cov = C)
+    expect_length(p, n)
+    expect_lt(abs(sum(p) - 1), 1e-9)
+    expect_true(all(p > 0))
+  }
+})
+
+# --- the validation the one-runner branch sits below (#277) ----------
+#
+# The early return keys off nrow alone, so it has to come AFTER the
+# shape and covariance checks: a 1 x 2 matrix has nrow 1, and would
+# otherwise be answered from C[1, 1] with the second column dropped.
+# R had no validation here at all -- a negative variance was clamped to
+# the floor and NA/Inf propagated into the fit -- while python refused
+# each one. Same contract, same messages, both ports.
+
+test_that("a non-square cov is refused rather than read by nrow", {
+  expect_error(fit_covariance(matrix(c(1, 2), 1, 2)), "must be square")
+  expect_error(fit_covariance(matrix(c(1, 2), 2, 1)), "must be square")
+  # the message names the shape it got
+  expect_error(fit_covariance(matrix(c(1, 2), 1, 2)), "1 x 2")
+})
+
+test_that("a non-finite one-runner cov is refused", {
+  expect_error(fit_covariance(matrix(NA_real_, 1, 1)), "NaN or inf")
+  expect_error(fit_covariance(matrix(Inf, 1, 1)), "NaN or inf")
+  expect_error(fit_covariance(matrix(-Inf, 1, 1)), "NaN or inf")
+  expect_error(fit_covariance(matrix(NaN, 1, 1)), "NaN or inf")
+})
+
+test_that("a negative one-runner variance is refused, not clamped", {
+  # it used to come back as D = 1e-12, i.e. invalid data dressed up as
+  # a certain race
+  expect_error(fit_covariance(matrix(-1, 1, 1)), "positive semidefinite")
+})
+
+test_that("a zero one-runner variance is valid and lands on the floor", {
+  f <- fit_covariance(matrix(0, 1, 1))
+  expect_equal(as.numeric(f$D), 1e-12)     # python's value too
+  expect_equal(as.numeric(f$W), 1)
+  expect_equal(f$rank, 0L)
+})
+
+test_that("an asymmetric cov is refused at every size", {
+  expect_error(fit_covariance(matrix(c(1, 0.9, 0.1, 1), 2, 2)),
+               "not symmetric")
+})
+
+test_that("a valid one-runner cov still fits", {
+  f <- fit_covariance(matrix(4, 1, 1))
+  expect_equal(as.numeric(f$D), 4)
+  expect_equal(as.numeric(f$V), 0)
+  expect_equal(f$rank, 0L)
+})
+
+# --- symmetrising must not overflow what the check just passed (#279)
+#
+# The finiteness check runs before the symmetrisation, and
+# 0.5 * (C + t(C)) doubles before it halves, so a finite variance near
+# the double ceiling passed the check and then became Inf. The PSD
+# tolerance had the same shape: sum(diag(C)) overflows before the
+# division by n, and a tolerance of -Inf makes the comparison FALSE
+# for every eigenvalue, so the check accepted a matrix that is not a
+# covariance at all.
+
+test_that("a huge finite one-runner variance survives symmetrising", {
+  for (v in c(1e307, 1e308, 1.5e308, .Machine$double.xmax)) {
+    f <- fit_covariance(matrix(v, 1, 1))
+    expect_true(is.finite(f$D))
+    expect_equal(as.numeric(f$D), v)
+  }
+})
+
+test_that("an overflowing trace does not disable the PSD check", {
+  C <- matrix(c(1e308, 1.5e308, 1.5e308, 1e308), 2, 2)
+  expect_lt(min(eigen(C, symmetric = TRUE, only.values = TRUE)$values), 0)
+  expect_error(fit_covariance(C), "positive semidefinite")
+})
+
+test_that("a large two-runner cov still fits", {
+  # 1e308 overflows further into the fit, which is separate work
+  for (v in c(1e200, 1e300)) {
+    f <- fit_covariance(diag(c(v, v)))
+    expect_true(all(is.finite(f$D)))
+  }
+})
