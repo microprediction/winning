@@ -40,3 +40,23 @@ observations. Needs: a batched GPU/JAX kernel, aggressive class
 pruning, ranks ~1-4. Parked behind Tracks A/D/E in PLANS.md; this
 note is the fuller statement of why the fit is exact and what the
 engineering bill is.
+
+## The small-N front door: zero-shot classifiers (added 2026-09-23)
+The throughput obstacle above assumes tens of thousands of classes and
+billions of observations. GLiClass (Knowledgator; see ml-systems.md 1b)
+is the same head at the other end of the scale: a user-supplied label set
+of a few to a few dozen labels, encoded in the same forward pass as the
+text, scored by a scalar logit per label, and closed by
+
+    torch.softmax(logits, dim=-1)      # single-label
+    torch.sigmoid(logits) + threshold  # multi-label
+
+Two things make it the right first target. The label set is chosen by
+the end user and is full of near-synonyms, so IIA fails by construction
+rather than by accident. And the label embeddings are already in hand,
+so the loadings `V` are a byproduct of the forward pass, not a fit: the
+race head is an inference-time swap on a frozen checkpoint. Exactness
+costs microseconds at this N. If the swap moves calibration or the
+synonym-split behaviour on a public zero-shot suite, that is the
+existence proof for the large-N product without paying its kernel bill
+first.

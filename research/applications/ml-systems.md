@@ -77,6 +77,67 @@ learning / calibration workshops. The paper explicitly connects itself to
 
 ---
 
+## 1b. Zero-shot classifiers with a user-supplied label set (GLiClass) — RANK 1, first target
+
+Added 2026-09-23. A concrete, small-N instance of front 1 where the throughput
+obstacle in `probit_output_layer.md` does not bind.
+
+### (i) Race mapping
+GLiClass (Knowledgator, github.com/knowledgator/GLiClass; README and
+`gliclass/pipeline.py` read 2026-09-23) is "an efficient, zero-shot sequence
+classification model inspired by the GLiNER framework". The default
+uni-encoder puts the label strings into the SAME forward pass as the text,
+each label receives a scalar logit from a dot-product / weighted-dot / MLP /
+Hopfield scorer, and the head is
+
+    single-label:  scores = torch.softmax(logits, dim=-1)
+    multi-label:   scores = torch.sigmoid(logits), then a threshold
+
+i.e. the Gumbel independent race for single-label and independent Bernoullis
+for multi-label — applied to a label set the USER supplies at inference time.
+
+### (ii) Public data / benchmarks
+Open weights on Hugging Face (knowledgator/gliclass-* family) and the
+zero-shot text-classification suites their README reports on; any of the
+standard zero-shot sets (emotion, topic, intent) can be re-run with label
+sets deliberately containing near-synonyms.
+
+### (iii) Incumbent + documented limitation
+Softmax over labels assumes IIA. In zero-shot use the label set is chosen by
+the end user and is routinely full of near-synonyms ("happy" / "joyful",
+"billing" / "payment"), so the red-bus failure is built in rather than
+incidental: adding a synonym splits the winner's share instead of stealing
+proportionally from every label. Multi-label sigmoid ignores that correlated
+labels fire together. Neither the README nor the pipeline models label
+interactions at the head; the interaction, if any, is left to attention
+upstream of the scalar logits.
+
+### (iv) Unique advantage
+The label embeddings come out of the same encoder, so factor loadings
+`V` = label-embedding cosines (or a rank-k fit of the label Gram matrix via
+`fit_factor_model`) cost nothing extra. That makes an INFERENCE-TIME swap
+possible with no retraining: replace the softmax with `race_probabilities(
+-logits, V=V, D=D)` and the sigmoid stack with top-k membership under the same
+covariance. N is the size of the user's label set (typically 3-50), so the
+exact race is microseconds and the GPU-kernel bill of front 1 is absent.
+With the exact JVP the same head is also a training objective.
+
+### (v) Minimal demo
+Frozen GLiClass checkpoint. Build label sets of two kinds: (a) the benchmark's
+own labels, (b) the same labels plus one near-synonym of the true class.
+Compare softmax head vs factor-probit head with `V` from label embeddings on
+top-1, NLL/ECE, and on the share transferred to the synonym in (b) — the IIA
+prediction is 50/50 splitting, the correlated prediction is not. Multi-label:
+compare threshold-sigmoid vs top-k membership on the label-set F1.
+
+### (vi) Who would care
+Knowledgator (GLiClass / GLiNER maintainers); zero-shot classification users
+in the Hugging Face ecosystem; the same calibration audience as front 1.
+Cleanest possible "the head is the Gumbel special case of a race" story
+because the correlation structure is observable, not fitted.
+
+---
+
 ## 2. LLM leaderboards / arenas — RANK 2
 
 ### (i) Race mapping
@@ -307,6 +368,10 @@ footnote application, not a campaign.
    closed form, at their exact covariance structure (low-rank R=50 + diagonal,
    K up to 21k). Cleanest "delete the approximation" paper; public code and
    benchmarks; differentiability is the whole point there.
+   **First target within this front: GLiClass (1b)** — user-supplied label
+   sets full of near-synonyms, N small enough that exactness is free, and
+   label-embedding loadings available from the same forward pass, so the
+   swap needs no retraining and no kernel work.
 2. **Arena/leaderboard rating** — best story and public data; deprecation
    (205/243 models silently removed, documented BT-assumption violation) and
    best-of-N variant gaming are *removal counterfactual* and *max of
@@ -323,6 +388,7 @@ footnote application, not a campaign.
 ## Sources
 
 - https://arxiv.org/abs/2105.10305 (Collier et al., CVPR 2021; quotes read from PDF pp. 2-4)
+- https://github.com/knowledgator/GLiClass (README and gliclass/pipeline.py read 2026-09-23; softmax / sigmoid head quoted from _postprocess_logits)
 - https://openreview.net/pdf?id=sIoED-yPK9l (HET-XL, ICLR 2023)
 - https://www.lmsys.org/blog/2024-08-28-style-control/
 - https://arxiv.org/abs/2504.20879 (The Leaderboard Illusion; quotes read from PDF pp. 4-7)
