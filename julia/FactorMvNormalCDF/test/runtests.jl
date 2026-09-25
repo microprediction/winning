@@ -69,4 +69,53 @@ end
     @test e_fast < 1e-6
 end
 
+
+# --- empty and degenerate rectangles (#235) ---------------------------
+#
+# P(lower <= X <= upper) over a reversed coordinate is an EMPTY event.
+# Every port formed the negative conditional cell Phi(0) - Phi(1) and
+# clamped it to the underflow floor, so an impossible observation came
+# back as 1e-300 -- a finite log probability near -690.8 rather than
+# -Inf. mvtnorm::pmvnorm, which the R port is a drop-in for, raises on
+# reversed bounds and returns 0 when a coordinate has lower == upper.
+@testset "empty and degenerate rectangles" begin
+    @test_throws ArgumentError FactorMvNormalCDF.mvn_cdf_fast(
+        lower = [1.0], upper = [0.0], mean = [0.0],
+        V = zeros(1, 1), D = ones(1))
+
+    err = try
+        FactorMvNormalCDF.mvn_cdf_fast(
+            lower = [0.0, 1.0, -1.0], upper = [1.0, 0.0, 1.0],
+            mean = zeros(3), V = zeros(3, 1), D = ones(3))
+        ""
+    catch e
+        sprint(showerror, e)
+    end
+    @test occursin("coordinate 2", err)
+
+    p, meth = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = [0.5], upper = [0.5], mean = [0.0],
+        V = zeros(1, 1), D = ones(1))
+    @test p === 0.0                       # exactly, not 1e-300
+    @test meth == "degenerate-rectangle"
+    @test log(p) == -Inf
+
+    p3, _ = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = [0.0, 0.3, -1.0], upper = [1.0, 0.3, 1.0],
+        mean = zeros(3), V = zeros(3, 1), D = ones(3))
+    @test p3 === 0.0
+
+    # a valid rectangle is untouched: independent coordinates, exact
+    D = [0.7, 0.9, 1.1]
+    lo = [-1.0, -1.0, -1.0]; up = [0.4, 0.8, 1.2]
+    pv, _ = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = lo, upper = up, mean = zeros(3),
+        V = zeros(3, 1), D = D)
+    # Distributions is not a test dependency; use the package's own ndtr
+    Phi = FactorMvNormalCDF.ndtr
+    exact = prod(Phi(up[i] / sqrt(D[i])) - Phi(lo[i] / sqrt(D[i]))
+                 for i in 1:3)
+    @test abs(pv - exact) < 1e-10
+end
+
 println("all FactorMvNormalCDF tests passed")

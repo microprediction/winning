@@ -70,6 +70,7 @@
   `targetFloor` vanished on every other path. Sabotage-tested by putting
   an unread key back.
 
+
 - The browser honours the loading-shape contract, in every module that
   takes `V` (#232). `winning.shapes.as_loadings` is the one place the rule
   is decided -- `V` is `(n, rank)`, one ROW per contestant, and a scalar,
@@ -99,6 +100,139 @@
   exception on a happy path killed the file, so the run failed with no
   named check and every later check silently went unrun. A new `accepts()`
   helper turns a thrown exception into a named FAIL.
+
+
+
+- The pre-renovation `src/` package is gone, all but the one part still
+  used. It had sat since the August renovation: not packaged (`setup.py`
+  lists only `winning.*`), not collected (`pytest.ini` does not name it),
+  and four of its filenames -- `lattice_calibration`, `lattice_conventions`,
+  `skew_calibration`, `std_calibration` -- shadowed live ones under
+  `winning/classic/`, so a grep returned two hits with nothing saying
+  which was current. Those are deleted, with `elo`, `kernels`, `shims`,
+  `thurstonerating`, the old test tree and the benchmarks: nothing
+  referenced any of them.
+
+  What survives is `attic/src/winning`, holding the dependency closure of
+  Glicko-2 -- `glicko2.py`, `exact.py`, `ratingsystem.py` -- because six
+  chess experiments compare against it and the live package has no
+  Glicko-2.
+
+  **It had stopped working.** `exact.py` imported the external `thurstone`
+  package, which is retired, and `winning.thurstone` is now a tombstone
+  that raises on import, so every one of those experiments would have
+  failed at the Glicko-2 step. It imports `winning.research` now, which is
+  the migration that tombstone's own message prescribes. Verified end to
+  end: A beating B three times gives A 1753, B 1247, win probability 0.82.
+  A test covers it, since nothing else looks at that directory -- which is
+  precisely how it broke.
+
+- The sampler goodness-of-fit test uses a STABLE seed (`zlib.crc32`
+  rather than `hash`). `str.__hash__` is salted per process unless
+  `PYTHONHASHSEED` is set, so `np.random.default_rng(hash(name) % 2**32)`
+  drew a different sample on every run and re-rolled the test's own 9e-5
+  tail risk each time. Thirteen bases across six CI platforms is 78 draws
+  per round, which is a failure every few rounds: one hit a macos runner
+  at 0.010262 against the 1e-2 bound, on a pull request that changed only
+  browser javascript. The comment in the test blamed platform differences;
+  those are why the scipy-backed samplers consume the stream differently,
+  not why the draw changed between two runs on the same machine.
+
+  Each (base, platform) pair now has one fixed draw: it passes forever or
+  fails immediately, rather than being re-rolled. Locally the worst base
+  sits at 0.006956, a 1.44x margin, and over 120 seeds the previously
+  failing base has median 0.0038 and max 0.0067.
+
+- All four structured-MVN ports reject an empty rectangle instead of
+  pricing it at the underflow floor (#235). `P(lower <= X <= upper)` with
+  `lower_i > upper_i` is an EMPTY event. Python, the vendored standalone
+  python, R and Julia each formed the negative conditional cell --
+  `Phi(0) - Phi(1) = -0.341344746...` -- and then clamped it with
+  `max(cell, 1e-300)`. So an impossible observation came back as a finite
+  probability, and in log-likelihood code as about `-690.8` rather than
+  `-inf`. On the recentered path it is worse than a clamp: importance
+  integration then integrates the artificial constant cell.
+
+  `mvtnorm::pmvnorm`, which `r/mvtnormfast` is a drop-in for, raises on
+  reversed bounds and returns 0 when a coordinate has `lower == upper`.
+  All four ports now do exactly that, and report the degenerate case as
+  method `degenerate-rectangle` with a value of exactly `0.0`, not
+  `1e-300`. The error names the offending coordinate.
+
+  The check sits in front of the dense routes too, not only the factor
+  one. `scipy.stats.multivariate_normal.cdf` returns the NEGATIVE number
+  `-0.341...` for a reversed rectangle rather than raising, so the python
+  fallback branch needed its own guard; the julia dense delegation and
+  the R `mvtnorm` fallback are covered the same way. Distinct from #196,
+  which is about cancellation on VALID upper-tail intervals.
+
+- `rprobit_fast` and `mlogit_fast` reject a malformed choice set instead
+  of reshaping it (#230). Both price a field by a POSITIONAL reshape --
+  `matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)` -- so row order
+  alone decides which alternative a row is priced as, and the only guard
+  was a count: `nrow(df) == Tn * J`. An observation that duplicates one
+  alternative and omits another still has J rows, so it passed, and the
+  duplicate row was priced as the alternative that was missing. The
+  reported case fits a covariate value of 10 onto an alternative that
+  does not exist for that observation and returns an ordinary-looking
+  coefficient.
+
+  The contract is one row per (observation, alternative), which is a
+  table and not a total, so both packages now check the contingency table
+  and name the offending observation and alternative. A well-formed panel
+  is untouched.
+
+- The browser inverse honours the two options it advertised (#226).
+  `targetFloor` and `returnInfo` were on `abilitiesFromRace`'s allowlist
+  and read by nothing, so they passed validation and vanished -- the
+  precise failure the allowlist exists to prevent, reintroduced by
+  deriving that list from python's signature rather than from what the
+  function reads. It now matches python: a zero share raises, because it
+  has no finite inverse; `targetFloor` floors deliberately and reports
+  which entries were floored; `returnInfo` returns the record rather than
+  the bare vector, and does not change the answer.
+
+  A test now requires every allowlisted key to be read by the function
+  that advertises it. Two functions legitimately forward their whole
+  options object onward, and that is DECLARED rather than inferred --
+  "the body mentions opts somewhere" would have excused this very bug,
+  since `abilitiesFromRace` forwards on its structure branch while
+  `targetFloor` vanished on every other path. Sabotage-tested by putting
+  an unread key back.
+
+- `rank_probabilities` keeps BOTH guards, before and after normalisation
+  (#221). The entry above replaced the raw check with a post-normalisation
+  one, and that was wrong: they are independent, not alternatives. Row
+  normalisation can ERASE a gross raw defect. On a field whose sds span
+  232x the raw matrix is off by 0.249 in a row and 0.199 in a column, and
+  dividing by those same row sums leaves a column defect of 0.0047 --
+  inside the 5e-3 tolerance -- so it returned a false success, while
+  `top_k_probabilities` rejected the same field at 0.056. The raw check
+  sees the quadrature; the post check sees what the caller gets; neither
+  implies the other.
+
+  The two fields now on record prove the independence, and each slips past
+  the guard that does not catch it: #221's is caught only before
+  normalisation, #203's only after. A test asserts that, and another
+  asserts what the user actually saw -- that rank and top-k agree about
+  whether a field resolves at all. Python, R, Julia and the browser all
+  carry both; R and the browser agree with python to 9e-10 at 2001 points.
+
+- Binary choices fit in `rprobitfast` and `mlogitfast` (#183). The
+  triangular-loading loop read `for (row in (col + 1L):J)`, and at J = 2
+  with the default rank 2 the second pass evaluates `3:2` -- which in R
+  is the two-element vector `c(3, 2)`, counting DOWN, not an empty range.
+  The first assignment was therefore `V[3, 2]` on a 2x2 matrix and every
+  binary-choice fit died with "subscript out of bounds"; `nw` counts one
+  free loading there, so `wfree[2]` was past the end of the parameter
+  vector as well. `col + seq_len(J - col)` is empty exactly when it should
+  be, and identical elsewhere -- checked, not assumed: at J = 5, rank 2
+  the two loops visit the same seven cells in the same order.
+
+  Fixed in all three copies of the loop (`mlogitfast/R/mlogit_fast.R`,
+  `rprobitfast/R/engine.R`, `rprobitfast/R/rprobit_fast.R`). A 180-subject
+  binary probit now recovers a true slope of 0.8 as 0.757, where it raised
+  before.
 
 - The browser factor race's own parity suite runs in CI (#140, second
   half). `js/factor/test_parity.mjs` checks the tabulated bases against

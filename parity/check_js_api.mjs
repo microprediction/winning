@@ -87,6 +87,25 @@ holds("inverse works", races.abilitiesFromRace([0.5, 0.3, 0.2], { D: D3 }).every
 holds("topK works", topk.topKProbabilities(mu3, 1, { D: D3 }).every(Number.isFinite));
 holds("blocks work", blocks.blockRaceProbabilities(mu3, [0, 0, 1], [0.3, 0.3, 0.3], D3, { points: 257 }).every(Number.isFinite));
 
+// --- the inverse honours the options it advertises (#226)
+rejects(races.abilitiesFromRace, [[0.5, 0.5, 0], { D: [1, 1, 1] }],
+        "zero target without a floor", "no finite inverse");
+rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { D: [1, 1, 1], targetFloor: -1 }],
+        "negative targetFloor", "must be positive");
+{
+  const D = [1, 1, 1];
+  const info = races.abilitiesFromRace([0.5, 0.3, 0.2], { D, returnInfo: true });
+  holds("returnInfo returns diagnostics",
+        Array.isArray(info.mu) && typeof info.converged === "boolean"
+        && Number.isFinite(info.maxLogResidual) && Array.isArray(info.floored),
+        `converged=${info.converged} resid=${info.maxLogResidual.toExponential(2)}`);
+  const f = races.abilitiesFromRace([0.5, 0.5, 0], { D, targetFloor: 1e-4, returnInfo: true });
+  holds("targetFloor floors and says which", JSON.stringify(f.floored) === "[false,false,true]",
+        JSON.stringify(f.floored));
+  const plain = races.abilitiesFromRace([0.5, 0.3, 0.2], { D });
+  holds("returnInfo does not change the answer",
+        Math.max(...plain.map((v, i) => Math.abs(v - info.mu[i]))) < 1e-12);
+}
 // --- the loadings shape contract, in every module that takes V (#232)
 // V is (n, rank), one ROW per contestant, and as_loadings is the one
 // place that rule is decided. The browser indexed V directly instead, so

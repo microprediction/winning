@@ -73,7 +73,13 @@
   V <- matrix(0, J, r)
   k <- 1L
   fill <- list()
-  for (col in seq_len(r)) for (row in (col + 1L):J) {
+  # seq_len, not `(col + 1L):J`: at J = 2 and the default r = 2L the
+  # col = 2 pass evaluates 3:2, which in R is the two-element vector
+  # c(3, 2) rather than empty, so the first assignment is V[3, 2] on a
+  # 2x2 matrix and every binary-choice fit died out of bounds (#183).
+  # nw counts only one free loading there, so wfree[2] was out of range
+  # too. seq_len(J - col) is empty exactly when it should be.
+  for (col in seq_len(r)) for (row in col + seq_len(J - col)) {
     V[row, col] <- wfree[k]; fill[[k]] <- c(row, col); k <- k + 1L
   }
   Tn <- nrow(X) / J
@@ -143,6 +149,30 @@
 #' @param r number of factor columns (default 2 covers the full
 #'   identified covariance at J = 4).
 #' @param Qf,Qz Gauss-Hermite orders for factor and own-noise nodes.
+.check_choice_sets <- function(ids, alt, J) {
+  # The reshape downstream is POSITIONAL --
+  #   mu <- matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)
+  # -- so row order alone decides which alternative a row is priced as.
+  # A count check cannot see that: an observation that duplicates one
+  # alternative and omits another still has J rows, so `nrow(df) == Tn *
+  # J` passed and the duplicate row was priced as the missing
+  # alternative, returning an ordinary-looking fit (#230). The contract
+  # is one row per (observation, alternative), and that is a table, not
+  # a total.
+  tab <- table(ids, alt)
+  bad <- which(tab != 1L, arr.ind = TRUE)
+  if (nrow(bad) == 0L) return(invisible(NULL))
+  ids_lab <- rownames(tab); alt_lab <- colnames(tab)
+  first <- bad[order(bad[, 1], bad[, 2]), , drop = FALSE][1, ]
+  count <- tab[first[1], first[2]]
+  stop(sprintf(paste("each observation must contain each of the %d",
+                     "alternatives exactly once; observation '%s' has %d",
+                     "row(s) for alternative '%s' (%d observation-alternative",
+                     "cell(s) are wrong)"),
+               J, ids_lab[first[1]], count, alt_lab[first[2]], nrow(bad)),
+       call. = FALSE)
+}
+
 mlogit_fast <- function(formula, data, r = 2L, Qf = 7L, Qz = 7L,
                         maxit = 400L) {
   t0 <- Sys.time()
@@ -153,6 +183,9 @@ mlogit_fast <- function(formula, data, r = 2L, Qf = 7L, Qz = 7L,
   # dfidx wraps columns in xseries, under which %in% misbehaves; coerce
   chosen_rows <- which(as.logical(data[[as.character(formula[[2]])]]))
   Tn <- length(chosen_rows)
+  # the same positional reshape lives here (#230); idx[[1]] is the
+  # observation index dfidx carries alongside the alternative
+  .check_choice_sets(as.integer(as.factor(idx[[1]])), alt, J)
   choice <- alt[chosen_rows]
   rhs <- attr(terms(formula), "term.labels")
   Xcov <- as.matrix(as.data.frame(data)[, rhs, drop = FALSE])
