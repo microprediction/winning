@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- `structureCov` described a different race from the one the kernels
+  price, as soon as the cluster labels were not 0, 1, 2 (#306). Labels
+  are arbitrary comparable values and every tree kernel remaps them
+  densely; this read them as tree-node INDICES. Relabelling 0,1,2 to
+  10,20,30 sent each lookup past the end of `parent`, so the ancestor
+  set came back empty and every shared factor vanished -- a covariance
+  0.52 out, silently, while `treeRaceProbabilities` returned the same
+  prices as before. Negative and string labels threw
+  `anc[...] is not iterable`.
+
+  This is the browser twin of the python defect fixed in #146/#251. The
+  remapper existed and was private to `blocks.mjs`; `clusterIndex` is
+  now exported and `structureCov` calls it, so one place decides what a
+  label means. A private copy of a shared rule is the same shape as the
+  gauge-centering defect: the module that had it did not stop the
+  module that lacked it from shipping.
+
+  Checked end to end, not just for self-consistency: a 400k-path Monte
+  Carlo sampling from `structureCov`'s covariance reproduces
+  `treeRaceProbabilities` to 1.0e-3 against a 1.6e-3 noise floor, and
+  does so identically for integer, offset, negative and string labels.
+  The regression also asserts the fixture's ancestor factors contribute
+  0.52, since a tree whose ancestors contributed nothing would pass a
+  label-invariance test however it was indexed.
+
 - R's `race_jacobian` depended on the SCALE of the factor weights --
   #281's defect, in a third place. `W` and `c*W` describe the same
   factor law; the forward divides its accumulated shares by their total

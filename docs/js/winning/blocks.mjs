@@ -14,7 +14,12 @@ const TREE_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
 const ABILITIES_FROM_BLOCK_RACE_OPTS = new Set(["points", "qa", "maxIter", "tol"]);
 
 
-function clusterIndex(cluster) {
+// Exported because a SECOND reader of cluster labels existed and had a
+// private rule: demo.mjs's structureCov indexed by the raw label, so a
+// tree relabelled 0,1,2 -> 10,20,30 silently lost every ancestor factor
+// and negative or string labels threw (#306). One place decides what a
+// label means, as the python side decided in #146.
+export function clusterIndex(cluster) {
   const lv = [...new Set(cluster)].sort((a, b) => (a > b ? 1 : a < b ? -1 : 0));
   const map = new Map(lv.map((v, i) => [v, i]));
   return cluster.map(c => map.get(c));
