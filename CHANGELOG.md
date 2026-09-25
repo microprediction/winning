@@ -11,6 +11,131 @@
   an optimizer declares convergence precisely where an observation is
   most badly contradicted: it cannot tell a maximum from a floor, and a
   central difference of the objective is zero there too.
+- The browser's block Jacobian returned an all-`NaN` matrix for
+  supported rank-2 cluster loadings, and said nothing (#271). The
+  FORWARD block kernel prices rank-r loadings; this Jacobian is written
+  for rank one only. It takes each loading row as a NUMBER --
+  `Math.abs(v)` for the quadrature amplitude, `v * a` for the shift --
+  and javascript coerces a one-element array to its number, so an
+  `(n, 1)` column kept working while a rank-2 row went NaN at both. The
+  NaN then reached every cell.
+
+  python's `block_race_jacobian` detects rank > 1 and raises; the
+  browser now matches it rather than inventing a second behaviour.
+  Every Jacobian door here funnels through `blockRaceJacobian` --
+  `nestedRaceJacobian`, the structured `raceJacobian` front door,
+  `abilitiesFromBlockRace` and `polishRace` -- so the one guard covers
+  all of them, and each is checked. The tree grammar already had its
+  own guard with its own message, since only the block grammar prices
+  rank r at all.
+
+  The message points somewhere: the forward still prices the field it
+  refuses to differentiate, so finite differences of
+  `blockRaceProbabilities` remain available, as does the factor grammar
+  when the loadings are global. Distinct from #212 (a finite-grid
+  derivative mismatch for loadings that ARE supported) and #264 (the
+  nested `coupling` rank).
+- Two documents stopped pointing at a deleted tree (#250). Removing the
+  dead `src/` package left `data/README.md` sending readers to
+  `attic/src/winning/benchmarks/`, which went with it, and a research
+  script explaining that `pip install winning` resolves to
+  `attic/src/winning` -- which `setup.py` shows it never did, since it
+  packages the top-level `winning.*` tree and the attic is neither
+  installed nor importable through it. The README now points at
+  `winning/bench/` and `BENCHMARKS.md`, and the script says what the
+  path insertion is actually for: an INSTALLED copy may be an older
+  release or a different checkout, so the repo root goes first.
+
+  The audit the issue suggested is deliberately narrow. A repo-wide
+  "every documented path exists" rule is not worth having here: of 216
+  backticked paths in markdown, 115 do not resolve, and nearly all are
+  URLs, MIME types, external dataset identifiers or paths relative to
+  their own document. The rule is about the tree that just moved -- a
+  path under `attic/` written in BACKTICKS must exist, because backticks
+  mean go and look, while prose about something that used to be there is
+  fine -- plus a check that `setup.py`'s packaged roots still match the
+  claim the script makes about them.
+- A tree's cluster labels mean the same thing on both paths (#146).
+  Labels are arbitrary comparable values, and the forward dispatch says
+  so: every tree and block kernel in `blocks.py` remaps them with
+  `np.unique(..., return_inverse=True)`. `structure_variances`, which the
+  generic inverse uses, cast them to `int` and used them directly as node
+  IDs. So a tree labelled 10/20 priced fine and inverted with "index 10
+  is out of bounds for axis 0 with size 3", and string labels died inside
+  `int()`. Canonical 0/1 labels worked, which is why it survived.
+
+  `Blocks` and `Nested` were already fine -- neither indexes anything by
+  the label -- so this is the tree alone, and the tests record that so a
+  later change cannot quietly break what worked.
+
+  The fixture needed care. A tree whose leaf clusters hang off one parent
+  gives every leaf the same ancestor variance, so relabelling cannot
+  change the answer and the invariance would hold against a broken
+  implementation; my first one was exactly that. These leaves hang at
+  UNEQUAL depth, and the tests show the strengths move the race, and that
+  a different PARTITION is a different race, before any equality is
+  believed.
+- R's `pmvnorm_fast` recycled every per-coordinate argument in silence
+  (#285). R repeats a short vector whenever its length divides `n` and
+  emits no warning, so `D = c(1, 4)` at `n = 4` became `c(1, 4, 1, 4)`
+  and the call returned `[Phi(1)Phi(1/2)]^2 = 0.3384427299701321` -- a
+  perfectly plausible probability for a Gaussian the caller never
+  described. `mean = c(0, 1)` did the same, returning 0.0062928724.
+
+  Sweeping the pattern rather than the reported symptom turned up two
+  more sites. `lower` and `upper` went through `rep_len`, which recycles
+  in exactly the same silence -- `upper = c(0, 1)` at `n = 4` returned
+  0.1769652454 -- and `r/winning`'s `concentration_matrix` recycled
+  `name_caps`, so a length-2 cap vector capped names 3 and 4 with the
+  caps meant for 1 and 2 and returned a well-formed constraint system
+  for a problem nobody posed.
+
+  `.as_len` is now the one place that rule is decided in mvtnormfast,
+  as `winning.shapes.as_idio` is for python: a SCALAR is broadcast on
+  purpose -- that is what the `-Inf`/`Inf` defaults are -- and every
+  other wrong length is refused by name, with the length it got and the
+  dimension it needed. A variance must also be finite and non-negative;
+  a bound may be infinite, a mean may not.
+
+  The python reference validates through `as_idio`/`as_loadings` and
+  julia fails on unequal lengths, so this was the only port guessing.
+
+  The shipped manual said `lower` and `upper` were "recycled to
+  dimension n" (#289). That promise was wrong rather than the check
+  being wrong: `mvtnorm::pmvnorm`, which `pmvnorm_fast` is a drop-in
+  for, REFUSES a length-2 bound at n = 4 --
+
+      'diag(sigma)' and 'lower' are of different length
+
+  -- while broadcasting its scalar `-Inf` default, which is exactly the
+  contract here. The manual now says so.
+  Every documented spelling still agrees: scalar `D`, length-n `D` and
+  the default bounds all return the same number.
+
+- `block_race_jacobian` reads a rank-one loading in every spelling
+  (#145). `winning.shapes.as_loadings` is the one place that rule is
+  decided -- a scalar, a length-n vector, `(n, 1)` and `(1, n)` are the
+  same rank-one loading -- and `block_race_probabilities` went through
+  it while the Jacobian did not. It called `np.asarray` and kept whatever
+  shape it was handed, so the `(n, 1)` spelling reached the kernel as a
+  matrix and died inside an unrelated `np.take` with "input operand has
+  more dimensions than allowed by the axis remapping". Every inverse and
+  polishing path that calls the Jacobian inherited it, so a caller who
+  wrote `v[:, None]` got a forward pass that worked and an inverse that
+  crashed. All four spellings now agree exactly, and rank two is still
+  refused with its own reason.
+
+  The function also had no docstring: a statement sat above the string
+  literal, so python never bound it as `__doc__` and `help()` showed
+  nothing. The guard moved below it.
+  Symmetrising must not overflow what the finiteness check just passed
+  (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
+  variance near the double ceiling became `inf` between the check and
+  the fit, and `race_probabilities([2.0], cov=[[1e308]])` failed with
+  `D has a non-finite entry` for input it had itself accepted. Halving
+  each term first is the same number everywhere else -- multiplying by
+  0.5 is exact, and over 2000 random matrices spanning 400 orders of
+  magnitude the two spellings are bit-identical.
 
   `log_ndtr` / `pnorm(log.p = TRUE)` / a new julia `logndtr` replace the
   floor. The objective now falls monotonically -- -669, -1594, -4645,
@@ -676,8 +801,6 @@
   exception on a happy path killed the file, so the run failed with no
   named check and every later check silently went unrun. A new `accepts()`
   helper turns a thrown exception into a named FAIL.
-
-
 
 - The pre-renovation `src/` package is gone, all but the one part still
   used. It had sat since the August renovation: not packaged (`setup.py`
