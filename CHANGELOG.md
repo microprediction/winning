@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- `D` goes through the idiosyncratic-variance contract, in the browser
+  and in python's top-k family (#254). The browser normalised `V` and
+  left `D` alone, so a scalar -- which python defines as the same
+  variance for every contestant -- threw `D.slice is not a function`,
+  and short, zero, negative and non-finite entries propagated NaN
+  through forward and inverse alike. The dangerous one was a `D` with
+  ONE EXTRA entry: accepted, and returned a normalised, plausible,
+  materially wrong answer, `[0.888, 0.102, 0.010]` where the race is
+  `[0.507, 0.312, 0.181]`.
+
+  `core.mjs` gains `asIdio`, the companion of `asLoadings`, and the
+  forward, the inverse (which keeps its own copy of `D`) and the whole
+  top-k family call it.
+
+  Sweeping for the same pattern found it in PYTHON too, and worse there.
+  `winning/factor/topk.py` called `np.asarray(D, float)` at seven sites,
+  so a scalar became a 0-d array and the COMPILED kernel indexed past
+  it: `PanicException: index out of bounds: the len is 1 but the index
+  is 1`. A rust panic is not an exception a caller can catch in the
+  ordinary way, which is worse than the wrong answer it replaced. The
+  browser accepted a scalar and python panicked on it, so the ports
+  disagreed and python was the one that was wrong. Both now give
+  `[0.818841, 0.687865, 0.493294]`.
+
+  The rehearsal also found a hole in the checker itself: `accepts()`
+  wrapped the CALL but not its predicate, and the predicate usually
+  calls the API again to compare against. A throw there still killed the
+  file -- the first sabotage produced one named failure and then
+  aborted, hiding five more. It now reports 8 with all 97 checks still
+  running.
+
 - The browser's nested `coupling` is a loading matrix like any other
   (#264). It was normalised by hand in `blocks.mjs` -- wrap a flat
   vector, otherwise take it as given -- and never transposed, so a

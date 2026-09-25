@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, firstPrimes } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, firstPrimes } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -36,7 +36,7 @@ const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [1
 
 function setup(mu, V, D, F, W, base) {
   const n = mu.length;
-  D = D ? D.slice() : new Array(n).fill(1);
+  D = asIdio(D, n);        // the companion of asLoadings, #254
   // the shape contract at the door, as python's _setup does it: a
   // scalar, a length-n vector, (n, rank) and (rank, n) are the same
   // race, and a ragged V raises instead of being truncated to the first
@@ -316,7 +316,7 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   const lm = mean(logt);
   // the field's contrast scale (matching python/R): median idiosyncratic
   // variance plus the mean factor variance under the represented nodes
-  const Dn = D ? D.slice() : new Array(n).fill(1);
+  const Dn = asIdio(D, n);        // the inverse has its own copy (#254)
   const Vn = V ? asLoadings(V, n).map(row => row.slice()) : Array.from({ length: n }, () => [0]);
   const r = Vn[0].length;
   const colMean = Array.from({ length: r }, (_, c) => mean(Vn.map(row => row[c])));
