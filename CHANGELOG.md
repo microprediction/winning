@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- R's `pmvnorm_fast` recycled every per-coordinate argument in silence
+  (#285). R repeats a short vector whenever its length divides `n` and
+  emits no warning, so `D = c(1, 4)` at `n = 4` became `c(1, 4, 1, 4)`
+  and the call returned `[Phi(1)Phi(1/2)]^2 = 0.3384427299701321` -- a
+  perfectly plausible probability for a Gaussian the caller never
+  described. `mean = c(0, 1)` did the same, returning 0.0062928724.
+
+  Sweeping the pattern rather than the reported symptom turned up two
+  more sites. `lower` and `upper` went through `rep_len`, which recycles
+  in exactly the same silence -- `upper = c(0, 1)` at `n = 4` returned
+  0.1769652454 -- and `r/winning`'s `concentration_matrix` recycled
+  `name_caps`, so a length-2 cap vector capped names 3 and 4 with the
+  caps meant for 1 and 2 and returned a well-formed constraint system
+  for a problem nobody posed.
+
+  `.as_len` is now the one place that rule is decided in mvtnormfast,
+  as `winning.shapes.as_idio` is for python: a SCALAR is broadcast on
+  purpose -- that is what the `-Inf`/`Inf` defaults are -- and every
+  other wrong length is refused by name, with the length it got and the
+  dimension it needed. A variance must also be finite and non-negative;
+  a bound may be infinite, a mean may not.
+
+  The python reference validates through `as_idio`/`as_loadings` and
+  julia fails on unequal lengths, so this was the only port guessing.
+  Every documented spelling still agrees: scalar `D`, length-n `D` and
+  the default bounds all return the same number.
+
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
   variance near the double ceiling became `inf` between the check and
