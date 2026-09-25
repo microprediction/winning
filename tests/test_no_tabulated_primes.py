@@ -34,12 +34,19 @@ SUFFIXES = {".py", ".R", ".r", ".jl", ".mjs", ".js"}
 SKIP_DIRS = {".git", "node_modules", "build", "dist", "__pycache__",
              ".venv", "venv", ".mypy_cache", ".pytest_cache", "attic"}
 
-# A test may legitimately state the expected primes -- that is the point
-# of testing the generator. Only these files may.
-ALLOWED = {
-    "r/winning/tests/testthat/test-fit.R",
-    "tests/test_no_tabulated_primes.py",
-}
+# The sweep governs SHIPPED SOURCE. A test may state the expected primes
+# -- that is how you check a generator -- so test files are exempt, by a
+# rule rather than a hand-kept list, since every port spells its test
+# paths differently: tests/ and testthat/ directories, `test_*.py`,
+# `test-*.R`, `runtests.jl`.
+def _is_test_file(rel: str) -> bool:
+    parts = rel.split("/")
+    if any(part in ("tests", "test", "testthat") for part in parts[:-1]):
+        return True
+    name = parts[-1]
+    return (name.startswith(("test_", "test-", "test."))
+            or name == "runtests.jl"
+            or name.endswith(("_test.py", "_test.jl", "_test.R")))
 
 
 def _sources():
@@ -66,7 +73,7 @@ def test_no_port_tabulates_its_halton_primes():
     offenders = []
     for path in _sources():
         rel = path.relative_to(ROOT).as_posix()
-        if rel in ALLOWED:
+        if _is_test_file(rel):
             continue
         try:
             text = path.read_text(encoding="utf-8")
