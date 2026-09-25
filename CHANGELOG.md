@@ -30,6 +30,239 @@
   length that is neither 1 nor `n` now raises with both numbers named,
   rather than recycling silently.
 
+- Quadrature weights are RELATIVE, in every verb that takes them (#208).
+  `W` and `c*W` describe the same factor law, and every verb normalises
+  its own result, so the common scale cancels -- except in the
+  pre-normalisation mass checks, which compared an unnormalised row sum
+  against 1. `removal_shares` and `ordered_probabilities` therefore
+  REJECTED `W = [5, 5]` while accepting the identical law
+  `W = [0.5, 0.5]`, with a "mass defect 9.00e+00" that is just the
+  weight total minus one.
+
+  The issue named `removal_shares`. Sweeping every public verb that takes
+  `mu`, `F` and `W` found two more: `ordered_probabilities` raised the
+  same way, and `plackett_luce_prefix_logprob` returned a
+  log-probability shifted by exactly `log(sum W)` -- the same law spelled
+  `[5, 5]` read -1.5071 as +0.7955 -- because it skips `_setup` entirely
+  when the caller supplies the law.
+
+  `_setup` is where the factor law is assembled, so it is the one place
+  the rule is decided, as `as_loadings` is for `V`. Every rule the
+  library generates already sums to one, so nothing it produces changes;
+  a zero or negative weight total is now refused with a reason instead of
+  being carried into a mass check. The sweep lives in
+  `tests/test_shape_contract.py`, which fails if a new verb takes a
+  factor law and is not covered.
+
+  The R and Julia helpers clamp in floating point before converting
+  (#228). Both computed the uncapped requirement in a fixed-width integer
+  and overflowed BEFORE `min(need, 8193)` -- in the very regime the cap
+  exists for. A narrowest sd of 1e-10 needs about 5.9e11 points: R's
+  `as.integer()` returned NA, so the `if (need > 8193)` meant to warn
+  errored with "missing value where TRUE/FALSE needed", and Julia threw
+  `InexactError`. Python was unaffected only because its integers are
+  unbounded, which is precisely why a port cannot inherit a numeric
+  argument from it. All four now return 8193 there and warn; the browser
+  then rejects the field on the mass check, which is the right layering.
+
+- Top-k and rank refine the lattice to the NARROWEST runner, in all four
+  engines (#224). The window is set by the widest runner and the grid by
+  `points`, so a heterogeneous field left the narrowest density between
+  samples: sds of 0.093 and 6.02 at the default 513 points gave a spacing
+  of 0.174, nearly twice the narrow runner's whole standard deviation,
+  and its top-4 membership came out 4.4e-3 wrong.
+
+  The mass check could not see it, and no tightening of that check would
+  have. It is ONE SCALAR -- the memberships sum to k -- and runner-level
+  errors of opposite sign cancel in it: the raw total was 3.99440 against
+  a tolerance of 0.02, comfortably inside, and the routine then rescaled a
+  wrong vector to sum to four. The cure is resolution, not a tighter
+  aggregate.
+
+  Same rule the win race has had all along (`races.forward_grid`): about
+  two points per narrowest sd, capped at 8193, warning when the cap still
+  leaves the lattice coarse. Measured on the reported field, the error
+  falls from 4.4e-3 to 4.8e-9 at the default `points`, and stops moving
+  with resolution at all -- 513 and 2049 now agree to 1e-9 where they
+  differed by 4.4e-3.
+
+  It subsumes two earlier rejections. The #203 field promotes itself to
+  2171 points and the #221 field to 6845, both then agreeing with an
+  8193-point answer to 5e-11, so neither has to be refused any more. The
+  guards from #221 stay as the backstop for what refinement cannot reach:
+  a field whose narrowest sd is 5e-5 needs about a million points, and it
+  warns and is rejected. Tests cover all three bands -- resolved, warned,
+  rejected. Parity vectors are unchanged, since the refinement does not
+  fire on fields with mild scale spread.
+
+- GMRFExtremes integrates its transition kernel over each lattice cell
+  instead of sampling the density (#244). `npdf(z) * dx` is a probability
+  only where the density is flat across a cell. An innovation sd far
+  below the lattice spacing makes the kernel a SPIKE between samples, and
+  the spacing is set by the MARGINAL sd, so a chain with innovation
+  sd 1e-4 gave transition columns summing to about 80: `max_cdf` returned
+  79.988 for a probability, `excursion_probability` -78.988, and
+  `first_passage` a vector with a -79.488 in it.
+
+  The cell mass is a CDF difference with the variance deflated by
+  `dx^2/12`, which is exactly what averaging over a cell adds. That
+  matters: the plain CDF difference is exact in mass but smooths by a
+  boxcar at every step, and it measured WORSE than the old midpoint rule
+  where the old rule worked. With the deflation the resolved regime is
+  unchanged to the digit, and the unresolved one gets its correct
+  degenerate limit.
+
+  | innovation sd | before, 200 points | after | before, 3200 | after |
+  |---|---:|---:|---:|---:|
+  | 1.0 | 1.3e-4 | 1.3e-4 | 5e-7 | 5e-7 |
+  | 0.25 | 3.6e-4 | 3.6e-4 | 1.4e-6 | 1.4e-6 |
+  | 0.01 | **1.1** | 1.6e-3 | 3.4e-5 | 3.4e-5 |
+  | 1e-4 | **160** | 1.6e-5 | **9.5** | 1.6e-5 |
+
+  Renormalising the columns would have produced numbers in [0, 1] and
+  hidden the resolution failure, which is what #217 and #221 are about.
+
+- The Euler-Maclaurin end correction is gone from both browser copies of
+  the tabulated base (#216). #211's description and this changelog both
+  said the correction measured worse and was removed; it was left in the
+  code, so an undocumented numerical change landed on `main` and it
+  touched every tabulated base, not just the `t4` span widening that PR
+  was about. Measured on the committed fixtures, removing it:
+
+  | fixture | with correction | without |
+  |---|---:|---:|
+  | skew forward vs scipy | 4.518e-7 | 4.472e-7 |
+  | t4 forward vs scipy   | 8.439e-7 | 8.423e-7 |
+  | skewNormalBase(0) = normal | 2.68e-7 | 3.52e-7 |
+
+  Two of the three improve and the third degrades, all of them a fifth or
+  less of their tolerances -- which is the point: the correction never did
+  anything, and it could not have. The cumulative is chained across three
+  pieces with two different step sizes, corrected per piece with that
+  piece's `h` and with nothing at the joins, and `f'(a)` was taken as
+  `fpL[0]`, which the centred-difference helper never writes, so it was
+  identically zero rather than the derivative at the left end. What
+  actually closed the 1e-5 survival gap in #211 was the span widening,
+  `BASES.t4` `[12,12] -> [24,24]`. Both copies stay byte-identical.
+
+- `polishRace` accepts `mu0` again (#207). It reads the option as
+  `const { mu0: mu0In = null } = opts`, and #204's allowlist named the
+  destructured LOCAL, `mu0In`. So a call that had worked since the
+  function was written threw `unknown option 'mu0'`, while `mu0In` was
+  accepted, ignored, and then failed with `give p0 or mu0`.
+
+  The surface test that exists to catch this searched the function body
+  for the allowlisted string and found the local name, so it passed. It
+  now parses the destructuring and compares PUBLIC keys, and a second
+  test covers the opposite direction -- a key the function reads that its
+  allowlist rejects, which is the half that refuses valid callers and the
+  half #207 actually was. Sweeping all 21 guarded browser APIs that way
+  turns up no others. `parity/check_js_api.mjs` calls `polishRace` both
+  ways, because neither direction is visible without making the call.
+
+  The first cut of that sweep exempted forwarding wrappers outright, and
+  review pointed out the hole (#237): a wrapper reads nothing off `opts`,
+  so the audits had nothing to compare its allowlist against and skipped
+  it -- leaving `bottomKProbabilities` and `locScaleFromWinAndSecond`
+  unguarded in exactly the direction that refuses valid callers. Dropping
+  `D` from the first one's list turned `bottomKProbabilities(mu, k, {D})`
+  into `unknown option 'D'` with all three source audits still green. The
+  exemption now names the API each wrapper forwards to and requires the
+  two allowlists to be equal, which is a checkable claim rather than a
+  waiver, and the checker calls both wrappers with every option at a
+  non-default value.
+
+- The browser inverse honours the two options it advertised (#226).
+  `targetFloor` and `returnInfo` were on `abilitiesFromRace`'s allowlist
+  and read by nothing, so they passed validation and vanished -- the
+  precise failure the allowlist exists to prevent, reintroduced by
+  deriving that list from python's signature rather than from what the
+  function reads. It now matches python: a zero share raises, because it
+  has no finite inverse; `targetFloor` floors deliberately and reports
+  which entries were floored; `returnInfo` returns the record rather than
+  the bare vector, and does not change the answer.
+
+  A test now requires every allowlisted key to be read by the function
+  that advertises it. Two functions legitimately forward their whole
+  options object onward, and that is DECLARED rather than inferred --
+  "the body mentions opts somewhere" would have excused this very bug,
+  since `abilitiesFromRace` forwards on its structure branch while
+  `targetFloor` vanished on every other path. Sabotage-tested by putting
+  an unread key back.
+
+
+- The browser honours the loading-shape contract, in every module that
+  takes `V` (#232). `winning.shapes.as_loadings` is the one place the rule
+  is decided -- `V` is `(n, rank)`, one ROW per contestant, and a scalar,
+  a length-n vector, `(n, rank)` and `(rank, n)` are all the same race.
+  Four browser modules decided it for themselves instead, by indexing `V`
+  and taking the rank from `V[0].length`. So a length-n vector threw
+  `V[i].reduce is not a function`, a valid `(rank, n)` matrix was read as
+  rank n and rejected with a message about the rank cap, and a RAGGED `V`
+  was truncated to the first row's width and answered all-NaN with no
+  complaint at all. `core.mjs` now exports `asLoadings`, and `races.mjs`,
+  `topk.mjs` and `polish.mjs` call it at the door. All four spellings now
+  agree with the python reference to 1.4e-16, and `(rank, n)` is
+  bit-identical to `(n, rank)`.
+
+- Halton bases are generated, not tabulated (#233). The low-discrepancy
+  nodes read their primes from a literal array: 24 entries in
+  `races.mjs`, 16 in `demo.mjs`. One factor past the end gave
+  `base = undefined`, and the node loop produced NaN rather than an error,
+  so a rank-25 race and a rank-17 demo returned NaN for every runner in
+  silence. `firstPrimes(d)` generates them. This is the same defect as
+  R's 30-prime table in #190, in a tree I did not grep when I fixed that
+  one; the browser checker now exercises ranks 8, 17, 25 and 40.
+
+  Both fixes are guarded behaviourally in `parity/check_js_api.mjs`, which
+  CALLS the functions rather than reading the source. Rehearsing four
+  sabotages against it found a fifth defect in the checker itself: an
+  exception on a happy path killed the file, so the run failed with no
+  named check and every later check silently went unrun. A new `accepts()`
+  helper turns a thrown exception into a named FAIL.
+
+
+
+- The pre-renovation `src/` package is gone, all but the one part still
+  used. It had sat since the August renovation: not packaged (`setup.py`
+  lists only `winning.*`), not collected (`pytest.ini` does not name it),
+  and four of its filenames -- `lattice_calibration`, `lattice_conventions`,
+  `skew_calibration`, `std_calibration` -- shadowed live ones under
+  `winning/classic/`, so a grep returned two hits with nothing saying
+  which was current. Those are deleted, with `elo`, `kernels`, `shims`,
+  `thurstonerating`, the old test tree and the benchmarks: nothing
+  referenced any of them.
+
+  What survives is `attic/src/winning`, holding the dependency closure of
+  Glicko-2 -- `glicko2.py`, `exact.py`, `ratingsystem.py` -- because six
+  chess experiments compare against it and the live package has no
+  Glicko-2.
+
+  **It had stopped working.** `exact.py` imported the external `thurstone`
+  package, which is retired, and `winning.thurstone` is now a tombstone
+  that raises on import, so every one of those experiments would have
+  failed at the Glicko-2 step. It imports `winning.research` now, which is
+  the migration that tombstone's own message prescribes. Verified end to
+  end: A beating B three times gives A 1753, B 1247, win probability 0.82.
+  A test covers it, since nothing else looks at that directory -- which is
+  precisely how it broke.
+
+- The sampler goodness-of-fit test uses a STABLE seed (`zlib.crc32`
+  rather than `hash`). `str.__hash__` is salted per process unless
+  `PYTHONHASHSEED` is set, so `np.random.default_rng(hash(name) % 2**32)`
+  drew a different sample on every run and re-rolled the test's own 9e-5
+  tail risk each time. Thirteen bases across six CI platforms is 78 draws
+  per round, which is a failure every few rounds: one hit a macos runner
+  at 0.010262 against the 1e-2 bound, on a pull request that changed only
+  browser javascript. The comment in the test blamed platform differences;
+  those are why the scipy-backed samplers consume the stream differently,
+  not why the draw changed between two runs on the same machine.
+
+  Each (base, platform) pair now has one fixed draw: it passes forever or
+  fails immediately, rather than being re-rolled. Locally the worst base
+  sits at 0.006956, a 1.44x margin, and over 120 seeds the previously
+  failing base has median 0.0038 and max 0.0067.
+
 - All four structured-MVN ports reject an empty rectangle instead of
   pricing it at the underflow floor (#235). `P(lower <= X <= upper)` with
   `lower_i > upper_i` is an EMPTY event. Python, the vendored standalone

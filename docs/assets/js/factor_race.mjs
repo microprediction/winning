@@ -129,16 +129,17 @@ function tabulatedBase(pdfStd, spans) {
     const cumR = new Float64Array(NOUT); cumR[0] = C;
     for (let k = 1; k < NOUT; k++) { C += 0.5 * (fR[k - 1] + fR[k]) * DXO; cumR[k] = C; }
     const T = C;
-    // Euler-Maclaurin end correction. The cumulative was a plain
-    // trapezoid, which is O(h^2) and left the survival ~1e-5 out against
-    // scipy's exact sf -- a hundred times python's own lattice error, and
-    // the standing failure in test_parity.mjs. Subtracting
-    // (h^2/12)(f'(x) - f'(a)) raises it to O(h^4) for the cost of one
-    // multiply per point, using the derivative already tabulated below.
-    const correct = (c, fpArr, h, fp0) => {
-      for (let k = 0; k < c.length; k++)
-        c[k] -= (h * h / 12) * (fpArr[k] - fp0);
-    };
+    // No end correction on the cumulative. An Euler-Maclaurin term
+    // (h^2/12)(f'(x) - f'(a)) was tried and measured WORSE than the plain
+    // trapezoid, which is why #211's description and the changelog say it
+    // was removed; it was left in the code by mistake (#216). It could not
+    // have delivered its O(h^4): the cumulative is chained across three
+    // pieces with two different step sizes, corrected per piece with that
+    // piece's h and no correction at the joins, and f'(a) was taken as
+    // fpL[0], which the centred-difference helper never writes, so it was
+    // identically zero rather than the derivative at the left end. What
+    // actually fixed the 1e-5 survival gap was the span widening in the
+    // same PR, BASES.t4 [12,12] -> [24,24].
     const lsOf = (c) => {
       const a = new Float64Array(c.length);
       for (let k = 0; k < c.length; k++)
@@ -151,12 +152,6 @@ function tabulatedBase(pdfStd, spans) {
       return a;
     };
     const fp = dOf(f, DX), fpR = dOf(fR, DXO), fpL = dOf(fL, DXO);
-    // one continuous sweep, so each piece corrects against the derivative
-    // at the far-left start of the whole range
-    const fp0 = fpL[0];
-    correct(cumL, fpL, DXO, fp0);
-    correct(cum, fp, DX, fp0);
-    correct(cumR, fpR, DXO, fp0);
     g = { f, ls: lsOf(cum), fp,
           fR, lsR: lsOf(cumR), fpR,
           fL, lsL: lsOf(cumL), fpL };
