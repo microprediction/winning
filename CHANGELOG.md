@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- The browser inverse honours the two options it advertised (#226).
+  `targetFloor` and `returnInfo` were on `abilitiesFromRace`'s allowlist
+  and read by nothing, so they passed validation and vanished -- the
+  precise failure the allowlist exists to prevent, reintroduced by
+  deriving that list from python's signature rather than from what the
+  function reads. It now matches python: a zero share raises, because it
+  has no finite inverse; `targetFloor` floors deliberately and reports
+  which entries were floored; `returnInfo` returns the record rather than
+  the bare vector, and does not change the answer.
+
+  A test now requires every allowlisted key to be read by the function
+  that advertises it. Two functions legitimately forward their whole
+  options object onward, and that is DECLARED rather than inferred --
+  "the body mentions opts somewhere" would have excused this very bug,
+  since `abilitiesFromRace` forwards on its structure branch while
+  `targetFloor` vanished on every other path. Sabotage-tested by putting
+  an unread key back.
+
 - `rank_probabilities` keeps BOTH guards, before and after normalisation
   (#221). The entry above replaced the raw check with a post-normalisation
   one, and that was wrong: they are independent, not alternatives. Row
