@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The browser factor race's own parity suite runs in CI (#140, second
+  half). `js/factor/test_parity.mjs` checks the tabulated bases against
+  scipy-generated vectors, and nothing ran it -- which is why it sat
+  failing on `main` at 1.01e-5 against its own 2e-6 tolerance until #211.
+  An ungated suite stays broken for exactly as long as nobody happens to
+  run it. It is now a step in the `parity` job, alongside the vector
+  check, both port checkers and the browser API guards.
+
 - The browser factor race's Student-t4 base integrates over a window wide
   enough for its tails, and `js/factor/test_parity.mjs` is green for the
   first time in a while. Its `t4 forward shares vs scipy` check had been
