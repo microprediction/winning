@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- The browser's block Jacobian returned an all-`NaN` matrix for
+  supported rank-2 cluster loadings, and said nothing (#271). The
+  FORWARD block kernel prices rank-r loadings; this Jacobian is written
+  for rank one only. It takes each loading row as a NUMBER --
+  `Math.abs(v)` for the quadrature amplitude, `v * a` for the shift --
+  and javascript coerces a one-element array to its number, so an
+  `(n, 1)` column kept working while a rank-2 row went NaN at both. The
+  NaN then reached every cell.
+
+  python's `block_race_jacobian` detects rank > 1 and raises; the
+  browser now matches it rather than inventing a second behaviour.
+  Every Jacobian door here funnels through `blockRaceJacobian` --
+  `nestedRaceJacobian`, the structured `raceJacobian` front door,
+  `abilitiesFromBlockRace` and `polishRace` -- so the one guard covers
+  all of them, and each is checked. The tree grammar already had its
+  own guard with its own message, since only the block grammar prices
+  rank r at all.
+
+  The message points somewhere: the forward still prices the field it
+  refuses to differentiate, so finite differences of
+  `blockRaceProbabilities` remain available, as does the factor grammar
+  when the loadings are global. Distinct from #212 (a finite-grid
+  derivative mismatch for loadings that ARE supported) and #264 (the
+  nested `coupling` rank).
+
 - An unresolved merge conflict was sitting in `parity/check_js_api.mjs`
   on main, so the browser API checker had not run since it landed. The
   file did not parse: `node parity/check_js_api.mjs` exited on
