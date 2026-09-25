@@ -298,6 +298,21 @@ def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
     return -Ji / max(p[i], 1e-300), p[i]
 
 
+def _floor_v(v_prior, v_post):
+    """Floor the posterior variance, except where the caller declared
+    the coordinate perfectly known.
+
+    `as_variance` documents zero as "a perfectly known quantity", and
+    the mean update already honours it -- `m + v * g` does not move a
+    coordinate with v = 0. The floor then gave that same coordinate
+    1e-6 of uncertainty it had just been told did not exist, so a
+    belief could not stay known across an update (#78). Unchanged
+    wherever v > 0, which is where the floor exists to keep a
+    downstream 1/v finite.
+    """
+    return np.where(v_prior <= 0.0, 0.0, np.maximum(v_post, 1e-6))
+
+
 def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
     """Exact-moment posterior (m, v) update given `winner` won the race.
 
@@ -319,7 +334,7 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
         curves = _predictive_curves(v, beta2, base)
         p_i, g, d2 = _winner_moments_curves(m, curves, winner)
         d2 = _clamp_d2(d2, base)
-        return m + v * g, np.maximum(v + v**2 * d2, 1e-6), p_i
+        return m + v * g, _floor_v(v, v + v**2 * d2), p_i
     D = v + beta2
     g, p_i = _grad_logp_row(m, D, winner, base=base)
     m_new = m + v * g
@@ -339,7 +354,7 @@ def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
         gm, _ = _grad_logp_row(m - ej, D, winner, base=base)
         d2[j] = (gp[j] - gm[j]) / (2 * step[j])
     d2 = _clamp_d2(d2, base)
-    v_new = np.maximum(v + v**2 * d2, 1e-6)
+    v_new = _floor_v(v, v + v**2 * d2)
     return m_new, v_new, p_i
 
 
