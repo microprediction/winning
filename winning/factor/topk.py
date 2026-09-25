@@ -224,6 +224,30 @@ def _checked_topk(raw, k, kind, mass_tol=5e-3):
     return np.clip(raw * (k / t), 0.0, 1.0)
 
 
+def _as_depth(k, n, where="k"):
+    """The depth of a top-k curve is a COUNT, so it is an integer.
+
+    Every guard here truncated first -- `int(k)`, and `Math.trunc` /
+    `as.integer` in the other ports -- and then range-checked the
+    truncated value, so a fractional depth passed and was silently
+    floored: `top_k_probabilities(mu, 1.5)` returned the top-1 curve
+    and `2.5` the top-2 one, with no warning and a mass of 1 or 2
+    rather than the 1.5 or 2.5 the caller asked for. k=0, k=n and k>n
+    were all refused; only the non-integer slipped through, which is
+    the one case the message "k must be in [1, n-1]" reads as
+    permitting.
+    """
+    kk = float(k)
+    if kk != int(kk):
+        raise ValueError(
+            f"{where} must be a whole number of places; got {k!r}. A "
+            "top-k curve counts finishers, so there is no top-1.5.")
+    kk = int(kk)
+    if not 1 <= kk <= n - 1:
+        raise ValueError(f"{where} must be in [1, n-1]; got k={k}, n={n}")
+    return kk
+
+
 def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
                         qa=15):
     """P(X_i among the k smallest), for every i, min-wins.
@@ -237,9 +261,7 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     and a material defect raises."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    if not 1 <= int(k) <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
-    k = int(k)
+    k = _as_depth(k, n)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
@@ -269,8 +291,7 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     P(in the worst k) = 1 - P(in the best n-k), so no reflected base is
     ever needed."""
     n = len(np.asarray(mu))
-    if not 1 <= int(k) <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    k = _as_depth(k, n)
     q = top_k_probabilities(mu, n - int(k), V=V, D=D, base=base,
                             points=points, qa=qa)
     return 1.0 - q
@@ -350,9 +371,7 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     so the row sums to zero. Independent races only; min-wins."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    k = int(k)
-    if not 1 <= k <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    k = _as_depth(k, n)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
@@ -407,9 +426,7 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     moves no membership."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    k = int(k)
-    if not 1 <= k <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    k = _as_depth(k, n)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
@@ -454,9 +471,7 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     J = sum_q w_q J_ind(mu + V f_q, sigma)."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    k = int(k)
-    if not 1 <= k <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    k = _as_depth(k, n)
     if V is not None:
         Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_jacobians")
         Jm = np.zeros((n, n))
@@ -660,9 +675,7 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     same call at n - k on 1 - q."""
     mu_probe = np.asarray(q, dtype=float)
     n = len(mu_probe)
-    k = int(k)
-    if not 1 <= k <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    k = _as_depth(k, n)
     target, floored = _validated_topk_target(q, k, n, target_floor)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
@@ -781,14 +794,12 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
             "the three-curve least-squares solver.")
     t1 = np.asarray(q1, dtype=float)
     n = len(t1)
-    k1, k2 = int(k1), int(k2)
+    k1 = _as_depth(k1, n, "k1")
+    k2 = _as_depth(k2, n, "k2")
     if k1 == k2:
         raise ValueError(
             "k1 == k2 gives one curve twice: scale is unidentified "
             "without a second, different membership depth")
-    for kk in (k1, k2):
-        if not 1 <= kk <= n - 1:
-            raise ValueError(f"k must be in [1, n-1]; got k={kk}, n={n}")
     target1, _ = _validated_topk_target(q1, k1, n, None)
     target2, _ = _validated_topk_target(q2, k2, n, None)
     lt1 = np.log(target1) - np.log1p(-target1)
