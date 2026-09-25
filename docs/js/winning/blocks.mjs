@@ -371,8 +371,38 @@ function withinBlockTerm(J, I, negate = true) {
   }
 }
 
+/* The FORWARD block kernel prices rank-r per-cluster loadings; this
+   Jacobian is written for rank one only. It takes each loading row as
+   a number -- `Math.abs(vO[i])` for the quadrature amplitude, `vi * a`
+   for the shift -- and javascript coerces a ONE-element array to its
+   number, so an (n, 1) column keeps working, but a rank-2 row is NaN
+   at both. The NaN then propagates through every cell, so the call
+   returned an all-NaN matrix and said nothing (#271).
+
+   python's `block_race_jacobian` detects this and raises; the browser
+   matches it rather than inventing a second behaviour. Every other
+   Jacobian door here -- nestedRaceJacobian, the structured raceJacobian
+   front door, polishRace -- funnels through this function, so the one
+   guard covers all of them.
+
+   This is not #212 (a finite-grid derivative mismatch for loadings
+   that ARE supported) and not #264 (the nested `coupling` rank). */
+function assertRankOneLoading(loading, where) {
+  if (!Array.isArray(loading)) return;
+  const rows = loading.filter(Array.isArray);
+  if (rows.length === 0) return;                 // plain numbers: rank one
+  const rank = Math.max(...rows.map(r => r.length));
+  if (rank > 1 && loading.length > 1)
+    throw new Error(
+      `${where} supports rank-one cluster loadings only; the rank-${rank} ` +
+      `block Jacobian is not implemented (the FORWARD rank-${rank} kernel ` +
+      `is). Use finite differences of blockRaceProbabilities, or the ` +
+      `factor grammar if the loadings are global.`);
+}
+
 export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
   checkOpts(opts, BLOCK_RACE_JACOBIAN_OPTS, "blockRaceJacobian", OPT_HINTS);
+  assertRankOneLoading(loading, "blockRaceJacobian");
   const { points = 257, qa = 9 } = opts;
   const m = mu.map(v => -v);
   const sd = D.map(Math.sqrt);
