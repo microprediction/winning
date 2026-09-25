@@ -20,7 +20,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.optimize import minimize
 
-from .likelihood import choice_loglik_and_score, nodes_for_likelihood
+from .likelihood import (choice_loglik_and_score,
+                         nodes_for_likelihood, sharpness_bound)
 
 
 def _fill_positions(J, r):
@@ -155,7 +156,18 @@ def _prob_of(mu, V, k):
     from scipy.special import ndtr
     T, J = mu.shape
     r = V.shape[1]
-    sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1))))
+    # The SAME dispatch the likelihood uses (likelihood.py). Prediction
+    # used max_i ||V_i||: no gauge-centering, no sqrt(2), so a fitted
+    # model could optimise and report under Sobol and then be priced on
+    # the 7-point Hermite tensor. It was not even gauge-invariant -- only
+    # loading DIFFERENCES decide a race, yet adding a common offset of 5
+    # to every row moved the statistic from 2.0 to 7.0 and switched 49
+    # nodes for 1024 on an unchanged race. In the other direction a
+    # centred spread of 2.2 scored 2.2 against the likelihood's 3.11, so
+    # prediction quietly took the weaker rule and priced 2.9e-2 away from
+    # it (#213). Julia already matched its own likelihood.
+    sharp = sharpness_bound(V)
+    V = V - V.mean(axis=0)
     F, W = nodes_for_likelihood(r, 7, 7, sharp)
     Fq, zq = F[:, :r], F[:, r]
     Vf = Fq @ V.T

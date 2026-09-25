@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Prediction and likelihood choose the same quadrature (#213).
+  `choice_loglik_and_score` gauge-centers `V` and dispatches on the
+  pairwise-safe bound `sqrt(2) max_i ||(PV)_i|| / sqrt(min D)`.
+  `MNProbit._prob_of` dispatched on `max_i ||V_i||`: no centering, no
+  `sqrt(2)`, no `D`. A fitted model could therefore optimise and report
+  under scrambled Sobol and then be PRICED on the 7-point Hermite
+  tensor. Julia already matched its own likelihood.
+
+  Two ways it showed. It was not gauge-invariant -- only loading
+  DIFFERENCES decide a race, yet adding a common offset of 5 to every
+  row moved the statistic from 2.0 to 7.0 and swapped 49 nodes for 1024
+  on an unchanged race. And it was too weak: a centred spread of 2.2
+  scored 2.2 against the likelihood's 3.11, so prediction took the
+  Hermite tensor and priced 2.9e-2 away from the rule the fit used.
+
+  The rule now lives in one place, `likelihood.sharpness_bound`, because
+  it was written twice and the copies drifted. Below the threshold
+  nothing changes: the same field measures a 3.161e-3 row-sum defect
+  before and after. Above it the sharp field improves from 1.6e-3 to
+  6.2e-4, which is the escalation doing its job.
+
 - The browser honours the loading-shape contract, in every module that
   takes `V` (#232). `winning.shapes.as_loadings` is the one place the rule
   is decided -- `V` is `(n, rank)`, one ROW per contestant, and a scalar,
