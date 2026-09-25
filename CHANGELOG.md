@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- Classic state prices summed to 188% at integer boundary offsets
+  (#292), in every port. The field is built with `shifted_cdf`, which
+  goes through `low_high` and PINS any offset at or past `L-2` to the
+  boundary. `implicit_state_prices` then took a fast path for exact
+  integers and called `integer_shift(cdf, k)` with the RAW `k`, whose
+  own clamp is the much wider `+/-(m-1)`. So a runner could sit in the
+  field at offset `L-2` and be PAID at 60:
+
+  | offsets | before | after |
+  |---|---|---|
+  | `[48, -48]` | 0.9999867465 | 0.9999867465 |
+  | `[49, -49]` | **1.0785974955** | 0.9999867465 |
+  | `[49.000001, ...]` | 0.9999867465 | 0.9999867465 |
+  | `[60, -60]` | **1.8835336397** | 0.9999867465 |
+  | `[60.1, -60.1]` | 0.9999867465 | 0.9999867465 |
+
+  An epsilon off the integer moved the total by 0.88, because the
+  non-integer path had been clamped correctly all along -- the prices
+  had stopped being exhaustive claims on one race, and the result
+  depended on whether an offset happened to serialise as an integer.
+
+  Guarding the fast path by the interior condition is exactly
+  equivalent where it applies -- for an interior integer `low_high`
+  returns `(k, 1), (k, 0)`, which is that shift with weight one -- and
+  clamps the boundary integers the way the field already does. Interior
+  results are unchanged.
+
+  **The compiled kernel needs rebuilding.** `rust/winning/src/lib.rs`
+  carries the identical branch and is what `state_prices_from_offsets`
+  dispatches to by default, so with the shipped wheel the totals are
+  still 1.0786 and 1.8835. The one-line guard is applied there too, but
+  this checkout has no cargo and the rust workflow is
+  `workflow_dispatch` only, so that change is NOT compiled or tested by
+  anything here. It needs a build before the next wheel.
 - The MNP tail likelihood went FLAT with a score of exactly zero
   (#270), in python, R and julia. The conditional log-CDF was
   `log(max(ndtr(a), 1e-300))`, and `ndtr` underflows to exactly zero
