@@ -7,12 +7,13 @@ import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./block
 
 export function raceJacobian(mu, opts = {}) {
   checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 501, structure = null,
-          qa = 9, qf = 15 } = opts;
+  const { V = null, D = null, F = null, W = null, base = "normal",
+          points = 501, structure = null, qa = 9, qf = 15 } = opts;
   if (structure) {
     const s = structure;
     if (s.kind === "Independent") return raceJacobian(mu, { D: s.D, base, points });
-    if (s.kind === "Factor") return raceJacobian(mu, { V: s.V, D: s.D, base, points });
+    if (s.kind === "Factor")
+      return raceJacobian(mu, { V: s.V, D: s.D, F, W, base, points });
     if (s.kind === "Blocks")
       return blockRaceJacobian(mu, s.cluster, s.loading, s.D, { points, qa });
     if (s.kind === "Nested")
@@ -26,23 +27,31 @@ export function raceJacobian(mu, opts = {}) {
   const n = mu.length;
   const Dv = D || new Array(n).fill(1);
   const Vv = V || mu.map(() => [0]);
-  return raceJacobianExplicit(mu, Vv, Dv, base, points);
+  return raceJacobianExplicit(mu, Vv, Dv, base, points, F, W);
 }
 
 import { hermiteNodes } from "./core.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
-const RACE_JACOBIAN_OPTS = new Set(["V", "D", "base", "points", "qa", "qf", "structure"]);
-const POLISH_RACE_OPTS = new Set(["V", "D", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback"]);
+const RACE_JACOBIAN_OPTS = new Set(["V", "D", "F", "W", "base", "points", "qa", "qf", "structure"]);
+const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback"]);
 
-function raceJacobianExplicit(mu, V, D, base, points) {
+/* F0/W0: a caller-supplied factor law. raceProbabilities has always
+   accepted one, and this always built its own standard-normal Hermite
+   rule instead, so the browser could PRICE a discrete or otherwise
+   non-Gaussian factor and could not differentiate or polish it -- the
+   returned Jacobian was the derivative of a different model (#209).
+   Used verbatim, exactly as the forward's setup() uses them. */
+function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
   let F = [[0]], W = [1];
   V = asLoadings(V, n) || Array.from({ length: n }, () => [0]);   // #232
   const hasV = V.some(row => row.some(v => v !== 0));
-  if (hasV) {
+  if (hasV && F0 && W0) {
+    F = F0; W = W0;
+  } else if (hasV) {
     let sharp = 0;
     for (let i = 0; i < n; i++) {
       const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
@@ -168,15 +177,19 @@ function bfgsMin(x0, obj, grad, maxit = 80) {
 
 export function polishRace(opts = {}) {
   checkOpts(opts, POLISH_RACE_OPTS, "polishRace", OPT_HINTS);
-  const { p0 = null, mu0: mu0In = null, V = null, D = null, base = "normal",
+  const { p0 = null, mu0: mu0In = null, V = null, D = null, F = null,
+          W = null, base = "normal",
           points = 257, nameCaps = null, groups = null, A = null, b = null,
           structure = null, fdFallback = true } = opts;
-  const forward = m => raceProbabilities(m, { V, D, base, points, structure });
-  const jac = m => raceJacobian(m, { V, D, base, points, structure });
+  // F/W must reach the forward, the jacobian AND the inverse that makes
+  // mu0. Polishing under a different factor law than the one the caller
+  // priced with silently optimises the wrong model (#209).
+  const forward = m => raceProbabilities(m, { V, D, F, W, base, points, structure });
+  const jac = m => raceJacobian(m, { V, D, F, W, base, points, structure });
   let mu0 = mu0In;
   if (!mu0) {
     if (!p0) throw new Error("give p0 or mu0");
-    mu0 = abilitiesFromRace(p0, { V, D, base, points, structure });
+    mu0 = abilitiesFromRace(p0, { V, D, F, W, base, points, structure });
   }
   const m0m = mean(mu0);
   mu0 = mu0.map(v => v - m0m);

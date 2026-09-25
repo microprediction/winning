@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- The browser differentiates and polishes the factor law it was GIVEN
+  (#209). `raceProbabilities` has always accepted caller-supplied factor
+  nodes and weights, `{V, D, F, W}`. `raceJacobian` and `polishRace`
+  rejected `F` and `W` outright, and `raceJacobianExplicit` built its own
+  standard-normal Hermite rule whenever `V` was nonzero. So the browser
+  could PRICE a discrete or otherwise non-Gaussian factor and could not
+  differentiate it: dropping `F, W` is not a workaround, it silently
+  changes the model.
+
+  This was not a cosmetic gap. On a two-point law `F = [[-3], [3]]`,
+  `W = [0.5, 0.5]`, the Jacobian the browser returned differed from the
+  true one by 0.205 in absolute terms. It now agrees with finite
+  differences of the same forward to 8.1e-12, and `polishRace` threads
+  the law through its forward, its Jacobian AND the inverse that builds
+  `mu0` -- polishing under a different law than the caller priced with
+  optimises the wrong model. A binding cap of 0.35 reprices to
+  (0.35, 0.30, 0.35) under the caller's own nodes.
+
 - The browser prices the one-leaf tree (#241). An EMPTY linkage is the
   valid scipy-style spelling of a hierarchy with one leaf, and
   `treeFromLinkage([])` computed the leaf variance as

@@ -221,5 +221,47 @@ holds("a real linkage is unchanged: python's D = [0.5, 0.5, 1]",
       Math.max(...threeLeaf.D.map((v, i) => Math.abs(v - [0.5, 0.5, 1][i]))) < 1e-15,
       `D = [${threeLeaf.D}]`);
 
+// --- a caller-supplied factor law reaches the derivative too (#209)
+// raceProbabilities has always accepted {F, W}. raceJacobian and
+// polishRace rejected them and built their own standard-normal Hermite
+// rule, so the browser could PRICE a discrete factor law and could not
+// differentiate or polish it: the Jacobian returned was the derivative
+// of a DIFFERENT model, and on this two-point law it is wrong by 0.2 in
+// absolute terms. Dropping F/W is not a workaround, it is the bug.
+const muF = [0, 0.4, 1.0], VF = [[-1], [0], [1]], DF = [1, 1, 1];
+const FF = [[-3], [3]], WF = [0.5, 0.5];
+const fwdF = m => races.raceProbabilities(m, { V: VF, D: DF, F: FF, W: WF });
+accepts("raceJacobian takes a caller factor law",
+        () => polish.raceJacobian(muF, { V: VF, D: DF, F: FF, W: WF }),
+        J => J.length === 3 && J.every(r => r.every(Number.isFinite)));
+{
+  const J = polish.raceJacobian(muF, { V: VF, D: DF, F: FF, W: WF });
+  const h = 1e-5;
+  let worst = 0;
+  for (let j = 0; j < 3; j++) {
+    const a = muF.slice(), b = muF.slice();
+    a[j] += h; b[j] -= h;
+    const pa = fwdF(a), pb = fwdF(b);
+    for (let i = 0; i < 3; i++)
+      worst = Math.max(worst, Math.abs(J[i][j] - (pa[i] - pb[i]) / (2 * h)));
+  }
+  holds("the jacobian is the derivative of THAT forward",
+        worst < 1e-8, `max |analytic - finite difference| ${worst.toExponential(2)}`);
+  const Jg = polish.raceJacobian(muF, { V: VF, D: DF });
+  let gap = 0;
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++) gap = Math.max(gap, Math.abs(Jg[i][j] - J[i][j]));
+  holds("and the internal gaussian rule is NOT the same answer",
+        gap > 1e-2, `differs by ${gap.toExponential(2)}`);
+}
+accepts("polishRace takes a caller factor law and honours it",
+        () => polish.polishRace({ mu0: muF, V: VF, D: DF, F: FF, W: WF,
+                                  nameCaps: 0.35 }),
+        res => {
+          const re = fwdF(res.mu);
+          return Math.max(...re.map(v => v - 0.35)) < 1e-8 &&
+                 Math.max(...re.map((v, i) => Math.abs(v - res.p[i]))) < 1e-8;
+        });
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
