@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- R's `race_jacobian` depended on the SCALE of the factor weights --
+  #281's defect, in a third place. `W` and `c*W` describe the same
+  factor law; the forward divides its accumulated shares by their total
+  and was invariant either way, but the Jacobian does not, so `J(W)` and
+  `J(10W)` differed by **1.473**. A Newton step scaled by the spelling
+  of the law rather than the law.
+
+  `.race_setup` now normalises `W`, as python's `_setup` does through
+  `winning.shapes.as_weights` and as `abilities_from_race` already did
+  for itself a few lines further down -- the rule was in the file, just
+  not at the door. A weight that is not finite, is negative, or whose
+  total is not positive is refused rather than normalised into
+  something plausible.
+
+  Found by sweeping the pattern after fixing it for the browser: the
+  same defect is in `js/factor/factor_race.mjs` (#281) and
+  `docs/js/winning/polish.mjs` (#290). julia's forward is already
+  invariant and it has no `race_jacobian`, so it is clean -- a finding,
+  not an omission.
+
+  The same sweep found #290's OTHER half here: the caller's factor
+  nodes were taken verbatim, so an `F` with the wrong number of ROWS
+  was accepted and priced a different quadrature outright -- `0.64616
+  0.12271 0.23064 0.00049` where the right answer is `0.38173 0.30061
+  0.13687 0.18079` -- too few weights returned all `NA`, and extra
+  weights were ignored. A short `F` did fail, but with "non-conformable
+  arguments", which names nothing the caller passed. Every node must
+  now carry exactly the loadings' rank and there must be one weight per
+  node.
+
+  Every already-normalised answer is bit-identical to before, and the
+  rescaled ones now agree to 0 across twelve orders of magnitude.
 - A top-k depth is a count, so it is an integer -- and a fractional one
   was silently floored, in all three ports. Every guard truncated
   FIRST (`int(k)`, `Math.trunc(k)`, `as.integer(k)`) and then
