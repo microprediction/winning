@@ -419,3 +419,202 @@ def test_browser_allowlists_are_per_function():
         names |= set(re.findall(r"const (\w+_OPTS) = new Set\(", path.read_text()))
     assert len(names) >= 18, f"only {len(names)} allowlists for 20 entry points: {sorted(names)}"
     assert "KNOWN_OPTS" not in names, "the shared union is back"
+
+
+# a function may legitimately forward its whole options object to another;
+# declared rather than guessed, because "the body mentions opts somewhere"
+# would also have excused the bug this test exists for -- abilitiesFromRace
+# forwards opts on its structure branch, and targetFloor still vanished
+# on every other path (#226)
+# A wrapper that hands `opts` straight to another API, mapped to the API
+# it hands it to. The wrapper reads nothing itself, so exempting it from
+# the audits below leaves its public signature unguarded in BOTH
+# directions -- dropping a supported key from the wrapper's own allowlist
+# would turn `bottomKProbabilities(mu, k, {D})` into `unknown option 'D'`
+# while every source audit still passed (#237). Naming the callee instead
+# turns the exemption into a checkable claim: the two allowlists must
+# agree, because whatever one accepts the other has to.
+FORWARDS_OPTS = {
+    "topk.mjs::bottomKProbabilities": "topk.mjs::topKProbabilities",
+    "topk.mjs::locScaleFromWinAndSecond": "topk.mjs::locScaleFromTopkPair",
+}
+
+# keys read only on a branch that forwards, and meaningless on the rest
+FORWARD_ONLY_KEYS = {
+    "races.mjs::abilitiesFromRace": {"qa", "qf"},   # the structure dispatch
+}
+
+
+def _balanced(text, open_at):
+    """Index of the brace closing the one at open_at."""
+    depth = 0
+    for i in range(open_at, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+    raise AssertionError("unbalanced braces")
+
+
+def _split_top_level(text):
+    parts, depth, cur = [], 0, ""
+    for ch in text:
+        if ch in "{[(":
+            depth += 1
+        elif ch in "}])":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    parts.append(cur)
+    return parts
+
+
+def _public_keys_read(body, var="opts"):
+    """The PUBLIC keys a function body reads off `var`.
+
+    Destructuring renames freely -- `const { mu0: mu0In = null } = opts`
+    reads the public key `mu0` into a local called `mu0In` -- so the key
+    is what stands to the LEFT of the colon. Searching the body for the
+    allowlisted string instead finds the local name and calls it read,
+    which is how #207 passed this very test.
+    """
+    keys = set()
+    for m in re.finditer(r"\{", body):
+        close = _balanced(body, m.start())
+        if not re.match(rf"\s*=\s*{var}\b", body[close + 1:close + 40]):
+            continue
+        for part in _split_top_level(body[m.start() + 1:close]):
+            part = part.strip()
+            if not part or part.startswith("..."):
+                continue
+            key = part.split(":")[0].split("=")[0].strip()
+            if key:
+                keys.add(key)
+    keys |= set(re.findall(rf"{var}\.(\w+)", body))
+    keys |= set(re.findall(rf'{var}\[\s*"(\w+)"\s*\]', body))
+    return keys
+
+
+def _guarded_browser_apis():
+    """(key, allowlisted keys, public keys read) per guarded browser API."""
+    out = []
+    for path in sorted((ROOT / "docs/js/winning").glob("*.mjs")):
+        text = path.read_text()
+        allow = {
+            m.group(1): set(re.findall(r'"(\w+)"', m.group(2)))
+            for m in re.finditer(
+                r"const (\w+_OPTS) = new Set\(\[(.*?)\]\)", text, re.S)
+        }
+        for m in re.finditer(
+                r"export function (\w+)\([^)]*opts\s*=\s*\{\}\s*\)\s*\{", text):
+            fn, start = m.group(1), m.end()
+            end = text.find("\n}\n", start)
+            body = text[start:end if end > 0 else len(text)]
+            used = re.search(r"checkOpts\(opts,\s*(\w+)", body)
+            if not used or used.group(1) not in allow:
+                continue
+            out.append((f"{path.name}::{fn}",
+                        allow[used.group(1)], _public_keys_read(body)))
+    return out
+
+
+def test_the_browser_option_sweep_is_not_vacuous():
+    """A sweep that finds nothing passes every assertion below it."""
+    found = _guarded_browser_apis()
+    assert len(found) >= 18, f"only {len(found)} guarded browser APIs found"
+    names = {k.split("::")[1] for k, _a, _r in found}
+    for expected in ("raceProbabilities", "abilitiesFromRace", "polishRace",
+                     "topKProbabilities", "rankProbabilities"):
+        assert expected in names, f"{expected} is guarded but was not swept"
+
+
+def test_every_allowlisted_browser_option_is_actually_read():
+    """An allowlist derived from python's signature rather than from what
+    the function reads is worse than no allowlist: the key passes
+    validation and is silently discarded, which is the exact failure the
+    guard exists to prevent. `targetFloor` and `returnInfo` were
+    advertised by abilitiesFromRace and read by nothing (#226).
+
+    This is a relationship between two things in the same file, which is
+    what source inspection is good for -- unlike behaviour, which needs
+    parity/check_js_api.mjs.
+    """
+    offenders = []
+    for key, allow, read in _guarded_browser_apis():
+        if key in FORWARDS_OPTS:
+            continue
+        exempt = FORWARD_ONLY_KEYS.get(key, set())
+        for k in sorted(allow - read - exempt):
+            offenders.append(f"{key} advertises '{k}'")
+    assert not offenders, (
+        "browser options accepted by an allowlist but read by nothing -- "
+        "they pass validation and vanish:\n  " + "\n  ".join(offenders))
+
+
+def test_every_browser_option_read_is_allowlisted():
+    """The other direction, and the one that refuses valid callers.
+
+    #204 put the DESTRUCTURED LOCAL name in polishRace's allowlist, so
+    `polishRace({mu0: ...})` -- supported since the function was written
+    -- threw `unknown option 'mu0'`, while `mu0In` was accepted and
+    ignored. Nothing caught it: the test above searched the body for the
+    string `mu0In` and found the local, and no behavioural check made
+    either call (#207).
+    """
+    offenders = []
+    for key, allow, read in _guarded_browser_apis():
+        for k in sorted(read - allow):
+            offenders.append(f"{key} reads '{k}'")
+    assert not offenders, (
+        "browser options the function reads but its allowlist rejects -- "
+        "a supported call now throws:\n  " + "\n  ".join(offenders))
+
+
+def test_the_forwarding_exemptions_are_real():
+    """A declared exemption must still forward; otherwise it is a way to
+    hide the bug above."""
+    for key, callee in FORWARDS_OPTS.items():
+        fname, fn = key.split("::")
+        _cfile, cfn = callee.split("::")
+        text = (ROOT / "docs/js/winning" / fname).read_text()
+        i = text.index(f"export function {fn}(")
+        body = text[i:text.find("\n}\n", i)]
+        assert "opts)" in body or "...opts" in body, (
+            f"{key} is exempted as a forwarder but no longer forwards")
+        assert f"{cfn}(" in body, (
+            f"{key} is declared to forward to {cfn}, which it never calls")
+
+
+def test_a_forwarder_and_its_callee_allow_the_same_options():
+    """The half #237 found missing.
+
+    A forwarder reads nothing off `opts`, so the audits above have
+    nothing to compare its allowlist against and skipped it entirely.
+    That left the rejected-valid-key direction unguarded exactly where
+    two option lists can drift apart: removing "D" from
+    BOTTOM_K_PROBABILITIES_OPTS made `bottomKProbabilities(mu, k, {D})`
+    throw `unknown option 'D'` while all three source audits passed.
+
+    The wrapper validates first and then hands `opts` on, so its list has
+    to name everything the callee accepts -- a key the callee supports and
+    the wrapper omits is refused before it ever arrives, and a key the
+    wrapper allows and the callee does not is refused one call later with
+    a message naming the wrong function.
+    """
+    allow = {k: a for k, a, _r in _guarded_browser_apis()}
+    for key, callee in FORWARDS_OPTS.items():
+        assert key in allow, f"{key} is declared a forwarder but not guarded"
+        assert callee in allow, f"{callee} is a declared callee but not guarded"
+        missing = sorted(allow[callee] - allow[key])
+        extra = sorted(allow[key] - allow[callee])
+        assert not missing, (
+            f"{key} forwards to {callee}, which accepts "
+            f"{', '.join(missing)} -- the wrapper refuses them first")
+        assert not extra, (
+            f"{key} accepts {', '.join(extra)} but {callee}, which it "
+            f"forwards to, rejects them")
