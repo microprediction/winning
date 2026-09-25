@@ -350,7 +350,6 @@ accepts("a group cap binds on its members",
         r => Math.abs(r.p[0] + r.p[1] - 0.45) < 1e-6,
         r => `p0 + p1 = ${(r.p[0] + r.p[1]).toFixed(6)}`);
 
-<<<<<<< HEAD
 // --- the idiosyncratic-variance contract, D's half of asLoadings (#254)
 // The browser normalised V and left D alone. A scalar threw
 // `D.slice is not a function`; short, zero, negative and NaN entries
@@ -390,7 +389,6 @@ accepts("the inverse takes a scalar D, matching python",
         mu => Math.max(...mu.map((v, i) =>
           Math.abs(v - [-0.379114, 0.039741, 0.339373][i]))) < 1e-6,
         mu => `[${mu.map(v => v.toFixed(6))}]`);
-=======
 // --- the jacobian differentiates the forward's own lattice (#212)
 // raceJacobian built its OWN grid: a plain span window, no adaptive
 // placement, no refinement. So it differentiated a different lattice
@@ -477,7 +475,6 @@ accepts("the inverse takes a scalar D, matching python",
             return worst < 1e-8;
           });
 }
->>>>>>> origin/main
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
