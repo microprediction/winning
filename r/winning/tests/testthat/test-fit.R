@@ -185,3 +185,51 @@ test_that("larger fields are untouched", {
     expect_true(all(p > 0))
   }
 })
+
+# --- the validation the one-runner branch sits below (#277) ----------
+#
+# The early return keys off nrow alone, so it has to come AFTER the
+# shape and covariance checks: a 1 x 2 matrix has nrow 1, and would
+# otherwise be answered from C[1, 1] with the second column dropped.
+# R had no validation here at all -- a negative variance was clamped to
+# the floor and NA/Inf propagated into the fit -- while python refused
+# each one. Same contract, same messages, both ports.
+
+test_that("a non-square cov is refused rather than read by nrow", {
+  expect_error(fit_covariance(matrix(c(1, 2), 1, 2)), "must be square")
+  expect_error(fit_covariance(matrix(c(1, 2), 2, 1)), "must be square")
+  # the message names the shape it got
+  expect_error(fit_covariance(matrix(c(1, 2), 1, 2)), "1 x 2")
+})
+
+test_that("a non-finite one-runner cov is refused", {
+  expect_error(fit_covariance(matrix(NA_real_, 1, 1)), "NaN or inf")
+  expect_error(fit_covariance(matrix(Inf, 1, 1)), "NaN or inf")
+  expect_error(fit_covariance(matrix(-Inf, 1, 1)), "NaN or inf")
+  expect_error(fit_covariance(matrix(NaN, 1, 1)), "NaN or inf")
+})
+
+test_that("a negative one-runner variance is refused, not clamped", {
+  # it used to come back as D = 1e-12, i.e. invalid data dressed up as
+  # a certain race
+  expect_error(fit_covariance(matrix(-1, 1, 1)), "positive semidefinite")
+})
+
+test_that("a zero one-runner variance is valid and lands on the floor", {
+  f <- fit_covariance(matrix(0, 1, 1))
+  expect_equal(as.numeric(f$D), 1e-12)     # python's value too
+  expect_equal(as.numeric(f$W), 1)
+  expect_equal(f$rank, 0L)
+})
+
+test_that("an asymmetric cov is refused at every size", {
+  expect_error(fit_covariance(matrix(c(1, 0.9, 0.1, 1), 2, 2)),
+               "not symmetric")
+})
+
+test_that("a valid one-runner cov still fits", {
+  f <- fit_covariance(matrix(4, 1, 1))
+  expect_equal(as.numeric(f$D), 4)
+  expect_equal(as.numeric(f$V), 0)
+  expect_equal(f$rank, 0L)
+})

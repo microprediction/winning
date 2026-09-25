@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+  The one-runner return keys off `nrow` alone, so it has to sit BELOW
+  the shape and covariance checks -- a `1 x 2` matrix has `nrow` 1 and
+  would otherwise be answered from `C[1, 1]` with the second column
+  dropped (#277). R had no validation on this path at all: a negative
+  variance was clamped to the floor, and `NA` and `Inf` propagated into
+  the fit, while python refused each one. R now states the same
+  contract in the same order with the same messages -- square, finite,
+  symmetric, positive semidefinite.
+
+  python's squareness was itself only ever caught by accident. A
+  `1 x 2` broadcasts against its own transpose into a `2 x 2`, so the
+  asymmetry check reported "not symmetric" for something that is
+  really not square; a 1-D array passed that check outright and then
+  had `np.diag` build a matrix FROM it. Both ports now say `cov= must
+  be square`.
+
 - A one-runner field with `cov=` crashes instead of returning `[1]`
   (#273), in python and in R. `race_probabilities([2.0], cov=[[4.0]])`
   raised `ZeroDivisionError`; the R `fit_covariance` raised

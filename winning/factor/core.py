@@ -385,6 +385,15 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     from scipy.spatial.distance import squareform
 
     C = np.asarray(C, dtype=float)
+    # Squareness, stated. It was only ever caught by accident: a 1 x 2
+    # broadcasts against its own transpose into a 2 x 2, so the
+    # asymmetry check below reported "not symmetric" for something that
+    # is really not square, and a 1-D array passed that check outright
+    # (asym 0) and then had np.diag build a matrix FROM it. The R port
+    # read nrow() alone and answered for a 1 x 2 from C[1, 1] (#277).
+    if C.ndim != 2 or C.shape[0] != C.shape[1]:
+        raise ValueError(
+            f"cov= must be square; got shape {C.shape}")
     n = len(C)
     if not np.isfinite(C).all():
         raise ValueError("cov= contains NaN or inf")

@@ -64,3 +64,55 @@ def test_larger_fields_are_untouched(n):
     assert p.shape == (n,)
     assert abs(p.sum() - 1.0) < 1e-9
     assert (p > 0).all()
+
+
+# --- the validation the one-runner branch must sit BELOW (#277) -------
+#
+# The early return keys off nrow alone, so it has to come after the
+# shape and covariance checks or a 1 x 2 matrix -- nrow 1 -- gets
+# answered from C[1, 1] with the second column dropped. R had no
+# validation at all before this; python's squareness was only ever
+# caught by accident, because a 1 x 2 broadcasts against its transpose
+# into a 2 x 2 and reported "not symmetric" instead.
+
+@pytest.mark.parametrize("C, message", [
+    ([[1.0, 2.0]], "must be square"),          # nrow 1, ncol 2
+    ([[1.0], [2.0]], "must be square"),        # nrow 2, ncol 1
+    ([1.0, 2.0, 3.0], "must be square"),       # 1-D: np.diag would BUILD a matrix
+    ([[[1.0]]], "must be square"),             # 3-D
+])
+def test_a_non_square_cov_is_refused(C, message):
+    with pytest.raises(ValueError, match=message):
+        fit_covariance(np.array(C))
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_a_non_finite_one_runner_cov_is_refused(bad):
+    with pytest.raises(ValueError, match="NaN or inf"):
+        fit_covariance(np.array([[bad]]))
+
+
+def test_a_negative_one_runner_variance_is_refused():
+    """Not clamped to the floor: a negative variance is not a
+    covariance, and answering [1] for it would dress invalid data as a
+    certain race."""
+    with pytest.raises(ValueError, match="positive semidefinite"):
+        fit_covariance(np.array([[-1.0]]))
+
+
+def test_a_zero_one_runner_variance_is_accepted_at_the_floor():
+    """Zero IS positive semidefinite, so it is valid input; it lands on
+    the same 1e-12 floor the R port uses."""
+    V, D, F, W = fit_covariance(np.array([[0.0]]))
+    assert float(D[0]) == 1e-12
+    assert float(W[0]) == 1.0
+
+
+def test_the_front_door_refuses_them_too():
+    """race_probabilities(mu, cov=) calls the fitter directly, so these
+    must not be reachable through it either."""
+    for C, message in [([[-1.0]], "positive semidefinite"),
+                       ([[np.nan]], "NaN or inf"),
+                       ([[1.0, 2.0]], "must be square")]:
+        with pytest.raises(ValueError, match=message):
+            race_probabilities([0.0], cov=C)

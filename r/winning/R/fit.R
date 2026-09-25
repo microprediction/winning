@@ -73,7 +73,30 @@
 fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
                            nodes = 2048L) {
   C <- as.matrix(C)
+  # The same contract python states, in the same order and with the
+  # same messages. R had NONE of it: a negative variance was clamped to
+  # the floor, NA and Inf propagated into the fit, and a non-square
+  # matrix was read by nrow() alone. That last one is why this block
+  # sits ABOVE the n == 1 return rather than below it -- a 1 x 2 matrix
+  # has nrow 1, so the one-runner branch would otherwise answer for it
+  # from C[1, 1] and drop the second column (#277).
+  if (nrow(C) != ncol(C))
+    stop(sprintf("cov= must be square; got %d x %d", nrow(C), ncol(C)))
   n <- nrow(C)
+  if (!all(is.finite(C))) stop("cov= contains NaN or inf")
+  asym <- max(abs(C - t(C)))
+  if (asym > 1e-8 * max(max(abs(C)), 1e-300))
+    stop(sprintf(paste("cov= is not symmetric (max asymmetry %.2e); pass",
+                       "(C + t(C))/2 if the asymmetry is numerical noise"),
+                 asym))
+  C <- 0.5 * (C + t(C))
+  lam_min <- min(eigen(C, symmetric = TRUE, only.values = TRUE)$values)
+  if (lam_min < -1e-8 * max(sum(diag(C)) / n, 1e-300))
+    stop(sprintf(paste("cov= is not positive semidefinite (min eigenvalue",
+                       "%.2e); this is not a covariance matrix. Project to",
+                       "the PSD cone first if it came from noisy",
+                       "estimation."),
+                 lam_min))
   if (n == 1L) {
     # A one-runner field has no covariance STRUCTURE: nothing for a
     # factor to correlate, the whole variance idiosyncratic, and the
