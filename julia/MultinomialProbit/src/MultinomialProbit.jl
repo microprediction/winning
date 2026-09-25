@@ -237,6 +237,24 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
                                  nodes = nothing, per_obs = false)
     T, J = size(mu)
     r = size(V, 2)
+    # Every observation must be accounted for. The loop below walks the
+    # LEGAL labels and gathers the rows matching each, so a row whose
+    # choice is outside 1..J is never visited: it contributed nothing to
+    # the log-likelihood and a zero row to the score, and the fit
+    # silently optimised a SUBSET while reporting it as the whole. This
+    # port also accepted a choice vector SHORTER than T, dropping the
+    # tail without a word (#194).
+    length(choice) == T || throw(ArgumentError(
+        "choice must have one entry per observation: got " *
+        string(length(choice)) * " for " * string(T) * " rows of mu"))
+    for (i, c) in enumerate(choice)
+        (c isa Integer) || throw(ArgumentError(
+            "choice[" * string(i) * "] is not an integer alternative index"))
+        (1 <= c <= J) || throw(ArgumentError(
+            "choice[" * string(i) * "] = " * string(c) * " is outside 1.." *
+            string(J) * "; it would be dropped in silence, which raises " *
+            "the log-likelihood because there is less of it"))
+    end
     Dv = D === nothing ? ones(J) : Float64.(collect(D))
     s = sqrt.(Dv)
     V = V .- sum(V, dims = 1) ./ J          # gauge: differences decide
@@ -376,6 +394,11 @@ mutable struct MNProbit
     loglik::Float64
     converged::Bool
     method::Symbol
+    # Whether the constructor GENERATED the alternative intercept
+    # columns. Without it, predict_proba could only guess from the
+    # column count, and guessed wrong: see its docstring (#195).
+    intercepts::Bool
+    p_raw::Int          # covariate columns the caller supplied
 end
 
 function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
@@ -393,7 +416,7 @@ function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
     pos = _fill_positions(J, r)
     return MNProbit(Xf, Int.(choice), T, J, p, r, pos,
                     zeros(p + length(pos)), zeros(p), zeros(J, r),
-                    NaN, false, :exact)
+                    NaN, false, :exact, intercepts, p0)
 end
 
 function _unpack(m::MNProbit, theta)
@@ -577,17 +600,47 @@ function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
 end
 
 """Choice probabilities under the fitted parameters, by the same
-factor-conditional product integrals (normalized across alternatives)."""
+factor-conditional product integrals (normalized across alternatives).
+
+New data must carry the design the model was FITTED on. This used to decide whether to prepend generated intercept columns from
+the column count alone -- `size(Xr, 3) != m.p` -- and the model recorded
+neither whether it had generated them nor how many covariates the caller
+supplied. So new data with the wrong number of features were silently
+REINTERPRETED rather than refused: a model fitted on two covariates
+without intercepts, handed one covariate, prepended two synthetic
+intercept columns, then used only the first `m.p` of the three. It
+applied coefficients fitted to the covariates to the intercepts and
+IGNORED the supplied feature entirely, returning a plausible probability
+row (#195).
+
+The model now records both, so the column count is checked rather than
+guessed. `p_raw` columns means raw covariates, and the intercepts are
+generated exactly when the fit generated them; `p` columns means the
+design is already assembled. Anything else raises."""
 function predict_proba(m::MNProbit; X = nothing)
     Xf = X === nothing ? m.X : begin
         Xr = Float64.(X)
-        if size(Xr, 3) != m.p
+        size(Xr, 2) == m.J || throw(DimensionMismatch(
+            "X has " * string(size(Xr, 2)) * " alternatives; the model " *
+            "was fitted on " * string(m.J)))
+        nc = size(Xr, 3)
+        if nc == m.p
+            # already the fitted design, intercepts and all
+        elseif m.intercepts && nc == m.p_raw
             T2 = size(Xr, 1)
             Z = zeros(T2, m.J, m.J - 1)
             for j in 2:m.J
                 Z[:, j, j - 1] .= 1.0
             end
             Xr = cat(Z, Xr; dims = 3)
+        else
+            throw(DimensionMismatch(
+                "X has " * string(nc) * " covariate columns; this model " *
+                "was fitted on " * string(m.p_raw) *
+                (m.intercepts ? " covariates plus generated intercepts, so " *
+                 "pass either " * string(m.p_raw) * " or " * string(m.p) :
+                 " covariates and no generated intercepts, so pass " *
+                 string(m.p))))
         end
         Xr
     end

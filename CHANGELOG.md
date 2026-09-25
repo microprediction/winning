@@ -45,6 +45,188 @@
   package has testthat files it cannot run, or if relative sourcing
   returns.
 
+- `predict_proba` checks the design instead of guessing it, in Julia and
+  in Python (#195, #261).
+  It decided whether to prepend generated alternative-intercept columns
+  from the COLUMN COUNT alone, and `MNProbit` recorded neither whether
+  it had generated them nor how many covariates the caller supplied. New
+  data with the wrong number of features were therefore silently
+  REINTERPRETED rather than refused.
+
+  A model fitted on two covariates without intercepts, handed one
+  covariate, prepended two synthetic intercept columns and then used
+  only the first `p` of the three. It applied coefficients fitted to the
+  covariates to the intercepts, IGNORED the supplied feature entirely,
+  and returned a plausible probability row.
+
+  The model now records `intercepts` and `p_raw`, so the count is
+  checked: `p_raw` columns means raw covariates and the intercepts are
+  generated exactly when the fit generated them, `p` columns means the
+  design is already assembled, and anything else raises with both
+  numbers named. The alternative count is checked too.
+
+  The python reference had the identical defect and it is fixed here
+  too. Review found it, not me: I fixed the port the issue named and did
+  not sweep, which is the rule I had just written down. Python's version
+  is sharper -- the guess is wrong exactly when the wrong width plus the
+  `J - 1` generated columns EQUALS the fitted width, so three covariates
+  fitted without intercepts, handed one, gained two synthetic intercepts
+  and returned `[0.198, 0.605, 0.198]`.
+
+
+- The exact likelihood refuses a choice it cannot account for, in all
+  three ports (#194). The cores iterate over the LEGAL alternative
+  labels and gather the rows matching each, so a row whose choice is
+  outside the range is never visited: it contributed nothing to the
+  log-likelihood and a zero row to the score, and the fit silently
+  optimised a SUBSET of the data while reporting it as the whole.
+
+  The direction is what makes it dangerous. Dropping observations RAISES
+  the log-likelihood, because there is less of it -- five bad rows out
+  of forty moved it from -55.699 to -49.134 -- and nothing downstream
+  can tell that from a better fit. The tests assert that property
+  directly rather than describing it.
+
+  Julia additionally accepted a choice vector SHORTER than `T` and
+  dropped the tail; R left `logp == 0` for `NA` rows, which adds zero
+  negative log-likelihood and zero gradient. All three now name the
+  first offending row and count how many there are. An integer-valued
+  float is still accepted, because refusing `1.0` would be pedantry
+  rather than a guard.
+
+
+- Prediction and likelihood choose the same quadrature (#213).
+  `choice_loglik_and_score` gauge-centers `V` and dispatches on the
+  pairwise-safe bound `sqrt(2) max_i ||(PV)_i|| / sqrt(min D)`.
+  `MNProbit._prob_of` dispatched on `max_i ||V_i||`: no centering, no
+  `sqrt(2)`, no `D`. A fitted model could therefore optimise and report
+  under scrambled Sobol and then be PRICED on the 7-point Hermite
+  tensor. Julia already matched its own likelihood.
+
+  Two ways it showed. It was not gauge-invariant -- only loading
+  DIFFERENCES decide a race, yet adding a common offset of 5 to every
+  row moved the statistic from 2.0 to 7.0 and swapped 49 nodes for 1024
+  on an unchanged race. And it was too weak: a centred spread of 2.2
+  scored 2.2 against the likelihood's 3.11, so prediction took the
+  Hermite tensor and priced 2.9e-2 away from the rule the fit used.
+
+  The rule now lives in one place, `likelihood.sharpness_bound`, because
+  it was written twice and the copies drifted. Below the threshold
+  nothing changes: the same field measures a 3.161e-3 row-sum defect
+  before and after. Above it the sharp field improves from 1.6e-3 to
+  6.2e-4, which is the escalation doing its job.
+
+
+
+
+
+- The relative-weight contract reaches the ROOT namespace, and refuses a
+  signed rule (#263). #245 put the rule in `_setup` and swept
+  `winning.factor`, reporting every verb covered.
+  `softmax_probabilities` and `plackett_luce_order_logprob` are exported
+  from the package root and skip `_setup` when the caller supplies the
+  law, so they kept scaling with `sum(W)`: the same factor law spelled
+  `[5, 5]` instead of `[0.5, 0.5]` returned TEN TIMES the probabilities,
+  and the ordered log-probability `log(10)` higher. `harville_*` are
+  aliases of those, so they carried it too.
+
+  A sweep that names its own scope too narrowly reports success for the
+  part it looked at. The discovery now walks both `winning` and
+  `winning.factor`, and names the two that escaped.
+
+  The second gap is the check itself. `sum(W) > 0` admits a SIGNED rule:
+  `W = [2, -1]` passed and returned "probabilities" of `-0.144` and
+  `1.999`. Entries must be non-negative, not merely the total positive.
+  An individual ZERO stays valid -- it is a node that contributes
+  nothing.
+
+  The rule lives in `shapes.as_weights` now, beside `as_loadings` and
+  `as_idio`, rather than inline in `_setup` where three other verbs
+  could not reach it.
+
+- `D` goes through the idiosyncratic-variance contract, in the browser
+  and in python's top-k family (#254). The browser normalised `V` and
+  left `D` alone, so a scalar -- which python defines as the same
+  variance for every contestant -- threw `D.slice is not a function`,
+  and short, zero, negative and non-finite entries propagated NaN
+  through forward and inverse alike. The dangerous one was a `D` with
+  ONE EXTRA entry: accepted, and returned a normalised, plausible,
+  materially wrong answer, `[0.888, 0.102, 0.010]` where the race is
+  `[0.507, 0.312, 0.181]`.
+
+  `core.mjs` gains `asIdio`, the companion of `asLoadings`, and the
+  forward, the inverse (which keeps its own copy of `D`) and the whole
+  top-k family call it.
+
+  Sweeping for the same pattern found it in PYTHON too, and worse there.
+  `winning/factor/topk.py` called `np.asarray(D, float)` at seven sites,
+  so a scalar became a 0-d array and the COMPILED kernel indexed past
+  it: `PanicException: index out of bounds: the len is 1 but the index
+  is 1`. A rust panic is not an exception a caller can catch in the
+  ordinary way, which is worse than the wrong answer it replaced. The
+  browser accepted a scalar and python panicked on it, so the ports
+  disagreed and python was the one that was wrong. Both now give
+  `[0.818841, 0.687865, 0.493294]`.
+
+  The rehearsal also found a hole in the checker itself: `accepts()`
+  wrapped the CALL but not its predicate, and the predicate usually
+  calls the API again to compare against. A throw there still killed the
+  file -- the first sabotage produced one named failure and then
+  aborted, hiding five more. It now reports 8 with all 97 checks still
+  running.
+
+- The browser's nested `coupling` is a loading matrix like any other
+  (#264). It was normalised by hand in `blocks.mjs` -- wrap a flat
+  vector, otherwise take it as given -- and never transposed, so a
+  `(rank, n)` spelling, which python treats as the SAME race, was read as
+  rank n and refused. `asLoadings` decides that rule everywhere else,
+  and now here too, in both nested verbs.
+
+  Rank 3 was refused outright, and the message told the caller to
+  "supply nodes explicitly" -- a remediation that cannot be followed,
+  since no nested verb takes a `nodes` option and `checkOpts` rejects it
+  before pricing. Rank >= 3 now escalates the FAMILY to Halton, which is
+  what `races.mjs` already does for high-rank loadings and what python
+  does with scrambled Sobol.
+
+  Different QMC families, so the agreement is to quadrature tolerance
+  rather than to the digit: 6.5e-5 against python on a rank-3 coupling,
+  rows summing to one at 1e-12, and the rank-3 Jacobian within 7.7e-11
+  of finite differences of its own forward.
+
+  Fourth parameter this session found bypassing the shared contract,
+  after `V` (#232), `D` (#254) and `W` (#208, #263).
+
+- The browser's race Jacobian differentiates the lattice its own forward
+  integrates on (#212, partly). It built its OWN grid -- a plain span
+  window, no adaptive placement, no refinement -- while
+  `raceProbabilities` uses an adaptive bulk window plus a refinement when
+  the spacing exceeds half the narrowest performance sd. So the two
+  parted company exactly where the lattice is coarse relative to the
+  field.
+
+  Measured against finite differences of its own forward, on a
+  four-runner race whose variances span 4005x:
+
+  | points | before | after | python |
+  |---|---:|---:|---:|
+  | 257 | 1.02e-3 | 1.51e-5 | 1.74e-8 |
+  | 1025 | 1.51e-10 | 1.51e-10 | 1.91e-9 |
+
+  A sweep of 40 random fields puts the median at 1.4e-11 and shows the
+  degradation appearing only past a variance ratio of about 1000, which
+  is why it went unnoticed.
+
+  `forwardGrid` is now exported from `races.mjs` and both verbs call it,
+  mirroring python's `forward_grid`. This does NOT close #212: the issue
+  also asks for the own-density derivative to be integrated rather than
+  the diagonal imposed by a zero-row-sum identity, and for the
+  normalisation's quotient-rule term. I ported both and measured the
+  result WORSE on an unresolvable field -- 1.33 against 0.355 -- so the
+  port has a defect I have not found, and shipping it would have traded
+  a clean 68x improvement for a regression. The remaining terms stay
+  open, with the measurement above as the baseline. R has the same
+  divergence and is untouched.
 - GMRFExtremes answers a threshold out in the tail (#197). The grid was
   built from the chain's means and marginal sds alone, so a threshold
   above the last cell left the occupancy identically one and every
@@ -345,7 +527,6 @@
   since `abilitiesFromRace` forwards on its structure branch while
   `targetFloor` vanished on every other path. Sabotage-tested by putting
   an unread key back.
-
 
 - The browser honours the loading-shape contract, in every module that
   takes `V` (#232). `winning.shapes.as_loadings` is the one place the rule
