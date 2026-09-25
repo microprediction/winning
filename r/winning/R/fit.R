@@ -89,9 +89,15 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
     stop(sprintf(paste("cov= is not symmetric (max asymmetry %.2e); pass",
                        "(C + t(C))/2 if the asymmetry is numerical noise"),
                  asym))
-  C <- 0.5 * (C + t(C))
+  # halve BEFORE adding, or C + t(C) overflows to Inf for finite
+  # entries near the double ceiling (#279)
+  C <- 0.5 * C + 0.5 * t(C)
   lam_min <- min(eigen(C, symmetric = TRUE, only.values = TRUE)$values)
-  if (lam_min < -1e-8 * max(sum(diag(C)) / n, 1e-300))
+  # mean diagonal, divided BEFORE summing: sum(diag(C)) overflows to
+  # Inf for finite entries near the ceiling, and the tolerance is
+  # then -Inf, so the comparison is always FALSE and the check
+  # accepts a matrix with a large negative eigenvalue (#279)
+  if (lam_min < -1e-8 * max(sum(diag(C) / n), 1e-300))
     stop(sprintf(paste("cov= is not positive semidefinite (min eigenvalue",
                        "%.2e); this is not a covariance matrix. Project to",
                        "the PSD cone first if it came from noisy",

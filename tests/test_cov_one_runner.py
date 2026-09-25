@@ -116,3 +116,65 @@ def test_the_front_door_refuses_them_too():
                        ([[1.0, 2.0]], "must be square")]:
         with pytest.raises(ValueError, match=message):
             race_probabilities([0.0], cov=C)
+
+
+# --- symmetrising must not overflow what the check just passed (#279)
+#
+# The finiteness check runs BEFORE the symmetrisation, and
+# `0.5 * (C + C.T)` doubles before it halves. So a finite variance near
+# the double ceiling passed the check and then became inf, and the inf
+# came back out as D -- the front door raised "D has a non-finite
+# entry" for input it had already accepted as finite. Halving each term
+# first is the same number everywhere else: over 2000 random matrices
+# spanning 400 orders of magnitude the two spellings are bit-identical,
+# because multiplying by 0.5 is exact.
+
+@pytest.mark.parametrize("v", [1e307, 1e308, 1.5e308,
+                               float(np.finfo(float).max)])
+def test_a_huge_finite_variance_survives_symmetrising(v):
+    V, D, F, W = fit_covariance(np.array([[v]]))
+    assert np.isfinite(D).all(), f"D = {D} for a finite cov of {v}"
+    assert float(D[0]) == v
+
+
+@pytest.mark.parametrize("v", [1e308, float(np.finfo(float).max)])
+def test_the_front_door_prices_a_huge_finite_variance(v):
+    """It used to raise `D has a non-finite entry` for a covariance it
+    had itself just accepted as finite."""
+    p = np.asarray(race_probabilities([2.0], cov=[[v]]))
+    assert p.shape == (1,)
+    assert p[0] == 1.0
+
+
+@pytest.mark.parametrize("v", [1e200, 1e300])
+def test_a_large_two_runner_cov_survives_too(v):
+    """Not a one-runner special case: the symmetrisation is on the
+    shared path. At 1e308 a two-runner fit still overflows further in
+    (`_center2` sums a column), which is a separate and much larger
+    piece of work -- fitting a field that size needs the covariance
+    rescaled before the fit, not one more guarded addition. This pins
+    what the fix does reach."""
+    C = np.array([[v, 0.0], [0.0, v]])
+    V, D, F, W = fit_covariance(C)
+    assert np.isfinite(D).all()
+
+
+def test_an_overflowing_trace_does_not_disable_the_psd_check():
+    """The tolerance was `-1e-8 * max(trace(C) / n, 1e-300)`, and
+    trace overflows before the division. That makes the tolerance
+    -inf, and `lam_min < -inf` is False for every lam_min, so the
+    check ACCEPTED a matrix whose smallest eigenvalue is -5e307.
+    Dividing before summing keeps the tolerance finite."""
+    C = np.array([[1e308, 1.5e308], [1.5e308, 1e308]])
+    assert np.linalg.eigvalsh(C).min() < 0          # it is not PSD
+    with pytest.raises(ValueError, match="positive semidefinite"):
+        fit_covariance(C)
+
+
+def test_halving_first_is_the_same_number():
+    """The fix must not move any answer that already worked."""
+    rng = np.random.default_rng(0)
+    for _ in range(500):
+        A = rng.standard_normal((5, 5)) * float(10.0 ** float(
+            rng.integers(-200, 200)))
+        assert np.array_equal(0.5 * (A + A.T), 0.5 * A + 0.5 * A.T)

@@ -233,3 +233,35 @@ test_that("a valid one-runner cov still fits", {
   expect_equal(as.numeric(f$V), 0)
   expect_equal(f$rank, 0L)
 })
+
+# --- symmetrising must not overflow what the check just passed (#279)
+#
+# The finiteness check runs before the symmetrisation, and
+# 0.5 * (C + t(C)) doubles before it halves, so a finite variance near
+# the double ceiling passed the check and then became Inf. The PSD
+# tolerance had the same shape: sum(diag(C)) overflows before the
+# division by n, and a tolerance of -Inf makes the comparison FALSE
+# for every eigenvalue, so the check accepted a matrix that is not a
+# covariance at all.
+
+test_that("a huge finite one-runner variance survives symmetrising", {
+  for (v in c(1e307, 1e308, 1.5e308, .Machine$double.xmax)) {
+    f <- fit_covariance(matrix(v, 1, 1))
+    expect_true(is.finite(f$D))
+    expect_equal(as.numeric(f$D), v)
+  }
+})
+
+test_that("an overflowing trace does not disable the PSD check", {
+  C <- matrix(c(1e308, 1.5e308, 1.5e308, 1e308), 2, 2)
+  expect_lt(min(eigen(C, symmetric = TRUE, only.values = TRUE)$values), 0)
+  expect_error(fit_covariance(C), "positive semidefinite")
+})
+
+test_that("a large two-runner cov still fits", {
+  # 1e308 overflows further into the fit, which is separate work
+  for (v in c(1e200, 1e300)) {
+    f <- fit_covariance(diag(c(v, v)))
+    expect_true(all(is.finite(f$D)))
+  }
+})

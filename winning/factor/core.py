@@ -402,9 +402,17 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         raise ValueError(
             f"cov= is not symmetric (max asymmetry {asym:.2e}); pass "
             "(C + C.T)/2 if the asymmetry is numerical noise")
-    C = 0.5 * (C + C.T)
+    # halve BEFORE adding: C + C.T overflows to inf for finite
+    # entries near the double ceiling, and the finiteness check
+    # above has already passed by then, so an inf reached D and
+    # came back out as a non-finite variance (#279). The two are
+    # the same number everywhere else.
+    C = 0.5 * C + 0.5 * C.T
     lam_min = float(np.linalg.eigvalsh(C).min())
-    if lam_min < -1e-8 * max(float(np.trace(C)) / n, 1e-300):
+    # mean diagonal, divided BEFORE summing: np.trace overflows for
+    # finite entries near the ceiling, which made the tolerance inf
+    # and the comparison meaningless (#279)
+    if lam_min < -1e-8 * max(float(np.sum(np.diag(C) / n)), 1e-300):
         raise ValueError(
             f"cov= is not positive semidefinite (min eigenvalue "
             f"{lam_min:.2e}); this is not a covariance matrix. Project "

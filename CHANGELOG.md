@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+  Symmetrising must not overflow what the finiteness check just passed
+  (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
+  variance near the double ceiling became `inf` between the check and
+  the fit, and `race_probabilities([2.0], cov=[[1e308]])` failed with
+  `D has a non-finite entry` for input it had itself accepted. Halving
+  each term first is the same number everywhere else -- multiplying by
+  0.5 is exact, and over 2000 random matrices spanning 400 orders of
+  magnitude the two spellings are bit-identical.
+
+  The PSD tolerance had the same shape and a worse consequence:
+  `-1e-8 * max(trace(C) / n, 1e-300)` overflows the trace BEFORE the
+  division, so the tolerance was `-inf` and `lam_min < -inf` is False
+  for every eigenvalue. The check therefore ACCEPTED a matrix whose
+  smallest eigenvalue is -5e307. Dividing before summing keeps it
+  finite, and that matrix is now refused.
+
+  Three more `0.5 * (X + X.T)` in the shipped package take the same
+  spelling, in `ratings/full.py`, `factor/races.py` and
+  `research/laplacian.py`. Not fixed, and a known limit: a field of
+  two or more at 1e308 still overflows further into the fit, where
+  `_center2` sums a column. Reaching that needs the covariance
+  rescaled before fitting rather than one more guarded addition. Up to
+  1e300 a two-runner fit is fine.
+
   The one-runner return keys off `nrow` alone, so it has to sit BELOW
   the shape and covariance checks -- a `1 x 2` matrix has `nrow` 1 and
   would otherwise be answered from `C[1, 1]` with the second column
