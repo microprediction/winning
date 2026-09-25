@@ -2,7 +2,8 @@
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
 import { mean, checkOpts, OPT_HINTS, asLoadings } from "./core.mjs";
-import { raceProbabilities, abilitiesFromRace, BASES } from "./races.mjs";
+import { raceProbabilities, abilitiesFromRace, BASES,
+         forwardGrid } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./blocks.mjs";
 
 export function raceJacobian(mu, opts = {}) {
@@ -70,14 +71,16 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
     for (let r = 0; r < fq.length; r++) s += V[i][r] * fq[r];
     return s;
   }));
-  let mn = Infinity, mx = -Infinity;
-  for (const row of Mall) for (const v of row) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
-  const smax = Math.max(...sd);
-  const P = points;
-  const x = new Array(P);
-  const lo = mn - left * smax, hi = mx + right * smax;
-  for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
-  const dx = x[1] - x[0];
+  // The SAME lattice raceProbabilities integrates on. This built its own
+  // -- a plain span window, no adaptive placement, no refinement -- so
+  // it differentiated a different grid than the forward computed on, and
+  // the two parted company exactly where the lattice is coarse relative
+  // to the field: on a four-runner race whose variances span 4005x, at
+  // 257 points, the analytic jacobian was 1.0e-3 from finite differences
+  // of its own forward. Sharing the grid brings that to 1.5e-5 (#212).
+  const { x, dx } = forwardGrid(Mall, sd, { V, left, right },
+                                points, "bulk", 1e-12);
+  const P = x.length;
   const J = Array.from({ length: n }, () => new Array(n).fill(0));
   for (let q = 0; q < F.length; q++) {
     const Mq = Mall[q], wq = W[q];

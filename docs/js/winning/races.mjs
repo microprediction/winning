@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, firstPrimes } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, firstPrimes } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -36,7 +36,7 @@ const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [1
 
 function setup(mu, V, D, F, W, base) {
   const n = mu.length;
-  D = D ? D.slice() : new Array(n).fill(1);
+  D = asIdio(D, n);        // the companion of asLoadings, #254
   // the shape contract at the door, as python's _setup does it: a
   // scalar, a length-n vector, (n, rank) and (rank, n) are the same
   // race, and a ragged V raises instead of being truncated to the first
@@ -121,7 +121,7 @@ function condMeans(mu, V, F) {
 }
 
 
-function invNormalRational(p) {
+export function invNormalRational(p) {
   // Acklam rational approximation, adequate for node placement
   const a = [-39.6968302866538, 220.946098424521, -275.928510446969,
              138.357751867269, -30.6647980661472, 2.50662827745924];
@@ -187,18 +187,20 @@ const INVERSE_OPTS = new Set([
   "nIter", "tol", "targetFloor", "returnInfo",
 ]);
 
-export function raceProbabilities(mu, opts = {}) {
-  const { V = null, D = null, F = null, W = null, base = "normal",
-          points = 257, returnSlopes = false, window: win = "bulk",
-          delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
-  checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
-  if (structure) {
-    return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
-  }
-  const st = setup(mu, V, D, F, W, base);
-  const n = st.mu.length;
-  const sd = st.D.map(Math.sqrt);
-  const Mall = condMeans(st.mu, st.V, st.F);
+/* The lattice the forward map integrates on, as one function.
+ *
+ * raceJacobian built its OWN grid -- a plain span window with no
+ * adaptive placement and no refinement -- so it differentiated a
+ * different lattice than raceProbabilities computed on, and the two
+ * stopped agreeing exactly where the lattice is coarse relative to the
+ * field. On a four-runner race whose variances span 4005x, at 257
+ * points, the analytic jacobian differed from finite differences of its
+ * own forward by 1.0e-3 where python -- which shares its grid through
+ * `forward_grid` -- was 1.7e-8. Both converge by 1025 points, which is
+ * why it went unnoticed (#212).
+ */
+export function forwardGrid(Mall, sd, st, points, win = "bulk",
+                            delta = 1e-12) {
   let x;
   if (win === "bulk") {
     x = bulkWindow(Mall, sd, points, delta);
@@ -211,23 +213,37 @@ export function raceProbabilities(mu, opts = {}) {
     for (let t = 0; t < points; t++) x[t] = lo + t * (hi - lo) / (points - 1);
   }
   let dx = x[1] - x[0];
-  {
-    // extreme-sharpness lattice refinement (matching python/R)
-    const smin = Math.min(...sd);
-    let vmax = 0;
-    for (const row of st.V) vmax = Math.max(vmax, Math.sqrt(row.reduce((a, b) => a + b * b, 0)));
-    if (vmax / Math.max(smin, 1e-300) > 25 && dx > 0.5 * smin) {
-      const span = x[x.length - 1] - x[0];
-      const need = Math.ceil(span / (0.5 * smin)) + 1;
-      const pts2 = Math.min(need, 8193);
-      if (pts2 > x.length) {
-        const x0 = x[0];
-        x = new Array(pts2);
-        for (let t = 0; t < pts2; t++) x[t] = x0 + t * span / (pts2 - 1);
-        dx = x[1] - x[0];
-      }
+  // extreme-sharpness lattice refinement (matching python/R)
+  const smin = Math.min(...sd);
+  let vmax = 0;
+  for (const row of st.V) vmax = Math.max(vmax, Math.sqrt(row.reduce((a, b) => a + b * b, 0)));
+  if (vmax / Math.max(smin, 1e-300) > 25 && dx > 0.5 * smin) {
+    const span = x[x.length - 1] - x[0];
+    const need = Math.ceil(span / (0.5 * smin)) + 1;
+    const pts2 = Math.min(need, 8193);
+    if (pts2 > x.length) {
+      const x0 = x[0];
+      x = new Array(pts2);
+      for (let t = 0; t < pts2; t++) x[t] = x0 + t * span / (pts2 - 1);
+      dx = x[1] - x[0];
     }
   }
+  return { x, dx };
+}
+
+export function raceProbabilities(mu, opts = {}) {
+  const { V = null, D = null, F = null, W = null, base = "normal",
+          points = 257, returnSlopes = false, window: win = "bulk",
+          delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
+  checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
+  if (structure) {
+    return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
+  }
+  const st = setup(mu, V, D, F, W, base);
+  const n = st.mu.length;
+  const sd = st.D.map(Math.sqrt);
+  const Mall = condMeans(st.mu, st.V, st.F);
+  const { x, dx } = forwardGrid(Mall, sd, st, points, win, delta);
   const p = new Array(n).fill(0);
   const slope = new Array(n).fill(0);
   const logS = new Array(n), fArr = new Array(n), fpArr = new Array(n);
@@ -300,7 +316,7 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   const lm = mean(logt);
   // the field's contrast scale (matching python/R): median idiosyncratic
   // variance plus the mean factor variance under the represented nodes
-  const Dn = D ? D.slice() : new Array(n).fill(1);
+  const Dn = asIdio(D, n);        // the inverse has its own copy (#254)
   const Vn = V ? asLoadings(V, n).map(row => row.slice()) : Array.from({ length: n }, () => [0]);
   const r = Vn[0].length;
   const colMean = Array.from({ length: r }, (_, c) => mean(Vn.map(row => row[c])));
