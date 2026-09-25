@@ -22,3 +22,75 @@ test_that("synthetic MNP fits, converges, recovers slope direction", {
   expect_gt(fit$coefficients["price"], 0.5)
   expect_false(fit$boundary)
 })
+
+test_that("a malformed choice set is rejected, not reshaped", {
+  # The reshape downstream is POSITIONAL, so row order alone decides
+  # which alternative a row is priced as. A count check cannot see a
+  # duplicate paired with an omission: the observation still has J rows,
+  # `nrow(df) == Tn * J` passed, and the duplicate was priced as the
+  # missing alternative, returning an ordinary-looking fit (#230).
+  d <- data.frame(id = c(1, 1, 1, 2, 2, 2),
+                  alt = c(1, 1, 3, 1, 2, 3),   # id 1 duplicates 1, omits 2
+                  chosen = c(TRUE, FALSE, FALSE, TRUE, FALSE, FALSE),
+                  x = c(0, 10, 0, 0, 0, 0))
+  expect_error(rprobit_fast(d, covariates = "x", r = 1L, Qf = 3L, Qz = 3L,
+                            maxit = 1L),
+               "exactly once")
+  # the message must name the observation and the alternative
+  msg <- tryCatch(rprobit_fast(d, covariates = "x", r = 1L, Qf = 3L,
+                               Qz = 3L, maxit = 1L),
+                  error = function(e) conditionMessage(e))
+  expect_match(msg, "observation '1'")
+  expect_match(msg, "alternative '1'")
+})
+
+test_that("a well-formed panel is untouched", {
+  set.seed(4)
+  n <- 60L; J <- 3L
+  df <- data.frame(id = rep(seq_len(n), each = J),
+                   alt = rep(1:J, times = n), x = rnorm(n * J))
+  u <- 0.7 * df$x + rnorm(n * J)
+  df$chosen <- unlist(lapply(split(u, df$id),
+                             function(v) as.integer(seq_along(v) == which.max(v))))
+  fit <- rprobit_fast(df, covariates = "x", r = 1L, Qf = 5L, Qz = 5L,
+                      maxit = 40L)
+  expect_true(is.finite(fit$coefficients[["x"]]))
+  expect_gt(fit$coefficients[["x"]], 0)
+})
+
+test_that("a binary choice fits instead of running off the end of V", {
+  # The triangular-loading loop read `(col + 1L):J`, and at J = 2 with the
+  # default r = 2L the col = 2 pass evaluates 3:2 -- which in R is the
+  # two-element vector c(3, 2), not empty. The first assignment was
+  # V[3, 2] on a 2x2 matrix, so every binary-choice fit died with
+  # "subscript out of bounds" (#183). nw counts one free loading there, so
+  # wfree[2] was out of range too.
+  set.seed(11)
+  n <- 120L; J <- 2L
+  id <- rep(seq_len(n), each = J)
+  alt <- rep(1:J, times = n)
+  x <- rnorm(n * J)
+  u <- 0.8 * x + rnorm(n * J)
+  chosen <- unlist(lapply(split(u, id),
+                          function(v) as.integer(seq_along(v) == which.max(v))))
+  df <- data.frame(id = id, alt = alt, x = x, chosen = chosen)
+  fit <- rprobit_fast(df, covariates = "x", maxit = 60L)
+  expect_true(is.finite(fit$coefficients[["x"]]))
+  expect_gt(fit$coefficients[["x"]], 0)        # the true slope is +0.8
+})
+
+test_that("the triangular loop is empty exactly when it should be", {
+  # `(col + 1L):J` counts DOWN when col + 1 > J; seq_len does not.
+  visited <- function(J, r) {
+    out <- character(0)
+    for (col in seq_len(r)) for (row in col + seq_len(J - col))
+      out <- c(out, sprintf("%d,%d", row, col))
+    out
+  }
+  expect_equal(visited(2L, 2L), "2,1")          # one free loading, in range
+  # J = 5, r = 2: col 1 fills rows 2..5 and col 2 fills rows 3..5
+  expect_equal(length(visited(5L, 2L)), (5L - 1L) + (5L - 2L))
+  expect_true(all(vapply(strsplit(visited(5L, 2L), ","),
+                         function(p) as.integer(p[1]) <= 5L, TRUE)))
+  expect_equal(visited(1L, 1L), character(0))   # nothing to fill
+})
