@@ -205,7 +205,7 @@ export function asFactorNodes(F, rank, where = "F") {
    door. The forward normalises its shares so a rescaling cancels there,
    but the spelling should not matter anywhere, and a mismatched length
    must not reach the kernel. */
-export function asNodeWeights(W, nNodes, where = "W") {
+export function asWeights(W, nNodes, where = "W") {
   if (!Array.isArray(W) && !ArrayBuffer.isView(W))
     throw new Error(`${where} must be an array of node weights; got ${typeof W}`);
   if (W.length !== nNodes)

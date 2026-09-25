@@ -14,8 +14,9 @@
   | extra weights | silently ignored | refused |
   | too few weights | `NaN` | refused |
 
-  `asFactorNodes` and `asNodeWeights` are now the one place those rules
-  are decided, beside `asLoadings` and `asIdio`. Every node carries
+  `asFactorNodes` and `asWeights` are now the one place those rules
+  are decided, beside `asLoadings` and `asIdio` -- `asWeights` carrying
+  python's own name for it. Every node carries
   exactly the loadings' rank, there is one finite non-negative weight
   per node, and the weights are normalised -- so `W` and `c*W` are the
   same law here too, as python's `as_weights` makes them.
