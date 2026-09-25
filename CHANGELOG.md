@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Every port GENERATES its Halton primes (#143, and the sweep that should
+  have come with #190 and #233). A Halton construction needs one prime
+  per dimension, and writing them as a literal puts a silent cliff in a
+  public rank argument: one dimension past the end of the table the base
+  is `NA`, `undefined` or out of bounds, and the generator either throws
+  somewhere unrelated or fills that column with nothing and returns
+  numbers that look like an answer.
+
+  This is the third time. #190 was `r/winning` with 30 entries, where the
+  public `cov=` route stopped at 31 runners; #233 was the browser with 16
+  in `demo.mjs` and 24 in `races.mjs`, where rank 17 and rank 25 returned
+  NaN for every runner in silence; #143 is `r/mvtnormfast` with six,
+  where an explicit rank-7 `V` selected `primes[7] = NA`. Each was fixed
+  where it was found and the next one was found somewhere else, because
+  nobody grepped the other trees.
+
+  Fixed here, in all of them at once: `r/mvtnormfast`, `r/rprobitfast`
+  and `r/mlogitfast` (four entries, a cliff at rank 4), `r/winning`'s
+  races, `julia/winning` (12) and `julia/MultinomialProbit` (8). The
+  python copies in `winning/fastmvn.py` and its vendored twin had a
+  six-entry table in a `_halton_unit` with no callers at all -- it
+  allocated `r` columns, filled six, and returned the rest as whatever
+  `np.empty` gave it -- so those are deleted rather than fixed.
+
+  `tests/test_no_tabulated_primes.py` is the sweep, and fails if a table
+  reappears anywhere, if a port drops its generator, or if the sweep
+  itself stops reading files. `r/mvtnormfast` gains rank 6/7/8/12 tests;
+  the measured relative error there is 1.1e-3 at rank 6, 9.1e-4 at 7,
+  1.5e-3 at 8 and 3.4e-3 at 12, so the ranks that used to be refused are
+  in the same band as the rank that always worked.
+
 - A coordinate with no idiosyncratic variance is treated as
   deterministic, in all three structured-MVN ports (#206). Given the
   factor draw such a coordinate is a CONSTANT, `X_i = mu_i + v_i . f`, so

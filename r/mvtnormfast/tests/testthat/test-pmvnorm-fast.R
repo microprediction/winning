@@ -156,3 +156,45 @@ test_that("a deterministic coordinate that still loads on the factor", {
                      -50, 0)$value
   expect_lt(abs(as.numeric(p) - exact), 1e-4)
 })
+
+# --- explicit factor rank past the old prime table (#143) --------------
+#
+# .halton_unit tabulated exactly six primes and indexed them by rank, so
+# an explicit V of rank 7 selected primes[7] = NA and the Halton loop
+# died with a missing-value error. pmvnorm_fast documents no rank limit,
+# and the python reference has none: it uses arbitrary-dimensional Sobol
+# nodes. The primes are generated now.
+
+test_that("an explicit factor rank past six is accepted", {
+  for (r in c(6L, 7L, 8L, 12L)) {
+    n <- r + 1L
+    V <- diag(n)[, seq_len(r), drop = FALSE] * 0.4
+    p <- pmvnorm_fast(upper = rep(0, n), V = V, D = rep(1, n))
+    expect_true(is.finite(as.numeric(p)), info = paste("rank", r))
+    expect_gt(as.numeric(p), 0)
+    expect_lt(as.numeric(p), 1)
+  }
+})
+
+test_that("a rank past six is no less accurate than rank six was", {
+  # V = 0.4 * the first r columns of I_n leaves every coordinate
+  # independent with mean 0, so P(X <= 0) = 0.5^n exactly and the gap is
+  # pure node error. Halton in r dimensions loses accuracy as r grows,
+  # and the ranks that used to be refused are in the same band as rank 6,
+  # which always worked -- measured relative error 1.1e-3 at rank 6,
+  # 9.1e-4 at 7, 1.5e-3 at 8, 3.4e-3 at 12. The point of this test is
+  # that rank 7 is ordinary, not that it is exact.
+  for (r in c(6L, 7L, 8L, 12L)) {
+    n <- r + 1L
+    V <- diag(n)[, seq_len(r), drop = FALSE] * 0.4
+    p <- as.numeric(pmvnorm_fast(upper = rep(0, n), V = V, D = rep(1, n)))
+    expect_lt(abs(p - 0.5^n) / 0.5^n, 5e-3, label = paste("rank", r))
+  }
+})
+
+test_that(".first_primes generates the primes it used to tabulate", {
+  expect_equal(.first_primes(6), c(2, 3, 5, 7, 11, 13))
+  expect_equal(.first_primes(1), 2)
+  expect_equal(length(.first_primes(0)), 0)
+  expect_equal(tail(.first_primes(20), 1), 71)
+})

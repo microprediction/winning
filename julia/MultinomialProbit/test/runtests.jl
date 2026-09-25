@@ -188,3 +188,18 @@ println("all MultinomialProbit tests passed")
     show(io, MIME"text/plain"(), m)
     @test occursin("beta[1]", String(take!(io)))
 end
+
+# --- Halton primes are generated, not tabulated (#143, #190, #233) ----
+#
+# A literal prime table puts a SILENT cliff in a public rank argument:
+# one dimension past the end, the base is out of bounds or the column is
+# never filled. That has been three separate issues in three different
+# ports, each fixed where it was found. Every port generates them now.
+@testset "generated halton primes" begin
+    @test MultinomialProbit._first_primes(6) == [2, 3, 5, 7, 11, 13]
+    @test MultinomialProbit._first_primes(1) == [2]
+    @test isempty(MultinomialProbit._first_primes(0))
+    @test last(MultinomialProbit._first_primes(20)) == 71
+    @test length(MultinomialProbit._first_primes(100)) == 100
+    @test last(MultinomialProbit._first_primes(100)) == 541
+end
