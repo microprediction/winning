@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+- The mixed Plackett-Luce likelihood used a FIXED 7-node rule whatever
+  the loadings were (#272). `ranking_loglik_and_score` always called
+  `_factor_nodes`, which at rank one or two is a Gauss-Hermite tensor of
+  order `Qf` -- no dispatch on the loadings, no convergence check, no
+  warning -- while the choice likelihood beside it escalates past a
+  sharpness of 3.
+
+  A length-one ranking is a mixed-logit choice probability, so a
+  rank-one factor has a direct one-dimensional reference integral and
+  the failure is exact rather than a disagreement between two
+  approximations. On a field with a centred loading contrast of 4.8:
+
+  | | before | exact | after |
+  |---|---|---|---|
+  | probability | 0.6927739 | 0.6136638 | rel 9.3e-08 |
+  | utility score | 0.0481050 | 0.0734129 | rel 4.8e-07 |
+  | loading score | 0.0002319 | 0.0204003 | rel 1.4e-06 |
+
+  The loading score was smaller by a factor of **88**. These are
+  derivatives of the TRUE mixed likelihood, so no finite-difference
+  test against the same 7-node rule could see it, and the Monte Carlo
+  test used loadings near one where `Qf=7` and `Qf=21` agree.
+
+  Raising the order does not rescue it -- the integrand is a softmax
+  and Gauss-Hermite is non-monotone on it, giving 0.6928, 0.6374,
+  0.6128, 0.6121, 0.6137 at orders 7, 15, 31, 63, 127 and reaching
+  5.7e-8 only at 255. The low-discrepancy rule the helper already uses
+  past rank two gets 9.3e-8 from 1024 nodes.
+
+  So the rule now dispatches on `sharpness_bound(V / tau)`, measured
+  over 220 random fields:
+
+      sharpness   GH Qf=7    Sobol 2^10
+      [0, 1)      3.9e-05    2.6e-04
+      [1, 2)      1.1e-03    2.4e-03
+      [2, 3)      4.7e-02    2.3e-03    <- Gauss-Hermite collapses here
+      [4, 6)      3.9e-01    1.8e-03
+      [6, 20)     1.15       8.5e-05
+
+  Gauss-Hermite is the better rule below 2 and 146 times cheaper, 7
+  nodes against 1024, so the crossover goes there. The choice
+  likelihood dispatches at 3.0 on a product of Gaussian CDFs; a softmax
+  is a sharper integrand and turns over sooner, which is why the two
+  numbers differ. Twelve smooth fixtures are bit-identical to before.
+
+  `winning.ratings.nway` shares the helper through `_factor_grid` and
+  is deliberately NOT dispatched: its integrand is the Gaussian order
+  likelihood, so the crossover above does not apply to it, and its
+  behaviour is gated by the ratings verifier. That needs its own
+  measurement.
+
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
   variance near the double ceiling became `inf` between the check and
