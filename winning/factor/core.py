@@ -385,6 +385,15 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     from scipy.spatial.distance import squareform
 
     C = np.asarray(C, dtype=float)
+    # Squareness, stated. It was only ever caught by accident: a 1 x 2
+    # broadcasts against its own transpose into a 2 x 2, so the
+    # asymmetry check below reported "not symmetric" for something that
+    # is really not square, and a 1-D array passed that check outright
+    # (asym 0) and then had np.diag build a matrix FROM it. The R port
+    # read nrow() alone and answered for a 1 x 2 from C[1, 1] (#277).
+    if C.ndim != 2 or C.shape[0] != C.shape[1]:
+        raise ValueError(
+            f"cov= must be square; got shape {C.shape}")
     n = len(C)
     if not np.isfinite(C).all():
         raise ValueError("cov= contains NaN or inf")
@@ -393,13 +402,44 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         raise ValueError(
             f"cov= is not symmetric (max asymmetry {asym:.2e}); pass "
             "(C + C.T)/2 if the asymmetry is numerical noise")
-    C = 0.5 * (C + C.T)
+    # halve BEFORE adding: C + C.T overflows to inf for finite
+    # entries near the double ceiling, and the finiteness check
+    # above has already passed by then, so an inf reached D and
+    # came back out as a non-finite variance (#279). The two are
+    # the same number everywhere else.
+    C = 0.5 * C + 0.5 * C.T
     lam_min = float(np.linalg.eigvalsh(C).min())
-    if lam_min < -1e-8 * max(float(np.trace(C)) / n, 1e-300):
+    # mean diagonal, divided BEFORE summing: np.trace overflows for
+    # finite entries near the ceiling, which made the tolerance inf
+    # and the comparison meaningless (#279)
+    if lam_min < -1e-8 * max(float(np.sum(np.diag(C) / n)), 1e-300):
         raise ValueError(
             f"cov= is not positive semidefinite (min eigenvalue "
             f"{lam_min:.2e}); this is not a covariance matrix. Project "
             "to the PSD cone first if it came from noisy estimation.")
+    if n == 1:
+        # A one-runner field has no covariance STRUCTURE: there is
+        # nothing for a factor to correlate, the whole variance is
+        # idiosyncratic, and the race is [1] whatever it is. The
+        # machinery below divides by (1 - 2/n) + n/n^2, which is exactly
+        # zero at n = 1, so cov=[[v]] raised ZeroDivisionError while the
+        # equivalent plain race already returned [1]. #181 added the
+        # n <= 2 branch to the inner solver and that branch divides by
+        # the same quantity (#273).
+        V = np.zeros((1, 1))
+        D = np.array([max(float(C[0, 0]), 1e-12)])
+        F = np.zeros((1, 1))
+        W = np.ones(1)
+        if return_report:
+            # the same keys the full path reports, so every caller reads
+            # a one-runner fit the way it reads any other: an EXACT fit
+            # of rank zero, nothing residual, nothing sharp
+            return V, D, F, W, {"projected_residual_rel": 0.0,
+                                "projected_residual_max": 0.0,
+                                "rank": 0,
+                                "sharpness": 0.0,
+                                "contrast_residual_max": 0.0}
+        return V, D, F, W
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)

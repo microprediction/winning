@@ -25,6 +25,103 @@
 
   `hermiteNodes` now also refuses a non-integer or non-positive rank or
   order rather than looping on `Math.pow(order, k)`.
+  Symmetrising must not overflow what the finiteness check just passed
+  (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
+  variance near the double ceiling became `inf` between the check and
+  the fit, and `race_probabilities([2.0], cov=[[1e308]])` failed with
+  `D has a non-finite entry` for input it had itself accepted. Halving
+  each term first is the same number everywhere else -- multiplying by
+  0.5 is exact, and over 2000 random matrices spanning 400 orders of
+  magnitude the two spellings are bit-identical.
+
+  The PSD tolerance had the same shape and a worse consequence:
+  `-1e-8 * max(trace(C) / n, 1e-300)` overflows the trace BEFORE the
+  division, so the tolerance was `-inf` and `lam_min < -inf` is False
+  for every eigenvalue. The check therefore ACCEPTED a matrix whose
+  smallest eigenvalue is -5e307. Dividing before summing keeps it
+  finite, and that matrix is now refused.
+
+  Three more `0.5 * (X + X.T)` in the shipped package take the same
+  spelling, in `ratings/full.py`, `factor/races.py` and
+  `research/laplacian.py`. Not fixed, and a known limit: a field of
+  two or more at 1e308 still overflows further into the fit, where
+  `_center2` sums a column. Reaching that needs the covariance
+  rescaled before fitting rather than one more guarded addition. Up to
+  1e300 a two-runner fit is fine.
+
+  The one-runner return keys off `nrow` alone, so it has to sit BELOW
+  the shape and covariance checks -- a `1 x 2` matrix has `nrow` 1 and
+  would otherwise be answered from `C[1, 1]` with the second column
+  dropped (#277). R had no validation on this path at all: a negative
+  variance was clamped to the floor, and `NA` and `Inf` propagated into
+  the fit, while python refused each one. R now states the same
+  contract in the same order with the same messages -- square, finite,
+  symmetric, positive semidefinite.
+
+  python's squareness was itself only ever caught by accident. A
+  `1 x 2` broadcasts against its own transpose into a `2 x 2`, so the
+  asymmetry check reported "not symmetric" for something that is
+  really not square; a 1-D array passed that check outright and then
+  had `np.diag` build a matrix FROM it. Both ports now say `cov= must
+  be square`.
+
+- A one-runner field with `cov=` crashes instead of returning `[1]`
+  (#273), in python and in R. `race_probabilities([2.0], cov=[[4.0]])`
+  raised `ZeroDivisionError`; the R `fit_covariance` raised
+  `Error: 0 x 0 matrix`. The equivalent plain race, `race_probabilities
+  ([2.0])`, already returned `[1]`, so passing a covariance to a
+  one-entry field turned a working call into a crash.
+
+  Both ports divide by the same quantity. The centred Gram the inner
+  solver works with carries a factor `(1 - 2/n) + n/n^2`, which is
+  exactly zero at `n = 1`; #181 added an `n <= 2` branch to that solver
+  and the branch it added divides by it too. In R the same degeneracy
+  shows up one step earlier, as `min(k, n - 1) = 0` factors and a
+  `0 x 0` matrix that then fails to multiply.
+
+  There is nothing to estimate here, so neither port should reach that
+  arithmetic. A one-runner field has no covariance STRUCTURE: no pair
+  to correlate, the whole variance idiosyncratic, and the answer is
+  `[1]` for any positive variance. Both now return the exact rank-zero
+  fit -- `V = [[0]]`, `D = [c]`, `W = [1]` -- with the full report the
+  ordinary path returns, so a caller reads a one-runner fit the way it
+  reads any other rather than special-casing it.
+
+  Only python and R have a `fit_covariance`; the browser and julia
+  ports have no `cov=` path to fix.
+- The browser's classic inverse accepted an ASCENDING `offsetSamples`
+  and silently miscalibrated (#274). python raises
+  `ValueError("Not descending")` and R stops with `offset_samples must
+  be descending` for the same input; only the browser guessed.
+
+  The direction is a precondition of the algorithm, not a presentation
+  choice. The interpolation table is built by mapping over
+  `offsetSamples` and read back with `interpClamped`, whose `xp` must
+  ascend -- descending offsets are exactly what make the prices ascend.
+  Reverse them and the binary search runs on a descending table, so
+  every lookup falls off an end and clamps: three distinct prices came
+  back as the lattice boundary `[24, -25, -25]` and repriced 0.53 away
+  from the target, with no error and nothing in the return value to say
+  so.
+
+  `asDescendingOffsets` is now the one place that rule is decided, in
+  the same spirit as `asLoadings` and `asIdio`. It also refuses the two
+  neighbouring inputs the sweep turned up, which were silently wrong in
+  the browser for the same reason: an empty array returned
+  `[undefined, undefined, undefined]`, and a NaN among the offsets
+  returned `[-5, -5, -5]`. Ties stay legal in all three ports -- a
+  repeated offset is a flat step in the table, not an ascent.
+
+  The default `offsetSamples`, which the browser builds itself, and
+  every descending call are bit-identical to before.
+
+  Two findings from the sweep that are NOT fixed here. python's rust
+  kernel PANICS on an empty `offset_samples` (`index out of bounds`
+  through PyO3) where the numpy path raises; that needs a rust build,
+  which this checkout cannot do. And R's guard is
+  `any(diff(o) > 0)`, which on a NaN offset is `NA`, so it fails with
+  `missing value where TRUE/FALSE needed` rather than naming the
+  argument.
 
 - An unresolved merge conflict was sitting in `parity/check_js_api.mjs`
   on main, so the browser API checker had not run since it landed. The
