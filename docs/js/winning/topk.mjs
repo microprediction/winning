@@ -4,7 +4,7 @@
 // winning/factor/topk.py -- the cavity count distribution with
 // stable-direction deconvolution; see the python module docstring for
 // the derivations and the two-branch refusal of exact-rank targets.
-import { TINY, hermite1, solve, checkOpts, OPT_HINTS } from "./core.mjs";
+import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings } from "./core.mjs";
 import { BASES } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -242,7 +242,7 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
 }
 
 function factorNodes(V, n, qa) {
-  let Vm = V.map(r => (Array.isArray(r) ? r.slice() : [r]));
+  const Vm = asLoadings(V, n).map(row => row.slice());
   const r = Vm[0].length;
   if (r > 2)
     throw new Error("topKProbabilities is implemented for factor rank <= 2");
