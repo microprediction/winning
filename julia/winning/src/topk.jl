@@ -7,11 +7,16 @@ clip01(v) = clamp.(v, 0.0, 1.0)
 
 function _resolved_points(lo, hi, sd, points)
     smin = max(minimum(sd), 1e-300)
-    need = Int(ceil((hi - lo) / (0.5 * smin))) + 1
-    if need > 8193
+    # in Float64, and clamp before converting: a narrow enough runner
+    # makes the requirement exceed typemax(Int64), and Int(ceil(...))
+    # throws InexactError -- in the very regime the cap exists for
+    # (#228). Python is unaffected only because its integers are
+    # unbounded.
+    need = ceil((hi - lo) / (0.5 * smin)) + 1
+    if !isfinite(need) || need > 8193
         @warn "top-k lattice cannot resolve the narrowest runner even at 8193 points" smin window=(hi - lo)
     end
-    return max(Int(points), min(need, 8193))
+    return max(Int(points), Int(min(need, 8193.0)))
 end
 
 function _count_window(mu, sd, k, fn; delta = 1e-12, pad_sds = 2.0)

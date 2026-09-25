@@ -190,8 +190,10 @@ function resolvedPoints(lo, hi, sd, points) {
   // check cannot see it: that check is one scalar (memberships sum to k)
   // and runner-level errors of opposite sign cancel in it (#224).
   const smin = Math.max(Math.min(...sd), 1e-300);
+  // a Number is already a double, so this cannot overflow the way R and
+  // Julia did (#228); !isFinite still guards a zero-width window
   const need = Math.ceil((hi - lo) / (0.5 * smin)) + 1;
-  if (need > 8193 && typeof console !== "undefined")
+  if ((!Number.isFinite(need) || need > 8193) && typeof console !== "undefined")
     console.warn(
       `top-k lattice cannot resolve the narrowest runner even at 8193 ` +
       `points (min sd ${smin.toExponential(1)} over a window of ` +

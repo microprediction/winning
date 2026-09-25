@@ -14,6 +14,7 @@ hiding the under-resolution that caused the defect: the same field at 2001
 points has a column error of 3.5e-9, so the quadrature is what is wrong,
 not the normalisation.
 """
+import pathlib
 import warnings
 
 import numpy as np
@@ -109,3 +110,32 @@ def test_the_mass_check_alone_would_not_have_caught_it():
     ref = np.array([0.84005969, 0.90113651, 0.79813532,
                     0.80744990, 0.65321859])
     assert np.abs(q - ref).max() < 1e-6   # and the per-runner truth now
+
+
+@pytest.mark.parametrize("smin", [1e-10, 1e-300])
+def test_the_cap_is_reached_without_overflowing_on_the_way(smin):
+    """#228: R and Julia computed the uncapped requirement in a
+    fixed-width integer and overflowed BEFORE the `min(need, 8193)` --
+    in the very regime the cap exists for. R's as.integer() gave NA, so
+    the `if (need > 8193)` meant to warn errored instead; Julia threw
+    InexactError. Python is unaffected only because its integers are
+    unbounded, which is exactly why the ports needed their own check.
+    """
+    from winning.factor.topk import _resolved_points
+    got = _resolved_points(-18.0689583389, 11.4380329712,
+                           np.array([smin, 1.0, 2.0]), 513)
+    assert got == 8193
+
+
+def test_the_ports_clamp_in_floating_point_before_converting():
+    """Pinned in the source, because this machine cannot run every port
+    and the failure is a conversion, not a value."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    r = (root / "r" / "winning" / "R" / "topk.R").read_text()
+    assert "as.integer(min(need, 8193))" in r, \
+        "R must clamp in double and convert after"
+    assert "!is.finite(need)" in r
+    jl = (root / "julia" / "winning" / "src" / "topk.jl").read_text()
+    assert "Int(min(need, 8193.0))" in jl, \
+        "julia must clamp in Float64 and convert after"
+    assert "!isfinite(need)" in jl

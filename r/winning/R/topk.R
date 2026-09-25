@@ -9,14 +9,19 @@
 
 .resolved_points <- function(lo, hi, sd, points) {
   smin <- max(min(sd), 1e-300)
-  need <- as.integer(ceiling((hi - lo) / (0.5 * smin))) + 1L
-  if (need > 8193L)
+  # in DOUBLE, and clamp before converting: a narrow enough runner makes
+  # the requirement exceed .Machine$integer.max, and as.integer() then
+  # returns NA, so the very `if (need > 8193)` meant to handle that
+  # regime errored with "missing value where TRUE/FALSE needed" (#228).
+  # Python is unaffected only because its integers are unbounded.
+  need <- ceiling((hi - lo) / (0.5 * smin)) + 1
+  if (!is.finite(need) || need > 8193)
     warning(sprintf(paste("top-k lattice cannot resolve the narrowest",
                           "runner even at 8193 points (min sd %.1e over a",
                           "window of %.3g); memberships may carry",
                           "percent-level error the mass check cannot see."),
                     smin, hi - lo), call. = FALSE)
-  max(as.integer(points), min(need, 8193L))
+  max(as.integer(points), as.integer(min(need, 8193)))
 }
 
 .count_window <- function(mu, sd, k, fn, delta = 1e-12, pad_sds = 2.0) {

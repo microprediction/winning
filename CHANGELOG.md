@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+  The R and Julia helpers clamp in floating point before converting
+  (#228). Both computed the uncapped requirement in a fixed-width integer
+  and overflowed BEFORE `min(need, 8193)` -- in the very regime the cap
+  exists for. A narrowest sd of 1e-10 needs about 5.9e11 points: R's
+  `as.integer()` returned NA, so the `if (need > 8193)` meant to warn
+  errored with "missing value where TRUE/FALSE needed", and Julia threw
+  `InexactError`. Python was unaffected only because its integers are
+  unbounded, which is precisely why a port cannot inherit a numeric
+  argument from it. All four now return 8193 there and warn; the browser
+  then rejects the field on the mass check, which is the right layering.
+
 - Top-k and rank refine the lattice to the NARROWEST runner, in all four
   engines (#224). The window is set by the widest runner and the grid by
   `points`, so a heterogeneous field left the narrowest density between
