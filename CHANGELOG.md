@@ -37,6 +37,22 @@
   and #228: a lattice spanned by the widest scale, sampled uniformly,
   with an AGGREGATE guard that cannot see a per-element failure.
 
+- `block_race_jacobian` reads a rank-one loading in every spelling
+  (#145). `winning.shapes.as_loadings` is the one place that rule is
+  decided -- a scalar, a length-n vector, `(n, 1)` and `(1, n)` are the
+  same rank-one loading -- and `block_race_probabilities` went through
+  it while the Jacobian did not. It called `np.asarray` and kept whatever
+  shape it was handed, so the `(n, 1)` spelling reached the kernel as a
+  matrix and died inside an unrelated `np.take` with "input operand has
+  more dimensions than allowed by the axis remapping". Every inverse and
+  polishing path that calls the Jacobian inherited it, so a caller who
+  wrote `v[:, None]` got a forward pass that worked and an inverse that
+  crashed. All four spellings now agree exactly, and rank two is still
+  refused with its own reason.
+
+  The function also had no docstring: a statement sat above the string
+  literal, so python never bound it as `__doc__` and `help()` showed
+  nothing. The guard moved below it.
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
   variance near the double ceiling became `inf` between the check and
