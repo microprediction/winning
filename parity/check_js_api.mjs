@@ -341,5 +341,39 @@ accepts("a group cap binds on its members",
         r => Math.abs(r.p[0] + r.p[1] - 0.45) < 1e-6,
         r => `p0 + p1 = ${(r.p[0] + r.p[1]).toFixed(6)}`);
 
+// --- the jacobian differentiates the forward's own lattice (#212)
+// raceJacobian built its OWN grid: a plain span window, no adaptive
+// placement, no refinement. So it differentiated a different lattice
+// than raceProbabilities computed on, and the two parted company
+// exactly where the lattice is coarse relative to the field. Sharing
+// forwardGrid is what closes it; the fixture below is chosen for a
+// variance ratio of 4005, where the gap was 1.0e-3.
+{
+  const muJ = [-0.8582367891716942, -1.257503986012891,
+               0.40498888604575267, 0.5712404263071904];
+  const DJ = [74.38440122352718, 0.06946348206585057,
+              6.65916905702646, 0.018571769943793635];
+  const fd = (mu, D, L) => {
+    const J = polish.raceJacobian(mu, { D, points: L });
+    const h = 1e-5;
+    let worst = 0;
+    for (let j = 0; j < mu.length; j++) {
+      const a = mu.slice(), b = mu.slice();
+      a[j] += h; b[j] -= h;
+      const pa = races.raceProbabilities(a, { D, points: L });
+      const pb = races.raceProbabilities(b, { D, points: L });
+      for (let i = 0; i < mu.length; i++)
+        worst = Math.max(worst, Math.abs(J[i][j] - (pa[i] - pb[i]) / (2 * h)));
+    }
+    return worst;
+  };
+  holds("the jacobian follows its forward on a coarse lattice",
+        fd(muJ, DJ, 257) < 1e-4, `|J - FD| ${fd(muJ, DJ, 257).toExponential(2)}`);
+  holds("and converges as the lattice refines",
+        fd(muJ, DJ, 1025) < 1e-8, `|J - FD| ${fd(muJ, DJ, 1025).toExponential(2)}`);
+  holds("an ordinary field is unchanged",
+        fd([0, 1, 2], [0.8, 1.0, 1.2], 257) < 1e-9);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
