@@ -1,5 +1,8 @@
-source(file.path("..", "..", "R", "mlogit_fast.R"))
-
+# Run by R CMD check through tests/testthat.R, so the package is
+# already attached and its internals are in scope. These files used
+# to source(file.path("..", "..", "R", ...)) instead, which only
+# works from the repo and fails inside a check -- which is how they
+# went unrun (#142).
 test_that("nll is finite and decreases from start on a synthetic problem", {
   set.seed(3)
   J <- 3; Tn <- 400; r <- 2
@@ -30,4 +33,21 @@ test_that("sharpness escalation switches node families", {
   v_m <- .nll(th_mild, list(X), c(1, 2, 3), J, r, nodes, ns)
   v_s <- .nll(th_sharp, list(X), c(1, 2, 3), J, r, nodes, ns)
   expect_true(is.finite(v_m) && is.finite(v_s))
+})
+
+test_that("the triangular loading loop is empty at J = 2, not backwards", {
+  # `(col + 1L):J` is c(3, 2) at J = 2, not empty, so the loop wrote
+  # V[3, 2] on a 2x2 matrix and every binary-choice fit died out of
+  # bounds (#183). The same loop is in rprobitfast, which carries the
+  # end-to-end fit test; this pins the sequence itself.
+  visited <- function(J, r) {
+    out <- character(0)
+    for (col in seq_len(r)) for (row in col + seq_len(J - col))
+      out <- c(out, sprintf("%d,%d", row, col))
+    out
+  }
+  expect_equal(visited(2L, 2L), "2,1")
+  expect_equal(visited(1L, 1L), character(0))
+  expect_true(all(vapply(strsplit(visited(4L, 2L), ","),
+                         function(p) as.integer(p[1]) <= 4L, TRUE)))
 })

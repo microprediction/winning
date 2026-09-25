@@ -69,4 +69,105 @@ end
     @test e_fast < 1e-6
 end
 
+
+# --- empty and degenerate rectangles (#235) ---------------------------
+#
+# P(lower <= X <= upper) over a reversed coordinate is an EMPTY event.
+# Every port formed the negative conditional cell Phi(0) - Phi(1) and
+# clamped it to the underflow floor, so an impossible observation came
+# back as 1e-300 -- a finite log probability near -690.8 rather than
+# -Inf. mvtnorm::pmvnorm, which the R port is a drop-in for, raises on
+# reversed bounds and returns 0 when a coordinate has lower == upper.
+@testset "empty and degenerate rectangles" begin
+    @test_throws ArgumentError FactorMvNormalCDF.mvn_cdf_fast(
+        lower = [1.0], upper = [0.0], mean = [0.0],
+        V = zeros(1, 1), D = ones(1))
+
+    err = try
+        FactorMvNormalCDF.mvn_cdf_fast(
+            lower = [0.0, 1.0, -1.0], upper = [1.0, 0.0, 1.0],
+            mean = zeros(3), V = zeros(3, 1), D = ones(3))
+        ""
+    catch e
+        sprint(showerror, e)
+    end
+    @test occursin("coordinate 2", err)
+
+    p, meth = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = [0.5], upper = [0.5], mean = [0.0],
+        V = zeros(1, 1), D = ones(1))
+    @test p === 0.0                       # exactly, not 1e-300
+    @test meth == "degenerate-rectangle"
+    @test log(p) == -Inf
+
+    p3, _ = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = [0.0, 0.3, -1.0], upper = [1.0, 0.3, 1.0],
+        mean = zeros(3), V = zeros(3, 1), D = ones(3))
+    @test p3 === 0.0
+
+    # a valid rectangle is untouched: independent coordinates, exact
+    D = [0.7, 0.9, 1.1]
+    lo = [-1.0, -1.0, -1.0]; up = [0.4, 0.8, 1.2]
+    pv, _ = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = lo, upper = up, mean = zeros(3),
+        V = zeros(3, 1), D = D)
+    # Distributions is not a test dependency; use the package's own ndtr
+    Phi = FactorMvNormalCDF.ndtr
+    exact = prod(Phi(up[i] / sqrt(D[i])) - Phi(lo[i] / sqrt(D[i]))
+                 for i in 1:3)
+    @test abs(pv - exact) < 1e-10
+end
+
+# --- scalar bounds broadcast, as in the specification (#184) ----------
+#
+# winning.fastmvn broadcasts a scalar bound to every coordinate, and the
+# R port does the same with rep_len. This port called collect on the
+# argument, and a scalar Float64 is not iterable, so the ordinary
+# joint-CDF spelling upper=0.0 threw before evaluating anything.
+@testset "scalar bounds broadcast" begin
+    V = zeros(3, 1); D = ones(3)
+    @test FactorMvNormalCDF.mvn_cdf_fast(V = V, D = D, upper = 0.0) ≈ 0.125 atol = 1e-10
+    @test FactorMvNormalCDF.mvn_cdf_fast(V = V, D = D, upper = [0.0]) ≈ 0.125 atol = 1e-10
+    @test FactorMvNormalCDF.mvn_cdf_fast(V = V, D = D, upper = zeros(3)) ≈ 0.125 atol = 1e-10
+    # a scalar lower bound broadcasts too, and the pair agree
+    a = FactorMvNormalCDF.mvn_cdf_fast(V = zeros(2, 1), D = ones(2),
+                                       lower = -1.0, upper = 1.0)
+    b = FactorMvNormalCDF.mvn_cdf_fast(V = zeros(2, 1), D = ones(2),
+                                       lower = [-1.0, -1.0], upper = [1.0, 1.0])
+    @test a ≈ b atol = 1e-12
+    # a length that is neither 1 nor n is a mistake, not a recycling rule
+    @test_throws ArgumentError FactorMvNormalCDF.mvn_cdf_fast(
+        V = V, D = D, upper = [0.0, 1.0])
+end
+
+# --- deterministic coordinates (#206) ---------------------------------
+#
+# A coordinate with zero idiosyncratic variance is DETERMINISTIC given
+# the factor draw, so its cell is an indicator, not a gaussian interval.
+# Dividing by sd = 0 is 0/0 = NaN the moment that value lands exactly on
+# an inclusive boundary: P(X_1 <= 0) = 1 for X_1 identically 0.
+@testset "deterministic coordinates" begin
+    fixed = (mean = [0.0, 0.0], V = zeros(2, 1), D = [0.0, 1.0])
+    p, _ = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = [-Inf, -Inf], upper = [0.0, 0.0]; fixed...)
+    @test !isnan(p)
+    @test p ≈ 0.5 atol = 1e-10
+
+    pin, _ = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = [-Inf, -Inf], upper = [1.0, 0.0]; fixed...)
+    @test pin ≈ 0.5 atol = 1e-10
+
+    for (lo, up) in (([-Inf, -Inf], [-1.0, 0.0]), ([0.5, -Inf], [Inf, 0.0]))
+        pz, meth = FactorMvNormalCDF.mvn_cdf_fast_info(
+            lower = lo, upper = up; fixed...)
+        @test pz === 0.0          # not the TINY the cell floor would give
+        @test meth == "outside-support"
+    end
+
+    pall, _ = FactorMvNormalCDF.mvn_cdf_fast_info(
+        lower = [-Inf, -Inf], upper = [0.0, 0.0],
+        mean = [0.0, 0.0], V = zeros(2, 1), D = [0.0, 0.0])
+    @test pall ≈ 1.0 atol = 1e-10
+end
+
 println("all FactorMvNormalCDF tests passed")

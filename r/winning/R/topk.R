@@ -7,6 +7,23 @@
 
 .clip01 <- function(v) pmin(pmax(v, 0), 1)
 
+.resolved_points <- function(lo, hi, sd, points) {
+  smin <- max(min(sd), 1e-300)
+  # in DOUBLE, and clamp before converting: a narrow enough runner makes
+  # the requirement exceed .Machine$integer.max, and as.integer() then
+  # returns NA, so the very `if (need > 8193)` meant to handle that
+  # regime errored with "missing value where TRUE/FALSE needed" (#228).
+  # Python is unaffected only because its integers are unbounded.
+  need <- ceiling((hi - lo) / (0.5 * smin)) + 1
+  if (!is.finite(need) || need > 8193)
+    warning(sprintf(paste("top-k lattice cannot resolve the narrowest",
+                          "runner even at 8193 points (min sd %.1e over a",
+                          "window of %.3g); memberships may carry",
+                          "percent-level error the mass check cannot see."),
+                    smin, hi - lo), call. = FALSE)
+  max(as.integer(points), as.integer(min(need, 8193)))
+}
+
 .count_window <- function(mu, sd, k, fn, delta = 1e-12, pad_sds = 2.0) {
   n <- length(mu)
   smax <- max(max(sd), 1e-12)
@@ -43,6 +60,12 @@
 
 .topk_grid <- function(mu, sd, k, fn, points, delta = 1e-12) {
   w <- .count_window(mu, sd, k, fn, delta)
+  # about two points per NARROWEST sd, capped at 8193. The window is
+# set by the widest runner and the grid by `points`, so a heterogeneous
+# field leaves the narrowest density between samples, and the mass check
+# cannot see it: that check is one scalar (memberships sum to k) and
+# runner-level errors of opposite sign cancel in it (#224).
+  points <- .resolved_points(w[1], w[2], sd, points)
   x <- seq(w[1], w[2], length.out = points)
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
@@ -253,15 +276,23 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
   # not forced: alternating scaling would make both exact by hiding the
   # under-resolution that caused it, and the same field at 2001 points has
   # a column error of 3.5e-9.
+  # BOTH checks. They are independent and were mistaken for alternatives:
+  # row normalisation can ERASE a gross raw defect and leave the result
+  # just inside tolerance (#221). The raw check sees the quadrature, the
+  # post check sees what the caller gets.
+  .rank_reject <- function(where, re_, ce) {
+    stop(sprintf(paste("rank marginals defective %s: row-sum error %.2e,",
+                       "column-sum error %.2e. Raise points=."),
+                 where, re_, ce), call. = FALSE)
+  }
+  re_raw <- max(abs(rowSums(P) - 1)); ce_raw <- max(abs(colSums(P) - 1))
+  if (any(!is.finite(P)) || re_raw > 5e-3 || ce_raw > 5e-3)
+    .rank_reject("before normalisation", re_raw, ce_raw)
   P <- .clip01(P / pmax(rowSums(P), 1e-300))
-  rows <- rowSums(P)
-  cols <- colSums(P)
-  if (any(!is.finite(P)) || max(abs(rows - 1)) > 5e-3 ||
-      max(abs(cols - 1)) > 5e-3)
-    stop(sprintf(paste("rank marginals defective: row-sum error %.2e,",
-                       "column-sum error %.2e, measured on the RETURNED",
-                       "matrix after row normalisation. Raise points=."),
-                 max(abs(rows - 1)), max(abs(cols - 1))))
+  re_out <- max(abs(rowSums(P) - 1)); ce_out <- max(abs(colSums(P) - 1))
+  if (any(!is.finite(P)) || re_out > 5e-3 || ce_out > 5e-3)
+    .rank_reject("in the RETURNED matrix after row normalisation",
+                 re_out, ce_out)
   P
 }
 

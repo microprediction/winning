@@ -201,11 +201,77 @@ end
 # Delegation to the incumbent for every case outside the exact path;
 # returns (p, e) in MvNormalCDF's convention. Keyword arguments (m, rng)
 # are forwarded so a caller controls the QMC budget there.
+"""
+    _bound_vector(x, default, n) -> Vector{Float64}
+
+`winning.fastmvn` is the specification, and it broadcasts a scalar bound
+to every coordinate (`np.broadcast_to`); the R port does the same with
+`rep_len`. This port called `collect` on the argument, and a scalar
+`Float64` is not iterable, so the ordinary joint-CDF spelling
+`mvn_cdf_fast(V=V, D=D, upper=0.0)` threw before evaluating anything, on
+both the structured and the delegated dense path (#184).
+"""
+function _bound_vector(x, default::Float64, n::Int, name::AbstractString)
+    x === nothing && return fill(default, n)
+    x isa Number && return fill(Float64(x), n)
+    v = Float64.(collect(x))
+    length(v) == 1 && return fill(v[1], n)
+    length(v) == n || throw(ArgumentError(
+        "$name has length $(length(v)) but the problem has $n " *
+        "coordinates; pass a scalar or one bound per coordinate"))
+    return v
+end
+
+"""
+    _cell(hi, lo, sd) -> Float64
+
+One coordinate's conditional cell mass, `sd == 0` included.
+
+A coordinate with zero idiosyncratic variance is DETERMINISTIC given the
+factor draw. Its cell is an INDICATOR, not a gaussian interval, and
+dividing by `sd = 0` gave `0/0 = NaN` the moment that deterministic value
+landed exactly on an inclusive rectangle boundary -- `P(X_1 <= 0)` for
+`X_1` identically 0, which is 1, not undefined (#206). `hi` and `lo` here
+are already shifted by the mean and the factor term.
+"""
+function _cell(hi::Float64, lo::Float64, sd::Float64)
+    sd > 0.0 && return ndtr(hi / sd) - ndtr(lo / sd)
+    return (lo <= 0.0 && 0.0 <= hi) ? 1.0 : 0.0
+end
+
+"""
+    _rectangle_status(lo, up) -> Bool
+
+Classify the rectangle `{lo <= x <= up}` before any quadrature.
+
+A reversed coordinate makes the event EMPTY. Every port used to form the
+negative conditional cell -- `Phi(0) - Phi(1) = -0.3413...` -- and then
+clamp it to the underflow floor `1e-300`, so an impossible observation
+came back as a finite probability and, in log-likelihood code, as about
+`-690.8` instead of `-Inf` (#235). `mvtnorm::pmvnorm`, which the R port
+is a drop-in for, raises on reversed bounds and returns 0 when a
+coordinate has `lower == upper`; all four ports now agree with it.
+
+Returns `true` when the rectangle is degenerate: exactly zero mass.
+"""
+function _rectangle_status(lo, up)
+    for i in eachindex(lo, up)
+        if lo[i] > up[i]
+            throw(ArgumentError(
+                "lower must not exceed upper: coordinate $i has " *
+                "lower=$(lo[i]) > upper=$(up[i]), so the rectangle is " *
+                "empty. Check the argument order."))
+        end
+    end
+    return any(lo[i] == up[i] for i in eachindex(lo, up))
+end
+
 function _dense_fallback(lower, upper, mean, sigma; kwargs...)
     n = size(sigma, 1)
     mu = mean === nothing ? zeros(n) : Float64.(collect(mean))
-    lo = lower === nothing ? fill(-Inf, n) : Float64.(collect(lower))
-    up = upper === nothing ? fill(Inf, n) : Float64.(collect(upper))
+    lo = _bound_vector(lower, -Inf, n, "lower")
+    up = _bound_vector(upper, Inf, n, "upper")
+    _rectangle_status(lo, up) && return (0.0, 0.0)
     return MvNormalCDF.mvnormcdf(mu, Float64.(Matrix(sigma)), lo, up; kwargs...)
 end
 
@@ -215,8 +281,8 @@ function _cell_expectation(F, W, V, s, mu, lo, up)
     for q in axes(F, 1)
         lc = 0.0
         for j in eachindex(mu)
-            cell = ndtr((up[j] - mu[j] - M[q, j]) / s[j]) -
-                   ndtr((lo[j] - mu[j] - M[q, j]) / s[j])
+            cell = _cell(up[j] - mu[j] - M[q, j],
+                         lo[j] - mu[j] - M[q, j], s[j])
             lc += log(max(cell, TINY))
         end
         total += W[q] * exp(lc)
@@ -228,8 +294,13 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
     if V === nothing || D === nothing
         sigma === nothing && error("supply sigma, or V and D")
         fd = factorize_covariance(sigma)
-        fd === nothing &&
+        if fd === nothing
+            nn = size(sigma, 1)
+            lo0 = _bound_vector(lower, -Inf, nn, "lower")
+            up0 = _bound_vector(upper, Inf, nn, "upper")
+            _rectangle_status(lo0, up0) && return 0.0, "degenerate-rectangle"
             return _dense_fallback(lower, upper, mean, sigma; kwargs...)[1], "fallback"
+        end
         V, D = fd
     end
     Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
@@ -237,9 +308,19 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
     n = size(Vm, 1)
     Dv = Float64.(collect(D))
     mu = mean === nothing ? zeros(n) : Float64.(collect(mean))
-    lo = lower === nothing ? fill(-Inf, n) : Float64.(collect(lower))
-    up = upper === nothing ? fill(Inf, n) : Float64.(collect(upper))
+    lo = _bound_vector(lower, -Inf, n, "lower")
+    up = _bound_vector(upper, Inf, n, "upper")
+    _rectangle_status(lo, up) && return 0.0, "degenerate-rectangle"
     s = sqrt.(Dv)
+    # A coordinate with no idiosyncratic variance AND no loading is a
+    # constant at mu_i. Outside its own interval the probability is
+    # exactly 0, not the TINY the cell floor would give it.
+    for j in 1:n
+        if s[j] == 0.0 && all(Vm[j, c] == 0.0 for c in 1:size(Vm, 2)) &&
+           (mu[j] < lo[j] || mu[j] > up[j])
+            return 0.0, "outside-support"
+        end
+    end
     r = size(Vm, 2)
     sharp = _sharpness(Vm, Dv)
     if r > 2 || sharp > 3.0
@@ -258,8 +339,8 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
         z = Vm * f
         acc = -0.5 * (f' * f)
         for j in 1:n
-            cell = ndtr((up[j] - mu[j] - z[j]) / s[j]) -
-                   ndtr((lo[j] - mu[j] - z[j]) / s[j])
+            cell = _cell(up[j] - mu[j] - z[j],
+                         lo[j] - mu[j] - z[j], s[j])
             acc += log(max(cell, TINY))
         end
         acc

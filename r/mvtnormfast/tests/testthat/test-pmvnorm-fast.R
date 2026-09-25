@@ -1,5 +1,8 @@
-source(file.path("..", "..", "R", "pmvnorm_fast.R"))
-
+# Run by R CMD check through tests/testthat.R, so the package is
+# already attached and its internals are in scope. These files used
+# to source(file.path("..", "..", "R", ...)) instead, which only
+# works from the repo and fails inside a check -- which is how they
+# went unrun (#142).
 test_that("factor case matches mvtnorm within its own error bound", {
   set.seed(11)
   n <- 30
@@ -61,4 +64,98 @@ test_that("independence sanity: product of marginals", {
   b <- seq(-1, 1.5, length.out = n)
   pf <- pmvnorm_fast(upper = b, V = matrix(0, n, 1), D = D)
   expect_lt(abs(as.numeric(pf) - prod(pnorm(b / sqrt(D)))), 1e-12)
+})
+
+# --- empty and degenerate rectangles (#235) ---------------------------
+#
+# P(lower <= X <= upper) over a reversed coordinate is an EMPTY event.
+# This formed the negative conditional cell pnorm(0) - pnorm(1) and
+# clamped it to the underflow floor, so an impossible observation came
+# back as 1e-300 -- a finite log probability near -690.8 rather than
+# -Inf. mvtnorm::pmvnorm, which this package is a drop-in for, raises on
+# reversed bounds and returns 0 when a coordinate has lower == upper.
+
+test_that("reversed bounds raise rather than returning the floor", {
+  expect_error(
+    pmvnorm_fast(lower = 1, upper = 0, mean = 0,
+                 V = matrix(0, 1, 1), D = 1),
+    "lower must not exceed upper")
+})
+
+test_that("the error names the offending coordinate", {
+  expect_error(
+    pmvnorm_fast(lower = c(0, 1, -1), upper = c(1, 0, 1),
+                 mean = rep(0, 3), V = matrix(0, 3, 1), D = rep(1, 3)),
+    "coordinate 2")
+})
+
+test_that("a degenerate coordinate has exactly zero mass", {
+  p <- pmvnorm_fast(lower = 0.5, upper = 0.5, mean = 0,
+                    V = matrix(0, 1, 1), D = 1)
+  expect_identical(as.numeric(p), 0)
+  expect_equal(attr(p, "method"), "degenerate-rectangle")
+  expect_true(is.infinite(log(as.numeric(p))))
+})
+
+test_that("one degenerate coordinate among valid ones is still zero", {
+  p <- pmvnorm_fast(lower = c(0, 0.3, -1), upper = c(1, 0.3, 1),
+                    mean = rep(0, 3), V = matrix(0, 3, 1), D = rep(1, 3))
+  expect_identical(as.numeric(p), 0)
+})
+
+test_that("valid rectangles are untouched by the check", {
+  n <- 4
+  D <- 0.6 + (1:n) / 10
+  lo <- rep(-1, n); up <- seq(0.2, 1.4, length.out = n)
+  p <- pmvnorm_fast(lower = lo, upper = up, V = matrix(0, n, 1), D = D)
+  expect_lt(abs(as.numeric(p) -
+                prod(pnorm(up / sqrt(D)) - pnorm(lo / sqrt(D)))), 1e-12)
+})
+
+# --- deterministic coordinates (#206) ---------------------------------
+#
+# A coordinate with zero idiosyncratic variance is DETERMINISTIC given
+# the factor draw, so its conditional cell is an indicator, not a normal
+# interval. Dividing by s = 0 is 0/0 = NaN the moment the deterministic
+# value lands exactly on an inclusive boundary: the documented
+# P(X_1 <= 0) = 1 for X_1 identically 0.
+
+test_that("a deterministic coordinate on the boundary is included", {
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(0, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 1))
+  expect_false(is.na(as.numeric(p)))
+  expect_lt(abs(as.numeric(p) - 0.5), 1e-12)
+})
+
+test_that("a deterministic coordinate strictly inside is included", {
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(1, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 1))
+  expect_lt(abs(as.numeric(p) - 0.5), 1e-12)
+})
+
+test_that("a deterministic coordinate outside gives exactly zero", {
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(-1, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 1))
+  expect_identical(as.numeric(p), 0)
+  expect_equal(attr(p, "method"), "outside-support")
+  q <- pmvnorm_fast(lower = c(0.5, -Inf), upper = c(Inf, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 1))
+  expect_identical(as.numeric(q), 0)
+})
+
+test_that("every coordinate deterministic and inside is one", {
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(0, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 0))
+  expect_lt(abs(as.numeric(p) - 1), 1e-12)
+})
+
+test_that("a deterministic coordinate that still loads on the factor", {
+  # D_1 = 0 but V_1 != 0: constant only GIVEN f, so the indicator
+  # restricts the factor region and the answer comes out of quadrature.
+  # P = E_f[ 1{f <= 0} Phi(-f/2) ], by one-dimensional integration.
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(0, 0), mean = c(0, 0),
+                    V = matrix(c(0.5, 0.5), 2, 1), D = c(0, 1))
+  exact <- integrate(function(t) dnorm(t) * pnorm(-0.5 * t),
+                     -50, 0)$value
+  expect_lt(abs(as.numeric(p) - exact), 1e-4)
 })
