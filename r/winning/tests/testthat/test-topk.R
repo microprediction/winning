@@ -56,3 +56,18 @@ test_that("the returned rank matrix is what gets checked", {
   q <- top_k_probabilities(mu, 2, D = sd^2, points = 2001)
   expect_lt(max(abs(rowSums(P[, 1:2]) - q)), 1e-6)
 })
+
+test_that("a gross raw defect is caught before normalisation", {
+  # Row normalisation can ERASE it: on this field (sds spanning 232x) the
+  # raw matrix is off by 0.249 in a row, and dividing by those same row
+  # sums leaves a column defect of 0.0047, inside the tolerance. The two
+  # guards are independent (#221).
+  mu <- c(1.7802347516623231, 7.71387298475329,
+          -8.864593234372917, -13.723882426584884)
+  sd <- c(0.09388844913109345, 0.2459800972322556,
+          1.0565710909345742, 21.775572080525823)
+  expect_error(rank_probabilities(mu, D = sd^2, points = 513),
+               "before normalisation")
+  P <- rank_probabilities(mu, D = sd^2, points = 2001)
+  expect_lt(max(abs(colSums(P) - 1)), 5e-3)
+})

@@ -268,13 +268,34 @@ export function raceProbabilities(mu, opts = {}) {
 
 export function abilitiesFromRace(pTarget, opts = {}) {
   const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
-          F = null, W = null, base = "normal", points = 257 } = opts;
+          F = null, W = null, base = "normal", points = 257,
+          targetFloor = null, returnInfo = false } = opts;
   checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
   if (structure) return dispatchAbilities(pTarget, structure, opts);
   let target = pTarget.slice();
+  const n = target.length;
+
+  // The target contract, matching python: a zero share has no finite
+  // inverse, so it RAISES unless the caller floors deliberately, and the
+  // floored entries are reported. Both keys were on the allowlist and
+  // read by nothing, so they passed validation and vanished (#226) --
+  // the failure mode the allowlist exists to prevent.
+  let floored = new Array(n).fill(false);
+  if (targetFloor != null) {
+    if (!(targetFloor > 0))
+      throw new Error("targetFloor must be positive");
+    floored = target.map(v => v < targetFloor);
+    target = target.map(v => Math.max(v, targetFloor));
+  } else if (target.some(v => v <= 0)) {
+    throw new Error(
+      "all target probabilities must be positive: a zero share has no " +
+      "finite inverse (the supremum is approached as that contrast " +
+      "diverges). Pass targetFloor to floor small entries deliberately " +
+      "and read the result as a one-sided bound on the floored " +
+      "contrasts, or supply a pseudocount upstream.");
+  }
   const s = target.reduce((a, b) => a + b, 0);
   target = target.map(v => v / s);
-  const n = target.length;
   const logt = target.map(Math.log);
   const lm = mean(logt);
   // the field's contrast scale (matching python/R): median idiosyncratic
@@ -299,7 +320,10 @@ export function abilitiesFromRace(pTarget, opts = {}) {
     // a pair is one Gaussian contrast: closed form (matching python/R)
     const sdD = Math.sqrt(Math.max(sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1) + Dn[0] + Dn[1], 1e-300));
     const gap = sdD * invNormalRational(target[0]);
-    return [-0.5 * gap, 0.5 * gap];
+    const pair = [-0.5 * gap, 0.5 * gap];
+    return returnInfo
+      ? { mu: pair, converged: true, maxLogResidual: 0, iterations: 0, floored }
+      : pair;
   }
   let mu = logt.map(v => -(v - lm) / 2 * scale);
   // damping: a pair, or two runners holding nearly all the mass, two-cycles
@@ -366,7 +390,15 @@ export function abilitiesFromRace(pTarget, opts = {}) {
       mu = mu.map((m, i) => m - step[i]);
     }
   }
-  return mu;
+  if (!returnInfo) return mu;
+  // one more forward pass to report the residual actually achieved,
+  // rather than the one from before the last step
+  const { p: pf } = raceProbabilities(mu, {
+    V, D, F, W, base, points, returnSlopes: true, structure: null });
+  const resid = pf.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
+  const maxLogResidual = Math.max(...resid.map(Math.abs));
+  return { mu, converged: maxLogResidual < tol, maxLogResidual,
+           iterations: nIter, floored };
 }
 
 // filled in by structures.mjs to avoid a cycle

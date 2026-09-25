@@ -419,3 +419,70 @@ def test_browser_allowlists_are_per_function():
         names |= set(re.findall(r"const (\w+_OPTS) = new Set\(", path.read_text()))
     assert len(names) >= 18, f"only {len(names)} allowlists for 20 entry points: {sorted(names)}"
     assert "KNOWN_OPTS" not in names, "the shared union is back"
+
+
+# a function may legitimately forward its whole options object to another;
+# declared rather than guessed, because "the body mentions opts somewhere"
+# would also have excused the bug this test exists for -- abilitiesFromRace
+# forwards opts on its structure branch, and targetFloor still vanished
+# on every other path (#226)
+FORWARDS_OPTS = {
+    "topk.mjs::bottomKProbabilities":
+        "forwards to topKProbabilities(mu, n - k, opts)",
+    "topk.mjs::locScaleFromWinAndSecond":
+        "forwards to locScaleFromTopkPair(p1, 1, top2, 2, opts)",
+}
+
+# keys read only on a branch that forwards, and meaningless on the rest
+FORWARD_ONLY_KEYS = {
+    "races.mjs::abilitiesFromRace": {"qa", "qf"},   # the structure dispatch
+}
+
+
+def test_every_allowlisted_browser_option_is_actually_read():
+    """An allowlist derived from python's signature rather than from what
+    the function reads is worse than no allowlist: the key passes
+    validation and is silently discarded, which is the exact failure the
+    guard exists to prevent. `targetFloor` and `returnInfo` were
+    advertised by abilitiesFromRace and read by nothing (#226).
+
+    This is a relationship between two things in the same file, which is
+    what source inspection is good for -- unlike behaviour, which needs
+    parity/check_js_api.mjs.
+    """
+    offenders = []
+    for path in sorted((ROOT / "docs/js/winning").glob("*.mjs")):
+        text = path.read_text()
+        allow = dict(re.findall(
+            r"const (\w+_OPTS) = new Set\(\[(.*?)\]\)", text, re.S))
+        for m in re.finditer(
+                r"export function (\w+)\([^)]*opts\s*=\s*\{\}\s*\)\s*\{", text):
+            fn, start = m.group(1), m.end()
+            key = f"{path.name}::{fn}"
+            if key in FORWARDS_OPTS:
+                continue
+            end = text.find("\n}\n", start)
+            body = text[start:end if end > 0 else len(text)]
+            used = re.search(r"checkOpts\(opts,\s*(\w+)", body)
+            if not used or used.group(1) not in allow:
+                continue
+            exempt = FORWARD_ONLY_KEYS.get(key, set())
+            for k in re.findall(r'"(\w+)"', allow[used.group(1)]):
+                if k in exempt:
+                    continue
+                if not re.search(rf"\b{k}\b", body):
+                    offenders.append(f"{key} advertises '{k}'")
+    assert not offenders, (
+        "browser options accepted by an allowlist but read by nothing -- "
+        "they pass validation and vanish:\n  " + "\n  ".join(offenders))
+
+
+def test_the_forwarding_exemptions_are_real():
+    """A declared exemption must still forward; otherwise it is a way to
+    hide the bug above."""
+    for key, why in FORWARDS_OPTS.items():
+        fname, fn = key.split("::")
+        text = (ROOT / "docs/js/winning" / fname).read_text()
+        i = text.index(f"export function {fn}(")
+        body = text[i:text.find("\n}\n", i)]
+        assert "opts)" in body or "...opts" in body, f"{key}: {why} is stale"

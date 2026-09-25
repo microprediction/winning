@@ -7,6 +7,6 @@ runner. Uploaded November 2021.
 
 The rating-system benchmarks do not use this file (it has no contestant
 identifiers across races); they use synthetic worlds with known ground truth
-and the ATP tennis archive fetched at run time — see `src/winning/benchmarks/`.
+and the ATP tennis archive fetched at run time — see `attic/src/winning/benchmarks/`.
 This dataset is kept for planned market-calibration work: scoring BSP-implied
 probabilities against outcomes as the ceiling any rating system chases.
