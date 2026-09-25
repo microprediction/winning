@@ -96,8 +96,8 @@ from winning.ratings import select
 def _load_glicko():
     here = os.path.dirname(os.path.abspath(__file__))
     repo = os.path.dirname(os.path.dirname(here))
-    roots = [os.path.join(repo, "src", "winning"),
-             os.path.expanduser("~/github/winning/src/winning")]
+    roots = [os.path.join(repo, "attic", "src", "winning"),
+             os.path.expanduser("~/github/winning/attic/src/winning")]
     root = next((r for r in roots if os.path.isdir(r)), None)
     if root is None:
         raise ImportError(f"glicko2 source tree not found in {roots}")

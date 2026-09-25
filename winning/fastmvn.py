@@ -184,6 +184,13 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
     if _rectangle_status(lo, up):
         return 0.0, "degenerate-rectangle"
     s = np.sqrt(D)
+    # A coordinate with no idiosyncratic variance AND no loading is a
+    # constant at mu_i. If that constant is outside its own interval the
+    # probability is exactly 0, not the 1e-300 the cell floor would give
+    # it, and not a number the recentered path should go looking for.
+    fixed = (s == 0.0) & ~np.any(V != 0.0, axis=1)
+    if np.any(fixed & ((mu < lo) | (mu > up))):
+        return 0.0, "outside-support"
 
     F, W = _nodes_for(V, D)
     p = _cell_expectation(F, W, V, s, mu, lo, up)
@@ -196,7 +203,7 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
 
     def logint(f):
         z = V @ f
-        cell = ndtr((up - mu - z) / s) - ndtr((lo - mu - z) / s)
+        cell = _interval_mass(up - mu - z, lo - mu - z, s)
         return float(np.log(np.maximum(cell, 1e-300)).sum()
                      - 0.5 * f @ f)
 
@@ -219,16 +226,37 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
     M = Fq @ V.T
     hiq = (up - mu)[None, :] - M
     loq = (lo - mu)[None, :] - M
-    lc = np.log(np.maximum(ndtr(hiq / s) - ndtr(loq / s), 1e-300))
+    lc = np.log(np.maximum(_interval_mass(hiq, loq, s), 1e-300))
     lt = lc.sum(axis=1) + logw
     m = lt.max()
     p = float(np.exp(m) * np.mean(np.exp(lt - m)))
     return p, "factor-recentered"
 
 
+def _interval_mass(hi, lo_, s):
+    """Per-coordinate cell mass P(lo_ <= sigma Z <= hi), sigma == 0 too.
+
+    A coordinate with zero idiosyncratic variance is DETERMINISTIC given
+    the factor draw: X_i = mu_i + v_i . f. Its conditional cell is an
+    INDICATOR, not a gaussian interval. Dividing by s = 0 gave 0/0 = NaN
+    the moment that deterministic value landed exactly on an inclusive
+    rectangle boundary -- P(X_1 <= 0) for X_1 identically 0, which is 1,
+    not undefined (#206). Off the boundary the division happened to give
+    the right answer, so this only ever showed up as a NaN.
+
+    `hi` and `lo_` are already shifted by the mean and the factor term,
+    so the deterministic coordinate is inside the rectangle exactly when
+    lo_ <= 0 <= hi.
+    """
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gauss = ndtr(hi / s) - ndtr(lo_ / s)
+    determ = ((lo_ <= 0.0) & (0.0 <= hi)).astype(float)
+    return np.where(s > 0.0, gauss, determ)
+
+
 def _cell_expectation(F, W, V, s, mu, lo, up):
     M = F @ V.T
     hi = (up - mu)[None, :] - M
     lo_ = (lo - mu)[None, :] - M
-    logcell = np.log(np.maximum(ndtr(hi / s) - ndtr(lo_ / s), 1e-300))
+    logcell = np.log(np.maximum(_interval_mass(hi, lo_, s), 1e-300))
     return float(W @ np.exp(logcell.sum(axis=1)))

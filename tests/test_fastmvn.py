@@ -159,3 +159,76 @@ def test_valid_rectangles_are_untouched_by_the_check():
         up, lower_limit=lo)
     assert meth == "factor"
     assert abs(p - ps) < 5e-5
+
+
+# --- deterministic coordinates (#206) -------------------------------------
+#
+# A coordinate with zero idiosyncratic variance is DETERMINISTIC given the
+# factor draw, so its conditional cell is an indicator, not a gaussian
+# interval. The ports divided by s = 0 regardless, which is 0/0 = NaN the
+# moment the deterministic value lands exactly on an inclusive boundary --
+# the documented P(X_1 <= 0) = 1 for X_1 identically 0. Off the boundary
+# the division happened to give the right answer, so it only ever showed
+# up as a NaN.
+
+def _fixed_and_free():
+    """X_1 == 0 exactly; X_2 ~ N(0, 1). P(X <= (0, 0)) = 1 * 1/2."""
+    return dict(mean=[0.0, 0.0], V=np.zeros((2, 1)), D=[0.0, 1.0])
+
+
+def test_a_deterministic_coordinate_on_the_boundary_is_included():
+    p, meth = mvn_cdf_fast_info(lower=[-np.inf, -np.inf], upper=[0.0, 0.0],
+                                **_fixed_and_free())
+    assert not np.isnan(p)
+    assert abs(p - 0.5) < 1e-12
+    assert meth == "factor"
+
+
+def test_a_deterministic_coordinate_strictly_inside_is_included():
+    p, _m = mvn_cdf_fast_info(lower=[-np.inf, -np.inf], upper=[1.0, 0.0],
+                              **_fixed_and_free())
+    assert abs(p - 0.5) < 1e-12
+
+
+@pytest.mark.parametrize("lower,upper", [
+    ([-np.inf, -np.inf], [-1.0, 0.0]),        # constant above its upper
+    ([0.5, -np.inf], [np.inf, 0.0]),          # constant below its lower
+])
+def test_a_deterministic_coordinate_outside_gives_exactly_zero(lower, upper):
+    p, meth = mvn_cdf_fast_info(lower=lower, upper=upper, **_fixed_and_free())
+    assert p == 0.0, "not the 1e-300 the cell floor would give it"
+    assert meth == "outside-support"
+
+
+def test_every_coordinate_deterministic_and_inside_is_one():
+    p, _m = mvn_cdf_fast_info(lower=[-np.inf, -np.inf], upper=[0.0, 0.0],
+                              mean=[0.0, 0.0], V=np.zeros((2, 1)),
+                              D=[0.0, 0.0])
+    assert abs(p - 1.0) < 1e-12
+
+
+def test_a_deterministic_coordinate_that_still_loads_on_the_factor():
+    """The harder case: D_1 = 0 but V_1 != 0, so X_1 is constant only
+    GIVEN f. The cell is then an indicator that restricts the factor
+    region rather than a coordinate that can be decided up front, and the
+    answer has to come out of the quadrature."""
+    V = np.array([[0.5], [0.5]])
+    p, _m = mvn_cdf_fast_info(lower=[-np.inf, -np.inf], upper=[0.0, 0.0],
+                              mean=[0.0, 0.0], V=V, D=[0.0, 1.0])
+    # P = E_f[ 1{f <= 0} Phi(-f/2) ], by one-dimensional quadrature
+    from scipy.integrate import quad
+    from scipy.stats import norm
+    exact, _err = quad(lambda t: norm.pdf(t) * norm.cdf(-0.5 * t), -50, 0)
+    assert abs(p - exact) < 1e-5, f"{p} vs {exact}"
+
+
+def test_a_free_coordinate_is_unaffected_by_the_deterministic_branch():
+    rng = np.random.default_rng(5)
+    n = 5
+    V = rng.normal(size=(n, 1)) * 0.4
+    D = 0.5 + rng.random(n)
+    up = rng.normal(size=n) + 0.5
+    p, meth = mvn_cdf_fast_info(upper=up, mean=np.zeros(n), V=V, D=D)
+    ps = multivariate_normal(mean=np.zeros(n), cov=V @ V.T + np.diag(D)).cdf(up)
+    assert meth == "factor"
+    assert abs(p - ps) < 5e-5

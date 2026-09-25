@@ -115,6 +115,27 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
   any(lower == upper)
 }
 
+# Per-coordinate conditional cell mass, s == 0 included.
+#
+# A coordinate with zero idiosyncratic variance is DETERMINISTIC given the
+# factor draw: X_i = mean_i + v_i . f. Its cell is an INDICATOR, not a
+# normal interval, and dividing by s = 0 gave 0/0 = NaN the moment that
+# deterministic value landed exactly on an inclusive rectangle boundary --
+# P(X_1 <= 0) for X_1 identically 0, which is 1, not undefined (#206).
+# `hi` and `lo` are matrices already shifted by the mean and the factor
+# term; `s` is the per-coordinate sd, recycled down the columns.
+.cell_mass <- function(hi, lo, s) {
+  sdm <- matrix(rep(s, each = nrow(hi)), nrow = nrow(hi))
+  out <- matrix(0, nrow(hi), ncol(hi))
+  pos <- sdm > 0
+  if (any(pos))
+    out[pos] <- pnorm(hi[pos] / sdm[pos]) - pnorm(lo[pos] / sdm[pos])
+  det <- !pos
+  if (any(det))
+    out[det] <- as.numeric(lo[det] <= 0 & 0 <= hi[det])
+  out
+}
+
 pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                          sigma = NULL, V = NULL, D = NULL, ...) {
   if (is.null(V) || is.null(D)) {
@@ -145,12 +166,20 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     return(p)
   }
   s <- sqrt(D)
+  # A coordinate with no idiosyncratic variance AND no loading is a
+  # constant at mean_i. Outside its own interval the probability is
+  # exactly 0, not the 1e-300 the cell floor would give it.
+  fixed <- s == 0 & apply(V != 0, 1, function(z) !any(z))
+  if (any(fixed & (mean < lower | mean > upper))) {
+    p <- 0
+    attr(p, "method") <- "outside-support"
+    return(p)
+  }
   nd <- .nodes_for(V, D)
   M <- nd$F %*% t(V)                        # (Q, n) conditional shifts
   lo <- sweep(-M, 2, lower - mean, "+")     # (Q, n): lower - mean - v'f
   hi <- sweep(-M, 2, upper - mean, "+")
-  lo <- sweep(lo, 2, s, "/"); hi <- sweep(hi, 2, s, "/")
-  logcell <- log(pmax(pnorm(hi) - pnorm(lo), 1e-300))
+  logcell <- log(pmax(.cell_mass(hi, lo, s), 1e-300))
   p <- sum(nd$W * exp(rowSums(logcell)))
   if (p < 1e-8) {
     # deep tail: the integrand concentrates in a corner of factor space
@@ -159,9 +188,9 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     r <- ncol(V)
     logint <- function(f) {
       z <- as.vector(V %*% f)
-      sum(log(pmax(pnorm((upper - mean - z) / s)
-                   - pnorm((lower - mean - z) / s), 1e-300))) -
-        0.5 * sum(f^2)
+      sum(log(pmax(.cell_mass(matrix(upper - mean - z, nrow = 1),
+                              matrix(lower - mean - z, nrow = 1), s),
+                   1e-300))) - 0.5 * sum(f^2)
     }
     f0 <- rep(0, r); h <- 1e-4
     for (it in 1:50) {
@@ -180,9 +209,9 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     logw <- -0.5 * rowSums(sweep(Fq, 2, rep(0, r))^2) +
       0.5 * rowSums(Fh^2) + r * log(tau)
     Mq <- Fq %*% t(V)
-    loq <- sweep(sweep(-Mq, 2, lower - mean, "+"), 2, s, "/")
-    hiq <- sweep(sweep(-Mq, 2, upper - mean, "+"), 2, s, "/")
-    lc <- log(pmax(pnorm(hiq) - pnorm(loq), 1e-300))
+    loq <- sweep(-Mq, 2, lower - mean, "+")
+    hiq <- sweep(-Mq, 2, upper - mean, "+")
+    lc <- log(pmax(.cell_mass(hiq, loq, s), 1e-300))
     # importance identity: E_phi[cell] = mean over q-draws of
     # cell(Fq) * phi(Fq)/q(Fq), and log(phi/q) = logw above
     lt <- rowSums(lc) + logw

@@ -111,3 +111,51 @@ test_that("valid rectangles are untouched by the check", {
   expect_lt(abs(as.numeric(p) -
                 prod(pnorm(up / sqrt(D)) - pnorm(lo / sqrt(D)))), 1e-12)
 })
+
+# --- deterministic coordinates (#206) ---------------------------------
+#
+# A coordinate with zero idiosyncratic variance is DETERMINISTIC given
+# the factor draw, so its conditional cell is an indicator, not a normal
+# interval. Dividing by s = 0 is 0/0 = NaN the moment the deterministic
+# value lands exactly on an inclusive boundary: the documented
+# P(X_1 <= 0) = 1 for X_1 identically 0.
+
+test_that("a deterministic coordinate on the boundary is included", {
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(0, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 1))
+  expect_false(is.na(as.numeric(p)))
+  expect_lt(abs(as.numeric(p) - 0.5), 1e-12)
+})
+
+test_that("a deterministic coordinate strictly inside is included", {
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(1, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 1))
+  expect_lt(abs(as.numeric(p) - 0.5), 1e-12)
+})
+
+test_that("a deterministic coordinate outside gives exactly zero", {
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(-1, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 1))
+  expect_identical(as.numeric(p), 0)
+  expect_equal(attr(p, "method"), "outside-support")
+  q <- pmvnorm_fast(lower = c(0.5, -Inf), upper = c(Inf, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 1))
+  expect_identical(as.numeric(q), 0)
+})
+
+test_that("every coordinate deterministic and inside is one", {
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(0, 0),
+                    mean = c(0, 0), V = matrix(0, 2, 1), D = c(0, 0))
+  expect_lt(abs(as.numeric(p) - 1), 1e-12)
+})
+
+test_that("a deterministic coordinate that still loads on the factor", {
+  # D_1 = 0 but V_1 != 0: constant only GIVEN f, so the indicator
+  # restricts the factor region and the answer comes out of quadrature.
+  # P = E_f[ 1{f <= 0} Phi(-f/2) ], by one-dimensional integration.
+  p <- pmvnorm_fast(lower = c(-Inf, -Inf), upper = c(0, 0), mean = c(0, 0),
+                    V = matrix(c(0.5, 0.5), 2, 1), D = c(0, 1))
+  exact <- integrate(function(t) dnorm(t) * pnorm(-0.5 * t),
+                     -50, 0)$value
+  expect_lt(abs(as.numeric(p) - exact), 1e-4)
+})

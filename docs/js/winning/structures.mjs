@@ -31,7 +31,17 @@ export function treeFromLinkage(Z) {
     strength[t] = Math.sqrt(Math.max(rho[t] - (pa >= 0 ? rho[pa] : 0), 0));
   }
   const D = [];
-  for (let i = 0; i < n; i++) D.push(Math.max(1 - rho[parent[i]], 1e-10));
+  for (let i = 0; i < n; i++) {
+    // A leaf with no parent only happens for the one-leaf tree, which an
+    // EMPTY linkage is the valid scipy-style spelling of. javascript has
+    // no negative indexing, so rho[-1] was undefined and D came out
+    // [NaN]; pricing that tree then failed instead of returning the
+    // certain probability [1] (#241). Python gets the same answer by
+    // accident -- numpy wraps rho[-1] to the single zero entry -- and the
+    // guard on the line above this loop was already written correctly.
+    const pa = parent[i];
+    D.push(Math.max(1 - (pa >= 0 ? rho[pa] : 0), 1e-10));
+  }
   return Tree([...Array(n).keys()], new Array(n).fill(0), D, parent, strength);
 }
 
