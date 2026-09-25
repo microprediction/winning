@@ -414,7 +414,24 @@ def _setup(mu, V, D, F, W, base):
     fn = base if callable(base) else BASES[base]
     left, right = _SPANS.get(base, (12.0, 12.0)) if not callable(base) \
         else getattr(base, "span", (12.0, 12.0))
-    return mu, V, D, np.asarray(F, float), np.asarray(W, float), fn, left, right
+    # W is a RELATIVE weight. W and c*W describe the same factor law, and
+    # every verb normalises its own result, so the common scale cancels
+    # -- except in the pre-normalisation mass checks, which compared an
+    # unnormalised row sum against 1. removal_shares and
+    # ordered_probabilities therefore REJECTED W = [5, 5] while accepting
+    # the identical law W = [0.5, 0.5], with a "mass defect 9.00e+00"
+    # that is just the weight total minus one (#208). Every rule built
+    # above already sums to one, so this changes nothing the library
+    # generates; it makes the caller's spelling not matter, which is the
+    # contract everywhere else.
+    W = np.asarray(W, float)
+    wtot = float(W.sum())
+    if not np.isfinite(wtot) or wtot <= 0.0:
+        raise ValueError(
+            f"W must be positive weights: they total {wtot!r}. They are "
+            "relative, so any positive multiple of a valid rule is the "
+            "same factor law, but a zero or negative total is not one.")
+    return mu, V, D, np.asarray(F, float), W / wtot, fn, left, right
 
 
 

@@ -199,10 +199,55 @@ _refusal_msg() = string(
 
 # ---- lattice -------------------------------------------------------
 
-function _grid(c::GaussMarkovChain, points::Int; pad = 8.0)
+"""Largest lattice a chain of length `n` may use.
+
+The transitions are (n-1) dense L x L matrices, so the memory is
+O(n L^2). This budget is 2e7 doubles, about 160 MB, which is what keeps
+a threshold far out in the tail from asking for a lattice nobody can
+hold.
+"""
+_max_points(n::Int) = n <= 1 ? 2_000_001 :
+    max(400, floor(Int, sqrt(2.0e7 / (n - 1))))
+
+"""
+    _grid(c, points; pad = 8.0, u = nothing)
+
+The lattice, extended to cover a threshold `u` that lies outside it.
+
+The grid was built from the chain's means and marginal sds alone, so a
+threshold above the last cell left the occupancy identically one and
+`max_cdf`, `excursion_probability` and `first_passage` stopped depending
+on `u` at all: 9, 10 and 20 sd out all returned the same 1.11e-15, which
+is quadrature noise rather than a tail (#197).
+
+Extending the range without adding points would coarsen the bulk, so the
+spacing is preserved and the point count grows with the range, up to
+`_max_points`. Past that the spacing does grow, and the caller is told.
+"""
+function _grid(c::GaussMarkovChain, points::Int; pad = 8.0, u = nothing)
     msd = marginal_sd(c)
     lo = minimum(c.mu .- pad .* max.(msd, 1e-12))
     hi = maximum(c.mu .+ pad .* max.(msd, 1e-12))
+    if u !== nothing
+        uf = float(u)
+        if isfinite(uf)
+            margin = pad * maximum(max.(msd, 1e-12))
+            span0 = hi - lo
+            lo = min(lo, uf - margin)
+            hi = max(hi, uf + margin)
+            if hi - lo > span0
+                want = ceil(Int, (points - 1) * (hi - lo) / span0) + 1
+                cap = _max_points(length(c))
+                if want > cap
+                    @warn string("threshold ", uf, " is far outside the ",
+                                 "chain's range; the lattice is capped at ",
+                                 cap, " points, so the spacing is coarser ",
+                                 "than requested")
+                end
+                points = min(want, cap)
+            end
+        end
+    end
     x = collect(range(lo, hi, length = points))
     return x, x[2] - x[1]
 end
@@ -219,9 +264,8 @@ function _transitions(c::GaussMarkovChain, x::Vector{Float64},
         M = Matrix{Float64}(undef, L, L)
         for (j, xm) in enumerate(x)
             m = c.mu[t + 1] + c.phi[t] * (xm - c.mu[t])
-            invs = 1.0 / c.s[t]
             @inbounds for i in 1:L
-                M[i, j] = npdf((x[i] - m) * invs) * invs * dx
+                M[i, j] = _cell_mass(x[i], m, c.s[t], dx)
             end
         end
         T[t] = M
@@ -229,57 +273,130 @@ function _transitions(c::GaussMarkovChain, x::Vector{Float64},
     return T
 end
 
+"""
+    _cell_mass(xi, m, invs, dx)
+
+The probability that a N(m, 1/invs^2) draw lands in the lattice cell
+centred on `xi`, as a CDF difference rather than density x spacing.
+
+`npdf(z) * invs * dx` is a Riemann sample of the density, and it is only
+a probability when the density is flat across the cell. An innovation sd
+far below the spacing makes the transition kernel a SPIKE between
+samples: with innovation variance 1e-4 on a lattice whose spacing is set
+by the marginal sd, each column of the transition matrix summed to about
+80 instead of 1, and `max_cdf` returned 79.988 for a probability (#244).
+An excursion probability came back as -78.99.
+
+The CDF difference is the cell's exact mass, so a column sums to one
+however narrow the kernel is, and for a wide kernel it agrees with the
+old expression to O(dx^2) -- it is strictly the better quadrature, not a
+special case. Renormalising the columns instead would have hidden the
+resolution failure rather than fixed it.
+"""
+@inline function _cell_mass(xi::Float64, m::Float64, sd::Float64,
+                            dx::Float64)
+    # Integrating the kernel over the cell is exact in mass but convolves
+    # a boxcar of width dx at every step, which adds dx^2/12 to the
+    # transition variance. Deflating by exactly that much puts it back,
+    # so the discretised chain has the right variance and this is not a
+    # worse quadrature than the midpoint rule where the midpoint rule
+    # works. Below the resolution limit the deflated sd is zero and the
+    # cell containing the mean takes the whole mass -- the correct
+    # degenerate limit, and the case the midpoint rule turned into 80.
+    v = sd * sd - dx * dx / 12.0
+    h = 0.5 * dx
+    if v <= 0.0
+        return (m >= xi - h && m < xi + h) ? 1.0 : 0.0
+    end
+    inv = 1.0 / sqrt(v)
+    mass = ndtr((xi + h - m) * inv) - ndtr((xi - h - m) * inv)
+    mass > 0.0 && return mass
+    # Both endpoints sit in the same saturated tail of ndtr, which
+    # reaches exactly 1 around 8.3 sd, so their difference underflows to
+    # zero and a threshold 9 sd out returned a tail probability of
+    # exactly 0 for every threshold alike (#197). The midpoint density is
+    # the form that survives out there -- it does not underflow until
+    # about 38 sd -- and where both are representable the two agree to
+    # O(dx^2), so this is a fallback, not a second opinion.
+    return npdf((xi - m) * inv) * inv * dx
+end
+
 _initial_density(c, x, dx) =
-    [npdf((xi - c.mu[1]) / c.sd0) / c.sd0 * dx for xi in x]
+    [_cell_mass(xi, c.mu[1], c.sd0, dx) for xi in x]
 
 # ---- max CDF and first passage (one restricted forward pass) -------
 
 """P(max_t X_t <= u). `u` may be a number or a vector."""
 function max_cdf(c::GaussMarkovChain, u::Real; points = 400)
-    x, dx = _grid(c, points)
+    x, dx = _grid(c, points; u = u)
     T = _transitions(c, x, dx)
-    return _restricted_masses(c, T, x, dx, float(u))[end]
+    return _restricted_masses(c, T, x, dx, float(u))[1][end]
 end
 
 function max_cdf(c::GaussMarkovChain, us::AbstractVector; points = 400)
-    x, dx = _grid(c, points)
+    x, dx = _grid(c, points; u = isempty(us) ? nothing : maximum(float.(us)))
     T = _transitions(c, x, dx)
-    return [_restricted_masses(c, T, x, dx, float(u))[end] for u in us]
+    return [_restricted_masses(c, T, x, dx, float(u))[1][end] for u in us]
 end
 
+"""Restricted masses, and the mass that EXCEEDS u at each step.
+
+`masses[t]` is P(X_1..X_t all <= u). The exceedance used to be taken as
+`1 - masses[n]`, and in the tail that is a subtraction of two numbers
+that agree to every bit: at 10 sd it returned -8.9e-16, a negative
+probability, and `first_passage` differenced the same quantities and
+produced a negative passage mass.
+
+`escaped[t]` is the mass removed at step t, summed over the cells ABOVE
+u rather than subtracted from one. Those are small positive numbers, so
+the answer has full relative accuracy however far out the threshold is.
+"""
 function _restricted_masses(c, T, x, dx, u)
     n = length(c)
     # fractional occupancy of the boundary cell: v[i] is mass in
     # [x_i - dx/2, x_i + dx/2), and a hard cutoff at u costs O(dx);
     # keeping the sub-cell fraction restores O(dx^2)
     keep = clamp.((u .- (x .- dx / 2)) ./ dx, 0.0, 1.0)
-    v = _initial_density(c, x, dx) .* keep
+    drop = 1.0 .- keep
     masses = zeros(n)
+    escaped = zeros(n)
+    w = _initial_density(c, x, dx)
+    escaped[1] = sum(w .* drop)
+    v = w .* keep
     masses[1] = sum(v)
     for t in 1:(n - 1)
-        v = keep .* (T[t] * v)
+        w = T[t] * v
+        escaped[t + 1] = sum(w .* drop)
+        v = keep .* w
         masses[t + 1] = sum(v)
     end
-    return masses
+    return masses, escaped
 end
 
 """P(max <= u) complement: P(any X_t > u) -- the excursion
 probability of Bolin-Lindgren, exact on the chain."""
-excursion_probability(c::GaussMarkovChain, u; points = 400) =
-    1 .- max_cdf(c, u; points = points)
+function excursion_probability(c::GaussMarkovChain, u::Real; points = 400)
+    x, dx = _grid(c, points; u = u)
+    T = _transitions(c, x, dx)
+    _masses, escaped = _restricted_masses(c, T, x, dx, float(u))
+    return sum(escaped)          # small positive terms, not 1 - (1 - eps)
+end
+
+excursion_probability(c::GaussMarkovChain, us::AbstractVector; points = 400) =
+    [excursion_probability(c, u; points = points) for u in us]
 
 """Distribution of the FIRST index exceeding u: a vector p with
 p[t] = P(first passage at t), plus P(never) as the final entry."""
 function first_passage(c::GaussMarkovChain, u::Real; points = 400)
-    x, dx = _grid(c, points)
+    x, dx = _grid(c, points; u = u)
     T = _transitions(c, x, dx)
-    masses = _restricted_masses(c, T, x, dx, float(u))
+    masses, escaped = _restricted_masses(c, T, x, dx, float(u))
     n = length(c)
     p = zeros(n + 1)
-    prev = 1.0
+    # the mass removed AT step t is the first-passage mass at t, taken
+    # directly rather than as a difference of two near-one numbers
     for t in 1:n
-        p[t] = prev - masses[t]
-        prev = masses[t]
+        p[t] = escaped[t]
     end
     p[n + 1] = masses[n]
     return p
@@ -295,7 +412,7 @@ function expected_max(c::GaussMarkovChain; points = 400, nu = 200)
     du = us[2] - us[1]
     x, dx = _grid(c, points)
     T = _transitions(c, x, dx)
-    F = [_restricted_masses(c, T, x, dx, u)[end] for u in us]
+    F = [_restricted_masses(c, T, x, dx, u)[1][end] for u in us]
     # trapezoid in the threshold: the left-rectangle rule biased
     # E[max] by O(du) (measured +0.053 at nu = 200 against MC)
     surv = 1.0 .- F
