@@ -67,20 +67,38 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
     # the exact rank-one structure of P'diag(1/tau2)P only when tau2 is
     # uniform; otherwise fall back to the dense solve (n is small in
     # ratings use).
+    # `as_variance` declares zero legal -- "a perfectly known quantity"
+    # -- and the update then divided by it. The limit is not singular:
+    # u = 1/(1/v + 1/t2) -> 0 and b = m/v + y/t2 -> inf, but their
+    # PRODUCT tends to m, exactly. Evaluated as written it was 0 * inf,
+    # so one known coordinate returned NaN for every runner (#78). The
+    # closed forms below agree with the naive ones to every digit where
+    # v > 0 and are finite at v = 0.
+    known = v <= 0.0
     if np.allclose(tau2, tau2[0]):
         t2 = float(tau2[0])
-        c = 1.0 / v + 1.0 / t2
-        u = 1.0 / c
+        u = v * t2 / (v + t2)                  # = 1/(1/v + 1/t2)
+        ub = (t2 * m + v * y) / (v + t2)       # = u * (m/v + y/t2)
         k = (1.0 / (n * t2)) / (1.0 - (1.0 / (n * t2)) * u.sum())
-        b = m / v + y / t2
-        mu = b * u + k * u * float(u @ b)
+        mu = ub + k * u * float(ub.sum())
         var = u + k * u * u
     else:
         P = np.eye(n) - np.ones((n, n)) / n
-        A = np.diag(1.0 / v) + P @ np.diag(1.0 / tau2) @ P
-        S = np.linalg.inv(A)
-        mu = S @ (m / v + P @ (y / tau2))
-        var = np.diag(S).copy()
+        G = P @ np.diag(1.0 / tau2) @ P
+        free = ~known
+        mu = m.copy()
+        var = np.zeros(n)
+        if free.any():
+            # a known coordinate is a CONSTANT in the likelihood, so the
+            # free block is the conditional given it -- not a division by
+            # its zero variance
+            A = np.diag(1.0 / v[free]) + G[np.ix_(free, free)]
+            rhs = m[free] / v[free] + (P @ (y / tau2))[free]
+            if known.any():
+                rhs = rhs - G[np.ix_(free, known)] @ m[known]
+            S = np.linalg.inv(A)
+            mu[free] = S @ rhs
+            var[free] = np.diag(S)
 
     # evidence on the contrast space: y ~ N(Pm, P(diag(v)+diag(tau2))P)
     P = np.eye(n) - np.ones((n, n)) / n
@@ -91,7 +109,11 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
     z = U[:, keep].T @ r
     logZ = float(-0.5 * (np.sum(z * z / lam[keep]) + np.sum(np.log(lam[keep]))
                          + keep.sum() * np.log(2.0 * np.pi)))
-    return mu, np.maximum(var, 1e-6), logZ
+    # The floor keeps a downstream 1/v finite, but a coordinate the
+    # caller declared perfectly known must not have uncertainty
+    # manufactured for it: it stays zero, as it does in update_winner's
+    # means. Unchanged wherever v > 0.
+    return mu, np.where(known, 0.0, np.maximum(var, 1e-6)), logZ
 
 
 def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,

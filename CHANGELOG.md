@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- A belief the caller declared perfectly known survives the evidence now
+  (#78). `as_variance` documents zero as "a perfectly known quantity"
+  and both updates accepted it; `update_market` then divided by it and
+  returned NaN. Worse than the contract being unmet: **one** zero
+  coordinate returned NaN for **every** runner, so a single known skill
+  destroyed the whole posterior.
+
+  The limit is not singular. With `u = 1/(1/v + 1/tau2) -> 0` and
+  `b = m/v + y/tau2 -> inf`, the PRODUCT tends to `m` exactly -- it was
+  simply evaluated as `0 * inf`. The closed forms
+
+      u  = v*tau2 / (v + tau2)
+      ub = (tau2*m + v*y) / (v + tau2)
+
+  agree with the naive ones to every printed digit wherever `v > 0` and
+  are finite at zero. The non-uniform-`tau2` branch inverted
+  `diag(1/v)` instead, so it now solves the free block as the
+  CONDITIONAL given the known coordinates, which is what a zero-variance
+  prior means.
+
+  `update_winner`'s means were already right -- `m + v*g` cannot move a
+  coordinate with `v = 0` -- but its variance floor handed that
+  coordinate 1e-6 of uncertainty it had just been told did not exist. A
+  belief could not stay known across an update. The floor now applies
+  only where `v > 0`, which is where it exists, to keep a downstream
+  `1/v` finite.
+
+  Measured as a no-op on the ordinary path: over 12 market fixtures
+  spanning both `tau2` branches at n = 3 and n = 5, and 24
+  `update_winner` fixtures over both bases, the outputs are
+  BIT-IDENTICAL to before. One test pins values read off the pre-fix
+  code, and another requires the v = 0 answer to be the limit of
+  v = 1e-2, 1e-4, 1e-6, 1e-8 rather than a special case bolted beside
+  it.
+
 - R's `race_jacobian` depended on the SCALE of the factor weights --
   #281's defect, in a third place. `W` and `c*W` describe the same
   factor law; the forward divides its accumulated shares by their total
