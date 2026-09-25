@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- `AbilityTracker.observe` refuses evidence that would poison its state.
+  A tracker CARRIES state, so bad evidence is not one bad answer -- it
+  is a corrupted filter. One NaN score made every entity's mean and
+  variance NaN, and a later CLEAN contest did not recover them:
+
+      before NaN:            [0.8, 0.0, -0.8]
+      after NaN:             [nan, nan, nan]
+      after a CLEAN contest: [nan, nan, nan]
+
+  An infinite score and a NaN price did the same, all three silently.
+  Nothing downstream could tell a poisoned filter from a filter that
+  had simply learned nothing, and there is no way back: the ratings the
+  caller keeps asking for stay NaN for the rest of the run.
+
+  `scores` and `prices` are now checked at the door for finiteness and
+  for one entry per entrant. The length did already raise, but as
+  "operands could not be broadcast together with shapes", which names
+  nothing the caller passed; it now says which argument and what it got.
+  The message for a non-finite entry names the index, counts how many
+  there are, and says why it matters rather than just that it is
+  refused.
+
+  A refusal leaves the filter exactly as it was -- the ratings before
+  and after are identical objects -- so a caller who catches it can
+  carry on with the next contest.
+
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is
   decided -- a scalar, a length-n vector, `(n, 1)` and `(1, n)` are the
