@@ -96,6 +96,34 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     """
     mu = np.asarray(mu, dtype=float)
     T, J = mu.shape
+    # Every observation must be accounted for. The loop below walks the
+    # LEGAL labels and gathers the rows matching each, so a row whose
+    # choice is outside 0..J-1 is never visited: it contributed nothing
+    # to the log-likelihood and a zero row to the score, and the fit
+    # silently optimised a SUBSET of the data while reporting it as the
+    # whole. Five bad rows out of forty moved the log-likelihood from
+    # -55.699 to -49.134 -- better, because there was less of it (#194).
+    choice = np.asarray(choice)
+    if choice.ndim != 1 or choice.shape[0] != T:
+        raise ValueError(
+            f"choice must have one entry per observation: got shape "
+            f"{choice.shape} for {T} rows of mu")
+    if not np.issubdtype(choice.dtype, np.integer):
+        if np.issubdtype(choice.dtype, np.floating) and np.isnan(choice).any():
+            raise ValueError(
+                f"choice has {int(np.isnan(choice).sum())} missing "
+                "entries; drop those observations deliberately rather "
+                "than letting them score zero")
+        if not np.all(choice == np.floor(choice)):
+            raise ValueError("choice must be integer alternative indices")
+        choice = choice.astype(int)
+    bad = np.flatnonzero((choice < 0) | (choice >= J))
+    if bad.size:
+        raise ValueError(
+            f"choice[{int(bad[0])}] = {int(choice[bad[0]])} is outside "
+            f"0..{J - 1}; {bad.size} of {T} observations are. They would "
+            "be dropped in silence, which raises the log-likelihood "
+            "because there is less of it.")
     V = as_loadings(V, J)
     r = V.shape[1]
     D = np.ones(J) if D is None else np.asarray(D, dtype=float)

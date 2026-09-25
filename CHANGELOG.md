@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- The exact likelihood refuses a choice it cannot account for, in all
+  three ports (#194). The cores iterate over the LEGAL alternative
+  labels and gather the rows matching each, so a row whose choice is
+  outside the range is never visited: it contributed nothing to the
+  log-likelihood and a zero row to the score, and the fit silently
+  optimised a SUBSET of the data while reporting it as the whole.
+
+  The direction is what makes it dangerous. Dropping observations RAISES
+  the log-likelihood, because there is less of it -- five bad rows out
+  of forty moved it from -55.699 to -49.134 -- and nothing downstream
+  can tell that from a better fit. The tests assert that property
+  directly rather than describing it.
+
+  Julia additionally accepted a choice vector SHORTER than `T` and
+  dropped the tail; R left `logp == 0` for `NA` rows, which adds zero
+  negative log-likelihood and zero gradient. All three now name the
+  first offending row and count how many there are. An integer-valued
+  float is still accepted, because refusing `1.0` would be pedantry
+  rather than a guard.
+
 - Prediction and likelihood choose the same quadrature (#213).
   `choice_loglik_and_score` gauge-centers `V` and dispatches on the
   pairwise-safe bound `sqrt(2) max_i ||(PV)_i|| / sqrt(min D)`.
