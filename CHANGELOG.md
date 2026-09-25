@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Two documents stopped pointing at a deleted tree (#250). Removing the
+  dead `src/` package left `data/README.md` sending readers to
+  `attic/src/winning/benchmarks/`, which went with it, and a research
+  script explaining that `pip install winning` resolves to
+  `attic/src/winning` -- which `setup.py` shows it never did, since it
+  packages the top-level `winning.*` tree and the attic is neither
+  installed nor importable through it. The README now points at
+  `winning/bench/` and `BENCHMARKS.md`, and the script says what the
+  path insertion is actually for: an INSTALLED copy may be an older
+  release or a different checkout, so the repo root goes first.
+
+  The audit the issue suggested is deliberately narrow. A repo-wide
+  "every documented path exists" rule is not worth having here: of 216
+  backticked paths in markdown, 115 do not resolve, and nearly all are
+  URLs, MIME types, external dataset identifiers or paths relative to
+  their own document. The rule is about the tree that just moved -- a
+  path under `attic/` written in BACKTICKS must exist, because backticks
+  mean go and look, while prose about something that used to be there is
+  fine -- plus a check that `setup.py`'s packaged roots still match the
+  claim the script makes about them.
 - A tree's cluster labels mean the same thing on both paths (#146).
   Labels are arbitrary comparable values, and the forward dispatch says
   so: every tree and block kernel in `blocks.py` remaps them with
@@ -752,8 +772,6 @@
   exception on a happy path killed the file, so the run failed with no
   named check and every later check silently went unrun. A new `accepts()`
   helper turns a thrown exception into a named FAIL.
-
-
 
 - The pre-renovation `src/` package is gone, all but the one part still
   used. It had sat since the August renovation: not packaged (`setup.py`
