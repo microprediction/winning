@@ -125,6 +125,12 @@ jobs:
         # read the source and a shared allowlist let each API accept the
         # other's options and ignore them
         run: node parity/check_js_api.mjs
+      - name: Browser factor race vs scipy
+        # js/factor/test_parity.mjs checks the tabulated bases against
+        # scipy-generated vectors, and nothing ran it: it sat failing on
+        # main at 1.01e-5 against its own 2e-6 tolerance until #211, which
+        # is exactly how long an ungated suite stays broken (#140).
+        run: node js/factor/test_parity.mjs
 
   lint:
     runs-on: ubuntu-latest
