@@ -1,0 +1,37 @@
+{
+  "note": "Behavioural parity: which malformed inputs each port ACCEPTS. Value parity is check_vectors/check.mjs/check.R/check.jl; this is the other half.",
+  "cases": [
+    {"id": "ok_independent",        "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "ok_factor_rank1",       "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "V": [0.5, 0.3, -0.2, 0.1], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "mu_nan",                "verb": "race", "mu": [0.0, "nan", -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "mu_inf",                "verb": "race", "mu": [0.0, "inf", -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "D_nan",                 "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, "nan", 1.0, 1.0]},
+    {"id": "D_zero",                "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 0.0, 1.0, 1.0]},
+    {"id": "D_negative",            "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, -1.0, 1.0, 1.0]},
+    {"id": "D_too_short",           "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1.0]},
+    {"id": "D_too_long",            "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0, 1.0]},
+    {"id": "D_scalar",              "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": 1.0},
+    {"id": "V_nan",                 "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "V": [0.5, "nan", -0.2, 0.1], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "V_too_short",           "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "V": [0.5, 0.3], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "V_scalar",              "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "V": 0.4, "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "mu_single_runner",      "verb": "race", "mu": [0.5], "D": [1.0]},
+    {"id": "mu_empty",              "verb": "race", "mu": [], "D": []},
+    {"id": "mu_huge",               "verb": "race", "mu": [0.0, 1e308, -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "D_huge",                "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1e308, 1.0, 1.0]},
+    {"id": "D_tiny",                "verb": "race", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1e-300, 1.0, 1.0]},
+
+    {"id": "inv_ok",                "verb": "inverse", "p": [0.4, 0.3, 0.2, 0.1], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "inv_p_zero",            "verb": "inverse", "p": [0.5, 0.0, 0.3, 0.2], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "inv_p_negative",        "verb": "inverse", "p": [0.6, -0.1, 0.3, 0.2], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "inv_p_nan",             "verb": "inverse", "p": [0.4, "nan", 0.3, 0.2], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "inv_p_unnormalised",    "verb": "inverse", "p": [4.0, 3.0, 2.0, 1.0], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "inv_p_huge",            "verb": "inverse", "p": [1e308, 1e308, 1e308, 1e308], "D": [1.0, 1.0, 1.0, 1.0]},
+    {"id": "inv_p_too_short",       "verb": "inverse", "p": [0.5, 0.5], "D": [1.0, 1.0, 1.0, 1.0]},
+
+    {"id": "topk_ok",               "verb": "topk", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0], "k": 2},
+    {"id": "topk_k_fractional",     "verb": "topk", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0], "k": 1.5},
+    {"id": "topk_k_zero",           "verb": "topk", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0], "k": 0},
+    {"id": "topk_k_equals_n",       "verb": "topk", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0], "k": 4},
+    {"id": "topk_k_negative",       "verb": "topk", "mu": [0.0, 0.3, -0.2, 0.5], "D": [1.0, 1.0, 1.0, 1.0], "k": -1}
+  ]
+}

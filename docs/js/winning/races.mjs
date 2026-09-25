@@ -36,6 +36,22 @@ const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [1
 
 function setup(mu, V, D, F, W, base) {
   const n = mu.length;
+  // mu was the one argument nobody checked: D goes through asIdio, V
+  // through asLoadings, W through asWeights, and the abilities
+  // themselves went straight to the lattice. A NaN or inf there came
+  // back as NaN probabilities, and an EMPTY field came back as an
+  // empty answer rather than a refusal. R and julia already refused
+  // both, which is how the cross-port divergence scan found it.
+  if (!Array.isArray(mu) && !ArrayBuffer.isView(mu))
+    throw new Error(`mu must be an array of abilities; got ${typeof mu}`);
+  if (n === 0)
+    throw new Error("mu is empty; a race needs at least one contestant");
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(mu[i]))
+      throw new Error(
+        `mu[${i}] = ${mu[i]} is not finite; an ability is a finite ` +
+        `location on the performance scale`);
+  }
   D = asIdio(D, n);        // the companion of asLoadings, #254
   // the shape contract at the door, as python's _setup does it: a
   // scalar, a length-n vector, (n, rank) and (rank, n) are the same

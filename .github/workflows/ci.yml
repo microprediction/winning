@@ -131,6 +131,18 @@ jobs:
         # main at 1.01e-5 against its own 2e-6 tolerance until #211, which
         # is exactly how long an ungated suite stays broken (#140).
         run: node js/factor/test_parity.mjs
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Ports agree about what they REFUSE
+        # check_vectors/check.mjs/check.R/check.jl compare the ports'
+        # VALUES on well-formed inputs. Nothing compared their DECISIONS
+        # on malformed ones, and that is where they drifted: ten of
+        # thirty cases diverged, and a port that quietly recycles a
+        # short D agrees on every vector in those files while pricing a
+        # different race. The check skips any port whose toolchain is
+        # absent rather than passing vacuously.
+        run: python parity/check_divergence.py
 
   lint:
     runs-on: ubuntu-latest

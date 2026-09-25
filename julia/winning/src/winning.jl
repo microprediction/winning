@@ -248,12 +248,33 @@ function _race_setup(mu, V, D, F, W, base)
     mu = Float64.(collect(mu))
     n = length(mu)
     D = D === nothing ? ones(n) : Float64.(collect(D))
+    # A scalar D is the same variance for everyone, as as_idio states;
+    # a zero variance is a contestant with no idiosyncratic noise, which
+    # this lattice cannot represent -- it returned NaN where python, R
+    # and the browser all refuse. Found by the cross-port divergence
+    # scan.
+    length(D) == 1 && (D = fill(D[1], n))
+    length(D) == n || throw(ArgumentError(
+        "D must be a scalar or one idiosyncratic variance per contestant; " *
+        "got " * string(length(D)) * " for " * string(n)))
+    all(isfinite, D) || throw(ArgumentError("D has a non-finite entry"))
+    all(>(0.0), D) || throw(ArgumentError(
+        "D must be strictly positive here: a zero variance is a " *
+        "contestant the lattice cannot represent"))
     if V === nothing
         Vm = zeros(n, 1)
         Fm = zeros(1, 1)
         Wv = [1.0]
     else
-        Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) : reshape(Float64.(collect(V)), :, 1)
+        # a SCALAR V is the same loading for everyone -- the spelling
+        # as_loadings documents, which python and the browser accept
+        # and julia refused (cross-port divergence scan)
+        Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
+             (V isa Number ? fill(Float64(V), n, 1) :
+              reshape(Float64.(collect(V)), :, 1))
+        size(Vm, 1) == n || throw(ArgumentError(
+            "V must have one row per contestant; got " *
+            string(size(Vm, 1)) * " for " * string(n)))
         Vm = Vm .- sum(Vm, dims = 1) ./ n      # common column is gauge
         if F === nothing || W === nothing
             sharp = sqrt(2) * maximum(sqrt.(vec(sum(Vm .^ 2, dims = 2))) ./

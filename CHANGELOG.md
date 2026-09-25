@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+- The ports disagreed about what to REFUSE, in ten of thirty cases, and
+  nothing was looking. `check_vectors.py`, `check.mjs`, `check.R` and
+  `check.jl` compare the ports' VALUES on well-formed inputs; nothing
+  compared their DECISIONS on malformed ones. A port that quietly
+  recycles a short `D` agrees with everyone on every vector in those
+  files and still prices a different race.
+
+  `parity/check_divergence.py` runs one case file through all four
+  ports and fails when they disagree. What it found, none of it
+  reported before:
+
+  | case | python | browser | R | julia |
+  |---|---|---|---|---|
+  | non-finite `mu` | NaN out | NaN out | refuse | refuse |
+  | empty `mu` | refuse | **accepts** | refuse | refuse |
+  | `D` wrong length | refuse | refuse | **recycles** | refuse |
+  | `D` zero | refuse | refuse | refuse | NaN out |
+  | scalar `V` | accept | accept | **refuse** | **refuse** |
+  | inverse `p` wrong length | refuse | refuse | **accepts** | refuse |
+
+  The worst is R's recycling in the core race verb: `D = c(2, 9)` at
+  n = 4 prices EXACTLY the race `D = c(2, 9, 2, 9)` prices -- same
+  numbers, no warning. That is #285's defect in `r/winning` itself
+  rather than `mvtnormfast`, and it would have been missed: `W` and `F`
+  were fixed at that same door earlier without anyone checking `D`.
+  R's inverse had it too, answering a two-runner race from a
+  four-entry `D`.
+
+  `mu` turns out to be the one argument nobody checked anywhere: `D`
+  goes through `as_idio`, `V` through `as_loadings`, `W` through
+  `as_weights`, and the abilities went straight to the lattice. python
+  and the browser now refuse a non-finite or empty `mu`.
+
+  The scalar-`V` row went the other way: python and the browser
+  implement the contract `as_loadings` documents -- a scalar is the
+  same loading for everyone -- and R and julia refused it. They were
+  moved to the documented behaviour, not the reverse.
+
+  All thirty cases now agree across all four ports, and the check runs
+  in CI, skipping any port whose toolchain is absent rather than
+  passing vacuously.
+
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is
   decided -- a scalar, a length-n vector, `(n, 1)` and `(1, n)` are the
