@@ -1,13 +1,12 @@
 // Demo support: seeded correlation generators (randomcov's ensembles in
 // miniature), dense linear algebra for the in-browser grammar fit, and
 // a Monte Carlo sampler to race against.
-import { hermite1, interpClamped, solve } from "./core.mjs";
+import { hermite1, interpClamped, solve, firstPrimes } from "./core.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
    Gauss-Hermite grids explode; low-discrepancy nodes are the right
    family there (same escalation as the python and R engines). */
-const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53];
 function invNormal(p) {
   // Acklam-style rational approximation, adequate for node placement
   const a = [-39.6968302866538, 220.946098424521, -275.928510446969,
@@ -31,10 +30,12 @@ function invNormal(p) {
 }
 export function haltonNormalNodes(r, count) {
   const F = [], W = new Array(count).fill(1 / count);
+  const primes = firstPrimes(r);   // generated: a literal table had a
+  // silent cliff at rank 17, past which every node was NaN (#233)
   for (let idx = 0; idx < count; idx++) {
     const node = [];
     for (let dim = 0; dim < r; dim++) {
-      const base = PRIMES[dim];
+      const base = primes[dim];
       let i = idx + 21, f = 1 / base, h = 0;
       while (i > 0) { h += f * (i % base); i = Math.floor(i / base); f /= base; }
       node.push(invNormal(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));

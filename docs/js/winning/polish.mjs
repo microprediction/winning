@@ -1,7 +1,7 @@
 // Polish a race onto linear constraints -- port of winning/factor/polish.py
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
-import { mean, checkOpts, OPT_HINTS } from "./core.mjs";
+import { mean, checkOpts, OPT_HINTS, asLoadings } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./blocks.mjs";
 
@@ -40,6 +40,7 @@ function raceJacobianExplicit(mu, V, D, base, points) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
   let F = [[0]], W = [1];
+  V = asLoadings(V, n) || Array.from({ length: n }, () => [0]);   // #232
   const hasV = V.some(row => row.some(v => v !== 0));
   if (hasV) {
     let sharp = 0;

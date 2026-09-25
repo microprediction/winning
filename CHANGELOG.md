@@ -20,6 +20,36 @@
   `targetFloor` vanished on every other path. Sabotage-tested by putting
   an unread key back.
 
+- The browser honours the loading-shape contract, in every module that
+  takes `V` (#232). `winning.shapes.as_loadings` is the one place the rule
+  is decided -- `V` is `(n, rank)`, one ROW per contestant, and a scalar,
+  a length-n vector, `(n, rank)` and `(rank, n)` are all the same race.
+  Four browser modules decided it for themselves instead, by indexing `V`
+  and taking the rank from `V[0].length`. So a length-n vector threw
+  `V[i].reduce is not a function`, a valid `(rank, n)` matrix was read as
+  rank n and rejected with a message about the rank cap, and a RAGGED `V`
+  was truncated to the first row's width and answered all-NaN with no
+  complaint at all. `core.mjs` now exports `asLoadings`, and `races.mjs`,
+  `topk.mjs` and `polish.mjs` call it at the door. All four spellings now
+  agree with the python reference to 1.4e-16, and `(rank, n)` is
+  bit-identical to `(n, rank)`.
+
+- Halton bases are generated, not tabulated (#233). The low-discrepancy
+  nodes read their primes from a literal array: 24 entries in
+  `races.mjs`, 16 in `demo.mjs`. One factor past the end gave
+  `base = undefined`, and the node loop produced NaN rather than an error,
+  so a rank-25 race and a rank-17 demo returned NaN for every runner in
+  silence. `firstPrimes(d)` generates them. This is the same defect as
+  R's 30-prime table in #190, in a tree I did not grep when I fixed that
+  one; the browser checker now exercises ranks 8, 17, 25 and 40.
+
+  Both fixes are guarded behaviourally in `parity/check_js_api.mjs`, which
+  CALLS the functions rather than reading the source. Rehearsing four
+  sabotages against it found a fifth defect in the checker itself: an
+  exception on a happy path killed the file, so the run failed with no
+  named check and every later check silently went unrun. A new `accepts()`
+  helper turns a thrown exception into a named FAIL.
+
 - The browser factor race's own parity suite runs in CI (#140, second
   half). `js/factor/test_parity.mjs` checks the tabulated bases against
   scipy-generated vectors, and nothing ran it -- which is why it sat
