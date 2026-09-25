@@ -151,3 +151,52 @@ def test_both_walk_forwards_inherit_the_contract():
               "scores": [0.0, np.nan, 2.0], "winner": 0}
     with pytest.raises(ValueError, match="not finite"):
         tracker_walk_forward(trk, warmup=1)
+
+
+# --- finite input must not leave a filter non-finite either (#300) ----
+#
+# The finiteness checks above look at the ENTRIES, and for a market law
+# like [1e308, 1e308, 1e308] every entry is finite. The sum is not:
+# `target / target.sum()` in abilities_from_race divided by inf and
+# gave NaN, and both filters then stored NaN means and NaN evidence
+# from input they had just accepted, correctly, as finite.
+#
+# A market law is defined up to a positive factor, so [1e308]*3 is the
+# SAME law as [1]*3 and must give the same answer.
+
+@pytest.mark.parametrize("scale", [1.0, 1e-300, 1e307, 1e308, 1.7e308])
+def test_a_rescaled_market_law_is_the_same_law(scale):
+    ref = AbilityTracker(seed=0)
+    ref.observe(IDS, t=0.0, prices=[1.0, 1.0, 1.0])
+    want = [ref.rating(i) for i in IDS]
+
+    t = AbilityTracker(seed=0)
+    t.observe(IDS, t=0.0, prices=[scale] * 3)
+    got = [t.rating(i) for i in IDS]
+    assert np.isfinite([g[0] for g in got]).all(), (scale, got)
+    assert np.isfinite([g[1] for g in got]).all(), (scale, got)
+    assert np.isfinite(t.evidence), (scale, t.evidence)
+    assert got == want, (scale, got, want)
+
+
+@pytest.mark.parametrize("scale", [1e307, 1e308])
+def test_the_dense_filter_survives_it_too(scale):
+    ratings, evidence = rate_history(
+        [{"runners": ["a", "b", "c"], "t": 0.0, "p_market": [scale] * 3}])
+    means = np.array([ratings[i][0] for i in ["a", "b", "c"]])
+    assert np.isfinite(means).all(), (scale, means)
+    assert np.isfinite(evidence), (scale, evidence)
+
+
+def test_an_unequal_law_rescales_too():
+    """Not just the symmetric case: the contrasts must be unchanged."""
+    base = [0.5, 0.3, 0.2]
+    ref = AbilityTracker(seed=0)
+    ref.observe(IDS, t=0.0, prices=base)
+    want = [ref.rating(i)[0] for i in IDS]
+    for scale in (1e-200, 1e200, 1e308):
+        t = AbilityTracker(seed=0)
+        t.observe(IDS, t=0.0, prices=[p * scale for p in base])
+        got = [t.rating(i)[0] for i in IDS]
+        assert np.isfinite(got).all(), (scale, got)
+        assert np.allclose(got, want, rtol=1e-9, atol=1e-12), (scale, got, want)

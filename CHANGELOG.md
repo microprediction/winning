@@ -40,6 +40,19 @@
   `observe`, so they inherit the contract. That is the point of fixing
   the door rather than the callers, and there is a test that pins it.
 
+  Those checks look at the ENTRIES, which is not enough (#300). For a
+  market law like `[1e308, 1e308, 1e308]` every entry is finite and the
+  SUM is not: `target / target.sum()` in `abilities_from_race` divided
+  by inf and gave NaN, and both filters then stored NaN means and NaN
+  evidence from input they had just accepted, correctly, as finite.
+  A market law is defined up to a positive factor, so that is the same
+  law as `[1, 1, 1]` and must give the same answer -- it now does, for
+  scales from 1e-300 to 1.7e308.
+
+  The rescale is CONDITIONAL, taken only when the sum overflows, so
+  every ordinary input is bit-identical: 25 random inverses agree with
+  main to 0.000e+00.
+
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is
   decided -- a scalar, a length-n vector, `(n, 1)` and `(1, n)` are the
