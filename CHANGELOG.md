@@ -25,6 +25,234 @@
 
   This is what `docs/converge.html` draws as the Mendell-Elston arm.
 
+- julia's `_race_setup` took the caller's factor nodes and weights
+  verbatim, so an `F` with the wrong number of ROWS was accepted and
+  priced a different quadrature outright -- `[0.646, 0.123, 0.231,
+  0.0005]` where the right answer is `[0.382, 0.301, 0.137, 0.181]` --
+  and an extra weight was silently ignored. The two spellings that did
+  fail failed with a `DimensionMismatch` or a `BoundsError` from
+  somewhere inside, naming nothing the caller passed. This is #290,
+  filed against the browser; julia had its own copy, found by sweeping
+  rather than by a report.
+
+  Every node must now carry exactly the loadings' rank, there must be
+  one finite non-negative weight per node with a positive total, and
+  the weights are normalised -- so `W` and `c*W` are the same law here
+  too, which was already true of julia's forward and is now true by
+  construction rather than by accident.
+
+  Valid inputs are unchanged to 1.1e-16, which is the rounding of
+  dividing an already-normalised `W` by its own sum.
+- The mixed Plackett-Luce likelihood used a FIXED 7-node rule whatever
+  the loadings were (#272). `ranking_loglik_and_score` always called
+  `_factor_nodes`, which at rank one or two is a Gauss-Hermite tensor of
+  order `Qf` -- no dispatch on the loadings, no convergence check, no
+  warning -- while the choice likelihood beside it escalates past a
+  sharpness of 3.
+
+  A length-one ranking is a mixed-logit choice probability, so a
+  rank-one factor has a direct one-dimensional reference integral and
+  the failure is exact rather than a disagreement between two
+  approximations. On a field with a centred loading contrast of 4.8:
+
+  | | before | exact | after |
+  |---|---|---|---|
+  | probability | 0.6927739 | 0.6136638 | rel 9.3e-08 |
+  | utility score | 0.0481050 | 0.0734129 | rel 4.8e-07 |
+  | loading score | 0.0002319 | 0.0204003 | rel 1.4e-06 |
+
+  The loading score was smaller by a factor of **88**. These are
+  derivatives of the TRUE mixed likelihood, so no finite-difference
+  test against the same 7-node rule could see it, and the Monte Carlo
+  test used loadings near one where `Qf=7` and `Qf=21` agree.
+
+  Raising the order does not rescue it -- the integrand is a softmax
+  and Gauss-Hermite is non-monotone on it, giving 0.6928, 0.6374,
+  0.6128, 0.6121, 0.6137 at orders 7, 15, 31, 63, 127 and reaching
+  5.7e-8 only at 255. The low-discrepancy rule the helper already uses
+  past rank two gets 9.3e-8 from 1024 nodes.
+
+  So the rule now dispatches on `sharpness_bound(V / tau)`, measured
+  over 220 random fields:
+
+      sharpness   GH Qf=7    Sobol 2^10
+      [0, 1)      3.9e-05    2.6e-04
+      [1, 2)      1.1e-03    2.4e-03
+      [2, 3)      4.7e-02    2.3e-03    <- Gauss-Hermite collapses here
+      [4, 6)      3.9e-01    1.8e-03
+      [6, 20)     1.15       8.5e-05
+
+  Gauss-Hermite is the better rule below 2 and 146 times cheaper, 7
+  nodes against 1024, so the crossover goes there. The choice
+  likelihood dispatches at 3.0 on a product of Gaussian CDFs; a softmax
+  is a sharper integrand and turns over sooner, which is why the two
+  numbers differ. Twelve smooth fixtures are bit-identical to before.
+
+  `winning.ratings.nway` shares the helper through `_factor_grid` and
+  is deliberately NOT dispatched: its integrand is the Gaussian order
+  likelihood, so the crossover above does not apply to it, and its
+  behaviour is gated by the ratings verifier. That needs its own
+  measurement.
+- Classic state prices summed to 188% at integer boundary offsets
+  (#292), in every port. The field is built with `shifted_cdf`, which
+  goes through `low_high` and PINS any offset at or past `L-2` to the
+  boundary. `implicit_state_prices` then took a fast path for exact
+  integers and called `integer_shift(cdf, k)` with the RAW `k`, whose
+  own clamp is the much wider `+/-(m-1)`. So a runner could sit in the
+  field at offset `L-2` and be PAID at 60:
+
+  | offsets | before | after |
+  |---|---|---|
+  | `[48, -48]` | 0.9999867465 | 0.9999867465 |
+  | `[49, -49]` | **1.0785974955** | 0.9999867465 |
+  | `[49.000001, ...]` | 0.9999867465 | 0.9999867465 |
+  | `[60, -60]` | **1.8835336397** | 0.9999867465 |
+  | `[60.1, -60.1]` | 0.9999867465 | 0.9999867465 |
+
+  An epsilon off the integer moved the total by 0.88, because the
+  non-integer path had been clamped correctly all along -- the prices
+  had stopped being exhaustive claims on one race, and the result
+  depended on whether an offset happened to serialise as an integer.
+
+  Guarding the fast path by the interior condition is exactly
+  equivalent where it applies -- for an interior integer `low_high`
+  returns `(k, 1), (k, 0)`, which is that shift with weight one -- and
+  clamps the boundary integers the way the field already does. Interior
+  results are unchanged.
+
+  **The compiled kernel needs rebuilding.** `rust/winning/src/lib.rs`
+  carries the identical branch and is what `state_prices_from_offsets`
+  dispatches to by default, so with the shipped wheel the totals are
+  still 1.0786 and 1.8835. The one-line guard is applied there too, but
+  this checkout has no cargo and the rust workflow is
+  `workflow_dispatch` only, so that change is NOT compiled or tested by
+  anything here. It needs a build before the next wheel.
+- The MNP tail likelihood went FLAT with a score of exactly zero
+  (#270), in python, R and julia. The conditional log-CDF was
+  `log(max(ndtr(a), 1e-300))`, and `ndtr` underflows to exactly zero
+  below about -37, so every deep tail collapsed to the same number,
+  log(1e-300) = -690.78. The Mills ratio, taken as
+  `exp(logphi - logPhi)`, then underflowed to zero. Together those mean
+  an optimizer declares convergence precisely where an observation is
+  most badly contradicted: it cannot tell a maximum from a floor, and a
+  central difference of the objective is zero there too.
+- The browser's block Jacobian returned an all-`NaN` matrix for
+  supported rank-2 cluster loadings, and said nothing (#271). The
+  FORWARD block kernel prices rank-r loadings; this Jacobian is written
+  for rank one only. It takes each loading row as a NUMBER --
+  `Math.abs(v)` for the quadrature amplitude, `v * a` for the shift --
+  and javascript coerces a one-element array to its number, so an
+  `(n, 1)` column kept working while a rank-2 row went NaN at both. The
+  NaN then reached every cell.
+
+  python's `block_race_jacobian` detects rank > 1 and raises; the
+  browser now matches it rather than inventing a second behaviour.
+  Every Jacobian door here funnels through `blockRaceJacobian` --
+  `nestedRaceJacobian`, the structured `raceJacobian` front door,
+  `abilitiesFromBlockRace` and `polishRace` -- so the one guard covers
+  all of them, and each is checked. The tree grammar already had its
+  own guard with its own message, since only the block grammar prices
+  rank r at all.
+
+  The message points somewhere: the forward still prices the field it
+  refuses to differentiate, so finite differences of
+  `blockRaceProbabilities` remain available, as does the factor grammar
+  when the loadings are global. Distinct from #212 (a finite-grid
+  derivative mismatch for loadings that ARE supported) and #264 (the
+  nested `coupling` rank).
+- Two documents stopped pointing at a deleted tree (#250). Removing the
+  dead `src/` package left `data/README.md` sending readers to
+  `attic/src/winning/benchmarks/`, which went with it, and a research
+  script explaining that `pip install winning` resolves to
+  `attic/src/winning` -- which `setup.py` shows it never did, since it
+  packages the top-level `winning.*` tree and the attic is neither
+  installed nor importable through it. The README now points at
+  `winning/bench/` and `BENCHMARKS.md`, and the script says what the
+  path insertion is actually for: an INSTALLED copy may be an older
+  release or a different checkout, so the repo root goes first.
+
+  The audit the issue suggested is deliberately narrow. A repo-wide
+  "every documented path exists" rule is not worth having here: of 216
+  backticked paths in markdown, 115 do not resolve, and nearly all are
+  URLs, MIME types, external dataset identifiers or paths relative to
+  their own document. The rule is about the tree that just moved -- a
+  path under `attic/` written in BACKTICKS must exist, because backticks
+  mean go and look, while prose about something that used to be there is
+  fine -- plus a check that `setup.py`'s packaged roots still match the
+  claim the script makes about them.
+- A tree's cluster labels mean the same thing on both paths (#146).
+  Labels are arbitrary comparable values, and the forward dispatch says
+  so: every tree and block kernel in `blocks.py` remaps them with
+  `np.unique(..., return_inverse=True)`. `structure_variances`, which the
+  generic inverse uses, cast them to `int` and used them directly as node
+  IDs. So a tree labelled 10/20 priced fine and inverted with "index 10
+  is out of bounds for axis 0 with size 3", and string labels died inside
+  `int()`. Canonical 0/1 labels worked, which is why it survived.
+
+  `Blocks` and `Nested` were already fine -- neither indexes anything by
+  the label -- so this is the tree alone, and the tests record that so a
+  later change cannot quietly break what worked.
+
+  The fixture needed care. A tree whose leaf clusters hang off one parent
+  gives every leaf the same ancestor variance, so relabelling cannot
+  change the answer and the invariance would hold against a broken
+  implementation; my first one was exactly that. These leaves hang at
+  UNEQUAL depth, and the tests show the strengths move the race, and that
+  a different PARTITION is a different race, before any equality is
+  believed.
+- R's `pmvnorm_fast` recycled every per-coordinate argument in silence
+  (#285). R repeats a short vector whenever its length divides `n` and
+  emits no warning, so `D = c(1, 4)` at `n = 4` became `c(1, 4, 1, 4)`
+  and the call returned `[Phi(1)Phi(1/2)]^2 = 0.3384427299701321` -- a
+  perfectly plausible probability for a Gaussian the caller never
+  described. `mean = c(0, 1)` did the same, returning 0.0062928724.
+
+  Sweeping the pattern rather than the reported symptom turned up two
+  more sites. `lower` and `upper` went through `rep_len`, which recycles
+  in exactly the same silence -- `upper = c(0, 1)` at `n = 4` returned
+  0.1769652454 -- and `r/winning`'s `concentration_matrix` recycled
+  `name_caps`, so a length-2 cap vector capped names 3 and 4 with the
+  caps meant for 1 and 2 and returned a well-formed constraint system
+  for a problem nobody posed.
+
+  `.as_len` is now the one place that rule is decided in mvtnormfast,
+  as `winning.shapes.as_idio` is for python: a SCALAR is broadcast on
+  purpose -- that is what the `-Inf`/`Inf` defaults are -- and every
+  other wrong length is refused by name, with the length it got and the
+  dimension it needed. A variance must also be finite and non-negative;
+  a bound may be infinite, a mean may not.
+
+  The python reference validates through `as_idio`/`as_loadings` and
+  julia fails on unequal lengths, so this was the only port guessing.
+
+  The shipped manual said `lower` and `upper` were "recycled to
+  dimension n" (#289). That promise was wrong rather than the check
+  being wrong: `mvtnorm::pmvnorm`, which `pmvnorm_fast` is a drop-in
+  for, REFUSES a length-2 bound at n = 4 --
+
+      'diag(sigma)' and 'lower' are of different length
+
+  -- while broadcasting its scalar `-Inf` default, which is exactly the
+  contract here. The manual now says so.
+  Every documented spelling still agrees: scalar `D`, length-n `D` and
+  the default bounds all return the same number.
+
+- `block_race_jacobian` reads a rank-one loading in every spelling
+  (#145). `winning.shapes.as_loadings` is the one place that rule is
+  decided -- a scalar, a length-n vector, `(n, 1)` and `(1, n)` are the
+  same rank-one loading -- and `block_race_probabilities` went through
+  it while the Jacobian did not. It called `np.asarray` and kept whatever
+  shape it was handed, so the `(n, 1)` spelling reached the kernel as a
+  matrix and died inside an unrelated `np.take` with "input operand has
+  more dimensions than allowed by the axis remapping". Every inverse and
+  polishing path that calls the Jacobian inherited it, so a caller who
+  wrote `v[:, None]` got a forward pass that worked and an inverse that
+  crashed. All four spellings now agree exactly, and rank two is still
+  refused with its own reason.
+
+  The function also had no docstring: a statement sat above the string
+  literal, so python never bound it as `__doc__` and `help()` showed
+  nothing. The guard moved below it.
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
   variance near the double ceiling became `inf` between the check and
@@ -34,36 +262,32 @@
   0.5 is exact, and over 2000 random matrices spanning 400 orders of
   magnitude the two spellings are bit-identical.
 
-  The PSD tolerance had the same shape and a worse consequence:
-  `-1e-8 * max(trace(C) / n, 1e-300)` overflows the trace BEFORE the
-  division, so the tolerance was `-inf` and `lam_min < -inf` is False
-  for every eigenvalue. The check therefore ACCEPTED a matrix whose
-  smallest eigenvalue is -5e307. Dividing before summing keeps it
-  finite, and that matrix is now refused.
+  `log_ndtr` / `pnorm(log.p = TRUE)` / a new julia `logndtr` replace the
+  floor. The objective now falls monotonically -- -669, -1594, -4645,
+  -19271 at gaps of -40, -60, -100, -200 -- and the score rises with the
+  surprise instead of vanishing. julia's `logndtr` uses the cephes
+  `ndtr` in the ordinary range and the `erfcx` continued fraction only
+  past 2.5 sigma, where that fraction has converged; the crossover
+  matters, since taking it at 1 sigma is wrong by 5e-7 relative. It
+  agrees with scipy's `log_ndtr` to 4.5e-16.
 
-  Three more `0.5 * (X + X.T)` in the shipped package take the same
-  spelling, in `ratings/full.py`, `factor/races.py` and
-  `research/laplacian.py`. Not fixed, and a known limit: a field of
-  two or more at 1e308 still overflows further into the fit, where
-  `_center2` sums a column. Reaching that needs the covariance
-  rescaled before fitting rather than one more guarded addition. Up to
-  1e300 a two-runner fit is fine.
+  What this does NOT fix, deliberately: the quadrature underneath. The
+  fixed Gauss-Hermite rule samples the chosen alternative's own noise
+  where the PRIOR has mass, and for a large observed contrast the
+  integrand's mass is far outside it -- at a gap of -20 the mode is at
+  z = 10 and a 7-node rule reaches |z| < 3.8 -- so the likelihood is
+  still 38% from the closed form there and the score 62%. The tests
+  RECORD those numbers rather than pretending otherwise.
 
-  The one-runner return keys off `nrow` alone, so it has to sit BELOW
-  the shape and covariance checks -- a `1 x 2` matrix has `nrow` 1 and
-  would otherwise be answered from `C[1, 1]` with the second column
-  dropped (#277). R had no validation on this path at all: a negative
-  variance was clamped to the floor, and `NA` and `Inf` propagated into
-  the fit, while python refused each one. R now states the same
-  contract in the same order with the same messages -- square, finite,
-  symmetric, positive semidefinite.
-
-  python's squareness was itself only ever caught by accident. A
-  `1 x 2` broadcasts against its own transpose into a `2 x 2`, so the
-  asymmetry check reported "not symmetric" for something that is
-  really not square; a 1-D array passed that check outright and then
-  had `np.diag` build a matrix FROM it. Both ports now say `cov= must
-  be square`.
+  A Laplace-tilted rule fixes it to machine precision; it was written
+  and measured, and is held back. Tilting makes the quadrature depend
+  on the parameters, so the analytic score stops being the gradient of
+  the computed objective, and an end-to-end fit went from 4 s and
+  `converged = true` to 160 s and `converged = false` in julia, 5.7 s to
+  52 s in python -- with the estimates still correct, but the optimizer
+  unable to certify them. Closing that properly needs the tilt's own
+  derivative through the implicit mode condition, and belongs in its own
+  change rather than folded into a floor fix.
 
 - A one-runner field with `cov=` crashes instead of returning `[1]`
   (#273), in python and in R. `race_probabilities([2.0], cov=[[4.0]])`
@@ -702,8 +926,6 @@
   exception on a happy path killed the file, so the run failed with no
   named check and every later check silently went unrun. A new `accepts()`
   helper turns a thrown exception into a named FAIL.
-
-
 
 - The pre-renovation `src/` package is gone, all but the one part still
   used. It had sat since the August renovation: not packaged (`setup.py`

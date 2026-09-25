@@ -476,6 +476,67 @@ accepts("the inverse takes a scalar D, matching python",
           });
 }
 
+// --- the block Jacobian says rank-one, or says so (#271)
+// The FORWARD block kernel prices rank-r cluster loadings. The
+// Jacobian is rank-one only: it takes each loading row as a number,
+// and javascript coerces a ONE-element array to its number, so an
+// (n, 1) column kept working while a rank-2 row went NaN at both the
+// quadrature amplitude and the shift. The NaN reached every cell, so
+// the call returned an all-NaN matrix and said nothing. python's
+// block_race_jacobian raises for exactly this input.
+{
+  const muB = [-0.4, 0.1, 0.2, 0.5];
+  const clB = [0, 0, 1, 1];
+  const DB = [0.7, 0.8, 0.9, 1.0];
+  const rank2 = [[0.5, 0.2], [0.3, -0.4], [-0.2, 0.6], [0.1, 0.5]];
+  const column = [[0.5], [0.3], [-0.2], [0.1]];
+  const flat = [0.5, 0.3, -0.2, 0.1];
+  const want = "rank-one cluster loadings only";
+
+  // every Jacobian door funnels through blockRaceJacobian, so all of
+  // them have to refuse -- that is the point of guarding there
+  rejects(blocks.blockRaceJacobian, [muB, clB, rank2, DB],
+          "block jacobian refuses rank-2 loadings", want);
+  rejects(blocks.nestedRaceJacobian,
+          [muB, clB, rank2, DB, { coupling: [0.2, -0.1, 0.3, 0.0] }],
+          "nested jacobian refuses rank-2 loadings", want);
+  rejects(polish.raceJacobian,
+          [muB, { structure: { kind: "Blocks", cluster: clB, loading: rank2, D: DB } }],
+          "the structured front door refuses rank-2 too", want);
+  rejects(blocks.abilitiesFromBlockRace,
+          [[0.4, 0.25, 0.2, 0.15], clB, rank2, DB],
+          "the block inverse refuses rank-2 too", want);
+
+  // and the message points somewhere: the forward DOES price it
+  accepts("the forward still prices the rank-2 field it refuses to differentiate",
+          () => blocks.blockRaceProbabilities(muB, clB, rank2, DB),
+          p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-9
+                && p2.every(v => v > 0),
+          p2 => `[${p2.map(v => v.toFixed(5))}]`);
+
+  // the rank-one spellings are untouched, INCLUDING the (n, 1) column
+  // that only ever worked by javascript's number coercion
+  accepts("an (n,1) column is the same jacobian as the flat vector",
+          () => [blocks.blockRaceJacobian(muB, clB, column, DB),
+                 blocks.blockRaceJacobian(muB, clB, flat, DB)],
+          ([a, b2]) => JSON.stringify(a) === JSON.stringify(b2));
+  accepts("the rank-one jacobian still follows its forward",
+          () => {
+            const J = blocks.blockRaceJacobian(muB, clB, flat, DB);
+            const h = 1e-5;
+            let worst = 0;
+            for (let j = 0; j < 4; j++) {
+              const a = muB.slice(), c = muB.slice();
+              a[j] += h; c[j] -= h;
+              const pa = blocks.blockRaceProbabilities(a, clB, flat, DB);
+              const pc = blocks.blockRaceProbabilities(c, clB, flat, DB);
+              for (let i = 0; i < 4; i++)
+                worst = Math.max(worst, Math.abs(J[i][j] - (pa[i] - pc[i]) / (2 * h)));
+            }
+            return worst < 1e-6;
+          });
+}
+
 // --- classic calibration: offsetSamples must descend (#274)
 // The interpolation table is built by mapping over offsetSamples and
 // read back with interpClamped, whose xp must ascend -- descending
@@ -569,6 +630,45 @@ accepts("the inverse takes a scalar D, matching python",
           b => Math.max(...b.map((x, i) => Math.abs(x - REF[i]))) < 1e-12,
           b => `max |diff| ${Math.max(...b.map((x, i) =>
             Math.abs(x - REF[i]))).toExponential(2)}`);
+}
+
+// --- state prices stay exhaustive at boundary offsets (#292)
+// statePricesFromOffsets builds the field with shiftedCdf, which goes
+// through lowHigh and PINS any offset at or past L-2 to the boundary.
+// implicitPrices took a fast path for exact integers and called
+// integerShift(baseCdf, k) with the RAW k, whose own clamp is the much
+// wider +/-(m-1). A runner could sit in the field at offset L-2 and be
+// PAID at 60, so the prices summed to 1.8835 -- while an epsilon off
+// the integer gave 0.99999, because the non-integer path had been
+// clamped correctly all along.
+{
+  const dB = classic.skewNormalDensity(50, 0.1);
+  const ORD = 0.9999867465;
+  const total = a => classic.statePricesFromOffsets(dB, [a, -a])
+    .reduce((x, y) => x + y, 0);
+
+  for (const a of [48, 48.5, 49, 49.000001, 50, 60, 60.1, 100, 1000])
+    accepts(`state prices sum to one at offset ${a}`, () => total(a),
+            t => Math.abs(t - ORD) < 5e-9,
+            t => `sum ${t.toFixed(10)}`);
+
+  for (const k of [49, 60, -49, -60])
+    accepts(`offset ${k} is continuous in its neighbourhood`,
+            () => [total(k), total(k - 1e-6), total(k + 1e-6)],
+            ([a, b2, c]) => Math.abs(a - b2) < 5e-9 && Math.abs(a - c) < 5e-9,
+            ([a, b2, c]) => `${a.toFixed(9)} / ${b2.toFixed(9)} / ${c.toFixed(9)}`);
+
+  accepts("past the clamp every offset is the same distribution",
+          () => [classic.statePricesFromOffsets(dB, [60, -60]),
+                 classic.statePricesFromOffsets(dB, [80, -80])],
+          ([a, b2]) => Math.max(...a.map((v, i) => Math.abs(v - b2[i]))) < 1e-15);
+
+  accepts("interior integers are untouched",
+          () => [0, 1, 5, 20, 40, 47, -40].map(k =>
+            classic.statePricesFromOffsets(dB, [k, -k, k / 3])
+              .reduce((x, y) => x + y, 0)),
+          ts => ts.every(t => Math.abs(t - 1) < 1e-3),
+          ts => `worst |sum - 1| ${Math.max(...ts.map(t => Math.abs(t - 1))).toExponential(2)}`);
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
