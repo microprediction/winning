@@ -55,7 +55,7 @@ def _psd_repair(S, floor_frac=1e-8):
             "non-finite entries in a belief covariance; the update that "
             "produced it overflowed (typically a near-impossible "
             "observation under a very diffuse prior)")
-    S = 0.5 * (S + S.T)
+    S = 0.5 * S + 0.5 * S.T        # halved first: see #279
     lam, U = np.linalg.eigh(S)
     floor = floor_frac * max(float(np.trace(S)) / len(S), 1e-12)
     return (U * np.maximum(lam, floor)) @ U.T
@@ -211,7 +211,7 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
         gp, _ = mixture(mu_obs + ej)
         gm, _ = mixture(mu_obs - ej)
         H[j] = (gp - gm) / (2 * steps[j])
-    H = 0.5 * (H + H.T)
+    H = 0.5 * H + 0.5 * H.T        # halved first: see #279
     SAt = S @ A.T
     S_new = _psd_repair(S + SAt @ H @ SAt.T)
     return m_new, S_new, float(logZ)
