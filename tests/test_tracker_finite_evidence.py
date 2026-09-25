@@ -90,3 +90,64 @@ def test_ordinary_evidence_is_untouched():
     v = np.array([t.rating(i)[1] for i in IDS])
     assert np.isfinite(m).all() and np.isfinite(v).all() and (v > 0).all()
     assert np.abs(m).max() > 0.0
+
+
+# --- the dense filter has the same hole, and the same fix -------------
+#
+# rate_history does not carry state ACROSS calls the way the tracker
+# does, but it carries it across the history it is given: one
+# non-finite margin made every entity's mean and covariance NaN for the
+# rest of that history, silently. Both walk_forward variants route
+# their evidence through these two doors, so they inherit the contract
+# rather than needing their own.
+
+from winning.ratings.history import rate_history, walk_forward  # noqa: E402
+from winning.ratings.tracker import walk_forward as tracker_walk_forward  # noqa: E402
+
+
+def _races(n=4):
+    return [{"runners": ["a", "b", "c"], "t": float(i),
+             "margins": [0.0, 1.0, 2.0]} for i in range(n)]
+
+
+@pytest.mark.parametrize("key", ["margins", "scores", "p_market"])
+@pytest.mark.parametrize("bad", [np.nan, np.inf])
+def test_the_dense_filter_refuses_non_finite_evidence(key, bad):
+    races = _races()
+    races[2] = {"runners": ["a", "b", "c"], "t": 2.0, key: [0.5, bad, 0.2]}
+    with pytest.raises(ValueError, match="not finite"):
+        rate_history(races)
+
+
+def test_the_dense_filter_names_the_argument_and_the_race_length():
+    races = _races()
+    races[2] = {"runners": ["a", "b", "c"], "t": 2.0, "margins": [0.0, 1.0]}
+    with pytest.raises(ValueError, match="one entry per runner"):
+        rate_history(races)
+
+
+def test_a_clean_history_is_unaffected():
+    out = rate_history(_races())
+    arr = out[0] if isinstance(out, tuple) else out
+    vals = list(arr.values()) if isinstance(arr, dict) else list(arr)
+    flat = np.array([float(x) for v in vals
+                     for x in (v if np.ndim(v) else [v])], dtype=float)
+    assert np.isfinite(flat).all()
+
+
+def test_both_walk_forwards_inherit_the_contract():
+    """Neither needs its own check: one routes through rate_history and
+    the other through observe, which is the point of fixing the door."""
+    dense_bad = _races(5)
+    dense_bad[3] = {"runners": ["a", "b", "c"], "t": 3.0,
+                    "margins": [0.0, np.nan, 2.0]}
+    with pytest.raises(ValueError, match="not finite"):
+        walk_forward(dense_bad, warmup=1)
+
+    trk = [{"runners": ["a", "b", "c"], "t": float(i),
+            "scores": [0.0, 1.0, 2.0], "winner": 0} for i in range(6)]
+    assert tracker_walk_forward(trk, warmup=1)["n_scored"] == 5
+    trk[4] = {"runners": ["a", "b", "c"], "t": 4.0,
+              "scores": [0.0, np.nan, 2.0], "winner": 0}
+    with pytest.raises(ValueError, match="not finite"):
+        tracker_walk_forward(trk, warmup=1)

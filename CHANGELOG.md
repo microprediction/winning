@@ -28,6 +28,18 @@
   and after are identical objects -- so a caller who catches it can
   carry on with the next contest.
 
+  The DENSE filter had the same hole. `rate_history` does not carry
+  state across calls the way the tracker does, but it carries it across
+  the history it is given: one non-finite `margins`, `scores` or
+  `p_market` entry made every entity's mean and covariance NaN for the
+  rest of that history. Both are now checked in the per-race loop, with
+  the same two messages.
+
+  Neither `walk_forward` needs its own check: the dense one routes
+  every race through `rate_history` and the tracker's through
+  `observe`, so they inherit the contract. That is the point of fixing
+  the door rather than the callers, and there is a test that pins it.
+
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is
   decided -- a scalar, a length-n vector, `(n, 1)` and `(1, n)` are the
