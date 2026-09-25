@@ -528,5 +528,52 @@ accepts("the inverse takes a scalar D, matching python",
           a => `[${a.map(v => v.toFixed(4))}]`);
 }
 
+// --- caller-supplied factor nodes carry the loadings' rank (#290)
+// condMeans dotted each node row against the loadings over the ROW's
+// own length, so the rank was whatever each row happened to be: a
+// uniformly short F priced a LOWER-RANK model, a ragged F priced a
+// different rank at each quadrature node, extra weights were ignored
+// and too few produced NaN -- all of it finite and normalised.
+{
+  const muF = [-0.6, -0.2, 0.15, 0.7];
+  const VF = [[1.2, -0.7], [-0.4, 1.1], [0.6, 0.9], [-1.0, -0.5]];
+  const DF = [0.5, 0.8, 0.6, 0.9];
+  const FF = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+  const WF = [0.25, 0.25, 0.25, 0.25];
+  const fwd = o => races.raceProbabilities(muF, { V: VF, D: DF, ...o });
+
+  rejects(fwd, [{ F: FF.map(r => [r[0]]), W: WF }],
+          "forward refuses a uniformly short F", "rank 2");
+  rejects(fwd, [{ F: [[-1, -1], [-1], [1, -1], [1, 1]], W: WF }],
+          "forward refuses a ragged F", "coordinate");
+  rejects(fwd, [{ F: FF, W: [...WF, 0.9] }],
+          "forward refuses too many weights", "one weight per factor node");
+  rejects(fwd, [{ F: FF, W: WF.slice(0, 3) }],
+          "forward refuses too few weights", "one weight per factor node");
+  rejects(fwd, [{ F: [], W: [] }], "forward refuses an empty F", "empty");
+  rejects(fwd, [{ F: FF, W: [0.25, -0.25, 0.5, 0.5] }],
+          "forward refuses a negative weight", "negative weight");
+
+  // the jacobian door and the inverse share the contract
+  rejects(polish.raceJacobian,
+          [muF, { V: VF, D: DF, F: [[-1, -1], [-1], [1, -1], [1, 1]], W: WF }],
+          "the jacobian refuses a ragged F too", "coordinate");
+  rejects(races.abilitiesFromRace,
+          [[0.4, 0.3, 0.2, 0.1], { V: VF, D: DF, F: FF, W: [0.5, 0.5] }],
+          "the inverse refuses mismatched weights", "one weight per factor node");
+
+  // and the spellings that ARE the same race agree
+  const base = accepts("explicit nodes still price",
+                       () => fwd({ F: FF, W: WF }),
+                       p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-12,
+                       p2 => `[${p2.map(v => v.toFixed(5))}]`);
+  accepts("W and c*W are the same law",
+          () => fwd({ F: FF, W: WF.map(w => 10 * w) }),
+          p2 => base && Math.max(...p2.map((v, i) => Math.abs(v - base[i]))) < 1e-15);
+  accepts("the internally built nodes are unaffected",
+          () => fwd({}),
+          p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-12);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

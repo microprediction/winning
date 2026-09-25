@@ -162,6 +162,70 @@ export function interpClamped(x, xp, fp) {
   return fp[lo] + (x - xp[lo]) / d * (fp[lo + 1] - fp[lo]);
 }
 
+/* Caller-supplied factor nodes and their weights.
+
+   `condMeans` dotted each node row against the loadings over the ROW's
+   own length, so the rank was whatever each row happened to be. A
+   uniformly short F silently priced a LOWER-RANK model (0.46444 where
+   the rank-2 answer is 0.38173); a ragged F applied a different rank at
+   different quadrature nodes and still returned finite, normalised
+   probabilities; extra weights were ignored and too few produced NaN
+   (#290). python refuses all of these -- `np.asarray(F, float)` will
+   not build an array from ragged rows, and a wrong rank fails the
+   matmul against V -- so this is the browser guessing alone.
+
+   Distinct from #232 (the shape of V) and #281 (weight SCALE in the
+   standalone js/factor module). */
+export function asFactorNodes(F, rank, where = "F") {
+  if (!Array.isArray(F))
+    throw new Error(`${where} must be an array of factor nodes; got ${typeof F}`);
+  if (F.length === 0)
+    throw new Error(`${where} is empty; there are no quadrature nodes`);
+  const out = new Array(F.length);
+  for (let q = 0; q < F.length; q++) {
+    const row = Array.isArray(F[q]) ? F[q]
+      : (typeof F[q] === "number" ? [F[q]] : null);
+    if (row === null)
+      throw new Error(`${where}[${q}] must be a node of ${rank} coordinate(s)`);
+    if (row.length !== rank)
+      throw new Error(
+        `${where}[${q}] has ${row.length} coordinate(s) but the loadings ` +
+        `have rank ${rank}; a short node prices a lower-rank model and a ` +
+        `ragged one prices a different rank at each node`);
+    for (let c = 0; c < rank; c++) {
+      if (!Number.isFinite(row[c]))
+        throw new Error(`${where}[${q}][${c}] = ${row[c]} is not finite`);
+    }
+    out[q] = Array.from(row, Number);
+  }
+  return out;
+}
+
+/* One weight per node, normalised -- python's `as_weights` at the same
+   door. The forward normalises its shares so a rescaling cancels there,
+   but the spelling should not matter anywhere, and a mismatched length
+   must not reach the kernel. */
+export function asNodeWeights(W, nNodes, where = "W") {
+  if (!Array.isArray(W) && !ArrayBuffer.isView(W))
+    throw new Error(`${where} must be an array of node weights; got ${typeof W}`);
+  if (W.length !== nNodes)
+    throw new Error(
+      `${where} must have one weight per factor node; got ${W.length} ` +
+      `for ${nNodes} nodes`);
+  let total = 0;
+  for (let q = 0; q < W.length; q++) {
+    const v = Number(W[q]);
+    if (!Number.isFinite(v))
+      throw new Error(`${where}[${q}] = ${W[q]} is not a finite weight`);
+    if (v < 0)
+      throw new Error(`${where}[${q}] = ${v} is a negative weight`);
+    total += v;
+  }
+  if (!(total > 0))
+    throw new Error(`${where} must have a positive total; got ${total}`);
+  return Array.from(W, v => Number(v) / total);
+}
+
 /* ---- options-object guards ---------------------------------------- *
  * A javascript object silently swallows a key nobody reads, so an API
  * whose options are an object cannot rely on the language to reject a

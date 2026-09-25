@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- Browser factor APIs accepted a ragged `F` and a mismatched `W`
+  without a word (#290). `condMeans` dotted each node row against the
+  loadings over the ROW's own length, so the rank was whatever each row
+  happened to be:
+
+  | input | before | now |
+  |---|---|---|
+  | uniformly short `F` | priced a LOWER-RANK model, 0.46444 where the rank-2 answer is 0.38173 | refused |
+  | ragged `F` | a different rank at each quadrature node, still finite and normalised | refused, naming the node |
+  | extra weights | silently ignored | refused |
+  | too few weights | `NaN` | refused |
+
+  `asFactorNodes` and `asNodeWeights` are now the one place those rules
+  are decided, beside `asLoadings` and `asIdio`. Every node carries
+  exactly the loadings' rank, there is one finite non-negative weight
+  per node, and the weights are normalised -- so `W` and `c*W` are the
+  same law here too, as python's `as_weights` makes them.
+
+  The same contract covers `raceJacobianExplicit`, which repeated the
+  row-length loop, so `raceJacobian`, `polishRace` and
+  `abilitiesFromRace` no longer differentiate or invert a different-rank
+  model than the forward prices.
+
+  python refuses all of these already -- `np.asarray(F, float)` will not
+  build an array from ragged rows and a wrong rank fails the matmul
+  against V -- so this was the browser guessing alone. Distinct from
+  #232 (the shape of V) and #281 (weight SCALE in the standalone
+  `js/factor` module).
+
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
   variance near the double ceiling became `inf` between the check and
