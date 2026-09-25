@@ -263,5 +263,30 @@ accepts("polishRace takes a caller factor law and honours it",
                  Math.max(...re.map((v, i) => Math.abs(v - res.p[i]))) < 1e-8;
         });
 
+// --- dividends that are not ordinary positive numbers (#242)
+// Only a MISSING quote becomes nanValue. The browser used
+// `Number.isFinite(x) ? x : nanValue`, conflating every non-finite value
+// with a missing one, and divided unconditionally: an infinite-dividend
+// entrant took 1/2000 of the book instead of nothing, a dividend of 0
+// gave NaN, and a NEGATIVE dividend gave a negative "probability". The
+// expected rows below are python's StatePricer.prices_from_dividends.
+for (const [label, d, want] of [
+  ["+Infinity is worthless", [2, 4, Infinity], [2 / 3, 1 / 3, 0]],
+  ["zero is worthless", [2, 4, 0], [2 / 3, 1 / 3, 0]],
+  ["negative is worthless", [2, 4, -5], [2 / 3, 1 / 3, 0]],
+  ["-Infinity is worthless", [2, 4, -Infinity], [2 / 3, 1 / 3, 0]],
+  ["an all-infinite book is zeros, not 0/0", [Infinity, Infinity], [0, 0]],
+  ["a MISSING quote still takes nanValue", [2, 4, NaN],
+   [0.6662225183211193, 0.33311125916055967, 0.0006662225183211193]],
+  ["null is missing too", [2, 4, null],
+   [0.6662225183211193, 0.33311125916055967, 0.0006662225183211193]],
+]) {
+  accepts(`dividends: ${label}`,
+          () => classic.pricesFromDividends(d),
+          p => p.every(Number.isFinite) && p.every(v => v >= 0) &&
+               Math.max(...p.map((v, i) => Math.abs(v - want[i]))) < 1e-12,
+          p => `[${p.map(v => v.toFixed(6))}]`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

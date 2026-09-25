@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- A worthless dividend prices at zero, in the browser AND in R (#242).
+  `prices_from_dividends` maps only a MISSING quote to `nan_value`. The
+  browser used `Number.isFinite(x) ? x : nanValue`, which conflates every
+  non-finite value with a missing one, and both ports divided by the
+  dividend unconditionally. So an infinite-dividend entrant took
+  `1/2000` of the book instead of nothing, a dividend of `0` produced
+  `Infinity` and then `NaN` after normalising, and a NEGATIVE dividend
+  came back as a negative probability.
+
+  The issue reported the browser. R shares two of the three: only the
+  `Inf` case was right there, because `1/Inf` is 0 on its own. Both now
+  follow python exactly -- a non-positive dividend (and `-Inf` with it)
+  prices at 0, `+Inf` prices at 0, a missing quote still takes
+  `nan_value`, and the book is normalised only when its total is
+  positive, so an all-infinite book is zeros rather than `0/0`.
+
+  | dividends | was (browser) | was (R) | now, all three |
+  |---|---|---|---|
+  | `[2, 4, Inf]` | 0.666, 0.333, 0.00067 | correct | 2/3, 1/3, 0 |
+  | `[2, 4, 0]` | 0, 0, NaN | 0, 0, NaN | 2/3, 1/3, 0 |
+  | `[2, 4, -5]` | 0.909, 0.455, **-0.364** | same | 2/3, 1/3, 0 |
+  | `[Inf, Inf]` | 0.5, 0.5 | NaN, NaN | 0, 0 |
+
 - The browser differentiates and polishes the factor law it was GIVEN
   (#209). `raceProbabilities` has always accepted caller-supplied factor
   nodes and weights, `{V, D, F, W}`. `raceJacobian` and `polishRace`
