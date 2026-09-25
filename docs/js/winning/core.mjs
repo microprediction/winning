@@ -194,3 +194,115 @@ export const OPT_HINTS = {
        "call -- or use the python package, whose race_probabilities(cov=) " +
        "also routes a degraded fit to GHK.",
 };
+
+/* ---- the loading-shape contract ------------------------------------ *
+ * `V` means factor loadings in every public verb and is an (n, rank)
+ * matrix, one ROW per contestant. This is the one place that rule is
+ * decided, mirroring winning/shapes.py::as_loadings: a scalar, a
+ * length-n vector, (n, rank) and (rank, n) are the same race, and
+ * anything else raises rather than reaching the kernel.
+ *
+ * The browser used to index V directly and take the rank from
+ * V[0].length, so a length-n vector threw an obscure `V[i].reduce is not
+ * a function` and a RAGGED V was silently truncated to the first row's
+ * width, producing an all-NaN answer with no complaint (#232).
+ */
+/* Idiosyncratic VARIANCES as the length-n vector the kernels contract
+ * for, mirroring winning/shapes.py::as_idio. A scalar is the same
+ * variance for every contestant; a wrong length, a non-finite entry or a
+ * negative variance raises here rather than reaching the lattice.
+ *
+ * The browser normalised V and left D alone, so a scalar threw
+ * `D.slice is not a function`, and -- the dangerous one -- a D with ONE
+ * EXTRA entry was accepted and returned a normalised, plausible,
+ * materially wrong answer: [0.888, 0.102, 0.010] where the race is
+ * [0.507, 0.312, 0.181]. Short, zero, negative and NaN entries all
+ * propagated NaN through forward and inverse alike (#254).
+ *
+ * `positive` is for the lattice kernels, which cannot represent an
+ * exact zero variance.
+ */
+export function asIdio(D, n, where = "D", positive = true) {
+  if (D == null) return new Array(n).fill(1);
+  let v;
+  if (typeof D === "number") {
+    v = new Array(n).fill(D);
+  } else if (Array.isArray(D)) {
+    if (D.length !== n)
+      throw new Error(
+        `${where} must be one idiosyncratic variance per contestant; ` +
+        `got ${D.length} for ${n}`);
+    v = D.slice();
+  } else {
+    throw new Error(`${where}: expected a number or array`);
+  }
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(v[i]))
+      throw new Error(`${where} has a non-finite entry at ${i}`);
+    if (v[i] < 0)
+      throw new Error(
+        `${where}[${i}] = ${v[i]} is a negative variance`);
+    if (positive && v[i] === 0)
+      throw new Error(
+        `${where} must be strictly positive here: entry ${i} is zero, ` +
+        "which the lattice cannot represent");
+  }
+  return v;
+}
+
+export function asLoadings(V, n, where = "V") {
+  if (V == null) return null;
+  if (typeof V === "number") {
+    if (!Number.isFinite(V)) throw new Error(`${where}: not a finite number`);
+    return Array.from({ length: n }, () => [V]);        // scalar: rank 1
+  }
+  if (!Array.isArray(V)) throw new Error(`${where}: expected a number or array`);
+  if (V.length === 0) throw new Error(`${where}: empty`);
+  if (!Array.isArray(V[0])) {                            // a flat vector
+    if (V.length !== n)
+      throw new Error(
+        `${where}: a flat vector must have one entry per contestant; ` +
+        `got ${V.length} for ${n}`);
+    if (!V.every(Number.isFinite)) throw new Error(`${where}: non-finite entry`);
+    return V.map(v => [v]);
+  }
+  const widths = new Set(V.map(r => (Array.isArray(r) ? r.length : -1)));
+  if (widths.has(-1))
+    throw new Error(`${where}: mixed rows and scalars`);
+  if (widths.size !== 1)
+    throw new Error(
+      `${where}: ragged -- rows have widths ` +
+      `${[...widths].sort((a, b) => a - b).join(", ")}; every contestant ` +
+      "needs the same number of factors");
+  const w = [...widths][0];
+  if (w === 0) throw new Error(`${where}: rows are empty`);
+  let M = V;
+  if (V.length !== n) {
+    if (w !== n)
+      throw new Error(
+        `${where}: shape ${V.length}x${w} matches neither (n, rank) nor ` +
+        `(rank, n) for n = ${n}`);
+    M = Array.from({ length: n }, (_, i) => V.map(row => row[i]));  // (rank,n)
+  }
+  if (!M.every(r => r.every(Number.isFinite)))
+    throw new Error(`${where}: non-finite entry`);
+  return M;
+}
+
+/* First d primes, generated. Literal tables put silent cliffs in the
+ * Halton constructions: 16 in demo.mjs and 24 here, past which
+ * `primes[dim]` is undefined, the radical inverse becomes NaN, and the
+ * whole probability vector comes back NaN (#233). The same tabulated
+ * cliff was in the R GHK at 30 (#190). */
+export function firstPrimes(d) {
+  const out = [];
+  for (let c = 2; out.length < d; c++) {
+    let isP = true;
+    for (const q of out) {
+      if (q * q > c) break;
+      if (c % q === 0) { isP = false; break; }
+    }
+    if (isP) out.push(c);
+  }
+  return out;
+}

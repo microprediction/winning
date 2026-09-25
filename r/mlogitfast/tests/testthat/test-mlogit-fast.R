@@ -1,5 +1,8 @@
-source(file.path("..", "..", "R", "mlogit_fast.R"))
-
+# Run by R CMD check through tests/testthat.R, so the package is
+# already attached and its internals are in scope. These files used
+# to source(file.path("..", "..", "R", ...)) instead, which only
+# works from the repo and fails inside a check -- which is how they
+# went unrun (#142).
 test_that("nll is finite and decreases from start on a synthetic problem", {
   set.seed(3)
   J <- 3; Tn <- 400; r <- 2
