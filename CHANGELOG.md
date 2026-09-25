@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- A top-k depth is a count, so it is an integer -- and a fractional one
+  was silently floored, in all three ports. Every guard truncated
+  FIRST (`int(k)`, `Math.trunc(k)`, `as.integer(k)`) and then
+  range-checked the truncated value, so `k = 0`, `k = n` and `k > n`
+  were all refused and only the non-integer slipped through:
+
+      top_k_probabilities(mu, 1.5)  ->  the top-1 curve, mass 1
+      top_k_probabilities(mu, 2.5)  ->  the top-2 curve, mass 2
+
+  The caller asked for a curve that does not exist and got a different
+  one, with no warning -- and the mass they can check is 1 or 2, not
+  the 1.5 or 2.5 they asked about, so nothing downstream reveals it
+  either. The neighbouring depths are genuinely different curves, so
+  there was nothing odd-looking to notice. The existing message, "k
+  must be in [1, n-1]", is the one sentence that reads as permitting
+  1.5.
+
+  `_as_depth` / `asDepth` / `.as_depth` is now the one place the rule
+  is decided in each port, and it covers every door: the eleven
+  single-depth entry points and the `loc_scale_from_topk_pair` pair,
+  which checks `k1` and `k2` separately and by name. A float that IS
+  whole -- `2.0`, or a numpy integer -- is still a depth of two.
+
+  This was a shared gap rather than a divergence: all three ports had
+  it identically, found by probing the doors rather than from a report.
 - julia's `_race_setup` took the caller's factor nodes and weights
   verbatim, so an `F` with the wrong number of ROWS was accepted and
   priced a different quadrature outright -- `[0.646, 0.123, 0.231,

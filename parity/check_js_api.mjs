@@ -589,6 +589,50 @@ accepts("the inverse takes a scalar D, matching python",
           a => `[${a.map(v => v.toFixed(4))}]`);
 }
 
+// --- a top-k depth is a count, so it is an integer (#272's neighbour)
+// Every guard truncated first -- Math.trunc(k) here, int(k) in python,
+// as.integer in R -- and then range-checked the TRUNCATED value. So
+// k=0, k=n and k>n were all refused and only a non-integer slipped
+// through, silently floored: topKProbabilities(mu, 1.5) returned the
+// top-1 curve with mass 1. The caller asked for a curve that does not
+// exist and got a different one, and the mass they can check is 1, not
+// the 1.5 they asked about.
+{
+  const muK = [-0.4, 0.1, 0.2, 0.5];
+  const DK = [0.7, 0.8, 0.9, 1.0];
+  const tkp = (k) => topk.topKProbabilities(muK, k, { D: DK });
+
+  for (const k of [1, 2, 3])
+    accepts(`topK depth ${k} prices`, () => tkp(k),
+            p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - k) < 1e-9,
+            p2 => `mass ${p2.reduce((a, b) => a + b, 0).toFixed(6)}`);
+
+  for (const k of [1.5, 2.5, 0.5, 2.0001])
+    rejects(tkp, [k], `topK refuses the fractional depth ${k}`,
+            "whole number of places");
+  for (const k of [0, 4, 5, -1])
+    rejects(tkp, [k], `topK refuses the depth ${k}`, "[1, n-1]");
+
+  // the two depths around 1.5 are genuinely different curves, which is
+  // why flooring it left nothing odd-looking to notice
+  accepts("the neighbouring depths differ",
+          () => [tkp(1), tkp(2)],
+          ([a, b2]) => Math.max(...a.map((v, i) => Math.abs(v - b2[i]))) > 0.1);
+
+  // the pair door checks BOTH depths
+  {
+    const q1 = tkp(1), q2 = tkp(2);
+    const pair = (a, b2) => topk.locScaleFromTopkPair(q1, a, q2, b2);
+    accepts("the pair door takes whole depths", () => pair(1, 2),
+            r => r && (r.mu || r.sd || Array.isArray(r)));
+    rejects(pair, [1.5, 2], "the pair door refuses a fractional k1",
+            "k1 must be a whole number");
+    rejects(pair, [1, 2.5], "the pair door refuses a fractional k2",
+            "k2 must be a whole number");
+    rejects(pair, [1, 1], "the pair door still refuses k1 == k2", "k1 == k2");
+  }
+}
+
 // --- state prices stay exhaustive at boundary offsets (#292)
 // statePricesFromOffsets builds the field with shiftedCdf, which goes
 // through lowHigh and PINS any offset at or past L-2 to the boundary.
