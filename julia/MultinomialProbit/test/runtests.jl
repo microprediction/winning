@@ -191,6 +191,51 @@ end
     @test occursin("choice[4]", err)
 end
 
+# --- new data must carry the fitted design (#195) ----------------------
+#
+# predict_proba decided whether to prepend generated intercept columns
+# from the COLUMN COUNT alone, and the model recorded neither whether it
+# had generated them nor how many covariates the caller supplied. New
+# data with the wrong number of features were therefore silently
+# REINTERPRETED: a model fitted on two covariates without intercepts,
+# handed one covariate, prepended two synthetic intercept columns and
+# then used only the first p of the three -- applying coefficients
+# fitted to the covariates to the intercepts, ignoring the supplied
+# feature, and returning a plausible probability row.
+@testset "predict_proba checks the design" begin
+    X = zeros(2, 3, 2)
+    m = MNProbit(X, [1, 2]; intercepts = false, r = 1)
+    m.beta .= [0.7, -0.4]
+    @test m.p_raw == 2
+    @test m.intercepts == false
+
+    # one covariate where two were fitted: used to return a probability row
+    @test_throws DimensionMismatch predict_proba(
+        m; X = reshape([1.0, 2.0, 3.0], 1, 3, 1))
+    # three where two were fitted
+    @test_throws DimensionMismatch predict_proba(m; X = randn(1, 3, 3))
+    # the wrong number of ALTERNATIVES
+    @test_throws DimensionMismatch predict_proba(m; X = randn(1, 2, 2))
+
+    # the right design still works, and is a distribution
+    P = predict_proba(m; X = reshape(collect(1.0:6.0), 1, 3, 2))
+    @test size(P) == (1, 3)
+    @test all(P .>= 0)
+    @test abs(sum(P) - 1) < 1e-10
+
+    # a model WITH generated intercepts takes either spelling
+    Xi = randn(6, 3, 2)
+    mi = MNProbit(Xi, [1, 2, 3, 1, 2, 3]; intercepts = true, r = 1)
+    @test mi.intercepts && mi.p_raw == 2 && mi.p == 2 + (3 - 1)
+    for nc in (mi.p_raw, mi.p)
+        Q = predict_proba(mi; X = randn(4, 3, nc))
+        @test size(Q) == (4, 3)
+        @test maximum(abs.(sum(Q; dims = 2) .- 1)) < 1e-10
+    end
+    # and nothing in between
+    @test_throws DimensionMismatch predict_proba(mi; X = randn(4, 3, 3))
+end
+
 println("all MultinomialProbit tests passed")
 
 @testset "inference: vcov, stderror, per-observation scores" begin

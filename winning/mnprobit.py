@@ -55,6 +55,13 @@ class MNProbit:
             X = np.concatenate([Z, X], axis=2)
         self.X = X
         self.p = X.shape[2]
+        # Whether the constructor GENERATED the alternative intercept
+        # columns, and how many covariates the caller supplied. Without
+        # them predict_proba could only guess from the column count, and
+        # the guess is wrong exactly when wrong_width + (J - 1) happens
+        # to equal p (#261; the julia port had the same defect, #195).
+        self.intercepts = bool(intercepts)
+        self.p_raw = int(p)
         self.pos = _fill_positions(self.J, self.r)
 
     def _unpack(self, theta):
@@ -138,11 +145,41 @@ class MNProbit:
         """Choice probabilities per observation, by per-alternative
         conditional-product integrals under the fitted parameters."""
         X = self.X if X is None else np.asarray(X, dtype=float)
-        if X.shape[2] != self.p:
-            Z = np.zeros((X.shape[0], self.J, self.J - 1))
-            for j in range(1, self.J):
-                Z[:, j, j - 1] = 1.0
-            X = np.concatenate([Z, X], axis=2)
+        if X is not self.X:
+            # New data must carry the design the model was FITTED on.
+            # This guessed whether to prepend generated intercept columns
+            # from the COLUMN COUNT alone, so new data with the wrong
+            # number of features were silently REINTERPRETED rather than
+            # refused -- and the guess is wrong exactly when the wrong
+            # width plus J-1 generated columns equals the fitted width.
+            # Three covariates fitted without intercepts, handed ONE,
+            # gained two synthetic intercepts and returned a plausible
+            # probability row (#261).
+            if X.ndim != 3:
+                raise ValueError(
+                    f"X must be (observations, alternatives, covariates); "
+                    f"got {X.ndim} dimensions")
+            if X.shape[1] != self.J:
+                raise ValueError(
+                    f"X has {X.shape[1]} alternatives; the model was "
+                    f"fitted on {self.J}")
+            nc = X.shape[2]
+            if nc == self.p:
+                pass                      # already the fitted design
+            elif self.intercepts and nc == self.p_raw:
+                Z = np.zeros((X.shape[0], self.J, self.J - 1))
+                for j in range(1, self.J):
+                    Z[:, j, j - 1] = 1.0
+                X = np.concatenate([Z, X], axis=2)
+            else:
+                want = (f"{self.p_raw} or {self.p}" if self.intercepts
+                        else f"{self.p}")
+                raise ValueError(
+                    f"X has {nc} covariate columns; this model was fitted "
+                    f"on {self.p_raw} covariates"
+                    + (" plus generated intercepts" if self.intercepts
+                       else " and no generated intercepts")
+                    + f", so pass {want}")
         mu = X @ self.params_
         T, J = mu.shape
         P = np.empty((T, J))
