@@ -62,3 +62,20 @@ end
     @test !isapprox(race_probabilities(mu; V = [0.5, 0.3, -0.2, 0.1],
                                        D = ones(4)), want)
 end
+
+@testset "node-rule counts" begin
+    mu = [0.0, 0.3, -0.2, 0.5]
+    # k = 0 is the EMPTY PRODUCT: one node of weight 1, no columns. julia
+    # already fell through to it; python returned the rank-1 rule and R
+    # raised, so pin it here before it drifts back
+    h0 = hermite_nodes(0, 5)
+    @test size(h0.F) == (1, 0)
+    @test h0.W ≈ [1.0]
+    @test size(hermite_nodes(1, 5).F) == (5, 1)
+    # and it prices the independent race through the factor path
+    @test race_probabilities(mu; V = zeros(4, 0), D = ones(4)) ≈
+          race_probabilities(mu; D = ones(4))
+    @test_throws ArgumentError hermite_nodes(-1, 5)
+    @test_throws ArgumentError hermite_nodes(1, 0)
+    @test_throws ArgumentError hermite_nodes(1, -3)
+end

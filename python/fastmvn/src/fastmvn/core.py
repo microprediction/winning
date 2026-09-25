@@ -46,6 +46,13 @@ def _halton_unit(r, n):
 
 
 def _gh_nodes(r, Q):
+    # r = 0 is the EMPTY PRODUCT: one node of weight 1 with no columns,
+    # so an (n, 0) loading matrix -- which the shape normalizer accepts
+    # as "empty = indep" -- reduces exactly to the independent product.
+    # np.meshgrid() of nothing gave "need at least one array to
+    # concatenate" from inside numpy instead (#68).
+    if r == 0:
+        return np.zeros((1, 0)), np.ones(1)
     x, w = hermegauss(Q)
     w = w / w.sum()
     grids = np.meshgrid(*([x] * r), indexing="ij")

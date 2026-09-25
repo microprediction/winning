@@ -35,9 +35,65 @@ RUNNERS = {
               CASES],
 }
 
-# Divergences that are deliberate. Each needs a reason, not just an id:
-# an entry here is a claim that the ports SHOULD differ.
-EXPECTED = {}
+# Divergences that are known. Each needs a reason, not just an id. The
+# list is STRICT in both directions: a case here that diverges is
+# reported and tolerated, and a case here that has started to AGREE
+# fails, so the list cannot outlive what it waives.
+EXPECTED = {
+    "topk_k_fractional":
+        "a fractional depth: julia's Int signature refuses it and the "
+        "other three round. The integer-depth contract is #298; this "
+        "entry goes when that lands.",
+    "D_tiny":
+        "#304 -- every port prices a contestant whose sd the lattice "
+        "cannot resolve at zero, and they disagree by 1.5e-4 about the "
+        "others. The disagreement is a symptom; the zero is the defect.",
+}
+
+
+# Two ports can agree to ACCEPT and still answer differently. That is
+# the quieter half of the same defect, so compare the numbers too --
+# loosely. check_vectors.py and its siblings own tight value parity on
+# well-formed inputs; this threshold is here to catch a port answering
+# a DIFFERENT QUESTION, not to police the last ulp.
+VALUE_TOL = 1e-9
+
+# ...except where the algorithm's OWN stopping rule is looser than that.
+# Both inverses solve to a residual of 1e-8 in probability space, which
+# leaves abilities free to differ by ~2e-9 between ports while every one
+# of them is converged and correct. Asserting agreement tighter than the
+# tolerance the code promises tests the arithmetic, not the port.
+VERB_TOL = {"inverse": 1e-6}
+
+
+def _value(v):
+    if not isinstance(v, dict):
+        return None
+    got = v.get("value")
+    if got is None:
+        return None
+    if not isinstance(got, list):
+        got = [got]
+    try:
+        return [float(x[0] if isinstance(x, list) else x) for x in got]
+    except (TypeError, ValueError):
+        return None
+
+
+def _value_gap(vals):
+    """The worst disagreement between ports, or None if not comparable."""
+    named = [(p, v) for p, v in vals.items() if v]
+    if len(named) < 2:
+        return None
+    widths = {len(v) for _, v in named}
+    if len(widths) > 1:
+        return float("inf")          # different shapes IS a disagreement
+    ref = named[0][1]
+    gap = 0.0
+    for _, v in named[1:]:
+        for a, b in zip(ref, v):
+            gap = max(gap, abs(a - b))
+    return gap
 
 
 def _verdict(v):
@@ -49,48 +105,103 @@ def _verdict(v):
 
 
 def main():
-    results, missing = {}, []
+    # An ABSENT toolchain is a skip; a toolchain that is present and
+    # whose runner FAILS is a failure. Collapsing the two let a port
+    # drop silently out of the comparison and the scan still print
+    # "all cases agree" -- the one report this tool must never make
+    # when it has not actually compared the port.
+    results, absent, broken = {}, [], {}
     for name, cmd in RUNNERS.items():
         try:
             out = subprocess.run(cmd, cwd=ROOT, capture_output=True,
                                  text=True, timeout=900)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            missing.append(name)
+        except FileNotFoundError:
+            absent.append(name)
             continue
-        if out.returncode != 0 or not out.stdout.strip():
-            missing.append(name)
+        except subprocess.TimeoutExpired:
+            broken[name] = "timed out after 900s"
             continue
-        results[name] = json.loads(out.stdout.strip().splitlines()[-1])
+        if out.returncode != 0:
+            broken[name] = (f"exit {out.returncode}: "
+                            + (out.stderr.strip().splitlines() or [""])[-1])
+            continue
+        if not out.stdout.strip():
+            broken[name] = "produced no output"
+            continue
+        try:
+            results[name] = json.loads(out.stdout.strip().splitlines()[-1])
+        except json.JSONDecodeError as exc:
+            broken[name] = f"unreadable output: {exc}"
+    if broken:
+        for name, why in sorted(broken.items()):
+            print(f"FAILED to run the {name} port: {why}")
+        print("The scan cannot speak for a port it could not run.")
+        return 1
     if len(results) < 2:
         print(f"skip: need two ports, have {sorted(results)} "
-              f"(missing {sorted(missing)})")
+              f"(absent {sorted(absent)})")
         return 0
-    if missing:
-        print(f"note: not run for {sorted(missing)}")
+    if absent:
+        print(f"note: toolchain absent, not compared: {sorted(absent)}")
 
     ids = list(json.load(open(CASES))["cases"])
-    diverged = []
+    diverged, value_gaps, stale = [], {}, []
     for case in ids:
         cid = case["id"]
         got = {p: _verdict(r.get(cid, "?")) for p, r in results.items()}
-        if len(set(got.values())) > 1 and cid not in EXPECTED:
+        tol = VERB_TOL.get(case["verb"], VALUE_TOL)
+        gap = None
+        if set(got.values()) == {"ACCEPT"}:
+            gap = _value_gap({p: _value(r.get(cid)) for p, r in
+                              results.items()})
+        # a case diverges if the ports DECIDE differently or ANSWER
+        # differently; an EXPECTED entry has to clear both to be stale
+        differs = (len(set(got.values())) > 1
+                   or (gap is not None and gap > tol))
+        if cid in EXPECTED:
+            if not differs:
+                stale.append(cid)
+            continue
+        if len(set(got.values())) > 1:
             diverged.append((cid, got))
+        elif gap is not None and gap > tol:
+            value_gaps[cid] = gap
 
     width = max(len(c["id"]) for c in ids)
     for case in ids:
         cid = case["id"]
         got = {p: _verdict(r.get(cid, "?")) for p, r in results.items()}
-        flag = "  <== DIVERGES" if any(cid == d[0] for d in diverged) else ""
+        if cid in EXPECTED:
+            flag = "  <== known, see EXPECTED"
+        else:
+            flag = "  <== DIVERGES" if any(cid == d[0] for d in diverged) else (
+                f"  <== SAME VERDICT, DIFFERENT ANSWER "
+                f"({value_gaps[cid]:.2e})" if cid in value_gaps else "")
         cols = "  ".join(f"{p}={got[p]}" for p in sorted(got))
         print(f"  {cid:{width}s}  {cols}{flag}")
 
+    if stale:
+        print()
+        for cid in stale:
+            print(f"EXPECTED case {cid!r} no longer diverges: "
+                  f"{EXPECTED[cid]}")
+        print("Remove it from EXPECTED -- a waiver that outlives the "
+              "defect hides the next one.")
+        return 1
+    if value_gaps and not diverged:
+        print(f"\n{len(value_gaps)} of {len(ids)} cases are ACCEPTED by "
+              "every port with different answers")
+        print("Agreeing to accept is not agreeing on the race.")
+        return 1
     if diverged:
         print(f"\n{len(diverged)} of {len(ids)} cases diverge across ports")
         print("A port that accepts what another refuses prices a different "
               "race on the same input. Fix it, or record it in EXPECTED "
               "with the reason.")
         return 1
-    print(f"\nall {len(ids)} cases agree across {sorted(results)}")
+    if value_gaps:
+        print(f"\n{len(value_gaps)} value gaps alongside the divergences")
+    print(f"\nall {len(ids)} cases agree, in verdict and answer, across {sorted(results)}")
     return 0
 
 

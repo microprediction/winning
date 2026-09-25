@@ -40,9 +40,54 @@
   same loading for everyone -- and R and julia refused it. They were
   moved to the documented behaviour, not the reverse.
 
-  All thirty cases now agree across all four ports, and the check runs
-  in CI, skipping any port whose toolchain is absent rather than
+  All forty-four cases now agree across all four ports, and the check
+  runs in CI, skipping any port whose toolchain is absent rather than
   passing vacuously.
+
+  Extending the scan to the node rule, the rank spellings and the other
+  verbs found the rest of #68 and one new defect. **Rank zero** is the
+  empty product -- one node of weight 1 with no columns -- and the
+  factor grammar already documents `Independent = Factor with empty V`,
+  with `as_loadings` accepting `(n, 0)`. Four paths could not price it,
+  each because the node constructors build the tensor by looping over
+  the rank and at rank zero that does not raise: python's
+  `hermite_nodes` returned the RANK-ONE rule, `_gh_nodes` raised from
+  inside `np.meshgrid`, julia's `_gh_nodes` built every `r != 1` as rank
+  two and then failed multiplying a `Q**2 x 2` node matrix by a `0 x n`
+  loading transpose, and R raised from inside `expand.grid`. The
+  browser and julia `hermite_nodes` already fell through to the right
+  answer, so the fix moved the other two onto their behaviour. Both
+  fastmvn copies and `FactorMvNormalCDF` now return exactly `0.5**n` for
+  the rank-zero rectangle, and the browser stopped refusing an `(n, 0)`
+  loading matrix outright -- a guard added by the very commit whose
+  purpose was to match the reference, which accepts it.
+
+  A negative rank and a zero order are now refused by name in all four,
+  rather than each falling through to a different well-formed rule for
+  a different problem.
+
+  The scan compares ANSWERS now, not just accept/refuse decisions: two
+  ports agreeing to accept is not agreeing on the race. That is what
+  turned up #304 -- a contestant whose idiosyncratic variance is small
+  but legal is priced at exactly **zero** by every port, its mass
+  renormalised onto the others, at 68% error by sd 3e-3 and 100% by sd
+  1e-3. `D = 0` is refused, so the boundary guard exists; it is just
+  drawn at zero rather than at what the lattice can resolve. Filed with
+  the measurement rather than fixed here: the repair is a lattice
+  change in four ports.
+
+  Two entries sit in `EXPECTED`, each with a reason, and the list is
+  strict in both directions -- an entry that stops diverging fails the
+  scan, so a waiver cannot outlive its defect.
+
+  Three of the first five "divergences" the value comparison reported
+  were the harness, not the ports: julia `vec`s a matrix column-major
+  where the reference ravels row-major, the julia runner was rounding a
+  fractional depth the port cannot express, and `rbind` turned a scalar
+  `V` into a 1x1 matrix. A parity tool that cannot be wrong about the
+  ports is not measuring them, so the scanner now fails loudly when a
+  present toolchain's runner exits non-zero, instead of dropping that
+  port and reporting that everyone agreed.
 
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is

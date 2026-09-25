@@ -14,6 +14,7 @@ everyone on every well-formed vector and still prices a different race.
 import numpy as np
 import pytest
 
+from winning.factor.core import hermite_nodes
 from winning.factor.races import abilities_from_race, race_probabilities
 
 MU = np.array([0.0, 0.3, -0.2, 0.5])
@@ -69,6 +70,41 @@ def test_the_inverse_keeps_its_own_contract():
         abilities_from_race(np.array([0.5, 0.5]), D=D4)
 
 
+def test_a_zero_rank_rule_is_the_empty_product_not_the_rank_one_rule():
+    """The loop that builds the tensor runs zero times at k <= 0, so it
+    returned a WELL-FORMED rule for a different problem: the rank-1 rule,
+    five nodes in one column, for a caller asking about no factors."""
+    F, W = hermite_nodes(0, 5)
+    assert F.shape == (1, 0), "k=0 must be one node with no columns"
+    assert W.shape == (1,) and W[0] == pytest.approx(1.0)
+    Fone, _ = hermite_nodes(1, 5)
+    assert Fone.shape == (5, 1)       # what k=0 used to return
+
+
+def test_a_zero_rank_loading_matrix_prices_the_independent_race():
+    """as_loadings accepts an (n, 0) matrix, so the rest of the package
+    has already decided rank 0 is legal. It used to reach numpy as a
+    matmul dimension mismatch."""
+    mu = np.array([0.0, 0.3, -0.2, 0.5])
+    D = np.ones(4)
+    got = race_probabilities(mu, V=np.zeros((4, 0)), D=D)
+    want = race_probabilities(mu, V=None, D=D)
+    assert np.allclose(got, want)
+
+
+@pytest.mark.parametrize("k", [-1, -5, 1.5, np.nan, np.inf])
+def test_a_nonsense_factor_count_is_refused_by_name(k):
+    with pytest.raises(ValueError, match="k"):
+        hermite_nodes(k, 5)
+
+
+@pytest.mark.parametrize("Q", [0, -3, 2.5])
+def test_a_nonsense_order_is_refused_by_name(Q):
+    """Q = 0 built a rule with NO NODES, which normalises 0/0."""
+    with pytest.raises(ValueError, match="Q"):
+        hermite_nodes(1, Q)
+
+
 def test_the_case_file_is_wired_to_the_runner():
     """A scan that silently stops covering things passes forever."""
     import json
@@ -76,9 +112,9 @@ def test_the_case_file_is_wired_to_the_runner():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cases = json.load(open(os.path.join(root, "parity",
                                         "divergence_cases.json")))["cases"]
-    assert len(cases) >= 25
+    assert len(cases) >= 40
     verbs = {c["verb"] for c in cases}
-    assert {"race", "inverse", "topk"} <= verbs
+    assert {"race", "inverse", "topk", "hermite", "rank", "bottomk"} <= verbs
     for name in ("divergence_py.py", "divergence_js.mjs", "divergence_r.R",
                  "divergence_jl.jl", "check_divergence.py"):
         assert os.path.exists(os.path.join(root, "parity", name)), name

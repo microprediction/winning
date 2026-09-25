@@ -4,7 +4,9 @@ import numpy as np
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from winning.factor.races import race_probabilities, abilities_from_race
-from winning.factor.topk import top_k_probabilities
+from winning.factor.topk import (bottom_k_probabilities, rank_probabilities,
+                                 top_k_probabilities)
+from winning.factor.core import hermite_nodes
 
 def num(x):
     if isinstance(x, str):
@@ -15,7 +17,20 @@ def num(x):
 
 def run(c):
     mu = num(c.get("mu")); D = num(c.get("D")); V = num(c.get("V"))
-    if c["verb"] == "race":
+    if c.get("Vt") is not None:
+        V = num(c["Vt"])
+    if c["verb"] == "hermite":
+        F, W = hermite_nodes(c["r"], c["order"])
+        # SHAPE, not the nodes: every port must agree on how many nodes
+        # in how many columns, which is what k and the order decide
+        return ("ACCEPT" if np.isfinite(F).all() and np.isfinite(W).all()
+                else "ACCEPT_NONFINITE",
+                [float(F.shape[0]), float(F.shape[1])])
+    if c["verb"] == "rank":
+        p = rank_probabilities(np.asarray(mu, float), D=D)
+    elif c["verb"] == "bottomk":
+        p = bottom_k_probabilities(np.asarray(mu, float), c["k"], D=D)
+    elif c["verb"] == "race":
         p = race_probabilities(np.asarray(mu, float), V=V, D=D)
     elif c["verb"] == "inverse":
         p = abilities_from_race(np.asarray(num(c["p"]), float), D=D)

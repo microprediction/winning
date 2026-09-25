@@ -203,9 +203,23 @@ function hermite1(order::Int)
     return (nodes = E.values, weights = w ./ sum(w))
 end
 
-"""Pruned Gauss-Hermite product rule, first coordinate slowest, pruned
-WITHOUT renormalizing (matching the reference exactly)."""
+"""
+    hermite_nodes(k, order = 15, prune = 1e-7)
+
+Pruned Gauss-Hermite product rule over N(0, I_k), first coordinate
+slowest, pruned WITHOUT renormalizing (matching the reference exactly).
+
+`k = 0` is the EMPTY PRODUCT: one node of weight 1 with no columns, so a
+zero-rank loading matrix integrates over the zero-dimensional factor
+space and prices the independent race through this same path. `k < 0`
+and `order < 1` raised from inside `ntuple`/`Iterators.product` with a
+message about tuples rather than about the rule being asked for (#68).
+"""
 function hermite_nodes(k::Int, order::Int = 15, prune::Float64 = 1e-7)
+    k < 0 && throw(ArgumentError("hermite_nodes needs k >= 0; got $k"))
+    order < 1 && throw(ArgumentError(
+        "hermite_nodes needs order >= 1; got $order"))
+    k == 0 && return (F = Matrix{Float64}(undef, 1, 0), W = [1.0])
     h = hermite1(order)
     k == 1 && return (F = reshape(h.nodes, :, 1), W = copy(h.weights))
     idx = [(i, j) for i in 1:order for j in 1:order]  # first slowest, k = 2
@@ -272,6 +286,12 @@ function _race_setup(mu, V, D, F, W, base)
         Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
              (V isa Number ? fill(Float64(V), n, 1) :
               reshape(Float64.(collect(V)), :, 1))
+        # (rank, n) is the SAME race as (n, rank), which as_loadings
+        # documents. The ambiguity is real only at rank == n, where the
+        # contract wins: n rows is n contestants.
+        if size(Vm, 1) != n && size(Vm, 2) == n
+            Vm = permutedims(Vm)
+        end
         size(Vm, 1) == n || throw(ArgumentError(
             "V must have one row per contestant; got " *
             string(size(Vm, 1)) * " for " * string(n)))

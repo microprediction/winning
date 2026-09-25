@@ -110,6 +110,12 @@
     # factor, not n contestants sharing a loading.
     if (length(V) == 1L && is.null(dim(V))) V <- matrix(as.numeric(V), n, 1L)
     V <- as.matrix(V)
+    # (rank, n) is the SAME race as (n, rank), which as_loadings
+    # documents and abilities_from_race already did for itself a few
+    # hundred lines down -- .race_setup did not, so R was inconsistent
+    # with the contract AND with itself. The ambiguity is real only at
+    # rank == n, where the contract wins: n rows is n contestants.
+    if (nrow(V) != n && ncol(V) == n) V <- t(V)
     if (nrow(V) != n)
       stop(sprintf("V must have one row per contestant; got %d for %d",
                    nrow(V), n), call. = FALSE)

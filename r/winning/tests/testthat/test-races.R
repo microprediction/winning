@@ -42,3 +42,26 @@ test_that("the inverse's target and D describe the same field", {
   expect_true(all(is.finite(m)))
   expect_equal(abilities_from_race(c(0.4, 0.3, 0.2, 0.1), D = 1), m)
 })
+
+test_that("a zero-rank rule is the empty product, not the rank-one rule", {
+  # the product grid runs zero times at k = 0: python returned the
+  # RANK-1 rule there and R raised from inside expand.grid, so one
+  # question had three answers across the ports
+  h <- hermite_nodes(0L, 5L)
+  expect_equal(dim(h$F), c(1L, 0L))
+  expect_equal(h$W, 1)
+  expect_equal(dim(hermite_nodes(1L, 5L)$F), c(5L, 1L))
+  # k = 0 is the independent race, priced through the factor path
+  mu <- c(0, 0.3, -0.2, 0.5)
+  expect_equal(race_probabilities(mu, V = matrix(numeric(0), 4L, 0L),
+                                  D = rep(1, 4)),
+               race_probabilities(mu, D = rep(1, 4)))
+})
+
+test_that("a nonsense node count is refused by name", {
+  for (k in list(-1L, -5L, 1.5, NA_real_, Inf))
+    expect_error(hermite_nodes(k, 5L), "k")
+  # order 0 built a rule with NO NODES, which normalises 0/0
+  for (o in list(0L, -3L, 2.5))
+    expect_error(hermite_nodes(1L, o), "order")
+})

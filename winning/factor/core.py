@@ -606,10 +606,42 @@ def _worst_contrast_ratio(C, R, cap_n=4000):
     return float(ratio.max())
 
 
+def _as_count(x, name, minimum):
+    """An integer count at a node-rule door, or a refusal naming it.
+
+    Both counts reach the tensor loop below as a range bound, so a
+    nonsense value does not raise there: it runs the loop zero times
+    and returns a WELL-FORMED rule for a different problem. k <= 0
+    returned the rank-1 rule and Q = 0 an empty one.
+    """
+    v = np.asarray(x)
+    if v.ndim != 0 or not np.isfinite(v) or v != np.floor(v):
+        raise ValueError(
+            f"hermite_nodes needs an integer {name}; got {x!r}")
+    v = int(v)
+    if v < minimum:
+        raise ValueError(
+            f"hermite_nodes needs {name} >= {minimum}; got {v}")
+    return v
+
+
 def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
-    """Product Gauss-Hermite rule for E over N(0, I_k); returns (nodes, weights)."""
+    """Product Gauss-Hermite rule for E over N(0, I_k); returns (nodes, weights).
+
+    k = 0 is the EMPTY PRODUCT: one node of weight 1 with no columns, so
+    a zero-rank loading matrix -- which as_loadings accepts -- integrates
+    over the zero-dimensional factor space and prices the independent
+    race through this same path. It is not a degenerate case to reject;
+    it is the value of the integral. The browser and julia ports already
+    fell through to it, python returned the rank-1 rule, and R raised
+    from expand.grid: three answers to one question (#68).
+    """
+    k = _as_count(k, "k", 0)
+    Q = _as_count(Q, "Q", 1)
     x, w = np.polynomial.hermite_e.hermegauss(Q)
     w = w / np.sqrt(2.0 * np.pi)
+    if k == 0:
+        return np.zeros((1, 0)), np.ones(1)
     if k == 1:
         return x[:, None], w
     # Build the product one dimension at a time and prune as it grows: a

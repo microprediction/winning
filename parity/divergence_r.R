@@ -19,12 +19,23 @@ for (cs in d$cases) {
   v <- tryCatch({
     mu <- if (!is.null(cs$mu)) num(cs$mu) else NULL
     D  <- if (!is.null(cs$D))  num(cs$D)  else NULL
-    V  <- if (!is.null(cs$V))  num(cs$V)  else NULL
-    p <- if (cs$verb == "race") race_probabilities(mu, V = V, D = D)
+    # a bare JSON number stays a scalar: rbind-ing it would hand the
+    # library a 1x1 matrix and test the runner, not the port
+    asV <- function(x) if (is.list(x)) do.call(rbind, lapply(x, num)) else num(x)
+    V  <- if (!is.null(cs$Vt)) asV(cs$Vt)
+          else if (!is.null(cs$V)) asV(cs$V) else NULL
+    p <- if (cs$verb == "hermite") hermite_nodes(num(cs$r), order = num(cs$order))$F
+         else if (cs$verb == "rank") rank_probabilities(mu, D = D)
+         else if (cs$verb == "bottomk") bottom_k_probabilities(mu, num(cs$k), D = D)
+         else if (cs$verb == "race") race_probabilities(mu, V = V, D = D)
          else if (cs$verb == "inverse") abilities_from_race(num(cs$p), D = D)
          else top_k_probabilities(mu, num(cs$k), D = D)
+    # SHAPE for the node rule, values for everything else
+    val <- if (cs$verb == "hermite") as.numeric(dim(p))
+           # R fills a matrix COLUMN-major; the reference ravels ROW-major
+           else as.numeric(head(as.numeric(if (is.matrix(p)) t(p) else p), 6))
     list(verdict = if (all(is.finite(p))) "ACCEPT" else "ACCEPT_NONFINITE",
-         value = as.numeric(head(p, 6)))
+         value = val)
   }, error = function(err) list(verdict = "REFUSE",
                                 error = substr(conditionMessage(err), 1, 40)))
   res[[id]] <- v
