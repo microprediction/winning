@@ -947,6 +947,9 @@ W_SCALES = [0.05, 0.5, 1.0, 2.0, 100.0]
 W_VERB_EXTRA = {
     "jacobian_vector_product": dict(h=np.array([0.1, -0.2, 0.1])),
     "plackett_luce_prefix_logprob": dict(prefix=[0, 1]),
+    "plackett_luce_order_logprob": dict(order=[0, 1, 2]),
+    "harville_prefix_logprob": dict(prefix=[0, 1]),
+    "harville_order_logprob": dict(order=[0, 1, 2]),
 }
 
 
@@ -962,12 +965,28 @@ def _verbs_taking_F_and_W():
 
     A new verb that takes a factor law is swept automatically, so it
     cannot quietly keep its own opinion about the weight scale.
+
+    BOTH namespaces. The first version of this swept `winning.factor`
+    alone and reported that every verb was covered, while
+    `softmax_probabilities` and `plackett_luce_order_logprob` -- exported
+    from the package ROOT and bypassing `_setup` when the caller supplies
+    the law -- scaled their answers with `sum(W)`: the same law spelled
+    [5, 5] returned ten times the probabilities (#263). A sweep that
+    names its own scope too narrowly reports success for the part it
+    looked at.
     """
     found = {}
-    for name in dir(winning.factor):
+    for module in (winning, winning.factor):
+        found.update(_verbs_in(module))
+    return found
+
+
+def _verbs_in(module):
+    found = {}
+    for name in dir(module):
         if name.startswith("_"):
             continue
-        fn = getattr(winning.factor, name)
+        fn = getattr(module, name)
         if not callable(fn):
             continue
         try:
@@ -990,7 +1009,9 @@ def _call_with_weights(name, fn, W):
 def test_the_weight_sweep_finds_the_verbs():
     found = _verbs_taking_F_and_W()
     assert len(found) >= 3, f"only found {sorted(found)}"
-    for expected in ("race_probabilities", "removal_shares"):
+    for expected in ("race_probabilities", "removal_shares",
+                     "softmax_probabilities",
+                     "plackett_luce_order_logprob"):
         assert expected in found, f"{expected} takes F/W but was not swept"
 
 
@@ -1019,7 +1040,24 @@ def test_the_weights_actually_move_the_answer():
     assert np.abs(even - tilt).max() > 1e-3
 
 
-@pytest.mark.parametrize("bad", [[0.0, 0.0], [-1.0, -1.0], [1.0, -1.0]])
-def test_a_non_positive_weight_total_is_refused(bad):
-    with pytest.raises(ValueError, match="positive weights"):
+@pytest.mark.parametrize("bad", [[0.0, 0.0]])
+def test_an_all_zero_rule_is_refused(bad):
+    with pytest.raises(ValueError, match="positive total"):
         winning.factor.race_probabilities(W=np.array(bad), **_factor_race())
+
+
+@pytest.mark.parametrize("bad", [[-1.0, -1.0], [1.0, -1.0], [2.0, -1.0]])
+def test_a_signed_rule_is_refused(bad):
+    """`sum(W) > 0` admits [2, -1], which passed and returned
+    "probabilities" of -0.144 and 1.999 (#263). The entries must be
+    non-negative, not merely the total positive."""
+    with pytest.raises(ValueError, match="negative"):
+        winning.factor.race_probabilities(W=np.array(bad), **_factor_race())
+
+
+def test_an_individual_zero_weight_is_allowed():
+    """A zero weight is a node that contributes nothing, not an error."""
+    kw = _factor_race()
+    a = np.asarray(winning.factor.race_probabilities(
+        W=np.array([0.0, 1.0]), **kw), float)
+    assert np.isfinite(a).all() and abs(a.sum() - 1) < 1e-12
