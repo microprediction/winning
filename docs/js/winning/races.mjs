@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, firstPrimes } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -37,6 +37,11 @@ const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [1
 function setup(mu, V, D, F, W, base) {
   const n = mu.length;
   D = D ? D.slice() : new Array(n).fill(1);
+  // the shape contract at the door, as python's _setup does it: a
+  // scalar, a length-n vector, (n, rank) and (rank, n) are the same
+  // race, and a ragged V raises instead of being truncated to the first
+  // row's width and answering NaN (#232)
+  V = asLoadings(V, n);
   if (!V) {
     V = mu.map(() => [0]);
     F = [[0]]; W = [1];
@@ -58,8 +63,9 @@ function setup(mu, V, D, F, W, base) {
         // escalate the FAMILY, not the order (matching python/R)
         const Q = 8192;
         F = []; W = new Array(Q).fill(1 / Q);
-        const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
-                        43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89];
+        // generated, not tabulated: a 24-entry table made a valid
+        // rank-25 V answer all-NaN, silently (#233)
+        const primes = firstPrimes(r);
         for (let idx = 0; idx < Q; idx++) {
           const node = [];
           for (let dim = 0; dim < r; dim++) {
@@ -80,8 +86,9 @@ function setup(mu, V, D, F, W, base) {
         // high-rank tensor footgun (matching python/R): Halton fallback
         const Q = 8192;
         F = []; W = new Array(Q).fill(1 / Q);
-        const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
-                        43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89];
+        // generated, not tabulated: a 24-entry table made a valid
+        // rank-25 V answer all-NaN, silently (#233)
+        const primes = firstPrimes(r);
         for (let idx = 0; idx < Q; idx++) {
           const node = [];
           for (let dim = 0; dim < r; dim++) {
@@ -273,7 +280,7 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   // the field's contrast scale (matching python/R): median idiosyncratic
   // variance plus the mean factor variance under the represented nodes
   const Dn = D ? D.slice() : new Array(n).fill(1);
-  const Vn = V ? V.map(row => (Array.isArray(row) ? row.slice() : [row])) : Array.from({ length: n }, () => [0]);
+  const Vn = V ? asLoadings(V, n).map(row => row.slice()) : Array.from({ length: n }, () => [0]);
   const r = Vn[0].length;
   const colMean = Array.from({ length: r }, (_, c) => mean(Vn.map(row => row[c])));
   const Vc = Vn.map(row => row.map((v, c) => v - colMean[c]));
