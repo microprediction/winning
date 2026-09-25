@@ -297,14 +297,21 @@ function rank_probabilities(mu; D = nothing, base = "normal", points = 513)
     # columns are not forced: alternating scaling would make both exact by
     # hiding the under-resolution that caused it, and the same field at
     # 2001 points has a column error of 3.5e-9.
+    # BOTH checks: independent, and mistaken for alternatives once. Row
+    # normalisation can ERASE a gross raw defect and leave the result just
+    # inside tolerance (#221).
+    re_raw = maximum(abs.(vec(sum(P, dims = 2)) .- 1))
+    ce_raw = maximum(abs.(vec(sum(P, dims = 1)) .- 1))
+    (all(isfinite, P) && re_raw <= 5e-3 && ce_raw <= 5e-3) ||
+        error("rank marginals defective before normalisation: row-sum " *
+              "error $re_raw, column-sum error $ce_raw. Raise points=.")
     P = clip01(P ./ max.(vec(sum(P, dims = 2)), 1e-300))
-    rows = vec(sum(P, dims = 2))
-    cols = vec(sum(P, dims = 1))
-    re, ce = maximum(abs.(rows .- 1)), maximum(abs.(cols .- 1))
+    re = maximum(abs.(vec(sum(P, dims = 2)) .- 1))
+    ce = maximum(abs.(vec(sum(P, dims = 1)) .- 1))
     (all(isfinite, P) && re <= 5e-3 && ce <= 5e-3) ||
-        error("rank marginals defective: row-sum error $re, column-sum " *
-              "error $ce, measured on the RETURNED matrix after row " *
-              "normalisation. Raise points=.")
+        error("rank marginals defective in the RETURNED matrix after row " *
+              "normalisation: row-sum error $re, column-sum error $ce. " *
+              "Raise points=.")
     return P
 end
 

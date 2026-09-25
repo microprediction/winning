@@ -43,6 +43,58 @@
   rejected. Parity vectors are unchanged, since the refinement does not
   fire on fields with mild scale spread.
 
+- The browser inverse honours the two options it advertised (#226).
+  `targetFloor` and `returnInfo` were on `abilitiesFromRace`'s allowlist
+  and read by nothing, so they passed validation and vanished -- the
+  precise failure the allowlist exists to prevent, reintroduced by
+  deriving that list from python's signature rather than from what the
+  function reads. It now matches python: a zero share raises, because it
+  has no finite inverse; `targetFloor` floors deliberately and reports
+  which entries were floored; `returnInfo` returns the record rather than
+  the bare vector, and does not change the answer.
+
+  A test now requires every allowlisted key to be read by the function
+  that advertises it. Two functions legitimately forward their whole
+  options object onward, and that is DECLARED rather than inferred --
+  "the body mentions opts somewhere" would have excused this very bug,
+  since `abilitiesFromRace` forwards on its structure branch while
+  `targetFloor` vanished on every other path. Sabotage-tested by putting
+  an unread key back.
+
+- `rank_probabilities` keeps BOTH guards, before and after normalisation
+  (#221). The entry above replaced the raw check with a post-normalisation
+  one, and that was wrong: they are independent, not alternatives. Row
+  normalisation can ERASE a gross raw defect. On a field whose sds span
+  232x the raw matrix is off by 0.249 in a row and 0.199 in a column, and
+  dividing by those same row sums leaves a column defect of 0.0047 --
+  inside the 5e-3 tolerance -- so it returned a false success, while
+  `top_k_probabilities` rejected the same field at 0.056. The raw check
+  sees the quadrature; the post check sees what the caller gets; neither
+  implies the other.
+
+  The two fields now on record prove the independence, and each slips past
+  the guard that does not catch it: #221's is caught only before
+  normalisation, #203's only after. A test asserts that, and another
+  asserts what the user actually saw -- that rank and top-k agree about
+  whether a field resolves at all. Python, R, Julia and the browser all
+  carry both; R and the browser agree with python to 9e-10 at 2001 points.
+
+- Binary choices fit in `rprobitfast` and `mlogitfast` (#183). The
+  triangular-loading loop read `for (row in (col + 1L):J)`, and at J = 2
+  with the default rank 2 the second pass evaluates `3:2` -- which in R
+  is the two-element vector `c(3, 2)`, counting DOWN, not an empty range.
+  The first assignment was therefore `V[3, 2]` on a 2x2 matrix and every
+  binary-choice fit died with "subscript out of bounds"; `nw` counts one
+  free loading there, so `wfree[2]` was past the end of the parameter
+  vector as well. `col + seq_len(J - col)` is empty exactly when it should
+  be, and identical elsewhere -- checked, not assumed: at J = 5, rank 2
+  the two loops visit the same seven cells in the same order.
+
+  Fixed in all three copies of the loop (`mlogitfast/R/mlogit_fast.R`,
+  `rprobitfast/R/engine.R`, `rprobitfast/R/rprobit_fast.R`). A 180-subject
+  binary probit now recovers a true slope of 0.8 as 0.757, where it raised
+  before.
+
 - The browser factor race's own parity suite runs in CI (#140, second
   half). `js/factor/test_parity.mjs` checks the tabulated bases against
   scipy-generated vectors, and nothing ran it -- which is why it sat

@@ -276,15 +276,23 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
   # not forced: alternating scaling would make both exact by hiding the
   # under-resolution that caused it, and the same field at 2001 points has
   # a column error of 3.5e-9.
+  # BOTH checks. They are independent and were mistaken for alternatives:
+  # row normalisation can ERASE a gross raw defect and leave the result
+  # just inside tolerance (#221). The raw check sees the quadrature, the
+  # post check sees what the caller gets.
+  .rank_reject <- function(where, re_, ce) {
+    stop(sprintf(paste("rank marginals defective %s: row-sum error %.2e,",
+                       "column-sum error %.2e. Raise points=."),
+                 where, re_, ce), call. = FALSE)
+  }
+  re_raw <- max(abs(rowSums(P) - 1)); ce_raw <- max(abs(colSums(P) - 1))
+  if (any(!is.finite(P)) || re_raw > 5e-3 || ce_raw > 5e-3)
+    .rank_reject("before normalisation", re_raw, ce_raw)
   P <- .clip01(P / pmax(rowSums(P), 1e-300))
-  rows <- rowSums(P)
-  cols <- colSums(P)
-  if (any(!is.finite(P)) || max(abs(rows - 1)) > 5e-3 ||
-      max(abs(cols - 1)) > 5e-3)
-    stop(sprintf(paste("rank marginals defective: row-sum error %.2e,",
-                       "column-sum error %.2e, measured on the RETURNED",
-                       "matrix after row normalisation. Raise points=."),
-                 max(abs(rows - 1)), max(abs(cols - 1))))
+  re_out <- max(abs(rowSums(P) - 1)); ce_out <- max(abs(colSums(P) - 1))
+  if (any(!is.finite(P)) || re_out > 5e-3 || ce_out > 5e-3)
+    .rank_reject("in the RETURNED matrix after row normalisation",
+                 re_out, ce_out)
   P
 }
 

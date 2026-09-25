@@ -66,6 +66,109 @@ def test_an_ordinary_field_is_untouched():
     assert np.abs(P[:, :2].sum(axis=1) - q).max() < 1e-6
 
 
+# a second field, from #221: sds spanning 232x. When #221 was written its
+# RAW quadrature was off by 0.249 in a row, and dividing by those same row
+# sums left a column defect of 0.0047 -- inside the 5e-3 tolerance -- so
+# the post-normalisation check alone returned a false success on it.
+#
+# #224 then refined the lattice to resolve the NARROWEST runner, and this
+# field, and the #217 field above, now resolve cleanly at every requested
+# resolution: 4.5e-9 and 3.5e-9 respectively, where they used to be 4.7e-3
+# and worse. That is the fix working, so the tests below record the new
+# truth rather than pinning the old symptom.
+MU_RAW = np.array([1.7802347516623231, 7.71387298475329,
+                   -8.864593234372917, -13.723882426584884])
+SD_RAW = np.array([0.09388844913109345, 0.2459800972322556,
+                   1.0565710909345742, 21.775572080525823])
+
+# A field the refinement CANNOT rescue: sds spanning 8636x, so the point
+# count it asks for is past the 8193 cap and the raw quadrature really is
+# defective. This is what still exercises the pre-normalisation guard.
+MU_UNRESOLVABLE = np.array([-5.629882, -10.123372, -4.986196, 0.330608])
+SD_UNRESOLVABLE = np.array([12.4970445, 0.00144703, 3.06481372, 0.00690731])
+
+
+@pytest.mark.parametrize("points", [513, 1001])
+def test_a_gross_raw_defect_is_caught_before_normalisation(points):
+    """The guard #221 added, on a field past the refinement cap."""
+    with pytest.raises(RuntimeError, match="before normalisation"):
+        rank_probabilities(MU_UNRESOLVABLE, D=SD_UNRESOLVABLE ** 2,
+                           points=points)
+
+
+@pytest.mark.parametrize("mu,sd,name", [
+    (MU_RAW, SD_RAW, "#221"),
+    (MU, SD, "#217"),
+])
+def test_the_fields_that_used_to_be_defective_now_resolve(mu, sd, name):
+    """#224's refinement is why. Both guards stay -- they are cheap and
+    they are independent -- but neither fires on these any more, and
+    pinning them as failures would pin a bug that is fixed."""
+    P = rank_probabilities(mu, D=sd ** 2, points=513)
+    assert np.abs(P.sum(axis=0) - 1).max() < 1e-6, name
+    assert np.abs(P.sum(axis=1) - 1).max() < 1e-12, name
+
+
+def test_the_returned_matrix_guard_is_now_a_backstop():
+    """Honest statement of where the two guards stand after #224.
+
+    The RETURNED-matrix guard catches a raw matrix that passes its own
+    check and then has its columns moved past tolerance by row
+    normalisation. With the lattice refined to the narrowest runner, a
+    search over 1200 deliberately extreme fields -- three to five runners,
+    sds spanning 1e-4 to 80 -- trips the RAW guard 903 times and the
+    RETURNED guard not once. It stays because it is one comparison and it
+    is independent of the other, not because a field is known to reach it.
+    """
+    import warnings as _w
+    rng = np.random.default_rng(7)
+    raw = returned = 0
+    for _ in range(200):
+        n = int(rng.integers(3, 6))
+        mu = rng.normal(scale=float(rng.uniform(1, 12)), size=n)
+        sd = np.exp(rng.uniform(np.log(1e-4), np.log(80), size=n))
+        try:
+            with _w.catch_warnings():
+                _w.simplefilter("ignore")
+                rank_probabilities(mu, D=sd ** 2, points=513)
+        except RuntimeError as e:
+            if "before normalisation" in str(e):
+                raw += 1
+            elif "RETURNED matrix" in str(e):
+                returned += 1
+    assert raw > 0, "the raw guard should still be reachable"
+    assert returned == 0, (
+        "a field now reaches the RETURNED guard -- update this test and "
+        "say which, rather than leaving the claim stale")
+
+
+def test_the_raw_field_resolves_and_agrees_with_top_k():
+    P = rank_probabilities(MU_RAW, D=SD_RAW ** 2, points=2001)
+    q = np.asarray(top_k_probabilities(MU_RAW, 2, D=SD_RAW ** 2, points=2001))
+    assert np.abs(P[:, :2].sum(axis=1) - q).max() < 1e-4
+    assert np.abs(P.sum(axis=0) - 1).max() < 5e-3
+
+
+def test_rank_and_top_k_agree_about_whether_a_field_resolves():
+    """The user-visible symptom of #221: rank returned while top-k rejected
+    the same field at the same points. Checked on the field that still
+    cannot resolve, since that is where the two can still disagree."""
+    for points in (513, 1001):
+        rank_failed = top_k_failed = False
+        try:
+            rank_probabilities(MU_UNRESOLVABLE, D=SD_UNRESOLVABLE ** 2,
+                               points=points)
+        except RuntimeError:
+            rank_failed = True
+        try:
+            top_k_probabilities(MU_UNRESOLVABLE, 2,
+                                D=SD_UNRESOLVABLE ** 2, points=points)
+        except Exception:
+            top_k_failed = True
+        assert rank_failed == top_k_failed, (
+            f"at points={points} rank and top-k disagree about resolution")
+
+
 # --- #224: the mass check is one scalar, and cannot see a runner ---------
 
 def test_top_k_resolves_the_narrowest_runner():

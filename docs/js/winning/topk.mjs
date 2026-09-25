@@ -420,18 +420,32 @@ export function rankProbabilities(mu, opts = {}) {
   // columns are not forced: alternating scaling would make both exact by
   // hiding the under-resolution that caused it, and the same field at
   // 2001 points has a column error of 3.5e-9.
+  // BOTH checks: independent, and mistaken for alternatives once. Row
+  // normalisation can ERASE a gross raw defect and leave the result just
+  // inside tolerance (#221). The raw check sees the quadrature, the post
+  // check sees what the caller gets.
+  const defects = (M) => {
+    const rows = M.map(r => r.reduce((a, b) => a + b, 0));
+    const cols = new Array(n).fill(0);
+    for (const r of M) for (let m = 0; m < n; m++) cols[m] += r[m];
+    return [Math.max(...rows.map(v => Math.abs(v - 1))),
+            Math.max(...cols.map(v => Math.abs(v - 1)))];
+  };
+  const reject = (where, re, ce) => {
+    throw new Error(
+      `rank marginals defective ${where}: row-sum error ` +
+      `${re.toExponential(2)}, column-sum error ${ce.toExponential(2)}. ` +
+      "Raise points=.");
+  };
+  const finite = (M) => M.every(r => r.every(Number.isFinite));
+  let [reRaw, ceRaw] = defects(P);
+  if (!finite(P) || reRaw > 5e-3 || ceRaw > 5e-3)
+    reject("before normalisation", reRaw, ceRaw);
   const raw = P.map(r => r.reduce((a, b) => a + b, 0));
   P = P.map((r, i) => r.map(v => clip01(v / Math.max(raw[i], 1e-300))));
-  const rows = P.map(r => r.reduce((a, b) => a + b, 0));
-  const cols = new Array(n).fill(0);
-  for (const r of P) for (let m = 0; m < n; m++) cols[m] += r[m];
-  const re = Math.max(...rows.map(v => Math.abs(v - 1)));
-  const ce = Math.max(...cols.map(v => Math.abs(v - 1)));
-  if (!P.every(r => r.every(Number.isFinite)) || re > 5e-3 || ce > 5e-3)
-    throw new Error(
-      `rank marginals defective: row-sum error ${re.toExponential(2)}, ` +
-      `column-sum error ${ce.toExponential(2)}, measured on the RETURNED ` +
-      "matrix after row normalisation. Raise points=.");
+  const [reOut, ceOut] = defects(P);
+  if (!finite(P) || reOut > 5e-3 || ceOut > 5e-3)
+    reject("in the RETURNED matrix after row normalisation", reOut, ceOut);
   return P;
 }
 
