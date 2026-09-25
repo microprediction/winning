@@ -237,6 +237,24 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
                                  nodes = nothing, per_obs = false)
     T, J = size(mu)
     r = size(V, 2)
+    # Every observation must be accounted for. The loop below walks the
+    # LEGAL labels and gathers the rows matching each, so a row whose
+    # choice is outside 1..J is never visited: it contributed nothing to
+    # the log-likelihood and a zero row to the score, and the fit
+    # silently optimised a SUBSET while reporting it as the whole. This
+    # port also accepted a choice vector SHORTER than T, dropping the
+    # tail without a word (#194).
+    length(choice) == T || throw(ArgumentError(
+        "choice must have one entry per observation: got " *
+        string(length(choice)) * " for " * string(T) * " rows of mu"))
+    for (i, c) in enumerate(choice)
+        (c isa Integer) || throw(ArgumentError(
+            "choice[" * string(i) * "] is not an integer alternative index"))
+        (1 <= c <= J) || throw(ArgumentError(
+            "choice[" * string(i) * "] = " * string(c) * " is outside 1.." *
+            string(J) * "; it would be dropped in silence, which raises " *
+            "the log-likelihood because there is less of it"))
+    end
     Dv = D === nothing ? ones(J) : Float64.(collect(D))
     s = sqrt.(Dv)
     V = V .- sum(V, dims = 1) ./ J          # gauge: differences decide

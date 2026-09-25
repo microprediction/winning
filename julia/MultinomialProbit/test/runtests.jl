@@ -143,6 +143,54 @@ end
     @test m.loglik >= ll_true - 1e-6
 end
 
+# --- every observation is accounted for (#194) -------------------------
+#
+# The core iterates over the LEGAL labels and gathers the rows matching
+# each, so a row whose choice is outside 1..J is never visited: it
+# contributed nothing to the log-likelihood and a zero row to the score,
+# and the fit silently optimised a SUBSET while reporting it as the
+# whole. This port also accepted a choice vector SHORTER than T and
+# dropped the tail. Dropping observations RAISES the log-likelihood,
+# because there is less of it, so nothing downstream can tell it from a
+# better fit.
+@testset "choice validation" begin
+    T, J, r = 40, 3, 1
+    rng = Xoshiro(1)
+    mu = randn(rng, T, J)
+    V = randn(rng, J, r) .* 0.4
+    good = rand(rng, 1:J, T)
+
+    ll, _, _ = MultinomialProbit.choice_loglik_and_score(mu, V, good)
+    @test isfinite(ll)
+
+    # fewer observations is a BETTER number -- the reason silence hurts
+    part, _, _ = MultinomialProbit.choice_loglik_and_score(
+        mu[6:end, :], V, good[6:end])
+    @test part > ll
+
+    for bad in (J + 1, 99, 0, -1)
+        ch = copy(good)
+        ch[1] = bad
+        @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+            mu, V, ch)
+    end
+
+    # a SHORT vector was silently truncated here, unlike the other ports
+    @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+        mu, V, good[1:30])
+    @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+        mu, V, vcat(good, 1))
+
+    err = try
+        ch = copy(good); ch[4] = 99
+        MultinomialProbit.choice_loglik_and_score(mu, V, ch)
+        ""
+    catch e
+        sprint(showerror, e)
+    end
+    @test occursin("choice[4]", err)
+end
+
 println("all MultinomialProbit tests passed")
 
 @testset "inference: vcov, stderror, per-observation scores" begin

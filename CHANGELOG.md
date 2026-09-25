@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- The exact likelihood refuses a choice it cannot account for, in all
+  three ports (#194). The cores iterate over the LEGAL alternative
+  labels and gather the rows matching each, so a row whose choice is
+  outside the range is never visited: it contributed nothing to the
+  log-likelihood and a zero row to the score, and the fit silently
+  optimised a SUBSET of the data while reporting it as the whole.
+
+  The direction is what makes it dangerous. Dropping observations RAISES
+  the log-likelihood, because there is less of it -- five bad rows out
+  of forty moved it from -55.699 to -49.134 -- and nothing downstream
+  can tell that from a better fit. The tests assert that property
+  directly rather than describing it.
+
+  Julia additionally accepted a choice vector SHORTER than `T` and
+  dropped the tail; R left `logp == 0` for `NA` rows, which adds zero
+  negative log-likelihood and zero gradient. All three now name the
+  first offending row and count how many there are. An integer-valued
+  float is still accepted, because refusing `1.0` would be pedantry
+  rather than a guard.
+
+
 - Prediction and likelihood choose the same quadrature (#213).
   `choice_loglik_and_score` gauge-centers `V` and dispatches on the
   pairwise-safe bound `sqrt(2) max_i ||(PV)_i|| / sqrt(min D)`.
@@ -22,6 +43,8 @@
   nothing changes: the same field measures a 3.161e-3 row-sum defect
   before and after. Above it the sharp field improves from 1.6e-3 to
   6.2e-4, which is the escalation doing its job.
+
+
 
 - The relative-weight contract reaches the ROOT namespace, and refuses a
   signed rule (#263). #245 put the rule in `_setup` and swept
@@ -130,7 +153,6 @@
   a clean 68x improvement for a regression. The remaining terms stay
   open, with the measurement above as the baseline. R has the same
   divergence and is untouched.
-
 - GMRFExtremes answers a threshold out in the tail (#197). The grid was
   built from the chain's means and marginal sds alone, so a threshold
   above the last cell left the occupancy identically one and every
