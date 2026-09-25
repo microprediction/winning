@@ -27,7 +27,17 @@
   the source rather than the thing that ships.
 
   All four now pass `R CMD check --as-cran` with one NOTE and no skips:
-  15, 14, 6 and 21 tests. `mvtnormfast` declares the `TruncatedNormal`
+  15, 14, 6 and 21 tests.
+
+  CI then caught what my local run could not. `mlogitfast` suggested
+  `mlogit` and `dfidx` and used them NOWHERE -- not in the code, the
+  tests, the examples or a vignette, only named in prose on a manual
+  page. `R CMD check --as-cran` ERRORS on a suggested package that is
+  absent, so it passed here, where this machine has them, and failed on
+  the runner with "Packages suggested but not available". They are
+  dropped, and two new tests close the class: every declared dependency
+  must be one the workflow installs, and no package may declare a
+  dependency nothing references. `mvtnormfast` declares the `TruncatedNormal`
   it was already using, which also clears a check WARNING, and CI
   installs it so that test runs rather than skipping.
   `tests/test_r_packages_are_all_gated.py` fails if a package is missing

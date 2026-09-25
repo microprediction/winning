@@ -122,3 +122,83 @@ def test_no_r_test_sources_the_package_by_relative_path():
     assert not offenders, (
         "R tests that source the package instead of using the installed "
         "one:\n  " + "\n  ".join(offenders))
+
+# Packages R ships with. Everything else must be installed by the
+# workflow before `R CMD check --as-cran` runs, or the check ERRORS with
+# "Packages suggested but not available".
+_R_BASE = {
+    "stats", "utils", "methods", "graphics", "grDevices", "tools",
+    "parallel", "compiler", "datasets", "grid", "splines", "stats4",
+    "tcltk", "translations", "base",
+}
+
+
+def _declared_deps(pkg):
+    """Imports, Depends and Suggests for one package, as a set."""
+    text = (ROOT / "r" / pkg / "DESCRIPTION").read_text(encoding="utf-8")
+    fields, current = {}, None
+    for line in text.splitlines():
+        if re.match(r"^[A-Za-z/]+:", line):
+            current, _, rest = line.partition(":")
+            fields[current] = rest
+        elif current and line.startswith((" ", "\t")):
+            fields[current] += " " + line
+    names = set()
+    for key in ("Imports", "Depends", "Suggests"):
+        for part in fields.get(key, "").split(","):
+            name = re.sub(r"\(.*?\)", "", part).strip()
+            if name and name != "R":
+                names.add(name)
+    return names - _R_BASE
+
+
+def _workflow_installs():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    m = re.search(r"install\.packages\(c\((.*?)\)\)", text, re.S)
+    assert m, "the workflow no longer installs R packages in one call"
+    return set(re.findall(r'"([^"]+)"', m.group(1)))
+
+
+def test_ci_installs_every_declared_r_dependency():
+    """`R CMD check --as-cran` ERRORS on a SUGGESTED package that is not
+    installed, so a dependency the workflow does not install fails the
+    job -- and it passes locally, where the developer has it.
+
+    `mlogitfast` suggested `mlogit` and `dfidx` and used them nowhere:
+    not in the code, the tests, the examples or a vignette, only named in
+    prose on a manual page. The check passed here and failed on the
+    runner with "Packages suggested but not available" (#142).
+    """
+    installs = _workflow_installs()
+    missing = []
+    for pkg in sorted(_packages_on_disk()):
+        for dep in sorted(_declared_deps(pkg) - installs):
+            missing.append(f"{pkg} declares {dep}")
+    assert not missing, (
+        "R dependencies the workflow never installs, so R CMD check "
+        "errors on the runner while passing locally:\n  "
+        + "\n  ".join(missing)
+        + "\n\nEither add them to the install step, or drop them from "
+          "DESCRIPTION if nothing actually uses them.")
+
+
+def test_no_package_declares_a_dependency_nothing_uses():
+    """The other half: a Suggests entry that no code, test or example
+    references is dead weight that only CI pays for."""
+    unused = []
+    for pkg in sorted(_packages_on_disk()):
+        root = ROOT / "r" / pkg
+        body = ""
+        for sub in ("R", "tests", "vignettes"):
+            d = root / sub
+            if d.is_dir():
+                for f in d.rglob("*.R"):
+                    body += f.read_text(encoding="utf-8", errors="ignore")
+        for dep in sorted(_declared_deps(pkg)):
+            if dep == "testthat":
+                continue          # the driver names it
+            if not re.search(rf"\b{re.escape(dep)}\b", body):
+                unused.append(f"{pkg} declares {dep}, which no R code uses")
+    assert not unused, (
+        "declared R dependencies that nothing references:\n  "
+        + "\n  ".join(unused))
