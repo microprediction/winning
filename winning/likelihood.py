@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .shapes import as_loadings
+from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
 from scipy.special import ndtr, ndtri
@@ -57,7 +57,7 @@ def nodes_for_likelihood(r, Qf=7, Qz=7, sharp=0.0):
     return F[keep], W[keep] / W[keep].sum()
 
 
-def sharpness_bound(V, D=None):
+def sharpness_bound(V, D=None, n=None):
     """The pairwise-safe sharpness of a loading matrix, gauge-fixed.
 
     Only loading DIFFERENCES decide a race, so the statistic must be
@@ -69,11 +69,15 @@ def sharpness_bound(V, D=None):
     This lives in one place because it was written twice and the copies
     drifted: prediction used `max_i ||V_i||` with no centering and no
     sqrt(2), so a fitted model could optimise under Sobol and then be
-    priced on the Hermite tensor (#213).
+    priced on the Hermite tensor (#213). `n` is the field size; it is
+    taken from `D` when that is given, and from `V` otherwise, so a
+    caller that already holds the count should pass it.
     """
-    V = np.asarray(V, float)
+    if n is None:
+        n = len(np.asarray(D)) if D is not None else np.shape(V)[0]
+    V = as_loadings(V, n)          # the same door every other verb uses
     V = V - V.mean(axis=0)
-    dmin = 1.0 if D is None else float(np.min(np.asarray(D, float)))
+    dmin = 1.0 if D is None else float(np.min(as_idio(D, n)))
     return float(np.sqrt(2.0) * np.max(np.sqrt((V ** 2).sum(axis=1)))
                  / np.sqrt(dmin))
 
