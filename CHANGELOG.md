@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- All four structured-MVN ports reject an empty rectangle instead of
+  pricing it at the underflow floor (#235). `P(lower <= X <= upper)` with
+  `lower_i > upper_i` is an EMPTY event. Python, the vendored standalone
+  python, R and Julia each formed the negative conditional cell --
+  `Phi(0) - Phi(1) = -0.341344746...` -- and then clamped it with
+  `max(cell, 1e-300)`. So an impossible observation came back as a finite
+  probability, and in log-likelihood code as about `-690.8` rather than
+  `-inf`. On the recentered path it is worse than a clamp: importance
+  integration then integrates the artificial constant cell.
+
+  `mvtnorm::pmvnorm`, which `r/mvtnormfast` is a drop-in for, raises on
+  reversed bounds and returns 0 when a coordinate has `lower == upper`.
+  All four ports now do exactly that, and report the degenerate case as
+  method `degenerate-rectangle` with a value of exactly `0.0`, not
+  `1e-300`. The error names the offending coordinate.
+
+  The check sits in front of the dense routes too, not only the factor
+  one. `scipy.stats.multivariate_normal.cdf` returns the NEGATIVE number
+  `-0.341...` for a reversed rectangle rather than raising, so the python
+  fallback branch needed its own guard; the julia dense delegation and
+  the R `mvtnorm` fallback are covered the same way. Distinct from #196,
+  which is about cancellation on VALID upper-tail intervals.
+
 - The browser factor race's own parity suite runs in CI (#140, second
   half). `js/factor/test_parity.mjs` checks the tabulated bases against
   scipy-generated vectors, and nothing ran it -- which is why it sat
