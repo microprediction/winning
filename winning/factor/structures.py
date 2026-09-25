@@ -209,7 +209,16 @@ def structure_variances(structure):
         tot = D + _scalar_loading(structure.loading, "tree races") ** 2
         parent = np.asarray(structure.parent, int)
         strength = np.asarray(structure.strength, float)
-        cluster = np.asarray(structure.cluster, int)
+        # Cluster labels are arbitrary comparable values, and the forward
+        # dispatch says so: every tree/block kernel in blocks.py remaps
+        # them with np.unique(..., return_inverse=True). This cast them
+        # to int and used them as node IDs, so a tree labelled 10/20
+        # priced fine and then inverted with "index 10 is out of bounds
+        # for axis 0 with size 3", and string labels died in int()
+        # (#146). Same remapping here, so a label means the same thing
+        # on both paths.
+        _labels, cluster = np.unique(np.asarray(structure.cluster),
+                                     return_inverse=True)
         anc = np.zeros(len(strength))
         for c in range(len(strength)):
             u, s = c, 0.0

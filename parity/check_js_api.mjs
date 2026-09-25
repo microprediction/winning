@@ -476,6 +476,67 @@ accepts("the inverse takes a scalar D, matching python",
           });
 }
 
+// --- the block Jacobian says rank-one, or says so (#271)
+// The FORWARD block kernel prices rank-r cluster loadings. The
+// Jacobian is rank-one only: it takes each loading row as a number,
+// and javascript coerces a ONE-element array to its number, so an
+// (n, 1) column kept working while a rank-2 row went NaN at both the
+// quadrature amplitude and the shift. The NaN reached every cell, so
+// the call returned an all-NaN matrix and said nothing. python's
+// block_race_jacobian raises for exactly this input.
+{
+  const muB = [-0.4, 0.1, 0.2, 0.5];
+  const clB = [0, 0, 1, 1];
+  const DB = [0.7, 0.8, 0.9, 1.0];
+  const rank2 = [[0.5, 0.2], [0.3, -0.4], [-0.2, 0.6], [0.1, 0.5]];
+  const column = [[0.5], [0.3], [-0.2], [0.1]];
+  const flat = [0.5, 0.3, -0.2, 0.1];
+  const want = "rank-one cluster loadings only";
+
+  // every Jacobian door funnels through blockRaceJacobian, so all of
+  // them have to refuse -- that is the point of guarding there
+  rejects(blocks.blockRaceJacobian, [muB, clB, rank2, DB],
+          "block jacobian refuses rank-2 loadings", want);
+  rejects(blocks.nestedRaceJacobian,
+          [muB, clB, rank2, DB, { coupling: [0.2, -0.1, 0.3, 0.0] }],
+          "nested jacobian refuses rank-2 loadings", want);
+  rejects(polish.raceJacobian,
+          [muB, { structure: { kind: "Blocks", cluster: clB, loading: rank2, D: DB } }],
+          "the structured front door refuses rank-2 too", want);
+  rejects(blocks.abilitiesFromBlockRace,
+          [[0.4, 0.25, 0.2, 0.15], clB, rank2, DB],
+          "the block inverse refuses rank-2 too", want);
+
+  // and the message points somewhere: the forward DOES price it
+  accepts("the forward still prices the rank-2 field it refuses to differentiate",
+          () => blocks.blockRaceProbabilities(muB, clB, rank2, DB),
+          p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-9
+                && p2.every(v => v > 0),
+          p2 => `[${p2.map(v => v.toFixed(5))}]`);
+
+  // the rank-one spellings are untouched, INCLUDING the (n, 1) column
+  // that only ever worked by javascript's number coercion
+  accepts("an (n,1) column is the same jacobian as the flat vector",
+          () => [blocks.blockRaceJacobian(muB, clB, column, DB),
+                 blocks.blockRaceJacobian(muB, clB, flat, DB)],
+          ([a, b2]) => JSON.stringify(a) === JSON.stringify(b2));
+  accepts("the rank-one jacobian still follows its forward",
+          () => {
+            const J = blocks.blockRaceJacobian(muB, clB, flat, DB);
+            const h = 1e-5;
+            let worst = 0;
+            for (let j = 0; j < 4; j++) {
+              const a = muB.slice(), c = muB.slice();
+              a[j] += h; c[j] -= h;
+              const pa = blocks.blockRaceProbabilities(a, clB, flat, DB);
+              const pc = blocks.blockRaceProbabilities(c, clB, flat, DB);
+              for (let i = 0; i < 4; i++)
+                worst = Math.max(worst, Math.abs(J[i][j] - (pa[i] - pc[i]) / (2 * h)));
+            }
+            return worst < 1e-6;
+          });
+}
+
 // --- classic calibration: offsetSamples must descend (#274)
 // The interpolation table is built by mapping over offsetSamples and
 // read back with interpClamped, whose xp must ascend -- descending
