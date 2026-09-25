@@ -219,9 +219,8 @@ function _transitions(c::GaussMarkovChain, x::Vector{Float64},
         M = Matrix{Float64}(undef, L, L)
         for (j, xm) in enumerate(x)
             m = c.mu[t + 1] + c.phi[t] * (xm - c.mu[t])
-            invs = 1.0 / c.s[t]
             @inbounds for i in 1:L
-                M[i, j] = npdf((x[i] - m) * invs) * invs * dx
+                M[i, j] = _cell_mass(x[i], m, c.s[t], dx)
             end
         end
         T[t] = M
@@ -229,8 +228,47 @@ function _transitions(c::GaussMarkovChain, x::Vector{Float64},
     return T
 end
 
+"""
+    _cell_mass(xi, m, invs, dx)
+
+The probability that a N(m, 1/invs^2) draw lands in the lattice cell
+centred on `xi`, as a CDF difference rather than density x spacing.
+
+`npdf(z) * invs * dx` is a Riemann sample of the density, and it is only
+a probability when the density is flat across the cell. An innovation sd
+far below the spacing makes the transition kernel a SPIKE between
+samples: with innovation variance 1e-4 on a lattice whose spacing is set
+by the marginal sd, each column of the transition matrix summed to about
+80 instead of 1, and `max_cdf` returned 79.988 for a probability (#244).
+An excursion probability came back as -78.99.
+
+The CDF difference is the cell's exact mass, so a column sums to one
+however narrow the kernel is, and for a wide kernel it agrees with the
+old expression to O(dx^2) -- it is strictly the better quadrature, not a
+special case. Renormalising the columns instead would have hidden the
+resolution failure rather than fixed it.
+"""
+@inline function _cell_mass(xi::Float64, m::Float64, sd::Float64,
+                            dx::Float64)
+    # Integrating the kernel over the cell is exact in mass but convolves
+    # a boxcar of width dx at every step, which adds dx^2/12 to the
+    # transition variance. Deflating by exactly that much puts it back,
+    # so the discretised chain has the right variance and this is not a
+    # worse quadrature than the midpoint rule where the midpoint rule
+    # works. Below the resolution limit the deflated sd is zero and the
+    # cell containing the mean takes the whole mass -- the correct
+    # degenerate limit, and the case the midpoint rule turned into 80.
+    v = sd * sd - dx * dx / 12.0
+    h = 0.5 * dx
+    if v <= 0.0
+        return (m >= xi - h && m < xi + h) ? 1.0 : 0.0
+    end
+    inv = 1.0 / sqrt(v)
+    return ndtr((xi + h - m) * inv) - ndtr((xi - h - m) * inv)
+end
+
 _initial_density(c, x, dx) =
-    [npdf((xi - c.mu[1]) / c.sd0) / c.sd0 * dx for xi in x]
+    [_cell_mass(xi, c.mu[1], c.sd0, dx) for xi in x]
 
 # ---- max CDF and first passage (one restricted forward pass) -------
 
