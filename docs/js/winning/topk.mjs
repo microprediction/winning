@@ -394,13 +394,25 @@ export function rankProbabilities(mu, opts = {}) {
         for (let mm = 0; mm < n; mm++) P[i][mm] += w[q] * node[i][mm];
     }
   }
+  // Check what is RETURNED. Row normalisation makes every row exact and
+  // MOVES the columns, so a matrix that passed the raw check could fail
+  // the stated identity afterwards with nothing looking (#203). The
+  // columns are not forced: alternating scaling would make both exact by
+  // hiding the under-resolution that caused it, and the same field at
+  // 2001 points has a column error of 3.5e-9.
+  const raw = P.map(r => r.reduce((a, b) => a + b, 0));
+  P = P.map((r, i) => r.map(v => clip01(v / Math.max(raw[i], 1e-300))));
   const rows = P.map(r => r.reduce((a, b) => a + b, 0));
   const cols = new Array(n).fill(0);
   for (const r of P) for (let m = 0; m < n; m++) cols[m] += r[m];
-  const bad = rows.some(v => Math.abs(v - 1) > 5e-3)
-    || cols.some(v => Math.abs(v - 1) > 5e-3);
-  if (bad) throw new Error("rank marginals defective; raise points=");
-  return P.map((r, i) => r.map(v => clip01(v / rows[i])));
+  const re = Math.max(...rows.map(v => Math.abs(v - 1)));
+  const ce = Math.max(...cols.map(v => Math.abs(v - 1)));
+  if (!P.every(r => r.every(Number.isFinite)) || re > 5e-3 || ce > 5e-3)
+    throw new Error(
+      `rank marginals defective: row-sum error ${re.toExponential(2)}, ` +
+      `column-sum error ${ce.toExponential(2)}, measured on the RETURNED ` +
+      "matrix after row normalisation. Raise points=.");
+  return P;
 }
 
 function validatedTarget(q, k, n, targetFloor) {
