@@ -26,11 +26,16 @@
   `abilitiesFromRace` no longer differentiate or invert a different-rank
   model than the forward prices.
 
+  Normalising the weights closed something nobody had reported.
+  `raceJacobian` was SCALE-dependent here too: `J(W)` and `J(10W)`
+  differed by 1.473, the same defect as #281 but in this tree rather
+  than the standalone `js/factor` module. They are now identical, and
+  the already-normalised answer is bit-identical to before.
+
   python refuses all of these already -- `np.asarray(F, float)` will not
   build an array from ragged rows and a wrong rank fails the matmul
   against V -- so this was the browser guessing alone. Distinct from
-  #232 (the shape of V) and #281 (weight SCALE in the standalone
-  `js/factor` module).
+  #232 (the shape of V).
 
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite

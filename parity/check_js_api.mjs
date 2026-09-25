@@ -573,6 +573,22 @@ accepts("the inverse takes a scalar D, matching python",
   accepts("the internally built nodes are unaffected",
           () => fwd({}),
           p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-12);
+
+  // The jacobian was scale-dependent too, which nobody had reported:
+  // the same defect as #281 but in this tree rather than the
+  // standalone js/factor module. On main J(W) and J(10W) differ by
+  // 1.473; normalising W at the door makes them identical, and leaves
+  // the already-normalised answer bit-identical.
+  const jac = w => polish.raceJacobian(muF, { V: VF, D: DF, F: FF, W: w });
+  const jbase = accepts("the jacobian prices with explicit nodes",
+                        () => jac(WF),
+                        J => J.length === 4 && J.every(r => r.length === 4));
+  accepts("the jacobian is invariant to W -> cW",
+          () => jac(WF.map(w => 10 * w)),
+          J => jbase && Math.max(...J.map((r, i) =>
+            Math.max(...r.map((v, j) => Math.abs(v - jbase[i][j]))))) === 0,
+          J => jbase ? `max |diff| ${Math.max(...J.map((r, i) =>
+            Math.max(...r.map((v, j) => Math.abs(v - jbase[i][j]))))).toExponential(2)}` : "");
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
