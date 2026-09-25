@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- A tree's cluster labels mean the same thing on both paths (#146).
+  Labels are arbitrary comparable values, and the forward dispatch says
+  so: every tree and block kernel in `blocks.py` remaps them with
+  `np.unique(..., return_inverse=True)`. `structure_variances`, which the
+  generic inverse uses, cast them to `int` and used them directly as node
+  IDs. So a tree labelled 10/20 priced fine and inverted with "index 10
+  is out of bounds for axis 0 with size 3", and string labels died inside
+  `int()`. Canonical 0/1 labels worked, which is why it survived.
+
+  `Blocks` and `Nested` were already fine -- neither indexes anything by
+  the label -- so this is the tree alone, and the tests record that so a
+  later change cannot quietly break what worked.
+
+  The fixture needed care. A tree whose leaf clusters hang off one parent
+  gives every leaf the same ancestor variance, so relabelling cannot
+  change the answer and the invariance would hold against a broken
+  implementation; my first one was exactly that. These leaves hang at
+  UNEQUAL depth, and the tests show the strengths move the race, and that
+  a different PARTITION is a different race, before any equality is
+  believed.
 - R's `pmvnorm_fast` recycled every per-coordinate argument in silence
   (#285). R repeats a short vector whenever its length divides `n` and
   emits no warning, so `D = c(1, 4)` at `n = 4` became `c(1, 4, 1, 4)`
