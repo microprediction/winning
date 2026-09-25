@@ -741,12 +741,20 @@ def _race_dense(mu, cov, budget=4096, seed=0, return_slopes=False,
     n = len(C)
     order = np.lexsort((C.sum(axis=1), m))
     Cs = C[np.ix_(order, order)]
+    # The Cholesky is a POSITIVE-DEFINITENESS TEST here, not a change of
+    # variables: the covariance goes to GHK as itself. Factoring it and
+    # letting qmc_ghk rebuild `L @ L.T` lost the choice-relevant
+    # eigenvalue whenever an unidentifiable common mode dominated --
+    # `I + a 11'` is the same race as `I` for every `a`, and the winner
+    # moved by 0.033 at a = 4e15 while the contrast variance stayed
+    # exactly 2.0 (#302). The R port always formed the contrast from
+    # the original matrix.
     try:
-        L = np.linalg.cholesky(Cs)
+        np.linalg.cholesky(Cs)
     except np.linalg.LinAlgError:
-        L = np.linalg.cholesky(Cs + 1e-10 * float(np.trace(Cs)) / n * np.eye(n))
-    ps, info = qmc_ghk(-m[order], L, np.full(n, 1e-12), budget=int(budget),
-                       seed=int(seed), return_slopes=return_slopes)
+        Cs = Cs + 1e-10 * float(np.trace(Cs)) / n * np.eye(n)
+    ps, info = qmc_ghk(-m[order], None, None, budget=int(budget),
+                       seed=int(seed), return_slopes=return_slopes, cov=Cs)
     p = np.empty(n)
     p[order] = np.asarray(ps, dtype=float)
     if log:
