@@ -160,4 +160,53 @@ end
     @test abs(am[1] - am[end]) < 0.01
 end
 
+# --- a transition narrower than the lattice spacing (#244) -------------
+#
+# The kernel was discretised as density x spacing, which is a probability
+# only where the density is flat across a cell. An innovation sd far
+# below the spacing makes it a SPIKE between samples: with s = 1e-4 on a
+# lattice spaced by the marginal sd, each column of the transition matrix
+# summed to about 80, max_cdf returned 79.988 for a probability and the
+# excursion probability came back as -78.99.
+#
+# The cell mass is a CDF difference with the variance deflated by
+# dx^2/12, which is what the cell averaging adds. That leaves the
+# resolved regime bit-for-bit as it was and gives the unresolved one its
+# correct degenerate limit.
+@testset "a transition narrower than the lattice" begin
+    c = GaussMarkovChain([0.0, 0.0], 1.0, [1.0], [1e-4])
+
+    # X2 = X1 + eps: bivariate normal, corr = 1/sqrt(1 + s^2), and
+    # P(max <= 0) = 1/4 + asin(rho)/(2pi).
+    rho = 1.0 / sqrt(1.0 + 1e-8)
+    exact = 0.25 + asin(rho) / (2pi)
+
+    for pts in (200, 400, 1600)
+        m = max_cdf(c, 0.0; points = pts)
+        @test 0.0 <= m <= 1.0
+        @test abs(m - exact) < 1e-3
+        e = excursion_probability(c, 0.0; points = pts)
+        @test 0.0 <= e <= 1.0
+        @test abs(m + e - 1.0) < 1e-12
+        f = first_passage(c, 0.0; points = pts)
+        @test all(0.0 .<= f .<= 1.0)
+        @test abs(sum(f) - 1.0) < 1e-10
+    end
+
+    # every transition column is a probability distribution, which is the
+    # property that failed: the columns summed to 80.
+    x, dx = GE._grid(c, 400)
+    T = GE._transitions(c, x, dx)
+    for M in T
+        colsums = vec(sum(M; dims = 1))
+        @test maximum(abs.(colsums .- 1.0)) < 1e-9
+    end
+
+    # and the resolved regime is unchanged: 12 iid normals, closed form
+    iid = GaussMarkovChain(zeros(12), 1.0, zeros(11), ones(11))
+    for u in (-0.5, 0.5, 1.5, 2.5)
+        @test abs(max_cdf(iid, u) - GE.ndtr(u)^12) < 2e-4
+    end
+end
+
 println("all GMRFExtremes tests passed")
