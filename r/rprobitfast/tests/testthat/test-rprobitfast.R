@@ -1,6 +1,8 @@
-source(file.path("..", "..", "R", "engine.R"))
-source(file.path("..", "..", "R", "rprobit_fast.R"))
-
+# Run by R CMD check through tests/testthat.R, so the package is
+# already attached and its internals are in scope. These files used
+# to source(file.path("..", "..", "R", ...)) instead, which only
+# works from the repo and fails inside a check -- which is how they
+# went unrun (#142).
 test_that("synthetic MNP fits, converges, recovers slope direction", {
   set.seed(9)
   J <- 3; Tn <- 600
@@ -93,4 +95,62 @@ test_that("the triangular loop is empty exactly when it should be", {
   expect_true(all(vapply(strsplit(visited(5L, 2L), ","),
                          function(p) as.integer(p[1]) <= 5L, TRUE)))
   expect_equal(visited(1L, 1L), character(0))   # nothing to fill
+})
+
+# --- every observation is accounted for (#194) ------------------------
+#
+# .nll_core iterates over the LEGAL labels and gathers the rows matching
+# each, so a row whose choice is outside 1..J is never visited: logp
+# stays 0 there, which adds zero negative log-likelihood and zero
+# gradient, and the fit silently optimised a SUBSET while reporting it
+# as the whole. NA rows did the same. Dropping observations RAISES the
+# log-likelihood, because there is less of it, so nothing downstream can
+# tell it from a better fit.
+
+test_that("a choice outside the alternatives is refused", {
+  X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
+  th <- c(0.5, 0.2, 0.3)
+  nd <- .halton_nodes3(1L, m = 5L)
+  for (bad in list(9L, 0L, -1L, NA_integer_)) {
+    ch <- rep(1:3, length.out = 30)
+    ch[1] <- bad
+    expect_error(.nll_core(th, list(X), ch, 3L, 1L, nd, nd,
+                           want_grad = FALSE),
+                 "not an alternative in 1\\.\\.3")
+  }
+})
+
+test_that("a choice vector of the wrong length is refused", {
+  X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
+  th <- c(0.5, 0.2, 0.3)
+  nd <- .halton_nodes3(1L, m = 5L)
+  for (n in c(20L, 31L)) {
+    expect_error(.nll_core(th, list(X), rep(1:3, length.out = n),
+                           3L, 1L, nd, nd, want_grad = FALSE),
+                 "one entry per observation")
+  }
+})
+
+test_that("the message names the first offender and counts them", {
+  X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
+  nd <- .halton_nodes3(1L, m = 5L)
+  ch <- rep(1:3, length.out = 30); ch[4] <- 9L
+  msg <- tryCatch(.nll_core(c(0.5, 0.2, 0.3), list(X), ch, 3L, 1L,
+                            nd, nd, want_grad = FALSE),
+                  error = function(e) conditionMessage(e))
+  expect_match(msg, "choice\\[4\\] = 9")
+  expect_match(msg, "1 of 30")
+})
+
+test_that("a valid panel is untouched", {
+  set.seed(2)
+  n <- 40L; J <- 3L
+  df <- data.frame(id = rep(seq_len(n), each = J),
+                   alt = rep(1:J, times = n), x = rnorm(n * J))
+  u <- 0.6 * df$x + rnorm(n * J)
+  df$chosen <- unlist(lapply(split(u, df$id),
+                             function(v) as.integer(seq_along(v) == which.max(v))))
+  fit <- rprobit_fast(df, covariates = "x", r = 1L, Qf = 5L, Qz = 5L,
+                      maxit = 10L)
+  expect_true(is.finite(fit$coefficients[["x"]]))
 })

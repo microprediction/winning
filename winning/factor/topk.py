@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..shapes import as_loadings
+from ..shapes import as_idio, as_loadings
 
 
 from .races import _jacobi_sweeps, BASES
@@ -175,6 +175,7 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
                       is_normal=False):
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
+    points = _resolved_points(lo, hi, sd, points)
     if is_normal and _HAVE_RUST:
         return np.asarray(_fastrace.top_k(
             np.ascontiguousarray(mu, dtype=float),
@@ -239,7 +240,11 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     if not 1 <= int(k) <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
     k = int(k)
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
 
@@ -348,10 +353,15 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     k = int(k)
     if not 1 <= k <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows)
+    points = _resolved_points(lo, hi, sd, points)
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -400,10 +410,15 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     k = int(k)
     if not 1 <= k <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows)
+    points = _resolved_points(lo, hi, sd, points)
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -452,11 +467,16 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
             Jm += w[j] * Jm_q
             Js += w[j] * Js_q
         return Jm, Js
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows,
                            is_normal=(base == "normal"))
+    points = _resolved_points(lo, hi, sd, points)
     if (base == "normal" and _HAVE_RUST
             and hasattr(_fastrace, "top_k_jacobians")):
         jm, js = _fastrace.top_k_jacobians(
@@ -503,6 +523,38 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
 # instead: exactly-2nd plus win is top-2.
 
 
+def _resolved_points(lo, hi, sd, points):
+    """Points enough to resolve the NARROWEST density on the window.
+
+    The window is set by the widest runner and the grid by `points`, so a
+    field with heterogeneous scales can leave the narrowest density
+    between samples: sds of 0.093 and 6.02 at the default 513 points gave
+    a spacing of 0.174, nearly twice the narrow runner's whole sd, and
+    its membership came out 4.4e-3 wrong (#224).
+
+    The mass check cannot see that. It is ONE SCALAR -- the memberships
+    sum to k -- and runner-level errors of opposite sign cancel in it:
+    the raw total was 3.9944 against a tolerance of 0.02, comfortably
+    inside, and the routine then rescaled a wrong vector to sum to four.
+
+    Same rule as the win race (races.forward_grid): about two points per
+    narrowest sd, capped at 8193, warning when the cap still leaves the
+    lattice coarse.
+    """
+    smin = max(float(np.min(sd)), 1e-300)
+    need = int(np.ceil((hi - lo) / (0.5 * smin))) + 1
+    if need > 8193:
+        import warnings
+        warnings.warn(
+            "top-k lattice cannot resolve the narrowest runner even at "
+            f"8193 points (min sd {smin:.1e} over a window of "
+            f"{hi - lo:.3g}); memberships may carry percent-level error "
+            "the mass check cannot see, since it is one scalar and "
+            "runner-level errors of opposite sign cancel in it.",
+            RuntimeWarning, stacklevel=3)
+    return max(int(points), min(need, 8193))
+
+
 def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
                       is_normal=False):
     """One forward pass returning the raw memberships AND the own
@@ -517,6 +569,7 @@ def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
     quadrature grid is identical)."""
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
+    points = _resolved_points(lo, hi, sd, points)
     if is_normal and _HAVE_RUST and hasattr(_fastrace, "top_k_slopes"):
         q, sl = _fastrace.top_k_slopes(
             np.ascontiguousarray(mu, dtype=float),
@@ -611,7 +664,11 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     if not 1 <= k <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
     target, floored = _validated_topk_target(q, k, n, target_floor)
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
 
@@ -863,6 +920,7 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
     python-computed window."""
     n = len(mu)
     lo, hi = _count_window(mu, sd, n - 1, base_rows, is_normal=is_normal)
+    points = _resolved_points(lo, hi, sd, points)
     if (is_normal and _HAVE_RUST
             and hasattr(_fastrace, "rank_marginal_jacobian")):
         p, jac = _fastrace.rank_marginal_jacobian(
@@ -928,7 +986,11 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
             "no finite inverse (floor small entries upstream)")
     target = target / target.sum()
     logt = np.log(target)
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     mu = (np.zeros(n) if mu0 is None
@@ -995,20 +1057,27 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     sums reproduce top_k_probabilities. O(n^2 L) per factor node."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
 
     def one_node(m):
         lo, hi = _count_window(m, sd, n - 1, base_rows,
                                is_normal=(base == "normal"))
+        # a LOCAL name: assigning `points` here would shadow the enclosing
+        # parameter and leave it unbound on the compiled branch
+        pts = _resolved_points(lo, hi, sd, points)
         if (base == "normal" and _HAVE_RUST
                 and hasattr(_fastrace, "rank_marginals")):
             flat = _fastrace.rank_marginals(
                 np.ascontiguousarray(m, dtype=float),
-                np.ascontiguousarray(sd, dtype=float), lo, hi, points)
+                np.ascontiguousarray(sd, dtype=float), lo, hi, pts)
             return np.asarray(flat, dtype=float).reshape(n, n)
-        x = np.linspace(lo, hi, points)
+        x = np.linspace(lo, hi, pts)
         dx = x[1] - x[0]
         z = (x[:, None] - m[None, :]) / sd[None, :]
         S, f, _ = base_rows(z)

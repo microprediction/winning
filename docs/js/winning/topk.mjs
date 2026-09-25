@@ -4,7 +4,7 @@
 // winning/factor/topk.py -- the cavity count distribution with
 // stable-direction deconvolution; see the python module docstring for
 // the derivations and the two-branch refusal of exact-rank targets.
-import { TINY, hermite1, solve, checkOpts, OPT_HINTS } from "./core.mjs";
+import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio } from "./core.mjs";
 import { BASES } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -183,8 +183,28 @@ function pairPmfAt(Qi, F, i, k) {
   return out;
 }
 
+function resolvedPoints(lo, hi, sd, points) {
+  // about two points per NARROWEST sd, capped at 8193. The window is set
+  // by the widest runner and the grid by `points`, so a heterogeneous
+  // field leaves the narrowest density between samples, and the mass
+  // check cannot see it: that check is one scalar (memberships sum to k)
+  // and runner-level errors of opposite sign cancel in it (#224).
+  const smin = Math.max(Math.min(...sd), 1e-300);
+  // a Number is already a double, so this cannot overflow the way R and
+  // Julia did (#228); !isFinite still guards a zero-width window
+  const need = Math.ceil((hi - lo) / (0.5 * smin)) + 1;
+  if ((!Number.isFinite(need) || need > 8193) && typeof console !== "undefined")
+    console.warn(
+      `top-k lattice cannot resolve the narrowest runner even at 8193 ` +
+      `points (min sd ${smin.toExponential(1)} over a window of ` +
+      `${(hi - lo).toPrecision(3)}); memberships may carry percent-level ` +
+      "error the mass check cannot see.");
+  return Math.max(points, Math.min(need, 8193));
+}
+
 function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   const [lo, hi] = countWindow(mu, sd, k, fn, delta);
+  points = resolvedPoints(lo, hi, sd, points);
   const x = new Array(points);
   const dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
@@ -222,7 +242,7 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
 }
 
 function factorNodes(V, n, qa) {
-  let Vm = V.map(r => (Array.isArray(r) ? r.slice() : [r]));
+  const Vm = asLoadings(V, n).map(row => row.slice());
   const r = Vm[0].length;
   if (r > 2)
     throw new Error("topKProbabilities is implemented for factor rank <= 2");
@@ -254,7 +274,7 @@ export function topKProbabilities(mu, k, opts = {}) {
   k = Math.trunc(k);
   if (!(k >= 1 && k <= n - 1))
     throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   if (!V) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
                              k, "top-k race");
@@ -312,7 +332,7 @@ export function topKJacobians(mu, k, opts = {}) {
     }
     return { Jmu, Jsigma };
   }
-  const Dv = D || new Array(n).fill(1);
+  const Dv = asIdio(D, n);
   const sd = Dv.map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   const { dx, F, f, fp, z } = topkGrid(mu, sd, k, fn, points);
@@ -353,7 +373,7 @@ export function rankProbabilities(mu, opts = {}) {
   checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
   const n = mu.length;
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
 
   // one factor node: the cavity count pmf against each runner's own
@@ -463,7 +483,7 @@ export function abilitiesFromTopk(q, k, opts = {}) {
   if (!(k >= 1 && k <= n - 1))
     throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
   const { target, floored } = validatedTarget(q, k, n, targetFloor);
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   const fac = V ? factorNodes(V, n, qa) : null;
 
@@ -720,7 +740,7 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
     throw new Error("all rank probabilities must be positive");
   const s = p.reduce((a, b) => a + b, 0);
   const logt = p.map(v => Math.log(v / s));
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   let mu;
   if (mu0 != null) {

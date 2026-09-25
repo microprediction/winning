@@ -67,6 +67,27 @@
 .nll_core <- function(theta, Xb, choice, J, r, nodes, nodes_sharp,
                       want_grad = TRUE) {
   X <- Xb[[1]]
+  # Every observation must be accounted for. The loop below walks the
+  # LEGAL labels and gathers the rows matching each, so a row whose
+  # choice is outside 1..J is never visited: logp stays 0 there, which
+  # adds zero negative log-likelihood and zero gradient, and the fit
+  # silently optimised a SUBSET while reporting it as the whole. NA rows
+  # did the same (#194).
+  # X is stacked long, J rows per observation, so the observation count
+  # is nrow(X) / J -- the same Tn the loop below uses.
+  .Tn <- nrow(X) / J
+  if (length(choice) != .Tn)
+    stop(sprintf(paste0("choice must have one entry per observation: ",
+                        "got %d for %d observations"),
+                 length(choice), .Tn), call. = FALSE)
+  bad <- which(is.na(choice) | choice < 1L | choice > J)
+  if (length(bad))
+    stop(sprintf(paste0("choice[%d] = %s is not an alternative in 1..%d; ",
+                        "%d of %d observations are not. They would be ",
+                        "dropped in silence, which raises the ",
+                        "log-likelihood because there is less of it"),
+                 bad[1], as.character(choice[bad[1]]), J, length(bad),
+                 length(choice)), call. = FALSE)
   nb <- ncol(X)
   beta <- theta[seq_len(nb)]
   wfree <- theta[-seq_len(nb)]

@@ -160,4 +160,107 @@ end
     @test abs(am[1] - am[end]) < 0.01
 end
 
+# --- a transition narrower than the lattice spacing (#244) -------------
+#
+# The kernel was discretised as density x spacing, which is a probability
+# only where the density is flat across a cell. An innovation sd far
+# below the spacing makes it a SPIKE between samples: with s = 1e-4 on a
+# lattice spaced by the marginal sd, each column of the transition matrix
+# summed to about 80, max_cdf returned 79.988 for a probability and the
+# excursion probability came back as -78.99.
+#
+# The cell mass is a CDF difference with the variance deflated by
+# dx^2/12, which is what the cell averaging adds. That leaves the
+# resolved regime bit-for-bit as it was and gives the unresolved one its
+# correct degenerate limit.
+@testset "a transition narrower than the lattice" begin
+    c = GaussMarkovChain([0.0, 0.0], 1.0, [1.0], [1e-4])
+
+    # X2 = X1 + eps: bivariate normal, corr = 1/sqrt(1 + s^2), and
+    # P(max <= 0) = 1/4 + asin(rho)/(2pi).
+    rho = 1.0 / sqrt(1.0 + 1e-8)
+    exact = 0.25 + asin(rho) / (2pi)
+
+    for pts in (200, 400, 1600)
+        m = max_cdf(c, 0.0; points = pts)
+        @test 0.0 <= m <= 1.0
+        @test abs(m - exact) < 1e-3
+        e = excursion_probability(c, 0.0; points = pts)
+        @test 0.0 <= e <= 1.0
+        @test abs(m + e - 1.0) < 1e-12
+        f = first_passage(c, 0.0; points = pts)
+        @test all(0.0 .<= f .<= 1.0)
+        @test abs(sum(f) - 1.0) < 1e-10
+    end
+
+    # every transition column is a probability distribution, which is the
+    # property that failed: the columns summed to 80.
+    x, dx = GE._grid(c, 400)
+    T = GE._transitions(c, x, dx)
+    for M in T
+        colsums = vec(sum(M; dims = 1))
+        @test maximum(abs.(colsums .- 1.0)) < 1e-9
+    end
+
+    # and the resolved regime is unchanged: 12 iid normals, closed form
+    iid = GaussMarkovChain(zeros(12), 1.0, zeros(11), ones(11))
+    for u in (-0.5, 0.5, 1.5, 2.5)
+        @test abs(max_cdf(iid, u) - GE.ndtr(u)^12) < 2e-4
+    end
+end
+
+# --- a threshold out in the tail (#197) --------------------------------
+#
+# The grid was built from the chain's means and marginal sds alone, so a
+# threshold above the last cell left the occupancy identically one and
+# every answer stopped depending on u: 9, 10 and 20 sd out all returned
+# the same 1.11e-15, which is quadrature noise, not a tail. The
+# excursion was then taken as 1 - max_cdf, a subtraction of two numbers
+# that agree to every bit, so it went NEGATIVE at 10 sd, and
+# first_passage differenced the same quantities and produced a negative
+# passage mass.
+#
+# Now the grid covers the threshold, the exceedance is summed over the
+# cells ABOVE u rather than subtracted from one, and the cell mass falls
+# back to the midpoint density where ndtr has saturated.
+@testset "a threshold out in the tail" begin
+    c = GaussMarkovChain([0.0], 1.0, Float64[], Float64[])
+
+    # one node is one standard normal, so the excursion is its tail.
+    # Computed in log space, since the double-precision cdf saturates
+    # around 8.3 sd and cannot express the answer directly.
+    logtail(u) = -0.5 * u^2 - log(u) - 0.5 * log(2pi) +
+                 log1p(-1 / u^2 + 3 / u^4)
+
+    for u in (4.0, 6.0, 9.0, 12.0)
+        e = excursion_probability(c, u)
+        @test e > 0.0                      # was 0, or negative at 10 sd
+        @test isfinite(e)
+        @test abs(e - exp(logtail(u))) / exp(logtail(u)) < 5e-2
+    end
+
+    # the answer must DEPEND on the threshold, which is what failed
+    @test excursion_probability(c, 9.0) > excursion_probability(c, 12.0)
+    @test excursion_probability(c, 12.0) > excursion_probability(c, 15.0)
+
+    # first passage is a distribution, with no negative entry
+    for u in (6.0, 9.0, 12.0)
+        f = first_passage(c, u; points = 200)
+        @test all(f .>= 0.0)
+        @test abs(sum(f) - 1.0) < 1e-12
+        @test f[1] > 0.0
+    end
+
+    # a chain with transitions, so the grid extension has to carry them
+    c3 = GaussMarkovChain(zeros(3), 1.0, fill(0.8, 2), fill(0.3, 2))
+    for u in (2.0, 5.0, 9.0)
+        e = excursion_probability(c3, u)
+        @test 0.0 < e <= 1.0
+        f = first_passage(c3, u; points = 200)
+        @test all(f .>= 0.0)
+        @test abs(sum(f) - 1.0) < 1e-10
+    end
+    @test excursion_probability(c3, 5.0) > excursion_probability(c3, 9.0)
+end
+
 println("all GMRFExtremes tests passed")
