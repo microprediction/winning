@@ -302,6 +302,14 @@ def _d_choice(V):
         np.tile(MU, (3, 1)), V, np.array([0, 1, 2]), D=D)
 
 
+@driver("winning.likelihood.sharpness_bound", bites=False)
+def _d_sharpness(V):
+    """Returns a scalar, so it cannot BITE the way a probability vector
+    does; what matters is that it reads every spelling of V alike, which
+    the sweep checks by comparing across them."""
+    return np.array([_mod("winning.likelihood.sharpness_bound")(V, D)])
+
+
 @driver("winning.likelihood.ranking_loglik_and_score")
 def _d_ranking(V):
     return _mod("winning.likelihood.ranking_loglik_and_score")(
