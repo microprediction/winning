@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- Malformed portfolio limits are refused, not dropped (#247). `nameCaps`
+  and `groups` encode name and sector caps, so a typo that DROPS a
+  constraint returns an ordinary-looking result that is simply
+  under-constrained -- worse than an error. In the browser:
+
+  | input | before |
+  |---|---|
+  | `nameCaps` of length n-1 | last name uncapped; an 80% position came back with `maxViolation` 0 |
+  | `nameCaps` of length n+1 | silently truncated to n |
+  | a group index of n | wrote past the row; every runner NaN, reported feasible |
+  | a negative group index | stored as a non-element property, member silently ignored |
+  | an `A` row of the wrong width | the constraint vanished |
+
+  Two of these needed the python side too, because the ports disagreed
+  about what the input MEANT rather than both being wrong. Numpy read a
+  negative group index as counting from the end, so python silently
+  capped the LAST name where the browser dropped the member. Neither is
+  documented and neither is what a group membership means, so both
+  refuse it now.
+
+  A non-finite `name_caps` ENTRY is left alone: "NaN/None entries
+  skipped" is the documented contract, meaning no cap for that name, and
+  my first cut broke it. That is a feature in both ports.
+
 - A worthless dividend prices at zero, in the browser AND in R (#242).
   `prices_from_dividends` maps only a MISSING quote to `nan_value`. The
   browser used `Number.isFinite(x) ? x : nanValue`, which conflates every

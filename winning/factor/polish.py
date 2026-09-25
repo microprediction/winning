@@ -157,7 +157,21 @@ def concentration_matrix(n, name_caps=None, groups=None):
                 rows.append(r); bs.append(float(caps[i]))
     if groups is not None:
         for idx, cap in groups:
-            r = np.zeros(n); r[np.asarray(idx, int)] = 1.0
+            members = np.asarray(idx, int)
+            # numpy read a negative index as counting from the END, so a
+            # typo silently capped the LAST name instead; the browser,
+            # which stores a negative index as a non-element property,
+            # silently dropped the member instead. Neither is documented
+            # and neither is what a group of names means, so both ports
+            # refuse it now rather than meaning two different things
+            # (#247).
+            bad = members[(members < 0) | (members >= n)]
+            if bad.size:
+                raise IndexError(
+                    f"group index {int(bad[0])} is not in [0, {n}); a "
+                    "negative index would count from the end, which is "
+                    "not what a group membership means")
+            r = np.zeros(n); r[members] = 1.0
             rows.append(r); bs.append(float(cap))
     if not rows:
         return np.zeros((0, n)), np.zeros(0)

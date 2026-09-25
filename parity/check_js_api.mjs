@@ -288,5 +288,39 @@ for (const [label, d, want] of [
           p => `[${p.map(v => v.toFixed(6))}]`);
 }
 
+// --- portfolio limits are refused when malformed, not dropped (#247)
+// These encode name and sector caps. A typo that DROPS a constraint
+// returns an ordinary-looking result that is simply under-constrained,
+// which is worse than an error: nameCaps of length n-1 left an 80%
+// position uncapped and still reported maxViolation 0, and a group index
+// of n produced NaN for every runner and called it feasible.
+rejects(polish.concentrationMatrix, [3, { nameCaps: [0.3, 0.3] }],
+        "a short nameCaps is refused", "one entry per contestant");
+rejects(polish.concentrationMatrix, [3, { nameCaps: [0.3, 0.3, 0.3, 0.3] }],
+        "an overlong nameCaps is refused", "one entry per contestant");
+rejects(polish.concentrationMatrix, [3, { groups: [[[0, 3], 0.5]] }],
+        "a group index of n is refused", "not an integer in [0, 3)");
+rejects(polish.concentrationMatrix, [3, { groups: [[[0, -1], 0.5]] }],
+        "a negative group index is refused", "not an integer in [0, 3)");
+rejects(polish.polishRace,
+        [{ p0: [0.2, 0.3, 0.5], D: [1, 1, 1], A: [[1, 0]], b: [0.4],
+           points: 129 }],
+        "an A row of the wrong width is refused", "one coefficient per");
+// python documents a non-finite ENTRY as "no cap for that name", so it
+// stays a feature rather than becoming an error.
+accepts("a NaN entry still means no cap for that name",
+        () => polish.concentrationMatrix(3, { nameCaps: [0.3, NaN, 0.4] }),
+        cm => cm.A.length === 2 && cm.b.length === 2);
+accepts("and the constraints that are well formed still bind",
+        () => polish.polishRace({ p0: [0.1, 0.1, 0.8], D: [1, 1, 1],
+                                  nameCaps: [0.5, 0.5, 0.5], points: 129 }),
+        r => Math.max(...r.p) <= 0.5 + 1e-8,
+        r => `p = [${r.p.map(v => v.toFixed(4))}]`);
+accepts("a group cap binds on its members",
+        () => polish.polishRace({ p0: [0.2, 0.3, 0.5], D: [1, 1, 1],
+                                  groups: [[[0, 1], 0.45]], points: 129 }),
+        r => Math.abs(r.p[0] + r.p[1] - 0.45) < 1e-6,
+        r => `p0 + p1 = ${(r.p[0] + r.p[1]).toFixed(6)}`);
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
