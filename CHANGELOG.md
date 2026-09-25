@@ -26,6 +26,16 @@
 
   The python reference validates through `as_idio`/`as_loadings` and
   julia fails on unequal lengths, so this was the only port guessing.
+
+  The shipped manual said `lower` and `upper` were "recycled to
+  dimension n" (#289). That promise was wrong rather than the check
+  being wrong: `mvtnorm::pmvnorm`, which `pmvnorm_fast` is a drop-in
+  for, REFUSES a length-2 bound at n = 4 --
+
+      'diag(sigma)' and 'lower' are of different length
+
+  -- while broadcasting its scalar `-Inf` default, which is exactly the
+  contract here. The manual now says so.
   Every documented spelling still agrees: scalar `D`, length-n `D` and
   the default bounds all return the same number.
 
