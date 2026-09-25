@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- The browser's Mendell-Elston approximation depended on the contestant
+  LABELS (#287). Sequential moment matching conditions one coordinate
+  at a time and pretends the remainder is still normal, so the order
+  decides the answer; `mendellElstonOne` applied it in raw contestant
+  order while python's `_order_variables` sorts hardest-first. Permuting
+  a four-runner race, evaluating it, and undoing the permutation moved
+  a share by **3.9 percentage points**.
+
+  The browser now fixes the order once from the initial moments, as
+  python does: ascending `m_k / sqrt(S_kk)`, which is python's
+  descending `a_t / sqrt(C_tt)` under this port's opposite sign
+  convention -- smallest survival probability first, while the normal
+  approximation is still exact.
+
+  It is not merely self-consistent now. Against
+  `winning.methods.orthant_extra.mendell_elston` on the reported
+  fixture the browser agrees to **4.3e-15**, where before it was 3e-2
+  away; and four permutations of that race return bit-identical
+  shares. Exact ties stay order dependent, here and in python: two
+  equally hard constraints have no canonical precedence.
+
+  This is what `docs/converge.html` draws as the Mendell-Elston arm.
+
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
   variance near the double ceiling became `inf` between the check and
