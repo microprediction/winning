@@ -2,6 +2,83 @@
 
 ## Unreleased
 
+- Malformed portfolio limits are refused, not dropped (#247). `nameCaps`
+  and `groups` encode name and sector caps, so a typo that DROPS a
+  constraint returns an ordinary-looking result that is simply
+  under-constrained -- worse than an error. In the browser:
+
+  | input | before |
+  |---|---|
+  | `nameCaps` of length n-1 | last name uncapped; an 80% position came back with `maxViolation` 0 |
+  | `nameCaps` of length n+1 | silently truncated to n |
+  | a group index of n | wrote past the row; every runner NaN, reported feasible |
+  | a negative group index | stored as a non-element property, member silently ignored |
+  | an `A` row of the wrong width | the constraint vanished |
+
+  Two of these needed the python side too, because the ports disagreed
+  about what the input MEANT rather than both being wrong. Numpy read a
+  negative group index as counting from the end, so python silently
+  capped the LAST name where the browser dropped the member. Neither is
+  documented and neither is what a group membership means, so both
+  refuse it now.
+
+  A non-finite `name_caps` ENTRY is left alone: "NaN/None entries
+  skipped" is the documented contract, meaning no cap for that name, and
+  my first cut broke it. That is a feature in both ports.
+
+- A worthless dividend prices at zero, in the browser AND in R (#242).
+  `prices_from_dividends` maps only a MISSING quote to `nan_value`. The
+  browser used `Number.isFinite(x) ? x : nanValue`, which conflates every
+  non-finite value with a missing one, and both ports divided by the
+  dividend unconditionally. So an infinite-dividend entrant took
+  `1/2000` of the book instead of nothing, a dividend of `0` produced
+  `Infinity` and then `NaN` after normalising, and a NEGATIVE dividend
+  came back as a negative probability.
+
+  The issue reported the browser. R shares two of the three: only the
+  `Inf` case was right there, because `1/Inf` is 0 on its own. Both now
+  follow python exactly -- a non-positive dividend (and `-Inf` with it)
+  prices at 0, `+Inf` prices at 0, a missing quote still takes
+  `nan_value`, and the book is normalised only when its total is
+  positive, so an all-infinite book is zeros rather than `0/0`.
+
+  | dividends | was (browser) | was (R) | now, all three |
+  |---|---|---|---|
+  | `[2, 4, Inf]` | 0.666, 0.333, 0.00067 | correct | 2/3, 1/3, 0 |
+  | `[2, 4, 0]` | 0, 0, NaN | 0, 0, NaN | 2/3, 1/3, 0 |
+  | `[2, 4, -5]` | 0.909, 0.455, **-0.364** | same | 2/3, 1/3, 0 |
+  | `[Inf, Inf]` | 0.5, 0.5 | NaN, NaN | 0, 0 |
+
+- The browser differentiates and polishes the factor law it was GIVEN
+  (#209). `raceProbabilities` has always accepted caller-supplied factor
+  nodes and weights, `{V, D, F, W}`. `raceJacobian` and `polishRace`
+  rejected `F` and `W` outright, and `raceJacobianExplicit` built its own
+  standard-normal Hermite rule whenever `V` was nonzero. So the browser
+  could PRICE a discrete or otherwise non-Gaussian factor and could not
+  differentiate it: dropping `F, W` is not a workaround, it silently
+  changes the model.
+
+  This was not a cosmetic gap. On a two-point law `F = [[-3], [3]]`,
+  `W = [0.5, 0.5]`, the Jacobian the browser returned differed from the
+  true one by 0.205 in absolute terms. It now agrees with finite
+  differences of the same forward to 8.1e-12, and `polishRace` threads
+  the law through its forward, its Jacobian AND the inverse that builds
+  `mu0` -- polishing under a different law than the caller priced with
+  optimises the wrong model. A binding cap of 0.35 reprices to
+  (0.35, 0.30, 0.35) under the caller's own nodes.
+
+- The browser prices the one-leaf tree (#241). An EMPTY linkage is the
+  valid scipy-style spelling of a hierarchy with one leaf, and
+  `treeFromLinkage([])` computed the leaf variance as
+  `1 - rho[parent[i]]` with `parent[i] = -1`. Javascript has no negative
+  indexing, so that is `undefined` and `D` came out `[NaN]`; pricing the
+  tree then failed instead of returning the certain `[1]`. The guard was
+  already written correctly one loop above, for the node strengths.
+
+  Python reaches the right answer by accident: numpy wraps `rho[-1]` to
+  the sole zero entry. Both now give `D = [1]` for the empty linkage and
+  `D = [0.5, 0.5, 1]` for a three-leaf one.
+
 - A coordinate with no idiosyncratic variance is treated as
   deterministic, in all three structured-MVN ports (#206). Given the
   factor draw such a coordinate is a CONSTANT, `X_i = mu_i + v_i . f`, so
