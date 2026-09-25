@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- GMRFExtremes integrates its transition kernel over each lattice cell
+  instead of sampling the density (#244). `npdf(z) * dx` is a probability
+  only where the density is flat across a cell. An innovation sd far
+  below the lattice spacing makes the kernel a SPIKE between samples, and
+  the spacing is set by the MARGINAL sd, so a chain with innovation
+  sd 1e-4 gave transition columns summing to about 80: `max_cdf` returned
+  79.988 for a probability, `excursion_probability` -78.988, and
+  `first_passage` a vector with a -79.488 in it.
+
+  The cell mass is a CDF difference with the variance deflated by
+  `dx^2/12`, which is exactly what averaging over a cell adds. That
+  matters: the plain CDF difference is exact in mass but smooths by a
+  boxcar at every step, and it measured WORSE than the old midpoint rule
+  where the old rule worked. With the deflation the resolved regime is
+  unchanged to the digit, and the unresolved one gets its correct
+  degenerate limit.
+
+  | innovation sd | before, 200 points | after | before, 3200 | after |
+  |---|---:|---:|---:|---:|
+  | 1.0 | 1.3e-4 | 1.3e-4 | 5e-7 | 5e-7 |
+  | 0.25 | 3.6e-4 | 3.6e-4 | 1.4e-6 | 1.4e-6 |
+  | 0.01 | **1.1** | 1.6e-3 | 3.4e-5 | 3.4e-5 |
+  | 1e-4 | **160** | 1.6e-5 | **9.5** | 1.6e-5 |
+
+  Renormalising the columns would have produced numbers in [0, 1] and
+  hidden the resolution failure, which is what #217 and #221 are about.
+
 - All four structured-MVN ports reject an empty rectangle instead of
   pricing it at the underflow floor (#235). `P(lower <= X <= upper)` with
   `lower_i > upper_i` is an EMPTY event. Python, the vendored standalone
