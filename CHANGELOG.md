@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- `research/polysemy_pilot/exact_analyze.py` promised the checkout and
+  could deliver the installed copy (#305). The comment says the repo
+  root "goes ahead of site-packages" so the script "always reads the
+  tree it sits in", but the guard inserted the root only when it was
+  ABSENT. Already present and behind site-packages -- which is what
+  `pip install -e` plus a plain `python script.py` produces -- and the
+  import took the installed `winning.factor.core`, silently, with the
+  documentation saying otherwise.
+
+  Every occurrence is removed and the root inserted at index 0, so the
+  promise is kept rather than stated.
+
+  The regression puts a DECOY `winning.factor.core` ahead of the root
+  and checks which copy the script imports, because that is the only
+  convincing test of the claim. It runs from a NEUTRAL cwd: from the
+  repo root `python -c` puts the checkout at `sys.path[0]` itself and
+  the decoy never wins, so the defect is invisible exactly where a
+  developer would look for it. A first test asserts the decoy really
+  does shadow, otherwise the second would pass however the script
+  behaved. Sabotaged back to the old guard, two of the three fail.
+
+  The same conditional-insert appears twice more, in
+  `research/qpo/run_closed_loop.py` and `research/qpo/snapshot.py`.
+  Both left alone: they add an external directory that no installed
+  package shadows, and neither claims precedence.
+
 - R's `race_jacobian` depended on the SCALE of the factor weights --
   #281's defect, in a third place. `W` and `c*W` describe the same
   factor law; the forward divides its accumulated shares by their total
