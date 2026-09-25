@@ -123,6 +123,32 @@ def mvn_cdf_fast_info(lower=None, upper=None, mean=None, sigma=None,
     return _mvn_cdf_impl(lower, upper, mean, sigma, V, D)
 
 
+def _rectangle_status(lo, up):
+    """Classify the rectangle {lo <= x <= up} before any quadrature.
+
+    A reversed coordinate makes the event EMPTY. Every port used to form
+    the negative conditional cell -- Phi(0) - Phi(1) = -0.3413... -- and
+    then clamp it to the underflow floor, so an impossible observation
+    came back as 1e-300 and, in log-likelihood code, as a finite -690.8
+    instead of -inf. Worse on the recentered path, where importance
+    integration then integrates the artificial constant cell (#235).
+
+    `mvtnorm::pmvnorm`, which r/mvtnormfast is a drop-in for, raises on
+    reversed bounds and returns 0 when a coordinate has lower == upper.
+    All four ports now do the same.
+    """
+    bad = np.nonzero(lo > up)[0]
+    if bad.size:
+        i = int(bad[0])
+        raise ValueError(
+            "lower must not exceed upper: coordinate {} has lower={!r} > "
+            "upper={!r}, so the rectangle is empty. Check the argument "
+            "order.".format(i, float(lo[i]), float(up[i])))
+    # lower == upper on a continuous coordinate is a degenerate slab of
+    # exactly zero mass; that includes -inf == -inf and +inf == +inf.
+    return bool(np.any(lo == up))
+
+
 def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
     if V is None or D is None:
         if sigma is None:
@@ -137,6 +163,8 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
                 np.broadcast_to(np.asarray(upper, float), (n,))
             lo = np.full(n, -np.inf) if lower is None else \
                 np.broadcast_to(np.asarray(lower, float), (n,))
+            if _rectangle_status(lo, up):
+                return 0.0, "degenerate-rectangle"
             mvn = multivariate_normal(mean=mu, cov=sigma,
                                       allow_singular=True)
             p = mvn.cdf(up, lower_limit=lo)
@@ -153,6 +181,8 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
         np.broadcast_to(np.asarray(lower, float), (n,)).astype(float)
     up = np.full(n, np.inf) if upper is None else \
         np.broadcast_to(np.asarray(upper, float), (n,)).astype(float)
+    if _rectangle_status(lo, up):
+        return 0.0, "degenerate-rectangle"
     s = np.sqrt(D)
 
     F, W = _nodes_for(V, D)

@@ -26,6 +26,45 @@
   `tests/test_shape_contract.py`, which fails if a new verb takes a
   factor law and is not covered.
 
+- All four structured-MVN ports reject an empty rectangle instead of
+  pricing it at the underflow floor (#235). `P(lower <= X <= upper)` with
+  `lower_i > upper_i` is an EMPTY event. Python, the vendored standalone
+  python, R and Julia each formed the negative conditional cell --
+  `Phi(0) - Phi(1) = -0.341344746...` -- and then clamped it with
+  `max(cell, 1e-300)`. So an impossible observation came back as a finite
+  probability, and in log-likelihood code as about `-690.8` rather than
+  `-inf`. On the recentered path it is worse than a clamp: importance
+  integration then integrates the artificial constant cell.
+
+  `mvtnorm::pmvnorm`, which `r/mvtnormfast` is a drop-in for, raises on
+  reversed bounds and returns 0 when a coordinate has `lower == upper`.
+  All four ports now do exactly that, and report the degenerate case as
+  method `degenerate-rectangle` with a value of exactly `0.0`, not
+  `1e-300`. The error names the offending coordinate.
+
+  The check sits in front of the dense routes too, not only the factor
+  one. `scipy.stats.multivariate_normal.cdf` returns the NEGATIVE number
+  `-0.341...` for a reversed rectangle rather than raising, so the python
+  fallback branch needed its own guard; the julia dense delegation and
+  the R `mvtnorm` fallback are covered the same way. Distinct from #196,
+  which is about cancellation on VALID upper-tail intervals.
+
+- `rprobit_fast` and `mlogit_fast` reject a malformed choice set instead
+  of reshaping it (#230). Both price a field by a POSITIONAL reshape --
+  `matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)` -- so row order
+  alone decides which alternative a row is priced as, and the only guard
+  was a count: `nrow(df) == Tn * J`. An observation that duplicates one
+  alternative and omits another still has J rows, so it passed, and the
+  duplicate row was priced as the alternative that was missing. The
+  reported case fits a covariate value of 10 onto an alternative that
+  does not exist for that observation and returns an ordinary-looking
+  coefficient.
+
+  The contract is one row per (observation, alternative), which is a
+  table and not a total, so both packages now check the contingency table
+  and name the offending observation and alternative. A well-formed panel
+  is untouched.
+
 - The browser inverse honours the two options it advertised (#226).
   `targetFloor` and `returnInfo` were on `abilitiesFromRace`'s allowlist
   and read by nothing, so they passed validation and vanished -- the
