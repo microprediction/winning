@@ -164,10 +164,27 @@ export function skewNormalDensity(L, unit, { loc = 0, scale = 1.0, a = 2.0 } = {
   return shiftedCdf(d, loc / unit, L);       // reference quirk: cdf-machinery on the density
 }
 
+/* Port of StatePricer.prices_from_dividends. Only a MISSING quote --
+   null, undefined or NaN -- becomes nanValue. A non-positive dividend,
+   and -Infinity with it, is worth nothing and prices at 0; +Infinity
+   prices at 1/Infinity = 0 on its own.
+
+   The browser used `Number.isFinite(x) ? x : nanValue`, which conflates
+   every non-finite value with a missing quote, and it divided by the
+   dividend unconditionally. So an infinite-dividend entrant got
+   1/2000 of the book instead of nothing, a dividend of 0 produced
+   Infinity and then NaN after normalising, and a negative dividend came
+   back as a NEGATIVE probability (#242). Normalising only when the
+   total is positive is python's rule too: an all-infinite book is all
+   zeros, not 0/0. */
 export function pricesFromDividends(dividends, nanValue = 2000) {
-  const p = dividends.map(x => 1 / (Number.isFinite(x) ? x : nanValue));
+  const p = dividends.map(x => {
+    const v = (x === null || x === undefined || Number.isNaN(x))
+      ? nanValue : Number(x);
+    return v <= 0 ? 0 : 1 / v;
+  });
   const s = p.reduce((a, b) => a + b, 0);
-  return p.map(v => v / s);
+  return s > 0 ? p.map(v => v / s) : p;
 }
 
 export function dividendImpliedAbility(dividends, density, { nanValue = 2000, unit = 1.0 } = {}) {
