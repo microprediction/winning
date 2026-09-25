@@ -74,6 +74,18 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
                            nodes = 2048L) {
   C <- as.matrix(C)
   n <- nrow(C)
+  if (n == 1L) {
+    # A one-runner field has no covariance STRUCTURE: nothing for a
+    # factor to correlate, the whole variance idiosyncratic, and the
+    # race is 1 whatever it is. .factor_model_projected is asked for
+    # min(k, n - 1) = 0 factors and hands back a 0 x 0 matrix, which
+    # then fails to multiply; python divided by zero at the same point
+    # (#273). Report it as what it is: an exact fit of rank zero.
+    return(list(V = matrix(0, 1L, 1L), D = pmax(C[1L, 1L], 1e-12),
+                F = matrix(0, 1L, 1L), W = 1,
+                rank = 0L, n = 1L, bound = 0, clamp = 0,
+                residual = 0, contrast_residual = 0, degraded = FALSE))
+  }
   s <- sqrt(pmax(diag(C), 1e-12))
   corr <- C / outer(s, s)
   fit <- .factor_model_projected(C, min(k, n - 1L))

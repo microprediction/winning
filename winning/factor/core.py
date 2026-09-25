@@ -400,6 +400,29 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
             f"cov= is not positive semidefinite (min eigenvalue "
             f"{lam_min:.2e}); this is not a covariance matrix. Project "
             "to the PSD cone first if it came from noisy estimation.")
+    if n == 1:
+        # A one-runner field has no covariance STRUCTURE: there is
+        # nothing for a factor to correlate, the whole variance is
+        # idiosyncratic, and the race is [1] whatever it is. The
+        # machinery below divides by (1 - 2/n) + n/n^2, which is exactly
+        # zero at n = 1, so cov=[[v]] raised ZeroDivisionError while the
+        # equivalent plain race already returned [1]. #181 added the
+        # n <= 2 branch to the inner solver and that branch divides by
+        # the same quantity (#273).
+        V = np.zeros((1, 1))
+        D = np.array([max(float(C[0, 0]), 1e-12)])
+        F = np.zeros((1, 1))
+        W = np.ones(1)
+        if return_report:
+            # the same keys the full path reports, so every caller reads
+            # a one-runner fit the way it reads any other: an EXACT fit
+            # of rank zero, nothing residual, nothing sharp
+            return V, D, F, W, {"projected_residual_rel": 0.0,
+                                "projected_residual_max": 0.0,
+                                "rank": 0,
+                                "sharpness": 0.0,
+                                "contrast_residual_max": 0.0}
+        return V, D, F, W
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- A one-runner field with `cov=` crashes instead of returning `[1]`
+  (#273), in python and in R. `race_probabilities([2.0], cov=[[4.0]])`
+  raised `ZeroDivisionError`; the R `fit_covariance` raised
+  `Error: 0 x 0 matrix`. The equivalent plain race, `race_probabilities
+  ([2.0])`, already returned `[1]`, so passing a covariance to a
+  one-entry field turned a working call into a crash.
+
+  Both ports divide by the same quantity. The centred Gram the inner
+  solver works with carries a factor `(1 - 2/n) + n/n^2`, which is
+  exactly zero at `n = 1`; #181 added an `n <= 2` branch to that solver
+  and the branch it added divides by it too. In R the same degeneracy
+  shows up one step earlier, as `min(k, n - 1) = 0` factors and a
+  `0 x 0` matrix that then fails to multiply.
+
+  There is nothing to estimate here, so neither port should reach that
+  arithmetic. A one-runner field has no covariance STRUCTURE: no pair
+  to correlate, the whole variance idiosyncratic, and the answer is
+  `[1]` for any positive variance. Both now return the exact rank-zero
+  fit -- `V = [[0]]`, `D = [c]`, `W = [1]` -- with the full report the
+  ordinary path returns, so a caller reads a one-runner fit the way it
+  reads any other rather than special-casing it.
+
+  Only python and R have a `fit_covariance`; the browser and julia
+  ports have no `cov=` path to fix.
+
 - CI checks every R package, on pull requests, and their tests actually
   run (#142). The R workflow was path-triggered by changes under
   `mvtnormfast`, `mlogitfast` OR `rprobitfast` and then always built and

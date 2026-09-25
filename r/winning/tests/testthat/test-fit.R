@@ -145,3 +145,43 @@ test_that("a two-runner covariance fits instead of throwing", {
   }
   expect_silent(fit_covariance(diag(2), k = 1L, m = 1L, nodes = 32L))
 })
+
+# --- a one-runner covariance (#273) -----------------------------------
+#
+# race_probabilities(mu) already returned 1 for a single runner.
+# cov = matrix(v, 1, 1) crashed instead: .factor_model_projected is asked
+# for min(k, n - 1) = 0 factors and hands back a 0 x 0 matrix, which then
+# fails to multiply. Python divided by zero at the same field, since its
+# inner solver divides by (1 - 2/n) + n/n^2 = 0 at n = 1.
+#
+# There is nothing for a factor to correlate with one runner, so the
+# whole variance is idiosyncratic and the fit is exact at rank zero.
+
+test_that("a one-runner race with a covariance is certain", {
+  p <- race_probabilities(2.0, cov = matrix(4.0, 1, 1))
+  expect_length(p, 1L)
+  expect_lt(abs(p[1] - 1), 1e-12)
+})
+
+test_that("it agrees with the plain one-runner race", {
+  expect_lt(abs(race_probabilities(2.0) -
+                race_probabilities(2.0, cov = matrix(4.0, 1, 1))), 1e-12)
+})
+
+test_that("the one-runner fit reports rank zero and no residual", {
+  f <- fit_covariance(matrix(4.0, 1, 1))
+  expect_identical(f$rank, 0L)
+  expect_identical(f$degraded, FALSE)
+  expect_lt(abs(f$D[1] - 4.0), 1e-9)
+  expect_lt(abs(sum(f$W) - 1), 1e-12)
+})
+
+test_that("larger fields are untouched", {
+  for (n in c(2L, 3L, 5L)) {
+    C <- diag(n) + 0.2 * (matrix(1, n, n) - diag(n))
+    p <- race_probabilities(seq(0, 1, length.out = n), cov = C)
+    expect_length(p, n)
+    expect_lt(abs(sum(p) - 1), 1e-9)
+    expect_true(all(p > 0))
+  }
+})
