@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Julia `predict_proba` checks the design instead of guessing it (#195).
+- `predict_proba` checks the design instead of guessing it, in Julia and
+  in Python (#195, #261).
   It decided whether to prepend generated alternative-intercept columns
   from the COLUMN COUNT alone, and `MNProbit` recorded neither whether
   it had generated them nor how many covariates the caller supplied. New
@@ -20,6 +21,14 @@
   generated exactly when the fit generated them, `p` columns means the
   design is already assembled, and anything else raises with both
   numbers named. The alternative count is checked too.
+
+  The python reference had the identical defect and it is fixed here
+  too. Review found it, not me: I fixed the port the issue named and did
+  not sweep, which is the rule I had just written down. Python's version
+  is sharper -- the guess is wrong exactly when the wrong width plus the
+  `J - 1` generated columns EQUALS the fitted width, so three covariates
+  fitted without intercepts, handed one, gained two synthetic intercepts
+  and returned `[0.198, 0.605, 0.198]`.
 
 - The exact likelihood refuses a choice it cannot account for, in all
   three ports (#194). The cores iterate over the LEGAL alternative
