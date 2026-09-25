@@ -65,3 +65,18 @@ test_that("a nonsense node count is refused by name", {
   for (o in list(0L, -3L, 2.5))
     expect_error(hermite_nodes(1L, o), "order")
 })
+
+test_that("zero-rank loadings reach top-k as the independent top-k", {
+  # .cluster_nodes handled rank 1 and rank 2 and sent everything else to
+  # the rank >= 3 Sobol refusal, so an (n, 0) matrix was turned away with
+  # a message about high rank (#309)
+  mu <- c(0, 0.3, -0.2, 0.5)
+  D <- rep(1, 4)
+  V0 <- matrix(numeric(0), 4L, 0L)
+  expect_equal(top_k_probabilities(mu, 2, V = V0, D = D),
+               top_k_probabilities(mu, 2, D = D))
+  # and a rank-one loading still MOVES it, so the equality means something
+  moved <- top_k_probabilities(mu, 2, V = matrix(c(0.9, -0.4, 0.2, -0.7), 4, 1),
+                               D = D)
+  expect_gt(max(abs(moved - top_k_probabilities(mu, 2, D = D))), 0.005)
+})

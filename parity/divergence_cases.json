@@ -707,6 +707,62 @@
         1
       ],
       "why": "zero width does not excuse the wrong row count"
+    },
+    {
+      "id": "topk_V_zero_rank",
+      "verb": "topk",
+      "mu": [
+        0,
+        0.3,
+        -0.2,
+        0.5
+      ],
+      "k": 2,
+      "V": [
+        [],
+        [],
+        [],
+        []
+      ],
+      "D": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "why": "#309: rank 0 is no factors here too, not a rank-2 tensor"
+    },
+    {
+      "id": "topk_V_rank1",
+      "verb": "topk",
+      "mu": [
+        0,
+        0.3,
+        -0.2,
+        0.5
+      ],
+      "k": 2,
+      "V": [
+        [
+          0.5
+        ],
+        [
+          0.3
+        ],
+        [
+          -0.2
+        ],
+        [
+          0.1
+        ]
+      ],
+      "D": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "why": "and an ordinary rank-1 loading must still price"
     }
   ]
 }

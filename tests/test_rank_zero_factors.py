@@ -63,6 +63,45 @@ def test_both_fastmvn_copies_price_the_rank_zero_rectangle(module):
     assert got == pytest.approx(0.5 ** 3, abs=1e-12)
 
 
+def test_top_k_and_rank_price_the_empty_loading_matrix():
+    """#68 covered the race and the CDF. These dispatch rank zero
+    through their OWN node builders, which special-cased rank 1 and sent
+    everything else through a rank-2 tensor (#309)."""
+    from winning.factor.topk import (bottom_k_probabilities,
+                                     rank_probabilities,
+                                     top_k_probabilities)
+    n = 4
+    mu = np.array([0.0, 0.3, -0.2, 0.5])
+    D = np.ones(n)
+    V0 = np.empty((n, 0))
+    assert np.allclose(top_k_probabilities(mu, 2, V=V0, D=D),
+                       top_k_probabilities(mu, 2, D=D))
+    assert np.allclose(bottom_k_probabilities(mu, 2, V=V0, D=D),
+                       bottom_k_probabilities(mu, 2, D=D))
+    assert np.allclose(rank_probabilities(mu, V=V0, D=D),
+                       rank_probabilities(mu, D=D))
+
+
+def test_the_ranking_likelihood_takes_the_empty_loading_matrix():
+    """`choice_loglik_and_score` already handled it; the ranking member
+    raised `need at least one array to concatenate` (#309)."""
+    from winning.likelihood import ranking_loglik_and_score
+    mu = np.array([[0.0, 0.3, -0.2, 0.5]])
+    ll, dmu, dV = ranking_loglik_and_score(mu, np.empty((4, 0)),
+                                           [[0, 1, 2, 3]])
+    assert np.isfinite(ll)
+    assert dmu.shape == (1, 4)
+    assert dV.shape == (4, 0)
+    # and it equals the plain Plackett-Luce value with no factor
+    z = mu[0]
+    want = 0.0
+    alive = list(range(4))
+    for w in [0, 1, 2, 3]:
+        want += z[w] - np.log(np.exp(z[alive]).sum())
+        alive.remove(w)
+    assert ll == pytest.approx(float(want), abs=1e-9)
+
+
 def test_a_zero_rank_race_is_not_accidentally_the_rank_one_race():
     """The failure mode was a WELL-FORMED rule for another problem, so
     an equality against the independent race only means something if a

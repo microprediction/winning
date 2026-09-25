@@ -39,15 +39,25 @@ RUNNERS = {
 # list is STRICT in both directions: a case here that diverges is
 # reported and tolerated, and a case here that has started to AGREE
 # fails, so the list cannot outlive what it waives.
+# `ports` names the ports whose DISAGREEMENT the waiver is about. A
+# waiver can only be judged stale when all of them actually ran: with
+# julia absent, python and the browser agreeing about a fractional
+# depth says nothing about whether julia still refuses it, and calling
+# the waiver stale there told the reader to delete a live one (#310).
 EXPECTED = {
-    "topk_k_fractional":
-        "a fractional depth: julia's Int signature refuses it and the "
-        "other three round. The integer-depth contract is #298; this "
-        "entry goes when that lands.",
-    "D_tiny":
-        "#304 -- every port prices a contestant whose sd the lattice "
-        "cannot resolve at zero, and they disagree by 1.5e-4 about the "
-        "others. The disagreement is a symptom; the zero is the defect.",
+    "topk_k_fractional": {
+        "why": "a fractional depth: julia's Int signature refuses it and "
+               "the other three round. The integer-depth contract is "
+               "#298; this entry goes when that lands.",
+        "ports": ["julia", "python"],
+    },
+    "D_tiny": {
+        "why": "#304 -- every port prices a contestant whose sd the "
+               "lattice cannot resolve at zero, and they disagree by "
+               "1.5e-4 about the others. The disagreement is a symptom; "
+               "the zero is the defect.",
+        "ports": ["python", "R", "browser", "julia"],
+    },
 }
 
 
@@ -145,7 +155,7 @@ def main():
         print(f"note: toolchain absent, not compared: {sorted(absent)}")
 
     ids = list(json.load(open(CASES))["cases"])
-    diverged, value_gaps, stale = [], {}, []
+    diverged, value_gaps, stale, unjudged = [], {}, [], {}
     for case in ids:
         cid = case["id"]
         got = {p: _verdict(r.get(cid, "?")) for p, r in results.items()}
@@ -159,7 +169,11 @@ def main():
         differs = (len(set(got.values())) > 1
                    or (gap is not None and gap > tol))
         if cid in EXPECTED:
-            if not differs:
+            need = set(EXPECTED[cid]["ports"])
+            absent_here = need - set(results)
+            if absent_here:
+                unjudged[cid] = sorted(absent_here)
+            elif not differs:
                 stale.append(cid)
             continue
         if len(set(got.values())) > 1:
@@ -171,7 +185,10 @@ def main():
     for case in ids:
         cid = case["id"]
         got = {p: _verdict(r.get(cid, "?")) for p, r in results.items()}
-        if cid in EXPECTED:
+        if cid in unjudged:
+            flag = ("  <== known, not judged: "
+                    + ", ".join(unjudged[cid]) + " absent")
+        elif cid in EXPECTED:
             flag = "  <== known, see EXPECTED"
         else:
             flag = "  <== DIVERGES" if any(cid == d[0] for d in diverged) else (
@@ -184,7 +201,7 @@ def main():
         print()
         for cid in stale:
             print(f"EXPECTED case {cid!r} no longer diverges: "
-                  f"{EXPECTED[cid]}")
+                  f"{EXPECTED[cid]['why']}")
         print("Remove it from EXPECTED -- a waiver that outlives the "
               "defect hides the next one.")
         return 1

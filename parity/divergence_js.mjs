@@ -24,7 +24,7 @@ for (const c of cases) {
     else if (c.verb === "bottomk") p = topk.bottomKProbabilities(mu, c.k, { D });
     else if (c.verb === "race") p = races.raceProbabilities(mu, { V, D });
     else if (c.verb === "inverse") p = races.abilitiesFromRace(num(c.p), { D });
-    else p = topk.topKProbabilities(mu, c.k, { D });
+    else p = topk.topKProbabilities(mu, c.k, { V, D });
     const a = Array.from(p.flat ? p.flat(9) : p, Number);
     out[c.id] = {
       verdict: a.every(Number.isFinite) ? "ACCEPT" : "ACCEPT_NONFINITE",

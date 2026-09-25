@@ -557,5 +557,35 @@ accepts("the inverse takes a scalar D, matching python",
     rejects(core.hermiteNodes, [1, o], `order = ${o} is refused`, "order");
 }
 
+{
+  // Rank zero reaches top-k through its OWN node builder, which
+  // special-cased rank 1 and sent everything else through a rank-2
+  // tensor -- so an (n, 0) matrix became "RangeError: Invalid array
+  // length" (#309). The race path was fixed in #68; this one was not.
+  const zmu = [0, 0.3, -0.2, 0.5], zD = [1, 1, 1, 1];
+  const Z = [[], [], [], []];
+  const same = (a, b) => Math.max(...a.flat(9).map(
+    (x, i) => Math.abs(x - b.flat(9)[i])));
+  accepts("zero-rank top-k is the independent top-k",
+          () => same(topk.topKProbabilities(zmu, 2, { V: Z, D: zD }),
+                     topk.topKProbabilities(zmu, 2, { D: zD })),
+          w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  accepts("zero-rank bottom-k is the independent bottom-k",
+          () => same(topk.bottomKProbabilities(zmu, 2, { V: Z, D: zD }),
+                     topk.bottomKProbabilities(zmu, 2, { D: zD })),
+          w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  accepts("zero-rank rank marginals are the independent ones",
+          () => same(topk.rankProbabilities(zmu, { V: Z, D: zD }),
+                     topk.rankProbabilities(zmu, { D: zD })),
+          w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  // and a rank-one loading must still MOVE top-k, or the three above
+  // are just two ways of computing the independent answer
+  accepts("a rank-one loading still moves top-k",
+          () => same(topk.topKProbabilities(
+                       zmu, 2, { V: [[0.9], [-0.4], [0.2], [-0.7]], D: zD }),
+                     topk.topKProbabilities(zmu, 2, { D: zD })),
+          w => w > 0.005, w => `moves by ${w.toFixed(4)}`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

@@ -26,7 +26,7 @@ for cs in d["cases"]
             elseif cs["verb"] == "inverse"
                 abilities_from_race(num(cs["p"]); D = D)
             else
-                top_k_probabilities(mu, Int(num(cs["k"])); D = D)
+                top_k_probabilities(mu, Int(num(cs["k"])); V = V, D = D)
             end
         v = cs["verb"] == "hermite" ?
             Float64[size(p, 1), size(p, 2)] :

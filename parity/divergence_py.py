@@ -35,7 +35,7 @@ def run(c):
     elif c["verb"] == "inverse":
         p = abilities_from_race(np.asarray(num(c["p"]), float), D=D)
     else:
-        p = top_k_probabilities(np.asarray(mu, float), c["k"], D=D)
+        p = top_k_probabilities(np.asarray(mu, float), c["k"], V=V, D=D)
     a = np.asarray(p, float)
     return ("ACCEPT" if np.isfinite(a).all() else "ACCEPT_NONFINITE",
             [float(v) for v in a.ravel()[:6]])

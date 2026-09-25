@@ -60,16 +60,48 @@ def test_an_expected_entry_that_stopped_diverging_fails(monkeypatch,
     mod = _load()
     _two_ports_or_skip(mod)
     expected = dict(mod.EXPECTED)
-    expected["ok_independent"] = "a case that has always agreed"
+    expected["ok_independent"] = {
+        "why": "a case that has always agreed",
+        "ports": sorted(mod.RUNNERS),
+    }
     monkeypatch.setattr(mod, "EXPECTED", expected)
     assert mod.main() == 1
-    assert "no longer diverges" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    # name the case: asserting only the exit status lets ANOTHER false
+    # stale entry stand in for this one and the test still pass (#310)
+    assert "'ok_independent' no longer diverges" in out
+
+
+def test_a_waiver_is_not_stale_when_its_port_is_absent(monkeypatch,
+                                                       capsys):
+    """A waiver exists because some port differs. With that port absent,
+    the survivors agreeing says nothing -- and telling the reader to
+    delete a live waiver is worse than not checking (#310)."""
+    mod = _load()
+    runners = {k: v for k, v in mod.RUNNERS.items() if k != "julia"}
+    if len(runners) < 2:
+        pytest.skip("need two other port toolchains")
+    monkeypatch.setattr(mod, "RUNNERS", runners)
+    assert "julia" in mod.EXPECTED["topk_k_fractional"]["ports"]
+    rc = mod.main()
+    out = capsys.readouterr().out
+    assert "no longer diverges" not in out
+    assert "not judged" in out and "julia" in out
+    assert rc == 0, out
+
+
+def test_every_waiver_names_the_ports_it_is_about():
+    mod = _load()
+    for cid, entry in mod.EXPECTED.items():
+        assert set(entry) >= {"why", "ports"}, cid
+        assert entry["ports"], f"{cid} names no ports"
+        assert set(entry["ports"]) <= set(mod.RUNNERS), cid
 
 
 def test_every_expected_entry_carries_a_reason():
     mod = _load()
-    for cid, why in mod.EXPECTED.items():
-        assert len(why) > 30, f"{cid} is waived without a reason"
+    for cid, entry in mod.EXPECTED.items():
+        assert len(entry["why"]) > 30, f"{cid} is waived without a reason"
 
 
 def test_values_are_compared_not_only_verdicts():

@@ -76,9 +76,33 @@
   the measurement rather than fixed here: the repair is a lattice
   change in four ports.
 
-  Two entries sit in `EXPECTED`, each with a reason, and the list is
-  strict in both directions -- an entry that stops diverging fails the
-  scan, so a waiver cannot outlive its defect.
+  Two entries sit in `EXPECTED`, each with a reason and the PORTS whose
+  disagreement it is about, and the list is strict in both directions --
+  an entry that stops diverging fails the scan, so a waiver cannot
+  outlive its defect. Naming the ports is what makes that safe: a
+  waiver can only be judged when all of them ran. Judging it from the
+  survivors made the scan falsely red on a python-and-node machine and
+  told the reader to delete a live waiver, because with julia absent
+  nothing establishes that julia still refuses a fractional depth
+  (#310). It now prints "known, not judged: julia absent" and exits 0.
+
+  Rank zero was still wrong in three more node builders, each with the
+  same shape as the four already fixed: rank 1 special-cased, every
+  other rank sent through a rank-2 tensor. `winning/factor/topk.py`,
+  `winning/likelihood.py::_factor_nodes` and
+  `docs/js/winning/topk.mjs` took an `(n, 0)` matrix into a
+  two-dimensional factor space the race does not have, and top-k, rank
+  marginals and the ranking likelihood raised rather than answering
+  (#309).
+
+  The issue named python and the browser, which is the pair the
+  reviewer ran. Adding the case to the scan showed R and julia had it
+  too -- R's shared `.cluster_nodes` refused rank 0 with a message
+  about needing Sobol nodes for rank >= 3, and julia's
+  `_topk_factor_nodes` built the rank-2 tensor. Four ports, one defect,
+  found by extending the scan rather than by reading four files. All
+  four now return the independent answer, agreeing with each other in
+  value and not merely in verdict.
 
   Three of the first five "divergences" the value comparison reported
   were the harness, not the ports: julia `vec`s a matrix column-major

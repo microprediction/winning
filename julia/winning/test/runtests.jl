@@ -79,3 +79,17 @@ end
     @test_throws ArgumentError hermite_nodes(1, 0)
     @test_throws ArgumentError hermite_nodes(1, -3)
 end
+
+@testset "zero-rank loadings reach top-k" begin
+    # _topk_factor_nodes special-cased rank 1 and sent every other rank
+    # through the rank-2 tensor, so an (n, 0) matrix was integrated over
+    # a factor space it does not have (#309)
+    mu = [0.0, 0.3, -0.2, 0.5]
+    D = ones(4)
+    @test top_k_probabilities(mu, 2; V = zeros(4, 0), D = D) ≈
+          top_k_probabilities(mu, 2; D = D)
+    # and a rank-one loading still moves it
+    moved = top_k_probabilities(mu, 2; V = reshape([0.9, -0.4, 0.2, -0.7], 4, 1),
+                                D = D)
+    @test maximum(abs.(moved .- top_k_probabilities(mu, 2; D = D))) > 0.005
+end

@@ -29,7 +29,7 @@ for (cs in d$cases) {
          else if (cs$verb == "bottomk") bottom_k_probabilities(mu, num(cs$k), D = D)
          else if (cs$verb == "race") race_probabilities(mu, V = V, D = D)
          else if (cs$verb == "inverse") abilities_from_race(num(cs$p), D = D)
-         else top_k_probabilities(mu, num(cs$k), D = D)
+         else top_k_probabilities(mu, num(cs$k), V = V, D = D)
     # SHAPE for the node rule, values for everything else
     val <- if (cs$verb == "hermite") as.numeric(dim(p))
            # R fills a matrix COLUMN-major; the reference ravels ROW-major

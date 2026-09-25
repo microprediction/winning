@@ -192,6 +192,11 @@ def _factor_nodes(r, Qf=7, nodes_log2=10):
         n = 2 ** int(nodes_log2)
         u = qmc.Sobol(r, scramble=True, seed=0).random(n)
         return ndtri(np.clip(u, 1e-12, 1 - 1e-12)), np.full(n, 1.0 / n)
+    if r == 0:
+        # the EMPTY PRODUCT, as hermite_nodes and choice_loglik_and_score
+        # already treat it: rank 1 was special-cased here and rank 0 fell
+        # into the rank-2 tensor (#309)
+        return np.zeros((1, 0)), np.ones(1)
     xf, wf = _gh1(Qf)
     if r == 1:
         return xf[:, None], wf
