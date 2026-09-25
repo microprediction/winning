@@ -375,5 +375,58 @@ accepts("a group cap binds on its members",
         fd([0, 1, 2], [0.8, 1.0, 1.2], 257) < 1e-9);
 }
 
+// --- the nested coupling is a loading matrix like any other (#264)
+// `coupling` was normalised by hand in blocks.mjs and never transposed,
+// so a (rank, n) spelling -- which python treats as the SAME race -- was
+// read as rank n and refused. Rank 3 was refused outright, with a
+// remediation that could not be followed: "supply nodes explicitly",
+// when no nested verb accepts a `nodes` option and checkOpts rejects it
+// before pricing. Rank >= 3 now escalates the FAMILY to Halton, as
+// races.mjs does for high-rank loadings.
+{
+  const muN = [-0.4, -0.1, 0.2, 0.5];
+  const clN = [0, 0, 1, 1], ldN = [0.3, 0.2, 0.4, 0.25];
+  const DN = [1, 0.8, 0.9, 1.1];
+  const c2 = [[0.3, 0.1], [0.2, -0.2], [-0.1, 0.4], [0.15, 0.05]];
+  const c2T = [[0.3, 0.2, -0.1, 0.15], [0.1, -0.2, 0.4, 0.05]];
+  const c3 = [[0.30, 0.10, -0.20], [0.20, -0.20, 0.10],
+              [-0.10, 0.40, 0.20], [0.15, 0.05, -0.15]];
+  const price = c => blocks.nestedRaceProbabilities(
+    muN, clN, ldN, DN, { coupling: c, gamma: 0.3 });
+  accepts("a transposed coupling is the same race",
+          () => price(c2T),
+          p => Math.max(...p.map((v, i) => Math.abs(v - price(c2)[i]))) < 1e-14);
+  accepts("a rank-3 coupling prices at all",
+          () => price(c3),
+          p => p.every(Number.isFinite) &&
+               Math.abs(p.reduce((a, b) => a + b, 0) - 1) < 1e-12);
+  // python's scrambled Sobol against the browser's Halton: different QMC
+  // families, so agreement is to quadrature tolerance, not to the digit
+  holds("and agrees with python's rank-3 answer",
+        Math.max(...price(c3).map((v, i) =>
+          Math.abs(v - [0.414742, 0.263511, 0.192839, 0.128909][i]))) < 5e-4,
+        `max diff ${Math.max(...price(c3).map((v, i) =>
+          Math.abs(v - [0.414742, 0.263511, 0.192839, 0.128909][i]))).toExponential(2)}`);
+  accepts("the rank-3 jacobian follows its own forward",
+          () => blocks.nestedRaceJacobian(muN, clN, ldN, DN,
+                                          { coupling: c3, gamma: 0.3 }),
+          J => {
+            const h = 1e-5;
+            let worst = 0;
+            for (let j = 0; j < 4; j++) {
+              const a = muN.slice(), b2 = muN.slice();
+              a[j] += h; b2[j] -= h;
+              const pa = blocks.nestedRaceProbabilities(a, clN, ldN, DN,
+                { coupling: c3, gamma: 0.3 });
+              const pb = blocks.nestedRaceProbabilities(b2, clN, ldN, DN,
+                { coupling: c3, gamma: 0.3 });
+              for (let i = 0; i < 4; i++)
+                worst = Math.max(worst,
+                  Math.abs(J[i][j] - (pa[i] - pb[i]) / (2 * h)));
+            }
+            return worst < 1e-8;
+          });
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
