@@ -162,7 +162,18 @@ rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { D: [1, 1, 1], targetFloor: 
         Math.max(...plain.map((v, i) => Math.abs(v - info.mu[i]))) < 1e-12);
 }
 
-if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
+// --- an allowlist names PUBLIC keys, not destructured locals (#207)
+// polishRace reads `const { mu0: mu0In = null } = opts`, and #204 put the
+// LOCAL name in its allowlist. So the supported call was refused as an
+// unknown option while the internal alias was accepted and ignored, and
+// 21 guard checks plus 87 surface tests all passed because none of them
+// made either call. tests/test_browser_option_keys.py sweeps the whole
+// surface for the same slip; these two calls pin this one.
+accepts("polishRace takes its public mu0",
+        () => polish.polishRace({ mu0: [-0.5, 0, 0.5], D: [1, 1, 1] }),
+        r => r && r.mu && r.mu.every(Number.isFinite));
+rejects(polish.polishRace, [{ mu0In: [-0.5, 0, 0.5], D: [1, 1, 1] }],
+        "polishRace rejects the internal alias", "unknown option 'mu0In'");
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
