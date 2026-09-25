@@ -132,6 +132,126 @@
   the sole zero entry. Both now give `D = [1]` for the empty linkage and
   `D = [0.5, 0.5, 1]` for a three-leaf one.
 
+- A coordinate with no idiosyncratic variance is treated as
+  deterministic, in all three structured-MVN ports (#206). Given the
+  factor draw such a coordinate is a CONSTANT, `X_i = mu_i + v_i . f`, so
+  its conditional cell is an INDICATOR, not a gaussian interval. Every
+  port divided by `s_i = 0` anyway. Off the boundary that happened to give
+  the right answer; on an inclusive boundary it is `0/0`, so the
+  documented `P(X_1 <= 0) = 1` for `X_1` identically zero came back as
+  `nan` from python and Julia, and as "missing value where TRUE/FALSE
+  needed" from R.
+
+  A constant that lies outside its own interval now returns exactly
+  `0.0` with method `outside-support`, rather than the `1e-300` the cell
+  floor gave it and a trip through the recentered path looking for a
+  probability that is not there. Checked against one-dimensional
+  quadrature for the harder case where `D_i = 0` but `V_i != 0`, so the
+  coordinate is constant only GIVEN the factor and the indicator
+  restricts the factor region instead: filter 0.32379233, quadrature
+  0.32379181.
+
+- Julia broadcasts a scalar bound, as the specification does (#184).
+  `winning.fastmvn` broadcasts with `np.broadcast_to` and the R port with
+  `rep_len`, but `julia/FactorMvNormalCDF` called `collect` on the
+  argument. A scalar `Float64` is not iterable, so the ordinary joint-CDF
+  spelling `mvn_cdf_fast(V=V, D=D, upper=0.0)` threw before evaluating
+  anything, on the structured and the delegated dense path alike. A
+  length that is neither 1 nor `n` now raises with both numbers named,
+  rather than recycling silently.
+
+- Quadrature weights are RELATIVE, in every verb that takes them (#208).
+  `W` and `c*W` describe the same factor law, and every verb normalises
+  its own result, so the common scale cancels -- except in the
+  pre-normalisation mass checks, which compared an unnormalised row sum
+  against 1. `removal_shares` and `ordered_probabilities` therefore
+  REJECTED `W = [5, 5]` while accepting the identical law
+  `W = [0.5, 0.5]`, with a "mass defect 9.00e+00" that is just the
+  weight total minus one.
+
+  The issue named `removal_shares`. Sweeping every public verb that takes
+  `mu`, `F` and `W` found two more: `ordered_probabilities` raised the
+  same way, and `plackett_luce_prefix_logprob` returned a
+  log-probability shifted by exactly `log(sum W)` -- the same law spelled
+  `[5, 5]` read -1.5071 as +0.7955 -- because it skips `_setup` entirely
+  when the caller supplies the law.
+
+  `_setup` is where the factor law is assembled, so it is the one place
+  the rule is decided, as `as_loadings` is for `V`. Every rule the
+  library generates already sums to one, so nothing it produces changes;
+  a zero or negative weight total is now refused with a reason instead of
+  being carried into a mass check. The sweep lives in
+  `tests/test_shape_contract.py`, which fails if a new verb takes a
+  factor law and is not covered.
+
+  The R and Julia helpers clamp in floating point before converting
+  (#228). Both computed the uncapped requirement in a fixed-width integer
+  and overflowed BEFORE `min(need, 8193)` -- in the very regime the cap
+  exists for. A narrowest sd of 1e-10 needs about 5.9e11 points: R's
+  `as.integer()` returned NA, so the `if (need > 8193)` meant to warn
+  errored with "missing value where TRUE/FALSE needed", and Julia threw
+  `InexactError`. Python was unaffected only because its integers are
+  unbounded, which is precisely why a port cannot inherit a numeric
+  argument from it. All four now return 8193 there and warn; the browser
+  then rejects the field on the mass check, which is the right layering.
+
+- Top-k and rank refine the lattice to the NARROWEST runner, in all four
+  engines (#224). The window is set by the widest runner and the grid by
+  `points`, so a heterogeneous field left the narrowest density between
+  samples: sds of 0.093 and 6.02 at the default 513 points gave a spacing
+  of 0.174, nearly twice the narrow runner's whole standard deviation,
+  and its top-4 membership came out 4.4e-3 wrong.
+
+  The mass check could not see it, and no tightening of that check would
+  have. It is ONE SCALAR -- the memberships sum to k -- and runner-level
+  errors of opposite sign cancel in it: the raw total was 3.99440 against
+  a tolerance of 0.02, comfortably inside, and the routine then rescaled a
+  wrong vector to sum to four. The cure is resolution, not a tighter
+  aggregate.
+
+  Same rule the win race has had all along (`races.forward_grid`): about
+  two points per narrowest sd, capped at 8193, warning when the cap still
+  leaves the lattice coarse. Measured on the reported field, the error
+  falls from 4.4e-3 to 4.8e-9 at the default `points`, and stops moving
+  with resolution at all -- 513 and 2049 now agree to 1e-9 where they
+  differed by 4.4e-3.
+
+  It subsumes two earlier rejections. The #203 field promotes itself to
+  2171 points and the #221 field to 6845, both then agreeing with an
+  8193-point answer to 5e-11, so neither has to be refused any more. The
+  guards from #221 stay as the backstop for what refinement cannot reach:
+  a field whose narrowest sd is 5e-5 needs about a million points, and it
+  warns and is rejected. Tests cover all three bands -- resolved, warned,
+  rejected. Parity vectors are unchanged, since the refinement does not
+  fire on fields with mild scale spread.
+
+- GMRFExtremes integrates its transition kernel over each lattice cell
+  instead of sampling the density (#244). `npdf(z) * dx` is a probability
+  only where the density is flat across a cell. An innovation sd far
+  below the lattice spacing makes the kernel a SPIKE between samples, and
+  the spacing is set by the MARGINAL sd, so a chain with innovation
+  sd 1e-4 gave transition columns summing to about 80: `max_cdf` returned
+  79.988 for a probability, `excursion_probability` -78.988, and
+  `first_passage` a vector with a -79.488 in it.
+
+  The cell mass is a CDF difference with the variance deflated by
+  `dx^2/12`, which is exactly what averaging over a cell adds. That
+  matters: the plain CDF difference is exact in mass but smooths by a
+  boxcar at every step, and it measured WORSE than the old midpoint rule
+  where the old rule worked. With the deflation the resolved regime is
+  unchanged to the digit, and the unresolved one gets its correct
+  degenerate limit.
+
+  | innovation sd | before, 200 points | after | before, 3200 | after |
+  |---|---:|---:|---:|---:|
+  | 1.0 | 1.3e-4 | 1.3e-4 | 5e-7 | 5e-7 |
+  | 0.25 | 3.6e-4 | 3.6e-4 | 1.4e-6 | 1.4e-6 |
+  | 0.01 | **1.1** | 1.6e-3 | 3.4e-5 | 3.4e-5 |
+  | 1e-4 | **160** | 1.6e-5 | **9.5** | 1.6e-5 |
+
+  Renormalising the columns would have produced numbers in [0, 1] and
+  hidden the resolution failure, which is what #217 and #221 are about.
+
 - The Euler-Maclaurin end correction is gone from both browser copies of
   the tabulated base (#216). #211's description and this changelog both
   said the correction measured worse and was removed; it was left in the
