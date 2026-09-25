@@ -42,3 +42,31 @@ test_that("a W that is not a law is refused", {
                                   W = c(0.25, NA, 0.25, 0.25)),
                "positive total|finite")
 })
+
+test_that("factor nodes carry the loadings' rank", {
+  # F with the wrong number of ROWS was accepted and priced a different
+  # quadrature outright; too few weights returned all NA; extra weights
+  # were ignored. Same contract as the browser's asFactorNodes (#290).
+  mu <- c(-0.6, -0.2, 0.15, 0.7)
+  V <- matrix(c(1.2, -0.4, 0.6, -1.0, -0.7, 1.1, 0.9, -0.5), 4, 2)
+  D <- c(0.5, 0.8, 0.6, 0.9)
+  F <- matrix(c(-1, -1, 1, 1, -1, 1, -1, 1), 4, 2)
+  W <- rep(0.25, 4)
+  expect_error(race_probabilities(mu, V = V, D = D,
+                                  F = F[, 1, drop = FALSE], W = W),
+               "one column per loading")
+  expect_error(race_probabilities(mu, V = V, D = D,
+                                  F = F[1:2, , drop = FALSE], W = W),
+               "one weight per factor node")
+  expect_error(race_probabilities(mu, V = V, D = D, F = F, W = W[1:2]),
+               "one weight per factor node")
+  expect_error(race_probabilities(mu, V = V, D = D, F = F, W = c(W, 0.9)),
+               "one weight per factor node")
+  expect_error(race_probabilities(mu, V = V, D = D,
+                                  F = matrix(0, 0, 2), W = numeric(0)),
+               "empty|one weight per factor node")
+  # and the valid spelling is untouched
+  p <- race_probabilities(mu, V = V, D = D, F = F, W = W)
+  expect_lt(abs(sum(p) - 1), 1e-12)
+  expect_true(all(is.finite(race_probabilities(mu, V = V, D = D))))
+})

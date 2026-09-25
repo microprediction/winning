@@ -22,6 +22,16 @@
   invariant and it has no `race_jacobian`, so it is clean -- a finding,
   not an omission.
 
+  The same sweep found #290's OTHER half here: the caller's factor
+  nodes were taken verbatim, so an `F` with the wrong number of ROWS
+  was accepted and priced a different quadrature outright -- `0.64616
+  0.12271 0.23064 0.00049` where the right answer is `0.38173 0.30061
+  0.13687 0.18079` -- too few weights returned all `NA`, and extra
+  weights were ignored. A short `F` did fail, but with "non-conformable
+  arguments", which names nothing the caller passed. Every node must
+  now carry exactly the loadings' rank and there must be one weight per
+  node.
+
   Every already-normalised answer is bit-identical to before, and the
   rescaled ones now agree to 0 across twelve orders of magnitude.
 

@@ -140,6 +140,29 @@
     s <- .SPANS[[base]]
     if (is.null(s)) c(12, 12) else s
   }
+  # Every node carries exactly the loadings' rank, and there is one
+  # weight per node. F with the wrong number of ROWS was accepted and
+  # priced a different quadrature outright -- 0.64616 0.12271 0.23064
+  # 0.00049 where the right answer is 0.38173 0.30061 0.13687 0.18079 --
+  # too few weights returned all NA, and extra weights were ignored. A
+  # short F did fail, but with "non-conformable arguments", which names
+  # nothing the caller passed. Same contract as the browser's
+  # asFactorNodes (#290) and julia's.
+  Fm <- as.matrix(F)
+  rk <- ncol(V)
+  if (ncol(Fm) != rk)
+    stop(sprintf(paste("F must have one column per loading; got %d for",
+                       "rank %d -- a short F prices a lower-rank model"),
+                 ncol(Fm), rk), call. = FALSE)
+  if (nrow(Fm) < 1L)
+    stop("F is empty; there are no quadrature nodes", call. = FALSE)
+  if (any(!is.finite(Fm)))
+    stop("F has a non-finite node", call. = FALSE)
+  if (length(W) != nrow(Fm))
+    stop(sprintf("W must have one weight per factor node; got %d for %d nodes",
+                 length(W), nrow(Fm)), call. = FALSE)
+  F <- Fm
+
   # W and c*W describe the SAME factor law, so normalise here, as
   # python's _setup does through winning.shapes.as_weights and as
   # abilities_from_race already does for itself further down. The
