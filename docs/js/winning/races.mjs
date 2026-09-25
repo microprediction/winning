@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, firstPrimes } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -46,13 +46,27 @@ function setup(mu, V, D, F, W, base) {
     V = mu.map(() => [0]);
     F = [[0]]; W = [1];
   } else {
+    // Gauge-fix the loadings, as python, R, julia and the standalone
+    // copy all do. A common loading column c adds the same c'f to every
+    // performance and cannot move an argmin, so the centered V prices
+    // the IDENTICAL race -- but only the centered one makes the node
+    // family, the node order and the lattice window invariant under
+    // V -> V + 1c'. Uncentered, adding 1 to every loading moved a
+    // priced share by 0.0141 (#303). #139 fixed the standalone copy and
+    // this newer API was left behind.
+    V = gaugeCenter(V);
     if (!F || !W) {
-      // adaptive order: sharpness rule identical to python/R
+      // adaptive order: sharpness rule identical to python/R. The
+      // statistic is the pairwise-safe bound
+      // sqrt(2) * max_i |(PV)_i| / sqrt(D_i), on the CENTERED rows:
+      // what decides a race is loading DIFFERENCES, and the raw row
+      // norm both misses a sharp pair and depends on the gauge.
       let sharp = 0;
       for (let i = 0; i < n; i++) {
         const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
         sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
       }
+      sharp *= Math.SQRT2;
       const r = V[0].length;
       // per-rank (Gauss-Hermite order cap, sharpness past which even that
       // order loses to the low-discrepancy family); see GH_RULE in the
