@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- The pre-renovation `src/` package is gone, all but the one part still
+  used. It had sat since the August renovation: not packaged (`setup.py`
+  lists only `winning.*`), not collected (`pytest.ini` does not name it),
+  and four of its filenames -- `lattice_calibration`, `lattice_conventions`,
+  `skew_calibration`, `std_calibration` -- shadowed live ones under
+  `winning/classic/`, so a grep returned two hits with nothing saying
+  which was current. Those are deleted, with `elo`, `kernels`, `shims`,
+  `thurstonerating`, the old test tree and the benchmarks: nothing
+  referenced any of them.
+
+  What survives is `attic/src/winning`, holding the dependency closure of
+  Glicko-2 -- `glicko2.py`, `exact.py`, `ratingsystem.py` -- because six
+  chess experiments compare against it and the live package has no
+  Glicko-2.
+
+  **It had stopped working.** `exact.py` imported the external `thurstone`
+  package, which is retired, and `winning.thurstone` is now a tombstone
+  that raises on import, so every one of those experiments would have
+  failed at the Glicko-2 step. It imports `winning.research` now, which is
+  the migration that tombstone's own message prescribes. Verified end to
+  end: A beating B three times gives A 1753, B 1247, win probability 0.82.
+  A test covers it, since nothing else looks at that directory -- which is
+  precisely how it broke.
+
 - The sampler goodness-of-fit test uses a STABLE seed (`zlib.crc32`
   rather than `hash`). `str.__hash__` is salted per process unless
   `PYTHONHASHSEED` is set, so `np.random.default_rng(hash(name) % 2**32)`
