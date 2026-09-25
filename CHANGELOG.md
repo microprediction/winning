@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- `rprobit_fast` and `mlogit_fast` reject a malformed choice set instead
+  of reshaping it (#230). Both price a field by a POSITIONAL reshape --
+  `matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)` -- so row order
+  alone decides which alternative a row is priced as, and the only guard
+  was a count: `nrow(df) == Tn * J`. An observation that duplicates one
+  alternative and omits another still has J rows, so it passed, and the
+  duplicate row was priced as the alternative that was missing. The
+  reported case fits a covariate value of 10 onto an alternative that
+  does not exist for that observation and returns an ordinary-looking
+  coefficient.
+
+  The contract is one row per (observation, alternative), which is a
+  table and not a total, so both packages now check the contingency table
+  and name the offending observation and alternative. A well-formed panel
+  is untouched.
+
 - The browser factor race's own parity suite runs in CI (#140, second
   half). `js/factor/test_parity.mjs` checks the tabulated bases against
   scipy-generated vectors, and nothing ran it -- which is why it sat
