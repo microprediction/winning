@@ -43,6 +43,307 @@
   before and after. Above it the sharp field improves from 1.6e-3 to
   6.2e-4, which is the escalation doing its job.
 
+- GMRFExtremes answers a threshold out in the tail (#197). The grid was
+  built from the chain's means and marginal sds alone, so a threshold
+  above the last cell left the occupancy identically one and every
+  answer stopped depending on `u`: 9, 10 and 20 sd out all returned the
+  same 1.11e-15, which is quadrature noise rather than a tail. The
+  excursion was then taken as `1 - max_cdf`, a subtraction of two
+  numbers that agree to every bit, so it went NEGATIVE at 10 sd, and
+  `first_passage` differenced the same quantities and returned a
+  negative passage mass.
+
+  Three things, because one alone was not enough and I measured each:
+
+  1. the grid covers the threshold, with the SPACING preserved -- the
+     point count grows with the range, up to a memory budget that
+     accounts for the O(n L^2) transitions, and past that the caller is
+     told rather than left with a silently coarser lattice;
+  2. the exceedance is summed over the cells ABOVE `u` instead of
+     subtracted from one, so it is a sum of small positive terms with
+     full relative accuracy;
+  3. the cell mass falls back to the midpoint density where `ndtr` has
+     saturated, since the double-precision CDF reaches exactly 1 around
+     8.3 sd and the difference underflows to zero there.
+
+  With (1) and (2) alone the answer was exactly 0.0 at 9 sd and at 12
+  sd alike -- no longer negative, still independent of `u`.
+
+  | threshold | before | after | exact |
+  |---|---|---|---|
+  | 6 sd | 9.911e-10 | 9.878e-10 | 9.869e-10 |
+  | 9 sd | 1.110e-15 | 1.128e-19 | 1.1286e-19 |
+  | 12 sd | 1.110e-15 | 1.780e-33 | 1.7765e-33 |
+  | 20 sd | 1.110e-15 | positive, decreasing | -- |
+
+  `first_passage` at 9 sd was `[-3.1e-15, 1.0]` and is now
+  `[1.09e-19, 1.0]`.
+
+- Malformed portfolio limits are refused, not dropped (#247). `nameCaps`
+  and `groups` encode name and sector caps, so a typo that DROPS a
+  constraint returns an ordinary-looking result that is simply
+  under-constrained -- worse than an error. In the browser:
+
+  | input | before |
+  |---|---|
+  | `nameCaps` of length n-1 | last name uncapped; an 80% position came back with `maxViolation` 0 |
+  | `nameCaps` of length n+1 | silently truncated to n |
+  | a group index of n | wrote past the row; every runner NaN, reported feasible |
+  | a negative group index | stored as a non-element property, member silently ignored |
+  | an `A` row of the wrong width | the constraint vanished |
+
+  Two of these needed the python side too, because the ports disagreed
+  about what the input MEANT rather than both being wrong. Numpy read a
+  negative group index as counting from the end, so python silently
+  capped the LAST name where the browser dropped the member. Neither is
+  documented and neither is what a group membership means, so both
+  refuse it now.
+
+  A non-finite `name_caps` ENTRY is left alone: "NaN/None entries
+  skipped" is the documented contract, meaning no cap for that name, and
+  my first cut broke it. That is a feature in both ports.
+
+- A worthless dividend prices at zero, in the browser AND in R (#242).
+  `prices_from_dividends` maps only a MISSING quote to `nan_value`. The
+  browser used `Number.isFinite(x) ? x : nanValue`, which conflates every
+  non-finite value with a missing one, and both ports divided by the
+  dividend unconditionally. So an infinite-dividend entrant took
+  `1/2000` of the book instead of nothing, a dividend of `0` produced
+  `Infinity` and then `NaN` after normalising, and a NEGATIVE dividend
+  came back as a negative probability.
+
+  The issue reported the browser. R shares two of the three: only the
+  `Inf` case was right there, because `1/Inf` is 0 on its own. Both now
+  follow python exactly -- a non-positive dividend (and `-Inf` with it)
+  prices at 0, `+Inf` prices at 0, a missing quote still takes
+  `nan_value`, and the book is normalised only when its total is
+  positive, so an all-infinite book is zeros rather than `0/0`.
+
+  | dividends | was (browser) | was (R) | now, all three |
+  |---|---|---|---|
+  | `[2, 4, Inf]` | 0.666, 0.333, 0.00067 | correct | 2/3, 1/3, 0 |
+  | `[2, 4, 0]` | 0, 0, NaN | 0, 0, NaN | 2/3, 1/3, 0 |
+  | `[2, 4, -5]` | 0.909, 0.455, **-0.364** | same | 2/3, 1/3, 0 |
+  | `[Inf, Inf]` | 0.5, 0.5 | NaN, NaN | 0, 0 |
+
+- The browser differentiates and polishes the factor law it was GIVEN
+  (#209). `raceProbabilities` has always accepted caller-supplied factor
+  nodes and weights, `{V, D, F, W}`. `raceJacobian` and `polishRace`
+  rejected `F` and `W` outright, and `raceJacobianExplicit` built its own
+  standard-normal Hermite rule whenever `V` was nonzero. So the browser
+  could PRICE a discrete or otherwise non-Gaussian factor and could not
+  differentiate it: dropping `F, W` is not a workaround, it silently
+  changes the model.
+
+  This was not a cosmetic gap. On a two-point law `F = [[-3], [3]]`,
+  `W = [0.5, 0.5]`, the Jacobian the browser returned differed from the
+  true one by 0.205 in absolute terms. It now agrees with finite
+  differences of the same forward to 8.1e-12, and `polishRace` threads
+  the law through its forward, its Jacobian AND the inverse that builds
+  `mu0` -- polishing under a different law than the caller priced with
+  optimises the wrong model. A binding cap of 0.35 reprices to
+  (0.35, 0.30, 0.35) under the caller's own nodes.
+
+- The browser prices the one-leaf tree (#241). An EMPTY linkage is the
+  valid scipy-style spelling of a hierarchy with one leaf, and
+  `treeFromLinkage([])` computed the leaf variance as
+  `1 - rho[parent[i]]` with `parent[i] = -1`. Javascript has no negative
+  indexing, so that is `undefined` and `D` came out `[NaN]`; pricing the
+  tree then failed instead of returning the certain `[1]`. The guard was
+  already written correctly one loop above, for the node strengths.
+
+  Python reaches the right answer by accident: numpy wraps `rho[-1]` to
+  the sole zero entry. Both now give `D = [1]` for the empty linkage and
+  `D = [0.5, 0.5, 1]` for a three-leaf one.
+
+- A coordinate with no idiosyncratic variance is treated as
+  deterministic, in all three structured-MVN ports (#206). Given the
+  factor draw such a coordinate is a CONSTANT, `X_i = mu_i + v_i . f`, so
+  its conditional cell is an INDICATOR, not a gaussian interval. Every
+  port divided by `s_i = 0` anyway. Off the boundary that happened to give
+  the right answer; on an inclusive boundary it is `0/0`, so the
+  documented `P(X_1 <= 0) = 1` for `X_1` identically zero came back as
+  `nan` from python and Julia, and as "missing value where TRUE/FALSE
+  needed" from R.
+
+  A constant that lies outside its own interval now returns exactly
+  `0.0` with method `outside-support`, rather than the `1e-300` the cell
+  floor gave it and a trip through the recentered path looking for a
+  probability that is not there. Checked against one-dimensional
+  quadrature for the harder case where `D_i = 0` but `V_i != 0`, so the
+  coordinate is constant only GIVEN the factor and the indicator
+  restricts the factor region instead: filter 0.32379233, quadrature
+  0.32379181.
+
+- Julia broadcasts a scalar bound, as the specification does (#184).
+  `winning.fastmvn` broadcasts with `np.broadcast_to` and the R port with
+  `rep_len`, but `julia/FactorMvNormalCDF` called `collect` on the
+  argument. A scalar `Float64` is not iterable, so the ordinary joint-CDF
+  spelling `mvn_cdf_fast(V=V, D=D, upper=0.0)` threw before evaluating
+  anything, on the structured and the delegated dense path alike. A
+  length that is neither 1 nor `n` now raises with both numbers named,
+  rather than recycling silently.
+
+- Quadrature weights are RELATIVE, in every verb that takes them (#208).
+  `W` and `c*W` describe the same factor law, and every verb normalises
+  its own result, so the common scale cancels -- except in the
+  pre-normalisation mass checks, which compared an unnormalised row sum
+  against 1. `removal_shares` and `ordered_probabilities` therefore
+  REJECTED `W = [5, 5]` while accepting the identical law
+  `W = [0.5, 0.5]`, with a "mass defect 9.00e+00" that is just the
+  weight total minus one.
+
+  The issue named `removal_shares`. Sweeping every public verb that takes
+  `mu`, `F` and `W` found two more: `ordered_probabilities` raised the
+  same way, and `plackett_luce_prefix_logprob` returned a
+  log-probability shifted by exactly `log(sum W)` -- the same law spelled
+  `[5, 5]` read -1.5071 as +0.7955 -- because it skips `_setup` entirely
+  when the caller supplies the law.
+
+  `_setup` is where the factor law is assembled, so it is the one place
+  the rule is decided, as `as_loadings` is for `V`. Every rule the
+  library generates already sums to one, so nothing it produces changes;
+  a zero or negative weight total is now refused with a reason instead of
+  being carried into a mass check. The sweep lives in
+  `tests/test_shape_contract.py`, which fails if a new verb takes a
+  factor law and is not covered.
+
+  The R and Julia helpers clamp in floating point before converting
+  (#228). Both computed the uncapped requirement in a fixed-width integer
+  and overflowed BEFORE `min(need, 8193)` -- in the very regime the cap
+  exists for. A narrowest sd of 1e-10 needs about 5.9e11 points: R's
+  `as.integer()` returned NA, so the `if (need > 8193)` meant to warn
+  errored with "missing value where TRUE/FALSE needed", and Julia threw
+  `InexactError`. Python was unaffected only because its integers are
+  unbounded, which is precisely why a port cannot inherit a numeric
+  argument from it. All four now return 8193 there and warn; the browser
+  then rejects the field on the mass check, which is the right layering.
+
+- Top-k and rank refine the lattice to the NARROWEST runner, in all four
+  engines (#224). The window is set by the widest runner and the grid by
+  `points`, so a heterogeneous field left the narrowest density between
+  samples: sds of 0.093 and 6.02 at the default 513 points gave a spacing
+  of 0.174, nearly twice the narrow runner's whole standard deviation,
+  and its top-4 membership came out 4.4e-3 wrong.
+
+  The mass check could not see it, and no tightening of that check would
+  have. It is ONE SCALAR -- the memberships sum to k -- and runner-level
+  errors of opposite sign cancel in it: the raw total was 3.99440 against
+  a tolerance of 0.02, comfortably inside, and the routine then rescaled a
+  wrong vector to sum to four. The cure is resolution, not a tighter
+  aggregate.
+
+  Same rule the win race has had all along (`races.forward_grid`): about
+  two points per narrowest sd, capped at 8193, warning when the cap still
+  leaves the lattice coarse. Measured on the reported field, the error
+  falls from 4.4e-3 to 4.8e-9 at the default `points`, and stops moving
+  with resolution at all -- 513 and 2049 now agree to 1e-9 where they
+  differed by 4.4e-3.
+
+  It subsumes two earlier rejections. The #203 field promotes itself to
+  2171 points and the #221 field to 6845, both then agreeing with an
+  8193-point answer to 5e-11, so neither has to be refused any more. The
+  guards from #221 stay as the backstop for what refinement cannot reach:
+  a field whose narrowest sd is 5e-5 needs about a million points, and it
+  warns and is rejected. Tests cover all three bands -- resolved, warned,
+  rejected. Parity vectors are unchanged, since the refinement does not
+  fire on fields with mild scale spread.
+
+- GMRFExtremes integrates its transition kernel over each lattice cell
+  instead of sampling the density (#244). `npdf(z) * dx` is a probability
+  only where the density is flat across a cell. An innovation sd far
+  below the lattice spacing makes the kernel a SPIKE between samples, and
+  the spacing is set by the MARGINAL sd, so a chain with innovation
+  sd 1e-4 gave transition columns summing to about 80: `max_cdf` returned
+  79.988 for a probability, `excursion_probability` -78.988, and
+  `first_passage` a vector with a -79.488 in it.
+
+  The cell mass is a CDF difference with the variance deflated by
+  `dx^2/12`, which is exactly what averaging over a cell adds. That
+  matters: the plain CDF difference is exact in mass but smooths by a
+  boxcar at every step, and it measured WORSE than the old midpoint rule
+  where the old rule worked. With the deflation the resolved regime is
+  unchanged to the digit, and the unresolved one gets its correct
+  degenerate limit.
+
+  | innovation sd | before, 200 points | after | before, 3200 | after |
+  |---|---:|---:|---:|---:|
+  | 1.0 | 1.3e-4 | 1.3e-4 | 5e-7 | 5e-7 |
+  | 0.25 | 3.6e-4 | 3.6e-4 | 1.4e-6 | 1.4e-6 |
+  | 0.01 | **1.1** | 1.6e-3 | 3.4e-5 | 3.4e-5 |
+  | 1e-4 | **160** | 1.6e-5 | **9.5** | 1.6e-5 |
+
+  Renormalising the columns would have produced numbers in [0, 1] and
+  hidden the resolution failure, which is what #217 and #221 are about.
+
+- The Euler-Maclaurin end correction is gone from both browser copies of
+  the tabulated base (#216). #211's description and this changelog both
+  said the correction measured worse and was removed; it was left in the
+  code, so an undocumented numerical change landed on `main` and it
+  touched every tabulated base, not just the `t4` span widening that PR
+  was about. Measured on the committed fixtures, removing it:
+
+  | fixture | with correction | without |
+  |---|---:|---:|
+  | skew forward vs scipy | 4.518e-7 | 4.472e-7 |
+  | t4 forward vs scipy   | 8.439e-7 | 8.423e-7 |
+  | skewNormalBase(0) = normal | 2.68e-7 | 3.52e-7 |
+
+  Two of the three improve and the third degrades, all of them a fifth or
+  less of their tolerances -- which is the point: the correction never did
+  anything, and it could not have. The cumulative is chained across three
+  pieces with two different step sizes, corrected per piece with that
+  piece's `h` and with nothing at the joins, and `f'(a)` was taken as
+  `fpL[0]`, which the centred-difference helper never writes, so it was
+  identically zero rather than the derivative at the left end. What
+  actually closed the 1e-5 survival gap in #211 was the span widening,
+  `BASES.t4` `[12,12] -> [24,24]`. Both copies stay byte-identical.
+
+- `polishRace` accepts `mu0` again (#207). It reads the option as
+  `const { mu0: mu0In = null } = opts`, and #204's allowlist named the
+  destructured LOCAL, `mu0In`. So a call that had worked since the
+  function was written threw `unknown option 'mu0'`, while `mu0In` was
+  accepted, ignored, and then failed with `give p0 or mu0`.
+
+  The surface test that exists to catch this searched the function body
+  for the allowlisted string and found the local name, so it passed. It
+  now parses the destructuring and compares PUBLIC keys, and a second
+  test covers the opposite direction -- a key the function reads that its
+  allowlist rejects, which is the half that refuses valid callers and the
+  half #207 actually was. Sweeping all 21 guarded browser APIs that way
+  turns up no others. `parity/check_js_api.mjs` calls `polishRace` both
+  ways, because neither direction is visible without making the call.
+
+  The first cut of that sweep exempted forwarding wrappers outright, and
+  review pointed out the hole (#237): a wrapper reads nothing off `opts`,
+  so the audits had nothing to compare its allowlist against and skipped
+  it -- leaving `bottomKProbabilities` and `locScaleFromWinAndSecond`
+  unguarded in exactly the direction that refuses valid callers. Dropping
+  `D` from the first one's list turned `bottomKProbabilities(mu, k, {D})`
+  into `unknown option 'D'` with all three source audits still green. The
+  exemption now names the API each wrapper forwards to and requires the
+  two allowlists to be equal, which is a checkable claim rather than a
+  waiver, and the checker calls both wrappers with every option at a
+  non-default value.
+
+- The browser inverse honours the two options it advertised (#226).
+  `targetFloor` and `returnInfo` were on `abilitiesFromRace`'s allowlist
+  and read by nothing, so they passed validation and vanished -- the
+  precise failure the allowlist exists to prevent, reintroduced by
+  deriving that list from python's signature rather than from what the
+  function reads. It now matches python: a zero share raises, because it
+  has no finite inverse; `targetFloor` floors deliberately and reports
+  which entries were floored; `returnInfo` returns the record rather than
+  the bare vector, and does not change the answer.
+
+  A test now requires every allowlisted key to be read by the function
+  that advertises it. Two functions legitimately forward their whole
+  options object onward, and that is DECLARED rather than inferred --
+  "the body mentions opts somewhere" would have excused this very bug,
+  since `abilitiesFromRace` forwards on its structure branch while
+  `targetFloor` vanished on every other path. Sabotage-tested by putting
+  an unread key back.
+
 - The browser honours the loading-shape contract, in every module that
   takes `V` (#232). `winning.shapes.as_loadings` is the one place the rule
   is decided -- `V` is `(n, rank)`, one ROW per contestant, and a scalar,
@@ -72,6 +373,8 @@
   exception on a happy path killed the file, so the run failed with no
   named check and every later check silently went unrun. A new `accepts()`
   helper turns a thrown exception into a named FAIL.
+
+
 
 - The pre-renovation `src/` package is gone, all but the one part still
   used. It had sat since the August renovation: not packaged (`setup.py`

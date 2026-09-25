@@ -7,6 +7,23 @@
 
 .clip01 <- function(v) pmin(pmax(v, 0), 1)
 
+.resolved_points <- function(lo, hi, sd, points) {
+  smin <- max(min(sd), 1e-300)
+  # in DOUBLE, and clamp before converting: a narrow enough runner makes
+  # the requirement exceed .Machine$integer.max, and as.integer() then
+  # returns NA, so the very `if (need > 8193)` meant to handle that
+  # regime errored with "missing value where TRUE/FALSE needed" (#228).
+  # Python is unaffected only because its integers are unbounded.
+  need <- ceiling((hi - lo) / (0.5 * smin)) + 1
+  if (!is.finite(need) || need > 8193)
+    warning(sprintf(paste("top-k lattice cannot resolve the narrowest",
+                          "runner even at 8193 points (min sd %.1e over a",
+                          "window of %.3g); memberships may carry",
+                          "percent-level error the mass check cannot see."),
+                    smin, hi - lo), call. = FALSE)
+  max(as.integer(points), as.integer(min(need, 8193)))
+}
+
 .count_window <- function(mu, sd, k, fn, delta = 1e-12, pad_sds = 2.0) {
   n <- length(mu)
   smax <- max(max(sd), 1e-12)
@@ -43,6 +60,12 @@
 
 .topk_grid <- function(mu, sd, k, fn, points, delta = 1e-12) {
   w <- .count_window(mu, sd, k, fn, delta)
+  # about two points per NARROWEST sd, capped at 8193. The window is
+# set by the widest runner and the grid by `points`, so a heterogeneous
+# field leaves the narrowest density between samples, and the mass check
+# cannot see it: that check is one scalar (memberships sum to k) and
+# runner-level errors of opposite sign cancel in it (#224).
+  points <- .resolved_points(w[1], w[2], sd, points)
   x <- seq(w[1], w[2], length.out = points)
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
