@@ -26,6 +26,83 @@
   when the loadings are global. Distinct from #212 (a finite-grid
   derivative mismatch for loadings that ARE supported) and #264 (the
   nested `coupling` rank).
+- Two documents stopped pointing at a deleted tree (#250). Removing the
+  dead `src/` package left `data/README.md` sending readers to
+  `attic/src/winning/benchmarks/`, which went with it, and a research
+  script explaining that `pip install winning` resolves to
+  `attic/src/winning` -- which `setup.py` shows it never did, since it
+  packages the top-level `winning.*` tree and the attic is neither
+  installed nor importable through it. The README now points at
+  `winning/bench/` and `BENCHMARKS.md`, and the script says what the
+  path insertion is actually for: an INSTALLED copy may be an older
+  release or a different checkout, so the repo root goes first.
+
+  The audit the issue suggested is deliberately narrow. A repo-wide
+  "every documented path exists" rule is not worth having here: of 216
+  backticked paths in markdown, 115 do not resolve, and nearly all are
+  URLs, MIME types, external dataset identifiers or paths relative to
+  their own document. The rule is about the tree that just moved -- a
+  path under `attic/` written in BACKTICKS must exist, because backticks
+  mean go and look, while prose about something that used to be there is
+  fine -- plus a check that `setup.py`'s packaged roots still match the
+  claim the script makes about them.
+- A tree's cluster labels mean the same thing on both paths (#146).
+  Labels are arbitrary comparable values, and the forward dispatch says
+  so: every tree and block kernel in `blocks.py` remaps them with
+  `np.unique(..., return_inverse=True)`. `structure_variances`, which the
+  generic inverse uses, cast them to `int` and used them directly as node
+  IDs. So a tree labelled 10/20 priced fine and inverted with "index 10
+  is out of bounds for axis 0 with size 3", and string labels died inside
+  `int()`. Canonical 0/1 labels worked, which is why it survived.
+
+  `Blocks` and `Nested` were already fine -- neither indexes anything by
+  the label -- so this is the tree alone, and the tests record that so a
+  later change cannot quietly break what worked.
+
+  The fixture needed care. A tree whose leaf clusters hang off one parent
+  gives every leaf the same ancestor variance, so relabelling cannot
+  change the answer and the invariance would hold against a broken
+  implementation; my first one was exactly that. These leaves hang at
+  UNEQUAL depth, and the tests show the strengths move the race, and that
+  a different PARTITION is a different race, before any equality is
+  believed.
+- R's `pmvnorm_fast` recycled every per-coordinate argument in silence
+  (#285). R repeats a short vector whenever its length divides `n` and
+  emits no warning, so `D = c(1, 4)` at `n = 4` became `c(1, 4, 1, 4)`
+  and the call returned `[Phi(1)Phi(1/2)]^2 = 0.3384427299701321` -- a
+  perfectly plausible probability for a Gaussian the caller never
+  described. `mean = c(0, 1)` did the same, returning 0.0062928724.
+
+  Sweeping the pattern rather than the reported symptom turned up two
+  more sites. `lower` and `upper` went through `rep_len`, which recycles
+  in exactly the same silence -- `upper = c(0, 1)` at `n = 4` returned
+  0.1769652454 -- and `r/winning`'s `concentration_matrix` recycled
+  `name_caps`, so a length-2 cap vector capped names 3 and 4 with the
+  caps meant for 1 and 2 and returned a well-formed constraint system
+  for a problem nobody posed.
+
+  `.as_len` is now the one place that rule is decided in mvtnormfast,
+  as `winning.shapes.as_idio` is for python: a SCALAR is broadcast on
+  purpose -- that is what the `-Inf`/`Inf` defaults are -- and every
+  other wrong length is refused by name, with the length it got and the
+  dimension it needed. A variance must also be finite and non-negative;
+  a bound may be infinite, a mean may not.
+
+  The python reference validates through `as_idio`/`as_loadings` and
+  julia fails on unequal lengths, so this was the only port guessing.
+
+  The shipped manual said `lower` and `upper` were "recycled to
+  dimension n" (#289). That promise was wrong rather than the check
+  being wrong: `mvtnorm::pmvnorm`, which `pmvnorm_fast` is a drop-in
+  for, REFUSES a length-2 bound at n = 4 --
+
+      'diag(sigma)' and 'lower' are of different length
+
+  -- while broadcasting its scalar `-Inf` default, which is exactly the
+  contract here. The manual now says so.
+  Every documented spelling still agrees: scalar `D`, length-n `D` and
+  the default bounds all return the same number.
+
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is
   decided -- a scalar, a length-n vector, `(n, 1)` and `(1, n)` are the
@@ -719,8 +796,6 @@
   exception on a happy path killed the file, so the run failed with no
   named check and every later check silently went unrun. A new `accepts()`
   helper turns a thrown exception into a named FAIL.
-
-
 
 - The pre-renovation `src/` package is gone, all but the one part still
   used. It had sat since the August renovation: not packaged (`setup.py`

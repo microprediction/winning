@@ -159,3 +159,75 @@ test_that("a deterministic coordinate that still loads on the factor", {
                      -50, 0)$value
   expect_lt(abs(as.numeric(p) - exact), 1e-4)
 })
+
+# --- per-coordinate arguments are not recycled (#285) -----------------
+#
+# R recycles a short vector silently whenever its length divides n, and
+# emits no warning, so `D = c(1, 4)` at n = 4 became c(1,4,1,4) and the
+# call returned [Phi(1)Phi(1/2)]^2 = 0.3384 -- a perfectly plausible
+# probability for a Gaussian the caller never described. `mean` and
+# `upper` did the same. The python reference validates through
+# as_idio/as_loadings and julia fails on unequal lengths; only this port
+# guessed. A scalar is still broadcast on purpose: that is what the
+# -Inf/Inf defaults are.
+
+test_that("a wrong-length D is refused rather than recycled", {
+  V <- matrix(0, 4, 1)
+  for (bad in list(c(1, 4), rep(1, 2), rep(1, 5), rep(1, 3))) {
+    expect_error(pmvnorm_fast(upper = rep(1, 4), mean = rep(0, 4),
+                              V = V, D = bad),
+                 "D must be a scalar or one value per coordinate")
+  }
+  # and the message says what it got and what it needed
+  expect_error(pmvnorm_fast(upper = rep(1, 4), V = V, D = c(1, 4)),
+               "got 2 for n = 4")
+})
+
+test_that("a wrong-length mean is refused rather than recycled", {
+  V <- matrix(0, 4, 1)
+  expect_error(pmvnorm_fast(upper = rep(0, 4), mean = c(0, 1),
+                            V = V, D = rep(1, 4)),
+               "mean must be a scalar or one value per coordinate")
+})
+
+test_that("wrong-length bounds are refused too", {
+  # found by sweeping the pattern rather than the reported symptom:
+  # lower/upper went through rep_len, which recycles in exactly the
+  # same silence
+  V <- matrix(0, 4, 1)
+  expect_error(pmvnorm_fast(upper = c(0, 1), V = V, D = rep(1, 4)),
+               "upper must be a scalar or one value per coordinate")
+  expect_error(pmvnorm_fast(lower = c(-1, 0), upper = rep(1, 4),
+                            V = V, D = rep(1, 4)),
+               "lower must be a scalar or one value per coordinate")
+})
+
+test_that("a negative or missing variance is refused by name", {
+  V <- matrix(0, 4, 1)
+  expect_error(pmvnorm_fast(upper = rep(1, 4), V = V, D = c(1, 1, -1, 1)),
+               "D\\[3\\] = -1 is a negative variance")
+  expect_error(pmvnorm_fast(upper = rep(1, 4), V = V,
+                            D = c(1, NA_real_, 1, 1)),
+               "D has a missing entry")
+  expect_error(pmvnorm_fast(upper = rep(1, 4), V = V, D = c(1, Inf, 1, 1)),
+               "D has a non-finite entry")
+})
+
+test_that("the documented spellings all still work and agree", {
+  V <- matrix(0, 4, 1)
+  want <- prod(pnorm(rep(1, 4)))
+  # scalar D, length-4 D, and the default bounds are one answer
+  a <- pmvnorm_fast(upper = rep(1, 4), V = V, D = 1)
+  b <- pmvnorm_fast(upper = rep(1, 4), V = V, D = rep(1, 4))
+  cc <- pmvnorm_fast(upper = rep(1, 4), mean = rep(0, 4), V = V,
+                     D = rep(1, 4))
+  expect_lt(abs(as.numeric(a) - want), 1e-12)
+  expect_identical(as.numeric(a), as.numeric(b))
+  expect_identical(as.numeric(a), as.numeric(cc))
+  # an infinite bound is legal; an infinite MEAN is not
+  expect_true(is.finite(as.numeric(
+    pmvnorm_fast(lower = -Inf, upper = rep(1, 4), V = V, D = 1))))
+  expect_error(pmvnorm_fast(upper = rep(1, 4), mean = c(0, 0, Inf, 0),
+                            V = V, D = 1),
+               "mean has a non-finite entry")
+})
