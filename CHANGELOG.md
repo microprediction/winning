@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Julia `predict_proba` checks the design instead of guessing it (#195).
+  It decided whether to prepend generated alternative-intercept columns
+  from the COLUMN COUNT alone, and `MNProbit` recorded neither whether
+  it had generated them nor how many covariates the caller supplied. New
+  data with the wrong number of features were therefore silently
+  REINTERPRETED rather than refused.
+
+  A model fitted on two covariates without intercepts, handed one
+  covariate, prepended two synthetic intercept columns and then used
+  only the first `p` of the three. It applied coefficients fitted to the
+  covariates to the intercepts, IGNORED the supplied feature entirely,
+  and returned a plausible probability row.
+
+  The model now records `intercepts` and `p_raw`, so the count is
+  checked: `p_raw` columns means raw covariates and the intercepts are
+  generated exactly when the fit generated them, `p` columns means the
+  design is already assembled, and anything else raises with both
+  numbers named. The alternative count is checked too.
+
 - The exact likelihood refuses a choice it cannot account for, in all
   three ports (#194). The cores iterate over the LEGAL alternative
   labels and gather the rows matching each, so a row whose choice is
