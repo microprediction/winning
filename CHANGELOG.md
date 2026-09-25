@@ -20,6 +20,99 @@
 
   Valid inputs are unchanged to 1.1e-16, which is the rounding of
   dividing an already-normalised `W` by its own sum.
+- The mixed Plackett-Luce likelihood used a FIXED 7-node rule whatever
+  the loadings were (#272). `ranking_loglik_and_score` always called
+  `_factor_nodes`, which at rank one or two is a Gauss-Hermite tensor of
+  order `Qf` -- no dispatch on the loadings, no convergence check, no
+  warning -- while the choice likelihood beside it escalates past a
+  sharpness of 3.
+
+  A length-one ranking is a mixed-logit choice probability, so a
+  rank-one factor has a direct one-dimensional reference integral and
+  the failure is exact rather than a disagreement between two
+  approximations. On a field with a centred loading contrast of 4.8:
+
+  | | before | exact | after |
+  |---|---|---|---|
+  | probability | 0.6927739 | 0.6136638 | rel 9.3e-08 |
+  | utility score | 0.0481050 | 0.0734129 | rel 4.8e-07 |
+  | loading score | 0.0002319 | 0.0204003 | rel 1.4e-06 |
+
+  The loading score was smaller by a factor of **88**. These are
+  derivatives of the TRUE mixed likelihood, so no finite-difference
+  test against the same 7-node rule could see it, and the Monte Carlo
+  test used loadings near one where `Qf=7` and `Qf=21` agree.
+
+  Raising the order does not rescue it -- the integrand is a softmax
+  and Gauss-Hermite is non-monotone on it, giving 0.6928, 0.6374,
+  0.6128, 0.6121, 0.6137 at orders 7, 15, 31, 63, 127 and reaching
+  5.7e-8 only at 255. The low-discrepancy rule the helper already uses
+  past rank two gets 9.3e-8 from 1024 nodes.
+
+  So the rule now dispatches on `sharpness_bound(V / tau)`, measured
+  over 220 random fields:
+
+      sharpness   GH Qf=7    Sobol 2^10
+      [0, 1)      3.9e-05    2.6e-04
+      [1, 2)      1.1e-03    2.4e-03
+      [2, 3)      4.7e-02    2.3e-03    <- Gauss-Hermite collapses here
+      [4, 6)      3.9e-01    1.8e-03
+      [6, 20)     1.15       8.5e-05
+
+  Gauss-Hermite is the better rule below 2 and 146 times cheaper, 7
+  nodes against 1024, so the crossover goes there. The choice
+  likelihood dispatches at 3.0 on a product of Gaussian CDFs; a softmax
+  is a sharper integrand and turns over sooner, which is why the two
+  numbers differ. Twelve smooth fixtures are bit-identical to before.
+
+  `winning.ratings.nway` shares the helper through `_factor_grid` and
+  is deliberately NOT dispatched: its integrand is the Gaussian order
+  likelihood, so the crossover above does not apply to it, and its
+  behaviour is gated by the ratings verifier. That needs its own
+  measurement.
+- Classic state prices summed to 188% at integer boundary offsets
+  (#292), in every port. The field is built with `shifted_cdf`, which
+  goes through `low_high` and PINS any offset at or past `L-2` to the
+  boundary. `implicit_state_prices` then took a fast path for exact
+  integers and called `integer_shift(cdf, k)` with the RAW `k`, whose
+  own clamp is the much wider `+/-(m-1)`. So a runner could sit in the
+  field at offset `L-2` and be PAID at 60:
+
+  | offsets | before | after |
+  |---|---|---|
+  | `[48, -48]` | 0.9999867465 | 0.9999867465 |
+  | `[49, -49]` | **1.0785974955** | 0.9999867465 |
+  | `[49.000001, ...]` | 0.9999867465 | 0.9999867465 |
+  | `[60, -60]` | **1.8835336397** | 0.9999867465 |
+  | `[60.1, -60.1]` | 0.9999867465 | 0.9999867465 |
+
+  An epsilon off the integer moved the total by 0.88, because the
+  non-integer path had been clamped correctly all along -- the prices
+  had stopped being exhaustive claims on one race, and the result
+  depended on whether an offset happened to serialise as an integer.
+
+  Guarding the fast path by the interior condition is exactly
+  equivalent where it applies -- for an interior integer `low_high`
+  returns `(k, 1), (k, 0)`, which is that shift with weight one -- and
+  clamps the boundary integers the way the field already does. Interior
+  results are unchanged.
+
+  **The compiled kernel needs rebuilding.** `rust/winning/src/lib.rs`
+  carries the identical branch and is what `state_prices_from_offsets`
+  dispatches to by default, so with the shipped wheel the totals are
+  still 1.0786 and 1.8835. The one-line guard is applied there too, but
+  this checkout has no cargo and the rust workflow is
+  `workflow_dispatch` only, so that change is NOT compiled or tested by
+  anything here. It needs a build before the next wheel.
+- The MNP tail likelihood went FLAT with a score of exactly zero
+  (#270), in python, R and julia. The conditional log-CDF was
+  `log(max(ndtr(a), 1e-300))`, and `ndtr` underflows to exactly zero
+  below about -37, so every deep tail collapsed to the same number,
+  log(1e-300) = -690.78. The Mills ratio, taken as
+  `exp(logphi - logPhi)`, then underflowed to zero. Together those mean
+  an optimizer declares convergence precisely where an observation is
+  most badly contradicted: it cannot tell a maximum from a floor, and a
+  central difference of the objective is zero there too.
 - The browser's block Jacobian returned an all-`NaN` matrix for
   supported rank-2 cluster loadings, and said nothing (#271). The
   FORWARD block kernel prices rank-r loadings; this Jacobian is written
@@ -146,36 +239,32 @@
   0.5 is exact, and over 2000 random matrices spanning 400 orders of
   magnitude the two spellings are bit-identical.
 
-  The PSD tolerance had the same shape and a worse consequence:
-  `-1e-8 * max(trace(C) / n, 1e-300)` overflows the trace BEFORE the
-  division, so the tolerance was `-inf` and `lam_min < -inf` is False
-  for every eigenvalue. The check therefore ACCEPTED a matrix whose
-  smallest eigenvalue is -5e307. Dividing before summing keeps it
-  finite, and that matrix is now refused.
+  `log_ndtr` / `pnorm(log.p = TRUE)` / a new julia `logndtr` replace the
+  floor. The objective now falls monotonically -- -669, -1594, -4645,
+  -19271 at gaps of -40, -60, -100, -200 -- and the score rises with the
+  surprise instead of vanishing. julia's `logndtr` uses the cephes
+  `ndtr` in the ordinary range and the `erfcx` continued fraction only
+  past 2.5 sigma, where that fraction has converged; the crossover
+  matters, since taking it at 1 sigma is wrong by 5e-7 relative. It
+  agrees with scipy's `log_ndtr` to 4.5e-16.
 
-  Three more `0.5 * (X + X.T)` in the shipped package take the same
-  spelling, in `ratings/full.py`, `factor/races.py` and
-  `research/laplacian.py`. Not fixed, and a known limit: a field of
-  two or more at 1e308 still overflows further into the fit, where
-  `_center2` sums a column. Reaching that needs the covariance
-  rescaled before fitting rather than one more guarded addition. Up to
-  1e300 a two-runner fit is fine.
+  What this does NOT fix, deliberately: the quadrature underneath. The
+  fixed Gauss-Hermite rule samples the chosen alternative's own noise
+  where the PRIOR has mass, and for a large observed contrast the
+  integrand's mass is far outside it -- at a gap of -20 the mode is at
+  z = 10 and a 7-node rule reaches |z| < 3.8 -- so the likelihood is
+  still 38% from the closed form there and the score 62%. The tests
+  RECORD those numbers rather than pretending otherwise.
 
-  The one-runner return keys off `nrow` alone, so it has to sit BELOW
-  the shape and covariance checks -- a `1 x 2` matrix has `nrow` 1 and
-  would otherwise be answered from `C[1, 1]` with the second column
-  dropped (#277). R had no validation on this path at all: a negative
-  variance was clamped to the floor, and `NA` and `Inf` propagated into
-  the fit, while python refused each one. R now states the same
-  contract in the same order with the same messages -- square, finite,
-  symmetric, positive semidefinite.
-
-  python's squareness was itself only ever caught by accident. A
-  `1 x 2` broadcasts against its own transpose into a `2 x 2`, so the
-  asymmetry check reported "not symmetric" for something that is
-  really not square; a 1-D array passed that check outright and then
-  had `np.diag` build a matrix FROM it. Both ports now say `cov= must
-  be square`.
+  A Laplace-tilted rule fixes it to machine precision; it was written
+  and measured, and is held back. Tilting makes the quadrature depend
+  on the parameters, so the analytic score stops being the gradient of
+  the computed objective, and an end-to-end fit went from 4 s and
+  `converged = true` to 160 s and `converged = false` in julia, 5.7 s to
+  52 s in python -- with the estimates still correct, but the optimizer
+  unable to certify them. Closing that properly needs the tilt's own
+  derivative through the implicit mode condition, and belongs in its own
+  change rather than folded into a floor fix.
 
 - A one-runner field with `cov=` crashes instead of returning `[1]`
   (#273), in python and in R. `race_probabilities([2.0], cov=[[4.0]])`

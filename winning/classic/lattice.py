@@ -769,7 +769,21 @@ def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, c
         offsets = range(int(-L / 2), int(L / 2))
     implicit = list()
     for k in offsets:
-        if k == int(k):
+        # The integer fast path must obey the SAME clamp the field was
+        # built with. The field goes through _low_high, which pins an
+        # offset at or past L-2 to the boundary; this called
+        # integer_shift(cdf, k) with the raw k, whose own clamp is the
+        # much wider +/-(m-1). So a runner could sit in the field at
+        # offset L-2 and be PAID at 60, and the state prices stopped
+        # being exhaustive claims on one race -- they summed to 1.88,
+        # while an epsilon off the integer gave 1.0 because the
+        # non-integer path was clamped correctly all along (#292).
+        #
+        # Guarding the fast path by the interior condition is exactly
+        # equivalent where it applies: for an interior integer
+        # _low_high returns (k, 1), (k, 0), which is this shift with
+        # weight one.
+        if k == int(k) and -L + 2 < k < L - 2:
             offset_cdf = integer_shift(cdf, int(k))
             ip = expected_payoff(density=None, densityAll=densityAll, multiplicityAll=multiplicityAll, cdf=offset_cdf,
                                  cdfAll=cdfAll)

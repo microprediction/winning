@@ -38,7 +38,8 @@ const TINY = 1e-300
 
 # ---- normal cdf / inverse (the winning JS/Julia core's recipes) ----
 
-function _erf_series(x::Float64)
+function _erf_series(x::Real)          # Real, not Float64: logndtr
+    # below is called on ForwardDiff duals, and this is pure arithmetic
     s = x
     t = x
     for n in 1:119
@@ -49,7 +50,7 @@ function _erf_series(x::Float64)
     return (2 / sqrt(pi)) * s
 end
 
-function _erfcx(x::Float64)
+function _erfcx(x::Real)
     cf = 0.0
     for k in 60:-1:1
         cf = (k / 2) / (x + cf)
@@ -138,7 +139,7 @@ function ndtr(a::Real)
     return x > 0 ? 1.0 - y : y
 end
 
-function _ndtr_series(z::Float64)
+function _ndtr_series(z::Real)
     x = z / sqrt(2)
     x >= 2.5 && return 1 - 0.5 * _erfcx(x) * exp(-x * x)
     x <= -2.5 && return 0.5 * _erfcx(-x) * exp(-x * x)
@@ -201,6 +202,61 @@ function _halton_normal(r::Int, n::Int)
     return F, fill(1.0 / n, n)
 end
 
+"""log of the standard normal CDF, tail-stable. `log(max(ndtr(a), TINY))`
+underflows to the same -690.78 for every a below about -37, which made the
+likelihood objective FLAT in the tail and its score exactly zero (#270)."""
+# _erfcx here is the continued fraction, which has NOT converged for
+# small x: at x = 1/sqrt(2), where a z <= -1 split would first call it,
+# it is wrong by 5e-7 relative and that error lands straight in the
+# log-likelihood. _ndtr_series already knows the right crossover, 2.5,
+# so use the same one rather than inventing a second.
+const _LOGNDTR_CUT = 2.5 * sqrt(2)
+
+function logndtr(z::Real)
+    # cephes ndtr in the ordinary range, not _ndtr_series: the series
+    # runs up to 119 terms and this is called on every node of every
+    # Newton step of every likelihood evaluation, which made an
+    # end-to-end fit so slow it looked like a hang. Above the cut the
+    # CDF is O(1e-4) or larger, so log of it loses nothing.
+    if z > _LOGNDTR_CUT
+        return log1p(-ndtr(-z))                  # the complement is tiny
+    elseif z >= -_LOGNDTR_CUT
+        return log(ndtr(z))
+    end
+    x = -z / sqrt(2)                             # x >= 2.5: CF is good here
+    return log(0.5 * _erfcx(x)) - 0.5 * z * z
+end
+
+"""log of phi(a)/Phi(a), the inverse Mills ratio, stable in the far tail."""
+_log_mills(a::Real) = -0.5 * a * a - 0.5 * log(2 * pi) - logndtr(a)
+
+"""Laplace-tilt the chosen alternative's own-noise quadrature.
+
+The fixed Gauss-Hermite rule samples z where the PRIOR has its mass, and
+for a large observed contrast the integrand's mass is far outside it: at
+a gap of -20 the mode is at z = 10 and a 7-node rule reaches |z| < 3.8.
+With g(z) = -z^2/2 + sum_j logPhi(A_j(z)),
+
+    g'(z)  = -z + sum_j (s_k/s_j) lam(A_j)
+    g''(z) = -1 - sum_j (s_k/s_j)^2 lam(A_j)(A_j + lam(A_j))
+
+and lam(a)(a + lam(a)) = -lam'(a) > 0 for every a, so g'' <= -1: g is
+strictly concave, its mode is unique and Newton converges from anywhere.
+The change of measure is undone exactly by log sigma - z^2/2 + x^2/2, so
+the shift moves the NODES and not the integrand (#270)."""
+# The tilt is a choice of NODES, so it must not carry derivative
+# information: if duals flowed through the Newton solve, ForwardDiff
+# would return the derivative of the re-tilted objective while the
+# analytic score -- correctly -- returns the quadrature of the true
+# derivative, and the two would disagree by a quadrature-order amount.
+# Stripping to the value makes the shift a constant, so dual-mode
+# differentiation of this code reproduces the analytic score exactly.
+#
+# Done WITHOUT a ForwardDiff dependency, and deliberately not through
+# the package extension: correctness must not depend on an extension
+# having been loaded. A dual carries its value in a `value` field, and
+# the recursion peels nested duals (forward-over-forward) down to the
+# float underneath.
 """(F, W): nodes over (factor^r, own-noise); Halton past sharpness 3
 (the dependency-free escalation of the R port)."""
 function nodes_for_likelihood(r::Int; Qf = 7, Qz = 7, sharp = 0.0)
@@ -284,7 +340,7 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
             shift = Vf[:, k] .- Vf[:, j] .+ zq .* s[k]      # (Q,)
             Aj = ((mu[idx, k] .- mu[idx, j]) .+ shift') ./ s[j]  # (Ti, Q)
             A[j] = Aj
-            lp = log.(max.(ndtr.(Aj), TINY))
+            lp = logndtr.(Aj)
             logPhi[j] = lp
             acc .+= lp
         end

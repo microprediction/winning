@@ -589,5 +589,44 @@ accepts("the inverse takes a scalar D, matching python",
           a => `[${a.map(v => v.toFixed(4))}]`);
 }
 
+// --- state prices stay exhaustive at boundary offsets (#292)
+// statePricesFromOffsets builds the field with shiftedCdf, which goes
+// through lowHigh and PINS any offset at or past L-2 to the boundary.
+// implicitPrices took a fast path for exact integers and called
+// integerShift(baseCdf, k) with the RAW k, whose own clamp is the much
+// wider +/-(m-1). A runner could sit in the field at offset L-2 and be
+// PAID at 60, so the prices summed to 1.8835 -- while an epsilon off
+// the integer gave 0.99999, because the non-integer path had been
+// clamped correctly all along.
+{
+  const dB = classic.skewNormalDensity(50, 0.1);
+  const ORD = 0.9999867465;
+  const total = a => classic.statePricesFromOffsets(dB, [a, -a])
+    .reduce((x, y) => x + y, 0);
+
+  for (const a of [48, 48.5, 49, 49.000001, 50, 60, 60.1, 100, 1000])
+    accepts(`state prices sum to one at offset ${a}`, () => total(a),
+            t => Math.abs(t - ORD) < 5e-9,
+            t => `sum ${t.toFixed(10)}`);
+
+  for (const k of [49, 60, -49, -60])
+    accepts(`offset ${k} is continuous in its neighbourhood`,
+            () => [total(k), total(k - 1e-6), total(k + 1e-6)],
+            ([a, b2, c]) => Math.abs(a - b2) < 5e-9 && Math.abs(a - c) < 5e-9,
+            ([a, b2, c]) => `${a.toFixed(9)} / ${b2.toFixed(9)} / ${c.toFixed(9)}`);
+
+  accepts("past the clamp every offset is the same distribution",
+          () => [classic.statePricesFromOffsets(dB, [60, -60]),
+                 classic.statePricesFromOffsets(dB, [80, -80])],
+          ([a, b2]) => Math.max(...a.map((v, i) => Math.abs(v - b2[i]))) < 1e-15);
+
+  accepts("interior integers are untouched",
+          () => [0, 1, 5, 20, 40, 47, -40].map(k =>
+            classic.statePricesFromOffsets(dB, [k, -k, k / 3])
+              .reduce((x, y) => x + y, 0)),
+          ts => ts.every(t => Math.abs(t - 1) < 1e-3),
+          ts => `worst |sum - 1| ${Math.max(...ts.map(t => Math.abs(t - 1))).toExponential(2)}`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
