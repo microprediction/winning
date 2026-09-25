@@ -276,8 +276,37 @@ function _race_setup(mu, V, D, F, W, base)
                 Fm, Wv = hw.F, hw.W
             end
         else
-            Fm = F isa AbstractMatrix ? Float64.(Matrix(F)) : reshape(Float64.(collect(F)), :, 1)
+            # The caller's nodes go through the same door as V and D:
+            # every node carries exactly the loadings' rank, and there
+            # is one weight per node. An F with the wrong number of
+            # ROWS was accepted and priced a different quadrature
+            # outright -- [0.646, 0.123, 0.231, 0.0005] where the right
+            # answer is [0.382, 0.301, 0.137, 0.181] -- and an extra
+            # weight was silently ignored. The two that did fail failed
+            # with a DimensionMismatch or a BoundsError from somewhere
+            # inside, which names nothing the caller passed (#290, in
+            # the browser; this is julia's copy).
+            Fm = F isa AbstractMatrix ? Float64.(Matrix(F)) :
+                 reshape(Float64.(collect(F)), :, 1)
+            rank = size(Vm, 2)
+            size(Fm, 2) == rank || throw(ArgumentError(
+                "F must have one column per loading; got " *
+                string(size(Fm, 2)) * " for rank " * string(rank) *
+                " -- a short F prices a lower-rank model"))
+            size(Fm, 1) >= 1 || throw(ArgumentError(
+                "F is empty; there are no quadrature nodes"))
+            all(isfinite, Fm) || throw(ArgumentError("F has a non-finite node"))
             Wv = Float64.(collect(W))
+            length(Wv) == size(Fm, 1) || throw(ArgumentError(
+                "W must have one weight per factor node; got " *
+                string(length(Wv)) * " for " * string(size(Fm, 1)) * " nodes"))
+            all(isfinite, Wv) || throw(ArgumentError("W has a non-finite weight"))
+            all(>=(0.0), Wv) || throw(ArgumentError(
+                "W has a negative weight; a factor law has no negative mass"))
+            wtot = sum(Wv)
+            wtot > 0 || throw(ArgumentError(
+                "W must have a positive total; got " * string(wtot)))
+            Wv = Wv ./ wtot          # W and c*W are the same law
         end
     end
     fn = _base_fn(base)

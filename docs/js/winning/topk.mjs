@@ -267,13 +267,33 @@ function factorNodes(V, n, qa) {
   return { Vm, nodes, w };
 }
 
+/* The depth of a top-k curve is a COUNT, so it is an integer.
+
+   Every guard truncated first -- `Math.trunc(k)` here, `int(k)` in
+   python, `as.integer(k)` in R -- and then range-checked the truncated
+   value, so a fractional depth passed and was silently floored:
+   topKProbabilities(mu, 1.5) returned the top-1 curve and 2.5 the
+   top-2 one, with no warning and a mass of 1 or 2 rather than the 1.5
+   or 2.5 asked for. k=0, k=n and k>n were all refused; only the
+   non-integer slipped through, which is the one case the message
+   "k must be in [1, n-1]" reads as permitting. */
+function asDepth(k, n, where = "k") {
+  if (!Number.isFinite(k))
+    throw new Error(`${where} must be a whole number of places; got ${k}`);
+  if (k !== Math.trunc(k))
+    throw new Error(
+      `${where} must be a whole number of places; got ${k}. A top-k ` +
+      `curve counts finishers, so there is no top-${k}.`);
+  if (!(k >= 1 && k <= n - 1))
+    throw new Error(`${where} must be in [1, n-1]; got k=${k}, n=${n}`);
+  return k;
+}
+
 export function topKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, TOP_K_PROBABILITIES_OPTS, "topKProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
   const n = mu.length;
-  k = Math.trunc(k);
-  if (!(k >= 1 && k <= n - 1))
-    throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
+  k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   if (!V) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
@@ -295,9 +315,7 @@ export function topKProbabilities(mu, k, opts = {}) {
 export function bottomKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, BOTTOM_K_PROBABILITIES_OPTS, "bottomKProbabilities", OPT_HINTS);
   const n = mu.length;
-  k = Math.trunc(k);
-  if (!(k >= 1 && k <= n - 1))
-    throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
+  k = asDepth(k, n);
   return topKProbabilities(mu, n - k, opts).map(v => 1 - v);
 }
 
@@ -306,9 +324,7 @@ export function topKJacobians(mu, k, opts = {}) {
   const { D = null, base = "normal", points = 513, V = null,
           qa = 15 } = opts;
   const n = mu.length;
-  k = Math.trunc(k);
-  if (!(k >= 1 && k <= n - 1))
-    throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
+  k = asDepth(k, n);
   if (V) {
     // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
     const { Vm, nodes, w } = factorNodes(V, n, qa);
@@ -479,9 +495,7 @@ export function abilitiesFromTopk(q, k, opts = {}) {
           nIter = 80, tol = 1e-8, targetFloor = null,
           returnInfo = false } = opts;
   const n = q.length;
-  k = Math.trunc(k);
-  if (!(k >= 1 && k <= n - 1))
-    throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
+  k = asDepth(k, n);
   const { target, floored } = validatedTarget(q, k, n, targetFloor);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
@@ -550,12 +564,10 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
           tol = 1e-8, ridge = 0.0, mu0 = null,
           returnInfo = false } = opts;
   const n = q1.length;
-  k1 = Math.trunc(k1); k2 = Math.trunc(k2);
+  k1 = asDepth(k1, n, "k1");
+  k2 = asDepth(k2, n, "k2");
   if (k1 === k2)
     throw new Error("k1 == k2 gives one curve twice: scale is unidentified");
-  for (const kk of [k1, k2])
-    if (!(kk >= 1 && kk <= n - 1))
-      throw new Error(`k must be in [1, n-1]; got k=${kk}, n=${n}`);
   const t1 = validatedTarget(q1, k1, n, null).target;
   const t2 = validatedTarget(q2, k2, n, null).target;
   const lt1 = t1.map(v => Math.log(v) - Math.log1p(-v));
