@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- The relative-weight contract reaches the ROOT namespace, and refuses a
+  signed rule (#263). #245 put the rule in `_setup` and swept
+  `winning.factor`, reporting every verb covered.
+  `softmax_probabilities` and `plackett_luce_order_logprob` are exported
+  from the package root and skip `_setup` when the caller supplies the
+  law, so they kept scaling with `sum(W)`: the same factor law spelled
+  `[5, 5]` instead of `[0.5, 0.5]` returned TEN TIMES the probabilities,
+  and the ordered log-probability `log(10)` higher. `harville_*` are
+  aliases of those, so they carried it too.
+
+  A sweep that names its own scope too narrowly reports success for the
+  part it looked at. The discovery now walks both `winning` and
+  `winning.factor`, and names the two that escaped.
+
+  The second gap is the check itself. `sum(W) > 0` admits a SIGNED rule:
+  `W = [2, -1]` passed and returned "probabilities" of `-0.144` and
+  `1.999`. Entries must be non-negative, not merely the total positive.
+  An individual ZERO stays valid -- it is a node that contributes
+  nothing.
+
+  The rule lives in `shapes.as_weights` now, beside `as_loadings` and
+  `as_idio`, rather than inline in `_setup` where three other verbs
+  could not reach it.
+
 - Quadrature weights are RELATIVE, in every verb that takes them (#208).
   `W` and `c*W` describe the same factor law, and every verb normalises
   its own result, so the common scale cancels -- except in the
