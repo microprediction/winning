@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- The standalone javascript factor inverse depended on the SCALE of the
+  quadrature weights (#281). `W` and `c*W` describe the same factor
+  law, and the forward already knew it: it normalises its accumulated
+  shares, so `p` was invariant to 1e-16 under any positive rescaling.
+  But it returns the own-slopes UNNORMALISED and the inverse divides
+  those by the normalised probabilities, so the Newton derivative
+  carried a factor of `c` and only the inverse moved. A self-generated
+  target repriced **0.164 away** after fifty iterations at `c = 0.1`,
+  with no error -- a calibration failure that looks like a hard
+  problem.
+
+  `js/factor/factor_race.mjs` now normalises and validates `W` at its
+  entry boundary, in both the forward and the inverse, with the
+  contract `winning.shapes.as_weights` states: finite, non-negative,
+  positive total. python's helper has the same internal mismatch and is
+  saved by its front door, `races._setup`; this standalone module had
+  no such boundary and now has one. Scaling the slope by the forward
+  total instead would also work, and is deliberately NOT done -- python
+  does not, and a silent divergence between ports is worse than either
+  behaviour.
+
+  Measured across twelve orders of magnitude, `c` from 1e-6 to 1e6, the
+  inverse now reprices to 2.49e-7 at every scale -- the same number, not
+  merely a similar one. The boundary also settles zero, negative,
+  non-finite and wrong-length weights, each of which previously reached
+  the kernel.
+
+  The deployed copy `docs/assets/js/factor_race.mjs`, which
+  `docs/fit.html` imports, is byte-identical as it must be.
+
 - The browser's classic inverse accepted an ASCENDING `offsetSamples`
   and silently miscalibrated (#274). python raises
   `ValueError("Not descending")` and R stops with `offset_samples must
