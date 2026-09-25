@@ -239,7 +239,8 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     if not 1 <= int(k) <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
     k = int(k)
-    D = as_idio(D, n, positive=True)      # scalar, length-n, and no
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
     # the compiled kernel then indexed past it and PANICKED, while a
     # wrong length broadcast into a plausible wrong answer (#254)
@@ -351,7 +352,8 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     k = int(k)
     if not 1 <= k <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
-    D = as_idio(D, n, positive=True)      # scalar, length-n, and no
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
     # the compiled kernel then indexed past it and PANICKED, while a
     # wrong length broadcast into a plausible wrong answer (#254)
@@ -406,7 +408,8 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     k = int(k)
     if not 1 <= k <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
-    D = as_idio(D, n, positive=True)      # scalar, length-n, and no
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
     # the compiled kernel then indexed past it and PANICKED, while a
     # wrong length broadcast into a plausible wrong answer (#254)
@@ -461,7 +464,8 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
             Jm += w[j] * Jm_q
             Js += w[j] * Js_q
         return Jm, Js
-    D = as_idio(D, n, positive=True)      # scalar, length-n, and no
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
     # the compiled kernel then indexed past it and PANICKED, while a
     # wrong length broadcast into a plausible wrong answer (#254)
@@ -623,7 +627,8 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     if not 1 <= k <= n - 1:
         raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
     target, floored = _validated_topk_target(q, k, n, target_floor)
-    D = as_idio(D, n, positive=True)      # scalar, length-n, and no
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
     # the compiled kernel then indexed past it and PANICKED, while a
     # wrong length broadcast into a plausible wrong answer (#254)
@@ -943,7 +948,8 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
             "no finite inverse (floor small entries upstream)")
     target = target / target.sum()
     logt = np.log(target)
-    D = as_idio(D, n, positive=True)      # scalar, length-n, and no
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
     # the compiled kernel then indexed past it and PANICKED, while a
     # wrong length broadcast into a plausible wrong answer (#254)
@@ -1013,7 +1019,8 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     sums reproduce top_k_probabilities. O(n^2 L) per factor node."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    D = as_idio(D, n, positive=True)      # scalar, length-n, and no
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
     # the compiled kernel then indexed past it and PANICKED, while a
     # wrong length broadcast into a plausible wrong answer (#254)
