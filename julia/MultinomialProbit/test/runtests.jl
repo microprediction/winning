@@ -281,3 +281,54 @@ println("all MultinomialProbit tests passed")
     show(io, MIME"text/plain"(), m)
     @test occursin("beta[1]", String(take!(io)))
 end
+
+# --- the tail likelihood is finite and its score is not zero (#270) ---
+#
+# lp was log.(max.(ndtr.(Aj), TINY)). ndtr underflows to exactly zero
+# below about -37, so every deep tail collapsed to the SAME -690.78 and
+# the objective went FLAT; the Mills ratio then underflowed to a score
+# of exactly ZERO, so an optimizer declares convergence precisely where
+# an observation is most badly contradicted.
+#
+# logndtr removes both. It does NOT remove the quadrature error
+# underneath, and the last testset pins that rather than pretending
+# otherwise.
+@testset "tail likelihood is finite with a nonzero score" begin
+    binary(gap) = choice_loglik_and_score(
+        reshape([gap, 0.0], 1, 2), zeros(2, 1), [1])
+
+    lls = [binary(g)[1] for g in (-40.0, -60.0, -100.0, -200.0)]
+    @test all(isfinite, lls)
+    @test all(diff(lls) .< -1.0)          # strictly falling, by a lot
+    @test minimum(lls) < -1e4             # far past the old -690.78
+
+    prev = 0.0
+    for gap in (-40.0, -60.0, -100.0, -200.0)
+        _, dmu, _ = binary(gap)
+        @test all(isfinite, dmu)
+        @test dmu[1, 1] > 0.0             # not the zero score
+        @test dmu[1, 1] > prev            # grows with the surprise
+        prev = dmu[1, 1]
+    end
+
+    # where the rule does reach the integrand the answer is right, so
+    # the tail failure is the quadrature and not the formula
+    for gap in (-1.0, -2.0, -3.0)
+        ll, _, _ = binary(gap)
+        ex = MP.logndtr(gap / sqrt(2))
+        @test abs(ll - ex) / abs(ex) < 1e-3
+    end
+
+    # recorded, not claimed fixed: 38% away at a gap of -20
+    ll20, _, _ = binary(-20.0)
+    ex20 = MP.logndtr(-20.0 / sqrt(2))
+    @test abs(ll20 - ex20) / abs(ex20) > 0.3
+    @test ll20 < ex20                     # understates the probability
+
+    # logndtr itself, against the naive form where the naive form works
+    for z in (-3.0, -1.0, 0.0, 0.5, 2.0)
+        @test isapprox(MP.logndtr(z), log(MP.ndtr(z)); rtol = 1e-12)
+    end
+    @test MP.logndtr(-40.0) < -700.0      # past where ndtr underflows
+    @test isfinite(MP.logndtr(-300.0))
+end

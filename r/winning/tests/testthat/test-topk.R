@@ -97,3 +97,40 @@ test_that("the field that used to be defective now resolves", {
   P2 <- rank_probabilities(mu, D = sd^2, points = 2001)
   expect_lt(max(abs(P - P2)), 1e-6)
 })
+
+# --- a top-k depth is a count, so it is an integer --------------------
+#
+# The guard truncated with as.integer(k) and then range-checked the
+# TRUNCATED value, so k=0, k=n and k>n were all refused and only a
+# non-integer slipped through, silently floored: top_k_probabilities(
+# mu, 1.5) returned the top-1 curve with mass 1, and 2.5 the top-2 one.
+# The caller asked for a curve that does not exist and got a different
+# one, and the mass they can check is 1 or 2, not the 1.5 they asked
+# about. All three ports shared this identically.
+
+test_that("whole depths are accepted and fractional ones refused", {
+  mu <- c(-0.4, 0.1, 0.2, 0.5); D <- c(0.7, 0.8, 0.9, 1.0)
+  for (k in c(1, 2, 3)) {
+    p <- top_k_probabilities(mu, k, D = D)
+    expect_lt(abs(sum(p) - k), 1e-9)
+  }
+  for (k in c(1.5, 2.5, 0.5, 2.0001)) {
+    expect_error(top_k_probabilities(mu, k, D = D), "whole number of places")
+  }
+  for (k in c(0, 4, 5)) {
+    expect_error(top_k_probabilities(mu, k, D = D), "\\[1, n-1\\]")
+  }
+})
+
+test_that("the pair door checks both depths", {
+  mu <- c(-0.4, 0.1, 0.2, 0.5); D <- c(0.7, 0.8, 0.9, 1.0)
+  q1 <- top_k_probabilities(mu, 1, D = D)
+  q2 <- top_k_probabilities(mu, 2, D = D)
+  expect_silent(loc_scale_from_topk_pair(q1, 1, q2, 2))
+  expect_error(loc_scale_from_topk_pair(q1, 1.5, q2, 2),
+               "k1 must be a whole number")
+  expect_error(loc_scale_from_topk_pair(q1, 1, q2, 2.5),
+               "k2 must be a whole number")
+  expect_error(loc_scale_from_topk_pair(q1, 0, q2, 2), "\\[1, n-1\\]")
+  expect_error(loc_scale_from_topk_pair(q1, 1, q2, 1), "k1 == k2")
+})

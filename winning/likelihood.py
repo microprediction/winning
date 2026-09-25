@@ -30,7 +30,7 @@ import numpy as np
 from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
-from scipy.special import ndtr, ndtri
+from scipy.special import log_ndtr, ndtr, ndtri
 
 
 def _gh1(Q):
@@ -80,6 +80,12 @@ def sharpness_bound(V, D=None, n=None):
     dmin = 1.0 if D is None else float(np.min(as_idio(D, n)))
     return float(np.sqrt(2.0) * np.max(np.sqrt((V ** 2).sum(axis=1)))
                  / np.sqrt(dmin))
+
+
+def _log_mills(a):
+    """log of phi(a)/Phi(a), the inverse Mills ratio, stable in the far
+    left tail where ndtr(a) underflows to exactly zero."""
+    return -0.5 * a * a - 0.5 * np.log(2.0 * np.pi) - log_ndtr(a)
 
 
 def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
@@ -158,7 +164,14 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
         for c, j in enumerate(rivals):
             shift = Vf[:, k] - Vf[:, j] + zq * s[k]
             A[j] = (dmu_k[:, c][:, None] + shift[None, :]) / s[j]
-            logPhi[j] = np.log(np.maximum(ndtr(A[j]), 1e-300))
+            # log_ndtr, not log(max(ndtr, 1e-300)). ndtr underflows to
+            # exactly 0 below about -37, so the floor turned every deep
+            # tail into the SAME number, log(1e-300) = -690.78: the
+            # objective went flat and the Mills ratio below it, computed
+            # as exp(logphi - logPhi), underflowed to a zero score. An
+            # optimizer then declares convergence exactly where the
+            # observation is most badly contradicted (#270).
+            logPhi[j] = log_ndtr(A[j])
             acc += logPhi[j]
         m = acc.max(axis=1)
         pw = np.exp(acc - m[:, None]) * W[None, :]
@@ -179,7 +192,26 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     return loglik, dmu, dV
 
 
-def _factor_nodes(r, Qf=7, nodes_log2=10):
+# Where the Gauss-Hermite tensor stops being the right family for the
+# SOFTMAX integrand and the low-discrepancy rule takes over. Measured
+# over 220 random fields, worst relative error by sharpness band:
+#
+#   sharpness   GH Qf=7    Sobol 2^10
+#   [0, 1)      3.9e-05    2.6e-04
+#   [1, 2)      1.1e-03    2.4e-03
+#   [2, 3)      4.7e-02    2.3e-03     <- Gauss-Hermite collapses here
+#   [4, 6)      3.9e-01    1.8e-03
+#   [6, 20)     1.15       8.5e-05
+#
+# so Gauss-Hermite is the better rule below 2 -- and 146 times cheaper,
+# 7 nodes against 1024 -- and the wrong one above it. The MNP choice
+# likelihood dispatches at 3.0, on a product of Gaussian CDFs; a
+# softmax is a sharper integrand and turns over sooner, which is why
+# these two numbers differ (#272).
+_FACTOR_SOBOL_SHARP = 2.0
+
+
+def _factor_nodes(r, Qf=7, nodes_log2=10, sharp=0.0):
     """(F, W) over the factor space alone (no own-noise dimension): the
     Gumbel members condition only on f, the winner integral being closed
     form. Gauss-Hermite tensor with Qf nodes per dimension at r <= 2;
@@ -187,7 +219,7 @@ def _factor_nodes(r, Qf=7, nodes_log2=10):
     (it was silently ignored there until 2026-09-11: the count was
     hard-coded at 1024, so the parameter did nothing in exactly the
     regime a user would reach for it)."""
-    if r > 2:
+    if r > 2 or sharp > _FACTOR_SOBOL_SHARP:
         from scipy.stats import qmc
         n = 2 ** int(nodes_log2)
         u = qmc.Sobol(r, scramble=True, seed=0).random(n)
@@ -241,7 +273,16 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     V = as_loadings(V, J)
     r = V.shape[1]
     tau = float(temperature)
-    F, W = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2)
+    # Dispatch on the loading sharpness, as the choice likelihood does.
+    # This took a FIXED Qf=7 tensor whatever the loadings were: on a
+    # rank-one field with a centred loading contrast of 4.8 the
+    # probability came back 12.9% high and the loading score smaller by
+    # a factor of 88 -- derivatives of the true mixed likelihood, not a
+    # disagreement with its own rule, so no finite-difference test
+    # could see it (#272). The loadings enter as V/tau, so that is what
+    # the sharpness is measured on.
+    sharp = sharpness_bound(V / tau, n=J) if tau > 0 else np.inf
+    F, W = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2, sharp=sharp)
     Q = len(F)
     shift = (F @ V.T)                       # (Q, J)
     loglik = 0.0
