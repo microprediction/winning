@@ -73,7 +73,48 @@
 fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
                            nodes = 2048L) {
   C <- as.matrix(C)
+  # The same contract python states, in the same order and with the
+  # same messages. R had NONE of it: a negative variance was clamped to
+  # the floor, NA and Inf propagated into the fit, and a non-square
+  # matrix was read by nrow() alone. That last one is why this block
+  # sits ABOVE the n == 1 return rather than below it -- a 1 x 2 matrix
+  # has nrow 1, so the one-runner branch would otherwise answer for it
+  # from C[1, 1] and drop the second column (#277).
+  if (nrow(C) != ncol(C))
+    stop(sprintf("cov= must be square; got %d x %d", nrow(C), ncol(C)))
   n <- nrow(C)
+  if (!all(is.finite(C))) stop("cov= contains NaN or inf")
+  asym <- max(abs(C - t(C)))
+  if (asym > 1e-8 * max(max(abs(C)), 1e-300))
+    stop(sprintf(paste("cov= is not symmetric (max asymmetry %.2e); pass",
+                       "(C + t(C))/2 if the asymmetry is numerical noise"),
+                 asym))
+  # halve BEFORE adding, or C + t(C) overflows to Inf for finite
+  # entries near the double ceiling (#279)
+  C <- 0.5 * C + 0.5 * t(C)
+  lam_min <- min(eigen(C, symmetric = TRUE, only.values = TRUE)$values)
+  # mean diagonal, divided BEFORE summing: sum(diag(C)) overflows to
+  # Inf for finite entries near the ceiling, and the tolerance is
+  # then -Inf, so the comparison is always FALSE and the check
+  # accepts a matrix with a large negative eigenvalue (#279)
+  if (lam_min < -1e-8 * max(sum(diag(C) / n), 1e-300))
+    stop(sprintf(paste("cov= is not positive semidefinite (min eigenvalue",
+                       "%.2e); this is not a covariance matrix. Project to",
+                       "the PSD cone first if it came from noisy",
+                       "estimation."),
+                 lam_min))
+  if (n == 1L) {
+    # A one-runner field has no covariance STRUCTURE: nothing for a
+    # factor to correlate, the whole variance idiosyncratic, and the
+    # race is 1 whatever it is. .factor_model_projected is asked for
+    # min(k, n - 1) = 0 factors and hands back a 0 x 0 matrix, which
+    # then fails to multiply; python divided by zero at the same point
+    # (#273). Report it as what it is: an exact fit of rank zero.
+    return(list(V = matrix(0, 1L, 1L), D = pmax(C[1L, 1L], 1e-12),
+                F = matrix(0, 1L, 1L), W = 1,
+                rank = 0L, n = 1L, bound = 0, clamp = 0,
+                residual = 0, contrast_residual = 0, degraded = FALSE))
+  }
   s <- sqrt(pmax(diag(C), 1e-12))
   corr <- C / outer(s, s)
   fit <- .factor_model_projected(C, min(k, n - 1L))

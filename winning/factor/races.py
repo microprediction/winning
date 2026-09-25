@@ -1440,7 +1440,7 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
                                   -745.0, 0.0))
             w[i] += W[c] * (f[i] * f * rest).sum(1) * dx
     np.fill_diagonal(w, 0.0)
-    return 0.5 * (w + w.T)          # symmetric by theory; average numerics
+    return 0.5 * w + 0.5 * w.T      # symmetric by theory; average numerics (#279)
 
 
 def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
