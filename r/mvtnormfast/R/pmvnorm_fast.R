@@ -136,6 +136,37 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
   out
 }
 
+# One place decides what "one value per coordinate" means here, the way
+# winning.shapes.as_idio does for python. A SCALAR is broadcast on
+# purpose -- that is what the -Inf/Inf defaults are -- and every other
+# wrong length is refused.
+#
+# R recycles silently whenever the short length divides n, and no
+# warning is emitted, so `D = c(1, 4)` at n = 4 became c(1,4,1,4) and
+# the call returned [Phi(1)Phi(1/2)]^2 = 0.3384: a perfectly plausible
+# probability for a Gaussian the caller never asked about. `mean` and
+# `upper` did the same (#285). The python reference validates through
+# as_idio/as_loadings and julia fails on unequal lengths; only this
+# port guessed.
+.as_len <- function(x, n, what, finite = TRUE, nonneg = FALSE) {
+  x <- as.numeric(x)
+  if (length(x) == 1L) x <- rep(x, n)
+  if (length(x) != n)
+    stop(sprintf(paste("%s must be a scalar or one value per coordinate;",
+                       "got %d for n = %d"), what, length(x), n),
+         call. = FALSE)
+  if (anyNA(x))
+    stop(sprintf("%s has a missing entry at %d", what, which(is.na(x))[1]),
+         call. = FALSE)
+  if (finite && any(!is.finite(x)))
+    stop(sprintf("%s has a non-finite entry at %d", what,
+                 which(!is.finite(x))[1]), call. = FALSE)
+  if (nonneg && any(x < 0))
+    stop(sprintf("%s[%d] = %g is a negative variance", what,
+                 which(x < 0)[1], x[which(x < 0)[1]]), call. = FALSE)
+  x
+}
+
 pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                          sigma = NULL, V = NULL, D = NULL, ...) {
   if (is.null(V) || is.null(D)) {
@@ -144,7 +175,8 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     fd <- factorize_covariance(sigma)
     if (is.null(fd)) {
       nn <- nrow(as.matrix(sigma))
-      if (.rectangle_status(rep_len(lower, nn), rep_len(upper, nn))) {
+      if (.rectangle_status(.as_len(lower, nn, "lower", finite = FALSE),
+                            .as_len(upper, nn, "upper", finite = FALSE))) {
         p <- 0
         attr(p, "method") <- "degenerate-rectangle"
         return(p)
@@ -158,8 +190,12 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
   }
   V <- as.matrix(V)
   n <- nrow(V)
-  if (is.null(mean)) mean <- rep(0, n)
-  lower <- rep_len(lower, n); upper <- rep_len(upper, n)
+  # every per-coordinate argument goes through the same contract; a
+  # bound may be infinite, a variance may not
+  D <- .as_len(D, n, "D", nonneg = TRUE)
+  mean <- if (is.null(mean)) rep(0, n) else .as_len(mean, n, "mean")
+  lower <- .as_len(lower, n, "lower", finite = FALSE)
+  upper <- .as_len(upper, n, "upper", finite = FALSE)
   if (.rectangle_status(lower, upper)) {
     p <- 0
     attr(p, "method") <- "degenerate-rectangle"
