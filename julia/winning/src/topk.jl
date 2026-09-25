@@ -271,12 +271,21 @@ function rank_probabilities(mu; D = nothing, base = "normal", points = 513)
         Qi = _loo_pmf(C, g.F, i)
         P[i, :] .= vec(sum(Qi .* (g.f[:, i] ./ sd[i]), dims = 1)) .* g.dx
     end
+    # Check what is RETURNED. Row normalisation makes every row exact and
+    # MOVES the columns, so a matrix that passed the raw check could fail
+    # the stated identity afterwards with nothing looking (#203). The
+    # columns are not forced: alternating scaling would make both exact by
+    # hiding the under-resolution that caused it, and the same field at
+    # 2001 points has a column error of 3.5e-9.
+    P = clip01(P ./ max.(vec(sum(P, dims = 2)), 1e-300))
     rows = vec(sum(P, dims = 2))
     cols = vec(sum(P, dims = 1))
-    (all(isfinite, P) && maximum(abs.(rows .- 1)) <= 5e-3 &&
-     maximum(abs.(cols .- 1)) <= 5e-3) ||
-        error("rank marginals defective; raise points=")
-    return clip01(P ./ rows)
+    re, ce = maximum(abs.(rows .- 1)), maximum(abs.(cols .- 1))
+    (all(isfinite, P) && re <= 5e-3 && ce <= 5e-3) ||
+        error("rank marginals defective: row-sum error $re, column-sum " *
+              "error $ce, measured on the RETURNED matrix after row " *
+              "normalisation. Raise points=.")
+    return P
 end
 
 function _validated_topk_target(q, k, n, target_floor)

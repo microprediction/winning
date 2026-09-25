@@ -26,6 +26,36 @@
   A test covers it, since nothing else looks at that directory -- which is
   precisely how it broke.
 
+- The browser factor race's own parity suite runs in CI (#140, second
+  half). `js/factor/test_parity.mjs` checks the tabulated bases against
+  scipy-generated vectors, and nothing ran it -- which is why it sat
+  failing on `main` at 1.01e-5 against its own 2e-6 tolerance until #211.
+  An ungated suite stays broken for exactly as long as nobody happens to
+  run it. It is now a step in the `parity` job, alongside the vector
+  check, both port checkers and the browser API guards.
+
+- `rank_probabilities` validates the matrix it RETURNS, in all four
+  engines (#203). It checked the raw quadrature matrix, divided by the raw
+  row sums and returned that, and row normalisation is not neutral: it
+  makes every row exact and MOVES the columns. On a field whose sds span
+  73x (0.19 to 14.3) at 513 points, the column excess grew from 4.5e-3 to
+  5.4e-3 through that division, past the tolerance the check had just
+  applied -- and the documented identity, that cumulative rank rows
+  reproduce `top_k_probabilities`, broke by 2.6e-3. Nothing looked at the
+  matrix afterwards.
+
+  The columns are deliberately NOT forced. Alternating row/column scaling
+  would make both identities exact and would do it by hiding what caused
+  the defect: the same field at 2001 points has a column error of 3.5e-9,
+  so the quadrature is what is wrong, not the normalisation. Raising says
+  so, and the error now names both errors and where they were measured; a
+  doubly stochastic answer to a question the lattice could not resolve
+  does not. Above 2001 points that field's cumulative rows reproduce
+  `top_k_probabilities` to 3.5e-9, which is the quadrature's own error.
+
+  Python, R, Julia and the browser all carry it, and R and the browser
+  agree with python to 1e-15 on the fixture at 2001 points.
+
 - The browser factor race's Student-t4 base integrates over a window wide
   enough for its tails, and `js/factor/test_parity.mjs` is green for the
   first time in a while. Its `t4 forward shares vs scipy` check had been
