@@ -31,3 +31,20 @@ test_that("sharpness escalation switches node families", {
   v_s <- .nll(th_sharp, list(X), c(1, 2, 3), J, r, nodes, ns)
   expect_true(is.finite(v_m) && is.finite(v_s))
 })
+
+test_that("the triangular loading loop is empty at J = 2, not backwards", {
+  # `(col + 1L):J` is c(3, 2) at J = 2, not empty, so the loop wrote
+  # V[3, 2] on a 2x2 matrix and every binary-choice fit died out of
+  # bounds (#183). The same loop is in rprobitfast, which carries the
+  # end-to-end fit test; this pins the sequence itself.
+  visited <- function(J, r) {
+    out <- character(0)
+    for (col in seq_len(r)) for (row in col + seq_len(J - col))
+      out <- c(out, sprintf("%d,%d", row, col))
+    out
+  }
+  expect_equal(visited(2L, 2L), "2,1")
+  expect_equal(visited(1L, 1L), character(0))
+  expect_true(all(vapply(strsplit(visited(4L, 2L), ","),
+                         function(p) as.integer(p[1]) <= 4L, TRUE)))
+})
