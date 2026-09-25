@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- An unresolved merge conflict was sitting in `parity/check_js_api.mjs`
+  on main, so the browser API checker had not run since it landed. The
+  file did not parse: `node parity/check_js_api.mjs` exited on
+  `SyntaxError: Unexpected token '<<'` instead of running its
+  ninety-odd behavioural checks -- the ones that exist because #186
+  shipped past tests that only read the source.
+
+  Both sides of the conflict were correct and additive, one block of
+  checks each. Deleting the three marker lines is the whole repair and
+  every check then passes; nothing else had to change, which is why it
+  went unnoticed.
+
+  It reached main because three things lined up. The branch was merged
+  without rerunning the checker. CI runs it (`ci.yml`, "Browser API
+  guards") but had not run on main for five weeks: the Actions pool was
+  saturated, and a push at saturation creates no run AT ALL rather than
+  queueing one. And nothing looked for the marker itself.
+
+  `tests/test_no_conflict_markers.py` closes the last of those. It
+  sweeps every tracked text file, which needs no toolchain and so
+  cannot be skipped by a starved one. A bare `=======` is not an
+  offence -- it underlines headings in reStructuredText -- only the
+  directional markers are.
+
 - CI checks every R package, on pull requests, and their tests actually
   run (#142). The R workflow was path-triggered by changes under
   `mvtnormfast`, `mlogitfast` OR `rprobitfast` and then always built and
