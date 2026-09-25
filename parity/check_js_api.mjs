@@ -7,9 +7,10 @@
 // API cannot lean on the language to reject a wrong or misspelled key.
 const here = new URL(".", import.meta.url).pathname;
 const eng = p => import(here + "../docs/js/winning/" + p);
-const [races, topk, blocks, polish, classic, demo] = await Promise.all(
-  ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs",
-   "demo.mjs"].map(eng));
+const [races, topk, blocks, polish, classic, demo, structures] =
+  await Promise.all(
+    ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs",
+     "demo.mjs", "structures.mjs"].map(eng));
 
 let fails = 0;
 const rejects = (fn, args, why, expect = null) => {
@@ -198,6 +199,27 @@ for (const [k, v] of [["base", "gumbel"], ["points", 1025], ["nIter", 30],
             [0.5, 0.3, 0.2], [0.3, 0.4, 0.3], { [k]: v }),
           r => r != null);
 }
+
+// --- the one-leaf tree (#241)
+// An EMPTY linkage is the valid scipy-style spelling of a hierarchy with
+// one leaf. javascript has no negative indexing, so rho[parent[i]] with
+// parent[i] = -1 was undefined and the leaf variance came out NaN;
+// pricing that tree failed instead of returning the certain [1]. The
+// values below are python's, which the browser must reproduce.
+const oneLeaf = structures.treeFromLinkage([]);
+holds("one-leaf tree has finite variance",
+      oneLeaf.D.every(Number.isFinite), `D = [${oneLeaf.D}]`);
+holds("one-leaf tree matches python's D = [1]",
+      Math.abs(oneLeaf.D[0] - 1) < 1e-15);
+accepts("the one-leaf tree prices to certainty",
+        () => blocks.treeRaceProbabilities([0], oneLeaf.cluster,
+          oneLeaf.loading, oneLeaf.D, oneLeaf.parent, oneLeaf.strength),
+        p => p.length === 1 && Math.abs(p[0] - 1) < 1e-12,
+        p => `p = [${p}]`);
+const threeLeaf = structures.treeFromLinkage([[0, 1, 0.5], [2, 3, 0.8]]);
+holds("a real linkage is unchanged: python's D = [0.5, 0.5, 1]",
+      Math.max(...threeLeaf.D.map((v, i) => Math.abs(v - [0.5, 0.5, 1][i]))) < 1e-15,
+      `D = [${threeLeaf.D}]`);
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

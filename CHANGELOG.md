@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- The browser prices the one-leaf tree (#241). An EMPTY linkage is the
+  valid scipy-style spelling of a hierarchy with one leaf, and
+  `treeFromLinkage([])` computed the leaf variance as
+  `1 - rho[parent[i]]` with `parent[i] = -1`. Javascript has no negative
+  indexing, so that is `undefined` and `D` came out `[NaN]`; pricing the
+  tree then failed instead of returning the certain `[1]`. The guard was
+  already written correctly one loop above, for the node strengths.
+
+  Python reaches the right answer by accident: numpy wraps `rho[-1]` to
+  the sole zero entry. Both now give `D = [1]` for the empty linkage and
+  `D = [0.5, 0.5, 1]` for a three-leaf one.
+
 - The Euler-Maclaurin end correction is gone from both browser copies of
   the tabulated base (#216). #211's description and this changelog both
   said the correction measured worse and was removed; it was left in the
