@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- The sampler goodness-of-fit test uses a STABLE seed (`zlib.crc32`
+  rather than `hash`). `str.__hash__` is salted per process unless
+  `PYTHONHASHSEED` is set, so `np.random.default_rng(hash(name) % 2**32)`
+  drew a different sample on every run and re-rolled the test's own 9e-5
+  tail risk each time. Thirteen bases across six CI platforms is 78 draws
+  per round, which is a failure every few rounds: one hit a macos runner
+  at 0.010262 against the 1e-2 bound, on a pull request that changed only
+  browser javascript. The comment in the test blamed platform differences;
+  those are why the scipy-backed samplers consume the stream differently,
+  not why the draw changed between two runs on the same machine.
+
+  Each (base, platform) pair now has one fixed draw: it passes forever or
+  fails immediately, rather than being re-rolled. Locally the worst base
+  sits at 0.006956, a 1.44x margin, and over 120 seeds the previously
+  failing base has median 0.0038 and max 0.0067.
+
 - All four structured-MVN ports reject an empty rectangle instead of
   pricing it at the underflow floor (#235). `P(lower <= X <= upper)` with
   `lower_i > upper_i` is an EMPTY event. Python, the vendored standalone
