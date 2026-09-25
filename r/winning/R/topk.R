@@ -247,12 +247,22 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
     Qi <- .loo_pmf(C, g$F, i)
     P[i, ] <- colSums(Qi * (g$f[, i] / sd[i])) * g$dx
   }
+  # Check what is RETURNED. Row normalisation makes every row exact and
+  # MOVES the columns, so a matrix that passed the raw check could fail the
+  # stated identity afterwards with nothing looking (#203). The columns are
+  # not forced: alternating scaling would make both exact by hiding the
+  # under-resolution that caused it, and the same field at 2001 points has
+  # a column error of 3.5e-9.
+  P <- .clip01(P / pmax(rowSums(P), 1e-300))
   rows <- rowSums(P)
   cols <- colSums(P)
   if (any(!is.finite(P)) || max(abs(rows - 1)) > 5e-3 ||
       max(abs(cols - 1)) > 5e-3)
-    stop("rank marginals defective; raise points=")
-  .clip01(P / rows)
+    stop(sprintf(paste("rank marginals defective: row-sum error %.2e,",
+                       "column-sum error %.2e, measured on the RETURNED",
+                       "matrix after row normalisation. Raise points=."),
+                 max(abs(rows - 1)), max(abs(cols - 1))))
+  P
 }
 
 .validated_topk_target <- function(q, k, n, target_floor) {

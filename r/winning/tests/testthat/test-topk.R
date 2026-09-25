@@ -39,3 +39,20 @@ test_that("jacobians satisfy the gauge identities", {
   euler <- J$Jmu %*% mu + J$Jsigma %*% sqrt(D)
   expect_lt(max(abs(euler)), 1e-7)
 })
+
+test_that("the returned rank matrix is what gets checked", {
+  # Row normalisation makes rows exact and MOVES the columns, so a matrix
+  # that passed the raw check could fail the stated identity afterwards
+  # with nothing looking (#203). Columns are not forced: the same field at
+  # 2001 points has a column error of 3.5e-9, so the quadrature is what is
+  # wrong, and raising says so.
+  mu <- c(0.852479112355, 1.342705472309, -4.927823648082)
+  sd <- c(0.635892136598, 0.194587863958, 14.30720080209)
+  expect_error(rank_probabilities(mu, D = sd^2, points = 513),
+               "RETURNED matrix")
+  P <- rank_probabilities(mu, D = sd^2, points = 2001)
+  expect_lt(max(abs(rowSums(P) - 1)), 5e-3)
+  expect_lt(max(abs(colSums(P) - 1)), 5e-3)
+  q <- top_k_probabilities(mu, 2, D = sd^2, points = 2001)
+  expect_lt(max(abs(rowSums(P[, 1:2]) - q)), 1e-6)
+})

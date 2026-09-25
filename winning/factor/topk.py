@@ -977,6 +977,9 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
                                 "abilities_from_rank_marginal")
 
 
+_TINY = 1e-300
+
+
 def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
                        qa=15):
     """The full rank marginals: an (n, n) matrix whose (i, r) entry is
@@ -1026,6 +1029,23 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
         for q in range(len(nodes)):
             P += w[q] * one_node(mu + Vm @ nodes[q])
 
+    # Check what is RETURNED, not what was computed. Row normalisation is
+    # not neutral: it makes every row exact and moves the columns, so a
+    # matrix that passed the raw check could fail the stated identity
+    # afterwards and nothing looked. On a field whose sds span 73x
+    # (0.19 to 14.3) at 513 points the column excess grew from 4.5e-3 to
+    # 5.4e-3 that way, and the cumulative rows stopped reproducing
+    # top_k_probabilities by 2.6e-3 (#203).
+    #
+    # The columns are not forced. Alternating row/column scaling would
+    # make both identities exact and would do it by hiding the
+    # under-resolution that caused the defect -- the same field at 2001
+    # points has a column error of 3.5e-9, so the quadrature, not the
+    # normalisation, is what is wrong. Raising says so; a doubly
+    # stochastic answer to a question the lattice could not resolve does
+    # not.
+    rows = P.sum(axis=1)
+    P = np.clip(P / np.maximum(rows[:, None], _TINY), 0.0, 1.0)
     rows = P.sum(axis=1)
     cols = P.sum(axis=0)
     if (not np.isfinite(P).all() or np.abs(rows - 1).max() > 5e-3
@@ -1033,7 +1053,7 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
         raise RuntimeError(
             "rank marginals defective: row-sum error "
             f"{np.abs(rows-1).max():.2e}, column-sum error "
-            f"{np.abs(cols-1).max():.2e}. Raise points=, or report this "
+            f"{np.abs(cols-1).max():.2e}, measured on the RETURNED matrix "
+            "after row normalisation. Raise points=, or report this "
             "field.")
-    P = P / rows[:, None]
-    return np.clip(P, 0.0, 1.0)
+    return P
