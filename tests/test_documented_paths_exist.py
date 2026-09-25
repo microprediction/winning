@@ -17,6 +17,12 @@ written in BACKTICKS must exist. Backticks mean "go and look"; prose
 about something that used to be there is fine and is how the deleted
 benchmarks tree is now described.
 
+`CHANGELOG.md` is exempt, and that is not a patch over an inconvenience:
+a changelog's whole job is to say what a release removed, so it has to
+be able to name a path that is deliberately gone. I found this the way
+you would expect -- the entry announcing this very fix tripped the sweep
+on the next full run.
+
 The second half pins the claim the research script makes about
 packaging, because that is the sort of statement that goes quietly
 false.
@@ -41,6 +47,9 @@ def _documents():
                 continue          # the attic may describe its own past
             if f.resolve() == Path(__file__).resolve():
                 continue          # this file quotes the patterns it hunts
+            if rel.name == "CHANGELOG.md":
+                continue          # a changelog's whole job is to name
+                                  # what a release removed
             yield f
 
 
