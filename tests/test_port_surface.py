@@ -426,11 +426,17 @@ def test_browser_allowlists_are_per_function():
 # would also have excused the bug this test exists for -- abilitiesFromRace
 # forwards opts on its structure branch, and targetFloor still vanished
 # on every other path (#226)
+# A wrapper that hands `opts` straight to another API, mapped to the API
+# it hands it to. The wrapper reads nothing itself, so exempting it from
+# the audits below leaves its public signature unguarded in BOTH
+# directions -- dropping a supported key from the wrapper's own allowlist
+# would turn `bottomKProbabilities(mu, k, {D})` into `unknown option 'D'`
+# while every source audit still passed (#237). Naming the callee instead
+# turns the exemption into a checkable claim: the two allowlists must
+# agree, because whatever one accepts the other has to.
 FORWARDS_OPTS = {
-    "topk.mjs::bottomKProbabilities":
-        "forwards to topKProbabilities(mu, n - k, opts)",
-    "topk.mjs::locScaleFromWinAndSecond":
-        "forwards to locScaleFromTopkPair(p1, 1, top2, 2, opts)",
+    "topk.mjs::bottomKProbabilities": "topk.mjs::topKProbabilities",
+    "topk.mjs::locScaleFromWinAndSecond": "topk.mjs::locScaleFromTopkPair",
 }
 
 # keys read only on a branch that forwards, and meaningless on the rest
@@ -572,9 +578,43 @@ def test_every_browser_option_read_is_allowlisted():
 def test_the_forwarding_exemptions_are_real():
     """A declared exemption must still forward; otherwise it is a way to
     hide the bug above."""
-    for key, why in FORWARDS_OPTS.items():
+    for key, callee in FORWARDS_OPTS.items():
         fname, fn = key.split("::")
+        _cfile, cfn = callee.split("::")
         text = (ROOT / "docs/js/winning" / fname).read_text()
         i = text.index(f"export function {fn}(")
         body = text[i:text.find("\n}\n", i)]
-        assert "opts)" in body or "...opts" in body, f"{key}: {why} is stale"
+        assert "opts)" in body or "...opts" in body, (
+            f"{key} is exempted as a forwarder but no longer forwards")
+        assert f"{cfn}(" in body, (
+            f"{key} is declared to forward to {cfn}, which it never calls")
+
+
+def test_a_forwarder_and_its_callee_allow_the_same_options():
+    """The half #237 found missing.
+
+    A forwarder reads nothing off `opts`, so the audits above have
+    nothing to compare its allowlist against and skipped it entirely.
+    That left the rejected-valid-key direction unguarded exactly where
+    two option lists can drift apart: removing "D" from
+    BOTTOM_K_PROBABILITIES_OPTS made `bottomKProbabilities(mu, k, {D})`
+    throw `unknown option 'D'` while all three source audits passed.
+
+    The wrapper validates first and then hands `opts` on, so its list has
+    to name everything the callee accepts -- a key the callee supports and
+    the wrapper omits is refused before it ever arrives, and a key the
+    wrapper allows and the callee does not is refused one call later with
+    a message naming the wrong function.
+    """
+    allow = {k: a for k, a, _r in _guarded_browser_apis()}
+    for key, callee in FORWARDS_OPTS.items():
+        assert key in allow, f"{key} is declared a forwarder but not guarded"
+        assert callee in allow, f"{callee} is a declared callee but not guarded"
+        missing = sorted(allow[callee] - allow[key])
+        extra = sorted(allow[key] - allow[callee])
+        assert not missing, (
+            f"{key} forwards to {callee}, which accepts "
+            f"{', '.join(missing)} -- the wrapper refuses them first")
+        assert not extra, (
+            f"{key} accepts {', '.join(extra)} but {callee}, which it "
+            f"forwards to, rejects them")

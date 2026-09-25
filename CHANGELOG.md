@@ -40,6 +40,18 @@
   turns up no others. `parity/check_js_api.mjs` calls `polishRace` both
   ways, because neither direction is visible without making the call.
 
+  The first cut of that sweep exempted forwarding wrappers outright, and
+  review pointed out the hole (#237): a wrapper reads nothing off `opts`,
+  so the audits had nothing to compare its allowlist against and skipped
+  it -- leaving `bottomKProbabilities` and `locScaleFromWinAndSecond`
+  unguarded in exactly the direction that refuses valid callers. Dropping
+  `D` from the first one's list turned `bottomKProbabilities(mu, k, {D})`
+  into `unknown option 'D'` with all three source audits still green. The
+  exemption now names the API each wrapper forwards to and requires the
+  two allowlists to be equal, which is a checkable claim rather than a
+  waiver, and the checker calls both wrappers with every option at a
+  non-default value.
+
 - The browser inverse honours the two options it advertised (#226).
   `targetFloor` and `returnInfo` were on `abilitiesFromRace`'s allowlist
   and read by nothing, so they passed validation and vanished -- the
