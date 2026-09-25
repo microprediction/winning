@@ -5,6 +5,15 @@
 
 clip01(v) = clamp.(v, 0.0, 1.0)
 
+function _resolved_points(lo, hi, sd, points)
+    smin = max(minimum(sd), 1e-300)
+    need = Int(ceil((hi - lo) / (0.5 * smin))) + 1
+    if need > 8193
+        @warn "top-k lattice cannot resolve the narrowest runner even at 8193 points" smin window=(hi - lo)
+    end
+    return max(Int(points), min(need, 8193))
+end
+
 function _count_window(mu, sd, k, fn; delta = 1e-12, pad_sds = 2.0)
     n = length(mu)
     smax = max(maximum(sd), 1e-12)
@@ -41,6 +50,12 @@ end
 
 function _topk_grid(mu, sd, k, fn, points; delta = 1e-12)
     lo, hi = _count_window(mu, sd, k, fn; delta = delta)
+    # about two points per NARROWEST sd, capped at 8193. The window is
+# set by the widest runner and the grid by `points`, so a heterogeneous
+# field leaves the narrowest density between samples, and the mass check
+# cannot see it: that check is one scalar (memberships sum to k) and
+# runner-level errors of opposite sign cancel in it (#224).
+    points = _resolved_points(lo, hi, sd, points)
     x = collect(range(lo, hi, length = points))
     z = (x .- mu') ./ sd'                       # (L, n)
     b = fn(z)

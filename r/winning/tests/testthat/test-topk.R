@@ -48,8 +48,15 @@ test_that("the returned rank matrix is what gets checked", {
   # wrong, and raising says so.
   mu <- c(0.852479112355, 1.342705472309, -4.927823648082)
   sd <- c(0.635892136598, 0.194587863958, 14.30720080209)
-  expect_error(rank_probabilities(mu, D = sd^2, points = 513),
-               "RETURNED matrix")
+  # #224 refines the grid to the NARROWEST runner, so this field resolves
+  # itself now instead of being rejected. The guard remains as the
+  # backstop for what refinement cannot reach, past the 8193 cap.
+  P513 <- rank_probabilities(mu, D = sd^2, points = 513)
+  expect_lt(max(abs(rowSums(P513) - 1)), 1e-6)
+  expect_lt(max(abs(colSums(P513) - 1)), 1e-6)
+  expect_error(suppressWarnings(
+    rank_probabilities(c(0, 1, -1), D = c(5e-5, 1, 3)^2, points = 513)),
+    "defective")
   P <- rank_probabilities(mu, D = sd^2, points = 2001)
   expect_lt(max(abs(rowSums(P) - 1)), 5e-3)
   expect_lt(max(abs(colSums(P) - 1)), 5e-3)
