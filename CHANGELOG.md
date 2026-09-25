@@ -22,6 +22,63 @@
   mean go and look, while prose about something that used to be there is
   fine -- plus a check that `setup.py`'s packaged roots still match the
   claim the script makes about them.
+- The browser's classic inverse accepted an ASCENDING `offsetSamples`
+  and silently miscalibrated (#274). python raises
+  `ValueError("Not descending")` and R stops with `offset_samples must
+  be descending` for the same input; only the browser guessed.
+
+  The direction is a precondition of the algorithm, not a presentation
+  choice. The interpolation table is built by mapping over
+  `offsetSamples` and read back with `interpClamped`, whose `xp` must
+  ascend -- descending offsets are exactly what make the prices ascend.
+  Reverse them and the binary search runs on a descending table, so
+  every lookup falls off an end and clamps: three distinct prices came
+  back as the lattice boundary `[24, -25, -25]` and repriced 0.53 away
+  from the target, with no error and nothing in the return value to say
+  so.
+
+  `asDescendingOffsets` is now the one place that rule is decided, in
+  the same spirit as `asLoadings` and `asIdio`. It also refuses the two
+  neighbouring inputs the sweep turned up, which were silently wrong in
+  the browser for the same reason: an empty array returned
+  `[undefined, undefined, undefined]`, and a NaN among the offsets
+  returned `[-5, -5, -5]`. Ties stay legal in all three ports -- a
+  repeated offset is a flat step in the table, not an ascent.
+
+  The default `offsetSamples`, which the browser builds itself, and
+  every descending call are bit-identical to before.
+
+  Two findings from the sweep that are NOT fixed here. python's rust
+  kernel PANICS on an empty `offset_samples` (`index out of bounds`
+  through PyO3) where the numpy path raises; that needs a rust build,
+  which this checkout cannot do. And R's guard is
+  `any(diff(o) > 0)`, which on a NaN offset is `NA`, so it fails with
+  `missing value where TRUE/FALSE needed` rather than naming the
+  argument.
+
+- An unresolved merge conflict was sitting in `parity/check_js_api.mjs`
+  on main, so the browser API checker had not run since it landed. The
+  file did not parse: `node parity/check_js_api.mjs` exited on
+  `SyntaxError: Unexpected token '<<'` instead of running its
+  ninety-odd behavioural checks -- the ones that exist because #186
+  shipped past tests that only read the source.
+
+  Both sides of the conflict were correct and additive, one block of
+  checks each. Deleting the three marker lines is the whole repair and
+  every check then passes; nothing else had to change, which is why it
+  went unnoticed.
+
+  It reached main because three things lined up. The branch was merged
+  without rerunning the checker. CI runs it (`ci.yml`, "Browser API
+  guards") but had not run on main for five weeks: the Actions pool was
+  saturated, and a push at saturation creates no run AT ALL rather than
+  queueing one. And nothing looked for the marker itself.
+
+  `tests/test_no_conflict_markers.py` closes the last of those. It
+  sweeps every tracked text file, which needs no toolchain and so
+  cannot be skipped by a starved one. A bare `=======` is not an
+  offence -- it underlines headings in reStructuredText -- only the
+  directional markers are.
 
 - CI checks every R package, on pull requests, and their tests actually
   run (#142). The R workflow was path-triggered by changes under
