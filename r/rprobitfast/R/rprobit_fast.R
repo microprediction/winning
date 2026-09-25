@@ -87,7 +87,13 @@ rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
   k <- nb + 1L
   V <- matrix(0, J, r)
   ki <- 1L
-  for (col in seq_len(r)) for (row in (col + 1L):J) {
+  # seq_len, not `(col + 1L):J`: at J = 2 and the default r = 2L the
+  # col = 2 pass evaluates 3:2, which in R is the two-element vector
+  # c(3, 2) rather than empty, so the first assignment is V[3, 2] on a
+  # 2x2 matrix and every binary-choice fit died out of bounds (#183).
+  # nw counts only one free loading there, so wfree[2] was out of range
+  # too. seq_len(J - col) is empty exactly when it should be.
+  for (col in seq_len(r)) for (row in col + seq_len(J - col)) {
     V[row, col] <- fit$par[nb + ki]; ki <- ki + 1L
   }
   structure(list(coefficients = beta,

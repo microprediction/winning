@@ -1044,16 +1044,31 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     # normalisation, is what is wrong. Raising says so; a doubly
     # stochastic answer to a question the lattice could not resolve does
     # not.
-    rows = P.sum(axis=1)
-    P = np.clip(P / np.maximum(rows[:, None], _TINY), 0.0, 1.0)
-    rows = P.sum(axis=1)
-    cols = P.sum(axis=0)
-    if (not np.isfinite(P).all() or np.abs(rows - 1).max() > 5e-3
-            or np.abs(cols - 1).max() > 5e-3):
+    # BOTH checks, before and after. They are independent, and #217
+    # mistook them for alternatives: it replaced the raw check with the
+    # post one, and row normalisation can ERASE a gross raw defect. On a
+    # field whose sds span 232x, the raw matrix was off by 0.249 in a row
+    # and 0.199 in a column, and dividing by those same row sums left a
+    # column defect of 0.0047 -- under the 5e-3 tolerance, so it returned
+    # a false success, while top_k_probabilities rejected the same field
+    # at 0.056 (#221). The raw check sees the quadrature; the post check
+    # sees what the caller gets; neither implies the other.
+    def _defects(M):
+        return (float(np.abs(M.sum(axis=1) - 1).max()),
+                float(np.abs(M.sum(axis=0) - 1).max()))
+
+    def _reject(where, re_, ce):
         raise RuntimeError(
-            "rank marginals defective: row-sum error "
-            f"{np.abs(rows-1).max():.2e}, column-sum error "
-            f"{np.abs(cols-1).max():.2e}, measured on the RETURNED matrix "
-            "after row normalisation. Raise points=, or report this "
+            f"rank marginals defective {where}: row-sum error {re_:.2e}, "
+            f"column-sum error {ce:.2e}. Raise points=, or report this "
             "field.")
+
+    re_raw, ce_raw = _defects(P)
+    if not np.isfinite(P).all() or re_raw > 5e-3 or ce_raw > 5e-3:
+        _reject("before normalisation", re_raw, ce_raw)
+    P = np.clip(P / np.maximum(P.sum(axis=1)[:, None], _TINY), 0.0, 1.0)
+    re_out, ce_out = _defects(P)
+    if not np.isfinite(P).all() or re_out > 5e-3 or ce_out > 5e-3:
+        _reject("in the RETURNED matrix after row normalisation",
+                re_out, ce_out)
     return P
