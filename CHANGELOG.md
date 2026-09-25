@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+  The R and Julia helpers clamp in floating point before converting
+  (#228). Both computed the uncapped requirement in a fixed-width integer
+  and overflowed BEFORE `min(need, 8193)` -- in the very regime the cap
+  exists for. A narrowest sd of 1e-10 needs about 5.9e11 points: R's
+  `as.integer()` returned NA, so the `if (need > 8193)` meant to warn
+  errored with "missing value where TRUE/FALSE needed", and Julia threw
+  `InexactError`. Python was unaffected only because its integers are
+  unbounded, which is precisely why a port cannot inherit a numeric
+  argument from it. All four now return 8193 there and warn; the browser
+  then rejects the field on the mass check, which is the right layering.
+
+- Top-k and rank refine the lattice to the NARROWEST runner, in all four
+  engines (#224). The window is set by the widest runner and the grid by
+  `points`, so a heterogeneous field left the narrowest density between
+  samples: sds of 0.093 and 6.02 at the default 513 points gave a spacing
+  of 0.174, nearly twice the narrow runner's whole standard deviation,
+  and its top-4 membership came out 4.4e-3 wrong.
+
+  The mass check could not see it, and no tightening of that check would
+  have. It is ONE SCALAR -- the memberships sum to k -- and runner-level
+  errors of opposite sign cancel in it: the raw total was 3.99440 against
+  a tolerance of 0.02, comfortably inside, and the routine then rescaled a
+  wrong vector to sum to four. The cure is resolution, not a tighter
+  aggregate.
+
+  Same rule the win race has had all along (`races.forward_grid`): about
+  two points per narrowest sd, capped at 8193, warning when the cap still
+  leaves the lattice coarse. Measured on the reported field, the error
+  falls from 4.4e-3 to 4.8e-9 at the default `points`, and stops moving
+  with resolution at all -- 513 and 2049 now agree to 1e-9 where they
+  differed by 4.4e-3.
+
+  It subsumes two earlier rejections. The #203 field promotes itself to
+  2171 points and the #221 field to 6845, both then agreeing with an
+  8193-point answer to 5e-11, so neither has to be refused any more. The
+  guards from #221 stay as the backstop for what refinement cannot reach:
+  a field whose narrowest sd is 5e-5 needs about a million points, and it
+  warns and is rejected. Tests cover all three bands -- resolved, warned,
+  rejected. Parity vectors are unchanged, since the refinement does not
+  fire on fields with mild scale spread.
+
 - GMRFExtremes integrates its transition kernel over each lattice cell
   instead of sampling the density (#244). `npdf(z) * dx` is a probability
   only where the density is flat across a cell. An innovation sd far
