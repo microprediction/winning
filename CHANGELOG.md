@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- The browser factor race's Student-t4 base integrates over a window wide
+  enough for its tails, and `js/factor/test_parity.mjs` is green for the
+  first time in a while. Its `t4 forward shares vs scipy` check had been
+  failing at 1.01e-5 against a 2e-6 tolerance, and the cause was neither
+  the tabulated survival (accurate to 1e-9 against scipy's exact `sf`,
+  measured) nor the lattice resolution (python at 257, 501, 2001 and 8001
+  points spans 1e-7): it was the `spans` constant. A t4 keeps real mass
+  far out, and 12 sd truncated it. Measured on that fixture at the default
+  501 points:
+
+      span   forward error   inverse over 501..4001 points
+        12       1.01e-5     2.9e-7 .. 2.3e-6
+        20       1.75e-6     2.9e-7 .. 5.0e-7
+        24       8.42e-7     2.9e-7 .. 3.5e-7
+        32       2.37e-7     2.9e-7 .. 5.3e-7
+        40       1.39e-7     NaN at 501, 1001 and 4001
+
+  Both ends cost something, which is why this is a table and not a maximum:
+  too narrow drops tail mass, too wide spreads a fixed point budget until
+  the bulk is under-resolved. 24 is where the forward clears its tolerance
+  with margin and the inverse is better than it was at every resolution.
+  The NaN past 40 is the inverse's own fragility rather than this constant
+  and is filed separately (#210); nothing ships near it.
+
+  Recorded because it was nearly fixed wrongly twice: an Euler-Maclaurin
+  correction to the cumulative, which measured 1.39e-7 against 1.21e-7
+  without it and was removed, and a reading that blamed the 257-versus-501
+  default mismatch, which accounts for 1e-7 of a 1e-5 gap.
+
 - R's `fit_covariance` threw for every 2x2 covariance (#181). The closing
   solve is against `P o P = a I + b 11'` with `a = 1 - 2/n`, and at n = 2
   that `a` is exactly zero, so the matrix is rank one and `solve()` failed
