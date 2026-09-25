@@ -52,6 +52,37 @@ def test_glicko2_loads_and_rates(frozen):
     assert abs(sum(p) - 1) < 1e-9 and p[0] > p[1]
 
 
+def test_every_public_method_runs(frozen):
+    """Exercising a subset is how the closure got this wrong: the first
+    cut deleted thurstonerating while `performance_samples` imported
+    `_stable_seed` from it inside the function body, so a scan of
+    module-level imports missed it and a test of observe/leaderboard/
+    win_probabilities never reached it (#229). Call them all."""
+    import numpy as np
+    g = frozen.Glicko2Rating()
+    for _ in range(3):
+        g.observe(["A", "B"], [1, 2])
+    public = [m for m in dir(g) if not m.startswith("_") and callable(getattr(g, m))]
+    assert set(public) >= {"observe", "leaderboard", "win_probabilities",
+                           "performance_samples", "rating", "known", "elapse"}
+    samples = np.asarray(g.performance_samples(["A", "B"], 4))
+    assert samples.shape == (4, 2) and np.isfinite(samples).all()
+    assert g.known() == ["A", "B"]
+    assert np.isfinite(g.rating("A").mu)
+    g.elapse(1.0)                               # must not raise
+
+
+def test_no_module_scoped_or_function_scoped_import_is_dangling(frozen):
+    """Every relative import in the kept files must resolve, wherever it
+    sits -- the one that broke was inside a function."""
+    import re
+    present = {p.stem for p in ATTIC.glob("*.py")}
+    for path in ATTIC.glob("*.py"):
+        for mod in re.findall(r"from \.(\w+) import", path.read_text()):
+            assert mod in present, (
+                f"{path.name} imports .{mod}, which is not in the closure")
+
+
 def test_the_loaders_point_at_the_attic():
     """The six experiments find it by path; if the path rots they fail at
     the Glicko-2 step, which is how this broke the first time."""

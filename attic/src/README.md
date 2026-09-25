@@ -10,7 +10,15 @@ ones, so a grep returned two hits with nothing saying which was current. Those
 are deleted, along with `elo`, `kernels`, `shims`, `thurstonerating`, the old
 test tree and the benchmarks: nothing referenced any of them.
 
-What survives is the dependency closure of the one thing that is still used:
+What survives is the dependency closure of the one thing that is still
+used. The first cut of that closure was wrong: `performance_samples`
+imported `_stable_seed` from `thurstonerating` INSIDE the function body,
+so a scan of module-level imports missed it and a test that called
+`observe`, `leaderboard` and `win_probabilities` never reached it (#229).
+Those three lines are inlined in `glicko2.py` now, and the tests call
+every public method and check every relative import resolves.
+
+The closure:
 
     glicko2.py       Glicko-2, which the live package has no equivalent for
     exact.py         gaussian_win_probabilities, which glicko2 calls
