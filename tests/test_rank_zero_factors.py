@@ -102,6 +102,42 @@ def test_the_ranking_likelihood_takes_the_empty_loading_matrix():
     assert ll == pytest.approx(float(want), abs=1e-9)
 
 
+def test_a_diagonal_covariance_factorizes_at_rank_zero():
+    """The first thing rank zero is FOR, rather than merely not
+    crashing on. A diagonal sigma is exactly `V V' + diag(D)` with no
+    factors, but the search began at rank 1 -- which also fits it
+    exactly, the off-diagonals already being zero -- and chose a fit
+    that put the variance in a LOADING (#132)."""
+    from scipy.special import ndtr
+
+    from winning.fastmvn import factorize_covariance, mvn_cdf_fast_info
+
+    D0 = np.array([1.0, 1.0, 1.0, 1.0, 1e8])
+    V, D = factorize_covariance(np.diag(D0))
+    assert V.shape == (5, 0), "a diagonal covariance has no factors"
+    assert np.allclose(D, D0)
+
+    # the consequence: a loading of 9487 made an independent rectangle a
+    # near-step factor integrand, 1.8e-3 out from a product of CDFs
+    b = np.array([10.0, 10.0, 10.0, 10.0, -5000.0])
+    got, _ = mvn_cdf_fast_info(upper=b, sigma=np.diag(D0))
+    want = float(np.prod(ndtr(b / np.sqrt(D0))))
+    assert abs(got - want) / want < 1e-12
+
+
+def test_a_correlated_covariance_still_factorizes():
+    """Rank zero must be tried first, not instead: an off-diagonal
+    covariance still has to find its factors."""
+    from winning.fastmvn import factorize_covariance
+
+    A = np.array([[2.0, 0.5], [0.5, 1.5]])
+    out = factorize_covariance(A)
+    assert out is not None
+    V, D = out
+    assert V.shape[1] >= 1, "a correlated matrix needs a factor"
+    assert np.abs(V @ V.T + np.diag(D) - A).max() < 1e-10
+
+
 def test_a_zero_rank_race_is_not_accidentally_the_rank_one_race():
     """The failure mode was a WELL-FORMED rule for another problem, so
     an equality against the independent race only means something if a

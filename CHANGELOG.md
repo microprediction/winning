@@ -86,6 +86,18 @@
   nothing establishes that julia still refuses a fractional depth
   (#310). It now prints "known, not judged: julia absent" and exits 0.
 
+  Rank zero then earned its keep rather than merely stopping a crash:
+  `factorize_covariance` now tries it FIRST. A diagonal covariance is
+  exactly `V V' + diag(D)` with no factors, but the search began at
+  rank 1 -- which also fits a diagonal exactly, the off-diagonals being
+  already zero -- and chose a fit that put the variance in a LOADING.
+  On `diag([1, 1, 1, 1, 1e8])` it returned a loading of 9487, turning
+  an independent rectangle into a near-step factor integrand: **1.8e-3**
+  relative error where the answer is a product of univariate CDFs
+  (#132). Rank zero is exact to 1.8e-16 and **4x faster**, the
+  quadrature being one node instead of Q. A correlated matrix still
+  finds its factors -- rank zero is tried first, not instead.
+
   Rank zero was still wrong in three more node builders, each with the
   same shape as the four already fixed: rank 1 special-cased, every
   other rank sent through a rank-2 tensor. `winning/factor/topk.py`,
