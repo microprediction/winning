@@ -140,6 +140,22 @@
     s <- .SPANS[[base]]
     if (is.null(s)) c(12, 12) else s
   }
+  # W and c*W describe the SAME factor law, so normalise here, as
+  # python's _setup does through winning.shapes.as_weights and as
+  # abilities_from_race already does for itself further down. The
+  # forward divides its accumulated shares by their total and was
+  # invariant either way; race_jacobian does not, so J(W) and J(10W)
+  # differed by 1.473 -- the same defect as #281 in the standalone
+  # javascript module, and #290 in the browser tree.
+  W <- as.numeric(W)
+  Wtot <- sum(W)
+  if (!is.finite(Wtot) || Wtot <= 0)
+    stop(sprintf("W must have a positive total; got %s", format(Wtot)),
+         call. = FALSE)
+  if (any(!is.finite(W)) || any(W < 0))
+    stop("W must be finite and non-negative; a factor law has no negative mass",
+         call. = FALSE)
+  W <- W / Wtot
   list(mu = mu, V = V, D = D, F = as.matrix(F), W = as.numeric(W),
        fn = fn, left = span[1], right = span[2])
 }

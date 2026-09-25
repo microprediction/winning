@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- R's `race_jacobian` depended on the SCALE of the factor weights --
+  #281's defect, in a third place. `W` and `c*W` describe the same
+  factor law; the forward divides its accumulated shares by their total
+  and was invariant either way, but the Jacobian does not, so `J(W)` and
+  `J(10W)` differed by **1.473**. A Newton step scaled by the spelling
+  of the law rather than the law.
+
+  `.race_setup` now normalises `W`, as python's `_setup` does through
+  `winning.shapes.as_weights` and as `abilities_from_race` already did
+  for itself a few lines further down -- the rule was in the file, just
+  not at the door. A weight that is not finite, is negative, or whose
+  total is not positive is refused rather than normalised into
+  something plausible.
+
+  Found by sweeping the pattern after fixing it for the browser: the
+  same defect is in `js/factor/factor_race.mjs` (#281) and
+  `docs/js/winning/polish.mjs` (#290). julia's forward is already
+  invariant and it has no `race_jacobian`, so it is clean -- a finding,
+  not an omission.
+
+  Every already-normalised answer is bit-identical to before, and the
+  rescaled ones now agree to 0 across twelve orders of magnitude.
+
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
   variance near the double ceiling became `inf` between the check and
