@@ -672,5 +672,36 @@ accepts("the inverse takes a scalar D, matching python",
           ts => `worst |sum - 1| ${Math.max(...ts.map(t => Math.abs(t - 1))).toExponential(2)}`);
 }
 
+{
+  // structureCov must describe the race the kernels PRICE, whatever the
+  // cluster labels are called. It read labels as tree-node indices, so
+  // relabelling 0,1,2 -> 10,20,30 sent every lookup past the end of
+  // `parent`: an empty ancestor set, every shared factor silently gone,
+  // and a covariance 0.52 out. Negative and string labels threw (#306).
+  const tmu = [-0.5, -0.1, 0.2, 0.4], tD = [0.8, 0.9, 1.0, 1.1];
+  const tload = [0.2, 0.3, -0.1, 0.4];
+  const tparent = [3, 3, 4, 4, -1], tstrength = [0, 0, 0, 0.6, 0.4];
+  const covFor = cl => demo.structureCov({
+    kind: "Tree", cluster: cl, loading: tload, D: tD,
+    parent: tparent, strength: tstrength });
+  const REFC = covFor([0, 0, 1, 2]);
+  for (const cl of [[10, 10, 20, 30], [-5, -5, 0, 7], ["a", "a", "b", "c"]])
+    accepts(`structureCov is the same under ${JSON.stringify(cl)}`,
+            () => Math.max(...covFor(cl).flat().map(
+              (x, i) => Math.abs(x - REFC.flat()[i]))),
+            w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  // the labels must actually be non-trivial: a tree whose ancestors
+  // contribute nothing would pass the above however it was indexed
+  accepts("the fixture's ancestor factors are not zero",
+          () => {
+            const flat = demo.structureCov({
+              kind: "Tree", cluster: [0, 0, 1, 2], loading: tload, D: tD,
+              parent: tparent, strength: [0, 0, 0, 0, 0] });
+            return Math.max(...REFC.flat().map(
+              (x, i) => Math.abs(x - flat.flat()[i])));
+          },
+          w => w > 0.1, w => `ancestors contribute ${w.toFixed(4)}`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
