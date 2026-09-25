@@ -28,6 +28,25 @@
   list(x = e$values, w = e$vectors[1, ]^2)
 }
 
+# log of phi(a)/Phi(a), the inverse Mills ratio. pnorm(log.p = TRUE),
+# never log(pmax(pnorm(a), 1e-300)): pnorm underflows to exactly 0
+# below about -37, so the floor turned every deep tail into the SAME
+# number, log(1e-300) = -690.78, the objective went flat and this ratio
+# underflowed to a score of exactly zero (#270).
+.log_mills <- function(a) dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE)
+
+# Laplace-tilt the chosen alternative's own-noise quadrature. The fixed
+# Gauss-Hermite rule samples z where the PRIOR has its mass, and for a
+# large observed contrast the integrand's mass is far outside it: at a
+# gap of -20 the mode is at z = 10 and a 7-node rule reaches |z| < 3.8.
+# With g(z) = -z^2/2 + sum_j logPhi(b_j + z) (unit variances here),
+#   g'(z)  = -z + sum_j lam(A_j)
+#   g''(z) = -1 - sum_j lam(A_j)(A_j + lam(A_j))
+# and lam(a)(a + lam(a)) = -lam'(a) > 0 for every a, so g'' <= -1: g is
+# strictly concave, its mode is unique, and Newton converges from
+# anywhere. Nodes go at z* + sigma*x and the change of measure is undone
+# exactly by log sigma - z^2/2 + x^2/2, so the shift moves the NODES and
+# not the integrand.
 .nodes3 <- function(Qf = 11, Qz = 11, r = 2) {
   g <- .gh1(Qf); gz <- .gh1(Qz)
   grids <- do.call(expand.grid, c(rep(list(g$x), r), list(gz$x)))
@@ -126,7 +145,7 @@
     acc <- matrix(0, Ti, Q)
     for (j in rivals) {
       A[[j]] <- outer(dmu[, j], Vf[, k_alt] - Vf[, j] + zq, "+")
-      logPhi[[j]] <- log(pmax(pnorm(A[[j]]), 1e-300))
+      logPhi[[j]] <- pnorm(A[[j]], log.p = TRUE)
       acc <- acc + logPhi[[j]]
     }
     m <- apply(acc, 1, max)

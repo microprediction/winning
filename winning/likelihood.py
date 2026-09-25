@@ -30,7 +30,7 @@ import numpy as np
 from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
-from scipy.special import ndtr, ndtri
+from scipy.special import log_ndtr, ndtr, ndtri
 
 
 def _gh1(Q):
@@ -80,6 +80,12 @@ def sharpness_bound(V, D=None, n=None):
     dmin = 1.0 if D is None else float(np.min(as_idio(D, n)))
     return float(np.sqrt(2.0) * np.max(np.sqrt((V ** 2).sum(axis=1)))
                  / np.sqrt(dmin))
+
+
+def _log_mills(a):
+    """log of phi(a)/Phi(a), the inverse Mills ratio, stable in the far
+    left tail where ndtr(a) underflows to exactly zero."""
+    return -0.5 * a * a - 0.5 * np.log(2.0 * np.pi) - log_ndtr(a)
 
 
 def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
@@ -158,7 +164,14 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
         for c, j in enumerate(rivals):
             shift = Vf[:, k] - Vf[:, j] + zq * s[k]
             A[j] = (dmu_k[:, c][:, None] + shift[None, :]) / s[j]
-            logPhi[j] = np.log(np.maximum(ndtr(A[j]), 1e-300))
+            # log_ndtr, not log(max(ndtr, 1e-300)). ndtr underflows to
+            # exactly 0 below about -37, so the floor turned every deep
+            # tail into the SAME number, log(1e-300) = -690.78: the
+            # objective went flat and the Mills ratio below it, computed
+            # as exp(logphi - logPhi), underflowed to a zero score. An
+            # optimizer then declares convergence exactly where the
+            # observation is most badly contradicted (#270).
+            logPhi[j] = log_ndtr(A[j])
             acc += logPhi[j]
         m = acc.max(axis=1)
         pw = np.exp(acc - m[:, None]) * W[None, :]
