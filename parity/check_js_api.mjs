@@ -7,8 +7,9 @@
 // API cannot lean on the language to reject a wrong or misspelled key.
 const here = new URL(".", import.meta.url).pathname;
 const eng = p => import(here + "../docs/js/winning/" + p);
-const [races, topk, blocks, polish, classic] = await Promise.all(
-  ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs"].map(eng));
+const [races, topk, blocks, polish, classic, demo] = await Promise.all(
+  ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs",
+   "demo.mjs"].map(eng));
 
 let fails = 0;
 const rejects = (fn, args, why, expect = null) => {
@@ -25,6 +26,21 @@ const rejects = (fn, args, why, expect = null) => {
 const holds = (label, cond, detail = "") => {
   console.log(`${cond ? "ok  " : "FAIL"}  ${label}${detail ? ": " + detail : ""}`);
   if (!cond) fails++;
+};
+// A call that is SUPPOSED to work. Without this an exception on a happy
+// path kills the file, so the run fails with no named check and every
+// later check is skipped -- the sabotage rehearsal found exactly that.
+const accepts = (label, fn, check = v => true, detail = () => "") => {
+  let v;
+  try {
+    v = fn();
+  } catch (e) {
+    console.log(`FAIL  ${label}: threw ${e.message.slice(0, 44)}`);
+    fails++;
+    return undefined;
+  }
+  holds(label, check(v), detail(v));
+  return v;
 };
 
 const mu3 = [0, 1, 2], D3 = [1, 1, 1], V3 = [[1], [0], [-1]];
@@ -90,6 +106,62 @@ rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { D: [1, 1, 1], targetFloor: 
   holds("returnInfo does not change the answer",
         Math.max(...plain.map((v, i) => Math.abs(v - info.mu[i]))) < 1e-12);
 }
+// --- the loadings shape contract, in every module that takes V (#232)
+// V is (n, rank), one ROW per contestant, and as_loadings is the one
+// place that rule is decided. The browser indexed V directly instead, so
+// a length-n vector threw `V[i].reduce is not a function` and a RAGGED V
+// was truncated to the first row's width and answered all-NaN in silence.
+const mu5 = [0, 0.3, 0.6, 0.9, 1.2], D5 = new Array(5).fill(1);
+const vec = [0.5, 0.2, 0.3, 0.1, 0.0];
+const spellings = {
+  "flat vector": vec,
+  "(n, rank)": vec.map(v => [v]),
+  "(rank, n)": [vec],
+};
+const ref = races.raceProbabilities(mu5, { V: spellings["(n, rank)"], D: D5 });
+for (const [lbl, V] of Object.entries(spellings)) {
+  accepts(`forward reads ${lbl} as the same race`,
+          () => races.raceProbabilities(mu5, { V, D: D5 }),
+          p => Math.max(...p.map((v, i) => Math.abs(v - ref[i]))) < 1e-12,
+          p => `max diff ${Math.max(...p.map((v, i) => Math.abs(v - ref[i]))).toExponential(2)}`);
+  accepts(`topK reads ${lbl}`, () => topk.topKProbabilities(mu5, 2, { V, D: D5 }),
+          t => t.every(Number.isFinite));
+}
+accepts("a scalar V is rank 1 for every contestant",
+        () => races.raceProbabilities(mu5, { V: 0.4, D: D5 }),
+        p => Math.max(...p.map((v, i) => Math.abs(v - races.raceProbabilities(
+          mu5, { V: mu5.map(() => [0.4]), D: D5 })[i]))) < 1e-14);
+
+const ragged = [[0.5, 0.1], [0.2], [0.3, 0.4], [0.1, 0.2], [0.0, 0.0]];
+rejects(races.raceProbabilities, [mu5, { V: ragged, D: D5 }],
+        "forward rejects a ragged V", "ragged");
+rejects(topk.topKProbabilities, [mu5, 2, { V: ragged, D: D5 }],
+        "topK rejects a ragged V", "ragged");
+rejects(races.raceProbabilities, [mu5, { V: [0.5, 0.2], D: D5 }],
+        "forward rejects a vector of the wrong length", "one entry per contestant");
+rejects(races.raceProbabilities, [mu5, { V: [[1, 2, 3], [4, 5, 6]], D: D5 }],
+        "forward rejects a shape that is neither", "neither");
+rejects(races.raceProbabilities, [mu5, { V: [0.5, 0.2, NaN, 0.1, 0.0], D: D5 }],
+        "forward rejects a non-finite loading", "non-finite");
+
+// --- no literal prime table behind the low-discrepancy nodes (#233)
+// Halton read its bases from a 24-entry array in races.mjs and a
+// 16-entry one in demo.mjs; one factor past the end made every node NaN
+// with no error, so a rank-25 race answered NaN and a rank-17 demo too.
+for (const r of [8, 17, 25, 40]) {
+  const V = Array.from({ length: 6 }, (_, i) =>
+    Array.from({ length: r }, (_, c) => 0.3 * Math.cos(1 + i + 2 * c) / Math.sqrt(r)));
+  const D = new Array(6).fill(1);
+  accepts(`rank ${r} race is finite and sums to one`,
+          () => races.raceProbabilities([0, 0.2, 0.4, 0.6, 0.8, 1.0], { V, D }),
+          p => p.every(Number.isFinite) &&
+               Math.abs(p.reduce((a, b) => a + b, 0) - 1) < 1e-6,
+          p => `sum ${p.reduce((a, b) => a + b, 0).toFixed(9)}`);
+}
+accepts("demo halton nodes survive past the old 16-prime table",
+        () => demo.haltonNormalNodes(20, 8),
+        h => h.F.every(r => r.every(Number.isFinite)));
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
+
