@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- Quadrature weights are RELATIVE, in every verb that takes them (#208).
+  `W` and `c*W` describe the same factor law, and every verb normalises
+  its own result, so the common scale cancels -- except in the
+  pre-normalisation mass checks, which compared an unnormalised row sum
+  against 1. `removal_shares` and `ordered_probabilities` therefore
+  REJECTED `W = [5, 5]` while accepting the identical law
+  `W = [0.5, 0.5]`, with a "mass defect 9.00e+00" that is just the
+  weight total minus one.
+
+  The issue named `removal_shares`. Sweeping every public verb that takes
+  `mu`, `F` and `W` found two more: `ordered_probabilities` raised the
+  same way, and `plackett_luce_prefix_logprob` returned a
+  log-probability shifted by exactly `log(sum W)` -- the same law spelled
+  `[5, 5]` read -1.5071 as +0.7955 -- because it skips `_setup` entirely
+  when the caller supplies the law.
+
+  `_setup` is where the factor law is assembled, so it is the one place
+  the rule is decided, as `as_loadings` is for `V`. Every rule the
+  library generates already sums to one, so nothing it produces changes;
+  a zero or negative weight total is now refused with a reason instead of
+  being carried into a mass check. The sweep lives in
+  `tests/test_shape_contract.py`, which fails if a new verb takes a
+  factor law and is not covered.
+
   The R and Julia helpers clamp in floating point before converting
   (#228). Both computed the uncapped requirement in a fixed-width integer
   and overflowed BEFORE `min(need, 8193)` -- in the very regime the cap
