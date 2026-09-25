@@ -20,7 +20,7 @@ from exact_restrict import CELLS, MODELS, PHRASINGS, match_items
 # internally, so locations and scores are negated at the boundary to keep the max-wins
 # convention (highest draw wins) this research code and the paper both use.
 # `winning.factor.core` lives in the repository's top-level winning/ tree, which is
-# not the package `pip install winning` gives (that resolves to src/winning, the
+# not the package `pip install winning` gives (that resolves to attic/src/winning, the
 # ratings-layer renovation, and has no factor module). Insert the repo root ahead of
 # site-packages so this always finds the right one regardless of the caller's cwd.
 _REPO_ROOT = HERE.parent.parent

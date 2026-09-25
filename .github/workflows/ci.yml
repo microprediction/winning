@@ -142,4 +142,6 @@ jobs:
       - name: Ruff
         run: |
           pip install ruff
-          ruff check winning/factor winning/probit winning/ratings/verify winning/ratings/simulate.py src
+          # `src` was the pre-renovation package; it is deleted, and
+          # attic/ is frozen by definition so it is not linted
+          ruff check winning/factor winning/probit winning/ratings/verify winning/ratings/simulate.py

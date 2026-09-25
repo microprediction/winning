@@ -32,6 +32,20 @@ def _expected(mu: float, mu_j: float, phi_j: float) -> float:
     return 1.0 / (1.0 + math.exp(x))
 
 
+def _stable_seed(names, salt: int) -> int:
+    """A seed that depends on the names, not on call order.
+
+    Inlined from the deleted thurstonerating module: it was three lines,
+    and `performance_samples` was the only caller left. It reached it by
+    a FUNCTION-SCOPED import, which is why the dependency closure that
+    kept this file missed it -- that scan read module-level imports only
+    (#229).
+    """
+    import zlib
+
+    return zlib.crc32("|".join(names).encode()) ^ (salt & 0xFFFFFFFF)
+
+
 class Glicko2Rating(RatingSystem):
     def __init__(
         self,
@@ -152,7 +166,6 @@ class Glicko2Rating(RatingSystem):
     def performance_samples(self, names: Sequence[str], size: int = 32):
         import numpy as np
 
-        from .thurstonerating import _stable_seed
 
         self._sample_calls = getattr(self, "_sample_calls", 0) + 1
         rng = np.random.default_rng(_stable_seed(names, self._sample_calls))
