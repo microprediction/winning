@@ -6,6 +6,46 @@ import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS } from "./core.mj
    core.mjs for why an options object needs this at all. */
 const SOLVE_FOR_IMPLIED_OFFSETS_OPTS = new Set(["offsetSamples", "guess", "nIter"]);
 
+/* The interpolation table is built BY MAPPING over offsetSamples, and
+   read back with interpClamped, whose xp must ascend. Descending
+   offsets are what make the prices ascend, so the direction of this
+   argument is a precondition of the algorithm and not a presentation
+   choice. Hand it an ascending array and the binary search runs on a
+   descending table: every lookup falls off an end and clamps, so three
+   distinct prices came back as the lattice boundary [24, -25, -25] and
+   repriced 0.53 away from the target -- with no error at all (#274).
+
+   python raises ValueError("Not descending") and R stops with
+   "offset_samples must be descending" for the same input; only the
+   browser guessed. Ties are legal in all three: a repeated offset is a
+   flat step in the table, not an ascent.
+
+   An empty array and a non-finite entry are the same class of thing --
+   an offsetSamples the algorithm cannot use -- and the browser was
+   silently wrong on both, returning [undefined, ...] and [-5, -5, -5]
+   respectively. They are refused here rather than downstream, so the
+   message names the argument the caller actually passed. */
+export function asDescendingOffsets(offsets, where = "offsetSamples") {
+  if (!Array.isArray(offsets) && !ArrayBuffer.isView(offsets))
+    throw new Error(`${where} must be an array of offsets; got ${typeof offsets}`);
+  const n = offsets.length;
+  if (n === 0)
+    throw new Error(`${where} is empty; there is nothing to interpolate against`);
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(offsets[i]))
+      throw new Error(`${where}[${i}] = ${offsets[i]} is not a finite offset`);
+  }
+  for (let i = 0; i + 1 < n; i++) {
+    if (offsets[i + 1] > offsets[i])
+      throw new Error(
+        `${where} must be descending: ${where}[${i + 1}] = ${offsets[i + 1]} ` +
+        `is above ${where}[${i}] = ${offsets[i]}. The interpolation table is ` +
+        `built in this order and read as an ascending price curve, so an ` +
+        `ascending array silently returns lattice-boundary abilities.`);
+  }
+  return Array.from(offsets, Number);
+}
+
 
 export function pdfToCdf(f) {
   const c = new Array(f.length);
@@ -127,9 +167,11 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
   checkOpts(opts, SOLVE_FOR_IMPLIED_OFFSETS_OPTS, "solveForImpliedOffsets", OPT_HINTS);
   const L = impliedL(density);
   let { offsetSamples = null, guess = null, nIter = 3 } = opts;
-  if (!offsetSamples) {
+  if (offsetSamples === null || offsetSamples === undefined) {
     offsetSamples = [];
     for (let k = Math.trunc(L / 2) - 1; k >= -Math.trunc(L / 2); k--) offsetSamples.push(k);
+  } else {
+    offsetSamples = asDescendingOffsets(offsetSamples, "offsetSamples");
   }
   if (!guess) {
     guess = [];
