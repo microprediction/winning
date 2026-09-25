@@ -2,6 +2,75 @@
 
 ## Unreleased
 
+- The Euler-Maclaurin end correction is gone from both browser copies of
+  the tabulated base (#216). #211's description and this changelog both
+  said the correction measured worse and was removed; it was left in the
+  code, so an undocumented numerical change landed on `main` and it
+  touched every tabulated base, not just the `t4` span widening that PR
+  was about. Measured on the committed fixtures, removing it:
+
+  | fixture | with correction | without |
+  |---|---:|---:|
+  | skew forward vs scipy | 4.518e-7 | 4.472e-7 |
+  | t4 forward vs scipy   | 8.439e-7 | 8.423e-7 |
+  | skewNormalBase(0) = normal | 2.68e-7 | 3.52e-7 |
+
+  Two of the three improve and the third degrades, all of them a fifth or
+  less of their tolerances -- which is the point: the correction never did
+  anything, and it could not have. The cumulative is chained across three
+  pieces with two different step sizes, corrected per piece with that
+  piece's `h` and with nothing at the joins, and `f'(a)` was taken as
+  `fpL[0]`, which the centred-difference helper never writes, so it was
+  identically zero rather than the derivative at the left end. What
+  actually closed the 1e-5 survival gap in #211 was the span widening,
+  `BASES.t4` `[12,12] -> [24,24]`. Both copies stay byte-identical.
+
+- `polishRace` accepts `mu0` again (#207). It reads the option as
+  `const { mu0: mu0In = null } = opts`, and #204's allowlist named the
+  destructured LOCAL, `mu0In`. So a call that had worked since the
+  function was written threw `unknown option 'mu0'`, while `mu0In` was
+  accepted, ignored, and then failed with `give p0 or mu0`.
+
+  The surface test that exists to catch this searched the function body
+  for the allowlisted string and found the local name, so it passed. It
+  now parses the destructuring and compares PUBLIC keys, and a second
+  test covers the opposite direction -- a key the function reads that its
+  allowlist rejects, which is the half that refuses valid callers and the
+  half #207 actually was. Sweeping all 21 guarded browser APIs that way
+  turns up no others. `parity/check_js_api.mjs` calls `polishRace` both
+  ways, because neither direction is visible without making the call.
+
+  The first cut of that sweep exempted forwarding wrappers outright, and
+  review pointed out the hole (#237): a wrapper reads nothing off `opts`,
+  so the audits had nothing to compare its allowlist against and skipped
+  it -- leaving `bottomKProbabilities` and `locScaleFromWinAndSecond`
+  unguarded in exactly the direction that refuses valid callers. Dropping
+  `D` from the first one's list turned `bottomKProbabilities(mu, k, {D})`
+  into `unknown option 'D'` with all three source audits still green. The
+  exemption now names the API each wrapper forwards to and requires the
+  two allowlists to be equal, which is a checkable claim rather than a
+  waiver, and the checker calls both wrappers with every option at a
+  non-default value.
+
+- The browser inverse honours the two options it advertised (#226).
+  `targetFloor` and `returnInfo` were on `abilitiesFromRace`'s allowlist
+  and read by nothing, so they passed validation and vanished -- the
+  precise failure the allowlist exists to prevent, reintroduced by
+  deriving that list from python's signature rather than from what the
+  function reads. It now matches python: a zero share raises, because it
+  has no finite inverse; `targetFloor` floors deliberately and reports
+  which entries were floored; `returnInfo` returns the record rather than
+  the bare vector, and does not change the answer.
+
+  A test now requires every allowlisted key to be read by the function
+  that advertises it. Two functions legitimately forward their whole
+  options object onward, and that is DECLARED rather than inferred --
+  "the body mentions opts somewhere" would have excused this very bug,
+  since `abilitiesFromRace` forwards on its structure branch while
+  `targetFloor` vanished on every other path. Sabotage-tested by putting
+  an unread key back.
+
+
 - The browser honours the loading-shape contract, in every module that
   takes `V` (#232). `winning.shapes.as_loadings` is the one place the rule
   is decided -- `V` is `(n, rank)`, one ROW per contestant, and a scalar,
@@ -31,6 +100,8 @@
   exception on a happy path killed the file, so the run failed with no
   named check and every later check silently went unrun. A new `accepts()`
   helper turns a thrown exception into a named FAIL.
+
+
 
 - The pre-renovation `src/` package is gone, all but the one part still
   used. It had sat since the August renovation: not packaged (`setup.py`

@@ -161,7 +161,62 @@ for (const r of [8, 17, 25, 40]) {
 accepts("demo halton nodes survive past the old 16-prime table",
         () => demo.haltonNormalNodes(20, 8),
         h => h.F.every(r => r.every(Number.isFinite)));
+// --- the inverse honours the options it advertises (#226)
+rejects(races.abilitiesFromRace, [[0.5, 0.5, 0], { D: [1, 1, 1] }],
+        "zero target without a floor", "no finite inverse");
+rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { D: [1, 1, 1], targetFloor: -1 }],
+        "negative targetFloor", "must be positive");
+{
+  const D = [1, 1, 1];
+  const info = races.abilitiesFromRace([0.5, 0.3, 0.2], { D, returnInfo: true });
+  holds("returnInfo returns diagnostics",
+        Array.isArray(info.mu) && typeof info.converged === "boolean"
+        && Number.isFinite(info.maxLogResidual) && Array.isArray(info.floored),
+        `converged=${info.converged} resid=${info.maxLogResidual.toExponential(2)}`);
+  const f = races.abilitiesFromRace([0.5, 0.5, 0], { D, targetFloor: 1e-4, returnInfo: true });
+  holds("targetFloor floors and says which", JSON.stringify(f.floored) === "[false,false,true]",
+        JSON.stringify(f.floored));
+  const plain = races.abilitiesFromRace([0.5, 0.3, 0.2], { D });
+  holds("returnInfo does not change the answer",
+        Math.max(...plain.map((v, i) => Math.abs(v - info.mu[i]))) < 1e-12);
+}
+
+// --- an allowlist names PUBLIC keys, not destructured locals (#207)
+// polishRace reads `const { mu0: mu0In = null } = opts`, and #204 put the
+// LOCAL name in its allowlist. So the supported call was refused as an
+// unknown option while the internal alias was accepted and ignored, and
+// 21 guard checks plus 87 surface tests all passed because none of them
+// made either call. tests/test_browser_option_keys.py sweeps the whole
+// surface for the same slip; these two calls pin this one.
+accepts("polishRace takes its public mu0",
+        () => polish.polishRace({ mu0: [-0.5, 0, 0.5], D: [1, 1, 1] }),
+        r => r && r.mu && r.mu.every(Number.isFinite));
+rejects(polish.polishRace, [{ mu0In: [-0.5, 0, 0.5], D: [1, 1, 1] }],
+        "polishRace rejects the internal alias", "unknown option 'mu0In'");
+
+// --- a forwarding wrapper really accepts what it forwards (#237)
+// bottomKProbabilities and locScaleFromWinAndSecond validate opts and
+// then hand it to another API. The source audits had nothing to compare
+// their allowlists against and skipped them, so dropping a supported key
+// from a wrapper's own list would have turned a working call into
+// `unknown option`, silently, with every static check still green. These
+// pass each option at a NON-DEFAULT value, which is the only way to see
+// that the wrapper let it through.
+const mu4 = [0, 0.5, 1.0, 1.5], D4 = [1, 0.8, 1.2, 0.9], V4 = [[0.6], [0.2], [-0.3], [-0.5]];
+for (const [k, v] of [["V", V4], ["D", D4], ["base", "gumbel"],
+                      ["points", 1025], ["qa", 21]]) {
+  accepts(`bottomKProbabilities forwards ${k}`,
+          () => topk.bottomKProbabilities(mu4, 1, { D: D4, [k]: v }),
+          p => p.every(Number.isFinite));
+}
+for (const [k, v] of [["base", "gumbel"], ["points", 1025], ["nIter", 30],
+                      ["tol", 1e-7], ["ridge", 1e-6], ["returnInfo", true],
+                      ["D0", [1, 0.9, 1.1]], ["mu0", [0.4, 0, -0.4]]]) {
+  accepts(`locScaleFromWinAndSecond forwards ${k}`,
+          () => topk.locScaleFromWinAndSecond(
+            [0.5, 0.3, 0.2], [0.3, 0.4, 0.3], { [k]: v }),
+          r => r != null);
+}
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
-

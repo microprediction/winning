@@ -34,7 +34,7 @@ import { hermiteNodes } from "./core.mjs";
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
 const RACE_JACOBIAN_OPTS = new Set(["V", "D", "base", "points", "qa", "qf", "structure"]);
-const POLISH_RACE_OPTS = new Set(["V", "D", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0In", "fdFallback"]);
+const POLISH_RACE_OPTS = new Set(["V", "D", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback"]);
 
 function raceJacobianExplicit(mu, V, D, base, points) {
   const n = mu.length;
