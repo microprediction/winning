@@ -33,6 +33,42 @@
   open, with the measurement above as the baseline. R has the same
   divergence and is untouched.
 
+- GMRFExtremes answers a threshold out in the tail (#197). The grid was
+  built from the chain's means and marginal sds alone, so a threshold
+  above the last cell left the occupancy identically one and every
+  answer stopped depending on `u`: 9, 10 and 20 sd out all returned the
+  same 1.11e-15, which is quadrature noise rather than a tail. The
+  excursion was then taken as `1 - max_cdf`, a subtraction of two
+  numbers that agree to every bit, so it went NEGATIVE at 10 sd, and
+  `first_passage` differenced the same quantities and returned a
+  negative passage mass.
+
+  Three things, because one alone was not enough and I measured each:
+
+  1. the grid covers the threshold, with the SPACING preserved -- the
+     point count grows with the range, up to a memory budget that
+     accounts for the O(n L^2) transitions, and past that the caller is
+     told rather than left with a silently coarser lattice;
+  2. the exceedance is summed over the cells ABOVE `u` instead of
+     subtracted from one, so it is a sum of small positive terms with
+     full relative accuracy;
+  3. the cell mass falls back to the midpoint density where `ndtr` has
+     saturated, since the double-precision CDF reaches exactly 1 around
+     8.3 sd and the difference underflows to zero there.
+
+  With (1) and (2) alone the answer was exactly 0.0 at 9 sd and at 12
+  sd alike -- no longer negative, still independent of `u`.
+
+  | threshold | before | after | exact |
+  |---|---|---|---|
+  | 6 sd | 9.911e-10 | 9.878e-10 | 9.869e-10 |
+  | 9 sd | 1.110e-15 | 1.128e-19 | 1.1286e-19 |
+  | 12 sd | 1.110e-15 | 1.780e-33 | 1.7765e-33 |
+  | 20 sd | 1.110e-15 | positive, decreasing | -- |
+
+  `first_passage` at 9 sd was `[-3.1e-15, 1.0]` and is now
+  `[1.09e-19, 1.0]`.
+
 - Malformed portfolio limits are refused, not dropped (#247). `nameCaps`
   and `groups` encode name and sector caps, so a typo that DROPS a
   constraint returns an ordinary-looking result that is simply
