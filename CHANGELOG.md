@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- `rank_probabilities` keeps BOTH guards, before and after normalisation
+  (#221). The entry above replaced the raw check with a post-normalisation
+  one, and that was wrong: they are independent, not alternatives. Row
+  normalisation can ERASE a gross raw defect. On a field whose sds span
+  232x the raw matrix is off by 0.249 in a row and 0.199 in a column, and
+  dividing by those same row sums leaves a column defect of 0.0047 --
+  inside the 5e-3 tolerance -- so it returned a false success, while
+  `top_k_probabilities` rejected the same field at 0.056. The raw check
+  sees the quadrature; the post check sees what the caller gets; neither
+  implies the other.
+
+  The two fields now on record prove the independence, and each slips past
+  the guard that does not catch it: #221's is caught only before
+  normalisation, #203's only after. A test asserts that, and another
+  asserts what the user actually saw -- that rank and top-k agree about
+  whether a field resolves at all. Python, R, Julia and the browser all
+  carry both; R and the browser agree with python to 9e-10 at 2001 points.
+
 - Binary choices fit in `rprobitfast` and `mlogitfast` (#183). The
   triangular-loading loop read `for (row in (col + 1L):J)`, and at J = 2
   with the default rank 2 the second pass evaluates `3:2` -- which in R
