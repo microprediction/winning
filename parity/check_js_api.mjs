@@ -476,5 +476,57 @@ accepts("the inverse takes a scalar D, matching python",
           });
 }
 
+// --- classic calibration: offsetSamples must descend (#274)
+// The interpolation table is built by mapping over offsetSamples and
+// read back with interpClamped, whose xp must ascend -- descending
+// offsets are what make the prices ascend. An ascending array runs the
+// binary search on a descending table, so every lookup clamps to an
+// end: three distinct prices came back as the lattice boundary
+// [24, -25, -25], repriced 0.53 away from the target, with no error.
+// python raises ValueError("Not descending") and R stops with
+// "offset_samples must be descending" for the very same input.
+{
+  const density = classic.skewNormalDensity(50, 0.1);
+  const target = classic.statePricesFromOffsets(density, [-3, 0.5, 2]);
+  const descending = Array.from({ length: 50 }, (_, i) => 24 - i);
+  const solve = os => classic.solveForImpliedOffsets(
+    target, density, { offsetSamples: os, guess: [0, 0, 0], nIter: 3 });
+
+  rejects(solve, [descending.slice().reverse()],
+          "classic refuses ascending offsetSamples", "must be descending");
+  rejects(solve, [[]], "classic refuses empty offsetSamples", "is empty");
+  rejects(solve, [[5, NaN, -5]],
+          "classic refuses a non-finite offset", "not a finite offset");
+  rejects(solve, [7], "classic refuses a non-array offsetSamples",
+          "must be an array");
+  rejects(classic.asDescendingOffsets, [[0, 1, 2]],
+          "the contract names the first ascent", "[1] = 1 is above");
+
+  // ties are LEGAL -- a repeated offset is a flat step in the table,
+  // not an ascent -- and python's `d > 0` allows them too
+  accepts("a repeated offset is not an ascent",
+          () => classic.asDescendingOffsets([5, 5, 0, -5]),
+          v => v.length === 4 && v[1] === 5);
+
+  // and the descending path is untouched: the fix must not move the
+  // answer it was already getting right
+  accepts("descending offsetSamples still reprice to the target",
+          () => classic.statePricesFromOffsets(density, solve(descending)),
+          back => Math.max(...back.map((b, i) => Math.abs(b - target[i]))) < 2e-3,
+          back => `max reprice error ${Math.max(...back.map((b, i) =>
+            Math.abs(b - target[i]))).toExponential(2)}`);
+
+  // the DEFAULT is built internally and must still be accepted by the
+  // contract it now has to satisfy
+  accepts("the internally built default is descending",
+          () => classic.solveForImpliedOffsets(target, density, { guess: [0, 0, 0] }),
+          a => a.length === 3 && a.every(Number.isFinite),
+          a => `[${a.map(v => v.toFixed(4))}]`);
+  accepts("dividendImpliedAbility still prices",
+          () => classic.dividendImpliedAbility([2.5, 4.0, 6.0], density),
+          a => a.length === 3 && a.every(Number.isFinite),
+          a => `[${a.map(v => v.toFixed(4))}]`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
