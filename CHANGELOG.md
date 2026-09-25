@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- julia's `_race_setup` took the caller's factor nodes and weights
+  verbatim, so an `F` with the wrong number of ROWS was accepted and
+  priced a different quadrature outright -- `[0.646, 0.123, 0.231,
+  0.0005]` where the right answer is `[0.382, 0.301, 0.137, 0.181]` --
+  and an extra weight was silently ignored. The two spellings that did
+  fail failed with a `DimensionMismatch` or a `BoundsError` from
+  somewhere inside, naming nothing the caller passed. This is #290,
+  filed against the browser; julia had its own copy, found by sweeping
+  rather than by a report.
+
+  Every node must now carry exactly the loadings' rank, there must be
+  one finite non-negative weight per node with a positive total, and
+  the weights are normalised -- so `W` and `c*W` are the same law here
+  too, which was already true of julia's forward and is now true by
+  construction rather than by accident.
+
+  Valid inputs are unchanged to 1.1e-16, which is the rounding of
+  dividing an already-normalised `W` by its own sum.
+
   Symmetrising must not overflow what the finiteness check just passed
   (#279). `0.5 * (C + C.T)` doubles before it halves, so a finite
   variance near the double ceiling became `inf` between the check and
