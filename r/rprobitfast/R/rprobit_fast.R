@@ -17,6 +17,30 @@
 #'   column names.
 #' @param r factor rank (r = 2 spans the full identified covariance at
 #'   four alternatives).
+.check_choice_sets <- function(ids, alt, J) {
+  # The reshape downstream is POSITIONAL --
+  #   mu <- matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)
+  # -- so row order alone decides which alternative a row is priced as.
+  # A count check cannot see that: an observation that duplicates one
+  # alternative and omits another still has J rows, so `nrow(df) == Tn *
+  # J` passed and the duplicate row was priced as the missing
+  # alternative, returning an ordinary-looking fit (#230). The contract
+  # is one row per (observation, alternative), and that is a table, not
+  # a total.
+  tab <- table(ids, alt)
+  bad <- which(tab != 1L, arr.ind = TRUE)
+  if (nrow(bad) == 0L) return(invisible(NULL))
+  ids_lab <- rownames(tab); alt_lab <- colnames(tab)
+  first <- bad[order(bad[, 1], bad[, 2]), , drop = FALSE][1, ]
+  count <- tab[first[1], first[2]]
+  stop(sprintf(paste("each observation must contain each of the %d",
+                     "alternatives exactly once; observation '%s' has %d",
+                     "row(s) for alternative '%s' (%d observation-alternative",
+                     "cell(s) are wrong)"),
+               J, ids_lab[first[1]], count, alt_lab[first[2]], nrow(bad)),
+       call. = FALSE)
+}
+
 rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
                          maxit = 400L) {
   t0 <- Sys.time()
@@ -28,6 +52,7 @@ rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
   alt <- alt[ord]; ids <- ids[ord]
   Tn <- length(unique(ids))
   stopifnot(nrow(df) == Tn * J)
+  .check_choice_sets(ids, alt, J)
   chosen <- which(as.logical(df$chosen))
   choice <- alt[chosen]
   Xcov <- as.matrix(df[, covariates, drop = FALSE])
@@ -62,7 +87,13 @@ rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
   k <- nb + 1L
   V <- matrix(0, J, r)
   ki <- 1L
-  for (col in seq_len(r)) for (row in (col + 1L):J) {
+  # seq_len, not `(col + 1L):J`: at J = 2 and the default r = 2L the
+  # col = 2 pass evaluates 3:2, which in R is the two-element vector
+  # c(3, 2) rather than empty, so the first assignment is V[3, 2] on a
+  # 2x2 matrix and every binary-choice fit died out of bounds (#183).
+  # nw counts only one free loading there, so wfree[2] was out of range
+  # too. seq_len(J - col) is empty exactly when it should be.
+  for (col in seq_len(r)) for (row in col + seq_len(J - col)) {
     V[row, col] <- fit$par[nb + ki]; ki <- ki + 1L
   }
   structure(list(coefficients = beta,

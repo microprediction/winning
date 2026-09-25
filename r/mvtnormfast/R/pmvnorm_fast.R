@@ -92,6 +92,29 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 #' and an exact decomposition is searched for (ranks 1..6); if none
 #' exists the call falls back to mvtnorm::pmvnorm() unchanged. The result
 #' carries attr "method" ("factor" or "mvtnorm-fallback").
+# Classify the rectangle {lower <= x <= upper} before any quadrature.
+#
+# A reversed coordinate makes the event EMPTY. Every port used to form the
+# negative conditional cell -- pnorm(0) - pnorm(1) = -0.3413... -- and then
+# clamp it to the underflow floor 1e-300, so an impossible observation came
+# back as a finite probability and, in log-likelihood code, as about -690.8
+# instead of -Inf (#235). mvtnorm::pmvnorm, which this is a drop-in for,
+# raises on reversed bounds and returns 0 when a coordinate has
+# lower == upper; all four ports now agree with it.
+#
+# Returns TRUE when the rectangle is degenerate (zero mass, exactly).
+.rectangle_status <- function(lower, upper) {
+  bad <- which(lower > upper)
+  if (length(bad)) {
+    i <- bad[1]
+    stop(sprintf(paste0("lower must not exceed upper: coordinate %d has ",
+                        "lower=%g > upper=%g, so the rectangle is empty. ",
+                        "Check the argument order."),
+                 i, lower[i], upper[i]), call. = FALSE)
+  }
+  any(lower == upper)
+}
+
 pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                          sigma = NULL, V = NULL, D = NULL, ...) {
   if (is.null(V) || is.null(D)) {
@@ -99,6 +122,12 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     if (is.null(mean)) mean <- rep(0, nrow(as.matrix(sigma)))
     fd <- factorize_covariance(sigma)
     if (is.null(fd)) {
+      nn <- nrow(as.matrix(sigma))
+      if (.rectangle_status(rep_len(lower, nn), rep_len(upper, nn))) {
+        p <- 0
+        attr(p, "method") <- "degenerate-rectangle"
+        return(p)
+      }
       p <- mvtnorm::pmvnorm(lower = lower, upper = upper, mean = mean,
                             sigma = sigma, ...)
       attr(p, "method") <- "mvtnorm-fallback"
@@ -110,6 +139,11 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
   n <- nrow(V)
   if (is.null(mean)) mean <- rep(0, n)
   lower <- rep_len(lower, n); upper <- rep_len(upper, n)
+  if (.rectangle_status(lower, upper)) {
+    p <- 0
+    attr(p, "method") <- "degenerate-rectangle"
+    return(p)
+  }
   s <- sqrt(D)
   nd <- .nodes_for(V, D)
   M <- nd$F %*% t(V)                        # (Q, n) conditional shifts

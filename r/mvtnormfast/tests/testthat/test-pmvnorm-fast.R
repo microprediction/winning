@@ -62,3 +62,49 @@ test_that("independence sanity: product of marginals", {
   pf <- pmvnorm_fast(upper = b, V = matrix(0, n, 1), D = D)
   expect_lt(abs(as.numeric(pf) - prod(pnorm(b / sqrt(D)))), 1e-12)
 })
+
+# --- empty and degenerate rectangles (#235) ---------------------------
+#
+# P(lower <= X <= upper) over a reversed coordinate is an EMPTY event.
+# This formed the negative conditional cell pnorm(0) - pnorm(1) and
+# clamped it to the underflow floor, so an impossible observation came
+# back as 1e-300 -- a finite log probability near -690.8 rather than
+# -Inf. mvtnorm::pmvnorm, which this package is a drop-in for, raises on
+# reversed bounds and returns 0 when a coordinate has lower == upper.
+
+test_that("reversed bounds raise rather than returning the floor", {
+  expect_error(
+    pmvnorm_fast(lower = 1, upper = 0, mean = 0,
+                 V = matrix(0, 1, 1), D = 1),
+    "lower must not exceed upper")
+})
+
+test_that("the error names the offending coordinate", {
+  expect_error(
+    pmvnorm_fast(lower = c(0, 1, -1), upper = c(1, 0, 1),
+                 mean = rep(0, 3), V = matrix(0, 3, 1), D = rep(1, 3)),
+    "coordinate 2")
+})
+
+test_that("a degenerate coordinate has exactly zero mass", {
+  p <- pmvnorm_fast(lower = 0.5, upper = 0.5, mean = 0,
+                    V = matrix(0, 1, 1), D = 1)
+  expect_identical(as.numeric(p), 0)
+  expect_equal(attr(p, "method"), "degenerate-rectangle")
+  expect_true(is.infinite(log(as.numeric(p))))
+})
+
+test_that("one degenerate coordinate among valid ones is still zero", {
+  p <- pmvnorm_fast(lower = c(0, 0.3, -1), upper = c(1, 0.3, 1),
+                    mean = rep(0, 3), V = matrix(0, 3, 1), D = rep(1, 3))
+  expect_identical(as.numeric(p), 0)
+})
+
+test_that("valid rectangles are untouched by the check", {
+  n <- 4
+  D <- 0.6 + (1:n) / 10
+  lo <- rep(-1, n); up <- seq(0.2, 1.4, length.out = n)
+  p <- pmvnorm_fast(lower = lo, upper = up, V = matrix(0, n, 1), D = D)
+  expect_lt(abs(as.numeric(p) -
+                prod(pnorm(up / sqrt(D)) - pnorm(lo / sqrt(D)))), 1e-12)
+})
