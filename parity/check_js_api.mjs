@@ -7,10 +7,10 @@
 // API cannot lean on the language to reject a wrong or misspelled key.
 const here = new URL(".", import.meta.url).pathname;
 const eng = p => import(here + "../docs/js/winning/" + p);
-const [races, topk, blocks, polish, classic, demo, structures] =
+const [races, topk, blocks, polish, classic, demo, structures, core] =
   await Promise.all(
     ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs",
-     "demo.mjs", "structures.mjs"].map(eng));
+     "demo.mjs", "structures.mjs", "core.mjs"].map(eng));
 
 let fails = 0;
 const rejects = (fn, args, why, expect = null) => {
@@ -474,6 +474,57 @@ accepts("the inverse takes a scalar D, matching python",
             }
             return worst < 1e-8;
           });
+}
+
+// --- the product rule is never materialised (#268)
+// hermiteNodes built the whole order**rank tensor and pruned it
+// after. `Math.max(...W)` spreads every weight as an argument list, so
+// rank 5 at order 15 -- 759,375 nodes -- died with a RangeError before
+// pruning ran; rank 5 at order 41 would have been 115,856,201 nodes
+// built and thrown away. python closed this in #155 and the browser
+// kept it. The expected counts below are python's.
+{
+  const expect = [[1, 15, 15], [2, 15, 145], [3, 15, 1317], [4, 15, 10929],
+                  [5, 15, 83757], [5, 7, 10295], [3, 41, 6283]];
+  for (const [k, q, n] of expect)
+    accepts(`hermiteNodes(${k}, ${q}) is python's rule`,
+            () => core.hermiteNodes(k, q),
+            r => r.F.length === n
+                 && Math.abs(r.W.reduce((a, b) => a + b, 0) - 1) < 1e-12
+                 && r.F.every(row => row.length === k),
+            r => `${r.F.length} nodes (python ${n})`);
+
+  // the one from the report, which used to be a RangeError, and the
+  // one that was never going to fit in memory at all
+  accepts("rank 5 order 15 returns instead of overflowing the stack",
+          () => core.hermiteNodes(5, 15),
+          r => r.F.length === 83757);
+  accepts("rank 5 order 41 prunes 115,856,201 down to python's count",
+          () => core.hermiteNodes(5, 41),
+          r => r.F.length === 1061871,
+          r => `${r.F.length} nodes from a 1.16e8 tensor`);
+
+  // pruning must not reorder: the kept set is the full tensor's, in
+  // the tensor's order, so a node's neighbours still mean what the
+  // reference means by them
+  accepts("the kept nodes are in tensor order (first coordinate slowest)",
+          () => core.hermiteNodes(2, 15),
+          r => {
+            for (let i = 1; i < r.F.length; i++) {
+              const a = r.F[i - 1], b2 = r.F[i];
+              if (a[0] > b2[0] + 1e-12) return false;          // never decreases
+              if (Math.abs(a[0] - b2[0]) < 1e-12 && a[1] > b2[1] + 1e-12)
+                return false;                                  // ties ascend in x1
+            }
+            return true;
+          });
+
+  rejects(core.hermiteNodes, [0, 15], "hermiteNodes refuses rank 0",
+          "positive integer");
+  rejects(core.hermiteNodes, [2.5, 15], "hermiteNodes refuses a fractional rank",
+          "positive integer");
+  rejects(core.hermiteNodes, [2, 0], "hermiteNodes refuses order 0",
+          "positive integer");
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

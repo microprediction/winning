@@ -93,38 +93,57 @@ export function hermite1(order) {
   return { nodes: values, weights: w };
 }
 
-/* pruned product rule: first coordinate slowest, prune WITHOUT
-   renormalizing (matching the reference exactly) */
+/* Pruned product Gauss-Hermite rule, built ONE DIMENSION AT A TIME.
+
+   This used to materialise the whole `order ** k` tensor and prune it
+   afterwards, which is the defect python closed in #155 and the browser
+   kept. Two ways it fails. `Math.max(...W)` spreads every weight as an
+   argument list, so rank 5 at order 15 -- 759,375 nodes -- died with
+   `RangeError: Maximum call stack size exceeded` before pruning ever
+   ran. And rewriting that line as a loop only moves the wall: rank 5 at
+   order 41 is 115,856,201 nodes to build and then throw away.
+
+   A partial product whose weight cannot reach the threshold whatever
+   the remaining factors contribute -- each at most `wmax` -- cannot be
+   in the answer, so it is dropped as soon as it appears. The kept set
+   and its ORDER are exactly those of the full tensor pruned once: the
+   test for a partial product is implied by the test for every full
+   product extending it, and the loops below extend in the same order
+   the tensor enumerated (first coordinate slowest, last fastest).
+
+   Weights are renormalised at the end, as the reference does: pruning
+   drops ~1e-7 of the mass and a direct weighted mixture consumes W
+   as-is. (#268) */
 export function hermiteNodes(k, order = 15, prune = 1e-7) {
+  if (!Number.isInteger(k) || k < 1)
+    throw new Error(`hermiteNodes: rank must be a positive integer; got ${k}`);
+  if (!Number.isInteger(order) || order < 1)
+    throw new Error(`hermiteNodes: order must be a positive integer; got ${order}`);
   const h = hermite1(order);
   if (k === 1) return { F: h.nodes.map(x => [x]), W: h.weights.slice() };
-  const F = [], W = [];
-  const idx = new Array(k).fill(0);
-  const total = Math.pow(order, k);
-  for (let t = 0; t < total; t++) {
-    let rem = t;
-    const node = new Array(k), digits = new Array(k);
-    for (let dPos = k - 1; dPos >= 0; dPos--) {   // last coordinate fastest
-      digits[dPos] = rem % order;
-      rem = Math.floor(rem / order);
+
+  // one-dimensional max, so this is `order` values and never the tensor
+  let wmax = h.weights[0];
+  for (let i = 1; i < order; i++) if (h.weights[i] > wmax) wmax = h.weights[i];
+  const floor = prune * Math.pow(wmax, k);
+
+  let F = h.nodes.map(x => [x]);
+  let W = h.weights.slice();
+  for (let d = 1; d < k; d++) {
+    // what the remaining k - 1 - d coordinates can still contribute
+    const reach = Math.pow(wmax, k - 1 - d);
+    const nF = [], nW = [];
+    for (let i = 0; i < F.length; i++) {
+      const row = F[i], wi = W[i];
+      for (let j = 0; j < order; j++) {
+        const w = wi * h.weights[j];
+        if (w * reach > floor) { nF.push([...row, h.nodes[j]]); nW.push(w); }
+      }
     }
-    let w = 1;
-    for (let dPos = 0; dPos < k; dPos++) {
-      node[dPos] = h.nodes[digits[dPos]];
-      w *= h.weights[digits[dPos]];
-    }
-    F.push(node); W.push(w);
+    F = nF; W = nW;
   }
-  const wmax = Math.max(...W);
-  const keepF = [], keepW = [];
-  for (let i = 0; i < W.length; i++) {
-    if (W[i] > prune * wmax) { keepF.push(F[i]); keepW.push(W[i]); }
-  }
-  // renormalize after pruning, as the reference does: it drops ~1e-7 of
-  // the mass and a direct weighted mixture consumes W as-is. The port
-  // omitted this and its weights summed to 1 - 2e-9 (surface audit).
-  const wsum = keepW.reduce((a, b) => a + b, 0);
-  return { F: keepF, W: keepW.map(w => w / wsum) };
+  const wsum = W.reduce((a, b) => a + b, 0);
+  return { F, W: W.map(w => w / wsum) };
 }
 
 /* ---- small dense linear algebra ------------------------------------ */
