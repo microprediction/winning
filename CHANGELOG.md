@@ -26,6 +26,147 @@
   `as_idio`, rather than inline in `_setup` where three other verbs
   could not reach it.
 
+- GMRFExtremes answers a threshold out in the tail (#197). The grid was
+  built from the chain's means and marginal sds alone, so a threshold
+  above the last cell left the occupancy identically one and every
+  answer stopped depending on `u`: 9, 10 and 20 sd out all returned the
+  same 1.11e-15, which is quadrature noise rather than a tail. The
+  excursion was then taken as `1 - max_cdf`, a subtraction of two
+  numbers that agree to every bit, so it went NEGATIVE at 10 sd, and
+  `first_passage` differenced the same quantities and returned a
+  negative passage mass.
+
+  Three things, because one alone was not enough and I measured each:
+
+  1. the grid covers the threshold, with the SPACING preserved -- the
+     point count grows with the range, up to a memory budget that
+     accounts for the O(n L^2) transitions, and past that the caller is
+     told rather than left with a silently coarser lattice;
+  2. the exceedance is summed over the cells ABOVE `u` instead of
+     subtracted from one, so it is a sum of small positive terms with
+     full relative accuracy;
+  3. the cell mass falls back to the midpoint density where `ndtr` has
+     saturated, since the double-precision CDF reaches exactly 1 around
+     8.3 sd and the difference underflows to zero there.
+
+  With (1) and (2) alone the answer was exactly 0.0 at 9 sd and at 12
+  sd alike -- no longer negative, still independent of `u`.
+
+  | threshold | before | after | exact |
+  |---|---|---|---|
+  | 6 sd | 9.911e-10 | 9.878e-10 | 9.869e-10 |
+  | 9 sd | 1.110e-15 | 1.128e-19 | 1.1286e-19 |
+  | 12 sd | 1.110e-15 | 1.780e-33 | 1.7765e-33 |
+  | 20 sd | 1.110e-15 | positive, decreasing | -- |
+
+  `first_passage` at 9 sd was `[-3.1e-15, 1.0]` and is now
+  `[1.09e-19, 1.0]`.
+
+- Malformed portfolio limits are refused, not dropped (#247). `nameCaps`
+  and `groups` encode name and sector caps, so a typo that DROPS a
+  constraint returns an ordinary-looking result that is simply
+  under-constrained -- worse than an error. In the browser:
+
+  | input | before |
+  |---|---|
+  | `nameCaps` of length n-1 | last name uncapped; an 80% position came back with `maxViolation` 0 |
+  | `nameCaps` of length n+1 | silently truncated to n |
+  | a group index of n | wrote past the row; every runner NaN, reported feasible |
+  | a negative group index | stored as a non-element property, member silently ignored |
+  | an `A` row of the wrong width | the constraint vanished |
+
+  Two of these needed the python side too, because the ports disagreed
+  about what the input MEANT rather than both being wrong. Numpy read a
+  negative group index as counting from the end, so python silently
+  capped the LAST name where the browser dropped the member. Neither is
+  documented and neither is what a group membership means, so both
+  refuse it now.
+
+  A non-finite `name_caps` ENTRY is left alone: "NaN/None entries
+  skipped" is the documented contract, meaning no cap for that name, and
+  my first cut broke it. That is a feature in both ports.
+
+- A worthless dividend prices at zero, in the browser AND in R (#242).
+  `prices_from_dividends` maps only a MISSING quote to `nan_value`. The
+  browser used `Number.isFinite(x) ? x : nanValue`, which conflates every
+  non-finite value with a missing one, and both ports divided by the
+  dividend unconditionally. So an infinite-dividend entrant took
+  `1/2000` of the book instead of nothing, a dividend of `0` produced
+  `Infinity` and then `NaN` after normalising, and a NEGATIVE dividend
+  came back as a negative probability.
+
+  The issue reported the browser. R shares two of the three: only the
+  `Inf` case was right there, because `1/Inf` is 0 on its own. Both now
+  follow python exactly -- a non-positive dividend (and `-Inf` with it)
+  prices at 0, `+Inf` prices at 0, a missing quote still takes
+  `nan_value`, and the book is normalised only when its total is
+  positive, so an all-infinite book is zeros rather than `0/0`.
+
+  | dividends | was (browser) | was (R) | now, all three |
+  |---|---|---|---|
+  | `[2, 4, Inf]` | 0.666, 0.333, 0.00067 | correct | 2/3, 1/3, 0 |
+  | `[2, 4, 0]` | 0, 0, NaN | 0, 0, NaN | 2/3, 1/3, 0 |
+  | `[2, 4, -5]` | 0.909, 0.455, **-0.364** | same | 2/3, 1/3, 0 |
+  | `[Inf, Inf]` | 0.5, 0.5 | NaN, NaN | 0, 0 |
+
+- The browser differentiates and polishes the factor law it was GIVEN
+  (#209). `raceProbabilities` has always accepted caller-supplied factor
+  nodes and weights, `{V, D, F, W}`. `raceJacobian` and `polishRace`
+  rejected `F` and `W` outright, and `raceJacobianExplicit` built its own
+  standard-normal Hermite rule whenever `V` was nonzero. So the browser
+  could PRICE a discrete or otherwise non-Gaussian factor and could not
+  differentiate it: dropping `F, W` is not a workaround, it silently
+  changes the model.
+
+  This was not a cosmetic gap. On a two-point law `F = [[-3], [3]]`,
+  `W = [0.5, 0.5]`, the Jacobian the browser returned differed from the
+  true one by 0.205 in absolute terms. It now agrees with finite
+  differences of the same forward to 8.1e-12, and `polishRace` threads
+  the law through its forward, its Jacobian AND the inverse that builds
+  `mu0` -- polishing under a different law than the caller priced with
+  optimises the wrong model. A binding cap of 0.35 reprices to
+  (0.35, 0.30, 0.35) under the caller's own nodes.
+
+- The browser prices the one-leaf tree (#241). An EMPTY linkage is the
+  valid scipy-style spelling of a hierarchy with one leaf, and
+  `treeFromLinkage([])` computed the leaf variance as
+  `1 - rho[parent[i]]` with `parent[i] = -1`. Javascript has no negative
+  indexing, so that is `undefined` and `D` came out `[NaN]`; pricing the
+  tree then failed instead of returning the certain `[1]`. The guard was
+  already written correctly one loop above, for the node strengths.
+
+  Python reaches the right answer by accident: numpy wraps `rho[-1]` to
+  the sole zero entry. Both now give `D = [1]` for the empty linkage and
+  `D = [0.5, 0.5, 1]` for a three-leaf one.
+
+- A coordinate with no idiosyncratic variance is treated as
+  deterministic, in all three structured-MVN ports (#206). Given the
+  factor draw such a coordinate is a CONSTANT, `X_i = mu_i + v_i . f`, so
+  its conditional cell is an INDICATOR, not a gaussian interval. Every
+  port divided by `s_i = 0` anyway. Off the boundary that happened to give
+  the right answer; on an inclusive boundary it is `0/0`, so the
+  documented `P(X_1 <= 0) = 1` for `X_1` identically zero came back as
+  `nan` from python and Julia, and as "missing value where TRUE/FALSE
+  needed" from R.
+
+  A constant that lies outside its own interval now returns exactly
+  `0.0` with method `outside-support`, rather than the `1e-300` the cell
+  floor gave it and a trip through the recentered path looking for a
+  probability that is not there. Checked against one-dimensional
+  quadrature for the harder case where `D_i = 0` but `V_i != 0`, so the
+  coordinate is constant only GIVEN the factor and the indicator
+  restricts the factor region instead: filter 0.32379233, quadrature
+  0.32379181.
+
+- Julia broadcasts a scalar bound, as the specification does (#184).
+  `winning.fastmvn` broadcasts with `np.broadcast_to` and the R port with
+  `rep_len`, but `julia/FactorMvNormalCDF` called `collect` on the
+  argument. A scalar `Float64` is not iterable, so the ordinary joint-CDF
+  spelling `mvn_cdf_fast(V=V, D=D, upper=0.0)` threw before evaluating
+  anything, on the structured and the delegated dense path alike. A
+  length that is neither 1 nor `n` now raises with both numbers named,
+  rather than recycling silently.
+
 - Quadrature weights are RELATIVE, in every verb that takes them (#208).
   `W` and `c*W` describe the same factor law, and every verb normalises
   its own result, so the common scale cancels -- except in the

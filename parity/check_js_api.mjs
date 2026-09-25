@@ -7,9 +7,10 @@
 // API cannot lean on the language to reject a wrong or misspelled key.
 const here = new URL(".", import.meta.url).pathname;
 const eng = p => import(here + "../docs/js/winning/" + p);
-const [races, topk, blocks, polish, classic, demo] = await Promise.all(
-  ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs",
-   "demo.mjs"].map(eng));
+const [races, topk, blocks, polish, classic, demo, structures] =
+  await Promise.all(
+    ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs",
+     "demo.mjs", "structures.mjs"].map(eng));
 
 let fails = 0;
 const rejects = (fn, args, why, expect = null) => {
@@ -217,6 +218,128 @@ for (const [k, v] of [["base", "gumbel"], ["points", 1025], ["nIter", 30],
             [0.5, 0.3, 0.2], [0.3, 0.4, 0.3], { [k]: v }),
           r => r != null);
 }
+
+// --- the one-leaf tree (#241)
+// An EMPTY linkage is the valid scipy-style spelling of a hierarchy with
+// one leaf. javascript has no negative indexing, so rho[parent[i]] with
+// parent[i] = -1 was undefined and the leaf variance came out NaN;
+// pricing that tree failed instead of returning the certain [1]. The
+// values below are python's, which the browser must reproduce.
+const oneLeaf = structures.treeFromLinkage([]);
+holds("one-leaf tree has finite variance",
+      oneLeaf.D.every(Number.isFinite), `D = [${oneLeaf.D}]`);
+holds("one-leaf tree matches python's D = [1]",
+      Math.abs(oneLeaf.D[0] - 1) < 1e-15);
+accepts("the one-leaf tree prices to certainty",
+        () => blocks.treeRaceProbabilities([0], oneLeaf.cluster,
+          oneLeaf.loading, oneLeaf.D, oneLeaf.parent, oneLeaf.strength),
+        p => p.length === 1 && Math.abs(p[0] - 1) < 1e-12,
+        p => `p = [${p}]`);
+const threeLeaf = structures.treeFromLinkage([[0, 1, 0.5], [2, 3, 0.8]]);
+holds("a real linkage is unchanged: python's D = [0.5, 0.5, 1]",
+      Math.max(...threeLeaf.D.map((v, i) => Math.abs(v - [0.5, 0.5, 1][i]))) < 1e-15,
+      `D = [${threeLeaf.D}]`);
+
+// --- a caller-supplied factor law reaches the derivative too (#209)
+// raceProbabilities has always accepted {F, W}. raceJacobian and
+// polishRace rejected them and built their own standard-normal Hermite
+// rule, so the browser could PRICE a discrete factor law and could not
+// differentiate or polish it: the Jacobian returned was the derivative
+// of a DIFFERENT model, and on this two-point law it is wrong by 0.2 in
+// absolute terms. Dropping F/W is not a workaround, it is the bug.
+const muF = [0, 0.4, 1.0], VF = [[-1], [0], [1]], DF = [1, 1, 1];
+const FF = [[-3], [3]], WF = [0.5, 0.5];
+const fwdF = m => races.raceProbabilities(m, { V: VF, D: DF, F: FF, W: WF });
+accepts("raceJacobian takes a caller factor law",
+        () => polish.raceJacobian(muF, { V: VF, D: DF, F: FF, W: WF }),
+        J => J.length === 3 && J.every(r => r.every(Number.isFinite)));
+{
+  const J = polish.raceJacobian(muF, { V: VF, D: DF, F: FF, W: WF });
+  const h = 1e-5;
+  let worst = 0;
+  for (let j = 0; j < 3; j++) {
+    const a = muF.slice(), b = muF.slice();
+    a[j] += h; b[j] -= h;
+    const pa = fwdF(a), pb = fwdF(b);
+    for (let i = 0; i < 3; i++)
+      worst = Math.max(worst, Math.abs(J[i][j] - (pa[i] - pb[i]) / (2 * h)));
+  }
+  holds("the jacobian is the derivative of THAT forward",
+        worst < 1e-8, `max |analytic - finite difference| ${worst.toExponential(2)}`);
+  const Jg = polish.raceJacobian(muF, { V: VF, D: DF });
+  let gap = 0;
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++) gap = Math.max(gap, Math.abs(Jg[i][j] - J[i][j]));
+  holds("and the internal gaussian rule is NOT the same answer",
+        gap > 1e-2, `differs by ${gap.toExponential(2)}`);
+}
+accepts("polishRace takes a caller factor law and honours it",
+        () => polish.polishRace({ mu0: muF, V: VF, D: DF, F: FF, W: WF,
+                                  nameCaps: 0.35 }),
+        res => {
+          const re = fwdF(res.mu);
+          return Math.max(...re.map(v => v - 0.35)) < 1e-8 &&
+                 Math.max(...re.map((v, i) => Math.abs(v - res.p[i]))) < 1e-8;
+        });
+
+// --- dividends that are not ordinary positive numbers (#242)
+// Only a MISSING quote becomes nanValue. The browser used
+// `Number.isFinite(x) ? x : nanValue`, conflating every non-finite value
+// with a missing one, and divided unconditionally: an infinite-dividend
+// entrant took 1/2000 of the book instead of nothing, a dividend of 0
+// gave NaN, and a NEGATIVE dividend gave a negative "probability". The
+// expected rows below are python's StatePricer.prices_from_dividends.
+for (const [label, d, want] of [
+  ["+Infinity is worthless", [2, 4, Infinity], [2 / 3, 1 / 3, 0]],
+  ["zero is worthless", [2, 4, 0], [2 / 3, 1 / 3, 0]],
+  ["negative is worthless", [2, 4, -5], [2 / 3, 1 / 3, 0]],
+  ["-Infinity is worthless", [2, 4, -Infinity], [2 / 3, 1 / 3, 0]],
+  ["an all-infinite book is zeros, not 0/0", [Infinity, Infinity], [0, 0]],
+  ["a MISSING quote still takes nanValue", [2, 4, NaN],
+   [0.6662225183211193, 0.33311125916055967, 0.0006662225183211193]],
+  ["null is missing too", [2, 4, null],
+   [0.6662225183211193, 0.33311125916055967, 0.0006662225183211193]],
+]) {
+  accepts(`dividends: ${label}`,
+          () => classic.pricesFromDividends(d),
+          p => p.every(Number.isFinite) && p.every(v => v >= 0) &&
+               Math.max(...p.map((v, i) => Math.abs(v - want[i]))) < 1e-12,
+          p => `[${p.map(v => v.toFixed(6))}]`);
+}
+
+// --- portfolio limits are refused when malformed, not dropped (#247)
+// These encode name and sector caps. A typo that DROPS a constraint
+// returns an ordinary-looking result that is simply under-constrained,
+// which is worse than an error: nameCaps of length n-1 left an 80%
+// position uncapped and still reported maxViolation 0, and a group index
+// of n produced NaN for every runner and called it feasible.
+rejects(polish.concentrationMatrix, [3, { nameCaps: [0.3, 0.3] }],
+        "a short nameCaps is refused", "one entry per contestant");
+rejects(polish.concentrationMatrix, [3, { nameCaps: [0.3, 0.3, 0.3, 0.3] }],
+        "an overlong nameCaps is refused", "one entry per contestant");
+rejects(polish.concentrationMatrix, [3, { groups: [[[0, 3], 0.5]] }],
+        "a group index of n is refused", "not an integer in [0, 3)");
+rejects(polish.concentrationMatrix, [3, { groups: [[[0, -1], 0.5]] }],
+        "a negative group index is refused", "not an integer in [0, 3)");
+rejects(polish.polishRace,
+        [{ p0: [0.2, 0.3, 0.5], D: [1, 1, 1], A: [[1, 0]], b: [0.4],
+           points: 129 }],
+        "an A row of the wrong width is refused", "one coefficient per");
+// python documents a non-finite ENTRY as "no cap for that name", so it
+// stays a feature rather than becoming an error.
+accepts("a NaN entry still means no cap for that name",
+        () => polish.concentrationMatrix(3, { nameCaps: [0.3, NaN, 0.4] }),
+        cm => cm.A.length === 2 && cm.b.length === 2);
+accepts("and the constraints that are well formed still bind",
+        () => polish.polishRace({ p0: [0.1, 0.1, 0.8], D: [1, 1, 1],
+                                  nameCaps: [0.5, 0.5, 0.5], points: 129 }),
+        r => Math.max(...r.p) <= 0.5 + 1e-8,
+        r => `p = [${r.p.map(v => v.toFixed(4))}]`);
+accepts("a group cap binds on its members",
+        () => polish.polishRace({ p0: [0.2, 0.3, 0.5], D: [1, 1, 1],
+                                  groups: [[[0, 1], 0.45]], points: 129 }),
+        r => Math.abs(r.p[0] + r.p[1] - 0.45) < 1e-6,
+        r => `p0 + p1 = ${(r.p[0] + r.p[1]).toFixed(6)}`);
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
