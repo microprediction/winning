@@ -222,8 +222,41 @@ function hermite_nodes(k::Int, order::Int = 15, prune::Float64 = 1e-7)
     return (F = F[keep, :], W = W[keep])
 end
 
+"""
+    _first_primes(d) -> Vector{Int}
+
+First `d` primes, generated. A fixed table puts a silent cliff in a public
+rank argument: past the end the base is out of bounds or the column is
+never filled. Three separate issues have been exactly that -- #190
+(r/winning, 30 entries), #233 (browser, 16 and 24) and #143
+(r/mvtnormfast, 6) -- so every port generates them.
+"""
+function _first_primes(d::Int)
+    d < 1 && return Int[]
+    out = Vector{Int}(undef, d)
+    out[1] = 2
+    k, cand = 1, 3
+    while k < d
+        isp = true
+        lim = isqrt(cand)
+        for q in view(out, 1:k)
+            q > lim && break
+            if cand % q == 0
+                isp = false
+                break
+            end
+        end
+        if isp
+            k += 1
+            out[k] = cand
+        end
+        cand += 2
+    end
+    return out
+end
+
 function halton_normal_nodes(r::Int, n::Int)
-    primes = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37)
+    primes = _first_primes(r)
     F = zeros(n, r)
     for c in 1:r
         b = primes[c]

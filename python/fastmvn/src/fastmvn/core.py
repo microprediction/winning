@@ -29,22 +29,6 @@ from scipy.special import ndtr, ndtri
 from scipy.stats import norm
 
 
-def _halton_unit(r, n):
-    primes = (2, 3, 5, 7, 11, 13)[:r]
-    out = np.empty((n, r))
-    for c, b in enumerate(primes):
-        idx = np.arange(1, n + 1) + 20
-        h = np.zeros(n)
-        f = 1.0 / b
-        i = idx.copy()
-        while i.max() > 0:
-            h += f * (i % b)
-            i //= b
-            f /= b
-        out[:, c] = h
-    return out
-
-
 def _gh_nodes(r, Q):
     x, w = hermegauss(Q)
     w = w / w.sum()

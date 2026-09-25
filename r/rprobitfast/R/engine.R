@@ -37,8 +37,29 @@
   list(F = as.matrix(grids)[keep, , drop = FALSE], W = W[keep] / sum(W[keep]))
 }
 
+# First d primes, generated. A fixed table puts a silent cliff in a public
+# rank argument: past the end the base is NA and the Halton loop fails or
+# fills a column with nothing. That has now been three separate issues --
+# #190 (r/winning, 30 entries), #233 (browser, 16 and 24) and #143 (here,
+# 6) -- so every port generates them.
+.first_primes <- function(d) {
+  if (d < 1L) return(integer(0))
+  out <- integer(d); out[1] <- 2L
+  k <- 1L; cand <- 3L
+  while (k < d) {
+    isp <- TRUE; lim <- floor(sqrt(cand))
+    for (q in out[seq_len(k)]) {
+      if (q > lim) break
+      if (cand %% q == 0L) { isp <- FALSE; break }
+    }
+    if (isp) { k <- k + 1L; out[k] <- cand }
+    cand <- cand + 2L
+  }
+  out
+}
+
 .halton_nodes3 <- function(r, m = 10L) {
-  primes <- c(2, 3, 5, 7)[seq_len(r + 1L)]
+  primes <- .first_primes(r + 1L)
   n <- 2L^m
   H <- vapply(primes, function(b) {
     idx <- seq_len(n) + 20L

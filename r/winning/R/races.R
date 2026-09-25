@@ -58,9 +58,7 @@
 # nodes for E over N(0, I_r). Used when the sharpness escalation calls
 # for a low-discrepancy family (see .race_setup); adequate for r <= 4.
 .halton_normal_nodes <- function(r, n) {
-  primes <- c(2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
-              47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103,
-              107, 109, 113, 127, 131)[seq_len(r)]
+  primes <- .first_primes(r)   # generated; see ghk.R (#190)
   H <- vapply(primes, function(b) {
     idx <- seq_len(n) + 20L          # drop the first few, standard hygiene
     h <- numeric(n)
