@@ -1,6 +1,8 @@
-source(file.path("..", "..", "R", "engine.R"))
-source(file.path("..", "..", "R", "rprobit_fast.R"))
-
+# Run by R CMD check through tests/testthat.R, so the package is
+# already attached and its internals are in scope. These files used
+# to source(file.path("..", "..", "R", ...)) instead, which only
+# works from the repo and fails inside a check -- which is how they
+# went unrun (#142).
 test_that("synthetic MNP fits, converges, recovers slope direction", {
   set.seed(9)
   J <- 3; Tn <- 600

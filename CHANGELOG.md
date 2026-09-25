@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- CI checks every R package, on pull requests, and their tests actually
+  run (#142). The R workflow was path-triggered by changes under
+  `mvtnormfast`, `mlogitfast` OR `rprobitfast` and then always built and
+  checked exactly `mvtnormfast`, so a change confined to either of the
+  other two produced a GREEN check that never loaded the changed
+  package. It ran on pushes to main only, so no pull request was gated.
+  And `r/winning`, the largest R package here, was gated by nothing at
+  all.
+
+  That is not hypothetical: a tabulated prime list survived in three of
+  these packages at once (#143), each with a silent cliff in a public
+  rank argument, because nothing ran them.
+
+  Adding them to a matrix turned out not to be enough. `R CMD check`
+  reaches `tests/testthat/` only through a `tests/testthat.R` driver, and
+  three of the four packages had testthat FILES and no driver -- so those
+  tests had never run anywhere except by hand. With the driver added they
+  ran, and failed: each file began
+  `source(file.path("..", "..", "R", ...))`, which works from the repo
+  and cannot work inside a check, where the package is installed. It is
+  also the wrong thing to test. Under `test_check` the package NAMESPACE
+  is attached, internals included, so sourcing the files checks a copy of
+  the source rather than the thing that ships.
+
+  All four now pass `R CMD check --as-cran` with one NOTE and no skips:
+  15, 14, 6 and 21 tests. `mvtnormfast` declares the `TruncatedNormal`
+  it was already using, which also clears a check WARNING, and CI
+  installs it so that test runs rather than skipping.
+  `tests/test_r_packages_are_all_gated.py` fails if a package is missing
+  from the matrix, if the workflow stops running on pull requests, if a
+  package has testthat files it cannot run, or if relative sourcing
+  returns.
+
 - All four structured-MVN ports reject an empty rectangle instead of
   pricing it at the underflow floor (#235). `P(lower <= X <= upper)` with
   `lower_i > upper_i` is an EMPTY event. Python, the vendored standalone
