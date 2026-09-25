@@ -924,3 +924,102 @@ def test_no_module_reimplements_the_contract_with_atleast_2d():
         "loadings must be normalised by winning.shapes.as_loadings, not "
         "np.atleast_2d (which reads (n,) as (1, n)):\n  "
         + "\n  ".join(offenders))
+
+
+# --- W is a RELATIVE weight (#208) ----------------------------------------
+#
+# W and c*W describe the same factor law, and every verb normalises its own
+# result, so the common scale cancels -- except in the pre-normalisation
+# mass checks, which compared an unnormalised row sum against 1.
+# `removal_shares` and `ordered_probabilities` therefore REJECTED
+# W = [5, 5] while accepting the identical law W = [0.5, 0.5], reporting a
+# "mass defect 9.00e+00" that is just the weight total minus one.
+#
+# `_setup` is the one place the factor law is assembled, so it is the one
+# place the rule is decided, exactly as `as_loadings` is for V.
+
+W_SCALES = [0.05, 0.5, 1.0, 2.0, 100.0]
+
+# Verbs that need more than the bare factor race. Declared rather than
+# skipped, so a verb cannot fall out of the sweep by being awkward to
+# call: the discovery test below fails if a verb is neither callable with
+# the fixture nor listed here.
+W_VERB_EXTRA = {
+    "jacobian_vector_product": dict(h=np.array([0.1, -0.2, 0.1])),
+    "plackett_luce_prefix_logprob": dict(prefix=[0, 1]),
+}
+
+
+def _factor_race():
+    return dict(mu=np.array([0.0, 0.3, 1.0]),
+                V=np.array([[0.0], [1.0], [-0.5]]),
+                D=np.ones(3),
+                F=np.array([[-1.0], [1.0]]))
+
+
+def _verbs_taking_F_and_W():
+    """Discovery: every public verb whose signature takes mu, F and W.
+
+    A new verb that takes a factor law is swept automatically, so it
+    cannot quietly keep its own opinion about the weight scale.
+    """
+    found = {}
+    for name in dir(winning.factor):
+        if name.startswith("_"):
+            continue
+        fn = getattr(winning.factor, name)
+        if not callable(fn):
+            continue
+        try:
+            params = inspect.signature(fn).parameters
+        except (TypeError, ValueError):
+            continue
+        if {"F", "W", "mu"} <= set(params):
+            found[name] = fn
+    return found
+
+
+def _call_with_weights(name, fn, W):
+    kw = _factor_race()
+    kw.update(W_VERB_EXTRA.get(name, {}))
+    params = inspect.signature(fn).parameters
+    kw = {k: v for k, v in kw.items() if k in params}
+    return np.asarray(fn(W=W, **kw), float)
+
+
+def test_the_weight_sweep_finds_the_verbs():
+    found = _verbs_taking_F_and_W()
+    assert len(found) >= 3, f"only found {sorted(found)}"
+    for expected in ("race_probabilities", "removal_shares"):
+        assert expected in found, f"{expected} takes F/W but was not swept"
+
+
+def test_every_swept_verb_is_actually_callable():
+    """A verb that raises for want of an argument would otherwise look
+    like a verb that is scale-free."""
+    for name, fn in sorted(_verbs_taking_F_and_W().items()):
+        _call_with_weights(name, fn, np.array([0.5, 0.5]))
+
+
+@pytest.mark.parametrize("name", sorted(_verbs_taking_F_and_W()))
+@pytest.mark.parametrize("c", W_SCALES)
+def test_rescaling_the_weights_is_the_same_race(name, c):
+    fn = _verbs_taking_F_and_W()[name]
+    a = _call_with_weights(name, fn, np.array([0.5, 0.5]))
+    b = _call_with_weights(name, fn, np.array([0.5 * c, 0.5 * c]))
+    assert a.shape == b.shape
+    assert np.abs(a - b).max() < 1e-12, f"{name} is not scale-free in W"
+
+
+def test_the_weights_actually_move_the_answer():
+    """Otherwise every equality above could hold because W is ignored."""
+    fn = winning.factor.race_probabilities
+    even = _call_with_weights("race_probabilities", fn, np.array([0.5, 0.5]))
+    tilt = _call_with_weights("race_probabilities", fn, np.array([0.9, 0.1]))
+    assert np.abs(even - tilt).max() > 1e-3
+
+
+@pytest.mark.parametrize("bad", [[0.0, 0.0], [-1.0, -1.0], [1.0, -1.0]])
+def test_a_non_positive_weight_total_is_refused(bad):
+    with pytest.raises(ValueError, match="positive weights"):
+        winning.factor.race_probabilities(W=np.array(bad), **_factor_race())
