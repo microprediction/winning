@@ -34,9 +34,17 @@ MARKERS = (_LT + " ", _GT + " ", "|" * 7 + " ")
 
 
 def _tracked_files(root=ROOT):
-    out = subprocess.run(["git", "ls-files", "-z"], cwd=root,
-                         capture_output=True, text=True, check=True).stdout
-    return [root / n for n in out.split("\0") if n]
+    # git is the file list, so a source tree unpacked without it has
+    # nothing to sweep rather than a wrong answer. That is a skip, not
+    # a pass: a sweep that silently reads nothing passes forever.
+    try:
+        r = subprocess.run(["git", "ls-files", "-z"], cwd=root,
+                           capture_output=True, text=True)
+    except (OSError, FileNotFoundError):
+        pytest.skip("no git available to list tracked files")
+    if r.returncode != 0:
+        pytest.skip(f"not a git checkout: {r.stderr.strip()[:60]}")
+    return [root / n for n in r.stdout.split("\0") if n]
 
 
 def _text_lines(path):
