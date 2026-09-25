@@ -25,9 +25,16 @@ from exact_restrict import CELLS, MODELS, PHRASINGS, match_items
 # site-packages and this always reads the tree it sits in, whatever the caller's
 # cwd or whatever `pip install winning` happens to have put there. (It does not
 # resolve to attic/src/winning: the attic is neither packaged nor importable.)
-_REPO_ROOT = HERE.parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+_REPO_ROOT = str(HERE.parent.parent)
+# Inserting only when ABSENT does not give precedence: if the root is
+# already on sys.path but BEHIND site-packages -- which is what a
+# `pip install -e` plus a plain `python script.py` produces -- the
+# comment above promised the checkout and the import took the installed
+# copy anyway (#305). Remove every occurrence, then put it first, so the
+# promise is kept rather than merely stated.
+while _REPO_ROOT in sys.path:
+    sys.path.remove(_REPO_ROOT)
+sys.path.insert(0, _REPO_ROOT)
 from winning.factor.core import win_probabilities as _win_probabilities_min
 from winning.factor.core import abilities_from_probabilities as _abilities_min
 
