@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .shapes import as_loadings
+from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
 from scipy.special import ndtr, ndtri
@@ -57,6 +57,31 @@ def nodes_for_likelihood(r, Qf=7, Qz=7, sharp=0.0):
     return F[keep], W[keep] / W[keep].sum()
 
 
+def sharpness_bound(V, D=None, n=None):
+    """The pairwise-safe sharpness of a loading matrix, gauge-fixed.
+
+    Only loading DIFFERENCES decide a race, so the statistic must be
+    invariant under V -> V + 1c'. Centering first and taking
+    `sqrt(2) max_i ||(PV)_i|| / sqrt(min D)` bounds the pairwise
+    sharpness `max_ij ||V_i - V_j|| / sqrt(D_i + D_j)` by the triangle
+    inequality, and costs nodes rather than accuracy when it overshoots.
+
+    This lives in one place because it was written twice and the copies
+    drifted: prediction used `max_i ||V_i||` with no centering and no
+    sqrt(2), so a fitted model could optimise under Sobol and then be
+    priced on the Hermite tensor (#213). `n` is the field size; it is
+    taken from `D` when that is given, and from `V` otherwise, so a
+    caller that already holds the count should pass it.
+    """
+    if n is None:
+        n = len(np.asarray(D)) if D is not None else np.shape(V)[0]
+    V = as_loadings(V, n)          # the same door every other verb uses
+    V = V - V.mean(axis=0)
+    dmin = 1.0 if D is None else float(np.min(as_idio(D, n)))
+    return float(np.sqrt(2.0) * np.max(np.sqrt((V ** 2).sum(axis=1)))
+                 / np.sqrt(dmin))
+
+
 def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     """Log-likelihood of observed argmax choices, with analytic score.
 
@@ -82,9 +107,8 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     # gauge-fix and dispatch on the pairwise-safe bound (eighth review):
     # only loading DIFFERENCES decide a race, and
     # sqrt(2) max_i |(PV)_i|/sqrt(D_i) bounds the pairwise sharpness
+    sharp = sharpness_bound(V, D)
     V = V - V.mean(axis=0)
-    sharp = float(np.sqrt(2.0) * np.max(np.sqrt((V ** 2).sum(axis=1)))
-                  / np.sqrt(D.min()))
     F, W = nodes_for_likelihood(r, Qf, Qz, sharp)
     Fq, zq = F[:, :r], F[:, r]
     Q = len(W)
