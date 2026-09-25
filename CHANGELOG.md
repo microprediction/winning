@@ -20,6 +20,14 @@
   whether a field resolves at all. Python, R, Julia and the browser all
   carry both; R and the browser agree with python to 9e-10 at 2001 points.
 
+- The browser factor race's own parity suite runs in CI (#140, second
+  half). `js/factor/test_parity.mjs` checks the tabulated bases against
+  scipy-generated vectors, and nothing ran it -- which is why it sat
+  failing on `main` at 1.01e-5 against its own 2e-6 tolerance until #211.
+  An ungated suite stays broken for exactly as long as nobody happens to
+  run it. It is now a step in the `parity` job, alongside the vector
+  check, both port checkers and the browser API guards.
+
 - `rank_probabilities` validates the matrix it RETURNS, in all four
   engines (#203). It checked the raw quadrature matrix, divided by the raw
   row sums and returned that, and row normalisation is not neutral: it
