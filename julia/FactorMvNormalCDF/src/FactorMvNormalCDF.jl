@@ -201,11 +201,39 @@ end
 # Delegation to the incumbent for every case outside the exact path;
 # returns (p, e) in MvNormalCDF's convention. Keyword arguments (m, rng)
 # are forwarded so a caller controls the QMC budget there.
+"""
+    _rectangle_status(lo, up) -> Bool
+
+Classify the rectangle `{lo <= x <= up}` before any quadrature.
+
+A reversed coordinate makes the event EMPTY. Every port used to form the
+negative conditional cell -- `Phi(0) - Phi(1) = -0.3413...` -- and then
+clamp it to the underflow floor `1e-300`, so an impossible observation
+came back as a finite probability and, in log-likelihood code, as about
+`-690.8` instead of `-Inf` (#235). `mvtnorm::pmvnorm`, which the R port
+is a drop-in for, raises on reversed bounds and returns 0 when a
+coordinate has `lower == upper`; all four ports now agree with it.
+
+Returns `true` when the rectangle is degenerate: exactly zero mass.
+"""
+function _rectangle_status(lo, up)
+    for i in eachindex(lo, up)
+        if lo[i] > up[i]
+            throw(ArgumentError(
+                "lower must not exceed upper: coordinate $i has " *
+                "lower=$(lo[i]) > upper=$(up[i]), so the rectangle is " *
+                "empty. Check the argument order."))
+        end
+    end
+    return any(lo[i] == up[i] for i in eachindex(lo, up))
+end
+
 function _dense_fallback(lower, upper, mean, sigma; kwargs...)
     n = size(sigma, 1)
     mu = mean === nothing ? zeros(n) : Float64.(collect(mean))
     lo = lower === nothing ? fill(-Inf, n) : Float64.(collect(lower))
     up = upper === nothing ? fill(Inf, n) : Float64.(collect(upper))
+    _rectangle_status(lo, up) && return (0.0, 0.0)
     return MvNormalCDF.mvnormcdf(mu, Float64.(Matrix(sigma)), lo, up; kwargs...)
 end
 
@@ -228,8 +256,13 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
     if V === nothing || D === nothing
         sigma === nothing && error("supply sigma, or V and D")
         fd = factorize_covariance(sigma)
-        fd === nothing &&
+        if fd === nothing
+            nn = size(sigma, 1)
+            lo0 = lower === nothing ? fill(-Inf, nn) : Float64.(collect(lower))
+            up0 = upper === nothing ? fill(Inf, nn) : Float64.(collect(upper))
+            _rectangle_status(lo0, up0) && return 0.0, "degenerate-rectangle"
             return _dense_fallback(lower, upper, mean, sigma; kwargs...)[1], "fallback"
+        end
         V, D = fd
     end
     Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
@@ -239,6 +272,7 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
     mu = mean === nothing ? zeros(n) : Float64.(collect(mean))
     lo = lower === nothing ? fill(-Inf, n) : Float64.(collect(lower))
     up = upper === nothing ? fill(Inf, n) : Float64.(collect(upper))
+    _rectangle_status(lo, up) && return 0.0, "degenerate-rectangle"
     s = sqrt.(Dv)
     r = size(Vm, 2)
     sharp = _sharpness(Vm, Dv)
