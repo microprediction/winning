@@ -40,7 +40,16 @@ const accepts = (label, fn, check = v => true, detail = () => "") => {
     fails++;
     return undefined;
   }
-  holds(label, check(v), detail(v));
+  // The predicate and the detail run OUTSIDE the call, and they often
+  // call the API again to compare against. Wrapping only fn() meant a
+  // throw in check() still killed the file: a sabotage rehearsal
+  // produced ONE named failure and then aborted, hiding the other five.
+  try {
+    holds(label, check(v), detail(v));
+  } catch (e) {
+    console.log(`FAIL  ${label}: its check threw ${e.message.slice(0, 34)}`);
+    fails++;
+  }
   return v;
 };
 
@@ -340,6 +349,46 @@ accepts("a group cap binds on its members",
                                   groups: [[[0, 1], 0.45]], points: 129 }),
         r => Math.abs(r.p[0] + r.p[1] - 0.45) < 1e-6,
         r => `p0 + p1 = ${(r.p[0] + r.p[1]).toFixed(6)}`);
+
+// --- the idiosyncratic-variance contract, D's half of asLoadings (#254)
+// The browser normalised V and left D alone. A scalar threw
+// `D.slice is not a function`; short, zero, negative and NaN entries
+// propagated NaN; and -- the dangerous one -- a D with ONE EXTRA entry
+// was ACCEPTED and returned a normalised, plausible, materially wrong
+// answer. The expected numbers below are python's.
+const mu254 = [-0.4, 0, 0.4];
+const P_FLAT = [0.506706, 0.312135, 0.181159];
+accepts("a scalar D is the same variance for everyone",
+        () => races.raceProbabilities(mu254, { D: 1 }),
+        p => Math.max(...p.map((v, i) => Math.abs(v - P_FLAT[i]))) < 1e-6,
+        p => `[${p.map(v => v.toFixed(6))}]`);
+accepts("and agrees with the length-n spelling",
+        () => races.raceProbabilities(mu254, { D: [1, 1, 1] }),
+        p => Math.max(...p.map((v, i) =>
+          Math.abs(v - races.raceProbabilities(mu254, { D: 1 })[i]))) < 1e-14);
+for (const [label, D] of [
+  ["one entry too many", [1, 1, 1, 1]],
+  ["one entry too few", [1, 1]],
+]) {
+  rejects(races.raceProbabilities, [mu254, { D }],
+          `forward rejects a D with ${label}`, "one idiosyncratic variance per");
+  rejects(topk.topKProbabilities, [mu254, 2, { D }],
+          `topK rejects a D with ${label}`, "one idiosyncratic variance per");
+}
+rejects(races.raceProbabilities, [mu254, { D: [1, -1, 1] }],
+        "a negative variance is refused", "negative variance");
+rejects(races.raceProbabilities, [mu254, { D: [1, 0, 1] }],
+        "a zero variance is refused", "strictly positive");
+rejects(races.raceProbabilities, [mu254, { D: [1, NaN, 1] }],
+        "a non-finite variance is refused", "non-finite");
+rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { D: [1, 1, 1, 1] }],
+        "the inverse has its own copy and refuses too",
+        "one idiosyncratic variance per");
+accepts("the inverse takes a scalar D, matching python",
+        () => races.abilitiesFromRace([0.5, 0.3, 0.2], { D: 1 }),
+        mu => Math.max(...mu.map((v, i) =>
+          Math.abs(v - [-0.379114, 0.039741, 0.339373][i]))) < 1e-6,
+        mu => `[${mu.map(v => v.toFixed(6))}]`);
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

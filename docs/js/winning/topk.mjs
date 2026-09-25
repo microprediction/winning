@@ -4,7 +4,7 @@
 // winning/factor/topk.py -- the cavity count distribution with
 // stable-direction deconvolution; see the python module docstring for
 // the derivations and the two-branch refusal of exact-rank targets.
-import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings } from "./core.mjs";
+import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio } from "./core.mjs";
 import { BASES } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -254,7 +254,7 @@ export function topKProbabilities(mu, k, opts = {}) {
   k = Math.trunc(k);
   if (!(k >= 1 && k <= n - 1))
     throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   if (!V) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
                              k, "top-k race");
@@ -312,7 +312,7 @@ export function topKJacobians(mu, k, opts = {}) {
     }
     return { Jmu, Jsigma };
   }
-  const Dv = D || new Array(n).fill(1);
+  const Dv = asIdio(D, n);
   const sd = Dv.map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   const { dx, F, f, fp, z } = topkGrid(mu, sd, k, fn, points);
@@ -353,7 +353,7 @@ export function rankProbabilities(mu, opts = {}) {
   checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
   const n = mu.length;
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
 
   // one factor node: the cavity count pmf against each runner's own
@@ -463,7 +463,7 @@ export function abilitiesFromTopk(q, k, opts = {}) {
   if (!(k >= 1 && k <= n - 1))
     throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
   const { target, floored } = validatedTarget(q, k, n, targetFloor);
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   const fac = V ? factorNodes(V, n, qa) : null;
 
@@ -720,7 +720,7 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
     throw new Error("all rank probabilities must be positive");
   const s = p.reduce((a, b) => a + b, 0);
   const logt = p.map(v => Math.log(v / s));
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   let mu;
   if (mu0 != null) {
