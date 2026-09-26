@@ -86,6 +86,13 @@
   nothing establishes that julia still refuses a fractional depth
   (#310). It now prints "known, not judged: julia absent" and exits 0.
 
+  A third guard came out of reviewing the diff rather than from it
+  failing: a waiver is only examined while walking the cases, so one
+  whose case has been DELETED from the file is never looked at again
+  and sits there forever. That is the stale-waiver failure one step
+  earlier, and the stale check runs too late to catch it. The scan now
+  reports an `EXPECTED` id that the case file does not contain.
+
   Rank zero then earned its keep rather than merely stopping a crash:
   `factorize_covariance` now tries it FIRST. A diagonal covariance is
   exactly `V V' + diag(D)` with no factors, but the search began at

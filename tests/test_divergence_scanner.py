@@ -90,6 +90,24 @@ def test_a_waiver_is_not_stale_when_its_port_is_absent(monkeypatch,
     assert rc == 0, out
 
 
+def test_a_waiver_for_a_deleted_case_is_reported(monkeypatch, capsys):
+    """A waiver is only examined while walking the cases, so one whose
+    case has been removed is never looked at again. Found reviewing my
+    own diff, not by it failing: the stale check runs one step too
+    late to catch it."""
+    mod = _load()
+    _two_ports_or_skip(mod)
+    expected = dict(mod.EXPECTED)
+    expected["a_case_that_was_deleted"] = {
+        "why": "a waiver whose case no longer exists in the file",
+        "ports": sorted(mod.RUNNERS),
+    }
+    monkeypatch.setattr(mod, "EXPECTED", expected)
+    assert mod.main() == 1
+    out = capsys.readouterr().out
+    assert "'a_case_that_was_deleted' is not in the case file" in out
+
+
 def test_every_waiver_names_the_ports_it_is_about():
     mod = _load()
     for cid, entry in mod.EXPECTED.items():

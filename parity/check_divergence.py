@@ -155,6 +155,16 @@ def main():
         print(f"note: toolchain absent, not compared: {sorted(absent)}")
 
     ids = list(json.load(open(CASES))["cases"])
+    # A waiver is only ever examined while walking the cases, so one
+    # whose case has been DELETED is never looked at again and sits
+    # there forever. Same failure as a stale waiver, one step earlier.
+    orphans = sorted(set(EXPECTED) - {c["id"] for c in ids})
+    if orphans:
+        for cid in orphans:
+            print(f"EXPECTED case {cid!r} is not in the case file: "
+                  f"{EXPECTED[cid]['why']}")
+        print("A waiver for a case nobody runs waives nothing.")
+        return 1
     diverged, value_gaps, stale, unjudged = [], {}, [], {}
     for case in ids:
         cid = case["id"]
