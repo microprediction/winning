@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+- The browser race and its analytic Jacobian priced a different race
+  depending on the GAUGE of the loadings (#303). Adding the same
+  loading to every contestant adds one common Gaussian shock to every
+  performance and cannot move an argmin, so it must not move a
+  probability. It moved a priced share by **0.0141** and a Jacobian
+  entry by **0.0199**.
+
+  python, R, julia and the standalone javascript copy all gauge-fix
+  `V -> V - colMeans(V)` before anything reads the loadings. The newer
+  `docs/js/winning/` API did not, in either `races.mjs` or
+  `polish.mjs`. #139 fixed the standalone copy and this one was left
+  behind, which is the recurring shape: an issue names the port the
+  reviewer ran.
+
+  The sharpness statistic had the same root. It decides the node family
+  and the node order, and it was `max_i |V_i| / sqrt(D_i)` on the RAW
+  rows -- missing both the centering and the `sqrt(2)` of the
+  pairwise-safe bound `sqrt(2) max_i |(PV)_i| / sqrt(D_i)` that python
+  and R dispatch on. So two of the three decisions the loadings feed
+  were gauge-dependent, and the third was reading a statistic that can
+  miss a sharp pair.
+
+  `gaugeCenter` now lives in `core.mjs` beside `asLoadings`, because
+  two modules needed it and the module that had it privately did not
+  stop this one shipping without it. Centering also happens BEFORE
+  `polish.mjs` computes `hasV`, so a constant loading column now reads
+  as what it is -- the independent race.
+
+  Checked, not assumed: `topk.mjs` was already invariant to 1.1e-16 and
+  needed nothing. `blocks.mjs` takes a scalar block loading rather than
+  a factor matrix, where a common shift genuinely changes the
+  within-cluster correlation, so the invariance does not apply. All
+  three parity harnesses still match the python reference, and the two
+  new invariance guards fail on sabotage (1.96e-6 and 7.53e-3) against
+  a fixture whose loadings move the race by 0.39 -- a near-centered
+  fixture would have passed against the broken code.
+
 - Every tracked javascript module is checked to PARSE
   (`tests/test_browser_modules_parse.py`). #275's marker sweep finds an
   unresolved conflict in any text file without a toolchain, which is

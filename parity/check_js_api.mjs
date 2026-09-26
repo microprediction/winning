@@ -640,6 +640,67 @@ accepts("the inverse takes a scalar D, matching python",
           a => `[${a.map(v => v.toFixed(4))}]`);
 }
 
+{
+  // Common-loading invariance, the property that says the engine is
+  // pricing a race and not a coordinate system. Adding the same loading
+  // to every contestant adds one common Gaussian shock, which cannot
+  // move an argmin. Uncentered, it moved a share by 0.0141 and a
+  // Jacobian entry by 0.0199 (#303). The fixture is the issue's, whose
+  // loadings are FAR from centered -- a near-centered V would have
+  // passed this test against the broken code.
+  const gmu = [-0.8342822144132106, 1.0225266393018637, 1.1413101763571138,
+    -0.22521847232046474, 0.465466912363422, -1.2022915735825428];
+  const gv = [-4.4130421891327085, -4.259934330177284, -1.3890276719160926,
+    -4.409152054880935, 3.770280643971603, -3.2829086131210348];
+  const gD = [0.43056642860174177, 0.30260230067651717, 0.31256756619550286,
+    0.24615555584896356, 0.29463348248973487, 0.5154752123868093];
+  const V0 = gv.map(x => [x]);
+  const shifted = c => gv.map(x => [x + c]);
+  accepts("the race is invariant to a common loading",
+          () => {
+            const p0 = races.raceProbabilities(gmu, {V: V0, D: gD, points: 257});
+            let worst = 0;
+            for (const c of [1, -3, 100]) {
+              const p = races.raceProbabilities(
+                gmu, {V: shifted(c), D: gD, points: 257});
+              worst = Math.max(worst, ...p0.map((x, i) => Math.abs(x - p[i])));
+            }
+            return worst;
+          },
+          w => w < 1e-12,
+          w => `worst shift ${w.toExponential(2)}`);
+  accepts("the Jacobian is invariant to a common loading",
+          () => {
+            const J0 = polish.raceJacobian(gmu, {V: V0, D: gD, points: 257});
+            const J1 = polish.raceJacobian(gmu, {V: shifted(1), D: gD,
+                                                 points: 257});
+            return Math.max(...J0.flatMap(
+              (row, i) => row.map((x, j) => Math.abs(x - J1[i][j]))));
+          },
+          w => w < 1e-12,
+          w => `worst shift ${w.toExponential(2)}`);
+  // and the fixture must MOVE the answer, or the invariance above is
+  // just two ways of computing the independent race
+  accepts("the fixture's loadings actually matter",
+          () => {
+            const withV = races.raceProbabilities(gmu, {V: V0, D: gD, points: 257});
+            const without = races.raceProbabilities(gmu, {D: gD, points: 257});
+            return Math.max(...withV.map((x, i) => Math.abs(x - without[i])));
+          },
+          w => w > 0.01,
+          w => `loadings move the race by ${w.toFixed(4)}`);
+  // a CONSTANT loading column is the independent race, gauge-fixed
+  accepts("a constant loading column is the independent race",
+          () => {
+            const flat = races.raceProbabilities(
+              gmu, {V: gmu.map(() => [2.5]), D: gD, points: 257});
+            const ind = races.raceProbabilities(gmu, {D: gD, points: 257});
+            return Math.max(...flat.map((x, i) => Math.abs(x - ind[i])));
+          },
+          w => w < 1e-12,
+          w => `gap ${w.toExponential(2)}`);
+}
+
 // --- caller-supplied factor nodes carry the loadings' rank (#290)
 // condMeans dotted each node row against the loadings over the ROW's
 // own length, so the rank was whatever each row happened to be: a

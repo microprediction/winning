@@ -1,7 +1,7 @@
 // Polish a race onto linear constraints -- port of winning/factor/polish.py
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
-import { mean, checkOpts, OPT_HINTS, asLoadings, asFactorNodes, asWeights } from "./core.mjs";
+import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asFactorNodes, asWeights } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES,
          forwardGrid } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./blocks.mjs";
@@ -49,6 +49,13 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
   const sd = D.map(Math.sqrt);
   let F = [[0]], W = [1];
   V = asLoadings(V, n) || Array.from({ length: n }, () => [0]);   // #232
+  // Gauge-fix before anything reads the loadings, exactly as the
+  // forward path does: a common column cannot move an argmin, so it
+  // must not move the Jacobian either. Uncentered, adding 1 to every
+  // loading moved an entry by 0.0199 (#303). Centering FIRST also
+  // makes `hasV` mean what it says -- a constant loading column IS the
+  // independent race, and now reads as one.
+  V = gaugeCenter(V);
   const hasV = V.some(row => row.some(v => v !== 0));
   if (hasV && F0 && W0) {
     // the caller's nodes get the same contract the forward applies, or
@@ -57,11 +64,14 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
     F = asFactorNodes(F0, V[0].length, "F");
     W = asWeights(W0, F.length, "W");
   } else if (hasV) {
+    // the pairwise-safe bound sqrt(2) max_i |(PV)_i| / sqrt(D_i), on
+    // the centered rows, matching the forward path and python/R
     let sharp = 0;
     for (let i = 0; i < n; i++) {
       const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
       sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
     }
+    sharp *= Math.SQRT2;
     const r = V[0].length;
     const cap = r === 1 ? 201 : r === 2 ? 41 : 15;
     const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);

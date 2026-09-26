@@ -372,6 +372,23 @@ export function asLoadings(V, n, where = "V") {
   return M;
 }
 
+/* Gauge-fix a loading matrix: subtract each factor's mean loading
+ * across contestants. A common loading column c adds the same c'f to
+ * every performance and cannot move an argmin, so PV prices the
+ * IDENTICAL race -- and unlike V it makes every downstream decision
+ * (node family, node order, lattice window) invariant under
+ * V -> V + 1c'. One place, because two modules needed it and the one
+ * that had it privately (the standalone copy, #139) did not stop this
+ * one shipping without it (#303).
+ */
+export function gaugeCenter(V) {
+  if (!V || !V.length) return V;
+  const n = V.length, r = V[0].length;
+  const colMean = new Array(r).fill(0);
+  for (const row of V) for (let j = 0; j < r; j++) colMean[j] += row[j] / n;
+  return V.map(row => row.map((x, j) => x - colMean[j]));
+}
+
 /* First d primes, generated. Literal tables put silent cliffs in the
  * Halton constructions: 16 in demo.mjs and 24 here, past which
  * `primes[dim]` is undefined, the radical inverse becomes NaN, and the
