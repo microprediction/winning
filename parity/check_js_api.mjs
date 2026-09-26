@@ -7,10 +7,10 @@
 // API cannot lean on the language to reject a wrong or misspelled key.
 const here = new URL(".", import.meta.url).pathname;
 const eng = p => import(here + "../docs/js/winning/" + p);
-const [races, topk, blocks, polish, classic, demo, structures] =
+const [races, topk, blocks, polish, classic, demo, structures, core] =
   await Promise.all(
     ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs",
-     "demo.mjs", "structures.mjs"].map(eng));
+     "demo.mjs", "structures.mjs", "core.mjs"].map(eng));
 
 let fails = 0;
 const rejects = (fn, args, why, expect = null) => {
@@ -476,6 +476,57 @@ accepts("the inverse takes a scalar D, matching python",
           });
 }
 
+// --- the product rule is never materialised (#268)
+// hermiteNodes built the whole order**rank tensor and pruned it
+// after. `Math.max(...W)` spreads every weight as an argument list, so
+// rank 5 at order 15 -- 759,375 nodes -- died with a RangeError before
+// pruning ran; rank 5 at order 41 would have been 115,856,201 nodes
+// built and thrown away. python closed this in #155 and the browser
+// kept it. The expected counts below are python's.
+{
+  const expect = [[1, 15, 15], [2, 15, 145], [3, 15, 1317], [4, 15, 10929],
+                  [5, 15, 83757], [5, 7, 10295], [3, 41, 6283]];
+  for (const [k, q, n] of expect)
+    accepts(`hermiteNodes(${k}, ${q}) is python's rule`,
+            () => core.hermiteNodes(k, q),
+            r => r.F.length === n
+                 && Math.abs(r.W.reduce((a, b) => a + b, 0) - 1) < 1e-12
+                 && r.F.every(row => row.length === k),
+            r => `${r.F.length} nodes (python ${n})`);
+
+  // the one from the report, which used to be a RangeError, and the
+  // one that was never going to fit in memory at all
+  accepts("rank 5 order 15 returns instead of overflowing the stack",
+          () => core.hermiteNodes(5, 15),
+          r => r.F.length === 83757);
+  accepts("rank 5 order 41 prunes 115,856,201 down to python's count",
+          () => core.hermiteNodes(5, 41),
+          r => r.F.length === 1061871,
+          r => `${r.F.length} nodes from a 1.16e8 tensor`);
+
+  // pruning must not reorder: the kept set is the full tensor's, in
+  // the tensor's order, so a node's neighbours still mean what the
+  // reference means by them
+  accepts("the kept nodes are in tensor order (first coordinate slowest)",
+          () => core.hermiteNodes(2, 15),
+          r => {
+            for (let i = 1; i < r.F.length; i++) {
+              const a = r.F[i - 1], b2 = r.F[i];
+              if (a[0] > b2[0] + 1e-12) return false;          // never decreases
+              if (Math.abs(a[0] - b2[0]) < 1e-12 && a[1] > b2[1] + 1e-12)
+                return false;                                  // ties ascend in x1
+            }
+            return true;
+          });
+
+  rejects(core.hermiteNodes, [0, 15], "hermiteNodes refuses rank 0",
+          "positive integer");
+  rejects(core.hermiteNodes, [2.5, 15], "hermiteNodes refuses a fractional rank",
+          "positive integer");
+  rejects(core.hermiteNodes, [2, 0], "hermiteNodes refuses order 0",
+          "positive integer");
+}
+
 // --- the block Jacobian says rank-one, or says so (#271)
 // The FORWARD block kernel prices rank-r cluster loadings. The
 // Jacobian is rank-one only: it takes each loading row as a number,
@@ -630,6 +681,174 @@ accepts("the inverse takes a scalar D, matching python",
           b => Math.max(...b.map((x, i) => Math.abs(x - REF[i]))) < 1e-12,
           b => `max |diff| ${Math.max(...b.map((x, i) =>
             Math.abs(x - REF[i]))).toExponential(2)}`);
+}
+
+{
+  // Common-loading invariance, the property that says the engine is
+  // pricing a race and not a coordinate system. Adding the same loading
+  // to every contestant adds one common Gaussian shock, which cannot
+  // move an argmin. Uncentered, it moved a share by 0.0141 and a
+  // Jacobian entry by 0.0199 (#303). The fixture is the issue's, whose
+  // loadings are FAR from centered -- a near-centered V would have
+  // passed this test against the broken code.
+  const gmu = [-0.8342822144132106, 1.0225266393018637, 1.1413101763571138,
+    -0.22521847232046474, 0.465466912363422, -1.2022915735825428];
+  const gv = [-4.4130421891327085, -4.259934330177284, -1.3890276719160926,
+    -4.409152054880935, 3.770280643971603, -3.2829086131210348];
+  const gD = [0.43056642860174177, 0.30260230067651717, 0.31256756619550286,
+    0.24615555584896356, 0.29463348248973487, 0.5154752123868093];
+  const V0 = gv.map(x => [x]);
+  const shifted = c => gv.map(x => [x + c]);
+  accepts("the race is invariant to a common loading",
+          () => {
+            const p0 = races.raceProbabilities(gmu, {V: V0, D: gD, points: 257});
+            let worst = 0;
+            for (const c of [1, -3, 100]) {
+              const p = races.raceProbabilities(
+                gmu, {V: shifted(c), D: gD, points: 257});
+              worst = Math.max(worst, ...p0.map((x, i) => Math.abs(x - p[i])));
+            }
+            return worst;
+          },
+          w => w < 1e-12,
+          w => `worst shift ${w.toExponential(2)}`);
+  accepts("the Jacobian is invariant to a common loading",
+          () => {
+            const J0 = polish.raceJacobian(gmu, {V: V0, D: gD, points: 257});
+            const J1 = polish.raceJacobian(gmu, {V: shifted(1), D: gD,
+                                                 points: 257});
+            return Math.max(...J0.flatMap(
+              (row, i) => row.map((x, j) => Math.abs(x - J1[i][j]))));
+          },
+          w => w < 1e-12,
+          w => `worst shift ${w.toExponential(2)}`);
+  // and the fixture must MOVE the answer, or the invariance above is
+  // just two ways of computing the independent race
+  accepts("the fixture's loadings actually matter",
+          () => {
+            const withV = races.raceProbabilities(gmu, {V: V0, D: gD, points: 257});
+            const without = races.raceProbabilities(gmu, {D: gD, points: 257});
+            return Math.max(...withV.map((x, i) => Math.abs(x - without[i])));
+          },
+          w => w > 0.01,
+          w => `loadings move the race by ${w.toFixed(4)}`);
+  // a CONSTANT loading column is the independent race, gauge-fixed
+  accepts("a constant loading column is the independent race",
+          () => {
+            const flat = races.raceProbabilities(
+              gmu, {V: gmu.map(() => [2.5]), D: gD, points: 257});
+            const ind = races.raceProbabilities(gmu, {D: gD, points: 257});
+            return Math.max(...flat.map((x, i) => Math.abs(x - ind[i])));
+          },
+          w => w < 1e-12,
+          w => `gap ${w.toExponential(2)}`);
+}
+
+// --- caller-supplied factor nodes carry the loadings' rank (#290)
+// condMeans dotted each node row against the loadings over the ROW's
+// own length, so the rank was whatever each row happened to be: a
+// uniformly short F priced a LOWER-RANK model, a ragged F priced a
+// different rank at each quadrature node, extra weights were ignored
+// and too few produced NaN -- all of it finite and normalised.
+{
+  const muF = [-0.6, -0.2, 0.15, 0.7];
+  const VF = [[1.2, -0.7], [-0.4, 1.1], [0.6, 0.9], [-1.0, -0.5]];
+  const DF = [0.5, 0.8, 0.6, 0.9];
+  const FF = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+  const WF = [0.25, 0.25, 0.25, 0.25];
+  const fwd = o => races.raceProbabilities(muF, { V: VF, D: DF, ...o });
+
+  rejects(fwd, [{ F: FF.map(r => [r[0]]), W: WF }],
+          "forward refuses a uniformly short F", "rank 2");
+  rejects(fwd, [{ F: [[-1, -1], [-1], [1, -1], [1, 1]], W: WF }],
+          "forward refuses a ragged F", "coordinate");
+  rejects(fwd, [{ F: FF, W: [...WF, 0.9] }],
+          "forward refuses too many weights", "one weight per factor node");
+  rejects(fwd, [{ F: FF, W: WF.slice(0, 3) }],
+          "forward refuses too few weights", "one weight per factor node");
+  rejects(fwd, [{ F: [], W: [] }], "forward refuses an empty F", "empty");
+  rejects(fwd, [{ F: FF, W: [0.25, -0.25, 0.5, 0.5] }],
+          "forward refuses a negative weight", "negative weight");
+
+  // the jacobian door and the inverse share the contract
+  rejects(polish.raceJacobian,
+          [muF, { V: VF, D: DF, F: [[-1, -1], [-1], [1, -1], [1, 1]], W: WF }],
+          "the jacobian refuses a ragged F too", "coordinate");
+  rejects(races.abilitiesFromRace,
+          [[0.4, 0.3, 0.2, 0.1], { V: VF, D: DF, F: FF, W: [0.5, 0.5] }],
+          "the inverse refuses mismatched weights", "one weight per factor node");
+
+  // and the spellings that ARE the same race agree
+  const base = accepts("explicit nodes still price",
+                       () => fwd({ F: FF, W: WF }),
+                       p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-12,
+                       p2 => `[${p2.map(v => v.toFixed(5))}]`);
+  accepts("W and c*W are the same law",
+          () => fwd({ F: FF, W: WF.map(w => 10 * w) }),
+          p2 => base && Math.max(...p2.map((v, i) => Math.abs(v - base[i]))) < 1e-15);
+  accepts("the internally built nodes are unaffected",
+          () => fwd({}),
+          p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-12);
+
+  // The jacobian was scale-dependent too, which nobody had reported:
+  // the same defect as #281 but in this tree rather than the
+  // standalone js/factor module. On main J(W) and J(10W) differ by
+  // 1.473; normalising W at the door makes them identical, and leaves
+  // the already-normalised answer bit-identical.
+  const jac = w => polish.raceJacobian(muF, { V: VF, D: DF, F: FF, W: w });
+  const jbase = accepts("the jacobian prices with explicit nodes",
+                        () => jac(WF),
+                        J => J.length === 4 && J.every(r => r.length === 4));
+  accepts("the jacobian is invariant to W -> cW",
+          () => jac(WF.map(w => 10 * w)),
+          J => jbase && Math.max(...J.map((r, i) =>
+            Math.max(...r.map((v, j) => Math.abs(v - jbase[i][j]))))) === 0,
+          J => jbase ? `max |diff| ${Math.max(...J.map((r, i) =>
+            Math.max(...r.map((v, j) => Math.abs(v - jbase[i][j]))))).toExponential(2)}` : "");
+}
+
+// --- a top-k depth is a count, so it is an integer (#272's neighbour)
+// Every guard truncated first -- Math.trunc(k) here, int(k) in python,
+// as.integer in R -- and then range-checked the TRUNCATED value. So
+// k=0, k=n and k>n were all refused and only a non-integer slipped
+// through, silently floored: topKProbabilities(mu, 1.5) returned the
+// top-1 curve with mass 1. The caller asked for a curve that does not
+// exist and got a different one, and the mass they can check is 1, not
+// the 1.5 they asked about.
+{
+  const muK = [-0.4, 0.1, 0.2, 0.5];
+  const DK = [0.7, 0.8, 0.9, 1.0];
+  const tkp = (k) => topk.topKProbabilities(muK, k, { D: DK });
+
+  for (const k of [1, 2, 3])
+    accepts(`topK depth ${k} prices`, () => tkp(k),
+            p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - k) < 1e-9,
+            p2 => `mass ${p2.reduce((a, b) => a + b, 0).toFixed(6)}`);
+
+  for (const k of [1.5, 2.5, 0.5, 2.0001])
+    rejects(tkp, [k], `topK refuses the fractional depth ${k}`,
+            "whole number of places");
+  for (const k of [0, 4, 5, -1])
+    rejects(tkp, [k], `topK refuses the depth ${k}`, "[1, n-1]");
+
+  // the two depths around 1.5 are genuinely different curves, which is
+  // why flooring it left nothing odd-looking to notice
+  accepts("the neighbouring depths differ",
+          () => [tkp(1), tkp(2)],
+          ([a, b2]) => Math.max(...a.map((v, i) => Math.abs(v - b2[i]))) > 0.1);
+
+  // the pair door checks BOTH depths
+  {
+    const q1 = tkp(1), q2 = tkp(2);
+    const pair = (a, b2) => topk.locScaleFromTopkPair(q1, a, q2, b2);
+    accepts("the pair door takes whole depths", () => pair(1, 2),
+            r => r && (r.mu || r.sd || Array.isArray(r)));
+    rejects(pair, [1.5, 2], "the pair door refuses a fractional k1",
+            "k1 must be a whole number");
+    rejects(pair, [1, 2.5], "the pair door refuses a fractional k2",
+            "k2 must be a whole number");
+    rejects(pair, [1, 1], "the pair door still refuses k1 == k2", "k1 == k2");
+  }
 }
 
 // --- state prices stay exhaustive at boundary offsets (#292)

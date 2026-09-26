@@ -25,6 +25,195 @@
 
   This is what `docs/converge.html` draws as the Mendell-Elston arm.
 
+- The browser race and its analytic Jacobian priced a different race
+  depending on the GAUGE of the loadings (#303). Adding the same
+  loading to every contestant adds one common Gaussian shock to every
+  performance and cannot move an argmin, so it must not move a
+  probability. It moved a priced share by **0.0141** and a Jacobian
+  entry by **0.0199**.
+
+  python, R, julia and the standalone javascript copy all gauge-fix
+  `V -> V - colMeans(V)` before anything reads the loadings. The newer
+  `docs/js/winning/` API did not, in either `races.mjs` or
+  `polish.mjs`. #139 fixed the standalone copy and this one was left
+  behind, which is the recurring shape: an issue names the port the
+  reviewer ran.
+
+  The sharpness statistic had the same root. It decides the node family
+  and the node order, and it was `max_i |V_i| / sqrt(D_i)` on the RAW
+  rows -- missing both the centering and the `sqrt(2)` of the
+  pairwise-safe bound `sqrt(2) max_i |(PV)_i| / sqrt(D_i)` that python
+  and R dispatch on. So two of the three decisions the loadings feed
+  were gauge-dependent, and the third was reading a statistic that can
+  miss a sharp pair.
+
+  `gaugeCenter` now lives in `core.mjs` beside `asLoadings`, because
+  two modules needed it and the module that had it privately did not
+  stop this one shipping without it. Centering also happens BEFORE
+  `polish.mjs` computes `hasV`, so a constant loading column now reads
+  as what it is -- the independent race.
+
+  Checked, not assumed: `topk.mjs` was already invariant to 1.1e-16 and
+  needed nothing. `blocks.mjs` takes a scalar block loading rather than
+  a factor matrix, where a common shift genuinely changes the
+  within-cluster correlation, so the invariance does not apply. All
+  three parity harnesses still match the python reference, and the two
+  new invariance guards fail on sabotage (1.96e-6 and 7.53e-3) against
+  a fixture whose loadings move the race by 0.39 -- a near-centered
+  fixture would have passed against the broken code.
+
+- Every tracked javascript module is checked to PARSE
+  (`tests/test_browser_modules_parse.py`). #275's marker sweep finds an
+  unresolved conflict in any text file without a toolchain, which is
+  the first net. It is not sufficient: resolving a later conflict in
+  `parity/check_js_api.mjs` by keeping both sides dropped one closing
+  brace, so there were no markers left, the sweep was green, and the
+  file still did not parse. A conflict resolution is exactly when a
+  brace goes missing. This asks node, so it skips where node is absent
+  -- the second net, not the first.
+- The browser's `hermiteNodes` built the whole `order ** rank` tensor
+  and pruned it afterwards (#268), which is the defect python closed in
+  #155 and this port kept. `Math.max(...W)` spreads every weight as an
+  argument list, so rank 5 at order 15 -- 759,375 nodes -- died with
+  `RangeError: Maximum call stack size exceeded` before pruning ever
+  ran. Rewriting that one line as a loop only moves the wall: rank 5 at
+  order 41 is 115,856,201 nodes to build and then throw away.
+
+  The rule is now built one dimension at a time, as python's is. A
+  partial product whose weight cannot reach the threshold whatever the
+  remaining coordinates contribute -- each at most `wmax` -- cannot be
+  in the answer, so it is dropped as soon as it appears. The kept set
+  and its ORDER are exactly the full tensor's, because the test for a
+  partial product is implied by the test for every full product
+  extending it and the loops extend in the tensor's own order.
+
+  Measured against the python reference: 20 rules over ranks 1-5 and
+  orders 3-15 agree in nodes, weights AND order. Rank 5 at order 15 is
+  83,757 nodes in 15 ms where it used to raise; rank 5 at order 41 is
+  1,061,871 nodes in 192 ms, from a tensor of 1.16e8.
+
+  `hermiteNodes` now also refuses a non-integer or non-positive rank or
+  order rather than looping on `Math.pow(order, k)`.
+- Browser factor APIs accepted a ragged `F` and a mismatched `W`
+  without a word (#290). `condMeans` dotted each node row against the
+  loadings over the ROW's own length, so the rank was whatever each row
+  happened to be:
+
+  | input | before | now |
+  |---|---|---|
+  | uniformly short `F` | priced a LOWER-RANK model, 0.46444 where the rank-2 answer is 0.38173 | refused |
+  | ragged `F` | a different rank at each quadrature node, still finite and normalised | refused, naming the node |
+  | extra weights | silently ignored | refused |
+  | too few weights | `NaN` | refused |
+
+  `asFactorNodes` and `asWeights` are now the one place those rules
+  are decided, beside `asLoadings` and `asIdio` -- `asWeights` carrying
+  python's own name for it. Every node carries
+  exactly the loadings' rank, there is one finite non-negative weight
+  per node, and the weights are normalised -- so `W` and `c*W` are the
+  same law here too, as python's `as_weights` makes them.
+
+  The same contract covers `raceJacobianExplicit`, which repeated the
+  row-length loop, so `raceJacobian`, `polishRace` and
+  `abilitiesFromRace` no longer differentiate or invert a different-rank
+  model than the forward prices.
+
+  Normalising the weights closed something nobody had reported.
+  `raceJacobian` was SCALE-dependent here too: `J(W)` and `J(10W)`
+  differed by 1.473, the same defect as #281 but in this tree rather
+  than the standalone `js/factor` module. They are now identical, and
+  the already-normalised answer is bit-identical to before.
+
+  python refuses all of these already -- `np.asarray(F, float)` will not
+  build an array from ragged rows and a wrong rank fails the matmul
+  against V -- so this was the browser guessing alone. Distinct from
+  #232 (the shape of V).
+- The standalone javascript factor inverse depended on the SCALE of the
+  quadrature weights (#281). `W` and `c*W` describe the same factor
+  law, and the forward already knew it: it normalises its accumulated
+  shares, so `p` was invariant to 1e-16 under any positive rescaling.
+  But it returns the own-slopes UNNORMALISED and the inverse divides
+  those by the normalised probabilities, so the Newton derivative
+  carried a factor of `c` and only the inverse moved. A self-generated
+  target repriced **0.164 away** after fifty iterations at `c = 0.1`,
+  with no error -- a calibration failure that looks like a hard
+  problem.
+
+  `js/factor/factor_race.mjs` now normalises and validates `W` at its
+  entry boundary, in both the forward and the inverse, with the
+  contract `winning.shapes.as_weights` states: finite, non-negative,
+  positive total. python's helper has the same internal mismatch and is
+  saved by its front door, `races._setup`; this standalone module had
+  no such boundary and now has one. Scaling the slope by the forward
+  total instead would also work, and is deliberately NOT done -- python
+  does not, and a silent divergence between ports is worse than either
+  behaviour.
+
+  Measured across twelve orders of magnitude, `c` from 1e-6 to 1e6, the
+  inverse now reprices to 2.49e-7 at every scale -- the same number, not
+  merely a similar one. The boundary also settles zero, negative,
+  non-finite and wrong-length weights, each of which previously reached
+  the kernel.
+
+  The deployed copy `docs/assets/js/factor_race.mjs`, which
+  `docs/fit.html` imports, is byte-identical as it must be.
+- R's `race_jacobian` depended on the SCALE of the factor weights --
+  #281's defect, in a third place. `W` and `c*W` describe the same
+  factor law; the forward divides its accumulated shares by their total
+  and was invariant either way, but the Jacobian does not, so `J(W)` and
+  `J(10W)` differed by **1.473**. A Newton step scaled by the spelling
+  of the law rather than the law.
+
+  `.race_setup` now normalises `W`, as python's `_setup` does through
+  `winning.shapes.as_weights` and as `abilities_from_race` already did
+  for itself a few lines further down -- the rule was in the file, just
+  not at the door. A weight that is not finite, is negative, or whose
+  total is not positive is refused rather than normalised into
+  something plausible.
+
+  Found by sweeping the pattern after fixing it for the browser: the
+  same defect is in `js/factor/factor_race.mjs` (#281) and
+  `docs/js/winning/polish.mjs` (#290). julia's forward is already
+  invariant and it has no `race_jacobian`, so it is clean -- a finding,
+  not an omission.
+
+  The same sweep found #290's OTHER half here: the caller's factor
+  nodes were taken verbatim, so an `F` with the wrong number of ROWS
+  was accepted and priced a different quadrature outright -- `0.64616
+  0.12271 0.23064 0.00049` where the right answer is `0.38173 0.30061
+  0.13687 0.18079` -- too few weights returned all `NA`, and extra
+  weights were ignored. A short `F` did fail, but with "non-conformable
+  arguments", which names nothing the caller passed. Every node must
+  now carry exactly the loadings' rank and there must be one weight per
+  node.
+
+  Every already-normalised answer is bit-identical to before, and the
+  rescaled ones now agree to 0 across twelve orders of magnitude.
+- A top-k depth is a count, so it is an integer -- and a fractional one
+  was silently floored, in all three ports. Every guard truncated
+  FIRST (`int(k)`, `Math.trunc(k)`, `as.integer(k)`) and then
+  range-checked the truncated value, so `k = 0`, `k = n` and `k > n`
+  were all refused and only the non-integer slipped through:
+
+      top_k_probabilities(mu, 1.5)  ->  the top-1 curve, mass 1
+      top_k_probabilities(mu, 2.5)  ->  the top-2 curve, mass 2
+
+  The caller asked for a curve that does not exist and got a different
+  one, with no warning -- and the mass they can check is 1 or 2, not
+  the 1.5 or 2.5 they asked about, so nothing downstream reveals it
+  either. The neighbouring depths are genuinely different curves, so
+  there was nothing odd-looking to notice. The existing message, "k
+  must be in [1, n-1]", is the one sentence that reads as permitting
+  1.5.
+
+  `_as_depth` / `asDepth` / `.as_depth` is now the one place the rule
+  is decided in each port, and it covers every door: the eleven
+  single-depth entry points and the `loc_scale_from_topk_pair` pair,
+  which checks `k1` and `k2` separately and by name. A float that IS
+  whole -- `2.0`, or a numpy integer -- is still a depth of two.
+
+  This was a shared gap rather than a divergence: all three ports had
+  it identically, found by probing the doors rather than from a report.
 - julia's `_race_setup` took the caller's factor nodes and weights
   verbatim, so an `F` with the wrong number of ROWS was accepted and
   priced a different quadrature outright -- `[0.646, 0.123, 0.231,
