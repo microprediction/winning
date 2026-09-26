@@ -325,6 +325,50 @@
   an optimizer declares convergence precisely where an observation is
   most badly contradicted: it cannot tell a maximum from a floor, and a
   central difference of the objective is zero there too.
+- The dense-covariance race priced a different race depending on the
+  common mode (#302). Adding `a 11'` to a covariance adds one shared
+  Gaussian shift, which cancels from every ordering, so `I + a 11'` is
+  the same race as `I` for every `a`. The winner moved by **0.033** at
+  `a = 4e15`, and materially well before that: 0.0066 at 3e14, 0.0127
+  at 2e15.
+
+  `_race_dense` factored the covariance, handed the factor to
+  `qmc_ghk`, and let it rebuild `L @ L.T + diag(D)`. That round trip is
+  not lossless. The Cholesky's conditional-variance step is
+  `C22 - L21**2`, catastrophic cancellation when an unidentifiable
+  common mode dominates: at `a = 4e15` it gives `L22**2 = 1.4030` where
+  the exact value is 2.0, and the reconstructed covariance has contrast
+  variance **1.5** against the input's 2.0.
+
+  The loss is invisible in float64, which is why it stood: evaluating
+  `R00 + R11 - 2 R01` on entries of size 4e15 cancels to exactly 2.0,
+  and only summing as rationals shows 1.5. The regression test measures
+  it in `Fraction` for that reason, and asserts the float64 reading is
+  the misleading one.
+
+  `qmc_ghk` now takes `cov=` and uses the matrix as given. `_ghk_prob`
+  already formed `M @ Sigma @ M.T` from whatever it was handed, so the
+  fix is to hand it the original -- which is what the R port
+  (`.ghk_one`) always did, making this a Python/R semantic discrepancy
+  as well as an invariance bug. The Cholesky stays in `_race_dense` as
+  the positive-definiteness TEST it also was, with its jitter now
+  applied to the covariance rather than routed through a factorization.
+
+  The registry normalises `V` and `D` at the door for all twelve
+  methods; a method handed the covariance directly has no loadings to
+  normalise, so an explicit `cov=` skips that and validates the matrix
+  itself. Narrow on purpose -- forcing a caller who already holds a
+  covariance to supply a factorization is precisely what this was.
+
+  Measured as a no-op everywhere it was already right: on random dense
+  covariances at n = 4 and n = 8 the probabilities are identical to
+  main to every printed digit, and the pre-existing GHK quadrature
+  noise (3.3e-5 permutation, n = 4) is unchanged. Beyond float64 the
+  input itself has no contrast -- at `a = 1e16`, `1 + 1e16 == 1e16` and
+  the stored matrix has contrast exactly zero -- so the fix holds to
+  exactly where the input still determines the race, and a test states
+  that boundary rather than leaving it to be discovered.
+
 - The browser's block Jacobian returned an all-`NaN` matrix for
   supported rank-2 cluster loadings, and said nothing (#271). The
   FORWARD block kernel prices rank-r loadings; this Jacobian is written

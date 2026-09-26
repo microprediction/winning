@@ -173,13 +173,30 @@ def ghk(mu, V, D, budget=1000, seed=9):
 
 
 @register("qmc_ghk")
-def qmc_ghk(mu, V, D, budget=1024, seed=13, return_slopes=False):
+def qmc_ghk(mu, V, D, budget=1024, seed=13, return_slopes=False,
+            cov=None):
     """GHK with scrambled-Sobol uniforms (Genz-Bretz style). The info dict
     carries "logp", the normalised log probabilities, finite where p
     underflows; with return_slopes=True also "slopes" (dp_i/dmu_i, this
-    max-wins convention, positive) and "dlogp" (d log p_i / dmu_i)."""
+    max-wins convention, positive) and "dlogp" (d log p_i / dmu_i).
+
+    `cov` hands the covariance over DIRECTLY, in place of `V` and `D`.
+    A caller that already holds one had to factor it and let this
+    function rebuild it, and the round trip is not lossless: what
+    decides the race is the contrast variance, and reconstructing
+    `V @ V.T` from a matrix dominated by an unidentifiable common mode
+    loses exactly the small choice-relevant eigenvalue. `_ghk_prob`
+    forms `M @ Sigma @ M.T` from whatever it is handed, so handing it
+    the original matrix makes the route invariant to adding `a 11'`,
+    as the R port already was (#302)."""
     n = len(mu)
-    Sigma = V @ V.T + np.diag(D)
+    if cov is not None:
+        Sigma = np.asarray(cov, dtype=float)
+        if Sigma.shape != (n, n):
+            raise ValueError(
+                f"cov must be {n}x{n} for {n} runners; got {Sigma.shape}")
+    else:
+        Sigma = V @ V.T + np.diag(D)
     u = qmc.Sobol(d=n - 1, scramble=True, seed=seed).random(int(budget))
     info = {"draws": int(budget)}
     if return_slopes:
