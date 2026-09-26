@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Every tracked javascript module is checked to PARSE
+  (`tests/test_browser_modules_parse.py`). #275's marker sweep finds an
+  unresolved conflict in any text file without a toolchain, which is
+  the first net. It is not sufficient: resolving a later conflict in
+  `parity/check_js_api.mjs` by keeping both sides dropped one closing
+  brace, so there were no markers left, the sweep was green, and the
+  file still did not parse. A conflict resolution is exactly when a
+  brace goes missing. This asks node, so it skips where node is absent
+  -- the second net, not the first.
 - The browser's `hermiteNodes` built the whole `order ** rank` tensor
   and pruned it afterwards (#268), which is the defect python closed in
   #155 and this port kept. `Math.max(...W)` spreads every weight as an
