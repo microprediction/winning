@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- Evidence is a density on the contrast space, and rescaling it now
+  costs what it should (#95). `_cardinal_observation` multiplied the
+  observation by `lengths_scale` and returned `log_jac = 0` on the
+  identity path, so evidence rose without bound as the scale fell. The
+  documented `tune_history(tune=("lengths_scale",))` was therefore
+  selecting COLLAPSE: an ordinary four-runner example ran to
+  2.449979443e-10.
+
+  A centred margin observation has `n - 1` free coordinates, so the
+  `* s` step costs exactly `(n - 1) * log(s)`. On the reported
+  four-runner example:
+
+  | `lengths_scale` | was | now |
+  |---|---|---|
+  | 1 | -5.98403637 | -5.98403637 |
+  | 0.1 | -3.81841137 | **-10.72616665** |
+  | 0.001 | -3.79653856 | **-24.51980439** |
+
+  The scale factors out of any transform -- `L -> g(L) -> * s -> centre`
+  -- so the term is the same whatever `g` is. The per-coordinate `g'`
+  terms keep their existing convention, which is what makes a
+  compressive transform comparable to a gentler one; only the SCALE
+  exponent moved, from `n` on the transform path and `0` on the
+  identity path to `n - 1` on both.
+
+  The test that matters is the consequence, not the constant: on 60
+  synthetic five-runner races generated at a KNOWN scale of 0.8,
+  evidence used to rise monotonically as the scale fell and put its
+  argmax on the grid edge at 0.05. It now peaks at **0.8**, in the
+  interior. A non-positive `lengths_scale` is refused, since `log(s)`
+  is in the answer.
+
 - The browser race and its analytic Jacobian priced a different race
   depending on the GAUGE of the loadings (#303). Adding the same
   loading to every contestant adds one common Gaussian shock to every
