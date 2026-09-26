@@ -42,7 +42,11 @@ def test_the_fitted_variance_is_the_one_supplied():
     """The symptom underneath: D came back 1e4 times the input."""
     for c in (1.0, 1e-4, 1e-6):
         V, D = fit_factor_model(c * c * np.eye(3), 1)
-        assert np.allclose(D, c * c, rtol=1e-9), (
+        # RATIO, not np.allclose: its default atol is 1e-8, which is
+        # larger than the quantities compared here, so
+        # `allclose(1e-8, 1e-12)` is True and the assertion passed
+        # against the very defect it exists to catch.
+        assert np.max(np.abs(D / (c * c) - 1.0)) < 1e-9, (
             f"Sigma = {c * c:.1e} * I fitted D = {D[0]:.1e}")
         assert np.allclose(V, 0.0, atol=1e-12), "a diagonal has no factor"
 

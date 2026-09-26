@@ -115,7 +115,9 @@ def test_a_diagonal_covariance_factorizes_at_rank_zero():
     D0 = np.array([1.0, 1.0, 1.0, 1.0, 1e8])
     V, D = factorize_covariance(np.diag(D0))
     assert V.shape == (5, 0), "a diagonal covariance has no factors"
-    assert np.allclose(D, D0)
+    # relative: D0 spans 1 to 1e8, and np.allclose's default tolerances
+    # would admit an error of ~1e3 on the largest entry
+    assert np.max(np.abs(D / D0 - 1.0)) < 1e-12
 
     # the consequence: a loading of 9487 made an independent rectangle a
     # near-step factor integrand, 1.8e-3 out from a product of CDFs

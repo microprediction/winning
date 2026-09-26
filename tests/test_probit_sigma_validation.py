@@ -56,15 +56,29 @@ def test_a_valid_sigma_is_unaffected():
     assert not np.allclose(p, q), "the correlation must move the shares"
 
 
-def test_the_shared_validator_is_one_function_not_two():
+@pytest.mark.parametrize("name", sorted(BAD))
+def test_sigma_and_cov_enforce_the_same_contract(name):
     """The defect was two doors onto one question with only one of them
-    asking it. Sigma= and cov= must reach the same code."""
-    import inspect
+    asking it, so the claim is that both now refuse the SAME matrices
+    for the SAME reason -- differing only in the argument they name.
 
-    from winning.factor import core
-    src = inspect.getsource(core.fit_covariance)
-    assert "_validate_covariance(" in src, (
-        "fit_covariance must use the shared validator, or the copies "
-        "will drift again")
+    Asserted behaviourally. An earlier version of this test read
+    `inspect.getsource(fit_covariance)` for the call, which is the
+    marker-inspection anti-pattern: inlining the identical checks would
+    have failed it, and calling the validator while ignoring its result
+    would have passed it.
+    """
+    from winning.factor.races import race_probabilities
+
+    with pytest.raises(ValueError) as via_sigma:
+        shares(U, Sigma=BAD[name], k=1)
+    with pytest.raises(ValueError) as via_cov:
+        race_probabilities(np.zeros(2), cov=BAD[name])
+    a = str(via_sigma.value).replace("Sigma", "<arg>")
+    b = str(via_cov.value).replace("cov=", "<arg>")
+    assert a == b, f"same input, different complaint:\n  {a}\n  {b}"
+
+
+def test_the_validator_returns_the_symmetrised_matrix():
     C = _validate_covariance([[2.0, 0.5], [0.5, 1.5]])
     assert np.allclose(C, C.T)

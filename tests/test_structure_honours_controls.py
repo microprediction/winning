@@ -40,17 +40,46 @@ def test_points_reaches_the_kernel(structure):
     assert (np.abs(mid - fine).max() < np.abs(coarse - fine).max())
 
 
+# A HETEROGENEOUS field, because the easy one is already converged: at
+# D = ones(4) the answer moves by 1e-16 between points=65 and 257, so a
+# comparison there passes whether or not points is forwarded at all. With
+# one narrow runner it moves by 2.5e-3.
+D_HET = np.array([1.0, 0.05, 1.0, 1.0])
+INDEP_HET = Independent(D_HET)
+
+
 def test_independent_structure_matches_the_plain_race():
     """The Independent branch drops through to the same race, so the
-    forwarded controls must land in the same place."""
-    for pts in (65, 257, 1025):
-        got = race_probabilities(MU, structure=INDEP, points=pts)
-        want = race_probabilities(MU, D=D4, points=pts)
-        assert np.allclose(got, want, atol=1e-12)
+    forwarded controls must land in the same place -- checked at a
+    resolution where they visibly matter."""
+    coarse = race_probabilities(MU, structure=INDEP_HET, points=17)
+    fine = race_probabilities(MU, structure=INDEP_HET, points=257)
+    assert not np.allclose(coarse, fine, atol=1e-6), (
+        "fixture is converged at 17 points; it cannot detect a dropped "
+        "points= and must be made harder")
+    for pts in (17, 65, 257):
+        got = race_probabilities(MU, structure=INDEP_HET, points=pts)
+        want = race_probabilities(MU, D=D_HET, points=pts)
+        assert np.allclose(got, want, atol=1e-12), f"points={pts}"
+
+
+def test_delta_reaches_the_kernel():
+    """delta= moves the answer, so forwarding is demonstrated rather
+    than assumed. It has to be the INDEPENDENT structure: on the factor
+    structure delta moves this field by 3e-16, indistinguishable from a
+    dropped argument, so that would have been an untestable claim."""
+    base = race_probabilities(MU, structure=INDEP_HET)
+    moved = race_probabilities(MU, structure=INDEP_HET, delta=1e-4)
+    assert np.abs(moved - base).max() > 1e-11
 
 
 @pytest.mark.parametrize("kw", [{"window": "span"}, {"delta": 1e-9}])
-def test_factor_structure_forwards_the_lattice_controls(kw):
+def test_the_factor_path_accepts_the_lattice_controls(kw):
+    """Named for what it actually checks. `window="span"` is ACCEPTED
+    and prices; it does not measurably move any fixture I could build
+    (1e-16 on four of them), so this cannot demonstrate that it reached
+    the kernel -- only that it is not refused, which is what separates
+    the Factor branch from the hierarchical ones above."""
     p = race_probabilities(MU, structure=FACTOR, **kw)
     assert np.isfinite(p).all() and p.sum() == pytest.approx(1.0, abs=1e-9)
 
