@@ -120,10 +120,33 @@ class Tree:
             # silently inflates every other implied correlation.
             rho[t] = max(1.0 - 2.0 * h * h, 0.0)
         lam = np.zeros(nT)
+        # "increments nonnegative by linkage monotonicity" is a PREMISE
+        # of this construction, and it was never checked. centroid and
+        # median linkage routinely produce inversions -- 9 of 40 random
+        # 8-point centroid linkages here -- and `max(lam2, 0.0)` then
+        # clipped the negative increment away, returning a tree whose
+        # implied covariance is NOT the cophenetic one it promises. The
+        # gap reached 0.029 in covariance and 1.4 percentage points on a
+        # head-to-head price, silently (#133).
+        bad = []
         for t in range(n, nT):
             pa = parent[t]
             lam2 = rho[t] - (rho[pa] if pa >= 0 else 0.0)
+            if lam2 < -1e-9:
+                bad.append((t, lam2))
             lam[t] = np.sqrt(max(lam2, 0.0))
+        if bad:
+            t0, d0 = min(bad, key=lambda x: x[1])
+            raise ValueError(
+                f"this linkage is not monotonic: node {t0} merges "
+                f"{-d0:.3g} BELOW its parent, and {len(bad)} node(s) do. "
+                "A tree race is a nested variance decomposition, so an "
+                "inversion has no representation in it -- clipping the "
+                "negative increment would return a different covariance "
+                "from the cophenetic one this promises. Use a monotonic "
+                "method (average, complete, ward), check with "
+                "scipy.cluster.hierarchy.is_monotonic first, or build "
+                "the Tree with explicit parent/strength.")
         D = np.array([1.0 - rho[parent[i]] for i in range(n)])
         return cls(cluster=np.arange(n), loading=np.zeros(n),
                    D=np.maximum(D, 1e-10), parent=parent, strength=lam)
