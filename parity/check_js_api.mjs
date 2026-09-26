@@ -519,12 +519,19 @@ accepts("the inverse takes a scalar D, matching python",
             return true;
           });
 
-  rejects(core.hermiteNodes, [0, 15], "hermiteNodes refuses rank 0",
-          "positive integer");
+  // rank 0 is the EMPTY PRODUCT, not an error: #68 settled that a
+  // zero-rank loading matrix prices the independent race, and python, R
+  // and julia all answer it. This used to assert a refusal, written
+  // when this port was the only one that refused.
+  accepts("hermiteNodes: rank 0 is one node with no columns",
+          () => core.hermiteNodes(0, 15),
+          h => h.F.length === 1 && h.F[0].length === 0 && h.W[0] === 1);
+  rejects(core.hermiteNodes, [-1, 15], "hermiteNodes refuses a negative rank",
+          "k >= 0");
   rejects(core.hermiteNodes, [2.5, 15], "hermiteNodes refuses a fractional rank",
-          "positive integer");
+          "integer k");
   rejects(core.hermiteNodes, [2, 0], "hermiteNodes refuses order 0",
-          "positive integer");
+          "order >= 1");
 }
 
 // --- the block Jacobian says rank-one, or says so (#271)
@@ -888,6 +895,65 @@ accepts("the inverse takes a scalar D, matching python",
               .reduce((x, y) => x + y, 0)),
           ts => ts.every(t => Math.abs(t - 1) < 1e-3),
           ts => `worst |sum - 1| ${Math.max(...ts.map(t => Math.abs(t - 1))).toExponential(2)}`);
+}
+
+{
+  // The node-rule counts. k = 0 is the EMPTY PRODUCT -- one node of
+  // weight 1 with no columns -- which the browser already fell through
+  // to while python returned the RANK-1 rule and R raised. Pin it on
+  // the side that was right, so it cannot drift to the other two.
+  const core = await eng("core.mjs");
+  accepts("k = 0 is one node with no columns",
+          () => core.hermiteNodes(0, 5),
+          h => h.F.length === 1 && h.F[0].length === 0
+               && Math.abs(h.W[0] - 1) < 1e-12,
+          h => `rows ${h.F.length} cols ${h.F[0].length} W ${h.W}`);
+  accepts("k = 1 is still the rank-one rule",
+          () => core.hermiteNodes(1, 5),
+          h => h.F.length === 5 && h.F[0].length === 1);
+  const mu = [0, 0.3, -0.2, 0.5], D = [1, 1, 1, 1];
+  accepts("a zero-rank loading matrix prices the independent race",
+          () => races.raceProbabilities(mu, { V: [[], [], [], []], D }),
+          p => {
+            const q = races.raceProbabilities(mu, { D });
+            return p.every((v, i) => Math.abs(v - q[i]) < 1e-9);
+          },
+          p => `[${p.map(v => v.toFixed(6))}]`);
+  for (const k of [-1, 1.5, NaN])
+    rejects(core.hermiteNodes, [k, 5], `k = ${k} is refused`, "k");
+  // order 0 built a rule with NO NODES, which normalises 0/0
+  for (const o of [0, -3, 2.5])
+    rejects(core.hermiteNodes, [1, o], `order = ${o} is refused`, "order");
+}
+
+{
+  // Rank zero reaches top-k through its OWN node builder, which
+  // special-cased rank 1 and sent everything else through a rank-2
+  // tensor -- so an (n, 0) matrix became "RangeError: Invalid array
+  // length" (#309). The race path was fixed in #68; this one was not.
+  const zmu = [0, 0.3, -0.2, 0.5], zD = [1, 1, 1, 1];
+  const Z = [[], [], [], []];
+  const same = (a, b) => Math.max(...a.flat(9).map(
+    (x, i) => Math.abs(x - b.flat(9)[i])));
+  accepts("zero-rank top-k is the independent top-k",
+          () => same(topk.topKProbabilities(zmu, 2, { V: Z, D: zD }),
+                     topk.topKProbabilities(zmu, 2, { D: zD })),
+          w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  accepts("zero-rank bottom-k is the independent bottom-k",
+          () => same(topk.bottomKProbabilities(zmu, 2, { V: Z, D: zD }),
+                     topk.bottomKProbabilities(zmu, 2, { D: zD })),
+          w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  accepts("zero-rank rank marginals are the independent ones",
+          () => same(topk.rankProbabilities(zmu, { V: Z, D: zD }),
+                     topk.rankProbabilities(zmu, { D: zD })),
+          w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  // and a rank-one loading must still MOVE top-k, or the three above
+  // are just two ways of computing the independent answer
+  accepts("a rank-one loading still moves top-k",
+          () => same(topk.topKProbabilities(
+                       zmu, 2, { V: [[0.9], [-0.4], [0.2], [-0.7]], D: zD }),
+                     topk.topKProbabilities(zmu, 2, { D: zD })),
+          w => w > 0.005, w => `moves by ${w.toFixed(4)}`);
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

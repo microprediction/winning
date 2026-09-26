@@ -204,7 +204,13 @@ def _factor_nodes(V, n, qa, caller):
     Vm = Vm - Vm.mean(axis=0, keepdims=True)
     an, aw = roots_hermitenorm(qa)
     aw = aw / aw.sum()
-    if Vm.shape[1] == 1:
+    if Vm.shape[1] == 0:
+        # the EMPTY PRODUCT: rank 1 was special-cased and every other
+        # rank fell into the rank-2 tensor, so an (n, 0) matrix -- the
+        # documented spelling of "no factors" -- was integrated over a
+        # two-dimensional factor space it does not have (#309)
+        nodes, w = np.zeros((1, 0)), np.ones(1)
+    elif Vm.shape[1] == 1:
         nodes, w = an[:, None], aw
     else:
         nodes = np.array([[a, b] for a in an for b in an])

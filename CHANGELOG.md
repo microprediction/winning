@@ -524,6 +524,135 @@
   Both copies are updated, since
   `python/fastmvn/src/fastmvn/shapes.py` must stay byte-identical to
   `winning/shapes.py`.
+- The ports disagreed about what to REFUSE, in ten of thirty cases, and
+  nothing was looking. `check_vectors.py`, `check.mjs`, `check.R` and
+  `check.jl` compare the ports' VALUES on well-formed inputs; nothing
+  compared their DECISIONS on malformed ones. A port that quietly
+  recycles a short `D` agrees with everyone on every vector in those
+  files and still prices a different race.
+
+  `parity/check_divergence.py` runs one case file through all four
+  ports and fails when they disagree. What it found, none of it
+  reported before:
+
+  | case | python | browser | R | julia |
+  |---|---|---|---|---|
+  | non-finite `mu` | NaN out | NaN out | refuse | refuse |
+  | empty `mu` | refuse | **accepts** | refuse | refuse |
+  | `D` wrong length | refuse | refuse | **recycles** | refuse |
+  | `D` zero | refuse | refuse | refuse | NaN out |
+  | scalar `V` | accept | accept | **refuse** | **refuse** |
+  | inverse `p` wrong length | refuse | refuse | **accepts** | refuse |
+
+  The worst is R's recycling in the core race verb: `D = c(2, 9)` at
+  n = 4 prices EXACTLY the race `D = c(2, 9, 2, 9)` prices -- same
+  numbers, no warning. That is #285's defect in `r/winning` itself
+  rather than `mvtnormfast`, and it would have been missed: `W` and `F`
+  were fixed at that same door earlier without anyone checking `D`.
+  R's inverse had it too, answering a two-runner race from a
+  four-entry `D`.
+
+  `mu` turns out to be the one argument nobody checked anywhere: `D`
+  goes through `as_idio`, `V` through `as_loadings`, `W` through
+  `as_weights`, and the abilities went straight to the lattice. python
+  and the browser now refuse a non-finite or empty `mu`.
+
+  The scalar-`V` row went the other way: python and the browser
+  implement the contract `as_loadings` documents -- a scalar is the
+  same loading for everyone -- and R and julia refused it. They were
+  moved to the documented behaviour, not the reverse.
+
+  All forty-four cases now agree across all four ports, and the check
+  runs in CI, skipping any port whose toolchain is absent rather than
+  passing vacuously.
+
+  Extending the scan to the node rule, the rank spellings and the other
+  verbs found the rest of #68 and one new defect. **Rank zero** is the
+  empty product -- one node of weight 1 with no columns -- and the
+  factor grammar already documents `Independent = Factor with empty V`,
+  with `as_loadings` accepting `(n, 0)`. Four paths could not price it,
+  each because the node constructors build the tensor by looping over
+  the rank and at rank zero that does not raise: python's
+  `hermite_nodes` returned the RANK-ONE rule, `_gh_nodes` raised from
+  inside `np.meshgrid`, julia's `_gh_nodes` built every `r != 1` as rank
+  two and then failed multiplying a `Q**2 x 2` node matrix by a `0 x n`
+  loading transpose, and R raised from inside `expand.grid`. The
+  browser and julia `hermite_nodes` already fell through to the right
+  answer, so the fix moved the other two onto their behaviour. Both
+  fastmvn copies and `FactorMvNormalCDF` now return exactly `0.5**n` for
+  the rank-zero rectangle, and the browser stopped refusing an `(n, 0)`
+  loading matrix outright -- a guard added by the very commit whose
+  purpose was to match the reference, which accepts it.
+
+  A negative rank and a zero order are now refused by name in all four,
+  rather than each falling through to a different well-formed rule for
+  a different problem.
+
+  The scan compares ANSWERS now, not just accept/refuse decisions: two
+  ports agreeing to accept is not agreeing on the race. That is what
+  turned up #304 -- a contestant whose idiosyncratic variance is small
+  but legal is priced at exactly **zero** by every port, its mass
+  renormalised onto the others, at 68% error by sd 3e-3 and 100% by sd
+  1e-3. `D = 0` is refused, so the boundary guard exists; it is just
+  drawn at zero rather than at what the lattice can resolve. Filed with
+  the measurement rather than fixed here: the repair is a lattice
+  change in four ports.
+
+  Two entries sit in `EXPECTED`, each with a reason and the PORTS whose
+  disagreement it is about, and the list is strict in both directions --
+  an entry that stops diverging fails the scan, so a waiver cannot
+  outlive its defect. Naming the ports is what makes that safe: a
+  waiver can only be judged when all of them ran. Judging it from the
+  survivors made the scan falsely red on a python-and-node machine and
+  told the reader to delete a live waiver, because with julia absent
+  nothing establishes that julia still refuses a fractional depth
+  (#310). It now prints "known, not judged: julia absent" and exits 0.
+
+  A third guard came out of reviewing the diff rather than from it
+  failing: a waiver is only examined while walking the cases, so one
+  whose case has been DELETED from the file is never looked at again
+  and sits there forever. That is the stale-waiver failure one step
+  earlier, and the stale check runs too late to catch it. The scan now
+  reports an `EXPECTED` id that the case file does not contain.
+
+  Rank zero then earned its keep rather than merely stopping a crash:
+  `factorize_covariance` now tries it FIRST. A diagonal covariance is
+  exactly `V V' + diag(D)` with no factors, but the search began at
+  rank 1 -- which also fits a diagonal exactly, the off-diagonals being
+  already zero -- and chose a fit that put the variance in a LOADING.
+  On `diag([1, 1, 1, 1, 1e8])` it returned a loading of 9487, turning
+  an independent rectangle into a near-step factor integrand: **1.8e-3**
+  relative error where the answer is a product of univariate CDFs
+  (#132). Rank zero is exact to 1.8e-16 and **4x faster**, the
+  quadrature being one node instead of Q. A correlated matrix still
+  finds its factors -- rank zero is tried first, not instead.
+
+  Rank zero was still wrong in three more node builders, each with the
+  same shape as the four already fixed: rank 1 special-cased, every
+  other rank sent through a rank-2 tensor. `winning/factor/topk.py`,
+  `winning/likelihood.py::_factor_nodes` and
+  `docs/js/winning/topk.mjs` took an `(n, 0)` matrix into a
+  two-dimensional factor space the race does not have, and top-k, rank
+  marginals and the ranking likelihood raised rather than answering
+  (#309).
+
+  The issue named python and the browser, which is the pair the
+  reviewer ran. Adding the case to the scan showed R and julia had it
+  too -- R's shared `.cluster_nodes` refused rank 0 with a message
+  about needing Sobol nodes for rank >= 3, and julia's
+  `_topk_factor_nodes` built the rank-2 tensor. Four ports, one defect,
+  found by extending the scan rather than by reading four files. All
+  four now return the independent answer, agreeing with each other in
+  value and not merely in verdict.
+
+  Three of the first five "divergences" the value comparison reported
+  were the harness, not the ports: julia `vec`s a matrix column-major
+  where the reference ravels row-major, the julia runner was rounding a
+  fractional depth the port cannot express, and `rbind` turned a scalar
+  `V` into a 1x1 matrix. A parity tool that cannot be wrong about the
+  ports is not measuring them, so the scanner now fails loudly when a
+  present toolchain's runner exits non-zero, instead of dropping that
+  port and reporting that everyone agreed.
 
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is

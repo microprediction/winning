@@ -331,6 +331,20 @@ GH_RULE_DEFAULT = (15, 3.0)
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
+    # mu was the one argument nobody checked: D goes through as_idio, V
+    # through as_loadings, W through as_weights, and the abilities
+    # themselves went straight to the lattice. A NaN or inf there came
+    # back as NaN probabilities that sum to nothing, silently. R and
+    # julia already refused it, which is how the cross-port divergence
+    # scan found it.
+    if n == 0:
+        raise ValueError("mu is empty; a race needs at least one contestant")
+    bad = np.flatnonzero(~np.isfinite(mu))
+    if bad.size:
+        raise ValueError(
+            f"mu[{int(bad[0])}] = {float(mu[bad[0]])!r} is not finite "
+            f"({bad.size} of {n} are); an ability is a finite location on "
+            "the performance scale")
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     if V is None:
         V = np.zeros((n, 1))

@@ -36,6 +36,22 @@ const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [1
 
 function setup(mu, V, D, F, W, base) {
   const n = mu.length;
+  // mu was the one argument nobody checked: D goes through asIdio, V
+  // through asLoadings, W through asWeights, and the abilities
+  // themselves went straight to the lattice. A NaN or inf there came
+  // back as NaN probabilities, and an EMPTY field came back as an
+  // empty answer rather than a refusal. R and julia already refused
+  // both, which is how the cross-port divergence scan found it.
+  if (!Array.isArray(mu) && !ArrayBuffer.isView(mu))
+    throw new Error(`mu must be an array of abilities; got ${typeof mu}`);
+  if (n === 0)
+    throw new Error("mu is empty; a race needs at least one contestant");
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(mu[i]))
+      throw new Error(
+        `mu[${i}] = ${mu[i]} is not finite; an ability is a finite ` +
+        `location on the performance scale`);
+  }
   D = asIdio(D, n);        // the companion of asLoadings, #254
   // the shape contract at the door, as python's _setup does it: a
   // scalar, a length-n vector, (n, rank) and (rank, n) are the same
@@ -342,11 +358,18 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   const Vc = Vn.map(row => row.map((v, c) => v - colMean[c]));
   let CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) => (a === b ? 1 : 0)));
   if (V && F) {
-    const Q = F.length;
-    const Wq = W ? W.map(w => w / W.reduce((a, b) => a + b, 0)) : new Array(Q).fill(1 / Q);
-    const Fm = Array.from({ length: r }, (_, c) => F.reduce((acc, f, q) => acc + Wq[q] * f[c], 0));
+    // the same door the forward pass uses. The inverse consumed F and W
+    // raw, so a W shorter than F left `Wq[q]` undefined past its end and
+    // every moment below came out NaN -- surfacing, once mu was checked
+    // for finiteness, as "mu[0] = NaN" rather than as the bad weights
+    // the caller actually passed.
+    const Fv = asFactorNodes(F, r, "F");
+    const Wv = asWeights(W, Fv.length, "W");
+    const Q = Fv.length;
+    const Wq = Wv.map(w => w / Wv.reduce((a, b) => a + b, 0));
+    const Fm = Array.from({ length: r }, (_, c) => Fv.reduce((acc, f, q) => acc + Wq[q] * f[c], 0));
     CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>
-      F.reduce((acc, f, q) => acc + Wq[q] * (f[a] - Fm[a]) * (f[b] - Fm[b]), 0)));
+      Fv.reduce((acc, f, q) => acc + Wq[q] * (f[a] - Fm[a]) * (f[b] - Fm[b]), 0)));
   }
   const sigV = (i, j) => Vc[i].reduce((acc, va, a) => acc + va * CovF[a].reduce((acc2, cab, b) => acc2 + cab * Vc[j][b], 0), 0);
   const med = (arr) => { const z = arr.slice().sort((a, b) => a - b); const h = Math.floor(z.length / 2); return z.length % 2 ? z[h] : 0.5 * (z[h - 1] + z[h]); };

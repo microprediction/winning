@@ -8,7 +8,30 @@
 #' @param prune drop nodes with weight below prune * max weight
 #' @return list with matrix F (nodes x k) and vector W of weights
 #' @export
+# An integer count at a node-rule door, or a refusal naming it. Both
+# counts reach the product grid as a repeat count, where a nonsense
+# value does not raise: it builds a WELL-FORMED rule for a different
+# problem, or raises from deep inside expand.grid (#68).
+.as_count <- function(x, name, minimum) {
+  if (length(x) != 1L || !is.numeric(x) || !is.finite(x) || x != floor(x))
+    stop(sprintf("hermite_nodes needs an integer %s; got %s", name,
+                 paste(format(x), collapse = " ")), call. = FALSE)
+  x <- as.integer(x)
+  if (x < minimum)
+    stop(sprintf("hermite_nodes needs %s >= %d; got %d", name, minimum, x),
+         call. = FALSE)
+  x
+}
+
+#' @details k = 0 is the EMPTY PRODUCT: one node of weight 1 with no
+#'   columns, so a zero-rank loading matrix integrates over the
+#'   zero-dimensional factor space and prices the independent race
+#'   through this same path. It is the value of the integral, not a
+#'   degenerate case to reject.
 hermite_nodes <- function(k, order = 15, prune = 1e-7) {
+  k <- .as_count(k, "k", 0L)
+  order <- .as_count(order, "order", 1L)
+  if (k == 0L) return(list(F = matrix(numeric(0), 1L, 0L), W = 1))
   h <- .hermite1(order)
   x1 <- h$nodes
   w1 <- h$weights
