@@ -1,7 +1,7 @@
 // Polish a race onto linear constraints -- port of winning/factor/polish.py
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
-import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter } from "./core.mjs";
+import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asFactorNodes, asWeights } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES,
          forwardGrid } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./blocks.mjs";
@@ -58,7 +58,11 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
   V = gaugeCenter(V);
   const hasV = V.some(row => row.some(v => v !== 0));
   if (hasV && F0 && W0) {
-    F = F0; W = W0;
+    // the caller's nodes get the same contract the forward applies, or
+    // the Jacobian differentiates a different-rank model than the
+    // forward prices (#290)
+    F = asFactorNodes(F0, V[0].length, "F");
+    W = asWeights(W0, F.length, "W");
   } else if (hasV) {
     // the pairwise-safe bound sqrt(2) max_i |(PV)_i| / sqrt(D_i), on
     // the centered rows, matching the forward path and python/R

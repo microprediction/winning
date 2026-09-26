@@ -7,10 +7,10 @@
 // API cannot lean on the language to reject a wrong or misspelled key.
 const here = new URL(".", import.meta.url).pathname;
 const eng = p => import(here + "../docs/js/winning/" + p);
-const [races, topk, blocks, polish, classic, demo, structures] =
+const [races, topk, blocks, polish, classic, demo, structures, core] =
   await Promise.all(
     ["races.mjs", "topk.mjs", "blocks.mjs", "polish.mjs", "classic.mjs",
-     "demo.mjs", "structures.mjs"].map(eng));
+     "demo.mjs", "structures.mjs", "core.mjs"].map(eng));
 
 let fails = 0;
 const rejects = (fn, args, why, expect = null) => {
@@ -476,6 +476,57 @@ accepts("the inverse takes a scalar D, matching python",
           });
 }
 
+// --- the product rule is never materialised (#268)
+// hermiteNodes built the whole order**rank tensor and pruned it
+// after. `Math.max(...W)` spreads every weight as an argument list, so
+// rank 5 at order 15 -- 759,375 nodes -- died with a RangeError before
+// pruning ran; rank 5 at order 41 would have been 115,856,201 nodes
+// built and thrown away. python closed this in #155 and the browser
+// kept it. The expected counts below are python's.
+{
+  const expect = [[1, 15, 15], [2, 15, 145], [3, 15, 1317], [4, 15, 10929],
+                  [5, 15, 83757], [5, 7, 10295], [3, 41, 6283]];
+  for (const [k, q, n] of expect)
+    accepts(`hermiteNodes(${k}, ${q}) is python's rule`,
+            () => core.hermiteNodes(k, q),
+            r => r.F.length === n
+                 && Math.abs(r.W.reduce((a, b) => a + b, 0) - 1) < 1e-12
+                 && r.F.every(row => row.length === k),
+            r => `${r.F.length} nodes (python ${n})`);
+
+  // the one from the report, which used to be a RangeError, and the
+  // one that was never going to fit in memory at all
+  accepts("rank 5 order 15 returns instead of overflowing the stack",
+          () => core.hermiteNodes(5, 15),
+          r => r.F.length === 83757);
+  accepts("rank 5 order 41 prunes 115,856,201 down to python's count",
+          () => core.hermiteNodes(5, 41),
+          r => r.F.length === 1061871,
+          r => `${r.F.length} nodes from a 1.16e8 tensor`);
+
+  // pruning must not reorder: the kept set is the full tensor's, in
+  // the tensor's order, so a node's neighbours still mean what the
+  // reference means by them
+  accepts("the kept nodes are in tensor order (first coordinate slowest)",
+          () => core.hermiteNodes(2, 15),
+          r => {
+            for (let i = 1; i < r.F.length; i++) {
+              const a = r.F[i - 1], b2 = r.F[i];
+              if (a[0] > b2[0] + 1e-12) return false;          // never decreases
+              if (Math.abs(a[0] - b2[0]) < 1e-12 && a[1] > b2[1] + 1e-12)
+                return false;                                  // ties ascend in x1
+            }
+            return true;
+          });
+
+  rejects(core.hermiteNodes, [0, 15], "hermiteNodes refuses rank 0",
+          "positive integer");
+  rejects(core.hermiteNodes, [2.5, 15], "hermiteNodes refuses a fractional rank",
+          "positive integer");
+  rejects(core.hermiteNodes, [2, 0], "hermiteNodes refuses order 0",
+          "positive integer");
+}
+
 // --- the block Jacobian says rank-one, or says so (#271)
 // The FORWARD block kernel prices rank-r cluster loadings. The
 // Jacobian is rank-one only: it takes each loading row as a number,
@@ -648,6 +699,152 @@ accepts("the inverse takes a scalar D, matching python",
           },
           w => w < 1e-12,
           w => `gap ${w.toExponential(2)}`);
+}
+
+// --- caller-supplied factor nodes carry the loadings' rank (#290)
+// condMeans dotted each node row against the loadings over the ROW's
+// own length, so the rank was whatever each row happened to be: a
+// uniformly short F priced a LOWER-RANK model, a ragged F priced a
+// different rank at each quadrature node, extra weights were ignored
+// and too few produced NaN -- all of it finite and normalised.
+{
+  const muF = [-0.6, -0.2, 0.15, 0.7];
+  const VF = [[1.2, -0.7], [-0.4, 1.1], [0.6, 0.9], [-1.0, -0.5]];
+  const DF = [0.5, 0.8, 0.6, 0.9];
+  const FF = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+  const WF = [0.25, 0.25, 0.25, 0.25];
+  const fwd = o => races.raceProbabilities(muF, { V: VF, D: DF, ...o });
+
+  rejects(fwd, [{ F: FF.map(r => [r[0]]), W: WF }],
+          "forward refuses a uniformly short F", "rank 2");
+  rejects(fwd, [{ F: [[-1, -1], [-1], [1, -1], [1, 1]], W: WF }],
+          "forward refuses a ragged F", "coordinate");
+  rejects(fwd, [{ F: FF, W: [...WF, 0.9] }],
+          "forward refuses too many weights", "one weight per factor node");
+  rejects(fwd, [{ F: FF, W: WF.slice(0, 3) }],
+          "forward refuses too few weights", "one weight per factor node");
+  rejects(fwd, [{ F: [], W: [] }], "forward refuses an empty F", "empty");
+  rejects(fwd, [{ F: FF, W: [0.25, -0.25, 0.5, 0.5] }],
+          "forward refuses a negative weight", "negative weight");
+
+  // the jacobian door and the inverse share the contract
+  rejects(polish.raceJacobian,
+          [muF, { V: VF, D: DF, F: [[-1, -1], [-1], [1, -1], [1, 1]], W: WF }],
+          "the jacobian refuses a ragged F too", "coordinate");
+  rejects(races.abilitiesFromRace,
+          [[0.4, 0.3, 0.2, 0.1], { V: VF, D: DF, F: FF, W: [0.5, 0.5] }],
+          "the inverse refuses mismatched weights", "one weight per factor node");
+
+  // and the spellings that ARE the same race agree
+  const base = accepts("explicit nodes still price",
+                       () => fwd({ F: FF, W: WF }),
+                       p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-12,
+                       p2 => `[${p2.map(v => v.toFixed(5))}]`);
+  accepts("W and c*W are the same law",
+          () => fwd({ F: FF, W: WF.map(w => 10 * w) }),
+          p2 => base && Math.max(...p2.map((v, i) => Math.abs(v - base[i]))) < 1e-15);
+  accepts("the internally built nodes are unaffected",
+          () => fwd({}),
+          p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - 1) < 1e-12);
+
+  // The jacobian was scale-dependent too, which nobody had reported:
+  // the same defect as #281 but in this tree rather than the
+  // standalone js/factor module. On main J(W) and J(10W) differ by
+  // 1.473; normalising W at the door makes them identical, and leaves
+  // the already-normalised answer bit-identical.
+  const jac = w => polish.raceJacobian(muF, { V: VF, D: DF, F: FF, W: w });
+  const jbase = accepts("the jacobian prices with explicit nodes",
+                        () => jac(WF),
+                        J => J.length === 4 && J.every(r => r.length === 4));
+  accepts("the jacobian is invariant to W -> cW",
+          () => jac(WF.map(w => 10 * w)),
+          J => jbase && Math.max(...J.map((r, i) =>
+            Math.max(...r.map((v, j) => Math.abs(v - jbase[i][j]))))) === 0,
+          J => jbase ? `max |diff| ${Math.max(...J.map((r, i) =>
+            Math.max(...r.map((v, j) => Math.abs(v - jbase[i][j]))))).toExponential(2)}` : "");
+}
+
+// --- a top-k depth is a count, so it is an integer (#272's neighbour)
+// Every guard truncated first -- Math.trunc(k) here, int(k) in python,
+// as.integer in R -- and then range-checked the TRUNCATED value. So
+// k=0, k=n and k>n were all refused and only a non-integer slipped
+// through, silently floored: topKProbabilities(mu, 1.5) returned the
+// top-1 curve with mass 1. The caller asked for a curve that does not
+// exist and got a different one, and the mass they can check is 1, not
+// the 1.5 they asked about.
+{
+  const muK = [-0.4, 0.1, 0.2, 0.5];
+  const DK = [0.7, 0.8, 0.9, 1.0];
+  const tkp = (k) => topk.topKProbabilities(muK, k, { D: DK });
+
+  for (const k of [1, 2, 3])
+    accepts(`topK depth ${k} prices`, () => tkp(k),
+            p2 => Math.abs(p2.reduce((a, b) => a + b, 0) - k) < 1e-9,
+            p2 => `mass ${p2.reduce((a, b) => a + b, 0).toFixed(6)}`);
+
+  for (const k of [1.5, 2.5, 0.5, 2.0001])
+    rejects(tkp, [k], `topK refuses the fractional depth ${k}`,
+            "whole number of places");
+  for (const k of [0, 4, 5, -1])
+    rejects(tkp, [k], `topK refuses the depth ${k}`, "[1, n-1]");
+
+  // the two depths around 1.5 are genuinely different curves, which is
+  // why flooring it left nothing odd-looking to notice
+  accepts("the neighbouring depths differ",
+          () => [tkp(1), tkp(2)],
+          ([a, b2]) => Math.max(...a.map((v, i) => Math.abs(v - b2[i]))) > 0.1);
+
+  // the pair door checks BOTH depths
+  {
+    const q1 = tkp(1), q2 = tkp(2);
+    const pair = (a, b2) => topk.locScaleFromTopkPair(q1, a, q2, b2);
+    accepts("the pair door takes whole depths", () => pair(1, 2),
+            r => r && (r.mu || r.sd || Array.isArray(r)));
+    rejects(pair, [1.5, 2], "the pair door refuses a fractional k1",
+            "k1 must be a whole number");
+    rejects(pair, [1, 2.5], "the pair door refuses a fractional k2",
+            "k2 must be a whole number");
+    rejects(pair, [1, 1], "the pair door still refuses k1 == k2", "k1 == k2");
+  }
+}
+
+// --- state prices stay exhaustive at boundary offsets (#292)
+// statePricesFromOffsets builds the field with shiftedCdf, which goes
+// through lowHigh and PINS any offset at or past L-2 to the boundary.
+// implicitPrices took a fast path for exact integers and called
+// integerShift(baseCdf, k) with the RAW k, whose own clamp is the much
+// wider +/-(m-1). A runner could sit in the field at offset L-2 and be
+// PAID at 60, so the prices summed to 1.8835 -- while an epsilon off
+// the integer gave 0.99999, because the non-integer path had been
+// clamped correctly all along.
+{
+  const dB = classic.skewNormalDensity(50, 0.1);
+  const ORD = 0.9999867465;
+  const total = a => classic.statePricesFromOffsets(dB, [a, -a])
+    .reduce((x, y) => x + y, 0);
+
+  for (const a of [48, 48.5, 49, 49.000001, 50, 60, 60.1, 100, 1000])
+    accepts(`state prices sum to one at offset ${a}`, () => total(a),
+            t => Math.abs(t - ORD) < 5e-9,
+            t => `sum ${t.toFixed(10)}`);
+
+  for (const k of [49, 60, -49, -60])
+    accepts(`offset ${k} is continuous in its neighbourhood`,
+            () => [total(k), total(k - 1e-6), total(k + 1e-6)],
+            ([a, b2, c]) => Math.abs(a - b2) < 5e-9 && Math.abs(a - c) < 5e-9,
+            ([a, b2, c]) => `${a.toFixed(9)} / ${b2.toFixed(9)} / ${c.toFixed(9)}`);
+
+  accepts("past the clamp every offset is the same distribution",
+          () => [classic.statePricesFromOffsets(dB, [60, -60]),
+                 classic.statePricesFromOffsets(dB, [80, -80])],
+          ([a, b2]) => Math.max(...a.map((v, i) => Math.abs(v - b2[i]))) < 1e-15);
+
+  accepts("interior integers are untouched",
+          () => [0, 1, 5, 20, 40, 47, -40].map(k =>
+            classic.statePricesFromOffsets(dB, [k, -k, k / 3])
+              .reduce((x, y) => x + y, 0)),
+          ts => ts.every(t => Math.abs(t - 1) < 1e-3),
+          ts => `worst |sum - 1| ${Math.max(...ts.map(t => Math.abs(t - 1))).toExponential(2)}`);
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

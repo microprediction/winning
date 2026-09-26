@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -122,6 +122,11 @@ function setup(mu, V, D, F, W, base) {
   }
   const fn = typeof base === "function" ? base : BASES[base];
   const span = typeof base === "function" ? [12, 12] : (SPANS[base] || [12, 12]);
+  // the caller's nodes go through the same door as V and D: every node
+  // carries exactly the loadings' rank, and there is one weight per
+  // node (#290)
+  F = asFactorNodes(F, V[0].length, "F");
+  W = asWeights(W, F.length, "W");
   return { mu, V, D, F, W, fn, left: span[0], right: span[1] };
 }
 

@@ -93,38 +93,57 @@ export function hermite1(order) {
   return { nodes: values, weights: w };
 }
 
-/* pruned product rule: first coordinate slowest, prune WITHOUT
-   renormalizing (matching the reference exactly) */
+/* Pruned product Gauss-Hermite rule, built ONE DIMENSION AT A TIME.
+
+   This used to materialise the whole `order ** k` tensor and prune it
+   afterwards, which is the defect python closed in #155 and the browser
+   kept. Two ways it fails. `Math.max(...W)` spreads every weight as an
+   argument list, so rank 5 at order 15 -- 759,375 nodes -- died with
+   `RangeError: Maximum call stack size exceeded` before pruning ever
+   ran. And rewriting that line as a loop only moves the wall: rank 5 at
+   order 41 is 115,856,201 nodes to build and then throw away.
+
+   A partial product whose weight cannot reach the threshold whatever
+   the remaining factors contribute -- each at most `wmax` -- cannot be
+   in the answer, so it is dropped as soon as it appears. The kept set
+   and its ORDER are exactly those of the full tensor pruned once: the
+   test for a partial product is implied by the test for every full
+   product extending it, and the loops below extend in the same order
+   the tensor enumerated (first coordinate slowest, last fastest).
+
+   Weights are renormalised at the end, as the reference does: pruning
+   drops ~1e-7 of the mass and a direct weighted mixture consumes W
+   as-is. (#268) */
 export function hermiteNodes(k, order = 15, prune = 1e-7) {
+  if (!Number.isInteger(k) || k < 1)
+    throw new Error(`hermiteNodes: rank must be a positive integer; got ${k}`);
+  if (!Number.isInteger(order) || order < 1)
+    throw new Error(`hermiteNodes: order must be a positive integer; got ${order}`);
   const h = hermite1(order);
   if (k === 1) return { F: h.nodes.map(x => [x]), W: h.weights.slice() };
-  const F = [], W = [];
-  const idx = new Array(k).fill(0);
-  const total = Math.pow(order, k);
-  for (let t = 0; t < total; t++) {
-    let rem = t;
-    const node = new Array(k), digits = new Array(k);
-    for (let dPos = k - 1; dPos >= 0; dPos--) {   // last coordinate fastest
-      digits[dPos] = rem % order;
-      rem = Math.floor(rem / order);
+
+  // one-dimensional max, so this is `order` values and never the tensor
+  let wmax = h.weights[0];
+  for (let i = 1; i < order; i++) if (h.weights[i] > wmax) wmax = h.weights[i];
+  const floor = prune * Math.pow(wmax, k);
+
+  let F = h.nodes.map(x => [x]);
+  let W = h.weights.slice();
+  for (let d = 1; d < k; d++) {
+    // what the remaining k - 1 - d coordinates can still contribute
+    const reach = Math.pow(wmax, k - 1 - d);
+    const nF = [], nW = [];
+    for (let i = 0; i < F.length; i++) {
+      const row = F[i], wi = W[i];
+      for (let j = 0; j < order; j++) {
+        const w = wi * h.weights[j];
+        if (w * reach > floor) { nF.push([...row, h.nodes[j]]); nW.push(w); }
+      }
     }
-    let w = 1;
-    for (let dPos = 0; dPos < k; dPos++) {
-      node[dPos] = h.nodes[digits[dPos]];
-      w *= h.weights[digits[dPos]];
-    }
-    F.push(node); W.push(w);
+    F = nF; W = nW;
   }
-  const wmax = Math.max(...W);
-  const keepF = [], keepW = [];
-  for (let i = 0; i < W.length; i++) {
-    if (W[i] > prune * wmax) { keepF.push(F[i]); keepW.push(W[i]); }
-  }
-  // renormalize after pruning, as the reference does: it drops ~1e-7 of
-  // the mass and a direct weighted mixture consumes W as-is. The port
-  // omitted this and its weights summed to 1 - 2e-9 (surface audit).
-  const wsum = keepW.reduce((a, b) => a + b, 0);
-  return { F: keepF, W: keepW.map(w => w / wsum) };
+  const wsum = W.reduce((a, b) => a + b, 0);
+  return { F, W: W.map(w => w / wsum) };
 }
 
 /* ---- small dense linear algebra ------------------------------------ */
@@ -160,6 +179,70 @@ export function interpClamped(x, xp, fp) {
   const d = xp[lo + 1] - xp[lo];
   if (d <= 0) return fp[lo];
   return fp[lo] + (x - xp[lo]) / d * (fp[lo + 1] - fp[lo]);
+}
+
+/* Caller-supplied factor nodes and their weights.
+
+   `condMeans` dotted each node row against the loadings over the ROW's
+   own length, so the rank was whatever each row happened to be. A
+   uniformly short F silently priced a LOWER-RANK model (0.46444 where
+   the rank-2 answer is 0.38173); a ragged F applied a different rank at
+   different quadrature nodes and still returned finite, normalised
+   probabilities; extra weights were ignored and too few produced NaN
+   (#290). python refuses all of these -- `np.asarray(F, float)` will
+   not build an array from ragged rows, and a wrong rank fails the
+   matmul against V -- so this is the browser guessing alone.
+
+   Distinct from #232 (the shape of V) and #281 (weight SCALE in the
+   standalone js/factor module). */
+export function asFactorNodes(F, rank, where = "F") {
+  if (!Array.isArray(F))
+    throw new Error(`${where} must be an array of factor nodes; got ${typeof F}`);
+  if (F.length === 0)
+    throw new Error(`${where} is empty; there are no quadrature nodes`);
+  const out = new Array(F.length);
+  for (let q = 0; q < F.length; q++) {
+    const row = Array.isArray(F[q]) ? F[q]
+      : (typeof F[q] === "number" ? [F[q]] : null);
+    if (row === null)
+      throw new Error(`${where}[${q}] must be a node of ${rank} coordinate(s)`);
+    if (row.length !== rank)
+      throw new Error(
+        `${where}[${q}] has ${row.length} coordinate(s) but the loadings ` +
+        `have rank ${rank}; a short node prices a lower-rank model and a ` +
+        `ragged one prices a different rank at each node`);
+    for (let c = 0; c < rank; c++) {
+      if (!Number.isFinite(row[c]))
+        throw new Error(`${where}[${q}][${c}] = ${row[c]} is not finite`);
+    }
+    out[q] = Array.from(row, Number);
+  }
+  return out;
+}
+
+/* One weight per node, normalised -- python's `as_weights` at the same
+   door. The forward normalises its shares so a rescaling cancels there,
+   but the spelling should not matter anywhere, and a mismatched length
+   must not reach the kernel. */
+export function asWeights(W, nNodes, where = "W") {
+  if (!Array.isArray(W) && !ArrayBuffer.isView(W))
+    throw new Error(`${where} must be an array of node weights; got ${typeof W}`);
+  if (W.length !== nNodes)
+    throw new Error(
+      `${where} must have one weight per factor node; got ${W.length} ` +
+      `for ${nNodes} nodes`);
+  let total = 0;
+  for (let q = 0; q < W.length; q++) {
+    const v = Number(W[q]);
+    if (!Number.isFinite(v))
+      throw new Error(`${where}[${q}] = ${W[q]} is not a finite weight`);
+    if (v < 0)
+      throw new Error(`${where}[${q}] = ${v} is a negative weight`);
+    total += v;
+  }
+  if (!(total > 0))
+    throw new Error(`${where} must have a positive total; got ${total}`);
+  return Array.from(W, v => Number(v) / total);
 }
 
 /* ---- options-object guards ---------------------------------------- *
