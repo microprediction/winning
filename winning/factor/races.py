@@ -1043,7 +1043,23 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                 "entries deliberately and read the result as a one-sided "
                 "bound on the floored contrasts, or supply a pseudocount "
                 "upstream.")
-    target = target / target.sum()
+    # Rescale before summing ONLY when the sum would overflow. A market
+    # law is defined up to a positive factor, so [1e308]*3 is the same
+    # law as [1]*3 -- but the sum of the first is inf, the division gave
+    # NaN, and both ratings filters then stored NaN means and NaN
+    # evidence from input every entry of which was finite (#300). The
+    # finiteness checks at the filters' doors cannot see this: they look
+    # at the entries, and the entries are fine.
+    #
+    # Conditional so that every ordinary input is bit-identical: the
+    # branch is taken only where the current arithmetic is already
+    # broken. Dividing by the max first leaves entries in (0, 1], so the
+    # sum is at most n.
+    _tot = target.sum()
+    if not np.isfinite(_tot):
+        target = target / target.max()
+        _tot = target.sum()
+    target = target / _tot
     if structure is not None:
         # the grammar path takes the SAME contract (sixth review): the
         # target was validated or floored above, and the iteration reports

@@ -334,6 +334,30 @@ class AbilityTracker:
         array (position of entrant i) is the inverse permutation and is
         silently wrong at K >= 3; convert it with order_from_positions
         (winning.ratings.orders)."""
+        # A tracker carries state, so bad evidence does not merely give
+        # a bad answer for one contest -- it poisons the filter. One NaN
+        # score made every entity's mean and variance NaN, a later CLEAN
+        # contest did not recover them, and nothing said a word. Same
+        # for an infinite score and for a NaN price. The lengths are
+        # checked here too: they did raise, but as "operands could not
+        # be broadcast together", which names nothing the caller passed.
+        n_ids = len(ids)
+        for _name, _seq in (("scores", scores), ("prices", prices)):
+            if _seq is None:
+                continue
+            _a = np.asarray(_seq, dtype=float)
+            if _a.ndim != 1 or _a.shape[0] != n_ids:
+                raise ValueError(
+                    f"{_name} must have one entry per entrant; got shape "
+                    f"{_a.shape} for {n_ids} ids")
+            _bad = np.flatnonzero(~np.isfinite(_a))
+            if _bad.size:
+                raise ValueError(
+                    f"{_name}[{int(_bad[0])}] = {float(_a[_bad[0]])!r} is not "
+                    f"finite ({_bad.size} of {n_ids} are). A tracker folds "
+                    "evidence into state it keeps, so this would leave "
+                    "every entity's rating NaN and no later contest would "
+                    "recover it.")
         m, v = self._gather(ids, t)
         V, b2 = self._blocks(groups, len(m))
         if prices is not None:                                     # market observer

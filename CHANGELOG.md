@@ -459,6 +459,56 @@
   contract here. The manual now says so.
   Every documented spelling still agrees: scalar `D`, length-n `D` and
   the default bounds all return the same number.
+- `AbilityTracker.observe` refuses evidence that would poison its state.
+  A tracker CARRIES state, so bad evidence is not one bad answer -- it
+  is a corrupted filter. One NaN score made every entity's mean and
+  variance NaN, and a later CLEAN contest did not recover them:
+
+      before NaN:            [0.8, 0.0, -0.8]
+      after NaN:             [nan, nan, nan]
+      after a CLEAN contest: [nan, nan, nan]
+
+  An infinite score and a NaN price did the same, all three silently.
+  Nothing downstream could tell a poisoned filter from a filter that
+  had simply learned nothing, and there is no way back: the ratings the
+  caller keeps asking for stay NaN for the rest of the run.
+
+  `scores` and `prices` are now checked at the door for finiteness and
+  for one entry per entrant. The length did already raise, but as
+  "operands could not be broadcast together with shapes", which names
+  nothing the caller passed; it now says which argument and what it got.
+  The message for a non-finite entry names the index, counts how many
+  there are, and says why it matters rather than just that it is
+  refused.
+
+  A refusal leaves the filter exactly as it was -- the ratings before
+  and after are identical objects -- so a caller who catches it can
+  carry on with the next contest.
+
+  The DENSE filter had the same hole. `rate_history` does not carry
+  state across calls the way the tracker does, but it carries it across
+  the history it is given: one non-finite `margins`, `scores` or
+  `p_market` entry made every entity's mean and covariance NaN for the
+  rest of that history. Both are now checked in the per-race loop, with
+  the same two messages.
+
+  Neither `walk_forward` needs its own check: the dense one routes
+  every race through `rate_history` and the tracker's through
+  `observe`, so they inherit the contract. That is the point of fixing
+  the door rather than the callers, and there is a test that pins it.
+
+  Those checks look at the ENTRIES, which is not enough (#300). For a
+  market law like `[1e308, 1e308, 1e308]` every entry is finite and the
+  SUM is not: `target / target.sum()` in `abilities_from_race` divided
+  by inf and gave NaN, and both filters then stored NaN means and NaN
+  evidence from input they had just accepted, correctly, as finite.
+  A market law is defined up to a positive factor, so that is the same
+  law as `[1, 1, 1]` and must give the same answer -- it now does, for
+  scales from 1e-300 to 1.7e308.
+
+  The rescale is CONDITIONAL, taken only when the sum overflows, so
+  every ordinary input is bit-identical: 25 random inverses agree with
+  main to 0.000e+00.
 
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is
