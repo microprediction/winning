@@ -133,27 +133,51 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
     from .races import race_probabilities as _rp
     from .blocks import (block_race_probabilities, nested_race_probabilities,
                          tree_race_probabilities)
+    # `points` is a NAMED parameter here, so it is not in **kw and these
+    # two branches used to recurse into the race without it -- the
+    # caller's resolution dropped a second time, after the front door
+    # had already dropped it (#89).
     if isinstance(structure, Independent):
-        return _rp(mu, V=None, D=np.asarray(structure.D, float), **kw)
+        return _rp(mu, V=None, D=np.asarray(structure.D, float),
+                   points=points, **kw)
     if isinstance(structure, Factor):
         return _rp(mu, V=np.asarray(structure.V, float),
-                   D=np.asarray(structure.D, float), **kw)
+                   D=np.asarray(structure.D, float), points=points, **kw)
     # the hierarchical kernels are Gaussian, hard-race, probabilities-only.
     # Accepting and discarding base=, temperature= or return_slopes=
     # would answer a different question than the caller asked
     # (sixth review), so they are refused.
+    # window= and delta= join the refusal list rather than the forward
+    # list: the hierarchical kernels do their own windowing and take
+    # neither argument, so forwarding them here would have dropped them
+    # silently -- the same defect being fixed one level up (#89). The
+    # Independent and Factor branches above DO forward them, through
+    # **kw, because race_probabilities takes them.
     unsupported = [k for k, bad in
                    (("base", kw.get("base") not in (None, "normal")),
                     ("temperature", bool(kw.get("temperature"))),
-                    ("return_slopes", bool(kw.get("return_slopes"))))
+                    ("return_slopes", bool(kw.get("return_slopes"))),
+                    ("window", kw.get("window") not in (None, "bulk")),
+                    ("delta", kw.get("delta") is not None
+                     and float(kw["delta"]) != 1e-12))
                    if bad]
     if unsupported:
+        lattice = [k for k in unsupported if k in ("window", "delta")]
+        model = [k for k in unsupported if k not in ("window", "delta")]
+        why = []
+        if model:
+            why.append(
+                f"{', '.join(model)}: the block/nested/tree kernels are "
+                "Gaussian hard races returning probabilities only")
+        if lattice:
+            why.append(
+                f"{', '.join(lattice)}: these kernels choose their own "
+                "lattice window per cluster")
         raise NotImplementedError(
             f"{type(structure).__name__} races do not support "
-            f"{', '.join(unsupported)}: the block/nested/tree kernels are "
-            "Gaussian hard races returning probabilities only. Use "
-            "structure=Factor (or V=/D=) for a non-normal base, finite "
-            "temperature or slopes.")
+            + "; ".join(why)
+            + ". Use structure=Factor (or V=/D=) for a non-normal base, "
+            "finite temperature, slopes, or an explicit lattice window.")
     if isinstance(structure, Blocks):
         return block_race_probabilities(mu, structure.cluster,
                                         structure.loading, structure.D,
