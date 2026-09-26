@@ -349,6 +349,40 @@
   when the loadings are global. Distinct from #212 (a finite-grid
   derivative mismatch for loadings that ARE supported) and #264 (the
   nested `coupling` rank).
+- A capped ordered-prefix lattice is policed per CELL, not by the total
+  (#269). `ordered_probabilities` sizes its lattice by the widest
+  runner and samples uniformly, so a field with sds of 22.0, 0.029 and
+  0.011 needed 259,498 points, got the 16,385 cap, and then trusted one
+  scalar invariant. That total was 1.00038 -- inside the default
+  `mass_tol=1e-3` -- while the `(1, 2)` cell was **2.1% high**, because
+  cell errors of opposite sign cancel in a sum. Normalising spread the
+  residual and returned a plausible number.
+
+  `points=` could not rescue it: `min(max(points, need), cap)` is the
+  cap whenever `need` exceeds it, so every value of `points` returned
+  the identical capped answer.
+
+  When the lattice is capped the pass now refines -- doubling -- and
+  watches the prefix probabilities themselves, stopping when they move
+  by less than `mass_tol`. That fixture resolves exactly at 32,769
+  points: the reported cell goes from 2.1% high to 6e-14 of the exact
+  one-dimensional integral, and every other cell agrees to 1e-8. If the
+  point budget runs out before the cells settle, the call RAISES and
+  says the total mass is not evidence, instead of renormalising a
+  guess.
+
+  The refinement costs nothing on an ordinary field: it runs only when
+  the lattice is capped, and fourteen uncapped fixtures over k=1,2,3,
+  both bases, are bit-identical to before.
+
+  Worth recording that the same fixture at `k=1` and `k=3` was ALREADY
+  raising on the mass check (defects 2.0e-3 and 2.7e-3). Only `k=2`
+  cancelled well enough to get through. All three now return the
+  resolved answer.
+
+  This is the ordered-prefix member of the family in #224, #244, #197
+  and #228: a lattice spanned by the widest scale, sampled uniformly,
+  with an AGGREGATE guard that cannot see a per-element failure.
 - Two documents stopped pointing at a deleted tree (#250). Removing the
   dead `src/` package left `data/README.md` sending readers to
   `attic/src/winning/benchmarks/`, which went with it, and a research
