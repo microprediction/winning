@@ -102,7 +102,20 @@ expected_payoff_sum <- function(cdf, cdf_all, mult_all) {
 # offsets blend the two integer shifts), against a fixed field.
 implicit_state_prices <- function(base_cdf, cdf_all, mult_all, offsets, L) {
   vapply(offsets, function(k) {
-    if (k == trunc(k)) {
+    # The integer fast path must obey the SAME clamp the field was
+    # built with. state_prices_from_offsets builds through shifted_cdf,
+    # which goes via low_high and pins an offset at or past L-2 to the
+    # boundary; this called integer_shift(base_cdf, k) with the raw k,
+    # whose own clamp is the much wider +/-(m-1). A runner could sit in
+    # the field at offset L-2 and be PAID at 60, so the state prices
+    # stopped being exhaustive claims on one race and summed to 1.88 --
+    # while an epsilon off the integer gave 1.0, because the
+    # non-integer path was clamped correctly all along (#292).
+    #
+    # Guarding the fast path by the interior condition is exactly
+    # equivalent where it applies: for an interior integer low_high
+    # returns (k, 1), (k, 0), which is this shift with weight one.
+    if (k == trunc(k) && k > -L + 2 && k < L - 2) {
       expected_payoff_sum(integer_shift(base_cdf, as.integer(k)),
                           cdf_all, mult_all)
     } else {

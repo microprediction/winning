@@ -5,6 +5,32 @@
 # stable-direction deconvolution; see the python module docstring for
 # derivations and the two-branch refusal of exact-rank targets.
 
+# The depth of a top-k curve is a COUNT, so it is an integer. Every
+# guard truncated first -- as.integer(k) here, int(k) in python,
+# Math.trunc in the browser -- and then range-checked the truncated
+# value, so a fractional depth passed and was silently floored:
+# top_k_probabilities(mu, 1.5) returned the top-1 curve and 2.5 the
+# top-2 one, with no warning and a mass of 1 or 2 rather than the 1.5
+# or 2.5 asked for. k=0, k=n and k>n were all refused; only the
+# non-integer slipped through, which is the one case the message
+# "k must be in [1, n-1]" reads as permitting.
+.as_depth <- function(k, n, where = "k") {
+  kk <- as.numeric(k)
+  if (length(kk) != 1L || !is.finite(kk))
+    stop(sprintf("%s must be a single whole number of places", where),
+         call. = FALSE)
+  if (kk != trunc(kk))
+    stop(sprintf(paste("%s must be a whole number of places; got %s. A",
+                       "top-k curve counts finishers, so there is no",
+                       "top-%s."), where, format(kk), format(kk)),
+         call. = FALSE)
+  kk <- as.integer(kk)
+  if (kk < 1L || kk > n - 1L)
+    stop(sprintf("%s must be in [1, n-1]; got k=%d, n=%d", where, kk, n),
+         call. = FALSE)
+  kk
+}
+
 .clip01 <- function(v) pmin(pmax(v, 0), 1)
 
 .resolved_points <- function(lo, hi, sd, points) {
@@ -184,9 +210,7 @@
 top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
                                 base = "normal", points = 513, qa = 15) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   sd <- sqrt(if (is.null(D)) rep(1, n) else D)
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V))
@@ -205,9 +229,7 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
                                    base = "normal", points = 513, qa = 15) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   1 - top_k_probabilities(mu, n - k, V = V, D = D, base = base,
                           points = points, qa = qa)
 }
@@ -215,9 +237,7 @@ bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
                             points = 513, V = NULL, qa = 15) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   if (!is.null(V)) {
     # exact node mixture: the factor shift commutes with d/dmu, d/dsigma
     fac <- .topk_factor_nodes(V, n, qa)
@@ -324,9 +344,7 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
                                 tol = 1e-8, target_floor = NULL,
                                 return_info = FALSE) {
   n <- length(q)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   vt <- .validated_topk_target(q, k, n, target_floor)
   target <- vt$target
   sd <- sqrt(if (is.null(D)) rep(1, n) else D)
@@ -382,11 +400,9 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      n_iter = 60, tol = 1e-8, ridge = 0,
                                      mu0 = NULL, return_info = FALSE) {
   n <- length(q1)
-  k1 <- as.integer(k1); k2 <- as.integer(k2)
+  k1 <- .as_depth(k1, n, "k1"); k2 <- .as_depth(k2, n, "k2")
   if (k1 == k2)
     stop("k1 == k2 gives one curve twice: scale is unidentified")
-  for (kk in c(k1, k2)) if (kk < 1 || kk > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", kk, n))
   t1 <- .validated_topk_target(q1, k1, n, NULL)$target
   t2 <- .validated_topk_target(q2, k2, n, NULL)$target
   lt1 <- log(t1) - log1p(-t1)
