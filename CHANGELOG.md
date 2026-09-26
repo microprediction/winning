@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- The browser's `hermiteNodes` built the whole `order ** rank` tensor
+  and pruned it afterwards (#268), which is the defect python closed in
+  #155 and this port kept. `Math.max(...W)` spreads every weight as an
+  argument list, so rank 5 at order 15 -- 759,375 nodes -- died with
+  `RangeError: Maximum call stack size exceeded` before pruning ever
+  ran. Rewriting that one line as a loop only moves the wall: rank 5 at
+  order 41 is 115,856,201 nodes to build and then throw away.
+
+  The rule is now built one dimension at a time, as python's is. A
+  partial product whose weight cannot reach the threshold whatever the
+  remaining coordinates contribute -- each at most `wmax` -- cannot be
+  in the answer, so it is dropped as soon as it appears. The kept set
+  and its ORDER are exactly the full tensor's, because the test for a
+  partial product is implied by the test for every full product
+  extending it and the loops extend in the tensor's own order.
+
+  Measured against the python reference: 20 rules over ranks 1-5 and
+  orders 3-15 agree in nodes, weights AND order. Rank 5 at order 15 is
+  83,757 nodes in 15 ms where it used to raise; rank 5 at order 41 is
+  1,061,871 nodes in 192 ms, from a tensor of 1.16e8.
+
+  `hermiteNodes` now also refuses a non-integer or non-positive rank or
+  order rather than looping on `Math.pow(order, k)`.
 - Browser factor APIs accepted a ragged `F` and a mismatched `W`
   without a word (#290). `condMeans` dotted each node row against the
   loadings over the ROW's own length, so the rank was whatever each row
