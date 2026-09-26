@@ -79,6 +79,8 @@ end
 
     # the internally built nodes are untouched
     @test isapprox(sum(race_probabilities(mu; V = V, D = D)), 1.0; atol = 1e-12)
+end
+
 # --- julia must refuse what the other ports refuse --------------------
 #
 # Found by parity/check_divergence.py, which runs the same malformed

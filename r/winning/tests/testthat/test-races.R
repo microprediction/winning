@@ -69,6 +69,9 @@ test_that("factor nodes carry the loadings' rank", {
   p <- race_probabilities(mu, V = V, D = D, F = F, W = W)
   expect_lt(abs(sum(p) - 1), 1e-12)
   expect_true(all(is.finite(race_probabilities(mu, V = V, D = D))))
+})
+
+
 # --- R must refuse what the other ports refuse ------------------------
 #
 # Found by parity/check_divergence.py, which runs the same malformed
