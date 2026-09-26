@@ -82,7 +82,9 @@ def test_a_waiver_is_not_stale_when_its_port_is_absent(monkeypatch,
     if len(runners) < 2:
         pytest.skip("need two other port toolchains")
     monkeypatch.setattr(mod, "RUNNERS", runners)
-    assert "julia" in mod.EXPECTED["topk_k_fractional"]["ports"]
+    waived = [c for c, e in mod.EXPECTED.items() if "julia" in e["ports"]]
+    if not waived:
+        pytest.skip("no waiver currently depends on julia")
     rc = mod.main()
     out = capsys.readouterr().out
     assert "no longer diverges" not in out

@@ -45,11 +45,14 @@ RUNNERS = {
 # depth says nothing about whether julia still refuses it, and calling
 # the waiver stale there told the reader to delete a live one (#310).
 EXPECTED = {
-    "topk_k_fractional": {
-        "why": "a fractional depth: julia's Int signature refuses it and "
-               "the other three round. The integer-depth contract is "
-               "#298; this entry goes when that lands.",
-        "ports": ["julia", "python"],
+    "inv_p_huge": {
+        "why": "#326 -- python rescues a target whose entries are finite "
+               "but whose SUM overflows, by dividing by the max before "
+               "normalising, and recovers the SAME abilities as the "
+               "finite target with identical ratios. That is #300's fix, "
+               "python-only so far; the other three still refuse. Goes "
+               "when the rescue is ported.",
+        "ports": ["python", "R", "browser", "julia"],
     },
     "D_tiny": {
         "why": "#304 -- every port prices a contestant whose sd the "
