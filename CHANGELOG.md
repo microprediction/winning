@@ -128,6 +128,28 @@
   build an array from ragged rows and a wrong rank fails the matmul
   against V -- so this was the browser guessing alone. Distinct from
   #232 (the shape of V).
+- A `Sigma=` supplied to `winning.probit` now goes through the same door
+  as `cov=` (#102). It went straight to `fit_factor_model`, so an
+  **indefinite** matrix -- eigenvalue -1 -- returned shares of
+  `[1.0, 0.0]`, and an asymmetric one returned a plausible
+  `[0.6485, 0.3515]`. Neither warned. A factor fit of a matrix that is
+  not a covariance has nothing to be checked against, so the check
+  belongs before the fit, not after it.
+
+  The validation already existed, inside `fit_covariance`. It is now
+  `winning.factor.core._validate_covariance` and both callers use it,
+  so the squareness, finiteness, symmetry and PSD rules are decided
+  once. Private, because `tests/test_port_surface.py` requires every
+  PUBLIC factor verb to declare its status in every port and a
+  validation helper is not a modelling verb -- `probit` already reaches
+  across for `_projected_sq` the same way.
+  The message names the argument the caller actually wrote, so a
+  `Sigma=` mistake is not reported as a problem with `cov=`.
+
+  `_prepare` is the single place `Sigma` enters, so `shares`,
+  `utilities_from_shares` and `removal_shares` all inherit it -- with a
+  test per verb, since inheriting it is the claim.
+
 - The standalone javascript factor inverse depended on the SCALE of the
   quadrature weights (#281). `W` and `c*W` describe the same factor
   law, and the forward already knew it: it normalises its accumulated
