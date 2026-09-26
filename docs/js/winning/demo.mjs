@@ -386,8 +386,26 @@ export function mendellElstonOne(mu, C, i) {
   const { m, S } = diffProblem(mu, C, i);
   const d = mu.length - 1;
   let logp = 0;
+  // Hardest constraint FIRST, as python's _order_variables does.
+  // Sequential moment matching is order dependent -- each step pretends
+  // the conditioned remainder is still normal -- so processing in raw
+  // contestant order made the answer depend on the LABELS: permuting a
+  // four-runner race, evaluating, and undoing the permutation moved a
+  // share by 3.9 percentage points (#287).
+  //
+  // python orders by a_t/sqrt(C_tt) descending, and its z is the
+  // negative of this port's, so here it is m[k]/sqrt(S[k,k])
+  // ASCENDING: the smallest survival probability goes first, while the
+  // normal approximation is still exact. The order is fixed once from
+  // the initial moments, as python fixes it, not re-sorted as the
+  // conditioning proceeds.
+  //
+  // Exact ties stay order dependent, in this port and in python: two
+  // equally hard constraints have no canonical precedence.
   const alive = [];
   for (let a = 0; a < d; a++) alive.push(a);
+  alive.sort((a, b) => (m[a] / Math.sqrt(Math.max(S[a * d + a], 1e-12)))
+                     - (m[b] / Math.sqrt(Math.max(S[b * d + b], 1e-12))));
   while (alive.length) {
     const k = alive.shift();
     const skk = Math.max(S[k * d + k], 1e-12), sk = Math.sqrt(skk);
