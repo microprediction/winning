@@ -113,12 +113,26 @@ export function hermite1(order) {
 
    Weights are renormalised at the end, as the reference does: pruning
    drops ~1e-7 of the mass and a direct weighted mixture consumes W
-   as-is. (#268) */
+   as-is. (#268)
+
+   k = 0 is the EMPTY PRODUCT -- one node of weight 1 with no columns --
+   so a zero-rank loading matrix integrates over the zero-dimensional
+   factor space and prices the independent race through this same path.
+   The guard here used to demand k >= 1, which refused it; python, R and
+   julia all answer it, so refusing made this port the odd one out
+   (#68). */
+function asCount(x, name, minimum) {
+  if (!Number.isInteger(x))
+    throw new Error(`hermiteNodes needs an integer ${name}; got ${x}`);
+  if (x < minimum)
+    throw new Error(`hermiteNodes needs ${name} >= ${minimum}; got ${x}`);
+  return x;
+}
+
 export function hermiteNodes(k, order = 15, prune = 1e-7) {
-  if (!Number.isInteger(k) || k < 1)
-    throw new Error(`hermiteNodes: rank must be a positive integer; got ${k}`);
-  if (!Number.isInteger(order) || order < 1)
-    throw new Error(`hermiteNodes: order must be a positive integer; got ${order}`);
+  k = asCount(k, "k", 0);
+  order = asCount(order, "order", 1);
+  if (k === 0) return { F: [[]], W: [1] };
   const h = hermite1(order);
   if (k === 1) return { F: h.nodes.map(x => [x]), W: h.weights.slice() };
 
@@ -358,7 +372,12 @@ export function asLoadings(V, n, where = "V") {
       `${[...widths].sort((a, b) => a - b).join(", ")}; every contestant ` +
       "needs the same number of factors");
   const w = [...widths][0];
-  if (w === 0) throw new Error(`${where}: rows are empty`);
+  // w = 0 is an (n, 0) loading matrix: no factors, which the reference
+  // accepts and prices as the independent race. Refusing it here made
+  // this port the only one of four that could not express "no factors"
+  // programmatically -- and the guard arrived in the commit whose whole
+  // purpose was to match the reference (#68). A zero-width V with the
+  // WRONG row count still fails the shape check below.
   let M = V;
   if (V.length !== n) {
     if (w !== n)

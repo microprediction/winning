@@ -170,4 +170,19 @@ end
     @test pall ≈ 1.0 atol = 1e-10
 end
 
+@testset "rank zero is the independent rectangle" begin
+    # every r != 1 was built as RANK TWO, so r = 0 made a spurious
+    # Q^2 x 2 node matrix and then failed multiplying it by a 0 x n
+    # loading transpose. The exact answer is the independent product
+    # (#68).
+    F, W = FactorMvNormalCDF._gh_nodes(0, 15)
+    @test size(F) == (1, 0)
+    @test W ≈ [1.0]
+    for n in (2, 3, 4)
+        @test mvn_cdf_fast(upper = zeros(n), V = zeros(n, 0),
+                           D = ones(n)) ≈ 0.5 ^ n atol = 1e-10
+    end
+    @test_throws ArgumentError FactorMvNormalCDF._gh_nodes(-1, 15)
+end
+
 println("all FactorMvNormalCDF tests passed")

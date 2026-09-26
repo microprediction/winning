@@ -71,6 +71,66 @@
   file still did not parse. A conflict resolution is exactly when a
   brace goes missing. This asks node, so it skips where node is absent
   -- the second net, not the first.
+- The probit variance floor now scales with the covariance it floors
+  (#101). A race is unchanged by the unit its performances are measured
+  in: scale every utility by `c` and every variance by `c**2` and the
+  shares are the same numbers. The `D=` path had that exactly; the
+  `Sigma=` path did not.
+
+  `factor_model_projected` floored `D` at an **absolute** `1e-8`, so
+  `Sigma = 1e-12 * I` came back as `D = 1e-8` -- the variance inflated
+  ten-thousandfold -- and the shares collapsed from
+  `[0.6085, 0.2626, 0.1288]` to `[0.3360, 0.3330, 0.3309]`, a near coin
+  flip. The same race written with `D=` was exact at every scale.
+
+  The rule was already settled 300 lines below, in `fit_covariance`:
+  *"the floor is RELATIVE to each runner's own variance, not an
+  absolute multiple of the mean ... An absolute floor destroys
+  near-singular contrasts."* That fix was made in one of the two places
+  this file floors a variance and not the other -- the same shape as
+  every cross-port defect this week, except both copies are in one
+  file.
+
+  The MULTIPLIER is unchanged, so at unit scale the floor is the same
+  ORDER it has always been -- but not the same number, and the
+  difference is worth stating precisely rather than claiming none.
+  Across 24 fits at n = 3, 5, 8 and rank 1 and 2, `D` is identical in
+  22. In the other two the old floor was BINDING, and because those
+  covariances have `diag(C)` near 1.6 the relative floor sits slightly
+  above the old absolute one, so `D` rises by 1.2e-8 and the shares
+  move by 1.0e-3. That is the fix doing its job -- the floor is tied to
+  the runner's own variance now rather than to 1 -- not a side effect,
+  and it only appears where a variance was already at the floor, i.e.
+  already degenerate.
+
+  `diag(1e-8, 1e-8, 1)` still keeps `Var(X1 - X2)` at exactly 2e-8
+  rather than raising it, and scale invariance now holds to 1e-12 over
+  nine decades, `1e0` down to `1e-9`.
+- `structure=` describes the covariance; it no longer silences the
+  numerical knobs (#89). `race_probabilities(..., structure=...)`
+  dropped `points`, `window` and `delta` at the front door, and
+  `dispatch_probabilities` dropped `points` a SECOND time recursing
+  into `Independent` and `Factor` -- it is a named parameter there, so
+  it never reached `**kw`. A caller asking for resolution got the
+  default in silence: `points = 17`, `257` and `2049` returned
+  byte-identical answers on a `Blocks` race, and a lattice too coarse
+  to resolve the field never raised the mass defect it should have.
+
+  `window` and `delta` join the REFUSAL list rather than the forward
+  list for the hierarchical kernels. They choose their own window per
+  cluster and take neither argument, so forwarding them would have
+  dropped them silently -- the same defect one level down. `base`,
+  `temperature` and `return_slopes` were already refused there for the
+  same reason, and the message now gives the right reason for each
+  group: a model-level refusal and a lattice-level one are not the same
+  sentence.
+
+  `structure=` together with `V=`, `D=`, `F=` or `W=` is refused.
+  Both describe the covariance, and the front door answered one of them
+  silently -- forward dropping the caller's `V/D` while the inverse
+  could keep `V` and replace `D` from the structure, so a target
+  inverted one way did not reprice the other.
+
 - The browser's `hermiteNodes` built the whole `order ** rank` tensor
   and pruned it afterwards (#268), which is the defect python closed in
   #155 and this port kept. `Math.max(...W)` spreads every weight as an
@@ -128,6 +188,28 @@
   build an array from ragged rows and a wrong rank fails the matmul
   against V -- so this was the browser guessing alone. Distinct from
   #232 (the shape of V).
+- A `Sigma=` supplied to `winning.probit` now goes through the same door
+  as `cov=` (#102). It went straight to `fit_factor_model`, so an
+  **indefinite** matrix -- eigenvalue -1 -- returned shares of
+  `[1.0, 0.0]`, and an asymmetric one returned a plausible
+  `[0.6485, 0.3515]`. Neither warned. A factor fit of a matrix that is
+  not a covariance has nothing to be checked against, so the check
+  belongs before the fit, not after it.
+
+  The validation already existed, inside `fit_covariance`. It is now
+  `winning.factor.core._validate_covariance` and both callers use it,
+  so the squareness, finiteness, symmetry and PSD rules are decided
+  once. Private, because `tests/test_port_surface.py` requires every
+  PUBLIC factor verb to declare its status in every port and a
+  validation helper is not a modelling verb -- `probit` already reaches
+  across for `_projected_sq` the same way.
+  The message names the argument the caller actually wrote, so a
+  `Sigma=` mistake is not reported as a problem with `cov=`.
+
+  `_prepare` is the single place `Sigma` enters, so `shares`,
+  `utilities_from_shares` and `removal_shares` all inherit it -- with a
+  test per verb, since inheriting it is the claim.
+
 - The standalone javascript factor inverse depended on the SCALE of the
   quadrature weights (#281). `W` and `c*W` describe the same factor
   law, and the forward already knew it: it normalises its accumulated
@@ -325,6 +407,50 @@
   an optimizer declares convergence precisely where an observation is
   most badly contradicted: it cannot tell a maximum from a floor, and a
   central difference of the objective is zero there too.
+- The dense-covariance race priced a different race depending on the
+  common mode (#302). Adding `a 11'` to a covariance adds one shared
+  Gaussian shift, which cancels from every ordering, so `I + a 11'` is
+  the same race as `I` for every `a`. The winner moved by **0.033** at
+  `a = 4e15`, and materially well before that: 0.0066 at 3e14, 0.0127
+  at 2e15.
+
+  `_race_dense` factored the covariance, handed the factor to
+  `qmc_ghk`, and let it rebuild `L @ L.T + diag(D)`. That round trip is
+  not lossless. The Cholesky's conditional-variance step is
+  `C22 - L21**2`, catastrophic cancellation when an unidentifiable
+  common mode dominates: at `a = 4e15` it gives `L22**2 = 1.4030` where
+  the exact value is 2.0, and the reconstructed covariance has contrast
+  variance **1.5** against the input's 2.0.
+
+  The loss is invisible in float64, which is why it stood: evaluating
+  `R00 + R11 - 2 R01` on entries of size 4e15 cancels to exactly 2.0,
+  and only summing as rationals shows 1.5. The regression test measures
+  it in `Fraction` for that reason, and asserts the float64 reading is
+  the misleading one.
+
+  `qmc_ghk` now takes `cov=` and uses the matrix as given. `_ghk_prob`
+  already formed `M @ Sigma @ M.T` from whatever it was handed, so the
+  fix is to hand it the original -- which is what the R port
+  (`.ghk_one`) always did, making this a Python/R semantic discrepancy
+  as well as an invariance bug. The Cholesky stays in `_race_dense` as
+  the positive-definiteness TEST it also was, with its jitter now
+  applied to the covariance rather than routed through a factorization.
+
+  The registry normalises `V` and `D` at the door for all twelve
+  methods; a method handed the covariance directly has no loadings to
+  normalise, so an explicit `cov=` skips that and validates the matrix
+  itself. Narrow on purpose -- forcing a caller who already holds a
+  covariance to supply a factorization is precisely what this was.
+
+  Measured as a no-op everywhere it was already right: on random dense
+  covariances at n = 4 and n = 8 the probabilities are identical to
+  main to every printed digit, and the pre-existing GHK quadrature
+  noise (3.3e-5 permutation, n = 4) is unchanged. Beyond float64 the
+  input itself has no contrast -- at `a = 1e16`, `1 + 1e16 == 1e16` and
+  the stored matrix has contrast exactly zero -- so the fix holds to
+  exactly where the input still determines the race, and a test states
+  that boundary rather than leaving it to be discovered.
+
 - The browser's block Jacobian returned an all-`NaN` matrix for
   supported rank-2 cluster loadings, and said nothing (#271). The
   FORWARD block kernel prices rank-r loadings; this Jacobian is written
@@ -349,6 +475,40 @@
   when the loadings are global. Distinct from #212 (a finite-grid
   derivative mismatch for loadings that ARE supported) and #264 (the
   nested `coupling` rank).
+- A capped ordered-prefix lattice is policed per CELL, not by the total
+  (#269). `ordered_probabilities` sizes its lattice by the widest
+  runner and samples uniformly, so a field with sds of 22.0, 0.029 and
+  0.011 needed 259,498 points, got the 16,385 cap, and then trusted one
+  scalar invariant. That total was 1.00038 -- inside the default
+  `mass_tol=1e-3` -- while the `(1, 2)` cell was **2.1% high**, because
+  cell errors of opposite sign cancel in a sum. Normalising spread the
+  residual and returned a plausible number.
+
+  `points=` could not rescue it: `min(max(points, need), cap)` is the
+  cap whenever `need` exceeds it, so every value of `points` returned
+  the identical capped answer.
+
+  When the lattice is capped the pass now refines -- doubling -- and
+  watches the prefix probabilities themselves, stopping when they move
+  by less than `mass_tol`. That fixture resolves exactly at 32,769
+  points: the reported cell goes from 2.1% high to 6e-14 of the exact
+  one-dimensional integral, and every other cell agrees to 1e-8. If the
+  point budget runs out before the cells settle, the call RAISES and
+  says the total mass is not evidence, instead of renormalising a
+  guess.
+
+  The refinement costs nothing on an ordinary field: it runs only when
+  the lattice is capped, and fourteen uncapped fixtures over k=1,2,3,
+  both bases, are bit-identical to before.
+
+  Worth recording that the same fixture at `k=1` and `k=3` was ALREADY
+  raising on the mass check (defects 2.0e-3 and 2.7e-3). Only `k=2`
+  cancelled well enough to get through. All three now return the
+  resolved answer.
+
+  This is the ordered-prefix member of the family in #224, #244, #197
+  and #228: a lattice spanned by the widest scale, sampled uniformly,
+  with an AGGREGATE guard that cannot see a per-element failure.
 - Two documents stopped pointing at a deleted tree (#250). Removing the
   dead `src/` package left `data/README.md` sending readers to
   `attic/src/winning/benchmarks/`, which went with it, and a research
@@ -425,6 +585,200 @@
   contract here. The manual now says so.
   Every documented spelling still agrees: scalar `D`, length-n `D` and
   the default bounds all return the same number.
+- `AbilityTracker.observe` refuses evidence that would poison its state.
+  A tracker CARRIES state, so bad evidence is not one bad answer -- it
+  is a corrupted filter. One NaN score made every entity's mean and
+  variance NaN, and a later CLEAN contest did not recover them:
+
+      before NaN:            [0.8, 0.0, -0.8]
+      after NaN:             [nan, nan, nan]
+      after a CLEAN contest: [nan, nan, nan]
+
+  An infinite score and a NaN price did the same, all three silently.
+  Nothing downstream could tell a poisoned filter from a filter that
+  had simply learned nothing, and there is no way back: the ratings the
+  caller keeps asking for stay NaN for the rest of the run.
+
+  `scores` and `prices` are now checked at the door for finiteness and
+  for one entry per entrant. The length did already raise, but as
+  "operands could not be broadcast together with shapes", which names
+  nothing the caller passed; it now says which argument and what it got.
+  The message for a non-finite entry names the index, counts how many
+  there are, and says why it matters rather than just that it is
+  refused.
+
+  A refusal leaves the filter exactly as it was -- the ratings before
+  and after are identical objects -- so a caller who catches it can
+  carry on with the next contest.
+
+  The DENSE filter had the same hole. `rate_history` does not carry
+  state across calls the way the tracker does, but it carries it across
+  the history it is given: one non-finite `margins`, `scores` or
+  `p_market` entry made every entity's mean and covariance NaN for the
+  rest of that history. Both are now checked in the per-race loop, with
+  the same two messages.
+
+  Neither `walk_forward` needs its own check: the dense one routes
+  every race through `rate_history` and the tracker's through
+  `observe`, so they inherit the contract. That is the point of fixing
+  the door rather than the callers, and there is a test that pins it.
+
+  Those checks look at the ENTRIES, which is not enough (#300). For a
+  market law like `[1e308, 1e308, 1e308]` every entry is finite and the
+  SUM is not: `target / target.sum()` in `abilities_from_race` divided
+  by inf and gave NaN, and both filters then stored NaN means and NaN
+  evidence from input they had just accepted, correctly, as finite.
+  A market law is defined up to a positive factor, so that is the same
+  law as `[1, 1, 1]` and must give the same answer -- it now does, for
+  scales from 1e-300 to 1.7e308.
+
+  The rescale is CONDITIONAL, taken only when the sum overflows, so
+  every ordinary input is bit-identical: 25 random inverses agree with
+  main to 0.000e+00.
+- `as_loadings` checks finiteness, as its two siblings already did. The
+  three shape contracts are the one place each rule is decided and
+  should refuse the same kinds of thing: `as_idio` names a non-finite
+  variance and `as_weights` names a non-finite weight, but
+  `as_loadings` let a NaN through.
+
+  It did not produce a wrong answer -- the NaN travelled as far as the
+  lattice sizing and came back as `ValueError: cannot convert float NaN
+  to integer`. That is a refusal, but one that names nothing the caller
+  passed and points at the wrong module: someone reading it goes
+  looking in the lattice code for a bug in their loadings.
+
+  Both copies are updated, since
+  `python/fastmvn/src/fastmvn/shapes.py` must stay byte-identical to
+  `winning/shapes.py`.
+- The ports disagreed about what to REFUSE, in ten of thirty cases, and
+  nothing was looking. `check_vectors.py`, `check.mjs`, `check.R` and
+  `check.jl` compare the ports' VALUES on well-formed inputs; nothing
+  compared their DECISIONS on malformed ones. A port that quietly
+  recycles a short `D` agrees with everyone on every vector in those
+  files and still prices a different race.
+
+  `parity/check_divergence.py` runs one case file through all four
+  ports and fails when they disagree. What it found, none of it
+  reported before:
+
+  | case | python | browser | R | julia |
+  |---|---|---|---|---|
+  | non-finite `mu` | NaN out | NaN out | refuse | refuse |
+  | empty `mu` | refuse | **accepts** | refuse | refuse |
+  | `D` wrong length | refuse | refuse | **recycles** | refuse |
+  | `D` zero | refuse | refuse | refuse | NaN out |
+  | scalar `V` | accept | accept | **refuse** | **refuse** |
+  | inverse `p` wrong length | refuse | refuse | **accepts** | refuse |
+
+  The worst is R's recycling in the core race verb: `D = c(2, 9)` at
+  n = 4 prices EXACTLY the race `D = c(2, 9, 2, 9)` prices -- same
+  numbers, no warning. That is #285's defect in `r/winning` itself
+  rather than `mvtnormfast`, and it would have been missed: `W` and `F`
+  were fixed at that same door earlier without anyone checking `D`.
+  R's inverse had it too, answering a two-runner race from a
+  four-entry `D`.
+
+  `mu` turns out to be the one argument nobody checked anywhere: `D`
+  goes through `as_idio`, `V` through `as_loadings`, `W` through
+  `as_weights`, and the abilities went straight to the lattice. python
+  and the browser now refuse a non-finite or empty `mu`.
+
+  The scalar-`V` row went the other way: python and the browser
+  implement the contract `as_loadings` documents -- a scalar is the
+  same loading for everyone -- and R and julia refused it. They were
+  moved to the documented behaviour, not the reverse.
+
+  All forty-four cases now agree across all four ports, and the check
+  runs in CI, skipping any port whose toolchain is absent rather than
+  passing vacuously.
+
+  Extending the scan to the node rule, the rank spellings and the other
+  verbs found the rest of #68 and one new defect. **Rank zero** is the
+  empty product -- one node of weight 1 with no columns -- and the
+  factor grammar already documents `Independent = Factor with empty V`,
+  with `as_loadings` accepting `(n, 0)`. Four paths could not price it,
+  each because the node constructors build the tensor by looping over
+  the rank and at rank zero that does not raise: python's
+  `hermite_nodes` returned the RANK-ONE rule, `_gh_nodes` raised from
+  inside `np.meshgrid`, julia's `_gh_nodes` built every `r != 1` as rank
+  two and then failed multiplying a `Q**2 x 2` node matrix by a `0 x n`
+  loading transpose, and R raised from inside `expand.grid`. The
+  browser and julia `hermite_nodes` already fell through to the right
+  answer, so the fix moved the other two onto their behaviour. Both
+  fastmvn copies and `FactorMvNormalCDF` now return exactly `0.5**n` for
+  the rank-zero rectangle, and the browser stopped refusing an `(n, 0)`
+  loading matrix outright -- a guard added by the very commit whose
+  purpose was to match the reference, which accepts it.
+
+  A negative rank and a zero order are now refused by name in all four,
+  rather than each falling through to a different well-formed rule for
+  a different problem.
+
+  The scan compares ANSWERS now, not just accept/refuse decisions: two
+  ports agreeing to accept is not agreeing on the race. That is what
+  turned up #304 -- a contestant whose idiosyncratic variance is small
+  but legal is priced at exactly **zero** by every port, its mass
+  renormalised onto the others, at 68% error by sd 3e-3 and 100% by sd
+  1e-3. `D = 0` is refused, so the boundary guard exists; it is just
+  drawn at zero rather than at what the lattice can resolve. Filed with
+  the measurement rather than fixed here: the repair is a lattice
+  change in four ports.
+
+  Two entries sit in `EXPECTED`, each with a reason and the PORTS whose
+  disagreement it is about, and the list is strict in both directions --
+  an entry that stops diverging fails the scan, so a waiver cannot
+  outlive its defect. Naming the ports is what makes that safe: a
+  waiver can only be judged when all of them ran. Judging it from the
+  survivors made the scan falsely red on a python-and-node machine and
+  told the reader to delete a live waiver, because with julia absent
+  nothing establishes that julia still refuses a fractional depth
+  (#310). It now prints "known, not judged: julia absent" and exits 0.
+
+  A third guard came out of reviewing the diff rather than from it
+  failing: a waiver is only examined while walking the cases, so one
+  whose case has been DELETED from the file is never looked at again
+  and sits there forever. That is the stale-waiver failure one step
+  earlier, and the stale check runs too late to catch it. The scan now
+  reports an `EXPECTED` id that the case file does not contain.
+
+  Rank zero then earned its keep rather than merely stopping a crash:
+  `factorize_covariance` now tries it FIRST. A diagonal covariance is
+  exactly `V V' + diag(D)` with no factors, but the search began at
+  rank 1 -- which also fits a diagonal exactly, the off-diagonals being
+  already zero -- and chose a fit that put the variance in a LOADING.
+  On `diag([1, 1, 1, 1, 1e8])` it returned a loading of 9487, turning
+  an independent rectangle into a near-step factor integrand: **1.8e-3**
+  relative error where the answer is a product of univariate CDFs
+  (#132). Rank zero is exact to 1.8e-16 and **4x faster**, the
+  quadrature being one node instead of Q. A correlated matrix still
+  finds its factors -- rank zero is tried first, not instead.
+
+  Rank zero was still wrong in three more node builders, each with the
+  same shape as the four already fixed: rank 1 special-cased, every
+  other rank sent through a rank-2 tensor. `winning/factor/topk.py`,
+  `winning/likelihood.py::_factor_nodes` and
+  `docs/js/winning/topk.mjs` took an `(n, 0)` matrix into a
+  two-dimensional factor space the race does not have, and top-k, rank
+  marginals and the ranking likelihood raised rather than answering
+  (#309).
+
+  The issue named python and the browser, which is the pair the
+  reviewer ran. Adding the case to the scan showed R and julia had it
+  too -- R's shared `.cluster_nodes` refused rank 0 with a message
+  about needing Sobol nodes for rank >= 3, and julia's
+  `_topk_factor_nodes` built the rank-2 tensor. Four ports, one defect,
+  found by extending the scan rather than by reading four files. All
+  four now return the independent answer, agreeing with each other in
+  value and not merely in verdict.
+
+  Three of the first five "divergences" the value comparison reported
+  were the harness, not the ports: julia `vec`s a matrix column-major
+  where the reference ravels row-major, the julia runner was rounding a
+  fractional depth the port cannot express, and `rbind` turned a scalar
+  `V` into a 1x1 matrix. A parity tool that cannot be wrong about the
+  ports is not measuring them, so the scanner now fails loudly when a
+  present toolchain's runner exits non-zero, instead of dropping that
+  port and reporting that everyone agreed.
 
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is

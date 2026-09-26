@@ -331,6 +331,20 @@ GH_RULE_DEFAULT = (15, 3.0)
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
+    # mu was the one argument nobody checked: D goes through as_idio, V
+    # through as_loadings, W through as_weights, and the abilities
+    # themselves went straight to the lattice. A NaN or inf there came
+    # back as NaN probabilities that sum to nothing, silently. R and
+    # julia already refused it, which is how the cross-port divergence
+    # scan found it.
+    if n == 0:
+        raise ValueError("mu is empty; a race needs at least one contestant")
+    bad = np.flatnonzero(~np.isfinite(mu))
+    if bad.size:
+        raise ValueError(
+            f"mu[{int(bad[0])}] = {float(mu[bad[0]])!r} is not finite "
+            f"({bad.size} of {n} are); an ability is a finite location on "
+            "the performance scale")
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     if V is None:
         V = np.zeros((n, 1))
@@ -741,12 +755,20 @@ def _race_dense(mu, cov, budget=4096, seed=0, return_slopes=False,
     n = len(C)
     order = np.lexsort((C.sum(axis=1), m))
     Cs = C[np.ix_(order, order)]
+    # The Cholesky is a POSITIVE-DEFINITENESS TEST here, not a change of
+    # variables: the covariance goes to GHK as itself. Factoring it and
+    # letting qmc_ghk rebuild `L @ L.T` lost the choice-relevant
+    # eigenvalue whenever an unidentifiable common mode dominated --
+    # `I + a 11'` is the same race as `I` for every `a`, and the winner
+    # moved by 0.033 at a = 4e15 while the contrast variance stayed
+    # exactly 2.0 (#302). The R port always formed the contrast from
+    # the original matrix.
     try:
-        L = np.linalg.cholesky(Cs)
+        np.linalg.cholesky(Cs)
     except np.linalg.LinAlgError:
-        L = np.linalg.cholesky(Cs + 1e-10 * float(np.trace(Cs)) / n * np.eye(n))
-    ps, info = qmc_ghk(-m[order], L, np.full(n, 1e-12), budget=int(budget),
-                       seed=int(seed), return_slopes=return_slopes)
+        Cs = Cs + 1e-10 * float(np.trace(Cs)) / n * np.eye(n)
+    ps, info = qmc_ghk(-m[order], None, None, budget=int(budget),
+                       seed=int(seed), return_slopes=return_slopes, cov=Cs)
     p = np.empty(n)
     p[order] = np.asarray(ps, dtype=float)
     if log:
@@ -848,10 +870,29 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         if degraded and routable:
             return _race_dense(mu, cov)
     if structure is not None:
+        # structure= DESCRIBES the covariance; V/D/F/W describe it too,
+        # and passing both asked two questions and answered one of them
+        # silently. Forward dropped the caller's V/D while the inverse
+        # could keep V and replace D from the structure, so a target
+        # inverted one way did not reprice the other (#89).
+        conflicting = [n for n, v in (("V", V), ("D", D), ("F", F),
+                                      ("W", W)) if v is not None]
+        if conflicting and cov is None:
+            raise ValueError(
+                f"structure= already describes the covariance; "
+                f"{', '.join(conflicting)}= would describe it again. "
+                "Pass one or the other.")
         from .structures import dispatch_probabilities
+        # points/window/delta are the NUMERICAL controls, and dropping
+        # them meant a caller asking for more resolution got the
+        # default: points=17, 257 and 2049 returned the identical
+        # answer on a Blocks race, and a points= too coarse to resolve
+        # the field never raised the mass defect it should have (#89).
         return dispatch_probabilities(mu, structure, base=base,
                                       temperature=temperature,
-                                      return_slopes=return_slopes)
+                                      return_slopes=return_slopes,
+                                      points=points, window=window,
+                                      delta=delta)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     if temperature and temperature > 0:
         return _race_tempered(mu, V, D, F, W, fn, left, right,
@@ -1043,7 +1084,23 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                 "entries deliberately and read the result as a one-sided "
                 "bound on the floored contrasts, or supply a pseudocount "
                 "upstream.")
-    target = target / target.sum()
+    # Rescale before summing ONLY when the sum would overflow. A market
+    # law is defined up to a positive factor, so [1e308]*3 is the same
+    # law as [1]*3 -- but the sum of the first is inf, the division gave
+    # NaN, and both ratings filters then stored NaN means and NaN
+    # evidence from input every entry of which was finite (#300). The
+    # finiteness checks at the filters' doors cannot see this: they look
+    # at the entries, and the entries are fine.
+    #
+    # Conditional so that every ordinary input is bit-identical: the
+    # branch is taken only where the current arithmetic is already
+    # broken. Dividing by the max first leaves entries in (0, 1], so the
+    # sum is at most n.
+    _tot = target.sum()
+    if not np.isfinite(_tot):
+        target = target / target.max()
+        _tot = target.sum()
+    target = target / _tot
     if structure is not None:
         # the grammar path takes the SAME contract (sixth review): the
         # target was validated or floored above, and the iteration reports

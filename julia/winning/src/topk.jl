@@ -185,7 +185,14 @@ function _topk_factor_nodes(V, n, qa, caller)
     r > 2 && error("$caller is implemented for factor rank <= 2")
     Vm = Vm .- sum(Vm, dims = 1) ./ n
     h = hermite1(qa)
-    if r == 1
+    if r == 0
+        # the EMPTY PRODUCT: rank 1 was special-cased and every other
+        # rank fell into the rank-2 tensor, so an (n, 0) matrix -- the
+        # documented spelling of "no factors" -- was integrated over a
+        # two-dimensional factor space it does not have (#309)
+        nodes = Matrix{Float64}(undef, 1, 0)
+        w = [1.0]
+    elseif r == 1
         nodes = reshape(h.nodes, :, 1)
         w = copy(h.weights)
     else
