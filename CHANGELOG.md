@@ -509,6 +509,21 @@
   The rescale is CONDITIONAL, taken only when the sum overflows, so
   every ordinary input is bit-identical: 25 random inverses agree with
   main to 0.000e+00.
+- `as_loadings` checks finiteness, as its two siblings already did. The
+  three shape contracts are the one place each rule is decided and
+  should refuse the same kinds of thing: `as_idio` names a non-finite
+  variance and `as_weights` names a non-finite weight, but
+  `as_loadings` let a NaN through.
+
+  It did not produce a wrong answer -- the NaN travelled as far as the
+  lattice sizing and came back as `ValueError: cannot convert float NaN
+  to integer`. That is a refusal, but one that names nothing the caller
+  passed and points at the wrong module: someone reading it goes
+  looking in the lattice code for a bug in their loadings.
+
+  Both copies are updated, since
+  `python/fastmvn/src/fastmvn/shapes.py` must stay byte-identical to
+  `winning/shapes.py`.
 
 - `block_race_jacobian` reads a rank-one loading in every spelling
   (#145). `winning.shapes.as_loadings` is the one place that rule is
