@@ -71,6 +71,42 @@
   file still did not parse. A conflict resolution is exactly when a
   brace goes missing. This asks node, so it skips where node is absent
   -- the second net, not the first.
+- The probit variance floor now scales with the covariance it floors
+  (#101). A race is unchanged by the unit its performances are measured
+  in: scale every utility by `c` and every variance by `c**2` and the
+  shares are the same numbers. The `D=` path had that exactly; the
+  `Sigma=` path did not.
+
+  `factor_model_projected` floored `D` at an **absolute** `1e-8`, so
+  `Sigma = 1e-12 * I` came back as `D = 1e-8` -- the variance inflated
+  ten-thousandfold -- and the shares collapsed from
+  `[0.6085, 0.2626, 0.1288]` to `[0.3360, 0.3330, 0.3309]`, a near coin
+  flip. The same race written with `D=` was exact at every scale.
+
+  The rule was already settled 300 lines below, in `fit_covariance`:
+  *"the floor is RELATIVE to each runner's own variance, not an
+  absolute multiple of the mean ... An absolute floor destroys
+  near-singular contrasts."* That fix was made in one of the two places
+  this file floors a variance and not the other -- the same shape as
+  every cross-port defect this week, except both copies are in one
+  file.
+
+  The MULTIPLIER is unchanged, so at unit scale the floor is the same
+  ORDER it has always been -- but not the same number, and the
+  difference is worth stating precisely rather than claiming none.
+  Across 24 fits at n = 3, 5, 8 and rank 1 and 2, `D` is identical in
+  22. In the other two the old floor was BINDING, and because those
+  covariances have `diag(C)` near 1.6 the relative floor sits slightly
+  above the old absolute one, so `D` rises by 1.2e-8 and the shares
+  move by 1.0e-3. That is the fix doing its job -- the floor is tied to
+  the runner's own variance now rather than to 1 -- not a side effect,
+  and it only appears where a variance was already at the floor, i.e.
+  already degenerate.
+
+  `diag(1e-8, 1e-8, 1)` still keeps `Var(X1 - X2)` at exactly 2e-8
+  rather than raising it, and scale invariance now holds to 1e-12 over
+  nine decades, `1e0` down to `1e-9`.
+
 - The browser's `hermiteNodes` built the whole `order ** rank` tensor
   and pruned it afterwards (#268), which is the defect python closed in
   #155 and this port kept. `Math.max(...W)` spreads every weight as an

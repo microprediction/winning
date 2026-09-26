@@ -214,7 +214,20 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
             D = D_new
             break
         D = D_new
-    return V, np.maximum(D, 1e-8)
+    # RELATIVE to each runner's own variance, the rule fit_covariance
+    # already settled on below ("the floor is RELATIVE ... an absolute
+    # floor destroys near-singular contrasts"). That fix was made in one
+    # of the two places this file floors a variance and not the other,
+    # so `Sigma = 1e-12 * I` came back as `D = 1e-8` -- the variance
+    # inflated ten-thousandfold and the shares collapsed to uniform,
+    # while the same race described with `D=` was exact (#101).
+    # The MULTIPLIER is unchanged, so at unit scale this is the same
+    # floor it has always been; only its covariance under rescaling is
+    # new. The inner term keeps the floor positive for a runner whose
+    # own variance is zero.
+    dc = np.diag(np.asarray(C, dtype=float))
+    floor = 1e-8 * np.maximum(dc, 1e-6 * max(float(np.mean(dc)), 1e-300))
+    return V, np.maximum(D, floor)
 
 
 def _projected_sq(C, V, D):
