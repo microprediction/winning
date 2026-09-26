@@ -106,6 +106,30 @@
   `diag(1e-8, 1e-8, 1)` still keeps `Var(X1 - X2)` at exactly 2e-8
   rather than raising it, and scale invariance now holds to 1e-12 over
   nine decades, `1e0` down to `1e-9`.
+- `structure=` describes the covariance; it no longer silences the
+  numerical knobs (#89). `race_probabilities(..., structure=...)`
+  dropped `points`, `window` and `delta` at the front door, and
+  `dispatch_probabilities` dropped `points` a SECOND time recursing
+  into `Independent` and `Factor` -- it is a named parameter there, so
+  it never reached `**kw`. A caller asking for resolution got the
+  default in silence: `points = 17`, `257` and `2049` returned
+  byte-identical answers on a `Blocks` race, and a lattice too coarse
+  to resolve the field never raised the mass defect it should have.
+
+  `window` and `delta` join the REFUSAL list rather than the forward
+  list for the hierarchical kernels. They choose their own window per
+  cluster and take neither argument, so forwarding them would have
+  dropped them silently -- the same defect one level down. `base`,
+  `temperature` and `return_slopes` were already refused there for the
+  same reason, and the message now gives the right reason for each
+  group: a model-level refusal and a lattice-level one are not the same
+  sentence.
+
+  `structure=` together with `V=`, `D=`, `F=` or `W=` is refused.
+  Both describe the covariance, and the front door answered one of them
+  silently -- forward dropping the caller's `V/D` while the inverse
+  could keep `V` and replace `D` from the structure, so a target
+  inverted one way did not reprice the other.
 
 - The browser's `hermiteNodes` built the whole `order ** rank` tensor
   and pruned it afterwards (#268), which is the defect python closed in

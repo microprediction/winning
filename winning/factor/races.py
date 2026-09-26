@@ -870,10 +870,29 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         if degraded and routable:
             return _race_dense(mu, cov)
     if structure is not None:
+        # structure= DESCRIBES the covariance; V/D/F/W describe it too,
+        # and passing both asked two questions and answered one of them
+        # silently. Forward dropped the caller's V/D while the inverse
+        # could keep V and replace D from the structure, so a target
+        # inverted one way did not reprice the other (#89).
+        conflicting = [n for n, v in (("V", V), ("D", D), ("F", F),
+                                      ("W", W)) if v is not None]
+        if conflicting and cov is None:
+            raise ValueError(
+                f"structure= already describes the covariance; "
+                f"{', '.join(conflicting)}= would describe it again. "
+                "Pass one or the other.")
         from .structures import dispatch_probabilities
+        # points/window/delta are the NUMERICAL controls, and dropping
+        # them meant a caller asking for more resolution got the
+        # default: points=17, 257 and 2049 returned the identical
+        # answer on a Blocks race, and a points= too coarse to resolve
+        # the field never raised the mass defect it should have (#89).
         return dispatch_probabilities(mu, structure, base=base,
                                       temperature=temperature,
-                                      return_slopes=return_slopes)
+                                      return_slopes=return_slopes,
+                                      points=points, window=window,
+                                      delta=delta)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     if temperature and temperature > 0:
         return _race_tempered(mu, V, D, F, W, fn, left, right,
