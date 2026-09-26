@@ -147,7 +147,20 @@ function expectedPayoffSum(cdf, cdfAll, multAll) {
 }
 function implicitPrices(baseCdf, cdfAll, multAll, offsets, L) {
   return offsets.map(k => {
-    if (k === Math.trunc(k))
+    // The integer fast path has to obey the SAME clamp the field was
+    // built with. `shiftedCdf` goes through `lowHigh`, which pins an
+    // offset at or past L-2 to the boundary; this called
+    // `integerShift(baseCdf, k)` with the raw k, whose own clamp is the
+    // much wider +/-(m-1). So a runner could sit in the field at
+    // offset L-2 and be PAID at 60: the state prices stopped being
+    // exhaustive claims on one race and summed to 1.88 (#292). An
+    // epsilon off the integer took the same race back to 1.0, because
+    // the non-integer path was clamped correctly all along.
+    //
+    // Guarding the fast path by the interior condition is exactly
+    // equivalent where it applies: for an interior integer `lowHigh`
+    // returns [[k, 1], [k, 0]], which is this shift with weight one.
+    if (k === Math.trunc(k) && k > -L + 2 && k < L - 2)
       return expectedPayoffSum(integerShift(baseCdf, k), cdfAll, multAll);
     const [[a, ac], [b, bc]] = lowHigh(k, L);
     return ac * expectedPayoffSum(integerShift(baseCdf, a), cdfAll, multAll)

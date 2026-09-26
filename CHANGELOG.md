@@ -25,6 +25,261 @@
 
   `hermiteNodes` now also refuses a non-integer or non-positive rank or
   order rather than looping on `Math.pow(order, k)`.
+- Browser factor APIs accepted a ragged `F` and a mismatched `W`
+  without a word (#290). `condMeans` dotted each node row against the
+  loadings over the ROW's own length, so the rank was whatever each row
+  happened to be:
+
+  | input | before | now |
+  |---|---|---|
+  | uniformly short `F` | priced a LOWER-RANK model, 0.46444 where the rank-2 answer is 0.38173 | refused |
+  | ragged `F` | a different rank at each quadrature node, still finite and normalised | refused, naming the node |
+  | extra weights | silently ignored | refused |
+  | too few weights | `NaN` | refused |
+
+  `asFactorNodes` and `asWeights` are now the one place those rules
+  are decided, beside `asLoadings` and `asIdio` -- `asWeights` carrying
+  python's own name for it. Every node carries
+  exactly the loadings' rank, there is one finite non-negative weight
+  per node, and the weights are normalised -- so `W` and `c*W` are the
+  same law here too, as python's `as_weights` makes them.
+
+  The same contract covers `raceJacobianExplicit`, which repeated the
+  row-length loop, so `raceJacobian`, `polishRace` and
+  `abilitiesFromRace` no longer differentiate or invert a different-rank
+  model than the forward prices.
+
+  Normalising the weights closed something nobody had reported.
+  `raceJacobian` was SCALE-dependent here too: `J(W)` and `J(10W)`
+  differed by 1.473, the same defect as #281 but in this tree rather
+  than the standalone `js/factor` module. They are now identical, and
+  the already-normalised answer is bit-identical to before.
+
+  python refuses all of these already -- `np.asarray(F, float)` will not
+  build an array from ragged rows and a wrong rank fails the matmul
+  against V -- so this was the browser guessing alone. Distinct from
+  #232 (the shape of V).
+- The standalone javascript factor inverse depended on the SCALE of the
+  quadrature weights (#281). `W` and `c*W` describe the same factor
+  law, and the forward already knew it: it normalises its accumulated
+  shares, so `p` was invariant to 1e-16 under any positive rescaling.
+  But it returns the own-slopes UNNORMALISED and the inverse divides
+  those by the normalised probabilities, so the Newton derivative
+  carried a factor of `c` and only the inverse moved. A self-generated
+  target repriced **0.164 away** after fifty iterations at `c = 0.1`,
+  with no error -- a calibration failure that looks like a hard
+  problem.
+
+  `js/factor/factor_race.mjs` now normalises and validates `W` at its
+  entry boundary, in both the forward and the inverse, with the
+  contract `winning.shapes.as_weights` states: finite, non-negative,
+  positive total. python's helper has the same internal mismatch and is
+  saved by its front door, `races._setup`; this standalone module had
+  no such boundary and now has one. Scaling the slope by the forward
+  total instead would also work, and is deliberately NOT done -- python
+  does not, and a silent divergence between ports is worse than either
+  behaviour.
+
+  Measured across twelve orders of magnitude, `c` from 1e-6 to 1e6, the
+  inverse now reprices to 2.49e-7 at every scale -- the same number, not
+  merely a similar one. The boundary also settles zero, negative,
+  non-finite and wrong-length weights, each of which previously reached
+  the kernel.
+
+  The deployed copy `docs/assets/js/factor_race.mjs`, which
+  `docs/fit.html` imports, is byte-identical as it must be.
+- R's `race_jacobian` depended on the SCALE of the factor weights --
+  #281's defect, in a third place. `W` and `c*W` describe the same
+  factor law; the forward divides its accumulated shares by their total
+  and was invariant either way, but the Jacobian does not, so `J(W)` and
+  `J(10W)` differed by **1.473**. A Newton step scaled by the spelling
+  of the law rather than the law.
+
+  `.race_setup` now normalises `W`, as python's `_setup` does through
+  `winning.shapes.as_weights` and as `abilities_from_race` already did
+  for itself a few lines further down -- the rule was in the file, just
+  not at the door. A weight that is not finite, is negative, or whose
+  total is not positive is refused rather than normalised into
+  something plausible.
+
+  Found by sweeping the pattern after fixing it for the browser: the
+  same defect is in `js/factor/factor_race.mjs` (#281) and
+  `docs/js/winning/polish.mjs` (#290). julia's forward is already
+  invariant and it has no `race_jacobian`, so it is clean -- a finding,
+  not an omission.
+
+  The same sweep found #290's OTHER half here: the caller's factor
+  nodes were taken verbatim, so an `F` with the wrong number of ROWS
+  was accepted and priced a different quadrature outright -- `0.64616
+  0.12271 0.23064 0.00049` where the right answer is `0.38173 0.30061
+  0.13687 0.18079` -- too few weights returned all `NA`, and extra
+  weights were ignored. A short `F` did fail, but with "non-conformable
+  arguments", which names nothing the caller passed. Every node must
+  now carry exactly the loadings' rank and there must be one weight per
+  node.
+
+  Every already-normalised answer is bit-identical to before, and the
+  rescaled ones now agree to 0 across twelve orders of magnitude.
+- A top-k depth is a count, so it is an integer -- and a fractional one
+  was silently floored, in all three ports. Every guard truncated
+  FIRST (`int(k)`, `Math.trunc(k)`, `as.integer(k)`) and then
+  range-checked the truncated value, so `k = 0`, `k = n` and `k > n`
+  were all refused and only the non-integer slipped through:
+
+      top_k_probabilities(mu, 1.5)  ->  the top-1 curve, mass 1
+      top_k_probabilities(mu, 2.5)  ->  the top-2 curve, mass 2
+
+  The caller asked for a curve that does not exist and got a different
+  one, with no warning -- and the mass they can check is 1 or 2, not
+  the 1.5 or 2.5 they asked about, so nothing downstream reveals it
+  either. The neighbouring depths are genuinely different curves, so
+  there was nothing odd-looking to notice. The existing message, "k
+  must be in [1, n-1]", is the one sentence that reads as permitting
+  1.5.
+
+  `_as_depth` / `asDepth` / `.as_depth` is now the one place the rule
+  is decided in each port, and it covers every door: the eleven
+  single-depth entry points and the `loc_scale_from_topk_pair` pair,
+  which checks `k1` and `k2` separately and by name. A float that IS
+  whole -- `2.0`, or a numpy integer -- is still a depth of two.
+
+  This was a shared gap rather than a divergence: all three ports had
+  it identically, found by probing the doors rather than from a report.
+- julia's `_race_setup` took the caller's factor nodes and weights
+  verbatim, so an `F` with the wrong number of ROWS was accepted and
+  priced a different quadrature outright -- `[0.646, 0.123, 0.231,
+  0.0005]` where the right answer is `[0.382, 0.301, 0.137, 0.181]` --
+  and an extra weight was silently ignored. The two spellings that did
+  fail failed with a `DimensionMismatch` or a `BoundsError` from
+  somewhere inside, naming nothing the caller passed. This is #290,
+  filed against the browser; julia had its own copy, found by sweeping
+  rather than by a report.
+
+  Every node must now carry exactly the loadings' rank, there must be
+  one finite non-negative weight per node with a positive total, and
+  the weights are normalised -- so `W` and `c*W` are the same law here
+  too, which was already true of julia's forward and is now true by
+  construction rather than by accident.
+
+  Valid inputs are unchanged to 1.1e-16, which is the rounding of
+  dividing an already-normalised `W` by its own sum.
+- The mixed Plackett-Luce likelihood used a FIXED 7-node rule whatever
+  the loadings were (#272). `ranking_loglik_and_score` always called
+  `_factor_nodes`, which at rank one or two is a Gauss-Hermite tensor of
+  order `Qf` -- no dispatch on the loadings, no convergence check, no
+  warning -- while the choice likelihood beside it escalates past a
+  sharpness of 3.
+
+  A length-one ranking is a mixed-logit choice probability, so a
+  rank-one factor has a direct one-dimensional reference integral and
+  the failure is exact rather than a disagreement between two
+  approximations. On a field with a centred loading contrast of 4.8:
+
+  | | before | exact | after |
+  |---|---|---|---|
+  | probability | 0.6927739 | 0.6136638 | rel 9.3e-08 |
+  | utility score | 0.0481050 | 0.0734129 | rel 4.8e-07 |
+  | loading score | 0.0002319 | 0.0204003 | rel 1.4e-06 |
+
+  The loading score was smaller by a factor of **88**. These are
+  derivatives of the TRUE mixed likelihood, so no finite-difference
+  test against the same 7-node rule could see it, and the Monte Carlo
+  test used loadings near one where `Qf=7` and `Qf=21` agree.
+
+  Raising the order does not rescue it -- the integrand is a softmax
+  and Gauss-Hermite is non-monotone on it, giving 0.6928, 0.6374,
+  0.6128, 0.6121, 0.6137 at orders 7, 15, 31, 63, 127 and reaching
+  5.7e-8 only at 255. The low-discrepancy rule the helper already uses
+  past rank two gets 9.3e-8 from 1024 nodes.
+
+  So the rule now dispatches on `sharpness_bound(V / tau)`, measured
+  over 220 random fields:
+
+      sharpness   GH Qf=7    Sobol 2^10
+      [0, 1)      3.9e-05    2.6e-04
+      [1, 2)      1.1e-03    2.4e-03
+      [2, 3)      4.7e-02    2.3e-03    <- Gauss-Hermite collapses here
+      [4, 6)      3.9e-01    1.8e-03
+      [6, 20)     1.15       8.5e-05
+
+  Gauss-Hermite is the better rule below 2 and 146 times cheaper, 7
+  nodes against 1024, so the crossover goes there. The choice
+  likelihood dispatches at 3.0 on a product of Gaussian CDFs; a softmax
+  is a sharper integrand and turns over sooner, which is why the two
+  numbers differ. Twelve smooth fixtures are bit-identical to before.
+
+  `winning.ratings.nway` shares the helper through `_factor_grid` and
+  is deliberately NOT dispatched: its integrand is the Gaussian order
+  likelihood, so the crossover above does not apply to it, and its
+  behaviour is gated by the ratings verifier. That needs its own
+  measurement.
+- Classic state prices summed to 188% at integer boundary offsets
+  (#292), in every port. The field is built with `shifted_cdf`, which
+  goes through `low_high` and PINS any offset at or past `L-2` to the
+  boundary. `implicit_state_prices` then took a fast path for exact
+  integers and called `integer_shift(cdf, k)` with the RAW `k`, whose
+  own clamp is the much wider `+/-(m-1)`. So a runner could sit in the
+  field at offset `L-2` and be PAID at 60:
+
+  | offsets | before | after |
+  |---|---|---|
+  | `[48, -48]` | 0.9999867465 | 0.9999867465 |
+  | `[49, -49]` | **1.0785974955** | 0.9999867465 |
+  | `[49.000001, ...]` | 0.9999867465 | 0.9999867465 |
+  | `[60, -60]` | **1.8835336397** | 0.9999867465 |
+  | `[60.1, -60.1]` | 0.9999867465 | 0.9999867465 |
+
+  An epsilon off the integer moved the total by 0.88, because the
+  non-integer path had been clamped correctly all along -- the prices
+  had stopped being exhaustive claims on one race, and the result
+  depended on whether an offset happened to serialise as an integer.
+
+  Guarding the fast path by the interior condition is exactly
+  equivalent where it applies -- for an interior integer `low_high`
+  returns `(k, 1), (k, 0)`, which is that shift with weight one -- and
+  clamps the boundary integers the way the field already does. Interior
+  results are unchanged.
+
+  **The compiled kernel needs rebuilding.** `rust/winning/src/lib.rs`
+  carries the identical branch and is what `state_prices_from_offsets`
+  dispatches to by default, so with the shipped wheel the totals are
+  still 1.0786 and 1.8835. The one-line guard is applied there too, but
+  this checkout has no cargo and the rust workflow is
+  `workflow_dispatch` only, so that change is NOT compiled or tested by
+  anything here. It needs a build before the next wheel.
+- The MNP tail likelihood went FLAT with a score of exactly zero
+  (#270), in python, R and julia. The conditional log-CDF was
+  `log(max(ndtr(a), 1e-300))`, and `ndtr` underflows to exactly zero
+  below about -37, so every deep tail collapsed to the same number,
+  log(1e-300) = -690.78. The Mills ratio, taken as
+  `exp(logphi - logPhi)`, then underflowed to zero. Together those mean
+  an optimizer declares convergence precisely where an observation is
+  most badly contradicted: it cannot tell a maximum from a floor, and a
+  central difference of the objective is zero there too.
+- The browser's block Jacobian returned an all-`NaN` matrix for
+  supported rank-2 cluster loadings, and said nothing (#271). The
+  FORWARD block kernel prices rank-r loadings; this Jacobian is written
+  for rank one only. It takes each loading row as a NUMBER --
+  `Math.abs(v)` for the quadrature amplitude, `v * a` for the shift --
+  and javascript coerces a one-element array to its number, so an
+  `(n, 1)` column kept working while a rank-2 row went NaN at both. The
+  NaN then reached every cell.
+
+  python's `block_race_jacobian` detects rank > 1 and raises; the
+  browser now matches it rather than inventing a second behaviour.
+  Every Jacobian door here funnels through `blockRaceJacobian` --
+  `nestedRaceJacobian`, the structured `raceJacobian` front door,
+  `abilitiesFromBlockRace` and `polishRace` -- so the one guard covers
+  all of them, and each is checked. The tree grammar already had its
+  own guard with its own message, since only the block grammar prices
+  rank r at all.
+
+  The message points somewhere: the forward still prices the field it
+  refuses to differentiate, so finite differences of
+  `blockRaceProbabilities` remain available, as does the factor grammar
+  when the loadings are global. Distinct from #212 (a finite-grid
+  derivative mismatch for loadings that ARE supported) and #264 (the
+  nested `coupling` rank).
 - Two documents stopped pointing at a deleted tree (#250). Removing the
   dead `src/` package left `data/README.md` sending readers to
   `attic/src/winning/benchmarks/`, which went with it, and a research
@@ -127,36 +382,32 @@
   0.5 is exact, and over 2000 random matrices spanning 400 orders of
   magnitude the two spellings are bit-identical.
 
-  The PSD tolerance had the same shape and a worse consequence:
-  `-1e-8 * max(trace(C) / n, 1e-300)` overflows the trace BEFORE the
-  division, so the tolerance was `-inf` and `lam_min < -inf` is False
-  for every eigenvalue. The check therefore ACCEPTED a matrix whose
-  smallest eigenvalue is -5e307. Dividing before summing keeps it
-  finite, and that matrix is now refused.
+  `log_ndtr` / `pnorm(log.p = TRUE)` / a new julia `logndtr` replace the
+  floor. The objective now falls monotonically -- -669, -1594, -4645,
+  -19271 at gaps of -40, -60, -100, -200 -- and the score rises with the
+  surprise instead of vanishing. julia's `logndtr` uses the cephes
+  `ndtr` in the ordinary range and the `erfcx` continued fraction only
+  past 2.5 sigma, where that fraction has converged; the crossover
+  matters, since taking it at 1 sigma is wrong by 5e-7 relative. It
+  agrees with scipy's `log_ndtr` to 4.5e-16.
 
-  Three more `0.5 * (X + X.T)` in the shipped package take the same
-  spelling, in `ratings/full.py`, `factor/races.py` and
-  `research/laplacian.py`. Not fixed, and a known limit: a field of
-  two or more at 1e308 still overflows further into the fit, where
-  `_center2` sums a column. Reaching that needs the covariance
-  rescaled before fitting rather than one more guarded addition. Up to
-  1e300 a two-runner fit is fine.
+  What this does NOT fix, deliberately: the quadrature underneath. The
+  fixed Gauss-Hermite rule samples the chosen alternative's own noise
+  where the PRIOR has mass, and for a large observed contrast the
+  integrand's mass is far outside it -- at a gap of -20 the mode is at
+  z = 10 and a 7-node rule reaches |z| < 3.8 -- so the likelihood is
+  still 38% from the closed form there and the score 62%. The tests
+  RECORD those numbers rather than pretending otherwise.
 
-  The one-runner return keys off `nrow` alone, so it has to sit BELOW
-  the shape and covariance checks -- a `1 x 2` matrix has `nrow` 1 and
-  would otherwise be answered from `C[1, 1]` with the second column
-  dropped (#277). R had no validation on this path at all: a negative
-  variance was clamped to the floor, and `NA` and `Inf` propagated into
-  the fit, while python refused each one. R now states the same
-  contract in the same order with the same messages -- square, finite,
-  symmetric, positive semidefinite.
-
-  python's squareness was itself only ever caught by accident. A
-  `1 x 2` broadcasts against its own transpose into a `2 x 2`, so the
-  asymmetry check reported "not symmetric" for something that is
-  really not square; a 1-D array passed that check outright and then
-  had `np.diag` build a matrix FROM it. Both ports now say `cov= must
-  be square`.
+  A Laplace-tilted rule fixes it to machine precision; it was written
+  and measured, and is held back. Tilting makes the quadrature depend
+  on the parameters, so the analytic score stops being the gradient of
+  the computed objective, and an end-to-end fit went from 4 s and
+  `converged = true` to 160 s and `converged = false` in julia, 5.7 s to
+  52 s in python -- with the estimates still correct, but the optimizer
+  unable to certify them. Closing that properly needs the tilt's own
+  derivative through the implicit mode condition, and belongs in its own
+  change rather than folded into a floor fix.
 
 - A one-runner field with `cov=` crashes instead of returning `[1]`
   (#273), in python and in R. `race_probabilities([2.0], cov=[[4.0]])`
