@@ -22,11 +22,20 @@
   every cross-port defect this week, except both copies are in one
   file.
 
-  The MULTIPLIER is unchanged, so at unit scale this is the floor it
-  has always been; only its covariance under rescaling is new.
-  Measured: bit-identical across 24 fits at n = 3, 5, 8 and rank 1 and
-  2, and `diag(1e-8, 1e-8, 1)` still keeps `Var(X1 - X2)` at exactly
-  2e-8 rather than raising it. Scale invariance now holds to 1e-12 over
+  The MULTIPLIER is unchanged, so at unit scale the floor is the same
+  ORDER it has always been -- but not the same number, and the
+  difference is worth stating precisely rather than claiming none.
+  Across 24 fits at n = 3, 5, 8 and rank 1 and 2, `D` is identical in
+  22. In the other two the old floor was BINDING, and because those
+  covariances have `diag(C)` near 1.6 the relative floor sits slightly
+  above the old absolute one, so `D` rises by 1.2e-8 and the shares
+  move by 1.0e-3. That is the fix doing its job -- the floor is tied to
+  the runner's own variance now rather than to 1 -- not a side effect,
+  and it only appears where a variance was already at the floor, i.e.
+  already degenerate.
+
+  `diag(1e-8, 1e-8, 1)` still keeps `Var(X1 - X2)` at exactly 2e-8
+  rather than raising it, and scale invariance now holds to 1e-12 over
   nine decades, `1e0` down to `1e-9`.
 
 - The browser's `hermiteNodes` built the whole `order ** rank` tensor
