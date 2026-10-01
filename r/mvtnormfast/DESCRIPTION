@@ -13,5 +13,5 @@ Description: Drop-in accelerator for mvtnorm::pmvnorm() on the structured
     unstructured covariances fall back to mvtnorm::pmvnorm() unchanged.
 License: MIT + file LICENSE
 Imports: mvtnorm, stats
-Suggests: testthat
+Suggests: testthat, TruncatedNormal
 Encoding: UTF-8

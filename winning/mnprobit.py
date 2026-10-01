@@ -20,7 +20,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.optimize import minimize
 
-from .likelihood import choice_loglik_and_score, nodes_for_likelihood
+from .likelihood import (choice_loglik_and_score,
+                         nodes_for_likelihood, sharpness_bound)
 
 
 def _fill_positions(J, r):
@@ -54,6 +55,13 @@ class MNProbit:
             X = np.concatenate([Z, X], axis=2)
         self.X = X
         self.p = X.shape[2]
+        # Whether the constructor GENERATED the alternative intercept
+        # columns, and how many covariates the caller supplied. Without
+        # them predict_proba could only guess from the column count, and
+        # the guess is wrong exactly when wrong_width + (J - 1) happens
+        # to equal p (#261; the julia port had the same defect, #195).
+        self.intercepts = bool(intercepts)
+        self.p_raw = int(p)
         self.pos = _fill_positions(self.J, self.r)
 
     def _unpack(self, theta):
@@ -137,11 +145,41 @@ class MNProbit:
         """Choice probabilities per observation, by per-alternative
         conditional-product integrals under the fitted parameters."""
         X = self.X if X is None else np.asarray(X, dtype=float)
-        if X.shape[2] != self.p:
-            Z = np.zeros((X.shape[0], self.J, self.J - 1))
-            for j in range(1, self.J):
-                Z[:, j, j - 1] = 1.0
-            X = np.concatenate([Z, X], axis=2)
+        if X is not self.X:
+            # New data must carry the design the model was FITTED on.
+            # This guessed whether to prepend generated intercept columns
+            # from the COLUMN COUNT alone, so new data with the wrong
+            # number of features were silently REINTERPRETED rather than
+            # refused -- and the guess is wrong exactly when the wrong
+            # width plus J-1 generated columns equals the fitted width.
+            # Three covariates fitted without intercepts, handed ONE,
+            # gained two synthetic intercepts and returned a plausible
+            # probability row (#261).
+            if X.ndim != 3:
+                raise ValueError(
+                    f"X must be (observations, alternatives, covariates); "
+                    f"got {X.ndim} dimensions")
+            if X.shape[1] != self.J:
+                raise ValueError(
+                    f"X has {X.shape[1]} alternatives; the model was "
+                    f"fitted on {self.J}")
+            nc = X.shape[2]
+            if nc == self.p:
+                pass                      # already the fitted design
+            elif self.intercepts and nc == self.p_raw:
+                Z = np.zeros((X.shape[0], self.J, self.J - 1))
+                for j in range(1, self.J):
+                    Z[:, j, j - 1] = 1.0
+                X = np.concatenate([Z, X], axis=2)
+            else:
+                want = (f"{self.p_raw} or {self.p}" if self.intercepts
+                        else f"{self.p}")
+                raise ValueError(
+                    f"X has {nc} covariate columns; this model was fitted "
+                    f"on {self.p_raw} covariates"
+                    + (" plus generated intercepts" if self.intercepts
+                       else " and no generated intercepts")
+                    + f", so pass {want}")
         mu = X @ self.params_
         T, J = mu.shape
         P = np.empty((T, J))
@@ -155,7 +193,18 @@ def _prob_of(mu, V, k):
     from scipy.special import ndtr
     T, J = mu.shape
     r = V.shape[1]
-    sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1))))
+    # The SAME dispatch the likelihood uses (likelihood.py). Prediction
+    # used max_i ||V_i||: no gauge-centering, no sqrt(2), so a fitted
+    # model could optimise and report under Sobol and then be priced on
+    # the 7-point Hermite tensor. It was not even gauge-invariant -- only
+    # loading DIFFERENCES decide a race, yet adding a common offset of 5
+    # to every row moved the statistic from 2.0 to 7.0 and switched 49
+    # nodes for 1024 on an unchanged race. In the other direction a
+    # centred spread of 2.2 scored 2.2 against the likelihood's 3.11, so
+    # prediction quietly took the weaker rule and priced 2.9e-2 away from
+    # it (#213). Julia already matched its own likelihood.
+    sharp = sharpness_bound(V)
+    V = V - V.mean(axis=0)
     F, W = nodes_for_likelihood(r, 7, 7, sharp)
     Fq, zq = F[:, :r], F[:, r]
     Vf = Fq @ V.T

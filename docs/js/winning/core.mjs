@@ -93,34 +93,57 @@ export function hermite1(order) {
   return { nodes: values, weights: w };
 }
 
-/* pruned product rule: first coordinate slowest, prune WITHOUT
-   renormalizing (matching the reference exactly) */
+/* Pruned product Gauss-Hermite rule, built ONE DIMENSION AT A TIME.
+
+   This used to materialise the whole `order ** k` tensor and prune it
+   afterwards, which is the defect python closed in #155 and the browser
+   kept. Two ways it fails. `Math.max(...W)` spreads every weight as an
+   argument list, so rank 5 at order 15 -- 759,375 nodes -- died with
+   `RangeError: Maximum call stack size exceeded` before pruning ever
+   ran. And rewriting that line as a loop only moves the wall: rank 5 at
+   order 41 is 115,856,201 nodes to build and then throw away.
+
+   A partial product whose weight cannot reach the threshold whatever
+   the remaining factors contribute -- each at most `wmax` -- cannot be
+   in the answer, so it is dropped as soon as it appears. The kept set
+   and its ORDER are exactly those of the full tensor pruned once: the
+   test for a partial product is implied by the test for every full
+   product extending it, and the loops below extend in the same order
+   the tensor enumerated (first coordinate slowest, last fastest).
+
+   Weights are renormalised at the end, as the reference does: pruning
+   drops ~1e-7 of the mass and a direct weighted mixture consumes W
+   as-is. (#268) */
 export function hermiteNodes(k, order = 15, prune = 1e-7) {
+  if (!Number.isInteger(k) || k < 1)
+    throw new Error(`hermiteNodes: rank must be a positive integer; got ${k}`);
+  if (!Number.isInteger(order) || order < 1)
+    throw new Error(`hermiteNodes: order must be a positive integer; got ${order}`);
   const h = hermite1(order);
   if (k === 1) return { F: h.nodes.map(x => [x]), W: h.weights.slice() };
-  const F = [], W = [];
-  const idx = new Array(k).fill(0);
-  const total = Math.pow(order, k);
-  for (let t = 0; t < total; t++) {
-    let rem = t;
-    const node = new Array(k), digits = new Array(k);
-    for (let dPos = k - 1; dPos >= 0; dPos--) {   // last coordinate fastest
-      digits[dPos] = rem % order;
-      rem = Math.floor(rem / order);
+
+  // one-dimensional max, so this is `order` values and never the tensor
+  let wmax = h.weights[0];
+  for (let i = 1; i < order; i++) if (h.weights[i] > wmax) wmax = h.weights[i];
+  const floor = prune * Math.pow(wmax, k);
+
+  let F = h.nodes.map(x => [x]);
+  let W = h.weights.slice();
+  for (let d = 1; d < k; d++) {
+    // what the remaining k - 1 - d coordinates can still contribute
+    const reach = Math.pow(wmax, k - 1 - d);
+    const nF = [], nW = [];
+    for (let i = 0; i < F.length; i++) {
+      const row = F[i], wi = W[i];
+      for (let j = 0; j < order; j++) {
+        const w = wi * h.weights[j];
+        if (w * reach > floor) { nF.push([...row, h.nodes[j]]); nW.push(w); }
+      }
     }
-    let w = 1;
-    for (let dPos = 0; dPos < k; dPos++) {
-      node[dPos] = h.nodes[digits[dPos]];
-      w *= h.weights[digits[dPos]];
-    }
-    F.push(node); W.push(w);
+    F = nF; W = nW;
   }
-  const wmax = Math.max(...W);
-  const keepF = [], keepW = [];
-  for (let i = 0; i < W.length; i++) {
-    if (W[i] > prune * wmax) { keepF.push(F[i]); keepW.push(W[i]); }
-  }
-  return { F: keepF, W: keepW };
+  const wsum = W.reduce((a, b) => a + b, 0);
+  return { F, W: W.map(w => w / wsum) };
 }
 
 /* ---- small dense linear algebra ------------------------------------ */
@@ -156,4 +179,230 @@ export function interpClamped(x, xp, fp) {
   const d = xp[lo + 1] - xp[lo];
   if (d <= 0) return fp[lo];
   return fp[lo] + (x - xp[lo]) / d * (fp[lo + 1] - fp[lo]);
+}
+
+/* Caller-supplied factor nodes and their weights.
+
+   `condMeans` dotted each node row against the loadings over the ROW's
+   own length, so the rank was whatever each row happened to be. A
+   uniformly short F silently priced a LOWER-RANK model (0.46444 where
+   the rank-2 answer is 0.38173); a ragged F applied a different rank at
+   different quadrature nodes and still returned finite, normalised
+   probabilities; extra weights were ignored and too few produced NaN
+   (#290). python refuses all of these -- `np.asarray(F, float)` will
+   not build an array from ragged rows, and a wrong rank fails the
+   matmul against V -- so this is the browser guessing alone.
+
+   Distinct from #232 (the shape of V) and #281 (weight SCALE in the
+   standalone js/factor module). */
+export function asFactorNodes(F, rank, where = "F") {
+  if (!Array.isArray(F))
+    throw new Error(`${where} must be an array of factor nodes; got ${typeof F}`);
+  if (F.length === 0)
+    throw new Error(`${where} is empty; there are no quadrature nodes`);
+  const out = new Array(F.length);
+  for (let q = 0; q < F.length; q++) {
+    const row = Array.isArray(F[q]) ? F[q]
+      : (typeof F[q] === "number" ? [F[q]] : null);
+    if (row === null)
+      throw new Error(`${where}[${q}] must be a node of ${rank} coordinate(s)`);
+    if (row.length !== rank)
+      throw new Error(
+        `${where}[${q}] has ${row.length} coordinate(s) but the loadings ` +
+        `have rank ${rank}; a short node prices a lower-rank model and a ` +
+        `ragged one prices a different rank at each node`);
+    for (let c = 0; c < rank; c++) {
+      if (!Number.isFinite(row[c]))
+        throw new Error(`${where}[${q}][${c}] = ${row[c]} is not finite`);
+    }
+    out[q] = Array.from(row, Number);
+  }
+  return out;
+}
+
+/* One weight per node, normalised -- python's `as_weights` at the same
+   door. The forward normalises its shares so a rescaling cancels there,
+   but the spelling should not matter anywhere, and a mismatched length
+   must not reach the kernel. */
+export function asWeights(W, nNodes, where = "W") {
+  if (!Array.isArray(W) && !ArrayBuffer.isView(W))
+    throw new Error(`${where} must be an array of node weights; got ${typeof W}`);
+  if (W.length !== nNodes)
+    throw new Error(
+      `${where} must have one weight per factor node; got ${W.length} ` +
+      `for ${nNodes} nodes`);
+  let total = 0;
+  for (let q = 0; q < W.length; q++) {
+    const v = Number(W[q]);
+    if (!Number.isFinite(v))
+      throw new Error(`${where}[${q}] = ${W[q]} is not a finite weight`);
+    if (v < 0)
+      throw new Error(`${where}[${q}] = ${v} is a negative weight`);
+    total += v;
+  }
+  if (!(total > 0))
+    throw new Error(`${where} must have a positive total; got ${total}`);
+  return Array.from(W, v => Number(v) / total);
+}
+
+/* ---- options-object guards ---------------------------------------- *
+ * A javascript object silently swallows a key nobody reads, so an API
+ * whose options are an object cannot rely on the language to reject a
+ * misspelling or an option belonging to a different call. That is not
+ * hypothetical here: raceProbabilities({cov}) returned the INDEPENDENT
+ * race, identical even for an all-zero covariance matrix; rankProbabilities
+ * ({V}) returned the independent rank matrix, plausible and doubly
+ * stochastic and for the wrong model; locScaleFromTopkPair({V}) reported
+ * converged: true where python raises NotImplementedError because the
+ * problem is underidentified.
+ *
+ * Every exported function taking an options object declares its OWN keys.
+ * A shared union is not enough: one let each race API accept the other's
+ * options and ignore them.
+ */
+export function checkOpts(opts, known, where, hints = {}) {
+  for (const k of Object.keys(opts)) {
+    if (known.has(k)) continue;
+    if (hints[k]) throw new Error(`${where}: ${hints[k]}`);
+    throw new Error(
+      `${where}: unknown option '${k}'. Known: ${[...known].join(", ")}.`);
+  }
+}
+
+/* Reasons that are worth more than "unknown option", shared by the modules
+ * that can receive these keys. */
+export const OPT_HINTS = {
+  cov: "cov= is not supported in the browser port. Fit the covariance " +
+       "first -- fitGrammar(C, k, m) in demo.mjs returns {V, D} for this " +
+       "call -- or use the python package, whose race_probabilities(cov=) " +
+       "also routes a degraded fit to GHK.",
+};
+
+/* ---- the loading-shape contract ------------------------------------ *
+ * `V` means factor loadings in every public verb and is an (n, rank)
+ * matrix, one ROW per contestant. This is the one place that rule is
+ * decided, mirroring winning/shapes.py::as_loadings: a scalar, a
+ * length-n vector, (n, rank) and (rank, n) are the same race, and
+ * anything else raises rather than reaching the kernel.
+ *
+ * The browser used to index V directly and take the rank from
+ * V[0].length, so a length-n vector threw an obscure `V[i].reduce is not
+ * a function` and a RAGGED V was silently truncated to the first row's
+ * width, producing an all-NaN answer with no complaint (#232).
+ */
+/* Idiosyncratic VARIANCES as the length-n vector the kernels contract
+ * for, mirroring winning/shapes.py::as_idio. A scalar is the same
+ * variance for every contestant; a wrong length, a non-finite entry or a
+ * negative variance raises here rather than reaching the lattice.
+ *
+ * The browser normalised V and left D alone, so a scalar threw
+ * `D.slice is not a function`, and -- the dangerous one -- a D with ONE
+ * EXTRA entry was accepted and returned a normalised, plausible,
+ * materially wrong answer: [0.888, 0.102, 0.010] where the race is
+ * [0.507, 0.312, 0.181]. Short, zero, negative and NaN entries all
+ * propagated NaN through forward and inverse alike (#254).
+ *
+ * `positive` is for the lattice kernels, which cannot represent an
+ * exact zero variance.
+ */
+export function asIdio(D, n, where = "D", positive = true) {
+  if (D == null) return new Array(n).fill(1);
+  let v;
+  if (typeof D === "number") {
+    v = new Array(n).fill(D);
+  } else if (Array.isArray(D)) {
+    if (D.length !== n)
+      throw new Error(
+        `${where} must be one idiosyncratic variance per contestant; ` +
+        `got ${D.length} for ${n}`);
+    v = D.slice();
+  } else {
+    throw new Error(`${where}: expected a number or array`);
+  }
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(v[i]))
+      throw new Error(`${where} has a non-finite entry at ${i}`);
+    if (v[i] < 0)
+      throw new Error(
+        `${where}[${i}] = ${v[i]} is a negative variance`);
+    if (positive && v[i] === 0)
+      throw new Error(
+        `${where} must be strictly positive here: entry ${i} is zero, ` +
+        "which the lattice cannot represent");
+  }
+  return v;
+}
+
+export function asLoadings(V, n, where = "V") {
+  if (V == null) return null;
+  if (typeof V === "number") {
+    if (!Number.isFinite(V)) throw new Error(`${where}: not a finite number`);
+    return Array.from({ length: n }, () => [V]);        // scalar: rank 1
+  }
+  if (!Array.isArray(V)) throw new Error(`${where}: expected a number or array`);
+  if (V.length === 0) throw new Error(`${where}: empty`);
+  if (!Array.isArray(V[0])) {                            // a flat vector
+    if (V.length !== n)
+      throw new Error(
+        `${where}: a flat vector must have one entry per contestant; ` +
+        `got ${V.length} for ${n}`);
+    if (!V.every(Number.isFinite)) throw new Error(`${where}: non-finite entry`);
+    return V.map(v => [v]);
+  }
+  const widths = new Set(V.map(r => (Array.isArray(r) ? r.length : -1)));
+  if (widths.has(-1))
+    throw new Error(`${where}: mixed rows and scalars`);
+  if (widths.size !== 1)
+    throw new Error(
+      `${where}: ragged -- rows have widths ` +
+      `${[...widths].sort((a, b) => a - b).join(", ")}; every contestant ` +
+      "needs the same number of factors");
+  const w = [...widths][0];
+  if (w === 0) throw new Error(`${where}: rows are empty`);
+  let M = V;
+  if (V.length !== n) {
+    if (w !== n)
+      throw new Error(
+        `${where}: shape ${V.length}x${w} matches neither (n, rank) nor ` +
+        `(rank, n) for n = ${n}`);
+    M = Array.from({ length: n }, (_, i) => V.map(row => row[i]));  // (rank,n)
+  }
+  if (!M.every(r => r.every(Number.isFinite)))
+    throw new Error(`${where}: non-finite entry`);
+  return M;
+}
+
+/* Gauge-fix a loading matrix: subtract each factor's mean loading
+ * across contestants. A common loading column c adds the same c'f to
+ * every performance and cannot move an argmin, so PV prices the
+ * IDENTICAL race -- and unlike V it makes every downstream decision
+ * (node family, node order, lattice window) invariant under
+ * V -> V + 1c'. One place, because two modules needed it and the one
+ * that had it privately (the standalone copy, #139) did not stop this
+ * one shipping without it (#303).
+ */
+export function gaugeCenter(V) {
+  if (!V || !V.length) return V;
+  const n = V.length, r = V[0].length;
+  const colMean = new Array(r).fill(0);
+  for (const row of V) for (let j = 0; j < r; j++) colMean[j] += row[j] / n;
+  return V.map(row => row.map((x, j) => x - colMean[j]));
+}
+
+/* First d primes, generated. Literal tables put silent cliffs in the
+ * Halton constructions: 16 in demo.mjs and 24 here, past which
+ * `primes[dim]` is undefined, the radical inverse becomes NaN, and the
+ * whole probability vector comes back NaN (#233). The same tabulated
+ * cliff was in the R GHK at 30 (#190). */
+export function firstPrimes(d) {
+  const out = [];
+  for (let c = 2; out.length < d; c++) {
+    let isP = true;
+    for (const q of out) {
+      if (q * q > c) break;
+      if (c % q === 0) { isP = false; break; }
+    }
+    if (isP) out.push(c);
+  }
+  return out;
 }

@@ -5,7 +5,50 @@
 # stable-direction deconvolution; see the python module docstring for
 # derivations and the two-branch refusal of exact-rank targets.
 
+# The depth of a top-k curve is a COUNT, so it is an integer. Every
+# guard truncated first -- as.integer(k) here, int(k) in python,
+# Math.trunc in the browser -- and then range-checked the truncated
+# value, so a fractional depth passed and was silently floored:
+# top_k_probabilities(mu, 1.5) returned the top-1 curve and 2.5 the
+# top-2 one, with no warning and a mass of 1 or 2 rather than the 1.5
+# or 2.5 asked for. k=0, k=n and k>n were all refused; only the
+# non-integer slipped through, which is the one case the message
+# "k must be in [1, n-1]" reads as permitting.
+.as_depth <- function(k, n, where = "k") {
+  kk <- as.numeric(k)
+  if (length(kk) != 1L || !is.finite(kk))
+    stop(sprintf("%s must be a single whole number of places", where),
+         call. = FALSE)
+  if (kk != trunc(kk))
+    stop(sprintf(paste("%s must be a whole number of places; got %s. A",
+                       "top-k curve counts finishers, so there is no",
+                       "top-%s."), where, format(kk), format(kk)),
+         call. = FALSE)
+  kk <- as.integer(kk)
+  if (kk < 1L || kk > n - 1L)
+    stop(sprintf("%s must be in [1, n-1]; got k=%d, n=%d", where, kk, n),
+         call. = FALSE)
+  kk
+}
+
 .clip01 <- function(v) pmin(pmax(v, 0), 1)
+
+.resolved_points <- function(lo, hi, sd, points) {
+  smin <- max(min(sd), 1e-300)
+  # in DOUBLE, and clamp before converting: a narrow enough runner makes
+  # the requirement exceed .Machine$integer.max, and as.integer() then
+  # returns NA, so the very `if (need > 8193)` meant to handle that
+  # regime errored with "missing value where TRUE/FALSE needed" (#228).
+  # Python is unaffected only because its integers are unbounded.
+  need <- ceiling((hi - lo) / (0.5 * smin)) + 1
+  if (!is.finite(need) || need > 8193)
+    warning(sprintf(paste("top-k lattice cannot resolve the narrowest",
+                          "runner even at 8193 points (min sd %.1e over a",
+                          "window of %.3g); memberships may carry",
+                          "percent-level error the mass check cannot see."),
+                    smin, hi - lo), call. = FALSE)
+  max(as.integer(points), as.integer(min(need, 8193)))
+}
 
 .count_window <- function(mu, sd, k, fn, delta = 1e-12, pad_sds = 2.0) {
   n <- length(mu)
@@ -43,6 +86,12 @@
 
 .topk_grid <- function(mu, sd, k, fn, points, delta = 1e-12) {
   w <- .count_window(mu, sd, k, fn, delta)
+  # about two points per NARROWEST sd, capped at 8193. The window is
+# set by the widest runner and the grid by `points`, so a heterogeneous
+# field leaves the narrowest density between samples, and the mass check
+# cannot see it: that check is one scalar (memberships sum to k) and
+# runner-level errors of opposite sign cancel in it (#224).
+  points <- .resolved_points(w[1], w[2], sd, points)
   x <- seq(w[1], w[2], length.out = points)
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
@@ -161,9 +210,7 @@
 top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
                                 base = "normal", points = 513, qa = 15) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   sd <- sqrt(if (is.null(D)) rep(1, n) else D)
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V))
@@ -182,9 +229,7 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
                                    base = "normal", points = 513, qa = 15) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   1 - top_k_probabilities(mu, n - k, V = V, D = D, base = base,
                           points = points, qa = qa)
 }
@@ -192,9 +237,7 @@ bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
                             points = 513, V = NULL, qa = 15) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   if (!is.null(V)) {
     # exact node mixture: the factor shift commutes with d/dmu, d/dsigma
     fac <- .topk_factor_nodes(V, n, qa)
@@ -247,12 +290,30 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
     Qi <- .loo_pmf(C, g$F, i)
     P[i, ] <- colSums(Qi * (g$f[, i] / sd[i])) * g$dx
   }
-  rows <- rowSums(P)
-  cols <- colSums(P)
-  if (any(!is.finite(P)) || max(abs(rows - 1)) > 5e-3 ||
-      max(abs(cols - 1)) > 5e-3)
-    stop("rank marginals defective; raise points=")
-  .clip01(P / rows)
+  # Check what is RETURNED. Row normalisation makes every row exact and
+  # MOVES the columns, so a matrix that passed the raw check could fail the
+  # stated identity afterwards with nothing looking (#203). The columns are
+  # not forced: alternating scaling would make both exact by hiding the
+  # under-resolution that caused it, and the same field at 2001 points has
+  # a column error of 3.5e-9.
+  # BOTH checks. They are independent and were mistaken for alternatives:
+  # row normalisation can ERASE a gross raw defect and leave the result
+  # just inside tolerance (#221). The raw check sees the quadrature, the
+  # post check sees what the caller gets.
+  .rank_reject <- function(where, re_, ce) {
+    stop(sprintf(paste("rank marginals defective %s: row-sum error %.2e,",
+                       "column-sum error %.2e. Raise points=."),
+                 where, re_, ce), call. = FALSE)
+  }
+  re_raw <- max(abs(rowSums(P) - 1)); ce_raw <- max(abs(colSums(P) - 1))
+  if (any(!is.finite(P)) || re_raw > 5e-3 || ce_raw > 5e-3)
+    .rank_reject("before normalisation", re_raw, ce_raw)
+  P <- .clip01(P / pmax(rowSums(P), 1e-300))
+  re_out <- max(abs(rowSums(P) - 1)); ce_out <- max(abs(colSums(P) - 1))
+  if (any(!is.finite(P)) || re_out > 5e-3 || ce_out > 5e-3)
+    .rank_reject("in the RETURNED matrix after row normalisation",
+                 re_out, ce_out)
+  P
 }
 
 .validated_topk_target <- function(q, k, n, target_floor) {
@@ -283,9 +344,7 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
                                 tol = 1e-8, target_floor = NULL,
                                 return_info = FALSE) {
   n <- length(q)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   vt <- .validated_topk_target(q, k, n, target_floor)
   target <- vt$target
   sd <- sqrt(if (is.null(D)) rep(1, n) else D)
@@ -341,11 +400,9 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      n_iter = 60, tol = 1e-8, ridge = 0,
                                      mu0 = NULL, return_info = FALSE) {
   n <- length(q1)
-  k1 <- as.integer(k1); k2 <- as.integer(k2)
+  k1 <- .as_depth(k1, n, "k1"); k2 <- .as_depth(k2, n, "k2")
   if (k1 == k2)
     stop("k1 == k2 gives one curve twice: scale is unidentified")
-  for (kk in c(k1, k2)) if (kk < 1 || kk > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", kk, n))
   t1 <- .validated_topk_target(q1, k1, n, NULL)$target
   t2 <- .validated_topk_target(q2, k2, n, NULL)$target
   lt1 <- log(t1) - log1p(-t1)

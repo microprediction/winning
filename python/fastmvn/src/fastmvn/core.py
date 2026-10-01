@@ -123,6 +123,32 @@ def mvn_cdf_fast_info(lower=None, upper=None, mean=None, sigma=None,
     return _mvn_cdf_impl(lower, upper, mean, sigma, V, D)
 
 
+def _rectangle_status(lo, up):
+    """Classify the rectangle {lo <= x <= up} before any quadrature.
+
+    A reversed coordinate makes the event EMPTY. Every port used to form
+    the negative conditional cell -- Phi(0) - Phi(1) = -0.3413... -- and
+    then clamp it to the underflow floor, so an impossible observation
+    came back as 1e-300 and, in log-likelihood code, as a finite -690.8
+    instead of -inf. Worse on the recentered path, where importance
+    integration then integrates the artificial constant cell (#235).
+
+    `mvtnorm::pmvnorm`, which r/mvtnormfast is a drop-in for, raises on
+    reversed bounds and returns 0 when a coordinate has lower == upper.
+    All four ports now do the same.
+    """
+    bad = np.nonzero(lo > up)[0]
+    if bad.size:
+        i = int(bad[0])
+        raise ValueError(
+            "lower must not exceed upper: coordinate {} has lower={!r} > "
+            "upper={!r}, so the rectangle is empty. Check the argument "
+            "order.".format(i, float(lo[i]), float(up[i])))
+    # lower == upper on a continuous coordinate is a degenerate slab of
+    # exactly zero mass; that includes -inf == -inf and +inf == +inf.
+    return bool(np.any(lo == up))
+
+
 def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
     if V is None or D is None:
         if sigma is None:
@@ -137,6 +163,8 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
                 np.broadcast_to(np.asarray(upper, float), (n,))
             lo = np.full(n, -np.inf) if lower is None else \
                 np.broadcast_to(np.asarray(lower, float), (n,))
+            if _rectangle_status(lo, up):
+                return 0.0, "degenerate-rectangle"
             mvn = multivariate_normal(mean=mu, cov=sigma,
                                       allow_singular=True)
             p = mvn.cdf(up, lower_limit=lo)
@@ -153,7 +181,16 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
         np.broadcast_to(np.asarray(lower, float), (n,)).astype(float)
     up = np.full(n, np.inf) if upper is None else \
         np.broadcast_to(np.asarray(upper, float), (n,)).astype(float)
+    if _rectangle_status(lo, up):
+        return 0.0, "degenerate-rectangle"
     s = np.sqrt(D)
+    # A coordinate with no idiosyncratic variance AND no loading is a
+    # constant at mu_i. If that constant is outside its own interval the
+    # probability is exactly 0, not the 1e-300 the cell floor would give
+    # it, and not a number the recentered path should go looking for.
+    fixed = (s == 0.0) & ~np.any(V != 0.0, axis=1)
+    if np.any(fixed & ((mu < lo) | (mu > up))):
+        return 0.0, "outside-support"
 
     F, W = _nodes_for(V, D)
     p = _cell_expectation(F, W, V, s, mu, lo, up)
@@ -166,7 +203,7 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
 
     def logint(f):
         z = V @ f
-        cell = ndtr((up - mu - z) / s) - ndtr((lo - mu - z) / s)
+        cell = _interval_mass(up - mu - z, lo - mu - z, s)
         return float(np.log(np.maximum(cell, 1e-300)).sum()
                      - 0.5 * f @ f)
 
@@ -189,16 +226,37 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
     M = Fq @ V.T
     hiq = (up - mu)[None, :] - M
     loq = (lo - mu)[None, :] - M
-    lc = np.log(np.maximum(ndtr(hiq / s) - ndtr(loq / s), 1e-300))
+    lc = np.log(np.maximum(_interval_mass(hiq, loq, s), 1e-300))
     lt = lc.sum(axis=1) + logw
     m = lt.max()
     p = float(np.exp(m) * np.mean(np.exp(lt - m)))
     return p, "factor-recentered"
 
 
+def _interval_mass(hi, lo_, s):
+    """Per-coordinate cell mass P(lo_ <= sigma Z <= hi), sigma == 0 too.
+
+    A coordinate with zero idiosyncratic variance is DETERMINISTIC given
+    the factor draw: X_i = mu_i + v_i . f. Its conditional cell is an
+    INDICATOR, not a gaussian interval. Dividing by s = 0 gave 0/0 = NaN
+    the moment that deterministic value landed exactly on an inclusive
+    rectangle boundary -- P(X_1 <= 0) for X_1 identically 0, which is 1,
+    not undefined (#206). Off the boundary the division happened to give
+    the right answer, so this only ever showed up as a NaN.
+
+    `hi` and `lo_` are already shifted by the mean and the factor term,
+    so the deterministic coordinate is inside the rectangle exactly when
+    lo_ <= 0 <= hi.
+    """
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gauss = ndtr(hi / s) - ndtr(lo_ / s)
+    determ = ((lo_ <= 0.0) & (0.0 <= hi)).astype(float)
+    return np.where(s > 0.0, gauss, determ)
+
+
 def _cell_expectation(F, W, V, s, mu, lo, up):
     M = F @ V.T
     hi = (up - mu)[None, :] - M
     lo_ = (lo - mu)[None, :] - M
-    logcell = np.log(np.maximum(ndtr(hi / s) - ndtr(lo_ / s), 1e-300))
+    logcell = np.log(np.maximum(_interval_mass(hi, lo_, s), 1e-300))
     return float(W @ np.exp(logcell.sum(axis=1)))

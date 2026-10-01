@@ -74,7 +74,16 @@ race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
 concentration_matrix <- function(n, name_caps = NULL, groups = NULL) {
   rows <- list(); bs <- numeric(0)
   if (!is.null(name_caps)) {
-    caps <- rep_len(as.numeric(name_caps), n)
+    # rep_len recycles in silence whenever the short length divides n,
+    # so a length-2 name_caps at n = 4 capped names 3 and 4 with the
+    # caps meant for 1 and 2. Same defect as #285 in mvtnormfast, same
+    # rule: a scalar broadcasts, every other wrong length is refused.
+    caps <- as.numeric(name_caps)
+    if (length(caps) == 1L) caps <- rep(caps, n)
+    if (length(caps) != n)
+      stop(sprintf(paste("name_caps must be a scalar or one cap per name;",
+                         "got %d for n = %d"), length(caps), n),
+           call. = FALSE)
     for (i in seq_len(n)) {
       if (is.finite(caps[i])) {
         r <- numeric(n); r[i] <- 1

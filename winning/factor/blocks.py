@@ -20,21 +20,15 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..rustconfig import load_fastrace
 from ..shapes import as_loadings
 
 from scipy.special import ndtr, roots_hermitenorm
 
 TINY = 1e-300
 
-try:
-    import fastrace as _fastrace
-    _RUST_OK = hasattr(_fastrace, "block_race")
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except Exception:                                            # pragma: no cover
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('block_race')
 
 
 def _warn_if_sharp(v, sd, qa, threshold=3.0):
@@ -318,20 +312,30 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
 
 
 def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
-    _lv = np.asarray(loading, float)
-    if _lv.ndim == 2 and _lv.shape[-1] > 1 and _lv.shape[0] > 1:
+    """Exact d p / d mu (min-wins), one pass. Rows sum to zero.
+
+    A rank-one cluster loading is valid as a length-n vector OR as an
+    (n, 1) matrix -- `as_loadings` is the one place that rule is decided,
+    and `block_race_probabilities` accepts both. This function used to
+    call `np.asarray` and keep whatever shape it was handed, so the
+    matrix spelling reached the kernel as (n, 1) and died in an unrelated
+    `np.take` with "input operand has more dimensions than allowed by the
+    axis"; every inverse and polishing path that calls the Jacobian
+    inherited the crash (#145).
+    """
+    mu = np.asarray(mu, float)
+    n = len(mu)
+    V = as_loadings(loading, n)          # (n, rank), one ROW per entity
+    if V.shape[1] > 1:
         raise NotImplementedError(
             "block_race_jacobian supports rank-one cluster loadings only; "
             "the rank-r block Jacobian is not implemented (the FORWARD "
             "rank-r kernel is). Use finite differences of "
             "block_race_probabilities, or the factor grammar if the "
             "loadings are global.")
-    """Exact d p / d mu (min-wins), one pass. Rows sum to zero."""
-    mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(np.asarray(D, float))
-    v = np.asarray(loading, float); cluster = np.asarray(cluster)
-    n = len(mu)
+    v = V[:, 0]; cluster = np.asarray(cluster)
     _, inv = np.unique(cluster, return_inverse=True)
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]

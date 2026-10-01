@@ -217,7 +217,11 @@ def main():
             rows.append(dict(rank=args.rank, n=args.n, D=D_level, sharp=sharp, method=name, passes=passes, err=err, seconds=dt))
 
         t = time.perf_counter(); p = np.asarray(wf.race_probabilities(mu, V=V, D=D, points=args.points)); report("winning default rule", p, -1, time.perf_counter() - t)
-        for Q in (15, 41) if args.rank >= 2 else (15, 51, 201):
+        # orders by rank: the pruned tensor is ~0.16 Q^rank nodes, so the
+        # top order is chosen to keep it under ~3e5 (#155: Q=41 at rank 5
+        # was 116M nodes before pruning and did not fit in memory)
+        orders = {1: (15, 51, 201), 2: (15, 41), 3: (11, 21), 4: (9, 15)}.get(args.rank, (7, 11))
+        for Q in orders:
             F, W = hermite_nodes(args.rank, Q=Q)
             t = time.perf_counter(); p = np.asarray(wf.race_probabilities(mu, V=V, D=D, F=F, W=W, points=args.points)); report(f"fixed Gauss-Hermite Q={Q}", p, len(F), time.perf_counter() - t)
         for m in (7, 9, 11):
