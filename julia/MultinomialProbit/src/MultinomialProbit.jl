@@ -38,7 +38,8 @@ const TINY = 1e-300
 
 # ---- normal cdf / inverse (the winning JS/Julia core's recipes) ----
 
-function _erf_series(x::Float64)
+function _erf_series(x::Real)          # Real, not Float64: logndtr
+    # below is called on ForwardDiff duals, and this is pure arithmetic
     s = x
     t = x
     for n in 1:119
@@ -49,7 +50,7 @@ function _erf_series(x::Float64)
     return (2 / sqrt(pi)) * s
 end
 
-function _erfcx(x::Float64)
+function _erfcx(x::Real)
     cf = 0.0
     for k in 60:-1:1
         cf = (k / 2) / (x + cf)
@@ -138,7 +139,7 @@ function ndtr(a::Real)
     return x > 0 ? 1.0 - y : y
 end
 
-function _ndtr_series(z::Float64)
+function _ndtr_series(z::Real)
     x = z / sqrt(2)
     x >= 2.5 && return 1 - 0.5 * _erfcx(x) * exp(-x * x)
     x <= -2.5 && return 0.5 * _erfcx(-x) * exp(-x * x)
@@ -201,6 +202,61 @@ function _halton_normal(r::Int, n::Int)
     return F, fill(1.0 / n, n)
 end
 
+"""log of the standard normal CDF, tail-stable. `log(max(ndtr(a), TINY))`
+underflows to the same -690.78 for every a below about -37, which made the
+likelihood objective FLAT in the tail and its score exactly zero (#270)."""
+# _erfcx here is the continued fraction, which has NOT converged for
+# small x: at x = 1/sqrt(2), where a z <= -1 split would first call it,
+# it is wrong by 5e-7 relative and that error lands straight in the
+# log-likelihood. _ndtr_series already knows the right crossover, 2.5,
+# so use the same one rather than inventing a second.
+const _LOGNDTR_CUT = 2.5 * sqrt(2)
+
+function logndtr(z::Real)
+    # cephes ndtr in the ordinary range, not _ndtr_series: the series
+    # runs up to 119 terms and this is called on every node of every
+    # Newton step of every likelihood evaluation, which made an
+    # end-to-end fit so slow it looked like a hang. Above the cut the
+    # CDF is O(1e-4) or larger, so log of it loses nothing.
+    if z > _LOGNDTR_CUT
+        return log1p(-ndtr(-z))                  # the complement is tiny
+    elseif z >= -_LOGNDTR_CUT
+        return log(ndtr(z))
+    end
+    x = -z / sqrt(2)                             # x >= 2.5: CF is good here
+    return log(0.5 * _erfcx(x)) - 0.5 * z * z
+end
+
+"""log of phi(a)/Phi(a), the inverse Mills ratio, stable in the far tail."""
+_log_mills(a::Real) = -0.5 * a * a - 0.5 * log(2 * pi) - logndtr(a)
+
+"""Laplace-tilt the chosen alternative's own-noise quadrature.
+
+The fixed Gauss-Hermite rule samples z where the PRIOR has its mass, and
+for a large observed contrast the integrand's mass is far outside it: at
+a gap of -20 the mode is at z = 10 and a 7-node rule reaches |z| < 3.8.
+With g(z) = -z^2/2 + sum_j logPhi(A_j(z)),
+
+    g'(z)  = -z + sum_j (s_k/s_j) lam(A_j)
+    g''(z) = -1 - sum_j (s_k/s_j)^2 lam(A_j)(A_j + lam(A_j))
+
+and lam(a)(a + lam(a)) = -lam'(a) > 0 for every a, so g'' <= -1: g is
+strictly concave, its mode is unique and Newton converges from anywhere.
+The change of measure is undone exactly by log sigma - z^2/2 + x^2/2, so
+the shift moves the NODES and not the integrand (#270)."""
+# The tilt is a choice of NODES, so it must not carry derivative
+# information: if duals flowed through the Newton solve, ForwardDiff
+# would return the derivative of the re-tilted objective while the
+# analytic score -- correctly -- returns the quadrature of the true
+# derivative, and the two would disagree by a quadrature-order amount.
+# Stripping to the value makes the shift a constant, so dual-mode
+# differentiation of this code reproduces the analytic score exactly.
+#
+# Done WITHOUT a ForwardDiff dependency, and deliberately not through
+# the package extension: correctness must not depend on an extension
+# having been loaded. A dual carries its value in a `value` field, and
+# the recursion peels nested duals (forward-over-forward) down to the
+# float underneath.
 """(F, W): nodes over (factor^r, own-noise); Halton past sharpness 3
 (the dependency-free escalation of the R port)."""
 function nodes_for_likelihood(r::Int; Qf = 7, Qz = 7, sharp = 0.0)
@@ -237,6 +293,24 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
                                  nodes = nothing, per_obs = false)
     T, J = size(mu)
     r = size(V, 2)
+    # Every observation must be accounted for. The loop below walks the
+    # LEGAL labels and gathers the rows matching each, so a row whose
+    # choice is outside 1..J is never visited: it contributed nothing to
+    # the log-likelihood and a zero row to the score, and the fit
+    # silently optimised a SUBSET while reporting it as the whole. This
+    # port also accepted a choice vector SHORTER than T, dropping the
+    # tail without a word (#194).
+    length(choice) == T || throw(ArgumentError(
+        "choice must have one entry per observation: got " *
+        string(length(choice)) * " for " * string(T) * " rows of mu"))
+    for (i, c) in enumerate(choice)
+        (c isa Integer) || throw(ArgumentError(
+            "choice[" * string(i) * "] is not an integer alternative index"))
+        (1 <= c <= J) || throw(ArgumentError(
+            "choice[" * string(i) * "] = " * string(c) * " is outside 1.." *
+            string(J) * "; it would be dropped in silence, which raises " *
+            "the log-likelihood because there is less of it"))
+    end
     Dv = D === nothing ? ones(J) : Float64.(collect(D))
     s = sqrt.(Dv)
     V = V .- sum(V, dims = 1) ./ J          # gauge: differences decide
@@ -266,7 +340,7 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
             shift = Vf[:, k] .- Vf[:, j] .+ zq .* s[k]      # (Q,)
             Aj = ((mu[idx, k] .- mu[idx, j]) .+ shift') ./ s[j]  # (Ti, Q)
             A[j] = Aj
-            lp = log.(max.(ndtr.(Aj), TINY))
+            lp = logndtr.(Aj)
             logPhi[j] = lp
             acc .+= lp
         end
@@ -376,6 +450,11 @@ mutable struct MNProbit
     loglik::Float64
     converged::Bool
     method::Symbol
+    # Whether the constructor GENERATED the alternative intercept
+    # columns. Without it, predict_proba could only guess from the
+    # column count, and guessed wrong: see its docstring (#195).
+    intercepts::Bool
+    p_raw::Int          # covariate columns the caller supplied
 end
 
 function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
@@ -393,7 +472,7 @@ function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
     pos = _fill_positions(J, r)
     return MNProbit(Xf, Int.(choice), T, J, p, r, pos,
                     zeros(p + length(pos)), zeros(p), zeros(J, r),
-                    NaN, false, :exact)
+                    NaN, false, :exact, intercepts, p0)
 end
 
 function _unpack(m::MNProbit, theta)
@@ -577,17 +656,47 @@ function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
 end
 
 """Choice probabilities under the fitted parameters, by the same
-factor-conditional product integrals (normalized across alternatives)."""
+factor-conditional product integrals (normalized across alternatives).
+
+New data must carry the design the model was FITTED on. This used to decide whether to prepend generated intercept columns from
+the column count alone -- `size(Xr, 3) != m.p` -- and the model recorded
+neither whether it had generated them nor how many covariates the caller
+supplied. So new data with the wrong number of features were silently
+REINTERPRETED rather than refused: a model fitted on two covariates
+without intercepts, handed one covariate, prepended two synthetic
+intercept columns, then used only the first `m.p` of the three. It
+applied coefficients fitted to the covariates to the intercepts and
+IGNORED the supplied feature entirely, returning a plausible probability
+row (#195).
+
+The model now records both, so the column count is checked rather than
+guessed. `p_raw` columns means raw covariates, and the intercepts are
+generated exactly when the fit generated them; `p` columns means the
+design is already assembled. Anything else raises."""
 function predict_proba(m::MNProbit; X = nothing)
     Xf = X === nothing ? m.X : begin
         Xr = Float64.(X)
-        if size(Xr, 3) != m.p
+        size(Xr, 2) == m.J || throw(DimensionMismatch(
+            "X has " * string(size(Xr, 2)) * " alternatives; the model " *
+            "was fitted on " * string(m.J)))
+        nc = size(Xr, 3)
+        if nc == m.p
+            # already the fitted design, intercepts and all
+        elseif m.intercepts && nc == m.p_raw
             T2 = size(Xr, 1)
             Z = zeros(T2, m.J, m.J - 1)
             for j in 2:m.J
                 Z[:, j, j - 1] .= 1.0
             end
             Xr = cat(Z, Xr; dims = 3)
+        else
+            throw(DimensionMismatch(
+                "X has " * string(nc) * " covariate columns; this model " *
+                "was fitted on " * string(m.p_raw) *
+                (m.intercepts ? " covariates plus generated intercepts, so " *
+                 "pass either " * string(m.p_raw) * " or " * string(m.p) :
+                 " covariates and no generated intercepts, so pass " *
+                 string(m.p))))
         end
         Xr
     end

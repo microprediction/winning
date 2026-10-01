@@ -2,6 +2,11 @@
 the bases, the max-wins flip is the right way round, and the worlds
 reproduce the private helpers they replaced (those tests' pinned numbers
 are the proof; here the bandits audit world is pinned draw for draw)."""
+import os
+import subprocess
+import sys
+import zlib
+
 import numpy as np
 import pytest
 
@@ -26,12 +31,36 @@ BASES = [("normal", "normal"), ("gumbel", "gumbel"), ("logistic", "logistic"),
 @pytest.mark.parametrize("name,base", BASES, ids=[b[0] for b in BASES])
 def test_sampler_matches_its_own_survival_function(name, base):
     # DKW: an exact sampler's Kolmogorov distance at n = 50,000 exceeds
-    # 1e-2 with probability 5e-5; a sign or scale slip is > 0.1. (The
-    # scipy-backed samplers consume the stream differently across
-    # platforms, so the draw is not the same everywhere: 7.7e-3 on a
-    # windows runner against an earlier 7.5e-3 mark.)
-    rng = np.random.default_rng(hash(name) % 2**32)
+    # 1e-2 with probability about 9e-5; a sign or scale slip is > 0.1.
+    #
+    # The seed must be STABLE. It was `hash(name) % 2**32`, and python
+    # salts str.__hash__ per process unless PYTHONHASHSEED is set, so
+    # every run drew a different sample and re-rolled that 9e-5 -- 13
+    # bases times six platforms is 78 draws per CI round, which is a
+    # failure every few rounds. One did fail a macos runner at 0.010262,
+    # on a pull request that changed only browser javascript. The comment
+    # here used to blame the platform; the platform is why the scipy
+    # samplers consume the stream differently, not why the draw changed
+    # between two runs on the SAME machine.
+    #
+    # crc32 is stable across processes, platforms and releases. Each
+    # (base, platform) pair now has one fixed draw: it passes forever or
+    # fails immediately, instead of being re-rolled. Local margin is
+    # comfortable -- over 120 seeds student4, the worst base, has median
+    # 0.0038 and max 0.0067 against the 1e-2 bound.
+    rng = np.random.default_rng(zlib.crc32(name.encode()))
     assert check_sampler(base, rng, n=50_000) < 1e-2
+
+
+def test_the_sampler_seed_does_not_change_between_processes():
+    """The property the fix depends on, asserted rather than assumed."""
+    out = subprocess.run(
+        [sys.executable, "-c",
+         "import zlib; print(zlib.crc32(b'student4'))"],
+        capture_output=True, text=True, check=True,
+        env={**os.environ, "PYTHONHASHSEED": "random"})
+    assert int(out.stdout) == zlib.crc32(b"student4")
+    assert zlib.crc32(b"student4") != zlib.crc32(b"normal")
 
 
 def test_named_bases_are_standardized_and_gumbel_flips_the_right_way():

@@ -16,8 +16,8 @@ pmvnorm_fast(lower = -Inf, upper = Inf, mean = NULL, sigma = NULL,
              V = NULL, D = NULL, ...)
 }
 \arguments{
-  \item{lower}{numeric vector of lower limits, recycled to dimension n; -Inf allowed.}
-  \item{upper}{numeric vector of upper limits, recycled to dimension n; Inf allowed.}
+  \item{lower}{a scalar, broadcast to every coordinate, or one limit per coordinate; -Inf allowed. Any other length is an error: R recycles silently whenever the short length divides n, which returns a plausible probability for a different rectangle (#285). mvtnorm::pmvnorm, which this is a drop-in for, refuses the same input.}
+  \item{upper}{a scalar, broadcast to every coordinate, or one limit per coordinate; Inf allowed. Any other length is an error, as for \code{lower}.}
   \item{mean}{numeric mean vector; defaults to zero.}
   \item{sigma}{covariance matrix; used when V and D are not supplied.}
   \item{V}{n-by-r factor loading matrix, so that sigma = VV' + diag(D).}

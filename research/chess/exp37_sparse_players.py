@@ -47,8 +47,8 @@ THRESHOLDS = (100, 50, 25, 10)
 
 def _glicko():
     repo = os.path.dirname(os.path.dirname(_HERE))
-    root = next((r for r in (os.path.join(repo, "src", "winning"),
-                             os.path.expanduser("~/github/winning/src/winning"))
+    root = next((r for r in (os.path.join(repo, "attic", "src", "winning"),
+                             os.path.expanduser("~/github/winning/attic/src/winning"))
                  if os.path.isdir(r)), None)
     pkg = types.ModuleType("wsrc"); pkg.__path__ = [root]
     sys.modules["wsrc"] = pkg

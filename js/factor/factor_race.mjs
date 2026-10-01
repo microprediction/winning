@@ -99,30 +99,83 @@ const BASES = {
  * central differences, log-survival interpolated linearly (log-linear
  * tails). Python parity vs scipy is ~1e-6, not machine precision. */
 function tabulatedBase(pdfStd, spans) {
+  // Two tiers. The inner one is fine enough for the bulk; the outer one
+  // exists because clamping the lookup at the table edge made the density
+  // FLAT beyond it, so a runner 100 sd behind kept the endpoint density
+  // and the race reported a false longshot floor -- 3.5e-7 at gaps 80 and
+  // 100 where the truth keeps falling (#182). Heavy tails are exactly
+  // where that matters: a Student-t4 survival decays polynomially, so
+  // there is no span past which the omitted mass is negligible, and the
+  // old normalisation divided by the INNER mass alone, which is the same
+  // error again.
   const HALF = 40, NPTS = 16001, DX = 2 * HALF / (NPTS - 1);
+  const OUTER = 4000, NOUT = 8001, DXO = (OUTER - HALF) / (NOUT - 1);
   let g = null;
   const build = () => {
-    const f = new Float64Array(NPTS), ls = new Float64Array(NPTS);
+    const f = new Float64Array(NPTS);
     for (let k = 0; k < NPTS; k++) f[k] = pdfStd(-HALF + k * DX);
+    const fR = new Float64Array(NOUT), fL = new Float64Array(NOUT);
+    for (let k = 0; k < NOUT; k++) {
+      fR[k] = pdfStd(HALF + k * DXO);
+      fL[k] = pdfStd(-OUTER + k * DXO);
+    }
+    // one cumulative sweep across all three pieces, left to right, so the
+    // survival is normalised by the WHOLE computed mass
     let C = 0;
-    const cum = new Float64Array(NPTS);
+    const cumL = new Float64Array(NOUT);
+    for (let k = 1; k < NOUT; k++) { C += 0.5 * (fL[k - 1] + fL[k]) * DXO; cumL[k] = C; }
+    const cum = new Float64Array(NPTS); cum[0] = C;
     for (let k = 1; k < NPTS; k++) { C += 0.5 * (f[k - 1] + f[k]) * DX; cum[k] = C; }
-    for (let k = 0; k < NPTS; k++)
-      ls[k] = Math.log(Math.max((C - cum[k]) / C, 1e-300));
-    const fp = new Float64Array(NPTS);
-    for (let k = 1; k < NPTS - 1; k++) fp[k] = (f[k + 1] - f[k - 1]) / (2 * DX);
-    g = { f, ls, fp };
+    const cumR = new Float64Array(NOUT); cumR[0] = C;
+    for (let k = 1; k < NOUT; k++) { C += 0.5 * (fR[k - 1] + fR[k]) * DXO; cumR[k] = C; }
+    const T = C;
+    // No end correction on the cumulative. An Euler-Maclaurin term
+    // (h^2/12)(f'(x) - f'(a)) was tried and measured WORSE than the plain
+    // trapezoid, which is why #211's description and the changelog say it
+    // was removed; it was left in the code by mistake (#216). It could not
+    // have delivered its O(h^4): the cumulative is chained across three
+    // pieces with two different step sizes, corrected per piece with that
+    // piece's h and no correction at the joins, and f'(a) was taken as
+    // fpL[0], which the centred-difference helper never writes, so it was
+    // identically zero rather than the derivative at the left end. What
+    // actually fixed the 1e-5 survival gap was the span widening in the
+    // same PR, BASES.t4 [12,12] -> [24,24].
+    const lsOf = (c) => {
+      const a = new Float64Array(c.length);
+      for (let k = 0; k < c.length; k++)
+        a[k] = Math.log(Math.max((T - c[k]) / T, 1e-300));
+      return a;
+    };
+    const dOf = (arr, h) => {
+      const a = new Float64Array(arr.length);
+      for (let k = 1; k < arr.length - 1; k++) a[k] = (arr[k + 1] - arr[k - 1]) / (2 * h);
+      return a;
+    };
+    const fp = dOf(f, DX), fpR = dOf(fR, DXO), fpL = dOf(fL, DXO);
+    g = { f, ls: lsOf(cum), fp,
+          fR, lsR: lsOf(cumR), fpR,
+          fL, lsL: lsOf(cumL), fpL };
   };
   return {
     spans,
     eval(z, sd) {
       if (!g) build();
-      let t = (z + HALF) / DX;
-      if (t < 0) t = 0;
-      if (t > NPTS - 2) t = NPTS - 2;
+      let arrF, arrLs, arrFp, t;
+      // Both wings clamp at BOTH ends: the left wing's top index is
+      // NOUT - 1 at z = -HALF exactly, and reading arr[k + 1] there gave
+      // NaN, which the race then carried into the whole field.
+      if (z >= HALF) {
+        t = (z - HALF) / DXO; arrF = g.fR; arrLs = g.lsR; arrFp = g.fpR;
+        t = Math.min(Math.max(t, 0), NOUT - 2);   // past 4000 sd a floor
+      } else if (z <= -HALF) {                    // remains, now ~1e-13
+        t = (z + OUTER) / DXO; arrF = g.fL; arrLs = g.lsL; arrFp = g.fpL;
+        t = Math.min(Math.max(t, 0), NOUT - 2);   // rather than 3.5e-7
+      } else {
+        t = (z + HALF) / DX; arrF = g.f; arrLs = g.ls; arrFp = g.fp;
+      }
       const k = Math.floor(t), a = t - k;
       const lerp = (arr) => arr[k] + a * (arr[k + 1] - arr[k]);
-      return { ls: lerp(g.ls), fx: lerp(g.f) / sd, ds: -lerp(g.fp) / (sd * sd) };
+      return { ls: lerp(arrLs), fx: lerp(arrF) / sd, ds: -lerp(arrFp) / (sd * sd) };
     },
   };
 }
@@ -146,10 +199,28 @@ BASES.skew = skewNormalBase(3);
 {
   // Student-t, nu = 4, standardized (sd = sqrt(2))
   const SQ2 = Math.SQRT2;
+  // spans: how far past the extreme conditional mean the lattice runs, in
+  // units of the largest sd. Student-t4 keeps real mass a long way out, so
+  // 12 truncated it and the forward sat 1.01e-5 from scipy -- a hundred
+  // times the python reference's own lattice error, and the standing
+  // failure in test_parity.mjs. Measured against that fixture, at the
+  // default 501 points:
+  //
+  //   span   forward error   inverse over 501..4001 points
+  //     12       1.01e-5     2.9e-7 .. 2.3e-6
+  //     20       1.75e-6     2.9e-7 .. 5.0e-7
+  //     24       8.42e-7     2.9e-7 .. 3.5e-7
+  //     32       2.37e-7     2.9e-7 .. 5.3e-7
+  //     40       1.39e-7     NaN at 501, 1001 and 4001
+  //
+  // Both ends cost: too narrow drops tail mass, too wide spreads a fixed
+  // point budget until the bulk is under-resolved, and past ~40 the
+  // inverse returns NaN outright (its own fragility, not this constant --
+  // reported separately). 24 sits where both are good with margin.
   BASES.t4 = tabulatedBase(
     (z) => { const u = SQ2 * z;
       return SQ2 * (3 / 8) * Math.pow(1 + u * u / 4, -2.5); },
-    [12, 12]);
+    [24, 24]);
 }
 
 function condMeans(mu, V, F) {
@@ -168,12 +239,51 @@ function condMeans(mu, V, F) {
 }
 
 /* forward pass: shares (and optionally slopes, pairwise densities, deletions) */
+/* The factor weights describe a LAW, so W and c*W are the same law and
+   must give the same answer. The forward already did: it normalises its
+   accumulated shares, so `p` was invariant to 1e-16 under any positive
+   rescaling. But it returns the own-slopes UNNORMALISED, and the
+   inverse divides those by the normalised probabilities -- so the
+   Newton derivative carried a factor of c, and only the inverse moved.
+   A self-generated target repriced 0.16 away after fifty iterations at
+   c = 0.1, which is a calibration failure with no error (#281).
+
+   python has the same helper-level mismatch and is saved by its front
+   door: `races._setup` puts W through `winning.shapes.as_weights`. This
+   standalone module has no such boundary, so it grows one, with the
+   same contract -- finite, non-negative, positive total, normalised --
+   which also settles zero and signed weights rather than letting them
+   through to produce a normalised, plausible, wrong answer.
+
+   Deliberately NOT also scaling the slope by the forward total: python
+   does not, and a silent divergence between the ports is worse than
+   either behaviour. This makes the two agree. */
+export function asWeights(W, nNodes, where = "W") {
+  if (!Array.isArray(W) && !ArrayBuffer.isView(W))
+    throw new Error(`${where} must be an array of factor-node weights; got ${typeof W}`);
+  if (W.length !== nNodes)
+    throw new Error(`${where} must have one weight per factor node; got ${W.length} for ${nNodes}`);
+  let total = 0;
+  for (let i = 0; i < W.length; i++) {
+    const v = Number(W[i]);
+    if (!Number.isFinite(v))
+      throw new Error(`${where}[${i}] = ${W[i]} is not a finite weight`);
+    if (v < 0)
+      throw new Error(`${where}[${i}] = ${v} is a negative weight; a factor law has no negative mass`);
+    total += v;
+  }
+  if (!(total > 0))
+    throw new Error(`${where} must have a positive total; got ${total}`);
+  return Array.from(W, (v) => Number(v) / total);
+}
+
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   const points = opts.points || 501;
   const base = (opts.base && typeof opts.base === "object")
     ? opts.base : BASES[opts.base || "normal"];
   if (!base) throw new Error("unknown base: " + opts.base);
   const N = mu.length, Q = F.length;
+  W = asWeights(W, Q, "W");
   const sd = D.map(Math.sqrt);
   // gauge-fix matching the python reference: center each factor's
   // loadings across contestants (a common column cannot move an argmin)
@@ -267,6 +377,7 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
   const nIter = opts.nIter || 50, tol = opts.tol || 1e-6, points = opts.points || 501;
   const base = opts.base || "normal";
   const N = pTarget.length;
+  W = asWeights(W, F.length, "W");
   let psum = 0;
   for (const v of pTarget) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
   const p = pTarget.map((v) => v / psum);

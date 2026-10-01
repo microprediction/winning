@@ -144,3 +144,36 @@ def as_variance(v, n):
     silent before this existed.
     """
     return _as_variance(v, n, "v", "belief variance")
+
+def as_weights(W, name="W"):
+    """Quadrature weights, normalised to sum to one.
+
+    They are RELATIVE: W and c*W for positive c describe the same factor
+    law, and every verb normalises its own result, so the common scale
+    cancels. It did not cancel in the pre-normalisation mass checks,
+    which compared an unnormalised row sum against 1 (#208).
+
+    A negative entry is refused, not merely a negative TOTAL. `sum > 0`
+    admits a SIGNED rule such as [2, -1], which passed and returned
+    "probabilities" of -0.144 and 1.999 (#263). An individual ZERO is
+    fine: it is a node that contributes nothing.
+    """
+    W = np.asarray(W, dtype=float)
+    if W.ndim != 1:
+        raise ValueError(f"{name} must be a one-dimensional weight vector; "
+                         f"got shape {W.shape}")
+    if not np.isfinite(W).all():
+        raise ValueError(f"{name} has a non-finite entry")
+    neg = np.flatnonzero(W < 0.0)
+    if neg.size:
+        raise ValueError(
+            f"{name}[{int(neg[0])}] = {float(W[neg[0]])!r} is negative. "
+            "Quadrature weights here are relative and must be "
+            "non-negative; a signed rule can return values outside [0, 1].")
+    tot = float(W.sum())
+    if tot <= 0.0:
+        raise ValueError(
+            f"{name} must have a positive total; got {tot!r}. They are "
+            "relative, so any positive multiple of a valid rule is the "
+            "same factor law, but an all-zero rule is not one.")
+    return W / tot

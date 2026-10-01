@@ -44,21 +44,16 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..shapes import as_loadings
+from ..shapes import as_idio, as_loadings
 
 
-from .races import BASES
+from .races import _jacobi_sweeps, BASES
 from .blocks import TINY, roots_hermitenorm
 
-try:
-    import fastrace as _fastrace
-    _RUST_OK = hasattr(_fastrace, "top_k")
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except ImportError:                                  # pragma: no cover
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('top_k')
 
 
 def _count_window(mu, sd, k, base_rows, delta=1e-12, pad_sds=2.0,
@@ -180,6 +175,7 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
                       is_normal=False):
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
+    points = _resolved_points(lo, hi, sd, points)
     if is_normal and _HAVE_RUST:
         return np.asarray(_fastrace.top_k(
             np.ascontiguousarray(mu, dtype=float),
@@ -228,6 +224,30 @@ def _checked_topk(raw, k, kind, mass_tol=5e-3):
     return np.clip(raw * (k / t), 0.0, 1.0)
 
 
+def _as_depth(k, n, where="k"):
+    """The depth of a top-k curve is a COUNT, so it is an integer.
+
+    Every guard here truncated first -- `int(k)`, and `Math.trunc` /
+    `as.integer` in the other ports -- and then range-checked the
+    truncated value, so a fractional depth passed and was silently
+    floored: `top_k_probabilities(mu, 1.5)` returned the top-1 curve
+    and `2.5` the top-2 one, with no warning and a mass of 1 or 2
+    rather than the 1.5 or 2.5 the caller asked for. k=0, k=n and k>n
+    were all refused; only the non-integer slipped through, which is
+    the one case the message "k must be in [1, n-1]" reads as
+    permitting.
+    """
+    kk = float(k)
+    if kk != int(kk):
+        raise ValueError(
+            f"{where} must be a whole number of places; got {k!r}. A "
+            "top-k curve counts finishers, so there is no top-1.5.")
+    kk = int(kk)
+    if not 1 <= kk <= n - 1:
+        raise ValueError(f"{where} must be in [1, n-1]; got k={k}, n={n}")
+    return kk
+
+
 def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
                         qa=15):
     """P(X_i among the k smallest), for every i, min-wins.
@@ -241,10 +261,12 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     and a material defect raises."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    if not 1 <= int(k) <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
-    k = int(k)
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    k = _as_depth(k, n)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
 
@@ -269,8 +291,7 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     P(in the worst k) = 1 - P(in the best n-k), so no reflected base is
     ever needed."""
     n = len(np.asarray(mu))
-    if not 1 <= int(k) <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    k = _as_depth(k, n)
     q = top_k_probabilities(mu, n - int(k), V=V, D=D, base=base,
                             points=points, qa=qa)
     return 1.0 - q
@@ -350,13 +371,16 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     so the row sums to zero. Independent races only; min-wins."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    k = int(k)
-    if not 1 <= k <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    k = _as_depth(k, n)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows)
+    points = _resolved_points(lo, hi, sd, points)
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -402,13 +426,16 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     moves no membership."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    k = int(k)
-    if not 1 <= k <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    k = _as_depth(k, n)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows)
+    points = _resolved_points(lo, hi, sd, points)
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -444,9 +471,7 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     J = sum_q w_q J_ind(mu + V f_q, sigma)."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    k = int(k)
-    if not 1 <= k <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    k = _as_depth(k, n)
     if V is not None:
         Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_jacobians")
         Jm = np.zeros((n, n))
@@ -457,11 +482,16 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
             Jm += w[j] * Jm_q
             Js += w[j] * Js_q
         return Jm, Js
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows,
                            is_normal=(base == "normal"))
+    points = _resolved_points(lo, hi, sd, points)
     if (base == "normal" and _HAVE_RUST
             and hasattr(_fastrace, "top_k_jacobians")):
         jm, js = _fastrace.top_k_jacobians(
@@ -508,6 +538,38 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
 # instead: exactly-2nd plus win is top-2.
 
 
+def _resolved_points(lo, hi, sd, points):
+    """Points enough to resolve the NARROWEST density on the window.
+
+    The window is set by the widest runner and the grid by `points`, so a
+    field with heterogeneous scales can leave the narrowest density
+    between samples: sds of 0.093 and 6.02 at the default 513 points gave
+    a spacing of 0.174, nearly twice the narrow runner's whole sd, and
+    its membership came out 4.4e-3 wrong (#224).
+
+    The mass check cannot see that. It is ONE SCALAR -- the memberships
+    sum to k -- and runner-level errors of opposite sign cancel in it:
+    the raw total was 3.9944 against a tolerance of 0.02, comfortably
+    inside, and the routine then rescaled a wrong vector to sum to four.
+
+    Same rule as the win race (races.forward_grid): about two points per
+    narrowest sd, capped at 8193, warning when the cap still leaves the
+    lattice coarse.
+    """
+    smin = max(float(np.min(sd)), 1e-300)
+    need = int(np.ceil((hi - lo) / (0.5 * smin))) + 1
+    if need > 8193:
+        import warnings
+        warnings.warn(
+            "top-k lattice cannot resolve the narrowest runner even at "
+            f"8193 points (min sd {smin:.1e} over a window of "
+            f"{hi - lo:.3g}); memberships may carry percent-level error "
+            "the mass check cannot see, since it is one scalar and "
+            "runner-level errors of opposite sign cancel in it.",
+            RuntimeWarning, stacklevel=3)
+    return max(int(points), min(need, 8193))
+
+
 def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
                       is_normal=False):
     """One forward pass returning the raw memberships AND the own
@@ -522,6 +584,7 @@ def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
     quadrature grid is identical)."""
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
+    points = _resolved_points(lo, hi, sd, points)
     if is_normal and _HAVE_RUST and hasattr(_fastrace, "top_k_slopes"):
         q, sl = _fastrace.top_k_slopes(
             np.ascontiguousarray(mu, dtype=float),
@@ -612,11 +675,13 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     same call at n - k on 1 - q."""
     mu_probe = np.asarray(q, dtype=float)
     n = len(mu_probe)
-    k = int(k)
-    if not 1 <= k <= n - 1:
-        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    k = _as_depth(k, n)
     target, floored = _validated_topk_target(q, k, n, target_floor)
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
 
@@ -628,21 +693,26 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     logit_t = np.log(target) - np.log1p(-target)
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
-    # N = 2 damping, inherited from the win inversion: K_2 is bipartite
-    # and the undamped Jacobi update two-cycles on the quotient.
-    alpha = 1.0 if n > 2 else 0.7
-    resid_max = np.inf
-    iters = 0
-    for it in range(n_iter):
-        iters = it + 1
+    # Damping, as in abilities_from_race: the photo-finish graph of a pair
+    # is bipartite and the undamped Jacobi update two-cycles; the same
+    # two-cycle appears at any n when two runners hold nearly all the
+    # win mass (#151: k = 1 kept `n > 2` after #150 fixed the win race
+    # and failed on the same fields), so the k = 1 gate is the win
+    # race's top-two share. For k >= 2 the slot identity spreads the
+    # mass and the gate is the pair. The sweeps then adapt the damping
+    # to the contraction they observe (see races._jacobi_sweeps).
+    _top2 = float(np.sort(target)[-2:].sum()) if (k == 1 and n > 2) else 1.0
+    alpha = 0.7 if (n == 2 or (k == 1 and _top2 > 0.8)) else 1.0
+
+    def _forward(m):
         if nodes is None:
-            qraw, sl = _topk_with_slopes(mu, sd, k, base_rows, points,
+            qraw, sl = _topk_with_slopes(m, sd, k, base_rows, points,
                                          is_normal=(base == "normal"))
         else:
             qraw = np.zeros(n)
             sl = np.zeros(n)
             for j in range(len(nodes)):
-                qj, sj = _topk_with_slopes(mu + Vm @ nodes[j], sd, k,
+                qj, sj = _topk_with_slopes(m + Vm @ nodes[j], sd, k,
                                            base_rows, points,
                                            is_normal=(base == "normal"))
                 qraw += w[j] * qj
@@ -650,16 +720,12 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
         qhat = _checked_topk(qraw, k, "top-k inversion")
         resid = (np.log(np.maximum(qhat, 1e-300))
                  - np.log(np.maximum(1.0 - qhat, 1e-300))) - logit_t
-        resid_max = float(np.abs(resid).max())
-        if resid_max < tol:
-            break
         dlogit = np.minimum(sl / np.maximum(qhat * (1.0 - qhat), 1e-300),
                             -1e-6)
-        # residual-proportional step cap, as in the win inversion: no
-        # coordinate moves much further than its own residual warrants.
-        lim = np.minimum(2.0, 10.0 * np.abs(resid))
-        mu = mu - np.clip(alpha * resid / dlogit, -lim, lim)
-        mu -= mu.mean()
+        return resid, dlogit
+
+    mu, _, resid_max, iters = _jacobi_sweeps(mu, _forward, 1.0, alpha,
+                                             n_iter, tol)
     return _topk_inverse_return(mu, resid_max < tol, resid_max, iters,
                                 floored, tol, return_info,
                                 "abilities_from_topk")
@@ -728,14 +794,12 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
             "the three-curve least-squares solver.")
     t1 = np.asarray(q1, dtype=float)
     n = len(t1)
-    k1, k2 = int(k1), int(k2)
+    k1 = _as_depth(k1, n, "k1")
+    k2 = _as_depth(k2, n, "k2")
     if k1 == k2:
         raise ValueError(
             "k1 == k2 gives one curve twice: scale is unidentified "
             "without a second, different membership depth")
-    for kk in (k1, k2):
-        if not 1 <= kk <= n - 1:
-            raise ValueError(f"k must be in [1, n-1]; got k={kk}, n={n}")
     target1, _ = _validated_topk_target(q1, k1, n, None)
     target2, _ = _validated_topk_target(q2, k2, n, None)
     lt1 = np.log(target1) - np.log1p(-target1)
@@ -867,6 +931,7 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
     python-computed window."""
     n = len(mu)
     lo, hi = _count_window(mu, sd, n - 1, base_rows, is_normal=is_normal)
+    points = _resolved_points(lo, hi, sd, points)
     if (is_normal and _HAVE_RUST
             and hasattr(_fastrace, "rank_marginal_jacobian")):
         p, jac = _fastrace.rank_marginal_jacobian(
@@ -932,7 +997,11 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
             "no finite inverse (floor small entries upstream)")
     target = target / target.sum()
     logt = np.log(target)
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     mu = (np.zeros(n) if mu0 is None
@@ -981,6 +1050,9 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
                                 "abilities_from_rank_marginal")
 
 
+_TINY = 1e-300
+
+
 def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
                        qa=15):
     """The full rank marginals: an (n, n) matrix whose (i, r) entry is
@@ -996,20 +1068,27 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     sums reproduce top_k_probabilities. O(n^2 L) per factor node."""
     mu = np.asarray(mu, float)
     n = len(mu)
-    D = np.ones(n) if D is None else np.asarray(D, float)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    # scalar, length-n, and no
+    # negative or zero variance: a bare asarray made a scalar 0-d, and
+    # the compiled kernel then indexed past it and PANICKED, while a
+    # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
 
     def one_node(m):
         lo, hi = _count_window(m, sd, n - 1, base_rows,
                                is_normal=(base == "normal"))
+        # a LOCAL name: assigning `points` here would shadow the enclosing
+        # parameter and leave it unbound on the compiled branch
+        pts = _resolved_points(lo, hi, sd, points)
         if (base == "normal" and _HAVE_RUST
                 and hasattr(_fastrace, "rank_marginals")):
             flat = _fastrace.rank_marginals(
                 np.ascontiguousarray(m, dtype=float),
-                np.ascontiguousarray(sd, dtype=float), lo, hi, points)
+                np.ascontiguousarray(sd, dtype=float), lo, hi, pts)
             return np.asarray(flat, dtype=float).reshape(n, n)
-        x = np.linspace(lo, hi, points)
+        x = np.linspace(lo, hi, pts)
         dx = x[1] - x[0]
         z = (x[:, None] - m[None, :]) / sd[None, :]
         S, f, _ = base_rows(z)
@@ -1030,14 +1109,46 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
         for q in range(len(nodes)):
             P += w[q] * one_node(mu + Vm @ nodes[q])
 
-    rows = P.sum(axis=1)
-    cols = P.sum(axis=0)
-    if (not np.isfinite(P).all() or np.abs(rows - 1).max() > 5e-3
-            or np.abs(cols - 1).max() > 5e-3):
+    # Check what is RETURNED, not what was computed. Row normalisation is
+    # not neutral: it makes every row exact and moves the columns, so a
+    # matrix that passed the raw check could fail the stated identity
+    # afterwards and nothing looked. On a field whose sds span 73x
+    # (0.19 to 14.3) at 513 points the column excess grew from 4.5e-3 to
+    # 5.4e-3 that way, and the cumulative rows stopped reproducing
+    # top_k_probabilities by 2.6e-3 (#203).
+    #
+    # The columns are not forced. Alternating row/column scaling would
+    # make both identities exact and would do it by hiding the
+    # under-resolution that caused the defect -- the same field at 2001
+    # points has a column error of 3.5e-9, so the quadrature, not the
+    # normalisation, is what is wrong. Raising says so; a doubly
+    # stochastic answer to a question the lattice could not resolve does
+    # not.
+    # BOTH checks, before and after. They are independent, and #217
+    # mistook them for alternatives: it replaced the raw check with the
+    # post one, and row normalisation can ERASE a gross raw defect. On a
+    # field whose sds span 232x, the raw matrix was off by 0.249 in a row
+    # and 0.199 in a column, and dividing by those same row sums left a
+    # column defect of 0.0047 -- under the 5e-3 tolerance, so it returned
+    # a false success, while top_k_probabilities rejected the same field
+    # at 0.056 (#221). The raw check sees the quadrature; the post check
+    # sees what the caller gets; neither implies the other.
+    def _defects(M):
+        return (float(np.abs(M.sum(axis=1) - 1).max()),
+                float(np.abs(M.sum(axis=0) - 1).max()))
+
+    def _reject(where, re_, ce):
         raise RuntimeError(
-            "rank marginals defective: row-sum error "
-            f"{np.abs(rows-1).max():.2e}, column-sum error "
-            f"{np.abs(cols-1).max():.2e}. Raise points=, or report this "
+            f"rank marginals defective {where}: row-sum error {re_:.2e}, "
+            f"column-sum error {ce:.2e}. Raise points=, or report this "
             "field.")
-    P = P / rows[:, None]
-    return np.clip(P, 0.0, 1.0)
+
+    re_raw, ce_raw = _defects(P)
+    if not np.isfinite(P).all() or re_raw > 5e-3 or ce_raw > 5e-3:
+        _reject("before normalisation", re_raw, ce_raw)
+    P = np.clip(P / np.maximum(P.sum(axis=1)[:, None], _TINY), 0.0, 1.0)
+    re_out, ce_out = _defects(P)
+    if not np.isfinite(P).all() or re_out > 5e-3 or ce_out > 5e-3:
+        _reject("in the RETURNED matrix after row normalisation",
+                re_out, ce_out)
+    return P
