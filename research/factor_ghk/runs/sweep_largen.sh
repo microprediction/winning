@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Hybrid A at large n. n=1000 first on all workers, then n=1e4 and n=1e5 side by side.
-cd /Users/petercotton/github/winning
+cd "${0:A:h}/../../.."   # repo root, wherever it is checked out
 export PYTHONPATH=.
 R=research/factor_ghk/runs
 run() { python3 -u research/factor_ghk/hybrid_a_largen.py "$@" 2>&1 | grep --line-buffered -v "Warning\|x, points" ; }

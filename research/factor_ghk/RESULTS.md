@@ -146,7 +146,13 @@ via `runs/sweep_largen.sh` and `runs/resume_n100000.sh`; rows in
 is a 2^17 to 2^18 scrambled-Sobol rule (2^15 at n=100,000 in the first
 pass, resumed to 2^17), computed in parallel over node chunks and
 certified against a second scramble; the certification line in each table
-is the floor below which nothing is readable.
+is the floor below which nothing is readable. Every row of a table is
+scored against that one truth from its saved estimate: the n=100,000
+Hybrid A R=32 and R=128 rows were priced before the resume and an
+earlier compiler showed them with their 2^15-truth errors under a 2^15
+header (#169); rescored, R=128's max relative error is 1.5e-1, not
+1.4e-1 (max abs 7.8e-3, not 7.9e-3), R=32's maxima are unchanged, and
+no other row moves.
 
 At large n the per-winner hybrid cannot price everyone (n passes per
 draw), so it prices 12 targets: the 8 favourites and the runners nearest
@@ -272,7 +278,9 @@ Per-target relative error, favourites left, longshots right:
 
 ### n = 100,000, rank 3, D = 0.05, sharpness 31.7
 
-Truth: Sobol 2^15 (seed 101), vs second scramble 1.1e-04, vs MC 1.8e-03. Read nothing below 2e-04.
+Truth: Sobol 2^17 (seed 101), vs second scramble 2.5e-05, vs MC 1.8e-03. Read nothing below 5e-05.
+
+† priced before the truth was extended to 2^17; its saved estimates are rescored against that truth here, its wall time is from the earlier run.
 
 | method | passes | per target | max abs err | max rel err | wall s |
 |---|---:|---:|---:|---:|---:|
@@ -280,8 +288,8 @@ Truth: Sobol 2^15 (seed 101), vs second scramble 1.1e-04, vs MC 1.8e-03. Read no
 | fixed scrambled Sobol 2^9 | 512 | 512 | 2.5e-03 | 3.6e-01 | 22.9 |
 | fixed scrambled Sobol 2^11 | 2048 | 2048 | 9.8e-04 | 6.4e-02 | 81.8 |
 | fixed scrambled Sobol 2^13 | 8192 | 8192 | 1.7e-04 | 7.5e-03 | 314.8 |
-| Hybrid A per-winner R=32 x 12 targets | 384 | 32 | 1.4e-02 | 7.1e-01 | 34.1 |
-| Hybrid A per-winner R=128 x 12 targets | 1536 | 128 | 7.9e-03 | 1.4e-01 | 133.7 |
+| Hybrid A per-winner R=32 x 12 targets † | 384 | 32 | 1.4e-02 | 7.1e-01 | 34.1 |
+| Hybrid A per-winner R=128 x 12 targets † | 1536 | 128 | 7.8e-03 | 1.5e-01 | 133.7 |
 | Hybrid A per-winner R=512 x 12 targets | 6144 | 512 | 1.4e-03 | 4.7e-02 | 529.9 |
 | fixed scrambled Sobol 2^15 | 32768 | 32768 | 1.1e-04 | 7.4e-03 | 998.5 |
 | Hybrid A per-winner R=2048 x 12 targets | 24576 | 2048 | 8.4e-05 | 1.1e-02 | 2162.4 |
@@ -294,8 +302,8 @@ Per-target relative error, favourites left, longshots right:
 | fixed scrambled Sobol 2^9 | 2.3e-02 | 1.7e-02 | 1.6e-04 | 2.2e-02 | 6.2e-03 | 8.1e-03 | 5.1e-02 | 4.6e-02 | 7.8e-02 | 3.4e-02 | 2.3e-02 | 3.6e-01 |
 | fixed scrambled Sobol 2^11 | 3.3e-03 | 4.3e-03 | 3.5e-03 | 5.3e-04 | 2.6e-03 | 1.7e-02 | 8.1e-04 | 2.9e-02 | 1.9e-02 | 3.8e-02 | 6.4e-02 | 9.7e-03 |
 | fixed scrambled Sobol 2^13 | 7.2e-04 | 2.5e-03 | 1.1e-03 | 4.8e-03 | 1.3e-03 | 4.7e-03 | 3.2e-03 | 4.2e-03 | 4.6e-03 | 2.4e-03 | 7.5e-03 | 4.3e-03 |
-| Hybrid A per-winner R=32 x 12 targets | 1.3e-01 | 4.2e-02 | 5.8e-03 | 1.3e-01 | 1.1e-01 | 2.3e-01 | 8.1e-02 | 7.5e-02 | 2.0e-01 | 4.9e-01 | 1.9e-01 | 7.1e-01 |
-| Hybrid A per-winner R=128 x 12 targets | 7.5e-02 | 1.3e-02 | 5.5e-02 | 1.4e-02 | 1.1e-02 | 3.3e-02 | 3.3e-02 | 6.9e-03 | 1.8e-02 | 8.7e-02 | 1.4e-01 | 6.8e-03 |
+| Hybrid A per-winner R=32 x 12 targets † | 1.3e-01 | 4.2e-02 | 6.5e-03 | 1.3e-01 | 1.1e-01 | 2.3e-01 | 8.3e-02 | 7.5e-02 | 1.9e-01 | 4.9e-01 | 2.0e-01 | 7.1e-01 |
+| Hybrid A per-winner R=128 x 12 targets † | 7.5e-02 | 1.3e-02 | 5.5e-02 | 1.3e-02 | 1.2e-02 | 3.4e-02 | 3.5e-02 | 7.1e-03 | 2.0e-02 | 8.5e-02 | 1.5e-01 | 3.6e-03 |
 | Hybrid A per-winner R=512 x 12 targets | 3.3e-03 | 2.6e-02 | 3.9e-04 | 7.2e-03 | 3.0e-03 | 1.3e-02 | 6.8e-04 | 6.9e-03 | 1.9e-02 | 2.4e-02 | 1.9e-02 | 4.7e-02 |
 | fixed scrambled Sobol 2^15 | 2.8e-04 | 2.0e-03 | 1.2e-03 | 7.6e-04 | 1.2e-03 | 1.5e-03 | 5.4e-04 | 1.9e-04 | 2.6e-03 | 3.1e-03 | 2.0e-03 | 7.4e-03 |
 | Hybrid A per-winner R=2048 x 12 targets | 5.6e-04 | 1.1e-03 | 6.8e-04 | 7.9e-04 | 1.0e-03 | 7.2e-04 | 1.5e-03 | 1.5e-03 | 7.8e-03 | 2.7e-03 | 2.6e-03 | 1.1e-02 |
@@ -304,9 +312,20 @@ Per-target relative error, favourites left, longshots right:
 # Part 3: shared node rules, composites, and per-node screening
 
 Ideas raised after Part 2, each tested against the same certified truths
-(`nodes_b.py`, `composite.py`, `screen.py`; rows in `runs/nodes_b_*.csv`,
-logs in `runs/`). Everything here is shared by all runners: one lattice
-pass per node prices everyone, unlike the per-winner hybrid.
+(`nodes_b.py`, `composite.py`, `screen.py`; rows in `runs/nodes_b_*.csv`
+and, from the review onwards, `runs/screen.csv`). Everything here is
+shared by all runners: one lattice pass per node prices everyone, unlike
+the per-winner hybrid.
+
+Provenance caveat at n=100,000 (#167): the truth arrays these
+experiments read were never committed and are lost, and neither
+`nodes_b_prune.csv` nor the original screening run (logs only) recorded
+whether the n=100,000 truth was then the 2^15 or the 2^17 revision. The
+n=100,000 ACCURACY figures below (pruning error floors, the full-field
+references, the screened Sobol 2^15 max abs) therefore cannot be
+re-derived from the repo until the truth is regenerated. The engine
+identity and the timings need no truth and were re-run at the review
+(`runs/screen.csv`).
 
 ## Verdicts
 

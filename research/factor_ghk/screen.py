@@ -98,22 +98,55 @@ def main():
     ap.add_argument("--c", type=float, default=8.0)
     ap.add_argument("--points", type=int, default=257)
     ap.add_argument("--no-bulk", action="store_true")
+    ap.add_argument("--csv", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs", "screen.csv"),
+                    help="appended to, one row per measurement, flushed as it goes (the raw record; logs are not committed)")
     args = ap.parse_args()
     bulk = not args.no_bulk
+    import csv
+    import datetime
+    import platform
+    fields = ["when", "host", "n", "c", "points", "bulk", "row", "nodes", "engine_ms_per_pass", "screened_ms_per_pass", "screen_ms", "price_ms",
+              "mean_contenders", "max_diff_engine", "truth", "truth_vs_scramble", "all_n_max_abs", "targets_max_rel", "seconds"]
+    new = not os.path.exists(args.csv) or os.path.getsize(args.csv) == 0
+    fh = open(args.csv, "a", newline=""); cw = csv.DictWriter(fh, fieldnames=fields)
+    if new:
+        cw.writeheader(); fh.flush()
+    stamp = dict(when=datetime.datetime.now().isoformat(timespec="seconds"), host=platform.node(), n=args.n, c=args.c, points=args.points, bulk=bulk)
+
+    def emit(**kw):
+        cw.writerow({**stamp, **kw}); fh.flush()
     mu, V, D, sharp = H.make_field(args.n, 3, 0.05, 3); sd = np.sqrt(D)
-    truth, d_scr, tkey = NB.largen_truth(args.n)
-    order = np.argsort(-truth); targets = list(order[:8]) + [int(np.argmin(np.abs(truth - q))) for q in (1e-2, 3e-3, 1e-3, 3e-4)]
-    print(f"\n=== screened lattice n={args.n} (sharpness {sharp:.0f}); truth {tkey} certified to {d_scr:.1e}; c={args.c}, points={args.points} ===", flush=True)
+    try:
+        truth, d_scr, tkey = NB.largen_truth(args.n)
+        order = np.argsort(-truth); targets = list(order[:8]) + [int(np.argmin(np.abs(truth - q))) for q in (1e-2, 3e-3, 1e-3, 3e-4)]
+        tdesc = f"truth {tkey} certified to {d_scr:.1e}"
+    except NB.TruthUnavailable as e:
+        # the engine identity and the timings need no truth; only the --m accuracy rows do
+        truth = None; tkey = d_scr = None; tdesc = "NO TRUTH (accuracy rows skipped)"
+        print(f"  {e}", flush=True)
+    print(f"\n=== screened lattice n={args.n} (sharpness {sharp:.0f}); {tdesc}; c={args.c}, points={args.points} ===", flush=True)
     # validation against the engine at 2^9 nodes
     F = NB.sobol_nodes(3, 9, 0); W = np.full(len(F), 1 / len(F))
     t = time.perf_counter(); pe = NB.price(mu, V, D, F); te = time.perf_counter() - t
     ps, k, ts, tp = screened_pass(mu, sd, V, F, W, args.c, args.points, bulk=bulk)
     print(f"  2^9 nodes: engine {te:.1f}s ({te/len(F)*1e3:.1f} ms/pass); screened {ts+tp:.1f}s ({(ts+tp)/len(F)*1e3:.2f} ms/pass: screen {ts/len(F)*1e3:.2f} + price {tp/len(F)*1e3:.2f}); mean contenders {k:.0f} of {args.n}; max |screened - engine| {np.abs(ps - pe).max():.1e}", flush=True)
+    emit(row="vs engine", nodes=len(F), engine_ms_per_pass=te / len(F) * 1e3, screened_ms_per_pass=(ts + tp) / len(F) * 1e3,
+         screen_ms=ts / len(F) * 1e3, price_ms=tp / len(F) * 1e3, mean_contenders=k, max_diff_engine=float(np.abs(ps - pe).max()),
+         truth=tkey, truth_vs_scramble=d_scr, seconds=ts + tp)
     for m in args.m:
         F = NB.sobol_nodes(3, m, 0); W = np.full(len(F), 1 / len(F))
         ps, k, ts, tp = screened_pass(mu, sd, V, F, W, args.c, args.points, bulk=bulk)
+        if truth is None:
+            print(f"  screened Sobol 2^{m}: no truth; {ts+tp:.1f}s ({(ts+tp)/len(F)*1e3:.2f} ms/pass), mean contenders {k:.0f}", flush=True)
+            emit(row="screened Sobol", nodes=len(F), screened_ms_per_pass=(ts + tp) / len(F) * 1e3, screen_ms=ts / len(F) * 1e3,
+                 price_ms=tp / len(F) * 1e3, mean_contenders=k, seconds=ts + tp)
+            continue
         err = np.abs(ps - truth).max(); rel = max(abs(ps[t_] - truth[t_]) / truth[t_] for t_ in targets)
         print(f"  screened Sobol 2^{m}: all-n max abs {err:.1e}, targets max rel {rel:.1e}; {ts+tp:.1f}s ({(ts+tp)/len(F)*1e3:.2f} ms/pass), mean contenders {k:.0f}", flush=True)
+        emit(row="screened Sobol", nodes=len(F), screened_ms_per_pass=(ts + tp) / len(F) * 1e3, screen_ms=ts / len(F) * 1e3,
+             price_ms=tp / len(F) * 1e3, mean_contenders=k, truth=tkey, truth_vs_scramble=d_scr, all_n_max_abs=float(err),
+             targets_max_rel=float(rel), seconds=ts + tp)
+    fh.close(); print(f"appended to {args.csv}")
 
 
 if __name__ == "__main__":

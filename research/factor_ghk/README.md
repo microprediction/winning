@@ -137,8 +137,27 @@ PYTHONPATH=. python3 research/factor_ghk/screen.py --n 100000 --m 13 15     # sc
 ```
 
 The n=100,000 state arrays (6.4 MB, eight vectors of 100,000 doubles)
-are not committed; a resume at that n recomputes the 2^17 truth, about
-70 minutes on 24 workers. The other state files are.
+were not committed and are lost; only their JSON bookkeeping is in the
+repo. Until a run regenerates them:
+
+- `screen.py --n 100000` still runs the engine identity and the per-pass
+  timings (no truth needed) and skips the accuracy rows, saying why;
+  `composite.py` and `nodes_b.py --exp prune` at that n stop with a
+  `TruthUnavailable` error naming the regeneration command.
+- `hybrid_a_largen.py --n 100000 ...` notices that the JSON says the
+  truth streams are complete while the `.npz` lacks them, and recomputes
+  them from draw 0 (#167; before the fix it returned an all-zero truth).
+  From the recorded stream times that is about 2.4 h for the two 2^17
+  scrambles plus 24 min for the Sobol 2^7..2^15 comparators, on 24
+  workers. The `.npz` now records each stream's draw count in the same
+  atomic write as its sum, so the two cannot drift apart again.
+
+The other state files, including the n=1,000 and n=10,000 arrays, are
+committed. `screen.py` appends its measurements to `runs/screen.csv`;
+the `.log` files are gitignored, so CSVs are the only raw record.
+`compile_largen.py` scores every displayed method against the latest
+truth revision in each CSV, from the saved estimates, and marks methods
+priced before that revision with a dagger (#169).
 
 Large-n knobs: `--top` and `--mid` choose the targets; `--ghk-max-n` and
 `--ghk-targets` bound the GHK spot-check (each worker holds about three

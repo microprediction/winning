@@ -58,11 +58,33 @@ def small_truth(rank, D):
     return np.asarray(st[key]["p"]), st[key]["d_scr"], key
 
 
+class TruthUnavailable(FileNotFoundError):
+    """The large-n truth state is absent or inconsistent; regenerate it."""
+
+
 def largen_truth(n):
+    """The certified Sobol truth hybrid_a_largen.py left in runs/state_largen.
+    Raises TruthUnavailable -- never returns a partial or zero vector -- if
+    the .npz is missing, lacks a stream, or disagrees with the JSON (#167)."""
     base = os.path.join(HERE, "runs", "state_largen", f"n{n}_rank3_D0.05_seed3_margin4.0_pts257")
+    regen = (f"regenerate with: PYTHONPATH=. python3 research/factor_ghk/hybrid_a_largen.py --n {n} --rank 3 --D 0.05 "
+             f"--truth-m <m> --R 32 --sobol-m 7 --workers <k>")
+    if not (os.path.exists(base + ".json") and os.path.exists(base + ".npz")):
+        raise TruthUnavailable(f"no large-n truth state at {base}.{{json,npz}}; {regen}")
     st = json.load(open(base + ".json")); arr = np.load(base + ".npz")
-    p = arr["sobol101"] / st["sobol101"]["done"]; q = arr["sobol202"] / st["sobol202"]["done"]
-    return p, float(np.abs(p - q).max()), f"sobol 2^{int(np.log2(st['sobol101']['done']))}"
+    out = []
+    for key in ("sobol101", "sobol202"):
+        if key not in arr or key not in st:
+            raise TruthUnavailable(f"{base}.npz/.json lack stream {key}; {regen}")
+        done = int(arr[key + "_done"]) if key + "_done" in arr else st[key]["done"]
+        if key + "_done" in arr and done != st[key]["done"]:
+            raise TruthUnavailable(f"{key}: .npz holds {done} draws, JSON {st[key]['done']}; rerun hybrid_a_largen.py to reconcile")
+        acc = np.asarray(arr[key], dtype=float)
+        if done <= 0 or not np.all(np.isfinite(acc)) or acc.sum() <= 0:
+            raise TruthUnavailable(f"{key}: {done} draws, running sum {acc.sum()!r}; {regen}")
+        out.append((acc / done, done))
+    (p, done), (q, _) = out
+    return p, float(np.abs(p - q).max()), f"sobol 2^{int(np.log2(done))}"
 
 
 # -------------------------------------------------------------- estimators

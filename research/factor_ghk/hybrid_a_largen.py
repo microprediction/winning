@@ -146,9 +146,44 @@ class Arrays:
     def __contains__(self, k): return k in self.d
     def __getitem__(self, k): return self.d[k]
     def __setitem__(self, k, v):
-        self.d[k] = np.asarray(v, dtype=float)
+        self.update({k: v})
+    def update(self, kv):
+        """Write several arrays in ONE atomic rewrite (an accumulator and its
+        draw count must never be on disk out of step)."""
+        for k, v in kv.items():
+            self.d[k] = np.asarray(v, dtype=float)
         tmp = self.path + ".tmp.npz"
         np.savez(tmp, **self.d); os.replace(tmp, self.path)
+
+
+class StateMismatch(RuntimeError):
+    """The JSON bookkeeping and the .npz accumulators disagree."""
+
+
+def stream_accumulator(arrays, st, key, n):
+    """The running sum for stream `key` and the number of draws it holds,
+    reconciled between the JSON entry `st` and the .npz.
+
+    The .npz is authoritative when it records its own count (key + "_done",
+    written in the same atomic rewrite as the sum).  A legacy .npz without
+    that count is trusted only if the JSON says draws were taken.  Anything
+    that cannot be reconciled -- in particular a JSON that says the stream
+    is complete while the .npz is missing or lacks the sum, which used to
+    return an all-zero "truth" (#167) -- restarts the stream from draw 0 and
+    says so; a sum is never paired with a count it was not built from."""
+    dkey = key + "_done"
+    if key in arrays and dkey in arrays:
+        done = int(arrays[dkey])
+        if done != st["done"]:
+            print(f"    state: {key} .npz holds {done} draws, JSON {st['done']}; using the .npz", flush=True)
+        return np.array(arrays[key], dtype=float), done
+    if key in arrays and st["done"] > 0:
+        return np.array(arrays[key], dtype=float), st["done"]          # legacy .npz, JSON count
+    if st["done"] > 0 or key in arrays:
+        print(f"    state: {key} JSON says {st['done']} draws but the .npz {arrays.path} "
+              f"{'lacks them' if key not in arrays else 'has a sum with no count'}; recomputing from draw 0", flush=True)
+        st["seconds"] = 0.0
+    return np.zeros(n), 0
 
 
 def sobol_stream(pool, arrays, state, seed, total, chunk):
@@ -157,14 +192,19 @@ def sobol_stream(pool, arrays, state, seed, total, chunk):
     (p, nodes actually used, seconds); if the state already holds more than
     `total` nodes the larger estimate is returned and reported as such."""
     key = f"sobol{seed}"; st = state.setdefault(key, {"done": 0, "seconds": 0.0})
-    acc = arrays[key] if key in arrays else np.zeros(len(G["mu"]))
+    acc, st["done"] = stream_accumulator(arrays, st, key, len(G["mu"]))
     if st["done"] < total:
         t = time.perf_counter()
         tasks = [(lo, min(lo + chunk, total), seed) for lo in range(st["done"], total, chunk)]
         for part in pool.imap_unordered(_w_sobol_chunk, tasks):
             acc = acc + part
         st["seconds"] += time.perf_counter() - t; st["done"] = total
-        arrays[key] = acc
+        arrays.update({key: acc, key + "_done": total})
+    elif key + "_done" not in arrays:
+        arrays.update({key + "_done": st["done"]})                    # stamp a legacy .npz
+    if not (np.all(np.isfinite(acc)) and acc.sum() > 0):
+        raise StateMismatch(f"{key}: {st['done']} draws but the running sum is {acc.sum()!r}; "
+                            f"delete {arrays.path} and the {key} entry of the JSON and rerun")
     return acc / st["done"], st["done"], st["seconds"]
 
 
@@ -175,7 +215,7 @@ def sobol_fixed(pool, arrays, state, m, workers):
         t = time.perf_counter(); total = 2 ** m; chunk = max(8, total // workers)
         acc = sum(pool.imap_unordered(_w_sobol_chunk, [(lo, min(lo + chunk, total), 0) for lo in range(0, total, chunk)]))
         arrays[key] = acc / total; state[key + "_seconds"] = time.perf_counter() - t
-    return arrays[key], state[key + "_seconds"]
+    return arrays[key], state.get(key + "_seconds", float("nan"))
 
 
 # ------------------------------------------------------------------- driver

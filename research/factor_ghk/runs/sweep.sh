@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Hybrid A sweep: one process per field, 2 BLAS threads each (LPs are single-threaded anyway).
-cd /Users/petercotton/github/winning
+cd "${0:A:h}/../../.."   # repo root, wherever it is checked out
 export PYTHONPATH=.
 run() { python3 -u research/factor_ghk/hybrid_a.py "$@" 2>&1 | grep --line-buffered -v "Warning\|x, points" ; }
 for rank in 2 3 4 5; do

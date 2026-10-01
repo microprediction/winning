@@ -1,5 +1,5 @@
 #!/bin/zsh
-cd /Users/petercotton/github/winning; export PYTHONPATH=.
+cd "${0:A:h}/../../.."; export PYTHONPATH=.   # repo root, wherever it is checked out
 R=research/factor_ghk/runs
 run() { python3 -u research/factor_ghk/nodes_b.py "$@" 2>&1 | grep --line-buffered -v "Warning\|x, points" ; }
 run --exp prune --n 100000 --m 11 13 15 --csv $R/nodes_b_prune.csv > $R/nodes_b_prune_n100000.log &
