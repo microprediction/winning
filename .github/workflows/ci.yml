@@ -141,8 +141,9 @@ jobs:
         # thirty cases diverged, and a port that quietly recycles a
         # short D agrees on every vector in those files while pricing a
         # different race. The check skips any port whose toolchain is
-        # absent rather than passing vacuously.
-        run: python parity/check_divergence.py
+        # absent rather than passing vacuously -- except here, where all
+        # four are installed and an absence means the install broke.
+        run: python parity/check_divergence.py --require-all
 
   lint:
     runs-on: ubuntu-latest

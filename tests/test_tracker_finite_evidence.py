@@ -200,3 +200,20 @@ def test_an_unequal_law_rescales_too():
         got = [t.rating(i)[0] for i in IDS]
         assert np.isfinite(got).all(), (scale, got)
         assert np.allclose(got, want, rtol=1e-9, atol=1e-12), (scale, got, want)
+
+
+@pytest.mark.parametrize("scale", [1e308, 1.7e308])
+def test_the_rescue_runs_under_strict_float_errors(scale):
+    """The rescue is triggered by the overflowing trial sum, so under
+    np.seterr(over="raise") it raised FloatingPointError at
+    `target.sum()` before it could run (#300 review). A caller who
+    turns on strict float errors gets the rescue, not the crash."""
+    with np.errstate(over="raise"):
+        t = AbilityTracker(seed=0)
+        t.observe(IDS, t=0.0, prices=[scale] * 3)
+        ratings, evidence = rate_history(
+            [{"runners": list(IDS), "t": 0.0, "p_market": [scale] * 3}])
+    assert np.isfinite([t.rating(i)[0] for i in IDS]).all()
+    assert np.isfinite(t.evidence)
+    assert np.isfinite([ratings[i][0] for i in IDS]).all()
+    assert np.isfinite(evidence)

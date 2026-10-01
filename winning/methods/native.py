@@ -191,7 +191,18 @@ def qmc_ghk(mu, V, D, budget=1024, seed=13, return_slopes=False,
     as the R port already was (#302)."""
     n = len(mu)
     if cov is not None:
-        Sigma = np.asarray(cov, dtype=float)
+        # The registry lets an explicit cov= past as_loadings/as_idio on
+        # the promise that this door validates the matrix itself. It
+        # checked only the shape, so an asymmetric C and its transpose
+        # priced two different races ([.265, .451, .284] against
+        # [.334, .309, .357]), a NaN matrix came back as all-NaN
+        # probabilities, and V/D handed alongside it were dropped
+        # without a word (#102). Same contract as every other
+        # covariance front door.
+        if V is not None or D is not None:
+            raise ValueError("cov= replaces V and D; pass one only")
+        from ..factor.core import _validate_covariance
+        Sigma = _validate_covariance(cov, name="cov=")
         if Sigma.shape != (n, n):
             raise ValueError(
                 f"cov must be {n}x{n} for {n} runners; got {Sigma.shape}")

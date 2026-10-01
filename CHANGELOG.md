@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- `qmc_ghk(..., cov=)` validates the matrix it is handed (#102). The
+  registry lets an explicit `cov=` skip `as_loadings`/`as_idio` on the
+  promise that the method checks it, and it checked only the shape: an
+  asymmetric matrix and its transpose priced two different races
+  (`[.265, .451, .284]` against `[.334, .309, .357]`), a NaN matrix
+  returned NaN probabilities, and `V`/`D` passed alongside were dropped
+  silently. It now goes through `_validate_covariance` like every other
+  covariance door, and `cov=` with `V` or `D` is refused.
+
+- The #300 overflow rescue in `abilities_from_race` runs under
+  `np.seterr(over="raise")`. Its trigger is the overflowing trial sum,
+  which raised `FloatingPointError` before the rescue could act, so
+  both ratings filters crashed on `[1e308] * 3` for a caller with
+  strict float errors.
+
+- `parity/check_divergence.py` tells an incomplete toolchain from a
+  broken port. The R runner exits 77 when `jsonlite` is missing, and
+  the scan treats that as absent rather than failed; every Windows CI
+  runner has `Rscript` without `jsonlite`, which turned three scanner
+  tests red there. `--require-all` makes any absence a failure, and the
+  parity job, which installs all four toolchains, passes it.
+
 - `Tree.from_linkage` checks the premise it was built on (#133). Its
   docstring says the cophenetic increments are "nonnegative by linkage
   monotonicity" -- and nothing checked that. `centroid` and `median`

@@ -1095,8 +1095,11 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # Conditional so that every ordinary input is bit-identical: the
     # branch is taken only where the current arithmetic is already
     # broken. Dividing by the max first leaves entries in (0, 1], so the
-    # sum is at most n.
-    _tot = target.sum()
+    # sum is at most n. The trial sum is allowed to overflow: it is the
+    # test, and under np.seterr(over="raise") it raised before the
+    # rescue could run (#300).
+    with np.errstate(over="ignore"):
+        _tot = target.sum()
     if not np.isfinite(_tot):
         target = target / target.max()
         _tot = target.sum()

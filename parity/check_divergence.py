@@ -16,7 +16,14 @@ Every divergence this found was real, and none had been reported:
   D_zero              julia returns NaN; the others refuse
   mu_empty            the browser answers an empty field
 
-Run: python parity/check_divergence.py
+Run: python parity/check_divergence.py [--require-all]
+
+A port whose toolchain is absent is skipped and named. That includes a
+runner that exits with ABSENT_STATUS (77), its way of saying a
+prerequisite of the toolchain is missing (the R port without jsonlite),
+which is not the same as the port failing to run. --require-all turns
+every absence into a failure, for the CI job that installs all four
+and must not quietly compare fewer.
 """
 import json
 import os
@@ -34,6 +41,9 @@ RUNNERS = {
     "julia": ["julia", "--color=no", os.path.join(HERE, "divergence_jl.jl"),
               CASES],
 }
+
+# A runner's "my toolchain is incomplete" exit, distinct from failing.
+ABSENT_STATUS = 77
 
 # Divergences that are known. Each needs a reason, not just an id. The
 # list is STRICT in both directions: a case here that diverges is
@@ -117,7 +127,8 @@ def _verdict(v):
     return str(v)
 
 
-def main():
+def main(argv=()):
+    require_all = "--require-all" in argv
     # An ABSENT toolchain is a skip; a toolchain that is present and
     # whose runner FAILS is a failure. Collapsing the two let a port
     # drop silently out of the comparison and the scan still print
@@ -134,6 +145,11 @@ def main():
         except subprocess.TimeoutExpired:
             broken[name] = "timed out after 900s"
             continue
+        if out.returncode == ABSENT_STATUS:
+            absent.append(name)
+            why = (out.stderr.strip().splitlines() or [""])[-1]
+            print(f"note: {name} port skipped: {why}")
+            continue
         if out.returncode != 0:
             broken[name] = (f"exit {out.returncode}: "
                             + (out.stderr.strip().splitlines() or [""])[-1])
@@ -149,6 +165,9 @@ def main():
         for name, why in sorted(broken.items()):
             print(f"FAILED to run the {name} port: {why}")
         print("The scan cannot speak for a port it could not run.")
+        return 1
+    if require_all and absent:
+        print(f"FAILED: --require-all, but absent: {sorted(absent)}")
         return 1
     if len(results) < 2:
         print(f"skip: need two ports, have {sorted(results)} "
@@ -236,4 +255,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

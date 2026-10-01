@@ -10,8 +10,15 @@ txt <- paste(readLines(args[1], warn = FALSE), collapse = "")
 num <- function(x) if (is.list(x)) vapply(x, function(v)
     if (is.character(v)) as.numeric(v) else as.numeric(v), 0) else
   if (is.character(x)) as.numeric(x) else x
-# minimal JSON: reuse jsonlite if present, else fail loudly
-if (!requireNamespace("jsonlite", quietly = TRUE)) stop("need jsonlite")
+# jsonlite is part of this port's toolchain. Without it the port is
+# ABSENT, not broken: exit 77 (the automake "skipped" status) so the
+# scan can tell the two apart. A plain stop() exits 1, which the scan
+# rightly treats as a port that failed to run -- and every Windows CI
+# runner ships Rscript without jsonlite.
+if (!requireNamespace("jsonlite", quietly = TRUE)) {
+  message("toolchain incomplete: R package jsonlite is not installed")
+  quit(save = "no", status = 77)
+}
 d <- jsonlite::fromJSON(txt, simplifyVector = FALSE)
 res <- list()
 for (cs in d$cases) {

@@ -58,11 +58,17 @@ def test_an_expected_entry_that_stopped_diverging_fails(monkeypatch,
                                                         capsys):
     """A waiver that outlives its defect hides the next one."""
     mod = _load()
-    _two_ports_or_skip(mod)
+    import shutil
+    if not shutil.which("node"):
+        pytest.skip("needs the browser port's node")
+    # the waiver names only ports this machine is sure to run. Naming
+    # all four asked a python+node machine to expire a waiver about R
+    # and julia, which it correctly refuses to judge (#310), so the
+    # test failed on every CI job without R.
     expected = dict(mod.EXPECTED)
     expected["ok_independent"] = {
         "why": "a case that has always agreed",
-        "ports": sorted(mod.RUNNERS),
+        "ports": ["browser", "python"],
     }
     monkeypatch.setattr(mod, "EXPECTED", expected)
     assert mod.main() == 1
@@ -70,6 +76,45 @@ def test_an_expected_entry_that_stopped_diverging_fails(monkeypatch,
     # name the case: asserting only the exit status lets ANOTHER false
     # stale entry stand in for this one and the test still pass (#310)
     assert "'ok_independent' no longer diverges" in out
+
+
+def _says_absent():
+    """A runner reporting its toolchain incomplete, as the R port does
+    without jsonlite."""
+    return [sys.executable, "-c",
+            "import sys; print('toolchain incomplete: no jsonlite', "
+            "file=sys.stderr); raise SystemExit(77)"]
+
+
+def test_an_incomplete_toolchain_is_absent_not_broken(monkeypatch,
+                                                      capsys):
+    """Windows runners ship Rscript without jsonlite. The R runner's
+    stop() exited 1, the scan called the port broken, and three scanner
+    tests failed there for a toolchain that was never installed."""
+    mod = _load()
+    runners = dict(mod.RUNNERS)
+    runners["R"] = _says_absent()
+    runners["julia"] = _says_absent()
+    runners["browser"] = _says_absent()
+    monkeypatch.setattr(mod, "RUNNERS", runners)
+    rc = mod.main()
+    out = capsys.readouterr().out
+    assert "FAILED to run" not in out
+    assert "R port skipped: toolchain incomplete: no jsonlite" in out
+    assert rc == 0, out           # one port left: a skip, not a pass
+    assert "skip: need two ports" in out
+
+
+def test_require_all_fails_on_any_absence(monkeypatch, capsys):
+    """The parity job installs every toolchain, so there an absence is
+    a broken install and must not shrink the comparison silently."""
+    mod = _load()
+    runners = dict(mod.RUNNERS)
+    runners["R"] = _says_absent()
+    monkeypatch.setattr(mod, "RUNNERS", runners)
+    assert mod.main(["--require-all"]) == 1
+    out = capsys.readouterr().out
+    assert "--require-all, but absent:" in out and "'R'" in out
 
 
 def test_a_waiver_is_not_stale_when_its_port_is_absent(monkeypatch,
