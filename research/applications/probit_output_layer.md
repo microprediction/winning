@@ -40,3 +40,28 @@ observations. Needs: a batched GPU/JAX kernel, aggressive class
 pruning, ranks ~1-4. Parked behind Tracks A/D/E in PLANS.md; this
 note is the fuller statement of why the fit is exact and what the
 engineering bill is.
+
+## The small-N front door: zero-shot classifiers (added 2026-09-23)
+The throughput obstacle above assumes tens of thousands of classes and
+billions of observations. GLiClass (Knowledgator; see ml-systems.md 1b)
+is the same head at the other end of the scale: a user-supplied label set
+of a few to a few dozen labels, encoded in the same forward pass as the
+text, scored by a scalar logit per label, and closed by
+
+    torch.softmax(logits, dim=-1)      # single-label
+    torch.sigmoid(logits) + threshold  # multi-label
+
+Two things make it a cheap first test. User-chosen label sets often
+contain near-synonyms, where softmax's IIA (conditional on the logits; the
+uni-encoder can move logits when labels change) is most likely to bite.
+And contextual label embeddings give a candidate covariance kernel
+`K = E E^T` from the same forward pass; its rank-r eigenfactor (not `K`
+itself) is the loading `V`, with a shared fraction, `D` and the logit
+scale left to calibrate, so the swap runs on a frozen checkpoint but is a
+hypothesis, not a free byproduct. Cost on the pure-Python path is 1-36 ms
+per forward pass at N=3-50, rank 1-2, rising to 0.4-2 s for fields sharp
+enough to take the 8,192-node Sobol rule (ml-systems.md 1b,
+`gliclass_head_timing.json`). If the calibrated head moves NLL/ECE or the
+synonym behaviour on a public zero-shot suite, that is the existence proof
+for the large-N product without paying its kernel bill first; if not, the
+kernel hypothesis is the first suspect.
