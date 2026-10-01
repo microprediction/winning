@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- `Tree.from_linkage` checks the premise it was built on (#133). Its
+  docstring says the cophenetic increments are "nonnegative by linkage
+  monotonicity" -- and nothing checked that. `centroid` and `median`
+  linkage routinely invert (9 of 40 random 8-point centroid linkages
+  here), and `max(lam2, 0.0)` then clipped the negative increment away,
+  returning a tree whose implied covariance is NOT the cophenetic one
+  the method promises. The gap reached **0.029** in covariance and
+  **1.4 percentage points** on a head-to-head price, silently.
+
+  A tree race is a nested variance decomposition, so a merge below its
+  own parent has no representation in one. It is refused, with the
+  size of the worst inversion, how many nodes invert, and what to do
+  instead -- a monotonic method, `scipy.cluster.hierarchy.is_monotonic`,
+  or an explicit `parent`/`strength`.
+
+  Measured: the criterion agrees with `is_monotonic` on all 240
+  linkages tried, with zero false refusals, and what is accepted still
+  reproduces the cophenetic matrix to 2.2e-16 across 137 cases. The
+  exactness check excludes merges above the `h = 1/sqrt(2)` horizon,
+  where correlations are floored to zero deliberately and documented
+  as such -- a first version of that check reported a 2.31 "error" that
+  was entirely that floor.
+
+  The R constructor `tree_from_linkage`, and `tree_from_hclust` through
+  it, still clipped -- the same inverted linkage errored in Python and
+  priced in R. It now refuses with the same message, node and size,
+  pinned by one three-runner fixture tested in both languages. The
+  browser's `treeFromLinkage` clipped too -- returning `D = [1, 1, 0.5]`
+  for a unit-variance model -- and now refuses the same way, checked in
+  `parity/check_js_api.mjs`.
+
 - The browser's Mendell-Elston approximation depended on the contestant
   LABELS (#287). Sequential moment matching conditions one coordinate
   at a time and pretends the remainder is still normal, so the order
