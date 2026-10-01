@@ -30,7 +30,11 @@ caught up a handicap lam claws back lam of it; with a handicap LAGGED
 by k rounds the gain is worth its full incentive for k rounds and
 (1 - lam) of it thereafter. Horizon capped at H rounds (a discount).
     u_i = kappa_u * inc_i * [ min(k, R) + (1 - lam) * max(R - k, 0) ]
-with R = min(T - t, H) rounds remaining.
+with R = min(T - t - 1, H) FUTURE rounds: investment chosen in round t
+lands after round t's performance, so it can only pay in rounds
+t+1 .. T-1, and in the last round it is worth nothing. (The first
+version used R = min(T - t, H), a phantom extra round; its output is
+kept in results.json, the corrected runs append to runs.jsonl.)
 
 The tracker runs with positive drift so it can follow abilities that
 move; belief variance then floors instead of vanishing, and hope never
@@ -43,7 +47,11 @@ Designer objectives reported, all summed over rounds:
               round-0 full field at zero effort: the best forecast
   robust    = the same with the most valuable member deleted: the
               pool's quality if its top contributor walks
-  exposure  = best - robust = the largest deletion value
+  exposure  = sum over rounds of the ABSOLUTE largest deletion value,
+              -E[min X] minus the same after deleting the most valuable
+              member (total_exposure_abs). total_exposure_change is the
+              same relative to its round-0 value, i.e. best - robust
+              with both measured against round 0.
 plus ability gain at T by talent tercile and participation.
 
 Sandbagging is not simulated. For a linear filter the impulse
@@ -123,7 +131,7 @@ def simulate(a0, w, lam, lag, seed):
     tr = AbilityTracker(drift=DRIFT, drift_exp=1.0, init_var=SIGMA_A ** 2, beta2=1.0)
     active = np.ones(N, bool)
     m_hist = []                      # public rating means per round (max-wins negated -> min-wins)
-    eff_t, qual_t, part_t, best_t, robust_t = [], [], [], [], []
+    eff_t, qual_t, part_t, best_t, robust_t, expo_abs_t = [], [], [], [], [], []
     best0, robust0 = pool_quality(a0); robust0 = np.array(robust0)
     eff_by_i = np.zeros(N); inv_by_i = np.zeros(N); paid_by_i = np.zeros(N)
     for t in range(T):
@@ -133,8 +141,8 @@ def simulate(a0, w, lam, lag, seed):
             if len(idx) == 1:
                 b, r = pool_quality(a[idx]); best_t.append(b - best0)
             else:
-                best_t.append(FLOOR - best0); r = [FLOOR] * M_DEL
-            robust_t.append(np.array(r) - robust0); continue
+                b = FLOOR; best_t.append(FLOOR - best0); r = [FLOOR] * M_DEL
+            robust_t.append(np.array(r) - robust0); expo_abs_t.append(np.array([b - x for x in r])); continue
         m_all = np.array([-tr.rating(ids[i])[0] if t > 0 else 0.0 for i in range(N)])
         v_all = np.array([tr.rating(ids[i])[1] if t > 0 else SIGMA_A ** 2 for i in range(N)])
         m_hist.append(m_all)
@@ -146,7 +154,7 @@ def simulate(a0, w, lam, lag, seed):
         wa = w[:len(idx)]
         inc = incentives(mu_race, D, wa)
         e = np.clip(KAPPA * inc, 0, None)
-        R = min(T - t, H)
+        R = min(T - t - 1, H)                   # future rounds in which the investment can pay
         u = np.clip(KAPPA_U * inc * (min(lag, R) + (1 - lam) * max(R - lag, 0)), 0, None)
         Rk = rank_probabilities(mu_race, D=D, points=POINTS)
         net = Rk @ wa - C_PART - e ** 2 / (2 * KAPPA) - u ** 2 / (2 * KAPPA_U)
@@ -159,15 +167,19 @@ def simulate(a0, w, lam, lag, seed):
         qual_t.append(float((e + (a0[idx] - a[idx])).sum()))
         b, r = pool_quality(a[idx] - e)
         best_t.append(float(b - best0)); robust_t.append(np.array(r) - robust0)
+        expo_abs_t.append(np.array([b - x for x in r]))
         part_t.append(int(len(idx)))
         a[idx] -= u                                # investment lands after the round
         active[idx[net < 0]] = False
     terc = np.digitize(a0, np.quantile(a0, [1 / 3, 2 / 3]))   # 0 = strongest
     robust_t = np.array(robust_t)                          # (T, M_DEL)
+    expo_abs_t = np.array(expo_abs_t)                      # (T, M_DEL), absolute deletion values
     return {"total_effort": float(np.sum(eff_t)), "total_improve": float(np.sum(qual_t)),
             "total_best": float(np.sum(best_t)),
             "total_robust": [float(v) for v in robust_t.sum(0)],
-            "total_exposure": [float(np.sum(best_t) - v) for v in robust_t.sum(0)],
+            "total_exposure_change": [float(np.sum(best_t) - v) for v in robust_t.sum(0)],
+            "total_exposure_abs": [float(v) for v in expo_abs_t.sum(0)],
+            "baseline_exposure_round0": [float(best0 - v) for v in robust0],
             "best_path": [round(x, 3) for x in best_t[::10]],
             "robust1_path": [round(float(x), 3) for x in robust_t[::10, 0]],
             "participants_final": part_t[-1],
@@ -178,7 +190,22 @@ def simulate(a0, w, lam, lag, seed):
             "participants_path": part_t[::10]}
 
 
+def check_no_phantom_round(a0):
+    """Regression: in a one-round contest investment can never pay, so
+    nobody invests (the first version valued a phantom extra round)."""
+    global T
+    T_save = T; T = 1
+    try:
+        r = simulate(a0, schedule("wta"), 0.0, 0, 0)
+    finally:
+        T = T_save
+    assert max(abs(g) for g in r["ability_gain_by_tercile"]) == 0.0, r["ability_gain_by_tercile"]
+
+
 def main():
+    """Append-only: one JSON line per config to runs.jsonl, tagged with a
+    run id and git head. results.json is the frozen first version."""
+    import subprocess
     t0 = time.time()
     configs = []
     for kind in ("wta", "top3", "geometric_r0.7"):
@@ -187,24 +214,28 @@ def main():
         for lag in (5, 15, 30):
             configs.append((kind, 1.0, lag))
     fields = {s: np.sort(np.random.default_rng(s).normal(0, SIGMA_A, N)) for s in SEEDS}
-    out = {"config": {"N": N, "T": T, "kappa": KAPPA, "kappa_u": KAPPA_U, "H": H,
-                      "drift": DRIFT, "c_part": C_PART, "seeds": SEEDS}, "runs": {}}
+    check_no_phantom_round(fields[SEEDS[0]])
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=HERE, capture_output=True, text=True).stdout.strip()
+    except OSError:
+        sha = ""
+    run_id = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    config = {"N": N, "T": T, "kappa": KAPPA, "kappa_u": KAPPA_U, "H": H, "drift": DRIFT, "c_part": C_PART,
+              "seeds": SEEDS, "horizon": "R = min(T - t - 1, H)"}
+    path = os.path.join(HERE, "runs.jsonl")
     for kind, lam, lag in configs:
         w = schedule("geometric", 0.7) if kind == "geometric_r0.7" else schedule(kind)
         runs = [simulate(fields[s], w, lam, lag, s) for s in SEEDS]
         key = f"{kind}|lam{lam}|lag{lag}"
-        out["runs"][key] = runs
+        with open(path, "a") as fh:
+            fh.write(json.dumps({"run_id": run_id, "git_head": sha, "config": config, "key": key, "runs": runs}) + "\n")
         ef = [r["total_effort"] for r in runs]; q = [r["total_best"] for r in runs]; rb = np.mean([r["total_robust"] for r in runs], 0)
+        ex = np.mean([r["total_exposure_abs"][0] for r in runs])
         print(f"{key:26s} effort {np.mean(ef):7.1f}±{np.std(ef):4.1f}  best {np.mean(q):6.1f}±{np.std(q):4.1f}  robust1/2/3 {rb.round(1)}  "
-              f"final n {np.mean([r['participants_final'] for r in runs]):4.1f}  "
+              f"exposure_abs {ex:6.1f}  final n {np.mean([r['participants_final'] for r in runs]):4.1f}  "
               f"ability gain by tercile {np.mean([r['ability_gain_by_tercile'] for r in runs], 0).round(2)}  "
               f"[{time.time()-t0:.0f}s]", file=sys.stderr, flush=True)
-        with open(os.path.join(HERE, "results.json"), "w") as fh:
-            json.dump(out, fh, indent=1)
-    out["runtime_s"] = time.time() - t0
-    with open(os.path.join(HERE, "results.json"), "w") as fh:
-        json.dump(out, fh, indent=1)
-    print("done", file=sys.stderr)
+    print(f"done run_id {run_id} in {time.time() - t0:.0f}s", file=sys.stderr)
 
 
 if __name__ == "__main__":
