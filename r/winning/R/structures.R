@@ -142,7 +142,9 @@ Tree <- function(cluster, loading, D, parent, strength)
 #' Builds the Tree structure whose implied correlation is EXACTLY the
 #' cophenetic correlation matrix 1 - 2 d^2 of the clustering: each merge
 #' at cophenetic distance h contributes lam^2 = rho - rho_parent with
-#' rho = 1 - 2 h^2; unit total variance per runner.
+#' rho = 1 - 2 h^2; unit total variance per runner. A non-monotonic
+#' linkage (an inversion, as centroid and median linkage produce) has no
+#' tree representation and is refused with an error.
 #'
 #' @param Z scipy-style linkage matrix (n-1 rows; columns: merged node
 #'   ids 0-based, distance, size)
@@ -164,9 +166,28 @@ tree_from_linkage <- function(Z) {
     rho[t] <- max(1 - 2 * Z[k, 3]^2, 0)
   }
   lam <- numeric(nT)
+  # the nonnegative increments are a PREMISE, checked as in Python's
+  # Tree.from_linkage: centroid and median linkage invert, and clipping
+  # the negative increment returns a covariance that is not the
+  # cophenetic one promised (#133)
+  bad <- numeric(0); bad_t <- integer(0)
   for (t in (n + 1L):nT) {
     pa <- parent[t]
-    lam[t] <- sqrt(max(rho[t] - if (pa > 0) rho[pa] else 0, 0))
+    lam2 <- rho[t] - if (pa > 0) rho[pa] else 0
+    if (lam2 < -1e-9) { bad <- c(bad, lam2); bad_t <- c(bad_t, t) }
+    lam[t] <- sqrt(max(lam2, 0))
+  }
+  if (length(bad)) {
+    w <- which.min(bad)
+    stop(sprintf(paste0(
+      "this linkage is not monotonic: node %d merges %.3g BELOW its ",
+      "parent, and %d node(s) do. A tree race is a nested variance ",
+      "decomposition, so an inversion has no representation in it -- ",
+      "clipping the negative increment would return a different ",
+      "covariance from the cophenetic one this promises. Use a monotonic ",
+      "method (average, complete, ward), or build the Tree with explicit ",
+      "parent/strength."), bad_t[w] - 1L, -bad[w], length(bad)),
+      call. = FALSE)
   }
   D <- pmax(1 - rho[parent[1:n]], 1e-10)
   Tree(cluster = seq_len(n), loading = numeric(n), D = D,
