@@ -21,9 +21,10 @@ judge fit quality -- but with D ~ 0 the conditional race is a near-step
 the factor-node quadrature cannot resolve. That is the points/window
 invariance: the error lives in the factor integral, not the lattice.
 
-Strict xfail: when fit_covariance recovers exact structure (or cov=
-routes a fit that binds the D floor elsewhere), these XPASS and fail,
-and the marks come off.
+Resolved by routing, not by fixing the fit: cov= sends the forward
+normal race to scrambled-Sobol GHK when the fit degenerates, so the
+first test now passes to GHK's accuracy. The second pins that the fit
+itself is unchanged, so the routing stays necessary.
 """
 import warnings
 
@@ -49,15 +50,17 @@ def exact_correlation(r, seed):
 
 
 @pytest.mark.parametrize("r", [1, 3, 5])
-@pytest.mark.xfail(strict=True, reason="fit_covariance degenerates to full "
-                   "rank with D on the floor at small n (#66 follow-up)")
 def test_cov_reproduces_an_exactly_structured_correlation(r):
+    """The fit still degenerates (pinned below); cov= now routes the
+    forward normal race to scrambled-Sobol GHK instead of using it, so
+    the answer is within GHK's 1024-node accuracy (~5e-4) of the exact
+    V/D lattice rather than 5-8e-3 off it."""
     V, D, C = exact_correlation(r, seed=5 + r)
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        warnings.simplefilter("error")                 # routed: no warning
         p_vd = np.asarray(wf.race_probabilities(MU, V=V, D=D, points=1001))
         p_cov = np.asarray(wf.race_probabilities(MU, cov=C, points=1001))
-    assert np.abs(p_cov - p_vd).max() < 1e-4
+    assert np.abs(p_cov - p_vd).max() < 2e-3
 
 
 @pytest.mark.parametrize("r", [1, 3, 5])

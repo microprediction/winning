@@ -13,6 +13,7 @@ Run:  WINNING_PURE=1 python parity/gen_vectors.py
 from __future__ import annotations
 
 import json
+import warnings
 import os
 
 import numpy as np
@@ -27,7 +28,9 @@ from winning.factor.blocks import (block_race_probabilities,
                                    abilities_from_block_race)
 from winning.factor.structures import Tree
 from winning.factor.polish import race_jacobian, polish_race
-from winning.factor.topk import (top_k_probabilities, top_k_jacobians,
+from winning.factor.core import hermite_nodes
+from winning.factor.topk import (bottom_k_probabilities,
+                                 top_k_probabilities, top_k_jacobians,
                                  abilities_from_topk,
                                  loc_scale_from_topk_pair,
                                  loc_scale_from_win_and_second,
@@ -71,7 +74,13 @@ def make_inputs(seed=2026):
     # drawn AFTER every earlier draw so the seeded stream prefix -- and
     # with it every pre-topk scenario value -- is unchanged
     sd_true = np.round(np.exp(rng.uniform(-0.25, 0.25, size=n)), 12)
+    _rng = np.random.default_rng(3)
+    _V = _rng.normal(size=(8, 3))
+    _d = 0.05 + _rng.random(8)
+    _S = _V @ _V.T + np.diag(_d)
+    _s = np.sqrt(np.diag(_S))
     return {
+        "degraded_cov": (_S / np.outer(_s, _s)).tolist(),
         "sd_true": sd_true.tolist(),
         "n": n, "mu": mu.tolist(), "V1": V1.tolist(), "V2": V2.tolist(),
         "D": D.tolist(), "cluster": cluster, "loading": loading.tolist(),
@@ -81,6 +90,18 @@ def make_inputs(seed=2026):
         "linkage_Z": _linkage_Z(n),
         "classic_L": 500, "classic_unit": 0.01, "classic_a": 1.5,
     }
+
+
+def _degraded_cov(n, rank, seed):
+    """A correlation the grammar fit degenerates on: exactly rank + diagonal,
+    which the pipeline reproduces by going to full rank with D on its floor
+    (the #118 fixture)."""
+    rng = np.random.default_rng(seed)
+    V = rng.normal(size=(n, rank))
+    d = 0.05 + rng.random(n)
+    S = V @ V.T + np.diag(d)
+    s = np.sqrt(np.diag(S))
+    return S / np.outer(s, s)
 
 
 def build(inputs):
@@ -98,8 +119,23 @@ def build(inputs):
 
     out = {}
 
-    def sc(name, value, tol=TOL_DEFAULT):
-        out[name] = {"value": np.asarray(value).tolist(), "tol": tol}
+    def sc(name, value, tol=TOL_DEFAULT, ports=None):
+        """ports=None means every port must reproduce this scenario. A list
+        names the ports that implement it; the others print a declared skip
+        rather than a failure, so partial coverage is visible instead of
+        being expressed by leaving the scenario out altogether."""
+        arr = np.asarray(value, dtype=float)
+        if not np.isfinite(arr).all():
+            raise ValueError(f"scenario {name!r} has non-finite values; a "
+                             "parity fixture must be a number")
+        out[name] = {"value": arr.tolist(), "tol": tol}
+        if ports is not None:
+            unknown = sorted(set(ports) - {"R", "js"})
+            if unknown or not ports:
+                raise ValueError(
+                    f"scenario {name!r}: ports={ports!r} names no checker "
+                    "that would run it (valid: 'R', 'js')")
+            out[name]["ports"] = list(ports)
 
     sc("independent_normal", race_probabilities(mu, D=D, points=257))
     sc("factor1_normal", race_probabilities(mu, V=V1, D=D, points=257))
@@ -172,6 +208,12 @@ def build(inputs):
     sc("loc_scale_mu", mu_ls, 1e-6)
     sc("loc_scale_sd", sd_ls, 1e-6)
     sc("rank_marginals", rank_probabilities(mu, D=D, points=257))
+    # with loadings: the browser used to swallow V here and return the
+    # INDEPENDENT rank matrix, plausible and doubly stochastic and for the
+    # wrong model (#199). R does not take V in this verb yet (#202), so
+    # this one is declared for the browser until it does.
+    sc("rank_marginals_factor",
+       rank_probabilities(mu, D=D, V=V1, points=257), ports=["js"])
     R = rank_probabilities(mu, D=D, points=257)
     mu_ws, sd_ws = loc_scale_from_win_and_second(R[:, 0], R[:, 1],
                                                  points=257)
@@ -187,6 +229,31 @@ def build(inputs):
     Jm_f, Js_f = top_k_jacobians(mu, 2, D=D, V=V1, points=257)
     sc("topk2_jacobian_mu_factor", Jm_f, 1e-9)
     sc("topk2_jacobian_sigma_factor", Js_f, 1e-9)
+    # exported by all three engines and covered by none of the above until
+    # the surface audit found them (tests/test_port_surface.py)
+    # The cov= route: both python and R answer a DEGRADED grammar fit with
+    # GHK rather than pricing the fit, and the browser has no GHK and
+    # rejects the key, so this one is declared R-only. Halton against
+    # scrambled Sobol is the tolerance here.
+    cov_deg = np.asarray(inputs["degraded_cov"], dtype=float)
+    mu8 = np.linspace(-0.6, 0.6, 8)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sc("cov_degraded_route", race_probabilities(mu8, cov=cov_deg),
+           2e-4, ports=["R"])
+        sc("cov_degraded_inverse", abilities_from_race(
+            race_probabilities(mu8, cov=cov_deg), cov=cov_deg), 2e-3,
+           ports=["R"])
+    # the inverse under a non-normal base: the forward had gumbel cover
+    # from the start, the inverse never did (found by the surface audit)
+    sc("invert_gumbel", abilities_from_race(
+        pt, D=np.full(len(mu), np.pi ** 2 / 6.0), base="gumbel",
+        points=1001), 1e-6)
+    sc("bottomk2_normal", bottom_k_probabilities(mu, 2, D=D, points=257))
+    sc("bottomk2_factor", bottom_k_probabilities(mu, 2, V=V1, D=D, points=257))
+    Fh, Wh = hermite_nodes(2, Q=9)
+    sc("hermite2_nodes", Fh, 1e-12)
+    sc("hermite2_weights", Wh, 1e-12)
     return out
 
 

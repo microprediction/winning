@@ -14,8 +14,17 @@ normalize <- function(p) p / sum(p)
 #' @return numeric probabilities summing to one
 #' @export
 prices_from_dividends <- function(dividends, nan_value = 2000) {
+  # Only a MISSING quote -- NA or NaN -- becomes nan_value. A
+  # non-positive dividend, and -Inf with it, is worth nothing and prices
+  # at 0; +Inf prices at 1/Inf = 0 on its own. This divided by the
+  # dividend unconditionally, so a dividend of 0 gave Inf and then NaN
+  # after normalising, and a negative dividend came back as a NEGATIVE
+  # probability. Normalising only when the total is positive is python's
+  # rule too: an all-infinite book is all zeros, not 0/0 (#242).
   d <- ifelse(is.na(dividends), nan_value, dividends)
-  normalize(1 / d)
+  p <- ifelse(d <= 0, 0, 1 / d)
+  s <- sum(p)
+  if (s > 0) p / s else p
 }
 
 #' Australian-style dividends from probabilities

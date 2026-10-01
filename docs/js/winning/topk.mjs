@@ -4,8 +4,31 @@
 // winning/factor/topk.py -- the cavity count distribution with
 // stable-direction deconvolution; see the python module docstring for
 // the derivations and the two-branch refusal of exact-rank targets.
-import { TINY, hermite1, solve } from "./core.mjs";
+import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio } from "./core.mjs";
 import { BASES } from "./races.mjs";
+
+/* Each exported call declares its own option keys; see checkOpts in
+   core.mjs for why an options object needs this at all. */
+
+/* python refuses V here rather than not implementing it, and the reason is
+   worth carrying: the browser used to solve the independent model and
+   report converged: true (#200). */
+const LOC_SCALE_HINTS = {
+  V: "loc/scale calibration with fixed factor loadings is " +
+     "under-identified: without the joint rescaling gauge, two curves " +
+     "carry 2n - 2 numbers against 2n - 1 unknowns and a flat direction " +
+     "survives. Use abilitiesFromTopk({V}) at fixed scales. Python raises " +
+     "NotImplementedError here for the same reason.",
+};
+const TOP_K_PROBABILITIES_OPTS = new Set(["V", "D", "base", "points", "qa"]);
+const BOTTOM_K_PROBABILITIES_OPTS = new Set(["V", "D", "base", "points", "qa"]);
+const TOP_K_JACOBIANS_OPTS = new Set(["V", "D", "base", "points", "qa"]);
+const RANK_PROBABILITIES_OPTS = new Set(["V", "D", "base", "points", "qa"]);
+const ABILITIES_FROM_TOPK_OPTS = new Set(["V", "D", "base", "points", "qa", "nIter", "tol", "targetFloor", "returnInfo"]);
+const LOC_SCALE_FROM_TOPK_PAIR_OPTS = new Set(["D0", "base", "points", "nIter", "tol", "ridge", "mu0", "returnInfo"]);
+const LOC_SCALE_FROM_WIN_AND_SECOND_OPTS = new Set(["D0", "base", "points", "nIter", "tol", "ridge", "mu0", "returnInfo"]);
+const ABILITIES_FROM_RANK_MARGINAL_OPTS = new Set(["D", "base", "points", "nIter", "tol", "mu0", "returnInfo"]);
+
 
 const clip01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -160,8 +183,28 @@ function pairPmfAt(Qi, F, i, k) {
   return out;
 }
 
+function resolvedPoints(lo, hi, sd, points) {
+  // about two points per NARROWEST sd, capped at 8193. The window is set
+  // by the widest runner and the grid by `points`, so a heterogeneous
+  // field leaves the narrowest density between samples, and the mass
+  // check cannot see it: that check is one scalar (memberships sum to k)
+  // and runner-level errors of opposite sign cancel in it (#224).
+  const smin = Math.max(Math.min(...sd), 1e-300);
+  // a Number is already a double, so this cannot overflow the way R and
+  // Julia did (#228); !isFinite still guards a zero-width window
+  const need = Math.ceil((hi - lo) / (0.5 * smin)) + 1;
+  if ((!Number.isFinite(need) || need > 8193) && typeof console !== "undefined")
+    console.warn(
+      `top-k lattice cannot resolve the narrowest runner even at 8193 ` +
+      `points (min sd ${smin.toExponential(1)} over a window of ` +
+      `${(hi - lo).toPrecision(3)}); memberships may carry percent-level ` +
+      "error the mass check cannot see.");
+  return Math.max(points, Math.min(need, 8193));
+}
+
 function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   const [lo, hi] = countWindow(mu, sd, k, fn, delta);
+  points = resolvedPoints(lo, hi, sd, points);
   const x = new Array(points);
   const dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
@@ -199,7 +242,7 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
 }
 
 function factorNodes(V, n, qa) {
-  let Vm = V.map(r => (Array.isArray(r) ? r.slice() : [r]));
+  const Vm = asLoadings(V, n).map(row => row.slice());
   const r = Vm[0].length;
   if (r > 2)
     throw new Error("topKProbabilities is implemented for factor rank <= 2");
@@ -224,13 +267,34 @@ function factorNodes(V, n, qa) {
   return { Vm, nodes, w };
 }
 
+/* The depth of a top-k curve is a COUNT, so it is an integer.
+
+   Every guard truncated first -- `Math.trunc(k)` here, `int(k)` in
+   python, `as.integer(k)` in R -- and then range-checked the truncated
+   value, so a fractional depth passed and was silently floored:
+   topKProbabilities(mu, 1.5) returned the top-1 curve and 2.5 the
+   top-2 one, with no warning and a mass of 1 or 2 rather than the 1.5
+   or 2.5 asked for. k=0, k=n and k>n were all refused; only the
+   non-integer slipped through, which is the one case the message
+   "k must be in [1, n-1]" reads as permitting. */
+function asDepth(k, n, where = "k") {
+  if (!Number.isFinite(k))
+    throw new Error(`${where} must be a whole number of places; got ${k}`);
+  if (k !== Math.trunc(k))
+    throw new Error(
+      `${where} must be a whole number of places; got ${k}. A top-k ` +
+      `curve counts finishers, so there is no top-${k}.`);
+  if (!(k >= 1 && k <= n - 1))
+    throw new Error(`${where} must be in [1, n-1]; got k=${k}, n=${n}`);
+  return k;
+}
+
 export function topKProbabilities(mu, k, opts = {}) {
+  checkOpts(opts, TOP_K_PROBABILITIES_OPTS, "topKProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
   const n = mu.length;
-  k = Math.trunc(k);
-  if (!(k >= 1 && k <= n - 1))
-    throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  k = asDepth(k, n);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   if (!V) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
                              k, "top-k race");
@@ -249,20 +313,18 @@ export function topKProbabilities(mu, k, opts = {}) {
 }
 
 export function bottomKProbabilities(mu, k, opts = {}) {
+  checkOpts(opts, BOTTOM_K_PROBABILITIES_OPTS, "bottomKProbabilities", OPT_HINTS);
   const n = mu.length;
-  k = Math.trunc(k);
-  if (!(k >= 1 && k <= n - 1))
-    throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
+  k = asDepth(k, n);
   return topKProbabilities(mu, n - k, opts).map(v => 1 - v);
 }
 
 export function topKJacobians(mu, k, opts = {}) {
+  checkOpts(opts, TOP_K_JACOBIANS_OPTS, "topKJacobians", OPT_HINTS);
   const { D = null, base = "normal", points = 513, V = null,
           qa = 15 } = opts;
   const n = mu.length;
-  k = Math.trunc(k);
-  if (!(k >= 1 && k <= n - 1))
-    throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
+  k = asDepth(k, n);
   if (V) {
     // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
     const { Vm, nodes, w } = factorNodes(V, n, qa);
@@ -286,7 +348,7 @@ export function topKJacobians(mu, k, opts = {}) {
     }
     return { Jmu, Jsigma };
   }
-  const Dv = D || new Array(n).fill(1);
+  const Dv = asIdio(D, n);
   const sd = Dv.map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   const { dx, F, f, fp, z } = topkGrid(mu, sd, k, fn, points);
@@ -324,29 +386,83 @@ export function topKJacobians(mu, k, opts = {}) {
 }
 
 export function rankProbabilities(mu, opts = {}) {
-  const { D = null, base = "normal", points = 513 } = opts;
+  checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
+  const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
   const n = mu.length;
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
-  const { dx, F, f } = topkGrid(mu, sd, n - 1, fn, points);
-  const C = countDistribution(F);
-  const P = [];
-  for (let i = 0; i < n; i++) {
-    const Qi = looPmf(C, F, i);
-    const row = new Array(n).fill(0);
-    for (let t = 0; t < F.length; t++) {
-      const d = f[t][i] / sd[i];
-      for (let m = 0; m < n; m++) row[m] += Qi[t][m] * d;
+
+  // one factor node: the cavity count pmf against each runner's own
+  // density, as in python's rank_probabilities.one_node
+  const oneNode = (m) => {
+    const { dx, F, f } = topkGrid(m, sd, n - 1, fn, points);
+    const C = countDistribution(F);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const Qi = looPmf(C, F, i);
+      const row = new Array(n).fill(0);
+      for (let t = 0; t < F.length; t++) {
+        const d = f[t][i] / sd[i];
+        for (let mm = 0; mm < n; mm++) row[mm] += Qi[t][mm] * d;
+      }
+      out.push(row.map(v => v * dx));
     }
-    P.push(row.map(v => v * dx));
+    return out;
+  };
+
+  // Loadings used to be destructured away and the independent rank matrix
+  // returned -- plausible, doubly stochastic, and for the wrong model
+  // (#199). The mixture is the same one topKProbabilities takes.
+  let P;
+  if (!V) {
+    P = oneNode(mu);
+  } else {
+    const { Vm, nodes, w } = factorNodes(V, n, qa);
+    P = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let q = 0; q < nodes.length; q++) {
+      const shifted = mu.map((m, i) => {
+        let acc = m;
+        for (let c = 0; c < nodes[q].length; c++) acc += Vm[i][c] * nodes[q][c];
+        return acc;
+      });
+      const node = oneNode(shifted);
+      for (let i = 0; i < n; i++)
+        for (let mm = 0; mm < n; mm++) P[i][mm] += w[q] * node[i][mm];
+    }
   }
-  const rows = P.map(r => r.reduce((a, b) => a + b, 0));
-  const cols = new Array(n).fill(0);
-  for (const r of P) for (let m = 0; m < n; m++) cols[m] += r[m];
-  const bad = rows.some(v => Math.abs(v - 1) > 5e-3)
-    || cols.some(v => Math.abs(v - 1) > 5e-3);
-  if (bad) throw new Error("rank marginals defective; raise points=");
-  return P.map((r, i) => r.map(v => clip01(v / rows[i])));
+  // Check what is RETURNED. Row normalisation makes every row exact and
+  // MOVES the columns, so a matrix that passed the raw check could fail
+  // the stated identity afterwards with nothing looking (#203). The
+  // columns are not forced: alternating scaling would make both exact by
+  // hiding the under-resolution that caused it, and the same field at
+  // 2001 points has a column error of 3.5e-9.
+  // BOTH checks: independent, and mistaken for alternatives once. Row
+  // normalisation can ERASE a gross raw defect and leave the result just
+  // inside tolerance (#221). The raw check sees the quadrature, the post
+  // check sees what the caller gets.
+  const defects = (M) => {
+    const rows = M.map(r => r.reduce((a, b) => a + b, 0));
+    const cols = new Array(n).fill(0);
+    for (const r of M) for (let m = 0; m < n; m++) cols[m] += r[m];
+    return [Math.max(...rows.map(v => Math.abs(v - 1))),
+            Math.max(...cols.map(v => Math.abs(v - 1)))];
+  };
+  const reject = (where, re, ce) => {
+    throw new Error(
+      `rank marginals defective ${where}: row-sum error ` +
+      `${re.toExponential(2)}, column-sum error ${ce.toExponential(2)}. ` +
+      "Raise points=.");
+  };
+  const finite = (M) => M.every(r => r.every(Number.isFinite));
+  let [reRaw, ceRaw] = defects(P);
+  if (!finite(P) || reRaw > 5e-3 || ceRaw > 5e-3)
+    reject("before normalisation", reRaw, ceRaw);
+  const raw = P.map(r => r.reduce((a, b) => a + b, 0));
+  P = P.map((r, i) => r.map(v => clip01(v / Math.max(raw[i], 1e-300))));
+  const [reOut, ceOut] = defects(P);
+  if (!finite(P) || reOut > 5e-3 || ceOut > 5e-3)
+    reject("in the RETURNED matrix after row normalisation", reOut, ceOut);
+  return P;
 }
 
 function validatedTarget(q, k, n, targetFloor) {
@@ -374,15 +490,14 @@ function validatedTarget(q, k, n, targetFloor) {
 }
 
 export function abilitiesFromTopk(q, k, opts = {}) {
+  checkOpts(opts, ABILITIES_FROM_TOPK_OPTS, "abilitiesFromTopk", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa = 15,
           nIter = 80, tol = 1e-8, targetFloor = null,
           returnInfo = false } = opts;
   const n = q.length;
-  k = Math.trunc(k);
-  if (!(k >= 1 && k <= n - 1))
-    throw new Error(`k must be in [1, n-1]; got k=${k}, n=${n}`);
+  k = asDepth(k, n);
   const { target, floored } = validatedTarget(q, k, n, targetFloor);
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   const fac = V ? factorNodes(V, n, qa) : null;
 
@@ -444,16 +559,15 @@ export function abilitiesFromTopk(q, k, opts = {}) {
 }
 
 export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
+  checkOpts(opts, LOC_SCALE_FROM_TOPK_PAIR_OPTS, "locScaleFromTopkPair", { ...OPT_HINTS, ...LOC_SCALE_HINTS });
   const { D0 = null, base = "normal", points = 513, nIter = 60,
           tol = 1e-8, ridge = 0.0, mu0 = null,
           returnInfo = false } = opts;
   const n = q1.length;
-  k1 = Math.trunc(k1); k2 = Math.trunc(k2);
+  k1 = asDepth(k1, n, "k1");
+  k2 = asDepth(k2, n, "k2");
   if (k1 === k2)
     throw new Error("k1 == k2 gives one curve twice: scale is unidentified");
-  for (const kk of [k1, k2])
-    if (!(kk >= 1 && kk <= n - 1))
-      throw new Error(`k must be in [1, n-1]; got k=${kk}, n=${n}`);
   const t1 = validatedTarget(q1, k1, n, null).target;
   const t2 = validatedTarget(q2, k2, n, null).target;
   const lt1 = t1.map(v => Math.log(v) - Math.log1p(-v));
@@ -575,6 +689,7 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
 }
 
 export function locScaleFromWinAndSecond(pWin, pSecond, opts = {}) {
+  checkOpts(opts, LOC_SCALE_FROM_WIN_AND_SECOND_OPTS, "locScaleFromWinAndSecond", { ...OPT_HINTS, ...LOC_SCALE_HINTS });
   // win plus EXACTLY-second marginals: P(2nd) + P(win) = P(top-2),
   // the well-posed pair. Each marginal renormalized to unit mass.
   const n = pWin.length;
@@ -624,6 +739,7 @@ function rankMarginalWithJacobian(mu, sd, r, fn, points) {
 }
 
 export function abilitiesFromRankMarginal(p, r, opts = {}) {
+  checkOpts(opts, ABILITIES_FROM_RANK_MARGINAL_OPTS, "abilitiesFromRankMarginal", OPT_HINTS);
   // invert one EXACT-rank marginal at frozen scales: two-branched for
   // r >= 2, mu0 selects the branch. See the python docstring.
   const { mu0 = null, D = null, base = "normal", points = 513,
@@ -636,7 +752,7 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
     throw new Error("all rank probabilities must be positive");
   const s = p.reduce((a, b) => a + b, 0);
   const logt = p.map(v => Math.log(v / s));
-  const sd = (D || new Array(n).fill(1)).map(Math.sqrt);
+  const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   let mu;
   if (mu0 != null) {

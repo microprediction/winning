@@ -143,6 +143,99 @@ end
     @test m.loglik >= ll_true - 1e-6
 end
 
+# --- every observation is accounted for (#194) -------------------------
+#
+# The core iterates over the LEGAL labels and gathers the rows matching
+# each, so a row whose choice is outside 1..J is never visited: it
+# contributed nothing to the log-likelihood and a zero row to the score,
+# and the fit silently optimised a SUBSET while reporting it as the
+# whole. This port also accepted a choice vector SHORTER than T and
+# dropped the tail. Dropping observations RAISES the log-likelihood,
+# because there is less of it, so nothing downstream can tell it from a
+# better fit.
+@testset "choice validation" begin
+    T, J, r = 40, 3, 1
+    rng = Xoshiro(1)
+    mu = randn(rng, T, J)
+    V = randn(rng, J, r) .* 0.4
+    good = rand(rng, 1:J, T)
+
+    ll, _, _ = MultinomialProbit.choice_loglik_and_score(mu, V, good)
+    @test isfinite(ll)
+
+    # fewer observations is a BETTER number -- the reason silence hurts
+    part, _, _ = MultinomialProbit.choice_loglik_and_score(
+        mu[6:end, :], V, good[6:end])
+    @test part > ll
+
+    for bad in (J + 1, 99, 0, -1)
+        ch = copy(good)
+        ch[1] = bad
+        @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+            mu, V, ch)
+    end
+
+    # a SHORT vector was silently truncated here, unlike the other ports
+    @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+        mu, V, good[1:30])
+    @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+        mu, V, vcat(good, 1))
+
+    err = try
+        ch = copy(good); ch[4] = 99
+        MultinomialProbit.choice_loglik_and_score(mu, V, ch)
+        ""
+    catch e
+        sprint(showerror, e)
+    end
+    @test occursin("choice[4]", err)
+end
+
+# --- new data must carry the fitted design (#195) ----------------------
+#
+# predict_proba decided whether to prepend generated intercept columns
+# from the COLUMN COUNT alone, and the model recorded neither whether it
+# had generated them nor how many covariates the caller supplied. New
+# data with the wrong number of features were therefore silently
+# REINTERPRETED: a model fitted on two covariates without intercepts,
+# handed one covariate, prepended two synthetic intercept columns and
+# then used only the first p of the three -- applying coefficients
+# fitted to the covariates to the intercepts, ignoring the supplied
+# feature, and returning a plausible probability row.
+@testset "predict_proba checks the design" begin
+    X = zeros(2, 3, 2)
+    m = MNProbit(X, [1, 2]; intercepts = false, r = 1)
+    m.beta .= [0.7, -0.4]
+    @test m.p_raw == 2
+    @test m.intercepts == false
+
+    # one covariate where two were fitted: used to return a probability row
+    @test_throws DimensionMismatch predict_proba(
+        m; X = reshape([1.0, 2.0, 3.0], 1, 3, 1))
+    # three where two were fitted
+    @test_throws DimensionMismatch predict_proba(m; X = randn(1, 3, 3))
+    # the wrong number of ALTERNATIVES
+    @test_throws DimensionMismatch predict_proba(m; X = randn(1, 2, 2))
+
+    # the right design still works, and is a distribution
+    P = predict_proba(m; X = reshape(collect(1.0:6.0), 1, 3, 2))
+    @test size(P) == (1, 3)
+    @test all(P .>= 0)
+    @test abs(sum(P) - 1) < 1e-10
+
+    # a model WITH generated intercepts takes either spelling
+    Xi = randn(6, 3, 2)
+    mi = MNProbit(Xi, [1, 2, 3, 1, 2, 3]; intercepts = true, r = 1)
+    @test mi.intercepts && mi.p_raw == 2 && mi.p == 2 + (3 - 1)
+    for nc in (mi.p_raw, mi.p)
+        Q = predict_proba(mi; X = randn(4, 3, nc))
+        @test size(Q) == (4, 3)
+        @test maximum(abs.(sum(Q; dims = 2) .- 1)) < 1e-10
+    end
+    # and nothing in between
+    @test_throws DimensionMismatch predict_proba(mi; X = randn(4, 3, 3))
+end
+
 println("all MultinomialProbit tests passed")
 
 @testset "inference: vcov, stderror, per-observation scores" begin
@@ -187,4 +280,55 @@ println("all MultinomialProbit tests passed")
     io = IOBuffer()
     show(io, MIME"text/plain"(), m)
     @test occursin("beta[1]", String(take!(io)))
+end
+
+# --- the tail likelihood is finite and its score is not zero (#270) ---
+#
+# lp was log.(max.(ndtr.(Aj), TINY)). ndtr underflows to exactly zero
+# below about -37, so every deep tail collapsed to the SAME -690.78 and
+# the objective went FLAT; the Mills ratio then underflowed to a score
+# of exactly ZERO, so an optimizer declares convergence precisely where
+# an observation is most badly contradicted.
+#
+# logndtr removes both. It does NOT remove the quadrature error
+# underneath, and the last testset pins that rather than pretending
+# otherwise.
+@testset "tail likelihood is finite with a nonzero score" begin
+    binary(gap) = choice_loglik_and_score(
+        reshape([gap, 0.0], 1, 2), zeros(2, 1), [1])
+
+    lls = [binary(g)[1] for g in (-40.0, -60.0, -100.0, -200.0)]
+    @test all(isfinite, lls)
+    @test all(diff(lls) .< -1.0)          # strictly falling, by a lot
+    @test minimum(lls) < -1e4             # far past the old -690.78
+
+    prev = 0.0
+    for gap in (-40.0, -60.0, -100.0, -200.0)
+        _, dmu, _ = binary(gap)
+        @test all(isfinite, dmu)
+        @test dmu[1, 1] > 0.0             # not the zero score
+        @test dmu[1, 1] > prev            # grows with the surprise
+        prev = dmu[1, 1]
+    end
+
+    # where the rule does reach the integrand the answer is right, so
+    # the tail failure is the quadrature and not the formula
+    for gap in (-1.0, -2.0, -3.0)
+        ll, _, _ = binary(gap)
+        ex = MP.logndtr(gap / sqrt(2))
+        @test abs(ll - ex) / abs(ex) < 1e-3
+    end
+
+    # recorded, not claimed fixed: 38% away at a gap of -20
+    ll20, _, _ = binary(-20.0)
+    ex20 = MP.logndtr(-20.0 / sqrt(2))
+    @test abs(ll20 - ex20) / abs(ex20) > 0.3
+    @test ll20 < ex20                     # understates the probability
+
+    # logndtr itself, against the naive form where the naive form works
+    for z in (-3.0, -1.0, 0.0, 0.5, 2.0)
+        @test isapprox(MP.logndtr(z), log(MP.ndtr(z)); rtol = 1e-12)
+    end
+    @test MP.logndtr(-40.0) < -700.0      # past where ndtr underflows
+    @test isfinite(MP.logndtr(-300.0))
 end
