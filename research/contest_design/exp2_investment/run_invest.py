@@ -9,7 +9,7 @@ values the pool's EXTREMAL quality, -E[min_i X_i] over the active
 field (the best forecast it can pick), and penalises EXPOSURE, the
 largest deletion value: how much of that quality rests on one member.
 Both are cavity objects (cavity_calculus/NOTES.md) and both are
-computed here exactly on a lattice from the TRUE performance means
+computed here numerically on a lattice from the TRUE performance means
 (ability minus effort), not the belief.
 
 Investment in ability under handicapped prize schedules.

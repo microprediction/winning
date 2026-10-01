@@ -9,26 +9,35 @@ contest literature.)
 ## The identity
 If effort moves a contestant along the ability axis, the marginal
 incentive to work is the derivative of expected prize with respect to
-own ability. With prizes w_k attached to finishing positions,
+own ability. Here performance X_i = mu_i - e_i + eps_i is MIN-WINS
+(lower is better), so raising the location mu_i makes i worse. With
+prizes w_k attached to finishing positions,
 
-    d P(rank_i <= k) / d mu_i  =  density that i ties at the k-th boundary
+    d P(rank_i <= k) / d mu_i  =  - (density that i ties at the k-th boundary)
 
-so
+and effort enters as -mu_i, so
 
-    incentive_i = sum_k (w_k - w_{k+1}) * tie density of i at boundary k.
+    incentive_i = d E[prize_i] / d e_i = - d E[prize_i] / d mu_i
+                = sum_k (w_k - w_{k+1}) * tie density of i at boundary k  >= 0.
+
+(Checked: for three equal runners d P(win_1) / d mu_1 = -0.28209 from
+the engine. The code's inc[i] = -(up - dn) / (2H) carries this sign.)
 
 Effort responds to prize STEPS, and only where the contestant has
 finishing density. Winner-take-all is one step at the top, felt only
 by those with density at the front. This is the discouragement effect
 as an object the engine prices: rank_probabilities gives every
-P(rank_i = k) exactly, and the derivative is a central difference of
-it (or tie_densities, which are the win-boundary case). Contestants
+P(rank_i = k) on a finite lattice (points = 257), and the derivative is
+a central difference of it with H = 1e-4 (or tie_densities, which are
+the win-boundary case). Both are numerical, not exact: over points
+129..1025 and H <= 1e-4 the incentives agree with (1025, 1e-5) to
+5.2e-9 (theory/verify_theory.py, numerics block). Contestants
 who are far from every paying boundary have zero incentive whatever
 the purse.
 
 ## Why the engine is the right tool
-- Heterogeneous, correlated fields of N contestants priced exactly at
-  every position: the incentive VECTOR for the whole field in one
+- Heterogeneous, correlated fields of N contestants priced at every
+  position to about 1e-8: the incentive VECTOR for the whole field in one
   pass, not a symmetric closed form.
 - Handicaps are the inversion: offsets that hit a target share vector
   are abilities_from_race at those shares (the same operation as
@@ -164,9 +173,13 @@ What the iteration adds.
    167 for the same purse, keeps all 24 in, equalises effort across
    terciles and pays them almost equally. The mechanism is the
    identity: with all predictive means equal the tie densities are
-   maximal, and per-round effort is 4.13 at t = 0 and 5.45 at the end,
-   the ratio being sqrt(1 + v) -- the density of the symmetric field
-   sharpening as the belief does. This is the symmetric-contest
+   maximal, and per-round effort is kappa c(w) / sqrt(1 + v_t) with
+   c(wta) = E[max of 24 normals] = 1.94767: 4.13 at t = 0 (v = 1) and
+   5.45 at t = 45, where the tracker's v_45 = 0.151 gives 5.4466. Effort
+   is INVERSELY proportional to the predictive sd sqrt(1 + v); it rises
+   because v falls, so the end/start ratio is
+   sqrt((1 + v_0) / (1 + v_45)) = 1.318 -- the density of the symmetric
+   field sharpening as the belief does. This is the symmetric-contest
    optimum of the classics, manufactured from a heterogeneous field by
    the rating.
 4. THE DIAL HAS A PRICE. lam = 1 pays the strong tercile 16 of 50,
@@ -179,9 +192,11 @@ What the iteration adds.
 Caveats beyond the myopia already stated. The one-shot rows are
 damped best response to a 1e-4 tolerance, not a proof of equilibrium.
 Two fields, no error bars; the ordering of schedules is not close
-enough for that to matter, the exact numbers are. Quitting is
+enough for that to matter, the precise numbers are. Quitting is
 irrevocable and myopic. The tracker runs with drift = 0, so belief
-variance falls as 1/(t + 1); a positive drift would keep some hope
+variance falls monotonically (to 0.151 by round 45 in the 24-player
+field; slower than the 1/(t + 1) of unit-noise Gaussian observations);
+a positive drift would keep some hope
 alive under every schedule and shrink the surprise rule's advantage.
 Nobody sandbags, and under lam > 0 they would.
 
@@ -189,7 +204,7 @@ Next if pursued: (a) let contestants invest in ability across rounds
 and find the lam that maximises long-run effort; (b) a
 sandbagging-proof surprise rule (pay on the residual against a rating
 frozen k rounds back, or against the market); (c) solve the designer's
-per-round problem with the exact incentive Jacobian instead of a grid.
+per-round problem with the incentive Jacobian instead of a grid.
 
 ## exp2_investment: the micromanager's problem (2026-09-24)
 Reframed by Peter: the designer is a micromanager who pays some number
@@ -203,8 +218,8 @@ So the objective is not total effort. It is the quality of the pool
 the platform can draw on, -E[min_i X_i] over the active field (the
 best forecast on offer), and its ROBUSTNESS: the same quantity with
 the most valuable member deleted. The gap is exposure, the largest
-deletion value, a cavity object. Both are computed exactly on a
-lattice from the true performance means. Ability is now a stock:
+deletion value, a cavity object. Both are computed numerically on a
+4001-point lattice from the true performance means. Ability is now a stock:
 each round a contestant also chooses a permanent improvement u_i,
 valued by the steady-state rule that a handicap lam claws back lam of
 any gain once the rating catches up, and a handicap LAGGED k rounds
@@ -215,17 +230,21 @@ positive so beliefs can follow moving abilities.
 ### Martin's fluctuation-dissipation identity
 For X_i = mu_i + s_i eps_i with Gaussian eps, Stein's lemma gives
 
-    d E[prize_i] / d mu_i = E[prize_i eps_i] / s_i = Cov(prize_i, eps_i) / s_i.
+    d E[prize_i] / d mu_i = E[prize_i eps_i] / s_i = Cov(prize_i, eps_i) / s_i,
 
+and under min-wins the incentive is minus this,
+incentive_i = Cov(prize_i, -eps_i) / s_i: payout co-moving with LOW
+noise, i.e. good luck.
 A contestant's marginal incentive is how much their payout co-moves
-with their own luck, per unit of luck. Verified against the exact
+with their own luck, per unit of luck. Verified against the engine's
 lattice incentives by Monte Carlo on the exp1 field with top-3 prizes:
 0.1585 vs 0.1577 +- 0.0005 for the favourite, 0.0014 vs 0.0014 for the
 tail-ender, totals 1.169 vs 1.167; heteroscedastic totals 1.166 vs
-1.165. (Min-wins flips the sign.) This is the response = covariance
+1.165 (incentives as defined above, i.e. with the min-wins sign). This is the response = covariance
 identity of the REINFORCE chapter (IDEAS.md), with prize as the
 observable and the contestant's own noise as the conjugate variable.
-The engine computes the covariance exactly instead of sampling it.
+The engine computes the covariance by lattice quadrature and a finite
+difference instead of sampling it.
 
 Consequences.
 - TOTAL incentive of a schedule = E[ sum_i prize_i eps_i ] = the
@@ -248,8 +267,10 @@ Consequences.
   1.124 even on the heterogeneous field; the 14 percent top-3 edge
   is an equilibrium effect -- winner-take-all makes the strong pull
   away, which kills the tie densities that pay).
-- Per-round effort under lam = 1 is kappa c(w) / sqrt(1 + v), which is
-  the sqrt(1 + v) sharpening measured in exp1.
+- Per-round effort under lam = 1 is kappa c(w) / sqrt(1 + v): inversely
+  proportional to the predictive sd, the 1/sqrt(1 + v) sharpening
+  measured in exp1 (checked: 24-player winner-take-all total incentive
+  1.94767408, 1.37721355, 0.97383704 at 1 + v = 1, 2, 4).
 
 ### Theory 2: what pays improvement
 A permanent gain delta earns inc_i delta per round while it is not
@@ -282,34 +303,47 @@ quality at every lam, and the ordering on "best" should flip as lam
 rises.
 
 ### Results (T = 80, N = 24, three fields, kappa_u = 0.01, H = 20,
-### tracker drift 0.05; results.json)
+### tracker drift 0.05; runs.jsonl run 2026-10-01T19:58:15Z)
+Corrected 2026-10-01 after review. The first version (results.json,
+kept frozen) valued investment over R = min(T - t, H) rounds, a phantom
+round after the last (a T = 1 contest invested 0.0046 per tercile); the
+rerun uses R = min(T - t - 1, H). Every number below moved by at most
+0.4 and no ordering changed. The first version's "exposure" column was
+also the CHANGE in exposure from round 0, not the deletion value; both
+are now reported. Tables: `python exp2_investment/tables.py`.
+
 Columns: cumulative over 80 rounds. "best" is the improvement in the
 quality of the best forecast on offer, -E[min X] over the active
 field, relative to the round-0 field at zero effort; "robust_m" the
-same after greedily deleting the m most valuable members; exposure
-is best - robust_1. Ability gain is the sum of permanent improvement
-over the strong / mid / weak talent terciles.
+same after greedily deleting the m most valuable members. expo_abs is
+the absolute largest deletion value, sum over rounds of
+-E[min X] minus the same with the most valuable member deleted; it is
+33.3 even for an unchanging field (round-0 gap 0.416 per round, mean
+over the three fields). expo_chg = best - robust_1 = expo_abs minus
+that baseline, the exposure CREATED by the schedule. Ability gain is
+the sum of permanent improvement over the strong / mid / weak talent
+terciles.
 
-    schedule | lam | lag   effort  improve   best  robust1  exposure  final n   ability gain (S / M / W)
-    wta      | 0   | 0       138     460    138.2    60.4     77.7      3.0     7.4  0.9  0.3
-    wta      | .25 | 0       216     621    132.4    54.0     78.5      7.0     7.8  1.7  0.4
-    wta      | .5  | 0       327     748     95.0    45.5     49.4     19.3     5.8  2.8  1.2
-    wta      | .75 | 0       378     622     41.1    30.6     10.4     24       2.4  1.8  1.3
-    wta      | 1   | 0       386     386     16.1    16.1      0.0     24       0    0    0
-    wta      | 1   | 5       316     515     38.0    31.4      6.5     13.7     2.6  1.6  0.9
-    wta      | 1   | 15      261     713     95.1    68.2     26.9      8.0     8.7  2.7  0.5
-    top3     | 0   | 0       204     711     86.4    65.7     20.8     10.3     9.0  2.9  0.4
-    top3     | .25 | 0       258     746     75.6    52.1     23.5     16.0     7.0  3.3  1.2
-    top3     | .5  | 0       302     693     54.8    38.9     15.9     23.0     4.5  2.8  1.6
-    top3     | .75 | 0       326     535     31.0    25.5      5.5     24       2.0  1.6  1.3
-    top3     | 1   | 0       331     331     13.8    13.8      0.0     24       0    0    0
-    top3     | 1   | 5       288     469     25.7    23.4      2.3     18.3     1.9  1.8  1.0
-    top3     | 1   | 15      257     722     57.4    49.7      7.7     14.0     6.7  4.3  0.7
-    geom .7  | 0   | 0       193     688     52.2    44.5      7.7     18.0     6.4  3.6  1.5
-    geom .7  | .25 | 0       218     639     45.4    37.0      8.4     21.0     4.9  3.2  1.6
-    geom .7  | .5  | 0       245     563     35.0    28.5      6.4     24       3.2  2.4  1.7
-    geom .7  | 1   | 0       264     264     11.0    11.0      0.0     24       0    0    0
-    geom .7  | 1   | 15      226     653     35.3    33.0      2.3     20.7     4.2  3.8  2.3
+    schedule | lam | lag   effort  improve   best  robust1  expo_abs  expo_chg  final n   ability gain (S / M / W)
+    wta      | 0   | 0       138     459    137.9    60.2    111.0     77.7      3.0     7.4  0.9  0.3
+    wta      | .25 | 0       216     621    132.2    53.8    111.6     78.3      7.3     7.7  1.7  0.4
+    wta      | .5  | 0       327     747     94.7    45.5     82.6     49.3     19.3     5.7  2.7  1.2
+    wta      | .75 | 0       378     621     41.0    30.6     43.7     10.4     24       2.4  1.8  1.3
+    wta      | 1   | 0       386     386     16.1    16.1     33.3      0.0     24       0    0    0
+    wta      | 1   | 5       316     515     37.9    31.4     39.8      6.5     13.7     2.6  1.6  0.9
+    wta      | 1   | 15      261     712     95.0    68.0     60.2     26.9      8.0     8.6  2.7  0.5
+    top3     | 0   | 0       204     710     86.2    65.5     54.0     20.7     10.3     8.9  2.9  0.4
+    top3     | .25 | 0       258     744     75.4    52.0     56.7     23.5     16.0     6.9  3.3  1.2
+    top3     | .5  | 0       302     692     54.7    38.8     49.1     15.8     23.0     4.4  2.7  1.6
+    top3     | .75 | 0       326     535     30.9    25.4     38.8      5.5     24       1.9  1.6  1.2
+    top3     | 1   | 0       331     331     13.8    13.8     33.3      0.0     24       0    0    0
+    top3     | 1   | 5       288     469     25.7    23.4     35.5      2.3     18.3     1.9  1.7  1.0
+    top3     | 1   | 15      257     721     57.3    49.6     41.0      7.7     14.0     6.6  4.3  0.7
+    geom .7  | 0   | 0       193     687     52.1    44.4     41.0      7.7     18.0     6.3  3.6  1.5
+    geom .7  | .25 | 0       218     638     45.3    36.9     41.6      8.4     21.0     4.8  3.1  1.5
+    geom .7  | .5  | 0       245     562     34.9    28.5     39.7      6.4     24       3.1  2.3  1.6
+    geom .7  | 1   | 0       264     264     11.0    11.0     33.3      0.0     24       0    0    0
+    geom .7  | 1   | 15      226     651     35.3    33.0     35.6      2.3     20.7     4.1  3.8  2.3
     (deeper deletions and lag = 30 rows in the table after the reading.)
 
 Reading it.
@@ -323,53 +357,57 @@ Reading it.
 2. WINNER-TAKE-ALL BUYS THE BEST FORECAST AND NOTHING ELSE. best =
    138, the top of the grid, with the strong tercile gaining 7.4 sd
    of ability -- concentrated in the one to three players still
-   competing at round 80. Exposure 78: more than half the quality
-   evaporates with one departure, and the pool is three deep.
+   competing at round 80. One departure removes 111 of absolute
+   quality (expo_abs), of which 78 is exposure the schedule created: more than half of the
+   138 IMPROVEMENT in the best forecast rests on one member, and the
+   pool is three deep.
    Prediction (i) confirmed on the mechanism, wrong on robust_1: the
    survivors ALL invested, so deleting one of three still leaves a
    good forecaster. The single-deletion measure is too kind to a
    three-player pool; hence the m = 2, 3 rerun.
 3. THREE PRIZES ARE THE ROBUST STEEP SCHEDULE. top-3 with no
    handicap: best 86 (62 percent of the superstar's), robust_1 66
-   (the best of any lam = 0 row), exposure 21 (a quarter of winner-
-   take-all's), ten players left, and the largest total improvement
-   volume of any un-handicapped schedule (711). Heterogeneity is
+   (the best of any lam = 0 row), absolute exposure 54 (half of
+   winner-take-all's 111; created exposure 21, a quarter of its 78),
+   ten players left, and the largest total improvement volume of any
+   un-handicapped schedule (710). Heterogeneity is
    doing the work the theory said it would: the second and third
    steps keep the mid tercile's tie densities alive long enough for
    it to invest (2.9 sd against 0.9 under winner-take-all).
 4. THE PATENT LAG IS THE RIGHT DIAL. Winner-take-all on surprise with
-   a 15-round lag: best 95, robust_1 68 (the top of the grid),
-   exposure 27, eight players. It pays improvement for exactly 15
-   rounds and then takes it back, which is enough to make the strong
-   invest 8.7 sd while the equalised race keeps the mid tercile
+   a 15-round lag: best 95, robust_1 68 (the top of this table),
+   absolute exposure 60 (created 27), eight players. It pays
+   improvement for exactly 15 rounds and then takes it back, which
+   is enough to make the strong invest 8.6 sd while the equalised race keeps the mid tercile
    working. Lag 5 is too short a patent: improvement 515 and the
    leader's transient advantage still discourages (13.7 players).
    Longer lags in the rerun.
 5. FLAT SCHEDULES BUY BREADTH, NOT QUALITY. geometric .7 spreads the
-   ability gain across all terciles (6.4 / 3.6 / 1.5, and 4.2 / 3.8 /
+   ability gain across all terciles (6.3 / 3.6 / 1.5, and 4.1 / 3.8 /
    2.3 with lag 15) with 18-21 players, at a third of the best
    quality. If the micromanager combines forecasts rather than picks
    one, this is the row to look at; that objective is not computed
    here.
 
-### Deeper deletions and longer patents (same runs; rerun with M_DEL = 3, lag 30 added)
+### Deeper deletions and longer patents (same run)
 
     schedule | lam | lag    best  robust1 robust2 robust3  improve  final n   ability gain (S / M / W)
-    wta      | 0   | 0     138.2   60.4    11.0   (empty)    460      3.0     7.4  0.9  0.3
-    wta      | .25 | 0     132.4   54.0    39.6    28.7      621      7.0     7.8  1.7  0.4
-    wta      | .5  | 0      95.0   45.5    41.2    37.7      748     19.3     5.8  2.8  1.2
-    wta      | 1   | 15     95.1   68.2    59.3    52.2      713      8.0     8.7  2.7  0.5
-    wta      | 1   | 30    156.7   77.3    58.4    41.8      679      6.3    10.8  1.5  0.3
-    top3     | 0   | 0      86.4   65.7    54.1    45.8      711     10.3     9.0  2.9  0.4
-    top3     | .25 | 0      75.6   52.1    46.2    42.3      746     16.0     7.0  3.3  1.2
-    top3     | 1   | 15     57.4   49.7    46.9    44.7      722     14.0     6.7  4.3  0.7
-    top3     | 1   | 30     80.7   60.9    54.8    50.4      806     12.7     8.9  4.9  0.5
-    geom .7  | 0   | 0      52.2   44.5    41.5    38.6      688     18.0     6.4  3.6  1.5
-    geom .7  | 1   | 30     46.9   42.4    40.5    38.8      743     20.0     5.8  4.4  2.3
+    wta      | 0   | 0     137.9   60.2    10.9   (empty)    459      3.0     7.4  0.9  0.3
+    wta      | .25 | 0     132.2   53.8    39.5    28.6      621      7.3     7.7  1.7  0.4
+    wta      | .5  | 0      94.7   45.5    41.1    37.7      747     19.3     5.7  2.7  1.2
+    wta      | 1   | 15     95.0   68.0    59.2    52.0      712      8.0     8.6  2.7  0.5
+    wta      | 1   | 30    156.3   77.0    58.1    41.5      677      6.3    10.6  1.4  0.3
+    top3     | 0   | 0      86.2   65.5    53.9    45.7      710     10.3     8.9  2.9  0.4
+    top3     | .25 | 0      75.4   52.0    46.1    42.2      744     16.0     6.9  3.3  1.2
+    top3     | 1   | 15     57.3   49.6    46.9    44.6      721     14.0     6.6  4.3  0.7
+    top3     | 1   | 30     80.5   60.7    54.6    50.3      804     12.7     8.8  4.8  0.5
+    geom .7  | 0   | 0      52.1   44.4    41.4    38.5      687     18.0     6.3  3.6  1.5
+    geom .7  | 1   | 30     46.9   42.3    40.4    38.7      742     20.0     5.8  4.4  2.2
     (every lam = 1, lag = 0 row: robust_m = best, nobody invests;
     "(empty)" = the pool had three members and deleting three leaves
     no forecaster at all -- the floor value is arbitrary, the
-    emptiness is the point.)
+    emptiness is the point. Absolute one-deletion exposure of the
+    lag-30 rows: wta 112.6, top3 53.1, geom .7 37.8.)
 
 6. THE SUPERSTAR POOL IS THREE DEEP AND THEN IT IS NOTHING. Winner-
    take-all with no handicap: robust_2 = 11, robust_3 = empty. Two
@@ -381,20 +419,21 @@ Reading it.
    lag = infinity IS lam = 0: the lag interpolates between the pure
    surprise rule and no handicap along a DIFFERENT path from lam, and
    a better one. Winner-take-all with lag 30 beats winner-take-all
-   with no handicap on best (157 vs 138) AND robust_1 (77 vs 60) AND
-   players (6.3 vs 3): thirty rounds of near-equality keep more
-   players investing for longer, which produces a stronger eventual
-   leader (10.8 sd) with a deeper bench behind. Every lam > 0 row is
+   with no handicap on best (156 vs 138) AND robust_1 (77 vs 60) AND
+   players (6.3 vs 3), at the same absolute exposure (113 vs 111):
+   thirty rounds of near-equality keep more players investing for
+   longer, which produces a stronger eventual leader (10.6 sd) with a
+   deeper bench behind. Every lam > 0 row is
    dominated by some lag row on quality at equal or better robustness.
 8. THE PATENT LENGTH SETS THE DEPTH OF THE BENCH. For winner-take-all,
    lag 15 maximises robust_2 and robust_3 (59, 52); lag 30 maximises
-   best and robust_1 (157, 77) at the cost of robust_3 (42). For
+   best and robust_1 (156, 77) at the cost of robust_3 (42). For
    top-3, lag 30 is the all-rounder: the most total improvement in
-   the grid (806), robust_3 = 50, 12.7 players, the mid tercile
-   gaining 4.9 sd -- the largest mid-tercile gain anywhere.
+   the grid (804), robust_3 = 50, 12.7 players, the mid tercile
+   gaining 4.8 sd -- the largest mid-tercile gain anywhere.
 9. THE ANSWER DEPENDS ONLY ON HOW DEEP A BENCH YOU NEED.
    - You consume one forecast and can replace a superstar: winner-
-     take-all on surprise, lag 30. best 157.
+     take-all on surprise, lag 30. best 156.
    - You need two or three you can trust: winner-take-all on surprise,
      lag 15 (robust_3 = 52) or top-3 on surprise, lag 30 (robust_3 =
      50 with 60 percent more players and the most total improvement).
@@ -432,8 +471,13 @@ Closed forms and their checks live in theory/THEORY.md and
 theory/verify_theory.py. Headlines: total incentive of any schedule is
 the prize vector dotted with the expected luck of each finishing
 position (Stein), which is the normal order statistics in a symmetric
-field; the symmetric Nash effort is kappa (w . E[Z]) / N exactly; two
-unequal players exert identical effort phi(d/sqrt2)/sqrt2; a second
+field; the symmetric Nash effort is kappa (w . E[Z]) / N in closed form; two
+unequal players exert identical effort kappa phi(d/sqrt2)/sqrt2 EACH
+(incentive phi(d/sqrt2)/sqrt2 = 0.2821 at d = 0; total effort
+2 kappa x that = 1.69257 at kappa = 3); over the model's ordered prize
+vectors the static optimum is the best equal top-k split, while in
+equilibrium on the seed-0 field top-2 equal beats winner-take-all by
+28.5 percent; a second
 prize helps iff the runner-up is luckier than the winner, threshold
 d* = 2.17 noise units for one leader over two chasers and lower in
 equilibrium; and the discouragement round solves a quadratic in the
