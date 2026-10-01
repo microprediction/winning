@@ -1,6 +1,8 @@
 # Analytic results for Gaussian rank-order contests
-(2026-09-24. Every numbered result is checked in `verify_theory.py`;
-numbers quoted are from `verify_results.json`. Peter asked for
+(2026-09-24, corrected 2026-10-01 after review. Every numbered result
+is checked in `verify_theory.py`; numbers quoted are from its latest
+line in the append-only `verify_runs.jsonl` (`verify_results.json` is
+the first version's frozen output). Peter asked for
 "analytic game theory results"; the classics are the foil, see
 `../NOTES.md`.)
 
@@ -26,8 +28,12 @@ A contestant's marginal incentive is how much their payout co-moves
 with their own luck, per unit of luck. This is the response =
 covariance identity of the fluctuation-dissipation chapter (IDEAS.md),
 with the prize as the observable and the contestant's own noise as the
-conjugate field. The race engine computes the left side exactly; the
-right side is what Monte Carlo would estimate. Checked in exp2's notes
+conjugate field. The identity is exact; the race engine evaluates the
+left side NUMERICALLY, as a central difference (step H = 1e-4) of
+lattice rank probabilities (points = 257). Convergence check in
+`verify_theory.py`: over points 129..1025 and H <= 1e-4 the incentives
+agree with (1025, 1e-5) to 5.2e-9. The right side is what Monte Carlo
+would estimate. Checked in exp2's notes
 (0.1585 vs 0.1577 +- 0.0005 for a favourite; totals 1.169 vs 1.167).
 
 ## R1. Total incentive is linear in the prize vector
@@ -38,12 +44,19 @@ Summing R0 over contestants with unit noise,
 The total incentive of ANY schedule is the prize vector dotted with the
 expected luck of each finishing position. The coefficients `E[L_(k)]`
 depend on the abilities but not on the prizes, so for a designer
-maximising total effort at a fixed field the problem is a linear
-programme over the simplex, solved at a vertex:
+maximising total STATIC incentive at a fixed field the problem is a
+linear programme over the model's feasible set, the ORDERED unit-purse
+simplex `w_1 >= ... >= w_N >= 0, sum w = 1`. Its vertices are the
+equal top-k splits `(1/k, ..., 1/k, 0, ...)`, not single positions, so
+the static optimum is
 
-    pay only the position whose finisher is, on average, luckiest.
+    pay the top k equally, k maximising the prefix average
+    (E[L_(1)] + ... + E[L_(k)]) / k.
 
-By Stein each coefficient is also a sum of exact rank-probability
+(Over the unordered simplex the vertex would be "pay only the luckiest
+position", which is outside the model whenever that is not first.)
+
+By Stein each coefficient is also a sum of rank-probability
 derivatives, `E[L_(k)] = sum_i d P(rank_i = k) / d(-mu_i)`, which is how
 the engine evaluates it.
 
@@ -62,13 +75,14 @@ Consequences for a symmetric field:
   any cost function that makes effort increasing in the marginal
   incentive. Multiple prizes can only win through heterogeneity (R6).
 - Lazear-Rosen's `g(0)` is the N = 2 case: `E[Z_(1)] = 1/sqrt(pi)` and
-  each of two players faces half of it, `1/(2 sqrt(pi)) = 0.2821`, the
-  density of the noise difference at zero.
+  each of two players faces half of it, an INCENTIVE of
+  `1/(2 sqrt(pi)) = 0.2821`, the density of the noise difference at
+  zero.
 
 ## R3. Symmetric Nash equilibrium in closed form
 In a symmetric field all incentives are equal, so equal efforts shift
 every mean equally and leave the race unchanged. The symmetric Nash
-effort is therefore exact:
+effort is therefore given in closed form:
 
     e* = kappa * (w . E[Z]) / N,   total effort = kappa * (w . E[Z]).
 
@@ -76,7 +90,11 @@ Checked by damped best response at N = 24, kappa = 3: winner-take-all
 e* = 0.2435, top-3 (.5/.3/.2) 0.2091, geometric .7 0.1663, all matching
 to 1e-13 with zero spread across contestants. With belief variance v
 added to every runner the noise scale is `sqrt(1 + v)` and every
-coefficient scales by `1/sqrt(1 + v)`: the sharpening measured in exp1.
+coefficient, hence every effort, scales by `1/sqrt(1 + v)` (checked:
+the 24-player winner-take-all total incentive is 1.94767408, 1.37721355,
+0.97383704 at 1 + v = 1, 2, 4, each times sqrt(1 + v) = 1.94767408).
+Effort RISES over rounds because v falls: the sharpening measured in
+exp1.
 
 Participation: each player expects `1/N` of the purse, so the symmetric
 field stays whole iff `1/N >= c_part + e*^2 / (2 kappa)`.
@@ -87,36 +105,46 @@ tie density of the difference at zero,
 
     inc_1 = inc_2 = phi(d / sqrt 2) / sqrt 2,
 
-so the strong and the weak player exert IDENTICAL effort (the
-Lazear-Rosen result with additive noise), and total effort falls with
-the gap as a Gaussian: 0.2821, 0.2197, 0.1038, 0.0297 at d = 0, 1, 2, 3
-(engine and formula agree to 4 decimals). Equal efforts leave the gap
+so the strong and the weak player exert IDENTICAL effort
+`e_i = kappa inc_i` (the Lazear-Rosen result with additive noise), and
+effort falls with the gap as a Gaussian. The incentive is 0.2821,
+0.2197, 0.1038, 0.0297 at d = 0, 1, 2, 3 (engine and formula agree to
+better than 1e-8); at kappa = 3 that is effort 0.8463, 0.6591, 0.3113,
+0.0892 EACH and total effort `2 kappa inc` = 1.69257, 1.31817, 0.62266,
+0.17840. Equal efforts leave the gap
 unchanged, so this is also the equilibrium. Any handicap that closes
 the gap raises effort; full handicapping is effort-optimal at N = 2.
 
 ## R5. Unequal field: the static rule and the equilibrium disagree
-On exp1's 24-player field (abilities N(0,1)), the position-luck
+On exp1's 24-player field (abilities N(0,1), seed 0), the position-luck
 coefficients at zero effort are `1.271, 1.130, 0.970, 0.829, ...` --
-still decreasing, so the STATIC rule R1 says winner-take-all. But the
-equilibrium total effort by damped best response is
+decreasing, so their prefix averages `1.271, 1.201, 1.124, 1.050, ...`
+peak at k = 1 and the STATIC rule R1 says winner-take-all. But the
+equilibrium total effort by damped best response (kappa = 3) over the
+feasible vertices is
 
-    pay 1st only   2.472
-    pay 2nd only   3.189
-    pay 3rd only   2.907
-    top-3 .5/.3/.2 3.146
+    top-1 (winner-take-all)  2.472
+    top-2 equal              3.176
+    top-3 equal              3.165
+    top-4 equal              3.029
+    top-5 equal              2.863
+    top-3 .5/.3/.2           3.146
 
-Paying second place alone buys 29 percent more equilibrium effort than
-winner-take-all. The static coefficients are evaluated at zero effort;
-in equilibrium under winner-take-all the favourite's effort widens the
+Splitting the purse equally between the first two places buys 28.5
+percent more equilibrium effort than winner-take-all; top-3 schedules
+are within 1 percent of it. (Best of the top-1..8 vertices and the
+.5/.3/.2 schedule; the equilibrium objective is not linear in w, so a
+non-vertex ordered schedule could do slightly better, and that search
+is not done.) The static coefficients are evaluated at zero effort; in
+equilibrium under winner-take-all the favourite's effort widens the
 gap, which kills the tie densities at the top boundary, including its
-own. Paying second place puts the step where the mid-field is dense and
-leaves the favourite -- who finishes first without trying -- out of the
-money. That is the mechanism of R6 in a large field.
+own. A second prize puts a step where the mid-field is dense. That is
+the mechanism of R6 in a large field.
 
-Caveat that matters: "pay second only" is only an equilibrium because
-effort is constrained non-negative. A favourite who could sandbag would
-aim for second. Top-3 gets within 1.4 percent of it while still paying
-the winner, which is the practical reading.
+Foil outside the model: "pay second only", `w = e_2`, violates
+`w_1 >= w_2` and is not a schedule of this game. Reported only for
+comparison (3.189, within 0.4 percent of top-2 equal); it would also
+invite the favourite to sandbag for second if effort could be negative.
 
 ## R6. Szymanski-Valletti in Gaussian form, with a threshold
 Three players: a leader at `-d`, two at 0. Prizes `(1 - s, s, 0)`. By R1
@@ -173,9 +201,10 @@ With steady-state Kalman gain g on the rating:
 
 ## What is proved and what is measured
 R0-R4 and R8 are exact statements about the Gaussian model, verified
-numerically. R5-R7 are exact computations on particular fields (the
-threshold d* = 2.170 is exact for the three-player configuration; the
-equilibrium rows are best-response fixed points to 1e-6). Nothing here
+numerically. R5-R7 are numerical computations on particular fields:
+lattice rank probabilities and finite-difference incentives (converged
+to about 5e-9, see R0), a root-find for the threshold d* = 2.170 of the
+three-player configuration, and best-response fixed points to 1e-6. Nothing here
 covers correlated noise, though R0 and R1 go through unchanged with
 `Cov(prize_i, eps_i)` replaced by the covariance against the runner's
 own noise component, and the engine's factor races price the
