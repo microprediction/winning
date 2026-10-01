@@ -325,7 +325,11 @@ n=100,000 ACCURACY figures below (pruning error floors, the full-field
 references, the screened Sobol 2^15 max abs) therefore cannot be
 re-derived from the repo until the truth is regenerated. The engine
 identity and the timings need no truth and were re-run at the review
-(`runs/screen.csv`).
+from a checkout without the arrays (`runs/screen.csv`, 2026-10-01, a
+machine under load): n=100,000 at 2^9 nodes, engine 433 ms/pass,
+screened 17.7 ms/pass (24x), 1,663 contenders per node, max |screened -
+engine| 3.3e-10; screened 2^13 at 17.1 ms/pass. n=1,000: 6.5e-14, 146
+contenders. Both match the figures below.
 
 ## Verdicts
 
