@@ -32,7 +32,20 @@
   evidence used to rise monotonically as the scale fell and put its
   argmax on the grid edge at 0.05. It now peaks at **0.8**, in the
   interior. A non-positive `lengths_scale` is refused, since `log(s)`
-  is in the answer.
+  is in the answer -- and so are `nan` and `inf`, which slipped past
+  `s <= 0` and returned NaN evidence and NaN posterior means.
+
+  The callable-transform path broke the same invariant. Margins are
+  lengths behind the winner, so the winner's coordinate is pinned and
+  the determinant is `s^(n-1) * prod_{j != winner} g'(L_j)`; the code
+  summed `log g'` over all `n`, the pinned one included.
+  `transform=lambda x: 2*x` at scale 1 and `lengths_scale=2` are the
+  same observation, and returned identical posteriors but evidence
+  -9.77394765 against -10.46709483 -- exactly `log(2)` apart. They now
+  agree to 1e-8, on the individual and the team node. The asinh path is
+  unchanged whenever the winner's margin is zero, since its
+  `g'(0) = 1`. The ratings layer has no R, browser, Julia or Rust port,
+  so there is nothing to bring into parity.
 
 - `Tree.from_linkage` checks the premise it was built on (#133). Its
   docstring says the cophenetic increments are "nonnegative by linkage

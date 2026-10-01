@@ -108,3 +108,64 @@ def test_a_non_positive_scale_is_refused():
     for bad in (0.0, -1.0):
         with pytest.raises(ValueError, match="lengths_scale"):
             update_margins_full(M0, S0, MARGINS, lengths_scale=bad)
+
+
+def test_a_non_finite_scale_is_refused():
+    """nan and inf pass `ls <= 0` and returned NaN evidence and NaN
+    posterior means; both are refused with the positivity check."""
+    for bad in (np.nan, np.inf, -np.inf):
+        with pytest.raises(ValueError, match="lengths_scale"):
+            update_margins_full(M0, S0, MARGINS, lengths_scale=bad)
+
+
+def test_a_linear_callable_costs_what_the_same_scale_costs():
+    """The reviewer's reproducer (#95). `transform=lambda x: 2*x` at
+    scale 1 and `lengths_scale=2` are the SAME observation map, P(2L),
+    so posterior AND evidence must agree. Summing the callable's
+    derivative over all n coordinates, the winner's pinned zero
+    included, overcharged exactly log(2)."""
+    a = update_margins_full(M0, S0, MARGINS, lengths_scale=1.0,
+                            transform=lambda x: 2 * x)
+    b = update_margins_full(M0, S0, MARGINS, lengths_scale=2.0,
+                            transform=None)
+    np.testing.assert_allclose(a[0], b[0], atol=1e-12)
+    np.testing.assert_allclose(a[1], b[1], atol=1e-12)
+    assert a[-1] == pytest.approx(b[-1], abs=1e-8)
+
+
+@pytest.mark.parametrize("n", [2, 3, 5])
+@pytest.mark.parametrize("k", [0.5, 3.0])
+def test_every_linear_parameterisation_agrees(n, k):
+    """The same invariant on every path: a callable k*x, a scale k, and
+    a callable k*x combined with a scale s are each the observation
+    P(k s L) and must return the same evidence -- with the winner
+    listed anywhere, since the pinned coordinate is not position 0."""
+    rng = np.random.default_rng(10 * n + int(k))
+    margins = np.abs(rng.normal(size=n))
+    margins[n // 2] = 0.0
+    m, S = np.zeros(n), np.eye(n)
+    by_scale = update_margins_full(m, S, margins, lengths_scale=k)[-1]
+    by_call = update_margins_full(m, S, margins, lengths_scale=1.0,
+                                  transform=lambda x: k * x)[-1]
+    assert by_call == pytest.approx(by_scale, abs=1e-8)
+    for s in (0.25, 4.0):
+        both = update_margins_full(m, S, margins, lengths_scale=s,
+                                   transform=lambda x: k * x)[-1]
+        alone = update_margins_full(m, S, margins, lengths_scale=k * s)[-1]
+        assert both == pytest.approx(alone, abs=1e-8)
+
+
+def test_the_team_node_obeys_the_same_invariant():
+    """teams.update_team_margins_full shares the observation, so it
+    shares the fix."""
+    from winning.ratings.teams import update_team_margins_full
+    A = np.array([[1.0, 1.0, 0.0, 0.0, 0.0],
+                  [0.0, 0.0, 1.0, 0.0, 0.0],
+                  [0.0, 0.0, 0.0, 1.0, 1.0]])
+    m, S = np.zeros(5), np.eye(5)
+    margins = np.array([1.5, 0.0, 3.0])
+    a = update_team_margins_full(m, S, A, margins, lengths_scale=1.0,
+                                 transform=lambda x: 2 * x)
+    b = update_team_margins_full(m, S, A, margins, lengths_scale=2.0)
+    np.testing.assert_allclose(a[0], b[0], atol=1e-12)
+    assert a[-1] == pytest.approx(b[-1], abs=1e-8)
