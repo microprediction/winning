@@ -28,7 +28,10 @@
   The R constructor `tree_from_linkage`, and `tree_from_hclust` through
   it, still clipped -- the same inverted linkage errored in Python and
   priced in R. It now refuses with the same message, node and size,
-  pinned by one three-runner fixture tested in both languages.
+  pinned by one three-runner fixture tested in both languages. The
+  browser's `treeFromLinkage` clipped too -- returning `D = [1, 1, 0.5]`
+  for a unit-variance model -- and now refuses the same way, checked in
+  `parity/check_js_api.mjs`.
 
 - The browser's Mendell-Elston approximation depended on the contestant
   LABELS (#287). Sequential moment matching conditions one coordinate
