@@ -350,7 +350,11 @@ PORT_ONLY = {
     # browser-only: a reduced covariance fitter for the demo pages (blocks
     # omitted for latency, so NOT the package's fit_covariance), and the
     # dependency-free node family the ports use where python has Sobol
-    "js": {"fitGrammar", "haltonNormalNodes"},
+    # asFactorNodes is a browser-only guard: python gets the same
+    # refusal free from numpy, which will not build a float array from
+    # ragged rows and fails the matmul on a wrong rank (#290). Its
+    # companion is named asWeights, matching python's as_weights.
+    "js": {"fitGrammar", "haltonNormalNodes", "asFactorNodes"},
 }
 
 

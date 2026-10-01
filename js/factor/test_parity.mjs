@@ -83,4 +83,50 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   }
 }
 
+/* --- W and c*W are the same law (#281) ------------------------------
+   The forward normalises its accumulated shares, so `p` was already
+   invariant. It returns the own-slopes UNNORMALISED, and the inverse
+   divides those by the normalised probabilities, so the Newton
+   derivative carried the factor c and ONLY the inverse moved: a
+   self-generated target repriced 0.16 away after fifty iterations at
+   c = 0.1. Checked here across twelve orders of magnitude, because a
+   rescaling is a spelling of the same law and a custom quadrature or
+   importance rule need not arrive normalised. */
+{
+  const Vi = [[0.8], [-0.3], [0.1], [0.5]];
+  const Di = [0.7, 1.1, 0.8, 1.2];
+  const Fi = [[-1], [1]];
+  const Wi = [0.5, 0.5];
+  const mu0 = [-0.6, -0.1, 0.2, 0.5];
+  const target = winProbabilitiesFactor(mu0, Vi, Di, Fi, Wi, { points: 1001 }).p;
+
+  let worstFwd = 0, worstInv = 0;
+  for (const c of [1e-6, 1e-3, 0.1, 1, 10, 1e3, 1e6]) {
+    const Wc = Wi.map((w) => c * w);
+    const fwd = winProbabilitiesFactor(mu0, Vi, Di, Fi, Wc, { points: 1001 }).p;
+    worstFwd = Math.max(worstFwd, ...fwd.map((x, i) => Math.abs(x - target[i])));
+    const mu2 = abilitiesFromProbabilitiesFactor(target, Vi, Di, Fi, Wc,
+                                                 { points: 501, nIter: 50 });
+    const rep = winProbabilitiesFactor(mu2, Vi, Di, Fi, Wi, { points: 1001 }).p;
+    worstInv = Math.max(worstInv, ...rep.map((x, i) => Math.abs(x - target[i])));
+  }
+  check("forward is invariant to W -> cW", [worstFwd], [0], 1e-12);
+  // the inverse's own convergence floor is ~2.5e-7; what must not
+  // happen is that rescaling MOVES it, and at c = 0.1 it was 0.16
+  check("inverse reprices to target at every W scale", [worstInv], [0], 1e-6);
+
+  // and the contract refuses what it cannot normalise, instead of
+  // returning a normalised, plausible, wrong answer
+  const refuses = (W, why) => {
+    let threw = false;
+    try { winProbabilitiesFactor(mu0, Vi, Di, Fi, W, { points: 257 }); }
+    catch (e) { threw = true; }
+    check(`refuses ${why}`, [threw ? 1 : 0], [1], 0.5);
+  };
+  refuses([0.5, -0.5], "a negative weight");
+  refuses([0, 0], "an all-zero W");
+  refuses([0.5, NaN], "a non-finite weight");
+  refuses([0.5, 0.3, 0.2], "a W of the wrong length");
+}
+
 process.exit(failures ? 1 : 0);

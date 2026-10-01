@@ -239,12 +239,51 @@ function condMeans(mu, V, F) {
 }
 
 /* forward pass: shares (and optionally slopes, pairwise densities, deletions) */
+/* The factor weights describe a LAW, so W and c*W are the same law and
+   must give the same answer. The forward already did: it normalises its
+   accumulated shares, so `p` was invariant to 1e-16 under any positive
+   rescaling. But it returns the own-slopes UNNORMALISED, and the
+   inverse divides those by the normalised probabilities -- so the
+   Newton derivative carried a factor of c, and only the inverse moved.
+   A self-generated target repriced 0.16 away after fifty iterations at
+   c = 0.1, which is a calibration failure with no error (#281).
+
+   python has the same helper-level mismatch and is saved by its front
+   door: `races._setup` puts W through `winning.shapes.as_weights`. This
+   standalone module has no such boundary, so it grows one, with the
+   same contract -- finite, non-negative, positive total, normalised --
+   which also settles zero and signed weights rather than letting them
+   through to produce a normalised, plausible, wrong answer.
+
+   Deliberately NOT also scaling the slope by the forward total: python
+   does not, and a silent divergence between the ports is worse than
+   either behaviour. This makes the two agree. */
+export function asWeights(W, nNodes, where = "W") {
+  if (!Array.isArray(W) && !ArrayBuffer.isView(W))
+    throw new Error(`${where} must be an array of factor-node weights; got ${typeof W}`);
+  if (W.length !== nNodes)
+    throw new Error(`${where} must have one weight per factor node; got ${W.length} for ${nNodes}`);
+  let total = 0;
+  for (let i = 0; i < W.length; i++) {
+    const v = Number(W[i]);
+    if (!Number.isFinite(v))
+      throw new Error(`${where}[${i}] = ${W[i]} is not a finite weight`);
+    if (v < 0)
+      throw new Error(`${where}[${i}] = ${v} is a negative weight; a factor law has no negative mass`);
+    total += v;
+  }
+  if (!(total > 0))
+    throw new Error(`${where} must have a positive total; got ${total}`);
+  return Array.from(W, (v) => Number(v) / total);
+}
+
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   const points = opts.points || 501;
   const base = (opts.base && typeof opts.base === "object")
     ? opts.base : BASES[opts.base || "normal"];
   if (!base) throw new Error("unknown base: " + opts.base);
   const N = mu.length, Q = F.length;
+  W = asWeights(W, Q, "W");
   const sd = D.map(Math.sqrt);
   // gauge-fix matching the python reference: center each factor's
   // loadings across contestants (a common column cannot move an argmin)
@@ -338,6 +377,7 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
   const nIter = opts.nIter || 50, tol = opts.tol || 1e-6, points = opts.points || 501;
   const base = opts.base || "normal";
   const N = pTarget.length;
+  W = asWeights(W, F.length, "W");
   let psum = 0;
   for (const v of pTarget) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
   const p = pTarget.map((v) => v / psum);
