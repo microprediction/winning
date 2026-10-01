@@ -2,6 +2,7 @@
 // miniature), dense linear algebra for the in-browser grammar fit, and
 // a Monte Carlo sampler to race against.
 import { hermite1, interpClamped, solve, firstPrimes } from "./core.mjs";
+import { clusterIndex } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
@@ -262,8 +263,15 @@ export function structureCov(s) {
         C[i][j] = v + (i === j ? s.D[i] : 0);
       }
   } else if (s.kind === "Tree") {
+    // Labels are arbitrary comparable values: the pricing kernels remap
+    // them densely and this read them as node INDICES, so 10/20/30 sent
+    // every lookup past the end of `parent` -- an empty ancestor set,
+    // every shared factor silently gone -- and negative or string
+    // labels threw `anc[...] is not iterable` (#306). Same remapper as
+    // the kernels, imported rather than repeated.
+    const cluster = clusterIndex(s.cluster);
     const anc = [];
-    const nc = Math.max(...s.cluster) + 1;
+    const nc = Math.max(...cluster) + 1;
     for (let c = 0; c < nc; c++) {
       const a = new Set();
       let u = c;
@@ -273,8 +281,8 @@ export function structureCov(s) {
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++) {
         let v = 0;
-        for (const t of anc[s.cluster[i]])
-          if (anc[s.cluster[j]].has(t)) v += s.strength[t] ** 2;
+        for (const t of anc[cluster[i]])
+          if (anc[cluster[j]].has(t)) v += s.strength[t] ** 2;
         if (s.cluster[i] === s.cluster[j]) v += s.loading[i] * s.loading[j];
         C[i][j] = v + (i === j ? s.D[i] : 0);
       }
