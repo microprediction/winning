@@ -51,12 +51,17 @@ text, scored by a scalar logit per label, and closed by
     torch.softmax(logits, dim=-1)      # single-label
     torch.sigmoid(logits) + threshold  # multi-label
 
-Two things make it the right first target. The label set is chosen by
-the end user and is full of near-synonyms, so IIA fails by construction
-rather than by accident. And the label embeddings are already in hand,
-so the loadings `V` are a byproduct of the forward pass, not a fit: the
-race head is an inference-time swap on a frozen checkpoint. Exactness
-costs microseconds at this N. If the swap moves calibration or the
-synonym-split behaviour on a public zero-shot suite, that is the
-existence proof for the large-N product without paying its kernel bill
-first.
+Two things make it a cheap first test. User-chosen label sets often
+contain near-synonyms, where softmax's IIA (conditional on the logits; the
+uni-encoder can move logits when labels change) is most likely to bite.
+And contextual label embeddings give a candidate covariance kernel
+`K = E E^T` from the same forward pass; its rank-r eigenfactor (not `K`
+itself) is the loading `V`, with a shared fraction, `D` and the logit
+scale left to calibrate, so the swap runs on a frozen checkpoint but is a
+hypothesis, not a free byproduct. Cost on the pure-Python path is 1-36 ms
+per forward pass at N=3-50, rank 1-2, rising to 0.4-2 s for fields sharp
+enough to take the 8,192-node Sobol rule (ml-systems.md 1b,
+`gliclass_head_timing.json`). If the calibrated head moves NLL/ECE or the
+synonym behaviour on a public zero-shot suite, that is the existence proof
+for the large-N product without paying its kernel bill first; if not, the
+kernel hypothesis is the first suspect.
