@@ -1,5 +1,8 @@
 """Numerical checks of the analytic results in THEORY.md.
 
+Appends one JSON line per run to verify_runs.jsonl (append-only);
+verify_results.json is the frozen output of the first version (8bf6b7a).
+
 Model: X_i = mu_i - e_i + eps_i, eps iid N(0,1) (min-wins), prizes w_k
 by finishing position, effort cost e^2 / (2 kappa). Luck of the k-th
 finisher L_(k) = -eps of whoever finishes k-th.
@@ -9,7 +12,9 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
            "VECLIB_MAXIMUM_THREADS"):
     os.environ.setdefault(_v, "1")
 import json
+import subprocess
 import sys
+import time
 
 import numpy as np
 from scipy.stats import norm
@@ -42,7 +47,25 @@ def position_luck_mc(mu, M=400000):
     return -np.take_along_axis(eps, order, axis=1).mean(0)
 
 
-def nash(mu, w, kappa, iters=200, damp=0.5, tol=1e-6):
+def check_schedule(w):
+    """The model's prize schedules: w_1 >= ... >= w_N >= 0, unit purse."""
+    w = np.asarray(w, float)
+    assert np.all(w >= 0) and abs(w.sum() - 1) < 1e-12, w
+    assert np.all(np.diff(w) <= 1e-15), f"non-monotone prize vector {w}"
+    return w
+
+
+def top_k(n, k):
+    """Equal split over the top k: the vertices of the ordered unit-purse simplex."""
+    w = np.zeros(n); w[:k] = 1.0 / k
+    return w
+
+
+def nash(mu, w, kappa, iters=200, damp=0.5, tol=1e-6, foil=False):
+    """Damped best response. foil=True admits a prize vector outside the
+    model (non-monotone), reported only as a labelled foil."""
+    if not foil:
+        check_schedule(w)
     e = np.zeros(len(mu))
     for _ in range(iters):
         e_new = np.clip(kappa * incentives(mu - e, np.ones(len(mu)), w), 0, None)
@@ -51,6 +74,31 @@ def nash(mu, w, kappa, iters=200, damp=0.5, tol=1e-6):
         e = damp * e_new + (1 - damp) * e
     return e, False
 
+
+# ---- Numerics: the engine is a finite lattice (points) and the incentive a
+# central difference (H). Neither is exact; check convergence in both.
+import run as _run  # noqa: E402
+conv = []
+a_conv = np.sort(np.random.default_rng(0).normal(0, 1, 24))
+w_top3 = np.array([.5, .3, .2] + [0] * 21); w_wta = np.eye(24)[0]
+for P in (129, 257, 513, 1025):
+    for HH in (1e-3, 1e-4, 1e-5):
+        _run.POINTS, _run.H = P, HH
+        i_h = incentives(a_conv, np.ones(24), w_top3); i_s = incentives(np.zeros(24), np.ones(24), w_wta)
+        conv.append({"points": P, "H": HH, "hetero_top3_total": float(i_h.sum()), "hetero_top3_favourite": float(i_h[0]),
+                     "symmetric_wta_total": float(i_s.sum())})
+_run.POINTS, _run.H = 257, 1e-4
+ref = [c for c in conv if c["points"] == 1025 and c["H"] == 1e-5][0]
+spread = max(abs(c[k] - ref[k]) for c in conv if c["H"] <= 1e-4 for k in ("hetero_top3_total", "hetero_top3_favourite", "symmetric_wta_total"))
+print(f"numerics: max |incentive(points, H) - incentive(1025, 1e-5)| over points 129..1025, H <= 1e-4: {spread:.1e}", file=sys.stderr)
+# location-scale: symmetric-field incentives scale as 1/sqrt(D), D = 1 + v
+scal = {}
+for Dv in (1.0, 2.0, 4.0):
+    sdv = float(incentives(np.zeros(24), Dv * np.ones(24), w_wta).sum())
+    scal[f"D={Dv}"] = {"total_incentive": sdv, "times_sqrt_D": sdv * np.sqrt(Dv)}
+    print(f"numerics: symmetric N=24 wta, D = {Dv}: total incentive {sdv:.8f}, x sqrt(D) = {sdv * np.sqrt(Dv):.8f}", file=sys.stderr)
+out["numerics_convergence"] = {"grid": conv, "max_abs_diff_vs_1025_1e-5_for_H_le_1e-4": spread}
+out["numerics_scale_1_over_sqrt_D"] = scal
 
 # ---- R1/R2: total incentive = w . E[L_(k)]; symmetric field = normal order statistics
 N = 24
@@ -84,25 +132,45 @@ for d in [0.0, 1.0, 2.0, 3.0]:
     mu = np.array([0.0, d]); w = np.array([1.0, 0.0])
     inc = incentives(mu, np.ones(2), w)
     pred = norm.pdf(d / np.sqrt(2)) / np.sqrt(2)
-    res[f"gap={d}"] = {"incentive_strong": float(inc[0]), "incentive_weak": float(inc[1]), "predicted_both": float(pred)}
-    print(f"R4 N=2 gap {d}: incentives {inc.round(4)}, predicted {pred:.4f}", file=sys.stderr)
+    res[f"gap={d}"] = {"incentive_strong": float(inc[0]), "incentive_weak": float(inc[1]), "predicted_incentive_both": float(pred),
+                       "effort_each_kappa3": float(kappa * pred), "total_effort_kappa3": float(2 * kappa * pred)}
+    print(f"R4 N=2 gap {d}: incentives {inc.round(4)}, predicted {pred:.4f}; at kappa={kappa:g} effort each {kappa * pred:.4f}, "
+          f"total {2 * kappa * pred:.5f}", file=sys.stderr)
 out["R4_two_player"] = res
 
 # ---- R5: heterogeneous field: pay the position where luck matters most
 a = np.sort(np.random.default_rng(0).normal(0, 1, N))
 Lk_a = position_luck_engine(a)
 Lk_a_mc = position_luck_mc(a)
-kstar = int(np.argmax(Lk_a)) + 1
-# equilibrium totals under single-position prizes and under top-3, by best response
+kstar = int(np.argmax(Lk_a)) + 1                 # unconstrained vertex: NOT a feasible schedule unless kstar = 1
+prefix_avg = np.cumsum(Lk_a) / np.arange(1, N + 1)   # static total incentive of each feasible vertex top_k
+k_static = int(np.argmax(prefix_avg)) + 1
+print(f"R5 static: max prefix average of E[L_(k)] at k = {k_static} ({prefix_avg[k_static - 1]:.4f}); "
+      f"prefix averages k=1..6 {prefix_avg[:6].round(4)}", file=sys.stderr)
+# equilibrium totals over the feasible vertices (equal top-k splits), top-3 .5/.3/.2,
+# and, as labelled non-monotone foils outside the model, single-position prizes.
 tot = {}
-for name, w in {"e_1 (wta)": np.eye(N)[0], f"e_{kstar}": np.eye(N)[kstar - 1], "e_2": np.eye(N)[1], "e_3": np.eye(N)[2],
-                "top3 .5/.3/.2": np.array([.5, .3, .2] + [0] * (N - 3))}.items():
-    e, ok = nash(a, w, kappa)
-    tot[name] = {"total_effort": float(e.sum()), "converged": bool(ok), "static_total_incentive": float(w @ Lk_a)}
-    print(f"R5 field seed0 {name:14s}: static w.L = {w @ Lk_a:.4f}, equilibrium total effort {e.sum():.4f}", file=sys.stderr)
+K_EQ = 8
+for k in range(1, K_EQ + 1):
+    w = top_k(N, k); e, ok = nash(a, w, kappa)
+    tot[f"top{k} equal"] = {"total_effort": float(e.sum()), "converged": bool(ok), "static_total_incentive": float(w @ Lk_a), "feasible": True}
+    print(f"R5 field seed0 top{k} equal     : static w.L = {w @ Lk_a:.4f}, equilibrium total effort {e.sum():.4f}", file=sys.stderr)
+w = check_schedule(np.array([.5, .3, .2] + [0] * (N - 3))); e, ok = nash(a, w, kappa)
+tot["top3 .5/.3/.2"] = {"total_effort": float(e.sum()), "converged": bool(ok), "static_total_incentive": float(w @ Lk_a), "feasible": True}
+print(f"R5 field seed0 top3 .5/.3/.2   : static w.L = {w @ Lk_a:.4f}, equilibrium total effort {e.sum():.4f}", file=sys.stderr)
+for k in (2, 3):
+    w = np.eye(N)[k - 1]; e, ok = nash(a, w, kappa, foil=True)
+    tot[f"FOIL pay position {k} only (non-monotone, outside the model)"] = {
+        "total_effort": float(e.sum()), "converged": bool(ok), "static_total_incentive": float(w @ Lk_a), "feasible": False}
+    print(f"R5 field seed0 FOIL e_{k} only   : static w.L = {w @ Lk_a:.4f}, equilibrium total effort {e.sum():.4f}", file=sys.stderr)
+feas = {kk: vv for kk, vv in tot.items() if vv["feasible"]}
+best_feas = max(feas, key=lambda kk: feas[kk]["total_effort"])
+print(f"R5 best feasible schedule in equilibrium: {best_feas} ({feas[best_feas]['total_effort']:.4f})", file=sys.stderr)
 out["R5_position_luck_heterogeneous"] = {"abilities": a.round(3).tolist(), "E_luck_by_position_engine": Lk_a.round(4).tolist(),
-                                         "E_luck_by_position_mc": Lk_a_mc.round(4).tolist(), "k_star_static": kstar, "equilibrium": tot}
-print(f"R5 E[L_(k)] k=1..6 engine {Lk_a[:6].round(3)} mc {Lk_a_mc[:6].round(3)}; k* = {kstar}", file=sys.stderr)
+                                         "E_luck_by_position_mc": Lk_a_mc.round(4).tolist(),
+                                         "argmax_k_unconstrained": kstar, "prefix_average_static": prefix_avg.round(4).tolist(),
+                                         "k_static_feasible": k_static, "equilibrium": tot, "best_feasible_equilibrium": best_feas}
+print(f"R5 E[L_(k)] k=1..6 engine {Lk_a[:6].round(3)} mc {Lk_a_mc[:6].round(3)}", file=sys.stderr)
 
 # ---- R6: Szymanski-Valletti in Gaussian form: 3 players, leader at -d, two at 0.
 # static: second prize raises total incentive iff E[L_(2)] > E[L_(1)]; find d*.
@@ -116,7 +184,7 @@ grid = {}
 for d in [0.0, 1.0, 2.0, 3.0]:
     row = {}
     for s in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]:
-        w = np.array([1 - s, s, 0.0]); e, ok = nash(np.array([-d, 0.0, 0.0]), w, kappa)
+        w = check_schedule(np.array([1 - s, s, 0.0])); e, ok = nash(np.array([-d, 0.0, 0.0]), w, kappa)
         row[f"s={s}"] = float(e.sum())
     best_s = max(row, key=row.get); grid[f"gap={d}"] = {"total_effort_by_s": row, "best_s": best_s}
     print(f"R6 gap {d}: total effort by second-prize share {[round(v,4) for v in row.values()]} -> best {best_s}", file=sys.stderr)
@@ -153,6 +221,14 @@ for d in [3.0, 4.0, 5.0, 6.0]:
     print(f"R7 gap {d}: predicted t* {pred:.2f}, simulated median {np.nanmedian(ts):.1f} mean {np.nanmean(ts):.1f} (never within 400: {np.isnan(ts).mean():.2f})", file=sys.stderr)
 out["R7_discouragement_time"] = res
 
-with open(os.path.join(HERE, "verify_results.json"), "w") as fh:
-    json.dump(out, fh, indent=1)
-print("wrote verify_results.json", file=sys.stderr)
+# Append-only record: one JSON line per run. verify_results.json is the
+# frozen output of the first version (8bf6b7a) and is never rewritten.
+try:
+    sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=HERE, capture_output=True, text=True).stdout.strip()
+    dirty = bool(subprocess.run(["git", "status", "--porcelain", "--", HERE], cwd=HERE, capture_output=True, text=True).stdout.strip())
+except OSError:
+    sha, dirty = "", None
+rec = {"utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "git_head": sha, "worktree_dirty": dirty, "results": out}
+with open(os.path.join(HERE, "verify_runs.jsonl"), "a") as fh:
+    fh.write(json.dumps(rec) + "\n")
+print("appended to verify_runs.jsonl", file=sys.stderr)
