@@ -77,6 +77,91 @@ learning / calibration workshops. The paper explicitly connects itself to
 
 ---
 
+## 1b. Zero-shot classifiers with a user-supplied label set (GLiClass) — RANK 1, first target
+
+Added 2026-09-23. A concrete, small-N instance of front 1 where the throughput
+obstacle in `probit_output_layer.md` does not bind.
+
+### (i) Race mapping
+GLiClass (Knowledgator, github.com/knowledgator/GLiClass; README and
+`gliclass/pipeline.py` read 2026-09-23) is "an efficient, zero-shot sequence
+classification model inspired by the GLiNER framework". The default
+uni-encoder puts the label strings into the SAME forward pass as the text,
+each label receives a scalar logit from a dot-product / weighted-dot / MLP /
+Hopfield scorer, and the head is
+
+    single-label:  scores = torch.softmax(logits, dim=-1)
+    multi-label:   scores = torch.sigmoid(logits), then a threshold
+
+i.e. the Gumbel independent race for single-label and independent Bernoullis
+for multi-label — applied to a label set the USER supplies at inference time.
+
+### (ii) Public data / benchmarks
+Open weights on Hugging Face (knowledgator/gliclass-* family) and the
+zero-shot text-classification suites their README reports on; any of the
+standard zero-shot sets (emotion, topic, intent) can be re-run with label
+sets deliberately containing near-synonyms.
+
+### (iii) Incumbent + documented limitation
+Holding the logit vector fixed, softmax obeys IIA: a label added with logit
+equal to an incumbent's ties it, their combined mass grows, and every other
+label is renormalised in proportion (logits [2, 0] give [0.881, 0.119];
+add an equal-logit clone and it is [0.468, 0.468, 0.063]). User-chosen label
+sets routinely contain near-synonyms ("happy" / "joyful"), so this is the
+red-bus situation, but only CONDITIONALLY: the uni-encoder attends over text
+and all labels together, so adding a label can move every logit before the
+head, and a near-synonym need not get an equal logit. Multi-label: the head
+is a per-label sigmoid thresholded independently, which allows variable
+cardinality; it is a factorised conditional likelihood, but the shared
+encoder can still carry co-occurrence, so "ignores correlation" is a claim
+about the head, not about the end-to-end outputs.
+
+### (iv) Unique advantage
+Contextual label embeddings `E` (row-normalised) come out of the same
+forward pass (`get_embeddings()`), giving a candidate covariance KERNEL
+`K = E E^T`. It is not itself the loading matrix: race covariance is
+`V V^T + diag(D)`, so the factor is `V = Q_r sqrt(Lambda_r)`, the rank-r
+eigentruncation of `K`, scaled by a shared fraction `rho`, with
+`D = 1 - rho * rowsum(V^2)` (passing `K` as `V` would model `K K`, not `K`).
+That semantic similarity equals conditional noise covariance is a modelling
+HYPOTHESIS; `rho`, the probit scale of the logits, and `D` are not supplied
+by a checkpoint trained under softmax/sigmoid and must be calibrated (e.g.
+fit `rho` and one logit scale on held-out NLL) and validated. Given that, the
+head swap is `race_probabilities(-logits, V=V, D=D)` on a frozen checkpoint.
+
+Cost (pure numpy/scipy, no compiled backend; default node rule; error vs
+4e6-draw MC, at MC noise ~2-5e-4; `gliclass_head_timing.py` / `.json`):
+warm median 1.1 ms at N=3 r=1, 1.6 ms N=10 r=1, 8 ms N=10 r=2, 4.6 ms
+N=50 r=1, 36 ms N=50 r=2 on fields that stay on the Gauss-Hermite side;
+a field sharp enough to cross onto the 8,192-node Sobol side costs 0.39 s
+(N=10 r=2) and 1.96 s (N=50 r=2). Milliseconds, not microseconds, and
+sharpness, not N, sets which regime applies. The race is a deterministic
+quadrature, not a closed form.
+
+Multi-label top-k membership under the same covariance is NOT a drop-in for
+threshold-sigmoid: it needs `k` (fixed per task, or the cardinality from
+the thresholded head, or a cardinality model) and changes the prediction
+problem; report it as a separate head, with `k`'s rule stated.
+
+### (v) Minimal demo (a test, not a predicted win)
+Frozen GLiClass checkpoint. Label sets: (a) the benchmark's own labels;
+(b) the same plus one near-synonym of the true class. Report, separately:
+(1) incumbent logits before/after adding the synonym (how much the encoder
+already breaks IIA upstream); (2) softmax vs factor-probit head on the SAME
+logits, top-1 and NLL/ECE, with `rho` and the scale fit on a held-out
+split; (3) mass moved to the synonym and taken from non-synonyms. The null
+is that the calibrated probit head does no better than softmax; either
+outcome is informative. Multi-label: threshold-sigmoid vs top-k with `k`
+from the thresholded head's own count, label-set F1.
+
+### (vi) Who would care
+Knowledgator (GLiClass / GLiNER maintainers); zero-shot classification users
+in the Hugging Face ecosystem; the same calibration audience as front 1.
+A clean "the head is the Gumbel special case of a race" story, IF the
+embedding kernel survives calibration as a covariance.
+
+---
+
 ## 2. LLM leaderboards / arenas — RANK 2
 
 ### (i) Race mapping
@@ -307,6 +392,11 @@ footnote application, not a campaign.
    closed form, at their exact covariance structure (low-rank R=50 + diagonal,
    K up to 21k). Cleanest "delete the approximation" paper; public code and
    benchmarks; differentiability is the whole point there.
+   **First target within this front: GLiClass (1b)** — user-supplied label
+   sets full of near-synonyms, N small enough that the race costs ms on the
+   pure-Python path, and a candidate covariance kernel from the label
+   embeddings, so the test needs no retraining and no kernel work (the
+   kernel-as-covariance hypothesis still needs calibrating).
 2. **Arena/leaderboard rating** — best story and public data; deprecation
    (205/243 models silently removed, documented BT-assumption violation) and
    best-of-N variant gaming are *removal counterfactual* and *max of
@@ -323,6 +413,7 @@ footnote application, not a campaign.
 ## Sources
 
 - https://arxiv.org/abs/2105.10305 (Collier et al., CVPR 2021; quotes read from PDF pp. 2-4)
+- https://github.com/knowledgator/GLiClass (README and gliclass/pipeline.py read 2026-09-23; softmax / sigmoid head quoted from _postprocess_logits)
 - https://openreview.net/pdf?id=sIoED-yPK9l (HET-XL, ICLR 2023)
 - https://www.lmsys.org/blog/2024-08-28-style-control/
 - https://arxiv.org/abs/2504.20879 (The Leaderboard Illusion; quotes read from PDF pp. 4-7)
