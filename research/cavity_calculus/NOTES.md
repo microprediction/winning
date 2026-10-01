@@ -217,3 +217,133 @@ f_k(p) = 1-(1-p)^k step inside rho_16 is exactly the plug-in
 predictor measured here, so a posterior-predictive version of their
 own diagnostic is the natural first upgrade, before any Shapley
 machinery enters.
+
+## exp3_nonexch: pass@k without exchangeability (2026-09-23)
+Prompted by two remarks in conversation: pass@k from n samples,
+1 - C(n-c,k)/C(n,k), is the complete U-statistic of "the k-subset
+contains a success" (the average over all delete-(n-k) subsamples;
+k = 1..n is the subsampling spectrum -- NOT a delete-d jackknife
+pseudo-value, as first written here; corrected 2026-10-01 after
+review), and reading it as a forecast treats the samples as
+exchangeable, while a race takes the dependence structure as an
+input -- which for rollouts is observable.
+Re-streamed the 3 GB Pass8-Rollouts once (extract_features.py, 6 min)
+keeping per sample: reward, length, whether the think block closed, a
+hash of the extracted final answer; per prompt the 8x8 Jaccard of
+word 3-shingles. Response text never touched disk; features.npz is
+1.8 MB.
+
+What is observable before grading, and what it carries:
+(All counts below are emitted in results.json["test0_descriptives"];
+corrected 2026-10-01 after review.)
+- TRUNCATION. 52.4 percent of responses (37,719 of 72,000) never
+  close the think block, and NEARLY none of those succeed: 4 of
+  37,719 (1.06e-4; prompt/sample 1558/7, 1559/6, 2048/5, 7146/6),
+  against 0.588 for closed responses. All four have no extracted
+  answer, so "no extracted answer" does not imply failure under the
+  dataset reward. Success by length quintile runs
+  0.62, 0.37, 0.17, 0.17, 0.07.
+- ANSWER DUPLICATES. 20.06 percent of within-prompt pairs (50,547 of
+  252,000) give the same nonzero extracted-answer hash; those pairs
+  share fate 98.3 percent of the time (the reward is a function of
+  the answer; the rest is extraction error). Pairs with different
+  hashes (101,269) share fate 47.8 percent.
+- TEXT SIMILARITY among different-answer pairs: a small NEGATIVE,
+  non-monotone signal, not a null. Co-fate by global Jaccard quartile
+  0.451, 0.531, 0.507, 0.423 (Q4-Q1 = -0.028, prompt bootstrap 95%
+  [-0.047, -0.009]); both answers extracted (37,576 pairs): 0.381,
+  0.378, 0.315, 0.329 (Q4-Q1 -0.052 [-0.075, -0.027]). Within-prompt
+  linear probability model (prompt fixed effects, controls for 0/1/2
+  truncated, mean and |diff| of log length, both answered;
+  prompt-clustered SEs): -0.013 per SD of Jaccard (SE 0.0025); both
+  answered: -0.025 (SE 0.0046), on base rates 0.48 and 0.35. Read:
+  two different answers reached by similar text are slightly MORE
+  likely to split fate (one right, one wrong) -- near misses. It is
+  not "shared text is shared fate", and it is small next to the
+  shared answer, but the earlier "nothing/flat" (and its quartile
+  figures 0.47, 0.53, 0.51, 0.42) was wrong. Not done: whether it
+  improves any held-out prediction. The common prefix of all eight
+  responses has median 19 characters (exactly 19 in 36 percent of
+  prompts, max 210) -- a short opener, not a fixed one.
+
+Models (success iff z > 0, theta ~ N(mu, tau^2) the prompt factor):
+E exchangeable (= exp2's probit-normal); L adds beta x standardized
+log length; C adds an answer-cluster effect eta_c ~ N(0, sig^2);
+LC both. Given theta the likelihood factorises over clusters, so it
+is a nested one-dimensional integral, computed by NUMERICAL
+Gauss-Hermite quadrature (Q theta nodes, R eta nodes) -- not exact,
+as first written. Fit on even prompts, scored on odd; results.json
+(latest run) and runs.jsonl (append-only log of every run).
+
+Node convergence (results.json["quadrature_convergence"], fitted
+parameters fixed, held-out ll/sample). The original rule Q=41, R=11
+is fine for E, L (sig = 0; error < 1e-6) and C (4e-5), but not for
+LC: -0.280745 at (41,11), then -0.281621 (61,21), -0.281566 (81,25),
+-0.281796 (101,31) -- non-monotone -- settling at -0.281697 (61,61),
+-0.281695 (161,101), -0.281695 (201,151). The (41,11) LC value was
+optimistic by 0.00095 nat/sample. R is what matters: with sig at its
+cap of 3 and LC's tau fitted to ~0, the whole integral is the eta
+rule. All numbers below are refitted and re-evaluated at Q = R = 61
+(within 3e-6 of (201,151)); the (41,11) run is the first line of
+runs.jsonl.
+
+1. Held-out log-likelihood per sample (all 8 samples):
+   E -0.441, L -0.400, C -0.311, LC -0.282 (refit at Q = R = 61;
+   LC was -0.281 at the original rule). The unbounded C fit runs
+   sig -> infinity (mu -36, tau 12, sig 30): the cluster effect is
+   trying to be the deterministic fact that same answer means same
+   fate. Capped at sig = 3 for the rows above. The gain from C is
+   therefore a near-tautology and NOT the evidence-weighting story
+   below.
+2. Model-free evidence weighting. Held-out (samples 4-7) success
+   rate by composition of the four training samples:
+     0 of 4 succeeded, distinct answers 1/2/3/4:   .20 .15 .13 .06
+     0 of 4 succeeded, truncated 0/1/2/3/4:        .22 .12 .10 .08 .04
+   So the exchangeable sufficient statistic (the count) is NOT
+   sufficient: at the same count the held-out rate varies 3-5x with
+   composition, and E predicts 0.063 for every one of those cells.
+   BUT the two splits are confounded -- truncated samples have no
+   answer and are singletons -- and the cross-tab with NO truncated
+   training sample kills the duplicate effect: 0 of 4 with one shared
+   wrong answer .20 (n = 105) vs two distinct wrong answers .25
+   (n = 67); at 1-3 successes no pattern. The prediction made in
+   conversation, "four identical failures are less evidence than
+   four different ones", is FALSE here. What carries the information
+   is truncation: four truncated failures say "this prompt exhausts
+   the budget", and that predicts future failure far better than four
+   wrong answers do.
+3. Scenario B, predict fresh samples 4-7 from 0-3 (length of the
+   fresh sample unknown, so E vs C only): per-sample log loss E 0.406,
+   C 0.505; pass@4 log loss E 0.458, C 0.530. The cluster random
+   effect is the WRONG way to encode duplicates for prediction: it
+   attributes the training successes to lucky cluster draws, so the
+   theta posterior barely moves and it predicts 0.27 for prompts that
+   went 3 of 4 (observed 0.61). Duplicates are not a random effect;
+   they are repeated draws of the same answer. The right generative
+   object is an urn over answers with a correct-answer mass, not a
+   Gaussian cluster shift. A logistic regression of held-out success
+   on (count, distinct, truncated) scores 0.398 against 0.408 for the
+   count alone: the composition is worth about 0.01 nats per sample
+   for fresh-sample prediction, most of it truncation.
+4. Scenario A, which held-out sample to trust given its own text and
+   its answer's relation to the four verified samples: per-sample log
+   loss E 0.406, L 0.378, C 0.243, LC 0.224 (0.221 at the original
+   rule). Samples sharing an answer with a verified sample:
+   0.51 -> 0.17 (C). Novel answers: 0.36 -> 0.23 (LC)
+   (L and C both help; a novel answer among agreeing verified failures
+   is a different object from one among disagreement). This is
+   self-consistency with partial verification, and it is where the
+   duplicate structure earns its keep.
+
+Verdict on the two conversational claims. (i) Non-exchangeability is
+real and observable, and the exchangeable count throws away
+information -- but on this data it is length/truncation, a per-runner
+variance or mean covariate, not a duplicate-block structure. (ii)
+Duplicates matter for SELECTION among generated samples, not for the
+evidence weight of past samples about future ones. The conjectured
+tree/prefix loadings do not apply to independent samples with a fixed
+opener; they need branched rollouts. Not done: an urn model over
+answers for scenario B; a positive-drift re-run of exp2 with length as
+covariate; confidence intervals on the cross-tab cells (n = 67 to
+105, so the null result there is a bound, not a measurement).
+
