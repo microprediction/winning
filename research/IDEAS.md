@@ -91,22 +91,30 @@ Third, already in cavity_calculus/NOTES.md: pass@k is an extremal
 portfolio, whose exact gradient under correlated probit is the engine's
 Jacobian rather than a Monte Carlo covariance.
 
-## Pass@k is the full delete-d jackknife; winning need not assume
-## exchangeability (2026-09-23)
-Pass@k estimated from n samples by averaging over k-subsets is the
-delete-(n-k) jackknife pseudo-value of the "any success" statistic;
-the ordinary delete-one jackknife is the single point k = n-1, and
-the pass@k curve for k = 1..n is the complete deletion spectrum. The
-repo uses leave-one-out everywhere (cavity division, rank-one
-downdates, exact Jacobians = infinitesimal jackknife) but only ever
-for counterfactual prices, never as a resampling scheme -- and the
-jackknife needs exchangeable units, which a race does not: the
-dependence structure is an INPUT, and for rollouts it is observable
-(shared prefixes as tree loadings, near-duplicate answers as blocks,
-length as per-runner variance). Measured on Pass8-Rollouts in
+## Pass@k is a subsampling U-statistic that assumes exchangeability;
+## winning need not (2026-09-23, corrected 2026-10-01)
+With c successes in n samples the usual estimator
+1 - C(n-c, k)/C(n, k) is the complete U-statistic of the kernel
+"the k-subset contains a success": the average of that statistic over
+all size-k subsets, i.e. over all delete-(n-k) subsamples, and the
+curve k = 1..n is the full subsampling spectrum. It is NOT a
+delete-d jackknife pseudo-value (an earlier version of this entry
+said so): pseudo-values combine each replicate with the full-sample
+statistic, n*T - (n-1)*T_(-i). At n = 8, c = 1, pass@7 = 7/8 is the
+mean of the delete-one replicates, while the mean delete-one
+pseudo-value is 8 - 7*(7/8) = 15/8. What survives is the
+exchangeability point: reading the subset average as a forecast for
+future rollouts treats the samples as exchangeable. The repo uses
+leave-one-out everywhere (cavity division, rank-one downdates, exact
+Jacobians) but only for counterfactual prices, never as a resampling
+scheme, and a race does not need exchangeable units: the dependence
+structure is an INPUT, and for rollouts it is observable (shared
+prefixes as tree loadings, near-duplicate answers as blocks, length
+as per-runner variance). Measured on Pass8-Rollouts in
 cavity_calculus/exp3_nonexch: truncation/length carries the
 information the exchangeable count throws away; answer duplicates
 matter for selecting among generated samples, not for the evidence
-weight of past samples; text similarity beyond the answer carries
-nothing. The duplicate-as-random-effect model is the wrong encoding;
-an urn over answers is the open follow-up.
+weight of past samples; text similarity among different-answer pairs
+is a small, negative, non-monotone signal (not a null). The
+duplicate-as-random-effect model is the wrong encoding; an urn over
+answers is the open follow-up.

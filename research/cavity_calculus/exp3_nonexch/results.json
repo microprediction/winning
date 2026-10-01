@@ -2,13 +2,155 @@
  "n_prompts": 9000,
  "success_rate": 0.28005555555555556,
  "trunc_rate": 0.523875,
- "pairs_same_answer": null,
+ "quadrature": {
+  "Q": 41,
+  "R": 11
+ },
+ "test0_descriptives": {
+  "truncation": {
+   "n_samples": 72000,
+   "n_truncated": 37719,
+   "trunc_rate": 0.523875,
+   "truncated_successes": 4,
+   "truncated_success_rate": 0.00010604735014183833,
+   "truncated_success_positions_prompt_sample": [
+    [
+     1558,
+     7
+    ],
+    [
+     1559,
+     6
+    ],
+    [
+     2048,
+     5
+    ],
+    [
+     7146,
+     6
+    ]
+   ],
+   "truncated_successes_with_no_extracted_answer": 4,
+   "closed_success_rate": 0.5880808611184037
+  },
+  "success_by_length_quintile": [
+   0.6232115571607167,
+   0.36694444444444446,
+   0.1713075480869384,
+   0.1696527777777778,
+   0.0692313033817096
+  ],
+  "prefix_len": {
+   "median": 19.0,
+   "frac_eq_19": 0.35788888888888887,
+   "max": 210
+  },
+  "pairs_same_answer": {
+   "n_pairs": 252000,
+   "n_same_nonzero_answer": 50547,
+   "frac_same_nonzero_answer": 0.20058333333333334,
+   "cofate_same_answer": 0.9828674303123826,
+   "n_different_hash": 101269,
+   "cofate_different_hash": 0.4780140023106775,
+   "note": "same = equal nonzero answer hash; different = unequal hash (a pair with one missing answer counts as different; two missing answers are neither)"
+  },
+  "text_similarity_different_answers": {
+   "different_hash": {
+    "n_pairs": 101269,
+    "jaccard_quartile_cuts": [
+     0.10472173988819122,
+     0.12821543216705322,
+     0.15125511586666107
+    ],
+    "cofate_by_jaccard_quartile": [
+     0.45084330686890234,
+     0.530710589722321,
+     0.5072480941659754,
+     0.42325618137293625
+    ],
+    "Q4_minus_Q1": -0.02758712549596609,
+    "Q4_minus_Q1_prompt_bootstrap_95": [
+     -0.046602519000076156,
+     -0.009146521449217945
+    ],
+    "within_prompt_lpm": {
+     "coef": {
+      "jaccard_per_sd": -0.012860536541258984,
+      "one_truncated": 0.023560749107295366,
+      "both_truncated": 0.338536905845023,
+      "mean_log_len": 0.16492318041600904,
+      "absdiff_log_len": 0.009939852913641184,
+      "both_answered": -0.11323035151018376
+     },
+     "se": {
+      "jaccard_per_sd": 0.0025316884781005806,
+      "one_truncated": 0.06075106415358597,
+      "both_truncated": 0.09497554689871256,
+      "mean_log_len": 0.006812436006730593,
+      "absdiff_log_len": 0.0044813408504746225,
+      "both_answered": 0.06068449203653835
+     },
+     "jaccard_per_sd_prompt_FE_only": -0.03728692582297849,
+     "mean_cofate": 0.4780140023106775
+    }
+   },
+   "different_hash_both_answered": {
+    "n_pairs": 37576,
+    "jaccard_quartile_cuts": [
+     0.12120740674436092,
+     0.14460012316703796,
+     0.16698592901229858
+    ],
+    "cofate_by_jaccard_quartile": [
+     0.38120076644666806,
+     0.3784330423674686,
+     0.31488183947200343,
+     0.32946561635086224
+    ],
+    "Q4_minus_Q1": -0.051735150095805815,
+    "Q4_minus_Q1_prompt_bootstrap_95": [
+     -0.07543540812863836,
+     -0.026511492188030113
+    ],
+    "within_prompt_lpm": {
+     "coef": {
+      "jaccard_per_sd": -0.025309572070006447,
+      "one_truncated": 0.02858145549079919,
+      "mean_log_len": 0.12050059179780351,
+      "absdiff_log_len": 0.020176077566407498
+     },
+     "se": {
+      "jaccard_per_sd": 0.004626593966296389,
+      "one_truncated": 0.20022405240630664,
+      "mean_log_len": 0.008931444253314562,
+      "absdiff_log_len": 0.005792214566289912
+     },
+     "jaccard_per_sd_prompt_FE_only": -0.032733338730022085,
+     "mean_cofate": 0.35099531615925056
+    }
+   }
+  }
+ },
+ "pairs_same_answer": {
+  "n_pairs": 252000,
+  "n_same_nonzero_answer": 50547,
+  "frac_same_nonzero_answer": 0.20058333333333334,
+  "cofate_same_answer": 0.9828674303123826,
+  "n_different_hash": 101269,
+  "cofate_different_hash": 0.4780140023106775,
+  "note": "same = equal nonzero answer hash; different = unequal hash (a pair with one missing answer counts as different; two missing answers are neither)"
+ },
  "test1_heldout": {
   "E": {
    "mu": -1.0384863003377565,
    "tau": 1.5512526515239184,
    "sig": 0.0,
    "beta": 0.0,
+   "fit_rule": [
+    41,
+    11
+   ],
    "train_ll_per_sample": -0.4384455739823546,
    "test_ll_per_sample": -0.44099850232053694
   },
@@ -17,6 +159,10 @@
    "tau": 1.239829651003779,
    "sig": 0.0,
    "beta": -0.830996383965435,
+   "fit_rule": [
+    41,
+    11
+   ],
    "train_ll_per_sample": -0.39972755004682503,
    "test_ll_per_sample": -0.4004831174745824
   },
@@ -25,6 +171,10 @@
    "tau": 2.116143195775463,
    "sig": 2.9999999999999933,
    "beta": 0.0,
+   "fit_rule": [
+    41,
+    11
+   ],
    "train_ll_per_sample": -0.30960819017884444,
    "test_ll_per_sample": -0.3105277985073245
   },
@@ -33,8 +183,71 @@
    "tau": 7.169977057389701e-22,
    "sig": 2.9999999999999876,
    "beta": -1.5036876351597237,
+   "fit_rule": [
+    41,
+    11
+   ],
    "train_ll_per_sample": -0.28055170053857514,
    "test_ll_per_sample": -0.28074544824560316
+  }
+ },
+ "quadrature_convergence": {
+  "what": "odd-prompt held-out log likelihood per sample, fitted parameters fixed",
+  "by_rule": {
+   "Q=41,R=11": {
+    "E": -0.44099850232053694,
+    "L": -0.4004831174745824,
+    "C": -0.3105277985073245,
+    "LC": -0.28074544824560316
+   },
+   "Q=61,R=21": {
+    "E": -0.44099774914311446,
+    "L": -0.40048317169822883,
+    "C": -0.31055878637026,
+    "LC": -0.28162114189842113
+   },
+   "Q=81,R=25": {
+    "E": -0.4409975765750661,
+    "L": -0.40048317079316936,
+    "C": -0.3105611776452618,
+    "LC": -0.28156624606771036
+   },
+   "Q=101,R=31": {
+    "E": -0.4409975798003577,
+    "L": -0.4004831708219744,
+    "C": -0.3105616865134504,
+    "LC": -0.2817956160363204
+   },
+   "Q=41,R=61": {
+    "E": -0.44099850232053694,
+    "L": -0.4004831174745824,
+    "C": -0.3105661475523666,
+    "LC": -0.28169703943622343
+   },
+   "Q=61,R=61": {
+    "E": -0.44099774914311446,
+    "L": -0.40048317169822883,
+    "C": -0.31056164156369725,
+    "LC": -0.28169703943622343
+   },
+   "Q=101,R=61": {
+    "E": -0.4409975798003577,
+    "L": -0.4004831708219744,
+    "C": -0.31056165155940196,
+    "LC": -0.28169703943622343
+   },
+   "Q=161,R=101": {
+    "E": -0.44099758093760166,
+    "L": -0.4004831708213923,
+    "C": -0.31056164739141423,
+    "LC": -0.28169481708986555
+   },
+   "Q=201,R=151": {
+    "E": -0.44099758093707025,
+    "L": -0.4004831708213923,
+    "C": -0.31056164738897996,
+    "LC": -0.28169468458015695
+   }
   }
  },
  "sig_cap": 3.0,
@@ -255,8 +468,8 @@
   }
  },
  "test5_feature_logistic_heldout_logloss": {
-  "count_only": 0.4081029070516757,
-  "count+distinct+truncated": 0.39773304402978377
+  "count_only": 0.4081019983416326,
+  "count+distinct+truncated": 0.39772706742965597
  },
  "test3_scenarioB": {
   "E": {
@@ -424,5 +637,13 @@
    "frac_shares": 0.31666666666666665
   }
  },
- "runtime_s": 15.142628908157349
+ "runtime_s": 110.22308397293091,
+ "argv": [
+  "--Q",
+  "41",
+  "--R",
+  "11"
+ ],
+ "utc": "2026-10-01T20:04:30Z",
+ "git_head": "7f0edf7543c9265d397e26b51fc418fd7d48401a"
 }
