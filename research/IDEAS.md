@@ -60,3 +60,61 @@ the observable (VIX prices / choice shares) to pin the latent
 into a tractable stage-wise one. No race/order-statistics content;
 park unless a stochastic-volatility application of the engine ever
 materializes (implied win probabilities from vol surfaces?).
+
+## Policy-gradient hooks from Martin's fluctuation-dissipation chapter
+## (noted 2026-09-22; source: C. H. Martin, "Reinforcement learning as
+## nonequilibrium Monte Carlo", 8 pp., Downloads/grpo-etc.pdf)
+The chapter derives response = covariance and shows REINFORCE is a
+Monte Carlo estimate of it; GRPO is one page. For verifier rewards on
+i.i.d. samples the race engine has nothing to add. Two edges are real:
+1. ORDINAL REWARDS ARE A RACE. When a judge ranks or picks among the
+   G answers, GRPO's z-scored advantage is an arbitrary rank-to-score
+   map. The principled advantage is the expected latent performance
+   given the ranking: normal order-statistic scores under Gaussian
+   noise, Plackett-Luce under Gumbel (already in
+   winning.factor.permutations). Martin's leave-one-out baseline is
+   the race with sample i removed -- removal_shares prices all G in
+   one pass. His "response = covariance" identity is the softmax
+   Jacobian, i.e. the Gumbel special case; for the probit race the
+   response is the tie density instead, and the temperature bridge
+   interpolates. Test bed: Nectar 7-wise rankings (applications/
+   ml-systems.md front 3).
+2. THE SUSCEPTIBILITY IS A RATING-FILTER OUTPUT. In his two-state
+   example the per-prompt gradient signal is p(1-p): a prompt the
+   policy always or never solves contributes nothing. A curriculum
+   needs p BEFORE spending G rollouts. Prompts and checkpoints as
+   entities, a rollout as a pairwise contest, drift for the policy
+   improving: AbilityTracker's prediction IS the response coefficient.
+   Difficulty-aware sampling exists in the GRPO literature; the
+   filter is the novelty, not the idea.
+Third, already in cavity_calculus/NOTES.md: pass@k is an extremal
+portfolio, whose exact gradient under correlated probit is the engine's
+Jacobian rather than a Monte Carlo covariance.
+
+## Pass@k is a subsampling U-statistic that assumes exchangeability;
+## winning need not (2026-09-23, corrected 2026-10-01)
+With c successes in n samples the usual estimator
+1 - C(n-c, k)/C(n, k) is the complete U-statistic of the kernel
+"the k-subset contains a success": the average of that statistic over
+all size-k subsets, i.e. over all delete-(n-k) subsamples, and the
+curve k = 1..n is the full subsampling spectrum. It is NOT a
+delete-d jackknife pseudo-value (an earlier version of this entry
+said so): pseudo-values combine each replicate with the full-sample
+statistic, n*T - (n-1)*T_(-i). At n = 8, c = 1, pass@7 = 7/8 is the
+mean of the delete-one replicates, while the mean delete-one
+pseudo-value is 8 - 7*(7/8) = 15/8. What survives is the
+exchangeability point: reading the subset average as a forecast for
+future rollouts treats the samples as exchangeable. The repo uses
+leave-one-out everywhere (cavity division, rank-one downdates, exact
+Jacobians) but only for counterfactual prices, never as a resampling
+scheme, and a race does not need exchangeable units: the dependence
+structure is an INPUT, and for rollouts it is observable (shared
+prefixes as tree loadings, near-duplicate answers as blocks, length
+as per-runner variance). Measured on Pass8-Rollouts in
+cavity_calculus/exp3_nonexch: truncation/length carries the
+information the exchangeable count throws away; answer duplicates
+matter for selecting among generated samples, not for the evidence
+weight of past samples; text similarity among different-answer pairs
+is a small, negative, non-monotone signal (not a null). The
+duplicate-as-random-effect model is the wrong encoding; an urn over
+answers is the open follow-up.
