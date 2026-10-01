@@ -13,7 +13,8 @@ export const Tree = (cluster, loading, D, parent, strength) =>
   ({ kind: "Tree", cluster, loading, D, parent, strength });
 
 /* the tree race whose implied correlation IS the cophenetic matrix of a
-   scipy-style linkage; negative cophenetic correlation floored at zero */
+   scipy-style linkage; negative cophenetic correlation floored at zero.
+   A non-monotonic linkage (an inversion) is refused, as in python. */
 export function treeFromLinkage(Z) {
   const n = Z.length + 1;
   const nT = 2 * n - 1;
@@ -26,9 +27,28 @@ export function treeFromLinkage(Z) {
     rho[t] = Math.max(1 - 2 * h * h, 0);
   }
   const strength = new Array(nT).fill(0);
+  // the nonnegative increments are a PREMISE, checked as in python's
+  // Tree.from_linkage: centroid and median linkage invert, and clipping
+  // the negative increment returns a covariance that is not the
+  // cophenetic one promised -- here D = [1, 1, 0.5] for a unit-variance
+  // model (#133)
+  const bad = [];
   for (let t = n; t < nT; t++) {
     const pa = parent[t];
-    strength[t] = Math.sqrt(Math.max(rho[t] - (pa >= 0 ? rho[pa] : 0), 0));
+    const lam2 = rho[t] - (pa >= 0 ? rho[pa] : 0);
+    if (lam2 < -1e-9) bad.push([t, lam2]);
+    strength[t] = Math.sqrt(Math.max(lam2, 0));
+  }
+  if (bad.length) {
+    const [t0, d0] = bad.reduce((w, x) => (x[1] < w[1] ? x : w));
+    throw new Error(
+      `this linkage is not monotonic: node ${t0} merges ` +
+      `${Number((-d0).toPrecision(3))} BELOW its parent, and ${bad.length} ` +
+      "node(s) do. A tree race is a nested variance decomposition, so an " +
+      "inversion has no representation in it -- clipping the negative " +
+      "increment would return a different covariance from the cophenetic " +
+      "one this promises. Use a monotonic method (average, complete, " +
+      "ward), or build the Tree with explicit parent/strength.");
   }
   const D = [];
   for (let i = 0; i < n; i++) {

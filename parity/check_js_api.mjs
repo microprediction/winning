@@ -249,6 +249,18 @@ holds("a real linkage is unchanged: python's D = [0.5, 0.5, 1]",
       Math.max(...threeLeaf.D.map((v, i) => Math.abs(v - [0.5, 0.5, 1][i]))) < 1e-15,
       `D = [${threeLeaf.D}]`);
 
+// --- an inverted linkage is refused, not clipped (#133)
+// python and R refuse a merge below its own parent; the browser clipped
+// the negative increment and returned D = [1, 1, 0.5] for the second
+// fixture, breaking unit variance. Same fixtures, message, node and size
+// as tests/test_tree_linkage_monotonic.py and test-structures.R.
+rejects(structures.treeFromLinkage, [[[0, 1, 0.5, 2], [2, 3, 0.3, 3]]],
+        "treeFromLinkage refuses an inversion",
+        "node 3 merges 0.32 BELOW its parent, and 1 node(s)");
+rejects(structures.treeFromLinkage, [[[0, 1, 0.8, 2], [2, 3, 0.5, 3]]],
+        "treeFromLinkage refuses an inversion above rho = 0.5",
+        "not monotonic");
+
 // --- a caller-supplied factor law reaches the derivative too (#209)
 // raceProbabilities has always accepted {F, W}. raceJacobian and
 // polishRace rejected them and built their own standard-normal Hermite

@@ -21,6 +21,8 @@ implicit covariance): each merge at height h contributes
 lam^2 = rho - rho_parent with rho = 1 - 2 h^2. Pass the result as
 structure= to \code{\link{race_probabilities}} or
 \code{\link{polish_race}} to price or polish along the dendrogram.
+A non-monotonic linkage (an inversion, as centroid and median linkage
+produce) has no tree representation and is refused with an error.
 }
 \examples{
 hc <- hclust(dist(matrix(rnorm(40), 8, 5)) / 10, method = "average")
