@@ -34,6 +34,60 @@
   interior. A non-positive `lengths_scale` is refused, since `log(s)`
   is in the answer.
 
+- `Tree.from_linkage` checks the premise it was built on (#133). Its
+  docstring says the cophenetic increments are "nonnegative by linkage
+  monotonicity" -- and nothing checked that. `centroid` and `median`
+  linkage routinely invert (9 of 40 random 8-point centroid linkages
+  here), and `max(lam2, 0.0)` then clipped the negative increment away,
+  returning a tree whose implied covariance is NOT the cophenetic one
+  the method promises. The gap reached **0.029** in covariance and
+  **1.4 percentage points** on a head-to-head price, silently.
+
+  A tree race is a nested variance decomposition, so a merge below its
+  own parent has no representation in one. It is refused, with the
+  size of the worst inversion, how many nodes invert, and what to do
+  instead -- a monotonic method, `scipy.cluster.hierarchy.is_monotonic`,
+  or an explicit `parent`/`strength`.
+
+  Measured: the criterion agrees with `is_monotonic` on all 240
+  linkages tried, with zero false refusals, and what is accepted still
+  reproduces the cophenetic matrix to 2.2e-16 across 137 cases. The
+  exactness check excludes merges above the `h = 1/sqrt(2)` horizon,
+  where correlations are floored to zero deliberately and documented
+  as such -- a first version of that check reported a 2.31 "error" that
+  was entirely that floor.
+
+  The R constructor `tree_from_linkage`, and `tree_from_hclust` through
+  it, still clipped -- the same inverted linkage errored in Python and
+  priced in R. It now refuses with the same message, node and size,
+  pinned by one three-runner fixture tested in both languages. The
+  browser's `treeFromLinkage` clipped too -- returning `D = [1, 1, 0.5]`
+  for a unit-variance model -- and now refuses the same way, checked in
+  `parity/check_js_api.mjs`.
+
+- The browser's Mendell-Elston approximation depended on the contestant
+  LABELS (#287). Sequential moment matching conditions one coordinate
+  at a time and pretends the remainder is still normal, so the order
+  decides the answer; `mendellElstonOne` applied it in raw contestant
+  order while python's `_order_variables` sorts hardest-first. Permuting
+  a four-runner race, evaluating it, and undoing the permutation moved
+  a share by **3.9 percentage points**.
+
+  The browser now fixes the order once from the initial moments, as
+  python does: ascending `m_k / sqrt(S_kk)`, which is python's
+  descending `a_t / sqrt(C_tt)` under this port's opposite sign
+  convention -- smallest survival probability first, while the normal
+  approximation is still exact.
+
+  It is not merely self-consistent now. Against
+  `winning.methods.orthant_extra.mendell_elston` on the reported
+  fixture the browser agrees to **4.3e-15**, where before it was 3e-2
+  away; and four permutations of that race return bit-identical
+  shares. Exact ties stay order dependent, here and in python: two
+  equally hard constraints have no canonical precedence.
+
+  This is what `docs/converge.html` draws as the Mendell-Elston arm.
+
 - The browser race and its analytic Jacobian priced a different race
   depending on the GAUGE of the loadings (#303). Adding the same
   loading to every contestant adds one common Gaussian shock to every

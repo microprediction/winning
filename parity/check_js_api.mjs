@@ -249,6 +249,18 @@ holds("a real linkage is unchanged: python's D = [0.5, 0.5, 1]",
       Math.max(...threeLeaf.D.map((v, i) => Math.abs(v - [0.5, 0.5, 1][i]))) < 1e-15,
       `D = [${threeLeaf.D}]`);
 
+// --- an inverted linkage is refused, not clipped (#133)
+// python and R refuse a merge below its own parent; the browser clipped
+// the negative increment and returned D = [1, 1, 0.5] for the second
+// fixture, breaking unit variance. Same fixtures, message, node and size
+// as tests/test_tree_linkage_monotonic.py and test-structures.R.
+rejects(structures.treeFromLinkage, [[[0, 1, 0.5, 2], [2, 3, 0.3, 3]]],
+        "treeFromLinkage refuses an inversion",
+        "node 3 merges 0.32 BELOW its parent, and 1 node(s)");
+rejects(structures.treeFromLinkage, [[[0, 1, 0.8, 2], [2, 3, 0.5, 3]]],
+        "treeFromLinkage refuses an inversion above rho = 0.5",
+        "not monotonic");
+
 // --- a caller-supplied factor law reaches the derivative too (#209)
 // raceProbabilities has always accepted {F, W}. raceJacobian and
 // polishRace rejected them and built their own standard-normal Hermite
@@ -638,6 +650,49 @@ accepts("the inverse takes a scalar D, matching python",
           () => classic.dividendImpliedAbility([2.5, 4.0, 6.0], density),
           a => a.length === 3 && a.every(Number.isFinite),
           a => `[${a.map(v => v.toFixed(4))}]`);
+}
+
+// --- Mendell-Elston does not depend on the labels (#287)
+// Sequential moment matching conditions one coordinate at a time and
+// pretends the remainder is still normal, so the ORDER decides the
+// answer. This applied it in raw contestant order while python's
+// _order_variables sorts hardest-first, so permuting a four-runner
+// race, evaluating, and undoing the permutation moved a share by 3.9
+// percentage points.
+{
+  const muME = [-0.5, 1.5, 1.0, -1.5];
+  const CME = [[5.5, 1.0, 0.0, -2.0], [1.0, 1.5, 2.0, 2.0],
+               [0.0, 2.0, 5.5, 6.0], [-2.0, 2.0, 6.0, 8.5]];
+  const shares = (m, C) => {
+    const raw = m.map((_, i) => demo.mendellElstonOne(m, C, i));
+    const t = raw.reduce((a, b) => a + b, 0);
+    return raw.map(x => x / t);
+  };
+  const permuted = (m, C, perm) => {
+    const pp = shares(perm.map(i => m[i]), perm.map(i => perm.map(j => C[i][j])));
+    const back = new Array(m.length);
+    perm.forEach((old, now) => { back[old] = pp[now]; });
+    return back;
+  };
+  const base = shares(muME, CME);
+
+  for (const perm of [[3, 1, 0, 2], [1, 0, 3, 2], [2, 3, 1, 0], [3, 2, 1, 0]])
+    accepts(`mendell-elston is invariant under [${perm}]`,
+            () => permuted(muME, CME, perm),
+            b => Math.max(...b.map((x, i) => Math.abs(x - base[i]))) < 1e-12,
+            b => `max |diff| ${Math.max(...b.map((x, i) =>
+              Math.abs(x - base[i]))).toExponential(2)}`);
+
+  // and it is the PYTHON answer, not merely a self-consistent one:
+  // winning.methods.orthant_extra.mendell_elston(-mu, B, D) for
+  // B = [[1,-2],[1,0],[2,1],[2,2]], D = 0.5 (this port is min-wins)
+  const REF = [0.4041262077118515, 0.0007992933998171157,
+               0.0012330295143568694, 0.5938414693739745];
+  accepts("mendell-elston matches the python reference",
+          () => base,
+          b => Math.max(...b.map((x, i) => Math.abs(x - REF[i]))) < 1e-12,
+          b => `max |diff| ${Math.max(...b.map((x, i) =>
+            Math.abs(x - REF[i]))).toExponential(2)}`);
 }
 
 {
