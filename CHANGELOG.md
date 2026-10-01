@@ -25,6 +25,11 @@
   as such -- a first version of that check reported a 2.31 "error" that
   was entirely that floor.
 
+  The R constructor `tree_from_linkage`, and `tree_from_hclust` through
+  it, still clipped -- the same inverted linkage errored in Python and
+  priced in R. It now refuses with the same message, node and size,
+  pinned by one three-runner fixture tested in both languages.
+
 - The browser race and its analytic Jacobian priced a different race
   depending on the GAUGE of the loadings (#303). Adding the same
   loading to every contestant adds one common Gaussian shock to every

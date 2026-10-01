@@ -112,3 +112,11 @@ def test_the_message_says_how_far_and_how_many():
     assert "BELOW its parent" in msg
     assert "node(s) do" in msg
     assert "is_monotonic" in msg
+
+
+def test_the_r_parity_fixture_is_refused_here_too():
+    """r/winning/tests/testthat/test-structures.R refuses this same
+    three-runner inversion with the same node and size."""
+    Z = np.array([[0, 1, 0.5, 2], [2, 3, 0.3, 3]], float)
+    with pytest.raises(ValueError, match="node 3 merges 0.32 BELOW"):
+        Tree.from_linkage(Z)
