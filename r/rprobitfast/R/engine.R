@@ -28,6 +28,25 @@
   list(x = e$values, w = e$vectors[1, ]^2)
 }
 
+# log of phi(a)/Phi(a), the inverse Mills ratio. pnorm(log.p = TRUE),
+# never log(pmax(pnorm(a), 1e-300)): pnorm underflows to exactly 0
+# below about -37, so the floor turned every deep tail into the SAME
+# number, log(1e-300) = -690.78, the objective went flat and this ratio
+# underflowed to a score of exactly zero (#270).
+.log_mills <- function(a) dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE)
+
+# Laplace-tilt the chosen alternative's own-noise quadrature. The fixed
+# Gauss-Hermite rule samples z where the PRIOR has its mass, and for a
+# large observed contrast the integrand's mass is far outside it: at a
+# gap of -20 the mode is at z = 10 and a 7-node rule reaches |z| < 3.8.
+# With g(z) = -z^2/2 + sum_j logPhi(b_j + z) (unit variances here),
+#   g'(z)  = -z + sum_j lam(A_j)
+#   g''(z) = -1 - sum_j lam(A_j)(A_j + lam(A_j))
+# and lam(a)(a + lam(a)) = -lam'(a) > 0 for every a, so g'' <= -1: g is
+# strictly concave, its mode is unique, and Newton converges from
+# anywhere. Nodes go at z* + sigma*x and the change of measure is undone
+# exactly by log sigma - z^2/2 + x^2/2, so the shift moves the NODES and
+# not the integrand.
 .nodes3 <- function(Qf = 11, Qz = 11, r = 2) {
   g <- .gh1(Qf); gz <- .gh1(Qz)
   grids <- do.call(expand.grid, c(rep(list(g$x), r), list(gz$x)))
@@ -67,13 +86,40 @@
 .nll_core <- function(theta, Xb, choice, J, r, nodes, nodes_sharp,
                       want_grad = TRUE) {
   X <- Xb[[1]]
+  # Every observation must be accounted for. The loop below walks the
+  # LEGAL labels and gathers the rows matching each, so a row whose
+  # choice is outside 1..J is never visited: logp stays 0 there, which
+  # adds zero negative log-likelihood and zero gradient, and the fit
+  # silently optimised a SUBSET while reporting it as the whole. NA rows
+  # did the same (#194).
+  # X is stacked long, J rows per observation, so the observation count
+  # is nrow(X) / J -- the same Tn the loop below uses.
+  .Tn <- nrow(X) / J
+  if (length(choice) != .Tn)
+    stop(sprintf(paste0("choice must have one entry per observation: ",
+                        "got %d for %d observations"),
+                 length(choice), .Tn), call. = FALSE)
+  bad <- which(is.na(choice) | choice < 1L | choice > J)
+  if (length(bad))
+    stop(sprintf(paste0("choice[%d] = %s is not an alternative in 1..%d; ",
+                        "%d of %d observations are not. They would be ",
+                        "dropped in silence, which raises the ",
+                        "log-likelihood because there is less of it"),
+                 bad[1], as.character(choice[bad[1]]), J, length(bad),
+                 length(choice)), call. = FALSE)
   nb <- ncol(X)
   beta <- theta[seq_len(nb)]
   wfree <- theta[-seq_len(nb)]
   V <- matrix(0, J, r)
   k <- 1L
   fill <- list()
-  for (col in seq_len(r)) for (row in (col + 1L):J) {
+  # seq_len, not `(col + 1L):J`: at J = 2 and the default r = 2L the
+  # col = 2 pass evaluates 3:2, which in R is the two-element vector
+  # c(3, 2) rather than empty, so the first assignment is V[3, 2] on a
+  # 2x2 matrix and every binary-choice fit died out of bounds (#183).
+  # nw counts only one free loading there, so wfree[2] was out of range
+  # too. seq_len(J - col) is empty exactly when it should be.
+  for (col in seq_len(r)) for (row in col + seq_len(J - col)) {
     V[row, col] <- wfree[k]; fill[[k]] <- c(row, col); k <- k + 1L
   }
   Tn <- nrow(X) / J
@@ -99,7 +145,7 @@
     acc <- matrix(0, Ti, Q)
     for (j in rivals) {
       A[[j]] <- outer(dmu[, j], Vf[, k_alt] - Vf[, j] + zq, "+")
-      logPhi[[j]] <- log(pmax(pnorm(A[[j]]), 1e-300))
+      logPhi[[j]] <- pnorm(A[[j]], log.p = TRUE)
       acc <- acc + logPhi[[j]]
     }
     m <- apply(acc, 1, max)

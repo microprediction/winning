@@ -1,6 +1,51 @@
 // The classic state-price lattice calibration -- port of
 // winning/lattice.py + lattice_calibration.py, dead heats included.
-import { ndtr, npdf, interpClamped, mean } from "./core.mjs";
+import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS } from "./core.mjs";
+
+/* Each exported call declares its own option keys; see checkOpts in
+   core.mjs for why an options object needs this at all. */
+const SOLVE_FOR_IMPLIED_OFFSETS_OPTS = new Set(["offsetSamples", "guess", "nIter"]);
+
+/* The interpolation table is built BY MAPPING over offsetSamples, and
+   read back with interpClamped, whose xp must ascend. Descending
+   offsets are what make the prices ascend, so the direction of this
+   argument is a precondition of the algorithm and not a presentation
+   choice. Hand it an ascending array and the binary search runs on a
+   descending table: every lookup falls off an end and clamps, so three
+   distinct prices came back as the lattice boundary [24, -25, -25] and
+   repriced 0.53 away from the target -- with no error at all (#274).
+
+   python raises ValueError("Not descending") and R stops with
+   "offset_samples must be descending" for the same input; only the
+   browser guessed. Ties are legal in all three: a repeated offset is a
+   flat step in the table, not an ascent.
+
+   An empty array and a non-finite entry are the same class of thing --
+   an offsetSamples the algorithm cannot use -- and the browser was
+   silently wrong on both, returning [undefined, ...] and [-5, -5, -5]
+   respectively. They are refused here rather than downstream, so the
+   message names the argument the caller actually passed. */
+export function asDescendingOffsets(offsets, where = "offsetSamples") {
+  if (!Array.isArray(offsets) && !ArrayBuffer.isView(offsets))
+    throw new Error(`${where} must be an array of offsets; got ${typeof offsets}`);
+  const n = offsets.length;
+  if (n === 0)
+    throw new Error(`${where} is empty; there is nothing to interpolate against`);
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(offsets[i]))
+      throw new Error(`${where}[${i}] = ${offsets[i]} is not a finite offset`);
+  }
+  for (let i = 0; i + 1 < n; i++) {
+    if (offsets[i + 1] > offsets[i])
+      throw new Error(
+        `${where} must be descending: ${where}[${i + 1}] = ${offsets[i + 1]} ` +
+        `is above ${where}[${i}] = ${offsets[i]}. The interpolation table is ` +
+        `built in this order and read as an ascending price curve, so an ` +
+        `ascending array silently returns lattice-boundary abilities.`);
+  }
+  return Array.from(offsets, Number);
+}
+
 
 export function pdfToCdf(f) {
   const c = new Array(f.length);
@@ -102,7 +147,20 @@ function expectedPayoffSum(cdf, cdfAll, multAll) {
 }
 function implicitPrices(baseCdf, cdfAll, multAll, offsets, L) {
   return offsets.map(k => {
-    if (k === Math.trunc(k))
+    // The integer fast path has to obey the SAME clamp the field was
+    // built with. `shiftedCdf` goes through `lowHigh`, which pins an
+    // offset at or past L-2 to the boundary; this called
+    // `integerShift(baseCdf, k)` with the raw k, whose own clamp is the
+    // much wider +/-(m-1). So a runner could sit in the field at
+    // offset L-2 and be PAID at 60: the state prices stopped being
+    // exhaustive claims on one race and summed to 1.88 (#292). An
+    // epsilon off the integer took the same race back to 1.0, because
+    // the non-integer path was clamped correctly all along.
+    //
+    // Guarding the fast path by the interior condition is exactly
+    // equivalent where it applies: for an interior integer `lowHigh`
+    // returns [[k, 1], [k, 0]], which is this shift with weight one.
+    if (k === Math.trunc(k) && k > -L + 2 && k < L - 2)
       return expectedPayoffSum(integerShift(baseCdf, k), cdfAll, multAll);
     const [[a, ac], [b, bc]] = lowHigh(k, L);
     return ac * expectedPayoffSum(integerShift(baseCdf, a), cdfAll, multAll)
@@ -119,11 +177,14 @@ export function statePricesFromOffsets(density, offsets) {
 }
 
 export function solveForImpliedOffsets(prices, density, opts = {}) {
+  checkOpts(opts, SOLVE_FOR_IMPLIED_OFFSETS_OPTS, "solveForImpliedOffsets", OPT_HINTS);
   const L = impliedL(density);
   let { offsetSamples = null, guess = null, nIter = 3 } = opts;
-  if (!offsetSamples) {
+  if (offsetSamples === null || offsetSamples === undefined) {
     offsetSamples = [];
     for (let k = Math.trunc(L / 2) - 1; k >= -Math.trunc(L / 2); k--) offsetSamples.push(k);
+  } else {
+    offsetSamples = asDescendingOffsets(offsetSamples, "offsetSamples");
   }
   if (!guess) {
     guess = [];
@@ -158,10 +219,27 @@ export function skewNormalDensity(L, unit, { loc = 0, scale = 1.0, a = 2.0 } = {
   return shiftedCdf(d, loc / unit, L);       // reference quirk: cdf-machinery on the density
 }
 
+/* Port of StatePricer.prices_from_dividends. Only a MISSING quote --
+   null, undefined or NaN -- becomes nanValue. A non-positive dividend,
+   and -Infinity with it, is worth nothing and prices at 0; +Infinity
+   prices at 1/Infinity = 0 on its own.
+
+   The browser used `Number.isFinite(x) ? x : nanValue`, which conflates
+   every non-finite value with a missing quote, and it divided by the
+   dividend unconditionally. So an infinite-dividend entrant got
+   1/2000 of the book instead of nothing, a dividend of 0 produced
+   Infinity and then NaN after normalising, and a negative dividend came
+   back as a NEGATIVE probability (#242). Normalising only when the
+   total is positive is python's rule too: an all-infinite book is all
+   zeros, not 0/0. */
 export function pricesFromDividends(dividends, nanValue = 2000) {
-  const p = dividends.map(x => 1 / (Number.isFinite(x) ? x : nanValue));
+  const p = dividends.map(x => {
+    const v = (x === null || x === undefined || Number.isNaN(x))
+      ? nanValue : Number(x);
+    return v <= 0 ? 0 : 1 / v;
+  });
   const s = p.reduce((a, b) => a + b, 0);
-  return p.map(v => v / s);
+  return s > 0 ? p.map(v => v / s) : p;
 }
 
 export function dividendImpliedAbility(dividends, density, { nanValue = 2000, unit = 1.0 } = {}) {

@@ -12,18 +12,12 @@ from scipy.special import log_ndtr, ndtr, ndtri
 
 # the package-wide shape contract; re-exported here because
 # winning.factor.core is where the factor kernels look for it
-from ..shapes import as_idio, as_loadings  # noqa: F401
+from ..shapes import as_idio, as_loadings, as_weights  # noqa: F401
 
-try:                                       # compiled kernels (rust/fastrace)
-    import fastrace as _fastrace
-    _RUST_OK = (hasattr(_fastrace, "win_probabilities_factor")
-                and hasattr(_fastrace, "jacobian_vector_product"))
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except ImportError:
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('win_probabilities_factor', 'jacobian_vector_product')
 
 _TINY = 1e-300
 _PFLOOR = 1e-15
@@ -391,6 +385,15 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     from scipy.spatial.distance import squareform
 
     C = np.asarray(C, dtype=float)
+    # Squareness, stated. It was only ever caught by accident: a 1 x 2
+    # broadcasts against its own transpose into a 2 x 2, so the
+    # asymmetry check below reported "not symmetric" for something that
+    # is really not square, and a 1-D array passed that check outright
+    # (asym 0) and then had np.diag build a matrix FROM it. The R port
+    # read nrow() alone and answered for a 1 x 2 from C[1, 1] (#277).
+    if C.ndim != 2 or C.shape[0] != C.shape[1]:
+        raise ValueError(
+            f"cov= must be square; got shape {C.shape}")
     n = len(C)
     if not np.isfinite(C).all():
         raise ValueError("cov= contains NaN or inf")
@@ -399,13 +402,44 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         raise ValueError(
             f"cov= is not symmetric (max asymmetry {asym:.2e}); pass "
             "(C + C.T)/2 if the asymmetry is numerical noise")
-    C = 0.5 * (C + C.T)
+    # halve BEFORE adding: C + C.T overflows to inf for finite
+    # entries near the double ceiling, and the finiteness check
+    # above has already passed by then, so an inf reached D and
+    # came back out as a non-finite variance (#279). The two are
+    # the same number everywhere else.
+    C = 0.5 * C + 0.5 * C.T
     lam_min = float(np.linalg.eigvalsh(C).min())
-    if lam_min < -1e-8 * max(float(np.trace(C)) / n, 1e-300):
+    # mean diagonal, divided BEFORE summing: np.trace overflows for
+    # finite entries near the ceiling, which made the tolerance inf
+    # and the comparison meaningless (#279)
+    if lam_min < -1e-8 * max(float(np.sum(np.diag(C) / n)), 1e-300):
         raise ValueError(
             f"cov= is not positive semidefinite (min eigenvalue "
             f"{lam_min:.2e}); this is not a covariance matrix. Project "
             "to the PSD cone first if it came from noisy estimation.")
+    if n == 1:
+        # A one-runner field has no covariance STRUCTURE: there is
+        # nothing for a factor to correlate, the whole variance is
+        # idiosyncratic, and the race is [1] whatever it is. The
+        # machinery below divides by (1 - 2/n) + n/n^2, which is exactly
+        # zero at n = 1, so cov=[[v]] raised ZeroDivisionError while the
+        # equivalent plain race already returned [1]. #181 added the
+        # n <= 2 branch to the inner solver and that branch divides by
+        # the same quantity (#273).
+        V = np.zeros((1, 1))
+        D = np.array([max(float(C[0, 0]), 1e-12)])
+        F = np.zeros((1, 1))
+        W = np.ones(1)
+        if return_report:
+            # the same keys the full path reports, so every caller reads
+            # a one-runner fit the way it reads any other: an EXACT fit
+            # of rank zero, nothing residual, nothing sharp
+            return V, D, F, W, {"projected_residual_rel": 0.0,
+                                "projected_residual_max": 0.0,
+                                "rank": 0,
+                                "sharpness": 0.0,
+                                "contrast_residual_max": 0.0}
+        return V, D, F, W
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)
@@ -578,16 +612,23 @@ def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
     w = w / np.sqrt(2.0 * np.pi)
     if k == 1:
         return x[:, None], w
-    grids = np.meshgrid(*([x] * k), indexing="ij")
-    F = np.column_stack([g.ravel() for g in grids])
-    W = np.ones(len(F))
-    for d in range(k):
-        W *= w[np.searchsorted(x, F[:, d])]
-    keep = W > prune * W.max()
-    W = W[keep]
+    # Build the product one dimension at a time and prune as it grows: a
+    # partial product whose weight cannot reach the threshold whatever
+    # the remaining factors contribute (each at most w.max()) is dropped
+    # then, so the k-fold tensor is never materialised. The kept set and
+    # its order are exactly those of the full tensor pruned once (#155:
+    # Q=41 at rank 5 is 116M nodes, 9 GiB, before pruning to 3e5).
+    wmax = float(w.max())
+    F = x[:, None]
+    W = w.copy()
+    for d in range(1, k):
+        F = np.column_stack([np.repeat(F, Q, axis=0), np.tile(x, len(F))])
+        W = (W[:, None] * w[None, :]).ravel()
+        keep = W * wmax ** (k - 1 - d) > prune * wmax ** k
+        F, W = F[keep], W[keep]
     # renormalize: pruning drops ~1e-7 of mass, and direct weighted
     # mixtures (mixed softmax, moment updates) consume W as-is
-    return F[keep], W / W.sum()
+    return F, W / W.sum()
 
 
 def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
@@ -613,10 +654,17 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     """
     mu = np.asarray(mu, dtype=float)
     V = as_loadings(V, len(mu))      # before keep: rows are contestants
-    D = as_idio(D, len(mu))
+    D = as_idio(D, len(mu), positive=True)
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
+    # gauge-fix: a common loading column shifts every conditional mean
+    # equally and cannot move an argmin, so center V for a lattice window
+    # and numerics invariant under V -> V + 1c' (eighth review). Done
+    # BEFORE the compiled dispatch: the kernel does not center, and an
+    # uncentered column widened its window by the common shift (#114:
+    # a shift of 100 moved the answer by 3e-2 with rust on, 3e-16 off).
+    V = V - V.mean(axis=0)
     if (_HAVE_RUST and not return_deletions and not per_node_interval
             and N > 1 and len(F) >= 2):
         # The compiled kernel is the same lattice on the same global
@@ -633,10 +681,6 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
         p = np.asarray(p, dtype=float)
         return (p, float(total)) if return_total else p
     sd = np.sqrt(D)
-    # gauge-fix: a common loading column shifts every conditional mean
-    # equally and cannot move an argmin, so center V for a lattice window
-    # and numerics invariant under V -> V + 1c' (eighth review)
-    V = V - V.mean(axis=0)
     M_all = mu[None, :] + F @ V.T                      # (nodes, N) cond. means
     pad = 8.0 * sd.max()
     grid = np.arange(points) / (points - 1)            # common normalized coord
@@ -724,7 +768,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     logp = np.log(p)
     N = len(p)
     V = as_loadings(V, N)
-    D = as_idio(D, N)
+    D = as_idio(D, N, positive=True)
     sd = np.sqrt(D)
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
@@ -840,24 +884,32 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     mu = np.asarray(mu, dtype=float)
     h = np.asarray(h, dtype=float)
     N = len(mu)
+    D = as_idio(D, N, positive=True)
+    V = as_loadings(V, N)
+    V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass (#114)
     if _HAVE_RUST and normalized and N > 1 and len(F) >= 2:
-        # rust returns the normalized product (matches numpy to ~5e-17
-        # for both forms); the unnormalized variant is numpy-only.
+        # The compiled kernel returns the RAW directional derivative of the
+        # unnormalized rectangle sum (#124: it matched numpy's
+        # normalized=False to 2e-16 and missed normalized=True by 3.5e-4
+        # at 25 points). The quotient rule below needs the unnormalized
+        # masses a and their total T, which the compiled forward returns
+        # as (a/T, T) in one pass cheaper than the JVP itself.
         # len(F) >= 2: the compiled JVP carries ~0.5 ms of fixed cost per
         # call, so at a SINGLE factor node numpy is faster (0.42 vs 0.59
         # ms at K = 8) and rust only wins from two nodes up (1.2x at 2,
         # 2.9x at 15, 3.2x at 50). nway.update_winner_correlated calls
         # this 119 times with one node each; without the guard it ran
         # 25% slower with rust on.
-        return np.asarray(_fastrace.jacobian_vector_product(
-            np.ascontiguousarray(mu), np.ascontiguousarray(as_loadings(V, N)),
-            np.ascontiguousarray(as_idio(D, N)),
-            np.ascontiguousarray(F, dtype=float),
-            np.ascontiguousarray(W, dtype=float),
-            np.ascontiguousarray(h), int(points), str(form)), dtype=float)
-    sd = np.sqrt(as_idio(D, N))
-    V = as_loadings(V, N)
-    V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass
+        args = (np.ascontiguousarray(mu), np.ascontiguousarray(V),
+                np.ascontiguousarray(D),
+                np.ascontiguousarray(F, dtype=float),
+                np.ascontiguousarray(W, dtype=float))
+        raw = np.asarray(_fastrace.jacobian_vector_product(
+            *args, np.ascontiguousarray(h), int(points), str(form)),
+            dtype=float)
+        pn, T = _fastrace.win_probabilities_factor(*args, int(points))
+        return (raw - np.asarray(pn, dtype=float) * raw.sum()) / float(T)
+    sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
     x = np.linspace(M_all.min() - 8 * sd.max(), M_all.max() + 8 * sd.max(), points)
     dx = x[1] - x[0]

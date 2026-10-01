@@ -1,13 +1,12 @@
 // Demo support: seeded correlation generators (randomcov's ensembles in
 // miniature), dense linear algebra for the in-browser grammar fit, and
 // a Monte Carlo sampler to race against.
-import { hermite1, interpClamped, solve } from "./core.mjs";
+import { hermite1, interpClamped, solve, firstPrimes } from "./core.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
    Gauss-Hermite grids explode; low-discrepancy nodes are the right
    family there (same escalation as the python and R engines). */
-const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53];
 function invNormal(p) {
   // Acklam-style rational approximation, adequate for node placement
   const a = [-39.6968302866538, 220.946098424521, -275.928510446969,
@@ -31,10 +30,12 @@ function invNormal(p) {
 }
 export function haltonNormalNodes(r, count) {
   const F = [], W = new Array(count).fill(1 / count);
+  const primes = firstPrimes(r);   // generated: a literal table had a
+  // silent cliff at rank 17, past which every node was NaN (#233)
   for (let idx = 0; idx < count; idx++) {
     const node = [];
     for (let dim = 0; dim < r; dim++) {
-      const base = PRIMES[dim];
+      const base = primes[dim];
       let i = idx + 21, f = 1 / base, h = 0;
       while (i > 0) { h += f * (i % base); i = Math.floor(i / base); f /= base; }
       node.push(invNormal(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
@@ -385,8 +386,26 @@ export function mendellElstonOne(mu, C, i) {
   const { m, S } = diffProblem(mu, C, i);
   const d = mu.length - 1;
   let logp = 0;
+  // Hardest constraint FIRST, as python's _order_variables does.
+  // Sequential moment matching is order dependent -- each step pretends
+  // the conditioned remainder is still normal -- so processing in raw
+  // contestant order made the answer depend on the LABELS: permuting a
+  // four-runner race, evaluating, and undoing the permutation moved a
+  // share by 3.9 percentage points (#287).
+  //
+  // python orders by a_t/sqrt(C_tt) descending, and its z is the
+  // negative of this port's, so here it is m[k]/sqrt(S[k,k])
+  // ASCENDING: the smallest survival probability goes first, while the
+  // normal approximation is still exact. The order is fixed once from
+  // the initial moments, as python fixes it, not re-sorted as the
+  // conditioning proceeds.
+  //
+  // Exact ties stay order dependent, in this port and in python: two
+  // equally hard constraints have no canonical precedence.
   const alive = [];
   for (let a = 0; a < d; a++) alive.push(a);
+  alive.sort((a, b) => (m[a] / Math.sqrt(Math.max(S[a * d + a], 1e-12)))
+                     - (m[b] / Math.sqrt(Math.max(S[b * d + b], 1e-12))));
   while (alive.length) {
     const k = alive.shift();
     const skk = Math.max(S[k * d + k], 1e-12), sk = Math.sqrt(skk);

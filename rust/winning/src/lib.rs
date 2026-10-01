@@ -1302,7 +1302,17 @@ pub fn implicit_prices(
     offsets
         .par_iter()
         .map(|&k| {
-            if k == k.trunc() {
+            // The integer fast path must obey the SAME clamp the field
+            // was built with. shifted_cdf goes via low_high, which pins
+            // an offset at or past L-2 to the boundary; this called
+            // integer_shift(base_cdf, k) with the raw k, whose own
+            // clamp is the much wider +/-(m-1). A runner could sit in
+            // the field at offset L-2 and be PAID at 60, so the state
+            // prices summed to 1.88 while an epsilon off the integer
+            // gave 1.0 (#292). For an interior integer low_high returns
+            // ((k, 1), (k, 0)), so this guard is exactly equivalent
+            // where the fast path applies.
+            if k == k.trunc() && k > -(l as f64) + 2.0 && k < (l as f64) - 2.0 {
                 expected_payoff_sum(&integer_shift(base_cdf, k as i64), cdf_all, mult_all)
             } else {
                 let ((a, ac), (b, bc)) = low_high(k, l);

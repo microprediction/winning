@@ -73,7 +73,48 @@
 fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
                            nodes = 2048L) {
   C <- as.matrix(C)
+  # The same contract python states, in the same order and with the
+  # same messages. R had NONE of it: a negative variance was clamped to
+  # the floor, NA and Inf propagated into the fit, and a non-square
+  # matrix was read by nrow() alone. That last one is why this block
+  # sits ABOVE the n == 1 return rather than below it -- a 1 x 2 matrix
+  # has nrow 1, so the one-runner branch would otherwise answer for it
+  # from C[1, 1] and drop the second column (#277).
+  if (nrow(C) != ncol(C))
+    stop(sprintf("cov= must be square; got %d x %d", nrow(C), ncol(C)))
   n <- nrow(C)
+  if (!all(is.finite(C))) stop("cov= contains NaN or inf")
+  asym <- max(abs(C - t(C)))
+  if (asym > 1e-8 * max(max(abs(C)), 1e-300))
+    stop(sprintf(paste("cov= is not symmetric (max asymmetry %.2e); pass",
+                       "(C + t(C))/2 if the asymmetry is numerical noise"),
+                 asym))
+  # halve BEFORE adding, or C + t(C) overflows to Inf for finite
+  # entries near the double ceiling (#279)
+  C <- 0.5 * C + 0.5 * t(C)
+  lam_min <- min(eigen(C, symmetric = TRUE, only.values = TRUE)$values)
+  # mean diagonal, divided BEFORE summing: sum(diag(C)) overflows to
+  # Inf for finite entries near the ceiling, and the tolerance is
+  # then -Inf, so the comparison is always FALSE and the check
+  # accepts a matrix with a large negative eigenvalue (#279)
+  if (lam_min < -1e-8 * max(sum(diag(C) / n), 1e-300))
+    stop(sprintf(paste("cov= is not positive semidefinite (min eigenvalue",
+                       "%.2e); this is not a covariance matrix. Project to",
+                       "the PSD cone first if it came from noisy",
+                       "estimation."),
+                 lam_min))
+  if (n == 1L) {
+    # A one-runner field has no covariance STRUCTURE: nothing for a
+    # factor to correlate, the whole variance idiosyncratic, and the
+    # race is 1 whatever it is. .factor_model_projected is asked for
+    # min(k, n - 1) = 0 factors and hands back a 0 x 0 matrix, which
+    # then fails to multiply; python divided by zero at the same point
+    # (#273). Report it as what it is: an exact fit of rank zero.
+    return(list(V = matrix(0, 1L, 1L), D = pmax(C[1L, 1L], 1e-12),
+                F = matrix(0, 1L, 1L), W = 1,
+                rank = 0L, n = 1L, bound = 0, clamp = 0,
+                residual = 0, contrast_residual = 0, degraded = FALSE))
+  }
   s <- sqrt(pmax(diag(C), 1e-12))
   corr <- C / outer(s, s)
   fit <- .factor_model_projected(C, min(k, n - 1L))
@@ -113,9 +154,25 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   keep <- colSums(Vall ^ 2) > 1e-10 * sum(diag(C)) / n
   if (!any(keep)) keep[1] <- TRUE
   Vall <- Vall[, keep, drop = FALSE]
+  # the clamp is reported, not re-derived: the degradation test used to
+  # compare D against 1e-6 * diag while close_fit clamped at 1e-3 * mean,
+  # three orders of magnitude apart, so a clamp-bound fit counted zero
+  # bound entries and was priced instead of routed (#189)
+  d_clamp <- 1e-3 * mean(diag(C))
   close_fit <- function(Vc) {
     rhs <- diag(P %*% (C - Vc %*% t(Vc)) %*% P)
-    Dc <- pmax(solve(P * P, rhs), 1e-3 * mean(diag(C)))
+    # The closing solve is against P o P = a I + b 11' with a = 1 - 2/n,
+    # b = 1/n^2. At n = 2 that a is exactly ZERO, so the matrix is rank
+    # one and solve() threw for EVERY 2x2 covariance, public cov= calls
+    # included (#181). The python reference has had the two-runner branch
+    # all along: one contrast, so the total is spread evenly.
+    if (n <= 2L) {
+      a <- 1 - 2 / n
+      b <- 1 / (n * n)
+      Dc <- pmax(rep(max(sum(rhs), 0) / (a + n * b) / n, n), d_clamp)
+    } else {
+      Dc <- pmax(solve(P * P, rhs), d_clamp)
+    }
     Rm <- P %*% (C - Vc %*% t(Vc) - diag(Dc)) %*% P
     list(D = Dc, res = max(abs(Rm)))
   }
@@ -123,12 +180,44 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # second arm: pure eigen fit at the same total rank (greedy
   # factor+blocks allocation is the wrong shape for globally smooth
   # covariance); smaller choice-relevant residual wins, pipeline on ties
-  rank <- ncol(Vall)
+  # clamp to n: the greedy allocation (k global + m eigendirections +
+  # one per block) can ask for more columns than there are eigenvectors
+  # -- k=3, m=5 and 2 blocks is 10 at n=8 -- and the python reference's
+  # _top_eigen truncates silently where seq_len() here ran off the end
+  # of eC$vectors ("subscript out of bounds", an n=8 exact-rank-3
+  # correlation, the #118 fixture)
+  rank <- min(ncol(Vall), n)
   eC <- eigen(C, symmetric = TRUE)
   Veig <- eC$vectors[, seq_len(rank), drop = FALSE] *
     rep(sqrt(pmax(eC$values[seq_len(rank)], 0)), each = n)
   a2 <- close_fit(Veig)
   if (a2$res < a1$res) { Vall <- Veig; D <- a2$D } else D <- a1$D
   hw <- .halton_normal_nodes(ncol(Vall), nodes)
-  list(V = Vall, D = D, F = hw$F, W = hw$W)
+  # The two failure classes the python reference keys on, reported so a
+  # caller can see them: the fit degenerates to full rank or drives D onto
+  # its floor (the conditional race is then a near-step the factor nodes
+  # cannot resolve, and the residual checks are silent about it), or it
+  # reproduces cov badly. Python routes either case to GHK; this package
+  # has no GHK, so it prices the fit and says so -- see the warning in
+  # race_probabilities(). A gap that does not announce itself is the one
+  # failure mode that looks like an answer.
+  bound <- sum(D <= 2 * d_clamp)
+  # the pairwise-contrast residual python also keys on: a near-singular
+  # difference variance the fit did not hold makes head-to-head
+  # probabilities badly wrong while the global residual stays small
+  Sig <- Vall %*% t(Vall) + diag(D)
+  cv_fit <- outer(diag(Sig), diag(Sig), "+") - 2 * Sig
+  cv_true <- outer(diag(C), diag(C), "+") - 2 * C
+  scale_cv <- pmax(cv_true, 1e-12 * mean(diag(C)))
+  contrast_res <- max(abs(cv_fit - cv_true) / scale_cv)
+  residual <- min(a1$res, a2$res)
+  list(V = Vall, D = D, F = hw$F, W = hw$W,
+       rank = ncol(Vall), n = n,
+       bound = bound,
+       clamp = d_clamp,
+       residual = residual,
+       contrast_residual = contrast_res,
+       degraded = (bound > 0 || ncol(Vall) >= n ||
+                   contrast_res > 0.05 ||
+                   residual > 0.05 * mean(diag(C))))
 }

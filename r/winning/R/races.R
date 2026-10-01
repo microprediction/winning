@@ -100,7 +100,12 @@
       # which bounds the pairwise contrast sharpness from above
       sharp <- sqrt(2) * max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
       r <- ncol(V)
-      if (r >= 2 && sharp > 3.0) {
+      # per-rank (Gauss-Hermite order cap, sharpness past which even that
+      # order loses to the low-discrepancy family); see GH_RULE in the
+      # python reference for the measurements behind each number
+      cap <- if (r == 1) 201 else if (r == 2) 41 else if (r == 3) 31 else 15
+      sharp_max <- if (r == 2) 3.75 else if (r == 3) 4.75 else 3.0
+      if (r >= 2 && sharp > sharp_max) {
         # matching the python reference: past this sharpness the factor
         # integrand is a near-step and Gauss-Hermite converges slowly at
         # any order; escalate the FAMILY to a low-discrepancy rule.
@@ -108,7 +113,7 @@
         hw <- .halton_normal_nodes(r, 2^13)
         F <- hw$F
         W <- hw$W
-      } else if (r == 1 && ceiling(8 * sharp) > 201) {
+      } else if (r == 1 && ceiling(8 * sharp) > 80) {
         # rank-1 extreme sharpness (matching the python reference):
         # Gauss-Hermite is the wrong family for a near-step integrand;
         # an equal-weight midpoint-quantile grid scaled with sharpness
@@ -116,14 +121,13 @@
         Q <- as.integer(min(ceiling(8 * sharp), 4001))
         F <- matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)
         W <- rep(1 / Q, Q)
-      } else if (15^r > 1e5) {
+      } else if (cap^r > 1e5) {
         # high-rank tensor footgun (matching python): past a 1e5-node
         # tensor budget escalate to low-discrepancy nodes
         hw <- .halton_normal_nodes(r, 2^13)
         F <- hw$F
         W <- hw$W
       } else {
-        cap <- if (r == 1) 201 else if (r == 2) 41 else 15
         Q <- as.integer(min(max(ceiling(8 * sharp), 15), cap))
         hw <- hermite_nodes(ncol(V), order = Q)
         F <- hw$F
@@ -136,6 +140,45 @@
     s <- .SPANS[[base]]
     if (is.null(s)) c(12, 12) else s
   }
+  # Every node carries exactly the loadings' rank, and there is one
+  # weight per node. F with the wrong number of ROWS was accepted and
+  # priced a different quadrature outright -- 0.64616 0.12271 0.23064
+  # 0.00049 where the right answer is 0.38173 0.30061 0.13687 0.18079 --
+  # too few weights returned all NA, and extra weights were ignored. A
+  # short F did fail, but with "non-conformable arguments", which names
+  # nothing the caller passed. Same contract as the browser's
+  # asFactorNodes (#290) and julia's.
+  Fm <- as.matrix(F)
+  rk <- ncol(V)
+  if (ncol(Fm) != rk)
+    stop(sprintf(paste("F must have one column per loading; got %d for",
+                       "rank %d -- a short F prices a lower-rank model"),
+                 ncol(Fm), rk), call. = FALSE)
+  if (nrow(Fm) < 1L)
+    stop("F is empty; there are no quadrature nodes", call. = FALSE)
+  if (any(!is.finite(Fm)))
+    stop("F has a non-finite node", call. = FALSE)
+  if (length(W) != nrow(Fm))
+    stop(sprintf("W must have one weight per factor node; got %d for %d nodes",
+                 length(W), nrow(Fm)), call. = FALSE)
+  F <- Fm
+
+  # W and c*W describe the SAME factor law, so normalise here, as
+  # python's _setup does through winning.shapes.as_weights and as
+  # abilities_from_race already does for itself further down. The
+  # forward divides its accumulated shares by their total and was
+  # invariant either way; race_jacobian does not, so J(W) and J(10W)
+  # differed by 1.473 -- the same defect as #281 in the standalone
+  # javascript module, and #290 in the browser tree.
+  W <- as.numeric(W)
+  Wtot <- sum(W)
+  if (!is.finite(Wtot) || Wtot <= 0)
+    stop(sprintf("W must have a positive total; got %s", format(Wtot)),
+         call. = FALSE)
+  if (any(!is.finite(W)) || any(W < 0))
+    stop("W must be finite and non-negative; a factor law has no negative mass",
+         call. = FALSE)
+  W <- W / Wtot
   list(mu = mu, V = V, D = D, F = as.matrix(F), W = as.numeric(W),
        fn = fn, left = span[1], right = span[2])
 }
@@ -190,6 +233,88 @@
 #' @param nodes deprecated alias for list(F, W)
 #' @return probabilities summing to one, or list(p, slopes)
 #' @export
+.warn_degraded_cov <- function(fit, where) {
+  # matching winning.factor.races._fit_cov: the same two failure classes,
+  # and the same advice, except that python can route around it here
+  if (!isTRUE(fit$degraded)) return(invisible(NULL))
+  warning(sprintf(
+    "%s: the cov= grammar fit is degraded (rank %d of %d%s). The %s race is then a near-step the factor nodes cannot resolve, and the covariance residual checks do not see it -- expect percent-level error (4.6e-3 measured against the python reference on an exactly 3-factor correlation at n=8). The python package routes this case to scrambled-Sobol GHK and this port has none, so the two DISAGREE here by design; use winning (python) race_probabilities(cov=) if that matters.",
+    where, fit$rank, fit$n,
+    if (fit$bound > 0) sprintf(", idiosyncratic floor bound on %d of %d entries", fit$bound, fit$n) else "",
+    "conditional"), call. = FALSE)
+  invisible(NULL)
+}
+
+.jacobi_sweeps <- function(mu, forward, scale, alpha, n_iter, tol) {
+  # Own-slope-preconditioned coordinate sweeps on the mean-zero quotient,
+  # matching python's races._jacobi_sweeps. `forward(mu)` returns
+  # list(resid, dres): the residual in whatever space the caller inverts
+  # in, model minus target, and its own-slopes (negative).
+  #
+  # alpha_base is the Richardson value, a persistent fact about the
+  # Jacobian; penalty is caution after a sweep that failed to contract, a
+  # transient, restored on the next good sweep. One number for both can
+  # only ratchet down (#178). A monotone iteration riding one mode is
+  # summed rather than waited out (Aitken), above 1e3 tolerances only.
+  alpha_base <- alpha
+  penalty <- 1
+  prev <- NULL
+  prev_step <- NULL
+  rmax <- Inf
+  for (it in seq_len(n_iter)) {
+    fw <- forward(mu)
+    resid <- fw$resid
+    dlogp <- fw$dres
+    rmax <- max(abs(resid))
+    rrms <- sqrt(mean(resid^2))
+    if (rmax < tol) break
+    if (!is.null(prev) && rmax >= prev$rmax && rrms >= prev$rrms) {
+      if (penalty > 0.1) {
+        penalty <- max(0.5 * penalty, 0.1)
+        mu <- prev$mu; resid <- prev$resid; dlogp <- prev$dlogp
+        rmax <- prev$rmax; rrms <- prev$rrms
+        prev_step <- NULL
+      }
+    } else if (!is.null(prev) && penalty < 1) {
+      penalty <- min(1, penalty / 0.75)
+    }
+    prev <- list(mu = mu, resid = resid, dlogp = dlogp, rmax = rmax, rrms = rrms)
+    alpha <- alpha_base * penalty
+    # residual-proportional step cap in the field's scale: a near-certain
+    # winner's residual and own-slope both vanish and their noisy ratio
+    # destabilizes the recentered fixed point
+    lim <- pmin(2, 10 * abs(resid)) * scale
+    step <- pmin(pmax(alpha * resid / dlogp, -lim), lim)
+    step <- step - mean(step)
+    extrapolated <- FALSE
+    if (!is.null(prev_step)) {
+      na <- sqrt(sum(prev_step^2))
+      nb <- sqrt(sum(step^2))
+      if (na > 0) {
+        dot <- sum(step * prev_step)
+        rho <- dot / (na * na)
+        cosn <- if (nb > 0) dot / (na * nb) else 0
+        ratio <- nb / na
+        if (rho < 0) {
+          lam <- 1 - (1 - rho) / alpha
+          alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
+                   rmax > 1e3 * tol) {
+          # collinear steps decaying geometrically: sum the tail (Aitken)
+          mu <- mu - step / (1 - ratio)
+          prev_step <- NULL
+          extrapolated <- TRUE
+        }
+      }
+    }
+    if (!extrapolated) {
+      prev_step <- step
+      mu <- mu - step
+    }
+  }
+  list(mu = mu, converged = rmax < tol, resid = rmax)
+}
+
 race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                base = "normal", points = 257,
                                return_slopes = FALSE, structure = NULL,
@@ -199,6 +324,13 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
     fit <- fit_covariance(cov)
+    # the forward normal race with no slopes is the one case answerable
+    # without the fit at all; everything else needs the factor form and
+    # keeps the fit with its warning (matching python)
+    routable <- identical(base, "normal") && !return_slopes
+    if (isTRUE(fit$degraded) && routable)
+      return(.ghk_race(mu, cov)$p)
+    .warn_degraded_cov(fit, "race_probabilities")
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
@@ -267,10 +399,16 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                 base = "normal", points = 257,
                                 n_iter = 60, tol = 1e-8,
                                 structure = NULL, qa = 9, qf = 15, cov = NULL) {
+  dense <- NULL
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
     fit <- fit_covariance(cov)
+    if (isTRUE(fit$degraded) && identical(base, "normal")) {
+      dense <- as.matrix(cov)
+    } else {
+      .warn_degraded_cov(fit, "abilities_from_race")
+    }
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
@@ -281,25 +419,60 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   if (any(target <= 0)) stop("all target probabilities must be positive")
   target <- target / sum(target)
   logt <- log(target)
-  mu <- -(logt - mean(logt)) / 2
-  alpha <- if (length(target) > 2) 1.0 else 0.7
-  for (it in seq_len(n_iter)) {
-    ps <- race_probabilities(mu, V = V, D = D, F = F, W = W, base = base,
-                             points = points, return_slopes = TRUE)
-    phat <- ps$p
-    sl <- ps$slopes
-    resid <- log(pmax(phat, 1e-300)) - logt
-    if (max(abs(resid)) < tol) break
-    dlogp <- pmin(sl / pmax(phat, 1e-300), -1e-6)
-    # residual-proportional step cap: a near-certain winner's residual
-    # and own-slope both vanish and their noisy ratio destabilizes the
-    # recentered fixed point (heavy-favorite targets 1e-4..1e-8 stalled;
-    # capped they converge in a handful of iterations)
-    lim <- pmin(2, 10 * abs(resid))
-    mu <- mu - pmin(pmax(alpha * resid / dlogp, -lim), lim)
-    mu <- mu - mean(mu)
+  n <- length(target)
+  # the field's contrast scale (matching the python reference): median
+  # idiosyncratic variance plus the mean factor variance under the nodes
+  # actually represented, so (V, F) -> (V / c, c F) is invariant
+  Dn <- if (is.null(D)) rep(1, n) else as.numeric(D)
+  Vn <- if (is.null(V)) matrix(0, n, 1) else as.matrix(V)
+  if (nrow(Vn) != n && ncol(Vn) == n) Vn <- t(Vn)
+  Vc <- sweep(Vn, 2, colMeans(Vn))
+  if (!is.null(V) && !is.null(F)) {
+    Fq <- as.matrix(F)
+    Wq <- if (is.null(W)) rep(1 / nrow(Fq), nrow(Fq)) else as.numeric(W) / sum(W)
+    Fc <- sweep(Fq, 2, colSums(Fq * Wq))
+    CovF <- t(Fc) %*% (Fc * Wq)
+  } else {
+    CovF <- diag(ncol(Vc))
   }
-  mu
+  SigV <- Vc %*% CovF %*% t(Vc)
+  scale <- sqrt(median(Dn) + mean(diag(SigV)))
+  if (n == 2 && identical(base, "normal")) {
+    # a pair is one Gaussian contrast: closed form (matching python)
+    sd_d <- sqrt(max(SigV[1, 1] + SigV[2, 2] - 2 * SigV[1, 2] + Dn[1] + Dn[2],
+                     1e-300))
+    gap <- sd_d * qnorm(target[1])
+    return(c(-0.5 * gap, 0.5 * gap))
+  }
+  mu <- -(logt - mean(logt)) / 2 * scale
+  top2 <- if (n > 2) sum(sort(target, decreasing = TRUE)[1:2]) else 1
+  alpha <- if (n == 2 || top2 > 0.8) 0.7 else 1.0
+  if (!is.null(dense)) {
+    # Invert the routed map itself, not the fit: GHK yields d log p / d mu
+    # in its conditioning pass, so the same sweeps apply. Inverting the fit
+    # while the forward returns GHK would make the two front doors describe
+    # different races, which is python's #164.
+    scale <- sqrt(mean(diag(dense)))
+    mu <- -(logt - mean(logt)) / 2 * scale
+    fwd <- function(m) {
+      g <- .ghk_race(m, dense, want_slopes = TRUE)
+      list(resid = g$logp - logt, dres = pmin(g$dlogp, -1e-6))
+    }
+    out <- .jacobi_sweeps(mu, fwd, scale, alpha, max(n_iter, 120), tol)
+    if (!out$converged)
+      warning(sprintf("abilities_from_race did not converge: max |log residual| %.2e (tol %.0e)", out$resid, tol), call. = FALSE)
+    return(out$mu)
+  }
+  fwd <- function(m) {
+    ps <- race_probabilities(m, V = V, D = D, F = F, W = W, base = base,
+                             points = points, return_slopes = TRUE)
+    phat <- pmax(ps$p, 1e-300)
+    list(resid = log(phat) - logt, dres = pmin(ps$slopes / phat, -1e-6))
+  }
+  out <- .jacobi_sweeps(mu, fwd, scale, alpha, n_iter, tol)
+  if (!out$converged)
+    warning(sprintf("abilities_from_race did not converge: max |log residual| %.2e (tol %.0e)", out$resid, tol), call. = FALSE)
+  out$mu
 }
 
 #' @rdname abilities_from_race

@@ -53,17 +53,12 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import ndtr, ndtri
 
-from .core import as_idio, as_loadings, hermite_nodes
+from .core import as_idio, as_loadings, as_weights, hermite_nodes
 
-try:                                       # compiled kernels (rust/fastrace)
-    import fastrace as _fastrace
-    _RUST_OK = hasattr(_fastrace, "forward_and_slopes")
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except ImportError:
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('forward_and_slopes')
 
 _EULER = 0.5772156649015329
 
@@ -278,10 +273,65 @@ def skew_normal_base(a):
     return _skew
 
 
+# The factor-node rule, per rank: (Gauss-Hermite order cap, the sharpness
+# past which even that order loses to scrambled Sobol at 2^13). `sharp` is
+# the pairwise bound computed in _setup -- how many idiosyncratic standard
+# deviations the factor swings the field by -- so it says how close the
+# conditional race is to a step, which is what decides the family.
+#
+# One threshold of 3.0 for every rank used to stand here, and at rank 3 it
+# was defending against a Gauss-Hermite cap of 15 that was itself WORSE
+# than the Sobol rule it escalated to: at sharp 4, Q=15 carries total
+# variation 4.4e-4 against Sobol's 1.3e-4, while Q=31 -- 4067 nodes after
+# pruning, half of Sobol's 8192, and 29791 before it, inside the same
+# budget -- carries 1.8e-5. The cap was the defect, not the family.
+#
+# Each threshold is the last sharpness at which Gauss-Hermite beat Sobol on
+# EVERY field, over 8 seeds, against the mean of three 2^15 scrambles
+# (n = 50; ratio = GH error / Sobol error, so below 1 is a GH win):
+#
+#   rank 2, 413 GH nodes            rank 3, 4067 GH nodes
+#   sharp  median  worst   wins     sharp  median  worst   wins
+#    2.7    0.12   0.16     8/8      3.1    0.15   0.22     8/8
+#    3.2    0.15   0.23     8/8      3.7    0.17   0.23     8/8
+#    3.7    0.18   0.75     8/8      4.2    0.26   0.35     8/8
+#    4.3    0.38   1.73     7/8      4.7    0.40   0.73     8/8
+#                                    5.3    0.62   1.35     6/8
+#
+# Field-to-field spread at fixed sharpness is wide -- at rank 3, sharp 5.3
+# the median says Gauss-Hermite wins by 1.6x while the worst field loses by
+# 1.35x -- so these are set by the worst case, not the median. An earlier
+# cut of this table used 3-seed medians and put rank 3 at 6.0; a one-seed
+# regression test found a field losing at 5.6.
+#
+# Rank >= 4 keeps the old 3.0: its tensor is 10929 nodes at Q=15, already
+# dearer than Sobol's 8192, so there is no cheap side to reach for. At
+# sharp 4, n = 250 it buys total variation 3.3e-4 against 5.0e-4 for 3.49s
+# against 2.58s -- a trade, not a win, and not one to make silently.
+#
+# Rank 1 never escalates on sharpness (the branch is guarded r >= 2); it
+# hands over to an equal-weight midpoint-quantile grid at Q > 80 instead.
+#
+# What this is worth, measured at n = 250: a rank-3 field at sharp 4 takes
+# 1.50s where the escalation took 3.04s, for total variation 2.1e-5 where
+# it was 1.6e-4. A realistic correlated field lands there -- a caller
+# reported a calibration costing the same at rank 2 and rank 3 because
+# both escalated -- and it is ONE runner's exposure that decides it, the
+# statistic being a max.
+#
+# Ranks 1-3 are where the traffic is, which is why only they are tabled
+# here. `r` is the rank of the V handed in, and that is normally a fitted
+# factor model: a caller studying a five-factor market still races under
+# a k-factor estimate with k of 1, 2 or 3, so the population's rank is
+# not the one that reaches this rule.
+GH_RULE = {1: (201, float("inf")), 2: (41, 3.75), 3: (31, 4.75)}
+GH_RULE_DEFAULT = (15, 3.0)
+
+
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
-    D = np.ones(n) if D is None else as_idio(D, n)
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     if V is None:
         V = np.zeros((n, 1))
         F, W = np.zeros((1, 1)), np.ones(1)
@@ -318,15 +368,16 @@ def _setup(mu, V, D, F, W, base):
                           * np.max(np.sqrt((V ** 2).sum(axis=1))
                                    / np.sqrt(np.maximum(D, 1e-300))))
             r = V.shape[1]
-            if r >= 2 and sharp > 3.0:
-                # past this sharpness the integrand is a near-step in
-                # factor space and Gauss-Hermite converges slowly at ANY
-                # order (measured: the 25-node rule still loses ~1e-2 TV
-                # at sharp ~ 10, while scrambled Sobol reaches the QMC
-                # reference's own noise). Escalate the FAMILY, not the
-                # order. See papers/general_inversion/break.py,
-                # section H; identical rule in the R port (Halton there,
-                # to stay dependency-free).
+            cap, sharp_max = GH_RULE.get(r, GH_RULE_DEFAULT)
+            if r >= 2 and sharp > sharp_max:
+                # Past this sharpness the integrand is a near-step in
+                # factor space and Gauss-Hermite loses to scrambled
+                # Sobol even at the order the tensor budget affords.
+                # Escalate the FAMILY, not the order. See GH_RULE for
+                # the measurements behind each rank's number, and
+                # papers/general_inversion/break.py section H; identical
+                # rule in the R and browser ports (Halton there, to stay
+                # dependency-free).
                 from .core import qmc_nodes
                 F, W = qmc_nodes(r, m=13)
             elif r == 1 and np.ceil(8.0 * sharp) > 80:
@@ -347,22 +398,33 @@ def _setup(mu, V, D, F, W, base):
                 u = (np.arange(Q) + 0.5) / Q
                 F = ndtri(u)[:, None]
                 W = np.full(Q, 1.0 / Q)
-            elif 15 ** r > 100_000:
+            elif cap ** r > 100_000:
                 # high-rank ecology footgun (bandits, 120 horses x 12
-                # stable factors): the tensor grid is 15^r nodes BEFORE
+                # stable factors): the tensor grid is cap^r nodes BEFORE
                 # pruning -- 2.6e9 at r=8, 944 TiB at r=12, a hard kill.
                 # Past a 1e5-node tensor budget the rule escalates to
                 # scrambled Sobol, as the likelihood module always did.
+                # (The budget is measured on the order actually reachable,
+                # the cap, so raising a cap cannot quietly breach it.)
                 from .core import qmc_nodes
                 F, W = qmc_nodes(r, m=13)
             else:
-                cap = 201 if r == 1 else (41 if r == 2 else 15)
                 Q = int(np.clip(np.ceil(8.0 * sharp), 15, cap))
                 F, W = hermite_nodes(r, Q=Q)
     fn = base if callable(base) else BASES[base]
     left, right = _SPANS.get(base, (12.0, 12.0)) if not callable(base) \
         else getattr(base, "span", (12.0, 12.0))
-    return mu, V, D, np.asarray(F, float), np.asarray(W, float), fn, left, right
+    # W is a RELATIVE weight. W and c*W describe the same factor law, and
+    # every verb normalises its own result, so the common scale cancels
+    # -- except in the pre-normalisation mass checks, which compared an
+    # unnormalised row sum against 1. removal_shares and
+    # ordered_probabilities therefore REJECTED W = [5, 5] while accepting
+    # the identical law W = [0.5, 0.5], with a "mass defect 9.00e+00"
+    # that is just the weight total minus one (#208). Every rule built
+    # above already sums to one, so this changes nothing the library
+    # generates; it makes the caller's spelling not matter, which is the
+    # contract everywhere else.
+    return mu, V, D, np.asarray(F, float), as_weights(W), fn, left, right
 
 
 
@@ -560,18 +622,59 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     return x, points
 
 
-def _fit_cov(cov, structure, V, D, stacklevel=2):
+def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     """Fit a dense cov= to the factor grammar, with the accuracy warnings.
 
     Shared by race_probabilities and ordered_probabilities so the two
     front doors accept the same covariance descriptions on the same
-    terms -- and warn about the same fits.
+    terms -- and warn about the same fits. Returns (V, D, F, W, degraded):
+    `degraded` is True when either failure class is present -- the fit
+    reproduces cov badly (residual warnings), or it reproduces cov by
+    degenerating to full rank with D on its floor (quadrature cannot
+    resolve it). A caller that can route around a degraded fit passes
+    will_route=True and gets no warnings, because it will not use the fit.
     """
     if structure is not None or V is not None or D is not None:
         raise ValueError("cov= replaces structure=/V=/D=; pass one only")
     from .core import fit_covariance
     import warnings
     V, D, F, W, report = fit_covariance(cov, return_report=True)
+    C = np.asarray(cov, dtype=float)
+    n = len(C)
+    diag = np.diag(C)
+    floor = 1e-6 * np.maximum(diag, 1e-6 * float(diag.mean()))
+    bound = int((D <= 2.0 * floor).sum())
+    degenerate = bool(bound or report["rank"] >= n)
+    misfit = (report.get("contrast_residual_max", 0.0) > 0.05
+              or report["projected_residual_max"] > 0.05)
+    degraded = degenerate or misfit
+    if will_route and degraded:
+        return V, D, F, W, True
+    if degenerate:
+        # The residual checks below judge how well V V' + D reproduces
+        # cov, and they do fire on a dense cov the grammar fits badly. The
+        # case they MISS is the opposite one: the fit reproduces cov to
+        # ~1e-6 by going to full rank with D on its floor, and the
+        # conditional race is then a near-step the factor nodes cannot
+        # resolve. An exactly 3-factor correlation at n = 8 does this
+        # (k + blocks + m directions sum to n) and prices 6.6e-3 off its
+        # own exact V/D answer with every residual check silent. The
+        # signal for that is the fit's shape, not its residual.
+        warnings.warn(
+            f"cov= fit degenerated: rank {report['rank']} of {n}"
+            + (f", idiosyncratic floor bound on {bound} of {n} entries"
+               if bound else "")
+            + ". The conditional race is near-deterministic there and the "
+            "factor quadrature cannot resolve it; the residual checks are "
+            "satisfied and do not see this. Expect percent-level error in "
+            "the probabilities (6.6e-3 measured on an exactly 3-factor "
+            "correlation at n=8). The forward normal race and "
+            "abilities_from_race route this case to GHK automatically; "
+            "this call cannot (slopes, ordered prefixes, a temperature or "
+            "a non-normal base need the factor form). For win "
+            "probabilities alone: winning.methods.get_method('qmc_ghk')"
+            "(-mu, numpy.linalg.cholesky(cov), numpy.zeros(n)) (max-wins).",
+            RuntimeWarning, stacklevel=stacklevel)
     if report.get("contrast_residual_max", 0.0) > 0.05:
         warnings.warn(
             "cov= carries a nearly singular contrast the fit did not "
@@ -601,7 +704,64 @@ def _fit_cov(cov, structure, V, D, stacklevel=2):
             "(fit_covariance(..., nodes_log2=14)) or price by "
             "simulation for near-singular smooth covariances.",
             RuntimeWarning, stacklevel=stacklevel)
-    return V, D, F, W
+    return V, D, F, W, degraded
+
+
+def _race_dense(mu, cov, budget=4096, seed=0, return_slopes=False,
+                log=False):
+    """The dense-covariance race by scrambled-Sobol GHK: exact structure not
+    required, deterministic at a fixed seed, smooth in its inputs.
+
+    GHK conditions the runners sequentially, so its error depends on the
+    order they are listed in, and a fixed point set made the answer
+    label-dependent (#162: 8.8e-3 between two labelings of one 8-runner
+    field). The runners are therefore sorted into a canonical order --
+    by ability, ties by covariance row -- before the estimate and the
+    answer is mapped back, which makes the route exactly permutation-
+    equivariant. That order also happens to be the accurate one: on the
+    #162 field, versus 12M-path Monte Carlo, 5.6e-3 as listed became
+    2.4e-3 sorted at 1024 nodes; 4096 nodes gives 7.2e-4 in 13 ms
+    (2^14: 1.6e-4 in 46 ms), so 4096 is the budget, well inside the
+    2e-3 the #118 pins hold it to. Earlier measurement on dense
+    correlations at n=16 / n=30 against 4M-path Monte Carlo: 4.7e-4 /
+    5.0e-4 at 1024 nodes where the fitted lattice was 8.9e-3 / 6.5e-3
+    and no amount of extra fitting closed the gap (more factors send D
+    to its floor and the quadrature error returns).
+    The methods are max-wins, so the min-wins mu is negated and the
+    own-slopes (return_slopes=True: dp_i/dmu_i, negative) with it.
+    log=True returns (log p, d log p_i / d mu_i) instead, finite where p
+    underflows: on a near-singular n=30 correlation a runner displaced
+    from its near-duplicates has log p = -16000 at the inverse's warm
+    start, and that is a real value the Newton step recovers from, not
+    a zero.
+    """
+    from ..methods.native import qmc_ghk
+    C = np.asarray(cov, dtype=float)
+    m = np.asarray(mu, dtype=float)
+    n = len(C)
+    order = np.lexsort((C.sum(axis=1), m))
+    Cs = C[np.ix_(order, order)]
+    try:
+        L = np.linalg.cholesky(Cs)
+    except np.linalg.LinAlgError:
+        L = np.linalg.cholesky(Cs + 1e-10 * float(np.trace(Cs)) / n * np.eye(n))
+    ps, info = qmc_ghk(-m[order], L, np.full(n, 1e-12), budget=int(budget),
+                       seed=int(seed), return_slopes=return_slopes)
+    p = np.empty(n)
+    p[order] = np.asarray(ps, dtype=float)
+    if log:
+        lp = np.empty(n)
+        lp[order] = np.asarray(info["logp"], dtype=float)
+        if not return_slopes:
+            return lp
+        dl = np.empty(n)
+        dl[order] = -np.asarray(info["dlogp"], dtype=float)
+        return lp, dl
+    if return_slopes:
+        sl = np.empty(n)
+        sl[order] = -np.asarray(info["slopes"], dtype=float)
+        return p, sl
+    return p
 
 
 def _factor_of_structure(structure, verb):
@@ -649,21 +809,44 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     computed exactly as the hard race with each base convolved with the
     tau-scaled min-Gumbel kernel.
 
-    Cost against factor rank, and the lever for it. The node rule below
-    picks a Gauss-Hermite tensor while it fits a 1e5-node budget and
-    scrambled Sobol past that, so the node count caps and the cost stops
-    growing with rank: measured at K = 8, a forward pass takes 12 ms at
-    rank 3 (3,375 nodes), 86 ms at rank 4 (50,625) and 65 ms at ranks 5
-    and 6, where the budget caps it at 8,192. Rank 4 is the most
-    expensive because its tensor sits just under the budget, and it buys
-    that: total variation against a 65,536-node reference is 1.3e-6
-    there against 1.5e-5 for the capped rule. Pass F, W from
-    winning.factor.core.qmc_nodes(r, m=13) to take the capped cost at
-    rank 4 and the capped accuracy with it. Inversion runs the forward
-    pass per Newton step, so it scales the same way from 17 ms at rank
-    1."""
+    Cost is set by the FIELD as much as by the rank. The node rule
+    (GH_RULE, above _setup) picks a Gauss-Hermite tensor while it fits a
+    1e5-node budget and the field is not too sharp, and scrambled Sobol
+    at 8,192 nodes otherwise, so the node count caps and the cost stops
+    growing with rank: measured at K = 8 on a mild field, a forward pass
+    takes 12 ms at rank 3, 86 ms at rank 4 and 65 ms at ranks 5 and 6,
+    where the budget caps it.
+
+    The rank here is the rank of the V you PASS, which is usually a
+    FITTED one -- and a fitted factor model is nearly always low rank
+    even when the population it came from is not. A caller whose market
+    has five factors, but who races under a k-factor estimate from a
+    short panel, is running at rank 1, 2 or 3 and lives entirely on this
+    rule's cheap side. Read the table for the rank you race at, not the
+    rank of the thing you are modelling; it is easy to size this wrong
+    in the pessimistic direction (done, in review, by the author).
+
+    The other axis is `sharp`, how many idiosyncratic standard deviations
+    the factor swings the field by. A realistic correlated field crosses
+    its rank's threshold and takes the capped 8,192 nodes whatever its
+    rank -- a caller reported a calibration costing the same at rank 2
+    and rank 3 for exactly this reason, and it is ONE runner's exposure
+    that decides it, since the statistic is a max. So rank is the wrong
+    thing to optimise for real inputs; if the capped cost is too high,
+    pass F, W from winning.factor.core.qmc_nodes(r, m=11) for a quarter
+    of the nodes at about five times the error. Inversion runs the
+    forward pass per Newton step, so it scales the same way."""
+    nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
-        V, D, F, W = _fit_cov(cov, structure, V, D, stacklevel=3)
+        # The forward normal race with no slopes is the one case that can
+        # be answered without the fit at all; everything else (slopes for
+        # the inverter, a non-normal base, a tempered race) needs the
+        # factor form and keeps the fit with its warnings.
+        routable = (base == "normal" and not temperature and not return_slopes)
+        V, D, F, W, degraded = _fit_cov(cov, structure, V, D, stacklevel=3,
+                                        will_route=routable)
+        if degraded and routable:
+            return _race_dense(mu, cov)
     if structure is not None:
         from .structures import dispatch_probabilities
         return dispatch_probabilities(mu, structure, base=base,
@@ -688,10 +871,32 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         # run in Python BEFORE any compiled kernel is reached -- on the
         # head-to-head filter (every contest is a pair) that window
         # search, not the forward pass, was the single largest cost.
-        Sig = V @ V.T + np.diag(D)
-        var_d = float(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1])
+        #
+        # Under the nodes the caller supplied, if any: F, W then stand
+        # for the factor law, (V, F) -> (V / c, c F) is the same race, and
+        # the contrast variance is (V0 - V1)' Cov_W(F) (V0 - V1) with a
+        # node mean shifting the contrast (#149's invariant, forward
+        # side: V alone gave 0.51 for an exact 0.70 at c = 0.03). The
+        # default rule's nodes, and a covariance fit's, stand for the
+        # standard normal itself, so its covariance is the identity, not
+        # the pruned tensor's (3e-5 short of it: a fitted equicorrelated
+        # pair priced 3.6e-5 off its analytic value through the nodes).
+        dV = V[0] - V[1]
+        if nodes_given:
+            # relative weights, as the lattice reads them (#170: W and cW
+            # are the same factor law; unnormalised, a x10 weight moved
+            # the pair 0.72 -> 0.61 and its inverse "converged" 5.6e-2 off)
+            Wn = W / float(np.sum(W))
+            Fm = Wn @ F
+            Fc = F - Fm
+            CovF = Fc.T @ (Fc * Wn[:, None])
+            var_d = float(dV @ CovF @ dV + D[0] + D[1])
+            shift = float(dV @ Fm)
+        else:
+            var_d = float(dV @ dV + D[0] + D[1])
+            shift = 0.0
         sd_d = np.sqrt(max(var_d, 1e-300))
-        u = float((mu[1] - mu[0]) / sd_d)
+        u = float((mu[1] - mu[0] + shift) / sd_d)
         # Each tail directly: 1 - ndtr(u) rounds the loser to exactly 0 at
         # a 9 sd contrast where the true value is 1.1e-19, and the pair
         # then depends on which runner is listed first. ndtr(u), ndtr(-u)
@@ -796,11 +1001,24 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     dict (return_info=True) reports which entries were floored, whether
     the iteration converged, and the achieved residual. Non-convergence
     warns rather than returning silently."""
+    dense = None
+    nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
-        if structure is not None or V is not None or D is not None:
-            raise ValueError("cov= replaces structure=/V=/D=; pass one only")
-        from .core import fit_covariance
-        V, D, F, W = fit_covariance(cov)
+        # The forward race routes a degraded fit to GHK (#161); the inverse
+        # has to invert THAT map or the two front doors describe different
+        # races (#164: 4e-3 to 8e-3 apart on exact rank-1/3/5 fixtures).
+        # The fit still serves: its lattice inverse is the warm start and
+        # its own-slopes the Newton preconditioner, and the sweeps below
+        # then polish mu against the dense map itself until the residual
+        # is met. Where the fit is healthy or the call is not routable
+        # (non-normal base, temperature) the fit IS the model, with its
+        # warnings -- it used to call fit_covariance directly and say
+        # nothing.
+        routable = (base == "normal" and not temperature)
+        V, D, F, W, degraded = _fit_cov(cov, structure, V, D, stacklevel=2,
+                                        will_route=routable)
+        if degraded and routable:
+            dense = np.asarray(cov, dtype=float)
     if structure is not None:
         from .structures import Factor, Independent
         if isinstance(structure, Independent):
@@ -836,7 +1054,45 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         return _inverse_return(mu, converged, resid_max, iters, floored,
                                tol, return_info)
     logt = np.log(target)
-    mu = -(logt - logt.mean()) / 2.0
+    n_t = len(target)
+    # The field's contrast scale. The warm start below and the step cap in
+    # the loop were written in unit-variance units; on a field whose
+    # performance sd is 0.1-0.2 (a pair of near-identical high loadings,
+    # or D ~ 0.005 at n = 2-3) that start is many sd off, the forward
+    # saturates to [1, 0, ...], and a capped step of 2 is 10-20 sd -- the
+    # inverse diverged (gap 1.28 for an exact 0.17 at loadings 0.99).
+    # Scaling both by the typical contrast sd fixes every such case and
+    # leaves fields near unit scale exactly as they were.
+    #
+    # The factor part is measured on the factor distribution actually
+    # represented: with caller-supplied nodes, the covariance of F under W
+    # (#149: (V, F) -> (V/c, cF) is the same forward map, and reading the
+    # scale off V alone put the start 33x off and diverged at c = 0.03).
+    # The default nodes have unit covariance, where this is mean ||V_i||^2.
+    _Dn = np.ones(n_t) if D is None else as_idio(D, n_t)
+    _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
+    _Vc = _Vn - _Vn.mean(axis=0)
+    if V is not None and nodes_given:
+        _Fq = np.asarray(F, dtype=float).reshape(len(F), -1)
+        _Wq = (np.ones(len(_Fq)) / len(_Fq) if W is None
+               else np.asarray(W, dtype=float) / float(np.sum(W)))
+        _Fm = _Wq @ _Fq
+        _CovF = (_Fq - _Fm).T @ ((_Fq - _Fm) * _Wq[:, None])
+    else:
+        _CovF = np.eye(_Vc.shape[1])
+    _SigV = _Vc @ _CovF @ _Vc.T
+    scale = float(np.sqrt(np.median(_Dn) + np.diag(_SigV).mean()))
+    if n_t == 2 and base == "normal" and not temperature and dense is None:
+        # A pair is a single Gaussian contrast, so the inverse is closed
+        # form (the mirror of the forward closed form): with
+        # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0) / sd_d), so
+        # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
+        Sig = _SigV + np.diag(_Dn)
+        sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
+        gap = sd_d * float(ndtri(target[0]))
+        mu = np.array([-0.5 * gap, 0.5 * gap])
+        return _inverse_return(mu, True, 0.0, 0, floored, tol, return_info)
+    mu = -(logt - logt.mean()) / 2.0 * scale
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
     # a local two-cycle. Fixed damping 0.7 restores contraction.
@@ -855,30 +1111,150 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # a 150-runner field.
     _top2 = float(np.sort(target)[-2:].sum()) if len(target) > 2 else 1.0
     alpha = 0.7 if (len(target) == 2 or _top2 > 0.8) else 1.0
-    resid_max = np.inf
-    iters = 0
-    for it in range(n_iter):
-        iters = it + 1
-        phat, sl = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
+
+    if dense is not None:
+        # Invert the routed map itself (#164), by the same own-slope
+        # Newton sweeps as the lattice: GHK accumulates dp_i/dmu_i in its
+        # conditioning pass (see methods.native._ghk_prob), so the routed
+        # map has slopes of its own. The degraded fit is used for nothing
+        # here -- its own-slopes are useless with D on its floor (the
+        # conditional race is a near-step: the lattice inverse of the
+        # rank-1 fixture ran to a log residual of 690), and a fit lifted
+        # off the floor stalls at 0.19 on a dense n=30 correlation. The
+        # scale is read off the covariance directly.
+        scale = float(np.sqrt(np.mean(np.diag(dense))))
+        mu = -(logt - logt.mean()) / 2.0 * scale
+
+        def _dense_fwd(m):
+            lp, dl = _race_dense(m, dense, return_slopes=True, log=True)
+            return lp - logt, np.minimum(dl, -1e-6)
+
+        mu, converged, resid_max, iters = _jacobi_sweeps(
+            mu, _dense_fwd, scale, alpha, max(n_iter, 120), tol)
+        return _inverse_return(mu, converged, resid_max, iters, floored,
+                               tol, return_info)
+
+    def _lattice(m):
+        phat, sl = race_probabilities(m, V=V, D=D, F=F, W=W, base=base,
                                       points=points, temperature=temperature,
                                       return_slopes=True)
-        resid = np.log(np.maximum(phat, 1e-300)) - logt
+        phat = np.maximum(phat, 1e-300)
+        return np.log(phat) - logt, np.minimum(sl / phat, -1e-6)
+
+    mu, converged, resid_max, iters = _jacobi_sweeps(
+        mu, _lattice, scale, alpha, n_iter, tol)
+    return _inverse_return(mu, converged, resid_max, iters, floored,
+                           tol, return_info)
+
+
+def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
+    """Own-slope-preconditioned coordinate (Jacobi) sweeps on the mean-zero
+    quotient: mu <- mu - alpha * resid / dres, capped, recentered.
+
+    `forward(mu)` returns (resid, dres): the residual in whatever space
+    the caller inverts in (log p for the win race, logit q for top-k),
+    model minus target, and its own-slopes, negative and bounded away
+    from zero. Convergence is max |resid| < tol. The step cap is
+    residual-proportional: a near-certain winner has residual AND
+    own-slope both vanishing, and their ratio is an O(0.1) noise step
+    that recentering sloshes into every other coordinate (measured:
+    heavy-favorite targets in the 1e-4..1e-8 window stalled at 200
+    iterations; capped, they converge in 4-6). No coordinate moves much
+    further than its own residual warrants, in the field's scale.
+
+    Damping adapts to the contraction actually observed (#149), and it
+    separates two things the first cut of this conflated (#178). The
+    fixed gates in the callers (a pair, a dominant pair) catch the
+    two-cycle they were written for, but heterogeneous variances produce
+    the same negative Jacobi eigenvalue with no share threshold to see
+    it: p = [.6, .2, .2], D = [.03, .03, 1] has a top-two share of 0.8
+    exactly and contracted by only 0.92 a sweep undamped (60 sweeps,
+    1.7e-4 short) against 0.3 a sweep damped (17 sweeps). Consecutive
+    steps estimate the dominant mode: their normalised inner product rho
+    is the factor 1 - alpha (1 - lambda) that mode contracts by, so
+    lambda = 1 - (1 - rho) / alpha, and the Richardson choice for a
+    spectrum spanning [lambda, 0] is alpha = 2 / (2 - lambda), clipped
+    to [0.1, 1] -- 2/3 for the pair's -1, which is why the fixed 0.7 was
+    right where it applied.
+
+    That Richardson value is a PERSISTENT fact about the Jacobian, so it
+    is held in `base`. A sweep that contracts neither the max nor the rms
+    residual is a different event -- a nonlinear transient the mode
+    estimate does not describe -- and is met by undoing the sweep and
+    halving a separate `penalty`, which each contracting sweep then
+    restores a third of the way back toward 1. Multiplying the two keeps
+    caution temporary. One number for both could only ratchet down: on a
+    dense n = 30 correlation the residual fell to 5.7e-1 by sweep 10,
+    rose back to 1.1 by sweep 30 as the floor took hold, then crawled at
+    0.981 a sweep and was still 3.2e-1 short at 120, while the same
+    sweeps undamped converged in 93. Restoring `alpha_base` on a good sweep
+    instead is worse than either: it fights the Richardson value, which
+    the contraction did not repeal, and the heterogeneous cases above
+    stop converging at all.
+
+    A monotone iteration riding one mode is summed rather than waited
+    out: when consecutive steps are collinear (cosine > 0.999) and their
+    norms decay geometrically by a factor in (0.5, 0.999), the remaining
+    steps are a geometric series, so the step is scaled by
+    1 / (1 - ratio) and the pair is measured fresh afterwards. Only
+    while the residual is still a thousand tolerances out: within reach
+    of `tol` the steps are small enough that the ratio is noise, and a
+    hundredfold extrapolation of noise overshoots -- the top-k pair at
+    n = 10 stalled at 1.3e-6 that way, converging at 1e-8 once gated. That is
+    Aitken extrapolation in the iterate, and it is what a near-duplicate
+    pair needs: two runners 1e-5 apart in a dense field have a contrast
+    sd of 0.014, so their difference is nearly unidentified and the
+    own-slope preconditioner -- which sees each runner's own marginal,
+    not the contrast -- understates the step by the same factor every
+    sweep. That mode is monotone, not oscillating (measured: cosine
+    between consecutive steps exactly 1.0), so damping was the wrong
+    medicine for it and extrapolation is the right one. Dense n = 16 /
+    30 / 40 take 31 / 66 / 53 sweeps where they took 120 without
+    converging."""
+    resid_max = np.inf
+    resid_rms = np.inf
+    iters = 0
+    prev = None
+    prev_step = None
+    alpha_base = float(alpha)  # the Richardson value: persistent
+    penalty = 1.0              # caution after a bad sweep: transient
+    for it in range(n_iter):
+        iters = it + 1
+        resid, dlogp = forward(mu)
         resid_max = float(np.abs(resid).max())
+        resid_rms = float(np.sqrt(np.mean(resid * resid)))
         if resid_max < tol:
             break
-        dlogp = np.minimum(sl / np.maximum(phat, 1e-300), -1e-6)
-        # residual-proportional step cap: a near-certain winner has
-        # residual AND own-slope both vanishing, and their ratio is an
-        # O(0.1) noise step that recentering sloshes into every other
-        # coordinate (measured: heavy-favorite targets in the 1e-4..1e-8
-        # window stalled at 200 iterations; capped, they converge in
-        # 4-6). No coordinate moves much further than its own residual
-        # warrants.
-        lim = np.minimum(2.0, 10.0 * np.abs(resid))
-        mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
-        mu -= mu.mean()
-    return _inverse_return(mu, resid_max < tol, resid_max, iters, floored,
-                           tol, return_info)
+        if prev is not None and resid_max >= prev[3] and resid_rms >= prev[4]:
+            if penalty > 0.1:
+                penalty = max(0.5 * penalty, 0.1)
+                mu, resid, dlogp, resid_max, resid_rms = prev
+                prev_step = None
+        elif prev is not None and penalty < 1.0:
+            penalty = min(1.0, penalty / 0.75)
+        prev = (mu, resid, dlogp, resid_max, resid_rms)
+        alpha = alpha_base * penalty
+        lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
+        step = np.clip(alpha * resid / dlogp, -lim, lim)
+        step -= step.mean()
+        if prev_step is not None:
+            na = float(np.linalg.norm(prev_step))
+            nb = float(np.linalg.norm(step))
+            if na > 0.0:
+                rho = float(step @ prev_step) / (na * na)
+                cos = float(step @ prev_step) / (na * nb) if nb > 0 else 0.0
+                ratio = nb / na
+                if rho < 0.0:
+                    lam = 1.0 - (1.0 - rho) / alpha
+                    alpha_base = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
+                elif (cos > 0.999 and 0.5 < ratio < 0.999
+                      and resid_max > 1e3 * tol):
+                    mu = mu - step / (1.0 - ratio)   # sum the geometric tail
+                    prev_step = None
+                    continue
+        prev_step = step
+        mu = mu - step
+    return mu, resid_max < tol, resid_max, iters
 
 
 def _inverse_return(mu, converged, resid_max, iters, floored, tol,
@@ -1064,7 +1440,7 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
                                   -745.0, 0.0))
             w[i] += W[c] * (f[i] * f * rest).sum(1) * dx
     np.fill_diagonal(w, 0.0)
-    return 0.5 * (w + w.T)          # symmetric by theory; average numerics
+    return 0.5 * w + 0.5 * w.T      # symmetric by theory; average numerics (#279)
 
 
 def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
@@ -1174,6 +1550,13 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
     if F is None or W is None:
         D_impl = np.full(len(mu), _GUMBEL_UNIT_D * tau * tau)
         _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
+    else:
+        # _setup is where the relative-weight rule is decided, and this
+        # branch skips it because the caller supplied the law. Without
+        # this the answer scaled with sum(W): the same law spelled
+        # [5, 5] returned TEN TIMES the probabilities, and the ordered
+        # log-probability log(10) higher (#263).
+        W = as_weights(W)
     F = np.asarray(F, dtype=float)
     W = np.asarray(W, dtype=float)
     M = -(mu[None, :] + F @ V.T) / tau
@@ -1219,6 +1602,13 @@ def plackett_luce_order_logprob(mu, order, temperature=1.0, V=None, F=None,
     if F is None or W is None:
         D_impl = np.full(len(mu), _GUMBEL_UNIT_D * tau * tau)
         _, _, _, F, W, _, _, _ = _setup(mu, V, D_impl, F, W, "gumbel")
+    else:
+        # _setup is where the relative-weight rule is decided, and this
+        # branch skips it because the caller supplied the law. Without
+        # this the answer scaled with sum(W): the same law spelled
+        # [5, 5] returned TEN TIMES the probabilities, and the ordered
+        # log-probability log(10) higher (#263).
+        W = as_weights(W)
     logs = np.array([_one(-(mu + np.asarray(F)[q] @ V.T) / tau)
                      for q in range(len(F))])
     m = logs.max()

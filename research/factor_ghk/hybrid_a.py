@@ -361,6 +361,10 @@ def main():
         # fixed-node rules: cheap, recomputed every run
         F0, W0 = _races_setup(mu, V, D, None, None, "normal")[3:5]
         t = time.perf_counter(); p = np.asarray(wf.race_probabilities(mu, V=V, D=D, points=args.points)); report("winning default rule", p, len(F0), len(F0), time.perf_counter() - t)
+        # Q=41 at every rank >= 2 is what the committed sweeps ran. #155 (on main)
+        # capped the order by rank for the unpruned tensor; winning.factor.core.
+        # hermite_nodes prunes, and rank 5 Q=41 is 1,061,871 nodes in
+        # runs/sweep_rank5_*.csv, so the committed orders are kept.
         for Q in (15, 41) if args.rank >= 2 else (15, 51, 201):
             F, W = hermite_nodes(args.rank, Q=Q)
             t = time.perf_counter(); p = np.asarray(wf.race_probabilities(mu, V=V, D=D, F=F, W=W, points=args.points)); report(f"fixed Gauss-Hermite Q={Q}", p, len(F), len(F), time.perf_counter() - t)

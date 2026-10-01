@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -36,31 +36,73 @@ const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [1
 
 function setup(mu, V, D, F, W, base) {
   const n = mu.length;
-  D = D ? D.slice() : new Array(n).fill(1);
+  D = asIdio(D, n);        // the companion of asLoadings, #254
+  // the shape contract at the door, as python's _setup does it: a
+  // scalar, a length-n vector, (n, rank) and (rank, n) are the same
+  // race, and a ragged V raises instead of being truncated to the first
+  // row's width and answering NaN (#232)
+  V = asLoadings(V, n);
   if (!V) {
     V = mu.map(() => [0]);
     F = [[0]]; W = [1];
   } else {
+    // Gauge-fix the loadings, as python, R, julia and the standalone
+    // copy all do. A common loading column c adds the same c'f to every
+    // performance and cannot move an argmin, so the centered V prices
+    // the IDENTICAL race -- but only the centered one makes the node
+    // family, the node order and the lattice window invariant under
+    // V -> V + 1c'. Uncentered, adding 1 to every loading moved a
+    // priced share by 0.0141 (#303). #139 fixed the standalone copy and
+    // this newer API was left behind.
+    V = gaugeCenter(V);
     if (!F || !W) {
-      // adaptive order: sharpness rule identical to python/R
+      // adaptive order: sharpness rule identical to python/R. The
+      // statistic is the pairwise-safe bound
+      // sqrt(2) * max_i |(PV)_i| / sqrt(D_i), on the CENTERED rows:
+      // what decides a race is loading DIFFERENCES, and the raw row
+      // norm both misses a sharp pair and depends on the gauge.
       let sharp = 0;
       for (let i = 0; i < n; i++) {
         const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
         sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
       }
+      sharp *= Math.SQRT2;
       const r = V[0].length;
-      if (r === 1 && Math.ceil(8 * sharp) > 201) {
+      // per-rank (Gauss-Hermite order cap, sharpness past which even that
+      // order loses to the low-discrepancy family); see GH_RULE in the
+      // python reference for the measurements behind each number
+      const cap = r === 1 ? 201 : r === 2 ? 41 : r === 3 ? 31 : 15;
+      const sharpMax = r === 2 ? 3.75 : r === 3 ? 4.75 : 3.0;
+      if (r >= 2 && sharp > sharpMax) {
+        // escalate the FAMILY, not the order (matching python/R)
+        const Q = 8192;
+        F = []; W = new Array(Q).fill(1 / Q);
+        // generated, not tabulated: a 24-entry table made a valid
+        // rank-25 V answer all-NaN, silently (#233)
+        const primes = firstPrimes(r);
+        for (let idx = 0; idx < Q; idx++) {
+          const node = [];
+          for (let dim = 0; dim < r; dim++) {
+            const b = primes[dim];
+            let i = idx + 21, f = 1 / b, h = 0;
+            while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
+            node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
+          }
+          F.push(node);
+        }
+      } else if (r === 1 && Math.ceil(8 * sharp) > 80) {
         // rank-1 extreme sharpness (matching python/R): equal-weight
         // midpoint-quantile grid scaled with sharpness replaces GH
         const Q = Math.min(Math.ceil(8 * sharp), 4001);
         F = []; W = new Array(Q).fill(1 / Q);
         for (let q = 0; q < Q; q++) F.push([invNormalRational((q + 0.5) / Q)]);
-      } else if (Math.pow(15, r) > 100000) {
+      } else if (Math.pow(cap, r) > 100000) {
         // high-rank tensor footgun (matching python/R): Halton fallback
         const Q = 8192;
         F = []; W = new Array(Q).fill(1 / Q);
-        const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
-                        43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89];
+        // generated, not tabulated: a 24-entry table made a valid
+        // rank-25 V answer all-NaN, silently (#233)
+        const primes = firstPrimes(r);
         for (let idx = 0; idx < Q; idx++) {
           const node = [];
           for (let dim = 0; dim < r; dim++) {
@@ -72,7 +114,6 @@ function setup(mu, V, D, F, W, base) {
           F.push(node);
         }
       } else {
-        const cap = r === 1 ? 201 : r === 2 ? 41 : 15;
         const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);
         const hw = hermiteNodes(r, Q);
         F = hw.F; W = hw.W;
@@ -81,6 +122,11 @@ function setup(mu, V, D, F, W, base) {
   }
   const fn = typeof base === "function" ? base : BASES[base];
   const span = typeof base === "function" ? [12, 12] : (SPANS[base] || [12, 12]);
+  // the caller's nodes go through the same door as V and D: every node
+  // carries exactly the loadings' rank, and there is one weight per
+  // node (#290)
+  F = asFactorNodes(F, V[0].length, "F");
+  W = asWeights(W, F.length, "W");
   return { mu, V, D, F, W, fn, left: span[0], right: span[1] };
 }
 
@@ -94,7 +140,7 @@ function condMeans(mu, V, F) {
 }
 
 
-function invNormalRational(p) {
+export function invNormalRational(p) {
   // Acklam rational approximation, adequate for node placement
   const a = [-39.6968302866538, 220.946098424521, -275.928510446969,
              138.357751867269, -30.6647980661472, 2.50662827745924];
@@ -149,17 +195,31 @@ function bulkWindow(Mall, sd, points, delta) {
   return out;
 }
 
-export function raceProbabilities(mu, opts = {}) {
-  const { V = null, D = null, F = null, W = null, base = "normal",
-          points = 257, returnSlopes = false, window: win = "bulk",
-          delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
-  if (structure) {
-    return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
-  }
-  const st = setup(mu, V, D, F, W, base);
-  const n = st.mu.length;
-  const sd = st.D.map(Math.sqrt);
-  const Mall = condMeans(st.mu, st.V, st.F);
+/* Each race API declares its OWN keys: one shared union let each accept
+   the other's options and ignore them (#186). See checkOpts in core.mjs. */
+const FORWARD_OPTS = new Set([
+  "V", "D", "F", "W", "base", "points", "returnSlopes", "window", "delta",
+  "structure", "qa", "qf",
+]);
+const INVERSE_OPTS = new Set([
+  "V", "D", "F", "W", "base", "points", "structure", "qa", "qf",
+  "nIter", "tol", "targetFloor", "returnInfo",
+]);
+
+/* The lattice the forward map integrates on, as one function.
+ *
+ * raceJacobian built its OWN grid -- a plain span window with no
+ * adaptive placement and no refinement -- so it differentiated a
+ * different lattice than raceProbabilities computed on, and the two
+ * stopped agreeing exactly where the lattice is coarse relative to the
+ * field. On a four-runner race whose variances span 4005x, at 257
+ * points, the analytic jacobian differed from finite differences of its
+ * own forward by 1.0e-3 where python -- which shares its grid through
+ * `forward_grid` -- was 1.7e-8. Both converge by 1025 points, which is
+ * why it went unnoticed (#212).
+ */
+export function forwardGrid(Mall, sd, st, points, win = "bulk",
+                            delta = 1e-12) {
   let x;
   if (win === "bulk") {
     x = bulkWindow(Mall, sd, points, delta);
@@ -172,23 +232,37 @@ export function raceProbabilities(mu, opts = {}) {
     for (let t = 0; t < points; t++) x[t] = lo + t * (hi - lo) / (points - 1);
   }
   let dx = x[1] - x[0];
-  {
-    // extreme-sharpness lattice refinement (matching python/R)
-    const smin = Math.min(...sd);
-    let vmax = 0;
-    for (const row of st.V) vmax = Math.max(vmax, Math.sqrt(row.reduce((a, b) => a + b * b, 0)));
-    if (vmax / Math.max(smin, 1e-300) > 25 && dx > 0.5 * smin) {
-      const span = x[x.length - 1] - x[0];
-      const need = Math.ceil(span / (0.5 * smin)) + 1;
-      const pts2 = Math.min(need, 8193);
-      if (pts2 > x.length) {
-        const x0 = x[0];
-        x = new Array(pts2);
-        for (let t = 0; t < pts2; t++) x[t] = x0 + t * span / (pts2 - 1);
-        dx = x[1] - x[0];
-      }
+  // extreme-sharpness lattice refinement (matching python/R)
+  const smin = Math.min(...sd);
+  let vmax = 0;
+  for (const row of st.V) vmax = Math.max(vmax, Math.sqrt(row.reduce((a, b) => a + b * b, 0)));
+  if (vmax / Math.max(smin, 1e-300) > 25 && dx > 0.5 * smin) {
+    const span = x[x.length - 1] - x[0];
+    const need = Math.ceil(span / (0.5 * smin)) + 1;
+    const pts2 = Math.min(need, 8193);
+    if (pts2 > x.length) {
+      const x0 = x[0];
+      x = new Array(pts2);
+      for (let t = 0; t < pts2; t++) x[t] = x0 + t * span / (pts2 - 1);
+      dx = x[1] - x[0];
     }
   }
+  return { x, dx };
+}
+
+export function raceProbabilities(mu, opts = {}) {
+  const { V = null, D = null, F = null, W = null, base = "normal",
+          points = 257, returnSlopes = false, window: win = "bulk",
+          delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
+  checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
+  if (structure) {
+    return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
+  }
+  const st = setup(mu, V, D, F, W, base);
+  const n = st.mu.length;
+  const sd = st.D.map(Math.sqrt);
+  const Mall = condMeans(st.mu, st.V, st.F);
+  const { x, dx } = forwardGrid(Mall, sd, st, points, win, delta);
   const p = new Array(n).fill(0);
   const slope = new Array(n).fill(0);
   const logS = new Array(n), fArr = new Array(n), fpArr = new Array(n);
@@ -228,30 +302,138 @@ export function raceProbabilities(mu, opts = {}) {
 }
 
 export function abilitiesFromRace(pTarget, opts = {}) {
-  const { nIter = 60, tol = 1e-8, structure = null } = opts;
+  const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
+          F = null, W = null, base = "normal", points = 257,
+          targetFloor = null, returnInfo = false } = opts;
+  checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
   if (structure) return dispatchAbilities(pTarget, structure, opts);
   let target = pTarget.slice();
+  const n = target.length;
+
+  // The target contract, matching python: a zero share has no finite
+  // inverse, so it RAISES unless the caller floors deliberately, and the
+  // floored entries are reported. Both keys were on the allowlist and
+  // read by nothing, so they passed validation and vanished (#226) --
+  // the failure mode the allowlist exists to prevent.
+  let floored = new Array(n).fill(false);
+  if (targetFloor != null) {
+    if (!(targetFloor > 0))
+      throw new Error("targetFloor must be positive");
+    floored = target.map(v => v < targetFloor);
+    target = target.map(v => Math.max(v, targetFloor));
+  } else if (target.some(v => v <= 0)) {
+    throw new Error(
+      "all target probabilities must be positive: a zero share has no " +
+      "finite inverse (the supremum is approached as that contrast " +
+      "diverges). Pass targetFloor to floor small entries deliberately " +
+      "and read the result as a one-sided bound on the floored " +
+      "contrasts, or supply a pseudocount upstream.");
+  }
   const s = target.reduce((a, b) => a + b, 0);
   target = target.map(v => v / s);
   const logt = target.map(Math.log);
   const lm = mean(logt);
-  let mu = logt.map(v => -(v - lm) / 2);
-  const alpha = target.length > 2 ? 1.0 : 0.7;
-  for (let it = 0; it < nIter; it++) {
-    const { p: phat, slopes: sl } = raceProbabilities(mu, { ...opts, returnSlopes: true, structure: null });
-    const resid = phat.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
-    if (Math.max(...resid.map(Math.abs)) < tol) break;
-    mu = mu.map((m, i) => {
-      const dlogp = Math.min(sl[i] / Math.max(phat[i], 1e-300), -1e-6);
-      // residual-proportional step cap (heavy-favorite stall fix,
-      // mirrored from the python engine)
-      const lim = Math.min(2, 10 * Math.abs(resid[i]));
-      return m - Math.min(Math.max(alpha * resid[i] / dlogp, -lim), lim);
-    });
-    const mm = mean(mu);
-    mu = mu.map(v => v - mm);
+  // the field's contrast scale (matching python/R): median idiosyncratic
+  // variance plus the mean factor variance under the represented nodes
+  const Dn = asIdio(D, n);        // the inverse has its own copy (#254)
+  const Vn = V ? asLoadings(V, n).map(row => row.slice()) : Array.from({ length: n }, () => [0]);
+  const r = Vn[0].length;
+  const colMean = Array.from({ length: r }, (_, c) => mean(Vn.map(row => row[c])));
+  const Vc = Vn.map(row => row.map((v, c) => v - colMean[c]));
+  let CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) => (a === b ? 1 : 0)));
+  if (V && F) {
+    const Q = F.length;
+    const Wq = W ? W.map(w => w / W.reduce((a, b) => a + b, 0)) : new Array(Q).fill(1 / Q);
+    const Fm = Array.from({ length: r }, (_, c) => F.reduce((acc, f, q) => acc + Wq[q] * f[c], 0));
+    CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>
+      F.reduce((acc, f, q) => acc + Wq[q] * (f[a] - Fm[a]) * (f[b] - Fm[b]), 0)));
   }
-  return mu;
+  const sigV = (i, j) => Vc[i].reduce((acc, va, a) => acc + va * CovF[a].reduce((acc2, cab, b) => acc2 + cab * Vc[j][b], 0), 0);
+  const med = (arr) => { const z = arr.slice().sort((a, b) => a - b); const h = Math.floor(z.length / 2); return z.length % 2 ? z[h] : 0.5 * (z[h - 1] + z[h]); };
+  const scale = Math.sqrt(med(Dn) + mean(Dn.map((_, i) => sigV(i, i))));
+  if (n === 2 && base === "normal") {
+    // a pair is one Gaussian contrast: closed form (matching python/R)
+    const sdD = Math.sqrt(Math.max(sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1) + Dn[0] + Dn[1], 1e-300));
+    const gap = sdD * invNormalRational(target[0]);
+    const pair = [-0.5 * gap, 0.5 * gap];
+    return returnInfo
+      ? { mu: pair, converged: true, maxLogResidual: 0, iterations: 0, floored }
+      : pair;
+  }
+  let mu = logt.map(v => -(v - lm) / 2 * scale);
+  // damping: a pair, or two runners holding nearly all the mass, two-cycles
+  // undamped; the sweeps then adapt to the contraction they observe
+  // (matching python's _jacobi_sweeps)
+  const top2 = n > 2 ? target.slice().sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0) : 1;
+  let alpha = (n === 2 || top2 > 0.8) ? 0.7 : 1.0;
+  // alphaBase: the Richardson value, persistent (NB: `base` is the density
+  // argument). penalty: caution after a sweep that failed to contract, a
+  // transient, restored on the next good sweep. One number for both can
+  // only ratchet down (matching python, #178).
+  let alphaBase = alpha;
+  let penalty = 1;
+  let prev = null;
+  let prevStep = null;
+  for (let it = 0; it < nIter; it++) {
+    const { p: praw, slopes: sl } = raceProbabilities(mu, { V, D, F, W, base, points, returnSlopes: true, structure: null });
+    const phat = praw.map(v => Math.max(v, 1e-300));
+    let resid = phat.map((v, i) => Math.log(v) - logt[i]);
+    let dlogp = sl.map((v, i) => Math.min(v / phat[i], -1e-6));
+    let rmax = Math.max(...resid.map(Math.abs));
+    let rrms = Math.sqrt(mean(resid.map(v => v * v)));
+    if (rmax < tol) break;
+    if (prev && rmax >= prev.rmax && rrms >= prev.rrms) {
+      if (penalty > 0.1) {
+        penalty = Math.max(0.5 * penalty, 0.1);
+        ({ mu, resid, dlogp, rmax, rrms } = prev);
+        prevStep = null;
+      }
+    } else if (prev && penalty < 1) {
+      penalty = Math.min(1, penalty / 0.75);
+    }
+    prev = { mu, resid, dlogp, rmax, rrms };
+    alpha = alphaBase * penalty;
+    // residual-proportional step cap in the field's scale
+    let step = resid.map((v, i) => {
+      const lim = Math.min(2, 10 * Math.abs(v)) * scale;
+      return Math.min(Math.max(alpha * v / dlogp[i], -lim), lim);
+    });
+    const sm = mean(step);
+    step = step.map(v => v - sm);
+    let extrapolated = false;
+    if (prevStep) {
+      const na = Math.sqrt(prevStep.reduce((a, b) => a + b * b, 0));
+      const nb = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
+      if (na > 0) {
+        const dot = step.reduce((a, b, i) => a + b * prevStep[i], 0);
+        const rho = dot / (na * na);
+        const cosn = nb > 0 ? dot / (na * nb) : 0;
+        const ratio = nb / na;
+        if (rho < 0) {
+          const lam = 1 - (1 - rho) / alpha;
+          alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && rmax > 1e3 * tol) {
+          // collinear steps decaying geometrically: sum the tail (Aitken)
+          mu = mu.map((m, i) => m - step[i] / (1 - ratio));
+          prevStep = null;
+          extrapolated = true;
+        }
+      }
+    }
+    if (!extrapolated) {
+      prevStep = step;
+      mu = mu.map((m, i) => m - step[i]);
+    }
+  }
+  if (!returnInfo) return mu;
+  // one more forward pass to report the residual actually achieved,
+  // rather than the one from before the last step
+  const { p: pf } = raceProbabilities(mu, {
+    V, D, F, W, base, points, returnSlopes: true, structure: null });
+  const resid = pf.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
+  const maxLogResidual = Math.max(...resid.map(Math.abs));
+  return { mu, converged: maxLogResidual < tol, maxLogResidual,
+           iterations: nIter, floored };
 }
 
 // filled in by structures.mjs to avoid a cycle

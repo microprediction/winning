@@ -92,6 +92,81 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 #' and an exact decomposition is searched for (ranks 1..6); if none
 #' exists the call falls back to mvtnorm::pmvnorm() unchanged. The result
 #' carries attr "method" ("factor" or "mvtnorm-fallback").
+# Classify the rectangle {lower <= x <= upper} before any quadrature.
+#
+# A reversed coordinate makes the event EMPTY. Every port used to form the
+# negative conditional cell -- pnorm(0) - pnorm(1) = -0.3413... -- and then
+# clamp it to the underflow floor 1e-300, so an impossible observation came
+# back as a finite probability and, in log-likelihood code, as about -690.8
+# instead of -Inf (#235). mvtnorm::pmvnorm, which this is a drop-in for,
+# raises on reversed bounds and returns 0 when a coordinate has
+# lower == upper; all four ports now agree with it.
+#
+# Returns TRUE when the rectangle is degenerate (zero mass, exactly).
+.rectangle_status <- function(lower, upper) {
+  bad <- which(lower > upper)
+  if (length(bad)) {
+    i <- bad[1]
+    stop(sprintf(paste0("lower must not exceed upper: coordinate %d has ",
+                        "lower=%g > upper=%g, so the rectangle is empty. ",
+                        "Check the argument order."),
+                 i, lower[i], upper[i]), call. = FALSE)
+  }
+  any(lower == upper)
+}
+
+# Per-coordinate conditional cell mass, s == 0 included.
+#
+# A coordinate with zero idiosyncratic variance is DETERMINISTIC given the
+# factor draw: X_i = mean_i + v_i . f. Its cell is an INDICATOR, not a
+# normal interval, and dividing by s = 0 gave 0/0 = NaN the moment that
+# deterministic value landed exactly on an inclusive rectangle boundary --
+# P(X_1 <= 0) for X_1 identically 0, which is 1, not undefined (#206).
+# `hi` and `lo` are matrices already shifted by the mean and the factor
+# term; `s` is the per-coordinate sd, recycled down the columns.
+.cell_mass <- function(hi, lo, s) {
+  sdm <- matrix(rep(s, each = nrow(hi)), nrow = nrow(hi))
+  out <- matrix(0, nrow(hi), ncol(hi))
+  pos <- sdm > 0
+  if (any(pos))
+    out[pos] <- pnorm(hi[pos] / sdm[pos]) - pnorm(lo[pos] / sdm[pos])
+  det <- !pos
+  if (any(det))
+    out[det] <- as.numeric(lo[det] <= 0 & 0 <= hi[det])
+  out
+}
+
+# One place decides what "one value per coordinate" means here, the way
+# winning.shapes.as_idio does for python. A SCALAR is broadcast on
+# purpose -- that is what the -Inf/Inf defaults are -- and every other
+# wrong length is refused.
+#
+# R recycles silently whenever the short length divides n, and no
+# warning is emitted, so `D = c(1, 4)` at n = 4 became c(1,4,1,4) and
+# the call returned [Phi(1)Phi(1/2)]^2 = 0.3384: a perfectly plausible
+# probability for a Gaussian the caller never asked about. `mean` and
+# `upper` did the same (#285). The python reference validates through
+# as_idio/as_loadings and julia fails on unequal lengths; only this
+# port guessed.
+.as_len <- function(x, n, what, finite = TRUE, nonneg = FALSE) {
+  x <- as.numeric(x)
+  if (length(x) == 1L) x <- rep(x, n)
+  if (length(x) != n)
+    stop(sprintf(paste("%s must be a scalar or one value per coordinate;",
+                       "got %d for n = %d"), what, length(x), n),
+         call. = FALSE)
+  if (anyNA(x))
+    stop(sprintf("%s has a missing entry at %d", what, which(is.na(x))[1]),
+         call. = FALSE)
+  if (finite && any(!is.finite(x)))
+    stop(sprintf("%s has a non-finite entry at %d", what,
+                 which(!is.finite(x))[1]), call. = FALSE)
+  if (nonneg && any(x < 0))
+    stop(sprintf("%s[%d] = %g is a negative variance", what,
+                 which(x < 0)[1], x[which(x < 0)[1]]), call. = FALSE)
+  x
+}
+
 pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                          sigma = NULL, V = NULL, D = NULL, ...) {
   if (is.null(V) || is.null(D)) {
@@ -99,6 +174,13 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     if (is.null(mean)) mean <- rep(0, nrow(as.matrix(sigma)))
     fd <- factorize_covariance(sigma)
     if (is.null(fd)) {
+      nn <- nrow(as.matrix(sigma))
+      if (.rectangle_status(.as_len(lower, nn, "lower", finite = FALSE),
+                            .as_len(upper, nn, "upper", finite = FALSE))) {
+        p <- 0
+        attr(p, "method") <- "degenerate-rectangle"
+        return(p)
+      }
       p <- mvtnorm::pmvnorm(lower = lower, upper = upper, mean = mean,
                             sigma = sigma, ...)
       attr(p, "method") <- "mvtnorm-fallback"
@@ -108,15 +190,32 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
   }
   V <- as.matrix(V)
   n <- nrow(V)
-  if (is.null(mean)) mean <- rep(0, n)
-  lower <- rep_len(lower, n); upper <- rep_len(upper, n)
+  # every per-coordinate argument goes through the same contract; a
+  # bound may be infinite, a variance may not
+  D <- .as_len(D, n, "D", nonneg = TRUE)
+  mean <- if (is.null(mean)) rep(0, n) else .as_len(mean, n, "mean")
+  lower <- .as_len(lower, n, "lower", finite = FALSE)
+  upper <- .as_len(upper, n, "upper", finite = FALSE)
+  if (.rectangle_status(lower, upper)) {
+    p <- 0
+    attr(p, "method") <- "degenerate-rectangle"
+    return(p)
+  }
   s <- sqrt(D)
+  # A coordinate with no idiosyncratic variance AND no loading is a
+  # constant at mean_i. Outside its own interval the probability is
+  # exactly 0, not the 1e-300 the cell floor would give it.
+  fixed <- s == 0 & apply(V != 0, 1, function(z) !any(z))
+  if (any(fixed & (mean < lower | mean > upper))) {
+    p <- 0
+    attr(p, "method") <- "outside-support"
+    return(p)
+  }
   nd <- .nodes_for(V, D)
   M <- nd$F %*% t(V)                        # (Q, n) conditional shifts
   lo <- sweep(-M, 2, lower - mean, "+")     # (Q, n): lower - mean - v'f
   hi <- sweep(-M, 2, upper - mean, "+")
-  lo <- sweep(lo, 2, s, "/"); hi <- sweep(hi, 2, s, "/")
-  logcell <- log(pmax(pnorm(hi) - pnorm(lo), 1e-300))
+  logcell <- log(pmax(.cell_mass(hi, lo, s), 1e-300))
   p <- sum(nd$W * exp(rowSums(logcell)))
   if (p < 1e-8) {
     # deep tail: the integrand concentrates in a corner of factor space
@@ -125,9 +224,9 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     r <- ncol(V)
     logint <- function(f) {
       z <- as.vector(V %*% f)
-      sum(log(pmax(pnorm((upper - mean - z) / s)
-                   - pnorm((lower - mean - z) / s), 1e-300))) -
-        0.5 * sum(f^2)
+      sum(log(pmax(.cell_mass(matrix(upper - mean - z, nrow = 1),
+                              matrix(lower - mean - z, nrow = 1), s),
+                   1e-300))) - 0.5 * sum(f^2)
     }
     f0 <- rep(0, r); h <- 1e-4
     for (it in 1:50) {
@@ -146,9 +245,9 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     logw <- -0.5 * rowSums(sweep(Fq, 2, rep(0, r))^2) +
       0.5 * rowSums(Fh^2) + r * log(tau)
     Mq <- Fq %*% t(V)
-    loq <- sweep(sweep(-Mq, 2, lower - mean, "+"), 2, s, "/")
-    hiq <- sweep(sweep(-Mq, 2, upper - mean, "+"), 2, s, "/")
-    lc <- log(pmax(pnorm(hiq) - pnorm(loq), 1e-300))
+    loq <- sweep(-Mq, 2, lower - mean, "+")
+    hiq <- sweep(-Mq, 2, upper - mean, "+")
+    lc <- log(pmax(.cell_mass(hiq, loq, s), 1e-300))
     # importance identity: E_phi[cell] = mean over q-draws of
     # cell(Fq) * phi(Fq)/q(Fq), and log(phi/q) = logw above
     lt <- rowSums(lc) + logw

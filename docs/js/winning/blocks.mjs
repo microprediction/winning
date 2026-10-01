@@ -1,5 +1,18 @@
 // Block, nested and tree races -- port of winning/factor/blocks.py.
-import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped } from "./core.mjs";
+import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
+         OPT_HINTS, asLoadings, firstPrimes } from "./core.mjs";
+import { invNormalRational } from "./races.mjs";
+
+/* Each exported call declares its own option keys; see checkOpts in
+   core.mjs for why an options object needs this at all. */
+const BLOCK_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "nodes"]);
+const NESTED_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "qf", "coupling", "gamma"]);
+const TREE_RACE_PROBABILITIES_OPTS = new Set(["points", "qa"]);
+const BLOCK_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
+const NESTED_RACE_JACOBIAN_OPTS = new Set(["points", "qa", "qf", "coupling", "gamma"]);
+const TREE_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
+const ABILITIES_FROM_BLOCK_RACE_OPTS = new Set(["points", "qa", "maxIter", "tol"]);
+
 
 function clusterIndex(cluster) {
   const lv = [...new Set(cluster)].sort((a, b) => (a > b ? 1 : a < b ? -1 : 0));
@@ -82,7 +95,26 @@ function clusterNodes(r, qa) {
     const s = w.reduce((x, y) => x + y, 0);
     return { nodes, w: w.map(v => v / s) };
   }
-  throw new Error("rank >= 3 cluster effects: supply nodes explicitly");
+  // rank >= 3: the tensor grid explodes, so escalate the FAMILY, as
+  // races.mjs does for high-rank loadings and as python does with
+  // scrambled Sobol. The old message told the caller to "supply nodes
+  // explicitly", which no nested verb accepts -- checkOpts rejects a
+  // `nodes` option before pricing -- so it was a remediation that could
+  // not be followed (#264).
+  const Q = 8192;
+  const nodes = [], w = new Array(Q).fill(1 / Q);
+  const primes = firstPrimes(r);
+  for (let idx = 0; idx < Q; idx++) {
+    const node = [];
+    for (let dim = 0; dim < r; dim++) {
+      const b = primes[dim];
+      let i = idx + 21, f = 1 / b, h = 0;
+      while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
+      node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
+    }
+    nodes.push(node);
+  }
+  return { nodes, w };
 }
 
 function fieldPass(muO, sdO, shifts, cO, nC, x) {
@@ -155,6 +187,7 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
 }
 
 export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
+  checkOpts(opts, BLOCK_RACE_PROBABILITIES_OPTS, "blockRaceProbabilities", OPT_HINTS);
   const { points = 257, qa = 9, nodes = null } = opts;
   const sd = D.map(Math.sqrt);
   const p = blockMax(mu.map(v => -v), sd, cluster, loading, points, qa, nodes);
@@ -162,10 +195,15 @@ export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
 }
 
 export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
+  checkOpts(opts, NESTED_RACE_PROBABILITIES_OPTS, "nestedRaceProbabilities", OPT_HINTS);
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
   if (!coupling || gamma === 0)
     return blockRaceProbabilities(mu, cluster, loading, D, { points, qa });
-  const g = Array.isArray(coupling[0]) ? coupling : coupling.map(v => [v]);
+  // The shared contract, as python's atleast_2d-plus-transpose does
+  // it: a (rank, n) coupling is the SAME race as (n, rank). This
+  // normalised by hand and never transposed, so the transposed
+  // spelling was read as rank n and refused (#264).
+  const g = asLoadings(coupling, mu.length, "coupling");
   const k = g[0].length;
   let fn, fw;
   if (k === 1) {
@@ -292,6 +330,7 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
 }
 
 export function treeRaceProbabilities(mu, cluster, loading, D, parent, strength, opts = {}) {
+  checkOpts(opts, TREE_RACE_PROBABILITIES_OPTS, "treeRaceProbabilities", OPT_HINTS);
   const { points = 257, qa = 9 } = opts;
   const I = treeInternals(mu, cluster, loading, D, parent, strength, points, qa);
   const pO = new Array(I.n).fill(0);
@@ -332,7 +371,38 @@ function withinBlockTerm(J, I, negate = true) {
   }
 }
 
+/* The FORWARD block kernel prices rank-r per-cluster loadings; this
+   Jacobian is written for rank one only. It takes each loading row as
+   a number -- `Math.abs(vO[i])` for the quadrature amplitude, `vi * a`
+   for the shift -- and javascript coerces a ONE-element array to its
+   number, so an (n, 1) column keeps working, but a rank-2 row is NaN
+   at both. The NaN then propagates through every cell, so the call
+   returned an all-NaN matrix and said nothing (#271).
+
+   python's `block_race_jacobian` detects this and raises; the browser
+   matches it rather than inventing a second behaviour. Every other
+   Jacobian door here -- nestedRaceJacobian, the structured raceJacobian
+   front door, polishRace -- funnels through this function, so the one
+   guard covers all of them.
+
+   This is not #212 (a finite-grid derivative mismatch for loadings
+   that ARE supported) and not #264 (the nested `coupling` rank). */
+function assertRankOneLoading(loading, where) {
+  if (!Array.isArray(loading)) return;
+  const rows = loading.filter(Array.isArray);
+  if (rows.length === 0) return;                 // plain numbers: rank one
+  const rank = Math.max(...rows.map(r => r.length));
+  if (rank > 1 && loading.length > 1)
+    throw new Error(
+      `${where} supports rank-one cluster loadings only; the rank-${rank} ` +
+      `block Jacobian is not implemented (the FORWARD rank-${rank} kernel ` +
+      `is). Use finite differences of blockRaceProbabilities, or the ` +
+      `factor grammar if the loadings are global.`);
+}
+
 export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
+  checkOpts(opts, BLOCK_RACE_JACOBIAN_OPTS, "blockRaceJacobian", OPT_HINTS);
+  assertRankOneLoading(loading, "blockRaceJacobian");
   const { points = 257, qa = 9 } = opts;
   const m = mu.map(v => -v);
   const sd = D.map(Math.sqrt);
@@ -391,10 +461,15 @@ export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
 }
 
 export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
+  checkOpts(opts, NESTED_RACE_JACOBIAN_OPTS, "nestedRaceJacobian", OPT_HINTS);
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
   if (!coupling || gamma === 0)
     return blockRaceJacobian(mu, cluster, loading, D, { points, qa });
-  const g = Array.isArray(coupling[0]) ? coupling : coupling.map(v => [v]);
+  // The shared contract, as python's atleast_2d-plus-transpose does
+  // it: a (rank, n) coupling is the SAME race as (n, rank). This
+  // normalised by hand and never transposed, so the transposed
+  // spelling was read as rank n and refused (#264).
+  const g = asLoadings(coupling, mu.length, "coupling");
   const k = g[0].length;
   let fn, fw;
   if (k === 1) {
@@ -415,6 +490,7 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
 }
 
 export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts = {}) {
+  checkOpts(opts, TREE_RACE_JACOBIAN_OPTS, "treeRaceJacobian", OPT_HINTS);
   const { points = 257, qa = 9 } = opts;
   const I = treeInternals(mu, cluster, loading, D, parent, strength, points, qa);
   const P = I.x.length;
@@ -442,6 +518,7 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
 }
 
 export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) {
+  checkOpts(opts, ABILITIES_FROM_BLOCK_RACE_OPTS, "abilitiesFromBlockRace", OPT_HINTS);
   const { points = 257, qa = 9, tol = 1e-10, maxIter = 25 } = opts;
   let pT = pTarget.slice();
   let s = pT.reduce((a, b) => a + b, 0);

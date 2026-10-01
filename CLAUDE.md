@@ -80,6 +80,31 @@ been tuned; say so.
 - Always validate on data the tuning never saw. A model/market gap can
   drift by season, and in-sample gains can halve out of sample.
 
+## Run the tests the way CI runs them
+
+    python -m pytest -q                 # bare: pytest.ini's testpaths, 750+ tests
+    # NOT `pytest tests/` -- that is 460 of them; tests_arena, tests_research
+    # and tests_experiments are collected only by the bare command.
+
+CI installs `pip install -e ".[test]"`: pytest, pandas, matplotlib. It does
+NOT have jax, fastrace, trueskill or sklearn, and this machine has all
+four. A run that passes here with them present proves nothing about CI.
+Before claiming green, run once with the optional backends blocked:
+
+    # sitecustomize.py on PYTHONPATH: a PathFinder on sys.meta_path that
+    # raises ImportError for jax, fastrace, trueskill, sklearn
+    PYTHONPATH=<dir with that file> python -m pytest -q
+
+Match a missing module on its MESSAGE ("No module named X"), never the
+exception class -- a blocker raises ImportError where a real absence
+raises ModuleNotFoundError, and a regex on the class name passes locally
+and fails in CI. Three CI rounds were lost to exactly these in 2026-09.
+
+One job at a time. The suite takes ~15 min alone and 50 min when the
+verifier, an experiment and a second suite share the machine; and never
+edit, stash or switch branches in a tree a suite is running against --
+the result is meaningless and has to be rerun.
+
 ## Verify after any change to `winning/ratings`
 
     python -m winning.ratings.verify --profile fast     # ~1 min, gates CI
@@ -132,6 +157,18 @@ running anything on a history:
 
 Profile before optimising. Two confident diagnoses of a hot spot were both
 wrong; `cProfile` was right.
+
+## The compiled kernels: one switch, and it must reach every module
+
+`winning.rustconfig.use_rust()` / `rust_active()` toggle every module that
+imports fastrace, through a list in `rustconfig._rust_modules()`. A module
+that imports fastrace and is NOT in that list has a private switch nobody
+can flip, and `rust_active()` lies about it: `factor.core` -- 97% of a
+ratings update -- ran pure numpy for months that way.
+`tests/test_rust_dispatch_core.py` fails if any module imports fastrace
+off the list; add the module to the list, do not exempt it. Dispatch only
+where the compiled kernel wins: at a single factor node the compiled JVP
+is slower (0.5 ms fixed cost), so `core` dispatches at `len(F) >= 2`.
 
 ## Parameter shapes go through `winning.shapes`
 

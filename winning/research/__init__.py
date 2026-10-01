@@ -11,9 +11,12 @@ import warnings as _warnings
 
 _warnings.warn(
     "winning.research is the retired research engine; for calibration "
-    "use winning.calibrate_abilities(p, V=, D=), which is materially "
-    "faster and more accurate and uses the compiled kernels. This "
-    "package stays for the pipelines that still need it.",
+    "under the normal race (or a built-in base= such as gumbel) use "
+    "winning.calibrate_abilities(p, V=, D=, base=), which is materially "
+    "faster and more accurate and uses the compiled kernels. A custom "
+    "Density has no front-door equivalent and calibrates a different "
+    "model: this package stays for it and for the pipelines that still "
+    "need it.",
     DeprecationWarning, stacklevel=2)
 
 from .conventions import (

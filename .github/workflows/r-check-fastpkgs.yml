@@ -1,14 +1,44 @@
 name: R CMD check fast packages
 
+# Every R package here, on pull requests as well as pushes.
+#
+# This job used to be path-triggered by changes under mvtnormfast,
+# mlogitfast OR rprobitfast and then always build and check only
+# mvtnormfast, so a change confined to one of the other two produced a
+# GREEN check that never loaded the changed package. It also ran on
+# pushes to main only, so a pull request was never gated at all, and
+# r/winning -- ten testthat files, the largest R package here -- was
+# gated by nothing anywhere.
+#
+# That is not hypothetical: a tabulated prime list survived in three of
+# these packages at once (#143), each with a silent cliff in a public
+# rank argument, because nothing ran them.
+#
+# The matrix names the packages explicitly rather than globbing, so
+# adding a package to r/ without adding it here is a visible omission
+# rather than a silent one; tests/test_r_packages_are_all_gated.py fails
+# if the two lists drift apart.
+
 on:
   push:
     branches: [main]
-    paths: ["r/mvtnormfast/**", "r/mlogitfast/**", "r/rprobitfast/**"]
+    paths:
+      - "r/**"
+      - ".github/workflows/r-check-fastpkgs.yml"
+  pull_request:
+    paths:
+      - "r/**"
+      - ".github/workflows/r-check-fastpkgs.yml"
   workflow_dispatch:
 
 jobs:
   check:
+    name: R CMD check ${{ matrix.pkg }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg: [mvtnormfast, mlogitfast, rprobitfast, winning]
     steps:
       - uses: actions/checkout@v4
       - uses: r-lib/actions/setup-r@v2
@@ -20,14 +50,26 @@ jobs:
           # package of ours.
           use-public-rspm: true
       - name: Install deps
-        run: Rscript -e 'install.packages(c("mvtnorm","testthat"))'
-      - name: Check mvtnormfast (as-cran)
+        # The union of every package's Suggests that its tests actually
+        # use. If one is missing the test SKIPS rather than fails, which
+        # is the silent gap this workflow exists to close, so they are
+        # installed rather than left to chance.
+        run: >
+          Rscript -e 'install.packages(c("mvtnorm", "testthat",
+          "TruncatedNormal"))'
+      - name: Check ${{ matrix.pkg }} (as-cran)
         run: |
           cd r
-          R CMD build mvtnormfast
-          R CMD check --as-cran --no-manual mvtnormfast_*.tar.gz
+          R CMD build ${{ matrix.pkg }}
+          R CMD check --as-cran --no-manual ${{ matrix.pkg }}_*.tar.gz
+      - name: Show the check log on failure
+        if: failure()
+        run: |
+          cd r
+          cat ${{ matrix.pkg }}.Rcheck/00check.log || true
+          cat ${{ matrix.pkg }}.Rcheck/tests/testthat.Rout.fail || true
       - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
-          name: mvtnormfast-tarball
-          path: r/mvtnormfast_*.tar.gz
+          name: ${{ matrix.pkg }}-tarball
+          path: r/${{ matrix.pkg }}_*.tar.gz

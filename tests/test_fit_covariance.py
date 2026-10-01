@@ -136,7 +136,10 @@ def test_hard_covariance_warns_easy_does_not():
         assert not any(issubclass(x.category, RuntimeWarning) for x in w)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        race_probabilities(mu, cov=C_hard)
+        # the forward normal race now ROUTES a badly fitted cov to GHK and
+        # says nothing; slopes need the factor form, so that call keeps
+        # the fit and must still warn
+        race_probabilities(mu, cov=C_hard, return_slopes=True)
         assert any("grammar fit" in str(x.message) for x in w)
 
 
@@ -287,20 +290,32 @@ def test_group_degeneracy_is_predictable_and_detected():
         mult = int(np.sum(np.abs(w - w[0]) < 1e-8 * abs(w[0])))
         assert mult == nb - 1, (nb, mult)
 
+        from winning.factor.core import fit_covariance
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             p_dense = race_probabilities(mu, cov=C)
             warned = any("tied eigenvalue" in str(x.message) for x in caught)
+            Vf, Df, F, W = fit_covariance(C)
+        # the FIT's own race, which cov= used to return; cov= now routes a
+        # degraded fit to GHK, so the two are compared separately
+        p_fit = race_probabilities(mu, V=Vf, D=Df, F=F, W=W)
         blocks = Blocks(cluster=lab, loading=np.full(n, np.sqrt(rho)),
                         D=np.full(n, 1 - rho))
         p_exact = race_probabilities(mu, structure=blocks)
-        tv = 0.5 * float(np.abs(p_dense - p_exact).sum())
+        tv_cov = 0.5 * float(np.abs(p_dense - p_exact).sum())
+        tv_fit = 0.5 * float(np.abs(p_fit - p_exact).sum())
 
         if cuts_tie:
             assert warned, f"{nb} groups: rank 3 cuts a {mult}-fold tie undetected"
-            assert tv > 5e-3, (nb, tv)
+            # the cut tie still makes the FIT price a different race ...
+            assert tv_fit > 5e-3, (nb, tv_fit)
+            # ... and cov= no longer returns that race: routed to GHK, it is
+            # within GHK's 1024-node accuracy of the exact block race
+            # (measured 1.9e-3 at 6 groups, 2.4e-3 at 12)
+            assert tv_cov < 4e-3, (nb, tv_cov)
         else:
-            assert tv < 1e-3, (nb, tv)
+            assert tv_cov < 1e-3, (nb, tv_cov)
+            assert tv_fit < 1e-3, (nb, tv_fit)
 
     # the grammar path has no exposure at all: nothing is fitted, so no
     # rank is chosen and no tie can be cut
