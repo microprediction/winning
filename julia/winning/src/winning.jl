@@ -434,7 +434,15 @@ function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
                              n_iter = 60, tol = 1e-8)
     target = Float64.(collect(p))
     any(target .<= 0) && error("all target probabilities must be positive")
-    target ./= sum(target)
+    # a target is a law up to a positive factor: when its SUM overflows
+    # (entries all finite) rescale by the max first, as python does since
+    # #300; conditional, so ordinary inputs stay bit-identical (#326)
+    tot = sum(target)
+    if !isfinite(tot)
+        target ./= maximum(target)
+        tot = sum(target)
+    end
+    target ./= tot
     logt = log.(target)
     mu = -(logt .- sum(logt) / length(logt)) ./ 2
     alpha = length(target) > 2 ? 1.0 : 0.7

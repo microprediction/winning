@@ -333,7 +333,7 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
       "has no finite inverse. Pass target_floor= to floor small entries ",
       "deliberately."))
   }
-  target <- target * (k / sum(target))
+  target <- .rescaled_target(target, mass = k)
   if (any(target >= 1))
     stop(paste0(
       "after renormalizing to k slots, a target membership is >= 1: ",
@@ -561,7 +561,7 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
     stop(sprintf("rank must be in [1, n]; got r=%d, n=%d", r, n))
   if (any(p <= 0))
     stop("all rank probabilities must be positive")
-  logt <- log(p / sum(p))
+  logt <- log(.rescaled_target(as.numeric(p)))
   sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
   mu <- if (is.null(mu0)) rep(0, n) else as.numeric(mu0) - mean(mu0)

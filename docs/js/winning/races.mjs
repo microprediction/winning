@@ -389,7 +389,16 @@ export function abilitiesFromRace(pTarget, opts = {}) {
       "and read the result as a one-sided bound on the floored " +
       "contrasts, or supply a pseudocount upstream.");
   }
-  const s = target.reduce((a, b) => a + b, 0);
+  // a target is a law up to a positive factor: when its SUM overflows
+  // (entries all finite, e.g. [4e307, 2e307, 1e307, 1e307]) rescale by
+  // the max first, as python does since #300. Conditional, so ordinary
+  // inputs stay bit-identical (#326).
+  let s = target.reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(s)) {
+    const mx = Math.max(...target);
+    target = target.map(v => v / mx);
+    s = target.reduce((a, b) => a + b, 0);
+  }
   target = target.map(v => v / s);
   const logt = target.map(Math.log);
   const lm = mean(logt);

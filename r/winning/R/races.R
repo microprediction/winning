@@ -487,7 +487,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   }
   target <- as.numeric(p)
   if (any(target <= 0)) stop("all target probabilities must be positive")
-  target <- target / sum(target)
+  target <- .rescaled_target(target)
   logt <- log(target)
   n <- length(target)
   # the field's contrast scale (matching the python reference): median

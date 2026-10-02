@@ -183,3 +183,16 @@ test_that("the bulk window uses the caller's base (#106)", {
                             points = 64001, window = "span")
   expect_lt(max(abs(ps - ref)), max(abs(p12 - ref)))
 })
+
+test_that("an overflowing target sum is rescued, not refused (#326)", {
+  a <- abilities_from_race(c(4e307, 2e307, 1e307, 1e307))
+  b <- abilities_from_race(c(4, 2, 1, 1))
+  expect_equal(a, b)
+  expect_true(all(is.finite(a)))
+  u <- abilities_from_race(rep(1e308, 4))
+  expect_equal(u, rep(0, 4), tolerance = 1e-8)
+  q <- c(1.4e308, 0.4e308, 0.2e308)
+  expect_equal(abilities_from_topk(q, 1), abilities_from_topk(c(1.4, .4, .2), 1))
+  expect_equal(abilities_from_rank_marginal(c(1e308, 1e308, 1e308), 1),
+               rep(0, 3))
+})

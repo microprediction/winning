@@ -73,3 +73,20 @@
                  name, paste(format(n_iter), collapse = " ")), call. = FALSE)
   as.integer(v)
 }
+
+# A target is a law up to a positive factor. When its SUM overflows --
+# every entry finite, e.g. c(4e307, 2e307, 1e307, 1e307) -- rescale by
+# the max first, as python does since #300; the ratios, which are all a
+# target carries, survive. Conditional, so every ordinary input stays
+# bit-identical: the branch is taken only where the plain division
+# already returned NaN (#326).
+.rescaled_target <- function(target, mass = NULL) {
+  tot <- sum(target)
+  if (!is.finite(tot)) {
+    target <- target / max(target)
+    tot <- sum(target)
+  }
+  # `mass` keeps the caller's own arithmetic, so the ordinary path is
+  # bit-identical to the expression it replaced
+  if (is.null(mass)) target / tot else target * (mass / tot)
+}
