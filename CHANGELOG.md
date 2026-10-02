@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+- Evidence is a density on the contrast space, and rescaling it now
+  costs what it should (#95). `_cardinal_observation` multiplied the
+  observation by `lengths_scale` and returned `log_jac = 0` on the
+  identity path, so evidence rose without bound as the scale fell. The
+  documented `tune_history(tune=("lengths_scale",))` was therefore
+  selecting COLLAPSE: an ordinary four-runner example ran to
+  2.449979443e-10.
+
+  A centred margin observation has `n - 1` free coordinates, so the
+  `* s` step costs exactly `(n - 1) * log(s)`. On the reported
+  four-runner example:
+
+  | `lengths_scale` | was | now |
+  |---|---|---|
+  | 1 | -5.98403637 | -5.98403637 |
+  | 0.1 | -3.81841137 | **-10.72616665** |
+  | 0.001 | -3.79653856 | **-24.51980439** |
+
+  The scale factors out of any transform -- `L -> g(L) -> * s -> centre`
+  -- so the term is the same whatever `g` is. The per-coordinate `g'`
+  terms keep their existing convention, which is what makes a
+  compressive transform comparable to a gentler one; only the SCALE
+  exponent moved, from `n` on the transform path and `0` on the
+  identity path to `n - 1` on both.
+
+  The test that matters is the consequence, not the constant: on 60
+  synthetic five-runner races generated at a KNOWN scale of 0.8,
+  evidence used to rise monotonically as the scale fell and put its
+  argmax on the grid edge at 0.05. It now peaks at **0.8**, in the
+  interior. A non-positive `lengths_scale` is refused, since `log(s)`
+  is in the answer -- and so are `nan` and `inf`, which slipped past
+  `s <= 0` and returned NaN evidence and NaN posterior means.
+
+  The callable-transform path broke the same invariant. Margins are
+  lengths behind the winner, so the winner's coordinate is pinned and
+  the determinant is `s^(n-1) * prod_{j != winner} g'(L_j)`; the code
+  summed `log g'` over all `n`, the pinned one included.
+  `transform=lambda x: 2*x` at scale 1 and `lengths_scale=2` are the
+  same observation, and returned identical posteriors but evidence
+  -9.77394765 against -10.46709483 -- exactly `log(2)` apart. They now
+  agree to 1e-8, on the individual and the team node. The asinh path is
+  unchanged whenever the winner's margin is zero, since its
+  `g'(0) = 1`. The ratings layer has no R, browser, Julia or Rust port,
+  so there is nothing to bring into parity.
+
 - A belief the caller declared perfectly known survives the evidence now
   (#78). `as_variance` documents zero as "a perfectly known quantity"
   and both updates accepted it; `update_market` then divided by it and
