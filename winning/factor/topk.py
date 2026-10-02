@@ -193,8 +193,39 @@ def _leave_one_out_cdf(C, F, k, chunk=256):
     return out
 
 
+def _reflected(base_rows):
+    """Rows of the reflected noise -e: survival F(-z) = 1 - S(-z), density
+    f(-z), derivative -f'(-z). Used ONLY to place a window -- the
+    subtraction is exact enough for that and for nothing finer."""
+    def rows(z):
+        S, f, fp = base_rows(-z)
+        return 1.0 - S, f, -fp
+    return rows
+
+
 def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
-                      is_normal=False):
+                      is_normal=False, upper=False):
+    if upper:
+        # P(i among the k LARGEST) = int f_i(x) P(M_{-i}(x) <= k-1) dx,
+        # M_{-i}(x) the number of OTHER runners ABOVE x: the same count
+        # program with the survival S_j(x) in the role F_j(x) plays for
+        # top-k. The window is the top-k window of the reflected field.
+        # The old route, 1 - top_k(n - k), cancelled: at mu = [-12, 0, 0]
+        # the last-place probability 7.7e-24 came back as 0 at 513 points
+        # and as residue 3.6e-15 -- nine orders too large -- at 8193 (#365).
+        lo_r, hi_r = _count_window(-np.asarray(mu, float), sd, k,
+                                   _reflected(base_rows), delta=delta)
+        lo, hi = -hi_r, -lo_r
+        points = _resolved_points(lo, hi, sd, points)
+        x = np.linspace(lo, hi, points)
+        dx = x[1] - x[0]
+        z = (x[:, None] - mu[None, :]) / sd[None, :]
+        S, f, _ = base_rows(z)
+        G = np.clip(S, 0.0, 1.0)
+        C = _count_distribution(G)
+        cdf = _leave_one_out_cdf(C, G, k)
+        dens = (f / sd[None, :]).T
+        return (dens * cdf).sum(axis=1) * dx
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
     points = _resolved_points(lo, hi, sd, points)
@@ -213,26 +244,55 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
     return (dens * cdf).sum(axis=1) * dx
 
 
-def _factor_nodes(V, n, qa, caller):
-    """Column-centered loadings plus the Gauss-Hermite node mixture
-    (rank <= 2; the common column is gauge), shared by every correlated
-    entry point so the quadrature is identical across them."""
+_TOPK_QMC_NODES = 1024
+
+
+def _factor_nodes(V, n, qa, caller, D=None):
+    """Column-centered loadings plus the factor node mixture (rank <= 2;
+    the common column is gauge), shared by every correlated entry point
+    so the quadrature is identical across them.
+
+    qa=None (the default) takes the GENERAL RACE'S node rule
+    (races._setup: Gauss-Hermite order scaled with the centred-loading
+    sharpness, escalating to a midpoint-quantile grid at rank one and
+    scrambled Sobol at rank two). A fixed 15-node Gauss-Hermite rule was
+    the only option here, and on a sharp rank-one field (loadings +-3,
+    D = 0.01: sharpness 42) top-1 missed race_probabilities -- the same
+    quantity -- by 10.7 percentage points, raising points= changed
+    nothing, and both slot sums were exact, so no check fired; at rank
+    two a basis rotation V -> VQ, which leaves the covariance unchanged,
+    moved a top-2 membership by 1.3 points (#340). An explicit integer
+    qa keeps the fixed Gauss-Hermite rule of that order."""
     Vm = as_loadings(V, n)
     if Vm.shape[1] > 2:
         raise NotImplementedError(
-            f"{caller} mixes Gauss-Hermite factor nodes and is "
-            "implemented for factor rank <= 2; higher rank needs the "
-            "scrambled-Sobol escalation (issue #12).")
+            f"{caller} mixes factor nodes and is implemented for factor "
+            "rank <= 2; higher rank needs the scrambled-Sobol escalation "
+            "(issue #12).")
     Vm = Vm - Vm.mean(axis=0, keepdims=True)
-    an, aw = roots_hermitenorm(qa)
-    aw = aw / aw.sum()
     if Vm.shape[1] == 0:
         # the EMPTY PRODUCT: rank 1 was special-cased and every other
         # rank fell into the rank-2 tensor, so an (n, 0) matrix -- the
         # documented spelling of "no factors" -- was integrated over a
         # two-dimensional factor space it does not have (#309)
-        nodes, w = np.zeros((1, 0)), np.ones(1)
-    elif Vm.shape[1] == 1:
+        return Vm, np.zeros((1, 0)), np.ones(1)
+    if qa is None:
+        from .races import _setup
+        _, _, _, nodes, w, _, _, _ = _setup(np.zeros(n), Vm, D, None, None,
+                                            "normal")
+        if len(w) > _TOPK_QMC_NODES:
+            # The race's escalation is 8192 Sobol nodes, priced there by
+            # one compiled pass; here every node is a full count-program
+            # pass (~0.7 ms at n = 4), so 8192 of them is ~6 s per call
+            # and minutes per inversion. 1024 scrambled-Sobol nodes held
+            # the #340 rank-two rotation discrepancy to 2.1e-4 (it was
+            # 1.3e-2 at the old fixed qa=15) at an eighth of the cost.
+            from .core import qmc_nodes
+            nodes, w = qmc_nodes(Vm.shape[1], m=10)
+        return Vm, np.asarray(nodes, float), np.asarray(w, float)
+    an, aw = roots_hermitenorm(qa)
+    aw = aw / aw.sum()
+    if Vm.shape[1] == 1:
         nodes, w = an[:, None], aw
     else:
         nodes = np.array([[a, b] for a in an for b in an])
@@ -249,7 +309,60 @@ def _checked_topk(raw, k, kind, mass_tol=5e-3):
             f"{k} slots exist (defect {abs(t-k):.2e}): the window or the "
             "deconvolution missed part of the field. Raise points=, or "
             "report this field.")
-    return np.clip(raw * (k / t), 0.0, 1.0)
+    q = raw * (k / t)
+    # The total is ONE scalar, and the clip below is not mass-neutral: a
+    # coarse lattice returned raw [0.465, 1.529, 0.0002] -- total 1.9947,
+    # inside the tolerance -- and clipping the impossible 1.529 to 1 left
+    # memberships summing to 1.467 for k = 2 (#99). A membership is a
+    # probability; one materially above 1 is a resolution failure, and
+    # the invariants are re-checked on what is actually returned.
+    over = float(q.max() - 1.0) if q.size else 0.0
+    if over > mass_tol:
+        raise RuntimeError(
+            f"{kind} produced a membership of {1.0 + over:.4f} > 1: the "
+            "lattice did not resolve this field (the total-mass check "
+            "cannot see it, since runner-level errors cancel in one "
+            "scalar). Raise points=, or report this field.")
+    q = np.clip(q, 0.0, 1.0)
+    t2 = float(q.sum())
+    if abs(t2 - k) > mass_tol * k:
+        raise RuntimeError(
+            f"{kind} memberships total {t2:.4f} after clipping to [0, 1], "
+            f"where exactly {k} slots exist. Raise points=, or report "
+            "this field.")
+    return q
+
+
+def _as_rank(r, n, where="r"):
+    """An exact finishing rank, 1..n, as a whole number.
+
+    `int(r)` truncated, so r=1.5 and 1.999 silently solved first place
+    and 2.5 second, and could report convergence (#317). Same contract as
+    _as_depth, which closed that hole for top-k depths, over [1, n]."""
+    try:
+        rr = float(r)
+    except (TypeError, ValueError):
+        raise ValueError(f"{where} must be a whole-number rank; got {r!r}")
+    if isinstance(r, (bool, np.bool_)) or not np.isfinite(rr) \
+            or rr != int(rr):
+        raise ValueError(
+            f"{where} must be a whole-number rank; got {r!r}. A finishing "
+            "position is a count, so there is no rank 1.5.")
+    rr = int(rr)
+    if not 1 <= rr <= n:
+        raise ValueError(f"rank must be in [1, n]; got r={r}, n={n}")
+    return rr
+
+
+def _is_symmetric(base_rows):
+    """S(z) + S(-z) == 1 on a probe set: the noise law is symmetric."""
+    z = np.array([-2.3, -1.1, -0.35, 0.6, 1.7])
+    try:
+        Sp = np.asarray(base_rows(z)[0], float)
+        Sm = np.asarray(base_rows(-z)[0], float)
+    except Exception:
+        return False
+    return bool(np.allclose(Sp + Sm, 1.0, rtol=0.0, atol=1e-12))
 
 
 def _as_depth(k, n, where="k"):
@@ -277,7 +390,7 @@ def _as_depth(k, n, where="k"):
 
 
 def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
-                        qa=15):
+                        qa=None):
     """P(X_i among the k smallest), for every i, min-wins.
 
     mu: locations; D: idiosyncratic variances; V: optional factor
@@ -304,7 +417,7 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
                                 is_normal=is_normal)
         return _checked_topk(raw, k, "top-k race")
 
-    Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_probabilities")
+    Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_probabilities", D)
     raw = np.zeros(n)
     for q in range(len(nodes)):
         shift = Vm @ nodes[q]
@@ -314,15 +427,32 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
 
 
 def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
-                           points=513, qa=15):
-    """P(X_i among the k largest) -- the complement identity
-    P(in the worst k) = 1 - P(in the best n-k), so no reflected base is
-    ever needed."""
-    n = len(np.asarray(mu))
+                           points=513, qa=None):
+    """P(X_i among the k largest), for every i, min-wins: the worst k.
+
+    Computed DIRECTLY, as the top-k integral with the count of runners
+    above x in place of the count below, so a rare last-place
+    probability keeps its relative precision. The complement identity
+    P(in the worst k) = 1 - P(in the best n-k) is exact in the continuum
+    and useless in floating point at the tail this API faces: it returned
+    0 for a 7.7e-24 last place, and lattice noise in the near-one top-k
+    value fabricated 3.6e-15 when refined (#365). The slot identity
+    sum = k is checked as for top-k."""
+    mu = np.asarray(mu, float)
+    n = len(mu)
     k = _as_depth(k, n)
-    q = top_k_probabilities(mu, n - int(k), V=V, D=D, base=base,
-                            points=points, qa=qa)
-    return 1.0 - q
+    D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    sd = np.sqrt(D)
+    base_rows = BASES[base] if not callable(base) else base
+    if V is None:
+        raw = _topk_independent(mu, sd, k, base_rows, points, upper=True)
+        return _checked_topk(raw, k, "bottom-k race")
+    Vm, nodes, w = _factor_nodes(V, n, qa, "bottom_k_probabilities", D)
+    raw = np.zeros(n)
+    for q in range(len(nodes)):
+        raw += w[q] * _topk_independent(mu + Vm @ nodes[q], sd, k,
+                                        base_rows, points, upper=True)
+    return _checked_topk(raw, k, "bottom-k race")
 
 
 def _loo_pmf(C, F, i):
@@ -485,7 +615,7 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
 
 
 def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
-                    qa=15):
+                    qa=None):
     """Full (n, n) matrices (dq/dmu, dq/dsigma). The lattice, the
     field rows and the shared count distribution are built ONCE and
     reused across rows -- the row helper rebuilds them per call, which
@@ -501,7 +631,7 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     n = len(mu)
     k = _as_depth(k, n)
     if V is not None:
-        Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_jacobians")
+        Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_jacobians", D)
         Jm = np.zeros((n, n))
         Js = np.zeros((n, n))
         for j in range(len(nodes)):
@@ -685,7 +815,7 @@ def _topk_inverse_return(mu, converged, resid_max, iters, floored, tol,
 
 
 def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
-                        qa=15, n_iter=80, tol=1e-8, target_floor=None,
+                        qa=None, n_iter=80, tol=1e-8, target_floor=None,
                         return_info=False):
     """Invert the top-k race: mean-zero mu with
     top_k_probabilities(mu, k) = q. k = 1 recovers abilities_from_race.
@@ -714,7 +844,7 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     base_rows = BASES[base] if not callable(base) else base
 
     if V is not None:
-        Vm, nodes, w = _factor_nodes(V, n, qa, "abilities_from_topk")
+        Vm, nodes, w = _factor_nodes(V, n, qa, "abilities_from_topk", D)
     else:
         nodes, w, Vm = None, None, None
 
@@ -843,6 +973,14 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     sd = np.ones(n) if D0 is None else np.sqrt(np.asarray(D0, float))
     if mu0 is not None:
         mu = np.asarray(mu0, dtype=float) - np.mean(mu0)
+        # the RETURN gauge (mean-zero mu, geometric-mean-one sigma) applied
+        # to the start as well: it was applied only to accepted LM steps,
+        # so an exact warm start converged before any step and came back
+        # in the caller's physical units -- sd [2, 3, 4, 5] where a cold
+        # solve of the same targets returned [0.60, 0.91, 1.21, 1.51]
+        # (#360). Ranks are invariant to it, so no probability moves.
+        c0 = float(np.exp(np.log(sd).mean()))
+        mu, sd = mu / c0, sd / c0
     else:
         ka, ta = (k1, target1) if k1 < k2 else (k2, target2)
         # warm start only: the LM loop refines, so a loose tolerance
@@ -867,6 +1005,8 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     resid_max = float(np.abs(r[:2 * n]).max())
     lam = 1e-6
     iters = 0
+    last_grad = np.inf
+    accepted = True
     for it in range(n_iter):
         iters = it + 1
         if resid_max < tol:
@@ -884,6 +1024,7 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
         J = np.vstack(blocks)
         JtJ = J.T @ J
         Jtr = J.T @ r
+        last_grad = float(np.abs(Jtr).max())
         accepted = False
         for _ in range(8):
             try:
@@ -913,14 +1054,33 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
             lam *= 8.0
         if not accepted:
             break
-    # with a ridge the penalized optimum generally keeps a nonzero fit
-    # residual by design: an LM stall there is the answer, not a failure
-    converged = resid_max < tol or (sqr > 0.0 and not accepted)
+    # With a ridge the penalized optimum generally keeps a nonzero fit
+    # residual by design, so an LM stall CAN be the answer -- but a stall
+    # alone proves nothing. `converged = resid < tol or (ridge > 0 and
+    # stalled)` certified every rejected step, including boards no
+    # (mu, sigma) can fit: q1 = [.8, .1, .1] against q2 = [.2, .9, .9]
+    # reported converged=True at a logit residual of 1.57 and a 35-point
+    # repricing miss (#353, #105). A stall now counts only where it is a
+    # stationary point of the penalized objective AND the board passes
+    # the exact nesting necessity P(top k1) <= P(top k2) for k1 < k2
+    # (the top-k1 event is a subset of the top-k2 one), which no market
+    # convention can make false for a feasible board. The two facts are
+    # reported separately as well: fit_converged (the market residual
+    # met tol) and stationary (the penalized optimum was reached).
+    lo_t, hi_t = (target1, target2) if k1 < k2 else (target2, target1)
+    nested = bool(np.all(lo_t <= hi_t + 1e-12))
+    fit_ok = resid_max < tol
+    stationary = bool(fit_ok or (not accepted and iters > 0
+                                 and last_grad <= 1e-6 * max(1.0, cost)))
+    converged = fit_ok or (sqr > 0.0 and stationary and nested)
     out = _topk_inverse_return(mu, converged, resid_max, iters,
                                np.zeros(n, dtype=bool), tol, return_info,
                                "loc_scale_from_topk_pair")
     if return_info:
-        return out[0], sd, out[1]
+        info = dict(out[1])
+        info.update(fit_converged=bool(fit_ok), stationary=stationary,
+                    nested=nested)
+        return out[0], sd, info
     return out, sd
 
 
@@ -1021,11 +1181,10 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
     to unit mass (every rank is taken by someone). For the well-posed
     alternative, combine with the win curve: see
     loc_scale_from_win_and_second and abilities_from_topk."""
-    target = np.asarray(p, dtype=float)
+    from ..shapes import as_target
+    target = as_target(p, "p")
     n = len(target)
-    r = int(r)
-    if not 1 <= r <= n:
-        raise ValueError(f"rank must be in [1, n]; got r={r}, n={n}")
+    r = _as_rank(r, n)
     if np.any(target <= 0):
         raise ValueError(
             "all rank probabilities must be positive: a zero entry has "
@@ -1039,6 +1198,21 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
     # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
+    if mu0 is None and n % 2 == 1 and r == (n + 1) // 2 \
+            and _is_symmetric(base_rows):
+        # Under a symmetric base, negating every location reverses the
+        # finishing order, so the exact MIDDLE rank of an odd field is an
+        # even function of mu and its Jacobian at the default zero start
+        # is identically zero: J'J and J'r vanish and no damping makes a
+        # step. A self-generated target came back as zeros, converged
+        # False, 6.8 points off (#378). The two branches mu and -mu are
+        # both exact, so only the caller can choose one.
+        raise ValueError(
+            f"the exact middle rank r={r} of an odd field (n={n}) under a "
+            "symmetric base is unchanged by mu -> -mu, so the zero start "
+            "is a stationary point with no way off it and the inverse is "
+            "two-branched by symmetry. Pass mu0= (e.g. from the win odds) "
+            "to choose the branch.")
     mu = (np.zeros(n) if mu0 is None
           else np.asarray(mu0, dtype=float) - np.mean(mu0))
 
@@ -1089,7 +1263,7 @@ _TINY = 1e-300
 
 
 def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
-                       qa=15):
+                       qa=None):
     """The full rank marginals: an (n, n) matrix whose (i, r) entry is
     P(contestant i finishes in position r+1), min-wins.
 
@@ -1139,7 +1313,7 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     if V is None:
         P = one_node(mu)
     else:
-        Vm, nodes, w = _factor_nodes(V, n, qa, "rank_probabilities")
+        Vm, nodes, w = _factor_nodes(V, n, qa, "rank_probabilities", D)
         P = np.zeros((n, n))
         for q in range(len(nodes)):
             P += w[q] * one_node(mu + Vm @ nodes[q])

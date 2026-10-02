@@ -214,7 +214,10 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
         A0 = np.vstack([A0, np.atleast_2d(A)])
         b0 = np.concatenate([b0, np.atleast_1d(b)])
     if len(b0) == 0:
-        return forward(mu0), mu0, {"active": [], "nit": 0}
+        return forward(mu0), mu0, {"active": [], "nit": 0,
+                                   "max_violation": 0.0, "mu_distance": 0.0,
+                                   "converged": True, "feasible": True,
+                                   "status": 0, "message": "unconstrained"}
 
     def p_of(m):
         return forward(m)
@@ -225,7 +228,29 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     def cons_j(m):
         return -A0 @ jac(m)
 
-    res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), mu0,
+    start = mu0
+    if (b0 - A0 @ p_of(mu0)).min() < 0.0:
+        # Restore feasibility BEFORE asking SLSQP for the nearest point.
+        # From a saturated race the constraint gradient A J(mu) vanishes
+        # (p = [1, 6e-16] has J ~ 1e-15), so the line search failed with
+        # "Positive directional derivative" from the start, the fallback
+        # failed the same way, and the ORIGINAL violating race came back
+        # with no warning (#104). Shrinking toward the uniform race,
+        # mu -> t mu0, moves every share toward 1/n; the largest feasible
+        # t on that ray is found by bisection and is a start where the
+        # gradients are alive (for a capped pair it is already the answer).
+        def feasible(t):
+            return (b0 - A0 @ p_of(t * mu0)).min() >= 0.0
+        if feasible(0.0):
+            lo_t, hi_t = 0.0, 1.0
+            for _ in range(40):
+                mid = 0.5 * (lo_t + hi_t)
+                if feasible(mid):
+                    lo_t = mid
+                else:
+                    hi_t = mid
+            start = lo_t * mu0
+    res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), start,
                    jac=lambda m: m - mu0, method="SLSQP",
                    constraints=[
                        NonlinearConstraint(cons_f, 0.0, np.inf, jac=cons_j),
@@ -255,9 +280,22 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
         mu = res.x - res.x.mean()
         p = p_of(mu)
         slack = b0 - A0 @ p
+    max_violation = float(max(-slack.min(), 0.0))
+    feasible_out = max_violation <= 1e-6
+    if not feasible_out:
+        # never return a violating race as an ordinary result (#104)
+        import warnings
+        warnings.warn(
+            f"polish_race did not reach a feasible race: max constraint "
+            f"violation {max_violation:.3g} (optimizer: {res.message}). "
+            "The constraints may be infeasible (e.g. caps summing below "
+            "one); check info['converged'].", RuntimeWarning, stacklevel=2)
     return p, mu, {"active": list(np.flatnonzero(slack < 1e-6)),
-                   "nit": int(res.nit), "max_violation": float(-min(slack.min(), 0.0)),
-                   "mu_distance": float(np.linalg.norm(mu - mu0))}
+                   "nit": int(res.nit), "max_violation": max_violation,
+                   "mu_distance": float(np.linalg.norm(mu - mu0)),
+                   "converged": bool(feasible_out and res.success),
+                   "feasible": bool(feasible_out),
+                   "status": int(res.status), "message": str(res.message)}
 
 
 def _structure_engines(structure, points):

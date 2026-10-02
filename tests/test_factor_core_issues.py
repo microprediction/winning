@@ -363,3 +363,192 @@ def test_ordered_k1_prices_every_structure_73(s):
         race_probabilities(mu, structure=s, points=257))
     with pytest.raises(NotImplementedError):
         ordered_probabilities(mu, k=2, structure=s, points=257)
+
+
+# ---------------------------------------------------------------- #99
+
+def test_topk_checks_the_invariants_it_returns_99():
+    from winning.factor.topk import _checked_topk
+    with pytest.raises(RuntimeError):
+        _checked_topk(np.array([0.465219, 1.529295, 0.0002206]), 2, "top-k")
+    q = top_k_probabilities(np.array([9.23877796, -4.9945676, 6.54831504]),
+                            2, D=np.array([998.259121, 0.0465499142,
+                                           0.00819385198]), points=513)
+    assert abs(q.sum() - 2) < 1e-9 and q.max() <= 1.0
+    assert abs(q[2] - 0.533930405) < 1e-6
+
+
+# ---------------------------------------------------------------- #340
+
+def test_topk_factor_nodes_adapt_to_sharpness_340():
+    mu = np.array([-0.15, 0.05, 0.10, 0.0])
+    V = np.array([[-3.0], [-1.0], [1.0], [3.0]])
+    D = np.full(4, 0.01)
+    race = race_probabilities(mu, V=V, D=D, points=1025)
+    top1 = top_k_probabilities(mu, 1, V=V, D=D, points=1025)
+    top2 = top_k_probabilities(mu, 2, V=V, D=D, points=1025)
+    R = rank_probabilities(mu, V=V, D=D, points=1025)
+    assert np.abs(top1 - race).max() < 1e-6
+    sobol = np.array([0.52266979, 0.49723697, 0.47734331, 0.50275040])
+    assert np.abs(top2 - sobol).max() < 2e-4          # 3.8e-5 MC noise
+    assert np.abs(R[:, :2].sum(axis=1) - top2).max() < 1e-6
+
+
+def test_topk_rank_two_is_rotation_invariant_340():
+    mu = np.array([1.1044040028798148, -0.610358146270428,
+                   -0.7073887878365588, 0.7951985223407908])
+    D = np.array([0.09300996937789023, 0.30829572594491766,
+                  0.08224545726086945, 0.25876414192141967])
+    V = np.array([[-0.5506448387040641, 0.9898350311233367],
+                  [0.04244734092688795, -0.0540614843414359],
+                  [0.112700509026512, -1.086117151256921],
+                  [0.5576774312714896, 1.1493443752646453]])
+    th = 0.47
+    Q = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+    p = top_k_probabilities(mu, 2, V=V, D=D)
+    q = top_k_probabilities(mu, 2, V=V @ Q, D=D)
+    assert np.abs(p - q).max() < 1e-3                 # was 1.3e-2
+
+
+# ---------------------------------------------------------------- #365
+
+@pytest.mark.parametrize("points", [513, 2049, 8193])
+def test_bottom_k_keeps_rare_tails_365(points):
+    from winning.factor.topk import bottom_k_probabilities
+    mu = np.array([-12.0, 0.0, 0.0])
+    b = bottom_k_probabilities(mu, 1, D=np.ones(3), points=points)
+    assert abs(b[0] / 7.726967753938468796e-24 - 1) < 1e-6
+    R = rank_probabilities(mu, D=np.ones(3), points=points)
+    assert abs(b[0] / R[0, 2] - 1) < 1e-6
+
+
+def test_bottom_k_agrees_with_rank_columns_365():
+    from winning.factor.topk import bottom_k_probabilities
+    rng = np.random.default_rng(1)
+    n = 6
+    mu = rng.normal(size=n)
+    D = rng.uniform(0.3, 2.0, n)
+    for k in (1, 2, 4):
+        b = bottom_k_probabilities(mu, k, D=D)
+        R = rank_probabilities(mu, D=D)[:, n - k:].sum(axis=1)
+        assert np.abs(b - R).max() < 1e-7
+        assert np.abs(b - (1 - top_k_probabilities(mu, n - k, D=D))).max() \
+            < 1e-12
+
+
+# ---------------------------------------------------------------- #317
+
+@pytest.mark.parametrize("r", [1.5, 1.999, 2.0001, 1 + 1e-9, np.nan, np.inf,
+                               "1.5"])
+def test_fractional_ranks_are_refused_317(r):
+    from winning.factor.topk import abilities_from_rank_marginal
+    mu = np.array([-0.7, -0.1, 0.25, 0.55])
+    D = np.array([0.7, 0.8, 0.9, 1.0])
+    P = rank_probabilities(mu, D=D, points=1025)
+    with pytest.raises(ValueError):
+        abilities_from_rank_marginal(P[:, 0], r, D=D, points=1025, mu0=mu)
+
+
+@pytest.mark.parametrize("r", [2, 2.0, np.int64(2)])
+def test_whole_number_ranks_are_accepted_317(r):
+    from winning.factor.topk import abilities_from_rank_marginal
+    mu = np.array([-0.7, -0.1, 0.25, 0.55])
+    D = np.array([0.7, 0.8, 0.9, 1.0])
+    P = rank_probabilities(mu, D=D, points=1025)
+    _, info = abilities_from_rank_marginal(P[:, 1], r, D=D, points=1025,
+                                           mu0=mu, return_info=True)
+    assert info["converged"]
+
+
+# ---------------------------------------------------------------- #378
+
+def test_middle_rank_needs_a_branch_378():
+    from winning.factor.topk import abilities_from_rank_marginal
+    mu = np.array([-1, -0.4, 0.05, 0.45, 0.9])
+    D = np.ones(5)
+    t = rank_probabilities(mu, D=D, points=257)[:, 2]
+    with pytest.raises(ValueError, match="mu0"):
+        abilities_from_rank_marginal(t, 3, D=D, points=257)
+    _, info = abilities_from_rank_marginal(t, 3, D=D, points=257, mu0=mu,
+                                           return_info=True)
+    assert info["converged"]
+    # not the middle rank, or an asymmetric base: the zero start is fine
+    abilities_from_rank_marginal(rank_probabilities(mu, D=D)[:, 1], 2, D=D,
+                                 return_info=True)
+
+
+# ---------------------------------------------------------------- #360
+
+def test_exact_warm_start_returns_the_canonical_gauge_360():
+    from winning.factor.topk import (loc_scale_from_topk_pair,
+                                     loc_scale_from_win_and_second)
+    mu = np.array([-3.0, -1.0, 1.0, 3.0])
+    sd = np.array([2.0, 3.0, 4.0, 5.0])
+    D = sd ** 2
+    q1 = top_k_probabilities(mu, 1, D=D, points=1025)
+    q2 = top_k_probabilities(mu, 2, D=D, points=1025)
+    wm, ws, wi = loc_scale_from_topk_pair(q1, 1, q2, 2, D0=D, mu0=mu,
+                                          points=1025, return_info=True)
+    cm, cs, ci = loc_scale_from_topk_pair(q1, 1, q2, 2, points=1025,
+                                          return_info=True)
+    assert wi["converged"] and ci["converged"]
+    assert abs(np.mean(wm)) < 1e-12
+    assert abs(np.exp(np.mean(np.log(ws))) - 1) < 1e-12
+    assert np.abs(wm - cm).max() < 1e-6 and np.abs(ws - cs).max() < 1e-6
+    R = rank_probabilities(mu, D=D, points=1025)
+    am, as_, _ = loc_scale_from_win_and_second(R[:, 0], R[:, 1], D0=D,
+                                               mu0=mu, points=1025,
+                                               return_info=True)
+    assert abs(np.exp(np.mean(np.log(as_))) - 1) < 1e-12
+
+
+# ---------------------------------------------------------------- #353 #105
+
+@pytest.mark.parametrize("ridge", [0.0, 1e-4, 0.0025])
+def test_a_stall_on_an_impossible_board_is_not_convergence_353(ridge):
+    from winning.factor.topk import loc_scale_from_topk_pair
+    for q1, q2, pts in ((np.array([0.8, 0.1, 0.1]),
+                         np.array([0.2, 0.9, 0.9]), 1025),
+                        (np.array([0.9, 0.04, 0.03, 0.03]),
+                         np.array([0.1, 0.7, 0.6, 0.6]), 65)):
+        _, _, info = loc_scale_from_topk_pair(q1, 1, q2, 2, points=pts,
+                                              ridge=ridge, return_info=True)
+        assert not info["converged"]
+        assert not info["nested"] and not info["fit_converged"]
+
+
+def test_a_ridge_optimum_on_a_feasible_board_still_converges_353():
+    from winning.factor.topk import loc_scale_from_topk_pair
+    rng = np.random.default_rng(41)
+    n = 8
+    mu = rng.normal(size=n) * 0.7
+    sd = np.exp(rng.uniform(-0.25, 0.25, size=n))
+    q1 = top_k_probabilities(mu, 1, D=sd ** 2)
+    q2 = top_k_probabilities(mu, 2, D=sd ** 2)
+    _, _, info = loc_scale_from_topk_pair(q1, 1, q2, 2, ridge=0.05,
+                                          return_info=True)
+    assert info["converged"] and info["stationary"] and info["nested"]
+    assert not info["fit_converged"]
+
+
+# ---------------------------------------------------------------- #104
+
+def test_polish_reaches_the_feasible_pair_104():
+    from scipy.special import ndtri
+    from winning.factor.polish import polish_race
+    mu = np.array([-8 / np.sqrt(2), 8 / np.sqrt(2)])
+    p, m, info = polish_race(mu0=mu, D=np.ones(2),
+                             name_caps=np.array([0.9, np.nan]))
+    assert info["converged"] and info["max_violation"] < 1e-9
+    assert abs(p[0] - 0.9) < 1e-6
+    assert np.abs(m - np.array([-1, 1]) * ndtri(0.9) / np.sqrt(2)).max() \
+        < 1e-5
+
+
+def test_polish_reports_infeasible_constraints_104():
+    from winning.factor.polish import polish_race
+    with pytest.warns(RuntimeWarning, match="feasible"):
+        _, _, info = polish_race(mu0=np.array([-1.0, 0.0, 1.0]),
+                                 D=np.ones(3),
+                                 name_caps=np.array([0.2, 0.2, 0.2]))
+    assert not info["converged"] and info["max_violation"] > 0.1
