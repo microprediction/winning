@@ -732,6 +732,40 @@ def _factor_grid(r, Qf=7, nodes_log2=10):
     return _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2)
 
 
+
+def _canonical_loadings(V, rtol=1e-12):
+    """A representation of the factor law that depends on V V' alone.
+
+    Gaussian factors only enter through V V': a sign flip of a column,
+    an orthogonal rotation, or a zero column is the SAME model. A fixed
+    node cloud (Gauss-Hermite tensor or scrambled Sobol) is not
+    invariant under those maps, so equivalent loadings returned
+    different posteriors -- 0.030 in means and 0.070 in log evidence
+    for a rank-2 rotation at Qf=7, and an eigenvector sign chosen by
+    LAPACK made update_winner_full depend on entrant order (#130).
+
+    U S from the thin SVD is fixed by V V' up to the sign of each
+    column (and rotations within a repeated singular value, which this
+    cannot resolve). The sign is set by the column's sum of cubes, which
+    a permutation of entrants does not change; null directions are
+    dropped, so a zero-padded V is the unpadded one."""
+    V = np.asarray(V, dtype=float)
+    if V.shape[1] == 0 or not np.any(V):
+        return np.zeros((V.shape[0], 0))
+    U, sv, _ = np.linalg.svd(V, full_matrices=False)
+    keep = sv > rtol * sv[0]
+    C = U[:, keep] * sv[keep]
+    for c in range(C.shape[1]):
+        col = C[:, c]
+        cube = float(np.sum(col ** 3))
+        if abs(cube) <= 1e-12 * float(np.sum(np.abs(col) ** 3)):
+            # cube-symmetric column: fall back to the largest entry
+            cube = float(col[np.argmax(np.abs(col))])
+        if cube < 0:
+            C[:, c] = -col
+    return C
+
+
 _RECENTRE_INFLATE = 1.2
 
 
@@ -769,7 +803,7 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     (matching update_winner / update_ranking_exact's treatment)."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
-    V = as_loadings(V, len(m))
+    V = _canonical_loadings(as_loadings(V, len(m)))   # #130
     F, W = _factor_grid(V.shape[1], Qf=Qf, nodes_log2=nodes_log2)
     logW = np.log(W)
     shifts = F @ V.T                                  # (Q, n)

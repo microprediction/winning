@@ -152,6 +152,11 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
     else:
         Vv = as_loadings(V, k)
         Vaug = np.hstack([B, Vv])
+    # one representation per factor law, so the nodes cannot see a
+    # column sign, a rotation, or which eigenvector sign LAPACK chose
+    # for the belief split (#130)
+    from .nway import _canonical_loadings
+    Vaug = _canonical_loadings(Vaug)
     rank = Vaug.shape[1]
     F, W = _mixture_nodes(rank, nodes_log2)
     if rank == 0:
