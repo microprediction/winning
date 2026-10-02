@@ -363,7 +363,11 @@ class AbilityTracker:
         if prices is not None:                                     # market observer
             # prices are inverted under the same (blocked or independent)
             # performance model the outcome is priced with
-            model = {} if V is None else {"V": V, "D": b2}
+            # performance model the outcome is priced with -- its beta2
+            # and base included, which were dropped when V was None (#94)
+            model = {"D": b2, "base": self.base}
+            if V is not None:
+                model["V"] = V
             m, v, lz = update_market(m, v, np.asarray(prices, float), tau2=self.tau2, **model)
             self.evidence += lz
         if scores is not None:                                     # results observer, magnitudes

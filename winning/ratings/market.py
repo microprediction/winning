@@ -135,19 +135,26 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
     v = as_variance(v, len(m)).copy()
     info = {}
     if p_market is not None:
-        if V is not None and not market_model:
-            # the seam the bandits integration caught: the named V never
-            # reached **market_model, so the market leg inverted under
-            # the INDEPENDENT map while the outcome leg used the
-            # correlated one. Default the market's pricing model to the
-            # outcome model (loadings V, idio beta2); pass market_model
-            # kwargs or invert= to price the market differently.
-            from ..factor.races import abilities_from_race
-            Vm = as_loadings(V, len(m))
-            Dm = np.broadcast_to(np.asarray(beta2, dtype=float),
-                                 (len(m),)).astype(float)
-            market_model = {"invert":
-                            lambda p: -abilities_from_race(p, V=Vm, D=Dm)}
+        if "invert" not in market_model:
+            # Default the market's pricing model to the outcome model:
+            # loadings V, idiosyncratic noise D = beta2 and the base.
+            # Explicit market_model kwargs override single entries; an
+            # explicit invert= replaces the model wholesale.
+            #
+            # The bandits integration caught the first seam (a named V
+            # never reached the inversion). Three more remained (#94):
+            # without V, beta2 was dropped, so prices made at
+            # beta2 = 4 were read as beta2 = 1 and the posterior means
+            # came back half size; `base` was never forwarded, so a
+            # gumbel filter read its prices as normal (0.164 off in the
+            # means, 0.249 in market log evidence); and ANY numerical
+            # kwarg such as points=1001 suppressed the V, D default.
+            defaults = {"D": np.broadcast_to(np.asarray(beta2, dtype=float),
+                                             (len(m),)).astype(float),
+                        "base": base}
+            if V is not None:
+                defaults["V"] = as_loadings(V, len(m))
+            market_model = {**defaults, **market_model}
         m, v, lz = update_market(m, v, p_market, tau2=tau2, **market_model)
         info["logZ_market"] = lz
     if order is not None:

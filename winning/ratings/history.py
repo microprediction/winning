@@ -177,11 +177,14 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
         A = np.zeros((len(idx), n_all)); A[np.arange(len(idx)), idx] = 1.0
         V = race.get("V")
         if race.get("p_market") is not None:
+            # inverted under the outcome model: beta2 and base always,
+            # V when the race has loadings (beta2 and base were dropped
+            # without V, #94)
+            mkt = {"D": np.full(len(idx), float(beta2)), "base": base}
+            if V is not None:
+                mkt["V"] = as_loadings(V, len(idx))
             m, S, lz = update_team_market_full(
-                m, S, A, race["p_market"], tau2=tau2,
-                **({} if V is None else
-                   {"V": as_loadings(V, len(idx)),
-                    "D": np.full(len(idx), beta2)}))
+                m, S, A, race["p_market"], tau2=tau2, **mkt)
             total_logZ += lz
         if race.get("margins") is not None or race.get("scores") is not None:
             m, S, lz = update_team_margins_full(
