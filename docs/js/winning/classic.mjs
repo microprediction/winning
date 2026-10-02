@@ -1,6 +1,7 @@
 // The classic state-price lattice calibration -- port of
 // winning/lattice.py + lattice_calibration.py, dead heats included.
-import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS } from "./core.mjs";
+import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS, asFiniteVector,
+         asIterations, isVector } from "./core.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -168,7 +169,19 @@ function implicitPrices(baseCdf, cdfAll, multAll, offsets, L) {
   });
 }
 
+/* Contestant offsets (and an inverse's warm start) are finite numbers.
+   lowHigh has two tested branches and an unconditional fallback to the
+   most FAVOURABLE boundary, so NaN, undefined and "bad" all fell
+   through to it: one invalid entry in a tied pair priced 0.9999978 to
+   win. null and true were coerced to 0 and 1 (#438). A Float64Array is
+   accepted and copied to a plain array, since mapping a typed array to
+   CDF arrays coerced each CDF to NaN (#329). */
+function asOffsets(x, where) {
+  return asFiniteVector(x, where, "offset");
+}
+
 export function statePricesFromOffsets(density, offsets) {
+  offsets = asOffsets(offsets, "offsets");
   const L = impliedL(density);
   const baseCdf = pdfToCdf(density);
   const cdfs = offsets.map(o => shiftedCdf(baseCdf, o, L));
@@ -180,15 +193,22 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
   checkOpts(opts, SOLVE_FOR_IMPLIED_OFFSETS_OPTS, "solveForImpliedOffsets", OPT_HINTS);
   const L = impliedL(density);
   let { offsetSamples = null, guess = null, nIter = 3 } = opts;
+  // a loop bound: 0, negative and NaN returned the target PROBABILITIES
+  // as if they were offsets (27 points off on reprice), a fraction ran
+  // Math.ceil of itself, and Infinity never returned (#401)
+  asIterations(nIter, "solveForImpliedOffsets");
+  prices = asFiniteVector(prices, "prices", "price");
   if (offsetSamples === null || offsetSamples === undefined) {
     offsetSamples = [];
     for (let k = Math.trunc(L / 2) - 1; k >= -Math.trunc(L / 2); k--) offsetSamples.push(k);
   } else {
     offsetSamples = asDescendingOffsets(offsetSamples, "offsetSamples");
   }
-  if (!guess) {
+  if (guess == null) {
     guess = [];
     for (let k = 0; k < Math.trunc(L / 3); k++) guess.push(k);
+  } else {
+    guess = asOffsets(guess, "guess");
   }
   const baseCdf = pdfToCdf(density);
   let cdfs = guess.map(o => shiftedCdf(baseCdf, o, L));
@@ -233,7 +253,12 @@ export function skewNormalDensity(L, unit, { loc = 0, scale = 1.0, a = 2.0 } = {
    total is positive is python's rule too: an all-infinite book is all
    zeros, not 0/0. */
 export function pricesFromDividends(dividends, nanValue = 2000) {
-  const p = dividends.map(x => {
+  // a plain array whatever came in: a typed input used to come back
+  // typed, and the next call in dividendImpliedAbility could not map it
+  // (#329)
+  if (!isVector(dividends))
+    throw new Error(`dividends must be an array; got ${typeof dividends}`);
+  const p = Array.from(dividends).map(x => {
     const v = (x === null || x === undefined || Number.isNaN(x))
       ? nanValue : Number(x);
     return v <= 0 ? 0 : 1 / v;
