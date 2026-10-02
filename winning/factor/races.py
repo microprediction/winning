@@ -187,23 +187,35 @@ def skew_logistic_base(alpha):
     v = polygamma(1, alpha) + polygamma(1, 1.0)
     c = np.sqrt(v)                          # raw x = m + c z
 
+    def _softplus(u):
+        # log(1 + e^u) without overflow or the 1 + tiny cancellation
+        return np.maximum(u, 0.0) + np.log1p(np.exp(-np.abs(u)))
+
     def _skew_logistic(z):
+        # Log domain throughout (#108). S = 1 - (1+e^{-x})^{-alpha} is
+        # -expm1(-alpha * softplus(-x)); the subtraction from one lost the
+        # whole right tail (alpha = 1, the named logistic, was 14% low at
+        # a 25 sd gap and 52% low at 45), and the e^{-x} clip at 700 was a
+        # second wall on the left.
         x = m + c * np.asarray(z, dtype=float)
-        u = np.clip(-x, -700.0, 700.0)
-        eu = np.exp(u)                       # e^{-x}
-        log1p_eu = np.log1p(eu)
-        cdf = np.exp(-alpha * log1p_eu)      # (1 + e^{-x})^{-alpha}
-        S = np.maximum(1.0 - cdf, 1e-300)
-        sig = 1.0 / (1.0 + eu)               # logistic cdf of x
-        f = alpha * eu * np.exp(-(alpha + 1.0) * log1p_eu) * c
+        sp = _softplus(-x)                   # log(1 + e^{-x})
+        S = np.maximum(-np.expm1(-alpha * sp), 1e-300)
+        f = alpha * c * np.exp(-x - (alpha + 1.0) * sp)
+        sig = np.exp(-_softplus(-x))          # logistic cdf of x
         # d/dz f: chain rule through x = m + c z
         fp = f * c * ((alpha + 1.0) * (1.0 - sig) - 1.0)
         return S, f, fp
 
+    def _log_expm1(y):
+        # log(e^y - 1) for y > 0, finite for every y (no expm1 overflow)
+        y = np.asarray(y, dtype=float)
+        return y + np.log(-np.expm1(-y))
+
     # exponential tails on both sides; the left tail fattens as alpha
     # falls (raw left quantile ~ log of the alpha-th root), so place the
-    # span at the actual 1e-9 quantiles
-    q_lo = (np.log(np.expm1(np.log(1e-9) / -alpha)) if alpha < 60
+    # span at the actual 1e-9 quantiles. log(expm1(.)) overflowed to inf
+    # below alpha ~ 0.029 and every race came back NaN (#108).
+    q_lo = (float(_log_expm1(np.log(1e-9) / -alpha)) if alpha < 60
             else np.log(1e-9 / alpha))
     lo_edge = abs((-abs(q_lo) - m)) / c + 2.0
     hi_edge = abs((np.log(alpha / 1e-9) - m)) / c + 2.0
@@ -211,9 +223,11 @@ def skew_logistic_base(alpha):
     _skew_logistic.rust_base = (7, [alpha, m, c])
 
     def _skew_logistic_sample(rng, size=None):
-        # raw x has CDF (1 + e^{-x})^{-alpha}: invert, then standardize
+        # raw x has CDF (1 + e^{-x})^{-alpha}: invert, then standardize.
+        # -log(expm1(y)) overflowed to -inf whenever u < exp(-alpha*709),
+        # half of all draws at alpha = 0.001 (#108).
         u = rng.random(size)
-        x = -np.log(np.expm1(-np.log(u) / alpha))
+        x = -_log_expm1(-np.log(u) / alpha)
         return (x - m) / c
     _skew_logistic.sample = _skew_logistic_sample
     return _skew_logistic

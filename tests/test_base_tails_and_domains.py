@@ -58,3 +58,57 @@ def test_logistic_three_runner_tail_matches_the_compiled_values():
                            base="logistic", window="span", points=65537)
     assert p[1] == pytest.approx(8.99017456e-19, rel=1e-6)
     assert p[2] == pytest.approx(1.86370210e-38, rel=1e-6)
+
+
+# --- #108 ----------------------------------------------------------------
+
+@pytest.mark.parametrize("alpha", [0.001, 0.003, 0.01, 0.0292, 0.03, 0.1, 0.3, 1.0])
+def test_skew_logistic_small_alpha_is_finite(alpha):
+    from winning.factor.races import skew_logistic_base
+    b = skew_logistic_base(alpha)
+    assert np.all(np.isfinite(b.span))
+    S, f, fp = b(np.linspace(-80, 40, 2001))
+    assert np.all(np.isfinite(S)) and np.all(np.isfinite(f)) and np.all(np.isfinite(fp))
+    p = race_probabilities([-0.5, 1.1, -0.6], base=b, window="span", points=16385)
+    assert np.all(np.isfinite(p)) and abs(p.sum() - 1) < 1e-9
+
+
+def test_skew_logistic_samples_are_finite_and_standardized():
+    from winning.factor.races import skew_logistic_base
+    x = skew_logistic_base(0.001).sample(np.random.default_rng(0), 100_000)
+    assert np.all(np.isfinite(x))
+    x = skew_logistic_base(0.3).sample(np.random.default_rng(1), 400_000)
+    assert abs(x.mean()) < 0.01 and abs(x.std() - 1) < 0.01
+
+
+@pytest.mark.parametrize("gap", [25.0, 45.0])
+def test_skew_logistic_alpha_one_is_the_logistic_in_the_tail(gap):
+    from winning.factor.races import skew_logistic_base
+    kw = dict(window="span", points=16385)
+    ref = race_probabilities([0.0, gap], base="logistic", **kw)[1]
+    got = race_probabilities([0.0, gap], base=skew_logistic_base(1.0), **kw)[1]
+    assert got == pytest.approx(ref, rel=1e-8)
+
+
+def test_skew_logistic_span_quantile_is_the_stable_one():
+    from winning.factor.races import skew_logistic_base
+    # the stable standardized left span at alpha = 0.02 quoted in #108
+    # (it was inf)
+    assert skew_logistic_base(0.02).span[0] == pytest.approx(21.7111, abs=1e-3)
+
+
+def test_skew_logistic_tail_compiled_matches_pure():
+    """The compiled softplus was ln(1 + e^u), which rounds for u << 0;
+    skipped where no compiled kernel is installed (CI)."""
+    from winning.factor import races
+    from winning.factor.races import skew_logistic_base
+    if not races._RUST_OK:
+        pytest.skip("fastrace not installed")
+    kw = dict(window="span", points=16385)
+    pure = race_probabilities([0.0, 25.0], base=skew_logistic_base(1.0), **kw)[1]
+    rustconfig.use_rust(True)
+    try:
+        comp = race_probabilities([0.0, 25.0], base=skew_logistic_base(1.0), **kw)[1]
+    finally:
+        rustconfig.use_rust(False)
+    assert comp == pytest.approx(pure, rel=1e-8)

@@ -1951,10 +1951,13 @@ pub fn top_k_kernel(
 const EULER_GAMMA: f64 = 0.577_215_664_901_532_9;
 
 fn softplus(u: f64) -> f64 {
+    // ln_1p, not ln(1 + e^u): for u << 0 the sum rounds to one and the
+    // skew-logistic survival -expm1(-alpha*softplus(-x)) lost its right
+    // tail (alpha = 1 was 16.5% low at a 25 sd gap, #108)
     if u > 30.0 {
         u
     } else {
-        (1.0 + u.exp()).ln()
+        u.exp().ln_1p()
     }
 }
 
