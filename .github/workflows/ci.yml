@@ -80,6 +80,29 @@ jobs:
           /tmp/wheelenv/bin/pip install dist/*.whl
           cd /tmp && GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             /tmp/wheelenv/bin/python "$GITHUB_WORKSPACE/.github/smoke.py"
+      - name: Benchmarks from the installed wheel write to cwd (#141)
+        # RESULTS used to be <site-packages>/bench_results; a comparator
+        # without trueskill failed at import, not with an install hint
+        run: |
+          mkdir -p /tmp/benchcwd && cd /tmp/benchcwd
+          /tmp/wheelenv/bin/python -c "import winning.bench.season_ranked, winning.bench.season_trueskill"
+          printf '%s\n' '{"problem": "p", "n": 2, "k": 1, "method": "m", "budget": null, "seconds": 0.1, "max_err": 1e-4, "max_log_err": 0.01, "info": {}}' > records.jsonl
+          /tmp/wheelenv/bin/python -m winning.bench.leaderboard --out /tmp/benchcwd
+          test -f /tmp/benchcwd/LEADERBOARD.md
+          site=$(/tmp/wheelenv/bin/python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+          test ! -e "$site/bench_results"
+          /tmp/wheelenv/bin/pip install "$(ls $GITHUB_WORKSPACE/dist/*.whl)[benchmarks]"
+          /tmp/wheelenv/bin/python -c "import trueskill"
+      - name: Every test shipped in the sdist can be collected (#141)
+        run: |
+          mkdir -p /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist
+          cd /tmp/sdist/winning-*
+          if [ -d tests ]; then
+            /tmp/wheelenv/bin/pip install pytest
+            /tmp/wheelenv/bin/python -m pytest --collect-only -q tests
+          else
+            echo "sdist ships no tests (MANIFEST.in prunes them)"
+          fi
 
   parity:
     # The cross-language comparison has always existed and has never been

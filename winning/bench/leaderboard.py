@@ -1,6 +1,6 @@
 """Render the leaderboard from bench_results/records.jsonl.
 
-    python -m winning.bench.leaderboard
+    python -m winning.bench.leaderboard [--out DIR]
 
 Per problem: methods ranked by wall time within accuracy bands, plus the
 best time to reach each band. Written to bench_results/LEADERBOARD.md.
@@ -10,15 +10,15 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from pathlib import Path
+from . import results_dir
 
-RESULTS = Path(__file__).resolve().parents[2] / "bench_results"
 BANDS = [(1e-3, "1e-3"), (5e-4, "5e-4")]
 # betting-relevant bands: max log-odds error over reference-resolvable shares
 LOG_BANDS = [(0.10, "10% odds"), (0.05, "5% odds")]
 
 
-def main():
+def main(out=None):
+    RESULTS = results_dir(out)
     recs = [json.loads(line) for line
             in (RESULTS / "records.jsonl").read_text().splitlines()]
     # keep the best (fastest) record per (problem, method, band)
@@ -60,4 +60,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=None, help="results directory (default ./bench_results)")
+    main(ap.parse_args().out)
