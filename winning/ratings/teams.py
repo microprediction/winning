@@ -38,6 +38,11 @@ def update_team_order_full(m, S, A, order, V=None, beta2=1.0,
                            nodes_log2=10, eps=None, base="normal"):
     """Full team finishing order (best first, rows of A)."""
     A = np.atleast_2d(np.asarray(A, dtype=float))
+    from ..outcomes import as_order
+    order = as_order(order, A.shape[0])                        # #129
+    if len(order) <= 1:                  # tautology: exact, no mixture
+        return (np.asarray(m, dtype=float).copy(),
+                np.asarray(S, dtype=float).copy(), 0.0)
     return _mixture_update_full(m, S, V, beta2, None,
                                 nodes_log2=nodes_log2, eps=eps, A=A,
                                 kernel=_order_kernel(order, base=base))

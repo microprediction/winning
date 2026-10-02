@@ -182,3 +182,26 @@ test_that("the inverse is invariant to target scale (#377)", {
   expect_error(solve_for_implied_offsets(c(0, 0), d), "no positive mass")
   expect_error(solve_for_implied_offsets(c(0.5, NaN), d), "non-finite")
 })
+
+test_that("a distant runner does not collapse the viable field (#393)", {
+  d <- skew_normal_density(L = 21, unit = 1, a = 0)
+  # python ability_implied_state_prices on the same inputs (regenerated
+  # for the exact dead-heat engine, #418/#362; were 0.7508963573448679,
+  # 0.24910123733471592 under the mean-multiplicity engine)
+  ref <- c(0.7508984430516686, 0.24910155694833133, 0)
+  expect_equal(ability_implied_state_prices(c(0, 1, 500), d), ref,
+               tolerance = 1e-9)
+  expect_equal(ability_implied_state_prices(c(0, 1, Inf), d), ref,
+               tolerance = 1e-9)
+  expect_equal(ability_implied_state_prices(c(0, -Inf, -Inf), d),
+               c(0, 0.5, 0.5))
+  expect_equal(ability_implied_state_prices(c(0, 1, 30, 31, 33), d),
+               c(ref[1:2], 0, 0, 0), tolerance = 1e-9)
+  d2 <- skew_normal_density(L = 50, unit = 0.1, a = 1)
+  expect_equal(ability_implied_state_prices(c(-0.5, 0, 0.3, 2.1, 6), d2,
+                                            unit = 0.1),
+               c(0.5632313848738231, 0.2595696474144002, 0.17255456544459888,
+                 0.004644402180415685, 8.676225604073229e-11),
+               tolerance = 1e-8)
+  expect_true(is.infinite(ability_implied_dividends(c(0, 1, 500), d)[3]))
+})

@@ -26,3 +26,15 @@ test_that("a monotonic linkage is unaffected", {
                method = "average")
   expect_equal(length(tree_from_hclust(hc)$parent), 11L)
 })
+
+test_that("an empty linkage is the one-runner tree (#382)", {
+  tr <- tree_from_linkage(matrix(numeric(0), nrow = 0, ncol = 4))
+  expect_equal(tr$D, 1)
+  expect_length(tr$cluster, 1L)
+  expect_length(tr$parent, 1L)
+  expect_length(tr$strength, 1L)
+  expect_equal(race_probabilities(0, structure = tr), 1)
+  # a two-leaf tree is unchanged by the guard
+  tr2 <- tree_from_linkage(matrix(c(0, 1, 0.5, 2), nrow = 1))
+  expect_equal(tr2$D, c(0.5, 0.5))
+})

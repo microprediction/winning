@@ -31,7 +31,7 @@ mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
     with unit idiosyncratic variances the utility scale is then not
     identified.}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
-    integrals; a sharpness rule escalates to Halton nodes when the
+    integrals; a sharpness rule escalates to scrambled Sobol nodes when the
     conditional races become nearly deterministic.}
   \item{maxit}{BFGS iteration cap.}
 }

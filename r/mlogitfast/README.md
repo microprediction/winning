@@ -71,6 +71,6 @@ node escalation the OPTIMIZER EXPLOITS QUADRATURE HOLES -- the first
 fit ran the loadings to ||w|| ~ 300 and reported a fake 20-nat
 likelihood gain that collapsed under denser rules (GH-7: -1195.1,
 GH-15: -1243.4, GH-31: -1229.9, non-monotone = noise). The likelihood
-now switches to Halton nodes past sharpness 3, the same
+now switches to scrambled Sobol nodes past sharpness 3, the same
 family-escalation rule as winning::race_probabilities, and the runaway
 disappears.

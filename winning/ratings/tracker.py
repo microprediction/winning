@@ -363,7 +363,11 @@ class AbilityTracker:
         if prices is not None:                                     # market observer
             # prices are inverted under the same (blocked or independent)
             # performance model the outcome is priced with
-            model = {} if V is None else {"V": V, "D": b2}
+            # performance model the outcome is priced with -- its beta2
+            # and base included, which were dropped when V was None (#94)
+            model = {"D": b2, "base": self.base}
+            if V is not None:
+                model["V"] = V
             m, v, lz = update_market(m, v, np.asarray(prices, float), tau2=self.tau2, **model)
             self.evidence += lz
         if scores is not None:                                     # results observer, magnitudes
@@ -388,7 +392,8 @@ class AbilityTracker:
             # ranking factor (matches the Gibbs reference); 'moment' is the fast
             # biased moment-match; 'augmented' is the slow Gibbs reference itself.
             # With magnitudes available, `scores` is the right path, not this.
-            order = list(order)
+            from ..outcomes import as_order
+            order = list(as_order(order, len(m)))              # #129
             if V is not None:
                 m, v, lz = update_order_correlated(m, v, order, V, beta2=b2, Qf=self.Qf,
                                                    base=self.base, nodes_log2=self.nodes_log2)

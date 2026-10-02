@@ -10,7 +10,7 @@ dividend_implied_ability(dividends, density, nan_value = 2000, unit = 1.0)
 
 state_price_implied_ability(prices, density, unit = 1.0)
 
-ability_implied_state_prices(ability, density, unit = 1.0)
+ability_implied_state_prices(ability, density, unit = 1.0, max_depth = 3L)
 
 ability_implied_dividends(ability, density, unit = 1.0)
 
@@ -26,6 +26,7 @@ lower is better}
 \code{-L..L} (length \code{2L+1}), e.g. from
 \code{\link{skew_normal_density}}}
 \item{nan_value}{dividend assigned to \code{NA} entries}
+\item{max_depth}{recursion budget for the reference's wide-field clustering (infinite and far-off-lattice abilities are handled as in python's \code{state_prices_from_extended_offsets})}
 \item{unit}{lattice spacing assumed when the density was constructed}
 \item{offset_samples}{descending offsets for the interpolation table
 (default: the reference's half-lattice grid)}
