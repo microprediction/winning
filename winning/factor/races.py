@@ -256,6 +256,9 @@ def student_base(nu):
     # accordingly)
     edge = float(_t.isf(1e-7, nu)) / s
     _student.span = (max(12.0, edge), max(12.0, edge))
+    # central scale of the standardized law (#385): its density at the
+    # mode is that of a scale-1/s t, so resolution is set by 1/s
+    _student.resolution = 1.0 / s
     _student.rust_base = (5, [nu, s])
     _student.sample = lambda rng, size=None: rng.standard_t(nu, size) / s
     return _student
@@ -581,7 +584,7 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     # performance sd, the same resolution target the sharpness refinement
     # uses, so relaxation fires only when the tail would genuinely
     # outrun the lattice rather than whenever the budget is modest
-    budget = 0.5 * float(s.min()) * max(points - 1, 1)
+    budget = 0.5 * float(s.min()) * _resolution(fn) * max(points - 1, 1)
     d = float(delta)
     lo, hi = window_at(d)
     while hi - lo > budget and d < 1e-4:
@@ -597,6 +600,17 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
             "there. Raise points= to tighten it.",
             RuntimeWarning, stacklevel=3)
     return np.linspace(lo, hi, points)
+
+
+def _resolution(fn):
+    """The base's central scale in standardized units: the spacing target
+    is half of it times the performance sd. A unit-variance law can
+    still have a narrow centre -- Student-t(nu) concentrates on
+    sqrt((nu-2)/nu), 0.218 at nu = 2.1 -- and measuring resolution in
+    sd alone let the window widen until about two points crossed it
+    (#385). Bases declare it as .resolution; the default is 1."""
+    r = getattr(fn, "resolution", 1.0) if fn is not None else 1.0
+    return float(r) if np.isfinite(r) and r > 0 else 1.0
 
 
 def _ndtr_local(z):
@@ -625,6 +639,7 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                         M_all.max() + right * sd.max(), points)
     dx = x[1] - x[0]
     smin = float(sd.min())
+    res = _resolution(fn)
     sharp_here = float(np.max(np.sqrt((np.asarray(V, float) ** 2).sum(axis=1)))
                        / max(smin, 1e-300))
     if sharp_here > 25.0 and dx > 0.5 * smin:
@@ -655,11 +670,12 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     # tail pushes the delta-quantile so far out that the points are
     # spread too thin to resolve the bulk. A truncated window hides
     # that; an honest one has to say so.
-    if (x[-1] - x[0]) / max(len(x) - 1, 1) > 0.5 * smin:
+    if (x[-1] - x[0]) / max(len(x) - 1, 1) > 0.5 * smin * res:
         import warnings
         warnings.warn(
             f"lattice spacing {(x[-1]-x[0])/max(len(x)-1,1):.3g} exceeds "
-            f"half the smallest performance sd ({smin:.3g}): this base's "
+            f"half the smallest performance sd times the base's central "
+            f"scale ({smin:.3g} x {res:.3g}): this base's "
             "tail forced a window wider than the point budget can "
             "resolve. Raise points=, raise delta=, or declare a span on "
             "the base.", RuntimeWarning, stacklevel=2)
