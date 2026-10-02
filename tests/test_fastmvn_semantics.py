@@ -70,9 +70,12 @@ def test_a_loaded_deterministic_row_beside_free_ones(fm):
     b = g.normal(size=5) + 0.3
     a = b - 1.5 - g.random(5)
     p, _ = fm.mvn_cdf_fast_info(lower=a, upper=b, mean=mu, V=V, D=D)
-    ref = multivariate_normal(mean=mu, cov=V @ V.T + np.diag(D),
-                              abseps=1e-12, releps=1e-9,
-                              maxpts=10 ** 7).cdf(b, lower_limit=a)
+    # tolerances on the cdf call, not the constructor: the frozen
+    # constructor only accepts them on recent scipy (CI's 3.10 job has
+    # an older one), while the generator's cdf has taken them throughout
+    ref = multivariate_normal.cdf(b, mean=mu, cov=V @ V.T + np.diag(D),
+                                  maxpts=10 ** 7, abseps=1e-12, releps=1e-9,
+                                  lower_limit=a)
     assert p == pytest.approx(ref, rel=1e-4)
 
 
