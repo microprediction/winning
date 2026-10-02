@@ -754,6 +754,25 @@ def test_the_variance_and_the_loadings_cannot_be_exchanged(name):
         call(_LOAD, _V_BELIEF)                   # exchanged: refused
 
 
+_LOAD_POSITIVE = np.array([0.2, 0.5, 0.1, 0.4, 0.3])   # legal: non-constant, all > 0
+
+
+@pytest.mark.parametrize("name", sorted(SWAPPABLE))
+def test_an_all_positive_loading_swap_is_NOT_caught(name):
+    """The limit of the guard above, pinned so its tests cannot imply
+    complete protection (#85). Loadings are gauge-fixed INSIDE the model,
+    so an all-positive non-constant vector is a legal V, and it is also a
+    legal variance: the exchange answers a different question in silence.
+    If this starts raising, the API has grown a structural discriminator
+    (keyword-only arguments or typed wrappers) and this test should be
+    inverted, not deleted."""
+    call = SWAPPABLE[name]
+    right = _flat(call(_V_BELIEF, _LOAD_POSITIVE))
+    swapped = _flat(call(_LOAD_POSITIVE, _V_BELIEF))
+    assert right.shape == swapped.shape
+    assert np.max(np.abs(right - swapped)) > 1e-3
+
+
 # every public verb taking a belief variance, and the value it must refuse
 NEGATIVE_VARIANCE = {
     "winning.ratings.nway.update_winner":
