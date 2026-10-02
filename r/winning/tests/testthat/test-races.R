@@ -153,3 +153,33 @@ test_that("zero-rank loadings reach top-k as the independent top-k", {
                                D = D)
   expect_gt(max(abs(moved - top_k_probabilities(mu, 2, D = D))), 0.005)
 })
+
+test_that("the normal survival holds a 20-sd longshot (#96)", {
+  p <- race_probabilities(c(0, 20, 40), D = c(1, 1, 1), points = 16385,
+                          window = "span")
+  expect_lt(abs(p[2] / 1.044243791881266e-45 - 1), 1e-8)   # was ~93x low
+  b <- .base_normal(c(10, 20, 30))
+  expect_equal(b$S, pnorm(c(10, 20, 30), lower.tail = FALSE))
+})
+
+test_that("the bulk window uses the caller's base (#106)", {
+  t3 <- function(z) {
+    f <- 2 / (pi * (1 + z * z)^2)
+    F <- 0.5 + (atan(z) + z / (1 + z * z)) / pi
+    list(S = pmax(1 - F, 1e-300), f = f, fp = -8 * z / (pi * (1 + z * z)^3))
+  }
+  ref <- c(0.5662010847332788, 0.3610182079892741, 0.0727807072774470)
+  p <- suppressWarnings(race_probabilities(c(0, 1, 2), D = c(64, 1, 1),
+                                           base = t3, points = 32001))
+  expect_lt(max(abs(p - ref)), 1e-7)        # normal-survival window: 1.2e-4
+  # the relaxation is announced, not silent
+  expect_warning(race_probabilities(c(0, 1, 2), D = c(64, 1, 1), base = t3,
+                                    points = 4001), "relaxed delta")
+  # a declared span is honoured by window = "span"
+  t3s <- t3; attr(t3s, "span") <- c(400, 400)
+  ps <- race_probabilities(c(0, 1, 2), D = c(64, 1, 1), base = t3s,
+                           points = 64001, window = "span")
+  p12 <- race_probabilities(c(0, 1, 2), D = c(64, 1, 1), base = t3,
+                            points = 64001, window = "span")
+  expect_lt(max(abs(ps - ref)), max(abs(p12 - ref)))
+})
