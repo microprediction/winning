@@ -82,6 +82,14 @@
 }
 
 .cluster_nodes <- function(r, qa) {
+  if (r == 0) {
+    # the EMPTY PRODUCT: one node of weight 1 with no columns. Rank 1
+    # and rank 2 were handled and everything else fell to the rank >= 3
+    # refusal below, so an (n, 0) matrix -- the documented spelling of
+    # "no factors" -- was turned away with a message about Sobol nodes
+    # for high rank (#309).
+    return(list(nodes = matrix(numeric(0), 1L, 0L), w = 1))
+  }
   if (r == 1) {
     h <- .hermite1(qa)
     return(list(nodes = matrix(h$nodes, ncol = 1), w = h$weights))

@@ -214,7 +214,20 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
             D = D_new
             break
         D = D_new
-    return V, np.maximum(D, 1e-8)
+    # RELATIVE to each runner's own variance, the rule fit_covariance
+    # already settled on below ("the floor is RELATIVE ... an absolute
+    # floor destroys near-singular contrasts"). That fix was made in one
+    # of the two places this file floors a variance and not the other,
+    # so `Sigma = 1e-12 * I` came back as `D = 1e-8` -- the variance
+    # inflated ten-thousandfold and the shares collapsed to uniform,
+    # while the same race described with `D=` was exact (#101).
+    # The MULTIPLIER is unchanged, so at unit scale this is the same
+    # floor it has always been; only its covariance under rescaling is
+    # new. The inner term keeps the floor positive for a runner whose
+    # own variance is zero.
+    dc = np.diag(np.asarray(C, dtype=float))
+    floor = 1e-8 * np.maximum(dc, 1e-6 * max(float(np.mean(dc)), 1e-300))
+    return V, np.maximum(D, floor)
 
 
 def _projected_sq(C, V, D):
@@ -363,6 +376,52 @@ def _nnls_centered_gram(c, n, n_pass=100):
     return np.maximum((c - b * s) / a, 0.0)
 
 
+def _validate_covariance(C, name="cov="):
+    """A finite, square, symmetric, positive-semidefinite matrix, or a
+    refusal naming the argument. Returns the symmetrised matrix.
+
+    One place, because there were two doors onto the same question and
+    only one of them asked it: `winning.probit` fitted a supplied
+    `Sigma` straight through `fit_factor_model`, so an INDEFINITE matrix
+    (eigenvalue -1) returned shares of [1, 0] and an asymmetric one
+    returned a plausible [0.649, 0.351], neither with a warning (#102).
+    """
+    C = np.asarray(C, dtype=float)
+    # Squareness, stated. It was only ever caught by accident: a 1 x 2
+    # broadcasts against its own transpose into a 2 x 2, so the
+    # asymmetry check below reported "not symmetric" for something that
+    # is really not square, and a 1-D array passed that check outright
+    # (asym 0) and then had np.diag build a matrix FROM it. The R port
+    # read nrow() alone and answered for a 1 x 2 from C[1, 1] (#277).
+    if C.ndim != 2 or C.shape[0] != C.shape[1]:
+        raise ValueError(
+            f"{name} must be square; got shape {C.shape}")
+    n = len(C)
+    if not np.isfinite(C).all():
+        raise ValueError(f"{name} contains NaN or inf")
+    asym = float(np.abs(C - C.T).max())
+    if asym > 1e-8 * max(float(np.abs(C).max()), 1e-300):
+        raise ValueError(
+            f"{name} is not symmetric (max asymmetry {asym:.2e}); pass "
+            "(C + C.T)/2 if the asymmetry is numerical noise")
+    # halve BEFORE adding: C + C.T overflows to inf for finite
+    # entries near the double ceiling, and the finiteness check
+    # above has already passed by then, so an inf reached D and
+    # came back out as a non-finite variance (#279). The two are
+    # the same number everywhere else.
+    C = 0.5 * C + 0.5 * C.T
+    lam_min = float(np.linalg.eigvalsh(C).min())
+    # mean diagonal, divided BEFORE summing: np.trace overflows for
+    # finite entries near the ceiling, which made the tolerance inf
+    # and the comparison meaningless (#279)
+    if lam_min < -1e-8 * max(float(np.sum(np.diag(C) / n)), 1e-300):
+        raise ValueError(
+            f"{name} is not positive semidefinite (min eigenvalue "
+            f"{lam_min:.2e}); this is not a covariance matrix. Project "
+            "to the PSD cone first if it came from noisy estimation.")
+    return C
+
+
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                    blocks: int | None = None, nodes_log2: int = 11,
                    seed: int = 0, return_report: bool = False):
@@ -384,39 +443,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     from scipy.cluster.hierarchy import fcluster, linkage
     from scipy.spatial.distance import squareform
 
-    C = np.asarray(C, dtype=float)
-    # Squareness, stated. It was only ever caught by accident: a 1 x 2
-    # broadcasts against its own transpose into a 2 x 2, so the
-    # asymmetry check below reported "not symmetric" for something that
-    # is really not square, and a 1-D array passed that check outright
-    # (asym 0) and then had np.diag build a matrix FROM it. The R port
-    # read nrow() alone and answered for a 1 x 2 from C[1, 1] (#277).
-    if C.ndim != 2 or C.shape[0] != C.shape[1]:
-        raise ValueError(
-            f"cov= must be square; got shape {C.shape}")
+    C = _validate_covariance(C)
     n = len(C)
-    if not np.isfinite(C).all():
-        raise ValueError("cov= contains NaN or inf")
-    asym = float(np.abs(C - C.T).max())
-    if asym > 1e-8 * max(float(np.abs(C).max()), 1e-300):
-        raise ValueError(
-            f"cov= is not symmetric (max asymmetry {asym:.2e}); pass "
-            "(C + C.T)/2 if the asymmetry is numerical noise")
-    # halve BEFORE adding: C + C.T overflows to inf for finite
-    # entries near the double ceiling, and the finiteness check
-    # above has already passed by then, so an inf reached D and
-    # came back out as a non-finite variance (#279). The two are
-    # the same number everywhere else.
-    C = 0.5 * C + 0.5 * C.T
-    lam_min = float(np.linalg.eigvalsh(C).min())
-    # mean diagonal, divided BEFORE summing: np.trace overflows for
-    # finite entries near the ceiling, which made the tolerance inf
-    # and the comparison meaningless (#279)
-    if lam_min < -1e-8 * max(float(np.sum(np.diag(C) / n)), 1e-300):
-        raise ValueError(
-            f"cov= is not positive semidefinite (min eigenvalue "
-            f"{lam_min:.2e}); this is not a covariance matrix. Project "
-            "to the PSD cone first if it came from noisy estimation.")
     if n == 1:
         # A one-runner field has no covariance STRUCTURE: there is
         # nothing for a factor to correlate, the whole variance is
@@ -606,10 +634,42 @@ def _worst_contrast_ratio(C, R, cap_n=4000):
     return float(ratio.max())
 
 
+def _as_count(x, name, minimum):
+    """An integer count at a node-rule door, or a refusal naming it.
+
+    Both counts reach the tensor loop below as a range bound, so a
+    nonsense value does not raise there: it runs the loop zero times
+    and returns a WELL-FORMED rule for a different problem. k <= 0
+    returned the rank-1 rule and Q = 0 an empty one.
+    """
+    v = np.asarray(x)
+    if v.ndim != 0 or not np.isfinite(v) or v != np.floor(v):
+        raise ValueError(
+            f"hermite_nodes needs an integer {name}; got {x!r}")
+    v = int(v)
+    if v < minimum:
+        raise ValueError(
+            f"hermite_nodes needs {name} >= {minimum}; got {v}")
+    return v
+
+
 def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
-    """Product Gauss-Hermite rule for E over N(0, I_k); returns (nodes, weights)."""
+    """Product Gauss-Hermite rule for E over N(0, I_k); returns (nodes, weights).
+
+    k = 0 is the EMPTY PRODUCT: one node of weight 1 with no columns, so
+    a zero-rank loading matrix -- which as_loadings accepts -- integrates
+    over the zero-dimensional factor space and prices the independent
+    race through this same path. It is not a degenerate case to reject;
+    it is the value of the integral. The browser and julia ports already
+    fell through to it, python returned the rank-1 rule, and R raised
+    from expand.grid: three answers to one question (#68).
+    """
+    k = _as_count(k, "k", 0)
+    Q = _as_count(Q, "Q", 1)
     x, w = np.polynomial.hermite_e.hermegauss(Q)
     w = w / np.sqrt(2.0 * np.pi)
+    if k == 0:
+        return np.zeros((1, 0)), np.ones(1)
     if k == 1:
         return x[:, None], w
     # Build the product one dimension at a time and prune as it grows: a

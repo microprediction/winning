@@ -142,6 +142,16 @@ function _gh1(Q::Int)
 end
 
 function _gh_nodes(r::Int, Q::Int)
+    # r = 0 is the EMPTY PRODUCT: one node of weight 1 with no columns,
+    # so an (n, 0) loading matrix reduces exactly to the independent
+    # product. Every r != 1 was built as RANK TWO below, so r = 0 made a
+    # spurious Q^2 x 2 node matrix and then failed multiplying it by a
+    # 0 x n loading transpose (#68). Callers route r > 2 to the dense
+    # fallback, so 0, 1 and 2 are the whole domain here.
+    if r == 0
+        return Matrix{Float64}(undef, 1, 0), [1.0]
+    end
+    r < 0 && throw(ArgumentError("_gh_nodes needs r >= 0; got $r"))
     x, w = _gh1(Q)
     if r == 1
         return reshape(x, :, 1), w

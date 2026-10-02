@@ -131,6 +131,29 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
     total_logZ = 0.0
     n_all = len(index)
     for race in races:
+        # A filter folds evidence into state, so one non-finite number
+        # is not one bad race -- it is a NaN mean and covariance for
+        # EVERY entity, for the rest of the history, silently. The
+        # tracker had the same hole. Lengths are checked here too: a
+        # mismatch did raise, but as "operands could not be broadcast
+        # together", which names nothing the caller passed.
+        _k = len(race["runners"])
+        for _name in ("margins", "scores", "p_market"):
+            _seq = race.get(_name)
+            if _seq is None:
+                continue
+            _a = np.asarray(_seq, dtype=float)
+            if _a.ndim != 1 or _a.shape[0] != _k:
+                raise ValueError(
+                    f"race {_name!r} must have one entry per runner; got "
+                    f"shape {_a.shape} for {_k} runners")
+            _bad = np.flatnonzero(~np.isfinite(_a))
+            if _bad.size:
+                raise ValueError(
+                    f"race {_name}[{int(_bad[0])}] = "
+                    f"{float(_a[_bad[0]])!r} is not finite ({_bad.size} of "
+                    f"{_k} are). The filter folds this into state it keeps, "
+                    "so every entity's rating would be NaN from here on.")
         t = float(race.get("t", 0.0))
         if t_last is not None and t > t_last:
             m, S = diffuse_full(m, S, dt=t - t_last, timescale=timescale,

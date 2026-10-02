@@ -32,6 +32,15 @@ from .races import _fit_cov, _factor_of_structure, _setup, _tempered_curves
 _fastrace, _RUST_OK, _HAVE_RUST = load_fastrace("ordered_prefixes")
 
 
+# The single-shot lattice cap. Past this the field is refined and the
+# CELLS are watched for convergence rather than the scalar total (#269).
+_ORDERED_CAP = 16385
+# Refinement ceiling as n * points: the pass holds several (n, points)
+# float arrays, so this is tens of MB, and it keeps a wide field from
+# turning into an unbounded run.
+_ORDERED_POINT_BUDGET = 4_000_000
+
+
 def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
                           base="normal", points=501, temperature=0.0,
                           mass_tol=1e-3, structure=None, cov=None):
@@ -68,72 +77,109 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     pad_hi = right * sd.max() + (8.0 * tau if tau > 0 else 0.0)
     span = float(M_all.max() - M_all.min()) + pad_lo + pad_hi
     need = int(np.ceil(span / (float(sd.min()) / 8.0))) + 1
-    pts = int(min(max(points, need), 16385))
-    if need > 16385:
+    pts = int(min(max(points, need), _ORDERED_CAP))
+    lo_x, hi_x = M_all.min() - pad_lo, M_all.max() + pad_hi
+    def _accumulate(pts):
+        """One pass over the lattice at this resolution. Everything that
+        defines the problem is fixed above; only the number of points
+        varies, which is what makes a convergence check possible."""
+        x = np.linspace(lo_x, hi_x, pts)
+        dx = x[1] - x[0]
+        if (tau <= 0 and base == "normal" and _HAVE_RUST
+                and hasattr(_fastrace, "ordered_prefixes")):
+            flat, total = _fastrace.ordered_prefixes(
+                np.ascontiguousarray(mu), np.ascontiguousarray(V),
+                np.ascontiguousarray(D), np.ascontiguousarray(F),
+                np.ascontiguousarray(W), pts, float(x[0]), float(x[-1]), int(k))
+            return np.asarray(flat).reshape((n,) * k), float(total)
+        curves = ([_tempered_curves(sd[i], tau, fn, left, right) for i in range(n)]
+                  if tau > 0 else None)
+        out = np.zeros((n,) * k)
+        for c in range(len(F)):
+            if tau > 0:
+                S = np.empty((n, pts)); f = np.empty((n, pts))
+                for i in range(n):
+                    u, Sg, fg, _ = curves[i]
+                    args = x - M_all[c, i]
+                    S[i] = np.interp(args, u, Sg, left=1.0, right=1e-300)
+                    f[i] = np.interp(args, u, fg, left=0.0, right=0.0)
+            else:
+                z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
+                S, f, _ = fn(z)
+                f = f / sd[:, None]
+            logS = np.log(np.maximum(S, 1e-300))
+            Fc = 1.0 - S
+            logSfield = logS.sum(0)
+            if k == 1:
+                rest = np.exp(np.clip(logSfield[None, :] - logS, -745.0, 0.0))
+                out += W[c] * (f * rest).sum(1) * dx
+                continue
+            for i in range(n):
+                if k == 2:
+                    rest_i = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
+                                            -745.0, 0.0))
+                    contrib = (f * Fc[i][None, :] * rest_i).sum(1) * dx
+                    contrib[i] = 0.0
+                    out[i] += W[c] * contrib
+                    continue
+                for j in range(n):
+                    if j == i:
+                        continue
+                    g = f[j] * Fc[i]
+                    inner = (np.cumsum(g) - 0.5 * g) * dx
+                    rest_ij = np.exp(np.clip(logSfield[None, :] - logS[i] - logS[j]
+                                             - logS, -745.0, 0.0))
+                    contrib = (f * rest_ij * inner[None, :]).sum(1) * dx
+                    contrib[i] = 0.0
+                    contrib[j] = 0.0
+                    out[i, j] += W[c] * contrib
+        return out, float(out.sum())
+
+    out, total = _accumulate(pts)
+
+    # The scalar mass identity CANNOT police a capped lattice. Cell
+    # errors of opposite sign cancel in one number: the #269 fixture
+    # (sds of 22.0, 0.029 and 0.011) totalled 1.00038 -- inside the
+    # default 1e-3 -- while the (1, 2) cell was 2.1% high, and the
+    # normalisation then spread the residual into a plausible answer.
+    # `points=` could not help, because min(max(points, need), cap) is
+    # the cap whenever need exceeds it.
+    #
+    # So when the lattice is capped, refine it and watch the CELLS,
+    # which is where the error lives. Doubling until they stop moving
+    # resolves that fixture exactly at 32769 points. If the budget runs
+    # out first, raise: an unresolvable field is a deliberate error,
+    # never a renormalised guess.
+    if need > pts:
         import warnings
         warnings.warn(
             "ordered_probabilities: the ability span is too wide to resolve "
-            f"the sharpest runner even at 16385 lattice points (needs {need}); "
-            "the total mass is checked and will raise if accuracy is lost",
+            f"the sharpest runner at {pts} lattice points (needs {need}); "
+            "refining until the prefix probabilities stop moving, which "
+            "costs another pass or several. The total mass is NOT the "
+            "check -- cell errors of opposite sign cancel in it (#269).",
             RuntimeWarning, stacklevel=2)
-    x = np.linspace(M_all.min() - pad_lo, M_all.max() + pad_hi, pts)
-    dx = x[1] - x[0]
-    if (tau <= 0 and base == "normal" and _HAVE_RUST
-            and hasattr(_fastrace, "ordered_prefixes")):
-        flat, total = _fastrace.ordered_prefixes(
-            np.ascontiguousarray(mu), np.ascontiguousarray(V),
-            np.ascontiguousarray(D), np.ascontiguousarray(F),
-            np.ascontiguousarray(W), pts, float(x[0]), float(x[-1]), int(k))
-        out = np.asarray(flat).reshape((n,) * k)
-        if abs(total - 1.0) > mass_tol:
+        ceiling = max(pts, min(need, int(_ORDERED_POINT_BUDGET // max(n, 1))))
+        prev = out / total if total > 0 else out
+        moved = np.inf
+        while pts < ceiling:
+            pts = min(2 * pts - 1, ceiling)
+            out, total = _accumulate(pts)
+            cur = out / total if total > 0 else out
+            moved = float(np.abs(cur - prev).max())
+            prev = cur
+            if moved <= mass_tol:
+                break
+        if moved > mass_tol:
             raise FloatingPointError(
-                f"ordered_probabilities: total mass over ordered {k}-prefixes is "
-                f"{total:.6f}, defect {abs(total-1):.2e} exceeds {mass_tol:.0e}; "
-                "the lattice failed to capture the field -- raise points= or "
-                "mass_tol= deliberately rather than trusting a renormalization")
-        return out / total
-    curves = ([_tempered_curves(sd[i], tau, fn, left, right) for i in range(n)]
-              if tau > 0 else None)
-    out = np.zeros((n,) * k)
-    for c in range(len(F)):
-        if tau > 0:
-            S = np.empty((n, pts)); f = np.empty((n, pts))
-            for i in range(n):
-                u, Sg, fg, _ = curves[i]
-                args = x - M_all[c, i]
-                S[i] = np.interp(args, u, Sg, left=1.0, right=1e-300)
-                f[i] = np.interp(args, u, fg, left=0.0, right=0.0)
-        else:
-            z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
-            S, f, _ = fn(z)
-            f = f / sd[:, None]
-        logS = np.log(np.maximum(S, 1e-300))
-        Fc = 1.0 - S
-        logSfield = logS.sum(0)
-        if k == 1:
-            rest = np.exp(np.clip(logSfield[None, :] - logS, -745.0, 0.0))
-            out += W[c] * (f * rest).sum(1) * dx
-            continue
-        for i in range(n):
-            if k == 2:
-                rest_i = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
-                                        -745.0, 0.0))
-                contrib = (f * Fc[i][None, :] * rest_i).sum(1) * dx
-                contrib[i] = 0.0
-                out[i] += W[c] * contrib
-                continue
-            for j in range(n):
-                if j == i:
-                    continue
-                g = f[j] * Fc[i]
-                inner = (np.cumsum(g) - 0.5 * g) * dx
-                rest_ij = np.exp(np.clip(logSfield[None, :] - logS[i] - logS[j]
-                                         - logS, -745.0, 0.0))
-                contrib = (f * rest_ij * inner[None, :]).sum(1) * dx
-                contrib[i] = 0.0
-                contrib[j] = 0.0
-                out[i, j] += W[c] * contrib
-    total = float(out.sum())
+                f"ordered_probabilities: the field needs {need} lattice "
+                f"points to resolve the sharpest runner and the budget "
+                f"stops at {ceiling}; refining to there still moved a "
+                f"prefix probability by {moved:.2e}, above mass_tol="
+                f"{mass_tol:.0e}. The total mass is NOT evidence here -- "
+                "cell errors of opposite sign cancel in it. Narrow the "
+                "field, widen mass_tol deliberately, or raise the budget.")
+
     # the tempered curves are interpolated (as in _race_tempered, which
     # renormalises a ~3e-3 defect silently); hold the softened race to the
     # same standard the win race already accepts

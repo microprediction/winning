@@ -44,6 +44,18 @@ def as_loadings(V, n):
     ``rank == n``, where the contract wins: n rows is n contestants.
     """
     A = np.asarray(V, dtype=float)
+    # Finiteness, as as_idio and as_weights already check it. This was
+    # the one of the three that let a NaN through, and the loading then
+    # travelled to the lattice sizing and came back as "cannot convert
+    # float NaN to integer" -- a refusal, so no wrong answer, but one
+    # that names nothing the caller passed and sends them looking at the
+    # wrong module.
+    bad = np.flatnonzero(~np.isfinite(A.ravel()))
+    if bad.size:
+        raise ValueError(
+            f"V has a non-finite entry: V is a loading matrix, and "
+            f"{bad.size} of {A.size} entries are not finite (first at "
+            f"flat index {int(bad[0])}, value {float(A.ravel()[bad[0]])!r})")
     if A.ndim == 0:
         return np.full((n, 1), float(A))
     if A.ndim == 1 and A.size == n:

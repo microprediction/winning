@@ -254,7 +254,13 @@ function factorNodes(V, n, qa) {
   }
   const h = hermite1(qa);
   let nodes, w;
-  if (r === 1) {
+  if (r === 0) {
+    // the EMPTY PRODUCT: rank 1 was special-cased and every other rank
+    // fell into the rank-2 tensor, so an (n, 0) matrix -- the documented
+    // spelling of "no factors" -- became RangeError: Invalid array
+    // length from a negative-length tensor (#309)
+    nodes = [[]]; w = [1];
+  } else if (r === 1) {
     nodes = h.nodes.map(v => [v]);
     w = h.weights.slice();
   } else {

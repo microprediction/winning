@@ -80,14 +80,45 @@
 .race_setup <- function(mu, V, D, F, W, base) {
   mu <- as.numeric(mu)
   n <- length(mu)
+  # One idiosyncratic variance per contestant, or a scalar broadcast on
+  # purpose -- the contract winning.shapes.as_idio states. R recycles a
+  # short vector in silence whenever its length divides n, so
+  # D = c(2, 9) at n = 4 priced exactly the race D = c(2, 9, 2, 9)
+  # prices: same numbers, no warning. Found by the cross-port
+  # divergence scan, where python, the browser and julia all refuse it.
   if (is.null(D)) D <- rep(1, n)
   D <- as.numeric(D)
+  if (length(D) == 1L) D <- rep(D, n)
+  if (length(D) != n)
+    stop(sprintf(paste("D must be a scalar or one idiosyncratic variance",
+                       "per contestant; got %d for %d contestants"),
+                 length(D), n), call. = FALSE)
+  if (any(!is.finite(D)))
+    stop("D has a non-finite entry", call. = FALSE)
+  if (any(D < 0))
+    stop(sprintf("D[%d] = %g is a negative variance", which(D < 0)[1],
+                 D[which(D < 0)[1]]), call. = FALSE)
   if (is.null(V)) {
     V <- matrix(0, n, 1)
     F <- matrix(0, 1, 1)
     W <- 1
   } else {
+    # a SCALAR V is the same loading for everyone -- the spelling
+    # winning.shapes.as_loadings documents, which python and the browser
+    # accept and R refused (cross-port divergence scan). as.matrix() on
+    # a length-1 vector gives a 1x1, which is one contestant with one
+    # factor, not n contestants sharing a loading.
+    if (length(V) == 1L && is.null(dim(V))) V <- matrix(as.numeric(V), n, 1L)
     V <- as.matrix(V)
+    # (rank, n) is the SAME race as (n, rank), which as_loadings
+    # documents and abilities_from_race already did for itself a few
+    # hundred lines down -- .race_setup did not, so R was inconsistent
+    # with the contract AND with itself. The ambiguity is real only at
+    # rank == n, where the contract wins: n rows is n contestants.
+    if (nrow(V) != n && ncol(V) == n) V <- t(V)
+    if (nrow(V) != n)
+      stop(sprintf("V must have one row per contestant; got %d for %d",
+                   nrow(V), n), call. = FALSE)
     # gauge-fix matching the python reference: a common loading column
     # shifts every conditional mean equally and cannot move an argmin,
     # so center V and make node selection and the lattice window
@@ -423,7 +454,16 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   # the field's contrast scale (matching the python reference): median
   # idiosyncratic variance plus the mean factor variance under the nodes
   # actually represented, so (V, F) -> (V / c, c F) is invariant
+  # the target and D must describe the SAME field: a length-2 p with a
+  # length-4 D answered a two-runner race and returned two numbers,
+  # silently, where python, julia and the browser all refuse (cross-port
+  # divergence scan)
   Dn <- if (is.null(D)) rep(1, n) else as.numeric(D)
+  if (length(Dn) == 1L) Dn <- rep(Dn, n)
+  if (length(Dn) != n)
+    stop(sprintf(paste("D must be a scalar or one variance per target",
+                       "entry; got %d for %d entries"), length(Dn), n),
+         call. = FALSE)
   Vn <- if (is.null(V)) matrix(0, n, 1) else as.matrix(V)
   if (nrow(Vn) != n && ncol(Vn) == n) Vn <- t(Vn)
   Vc <- sweep(Vn, 2, colMeans(Vn))

@@ -46,6 +46,13 @@ def _halton_unit(r, n):
 
 
 def _gh_nodes(r, Q):
+    # r = 0 is the EMPTY PRODUCT: one node of weight 1 with no columns,
+    # so an (n, 0) loading matrix -- which the shape normalizer accepts
+    # as "empty = indep" -- reduces exactly to the independent product.
+    # np.meshgrid() of nothing gave "need at least one array to
+    # concatenate" from inside numpy instead (#68).
+    if r == 0:
+        return np.zeros((1, 0)), np.ones(1)
     x, w = hermegauss(Q)
     w = w / w.sum()
     grids = np.meshgrid(*([x] * r), indexing="ij")
@@ -85,6 +92,17 @@ def factorize_covariance(sigma, max_rank=6, tol=1e-11, n_iter=300):
     sigma = np.asarray(sigma, dtype=float)
     n = len(sigma)
     scale = float(np.abs(sigma).max())
+    # Rank ZERO first. A diagonal sigma is exactly V V' + diag(D) with
+    # no factors at all, but the search began at rank 1 -- which also
+    # fits a diagonal exactly, since the off-diagonals are already zero,
+    # and chose a fit that puts the variance in a LOADING. On
+    # diag([1, 1, 1, 1, 1e8]) it returned a loading of 9487, turning an
+    # independent rectangle into a near-step factor integrand: 1.8e-3
+    # relative error where the answer is a product of univariate CDFs
+    # (#132). Rank zero is exact to 1.8e-16 and 4x faster, since the
+    # quadrature is then one node rather than Q of them.
+    if np.abs(sigma - np.diag(np.diag(sigma))).max() <= tol * scale:
+        return np.zeros((n, 0)), np.diag(sigma).astype(float).copy()
     for r in range(1, min(max_rank, n - 1) + 1):
         D = np.full(n, 0.5 * float(np.mean(np.diag(sigma))))
         for _ in range(n_iter):

@@ -21,6 +21,14 @@ def register(name):
         @functools.wraps(fn)
         def wrapped(mu, V, D, *args, **kw):
             n = len(np.asarray(mu, dtype=float))
+            # A method handed the covariance DIRECTLY has no loadings to
+            # normalise, and forcing it to supply a factorization is what
+            # #302 was: the caller factored, the method rebuilt, and the
+            # round trip lost the contrast. Narrow on purpose -- only an
+            # explicit cov= takes this door, and the method validates the
+            # matrix itself.
+            if kw.get("cov") is not None:
+                return fn(mu, V, D, *args, **kw)
             return fn(mu, as_loadings(V, n), as_idio(D, n), *args, **kw)
         METHODS[name] = wrapped
         return wrapped
