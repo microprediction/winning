@@ -290,14 +290,26 @@ export function structureCov(s) {
   return C;
 }
 
+// Pivot floors are RELATIVE to the matrix's mean variance. They were
+// absolute (1e-10 here, 1e-12 in the GHK and Mendell-Elston baselines),
+// which is model noise in the utility unit: (mu, C) -> (sqrt(c) mu, c C)
+// is the same race, but at c = 1e-14 the GHK and ME leaders moved by
+// 0.266 and plain MC collapsed to 1/3 each (#101).
+function meanDiagScale(get, n) {
+  let t = 0;
+  for (let i = 0; i < n; i++) t += get(i);
+  return Math.max(t / Math.max(n, 1), 1e-300);
+}
+
 export function cholesky(Cin) {
   const n = Cin.length;
   const L = Array.from({ length: n }, () => new Array(n).fill(0));
+  const floor = 1e-10 * meanDiagScale((i) => Cin[i][i], n);
   for (let i = 0; i < n; i++) {
     for (let j = 0; j <= i; j++) {
       let s = Cin[i][j];
       for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
-      if (i === j) L[i][i] = Math.sqrt(Math.max(s, 1e-10));
+      if (i === j) L[i][i] = Math.sqrt(Math.max(s, floor));
       else L[i][j] = s / L[j][j];
     }
   }
@@ -353,11 +365,12 @@ export function ghkPrepareOne(mu, C, i) {
   const { m, S } = diffProblem(mu, C, i);
   const d = mu.length - 1;
   const L = new Float64Array(d * d);
+  const floor = 1e-12 * meanDiagScale((a) => S[a * d + a], d);
   for (let a = 0; a < d; a++) {
     for (let b = 0; b <= a; b++) {
       let s = S[a * d + b];
       for (let k = 0; k < b; k++) s -= L[a * d + k] * L[b * d + k];
-      if (a === b) L[a * d + a] = Math.sqrt(Math.max(s, 1e-12));
+      if (a === b) L[a * d + a] = Math.sqrt(Math.max(s, floor));
       else L[a * d + b] = s / L[b * d + b];
     }
   }
@@ -393,6 +406,7 @@ export function mendellElstonOne(mu, C, i) {
   // flat line this arm draws).
   const { m, S } = diffProblem(mu, C, i);
   const d = mu.length - 1;
+  const floor = 1e-12 * meanDiagScale((a) => S[a * d + a], d);
   let logp = 0;
   // Hardest constraint FIRST, as python's _order_variables does.
   // Sequential moment matching is order dependent -- each step pretends
@@ -412,11 +426,11 @@ export function mendellElstonOne(mu, C, i) {
   // equally hard constraints have no canonical precedence.
   const alive = [];
   for (let a = 0; a < d; a++) alive.push(a);
-  alive.sort((a, b) => (m[a] / Math.sqrt(Math.max(S[a * d + a], 1e-12)))
-                     - (m[b] / Math.sqrt(Math.max(S[b * d + b], 1e-12))));
+  alive.sort((a, b) => (m[a] / Math.sqrt(Math.max(S[a * d + a], floor)))
+                     - (m[b] / Math.sqrt(Math.max(S[b * d + b], floor))));
   while (alive.length) {
     const k = alive.shift();
-    const skk = Math.max(S[k * d + k], 1e-12), sk = Math.sqrt(skk);
+    const skk = Math.max(S[k * d + k], floor), sk = Math.sqrt(skk);
     const z = m[k] / sk;
     const Pz = Math.max(ndtr(z), 1e-300);
     logp += Math.log(Pz);

@@ -700,6 +700,30 @@ accepts("the inverse takes a scalar D, matching python",
           b => Math.max(...b.map((x, i) => Math.abs(x - REF[i]))) < 1e-12,
           b => `max |diff| ${Math.max(...b.map((x, i) =>
             Math.abs(x - REF[i]))).toExponential(2)}`);
+
+  // --- the baselines are scale free (#101): (mu, C) -> (sqrt(c) mu, c C)
+  // is the same race. The absolute pivot floors moved the GHK and ME
+  // leaders by 0.266 at c = 1e-14, and cholesky(1e-12 I) returned
+  // 1e-5 I (covariance 1e-10 I).
+  const scaled = (c) => [muME.map(x => Math.sqrt(c) * x),
+                         CME.map(r => r.map(x => c * x))];
+  for (const c of [1e-10, 1e-14, 1e-16]) {
+    const [m2, C2] = scaled(c);
+    accepts(`mendell-elston is scale free at c = ${c}`,
+            () => shares(m2, C2),
+            b => Math.max(...b.map((x, i) => Math.abs(x - base[i]))) < 1e-9,
+            b => `max |diff| ${Math.max(...b.map((x, i) =>
+              Math.abs(x - base[i]))).toExponential(2)}`);
+    accepts(`ghk preparation is scale free at c = ${c}`,
+            () => [0, 1, 2, 3].map(i => [demo.ghkPrepareOne(muME, CME, i),
+                                         demo.ghkPrepareOne(m2, C2, i)]),
+            v => v.every(([a, b]) => a.L.every((x, k) =>
+              Math.abs(b.L[k] / Math.sqrt(c) - x) <= 1e-9 * Math.abs(x) + 1e-300)));
+  }
+  accepts("cholesky keeps the covariance scale at 1e-12 I",
+          () => demo.cholesky([[1e-12, 0], [0, 1e-12]]),
+          L => Math.abs(L[0][0] - 1e-6) < 1e-18 && Math.abs(L[1][1] - 1e-6) < 1e-18,
+          L => `L00 ${L[0][0]}`);
 }
 
 {
