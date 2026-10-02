@@ -359,9 +359,8 @@ def _setup(mu, V, D, F, W, base):
         # and the default race came back (a 0.58 share move on a one-node
         # law), with the inverse calibrating a different model (#290).
         raise ValueError(
-            "a caller factor rule needs both F (the nodes) and W (their "
-            f"weights); got only {'W' if F is None else 'F'}. Pass both, "
-            "or neither for the automatic rule.")
+            "supply both F (factor nodes) and W (their weights), or "
+            f"neither; got only {'F' if W is None else 'W'}")
     if V is None:
         V = np.zeros((n, 1))
         F, W = np.zeros((1, 1)), np.ones(1)
@@ -1120,8 +1119,8 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         # which read a lone F with uniform weights for its scale while
         # its iterative forward discarded that same F
         raise ValueError(
-            "a caller factor rule needs both F (the nodes) and W (their "
-            f"weights); got only {'W' if F is None else 'F'}")
+            "supply both F (factor nodes) and W (their weights), or "
+            f"neither; got only {'F' if W is None else 'W'}")
     nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
         # The forward race routes a degraded fit to GHK (#161); the inverse
