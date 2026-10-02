@@ -37,7 +37,7 @@ def win_probabilities(mu: np.ndarray, sigma: float = 1.0,
     if x is None:
         x = _lattice(mu, sigma)
     z = (x[None, :] - mu[:, None]) / sigma
-    S = 1.0 - ndtr(z)
+    S = ndtr(-z)    # not 1 - ndtr(z), which cancels past ~8 sd (#96)
     f = np.exp(-0.5 * z**2) / (sigma * np.sqrt(2.0 * np.pi))
     dx = x[1] - x[0]
     log_S_field = np.sum(np.log(np.maximum(S, _TINY)), axis=0)

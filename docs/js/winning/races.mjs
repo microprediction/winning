@@ -6,7 +6,9 @@ const EULER = 0.5772156649015329;
 
 export const BASES = {
   normal: z => {
-    const S = Math.max(1 - ndtr(z), 1e-300);
+    // the upper tail directly: 1 - ndtr(z) cancels to 0 past ~8.3 sd,
+    // and a 20-sd longshot came out ~92x too unlikely (#96)
+    const S = Math.max(ndtr(-z), 1e-300);
     const f = npdf(z);
     return [S, f, -z * f];
   },
@@ -158,7 +160,11 @@ function setup(mu, V, D, F, W, base) {
   const fn = typeof base === "function" ? base : BASES[base];
   if (typeof fn !== "function")
     throw new Error(`unknown base ${JSON.stringify(base)}; known: ${Object.keys(BASES).join(", ")}, or a function`);
-  const span = typeof base === "function" ? [12, 12] : (SPANS[base] || [12, 12]);
+  // a callable base may declare its own span, as python's
+  // getattr(base, "span", (12, 12)) (#106)
+  const span = typeof base === "function"
+    ? (Array.isArray(base.span) ? base.span : [12, 12])
+    : (SPANS[base] || [12, 12]);
   return { mu, V, D, F, W, fn, left: span[0], right: span[1] };
 }
 
@@ -194,20 +200,21 @@ export function invNormalRational(p) {
          (((((b[0]*r2+b[1])*r2+b[2])*r2+b[3])*r2+b[4])*r2+1);
 }
 
-/* Lattice over the WINNER distribution's bulk, port of python's
-   _bulk_window. The envelope uses the CALLER'S base survival: this was
-   hard-coded to the normal one, so a Student-t(3) race was integrated on
-   a normal-tail interval and stayed 1.05e-3 TV wrong however many
-   points it was given (#380). Bracketed before bisecting (nine sigma
-   need not hold a polynomial tail's quantile), and delta relaxed by
-   factors of 100, with a warning, when the requested window cannot fit
-   the point budget at half the tightest sd. */
+/* Lattice over the winner distribution's bulk -- port of python's
+ * races._bulk_window: the envelope uses the CALLER'S base survival `fn`
+ * (normal when absent), both edges are bracketed before bisection, delta
+ * is relaxed by factors of 100 (to at most 1e-4, with a warning) when the
+ * requested quantiles will not fit the point budget, and a base's
+ * declared `span` widens the pad. The hard-coded normal survival missed a
+ * custom Student-t(3) race's first share by 1.2e-4 at any point count
+ * (#106), and a Student-t(3) race stayed 1.05e-3 TV off at 4001 points
+ * (#380). */
 const RELAXED_WARNED = new Set();
 function bulkWindow(Mall, sd, points, delta, fn = null) {
   const n = sd.length;
   const S = fn
     ? z => Math.max(fn(z)[0], 1e-300)
-    : z => Math.max(1 - ndtr(z), 1e-300);
+    : z => Math.max(ndtr(-z), 1e-300);     // no 1 - ndtr cancellation (#450)
   const muLo = new Array(n).fill(Infinity), muHi = new Array(n).fill(-Infinity);
   for (const row of Mall) for (let i = 0; i < n; i++) {
     if (row[i] < muLo[i]) muLo[i] = row[i];
@@ -451,7 +458,10 @@ function validatedRaceTarget(pTarget, targetFloor) {
       "and read the result as a one-sided bound on the floored " +
       "contrasts, or supply a pseudocount upstream.");
   }
-  // rescale before summing only when the sum would overflow (python #300)
+  // a target is a law up to a positive factor: when its SUM overflows
+  // (entries all finite, e.g. [4e307, 2e307, 1e307, 1e307]) rescale by
+  // the max first, as python does since #300. Conditional, so ordinary
+  // inputs stay bit-identical (#326).
   let s = target.reduce((a, b) => a + b, 0);
   if (!Number.isFinite(s)) {
     const mx = Math.max(...target);
@@ -517,10 +527,16 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     // dropped -- a translated Hermite rule missed by 8.2 points (#374)
     const sdD = Math.sqrt(Math.max(sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1) + Dn[0] + Dn[1], 1e-300));
     const shift = Vc[1].reduce((acc, v, c) => acc + (v - Vc[0][c]) * Fm[c], 0);
-    const gap = sdD * invNormalRational(target[0]) - shift;
+    // invert the SMALLER share: for [1, 1e-16] the normalized first
+    // share rounds to exactly 1 and invNormalRational(1) is NaN, which
+    // was certified as converged while [1e-16, 1] was finite (#412)
+    const gap = (target[0] <= target[1]
+      ? sdD * invNormalRational(target[0])
+      : -sdD * invNormalRational(target[1])) - shift;
     const pair = [-0.5 * gap, 0.5 * gap];
-    if (F == null)
-      return inverseReturn(pair, true, 0, 0, floored, tol, returnInfo);
+    const ok = pair.every(Number.isFinite);
+    if (F == null || !ok)
+      return inverseReturn(pair, ok, ok ? 0 : Infinity, 0, floored, tol, returnInfo);
     // A caller's rule need not be Gaussian -- a centred two-point law has
     // the right mean and variance and a different pair map (12.2 points)
     // -- and the forward integrates the rule itself, so the closed form

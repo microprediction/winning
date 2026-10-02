@@ -116,6 +116,21 @@ rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { D: [1, 1, 1], targetFloor: 
   holds("returnInfo does not change the answer",
         Math.max(...plain.map((v, i) => Math.abs(v - info.mu[i]))) < 1e-12);
 }
+// --- the pair inverse keeps a tiny share whatever the label order (#412)
+// [1, 1e-16] normalizes to [1, 1e-16] (1 + 1e-16 == 1), the closed form
+// inverted the first share, invNormalRational(1) = NaN, certified exact.
+// Referee: scipy ndtri(t / (1 + t)), the contrast at unit sd.
+for (const [t, z] of [[1e-12, -7.034483825301272], [1e-16, -8.222082216130435],
+                      [1e-20, -9.262340089798409], [1e-50, -14.933337534788487]]) {
+  const D = [0.5, 0.5];
+  const a = races.abilitiesFromRace([t, 1], { D, returnInfo: true });
+  const b = races.abilitiesFromRace([1, t], { D, returnInfo: true });
+  holds(`pair inverse [1, ${t}] is finite, converged and mirrors [${t}, 1]`,
+        b.mu.every(Number.isFinite) && a.converged && b.converged
+        && Math.abs(b.mu[0] - a.mu[1]) <= 1e-12 * Math.abs(a.mu[1])
+        && Math.abs((b.mu[0] - b.mu[1]) - z) <= 1e-8 * Math.abs(z),
+        `a=${a.mu} b=${b.mu}`);
+}
 // --- the loadings shape contract, in every module that takes V (#232)
 // V is (n, rank), one ROW per contestant, and as_loadings is the one
 // place that rule is decided. The browser indexed V directly instead, so
