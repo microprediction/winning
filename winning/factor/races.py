@@ -346,6 +346,15 @@ def _setup(mu, V, D, F, W, base):
             f"({bad.size} of {n} are); an ability is a finite location on "
             "the performance scale")
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    if (F is None) != (W is None):
+        # A factor rule is a PAIR. Either half alone was silently replaced
+        # by the automatic Gaussian rule below, so a caller's node vanished
+        # and the default race came back (a 0.58 share move on a one-node
+        # law), with the inverse calibrating a different model (#290).
+        raise ValueError(
+            "a caller factor rule needs both F (the nodes) and W (their "
+            f"weights); got only {'W' if F is None else 'F'}. Pass both, "
+            "or neither for the automatic rule.")
     if V is None:
         V = np.zeros((n, 1))
         F, W = np.zeros((1, 1)), np.ones(1)
@@ -1043,6 +1052,13 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     the iteration converged, and the achieved residual. Non-convergence
     warns rather than returning silently."""
     dense = None
+    if (F is None) != (W is None):
+        # the forward refuses a half rule (#290); so does its inverse,
+        # which read a lone F with uniform weights for its scale while
+        # its iterative forward discarded that same F
+        raise ValueError(
+            "a caller factor rule needs both F (the nodes) and W (their "
+            f"weights); got only {'W' if F is None else 'F'}")
     nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
         # The forward race routes a degraded fit to GHK (#161); the inverse
@@ -1142,17 +1158,35 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         _CovF = np.eye(_Vc.shape[1])
     _SigV = _Vc @ _CovF @ _Vc.T
     scale = float(np.sqrt(np.median(_Dn) + np.diag(_SigV).mean()))
+    mu_start = None
     if n_t == 2 and base == "normal" and not temperature and dense is None:
         # A pair is a single Gaussian contrast, so the inverse is closed
         # form (the mirror of the forward closed form): with
-        # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0) / sd_d), so
-        # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
+        # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0 + shift) / sd_d),
+        # so mu1 - mu0 = sd_d Phi^-1(p0) - shift, mean-zero; the shift is
+        # the factor rule's weighted MEAN, (v1 - v0) . E[F] (#374).
         Sig = _SigV + np.diag(_Dn)
         sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
-        gap = sd_d * float(ndtri(target[0]))
+        shift = (float((_Vc[1] - _Vc[0]) @ _Fm)
+                 if (V is not None and nodes_given) else 0.0)
+        gap = sd_d * float(ndtri(target[0])) - shift
         mu = np.array([-0.5 * gap, 0.5 * gap])
-        return _inverse_return(mu, True, 0.0, 0, floored, tol, return_info)
-    mu = -(logt - logt.mean()) / 2.0 * scale
+        if not nodes_given:
+            return _inverse_return(mu, True, 0.0, 0, floored, tol, return_info)
+        # A caller's rule need not be Gaussian (a centred two-point law
+        # has the right mean and variance and a different pair map), and
+        # the forward integrates the rule itself: the closed form is a
+        # START, certified only by the forward it claims to invert. It
+        # used to be returned as exact with residual 0 and missed by up
+        # to 21.8 points (#374).
+        ph = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
+                                points=points)
+        r0 = float(np.abs(np.log(np.maximum(ph, 1e-300)) - logt).max())
+        if r0 < tol:
+            return _inverse_return(mu, True, r0, 0, floored, tol, return_info)
+        mu_start = mu
+    mu = (-(logt - logt.mean()) / 2.0 * scale if mu_start is None
+          else mu_start)
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
     # a local two-cycle. Fixed damping 0.7 restores contraction.
@@ -1485,8 +1519,21 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
     sd = np.sqrt(D)
     n = len(mu)
     M_all = mu[None, :] + F @ V.T
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), points)
+    # These densities are not normalised and carry no mass check, so the
+    # grid must RESOLVE the narrowest runner on the span the widest one
+    # and the farthest mean set: a runner 100 units behind a close pair
+    # cut that pair's density by 10.3% at 501 points (#349). Spacing held
+    # to half the smallest sd, as the standalone JS engine now does.
+    lo = float(M_all.min() - left * sd.max())
+    hi = float(M_all.max() + right * sd.max())
+    need = int(np.ceil((hi - lo) / (0.5 * float(sd.min())))) + 1
+    if need > 16385:
+        import warnings
+        warnings.warn(
+            "tie_densities: the field is too wide to resolve the sharpest "
+            f"runner even at 16385 lattice points (needs {need})",
+            RuntimeWarning, stacklevel=2)
+    x = np.linspace(lo, hi, int(min(max(points, need), 16385)))
     dx = x[1] - x[0]
     w = np.zeros((n, n))
     for c in range(len(F)):

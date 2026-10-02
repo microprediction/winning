@@ -354,7 +354,10 @@ PORT_ONLY = {
     # refusal free from numpy, which will not build a float array from
     # ragged rows and fails the matmul on a wrong rank (#290). Its
     # companion is named asWeights, matching python's as_weights.
-    "js": {"fitGrammar", "haltonNormalNodes", "asFactorNodes"},
+    "js": {"fitGrammar", "haltonNormalNodes", "asFactorNodes",
+           # boundary helpers and the demo's Monte Carlo factor (#334, #357,
+           # #394): plumbing with race-like names, no python verb
+           "asAbilities", "validateCovariance", "raceFactor"},
 }
 
 

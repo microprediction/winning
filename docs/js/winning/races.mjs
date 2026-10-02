@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -32,32 +32,114 @@ export const BASES = {
     return [Math.max(S, 1e-300), f, -Math.sign(z) * f / b];
   },
 };
-const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [18, 18] };
+export const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [18, 18] };
+
+export function requireWholeRule(F, W, where = "F/W") {
+  if ((F == null) !== (W == null))
+    throw new Error(
+      `${where}: a caller factor rule needs BOTH F (the nodes) and W (their ` +
+      `weights); got only ${F == null ? "W" : "F"}. Either half alone used ` +
+      "to be replaced by the automatic Gaussian rule without a word, which " +
+      "prices a different race. Pass both, or neither.");
+}
+
+function haltonRule(r, Q) {
+  const F = [], W = new Array(Q).fill(1 / Q);
+  // generated, not tabulated: a 24-entry table made a valid rank-25 V
+  // answer all-NaN, silently (#233)
+  const primes = firstPrimes(r);
+  for (let idx = 0; idx < Q; idx++) {
+    const node = [];
+    for (let dim = 0; dim < r; dim++) {
+      const b = primes[dim];
+      let i = idx + 21, f = 1 / b, h = 0;
+      while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
+      node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
+    }
+    F.push(node);
+  }
+  return { F, W };
+}
+
+/* The factor rule a race integrates over, chosen in ONE place.
+
+   raceJacobian reimplemented only the Gauss-Hermite branch of this, so
+   on a sharp rank-one field the forward used a 114-node midpoint-quantile
+   rule and the Jacobian a 114-node Hermite rule: two approximations of
+   the same law, and the "derivative" sat 0.058 from finite differences
+   of the forward it claims to differentiate, at every lattice size
+   (#325). The forward and the Jacobian now both call this.
+
+   `V` must already be shape-normalised and gauge-centred, `D` validated.
+   A caller rule is validated, never replaced (#290). */
+export function factorRule(V, D, F = null, W = null) {
+  requireWholeRule(F, W);
+  const n = V.length, r = V[0].length;
+  if (F != null) {
+    // the caller's nodes go through the same door as V and D: every node
+    // carries exactly the loadings' rank, and there is one weight per
+    // node (#290)
+    const Fv = asFactorNodes(F, r, "F");
+    return { F: Fv, W: asWeights(W, Fv.length, "W") };
+  }
+  // adaptive order: sharpness rule identical to python/R. The statistic
+  // is the pairwise-safe bound sqrt(2) * max_i |(PV)_i| / sqrt(D_i), on
+  // the CENTERED rows: what decides a race is loading DIFFERENCES, and
+  // the raw row norm both misses a sharp pair and depends on the gauge.
+  let sharp = 0;
+  for (let i = 0; i < n; i++) {
+    const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
+    sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
+  }
+  sharp *= Math.SQRT2;
+  // per-rank (Gauss-Hermite order cap, sharpness past which even that
+  // order loses to the low-discrepancy family); see GH_RULE in the
+  // python reference for the measurements behind each number
+  const cap = r === 1 ? 201 : r === 2 ? 41 : r === 3 ? 31 : 15;
+  const sharpMax = r === 2 ? 3.75 : r === 3 ? 4.75 : 3.0;
+  if (r >= 2 && sharp > sharpMax) {
+    // escalate the FAMILY, not the order (matching python/R)
+    return haltonRule(r, 8192);
+  }
+  if (r === 1 && Math.ceil(8 * sharp) > 80) {
+    // rank-1 extreme sharpness (matching python/R): equal-weight
+    // midpoint-quantile grid scaled with sharpness replaces GH
+    const Q = Math.min(Math.ceil(8 * sharp), 4001);
+    const Fq = [];
+    for (let q = 0; q < Q; q++) Fq.push([invNormalRational((q + 0.5) / Q)]);
+    return { F: Fq, W: new Array(Q).fill(1 / Q) };
+  }
+  if (Math.pow(cap, r) > 100000) {
+    // high-rank tensor footgun (matching python/R): Halton fallback
+    return haltonRule(r, 8192);
+  }
+  const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);
+  return hermiteNodes(r, Q);
+}
 
 function setup(mu, V, D, F, W, base) {
-  const n = mu.length;
   // mu was the one argument nobody checked: D goes through asIdio, V
   // through asLoadings, W through asWeights, and the abilities
   // themselves went straight to the lattice. A NaN or inf there came
   // back as NaN probabilities, and an EMPTY field came back as an
   // empty answer rather than a refusal. R and julia already refused
   // both, which is how the cross-port divergence scan found it.
-  if (!Array.isArray(mu) && !ArrayBuffer.isView(mu))
-    throw new Error(`mu must be an array of abilities; got ${typeof mu}`);
-  if (n === 0)
-    throw new Error("mu is empty; a race needs at least one contestant");
-  for (let i = 0; i < n; i++) {
-    if (!Number.isFinite(mu[i]))
-      throw new Error(
-        `mu[${i}] = ${mu[i]} is not finite; an ability is a finite ` +
-        `location on the performance scale`);
-  }
+  // asAbilities also turns a Float64Array into a plain Array: its .map
+  // coerces nested arrays to NaN, so the default loadings below broke
+  // on a typed mu (#334).
+  mu = asAbilities(mu);
+  const n = mu.length;
   D = asIdio(D, n);        // the companion of asLoadings, #254
   // the shape contract at the door, as python's _setup does it: a
   // scalar, a length-n vector, (n, rank) and (rank, n) are the same
   // race, and a ragged V raises instead of being truncated to the first
   // row's width and answering NaN (#232)
   V = asLoadings(V, n);
+  // a factor rule is a PAIR: nodes and their weights. Either half alone
+  // used to be discarded in favour of the automatic rule, so a caller's
+  // F (or a stale W) vanished and the default Gaussian race came back
+  // with no indication (#290).
+  requireWholeRule(F, W);
   if (!V) {
     V = mu.map(() => [0]);
     F = [[0]]; W = [1];
@@ -71,78 +153,12 @@ function setup(mu, V, D, F, W, base) {
     // priced share by 0.0141 (#303). #139 fixed the standalone copy and
     // this newer API was left behind.
     V = gaugeCenter(V);
-    if (!F || !W) {
-      // adaptive order: sharpness rule identical to python/R. The
-      // statistic is the pairwise-safe bound
-      // sqrt(2) * max_i |(PV)_i| / sqrt(D_i), on the CENTERED rows:
-      // what decides a race is loading DIFFERENCES, and the raw row
-      // norm both misses a sharp pair and depends on the gauge.
-      let sharp = 0;
-      for (let i = 0; i < n; i++) {
-        const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
-        sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
-      }
-      sharp *= Math.SQRT2;
-      const r = V[0].length;
-      // per-rank (Gauss-Hermite order cap, sharpness past which even that
-      // order loses to the low-discrepancy family); see GH_RULE in the
-      // python reference for the measurements behind each number
-      const cap = r === 1 ? 201 : r === 2 ? 41 : r === 3 ? 31 : 15;
-      const sharpMax = r === 2 ? 3.75 : r === 3 ? 4.75 : 3.0;
-      if (r >= 2 && sharp > sharpMax) {
-        // escalate the FAMILY, not the order (matching python/R)
-        const Q = 8192;
-        F = []; W = new Array(Q).fill(1 / Q);
-        // generated, not tabulated: a 24-entry table made a valid
-        // rank-25 V answer all-NaN, silently (#233)
-        const primes = firstPrimes(r);
-        for (let idx = 0; idx < Q; idx++) {
-          const node = [];
-          for (let dim = 0; dim < r; dim++) {
-            const b = primes[dim];
-            let i = idx + 21, f = 1 / b, h = 0;
-            while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
-            node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
-          }
-          F.push(node);
-        }
-      } else if (r === 1 && Math.ceil(8 * sharp) > 80) {
-        // rank-1 extreme sharpness (matching python/R): equal-weight
-        // midpoint-quantile grid scaled with sharpness replaces GH
-        const Q = Math.min(Math.ceil(8 * sharp), 4001);
-        F = []; W = new Array(Q).fill(1 / Q);
-        for (let q = 0; q < Q; q++) F.push([invNormalRational((q + 0.5) / Q)]);
-      } else if (Math.pow(cap, r) > 100000) {
-        // high-rank tensor footgun (matching python/R): Halton fallback
-        const Q = 8192;
-        F = []; W = new Array(Q).fill(1 / Q);
-        // generated, not tabulated: a 24-entry table made a valid
-        // rank-25 V answer all-NaN, silently (#233)
-        const primes = firstPrimes(r);
-        for (let idx = 0; idx < Q; idx++) {
-          const node = [];
-          for (let dim = 0; dim < r; dim++) {
-            const b = primes[dim];
-            let i = idx + 21, f = 1 / b, h = 0;
-            while (i > 0) { h += f * (i % b); i = Math.floor(i / b); f /= b; }
-            node.push(invNormalRational(Math.min(Math.max(h, 1e-12), 1 - 1e-12)));
-          }
-          F.push(node);
-        }
-      } else {
-        const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);
-        const hw = hermiteNodes(r, Q);
-        F = hw.F; W = hw.W;
-      }
-    }
+    ({ F, W } = factorRule(V, D, F, W));
   }
   const fn = typeof base === "function" ? base : BASES[base];
+  if (typeof fn !== "function")
+    throw new Error(`unknown base ${JSON.stringify(base)}; known: ${Object.keys(BASES).join(", ")}, or a function`);
   const span = typeof base === "function" ? [12, 12] : (SPANS[base] || [12, 12]);
-  // the caller's nodes go through the same door as V and D: every node
-  // carries exactly the loadings' rank, and there is one weight per
-  // node (#290)
-  F = asFactorNodes(F, V[0].length, "F");
-  W = asWeights(W, F.length, "W");
   return { mu, V, D, F, W, fn, left: span[0], right: span[1] };
 }
 
@@ -178,36 +194,86 @@ export function invNormalRational(p) {
          (((((b[0]*r2+b[1])*r2+b[2])*r2+b[3])*r2+b[4])*r2+1);
 }
 
-function bulkWindow(Mall, sd, points, delta) {
+/* Lattice over the WINNER distribution's bulk, port of python's
+   _bulk_window. The envelope uses the CALLER'S base survival: this was
+   hard-coded to the normal one, so a Student-t(3) race was integrated on
+   a normal-tail interval and stayed 1.05e-3 TV wrong however many
+   points it was given (#380). Bracketed before bisecting (nine sigma
+   need not hold a polynomial tail's quantile), and delta relaxed by
+   factors of 100, with a warning, when the requested window cannot fit
+   the point budget at half the tightest sd. */
+const RELAXED_WARNED = new Set();
+function bulkWindow(Mall, sd, points, delta, fn = null) {
   const n = sd.length;
+  const S = fn
+    ? z => Math.max(fn(z)[0], 1e-300)
+    : z => Math.max(1 - ndtr(z), 1e-300);
   const muLo = new Array(n).fill(Infinity), muHi = new Array(n).fill(-Infinity);
   for (const row of Mall) for (let i = 0; i < n; i++) {
     if (row[i] < muLo[i]) muLo[i] = row[i];
     if (row[i] > muHi[i]) muHi[i] = row[i];
   }
-  const smax = Math.max(...sd);
+  const smax = Math.max(...sd), smin = Math.min(...sd);
   const G = (x, mus) => {
     let ls = 0;
-    for (let i = 0; i < n; i++) ls += Math.log(Math.max(1 - ndtr((x - mus[i]) / sd[i]), 1e-300));
+    for (let i = 0; i < n; i++) ls += Math.log(S((x - mus[i]) / sd[i]));
     return 1 - Math.exp(ls);
   };
-  const lo0 = Math.min(...muLo) - 9 * smax;
-  const hi0 = Math.max(...muHi) + 9 * smax;
-  let a = lo0, b = hi0;
-  for (let it = 0; it < 80; it++) {
-    const m = 0.5 * (a + b);
-    if (G(m, muLo) < delta) a = m; else b = m;
+  let warned = false;
+  const bracket = (x0, step0, ok, sign) => {
+    let step = step0;
+    for (let it = 0; it < 60; it++) {
+      if (ok(x0)) return x0;
+      x0 += sign * step; step *= 2;
+    }
+    if (!warned && typeof console !== "undefined") {
+      warned = true;
+      console.warn("bulk window could not bracket the requested quantile " +
+                   "after 60 doublings; the window is truncated rather " +
+                   "than quantile-exact.");
+    }
+    return x0;
+  };
+  let pad = 2 * smax;
+  if (fn && Array.isArray(fn.span)) pad = Math.max(pad, 0.25 * Math.max(...fn.span) * smax);
+  const windowAt = d => {
+    const step0 = Math.max(9 * smax, 1e-12);
+    const lo0 = bracket(Math.min(...muLo) - 9 * smax, step0, x => G(x, muLo) <= d, -1);
+    const hi0 = bracket(Math.max(...muHi) + 9 * smax, step0, x => G(x, muHi) >= 1 - d, +1);
+    let a = lo0, b = hi0;
+    for (let it = 0; it < 80; it++) {
+      const m = 0.5 * (a + b);
+      if (G(m, muLo) < d) a = m; else b = m;
+    }
+    const xlo = a;
+    a = xlo; b = hi0;
+    for (let it = 0; it < 80; it++) {
+      const m = 0.5 * (a + b);
+      if (G(m, muHi) < 1 - d) a = m; else b = m;
+    }
+    return [xlo - pad, b + pad];
+  };
+  const budget = 0.5 * smin * Math.max(points - 1, 1);
+  let d = delta;
+  let [lo, hi] = windowAt(d);
+  while (hi - lo > budget && d < 1e-4) {
+    d = Math.min(d * 100, 1e-4);
+    [lo, hi] = windowAt(d);
   }
-  const xlo = a;
-  a = xlo; b = hi0;
-  for (let it = 0; it < 80; it++) {
-    const m = 0.5 * (a + b);
-    if (G(m, muHi) < 1 - delta) a = m; else b = m;
-  }
-  const pad = 2 * smax;
+  // once per (budget, achieved delta): an inverse calls this every sweep,
+  // and python's warnings registry deduplicates the same way
+  const key = `${points}|${d}`;
+  if (d > delta && typeof console !== "undefined" && !RELAXED_WARNED.has(key) &&
+      RELAXED_WARNED.add(key))
+    console.warn(
+      `bulk window relaxed delta from ${delta.toExponential(0)} to ` +
+      `${d.toExponential(0)}: this base's tail puts the requested quantile ` +
+      `further out than ${points} points can resolve, so the window is ` +
+      `${(hi - lo).toPrecision(3)} units wide at the relaxed delta and ` +
+      "exact there. Raise points= to tighten it.");
   const out = new Array(points);
-  const step = (b + pad - (xlo - pad)) / (points - 1);
-  for (let t = 0; t < points; t++) out[t] = xlo - pad + t * step;
+  const step = (hi - lo) / (points - 1);
+  for (let t = 0; t < points; t++) out[t] = lo + t * step;
   return out;
 }
 
@@ -238,7 +304,7 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
                             delta = 1e-12) {
   let x;
   if (win === "bulk") {
-    x = bulkWindow(Mall, sd, points, delta);
+    x = bulkWindow(Mall, sd, points, delta, st.fn || null);
   } else {
     let mn = Infinity, mx = -Infinity;
     for (const row of Mall) for (const v of row) { if (v < mn) mn = v; if (v > mx) mx = v; }
@@ -266,15 +332,41 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
   return { x, dx };
 }
 
+/* Independent and Factor grammars ARE the V/D race, so they are priced
+   (and inverted) as one, keeping the caller's F/W. The dispatcher
+   rebuilt the call from s.V and s.D alone, so with structure:
+   Factor(V, D) the forward discarded a caller's factor rule while
+   raceJacobian used it -- the structured Jacobian sat 0.20 from finite
+   differences of the structured forward (#209). The other grammars have
+   no factor rule to take, so an F/W there is refused rather than
+   ignored. */
+export function collapseStructure(structure, V, D, F, W, where) {
+  if (!structure) return { structure: null, V, D };
+  if (V != null || D != null)
+    throw new Error(
+      `${where}: give the covariance once -- structure= or V=/D=, not both`);
+  if (structure.kind === "Independent")
+    return { structure: null, V: null, D: structure.D };
+  if (structure.kind === "Factor")
+    return { structure: null, V: structure.V, D: structure.D };
+  if (F != null || W != null)
+    throw new Error(
+      `${where}: F/W are a factor rule for the V/D (Factor) race; the ` +
+      `${structure.kind} grammar has its own quadrature (qa=, qf=) and ` +
+      "would ignore them");
+  return { structure, V, D };
+}
+
 export function raceProbabilities(mu, opts = {}) {
   const { V = null, D = null, F = null, W = null, base = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
-  if (structure) {
-    return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
+  const c = collapseStructure(structure, V, D, F, W, "raceProbabilities");
+  if (c.structure) {
+    return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes });
   }
-  const st = setup(mu, V, D, F, W, base);
+  const st = setup(mu, c.V, c.D, F, W, base);
   const n = st.mu.length;
   const sd = st.D.map(Math.sqrt);
   const Mall = condMeans(st.mu, st.V, st.F);
@@ -317,23 +409,37 @@ export function raceProbabilities(mu, opts = {}) {
   return pn;
 }
 
-export function abilitiesFromRace(pTarget, opts = {}) {
-  const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
-          F = null, W = null, base = "normal", points = 257,
-          targetFloor = null, returnInfo = false } = opts;
-  checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
-  if (structure) return dispatchAbilities(pTarget, structure, opts);
-  let target = pTarget.slice();
-  const n = target.length;
+/* One exit for every inversion path, as python's _inverse_return: warn
+   on non-convergence unless the caller asked for the diagnostics, and
+   report the iteration actually reached. Without it a starved solve came
+   back silently, and `iterations` was always the requested budget --
+   60 for a target the warm start already solved (#354). */
+function inverseReturn(mu, converged, maxLogResidual, iterations, floored,
+                       tol, returnInfo) {
+  if (!converged && !returnInfo && typeof console !== "undefined")
+    console.warn(
+      `abilitiesFromRace did not converge: max |log residual| ` +
+      `${maxLogResidual.toExponential(2)} after ${iterations} iterations ` +
+      `(tol ${tol.toExponential(0)}). Pass returnInfo: true for the ` +
+      "residual and iteration count instead of this warning.");
+  return returnInfo
+    ? { mu, converged, maxLogResidual, iterations, floored }
+    : mu;
+}
 
-  // The target contract, matching python: a zero share has no finite
-  // inverse, so it RAISES unless the caller floors deliberately, and the
-  // floored entries are reported. Both keys were on the allowlist and
-  // read by nothing, so they passed validation and vanished (#226) --
-  // the failure mode the allowlist exists to prevent.
+/* The target contract, matching python: a zero share has no finite
+   inverse, so it RAISES unless the caller floors deliberately, and the
+   floored entries are reported. Applied BEFORE any structure dispatch:
+   the hierarchical grammars clamped a zero to 1e-300 and returned
+   abilities near +/-230 as an inverse, a negative entry was quietly
+   projected to zero, and targetFloor/returnInfo were dropped on the way
+   through the dispatcher (#387). */
+function validatedRaceTarget(pTarget, targetFloor) {
+  let target = asFiniteVector(pTarget, "target", "probability");
+  const n = target.length;
   let floored = new Array(n).fill(false);
   if (targetFloor != null) {
-    if (!(targetFloor > 0))
+    if (!(typeof targetFloor === "number" && targetFloor > 0 && Number.isFinite(targetFloor)))
       throw new Error("targetFloor must be positive");
     floored = target.map(v => v < targetFloor);
     target = target.map(v => Math.max(v, targetFloor));
@@ -345,45 +451,86 @@ export function abilitiesFromRace(pTarget, opts = {}) {
       "and read the result as a one-sided bound on the floored " +
       "contrasts, or supply a pseudocount upstream.");
   }
-  const s = target.reduce((a, b) => a + b, 0);
-  target = target.map(v => v / s);
+  // rescale before summing only when the sum would overflow (python #300)
+  let s = target.reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(s)) {
+    const mx = Math.max(...target);
+    target = target.map(v => v / mx);
+    s = target.reduce((a, b) => a + b, 0);
+  }
+  return { target: target.map(v => v / s), floored };
+}
+
+export function abilitiesFromRace(pTarget, opts = {}) {
+  const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
+          F = null, W = null, base = "normal", points = 257,
+          targetFloor = null, returnInfo = false, qa = 9, qf = 15 } = opts;
+  checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
+  asIterations(nIter, "abilitiesFromRace");
+  asTolerance(tol, "abilitiesFromRace");
+  const { target, floored } = validatedRaceTarget(pTarget, targetFloor);
+  const n = target.length;
+  const c = collapseStructure(structure, V, D, F, W, "abilitiesFromRace");
+  if (c.structure) {
+    const r = dispatchAbilities(target, c.structure,
+      { points, qa, qf, nIter, tol });
+    return inverseReturn(r.mu, r.converged, r.maxLogResidual, r.iterations,
+                         floored, tol, returnInfo);
+  }
+  return solveRace(target, floored, { V: c.V, D: c.D, F, W, base, points,
+                                      nIter, tol, returnInfo });
+}
+
+function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
+                                      returnInfo }) {
+  const n = target.length;
+  requireWholeRule(F, W, "abilitiesFromRace");
   const logt = target.map(Math.log);
   const lm = mean(logt);
   // the field's contrast scale (matching python/R): median idiosyncratic
   // variance plus the mean factor variance under the represented nodes
   const Dn = asIdio(D, n);        // the inverse has its own copy (#254)
-  const Vn = V ? asLoadings(V, n).map(row => row.slice()) : Array.from({ length: n }, () => [0]);
+  const Vn = V != null ? asLoadings(V, n) : Array.from({ length: n }, () => [0]);
   const r = Vn[0].length;
-  const colMean = Array.from({ length: r }, (_, c) => mean(Vn.map(row => row[c])));
-  const Vc = Vn.map(row => row.map((v, c) => v - colMean[c]));
+  const Vc = gaugeCenter(Vn);
   let CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) => (a === b ? 1 : 0)));
-  if (V && F) {
+  let Fm = new Array(r).fill(0);
+  if (V != null && F != null) {
     // the same door the forward pass uses. The inverse consumed F and W
     // raw, so a W shorter than F left `Wq[q]` undefined past its end and
     // every moment below came out NaN -- surfacing, once mu was checked
     // for finiteness, as "mu[0] = NaN" rather than as the bad weights
     // the caller actually passed.
     const Fv = asFactorNodes(F, r, "F");
-    const Wv = asWeights(W, Fv.length, "W");
-    const Q = Fv.length;
-    const Wq = Wv.map(w => w / Wv.reduce((a, b) => a + b, 0));
-    const Fm = Array.from({ length: r }, (_, c) => Fv.reduce((acc, f, q) => acc + Wq[q] * f[c], 0));
+    const Wq = asWeights(W, Fv.length, "W");
+    Fm = Array.from({ length: r }, (_, c) => Fv.reduce((acc, f, q) => acc + Wq[q] * f[c], 0));
     CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>
       Fv.reduce((acc, f, q) => acc + Wq[q] * (f[a] - Fm[a]) * (f[b] - Fm[b]), 0)));
   }
   const sigV = (i, j) => Vc[i].reduce((acc, va, a) => acc + va * CovF[a].reduce((acc2, cab, b) => acc2 + cab * Vc[j][b], 0), 0);
   const med = (arr) => { const z = arr.slice().sort((a, b) => a - b); const h = Math.floor(z.length / 2); return z.length % 2 ? z[h] : 0.5 * (z[h - 1] + z[h]); };
   const scale = Math.sqrt(med(Dn) + mean(Dn.map((_, i) => sigV(i, i))));
+  let muStart = null;
   if (n === 2 && base === "normal") {
-    // a pair is one Gaussian contrast: closed form (matching python/R)
+    // a pair is one Gaussian contrast: closed form (matching python/R),
+    // including the rule's weighted MEAN, (v1 - v0) . E[F], which this
+    // dropped -- a translated Hermite rule missed by 8.2 points (#374)
     const sdD = Math.sqrt(Math.max(sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1) + Dn[0] + Dn[1], 1e-300));
-    const gap = sdD * invNormalRational(target[0]);
+    const shift = Vc[1].reduce((acc, v, c) => acc + (v - Vc[0][c]) * Fm[c], 0);
+    const gap = sdD * invNormalRational(target[0]) - shift;
     const pair = [-0.5 * gap, 0.5 * gap];
-    return returnInfo
-      ? { mu: pair, converged: true, maxLogResidual: 0, iterations: 0, floored }
-      : pair;
+    if (F == null)
+      return inverseReturn(pair, true, 0, 0, floored, tol, returnInfo);
+    // A caller's rule need not be Gaussian -- a centred two-point law has
+    // the right mean and variance and a different pair map (12.2 points)
+    // -- and the forward integrates the rule itself, so the closed form
+    // is only a START, certified by the forward it claims to invert.
+    const ph = raceProbabilities(pair, { V, D, F, W, base, points });
+    const r0 = Math.max(...ph.map((v, i) => Math.abs(Math.log(Math.max(v, 1e-300)) - logt[i])));
+    if (r0 < tol) return inverseReturn(pair, true, r0, 0, floored, tol, returnInfo);
+    muStart = pair;
   }
-  let mu = logt.map(v => -(v - lm) / 2 * scale);
+  let mu = muStart || logt.map(v => -(v - lm) / 2 * scale);
   // damping: a pair, or two runners holding nearly all the mass, two-cycles
   // undamped; the sweeps then adapt to the contraction they observe
   // (matching python's _jacobi_sweeps)
@@ -397,8 +544,10 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   let penalty = 1;
   let prev = null;
   let prevStep = null;
+  let iters = 0;
   for (let it = 0; it < nIter; it++) {
-    const { p: praw, slopes: sl } = raceProbabilities(mu, { V, D, F, W, base, points, returnSlopes: true, structure: null });
+    iters = it + 1;
+    const { p: praw, slopes: sl } = raceProbabilities(mu, { V, D, F, W, base, points, returnSlopes: true });
     const phat = praw.map(v => Math.max(v, 1e-300));
     let resid = phat.map((v, i) => Math.log(v) - logt[i]);
     let dlogp = sl.map((v, i) => Math.min(v / phat[i], -1e-6));
@@ -448,15 +597,14 @@ export function abilitiesFromRace(pTarget, opts = {}) {
       mu = mu.map((m, i) => m - step[i]);
     }
   }
-  if (!returnInfo) return mu;
   // one more forward pass to report the residual actually achieved,
-  // rather than the one from before the last step
-  const { p: pf } = raceProbabilities(mu, {
-    V, D, F, W, base, points, returnSlopes: true, structure: null });
+  // rather than the one from before the last step -- and to decide
+  // whether to warn when the caller did not ask for the diagnostics
+  const pf = raceProbabilities(mu, { V, D, F, W, base, points });
   const resid = pf.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
   const maxLogResidual = Math.max(...resid.map(Math.abs));
-  return { mu, converged: maxLogResidual < tol, maxLogResidual,
-           iterations: nIter, floored };
+  return inverseReturn(mu, maxLogResidual < tol, maxLogResidual, iters,
+                       floored, tol, returnInfo);
 }
 
 // filled in by structures.mjs to avoid a cycle
