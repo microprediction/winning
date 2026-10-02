@@ -833,31 +833,49 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
     ident = p > floor
+    # The factor law actually REPRESENTED by (F, W): V -> aV, F -> F/a is
+    # the same forward map, but reading the factor variance off raw
+    # sum(V_i^2) inflated the warm start and the step cap by a^2, and the
+    # inverse missed a self-generated target by 89 points at a = 100
+    # (#443). Weighted node mean and covariance, on the centred loadings.
+    F = np.asarray(F, dtype=float).reshape(len(F), -1)
+    W = np.asarray(W, dtype=float)
+    Wn = W / W.sum()
+    Vc = V - V.mean(axis=0)
+    Fm = Wn @ F
+    CovF = (F - Fm).T @ ((F - Fm) * Wn[:, None])
+    sig_v = np.einsum("ij,jk,ik->i", Vc, CovF, Vc)
+    shift = Vc @ Fm
     if N == 2:
-        # Closed form. Min-wins: p_1 = Phi((mu_2 - mu_1)/s) with
-        # s^2 = D_1 + D_2 + ||v_1 - v_2||^2. The loop below must not be
+        # Closed form. Min-wins: p_1 = Phi((mu_2 - mu_1 + shift)/s) with
+        # s^2 = D_1 + D_2 + (v_1 - v_2)' Cov(F) (v_1 - v_2), the
+        # represented factor law (#443). The loop below must not be
         # used here: K_2 is bipartite, the normalized photo-finish
         # Laplacian eigenvalue is exactly 2, and the undamped Jacobi
         # update is a local two-cycle whose flat residual defeats the
         # growth safeguard (observed log-share errors up to ~1).
-        s = float(np.sqrt(D.sum() + np.sum((V[0] - V[1]) ** 2)))
-        half = 0.5 * s * float(ndtri(p[0]))
-        mu = np.array([-half, half])
+        dv = Vc[0] - Vc[1]
+        s = float(np.sqrt(D.sum() + dv @ CovF @ dv))
+        gap = s * float(ndtri(p[0])) - float(shift[1] - shift[0])
+        mu = np.array([-0.5 * gap, 0.5 * gap])
         if return_info:
             return mu, {"iterations": 0, "residual": 0.0, "converged": True}
         return mu
     # warm start: exact INDEPENDENT inversion (allocation's design), using each
     # runner's total sd, via this same Newton with a single zero factor node
-    if F.shape[1] >= 1 and np.any(V != 0.0):
-        sd_tot = np.sqrt(D + np.sum(V**2, axis=1))
+    if F.shape[1] >= 1 and np.any(Vc != 0.0):
+        sd_tot = np.sqrt(D + sig_v)
         mu = abilities_from_probabilities_factor(
             p, np.zeros((N, 1)), sd_tot**2, np.zeros((1, 1)), np.ones(1),
-            n_iter=n_iter, tol=tol)
+            n_iter=n_iter, tol=tol) - shift
+        mu -= mu.mean()
     else:
         mu = (logp - logp.mean()) / 2.0
-    step_cap = 1.0 * np.sqrt(D + np.sum(V**2, axis=1))
+    step_cap = 1.0 * np.sqrt(D + sig_v)
     prev_res = np.inf
-    damp = 1.0
+    # two runners holding nearly all the mass two-cycle undamped at any N
+    # (races.abilities_from_race, #150/#151): start damped there
+    damp = 0.7 if float(np.sort(p)[-2:].sum()) > 0.8 else 1.0
     for _ in range(n_iter):
         M_all = mu[None, :] + F @ V.T
         lo = M_all.min() - 8.0 * sd.max()
@@ -866,6 +884,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         dx = x[1] - x[0]
         phat = np.zeros(N)
         slope = np.zeros(N)
+        cross = np.zeros(N)
         chunk = max(1, int(5e6 / (N * len(x))))
         for a in range(0, len(F), chunk):
             M = M_all[a:a + chunk]
@@ -877,7 +896,20 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
             rest = np.exp(np.clip(logSfield[:, None, :] - logS, -745.0, 0.0))
             phat += Wc @ (np.sum(f * rest, axis=2) * dx)
             slope += Wc @ (np.sum(z * f / sd[None, :, None] * rest, axis=2) * dx)
-        phat = np.maximum(phat / phat.sum(), _PFLOOR)
+            # sum_{j != i} d a_j / d mu_i = sum_{j != i} w_ij, by the
+            # hazard identity: f_i rest_i (H - h_i), h_j = f_j / S_j
+            # (finite in logs for the normal base)
+            haz = np.exp(np.log(np.maximum(f, 1e-300)) - logS)
+            H = haz.sum(axis=1, keepdims=True)
+            cross += Wc @ (np.sum(f * rest * (H - haz), axis=2) * dx)
+        total = phat.sum()
+        # d log p_i / d mu_i of the NORMALISED share the residual is
+        # measured on: a_i'/a_i - (a_i' + sum_j w_ij)/T. Dividing the raw
+        # own-slope by the normalised share instead parted from finite
+        # differences by 85% on a coarse lattice, and the solve missed a
+        # self-generated target by 22 points (#371).
+        dlogp = slope / np.maximum(phat, 1e-300) - (slope + cross) / total
+        phat = np.maximum(phat / total, _PFLOOR)
         resid = np.log(phat) - logp
         res = np.abs(resid[ident]).max() if np.any(ident) else np.abs(resid).max()
         if res < tol:
@@ -885,7 +917,6 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         if res > prev_res * 1.2:
             damp = max(0.25, damp * 0.5)     # simple safeguard
         prev_res = res
-        dlogp = slope / phat                  # negative for min-wins
         dlogp = np.minimum(dlogp, -1e-3 / (sd + 1e-9))
         delta = np.clip(damp * resid / dlogp, -step_cap, step_cap)
         mu = mu - delta                      # Newton: mu <- mu - resid / dlogp
