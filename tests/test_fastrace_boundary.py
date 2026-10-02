@@ -262,3 +262,66 @@ def test_rank_and_window_mu_sd_lengths():
                                         129)
     with pytest.raises(ValueError):
         fastrace.top_k_window(np.zeros(3), np.ones(2), 1)
+
+
+# --- #403: ordered_prefixes supports only k in {1, 2, 3} ------------------
+
+def test_ordered_prefixes_rejects_unsupported_k():
+    mu = np.array([0.0, 0.2, 0.7])
+    args = (mu, np.zeros((3, 1)), np.ones(3), np.zeros((1, 1)), np.ones(1),
+            1001, -8.0, 8.7)
+    flat3, total3 = fastrace.ordered_prefixes(*args, 3)
+    assert np.asarray(flat3).size == 27 and abs(total3 - 1) < 1e-4
+    for k in (1, 2):
+        flat, total = fastrace.ordered_prefixes(*args, k)
+        assert np.asarray(flat).size == 3 ** k and abs(total - 1) < 1e-4
+    for k in (0, 4, 5):
+        with pytest.raises(ValueError, match="1, 2 or 3"):
+            fastrace.ordered_prefixes(*args, k)
+
+
+# --- #436: top-k depths in [1, n-1], exact ranks in [1, n] ----------------
+
+TOPK_DEPTH_CALLS = {
+    "top_k": lambda mu, sd, k: fastrace.top_k(mu, sd, k, -8., 9., 1001),
+    "top_k_slopes":
+        lambda mu, sd, k: fastrace.top_k_slopes(mu, sd, k, -8., 9., 1001),
+    "top_k_jacobians":
+        lambda mu, sd, k: fastrace.top_k_jacobians(mu, sd, k, -8., 9., 1001),
+    "top_k_window": lambda mu, sd, k: fastrace.top_k_window(mu, sd, k),
+}
+
+
+@pytest.mark.parametrize("name", sorted(TOPK_DEPTH_CALLS))
+def test_topk_depth_contract(name):
+    call = TOPK_DEPTH_CALLS[name]
+    mu, sd = np.array([0.0, 0.2, 0.7]), np.ones(3)
+    for k in (1, 2):                                # valid endpoints
+        call(mu, sd, k)
+    for k in (0, 3, 4):                             # 0, n, n+1
+        with pytest.raises(ValueError, match=r"\[1, n-1\]"):
+            call(mu, sd, k)
+
+
+def test_topk_valid_depths_have_mass_k():
+    mu, sd = np.array([0.0, 0.2, 0.7]), np.ones(3)
+    for k in (1, 2):
+        q = np.asarray(fastrace.top_k(mu, sd, k, -8., 9., 1001))
+        assert abs(q.sum() - k) < 1e-6
+
+
+def test_rank_marginal_jacobian_rank_contract():
+    mu, sd = np.array([0.0, 0.2, 0.7]), np.ones(3)
+    total = np.zeros(3)
+    for r in (1, 2, 3):                             # valid endpoints
+        p, _ = fastrace.rank_marginal_jacobian(mu, sd, r, -8., 9., 1001)
+        total += np.asarray(p)
+    assert np.allclose(total, 1.0, atol=1e-6)
+    for r in (0, 4):
+        with pytest.raises(ValueError, match=r"one-based"):
+            fastrace.rank_marginal_jacobian(mu, sd, r, -8., 9., 1001)
+
+
+def test_one_runner_rank_window_still_allowed():
+    # the rank kernels ask for the window at depth n-1, which is 0 here
+    fastrace.top_k_window(np.zeros(1), np.ones(1), 0)

@@ -1343,6 +1343,51 @@ pub fn interp1(x: f64, xp: &[f64], fp: &[f64]) -> f64 {
     fp[j] + (x - xp[j]) / denom * (fp[j + 1] - fp[j])
 }
 
+/// The supported top-k depth: 1 <= k <= n-1, as
+/// winning.factor.topk._as_depth. k = 0 is not an event and k = n is
+/// trivially everyone; the forward/backward deconvolutions assume an
+/// interior depth and returned a mass-0.85 "top zero" vector and a
+/// mass-2.16 "top three of three" for them (#436).
+pub fn check_top_k_depth(k: usize, n: usize) -> Result<(), String> {
+    if k < 1 || k + 1 > n {
+        return Err(format!(
+            "k = {k} is out of range for a field of {n}: k must be in [1, n-1]"));
+    }
+    Ok(())
+}
+
+/// The supported exact rank: ONE-BASED, 1 <= r <= n (#436: r = 0
+/// indexed r - 1 and panicked; r > n read past the leave-one-out pmf).
+pub fn check_rank(r: usize, n: usize) -> Result<(), String> {
+    if r < 1 || r > n {
+        return Err(format!(
+            "r = {r} is out of range for a field of {n}: r is one-based, in [1, n]"));
+    }
+    Ok(())
+}
+
+/// The lattice-window depth: the top-k kernels pass k in [1, n-1] and
+/// the rank kernels pass n-1, which is 0 only for a one-runner field.
+pub fn check_window_depth(k: usize, n: usize) -> Result<(), String> {
+    if n == 0 || k + 1 > n || (k == 0 && n > 1) {
+        return Err(format!(
+            "k = {k} is out of range for a field of {n}: k must be in [1, n-1]"));
+    }
+    Ok(())
+}
+
+/// The supported ordered-prefix length: exacta/trifecta k in {1, 2, 3}
+/// (#403: any other k fell through to the trifecta recurrence while the
+/// buffer was n^k, so k = 4 returned a plausibly normalized tensor of
+/// impossible repeated orders).
+pub fn check_ordered_k(k: usize) -> Result<(), String> {
+    if !(1..=3).contains(&k) {
+        return Err(format!(
+            "k = {k} is not a supported ordered-prefix length: k must be 1, 2 or 3"));
+    }
+    Ok(())
+}
+
 /// The top-k lattice window, normal base: mirrors
 /// winning/factor/topk.py::_count_window -- geometric bracket growth
 /// then bisection on the monotone mean count, Chernoff-slack upper
@@ -1355,6 +1400,9 @@ pub fn top_k_window_kernel(
     pad_sds: f64,
 ) -> (f64, f64) {
     let n = mu.len();
+    if let Err(e) = check_window_depth(k, n) {
+        panic!("{e}");
+    }
     let smax = sd.iter().cloned().fold(f64::MIN, f64::max).max(1e-12);
     let mean_count = |x: f64| -> f64 {
         let mut t = 0.0;
@@ -1565,6 +1613,9 @@ pub fn top_k_slopes_kernel(
     points: usize,
 ) -> (Vec<f64>, Vec<f64>) {
     let n = mu.len();
+    if let Err(e) = check_top_k_depth(k, n) {
+        panic!("{e}");
+    }
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
@@ -1623,6 +1674,9 @@ pub fn top_k_jacobians_kernel(
     points: usize,
 ) -> (Vec<f64>, Vec<f64>) {
     let n = mu.len();
+    if let Err(e) = check_top_k_depth(k, n) {
+        panic!("{e}");
+    }
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
@@ -1745,6 +1799,9 @@ pub fn rank_jacobian_kernel(
     points: usize,
 ) -> (Vec<f64>, Vec<f64>) {
     let n = mu.len();
+    if let Err(e) = check_rank(r, n) {
+        panic!("{e}");
+    }
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
@@ -1817,6 +1874,9 @@ pub fn top_k_kernel(
     points: usize,
 ) -> Vec<f64> {
     let n = mu.len();
+    if let Err(e) = check_top_k_depth(k, n) {
+        panic!("{e}");
+    }
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     // shared field rows and count distribution (serial under the small-
@@ -2173,6 +2233,9 @@ pub fn ordered_kernel(
     k: usize,
 ) -> (Vec<f64>, f64) {
     let n = mu.len();
+    if let Err(e) = check_ordered_k(k) {
+        panic!("{e}");
+    }
     let q = f_nodes.nrows();
     let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
     let sd_max = sd.iter().cloned().fold(f64::MIN, f64::max);
@@ -2256,7 +2319,7 @@ pub fn ordered_kernel(
                     }
                     row
                 }
-                _ => {
+                3 => {
                     let mut slab = vec![0.0f64; n * n];
                     let mut inner = vec![0.0f64; points];
                     for j in 0..n {
@@ -2287,6 +2350,7 @@ pub fn ordered_kernel(
                     }
                     slab
                 }
+                _ => unreachable!("k validated above"),
             })
             .collect();
         let stride = size / n;
@@ -2298,4 +2362,60 @@ pub fn ordered_kernel(
     }
     let total: f64 = out.iter().sum();
     (out, total)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_k_depth_contract() {
+        assert!(check_top_k_depth(0, 3).is_err());
+        assert!(check_top_k_depth(1, 3).is_ok());
+        assert!(check_top_k_depth(2, 3).is_ok());
+        assert!(check_top_k_depth(3, 3).is_err());
+        assert!(check_top_k_depth(4, 3).is_err());
+        assert!(check_rank(0, 3).is_err());
+        assert!(check_rank(3, 3).is_ok());
+        assert!(check_rank(4, 3).is_err());
+        assert!(check_window_depth(0, 1).is_ok());
+        assert!(check_window_depth(0, 3).is_err());
+        assert!(check_window_depth(3, 3).is_err());
+        let mu = [0.0, 0.2, 0.7];
+        let sd = [1.0; 3];
+        for k in 1..3 {
+            let q = top_k_kernel(&mu, &sd, k, -8.0, 9.0, 1001);
+            assert!((q.iter().sum::<f64>() - k as f64).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "k must be in [1, n-1]")]
+    fn top_k_kernel_refuses_k_zero() {
+        top_k_kernel(&[0.0, 0.2, 0.7], &[1.0; 3], 0, -8.0, 9.0, 1001);
+    }
+
+    #[test]
+    #[should_panic(expected = "k must be in [1, n-1]")]
+    fn top_k_kernel_refuses_k_n() {
+        top_k_kernel(&[0.0, 0.2, 0.7], &[1.0; 3], 3, -8.0, 9.0, 1001);
+    }
+
+    #[test]
+    #[should_panic(expected = "r is one-based")]
+    fn rank_kernel_refuses_r_zero() {
+        rank_jacobian_kernel(&[0.0, 0.2, 0.7], &[1.0; 3], 0, -8.0, 9.0, 1001);
+    }
+
+    #[test]
+    #[should_panic(expected = "k must be 1, 2 or 3")]
+    fn ordered_kernel_refuses_k_four() {
+        let mu = ndarray::arr1(&[0.0, 0.2, 0.7]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = ndarray::arr1(&[1.0, 1.0, 1.0]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = ndarray::arr1(&[1.0]);
+        ordered_kernel(mu.view(), v.view(), d.view(), f.view(), w.view(),
+                       201, -8.0, 8.7, 4);
+    }
 }

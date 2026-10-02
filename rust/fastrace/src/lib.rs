@@ -538,6 +538,7 @@ fn ordered_prefixes<'py>(
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
     check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
     need_points(points)?;
+    winning::check_ordered_k(k).map_err(bad)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -659,6 +660,7 @@ fn rank_marginal_jacobian<'py>(
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
     need_points(points)?;
+    winning::check_rank(r, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (p, j) = py.allow_threads(|| with_usable_rayon(
@@ -682,6 +684,7 @@ fn top_k_window(
     pad_sds: f64,
 ) -> PyResult<(f64, f64)> {
     check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    winning::check_window_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     Ok(py.allow_threads(|| with_usable_rayon(|| winning::top_k_window_kernel(&m, &s, k, delta, pad_sds))))
@@ -701,6 +704,7 @@ fn top_k_slopes<'py>(
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
     need_points(points)?;
+    winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (q, sl) =
@@ -725,6 +729,7 @@ fn top_k_jacobians<'py>(
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
     need_points(points)?;
+    winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (jm, js) =
@@ -748,6 +753,7 @@ fn top_k<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
     need_points(points)?;
+    winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let q = py.allow_threads(|| with_usable_rayon(|| winning::top_k_kernel(&m, &s, k, lo, hi, points)));
