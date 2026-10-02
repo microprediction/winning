@@ -135,10 +135,43 @@ def _cluster_nodes(r, qa, seed=0):
         return nodes, w / w.sum()
     from scipy.stats import qmc
     from scipy.special import ndtri
-    m = max(4, int(np.ceil(np.log2(qa ** r))))
-    u = qmc.Sobol(r, scramble=True, seed=seed).random_base2(min(m, 10))
+    m = _sobol_log2(r, qa)
+    u = qmc.Sobol(r, scramble=True, seed=seed).random_base2(m)
     nodes = ndtri(np.clip(u, 1e-9, 1 - 1e-9))
     return nodes, np.full(len(nodes), 1.0 / len(nodes))
+
+
+# log2 of the rank-3+ Sobol budget at the default qa, and its ceiling
+_SOBOL_M_DEFAULT = 10
+_SOBOL_M_MAX = 16
+_QA_DEFAULT = 9
+
+
+def _sobol_log2(r, qa):
+    """log2 of the scrambled-Sobol node count for a rank-r (r >= 3) effect.
+
+    This was min(ceil(log2(qa ** r)), 10): at rank 6 qa = 3 already gave
+    m = 10, so qa = 5, 9, 31 and 100 all ran the identical 1024-node rule
+    and a covariance-equivalent rotation V -> VQ moved a share by 3.6e-3
+    whatever refinement was asked for (#392). Now the default qa keeps the
+    old budget and a LARGER qa grows the rule as qa^r relative to it
+    (doubling qa adds r bits), up to 2^16 nodes; a request beyond the
+    ceiling warns with the budget actually used instead of being dropped.
+    """
+    qa = float(qa)
+    m = max(4, int(np.ceil(np.log2(qa ** r))))
+    if qa <= _QA_DEFAULT:
+        return min(m, _SOBOL_M_DEFAULT)
+    m = _SOBOL_M_DEFAULT + int(np.ceil(r * np.log2(qa / _QA_DEFAULT)))
+    if m > _SOBOL_M_MAX:
+        import warnings
+        warnings.warn(
+            f"qa={qa:g} at factor rank {r} asks for 2^{m} Sobol nodes; "
+            f"using the ceiling 2^{_SOBOL_M_MAX} = {2 ** _SOBOL_M_MAX}. "
+            "The quadrature error at this budget is not reduced further "
+            "by raising qa.", RuntimeWarning, stacklevel=4)
+        m = _SOBOL_M_MAX
+    return m
 
 
 def _block_max_r(mu, sd, cluster, V, points, qa):
@@ -175,15 +208,25 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     shift = V_o @ nodes.T                                   # (n, Q)
-    z = (x[None, None, :] - mu_o[:, None, None]
-         - shift[:, :, None]) / sd_o[:, None, None]
-    logF = np.log(np.maximum(ndtr(z), TINY))
-    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
-    S = np.add.reduceat(logF, starts, axis=0)
-    G = np.einsum("q,cql->cl", w, np.exp(np.minimum(S, 0.0)))
+    # G and h are SUMS over the nodes, so they accumulate in node chunks:
+    # the (n, Q, L) cube of a 2^16-node rule would not fit in memory
+    n_c = len(starts)
+    G = np.zeros((n_c, points))
+    h = np.zeros((n, points))
+    chunk = max(1, int(4e6 // max(n * points, 1)))
+    for a in range(0, len(w), chunk):
+        sh = shift[:, a:a + chunk]
+        wc = w[a:a + chunk]
+        z = (x[None, None, :] - mu_o[:, None, None]
+             - sh[:, :, None]) / sd_o[:, None, None]
+        logF = np.log(np.maximum(ndtr(z), TINY))
+        pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+        S = np.add.reduceat(logF, starts, axis=0)
+        G += np.einsum("q,cql->cl", wc, np.exp(np.minimum(S, 0.0)))
+        h += np.einsum("q,nql->nl", wc,
+                       pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
     logG = np.log(np.maximum(G, TINY))
     rest = np.exp(np.minimum(logG.sum(axis=0)[None, :] - logG, 0.0))
-    h = np.einsum("q,nql->nl", w, pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
     p_o = (h * rest[c_o]).sum(axis=1) * dx
     p = np.empty(n); p[order] = p_o
     return np.maximum(p, 0.0)

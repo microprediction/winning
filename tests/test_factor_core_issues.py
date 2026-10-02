@@ -621,3 +621,36 @@ def test_tree_jacobian_is_the_forward_derivative_350():
         assert np.abs(J[:, j] - fd).max() < 1e-7
     _, jac, _ = _structure_engines(Tree(*args), 257)     # polish's gradient
     assert np.abs(jac(mu) - J).max() < 1e-12
+
+
+# ---------------------------------------------------------------- #392
+
+def test_block_sobol_budget_grows_with_qa_392():
+    from winning.factor.blocks import _sobol_log2
+    assert _sobol_log2(6, 9) == 10                  # default budget kept
+    ms = [_sobol_log2(6, qa) for qa in (9, 11, 13, 18)]
+    assert ms == sorted(ms) and len(set(ms)) == 4   # every step refines
+    with pytest.warns(RuntimeWarning, match="ceiling"):
+        assert _sobol_log2(6, 100) == 16
+
+
+def test_block_rank_three_rotation_shrinks_with_qa_392():
+    from winning.factor.blocks import block_race_probabilities
+    r = 3
+    rng = np.random.default_rng(5629)
+    n = 8
+    cluster = np.repeat(np.arange(2), 4)
+    mu = rng.normal(0, 0.9, n)
+    mu -= mu.mean()
+    D = rng.uniform(0.35, 1.2, n)
+    V = rng.normal(0, 0.5, (n, r))
+    cap = 2.8 * np.sqrt(D)
+    V *= np.minimum(1, cap / np.linalg.norm(V, axis=1))[:, None]
+    Q, _ = np.linalg.qr(rng.normal(size=(r, r)))
+    gap = {}
+    for qa in (9, 18):
+        a = block_race_probabilities(mu, cluster, V, D, points=513, qa=qa)
+        b = block_race_probabilities(mu, cluster, V @ Q, D, points=513,
+                                     qa=qa)
+        gap[qa] = np.abs(a - b).max()
+    assert gap[18] < 2e-5 and gap[18] < gap[9] / 10
