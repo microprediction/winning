@@ -32,9 +32,23 @@ const ABILITIES_FROM_RANK_MARGINAL_OPTS = new Set(["D", "base", "points", "nIter
 
 const clip01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 
+/* searched in STANDARDISED units (centred, over the widest sd) and mapped
+   back: memberships are invariant under mu -> a + c mu, sd -> c sd, but an
+   absolute 1e-12 floor on the widest sd gave a field written in units of
+   1e-18 a window 2e5 times its width (#370, as python/R). */
 function countWindow(mu, sd, k, fn, delta = 1e-12, padSds = 2.0) {
   const n = mu.length;
-  const smax = Math.max(Math.max(...sd), 1e-12);
+  const m0 = mu.reduce((a, b) => a + b, 0) / n;
+  const c = Math.max(...sd);
+  if (!(Number.isFinite(c) && c > 0)) throw new Error("top-k window needs positive scales");
+  const [lo, hi] = countWindowStd(mu.map(v => (v - m0) / c), sd.map(v => v / c),
+                                  k, fn, delta, padSds);
+  return [m0 + c * lo, m0 + c * hi];
+}
+
+function countWindowStd(mu, sd, k, fn, delta, padSds) {
+  const n = mu.length;
+  const smax = Math.max(...sd);
   const meanCount = x => {
     let t = 0;
     for (let i = 0; i < n; i++) t += 1 - fn((x - mu[i]) / sd[i])[0];
@@ -213,6 +227,31 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   return { x, dx, F, ...g };
 }
 
+/* P(i among the k LARGEST) directly: the top-k integral with the count of
+   runners ABOVE x. 1 - topK(n - k) cancelled -- 0 for a 7.7e-24 last
+   place at 513 points and residue 3.6e-15 at 8193 (#365). */
+function bottomkIndependent(mu, sd, k, fn, points) {
+  const n = mu.length;
+  const refl = z => { const b = fn(-z); return [1 - b[0], b[1], -b[2]]; };
+  const [lr, hr] = countWindow(mu.map(v => -v), sd, k, refl);
+  const lo = -hr, hi = -lr;
+  points = resolvedPoints(lo, hi, sd, points);
+  const x = new Array(points);
+  const dx = (hi - lo) / (points - 1);
+  for (let t = 0; t < points; t++) x[t] = lo + t * dx;
+  const g = baseGrid(fn, x, mu, sd);
+  const G = g.S.map(row => row.map(clip01));
+  const C = countDistribution(G);
+  const cdf = leaveOneOutCdf(C, G, k);
+  const q = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    let s0 = 0;
+    for (let t = 0; t < points; t++) s0 += (g.f[t][i] / sd[i]) * cdf[i][t];
+    q[i] = s0 * dx;
+  }
+  return q;
+}
+
 function topkWithSlopes(mu, sd, k, fn, points) {
   const n = mu.length;
   const { dx, F, f, fp } = topkGrid(mu, sd, k, fn, points);
@@ -238,7 +277,17 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
       `${kind} captured total membership ${t.toFixed(4)} where exactly ` +
       `${k} slots exist: the window or the deconvolution missed part ` +
       `of the field. Raise points=, or report this field.`);
-  return raw.map(v => clip01(v * (k / t)));
+  // the clip is not mass-neutral: re-check what is returned (#99)
+  const q = raw.map(v => v * (k / t));
+  if (Math.max(...q) - 1 > massTol)
+    throw new Error(`${kind} produced a membership of ${Math.max(...q).toFixed(4)} > 1: ` +
+                    "the lattice did not resolve this field. Raise points=.");
+  const out = q.map(clip01);
+  const t2 = out.reduce((a, b) => a + b, 0);
+  if (Math.abs(t2 - k) > massTol * k)
+    throw new Error(`${kind} memberships total ${t2.toFixed(4)} after clipping, ` +
+                    `where exactly ${k} slots exist`);
+  return out;
 }
 
 function factorNodes(V, n, qa) {
@@ -320,9 +369,24 @@ export function topKProbabilities(mu, k, opts = {}) {
 
 export function bottomKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, BOTTOM_K_PROBABILITIES_OPTS, "bottomKProbabilities", OPT_HINTS);
+  const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
   const n = mu.length;
   k = asDepth(k, n);
-  return topKProbabilities(mu, n - k, opts).map(v => 1 - v);
+  const sd = asIdio(D, n).map(Math.sqrt);
+  const fn = typeof base === "function" ? base : BASES[base];
+  if (!V) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
+  const { Vm, nodes, w } = factorNodes(V, n, qa);
+  const raw = new Array(n).fill(0);
+  for (let q = 0; q < nodes.length; q++) {
+    const shifted = mu.map((m, i) => {
+      let s = m;
+      for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
+      return s;
+    });
+    const node = bottomkIndependent(shifted, sd, k, fn, points);
+    for (let i = 0; i < n; i++) raw[i] += w[q] * node[i];
+  }
+  return checkedTopk(raw, k, "bottom-k race");
 }
 
 export function topKJacobians(mu, k, opts = {}) {
@@ -475,6 +539,10 @@ function validatedTarget(q, k, n, targetFloor) {
   let target = q.slice();
   if (target.length !== n)
     throw new Error(`target has ${target.length} entries for ${n} runners`);
+  // finite BEFORE flooring: NaN passed `v <= 0` and surfaced later as a
+  // RangeError from the lattice sizing (#110)
+  const bad = target.findIndex(v => !Number.isFinite(v));
+  if (bad >= 0) throw new Error(`target[${bad}] = ${target[bad]} is not finite`);
   let floored = new Array(n).fill(false);
   if (targetFloor != null) {
     if (!(targetFloor > 0)) throw new Error("targetFloor must be positive");
@@ -510,7 +578,13 @@ export function abilitiesFromTopk(q, k, opts = {}) {
   const logitT = target.map(v => Math.log(v) - Math.log1p(-v));
   const logT = target.map(Math.log);
   const mLog = logT.reduce((a, b) => a + b, 0) / n;
-  let mu = logT.map(v => -(v - mLog) / 2);
+  // in the field's own units, as python/R (#100)
+  const dsrt = sd.map(v => v * v).sort((a, b) => a - b);
+  const medD = n % 2 ? dsrt[(n - 1) / 2] : 0.5 * (dsrt[n / 2 - 1] + dsrt[n / 2]);
+  let sv = 0;
+  if (fac) { for (const row of fac.Vm) sv += row.reduce((a, b) => a + b * b, 0); sv /= n; }
+  const scale = Math.sqrt(medD + sv);
+  let mu = logT.map(v => -(v - mLog) / 2 * scale);
   const alpha = n > 2 ? 1.0 : 0.7;
   let residMax = Infinity, iters = 0;
   for (let it = 0; it < nIter; it++) {
@@ -544,8 +618,8 @@ export function abilitiesFromTopk(q, k, opts = {}) {
     if (residMax < tol) break;
     for (let i = 0; i < n; i++) {
       const dlogit = Math.min(
-        sl[i] / Math.max(qhat[i] * (1 - qhat[i]), 1e-300), -1e-6);
-      const lim = Math.min(2, 10 * Math.abs(resid[i]));
+        sl[i] / Math.max(qhat[i] * (1 - qhat[i]), 1e-300), -1e-6 / scale);
+      const lim = Math.min(2, 10 * Math.abs(resid[i])) * scale;
       let step = alpha * resid[i] / dlogit;
       if (step > lim) step = lim;
       if (step < -lim) step = -lim;
@@ -583,7 +657,11 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   let mu;
   if (mu0 != null) {
     const m0 = mu0.reduce((a, b) => a + b, 0) / n;
-    mu = mu0.map(v => v - m0);
+    // the return gauge applied to the start too: an exact warm start came
+    // back in physical units (#360)
+    const c0 = Math.exp(sd.reduce((a, b) => a + Math.log(b), 0) / n);
+    mu = mu0.map(v => (v - m0) / c0);
+    sd = sd.map(v => v / c0);
   } else {
     const [ka, ta] = k1 < k2 ? [k1, t1] : [k2, t2];
     // warm start only: the LM loop refines, loose tolerance by design
@@ -612,7 +690,7 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   let { r, qh1, qh2 } = logits(mu, sd);
   let cost = r.reduce((a, b) => a + b * b, 0);
   let residMax = fitMax(r);
-  let lam = 1e-6, iters = 0, lastAccepted = true;
+  let lam = 1e-6, iters = 0, lastAccepted = true, lastGrad = Infinity;
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
     if (residMax < tol) break;
@@ -644,6 +722,7 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
       JtJ.push(row);
       for (let t = 0; t < rows; t++) Jtr[a] += J[t][a] * r[t];
     }
+    lastGrad = Math.max(...Jtr.map(Math.abs));
     let accepted = false;
     for (let attempt = 0; attempt < 8; attempt++) {
       const A = JtJ.map((row, a) =>
@@ -684,13 +763,23 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   }
   // with a ridge the penalized optimum keeps a nonzero fit residual by
   // design: an LM stall there is the answer, not a failure
-  const converged = residMax < tol || (sqr > 0 && !lastAccepted);
+  // A ridge stall is convergence only at a stationary point of the
+  // penalized objective AND on a board passing the exact nesting
+  // necessity P(top k1) <= P(top k2) for k1 < k2, as in python (#353,
+  // #105): every rejected step used to be certified.
+  const [loT, hiT] = k1 < k2 ? [t1, t2] : [t2, t1];
+  const nested = loT.every((v, i) => v <= hiT[i] + 1e-12);
+  const fitConverged = residMax < tol;
+  const stationary = fitConverged ||
+    (!lastAccepted && iters > 0 && lastGrad <= 1e-6 * Math.max(1, cost));
+  const converged = fitConverged || (sqr > 0 && stationary && nested);
   if (!converged && !returnInfo)
     console.warn(`locScaleFromTopkPair did not converge: max |logit ` +
                  `residual| ${residMax.toExponential(2)} after ${iters} iterations`);
   if (returnInfo)
     return { mu, sd, info: { converged, maxLogitResidual: residMax,
-                             iterations: iters } };
+                             iterations: iters, fitConverged, stationary,
+                             nested } };
   return { mu, sd };
 }
 
@@ -751,15 +840,29 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
   const { mu0 = null, D = null, base = "normal", points = 513,
           nIter = 60, tol = 1e-8, returnInfo = false } = opts;
   const n = p.length;
-  r = Math.trunc(r);
+  // a whole-number rank, refused before coercion: Math.trunc(1.5) solved
+  // first place silently (#317)
+  if (typeof r !== "number" || !Number.isFinite(r) || r !== Math.trunc(r))
+    throw new Error(`r must be a whole-number rank; got ${r}`);
   if (!(r >= 1 && r <= n))
     throw new Error(`rank must be in [1, n]; got r=${r}, n=${n}`);
+  if (p.some(v => !Number.isFinite(v)))
+    throw new Error("rank probabilities must be finite");
   if (p.some(v => v <= 0))
     throw new Error("all rank probabilities must be positive");
   const s = p.reduce((a, b) => a + b, 0);
   const logt = p.map(v => Math.log(v / s));
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
+  const zz = [-2.3, -1.1, -0.35, 0.6, 1.7];
+  const symmetric = zz.every(z => Math.abs(fn(z)[0] + fn(-z)[0] - 1) < 1e-12);
+  if (mu0 == null && n % 2 === 1 && r === (n + 1) / 2 && symmetric)
+    // the exact middle rank of an odd field under a symmetric base is even
+    // in mu: zero Jacobian at the zero start, no way off it (#378)
+    throw new Error(
+      `the exact middle rank r=${r} of an odd field (n=${n}) under a ` +
+      "symmetric base is unchanged by mu -> -mu, so the zero start is " +
+      "stationary and the inverse two-branched. Pass mu0 to choose the branch.");
   let mu;
   if (mu0 != null) {
     const m0 = mu0.reduce((a, b) => a + b, 0) / n;

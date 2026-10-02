@@ -1031,5 +1031,42 @@ accepts("the inverse takes a scalar D, matching python",
   }
 }
 
+// factor-core top-k batch, browser parity with python/R
+{
+  const mu = [-.5, .2, .8, -.1], sd = [.7, 1.1, .9, 1.3];
+  const a = topk.topKProbabilities(mu, 2, { D: sd.map(v => v * v) });
+  const b = topk.topKProbabilities(mu.map(v => v * 1e-18), 2,
+                                   { D: sd.map(v => (v * 1e-18) ** 2) });
+  holds("top-k window is scale-free (#370)",
+        Math.max(...a.map((x, i) => Math.abs(x - b[i]))) < 1e-9);
+  const bk = topk.bottomKProbabilities([-12, 0, 0], 1, { D: [1, 1, 1] });
+  holds("bottom-k keeps a 7.7e-24 last place (#365)",
+        Math.abs(bk[0] / 7.726967753938468796e-24 - 1) < 1e-6, `${bk[0]}`);
+  const warn = console.warn; console.warn = () => {};
+  const ls = topk.locScaleFromTopkPair([.8, .1, .1], 1, [.2, .9, .9], 2,
+                                       { points: 1025, ridge: 1e-4, returnInfo: true });
+  console.warn = warn;
+  holds("a ridge stall on an impossible board is not convergence (#353)",
+        !ls.info.converged && !ls.info.nested);
+  rejects(topk.abilitiesFromRankMarginal, [[.4, .3, .2, .1], 1.5],
+          "fractional rank refused (#317)", "whole-number");
+  const P = topk.rankProbabilities([-1, -.4, .05, .45, .9],
+                                   { D: [1, 1, 1, 1, 1], points: 257 }).map(r => r[2]);
+  rejects(topk.abilitiesFromRankMarginal, [P, 3, { D: [1, 1, 1, 1, 1], points: 257 }],
+          "odd-field middle rank needs mu0 (#378)", "mu0");
+  const m = [-3, -1, 1, 3], D = [4, 9, 16, 25];
+  const q1 = topk.topKProbabilities(m, 1, { D, points: 1025 });
+  const q2 = topk.topKProbabilities(m, 2, { D, points: 1025 });
+  const w = topk.locScaleFromTopkPair(q1, 1, q2, 2, { D0: D, mu0: m, points: 1025, returnInfo: true });
+  const gm = Math.exp(w.sd.reduce((x, v) => x + Math.log(v), 0) / 4);
+  holds("exact warm start returns the canonical gauge (#360)", Math.abs(gm - 1) < 1e-12);
+  const q = topk.topKProbabilities([-.8, -.3, 0, .4, .7], 2);
+  const f = topk.abilitiesFromTopk(q, 2, { D: new Array(5).fill(1e-6), returnInfo: true });
+  holds("abilitiesFromTopk is unit-equivariant (#100)",
+        f.info.converged && Math.abs(f.mu[0] / 1e-3 + 0.8) < 1e-6);
+  rejects(topk.abilitiesFromTopk, [[.5, NaN, .5], 1], "non-finite top-k target refused (#110)",
+          "not finite");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
