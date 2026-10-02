@@ -494,10 +494,15 @@ def _discover():
     return _discover_by_param("V")
 
 
-# winning itself needs only numpy and scipy. Anything else a module
-# imports is an optional backend -- jax, sklearn, trueskill, fastrace,
-# pandas, matplotlib -- and a minimal install legitimately lacks it.
+# winning itself needs only numpy and scipy. The optional backends a
+# minimal install legitimately lacks are NAMED: treating every missing
+# third-party root as optional let a typo (`numpyy`) or an undeclared
+# required dependency silently drop a module, and all its public V verbs,
+# from the sweep (#80). test_optional_backends_list_is_exactly_what_
+# winning_imports keeps this list true by reading the imports themselves.
 HARD_DEPS = ("numpy", "scipy")
+OPTIONAL_BACKENDS = frozenset({"fastrace", "jax", "matplotlib", "mpl_toolkits",
+                               "pandas", "trueskill"})
 # match the MESSAGE, not the class name: ModuleNotFoundError subclasses
 # ImportError and either can carry a missing optional backend
 _MISSING = re.compile(r"No module named '?([A-Za-z_][\w.]*)'?")
@@ -521,12 +526,42 @@ def _split_import_failures(unimportable):
             continue
         m = _MISSING.search(err)
         missing = m.group(1).split(".")[0] if m else None
-        if (missing and missing not in HARD_DEPS
-                and not missing.startswith("winning")):
+        if missing in OPTIONAL_BACKENDS:
             optional[mod] = missing
         else:
             real[mod] = err
     return optional, real
+
+
+def test_an_unknown_missing_module_is_a_real_failure():
+    """#80: a misspelt or undeclared dependency must fail, not warn."""
+    for missing in ("truesskill", "numpyy", "some_new_required_dependency"):
+        optional, real = _split_import_failures(
+            {"winning.some_public_module":
+             f"ModuleNotFoundError: No module named '{missing}'"})
+        assert real and not optional, missing
+    optional, real = _split_import_failures(
+        {"winning.bench.season_ranked": "No module named 'trueskill'"})
+    assert optional == {"winning.bench.season_ranked": "trueskill"} and not real
+
+
+def test_optional_backends_list_is_exactly_what_winning_imports():
+    """The allowlist is the set of third-party roots winning/ imports,
+    minus the hard deps -- read from the source, so it cannot drift."""
+    import ast
+    import pathlib
+    import sys as _sys
+    roots = set()
+    for f in pathlib.Path(winning.__file__).parent.rglob("*.py"):
+        for node in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                roots |= {a.name.split(".")[0] for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                roots.add(node.module.split(".")[0])
+    third = roots - set(_sys.stdlib_module_names) - set(HARD_DEPS) - {"winning", "__future__"}
+    assert third == OPTIONAL_BACKENDS, (
+        f"imported but not listed: {sorted(third - OPTIONAL_BACKENDS)}; "
+        f"listed but never imported: {sorted(OPTIONAL_BACKENDS - third)}")
 
 
 def test_every_public_V_is_covered():
