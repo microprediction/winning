@@ -241,6 +241,18 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
     # sqrt(2) max_i |(PV)_i|/sqrt(D_i) bounds the pairwise sharpness
     sharp = sharpness_bound(V, D)
     Vc = V - V.mean(axis=0)
+    # A loading column that is zero after centring changes no choice
+    # probability, but it changed the Sobol dimension, so a zero-padded
+    # V priced differently from the unpadded one (#345). Integrate over
+    # the live columns only; the score of a null column is exactly zero
+    # (its factor's posterior is its prior, which is centred).
+    live = np.flatnonzero(np.any(Vc != 0.0, axis=0))
+    if live.size < r:
+        lp, dmu, dVl = _choice_logprob_terms(mu, V[:, live], D=D,
+                                             choice=choice, Qf=Qf, Qz=Qz)
+        dV = np.zeros((T, J, r))
+        dV[:, :, live] = dVl
+        return lp, dmu, dV
     w, dw = _blend_weight(sharp)
     if w == 0.0 or w == 1.0:
         F, Wt = nodes_for_likelihood(r, Qf, Qz, sharp)

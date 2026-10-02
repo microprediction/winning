@@ -111,3 +111,17 @@ def test_prediction_is_the_likelihood():
         want = np.array([np.exp(choice_loglik_and_score(mu[[t]], V, [k])[0])
                          for t in range(len(mu))])
         assert np.allclose(M._prob_of(mu, V, k), want, rtol=1e-13, atol=0)
+
+
+@pytest.mark.parametrize("scale", [0.5, 6.0])          # Hermite and Sobol
+def test_a_zero_column_is_invisible_at_J4(scale):
+    mu, ch, V = _field(seed=3)
+    V = V * scale
+    a = choice_loglik_and_score(mu, V, ch)
+    for pad in (np.hstack([V, np.zeros((4, 1))]),
+                np.hstack([np.full((4, 1), 2.5), V])):   # constant = zero once centred
+        b = choice_loglik_and_score(mu, pad, ch)
+        assert abs(a[0] - b[0]) < 1e-12
+        assert np.abs(a[1] - b[1]).max() < 1e-12
+        live = [c for c in range(3) if np.ptp(pad[:, c]) > 0]
+        assert np.abs(a[2] - b[2][:, live]).max() < 1e-12
