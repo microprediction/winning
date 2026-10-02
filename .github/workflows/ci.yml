@@ -41,6 +41,53 @@ jobs:
       - name: Core tests
         run: python -m pytest -q tests/test_races.py tests/test_probit.py tests_research
 
+  native:
+    # The compiled path, built from THIS checkout (#72). The matrix above
+    # installs `.[test]` without fastrace, so every compiled-path test was
+    # a skip there: tests/test_rust_parity.py and test_rust_dispatch_core.py
+    # importorskip it wholesale. Installing the published wheel would not
+    # help either -- it tests the last PyPI release, not edits under
+    # rust/fastrace in the PR. So: build the crate from source, prove the
+    # dispatch is live, and treat a skip in the compiled-path files as a
+    # failure. The pure path is the matrix above (no fastrace there).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install winning and build fastrace from the checkout
+        run: |
+          pip install maturin -e ".[test]"
+          pip install ./rust/fastrace
+      - name: The compiled path is live
+        run: |
+          python - <<'PY'
+          import importlib.metadata as md
+          import fastrace, winning
+          from winning import rustconfig
+          print("fastrace", md.version("fastrace"), "from", fastrace.__file__)
+          assert winning.rust_active(), "rust_active() is False with fastrace installed"
+          off = [m.__name__ for m in rustconfig._rust_modules() if not getattr(m, "_HAVE_RUST", False)]
+          assert not off, f"modules on the switch with the compiled path inactive: {off}"
+          PY
+      - name: Compiled-path suites, no skips allowed
+        run: |
+          python -m pytest -q -rs tests/test_rust_parity.py \
+            tests/test_rust_dispatch_core.py \
+            tests/test_rust_gauge_and_normalized_jvp.py \
+            tests/test_rust_switch_static.py tests/test_loading_shapes.py \
+            | tee native.txt
+          if grep -q "SKIPPED" native.txt; then
+            echo "::error::a compiled-path test skipped in the native job"; exit 1
+          fi
+      - name: Other suites that dispatch to the compiled kernels
+        run: |
+          python -m pytest -q tests/test_blocks.py tests/test_bases.py \
+            tests/test_permutations.py tests/test_topk.py \
+            tests/test_topk_inversion.py tests/test_shape_contract.py
+
   package:
     # What gets SHIPPED, not what is in the tree. setup.py lists packages
     # explicitly, so a new subpackage is invisible to users until someone
