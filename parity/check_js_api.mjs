@@ -999,5 +999,25 @@ accepts("the inverse takes a scalar D, matching python",
           w => w > 0.1, w => `ancestors contribute ${w.toFixed(4)}`);
 }
 
+// #430: Tree.from_linkage leaf variances are 2 h^2 EXACTLY -- the shared
+// fixture python and R read -- and a merge at height 0 is refused
+{
+  const { readFileSync } = await import("node:fs");
+  const fx = JSON.parse(readFileSync(
+    here + "../tests/golden/linkage_leaf_variance.json", "utf8"));
+  for (const c of fx.cases) {
+    const t = structures.treeFromLinkage(c.Z);
+    const rel = (a, b) => Math.abs(a - b) / Math.max(Math.abs(b), 1e-300);
+    let worst = 0;
+    c.D.forEach((v, i) => { worst = Math.max(worst, rel(t.D[i], v)); });
+    for (let j = c.D.length; j < c.strength.length; j++)
+      worst = Math.max(worst, rel(t.strength[j], c.strength[j]));
+    holds(`treeFromLinkage keeps 2h^2 (${c.name})`, worst <= fx.rtol,
+          `max rel err ${worst.toExponential(2)}`);
+  }
+  rejects(structures.treeFromLinkage, [fx.refuse_zero_height],
+          "treeFromLinkage refuses a zero-height merge", "height 0");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

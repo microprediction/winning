@@ -552,3 +552,38 @@ def test_polish_reports_infeasible_constraints_104():
                                  D=np.ones(3),
                                  name_caps=np.array([0.2, 0.2, 0.2]))
     assert not info["converged"] and info["max_violation"] > 0.1
+
+
+# ---------------------------------------------------------------- #430
+
+def _linkage_fixture():
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent / "golden" / "linkage_leaf_variance.json"
+    return json.loads(path.read_text())
+
+
+def test_from_linkage_keeps_near_duplicate_leaf_variances_430():
+    fx = _linkage_fixture()
+    for case in fx["cases"]:
+        t = Tree.from_linkage(np.array(case["Z"], float))
+        np.testing.assert_allclose(t.D, case["D"], rtol=fx["rtol"], atol=0,
+                                   err_msg=case["name"])
+        np.testing.assert_allclose(np.asarray(t.strength)[len(t.D):],
+                                   case["strength"][len(t.D):],
+                                   rtol=fx["rtol"], atol=0,
+                                   err_msg=case["name"])
+
+
+@pytest.mark.parametrize("h", [1e-5, 1e-6, 1e-8])
+def test_near_duplicate_pair_prices_the_cophenetic_model_430(h):
+    t = Tree.from_linkage(np.array([[0, 1, h, 2]]))
+    # the root shock is common to both leaves and cancels, so the pair is
+    # the residual race alone: Phi(1) at every h
+    p = race_probabilities(np.array([-h, h]), D=t.D)
+    assert abs(p[0] - norm.cdf(1.0)) < 1e-9
+
+
+def test_zero_height_merge_is_refused_430():
+    with pytest.raises(ValueError, match="height 0"):
+        Tree.from_linkage(np.array(_linkage_fixture()["refuse_zero_height"]))

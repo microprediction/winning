@@ -19,12 +19,14 @@ export function treeFromLinkage(Z) {
   const n = Z.length + 1;
   const nT = 2 * n - 1;
   const parent = new Array(nT).fill(-1);
-  const rho = new Array(nT).fill(0);
+  // d[t] = 1 - rho_t = 2 h^2, kept directly: 1 - (1 - 2 h^2) cancels to a
+  // few ulps for near-duplicate leaves (python Tree.from_linkage, #430)
+  const d = new Array(nT).fill(1);
   for (let k = 0; k < Z.length; k++) {
     const a = Math.round(Z[k][0]), b = Math.round(Z[k][1]), h = Z[k][2];
     const t = n + k;
     parent[a] = t; parent[b] = t;
-    rho[t] = Math.max(1 - 2 * h * h, 0);
+    d[t] = Math.min(2 * h * h, 1);
   }
   const strength = new Array(nT).fill(0);
   // the nonnegative increments are a PREMISE, checked as in python's
@@ -35,7 +37,7 @@ export function treeFromLinkage(Z) {
   const bad = [];
   for (let t = n; t < nT; t++) {
     const pa = parent[t];
-    const lam2 = rho[t] - (pa >= 0 ? rho[pa] : 0);
+    const lam2 = (pa >= 0 ? d[pa] : 1) - d[t];      // rho_t - rho_pa
     if (lam2 < -1e-9) bad.push([t, lam2]);
     strength[t] = Math.sqrt(Math.max(lam2, 0));
   }
@@ -60,8 +62,17 @@ export function treeFromLinkage(Z) {
     // accident -- numpy wraps rho[-1] to the single zero entry -- and the
     // guard on the line above this loop was already written correctly.
     const pa = parent[i];
-    D.push(Math.max(1 - (pa >= 0 ? rho[pa] : 0), 1e-10));
+    // EXACTLY 2 h^2: the old absolute floor Math.max(., 1e-10) changed
+    // every near-duplicate branch (h = 1e-6 priced 0.556 where the
+    // cophenetic model gives Phi(1) = 0.841), #430
+    D.push(pa >= 0 ? d[pa] : 1);
   }
+  const zero = D.findIndex((v) => !(v > 0));
+  if (zero >= 0)
+    throw new Error(
+      `leaf ${zero} merges at height 0: coincident leaves have zero ` +
+      "idiosyncratic variance, which a tree race cannot price. Merge the " +
+      "duplicates, or perturb them deliberately.");
   return Tree([...Array(n).keys()], new Array(n).fill(0), D, parent, strength);
 }
 

@@ -155,15 +155,18 @@ tree_from_linkage <- function(Z) {
   n <- nrow(Z) + 1L
   nT <- 2L * n - 1L
   parent <- integer(nT)                    # 0 = root
-  rho <- numeric(nT)
+  # d[t] = 1 - rho_t = 2 h^2, kept directly: 1 - (1 - 2 h^2) cancels to
+  # a few ulps for near-duplicate leaves (python Tree.from_linkage, #430)
+  d <- rep(1, nT)
   for (k in seq_len(nrow(Z))) {
     a <- as.integer(Z[k, 1]) + 1L          # 0-based ids -> 1-based
     b <- as.integer(Z[k, 2]) + 1L
     t <- n + k
     parent[a] <- t; parent[b] <- t
-    # floor at zero: the tree race cannot represent negative dependence,
-    # so merges above the h = 1/sqrt(2) horizon leave branches independent
-    rho[t] <- max(1 - 2 * Z[k, 3]^2, 0)
+    # floor rho at zero: the tree race cannot represent negative
+    # dependence, so merges above the h = 1/sqrt(2) horizon leave
+    # branches independent
+    d[t] <- min(2 * Z[k, 3]^2, 1)
   }
   lam <- numeric(nT)
   # the nonnegative increments are a PREMISE, checked as in Python's
@@ -173,7 +176,7 @@ tree_from_linkage <- function(Z) {
   bad <- numeric(0); bad_t <- integer(0)
   for (t in (n + 1L):nT) {
     pa <- parent[t]
-    lam2 <- rho[t] - if (pa > 0) rho[pa] else 0
+    lam2 <- (if (pa > 0) d[pa] else 1) - d[t]     # rho_t - rho_pa
     if (lam2 < -1e-9) { bad <- c(bad, lam2); bad_t <- c(bad_t, t) }
     lam[t] <- sqrt(max(lam2, 0))
   }
@@ -189,7 +192,19 @@ tree_from_linkage <- function(Z) {
       "parent/strength."), bad_t[w] - 1L, -bad[w], length(bad)),
       call. = FALSE)
   }
-  D <- pmax(1 - rho[parent[1:n]], 1e-10)
+  # D_i = 2 h^2 at the leaf's first merge, EXACTLY: the old absolute
+  # floor pmax(., 1e-10) changed every near-duplicate branch (h = 1e-6
+  # priced 0.556 where the cophenetic model gives pnorm(1)), #430. A
+  # merge at height 0 (coincident leaves) is refused by name.
+  D <- vapply(seq_len(n), function(i)
+    if (parent[i] > 0) d[parent[i]] else 1, numeric(1))
+  if (any(D <= 0)) {
+    stop(sprintf(paste0(
+      "leaf %d merges at height 0 (%d leaf/leaves do): coincident leaves ",
+      "have zero idiosyncratic variance, which a tree race cannot price. ",
+      "Merge the duplicates, or perturb them deliberately."),
+      which(D <= 0)[1] - 1L, sum(D <= 0)), call. = FALSE)
+  }
   Tree(cluster = seq_len(n), loading = numeric(n), D = D,
        parent = parent, strength = lam)
 }
