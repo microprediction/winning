@@ -52,14 +52,42 @@ def _cardinal_observation(margins=None, scores=None, lengths_scale=1.0,
     scaling). transform: None, a compression scale c for c*asinh(L/c),
     or a callable on raw margins; the Jacobian keeps evidence-based
     tuning of c comparable across transforms (a more compressive transform shrinks the data
-    and would otherwise win spuriously)."""
+    and would otherwise win spuriously). The Jacobian is taken on the
+    n-1 free coordinates: the reference (the smallest margin, the
+    winner's zero) is pinned and contributes no g' term."""
     if (margins is None) == (scores is None):
         raise ValueError("pass exactly one of margins= or scores=")
-    log_jac = 0.0
+    # The observation is a DENSITY on the (n-1)-dimensional contrast
+    # space, so rescaling it by lengths_scale costs (n-1)*log(scale) --
+    # and that term was missing entirely on the identity path, which
+    # returned log_jac = 0 while scaling y. Evidence then rose without
+    # bound as the scale fell, and `tune_history(tune=("lengths_scale",))`
+    # drove an ordinary four-runner example to 2.4e-10: the documented
+    # evidence tuning was selecting collapse (#95).
+    #
+    # The scale factors out of any transform: L -> g(L) -> * s -> centre,
+    # and the `* s` step contributes exactly (n-1)*log(s) on the contrast
+    # space whatever g is. The g' terms obey the SAME chart: margins are
+    # lengths behind the winner, so the winner's coordinate is pinned and
+    # only the other n-1 are data. Writing the contrasts against that
+    # reference r, d(y_j - y_r)/dL_k = -s g'(L_j) delta_jk for j, k != r,
+    # so the determinant is s^(n-1) * prod_{j != r} g'(L_j) -- the
+    # reference's own g'(L_r) is NOT in it. Summing all n derivatives
+    # overcounted by log g'(L_r): invisible for asinh, whose g'(0) = 1,
+    # but log(2) for the callable 2*x, which is the very same
+    # observation as lengths_scale=2 and must cost the same (#95).
+    ls = float(lengths_scale)
+    if not (np.isfinite(ls) and ls > 0.0):
+        raise ValueError(
+            f"lengths_scale must be positive and finite; got "
+            f"{lengths_scale!r}. It converts margins into performance "
+            "units, and the evidence carries (n-1) * log(lengths_scale).")
     if scores is not None:
-        y = np.asarray(scores, dtype=float) * float(lengths_scale)
+        y = np.asarray(scores, dtype=float) * ls
+        deriv = None
     else:
         Lm = np.asarray(margins, dtype=float)
+        deriv = None
         if transform is not None:
             if callable(transform):
                 Lt = np.asarray(transform(Lm), dtype=float)
@@ -69,11 +97,17 @@ def _cardinal_observation(margins=None, scores=None, lengths_scale=1.0,
                 c = float(transform)
                 Lt = c * np.arcsinh(Lm / c)
                 deriv = 1.0 / np.sqrt(1.0 + (Lm / c) ** 2)
-            log_jac = float(np.sum(np.log(np.maximum(
-                deriv * float(lengths_scale), 1e-300))))
             Lm = Lt
-        y = -Lm * float(lengths_scale)
-    return y - y.mean(), log_jac
+        y = -Lm * ls
+    n = len(y)
+    log_jac = (n - 1) * np.log(ls)
+    if deriv is not None:
+        # exclude the pinned reference: the winner, the smallest margin
+        # (any one of a dead heat at the front -- they share g'(L_r))
+        free = np.ones(n, dtype=bool)
+        free[int(np.argmin(np.asarray(margins, dtype=float)))] = False
+        log_jac += float(np.sum(np.log(np.maximum(deriv[free], 1e-300))))
+    return y - y.mean(), float(log_jac)
 
 
 def _lift_contrast_update(m, S, A, y, Cn, log_jac=0.0):
