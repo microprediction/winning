@@ -29,7 +29,7 @@ lower is better}
 \item{unit}{lattice spacing assumed when the density was constructed}
 \item{offset_samples}{descending offsets for the interpolation table
 (default: the reference's half-lattice grid)}
-\item{implied_offsets_guess}{starting offsets}
+\item{implied_offsets_guess}{starting offsets, one per price (default zeros)}
 \item{n_iter}{fixed-point iterations (default 3)}
 }
 \value{

@@ -74,6 +74,9 @@ function integerShift(cdf, k) {
   if (k === 0) return cdf.slice();
   const out = new Array(k).fill(0);
   for (let i = 0; i < m - k; i++) out.push(cdf[i]);
+  // mass shifted past the top atom lumps on it, mirroring the negative
+  // branch; truncating left a sub-probability CDF (#373)
+  out[m - 1] = cdf[m - 1];
   return out;
 }
 function lowHigh(offset, L) {
@@ -90,90 +93,90 @@ function shiftedCdf(cdf, offset, L) {
   const sa = integerShift(cdf, a), sb = integerShift(cdf, b);
   return sa.map((v, i) => ac * v + bc * sb[i]);
 }
-function winnerOfManyCdfs(cdfs) {
-  const m = cdfs[0].length;
-  let cdfMin = cdfs[0].slice();
-  let mult = new Array(m).fill(1);
-  for (let k = 1; k < cdfs.length; k++) {
-    const cb = cdfs[k];
-    const fa = cdfToPdf(cdfMin), fb = cdfToPdf(cb);
-    const newCdf = new Array(m), newMult = new Array(m);
-    for (let t = 0; t < m; t++) {
-      const win = fa[t] * (1 - cb[t]);
-      const draw = fa[t] * fb[t];
-      const lose = fb[t] * (1 - cdfMin[t]);
-      newMult[t] = (win * mult[t] + draw * (mult[t] + 1) + lose + 1e-18)
-        / (win + draw + lose + 1e-18);
-      newCdf[t] = 1 - (1 - cdfMin[t]) * (1 - cb[t]);
+/* Exact dead-heat pricing (#418, #362, #348, #373); mirrors
+   winning/classic/lattice.py. A runner's equal-split winner claim is
+
+     P_i = sum_t f_i(t) int_0^1 prod_{j != i} (S_j(t) + u f_j(t)) du,
+
+   since 1/(1+M) = int_0^1 u^M du. The integrand has degree n-1 in u, so
+   n//2 + 1 Gauss-Legendre nodes are exact. The field is
+   G_q(t) = prod_j (S_j + u_q f_j); a runner's opponents are
+   G_q / (S_i + u_q f_i), capped at one and nonincreasing in t. The old
+   fold kept only the minimum's CDF and MEAN multiplicity, so a
+   compact-support pair priced [0.917, 0.050] (#418), twenty iid
+   three-atom runners summed to 0.887 (#362), and a fractional offset was
+   paid as two integer runners neither of which was in the field (#348).
+   The lattice is padded by L-1 atoms per side so no shift loses mass. */
+function gaussLegendre01(n) {
+  const x = new Array(n), w = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let z = Math.cos(Math.PI * (i + 0.75) / (n + 0.5));
+    let dp = 1;
+    for (let it = 0; it < 100; it++) {
+      let p0 = 1, p1 = z;
+      for (let k = 2; k <= n; k++) {
+        const p2 = ((2 * k - 1) * z * p1 - (k - 1) * p0) / k;
+        p0 = p1; p1 = p2;
+      }
+      dp = n * (z * p1 - p0) / (z * z - 1);
+      const dz = p1 / dp;
+      z -= dz;
+      if (Math.abs(dz) < 1e-16) break;
     }
-    cdfMin = newCdf; mult = newMult;
+    x[n - 1 - i] = 0.5 * (z + 1);
+    w[n - 1 - i] = 1 / ((1 - z * z) * dp * dp);
   }
-  return { cdf: cdfMin, mult };
+  return { nodes: x, weights: w };
 }
-function expectedPayoffSum(cdf, cdfAll, multAll) {
-  const m = cdf.length;
-  const f1 = cdfToPdf(cdf);
-  const cdfRest = new Array(m);
-  for (let t = 0; t < m; t++) {
-    cdfRest[t] = 1 - (1 - cdfAll[t] + 1e-18) / (1 - cdf[t] + 1e-6);
-  }
-  const fRest = cdfToPdf(cdfRest);
-  let kmax = 0, fmax = -Infinity;
-  for (let t = 0; t < m; t++) if (f1[t] > fmax) { fmax = f1[t]; kmax = t; }
-  const multRest = new Array(m);
-  for (let t = 0; t < m; t++) {
-    const mm = multAll[t];
-    const s1 = 1 - cdf[t];
-    const srest = (1 - cdfAll[t] + 1e-18) / (s1 + 1e-6);
-    if (t < kmax) {
-      const numer = mm * f1[t] * srest + mm * (f1[t] + s1) * fRest[t]
-        - f1[t] * (srest + fRest[t]);
-      const denom = fRest[t] * (f1[t] + s1);
-      multRest[t] = (1e-18 + numer) / (1e-18 + denom);
-    } else {
-      const t1 = (s1 + 1e-18) / (f1[t] + 1e-6);
-      const trest = (srest + 1e-18) / (fRest[t] + 1e-6);
-      multRest[t] = mm * trest / (1 + t1) + mm - (1 + trest) / (1 + t1);
+const exactNodes = n => Math.trunc(n / 2) + 1;
+function paddedBaseCdf(density) {
+  const L = impliedL(density);
+  const pad = Math.max(L - 1, 0);
+  const d = new Array(pad).fill(0).concat(Array.from(density, Number), new Array(pad).fill(0));
+  return pdfToCdf(d);
+}
+function exactField(cdfs, nodes) {
+  const m = cdfs[0].length;
+  const G = nodes.map(() => new Array(m).fill(1));
+  for (const c of cdfs) {
+    const f = cdfToPdf(c);
+    for (let q = 0; q < nodes.length; q++) {
+      const row = G[q], u = nodes[q];
+      for (let t = 0; t < m; t++) row[t] *= Math.max(1 - c[t], 0) + u * f[t];
     }
   }
-  let run = -Infinity, total = 0, prev = 0;
-  for (let t = 0; t < m; t++) {
-    run = Math.max(run, cdfRest[t]);
-    const fr = run - prev;
-    prev = run;
-    total += f1[t] * (1 - run) + f1[t] * fr / (1 + multRest[t]);
+  return G;
+}
+function exactPayoff(cdf, G, gl) {
+  const f = cdfToPdf(cdf);
+  let total = 0;
+  for (let q = 0; q < gl.nodes.length; q++) {
+    const row = G[q], u = gl.nodes[q];
+    let run = 1, acc = 0;
+    for (let t = 0; t < cdf.length; t++) {
+      const den = Math.max(1 - cdf[t], 0) + u * f[t];
+      if (den > 0) run = Math.min(run, Math.min(row[t] / den, 1));
+      acc += run * f[t];
+    }
+    total += gl.weights[q] * acc;
   }
   return total;
 }
-function implicitPrices(baseCdf, cdfAll, multAll, offsets, L) {
-  return offsets.map(k => {
-    // The integer fast path has to obey the SAME clamp the field was
-    // built with. `shiftedCdf` goes through `lowHigh`, which pins an
-    // offset at or past L-2 to the boundary; this called
-    // `integerShift(baseCdf, k)` with the raw k, whose own clamp is the
-    // much wider +/-(m-1). So a runner could sit in the field at
-    // offset L-2 and be PAID at 60: the state prices stopped being
-    // exhaustive claims on one race and summed to 1.88 (#292). An
-    // epsilon off the integer took the same race back to 1.0, because
-    // the non-integer path was clamped correctly all along.
-    //
-    // Guarding the fast path by the interior condition is exactly
-    // equivalent where it applies: for an interior integer `lowHigh`
-    // returns [[k, 1], [k, 0]], which is this shift with weight one.
-    if (k === Math.trunc(k) && k > -L + 2 && k < L - 2)
-      return expectedPayoffSum(integerShift(baseCdf, k), cdfAll, multAll);
-    const [[a, ac], [b, bc]] = lowHigh(k, L);
-    return ac * expectedPayoffSum(integerShift(baseCdf, a), cdfAll, multAll)
-      + bc * expectedPayoffSum(integerShift(baseCdf, b), cdfAll, multAll);
-  });
+function exactStatePrices(cdfs) {
+  const gl = gaussLegendre01(exactNodes(cdfs.length));
+  const G = exactField(cdfs, gl.nodes);
+  return cdfs.map(c => exactPayoff(c, G, gl));
+}
+function exactImplicitPrices(base, fieldCdfs, offsets, L) {
+  const gl = gaussLegendre01(exactNodes(fieldCdfs.length));
+  const G = exactField(fieldCdfs, gl.nodes);
+  return offsets.map(k => exactPayoff(shiftedCdf(base, k, L), G, gl));
 }
 
 export function statePricesFromOffsets(density, offsets) {
   const L = impliedL(density);
-  const baseCdf = pdfToCdf(density);
-  const cdfs = offsets.map(o => shiftedCdf(baseCdf, o, L));
-  const { cdf, mult } = winnerOfManyCdfs(cdfs);
-  return implicitPrices(baseCdf, cdf, mult, offsets, L);
+  const base = paddedBaseCdf(density);
+  return exactStatePrices(Array.from(offsets, o => shiftedCdf(base, o, L)));
 }
 
 export function solveForImpliedOffsets(prices, density, opts = {}) {
@@ -186,18 +189,28 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
   } else {
     offsetSamples = asDescendingOffsets(offsetSamples, "offsetSamples");
   }
-  if (!guess) {
-    guess = [];
-    for (let k = 0; k < Math.trunc(L / 3); k++) guess.push(k);
+  // One starting offset per target price. The default was trunc(L/3)
+  // offsets -- lattice width as contestant count, a five-runner first
+  // field for a two-runner target at L=15 -- and any length was taken
+  // (#369); dividendImpliedAbility always passed zeros.
+  if (guess === null || guess === undefined) {
+    guess = new Array(prices.length).fill(0);
+  } else if (guess.length !== prices.length) {
+    throw new Error(`guess must have one starting offset per price: got ` +
+      `${guess.length} for ${prices.length} prices`);
   }
-  const baseCdf = pdfToCdf(density);
-  let cdfs = guess.map(o => shiftedCdf(baseCdf, o, L));
-  let implied = prices.slice();
+  // Defect correction a <- a + T^{-1}(p) - T^{-1}(P(a)) against the
+  // exact engine, so the fixed point is the exact forward map; reading
+  // p straight off the table converges to the table's own bias.
+  const base = paddedBaseCdf(density);
+  let implied = Array.from(guess, Number);
+  let cdfs = implied.map(o => shiftedCdf(base, o, L));
   for (let it = 0; it < nIter; it++) {
-    const { cdf, mult } = winnerOfManyCdfs(cdfs);
-    const table = implicitPrices(baseCdf, cdf, mult, offsetSamples, L);
-    implied = prices.map(p => interpClamped(p, table, offsetSamples));
-    cdfs = implied.map(o => shiftedCdf(baseCdf, o, L));
+    const table = exactImplicitPrices(base, cdfs, offsetSamples, L);
+    const current = exactStatePrices(cdfs);
+    implied = implied.map((a, i) => a + interpClamped(prices[i], table, offsetSamples)
+      - interpClamped(current[i], table, offsetSamples));
+    cdfs = implied.map(o => shiftedCdf(base, o, L));
   }
   return implied;
 }

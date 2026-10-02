@@ -260,46 +260,29 @@ fn tree_race<'py>(
 }
 
 
-/// state_prices_from_offsets: field from the shifted base density, then
-/// implicit prices AT those offsets (unnormalized, as the reference).
+/// state_prices_from_offsets on the exact dead-heat engine; see
+/// winning::exact_state_prices_from_offsets. The name changed with the
+/// engine (#418/#362/#348/#373) so that a wheel built before it is not
+/// dispatched to: load_fastrace finds no such kernel and the python
+/// path runs instead.
 #[pyfunction]
-fn classic_state_prices(density: Vec<f64>, offsets: Vec<f64>) -> PyResult<Vec<f64>> {
-    let l = ((density.len() - 1) / 2) as i64;
-    let base_cdf = pdf_to_cdf(&density);
-    let cdfs: Vec<Vec<f64>> = offsets.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-    let (cdf_all, mult_all) = winner_of_many(&cdfs);
-    Ok(implicit_prices(&base_cdf, &cdf_all, &mult_all, &offsets, l))
+fn classic_exact_state_prices(density: Vec<f64>, offsets: Vec<f64>) -> PyResult<Vec<f64>> {
+    Ok(winning::exact_state_prices_from_offsets(&density, &offsets))
 }
 
 
-/// solve_for_implied_offsets: the reference fixed-point iteration --
-/// interpolation table offset -> price rebuilt against the current field.
+/// solve_for_implied_offsets: the paper's table iteration as a defect
+/// correction against the exact engine; see winning::exact_calibrate.
 #[pyfunction]
 #[pyo3(signature = (density, prices, offset_samples, guess, n_iter=3))]
-fn classic_calibrate(
+fn classic_exact_calibrate(
     density: Vec<f64>,
     prices: Vec<f64>,
     offset_samples: Vec<f64>,
     guess: Vec<f64>,
     n_iter: usize,
 ) -> PyResult<Vec<f64>> {
-    let l = ((density.len() - 1) / 2) as i64;
-    let base_cdf = pdf_to_cdf(&density);
-    let mut cdfs: Vec<Vec<f64>> =
-        guess.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-    // offset_samples arrive descending (better first); implied prices are
-    // then ascending, which is what the interpolation needs
-    let mut implied: Vec<f64> = prices.clone();
-    for _ in 0..n_iter {
-        let (cdf_all, mult_all) = winner_of_many(&cdfs);
-        let table = implicit_prices(&base_cdf, &cdf_all, &mult_all, &offset_samples, l);
-        implied = prices
-            .iter()
-            .map(|&p| interp1(p, &table, &offset_samples))
-            .collect();
-        cdfs = implied.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-    }
-    Ok(implied)
+    Ok(winning::exact_calibrate(&density, &prices, &offset_samples, &guess, n_iter))
 }
 
 
@@ -377,8 +360,8 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rank_marginal_jacobian, m)?)?;
     m.add_function(wrap_pyfunction!(top_k_jacobians, m)?)?;
     m.add_function(wrap_pyfunction!(forward_and_slopes_base, m)?)?;
-    m.add_function(wrap_pyfunction!(classic_state_prices, m)?)?;
-    m.add_function(wrap_pyfunction!(classic_calibrate, m)?)?;
+    m.add_function(wrap_pyfunction!(classic_exact_state_prices, m)?)?;
+    m.add_function(wrap_pyfunction!(classic_exact_calibrate, m)?)?;
     m.add_function(wrap_pyfunction!(per_winner_rr, m)?)?;
     Ok(())
 }

@@ -39,15 +39,15 @@ dividends_from_prices <- function(prices, multiplicity = 1.0) {
 
 #' Solve the horse race problem: offsets matching given state prices
 #'
-#' The fixed-point iteration of the paper: build the winner-of-field
-#' density, tabulate offset -> implied price, interpolate the target
-#' prices to offsets, rebuild the field; three iterations suffice.
+#' The fixed-point iteration of the paper: tabulate offset -> implied
+#' price against the current field, correct each offset by the table's
+#' reading of target minus current price, rebuild the field.
 #'
 #' @param prices numeric state prices (positive, ideally summing to one)
 #' @param density performance density on the symmetric lattice
 #' @param offset_samples descending offsets for the interpolation table
 #'   (default: the reference's half-lattice grid)
-#' @param implied_offsets_guess starting offsets (default: the reference's)
+#' @param implied_offsets_guess starting offsets, one per price (default zeros)
 #' @param n_iter fixed-point iterations (default 3)
 #' @return numeric offsets in lattice units (lower is better)
 #' @export
@@ -61,19 +61,26 @@ solve_for_implied_offsets <- function(prices, density,
   } else if (any(diff(offset_samples) > 0)) {
     stop("offset_samples must be descending")
   }
+  # one starting offset per target price; the default was L %/% 3
+  # offsets -- lattice width as contestant count (#369)
   if (is.null(implied_offsets_guess)) {
-    implied_offsets_guess <- seq.int(0L, (L %/% 3) - 1L)
+    implied_offsets_guess <- rep(0, length(prices))
+  } else if (length(implied_offsets_guess) != length(prices)) {
+    stop("implied_offsets_guess must have one starting offset per price: got ",
+         length(implied_offsets_guess), " for ", length(prices), " prices")
   }
-  base_cdf <- pdf_to_cdf(density)
-  cdfs <- lapply(implied_offsets_guess,
-                 function(o) shifted_cdf(base_cdf, o, L))
-  implied <- prices
+  # defect correction a <- a + T^{-1}(p) - T^{-1}(P(a)) against the exact
+  # engine, so the fixed point is the exact forward map
+  # (see winning/classic/lattice_calibration.py)
+  base <- padded_base_cdf(density)
+  implied <- as.numeric(implied_offsets_guess)
+  cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   for (i in seq_len(n_iter)) {
-    fold <- winner_of_many_cdfs(cdfs)
-    tab <- implicit_state_prices(base_cdf, fold$cdf, fold$multiplicity,
-                                 offset_samples, L)
-    implied <- np_interp(prices, tab, offset_samples)
-    cdfs <- lapply(implied, function(o) shifted_cdf(base_cdf, o, L))
+    tab <- exact_implicit_prices(base, cdfs, offset_samples, L)
+    current <- exact_state_prices_from_cdfs(cdfs)
+    implied <- implied + np_interp(prices, tab, offset_samples) -
+      np_interp(current, tab, offset_samples)
+    cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   }
   implied
 }

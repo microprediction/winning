@@ -1,12 +1,13 @@
 from winning.classic.lattice import state_prices_from_extended_offsets, densities_and_coefs_from_offsets, \
-    winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices, implied_L
+    winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices, implied_L, cdf_to_pdf, \
+    _exact_offset_cdfs, _exact_implicit_prices, _exact_shifted_cdf, exact_state_prices_from_cdfs
 import numpy as np
 from winning.classic.lattice_conventions import NAN_DIVIDEND
 
 from ..rustconfig import load_fastrace
 
 # compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
-_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('classic_calibrate')
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('classic_exact_calibrate')
 
 
 #################################################################
@@ -163,45 +164,54 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
     else:
         _assert_descending(offset_samples)
 
+    # One starting offset per target price. The default was
+    # range(int(L/3)) -- lattice WIDTH as contestant count, a five-runner
+    # first field for a two-runner target at L=15 -- and a guess of any
+    # length was accepted (#369). The high-level wrappers always passed
+    # zeros; now the low-level default agrees and a mismatch is refused.
     if implied_offsets_guess is None:
-        implied_offsets_guess = list(range(int(L / 3)))
+        implied_offsets_guess = [0.0 for _ in prices]
+    elif len(implied_offsets_guess) != len(prices):
+        raise ValueError('implied_offsets_guess must have one starting offset per price: got '
+                         + str(len(implied_offsets_guess)) + ' for ' + str(len(prices)) + ' prices')
 
     if _HAVE_RUST and not verbose and not visualize:
-        return list(_fastrace.classic_calibrate(
+        return list(_fastrace.classic_exact_calibrate(
             [float(d) for d in density], [float(p) for p in prices],
             [float(o) for o in offset_samples],
             [float(o) for o in implied_offsets_guess], nIter))
 
-    # First guess at densities
-    densities, coefs = densities_and_coefs_from_offsets(density, implied_offsets_guess)
-    densityAllGuess, multiplicityAllGuess = winner_of_many(densities)
-    densityAll = densityAllGuess.copy()
-    multiplicityAll = multiplicityAllGuess.copy()
-
-    if verbose:
-        guess_prices = [np.sum(expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)) for density in
-                    densities]
-
+    # The paper's fixed point: tabulate offset -> price against the
+    # current field and read the targets off the table. The field and
+    # the table are priced by the exact dead-heat engine
+    # (winning.classic.lattice, #418/#362/#348/#373), and each step is a
+    # DEFECT CORRECTION
+    #
+    #     a_i  <-  a_i + T^{-1}(p_i) - T^{-1}(P_i(a)),
+    #
+    # P_i(a) the exact price of runner i in the current field. The table
+    # T is exact only for a field member, and between integer samples it
+    # is a linear interpolation, so reading p_i straight off it
+    # (a_i <- T^{-1}(p_i)) converges to the fixed point of the TABLE: on
+    # a three-atom law that missed the exact forward by 1e-2 however many
+    # iterations ran. Subtracting the table's own reading of the current
+    # price cancels that bias, so the fixed point is P(a) = p exactly;
+    # where the table is exact the step is the paper's.
+    base, cdfs, L = _exact_offset_cdfs(density, implied_offsets_guess)
+    implied_offsets = np.asarray(implied_offsets_guess, dtype=float)
     for _ in range(nIter):
         if visualize:
             from winning.classic.lattice_plot import densitiesPlot
-            # temporary hack to check progress of optimization
-            densitiesPlot([densityAll] + densities, unit=0.1)
-
-        # Main iteration...
-        implied_prices = implicit_state_prices(density=density, densityAll=densityAll, multiplicityAll=multiplicityAll,
-                                               offsets=offset_samples)
-        implied_offsets = np.interp(prices, implied_prices, offset_samples)
-        densities = densities_from_offsets(density, implied_offsets)
-        densityAll, multiplicityAll = winner_of_many(densities)
-
+            densitiesPlot([cdf_to_pdf(c) for c in cdfs], unit=0.1)
+        implied_prices = _exact_implicit_prices(base, cdfs, offset_samples, L)
+        current = exact_state_prices_from_cdfs(cdfs)
+        implied_offsets = implied_offsets + (
+            np.interp(prices, implied_prices, offset_samples)
+            - np.interp(current, implied_prices, offset_samples))
+        cdfs = [_exact_shifted_cdf(base, o, L) for o in implied_offsets]
         if verbose:
-            guess_prices = [np.sum(expected_payoff(density, densityAll, multiplicityAll, cdf=None, cdfAll=None)) for density
-                            in densities]
-            approx_prices  = [np.round(pri, 3) for pri in prices]
-            approx_guesses = [np.round(pri, 3) for pri in guess_prices]
-
-            print(zip(approx_prices, approx_guesses)[:5])
+            print(list(zip(np.round(prices, 3),
+                           np.round(exact_state_prices_from_cdfs(cdfs), 3)))[:5])
 
     return implied_offsets
 

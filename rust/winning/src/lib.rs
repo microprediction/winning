@@ -1184,9 +1184,13 @@ pub fn integer_shift(cdf: &[f64], k: i64) -> Vec<f64> {
     } else if k == 0 {
         cdf.to_vec()
     } else {
+        // mass shifted past the top atom lumps on it, mirroring the
+        // negative branch; truncating left a sub-probability CDF (#373)
         let a = k as usize;
         let mut out = vec![0.0; a];
         out.extend_from_slice(&cdf[..cdf.len() - a]);
+        let last = out.len() - 1;
+        out[last] = cdf[cdf.len() - 1];
         out
     }
 }
@@ -1239,88 +1243,155 @@ pub fn winner_of_many(cdfs: &[Vec<f64>]) -> (Vec<f64>, Vec<f64>) {
     (cdf_min, mult)
 }
 
-/// get_the_rest + conditional payoff, summed: the expected payoff of a
-/// contestant with cdf `cdf` against the field (cdf_all, mult_all).
-pub fn expected_payoff_sum(cdf: &[f64], cdf_all: &[f64], mult_all: &[f64]) -> f64 {
-    let m = cdf.len();
-    let f1 = cdf_to_pdf(cdf);
-    let mut cdf_rest = Vec::with_capacity(m);
-    for t in 0..m {
-        let s = 1.0 - cdf_all[t];
-        let s1 = 1.0 - cdf[t];
-        cdf_rest.push(1.0 - (s + 1e-18) / (s1 + 1e-6));
+/// Gauss-Legendre nodes and weights on [0, 1], nodes ascending (numpy's
+/// leggauss mapped by t -> (t + 1)/2). Newton on the Legendre recurrence.
+pub fn gauss_legendre01(n: usize) -> (Vec<f64>, Vec<f64>) {
+    let nf = n as f64;
+    let mut x = Vec::with_capacity(n);
+    let mut w = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut z = (std::f64::consts::PI * (i as f64 + 0.75) / (nf + 0.5)).cos();
+        let mut dp = 1.0;
+        for _ in 0..100 {
+            let (mut p0, mut p1) = (1.0f64, z);
+            for k in 2..=n {
+                let kf = k as f64;
+                let p2 = ((2.0 * kf - 1.0) * z * p1 - (kf - 1.0) * p0) / kf;
+                p0 = p1;
+                p1 = p2;
+            }
+            dp = nf * (z * p1 - p0) / (z * z - 1.0);
+            let dz = p1 / dp;
+            z -= dz;
+            if dz.abs() < 1e-16 {
+                break;
+            }
+        }
+        x.push(0.5 * (z + 1.0));
+        w.push(1.0 / ((1.0 - z * z) * dp * dp));
     }
-    let f_rest = cdf_to_pdf(&cdf_rest);
-    // multiplicity of the rest: left-tail inversion, right-tail asymptotic,
-    // switch at the mode of f1 (first argmax), exactly as the reference
-    let mut kmax = 0;
-    let mut fmax = f64::MIN;
-    for (t, &x) in f1.iter().enumerate() {
-        if x > fmax {
-            fmax = x;
-            kmax = t;
+    x.reverse();
+    w.reverse();
+    (x, w)
+}
+
+/// Nodes that integrate a degree n-1 polynomial exactly.
+pub fn exact_n_nodes(n_runners: usize) -> usize {
+    n_runners / 2 + 1
+}
+
+/// CDF of `density` padded by L-1 zero atoms on each side: the largest
+/// shift low_high returns, so no translated runner loses mass (#373).
+pub fn padded_base_cdf(density: &[f64]) -> Vec<f64> {
+    let l = (density.len() - 1) / 2;
+    let pad = if l >= 1 { l - 1 } else { 0 };
+    let mut d = vec![0.0; pad];
+    d.extend_from_slice(density);
+    d.extend(std::iter::repeat(0.0).take(pad));
+    pdf_to_cdf(&d)
+}
+
+fn survival_and_pdf(cdf: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let f = cdf_to_pdf(cdf);
+    let s = cdf.iter().map(|&c| (1.0 - c).max(0.0)).collect();
+    (s, f)
+}
+
+/// G[q][t] = prod_j (S_j(t) + u_q f_j(t)) -- the field at the nodes.
+pub fn exact_field(cdfs: &[Vec<f64>], nodes: &[f64]) -> Vec<Vec<f64>> {
+    let m = cdfs[0].len();
+    let mut g = vec![vec![1.0f64; m]; nodes.len()];
+    for c in cdfs {
+        let (s, f) = survival_and_pdf(c);
+        for (q, &u) in nodes.iter().enumerate() {
+            let row = &mut g[q];
+            for t in 0..m {
+                row[t] *= s[t] + u * f[t];
+            }
         }
     }
-    let mut mult_rest = Vec::with_capacity(m);
-    for t in 0..m {
-        let mm = mult_all[t];
-        let s1 = 1.0 - cdf[t];
-        let srest = (1.0 - cdf_all[t] + 1e-18) / (s1 + 1e-6);
-        if t < kmax {
-            let numer =
-                mm * f1[t] * srest + mm * (f1[t] + s1) * f_rest[t] - f1[t] * (srest + f_rest[t]);
-            let denom = f_rest[t] * (f1[t] + s1);
-            mult_rest.push((1e-18 + numer) / (1e-18 + denom));
-        } else {
-            let t1 = (s1 + 1e-18) / (f1[t] + 1e-6);
-            let trest = (srest + 1e-18) / (f_rest[t] + 1e-6);
-            mult_rest.push(mm * trest / (1.0 + t1) + mm - (1.0 + trest) / (1.0 + t1));
-        }
-    }
-    // forced monotone cdf of the rest, then payoff = win + draw/(1 + mult)
-    let mut run = f64::MIN;
+    g
+}
+
+/// Expected equal-split winner claim of a runner with CDF `cdf` against
+/// the field G, the runner divided out: the opponents' product at node
+/// u is G / (S + u f), exact for a member wherever f > 0, capped at one
+/// and nonincreasing in t as the exact cavity always is. Mirrors
+/// winning/classic/lattice.py::_exact_payoff.
+pub fn exact_payoff(cdf: &[f64], g: &[Vec<f64>], nodes: &[f64], weights: &[f64]) -> f64 {
+    let (s, f) = survival_and_pdf(cdf);
     let mut total = 0.0;
-    let mut prev = 0.0;
-    for t in 0..m {
-        run = run.max(cdf_rest[t]);
-        let fr = run - prev;
-        prev = run;
-        total += f1[t] * (1.0 - run) + f1[t] * fr / (1.0 + mult_rest[t]);
+    for (q, &u) in nodes.iter().enumerate() {
+        let row = &g[q];
+        let mut run = 1.0f64;
+        let mut acc = 0.0;
+        for t in 0..cdf.len() {
+            let den = s[t] + u * f[t];
+            if den > 0.0 {
+                run = run.min((row[t] / den).min(1.0));
+            }
+            acc += run * f[t];
+        }
+        total += weights[q] * acc;
     }
     total
 }
 
-/// implicit_state_prices: expected payoff of the base density shifted to
-/// each offset (float offsets blend the two integer shifts).
-pub fn implicit_prices(
-    base_cdf: &[f64],
-    cdf_all: &[f64],
-    mult_all: &[f64],
+/// Exact state prices (dead heats split equally) of runners with these
+/// CDFs on one common lattice.
+pub fn exact_state_prices_from_cdfs(cdfs: &[Vec<f64>]) -> Vec<f64> {
+    let (nodes, weights) = gauss_legendre01(exact_n_nodes(cdfs.len()));
+    let g = exact_field(cdfs, &nodes);
+    cdfs.iter().map(|c| exact_payoff(c, &g, &nodes, &weights)).collect()
+}
+
+/// The paper's interpolation table against the exact field.
+pub fn exact_implicit_prices(
+    padded_cdf: &[f64],
+    field_cdfs: &[Vec<f64>],
     offsets: &[f64],
     l: i64,
 ) -> Vec<f64> {
+    let (nodes, weights) = gauss_legendre01(exact_n_nodes(field_cdfs.len()));
+    let g = exact_field(field_cdfs, &nodes);
     offsets
         .par_iter()
-        .map(|&k| {
-            // The integer fast path must obey the SAME clamp the field
-            // was built with. shifted_cdf goes via low_high, which pins
-            // an offset at or past L-2 to the boundary; this called
-            // integer_shift(base_cdf, k) with the raw k, whose own
-            // clamp is the much wider +/-(m-1). A runner could sit in
-            // the field at offset L-2 and be PAID at 60, so the state
-            // prices summed to 1.88 while an epsilon off the integer
-            // gave 1.0 (#292). For an interior integer low_high returns
-            // ((k, 1), (k, 0)), so this guard is exactly equivalent
-            // where the fast path applies.
-            if k == k.trunc() && k > -(l as f64) + 2.0 && k < (l as f64) - 2.0 {
-                expected_payoff_sum(&integer_shift(base_cdf, k as i64), cdf_all, mult_all)
-            } else {
-                let ((a, ac), (b, bc)) = low_high(k, l);
-                ac * expected_payoff_sum(&integer_shift(base_cdf, a), cdf_all, mult_all)
-                    + bc * expected_payoff_sum(&integer_shift(base_cdf, b), cdf_all, mult_all)
-            }
-        })
+        .map(|&k| exact_payoff(&shifted_cdf(padded_cdf, k, l), &g, &nodes, &weights))
         .collect()
+}
+
+/// state_prices_from_offsets on the exact engine (#418, #362, #348, #373).
+pub fn exact_state_prices_from_offsets(density: &[f64], offsets: &[f64]) -> Vec<f64> {
+    let l = ((density.len() - 1) / 2) as i64;
+    let base = padded_base_cdf(density);
+    let cdfs: Vec<Vec<f64>> = offsets.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
+    exact_state_prices_from_cdfs(&cdfs)
+}
+
+/// solve_for_implied_offsets: the paper's table iteration as a defect
+/// correction, a_i += T^{-1}(p_i) - T^{-1}(P_i(a)), so its fixed point
+/// is the exact forward map (see lattice_calibration.py).
+pub fn exact_calibrate(
+    density: &[f64],
+    prices: &[f64],
+    offset_samples: &[f64],
+    guess: &[f64],
+    n_iter: usize,
+) -> Vec<f64> {
+    let l = ((density.len() - 1) / 2) as i64;
+    let base = padded_base_cdf(density);
+    let mut implied: Vec<f64> = guess.to_vec();
+    let mut cdfs: Vec<Vec<f64>> = implied.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
+    for _ in 0..n_iter {
+        let table = exact_implicit_prices(&base, &cdfs, offset_samples, l);
+        let current = exact_state_prices_from_cdfs(&cdfs);
+        for i in 0..implied.len() {
+            implied[i] += interp1(prices[i], &table, offset_samples)
+                - interp1(current[i], &table, offset_samples);
+        }
+        cdfs = implied.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
+    }
+    implied
 }
 
 /// np.interp(x, xp, fp) for ascending xp, end-clamped.

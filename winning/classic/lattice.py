@@ -5,7 +5,7 @@ import math
 from ..rustconfig import load_fastrace
 
 # compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
-_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('classic_state_prices')
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('classic_exact_state_prices')
 
 #########################################################################################
 #   Operations on univariate atomic distributions supported on evenly spaced points     #
@@ -30,7 +30,12 @@ def integer_shift(cdf, k):
     elif k == 0:
         return cdf
     else:
-        return np.append(np.zeros(k), cdf[:-k])
+        # Mass shifted past the top atom lumps on it, mirroring the
+        # negative branch (which lumps the bottom). Truncating left the
+        # CDF ending below its total, a sub-probability law (#373).
+        out = np.append(np.zeros(k), cdf[:-k])
+        out[-1] = cdf[-1]
+        return out
 
 
 def fractional_shift(cdf, x):
@@ -420,18 +425,13 @@ def state_prices_from_densities(densities:[[float]], densityAll=None, multiplici
       :param densities: List of performance distributions
       :return: state prices
     """
-    if (densityAll is None) or (multiplicityAll is None):
-        densityAll, multiplicityAll = winner_of_many(densities, multiplicities=None)
-    cdfAll = pdf_to_cdf(densityAll)
-    prices = list()
-    for k, density in enumerate(densities):
-        cdfRest, multiplicityRest = get_the_rest(density=density, densityAll=None,
-                                                 multiplicityAll=multiplicityAll, cdf=None,
-                                                 cdfAll=cdfAll)
-        pdfRest = cdf_to_pdf(cdfRest)
-        multiplicity = np.array([1.0 for _ in density])
-        price_k = beats(densityA=density, multiplicityA=multiplicity, densityB=pdfRest, multiplicityB=multiplicityRest)
-        prices.append(price_k)
+    # Exact dead heats (see exact_state_prices_from_cdfs). densityAll and
+    # multiplicityAll are accepted for compatibility and no longer used:
+    # the minimum's density and mean multiplicity do not determine the
+    # prices (#418, #362).
+    if len(densities) == 0:
+        raise ValueError('a race needs at least one runner')
+    prices = exact_state_prices_from_cdfs([pdf_to_cdf(d) for d in densities])
     sum_p = sum(prices)
     return [pi / sum_p for pi in prices]
 
@@ -778,11 +778,10 @@ def state_prices_from_offsets(density, offsets):
     # See the paper for a definition of state price
     # Be aware that this may fail if offsets provided are integers rather than float
     if _HAVE_RUST:
-        return list(_fastrace.classic_state_prices(
+        return list(_fastrace.classic_exact_state_prices(
             [float(d) for d in density], [float(o) for o in offsets]))
-    densities = densities_from_offsets(density, offsets)
-    densityAll, multiplicityAll = winner_of_many(densities)
-    return implicit_state_prices(density, densityAll=densityAll, multiplicityAll=multiplicityAll, offsets=offsets)
+    _, cdfs, _ = _exact_offset_cdfs(density, offsets)
+    return exact_state_prices_from_cdfs(cdfs)
 
 
 def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, cdfAll=None, offsets=None):
@@ -829,3 +828,129 @@ def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, c
             implicit.append(l_coef * np.sum(ip_left) + r_coef * np.sum(ip_right))
 
     return implicit
+
+
+#########################################################################################
+#   Exact dead-heat pricing (#418, #362, #348, #373)                                    #
+#########################################################################################
+#
+# A runner's state price is the expected share of a unit winner claim,
+# a dead heat split equally among the tied:
+#
+#     P_i = sum_t f_i(t) E[ 1{X_j >= t, all j != i} / (1 + M_t) ],
+#
+# M_t the number of OTHER runners exactly at t. Since 1/(1+M) is the
+# integral over [0,1] of u^M, and the runners are independent,
+#
+#     P_i = sum_t f_i(t) int_0^1 prod_{j != i} ( S_j(t) + u f_j(t) ) du,
+#
+# with S_j(t) = P(X_j > t). The integrand is a polynomial of degree n-1
+# in u, so Gauss-Legendre with n//2 + 1 nodes integrates it EXACTLY.
+#
+# The field is kept as G_q(t) = prod_j (S_j(t) + u_q f_j(t)) at those
+# nodes, and a runner's opponents are G_q / (S_i + u_q f_i). That
+# division is exact wherever it matters: where f_i(t) > 0 the divisor
+# is at least u_q f_i(t) > 0, and where f_i(t) = 0 the term pays
+# nothing. The engine it replaces kept only the minimum's CDF and the
+# conditional MEAN multiplicity, which loses information two ways:
+#
+#   * dividing the minimum's survival by a runner's survival is 0/0
+#     once that runner has surely finished, so an opponent's tail could
+#     not be recovered: a two-runner compact-support race priced
+#     [0.9167, 0.0500] instead of [0.95, 0.05] (#418);
+#   * 1/(1 + E[M]) is not E[1/(1 + M)]: twenty iid three-atom entrants
+#     were paid 0.04435 each, total 0.887 (#362).
+#
+# A fractional offset is the CDF mixture that _low_high defines, priced
+# AS THAT MIXTURE: the old engine averaged the payoffs of its two
+# integer components against a field that contained neither, and two
+# identical runners at 0.5 summed to 1.114 (#348).
+#
+# The lattice is padded by L-1 atoms on each side before shifting, which
+# is the largest shift _low_high can return, so a translated runner
+# never loses mass off an edge. The old shift dropped whatever moved
+# past the top: a singleton at +19 on a uniform 83-atom law was paid
+# 0.771 (#373).
+#
+# The inverse keeps the paper's fixed-point table: a candidate at each
+# sample offset is priced against G_q / (S_k + u_q f_k). For a field
+# member that is its exact price; for a candidate between members it is
+# the same cavity approximation the paper uses, bounded by one and
+# nonincreasing in t, which the exact cavity always is.
+
+
+def _gauss_legendre01(n_nodes):
+    """Gauss-Legendre nodes and weights on [0, 1]."""
+    x, w = np.polynomial.legendre.leggauss(int(n_nodes))
+    return 0.5 * (x + 1.0), 0.5 * w
+
+
+def _n_nodes(n_runners):
+    """Nodes that integrate a degree n-1 polynomial exactly."""
+    return int(n_runners) // 2 + 1
+
+
+def _padded_base_cdf(density):
+    """CDF of `density` padded by L-1 zero atoms on each side."""
+    L = implied_L(density)
+    pad = max(L - 1, 0)
+    d = np.concatenate([np.zeros(pad), np.asarray(density, dtype=float), np.zeros(pad)])
+    return np.cumsum(d)
+
+
+def _exact_shifted_cdf(padded_cdf, offset, L):
+    """The (mixture) CDF _low_high assigns to `offset`, on the padded lattice."""
+    (l, lc), (u, uc) = _low_high(offset, L=L)
+    return lc * integer_shift(padded_cdf, l) + uc * integer_shift(padded_cdf, u)
+
+
+def _survival_and_pdf(cdf):
+    cdf = np.asarray(cdf, dtype=float)
+    f = np.diff(cdf, prepend=0.0)
+    S = np.maximum(1.0 - cdf, 0.0)
+    return S, f
+
+
+def _exact_field(cdfs, nodes):
+    """G[q, t] = prod_j (S_j(t) + u_q f_j(t))."""
+    G = np.ones((len(nodes), len(cdfs[0])))
+    for c in cdfs:
+        S, f = _survival_and_pdf(c)
+        G *= S[None, :] + nodes[:, None] * f[None, :]
+    return G
+
+
+def _exact_payoff(cdf, G, nodes, weights):
+    """Expected winner claim of a runner with CDF `cdf` against the field G,
+    the runner itself divided out (see the block comment above)."""
+    S, f = _survival_and_pdf(cdf)
+    den = S[None, :] + nodes[:, None] * f[None, :]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ratio = np.where(den > 0, G / np.where(den > 0, den, 1.0), 1.0)
+    ratio = np.minimum.accumulate(np.minimum(ratio, 1.0), axis=1)
+    return float(np.dot(weights, ratio @ f))
+
+
+def exact_state_prices_from_cdfs(cdfs):
+    """Exact state prices (dead heats split equally) of independent runners
+    given their CDFs on one common lattice."""
+    cdfs = [np.asarray(c, dtype=float) for c in cdfs]
+    if not cdfs:
+        raise ValueError('a race needs at least one runner')
+    nodes, weights = _gauss_legendre01(_n_nodes(len(cdfs)))
+    G = _exact_field(cdfs, nodes)
+    return [_exact_payoff(c, G, nodes, weights) for c in cdfs]
+
+
+def _exact_offset_cdfs(density, offsets):
+    L = implied_L(density)
+    base = _padded_base_cdf(density)
+    return base, [_exact_shifted_cdf(base, o, L) for o in offsets], L
+
+
+def _exact_implicit_prices(base, field_cdfs, offset_samples, L):
+    """The paper's interpolation table, priced against the exact field."""
+    nodes, weights = _gauss_legendre01(_n_nodes(len(field_cdfs)))
+    G = _exact_field(field_cdfs, nodes)
+    return [_exact_payoff(_exact_shifted_cdf(base, k, L), G, nodes, weights)
+            for k in offset_samples]
