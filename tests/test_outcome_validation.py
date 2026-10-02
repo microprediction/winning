@@ -63,10 +63,18 @@ def test_singleton_partial_order_is_a_tautology():
     assert lp == 0.0 and not g.any()
     mm, vv = update_ranking_exact(m, v, [1])
     assert np.array_equal(mm, m) and np.array_equal(vv, v)
+    # exactly, not to the roundoff of a node-weight sum: through the
+    # mixture logZ was log(sum W) = 2.2e-16 on Linux CI
     mm, vv, lz = update_order_correlated(m, v, [1], V3)
-    assert lz == 0.0 and np.allclose(mm, m)
-    mm, S, lz = update_order_full(m, np.eye(3), [1])
-    assert lz == 0.0 and np.allclose(mm, m)
+    assert lz == 0.0 and np.array_equal(mm, m) and np.array_equal(vv, v)
+    for Vf in (None, V3):
+        mm, S, lz = update_order_full(m, np.eye(3), [1], V=Vf)
+        assert lz == 0.0 and np.array_equal(mm, m)
+        assert np.array_equal(S, np.eye(3))
+    from winning.ratings.teams import update_team_order_full
+    A = np.array([[1.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+    mm, S, lz = update_team_order_full(m, np.eye(3), A, [1])
+    assert lz == 0.0 and np.array_equal(mm, m) and np.array_equal(S, np.eye(3))
 
 
 @pytest.mark.parametrize("fn", [

@@ -329,6 +329,9 @@ def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
     """
     from ..outcomes import as_order
     order = as_order(order, len(np.asarray(m)))                # #129
+    if len(order) <= 1:                  # tautology: exact, no mixture
+        return (np.asarray(m, dtype=float).copy(),
+                np.asarray(S, dtype=float).copy(), 0.0)
     kernel = _order_kernel(order, base=base)
     return _mixture_update_full(m, S, V, beta2, None, nodes_log2=nodes_log2,
                                 eps=eps, eps_rel=eps_rel, kernel=kernel)
