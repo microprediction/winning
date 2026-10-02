@@ -682,6 +682,7 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
                             the recusion calls that merely get rid of float('inf') or float('-inf')
     :return:
     """
+    density = as_classic_density(density)
     # First get rid of float('inf')
     n = len(offsets)
     if n==1:
@@ -777,6 +778,7 @@ def state_prices_from_offsets(density, offsets):
     """
     # See the paper for a definition of state price
     # Be aware that this may fail if offsets provided are integers rather than float
+    density = as_classic_density(density)
     if _HAVE_RUST:
         return list(_fastrace.classic_exact_state_prices(
             [float(d) for d in density], [float(o) for o in offsets]))
@@ -877,6 +879,65 @@ def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, c
 # member that is its exact price; for a candidate between members it is
 # the same cavity approximation the paper uses, bounded by one and
 # nonincreasing in t, which the exact cavity always is.
+
+
+# The smallest lattice the offset API can represent: _low_high pins
+# every offset to [-L+2, L-2], which for L <= 2 is the single point 0 --
+# every runner priced as a tie whatever its offset -- and the inverse's
+# default table range(-L//2, L//2) is empty at L = 1 (#339).
+MIN_CLASSIC_L = 3
+
+
+def as_classic_density(density, where='density'):
+    """The one boundary for a classic atom vector (#339).
+
+    Accepts a finite, nonnegative, odd-length (2L+1, L >= 3) vector of
+    atoms with positive total and returns it normalised to unit mass, so
+    raw histogram counts are the same law as their frequencies. Entries
+    down to -1e-12 of the total are cdf/pdf round-off and are clipped.
+    Anything else raises ValueError: mass 10 used to give prices of -61,
+    a negative atom a finite tie, and an even length a silently
+    truncated lattice.
+    """
+    d = np.asarray(density, dtype=float)
+    if d.ndim != 1 or d.size == 0:
+        raise ValueError(where + ' must be a nonempty 1-d vector of lattice atoms')
+    if d.size % 2 != 1:
+        raise ValueError(where + ' must have odd length 2L+1 on the symmetric lattice; got length '
+                         + str(d.size))
+    if (d.size - 1) // 2 < MIN_CLASSIC_L:
+        raise ValueError(where + ' has L = ' + str((d.size - 1) // 2) + '; the classic lattice needs L >= '
+                         + str(MIN_CLASSIC_L) + ' (length >= ' + str(2 * MIN_CLASSIC_L + 1)
+                         + ') to represent distinct offsets')
+    if not np.all(np.isfinite(d)):
+        raise ValueError(where + ' has a non-finite atom')
+    total = float(d.sum())
+    if not total > 0:
+        raise ValueError(where + ' has no positive mass')
+    if d.min() < -1e-12 * total:
+        raise ValueError(where + ' has a negative atom (' + repr(float(d.min())) + ')')
+    return np.maximum(d, 0.0) / total
+
+
+def as_classic_prices(prices, where='prices'):
+    """Target state prices: finite, nonnegative, positive total, normalised.
+
+    A categorical price vector carries only relative mass; the inverse
+    used to read p and c*p off its table as different absolute
+    ordinates, so a 10% overround moved relative abilities by 0.9 lattice
+    units and a 10x book came back as an all-tie race (#377).
+    """
+    p = np.asarray(prices, dtype=float)
+    if p.ndim != 1 or p.size == 0:
+        raise ValueError(where + ' must be a nonempty 1-d vector')
+    if not np.all(np.isfinite(p)):
+        raise ValueError(where + ' has a non-finite entry')
+    if p.min() < 0:
+        raise ValueError(where + ' has a negative entry (' + repr(float(p.min())) + ')')
+    total = float(p.sum())
+    if not total > 0:
+        raise ValueError(where + ' has no positive mass')
+    return p / total
 
 
 def _gauss_legendre01(n_nodes):

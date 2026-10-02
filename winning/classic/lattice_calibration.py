@@ -1,6 +1,7 @@
 from winning.classic.lattice import state_prices_from_extended_offsets, densities_and_coefs_from_offsets, \
     winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices, implied_L, cdf_to_pdf, \
-    _exact_offset_cdfs, _exact_implicit_prices, _exact_shifted_cdf, exact_state_prices_from_cdfs
+    _exact_offset_cdfs, _exact_implicit_prices, _exact_shifted_cdf, exact_state_prices_from_cdfs, \
+    as_classic_density, as_classic_prices
 import numpy as np
 from winning.classic.lattice_conventions import NAN_DIVIDEND
 
@@ -157,11 +158,17 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
 
     """
 
+    density = as_classic_density(density)
+    prices = as_classic_prices(prices)
     L = implied_L(density)
     if offset_samples is None:
         offset_samples = list(range(int(-L / 2), int(L / 2)))[
                          ::-1]
     else:
+        if len(offset_samples) == 0:
+            raise ValueError('offset_samples is empty; there is nothing to interpolate against')
+        if not np.all(np.isfinite(np.asarray(offset_samples, dtype=float))):
+            raise ValueError('offset_samples has a non-finite offset')
         _assert_descending(offset_samples)
 
     # One starting offset per target price. The default was

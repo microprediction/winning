@@ -265,8 +265,25 @@ fn tree_race<'py>(
 /// engine (#418/#362/#348/#373) so that a wheel built before it is not
 /// dispatched to: load_fastrace finds no such kernel and the python
 /// path runs instead.
+/// The python boundary (as_classic_density) validates and normalises the
+/// atoms; this re-checks the shape so a direct caller cannot index an
+/// empty table or price a truncated lattice (#339).
+fn check_classic_density(density: &[f64]) -> PyResult<()> {
+    let n = density.len();
+    if n % 2 != 1 || n < 7 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "classic density must have odd length 2L+1 with L >= 3; got length {}", n)));
+    }
+    if density.iter().any(|x| !x.is_finite() || *x < 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "classic density must be finite and nonnegative"));
+    }
+    Ok(())
+}
+
 #[pyfunction]
 fn classic_exact_state_prices(density: Vec<f64>, offsets: Vec<f64>) -> PyResult<Vec<f64>> {
+    check_classic_density(&density)?;
     Ok(winning::exact_state_prices_from_offsets(&density, &offsets))
 }
 
@@ -282,6 +299,11 @@ fn classic_exact_calibrate(
     guess: Vec<f64>,
     n_iter: usize,
 ) -> PyResult<Vec<f64>> {
+    check_classic_density(&density)?;
+    if guess.len() != prices.len() || offset_samples.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "classic calibration needs one guess per price and a nonempty offset table"));
+    }
     Ok(winning::exact_calibrate(&density, &prices, &offset_samples, &guess, n_iter))
 }
 

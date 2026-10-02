@@ -55,9 +55,15 @@ solve_for_implied_offsets <- function(prices, density,
                                       offset_samples = NULL,
                                       implied_offsets_guess = NULL,
                                       n_iter = 3) {
+  density <- as_classic_density(density)
+  prices <- as_classic_prices(prices)
   L <- implied_L(density)
   if (is.null(offset_samples)) {
     offset_samples <- rev(seq.int(-(L %/% 2), (L %/% 2) - 1L))
+  } else if (length(offset_samples) == 0) {
+    stop("offset_samples is empty; there is nothing to interpolate against")
+  } else if (!all(is.finite(offset_samples))) {
+    stop("offset_samples has a non-finite offset")
   } else if (any(diff(offset_samples) > 0)) {
     stop("offset_samples must be descending")
   }

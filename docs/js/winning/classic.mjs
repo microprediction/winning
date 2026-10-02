@@ -47,6 +47,56 @@ export function asDescendingOffsets(offsets, where = "offsetSamples") {
 }
 
 
+/* The one boundary for a classic atom vector (#339), as python's
+   as_classic_density: a finite, nonnegative, odd-length (2L+1, L >= 3)
+   array with positive total, returned normalised so raw histogram
+   counts are the same law as their frequencies. Entries down to -1e-12
+   of the total are round-off and are clipped. Mass 10 used to price at
+   -61, a negative atom as a finite tie, an even length as a silently
+   truncated lattice, and L = 1 gave the inverse an empty table and NaN
+   abilities. L <= 2 is refused because lowHigh pins every offset to
+   [-L+2, L-2], a single point. */
+export const MIN_CLASSIC_L = 3;
+export function asClassicDensity(density, where = "density") {
+  if (!Array.isArray(density) && !ArrayBuffer.isView(density))
+    throw new Error(`${where} must be an array of lattice atoms; got ${typeof density}`);
+  const n = density.length;
+  if (n === 0) throw new Error(`${where} must be a nonempty vector of lattice atoms`);
+  if (n % 2 !== 1)
+    throw new Error(`${where} must have odd length 2L+1 on the symmetric lattice; got length ${n}`);
+  if ((n - 1) / 2 < MIN_CLASSIC_L)
+    throw new Error(`${where} has L = ${(n - 1) / 2}; the classic lattice needs L >= ` +
+      `${MIN_CLASSIC_L} (length >= ${2 * MIN_CLASSIC_L + 1}) to represent distinct offsets`);
+  let total = 0, lo = Infinity;
+  for (let i = 0; i < n; i++) {
+    const v = Number(density[i]);
+    if (!Number.isFinite(v)) throw new Error(`${where}[${i}] = ${density[i]} is a non-finite atom`);
+    total += v; lo = Math.min(lo, v);
+  }
+  if (!(total > 0)) throw new Error(`${where} has no positive mass`);
+  if (lo < -1e-12 * total) throw new Error(`${where} has a negative atom (${lo})`);
+  return Array.from(density, v => Math.max(Number(v), 0) / total);
+}
+
+/* Target state prices carry only relative mass (#377): the inverse read
+   p and c*p off its table as different ordinates, so a 10% overround
+   moved relative abilities by 0.9 lattice units and a 10x book came back
+   as an all-tie race. Finite, nonnegative, positive total; normalised. */
+export function asClassicPrices(prices, where = "prices") {
+  if (!Array.isArray(prices) && !ArrayBuffer.isView(prices))
+    throw new Error(`${where} must be an array of prices; got ${typeof prices}`);
+  if (prices.length === 0) throw new Error(`${where} must be a nonempty vector`);
+  let total = 0;
+  for (let i = 0; i < prices.length; i++) {
+    const v = Number(prices[i]);
+    if (!Number.isFinite(v)) throw new Error(`${where}[${i}] = ${prices[i]} is a non-finite entry`);
+    if (v < 0) throw new Error(`${where}[${i}] = ${v} is a negative entry`);
+    total += v;
+  }
+  if (!(total > 0)) throw new Error(`${where} has no positive mass`);
+  return Array.from(prices, v => Number(v) / total);
+}
+
 export function pdfToCdf(f) {
   const c = new Array(f.length);
   let s = 0;
@@ -174,6 +224,7 @@ function exactImplicitPrices(base, fieldCdfs, offsets, L) {
 }
 
 export function statePricesFromOffsets(density, offsets) {
+  density = asClassicDensity(density);
   const L = impliedL(density);
   const base = paddedBaseCdf(density);
   return exactStatePrices(Array.from(offsets, o => shiftedCdf(base, o, L)));
@@ -181,6 +232,8 @@ export function statePricesFromOffsets(density, offsets) {
 
 export function solveForImpliedOffsets(prices, density, opts = {}) {
   checkOpts(opts, SOLVE_FOR_IMPLIED_OFFSETS_OPTS, "solveForImpliedOffsets", OPT_HINTS);
+  density = asClassicDensity(density);
+  prices = asClassicPrices(prices);
   const L = impliedL(density);
   let { offsetSamples = null, guess = null, nIter = 3 } = opts;
   if (offsetSamples === null || offsetSamples === undefined) {

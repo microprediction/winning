@@ -8,6 +8,43 @@
 # spec; tests/testthat/test-parity.R pins this port to golden values it
 # produced.
 
+# The one boundary for a classic atom vector (#339), as python's
+# as_classic_density: finite, nonnegative, odd length 2L+1 with L >= 3,
+# positive total; returned normalised so raw counts are the same law as
+# their frequencies. Entries down to -1e-12 of the total are round-off
+# and are clipped. L <= 2 is refused because low_high pins every offset
+# to [-L+2, L-2], a single point.
+MIN_CLASSIC_L <- 3L
+
+as_classic_density <- function(density, where = "density") {
+  d <- as.numeric(density)
+  n <- length(d)
+  if (n == 0) stop(where, " must be a nonempty vector of lattice atoms")
+  if (n %% 2 != 1)
+    stop(where, " must have odd length 2L+1 on the symmetric lattice; got length ", n)
+  if ((n - 1) %/% 2 < MIN_CLASSIC_L)
+    stop(where, " has L = ", (n - 1) %/% 2, "; the classic lattice needs L >= ",
+         MIN_CLASSIC_L, " (length >= ", 2 * MIN_CLASSIC_L + 1,
+         ") to represent distinct offsets")
+  if (!all(is.finite(d))) stop(where, " has a non-finite atom")
+  total <- sum(d)
+  if (!(total > 0)) stop(where, " has no positive mass")
+  if (min(d) < -1e-12 * total) stop(where, " has a negative atom (", min(d), ")")
+  pmax(d, 0) / total
+}
+
+# Target prices carry only relative mass (#377): finite, nonnegative,
+# positive total; normalised.
+as_classic_prices <- function(prices, where = "prices") {
+  p <- as.numeric(prices)
+  if (length(p) == 0) stop(where, " must be a nonempty vector")
+  if (!all(is.finite(p))) stop(where, " has a non-finite entry")
+  if (min(p) < 0) stop(where, " has a negative entry (", min(p), ")")
+  total <- sum(p)
+  if (!(total > 0)) stop(where, " has no positive mass")
+  p / total
+}
+
 pdf_to_cdf <- function(density) cumsum(density)
 
 cdf_to_pdf <- function(cdf) diff(c(0, cdf))
@@ -177,6 +214,7 @@ np_interp <- function(x, xp, fp) {
 #' @return numeric vector of state prices (not renormalized)
 #' @export
 state_prices_from_offsets <- function(density, offsets) {
+  density <- as_classic_density(density)
   L <- implied_L(density)
   base <- padded_base_cdf(density)
   cdfs <- lapply(offsets, function(o) shifted_cdf(base, o, L))

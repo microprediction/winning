@@ -142,3 +142,43 @@ test_that("the default guess has one offset per price (#369)", {
                                          implied_offsets_guess = 0:4),
                "one starting offset per price")
 })
+
+# --- the classic input contract (#339, #377) ----------------------------
+
+test_that("raw counts are the same law as frequencies (#339)", {
+  d <- skew_normal_density(50, 0.1)
+  p <- state_prices_from_offsets(d, c(-3, 0.5, 2))
+  expect_lt(max(abs(state_prices_from_offsets(10 * d, c(-3, 0.5, 2)) - p)), 1e-15)
+})
+
+test_that("a non-distribution is refused by forward and inverse (#339)", {
+  bad <- list(c(rep(0, 7)), c(0.2, -0.1, 0.9, 0, 0, 0, 0), rep(0.25, 8),
+              c(0.1, NaN, 0.9, 0, 0, 0, 0), c(0.1, Inf, 0.9, 0, 0, 0, 0),
+              c(0.25, 0.5, 0.25), numeric(0))
+  for (b in bad) {
+    expect_error(state_prices_from_offsets(b, c(0, 0)))
+    expect_error(solve_for_implied_offsets(c(0.7, 0.3), b))
+  }
+  expect_error(state_prices_from_offsets(c(0.25, 0.5, 0.25), c(0, 0)), "L >= 3")
+})
+
+test_that("the smallest lattice round-trips", {
+  d <- c(0, 0, 0.25, 0.5, 0.25, 0, 0)
+  target <- state_prices_from_offsets(d, c(0, 0))
+  a <- solve_for_implied_offsets(target, d, implied_offsets_guess = c(0, 0))
+  expect_true(all(is.finite(a)))
+  expect_lt(max(abs(state_prices_from_offsets(d, a) - target)), 1e-12)
+})
+
+test_that("the inverse is invariant to target scale (#377)", {
+  d <- skew_normal_density(500, 0.01, a = 1.5)
+  p <- c(0.4, 0.3, 0.2, 0.1)
+  a1 <- solve_for_implied_offsets(p, d, implied_offsets_guess = rep(0, 4))
+  for (cc in c(1.1, 2, 10)) {
+    ac <- solve_for_implied_offsets(cc * p, d, implied_offsets_guess = rep(0, 4))
+    expect_lt(max(abs((ac - mean(ac)) - (a1 - mean(a1)))), 1e-12)
+  }
+  expect_error(solve_for_implied_offsets(c(0.5, -0.1, 0.6), d), "negative")
+  expect_error(solve_for_implied_offsets(c(0, 0), d), "no positive mass")
+  expect_error(solve_for_implied_offsets(c(0.5, NaN), d), "non-finite")
+})
