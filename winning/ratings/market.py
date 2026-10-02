@@ -83,8 +83,15 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
         mu = ub + k * u * float(ub.sum())
         var = u + k * u * u
     else:
-        P = np.eye(n) - np.ones((n, n)) / n
-        G = P @ np.diag(1.0 / tau2) @ P
+        # The observation noise is P eta, covariance C = P diag(tau2) P
+        # (rank n-1), so the contrast precision is its pseudo-inverse,
+        # formed in an orthonormal basis B of the contrast space. This
+        # was P diag(1/tau2) P, which is C^+ only when tau2 is uniform:
+        # the evidence below used C and the posterior a different
+        # observation model, 0.23 off in the means against the exact
+        # full-belief update for heterogeneous tau2 (#93).
+        Bc = np.linalg.svd(np.eye(n) - np.ones((n, n)) / n)[0][:, :n - 1]
+        G = Bc @ np.linalg.solve(Bc.T @ (tau2[:, None] * Bc), Bc.T)
         free = ~known
         mu = m.copy()
         var = np.zeros(n)
@@ -93,7 +100,7 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
             # free block is the conditional given it -- not a division by
             # its zero variance
             A = np.diag(1.0 / v[free]) + G[np.ix_(free, free)]
-            rhs = m[free] / v[free] + (P @ (y / tau2))[free]
+            rhs = m[free] / v[free] + (G @ y)[free]
             if known.any():
                 rhs = rhs - G[np.ix_(free, known)] @ m[known]
             S = np.linalg.inv(A)
