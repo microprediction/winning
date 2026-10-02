@@ -927,7 +927,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             # relative weights, as the lattice reads them (#170: W and cW
             # are the same factor law; unnormalised, a x10 weight moved
             # the pair 0.72 -> 0.61 and its inverse "converged" 5.6e-2 off)
-            Wn = W / float(np.sum(W))
+            Wn = as_weights(W)       # via max(W): sum(W) can overflow (#415)
             Fm = Wn @ F
             Fc = F - Fm
             CovF = Fc.T @ (Fc * Wn[:, None])
@@ -1135,7 +1135,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     if V is not None and nodes_given:
         _Fq = np.asarray(F, dtype=float).reshape(len(F), -1)
         _Wq = (np.ones(len(_Fq)) / len(_Fq) if W is None
-               else np.asarray(W, dtype=float) / float(np.sum(W)))
+               else as_weights(W))   # via max(W): sum(W) can overflow (#415)
         _Fm = _Wq @ _Fq
         _CovF = (_Fq - _Fm).T @ ((_Fq - _Fm) * _Wq[:, None])
     else:

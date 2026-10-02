@@ -182,10 +182,14 @@ def as_weights(W, name="W"):
             f"{name}[{int(neg[0])}] = {float(W[neg[0]])!r} is negative. "
             "Quadrature weights here are relative and must be "
             "non-negative; a signed rule can return values outside [0, 1].")
-    tot = float(W.sum())
-    if tot <= 0.0:
+    # Through the LARGEST weight, never the raw total: finite weights
+    # such as [1e308, 1e308] overflow only in W.sum(), and W / inf made
+    # every weight zero and every probability NaN (#415).
+    top = float(W.max()) if W.size else 0.0
+    if not top > 0.0:
         raise ValueError(
-            f"{name} must have a positive total; got {tot!r}. They are "
-            "relative, so any positive multiple of a valid rule is the "
-            "same factor law, but an all-zero rule is not one.")
-    return W / tot
+            f"{name} must have a positive total; got {float(W.sum())!r}. "
+            "They are relative, so any positive multiple of a valid rule "
+            "is the same factor law, but an all-zero rule is not one.")
+    W = W / top
+    return W / W.sum()

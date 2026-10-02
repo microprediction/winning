@@ -959,6 +959,22 @@ accepts("the inverse takes a scalar D, matching python",
           () => same(topk.rankProbabilities(zmu, { V: Z, D: zD }),
                      topk.rankProbabilities(zmu, { D: zD })),
           w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  // finite weights whose raw SUM overflows are the same law (#415):
+  // asWeights divided by that total, [1e308, 1e308] -> [0, 0] -> NaN
+  accepts("asWeights normalises [1e308, 1e308] to [0.5, 0.5]",
+          () => core.asWeights([1e308, 1e308], 2),
+          w => w[0] === 0.5 && w[1] === 0.5);
+  {
+    const wo = { V: [[-0.7], [0.7]], D: [1, 1], F: [[-1], [1]], points: 1001 };
+    accepts("raceProbabilities with W = [1e308, 1e308] prices like [1, 1]",
+            () => same(races.raceProbabilities([0, 0.4], { ...wo, W: [1e308, 1e308] }),
+                       races.raceProbabilities([0, 0.4], { ...wo, W: [1, 1] })),
+            w => w < 1e-15, w => `gap ${w.toExponential(2)}`);
+    accepts("raceJacobian with W = [1e308, 1e308] is the [1, 1] Jacobian",
+            () => same(polish.raceJacobian([0, 0.4], { ...wo, W: [1e308, 1e308] }),
+                       polish.raceJacobian([0, 0.4], { ...wo, W: [1, 1] })),
+            w => w < 1e-15, w => `gap ${w.toExponential(2)}`);
+  }
   // the exported Jacobian and its polishRace caller: the independent
   // default node was the RANK-ONE [[0]], so (n, 0) loadings read
   // V[i][0] = undefined and returned an all-NaN Jacobian (#68)
