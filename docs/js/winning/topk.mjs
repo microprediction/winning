@@ -5,7 +5,7 @@
 // stable-direction deconvolution; see the python module docstring for
 // the derivations and the two-branch refusal of exact-rank targets.
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio } from "./core.mjs";
-import { BASES } from "./races.mjs";
+import { BASES, _factorNodeRule } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -290,11 +290,24 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
   return out;
 }
 
-function factorNodes(V, n, qa) {
+function factorNodes(V, n, qa, D = null) {
   const Vm = asLoadings(V, n).map(row => row.slice());
   const r = Vm[0].length;
   if (r > 2)
     throw new Error("topKProbabilities is implemented for factor rank <= 2");
+  if (qa == null && r > 0) {
+    // qa = null (the default): the general race's sharpness rule, as
+    // python and R. A fixed qa = 15 Gauss-Hermite rule missed the race by
+    // 10.7 points on a sharp rank-one field and moved a top-2 membership
+    // 1.3 points under a covariance-preserving rotation (#340). Past the
+    // race's 8192-node escalation the first 1024 Halton points are used:
+    // every node here is a full count-program pass.
+    const rule = _factorNodeRule(Vm, D == null ? new Array(n).fill(1) : D);
+    let F = rule.F, W = rule.W;
+    if (W.length > 1024) { F = F.slice(0, 1024); W = new Array(1024).fill(1 / 1024); }
+    return { Vm: rule.V, nodes: F, w: W };
+  }
+  if (qa == null) qa = 15;
   for (let c = 0; c < r; c++) {
     let m = 0;
     for (let i = 0; i < n; i++) m += Vm[i][c];
@@ -346,14 +359,14 @@ function asDepth(k, n, where = "k") {
 
 export function topKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, TOP_K_PROBABILITIES_OPTS, "topKProbabilities", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
+  const { V = null, D = null, base = "normal", points = 513, qa = null } = opts;
   const n = mu.length;
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   if (!V) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
                              k, "top-k race");
-  const { Vm, nodes, w } = factorNodes(V, n, qa);
+  const { Vm, nodes, w } = factorNodes(V, n, qa, D);
   const raw = new Array(n).fill(0);
   for (let q = 0; q < nodes.length; q++) {
     const shifted = mu.map((m, i) => {
@@ -369,13 +382,13 @@ export function topKProbabilities(mu, k, opts = {}) {
 
 export function bottomKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, BOTTOM_K_PROBABILITIES_OPTS, "bottomKProbabilities", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
+  const { V = null, D = null, base = "normal", points = 513, qa = null } = opts;
   const n = mu.length;
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
   if (!V) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
-  const { Vm, nodes, w } = factorNodes(V, n, qa);
+  const { Vm, nodes, w } = factorNodes(V, n, qa, D);
   const raw = new Array(n).fill(0);
   for (let q = 0; q < nodes.length; q++) {
     const shifted = mu.map((m, i) => {
@@ -392,12 +405,12 @@ export function bottomKProbabilities(mu, k, opts = {}) {
 export function topKJacobians(mu, k, opts = {}) {
   checkOpts(opts, TOP_K_JACOBIANS_OPTS, "topKJacobians", OPT_HINTS);
   const { D = null, base = "normal", points = 513, V = null,
-          qa = 15 } = opts;
+          qa = null } = opts;
   const n = mu.length;
   k = asDepth(k, n);
   if (V) {
     // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
-    const { Vm, nodes, w } = factorNodes(V, n, qa);
+    const { Vm, nodes, w } = factorNodes(V, n, qa, D);
     const Jmu = [], Jsigma = [];
     for (let i = 0; i < n; i++) {
       Jmu.push(new Array(n).fill(0));
@@ -457,7 +470,7 @@ export function topKJacobians(mu, k, opts = {}) {
 
 export function rankProbabilities(mu, opts = {}) {
   checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
+  const { V = null, D = null, base = "normal", points = 513, qa = null } = opts;
   const n = mu.length;
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
@@ -487,7 +500,7 @@ export function rankProbabilities(mu, opts = {}) {
   if (!V) {
     P = oneNode(mu);
   } else {
-    const { Vm, nodes, w } = factorNodes(V, n, qa);
+    const { Vm, nodes, w } = factorNodes(V, n, qa, D);
     P = Array.from({ length: n }, () => new Array(n).fill(0));
     for (let q = 0; q < nodes.length; q++) {
       const shifted = mu.map((m, i) => {
@@ -565,7 +578,7 @@ function validatedTarget(q, k, n, targetFloor) {
 
 export function abilitiesFromTopk(q, k, opts = {}) {
   checkOpts(opts, ABILITIES_FROM_TOPK_OPTS, "abilitiesFromTopk", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 513, qa = 15,
+  const { V = null, D = null, base = "normal", points = 513, qa = null,
           nIter = 80, tol = 1e-8, targetFloor = null,
           returnInfo = false } = opts;
   const n = q.length;
@@ -573,7 +586,7 @@ export function abilitiesFromTopk(q, k, opts = {}) {
   const { target, floored } = validatedTarget(q, k, n, targetFloor);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = typeof base === "function" ? base : BASES[base];
-  const fac = V ? factorNodes(V, n, qa) : null;
+  const fac = V ? factorNodes(V, n, qa, D) : null;
 
   const logitT = target.map(v => Math.log(v) - Math.log1p(-v));
   const logT = target.map(Math.log);

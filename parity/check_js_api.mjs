@@ -1119,5 +1119,16 @@ accepts("the inverse takes a scalar D, matching python",
         `worst share error ${worst.toExponential(2)}`);
 }
 
+// #340: top-k factor nodes follow the race's sharpness rule
+{
+  const mu = [-0.15, 0.05, 0.10, 0.0], V = [[-3], [-1], [1], [3]], D = [0.01, 0.01, 0.01, 0.01];
+  const race = races.raceProbabilities(mu, { V, D, points: 1025 });
+  const top1 = topk.topKProbabilities(mu, 1, { V, D, points: 1025 });
+  const R = topk.rankProbabilities(mu, { V, D, points: 1025 }).map(r => r[0]);
+  holds("sharp rank-one top-1 equals the race (#340)",
+        Math.max(...race.map((x, i) => Math.abs(x - top1[i]))) < 1e-6 &&
+        Math.max(...race.map((x, i) => Math.abs(x - R[i]))) < 1e-6);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

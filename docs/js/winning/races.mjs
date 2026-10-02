@@ -266,6 +266,15 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
   return { x, dx };
 }
 
+/* The general race's factor node rule for loadings V at variances D --
+   gauge-centred V and its (F, W) -- for callers that mix their own
+   conditional kernels over the factor law (topk.mjs, #340). */
+export function _factorNodeRule(V, D) {
+  const n = asLoadings(V, V.length).length;
+  const st = setup(new Array(n).fill(0), V, D, null, null, "normal");
+  return { V: st.V, F: st.F, W: st.W };
+}
+
 export function raceProbabilities(mu, opts = {}) {
   const { V = null, D = null, F = null, W = null, base = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
