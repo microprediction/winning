@@ -62,9 +62,22 @@ def test_results_round_trip_through_json_and_markdown(tmp_path):
 def test_seeds_are_order_and_worker_independent():
     a = verify(profile="smoke", verbose=False, workers=1)
     b = verify(profile="smoke", verbose=False, workers=2)
-    sa = {r.name: r.statistic for r in a.results}
-    sb = {r.name: r.statistic for r in b.results}
-    assert sa == sb
+    # discrete outcomes exactly: names, verdicts, seeds, counts
+    assert [(r.name, r.verdict, r.seeds, r.n) for r in a.results] == \
+        [(r.name, r.verdict, r.seeds, r.n) for r in b.results]
+    # floating statistics to a few ULP, not bitwise (#76): a worker process
+    # runs the same seeds through a different BLAS/reduction path, and a
+    # residual at numerical zero (predict_gauge) came back 1.1e-16 vs
+    # 5.6e-17 -- 283 of 284 identical, one flaky full-suite failure.
+    # Seed or task-assignment dependence moves statistics by sampling
+    # noise, orders of magnitude above this tolerance.
+    for ra, rb in zip(a.results, b.results):
+        x, y = ra.statistic, rb.statistic
+        if isinstance(x, float) and isinstance(y, float):
+            assert (x == y or (np.isnan(x) and np.isnan(y))
+                    or abs(x - y) <= 1e-14 + 1e-12 * max(abs(x), abs(y))), (ra.name, x, y)
+        else:
+            assert x == y, (ra.name, x, y)
     assert seed_for("x") == seed_for("x") and seed_for("x") != seed_for("y")
     assert seed_for("x", root=1) != seed_for("x", root=2)
 

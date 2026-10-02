@@ -47,7 +47,13 @@ const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structu
 function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
-  let F = [[0]], W = [1];
+  // The independent default is the EMPTY node (no coordinates), not the
+  // rank-one node [[0]]: with an (n, 0) loading matrix the conditional
+  // mean below read V[i][0] * F[q][0] = undefined * 0 = NaN, so the
+  // rank-zero Jacobian was all NaN and polishRace died on it, while the
+  // rank-zero forward was already the independent race (#68). A zero
+  // rank-one column gives the same answer either way.
+  let F = [[]], W = [1];
   V = asLoadings(V, n) || Array.from({ length: n }, () => [0]);   // #232
   // Gauge-fix before anything reads the loadings, exactly as the
   // forward path does: a common column cannot move an argmin, so it

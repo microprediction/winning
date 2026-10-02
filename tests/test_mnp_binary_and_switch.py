@@ -50,7 +50,7 @@ def test_binary_near_deterministic_rival(eps, k):
 
 
 def test_a_deterministic_alternative_is_refused_at_J3():
-    with pytest.raises(ValueError, match="D_j > 0"):
+    with pytest.raises(ValueError, match="strictly positive"):
         choice_loglik_and_score(np.zeros((1, 3)), np.zeros((3, 1)), [1],
                                 D=[0.0, 1.0, 1.0])
 

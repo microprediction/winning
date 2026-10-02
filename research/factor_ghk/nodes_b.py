@@ -83,7 +83,10 @@ def largen_truth(n):
         if done <= 0 or not np.all(np.isfinite(acc)) or acc.sum() <= 0:
             raise TruthUnavailable(f"{key}: {done} draws, running sum {acc.sum()!r}; {regen}")
         out.append((acc / done, done))
-    (p, done), (q, _) = out
+    (p, done), (q, done_q) = out
+    if done != done_q:                                                 # #433: certify like with like
+        raise TruthUnavailable(f"sobol101 holds {done} draws but sobol202 {done_q}; the certification needs equal "
+                               f"counts -- rerun hybrid_a_largen.py, which extends the shorter stream")
     return p, float(np.abs(p - q).max()), f"sobol 2^{int(np.log2(done))}"
 
 

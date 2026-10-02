@@ -75,7 +75,7 @@ def sharpness_bound(V, D=None, n=None):
     caller that already holds the count should pass it.
     """
     if n is None:
-        n = len(np.asarray(D)) if D is not None else np.shape(V)[0]
+        n = np.size(D) if D is not None and np.ndim(D) > 0 else np.shape(V)[0]
     V = as_loadings(V, n)          # the same door every other verb uses
     V = V - V.mean(axis=0)
     dmin = 1.0 if D is None else float(np.min(as_idio(D, n)))
@@ -223,18 +223,16 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
     T, J = mu.shape
     V = as_loadings(V, J)
     r = V.shape[1]
-    D = np.ones(J) if D is None else as_idio(D, J)
     choice = np.asarray(choice, dtype=int)
     if J == 2:
+        # the closed form needs only D_k + D_j + ||V_k - V_j||^2 > 0, so a
+        # deterministic alternative (D_j = 0) is legal here (#352)
+        D = np.ones(J) if D is None else as_idio(D, J)          # #84
         return _choice_pair(mu, V, choice, D)
-    if float(np.min(D)) <= 0.0:
-        # the own-noise integral conditions on each rival through
-        # Phi(./sqrt(D_j)): at D_j = 0 that is 0/0 and the result was
-        # NaN, label-asymmetrically (#352). Refused rather than guessed.
-        raise ValueError(
-            "choice likelihood with J >= 3 needs every idiosyncratic "
-            "variance D_j > 0; a deterministic alternative has no "
-            "own-noise integral here")
+    # J >= 3: the own-noise integral conditions on each rival through
+    # Phi(./sqrt(D_j)); at D_j = 0 that is 0/0 and returned NaN,
+    # label-asymmetrically (#352). The central door refuses it (#84).
+    D = np.ones(J) if D is None else as_idio(D, J, positive=True)
     s = np.sqrt(D)
     # gauge-fix and dispatch on the pairwise-safe bound (eighth review):
     # only loading DIFFERENCES decide a race, and

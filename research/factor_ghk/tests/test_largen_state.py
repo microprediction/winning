@@ -171,3 +171,40 @@ def test_results_md_matches_the_compiler():
     for f in sorted((HERE.parent / "runs").glob("largen_n*.csv")):
         s = CL.compile_rows(list(csv.DictReader(open(f)))).strip()
         assert s in text, f.name
+
+
+# ------------------------------------------------------------------ #433
+def _stream(pool, tmp_path, seed, total, name):
+    arrays = L.Arrays(str(tmp_path / f"{name}.npz"))
+    p, used, _ = L.sobol_stream(pool, arrays, {}, seed, total, CHUNK)
+    assert used == total
+    return p * total                                                   # the running sum
+
+
+@pytest.mark.parametrize("long_seed", [101, 202])
+def test_truth_pair_extends_the_shorter_stream(pool, tmp_path, long_seed):
+    """A crash/retry left one stream at 128 draws and the other at 32; a rerun
+    asking for 64 must certify 128 against 128, not 128 against 64."""
+    short_seed = 303 - long_seed
+    want = {101: _stream(pool, tmp_path, 101, 128, "r101") / 128,
+            202: _stream(pool, tmp_path, 202, 128, "r202") / 128}
+    arrays = L.Arrays(str(tmp_path / "a.npz"))
+    arrays.update({f"sobol{long_seed}": want[long_seed] * 128, f"sobol{long_seed}_done": 128,
+                   f"sobol{short_seed}": _stream(pool, tmp_path, short_seed, 32, "s"), f"sobol{short_seed}_done": 32})
+    state = {f"sobol{long_seed}": {"done": 128, "seconds": 0.0}, f"sobol{short_seed}": {"done": 32, "seconds": 0.0}}
+    truth, check, used, _, _ = L.truth_pair(pool, arrays, state, 64, CHUNK)
+    assert used == 128
+    assert state["sobol101"]["done"] == state["sobol202"]["done"] == 128
+    np.testing.assert_allclose(truth, want[101], rtol=0, atol=1e-14)
+    np.testing.assert_allclose(check, want[202], rtol=0, atol=1e-14)
+
+
+def test_largen_truth_rejects_unequal_counts(tmp_path, monkeypatch):
+    d = tmp_path / "runs" / "state_largen"; d.mkdir(parents=True)
+    base = str(d / "n5_rank3_D0.05_seed3_margin4.0_pts257")
+    json.dump({"sobol101": {"done": 128}, "sobol202": {"done": 32}}, open(base + ".json", "w"))
+    np.savez(base + ".npz", sobol101=np.full(5, 128 / 5), sobol101_done=128,
+             sobol202=np.full(5, 32 / 5), sobol202_done=32)
+    monkeypatch.setattr(NB, "HERE", str(tmp_path))
+    with pytest.raises(NB.TruthUnavailable, match="equal"):
+        NB.largen_truth(5)

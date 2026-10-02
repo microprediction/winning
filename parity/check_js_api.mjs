@@ -974,6 +974,51 @@ accepts("the inverse takes a scalar D, matching python",
           () => same(topk.rankProbabilities(zmu, { V: Z, D: zD }),
                      topk.rankProbabilities(zmu, { D: zD })),
           w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  // finite weights whose raw SUM overflows are the same law (#415):
+  // asWeights divided by that total, [1e308, 1e308] -> [0, 0] -> NaN
+  accepts("asWeights normalises [1e308, 1e308] to [0.5, 0.5]",
+          () => core.asWeights([1e308, 1e308], 2),
+          w => w[0] === 0.5 && w[1] === 0.5);
+  {
+    const wo = { V: [[-0.7], [0.7]], D: [1, 1], F: [[-1], [1]], points: 1001 };
+    accepts("raceProbabilities with W = [1e308, 1e308] prices like [1, 1]",
+            () => same(races.raceProbabilities([0, 0.4], { ...wo, W: [1e308, 1e308] }),
+                       races.raceProbabilities([0, 0.4], { ...wo, W: [1, 1] })),
+            w => w < 1e-15, w => `gap ${w.toExponential(2)}`);
+    accepts("raceJacobian with W = [1e308, 1e308] is the [1, 1] Jacobian",
+            () => same(polish.raceJacobian([0, 0.4], { ...wo, W: [1e308, 1e308] }),
+                       polish.raceJacobian([0, 0.4], { ...wo, W: [1, 1] })),
+            w => w < 1e-15, w => `gap ${w.toExponential(2)}`);
+  }
+  // the exported Jacobian and its polishRace caller: the independent
+  // default node was the RANK-ONE [[0]], so (n, 0) loadings read
+  // V[i][0] = undefined and returned an all-NaN Jacobian (#68)
+  accepts("zero-rank race Jacobian is the independent Jacobian",
+          () => same(polish.raceJacobian(zmu, { V: Z, D: zD }),
+                     polish.raceJacobian(zmu, { D: zD })),
+          w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  accepts("zero-rank race Jacobian is finite",
+          () => polish.raceJacobian(zmu, { V: Z, D: zD }),
+          J => J.flat().every(Number.isFinite));
+  accepts("a zero rank-one column still gives the independent Jacobian",
+          () => same(polish.raceJacobian(zmu, { V: [[0], [0], [0], [0]], D: zD }),
+                     polish.raceJacobian(zmu, { D: zD })),
+          w => w < 1e-12, w => `gap ${w.toExponential(2)}`);
+  accepts("zero-rank polishRace matches its independent spelling",
+          () => {
+            const opts = { p0: [0.1, 0.1, 0.8], D: [1, 1, 1],
+                           nameCaps: [0.5, 0.5, 0.5], points: 129 };
+            const a = polish.polishRace({ ...opts, V: [[], [], []] });
+            const b = polish.polishRace(opts);
+            return [a, b];
+          },
+          ([a, b]) => {
+            const pa = a.p || a.probabilities || a.prices;
+            const pb = b.p || b.probabilities || b.prices;
+            return Array.isArray(pa) && pa.every(Number.isFinite) &&
+              Math.max(...pa.map((x, i) => Math.abs(x - pb[i]))) < 1e-9 &&
+              Math.max(...pa) <= 0.5 + 1e-6;
+          });
   // and a rank-one loading must still MOVE top-k, or the three above
   // are just two ways of computing the independent answer
   accepts("a rank-one loading still moves top-k",

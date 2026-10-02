@@ -1,6 +1,6 @@
 [package]
 name = "winning"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Lattice race kernels: factor/block/nested/tree win probabilities and the classic state-price calibration (pure rust, no python)"
 license = "MIT"
@@ -15,6 +15,5 @@ name = "winning"
 [dependencies]
 ndarray = "0.16"
 rayon = "1.10"
-puruspe = "0.4"
 owens-t = "0.1"
 libm = "0.2"
