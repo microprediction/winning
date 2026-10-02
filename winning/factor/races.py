@@ -1149,9 +1149,18 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
         Sig = _SigV + np.diag(_Dn)
         sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
-        gap = sd_d * float(ndtri(target[0]))
+        # Invert the SMALLER share, Phi^-1(p0) = -Phi^-1(p1): for
+        # [1, 1e-16] the normalized first share rounds to exactly 1, and
+        # ndtri(1) = inf was certified as converged while the
+        # permutation [1e-16, 1] gave the finite answer (#412).
+        if target[0] <= target[1]:
+            gap = sd_d * float(ndtri(target[0]))
+        else:
+            gap = -sd_d * float(ndtri(target[1]))
         mu = np.array([-0.5 * gap, 0.5 * gap])
-        return _inverse_return(mu, True, 0.0, 0, floored, tol, return_info)
+        ok = bool(np.isfinite(mu).all())
+        return _inverse_return(mu, ok, 0.0 if ok else np.inf, 0, floored,
+                               tol, return_info)
     mu = -(logt - logt.mean()) / 2.0 * scale
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
