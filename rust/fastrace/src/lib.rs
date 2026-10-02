@@ -66,6 +66,36 @@ fn check_factor(mu: usize, v: (usize, usize), d: usize, f: (usize, usize),
     need_len("w", w, f.0, "one weight per factor node (row of f)")
 }
 
+/// Base-family parameters (#134): finite, and inside each family's
+/// domain. nu = inf used to panic inside betai; the Python reference
+/// refuses it at construction.
+fn check_base_params(base_id: u32, params: &[f64]) -> PyResult<()> {
+    let need = match base_id { 4 | 5 => 2, 6 | 7 => 3, 8 => 5, _ => 0 };
+    if params.len() < need {
+        return Err(bad(format!(
+            "base_id = {base_id} needs {need} parameters, got {}", params.len())));
+    }
+    if let Some(i) = params.iter().take(need).position(|x| !x.is_finite()) {
+        return Err(bad(format!(
+            "base parameter {i} = {} is not finite", params[i])));
+    }
+    let p = params;
+    let ok = match base_id {
+        4 => p[0] > 0.0 && p[1] > 0.0,               // beta, a
+        5 => p[0] > 0.0 && p[1] > 0.0,               // nu, s
+        6 => p[2] > 0.0,                             // alpha, m, sd
+        7 => p[0] > 0.0 && p[2] > 0.0,               // alpha, m, c
+        8 => (0.0..=1.0).contains(&p[0]) && p[1] > 0.0 && p[4] > 0.0,
+        _ => true,
+    };
+    if !ok {
+        return Err(bad(format!(
+            "base parameters {:?} are outside base_id = {base_id}'s domain",
+            &p[..need])));
+    }
+    Ok(())
+}
+
 /// Cluster starts: first member index of each sorted cluster.
 fn check_starts(starts: &[i64], n: usize) -> PyResult<Vec<usize>> {
     if starts.is_empty() {
@@ -603,6 +633,7 @@ fn forward_and_slopes_base<'py>(
     if base_id > 8 {
         return Err(bad(format!("base_id = {base_id} is not a shipped base family (0..=8)")));
     }
+    check_base_params(base_id, &params)?;
     let mut pa = [0.0f64; 6];
     for (i, &x) in params.iter().take(6).enumerate() {
         pa[i] = x;

@@ -125,8 +125,10 @@ def exponential_power_base(beta):
     lesson. Very large beta makes near-edges the lattice must resolve;
     accuracy is measured in the tests at beta = 12."""
     beta = float(beta)
-    if beta <= 0.0:
-        raise ValueError("exponential_power_base needs beta > 0")
+    if not np.isfinite(beta) or beta <= 0.0:
+        # beta = inf is the uniform limit, which has no density this
+        # family can evaluate; it came back as NaN rows (#134)
+        raise ValueError("exponential_power_base needs a finite beta > 0")
     from scipy.special import gamma as _gamma, gammaincc
     a = np.sqrt(_gamma(1.0 / beta) / _gamma(3.0 / beta))
     c = beta / (2.0 * a * _gamma(1.0 / beta))
@@ -219,8 +221,13 @@ def student_base(nu):
     tails for performances with occasional wild days. Returns a callable
     for base=; the tail span widens with falling nu automatically."""
     nu = float(nu)
-    if nu <= 2.0:
+    if np.isnan(nu) or nu <= 2.0:
         raise ValueError("student_base needs nu > 2 for unit variance")
+    if np.isinf(nu):
+        # s = sqrt(inf/inf) is NaN and every row came back NaN, while the
+        # compiled kernel panicked (#134). The limit is the normal base.
+        raise ValueError("student_base needs a finite nu; use base='normal' "
+                         "for the nu -> inf limit")
     from scipy.stats import t as _t
     s = np.sqrt(nu / (nu - 2.0))            # raw x = s * z
 

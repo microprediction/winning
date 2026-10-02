@@ -20,6 +20,7 @@
 //!   factor generalization).
 
 pub use ndarray;
+pub mod special;
 use ndarray::{Array1, ArrayView1, ArrayView2};
 use rayon::prelude::*;
 
@@ -1964,8 +1965,9 @@ pub fn top_k_kernel(
 // log S(z), log f(z) and d log f / dz for the same standardized
 // densities winning/factor/races.py ships; ids and parameter layouts
 // match the python dispatch (races._rust_base_spec). Special functions
-// come from puruspe (regularized incomplete gamma and beta) and the
-// owens-t crate (Patefield-Tandy), not hand-rolled code.
+// come from winning::special (tail-accurate regularized incomplete gamma,
+// Student-t and negative-shape skew-normal survival, #134 #193) and the
+// owens-t crate (Patefield-Tandy).
 //   0 normal                      params unused
 //   1 gumbel-min                  params unused
 //   2 logistic                    params unused
@@ -2026,7 +2028,9 @@ impl BaseSpec {
                 let lf = (beta / (2.0 * a)).ln()
                     - libm::lgamma(1.0 / beta)
                     - t.min(745.0);
-                let half_tail = 0.5 * puruspe::gammq(1.0 / beta, t);
+                // own Q(a, x): puruspe's gammq was wrong at both
+                // extremes of t for small a = 1/beta (#134)
+                let half_tail = 0.5 * special::gamma_q(1.0 / beta, t);
                 let sv = if z >= 0.0 { half_tail } else { 1.0 - half_tail };
                 let dl = -beta * (z.abs() / a).powf(beta - 1.0)
                     * z.signum() / a;
@@ -2036,22 +2040,22 @@ impl BaseSpec {
             5 => {
                 let (nu, sc) = (p[0], p[1]);
                 let x = sc * z;
-                let ib = puruspe::betai(0.5 * nu, 0.5,
-                                        nu / (nu + x * x));
-                let sv = if x >= 0.0 { 0.5 * ib } else { 1.0 - 0.5 * ib };
-                let lf = libm::lgamma(0.5 * (nu + 1.0))
-                    - libm::lgamma(0.5 * nu)
-                    - 0.5 * (nu * std::f64::consts::PI).ln()
-                    - 0.5 * (nu + 1.0) * (1.0 + x * x / nu).ln()
+                // tail-stable survival and a cancellation-free density
+                // normalizer at large nu (#134)
+                let ls = special::student_log_sf(x, nu);
+                let lf = special::student_log_norm(nu)
+                    - 0.5 * (nu + 1.0) * (x * x / nu).ln_1p()
                     + sc.ln();
                 let dl = -(nu + 1.0) * x / (nu + x * x) * sc;
-                (sv.max(1e-300).ln(), lf, dl)
+                (ls.max(-690.7755278982137), lf, dl)
             }
             6 => {
                 let (alpha, m, sd) = (p[0], p[1], p[2]);
                 let x = m + sd * z;
-                // S = Phi(-x) + 2 T(x, alpha)
-                let sv = ndtr(-x) + 2.0 * owens_t::owens_t(x, alpha);
+                // S = Phi(-x) + 2 T(x, alpha), integrated directly in
+                // the negative-shape tail where that identity cancels
+                // (#193)
+                let ls = special::skew_normal_log_sf(x, alpha);
                 let l_phi_ax = log_ndtr(alpha * x);
                 let lf = std::f64::consts::LN_2 - 0.5 * x * x
                     - LN_SQRT_2PI + l_phi_ax + sd.ln();
@@ -2059,7 +2063,7 @@ impl BaseSpec {
                     - LN_SQRT_2PI - l_phi_ax)
                     .exp();
                 let dl = sd * (-x + alpha * hazard);
-                (sv.clamp(1e-300, 1.0).ln(), lf, dl)
+                (ls.max(-690.7755278982137), lf, dl)
             }
             7 => {
                 let (alpha, m, c) = (p[0], p[1], p[2]);
