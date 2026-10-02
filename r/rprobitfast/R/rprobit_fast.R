@@ -46,15 +46,16 @@ rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
   t0 <- Sys.time()
   alt <- as.integer(as.factor(df$alt))
   J <- max(alt)
-  ids <- as.integer(as.factor(df$id))
+  id_f <- as.factor(df$id)
+  ids <- as.integer(id_f)
   ord <- order(ids, alt)
   df <- df[ord, , drop = FALSE]
   alt <- alt[ord]; ids <- ids[ord]
   Tn <- length(unique(ids))
   stopifnot(nrow(df) == Tn * J)
   .check_choice_sets(ids, alt, J)
-  chosen <- which(as.logical(df$chosen))
-  choice <- alt[chosen]
+  # exactly one chosen row per observation, keyed by id (#324, #435)
+  choice <- .choices_by_id(ids, alt, df$chosen, levels(id_f))
   Xcov <- as.matrix(df[, covariates, drop = FALSE])
   Xint <- matrix(0, nrow(Xcov), J - 1L)
   for (j in 2:J) Xint[alt == j, j - 1L] <- 1
@@ -63,7 +64,8 @@ rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
   nodes <- .nodes3(Qf, Qz, r)
-  nodes_sharp <- .halton_nodes3(r, 10L)
+  # built only if the sharpness rule ever selects it (#388)
+  nodes_sharp <- .lazy_sharp_nodes(r, 10L)
   memo <- new.env()
   fn <- function(th) {
     if (!is.null(memo$th) && identical(th, memo$th)) return(memo$out$value)

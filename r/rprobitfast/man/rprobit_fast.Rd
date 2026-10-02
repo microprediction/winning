@@ -22,7 +22,7 @@ rprobit_fast(df, covariates, r = 2L, Qf = 7L, Qz = 7L, maxit = 400L)
   \item{r}{factor rank of the utility covariance (zero reference
     loadings, unit idiosyncratic variance).}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
-    integrals, with sharpness escalation to Halton nodes.}
+    integrals, with sharpness escalation to scrambled Sobol nodes.}
   \item{maxit}{BFGS iteration cap.}
 }
 \value{

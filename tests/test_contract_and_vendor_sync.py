@@ -44,3 +44,15 @@ def test_rprobitfast_engine_is_prefix_of_mlogitfast():
         "r/rprobitfast/R/engine.R must be an exact prefix of "
         "r/mlogitfast/R/mlogit_fast.R (shared engine internals); "
         "they have diverged -- sync deliberately and update this test")
+
+
+def test_r_sobol_generator_is_identical_across_packages():
+    # r/mvtnormfast, r/mlogitfast and r/rprobitfast each ship R/sobol.R
+    # (each package is self-contained on CRAN); one generator, three
+    # copies, so pin them together (#143, #388)
+    root = Path(__file__).resolve().parents[1]
+    copies = [(root / "r" / p / "R" / "sobol.R").read_text()
+              for p in ("mvtnormfast", "mlogitfast", "rprobitfast")]
+    assert len(copies[0]) > 2000
+    assert copies[0] == copies[1] == copies[2], (
+        "r/*/R/sobol.R copies have diverged -- sync deliberately")

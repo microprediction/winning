@@ -13,7 +13,7 @@ test_that("nll is finite and decreases from start on a synthetic problem", {
   mu <- matrix(X %*% beta_true, Tn, J, byrow = TRUE)
   eps <- t(V %*% matrix(rnorm(2 * Tn), 2)) + matrix(rnorm(Tn * J), Tn, J)
   choice <- max.col(mu + eps)
-  nodes <- .nodes3(7, 7, r); ns <- .halton_nodes3(r, 9L)
+  nodes <- .nodes3(7, 7, r); ns <- .sobol_nodes3(r, 9L)
   th0 <- c(rep(0, 3), rep(0.1, 3))
   v0 <- .nll(th0, list(X), choice, J, r, nodes, ns)
   expect_true(is.finite(v0))
@@ -23,9 +23,9 @@ test_that("nll is finite and decreases from start on a synthetic problem", {
 
 test_that("sharpness escalation switches node families", {
   J <- 3; r <- 2
-  nodes <- .nodes3(7, 7, r); ns <- .halton_nodes3(r, 9L)
+  nodes <- .nodes3(7, 7, r); ns <- .sobol_nodes3(r, 9L)
   X <- cbind(matrix(0, 3 * J, J - 1), rnorm(3 * J))
-  # sharp covariance parameters must route to the Halton set: the nll
+  # sharp covariance parameters must route to the Sobol set: the nll
   # values under the two calls differ only if the branch is taken, so
   # probe via node-count sensitivity at sharp vs mild theta
   th_mild <- c(0, 0, 0, 0.1, 0.1, 0.1)
@@ -68,7 +68,7 @@ test_that("the triangular loading loop is empty at J = 2, not backwards", {
 
 .binary_ll <- function(gap, Qf = 7L, Qz = 7L) {
   nd <- .nodes3(Qf = Qf, Qz = Qz, r = 1L)
-  ndS <- .halton_nodes3(1L, m = 10L)
+  ndS <- .sobol_nodes3(1L, m = 10L)
   X <- matrix(c(gap, 0), nrow = 2L, ncol = 1L)
   -.nll_core(c(1, 0), list(X), 1L, 2L, 1L, nd, ndS,
              want_grad = FALSE)$value
@@ -83,7 +83,7 @@ test_that("the objective does not go flat in the tail", {
 
 test_that("the score is not zero and points the right way", {
   nd <- .nodes3(Qf = 7L, Qz = 7L, r = 1L)
-  ndS <- .halton_nodes3(1L, m = 10L)
+  ndS <- .sobol_nodes3(1L, m = 10L)
   prev <- NULL
   for (gap in c(-40, -60, -100, -200)) {
     X <- matrix(c(gap, 0), nrow = 2L, ncol = 1L)
@@ -122,7 +122,7 @@ test_that("an ordinary panel still fits", {
   df$chosen <- unlist(lapply(split(u, df$id),
                              function(v) as.integer(seq_along(v) == which.max(v))))
   nd <- .nodes3(Qf = 5L, Qz = 5L, r = 1L)
-  ndS <- .halton_nodes3(1L, m = 8L)
+  ndS <- .sobol_nodes3(1L, m = 8L)
   X <- matrix(df$x, ncol = 1L)
   ch <- apply(matrix(df$chosen, nrow = n, ncol = J, byrow = TRUE), 1,
               which.max)
@@ -130,4 +130,100 @@ test_that("an ordinary panel still fits", {
                  want_grad = TRUE)
   expect_true(is.finite(r$value))
   expect_true(all(is.finite(r$grad)))
+})
+
+# --- shared-engine regressions (identical in mlogitfast and rprobitfast) ---
+
+test_that("sharp-regime nodes exist at every rank the fitters accept (#388)", {
+  for (r in 1:6) {
+    nd <- .sobol_nodes3(r, 5L)
+    expect_equal(dim(nd$F), c(32L, r + 1L))
+    expect_true(all(is.finite(nd$F)) && all(is.finite(nd$W)))
+    expect_equal(sum(nd$W), 1)
+  }
+  # the rule is built lazily, once
+  lz <- .lazy_sharp_nodes(4L, 5L)
+  expect_identical(lz(), lz())
+  expect_equal(ncol(lz()$F), 5L)
+})
+
+test_that("node dispatch uses the centred pairwise-safe bound (#419)", {
+  V <- matrix(c(0, 1, -2.7), ncol = 1)
+  expect_equal(.mnp_sharpness(V), sqrt(2) * max(abs(V - mean(V))))
+  expect_gt(.mnp_sharpness(V), 3)               # raw max |V_i| is 2.7
+  # gauge invariance: V -> V + 1 c'
+  V2 <- matrix(c(0, 1, -2.7, 0.3, -0.4, 2), ncol = 2)
+  expect_equal(.mnp_sharpness(V2), .mnp_sharpness(sweep(V2, 2, c(5, -3), "+")))
+  # the #419 fixture: alternative 3 wins with exact bivariate-normal
+  # probability 0.15149432190016066; Hermite-7 said 0.16517
+  X <- diag(3)
+  theta <- c(-3.25, 2.47, -1.61, 1, -2.7)
+  gh <- .nodes3(7L, 7L, 1L)
+  got <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
+                        nodes_sharp = .sobol_nodes3(1L, 10L))$value)
+  expect_lt(abs(got - 0.15149432190016066), 2e-3)
+  forced_gh <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
+                              nodes_sharp = gh)$value)
+  expect_gt(abs(forced_gh - 0.15149432190016066), 1e-2)
+})
+
+test_that("choices are keyed by observation, one per id (#324, #435)", {
+  ids <- rep(1:3, each = 3); alt <- rep(1:3, 3)
+  ok <- c(TRUE, FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, TRUE)
+  expect_equal(.choices_by_id(ids, alt, ok), c(1L, 2L, 3L))
+  expect_equal(.choices_by_id(ids, alt, as.integer(ok)), c(1L, 2L, 3L))
+  cancel <- c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE)
+  expect_error(.choices_by_id(ids, alt, cancel, c("a", "b", "c")),
+               "observation 'a' has 2 chosen rows")
+  none <- ok; none[5] <- FALSE
+  expect_error(.choices_by_id(ids, alt, none), "observation '2' has 0")
+  two <- ok; two[6] <- TRUE
+  expect_error(.choices_by_id(ids, alt, two), "has 2 chosen")
+  na <- ok; na[4] <- NA
+  expect_error(.choices_by_id(ids, alt, na), "missing")
+  expect_error(.choices_by_id(ids, alt, ok * 2), "logical or 0/1")
+})
+
+# a minimal stand-in for a dfidx: mlogit_fast reads attr(data, "idx")
+.fake_dfidx <- function(df) {
+  out <- df[, setdiff(names(df), c("id", "alt")), drop = FALSE]
+  attr(out, "idx") <- data.frame(id = df$id, alt = factor(df$alt))
+  out
+}
+
+test_that("mlogit_fast is invariant to long-row order (#215, #355)", {
+  set.seed(8)
+  n <- 40L; J <- 3L
+  df <- data.frame(id = rep(seq_len(n), each = J), alt = rep(1:J, n),
+                   x = rnorm(n * J))
+  u <- 0.8 * df$x + rnorm(n * J)
+  df$chosen <- unlist(lapply(split(u, df$id),
+                             function(v) seq_along(v) == which.max(v)))
+  f1 <- mlogit_fast(chosen ~ x, .fake_dfidx(df), r = 1L, Qf = 5L, Qz = 5L,
+                    maxit = 30L)
+  altmajor <- order(df$alt, df$id)
+  f2 <- mlogit_fast(chosen ~ x, .fake_dfidx(df[altmajor, ]), r = 1L,
+                    Qf = 5L, Qz = 5L, maxit = 30L)
+  shuffled <- sample(nrow(df))
+  f3 <- mlogit_fast(chosen ~ x, .fake_dfidx(df[shuffled, ]), r = 1L,
+                    Qf = 5L, Qz = 5L, maxit = 30L)
+  expect_equal(f1$logLik, f2$logLik)
+  expect_equal(f1$logLik, f3$logLik)
+  expect_equal(f1$coefficients, f3$coefficients)
+})
+
+test_that("mlogit_fast refuses cancelling choices and fits rank four", {
+  d <- data.frame(id = rep(1:3, each = 3), alt = rep(1:3, 3),
+                  x = c(-1, .2, .7, .4, -1.2, .1, .8, -.3, 1.1))
+  d$chosen <- c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE)
+  expect_error(mlogit_fast(chosen ~ x, .fake_dfidx(d), r = 1L, Qf = 3L,
+                           Qz = 3L, maxit = 1L),
+               "observation '1' has 2 chosen rows")
+  J <- 6L
+  df <- expand.grid(alt = seq_len(J), id = 1:3)
+  df$chosen <- df$alt == ((df$id - 1L) %% J + 1L)
+  df$x <- seq_len(nrow(df)) / nrow(df)
+  fit <- mlogit_fast(chosen ~ x, .fake_dfidx(df[, c("id", "alt", "chosen", "x")]),
+                     r = 4L, Qf = 3L, Qz = 3L, maxit = 1L)
+  expect_true(is.finite(fit$logLik))
 })

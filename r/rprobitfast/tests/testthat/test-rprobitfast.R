@@ -110,7 +110,7 @@ test_that("the triangular loop is empty exactly when it should be", {
 test_that("a choice outside the alternatives is refused", {
   X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
   th <- c(0.5, 0.2, 0.3)
-  nd <- .halton_nodes3(1L, m = 5L)
+  nd <- .sobol_nodes3(1L, m = 5L)
   for (bad in list(9L, 0L, -1L, NA_integer_)) {
     ch <- rep(1:3, length.out = 30)
     ch[1] <- bad
@@ -123,7 +123,7 @@ test_that("a choice outside the alternatives is refused", {
 test_that("a choice vector of the wrong length is refused", {
   X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
   th <- c(0.5, 0.2, 0.3)
-  nd <- .halton_nodes3(1L, m = 5L)
+  nd <- .sobol_nodes3(1L, m = 5L)
   for (n in c(20L, 31L)) {
     expect_error(.nll_core(th, list(X), rep(1:3, length.out = n),
                            3L, 1L, nd, nd, want_grad = FALSE),
@@ -133,7 +133,7 @@ test_that("a choice vector of the wrong length is refused", {
 
 test_that("the message names the first offender and counts them", {
   X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
-  nd <- .halton_nodes3(1L, m = 5L)
+  nd <- .sobol_nodes3(1L, m = 5L)
   ch <- rep(1:3, length.out = 30); ch[4] <- 9L
   msg <- tryCatch(.nll_core(c(0.5, 0.2, 0.3), list(X), ch, 3L, 1L,
                             nd, nd, want_grad = FALSE),
@@ -153,4 +153,89 @@ test_that("a valid panel is untouched", {
   fit <- rprobit_fast(df, covariates = "x", r = 1L, Qf = 5L, Qz = 5L,
                       maxit = 10L)
   expect_true(is.finite(fit$coefficients[["x"]]))
+})
+
+# --- shared-engine regressions (identical in mlogitfast and rprobitfast) ---
+
+test_that("sharp-regime nodes exist at every rank the fitters accept (#388)", {
+  for (r in 1:6) {
+    nd <- .sobol_nodes3(r, 5L)
+    expect_equal(dim(nd$F), c(32L, r + 1L))
+    expect_true(all(is.finite(nd$F)) && all(is.finite(nd$W)))
+    expect_equal(sum(nd$W), 1)
+  }
+  # the rule is built lazily, once
+  lz <- .lazy_sharp_nodes(4L, 5L)
+  expect_identical(lz(), lz())
+  expect_equal(ncol(lz()$F), 5L)
+})
+
+test_that("node dispatch uses the centred pairwise-safe bound (#419)", {
+  V <- matrix(c(0, 1, -2.7), ncol = 1)
+  expect_equal(.mnp_sharpness(V), sqrt(2) * max(abs(V - mean(V))))
+  expect_gt(.mnp_sharpness(V), 3)               # raw max |V_i| is 2.7
+  # gauge invariance: V -> V + 1 c'
+  V2 <- matrix(c(0, 1, -2.7, 0.3, -0.4, 2), ncol = 2)
+  expect_equal(.mnp_sharpness(V2), .mnp_sharpness(sweep(V2, 2, c(5, -3), "+")))
+  # the #419 fixture: alternative 3 wins with exact bivariate-normal
+  # probability 0.15149432190016066; Hermite-7 said 0.16517
+  X <- diag(3)
+  theta <- c(-3.25, 2.47, -1.61, 1, -2.7)
+  gh <- .nodes3(7L, 7L, 1L)
+  got <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
+                        nodes_sharp = .sobol_nodes3(1L, 10L))$value)
+  expect_lt(abs(got - 0.15149432190016066), 2e-3)
+  forced_gh <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
+                              nodes_sharp = gh)$value)
+  expect_gt(abs(forced_gh - 0.15149432190016066), 1e-2)
+})
+
+test_that("choices are keyed by observation, one per id (#324, #435)", {
+  ids <- rep(1:3, each = 3); alt <- rep(1:3, 3)
+  ok <- c(TRUE, FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, TRUE)
+  expect_equal(.choices_by_id(ids, alt, ok), c(1L, 2L, 3L))
+  expect_equal(.choices_by_id(ids, alt, as.integer(ok)), c(1L, 2L, 3L))
+  cancel <- c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE)
+  expect_error(.choices_by_id(ids, alt, cancel, c("a", "b", "c")),
+               "observation 'a' has 2 chosen rows")
+  none <- ok; none[5] <- FALSE
+  expect_error(.choices_by_id(ids, alt, none), "observation '2' has 0")
+  two <- ok; two[6] <- TRUE
+  expect_error(.choices_by_id(ids, alt, two), "has 2 chosen")
+  na <- ok; na[4] <- NA
+  expect_error(.choices_by_id(ids, alt, na), "missing")
+  expect_error(.choices_by_id(ids, alt, ok * 2), "logical or 0/1")
+})
+
+test_that("rank-four fits reach the likelihood (#388)", {
+  for (J in c(5L, 6L)) {
+    df <- expand.grid(alt = seq_len(J), id = 1:3)
+    df$chosen <- df$alt == ((df$id - 1L) %% J + 1L)
+    df$x <- seq_len(nrow(df)) / nrow(df)
+    for (r in c(3L, 4L)) {
+      fit <- rprobit_fast(df, "x", r = r, Qf = 3L, Qz = 3L, maxit = 1L)
+      expect_true(is.finite(fit$logLik))
+    }
+  }
+})
+
+test_that("cancelling duplicate/missing choices are refused (#324, #435)", {
+  d <- data.frame(id = rep(1:3, each = 3), alt = rep(1:3, 3),
+                  x = c(-1, .2, .7, .4, -1.2, .1, .8, -.3, 1.1))
+  d$chosen <- c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE)
+  expect_error(rprobit_fast(d, "x", r = 1L, Qf = 3L, Qz = 3L, maxit = 1L),
+               "observation '1' has 2 chosen rows")
+  d$chosen <- c(TRUE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE)
+  expect_error(rprobit_fast(d, "x", r = 1L, Qf = 3L, Qz = 3L, maxit = 1L),
+               "exactly one")
+  d$chosen <- c(TRUE, FALSE, FALSE, NA, TRUE, FALSE, FALSE, FALSE, TRUE)
+  expect_error(rprobit_fast(d, "x", r = 1L, Qf = 3L, Qz = 3L, maxit = 1L),
+               "missing")
+  # a valid row permutation keeps every choice attached to its id
+  d$chosen <- c(TRUE, FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, TRUE)
+  f1 <- rprobit_fast(d, "x", r = 1L, Qf = 5L, Qz = 5L, maxit = 20L)
+  p <- c(9, 4, 1, 8, 2, 6, 3, 7, 5)
+  f2 <- rprobit_fast(d[p, ], "x", r = 1L, Qf = 5L, Qz = 5L, maxit = 20L)
+  expect_equal(f1$logLik, f2$logLik)
+  expect_equal(f1$coefficients, f2$coefficients)
 })

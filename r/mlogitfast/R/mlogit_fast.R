@@ -56,17 +56,82 @@
   list(F = as.matrix(grids)[keep, , drop = FALSE], W = W[keep] / sum(W[keep]))
 }
 
-.halton_nodes3 <- function(r, m = 10L) {
-  primes <- c(2, 3, 5, 7)[seq_len(r + 1L)]
-  n <- 2L^m
-  H <- vapply(primes, function(b) {
-    idx <- seq_len(n) + 20L
-    h <- numeric(n); f <- 1 / b; i <- idx
-    while (any(i > 0)) { h <- h + f * (i %% b); i <- i %/% b; f <- f / b }
-    h
-  }, numeric(n))
-  list(F = qnorm(pmin(pmax(H, 1e-12), 1 - 1e-12)),
-       W = rep(1 / n, n))
+# Equal-weight nodes over (factor^r, own noise) for the sharp regime:
+# scrambled Sobol in r + 1 dimensions (R/sobol.R), as the python
+# reference's nodes_for_likelihood (2^10 points, seed 0). It was a
+# four-prime Halton table, so r = 4 -- the full triangular rank at five
+# alternatives -- indexed an NA fifth base and every rank-4 fit died in
+# setup, even on the Gauss-Hermite branch (#388).
+.sobol_nodes3 <- function(r, m = 10L) {
+  .sobol_normal(r + 1L, 2L^m, seed = 0L)
+}
+
+# The node-family dispatch statistic, pairwise-safe and gauge-fixed, as
+# python's winning.likelihood.sharpness_bound and julia's: only loading
+# DIFFERENCES decide a choice, so centre V first, then sqrt(2) max_i
+# ||(PV)_i|| bounds max_ij ||V_i - V_j|| / sqrt(2) (unit idiosyncratic
+# variance here, so no D divisor). The raw max ||V_i|| was the pre-#213
+# statistic: anchored rows 1 and -2.7 have norm <= 2.7 but differ by 3.7,
+# so a fit was priced on the 7-point Hermite tensor 1.37 points high where
+# python and julia escalate (#419).
+.mnp_sharpness <- function(V) {
+  V <- as.matrix(V)
+  Vc <- sweep(V, 2L, colMeans(V), "-")
+  sqrt(2) * max(sqrt(rowSums(Vc^2)))
+}
+
+# Lazily built sharp-regime rule: constructed on first use only.
+.lazy_sharp_nodes <- function(r, m = 10L) {
+  cache <- NULL
+  function() {
+    if (is.null(cache)) cache <<- .sobol_nodes3(r, m)
+    cache
+  }
+}
+
+# One chosen row per observation, keyed by observation. The wrappers
+# used to flatten every truthy row with which() and hand the result to
+# the core positionally, so an observation with two choices cancelled
+# one with none: the total was still T, the length check passed, and
+# observation 1's second choice became observation 2's (#324, #435).
+# `ids` are integer codes 1..T and the rows are already sorted by
+# (ids, alt); `labels` maps codes back to the caller's ids for messages.
+.choices_by_id <- function(ids, alt, chosen, labels = NULL) {
+  y <- chosen
+  if (is.factor(y)) y <- as.character(y)
+  if (is.logical(y)) {
+    v <- y
+  } else if (is.numeric(y)) {
+    if (any(!is.na(y) & !(y %in% c(0, 1))))
+      stop(sprintf(paste("the chosen indicator must be logical or 0/1;",
+                         "got %s"), format(y[which(!is.na(y) &
+                                                   !(y %in% c(0, 1)))[1]])),
+           call. = FALSE)
+    v <- y == 1
+  } else {
+    v <- as.logical(y)
+    if (any(is.na(v) & !is.na(y)))
+      stop("the chosen indicator must be logical or 0/1", call. = FALSE)
+  }
+  if (anyNA(v)) {
+    i <- which(is.na(v))[1]
+    stop(sprintf(paste("the chosen indicator is missing for observation",
+                       "'%s'; drop that observation deliberately"),
+                 if (is.null(labels)) ids[i] else labels[ids[i]]),
+         call. = FALSE)
+  }
+  Tn <- max(ids)
+  cnt <- tabulate(ids[v], nbins = Tn)
+  bad <- which(cnt != 1L)
+  if (length(bad))
+    stop(sprintf(paste("each observation must choose exactly one",
+                       "alternative; observation '%s' has %d chosen rows",
+                       "(%d of %d observations are malformed)"),
+                 if (is.null(labels)) bad[1] else labels[bad[1]],
+                 cnt[bad[1]], length(bad), Tn), call. = FALSE)
+  choice <- integer(Tn)
+  choice[ids[v]] <- alt[v]
+  choice
 }
 
 # Negative log-likelihood AND analytic score, fully vectorized.
@@ -74,8 +139,10 @@
 # near-step, Gauss-Hermite under-integrates at any order and the
 # OPTIMIZER EXPLOITS THE HOLES (observed: a runaway to ||w|| ~ 300 with
 # a fake 20-nat likelihood gain that collapses under denser rules), so
-# past sharpness 3 the evaluation switches to Halton nodes -- the same
-# family-escalation rule as winning::race_probabilities.
+# past sharpness 3 the evaluation switches to scrambled Sobol nodes --
+# the same family-escalation rule as winning::race_probabilities.
+# `nodes_sharp` may be a node list or a zero-argument function returning
+# one, so a caller can build the sharp rule only when it is selected.
 #
 # Score: with a_ijq = dmu_ij + s_jq and posterior node weights
 # omega_iq = w_q exp(sum_j log Phi) / p_i, the derivative of log p_i in
@@ -124,8 +191,9 @@
   }
   Tn <- nrow(X) / J
   mu <- matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)
-  sharp <- max(sqrt(rowSums(V^2)))
-  nd <- if (sharp > 3.0) nodes_sharp else nodes
+  nd <- if (.mnp_sharpness(V) > 3.0) {
+    if (is.function(nodes_sharp)) nodes_sharp() else nodes_sharp
+  } else nodes
   Fq <- nd$F[, seq_len(r), drop = FALSE]
   zq <- nd$F[, r + 1L]
   Wq <- nd$W
@@ -217,18 +285,27 @@ mlogit_fast <- function(formula, data, r = 2L, Qf = 7L, Qz = 7L,
                         maxit = 400L) {
   t0 <- Sys.time()
   idx <- if (!is.null(data$idx)) data$idx else attr(data, "idx")
-  alt_f <- idx[[2]]
+  alt_f <- as.factor(idx[[2]])
   alt <- as.integer(alt_f)
   J <- max(alt)
+  id_f <- as.factor(idx[[1]])
+  ids <- as.integer(id_f)
+  # Canonical (observation, alternative) order BEFORE anything is built.
+  # The core reshape is positional, so a dfidx in alternative-major or
+  # shuffled order priced each block's first row as alternative 1 whatever
+  # its label: the same labelled data gave nll 0.0342 or 23.94 by row
+  # order alone (#215, #355). rprobit_fast already sorted; this did not.
+  ord <- order(ids, alt)
+  alt <- alt[ord]; ids <- ids[ord]
+  # the same positional reshape lives here (#230)
+  .check_choice_sets(ids, alt, J)
   # dfidx wraps columns in xseries, under which %in% misbehaves; coerce
-  chosen_rows <- which(as.logical(data[[as.character(formula[[2]])]]))
-  Tn <- length(chosen_rows)
-  # the same positional reshape lives here (#230); idx[[1]] is the
-  # observation index dfidx carries alongside the alternative
-  .check_choice_sets(as.integer(as.factor(idx[[1]])), alt, J)
-  choice <- alt[chosen_rows]
+  resp <- as.vector(unclass(data[[as.character(formula[[2]])]]))[ord]
+  # exactly one chosen row per observation, keyed by id (#324, #435)
+  choice <- .choices_by_id(ids, alt, resp, levels(id_f))
+  Tn <- length(choice)
   rhs <- attr(terms(formula), "term.labels")
-  Xcov <- as.matrix(as.data.frame(data)[, rhs, drop = FALSE])
+  Xcov <- as.matrix(as.data.frame(data)[ord, rhs, drop = FALSE])
   Xint <- matrix(0, nrow(Xcov), J - 1L)
   for (j in 2:J) Xint[alt == j, j - 1L] <- 1
   X <- cbind(Xint, Xcov)
@@ -236,7 +313,8 @@ mlogit_fast <- function(formula, data, r = 2L, Qf = 7L, Qz = 7L,
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
   nodes <- .nodes3(Qf, Qz, r)
-  nodes_sharp <- .halton_nodes3(r, 10L)
+  # built only if the sharpness rule ever selects it (#388)
+  nodes_sharp <- .lazy_sharp_nodes(r, 10L)
   theta0 <- c(rep(0, nb), rep(0.1, nw))
   memo <- new.env()
   fn <- function(th) {
