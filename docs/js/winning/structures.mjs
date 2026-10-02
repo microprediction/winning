@@ -1,7 +1,7 @@
 // One race, five covariance grammars -- port of winning/factor/structures.py.
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
-         abilitiesFromBlockRace } from "./blocks.mjs";
+         abilitiesFromBlockRace, blockScale } from "./blocks.mjs";
 import { mean } from "./core.mjs";
 
 export const Independent = D => ({ kind: "Independent", D });
@@ -19,12 +19,14 @@ export function treeFromLinkage(Z) {
   const n = Z.length + 1;
   const nT = 2 * n - 1;
   const parent = new Array(nT).fill(-1);
-  const rho = new Array(nT).fill(0);
+  // d[t] = 1 - rho_t = 2 h^2, kept directly: 1 - (1 - 2 h^2) cancels to a
+  // few ulps for near-duplicate leaves (python Tree.from_linkage, #430)
+  const d = new Array(nT).fill(1);
   for (let k = 0; k < Z.length; k++) {
     const a = Math.round(Z[k][0]), b = Math.round(Z[k][1]), h = Z[k][2];
     const t = n + k;
     parent[a] = t; parent[b] = t;
-    rho[t] = Math.max(1 - 2 * h * h, 0);
+    d[t] = Math.min(2 * h * h, 1);
   }
   const strength = new Array(nT).fill(0);
   // the nonnegative increments are a PREMISE, checked as in python's
@@ -35,7 +37,7 @@ export function treeFromLinkage(Z) {
   const bad = [];
   for (let t = n; t < nT; t++) {
     const pa = parent[t];
-    const lam2 = rho[t] - (pa >= 0 ? rho[pa] : 0);
+    const lam2 = (pa >= 0 ? d[pa] : 1) - d[t];      // rho_t - rho_pa
     if (lam2 < -1e-9) bad.push([t, lam2]);
     strength[t] = Math.sqrt(Math.max(lam2, 0));
   }
@@ -60,23 +62,39 @@ export function treeFromLinkage(Z) {
     // accident -- numpy wraps rho[-1] to the single zero entry -- and the
     // guard on the line above this loop was already written correctly.
     const pa = parent[i];
-    D.push(Math.max(1 - (pa >= 0 ? rho[pa] : 0), 1e-10));
+    // EXACTLY 2 h^2: the old absolute floor Math.max(., 1e-10) changed
+    // every near-duplicate branch (h = 1e-6 priced 0.556 where the
+    // cophenetic model gives Phi(1) = 0.841), #430
+    D.push(pa >= 0 ? d[pa] : 1);
   }
+  const zero = D.findIndex((v) => !(v > 0));
+  if (zero >= 0)
+    throw new Error(
+      `leaf ${zero} merges at height 0: coincident leaves have zero ` +
+      "idiosyncratic variance, which a tree race cannot price. Merge the " +
+      "duplicates, or perturb them deliberately.");
   return Tree([...Array(n).keys()], new Array(n).fill(0), D, parent, strength);
 }
 
-export function invertGeneric(p, forward, tol = 1e-9, maxIter = 400) {
+/* scale: the field's contrast scale. A dimensionless start and an
+   absolute step made the same Nested/Tree race miss by 0.40 of a share
+   at c = 1e-3 (#100). returnInfo reports convergence: the bare array
+   used to come back silently after the hidden budget (#89). */
+export function invertGeneric(p, forward, tol = 1e-9, maxIter = 400,
+                              scale = 1, returnInfo = false) {
   let pv = p.slice();
   const s = pv.reduce((a, b) => a + b, 0);
   pv = pv.map(v => v / s);
   const lt = pv.map(v => Math.log(Math.max(v, 1e-300)));
   const lm = mean(lt);
-  let mu = lt.map(v => -(v - lm));
+  let mu = lt.map(v => -(v - lm) * scale);
   let eta = 1.0;
   let lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
   let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+  let iters = 0;
   for (let it = 0; it < maxIter && err >= tol; it++) {
-    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]));
+    iters = it + 1;
+    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
     const mm = mean(muN);
     muN = muN.map(v => v - mm);
     const lpN = forward(muN).map(v => Math.log(Math.max(v, 1e-300)));
@@ -84,15 +102,66 @@ export function invertGeneric(p, forward, tol = 1e-9, maxIter = 400) {
     if (e < err) { mu = muN; lp = lpN; err = e; eta = Math.min(eta * 1.2, 1.5); }
     else { eta *= 0.5; if (eta < 1e-4) break; }
   }
+  if (returnInfo)
+    return { mu, converged: err < tol, maxLogResidual: err, iterations: iters };
+  if (!(err < tol))
+    console.warn(`structured inverse did not converge: max |log residual| ` +
+                 `${err.toExponential(2)} (tol ${tol})`);
   return mu;
 }
 
+/* the hierarchical kernels are Gaussian hard races on their own lattice
+   windows: base/window/delta were dropped silently (#89) */
+function refuseHierarchical(kind, opts) {
+  const { base = "normal", window: win = "bulk", delta = 1e-12 } = opts;
+  const bad = [];
+  if (base !== "normal") bad.push("base");
+  if (win !== "bulk") bad.push("window");
+  if (delta !== 1e-12) bad.push("delta");
+  if (bad.length)
+    throw new Error(`${kind} races do not support ${bad.join(", ")}: the ` +
+      "block/nested/tree kernels are Gaussian hard races on their own " +
+      "lattice windows. Use structure Factor (or V/D).");
+}
+
+function structureScale(s) {
+  const n = s.D.length;
+  const tot = [];
+  for (let i = 0; i < n; i++) {
+    const L = Array.isArray(s.loading[i]) ? s.loading[i] : [Number(s.loading[i])];
+    let v = Number(s.D[i]) + L.reduce((a, b) => a + b * b, 0);
+    if (s.kind === "Nested" && s.coupling) {
+      const g = Array.isArray(s.coupling[i]) ? s.coupling[i] : [Number(s.coupling[i])];
+      v += (s.gamma ?? 1) ** 2 * g.reduce((a, b) => a + b * b, 0);
+    }
+    tot.push(v);
+  }
+  if (s.kind === "Tree") {
+    // add each leaf cluster's ancestor variance (labels remapped as the
+    // kernel does: sorted unique labels are leaf node ids)
+    const labels = [...new Set(s.cluster)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const idx = new Map(labels.map((v, k) => [v, k]));
+    for (let i = 0; i < n; i++) {
+      let u = idx.get(s.cluster[i]), a = 0;
+      while (s.parent[u] >= 0) { u = s.parent[u]; a += s.strength[u] ** 2; }
+      tot[i] += a;
+    }
+  }
+  tot.sort((a, b) => a - b);
+  const h = Math.floor(n / 2);
+  return Math.sqrt(n % 2 ? tot[h] : 0.5 * (tot[h - 1] + tot[h]));
+}
+
 function dp(mu, s, opts) {
-  const { base = "normal", points = 257, qa = 9, qf = 15, returnSlopes = false } = opts;
+  const { base = "normal", points = 257, qa = 9, qf = 15, returnSlopes = false,
+          window: win = "bulk", delta = 1e-12 } = opts;
+  // window and delta are forwarded: they used to be validated and then
+  // dropped, so a structured window: "span" priced the bulk window (#89)
   if (s.kind === "Independent")
-    return raceProbabilities(mu, { D: s.D, base, points, returnSlopes });
+    return raceProbabilities(mu, { D: s.D, base, points, returnSlopes, window: win, delta });
   if (s.kind === "Factor")
-    return raceProbabilities(mu, { V: s.V, D: s.D, base, points, returnSlopes });
+    return raceProbabilities(mu, { V: s.V, D: s.D, base, points, returnSlopes, window: win, delta });
+  refuseHierarchical(s.kind, opts);
   if (returnSlopes) throw new Error("returnSlopes: Independent/Factor only");
   if (s.kind === "Blocks")
     return blockRaceProbabilities(mu, s.cluster, s.loading, s.D, { points, qa });
@@ -105,18 +174,41 @@ function dp(mu, s, opts) {
   throw new Error("unknown structure " + s.kind);
 }
 function da(p, s, opts) {
-  const { points = 257, qa = 9, qf = 15 } = opts;
-  if (s.kind === "Independent") return abilitiesFromRace(p, { D: s.D, points });
-  if (s.kind === "Factor") return abilitiesFromRace(p, { V: s.V, D: s.D, points });
+  // base, nIter, tol and returnInfo are the caller's: every branch used
+  // to drop them and run hidden defaults, a logistic request calibrated a
+  // Gaussian race, and a stalled Tree solve came back as a bare array (#89)
+  const { points = 257, qa = 9, qf = 15, base = "normal", nIter, tol,
+          returnInfo = false, targetFloor = null } = opts;
+  const ctl = {};
+  if (nIter !== undefined) ctl.nIter = nIter;
+  if (tol !== undefined) ctl.tol = tol;
+  if (s.kind === "Independent")
+    return abilitiesFromRace(p, { D: s.D, points, base, returnInfo, targetFloor, ...ctl });
+  if (s.kind === "Factor")
+    return abilitiesFromRace(p, { V: s.V, D: s.D, points, base, returnInfo, targetFloor, ...ctl });
+  refuseHierarchical(s.kind, opts);
+  const tolH = tol ?? 1e-9;
+  let fwd;
   if (s.kind === "Blocks")
-    return abilitiesFromBlockRace(p, s.cluster, s.loading, s.D, { points, qa }).mu;
-  if (s.kind === "Nested")
-    return invertGeneric(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
-      { coupling: s.coupling, gamma: s.gamma, points, qa, qf }));
-  if (s.kind === "Tree")
-    return invertGeneric(p, m => treeRaceProbabilities(m, s.cluster, s.loading, s.D,
-      s.parent, s.strength, { points, qa }));
-  throw new Error("unknown structure " + s.kind);
+    fwd = m => blockRaceProbabilities(m, s.cluster, s.loading, s.D, { points, qa });
+  else if (s.kind === "Nested")
+    fwd = m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
+      { coupling: s.coupling, gamma: s.gamma, points, qa, qf });
+  else if (s.kind === "Tree")
+    fwd = m => treeRaceProbabilities(m, s.cluster, s.loading, s.D,
+      s.parent, s.strength, { points, qa });
+  else throw new Error("unknown structure " + s.kind);
+  if (s.kind === "Blocks") {
+    const out = abilitiesFromBlockRace(p, s.cluster, s.loading, s.D,
+      { points, qa, tol: tol ?? 1e-10, maxIter: nIter ?? 25 });
+    if (!returnInfo) return out.mu;
+    const lt = p.map(v => Math.log(v / p.reduce((a, b) => a + b, 0)));
+    const lp = fwd(out.mu).map(v => Math.log(Math.max(v, 1e-300)));
+    const err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+    return { mu: out.mu, converged: err < (tol ?? 1e-8), maxLogResidual: err,
+             iterations: out.iterations };
+  }
+  return invertGeneric(p, fwd, tolH, nIter ?? 400, structureScale(s), returnInfo);
 }
 _setDispatch(dp, da);
 

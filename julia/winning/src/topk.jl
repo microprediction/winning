@@ -19,9 +19,20 @@ function _resolved_points(lo, hi, sd, points)
     return max(Int(points), Int(min(need, 8193.0)))
 end
 
+# searched in STANDARDISED units and mapped back: an absolute 1e-12 floor
+# on the widest sd gave a field in units of 1e-18 a window 2e5 times its
+# width (#370, as python/R/browser)
 function _count_window(mu, sd, k, fn; delta = 1e-12, pad_sds = 2.0)
+    m0 = sum(mu) / length(mu)
+    c = maximum(sd)
+    (isfinite(c) && c > 0) || error("top-k window needs positive scales")
+    lo, hi = _count_window_std((mu .- m0) ./ c, sd ./ c, k, fn, delta, pad_sds)
+    return (m0 + c * lo, m0 + c * hi)
+end
+
+function _count_window_std(mu, sd, k, fn, delta, pad_sds)
     n = length(mu)
-    smax = max(maximum(sd), 1e-12)
+    smax = maximum(sd)
     mean_count(x) = sum(1 .- fn((x .- mu) ./ sd).S)
     lo = minimum(mu) - 9 * smax
     step = 9 * smax
@@ -566,12 +577,26 @@ function abilities_from_rank_marginal(p, r; mu0 = nothing, D = nothing,
                                       n_iter = 60, tol = 1e-8,
                                       return_info = false)
     n = length(p)
+    # a whole-number rank with a descriptive refusal (#317; Int(1.5)
+    # threw an InexactError naming nothing the caller passed)
+    (r isa Real && !(r isa Bool) && isfinite(r) && r == floor(r)) ||
+        throw(ArgumentError("r must be a whole-number rank; got $r"))
     r = Int(r)
     1 <= r <= n || error("rank must be in [1, n]; got r=$r, n=$n")
+    all(isfinite, p) || error("rank probabilities must be finite")
     any(p .<= 0) && error("all rank probabilities must be positive")
     logt = log.(p ./ sum(p))
     sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
     fn = _base_fn(base)
+    zz = [-2.3, -1.1, -0.35, 0.6, 1.7]
+    symmetric = all(abs.(fn(zz).S .+ fn(-zz).S .- 1) .< 1e-12)
+    if mu0 === nothing && isodd(n) && r == (n + 1) ÷ 2 && symmetric
+        # the exact middle rank of an odd field under a symmetric base is
+        # even in mu: zero Jacobian at the zero start (#378)
+        throw(ArgumentError("the exact middle rank r=$r of an odd field " *
+            "(n=$n) under a symmetric base is unchanged by mu -> -mu, so " *
+            "the zero start is stationary; pass mu0 to choose the branch"))
+    end
     mu = mu0 === nothing ? zeros(n) : Float64.(collect(mu0)) .- sum(mu0) / n
     st = _rank_marginal_with_jacobian(mu, sd, r, fn, points)
     resid = log.(max.(st.p, TINY)) .- logt

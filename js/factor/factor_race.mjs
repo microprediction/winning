@@ -282,20 +282,51 @@ export function asWeights(W, nNodes, where = "W") {
   return u.map((v) => v / total);
 }
 
-export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
-  const points = opts.points || 501;
-  const base = (opts.base && typeof opts.base === "object")
-    ? opts.base : BASES[opts.base || "normal"];
-  if (!base) throw new Error("unknown base: " + opts.base);
-  const N = mu.length, Q = F.length;
-  W = asWeights(W, Q, "W");
-  const sd = D.map(Math.sqrt);
-  // gauge-fix matching the python reference: center each factor's
-  // loadings across contestants (a common column cannot move an argmin)
+/* (F, W) with zero-weight nodes dropped (python shapes.as_factor_law). A
+   null node is a no-op for the integral but every lattice sizes its
+   window from all the nodes it is given, so zero-mass atoms at f = +-100
+   widened it until each density spike fell between points and the
+   forward returned NaN (#416). */
+export function asFactorLaw(F, W, where = "W") {
+  const Wn = asWeights(W, F.length, where);
+  const keepF = [], keepW = [];
+  let tot = 0;
+  for (let q = 0; q < Wn.length; q++) if (Wn[q] > 0) { keepF.push(F[q]); keepW.push(Wn[q]); tot += Wn[q]; }
+  return { F: keepF, W: keepW.map((v) => v / tot) };
+}
+
+/* A lattice size: a whole number >= 2. `opts.points || 501` read an
+   explicit 0 as "use the default", and 1 divided by points - 1 = 0 and
+   returned all NaN (#444). Same contract as python shapes.as_points. */
+export function asPoints(points, fallback = 501) {
+  if (points === undefined || points === null) return fallback;
+  const v = Number(points);
+  if (typeof points === "boolean" || !Number.isFinite(v) || !Number.isInteger(v))
+    throw new Error(`points must be a whole number of lattice points; got ${points}`);
+  if (v < 2)
+    throw new Error(`points must be at least 2: a lattice of ${v} point${v === 1 ? "" : "s"} has no spacing to integrate on`);
+  return v;
+}
+
+function centredLoadings(V, N) {
   const r0 = V[0].length;
   const colMean = new Array(r0).fill(0);
   for (const row of V) for (let j = 0; j < r0; j++) colMean[j] += row[j] / N;
-  V = V.map((row) => row.map((v, j) => v - colMean[j]));
+  return V.map((row) => row.map((v, j) => v - colMean[j]));
+}
+
+export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
+  const points = asPoints(opts.points, 501);
+  const base = (opts.base && typeof opts.base === "object")
+    ? opts.base : BASES[opts.base || "normal"];
+  if (!base) throw new Error("unknown base: " + opts.base);
+  const N = mu.length;
+  ({ F, W } = asFactorLaw(F, W, "W"));
+  const Q = F.length;
+  const sd = D.map(Math.sqrt);
+  // gauge-fix matching the python reference: center each factor's
+  // loadings across contestants (a common column cannot move an argmin)
+  V = centredLoadings(V, N);
   const M = condMeans(mu, V, F);
   const { x, dx } = lattice(M, sd, points, base.spans);
   const L = x.length;
@@ -363,6 +394,11 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   }
   let total = 0;
   for (const v of p) total += v;
+  // dividing by a zero or non-finite total returned all NaN (#416);
+  // python retries on its bulk window, this standalone module refuses
+  if (!(Number.isFinite(total) && total > 0))
+    throw new Error(`factor race integration failed: quadrature total ${total} ` +
+      "(every density fell between lattice points; raise points or check F, W)");
   const out = Array.from(p, (v) => v / total);
   const res = { p: out, total, slope: Array.from(slope) };
   if (w) res.w = w.map((r) => Array.from(r));
@@ -379,15 +415,26 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
 /* inverse transform: damped coordinatewise Newton (port of
  * abilities_from_probabilities_factor) */
 export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {}) {
-  const nIter = opts.nIter || 50, tol = opts.tol || 1e-6, points = opts.points || 501;
+  const nIter = opts.nIter || 50, tol = opts.tol || 1e-6;
+  const points = asPoints(opts.points, 501);
   const base = opts.base || "normal";
   const N = pTarget.length;
-  W = asWeights(W, F.length, "W");
+  ({ F, W } = asFactorLaw(F, W, "W"));
+  let pmax = 0;
+  for (const v of pTarget) {
+    // !(v > 0) also catches NaN, which `v <= 0` let through (#110)
+    if (!Number.isFinite(v)) throw new Error("targets must be finite");
+    if (!(v > 0)) throw new Error("targets must be positive");
+    if (v > pmax) pmax = v;
+  }
   let psum = 0;
-  for (const v of pTarget) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
-  const p = pTarget.map((v) => v / psum);
+  for (const v of pTarget) psum += v / pmax;
+  const p = pTarget.map((v) => v / pmax / psum);
   const logp = p.map(Math.log);
   const sd = D.map(Math.sqrt);
+  // the forward's gauge, applied BEFORE the warm start, norms and step
+  // caps: V + 100 turned a 2e-7 round trip into a 0.94 ability miss (#70)
+  V = centredLoadings(V, N);
   const vnorm2 = V.map((row) => row.reduce((a, b) => a + b * b, 0));
   const floor = Math.max(1e-9, 1e-4 / N);
   const ident = p.map((v) => v > floor);
@@ -401,8 +448,11 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     mu = abilitiesFromProbabilitiesFactor(
       p, V.map(() => [0]), sdTot2, [[0]], [1], { nIter, tol, points, base });
   } else {
+    // min-wins and in the field's units, as python (#100)
     const m = logp.reduce((a, b) => a + b, 0) / N;
-    mu = logp.map((v) => (v - m) / 2.0);
+    const ds = D.slice().sort((a, b) => a - b);
+    const med = N % 2 ? ds[(N - 1) / 2] : 0.5 * (ds[N / 2 - 1] + ds[N / 2]);
+    mu = logp.map((v) => -(v - m) / 2.0 * Math.sqrt(med));
   }
   const stepCap = D.map((d, i) => Math.sqrt(d + vnorm2[i]));
   let prevRes = Infinity, damp = 1.0, res = Infinity;

@@ -310,13 +310,29 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
   return { x, dx };
 }
 
+/* The general race's factor node rule for loadings V at variances D --
+   gauge-centred V and its (F, W) -- for callers that mix their own
+   conditional kernels over the factor law (topk.mjs, #340). */
+export function _factorNodeRule(V, D) {
+  const n = asLoadings(V, V.length).length;
+  const st = setup(new Array(n).fill(0), V, D, null, null, "normal");
+  return { V: st.V, F: st.F, W: st.W };
+}
+
 export function raceProbabilities(mu, opts = {}) {
   const { V = null, D = null, F = null, W = null, base = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
   if (structure) {
-    return dispatchProbabilities(mu, structure, { base, points, qa, qf, returnSlopes });
+    // one covariance description (#89), and the numerical controls reach
+    // the dispatch: window and delta were validated and then dropped
+    const second = ["V", "D", "F", "W"].filter(k => opts[k] != null);
+    if (second.length)
+      throw new Error(`structure already describes the covariance; ${second.join(", ")} ` +
+                      "would describe it again. Pass one or the other.");
+    return dispatchProbabilities(mu, structure,
+      { base, points, qa, qf, returnSlopes, window: win, delta });
   }
   const st = setup(mu, V, D, F, W, base);
   const n = st.mu.length;
@@ -366,7 +382,13 @@ export function abilitiesFromRace(pTarget, opts = {}) {
           F = null, W = null, base = "normal", points = 257,
           targetFloor = null, returnInfo = false } = opts;
   checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
-  if (structure) return dispatchAbilities(pTarget, structure, opts);
+  if (structure) {
+    const second = ["V", "D", "F", "W"].filter(k => opts[k] != null);
+    if (second.length)
+      throw new Error(`structure already describes the covariance; ${second.join(", ")} ` +
+                      "would describe it again. Pass one or the other.");
+    return dispatchAbilities(pTarget, structure, opts);
+  }
   let target = pTarget.slice();
   const n = target.length;
 
@@ -375,6 +397,13 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   // floored entries are reported. Both keys were on the allowlist and
   // read by nothing, so they passed validation and vanished (#226) --
   // the failure mode the allowlist exists to prevent.
+  // finite BEFORE flooring or the sign test: NaN and Infinity passed
+  // `v <= 0`, and the pair shortcut returned NaN abilities certified
+  // converged (#110). Math.max(NaN, targetFloor) is NaN, so the floor
+  // could not repair it either.
+  const bad = target.findIndex(v => !Number.isFinite(v));
+  if (bad >= 0)
+    throw new Error(`target[${bad}] = ${target[bad]} is not a finite probability`);
   let floored = new Array(n).fill(false);
   if (targetFloor != null) {
     if (!(targetFloor > 0))
