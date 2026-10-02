@@ -248,6 +248,26 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   }
 }
 
+/* #399: the skew-normal standardization used sqrt(1 + alpha^2), which
+   overflows past |alpha| ~ 1.34e154, so a finite saturated shape jumped
+   to an unstandardized law (leader's share 0.665 -> 0.982). Above the
+   threshold the law must be the same as just below it. */
+{
+  const mu = [-0.6, 0.2, 1.1, 1.7];
+  const D = [0.25, 1, 2.25, 4];
+  const Vs = [[], [], [], []], Fs = [[]], Ws = [1];
+  const at = (a) => winProbabilitiesFactor(mu, Vs, D, Fs, Ws,
+    { base: skewNormalBase(a), points: 16001 }).p;
+  const below = at(1e154);
+  for (const a of [2e154, 1e200, 1e300])
+    check(`skew-normal shape ${a} is the saturated law`, at(a), below, 1e-12);
+  const negBelow = at(-1e154);
+  check("skew-normal shape -2e154 is the saturated law", at(-2e154), negBelow, 1e-12);
+  let threw = false;
+  try { skewNormalBase(Infinity); } catch (e) { threw = true; }
+  check("skewNormalBase refuses an infinite shape", [threw ? 1 : 0], [1], 0.5);
+}
+
 /* --- finite weights whose SUM overflows are the same law (#415) -------
    The normaliser divided by the raw total, so [1e308, 1e308] became
    W / Infinity = [0, 0] and every probability NaN. */

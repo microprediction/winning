@@ -52,12 +52,12 @@ def _background_progress(call):
 def test_classic_kernels_release_the_gil(kernel):
     d, offsets = _classic_inputs()
     if kernel == "state_prices":
-        call = lambda: fastrace.classic_state_prices(d, offsets)
+        call = lambda: fastrace.classic_exact_state_prices(d, offsets)
     else:
         prices = list(np.linspace(1.0, 2.0, 400) / 600.0)
         samples = list(np.linspace(100, -100, 400))
         guess = list(np.linspace(-50, 50, 400))
-        call = lambda: fastrace.classic_calibrate(d, prices, samples, guess, 3)
+        call = lambda: fastrace.classic_exact_calibrate(d, prices, samples, guess, 3)
     # calibrate a reference rate of the spinner over the same wall time
     delta, elapsed = _background_progress(call)
     ref, ref_elapsed = _background_progress(lambda: time.sleep(elapsed))
@@ -75,7 +75,7 @@ import multiprocessing as mp, numpy as np, sys
 import fastrace
 x = np.arange(1001) - 500
 d = np.exp(-0.5 * (x / 80.0) ** 2); d /= d.sum()
-fastrace.classic_state_prices(d.tolist(), np.linspace(-100, 100, 200).tolist())
+fastrace.classic_exact_state_prices(d.tolist(), np.linspace(-100, 100, 200).tolist())
 def child(q):
     mu = np.linspace(-2, 2, 120); sd = np.ones(120)
     q.put(float(np.sum(fastrace.top_k(mu, sd, 40, -12.0, 12.0, 513))))
