@@ -1780,7 +1780,6 @@ def plackett_luce_topk_probabilities(p, k=3):
         return out
     # third: j first, l second, i third
     for j in range(n):
-        pj = p[j]
         rem1 = rest[j]
         for sec in range(n):
             if sec == j:
