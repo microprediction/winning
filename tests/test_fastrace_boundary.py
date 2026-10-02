@@ -325,3 +325,24 @@ def test_rank_marginal_jacobian_rank_contract():
 def test_one_runner_rank_window_still_allowed():
     # the rank kernels ask for the window at depth n-1, which is 0 here
     fastrace.top_k_window(np.zeros(1), np.ones(1), 0)
+
+
+# --- #218: the separated Chebyshev pass is unit-free -----------------------
+
+@pytest.mark.parametrize("spread", [False, True])
+def test_separated_kernel_scale_invariance(spread):
+    rel = np.array([1.0, 1.5, 0.7]) if spread else np.ones(3)
+
+    def price(c):
+        return np.asarray(fastrace.win_probabilities_factor_separated(
+            c * np.array([0.0, 0.4, 1.0]), np.zeros((3, 1)), c * c * rel,
+            np.zeros((1, 1)), np.ones(1), points=1501, rm=48, rs=14)[0])
+
+    p1 = price(1.0)
+    if not spread:
+        assert np.allclose(p1, [0.5289947793, 0.3279161766, 0.1430890441],
+                           atol=1e-6)
+    for e in range(-8, 9):
+        pc = price(10.0 ** e)
+        assert np.all(np.isfinite(pc)), e
+        assert np.max(np.abs(pc - p1)) < 1e-9, (e, pc, p1)

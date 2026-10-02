@@ -271,14 +271,23 @@ pub fn cheb_nodes(a: f64, b: f64, r: usize) -> Vec<f64> {
         .collect()
 }
 
+/// Barycentric weights for arbitrary distinct nodes, up to a common
+/// factor (which the second-kind formula in bary_row cancels). Computed
+/// on nodes rescaled to unit half-width: the raw product of 1/(x_j - x_k)
+/// scales as h^-(r-1), so at r = 48 an interval of width 1e-6 overflowed
+/// 34 of 48 weights to +-inf and bary_row then formed inf/inf (#218).
 pub fn bary_weights(nodes: &[f64]) -> Vec<f64> {
     let r = nodes.len();
+    let lo = nodes.iter().cloned().fold(f64::INFINITY, f64::min);
+    let hi = nodes.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let h = 0.5 * (hi - lo);
+    let h = if h > 0.0 && h.is_finite() { h } else { 1.0 };
     (0..r)
         .map(|j| {
             let mut w = 1.0;
             for k in 0..r {
                 if k != j {
-                    w /= nodes[j] - nodes[k];
+                    w *= h / (nodes[j] - nodes[k]);
                 }
             }
             w
@@ -286,11 +295,39 @@ pub fn bary_weights(nodes: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+/// Scale-free closed-form barycentric weights for the r first-kind
+/// Chebyshev roots that cheb_nodes returns, up to a common factor:
+/// w_j = (-1)^j sin((2j+1) pi / (2r)). Independent of the interval, so
+/// no unit of the caller's can overflow them (#218).
+pub fn cheb_bary_weights(r: usize) -> Vec<f64> {
+    (0..r)
+        .map(|j| {
+            let s = ((2 * j + 1) as f64 * std::f64::consts::PI / (2 * r) as f64).sin();
+            if j % 2 == 0 { s } else { -s }
+        })
+        .collect()
+}
+
 /// Barycentric Lagrange interpolation row for query point q.
+///
+/// A node hit is decided RELATIVE to the node span: the old absolute
+/// `|q - x_j| < 1e-14` collapsed distinct locations onto nodes once the
+/// caller's units made the whole interval that small (#218). A
+/// degenerate span (every node equal) puts the row on the first node.
 pub fn bary_row(nodes: &[f64], wts: &[f64], q: f64) -> Vec<f64> {
     let r = nodes.len();
+    let lo = nodes.iter().cloned().fold(f64::INFINITY, f64::min);
+    let hi = nodes.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let span = hi - lo;
+    if !(span > 0.0) {
+        let mut row = vec![0.0; r];
+        row[0] = 1.0;
+        return row;
+    }
+    let tol = 1e-14 * span;
     for j in 0..r {
-        if (q - nodes[j]).abs() < 1e-14 {
+        let gap = (q - nodes[j]).abs();
+        if gap == 0.0 || gap < tol {
             let mut row = vec![0.0; r];
             row[j] = 1.0;
             return row;
@@ -320,7 +357,9 @@ pub fn separated_kernel(
     let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
     let sd_min = sd.iter().cloned().fold(f64::MAX, f64::min);
     let sd_max = sd.iter().cloned().fold(f64::MIN, f64::max);
-    let rs = if sd_max - sd_min < 1e-12 { 1 } else { rs_req };
+    // relative, like every other decision here: the absolute 1e-12 used
+    // to call a heterogeneous field homogeneous in small units (#218)
+    let rs = if sd_max - sd_min <= 1e-12 * sd_max { 1 } else { rs_req };
 
     let mut m_all = vec![0.0f64; q * n];
     let mut m_lo = f64::MAX;
@@ -346,8 +385,8 @@ pub fn separated_kernel(
     } else {
         cheb_nodes(sd_min, sd_max, rs)
     };
-    let wm = bary_weights(&mn);
-    let ws = bary_weights(&sn);
+    let wm = cheb_bary_weights(rm);
+    let ws = if rs == 1 { vec![1.0] } else { cheb_bary_weights(rs) };
     let r_tot = rm * rs;
 
     // kernel tables at Chebyshev nodes: (r_tot, points)
@@ -2417,5 +2456,51 @@ mod tests {
         let w = ndarray::arr1(&[1.0]);
         ordered_kernel(mu.view(), v.view(), d.view(), f.view(), w.view(),
                        201, -8.0, 8.7, 4);
+    }
+    fn separated_price(c: f64, sd_spread: bool) -> Vec<f64> {
+        let mu = ndarray::arr1(&[0.0, 0.4 * c, 1.0 * c]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = if sd_spread {
+            ndarray::arr1(&[c * c, 1.5 * c * c, 0.7 * c * c])
+        } else {
+            ndarray::arr1(&[c * c, c * c, c * c])
+        };
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = ndarray::arr1(&[1.0]);
+        separated_kernel(mu.view(), v.view(), d.view(), f.view(), w.view(),
+                         1501, 48, 14).0.to_vec()
+    }
+
+    #[test]
+    fn separated_kernel_is_scale_invariant() {
+        for &spread in &[false, true] {
+            let p1 = separated_price(1.0, spread);
+            for e in -8..=8 {
+                let c = 10f64.powi(e);
+                let pc = separated_price(c, spread);
+                for (a, b) in p1.iter().zip(&pc) {
+                    assert!(b.is_finite() && (a - b).abs() < 1e-9,
+                            "c=1e{e} spread={spread}: {pc:?} vs {p1:?}");
+                }
+            }
+        }
+        let p = separated_price(1.0, false);
+        let want = [0.5289947793, 0.3279161766, 0.1430890441];
+        for (a, b) in p.iter().zip(&want) {
+            assert!((a - b).abs() < 1e-6, "{p:?}");
+        }
+    }
+
+    #[test]
+    fn bary_weights_do_not_overflow_on_small_intervals() {
+        let nodes = cheb_nodes(0.0, 1e-6, 48);
+        let w = bary_weights(&nodes);
+        assert!(w.iter().all(|x| x.is_finite()));
+        let wc = cheb_bary_weights(48);
+        // same weights up to a common factor
+        let ratio = w[0] / wc[0];
+        for (a, b) in w.iter().zip(&wc) {
+            assert!((a / b - ratio).abs() < 1e-8 * ratio.abs());
+        }
     }
 }
