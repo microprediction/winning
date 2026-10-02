@@ -263,4 +263,136 @@ end
     @test excursion_probability(c3, 5.0) > excursion_probability(c3, 9.0)
 end
 
+# --- the chain's shape is enforced at construction (#347) --------------
+@testset "GaussMarkovChain validates its shape" begin
+    ok = GaussMarkovChain([0.0, 0.0], 1.0, [0.0], [1.0])
+    @test length(ok) == 2
+    # surplus transitions used to be accepted and silently ignored
+    @test_throws DimensionMismatch GaussMarkovChain([0.0, 0.0], 1.0,
+                                                    [0.0, 25.0], [1.0, 1e-12])
+    @test_throws DimensionMismatch GaussMarkovChain([0.0], 1.0, [1e100], [1e-100])
+    # short ones failed later with a raw BoundsError
+    @test_throws DimensionMismatch GaussMarkovChain(zeros(3), 1.0, [0.5], [1.0])
+    @test_throws DimensionMismatch GaussMarkovChain(zeros(3), 1.0, [0.5, 0.5], [1.0])
+    @test_throws ArgumentError GaussMarkovChain(Float64[], 1.0, Float64[], Float64[])
+    @test_throws ArgumentError GaussMarkovChain([0.0, 0.0], -1.0, [0.0], [1.0])
+    @test_throws ArgumentError GaussMarkovChain([0.0, 0.0], 1.0, [0.0], [-1.0])
+    @test_throws ArgumentError GaussMarkovChain([0.0, NaN], 1.0, [0.0], [1.0])
+    @test_throws ArgumentError GaussMarkovChain([0.0, 0.0], 1.0, [Inf], [1.0])
+    # integer input still converts
+    @test GaussMarkovChain([0, 1], 1, [0], [1]).mu == [0.0, 1.0]
+end
+
+# --- an asymmetric precision is refused, not symmetrised (#356) --------
+@testset "chain_from_precision requires symmetry" begin
+    mu = zeros(2)
+    Qsym = [2.0 -1.0; -1.0 2.0]
+    Qlower = [2.0 0.0; -1.0 2.0]       # used to price as diag(2, 2)
+    Qasym = [2.0 -1.0; -0.1 2.0]       # used to price as Qsym
+    c = chain_from_precision(mu, Qsym)
+    @test c.phi ≈ [0.5]
+    @test abs(max_cdf(c, 0.0; points = 1600) - 1 / 3) < 2e-3
+    for Q in (Qlower, Qasym)
+        @test_throws ErrorException chain_from_precision(mu, Q)
+        @test_throws ErrorException chain_from_precision(mu, sparse(Q))
+    end
+    # symmetric sparse and an explicit tolerance still pass
+    @test chain_from_precision(mu, sparse(Qsym)).phi ≈ [0.5]
+    @test chain_from_precision(mu, [2.0 -1.0; -1.0 + 1e-10 2.0];
+                               tol = 1e-8).phi ≈ [0.5] atol = 1e-8
+    @test_throws ErrorException chain_from_precision(mu, [2.0 NaN; NaN 2.0])
+end
+
+# --- a batch of thresholds is covered at both ends (#417) --------------
+@testset "vector max_cdf agrees with the scalar calls" begin
+    c = GaussMarkovChain([0.0], 1.0, Float64[], Float64[])
+    for us in ([-9.0, 0.0], [-12.0, 0.0], [-12.0, 0.0, 12.0],
+               [-3.0, -1.0, 0.5, 2.0])
+        vb = max_cdf(c, us)
+        vs = [max_cdf(c, u) for u in us]
+        @test all(vb .> 0)                       # was exactly 0 at -9, -12
+        @test all(abs.(vb .- vs) .<= 1e-3 .* vs)
+        @test all(abs.(vb .- GE.ndtr.(us)) .<= 1e-3 .* GE.ndtr.(us))
+        @test issorted(vb[sortperm(us)])
+    end
+    c3 = GaussMarkovChain(zeros(3), 1.0, fill(0.8, 2), fill(0.6, 2))
+    us = [-4.0, 0.0, 2.0]
+    @test maximum(abs.(max_cdf(c3, us) .- [max_cdf(c3, u) for u in us]) ./
+                  [max_cdf(c3, u) for u in us]) < 1e-2
+    @test max_cdf(c3, Float64[]) == Float64[]
+end
+
+# --- the lattice is scale-equivariant (#363) ---------------------------
+@testset "scale equivariance below 1e-12" begin
+    ref = GaussMarkovChain([0.0, 0.3, -0.2], 1.0, [0.7, 0.5], [0.6, 0.9])
+    mref = max_cdf(ref, 0.8)
+    eref = excursion_probability(ref, 0.8)
+    fref = first_passage(ref, 0.8)
+    aref = argmax_marginals(ref)
+    xref = expected_max(ref)
+    for a in (1e-16, 1e-14, 1e-9, 1e3, 1e8)
+        c = GaussMarkovChain(a .* ref.mu, a * ref.sd0, ref.phi, a .* ref.s)
+        @test abs(max_cdf(c, a * 0.8) - mref) < 1e-9
+        @test abs(excursion_probability(c, a * 0.8) - eref) < 1e-9
+        @test maximum(abs.(first_passage(c, a * 0.8) .- fref)) < 1e-9
+        @test maximum(abs.(argmax_marginals(c) .- aref)) < 1e-9
+        @test abs(expected_max(c) / a - xref) < 1e-9 * max(1, abs(xref))
+    end
+    # the one-node reproducer: 0.6249 against Phi(1) = 0.8413
+    tiny = GaussMarkovChain([0.0], 1e-14, Float64[], Float64[])
+    @test abs(max_cdf(tiny, 1e-14) - GE.ndtr(1.0)) < 1e-12
+    @test abs(excursion_probability(tiny, 1e-14) - GE.ndtr(-1.0)) < 1e-12
+end
+
+# --- sub-cell scales keep their within-cell information (#244) ---------
+@testset "unresolved scales: initial law, identity chain, drift" begin
+    # a strictly positive but sub-cell sd0: was 5.5e-15 instead of 0.25
+    c = GaussMarkovChain([0.0, 0.0], 1e-4, [0.0], [1.0])
+    for pts in (200, 400, 1600)
+        @test abs(max_cdf(c, 0.0; points = pts) - 0.25) < 1e-9
+        @test abs(excursion_probability(c, 0.0; points = pts) - 0.75) < 1e-9
+        @test maximum(abs.(first_passage(c, 0.0; points = pts) .-
+                           [0.5, 0.25, 0.25])) < 1e-9
+    end
+    # an exactly repeated variable cannot first cross after step 1: the
+    # boundary cell was re-clipped at every step (0.154 invented mass)
+    n = 20
+    rep = GaussMarkovChain(zeros(n), 1.0, ones(n - 1), zeros(n - 1))
+    x, _ = GE._grid(rep, 20)
+    for (u, pts) in ((x[10], 20), (x[10], 400), (0.3, 400))
+        p = first_passage(rep, u; points = pts)
+        @test abs(p[1] - (1 - GE.ndtr(u))) < 1e-9
+        @test maximum(abs.(p[2:n])) < 1e-9
+        @test abs(p[end] - GE.ndtr(u)) < 1e-9
+    end
+    # a sub-cell drift is carried, not snapped away at every step:
+    # X_t = X_1 + 0.001 (t - 1) exactly, so max = X_200
+    m = 200
+    drift = GaussMarkovChain(0.001 .* (0:(m - 1)), 1.0, ones(m - 1), zeros(m - 1))
+    @test abs(max_cdf(drift, 0.5; points = 300) - GE.ndtr(0.5 - 0.199)) < 2e-3
+end
+
+# --- argmax refuses an order the lattice cannot see (#432) -------------
+@testset "argmax ordering below lattice resolution" begin
+    Phi = GE.ndtr
+    exact(phi, d, s) = Phi(-d / sqrt((1 - phi)^2 + s^2))
+    # the reproducer returned [0.5, 0.5]; truth [Phi(-1), Phi(1)]
+    for (d, s) in ((0.001, 0.001), (0.001, 0.0001))
+        c = GaussMarkovChain([0.0, d], 1.0, [1.0], [s])
+        @test_throws ErrorException argmax_marginals(c)
+        @test_throws ErrorException argmax_marginals(c; points = 1600)
+    end
+    # refused at the default lattice, answered (correctly) once raised
+    c = GaussMarkovChain([0.0, 0.05], 1.0, [1.0], [0.05])
+    @test_throws ErrorException argmax_marginals(c)
+    @test abs(argmax_marginals(c; points = 1600)[1] - exact(1.0, 0.05, 0.05)) < 2e-3
+    # wherever it answers, it answers to the oracle
+    for (phi, d, s) in ((1.0, 0.3, 0.3), (0.99, 0.05, 0.2), (1.0, 0.5, 1.0),
+                        (1.0, 0.2, 0.5), (0.95, 0.1, 0.3), (0.9, 0.0, 0.05))
+        c = GaussMarkovChain([0.0, d], 1.0, [phi], [s])
+        P = argmax_marginals(c)
+        @test abs(P[1] - exact(phi, d, s)) < 2e-3
+    end
+end
+
 println("all GMRFExtremes tests passed")
