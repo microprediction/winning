@@ -86,18 +86,10 @@
   # D = c(2, 9) at n = 4 priced exactly the race D = c(2, 9, 2, 9)
   # prices: same numbers, no warning. Found by the cross-port
   # divergence scan, where python, the browser and julia all refuse it.
-  if (is.null(D)) D <- rep(1, n)
-  D <- as.numeric(D)
-  if (length(D) == 1L) D <- rep(D, n)
-  if (length(D) != n)
-    stop(sprintf(paste("D must be a scalar or one idiosyncratic variance",
-                       "per contestant; got %d for %d contestants"),
-                 length(D), n), call. = FALSE)
-  if (any(!is.finite(D)))
-    stop("D has a non-finite entry", call. = FALSE)
-  if (any(D < 0))
-    stop(sprintf("D[%d] = %g is a negative variance", which(D < 0)[1],
-                 D[which(D < 0)[1]]), call. = FALSE)
+  # positive, as python's as_idio(D, n, positive=TRUE): a zero D is a
+  # point mass the lattice divides by, which crashed in .bulk_window with
+  # "missing value where TRUE/FALSE needed" instead of naming D.
+  D <- .as_idio(D, n, positive = TRUE)
   if (is.null(V)) {
     V <- matrix(0, n, 1)
     F <- matrix(0, 1, 1)
