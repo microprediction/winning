@@ -473,7 +473,10 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     does, and the achieved delta is reported. The window is then exactly
     what it claims to be at the delta it names.
     """
-    S_of = (lambda z: np.maximum(1.0 - _ndtr_local(z), 1e-300)) if fn is None \
+    # the normal base needs only its survival here; calling _normal would
+    # also build the density and its slope, discarded, ~160 times (#112)
+    S_of = (lambda z: np.maximum(1.0 - _ndtr_local(z), 1e-300)) \
+        if fn is None or fn is _normal \
         else (lambda z: np.maximum(fn(z)[0], 1e-300))
     mu_lo = M_all.min(axis=0)
     mu_hi = M_all.max(axis=0)
@@ -533,6 +536,8 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
         a, b = lo0, hi0
         for _ in range(80):
             m = 0.5 * (a + b)
+            if m == a or m == b:
+                break               # adjacent floats: the rest are no-ops (#112)
             if G(m) < d:
                 a = m
             else:
@@ -541,6 +546,8 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
         a, b = xlo, hi0
         for _ in range(80):
             m = 0.5 * (a + b)
+            if m == a or m == b:
+                break               # adjacent floats: the rest are no-ops (#112)
             if H(m) < 1.0 - d:
                 a = m
             else:
