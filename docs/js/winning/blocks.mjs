@@ -1,6 +1,8 @@
 // Block, nested and tree races -- port of winning/factor/blocks.py.
 import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
-         OPT_HINTS, asLoadings, firstPrimes } from "./core.mjs";
+         OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
+         asFactorNodes, asWeights, asIterations, asTolerance,
+         asFiniteVector } from "./core.mjs";
 import { invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -24,6 +26,81 @@ export function clusterIndex(cluster) {
   const map = new Map(lv.map((v, i) => [v, i]));
   return cluster.map(c => map.get(c));
 }
+
+/* One door for the block/nested/tree arguments.
+
+   The leaf-cluster `loading` was read raw: the rank came from
+   loading[0].length and each row was reduced over its OWN length, so a
+   transposed (1, n) or (r, n) spelling -- the same race in python --
+   threw or went NaN, and a RAGGED row was silently zero-padded, pricing a
+   different covariance (a 2.4-point share move) with no complaint (#335).
+   The loading now goes through asLoadings like V does everywhere else;
+   mu and D through their own doors (#440, #254). */
+function blockArgs(mu, cluster, loading, D, where) {
+  mu = asAbilities(mu, "mu");
+  const n = mu.length;
+  if (!isVector(cluster) || cluster.length !== n)
+    throw new Error(
+      `${where}: cluster must have one label per contestant; got ` +
+      `${isVector(cluster) ? cluster.length : typeof cluster} for ${n}`);
+  if (loading == null)
+    throw new Error(`${where}: loading is required (use 0 for no cluster effect)`);
+  const L = asLoadings(loading, n, "loading");
+  return { mu, cluster: Array.from(cluster), L, D: asIdio(D, n, "D") };
+}
+
+/* A tree is a tree: one root, every parent an existing node, no cycles,
+   and the cluster nodes are leaves. The kernels follow parent pointers
+   with `while (par[u] >= 0)`, so a cycle -- [1, 0], or a self-parent --
+   spun synchronously forever and froze the page (#328). Checked once,
+   in linear time, before any walk. */
+export function validateTree(parent, strength, nC, where = "tree") {
+  if (!isVector(parent))
+    throw new Error(`${where}: parent must be an array of node indices`);
+  const nT = parent.length;
+  if (!isVector(strength) || strength.length !== nT)
+    throw new Error(
+      `${where}: strength must have one entry per tree node; got ` +
+      `${isVector(strength) ? strength.length : typeof strength} for ${nT}`);
+  const par = Array.from(parent);
+  for (let t = 0; t < nT; t++) {
+    const u = par[t];
+    if (!Number.isInteger(u) || u < -1 || u >= nT)
+      throw new Error(`${where}: parent[${t}] = ${u} is not -1 or a node index in [0, ${nT})`);
+    if (u === t)
+      throw new Error(`${where}: parent contains a cycle: ${t} -> ${t}`);
+    if (typeof strength[t] !== "number" || !Number.isFinite(strength[t]))
+      throw new Error(`${where}: strength[${t}] = ${strength[t]} is not finite`);
+  }
+  const roots = [];
+  for (let t = 0; t < nT; t++) if (par[t] < 0) roots.push(t);
+  if (roots.length !== 1)
+    throw new Error(
+      `${where}: a tree has exactly one root (parent -1); got ${roots.length}` +
+      (roots.length ? ` (${roots.join(", ")})` : ""));
+  // cycle check: every node must reach the root within nT hops
+  const state = new Uint8Array(nT);         // 0 unseen, 1 on path, 2 done
+  for (let t = 0; t < nT; t++) {
+    const path = [];
+    let u = t;
+    while (u >= 0 && state[u] === 0) { state[u] = 1; path.push(u); u = par[u]; }
+    if (u >= 0 && state[u] === 1) {
+      const k = path.indexOf(u);
+      throw new Error(
+        `${where}: parent contains a cycle: ${path.slice(k).concat([u]).join(" -> ")}`);
+    }
+    for (const v of path) state[v] = 2;
+  }
+  if (nC > nT)
+    throw new Error(`${where}: ${nC} clusters but only ${nT} tree nodes`);
+  for (let t = 0; t < nT; t++)
+    if (par[t] >= 0 && par[t] < nC)
+      throw new Error(
+        `${where}: node ${t} has parent ${par[t]}, a cluster node; the first ` +
+        `${nC} nodes are the clusters and must be leaves`);
+  return { parent: par, strength: Array.from(strength, Number) };
+}
+
 function stableOrder(inv) {
   return inv.map((v, i) => i).sort((a, b) => inv[a] - inv[b] || a - b);
 }
@@ -122,6 +199,17 @@ function clusterNodes(r, qa) {
   return { nodes, w };
 }
 
+/* The caller-node override goes through the same doors as F/W in the
+   factor race: a node matrix of the loading's rank and exactly one
+   finite non-negative weight per node, normalised. Signed weights moved
+   a share by 0.17 and surplus weights were silently ignored (#290). */
+function checkedNodes(o, r) {
+  if (!o || typeof o !== "object" || !("nodes" in o) || !("w" in o))
+    throw new Error("nodes must be {nodes, w}: the factor nodes and their weights");
+  const nodes = asFactorNodes(o.nodes, r, "nodes.nodes");
+  return { nodes, w: asWeights(o.w, nodes.length, "nodes.w") };
+}
+
 function fieldPass(muO, sdO, shifts, cO, nC, x) {
   // returns S[c][q][t], logF[i][q][t], pdf[i][q][t]
   const n = muO.length, Q = shifts[0].length, P = x.length;
@@ -146,16 +234,18 @@ function fieldPass(muO, sdO, shifts, cO, nC, x) {
 }
 
 function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
+  // `loading` is the canonical (n, r) matrix from blockArgs
   const n = mu.length;
-  const isMat = Array.isArray(loading[0]);
-  const r = isMat ? loading[0].length : 1;
+  const isMat = true;
+  const r = loading[0].length;
   const inv = clusterIndex(cluster);
   const ord = stableOrder(inv);
   const muO = ord.map(i => mu[i]), sdO = ord.map(i => sd[i]);
   const VO = ord.map(i => (isMat ? loading[i] : [loading[i]]));
   const cO = ord.map(i => inv[i]);
   const nC = Math.max(...cO) + 1;
-  const { nodes, w } = nodesOverride || clusterNodes(r, qa);
+  const { nodes, w } = nodesOverride
+    ? checkedNodes(nodesOverride, r) : clusterNodes(r, qa);
   const Q = nodes.length;
   const maxNodeNorm = Math.max(...nodes.map(nq => Math.sqrt(nq.reduce((a, b) => a + b * b, 0))));
   const amp = VO.map(vi => Math.sqrt(vi.reduce((a, b) => a + b * b, 0)) * maxNodeNorm);
@@ -194,8 +284,9 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
 export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   checkOpts(opts, BLOCK_RACE_PROBABILITIES_OPTS, "blockRaceProbabilities", OPT_HINTS);
   const { points = 257, qa = 9, nodes = null } = opts;
-  const sd = D.map(Math.sqrt);
-  const p = blockMax(mu.map(v => -v), sd, cluster, loading, points, qa, nodes);
+  const a = blockArgs(mu, cluster, loading, D, "blockRaceProbabilities");
+  const sd = a.D.map(Math.sqrt);
+  const p = blockMax(a.mu.map(v => -v), sd, a.cluster, a.L, points, qa, nodes);
   return checkedMass(p, "block race");
 }
 
@@ -204,6 +295,10 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
   if (!coupling || gamma === 0)
     return blockRaceProbabilities(mu, cluster, loading, D, { points, qa });
+  const a = blockArgs(mu, cluster, loading, D, "nestedRaceProbabilities");
+  mu = a.mu;
+  if (typeof gamma !== "number" || !Number.isFinite(gamma))
+    throw new Error(`nestedRaceProbabilities: gamma must be a finite number; got ${gamma}`);
   // The shared contract, as python's atleast_2d-plus-transpose does
   // it: a (rank, n) coupling is the SAME race as (n, rank). This
   // normalised by hand and never transposed, so the transposed
@@ -219,13 +314,13 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
     fn = cn.nodes; fw = cn.w;
   }
   const n = mu.length;
-  const sd = D.map(Math.sqrt);
+  const sd = a.D.map(Math.sqrt);
   const p = new Array(n).fill(0);
   for (let q = 0; q < fn.length; q++) {
     // average the RAW conditional masses (each near one) and normalize
     // once: normalizing each conditional separately hides a window defect
     const shifted = mu.map((m, i) => -(m + gamma * g[i].reduce((a, b, r) => a + b * fn[q][r], 0)));
-    const pq = blockMax(shifted, sd, cluster, loading, points, qa, null);
+    const pq = blockMax(shifted, sd, a.cluster, a.L, points, qa, null);
     for (let i = 0; i < n; i++) p[i] += fw[q] * pq[i];
   }
   return checkedMass(p, "nested race");
@@ -233,21 +328,22 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
 
 /* tree machinery shared by forward and jacobian */
 function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
-  if (Array.isArray(loading[0])) {
-    if (loading[0].length > 1) {
-      throw new Error(
-        "tree races take scalar (rank-one) leaf-cluster loadings; rank-r " +
-        "leaf effects are supported by the block grammar only.");
-    }
-    loading = loading.map(v => v[0]);
+  const a = blockArgs(mu, cluster, loading, D, "tree race");
+  if (a.L[0].length > 1) {
+    throw new Error(
+      "tree races take scalar (rank-one) leaf-cluster loadings; rank-r " +
+      "leaf effects are supported by the block grammar only.");
   }
-  const m = mu.map(v => -v);
-  const sd = D.map(Math.sqrt);
-  const lam = strength.slice();
-  const par = parent.slice();                        // -1 = root (python style)
-  const n = m.length, nT = par.length;
+  loading = a.L.map(v => v[0]);
+  cluster = a.cluster;
+  const m = a.mu.map(v => -v);
+  const sd = a.D.map(Math.sqrt);
   const inv = clusterIndex(cluster);
   const nC = Math.max(...inv) + 1;
+  const tv = validateTree(parent, strength, nC, "tree race");   // #328
+  const lam = tv.strength;
+  const par = tv.parent;                             // -1 = root (python style)
+  const n = m.length, nT = par.length;
   const ord = stableOrder(inv);
   const muO = ord.map(i => m[i]), sdO = ord.map(i => sd[i]);
   const vO = ord.map(i => loading[i]), cO = ord.map(i => inv[i]);
@@ -407,10 +503,15 @@ function assertRankOneLoading(loading, where) {
 
 export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
   checkOpts(opts, BLOCK_RACE_JACOBIAN_OPTS, "blockRaceJacobian", OPT_HINTS);
-  assertRankOneLoading(loading, "blockRaceJacobian");
   const { points = 257, qa = 9 } = opts;
-  const m = mu.map(v => -v);
-  const sd = D.map(Math.sqrt);
+  const ba = blockArgs(mu, cluster, loading, D, "blockRaceJacobian");
+  // after normalisation, so a (1, n) rank-one row is rank one here too
+  // and the rank-r refusal of #271 sees the canonical rank (#335)
+  assertRankOneLoading(ba.L, "blockRaceJacobian");
+  loading = ba.L.map(v => v[0]);
+  cluster = ba.cluster;
+  const m = ba.mu.map(v => -v);
+  const sd = ba.D.map(Math.sqrt);
   const inv = clusterIndex(cluster);
   const ord = stableOrder(inv);
   const muO = ord.map(i => m[i]), sdO = ord.map(i => sd[i]);
@@ -470,6 +571,7 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
   if (!coupling || gamma === 0)
     return blockRaceJacobian(mu, cluster, loading, D, { points, qa });
+  mu = asAbilities(mu);
   // The shared contract, as python's atleast_2d-plus-transpose does
   // it: a (rank, n) coupling is the SAME race as (n, rank). This
   // normalised by hand and never transposed, so the transposed
@@ -525,7 +627,15 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
 export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) {
   checkOpts(opts, ABILITIES_FROM_BLOCK_RACE_OPTS, "abilitiesFromBlockRace", OPT_HINTS);
   const { points = 257, qa = 9, tol = 1e-10, maxIter = 25 } = opts;
-  let pT = pTarget.slice();
+  // the budget is a loop bound: 0/negative/NaN skipped Newton and
+  // returned the globaliser's state, a fraction ran Math.ceil of itself
+  // while reporting the fraction, and Infinity with a sub-machine tol
+  // spun forever on a step no line search could accept (#421)
+  asIterations(maxIter, "abilitiesFromBlockRace", "maxIter");
+  asTolerance(tol, "abilitiesFromBlockRace");
+  let pT = asFiniteVector(pTarget, "target", "probability");
+  if (pT.some(v => v < 0))
+    throw new Error("abilitiesFromBlockRace: a target probability is negative");
   let s = pT.reduce((a, b) => a + b, 0);
   pT = pT.map(v => v / s);
   const n = pT.length;
@@ -549,18 +659,24 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
     if (eN < err) { mu = muN; lp = lpN; err = eN; eta = Math.min(eta * 1.2, 1.5); }
     else { eta *= 0.5; if (eta < 1e-4) break; }
   }
-  for (let it = 0; it < maxIter; it++) {
-    let pv = forward(mu).map(v => Math.max(v, TINY));
+  const residualAt = m => {
+    let pv = forward(m).map(v => Math.max(v, TINY));
     const sv = pv.reduce((a, b) => a + b, 0);
     pv = pv.map(v => v / sv);
-    const r = pv.map((v, i) => Math.log(v) - lt[i]);
+    return { pv, r: pv.map((v, i) => Math.log(v) - lt[i]) };
+  };
+  let iterations = 0;
+  for (let it = 0; it < maxIter; it++) {
+    const { pv, r } = residualAt(mu);
     const cur = Math.max(...r.map(Math.abs));
-    if (cur < tol) return { mu: mu.map(v => v - mean(mu)), residual: cur, iterations: it };
+    if (cur < tol) return { mu: mu.map(v => v - mean(mu)), residual: cur, iterations };
+    iterations = it + 1;
     const J = blockRaceJacobian(mu, cluster, loading, D, { points, qa });
     const A = J.map((row, i) => row.map(v => v / pv[i] + 1 / n));
     let step = solve(A, r.map(v => -v));
     const nn = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
     if (nn > 5) step = step.map(v => v * 5 / nn);
+    let accepted = false;
     for (let k = 0; k < 8; k++) {
       let muN = mu.map((m, i) => m + step[i]);
       const mm = mean(muN);
@@ -568,14 +684,17 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
       let pN = forward(muN).map(v => Math.max(v, TINY));
       const sN = pN.reduce((a, b) => a + b, 0);
       pN = pN.map(v => v / sN);
-      if (Math.max(...pN.map((v, i) => Math.abs(Math.log(v) - lt[i]))) < cur) { mu = muN; break; }
+      if (Math.max(...pN.map((v, i) => Math.abs(Math.log(v) - lt[i]))) < cur) {
+        mu = muN; accepted = true; break;
+      }
       step = step.map(v => v * 0.5);
     }
+    // no line-search step improved: the state cannot change, so further
+    // sweeps would repeat this one exactly. Stop and report (#421).
+    if (!accepted) break;
   }
-  let pv = forward(mu).map(v => Math.max(v, TINY));
-  const sv = pv.reduce((a, b) => a + b, 0);
-  pv = pv.map(v => v / sv);
+  const { pv } = residualAt(mu);
   return { mu: mu.map(v => v - mean(mu)),
            residual: Math.max(...pv.map((v, i) => Math.abs(Math.log(v) - lt[i]))),
-           iterations: maxIter };
+           iterations };
 }
