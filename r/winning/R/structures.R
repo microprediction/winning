@@ -54,16 +54,23 @@ Tree <- function(cluster, loading, D, parent, strength)
              parent = parent, strength = strength)
 
 .dispatch_probabilities <- function(mu, s, base = "normal", points = 257,
-                                    qa = 9, qf = 15, return_slopes = FALSE) {
+                                    qa = 9, qf = 15, return_slopes = FALSE,
+                                    window = "bulk", delta = 1e-12) {
   cls <- class(s)[1]
   if (cls == "Independent") {
     return(race_probabilities(mu, V = NULL, D = s$D, base = base,
-                              points = points, return_slopes = return_slopes))
+                              points = points, return_slopes = return_slopes,
+                              window = window, delta = delta))
   }
   if (cls == "Factor") {
     return(race_probabilities(mu, V = s$V, D = s$D, base = base,
-                              points = points, return_slopes = return_slopes))
+                              points = points, return_slopes = return_slopes,
+                              window = window, delta = delta))
   }
+  # the hierarchical kernels are Gaussian hard races on their own
+  # windows: a non-normal base, a window or a delta was dropped silently
+  # and a different race priced (#89); refuse them, as python does
+  .refuse_hierarchical_controls(cls, base, window, delta)
   if (return_slopes) stop("return_slopes is available for Independent/Factor only")
   if (cls == "Blocks") {
     return(block_race_probabilities(mu, s$cluster, s$loading, s$D,
@@ -82,32 +89,54 @@ Tree <- function(cluster, loading, D, parent, strength)
   stop("unknown structure ", cls)
 }
 
+.refuse_hierarchical_controls <- function(cls, base, window = "bulk",
+                                          delta = 1e-12) {
+  bad <- c(base = !identical(base, "normal"),
+           window = !identical(window, "bulk"),
+           delta = !isTRUE(all.equal(delta, 1e-12)))
+  if (any(bad))
+    stop(sprintf(paste("%s races do not support %s: the block/nested/tree",
+                       "kernels are Gaussian hard races on their own",
+                       "lattice windows. Use structure=Factor (or V=/D=)."),
+                 cls, paste(names(bad)[bad], collapse = ", ")), call. = FALSE)
+}
+
 .dispatch_abilities <- function(p, s, base = "normal", points = 257,
-                                qa = 9, qf = 15) {
+                                qa = 9, qf = 15, n_iter = NULL, tol = NULL) {
+  # n_iter and tol are the CALLER'S controls: every branch used to run
+  # its own hidden defaults (#89). NULL keeps the branch's default.
   cls <- class(s)[1]
+  ctl <- function(v, default) if (is.null(v)) default else v
   if (cls == "Independent") {
     return(abilities_from_race(p, V = NULL, D = s$D, base = base,
-                               points = points))
+                               points = points, n_iter = ctl(n_iter, 60),
+                               tol = ctl(tol, 1e-8)))
   }
   if (cls == "Factor") {
     return(abilities_from_race(p, V = s$V, D = s$D, base = base,
-                               points = points))
+                               points = points, n_iter = ctl(n_iter, 60),
+                               tol = ctl(tol, 1e-8)))
   }
+  .refuse_hierarchical_controls(cls, base)
   if (cls == "Blocks") {
     return(abilities_from_block_race(p, s$cluster, s$loading, s$D,
-                                     points = points, qa = qa)$mu)
+                                     points = points, qa = qa,
+                                     max_iter = ctl(n_iter, 25),
+                                     tol = ctl(tol, 1e-10))$mu)
   }
   if (cls == "Nested") {
     return(.invert_generic(p, function(m)
       nested_race_probabilities(m, s$cluster, s$loading, s$D,
                                 coupling = s$coupling, gamma = s$gamma,
-                                points = points, qa = qa, qf = qf)))
+                                points = points, qa = qa, qf = qf),
+      tol = ctl(tol, 1e-9), max_iter = ctl(n_iter, 400)))
   }
   if (cls == "Tree") {
     return(.invert_generic(p, function(m)
       tree_race_probabilities(m, s$cluster, s$loading, s$D,
                               s$parent, s$strength,
-                              points = points, qa = qa)))
+                              points = points, qa = qa),
+      tol = ctl(tol, 1e-9), max_iter = ctl(n_iter, 400)))
   }
   stop("unknown structure ", cls)
 }

@@ -202,6 +202,9 @@
   # differed by 1.473 -- the same defect as #281 in the standalone
   # javascript module, and #290 in the browser tree.
   W <- as.numeric(W)
+  # divide by the largest entry BEFORE summing: sum(c(1e308, 1e308)) is
+  # Inf and the equivalent law of c(1e307, 1e307) was refused (#263)
+  if (all(is.finite(W)) && length(W) && max(W) > 0) W <- W / max(W)
   Wtot <- sum(W)
   if (!is.finite(Wtot) || Wtot <= 0)
     stop(sprintf("W must have a positive total; got %s", format(Wtot)),
@@ -346,11 +349,36 @@
   list(mu = mu, converged = rmax < tol, resid = rmax)
 }
 
+# A lattice size: a whole number >= 2 (python shapes.as_points, #444).
+# dx = x[2] - x[1] was NA at points = 1 and the race returned NaN.
+.as_points <- function(points) {
+  v <- suppressWarnings(as.numeric(points))
+  if (length(v) != 1L || is.logical(points) || !is.finite(v) || v != trunc(v))
+    stop(sprintf("points must be a whole number of lattice points; got %s",
+                 format(points)), call. = FALSE)
+  if (v < 2)
+    stop(sprintf(paste("points must be at least 2: a lattice of %d point(s)",
+                       "has no spacing to integrate on"), as.integer(v)),
+         call. = FALSE)
+  as.integer(v)
+}
+
+# structure= describes the covariance; V/D/F/W would describe it again,
+# and the forward silently dropped them while the inverse kept some (#89)
+.refuse_second_covariance <- function(V, D, F, W) {
+  given <- c(V = !is.null(V), D = !is.null(D), F = !is.null(F), W = !is.null(W))
+  if (any(given))
+    stop(sprintf(paste("structure= already describes the covariance; %s=",
+                       "would describe it again. Pass one or the other."),
+                 paste(names(given)[given], collapse = ", ")), call. = FALSE)
+}
+
 race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                base = "normal", points = 257,
                                return_slopes = FALSE, structure = NULL,
                                window = "bulk", delta = 1e-12,
                                qa = 9, qf = 15, nodes = NULL, cov = NULL) {
+  points <- .as_points(points)
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
@@ -365,9 +393,11 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
+    if (is.null(cov)) .refuse_second_covariance(V, D, F, W)
     return(.dispatch_probabilities(mu, structure, base = base,
                                    points = points, qa = qa, qf = qf,
-                                   return_slopes = return_slopes))
+                                   return_slopes = return_slopes,
+                                   window = window, delta = delta))
   }
   if (!is.null(nodes)) { F <- nodes$F; W <- nodes$W }
   st <- .race_setup(mu, V, D, F, W, base)
@@ -430,6 +460,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                 base = "normal", points = 257,
                                 n_iter = 60, tol = 1e-8,
                                 structure = NULL, qa = 9, qf = 15, cov = NULL) {
+  points <- .as_points(points)
   dense <- NULL
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
@@ -443,11 +474,20 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
+    if (is.null(cov)) .refuse_second_covariance(V, D, F, W)
+    # an explicit n_iter/tol reaches every grammar; left missing, each
+    # branch keeps its own default budget
     return(.dispatch_abilities(p, structure, base = base, points = points,
-                               qa = qa, qf = qf))
+                               qa = qa, qf = qf,
+                               n_iter = if (missing(n_iter)) NULL else n_iter,
+                               tol = if (missing(tol)) NULL else tol))
   }
   target <- as.numeric(p)
+  # finite BEFORE the sign test: NaN slips past `<= 0` (#110)
+  if (length(target) == 0L || any(!is.finite(target)))
+    stop("target probabilities must be finite", call. = FALSE)
   if (any(target <= 0)) stop("all target probabilities must be positive")
+  if (!is.finite(sum(target))) target <- target / max(target)
   target <- target / sum(target)
   logt <- log(target)
   n <- length(target)
@@ -481,7 +521,10 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     # a pair is one Gaussian contrast: closed form (matching python)
     sd_d <- sqrt(max(SigV[1, 1] + SigV[2, 2] - 2 * SigV[1, 2] + Dn[1] + Dn[2],
                      1e-300))
-    gap <- sd_d * qnorm(target[1])
+    # the quantile of the SMALLER share: c(1, 1e-17) normalises the
+    # favourite to exactly 1, where qnorm is Inf (#110)
+    gap <- if (target[1] <= 0.5) sd_d * qnorm(target[1])
+           else -sd_d * qnorm(target[2])
     return(c(-0.5 * gap, 0.5 * gap))
   }
   mu <- -(logt - mean(logt)) / 2 * scale
