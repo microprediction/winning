@@ -160,4 +160,9 @@ end
     @test_throws ArgumentError race_probabilities(m; D = ones(4), points = 0)
     # #110: non-finite targets are refused
     @test_throws ErrorException abilities_from_race([0.5, NaN, 0.5])
+    # #317: fractional ranks are refused by name; #378: the middle rank
+    @test_throws ArgumentError abilities_from_rank_marginal([.4, .3, .2, .1], 1.5)
+    P = rank_probabilities([-1, -.4, .05, .45, .9]; D = ones(5), points = 257)
+    @test_throws ArgumentError abilities_from_rank_marginal(P[:, 3], 3; D = ones(5),
+                                                            points = 257)
 end
