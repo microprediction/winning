@@ -19,9 +19,20 @@ function _resolved_points(lo, hi, sd, points)
     return max(Int(points), Int(min(need, 8193.0)))
 end
 
+# searched in STANDARDISED units and mapped back: an absolute 1e-12 floor
+# on the widest sd gave a field in units of 1e-18 a window 2e5 times its
+# width (#370, as python/R/browser)
 function _count_window(mu, sd, k, fn; delta = 1e-12, pad_sds = 2.0)
+    m0 = sum(mu) / length(mu)
+    c = maximum(sd)
+    (isfinite(c) && c > 0) || error("top-k window needs positive scales")
+    lo, hi = _count_window_std((mu .- m0) ./ c, sd ./ c, k, fn, delta, pad_sds)
+    return (m0 + c * lo, m0 + c * hi)
+end
+
+function _count_window_std(mu, sd, k, fn, delta, pad_sds)
     n = length(mu)
-    smax = max(maximum(sd), 1e-12)
+    smax = maximum(sd)
     mean_count(x) = sum(1 .- fn((x .- mu) ./ sd).S)
     lo = minimum(mu) - 9 * smax
     step = 9 * smax
