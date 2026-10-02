@@ -363,6 +363,33 @@ def _setup(mu, V, D, F, W, base):
         # 4.43 -- the race is genuinely sharp, the raw statistic missed
         # it, and the shipped answer carried TV 9.5e-3.
         V = V - V.mean(axis=0)
+        if (F is None) != (W is None):
+            # A lone F or W used to be discarded silently and BOTH
+            # regenerated (#75): the caller's rule never ran.
+            raise ValueError(
+                "supply both F (factor nodes) and W (their weights), or "
+                f"neither; got only {'F' if W is None else 'W'}")
+        if F is not None:
+            # A supplied rule is checked before any backend dispatch: a
+            # short W or a wrong-rank F used to reach the compiled kernel
+            # and come back as an index PanicException, or as a late
+            # matmul ValueError on the pure path (#75).
+            F = np.asarray(F, dtype=float)
+            if F.ndim != 2:
+                raise ValueError(
+                    f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
+            W_arr = np.asarray(W, dtype=float)
+            if W_arr.ndim != 1:
+                raise ValueError(
+                    f"W must be a 1-D weight vector; got shape {W_arr.shape}")
+            if F.shape[1] != V.shape[1]:
+                raise ValueError(
+                    f"F has {F.shape[1]} factor columns but V has rank "
+                    f"{V.shape[1]}; F is (nodes, rank)")
+            if F.shape[0] != W_arr.shape[0]:
+                raise ValueError(
+                    f"F has {F.shape[0]} nodes but W has {W_arr.shape[0]} "
+                    "weights; they must match one-to-one")
         if F is None or W is None:
             # adaptive order: when idiosyncratic noise is small relative
             # to the loadings, the conditional race is nearly
