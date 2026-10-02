@@ -26,7 +26,7 @@ import numpy as np
 
 from ..shapes import as_loadings, as_variance
 
-from scipy.special import ndtr
+from scipy.special import log_ndtr, ndtr
 
 from ..factor.core import jacobian_vector_product, win_probabilities_factor
 
@@ -265,6 +265,54 @@ def predictive_win_probabilities(m, v=None, beta2=1.0, base="normal", V=None,
     return p / p.sum()
 
 
+# --- the two-runner race is one Gaussian contrast (#92) ----------------
+#
+# The shared-field JVP and the ordered-statistics lattice span every
+# entrant's density on ONE grid sized by the widest sd. With variances
+# [1, 1e6] the narrow runner's density fell between nodes: the order
+# probabilities [0,1] and [1,0] summed to 1.628, the winner update's
+# posterior means were 2.5x too small and its loser variance was floored
+# at 1e-6 where the truth is 3.6e5. A pair needs no lattice at all:
+# P(i beats j) = sum_q W_q Phi(c_q / s), c_q the mean contrast at factor
+# node q and s^2 = D_i + D_j, with an analytic gradient. Every Gaussian
+# pair route -- winner, order, correlated, full-covariance, team --
+# goes through these two helpers.
+
+_LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
+
+
+def _pair_contrast_logp_grad(c, s):
+    """log Phi(c/s) and d/dc of it, elementwise over arrays c."""
+    z = np.asarray(c, dtype=float) / s
+    lp = log_ndtr(z)
+    return lp, np.exp(-0.5 * z * z - _LOG_SQRT_2PI - lp) / s
+
+
+def _pair_winner_logp_row(m, D, i, V=None, F=None, W=None):
+    """(d log p_i / d m, log p_i) for a two-runner Gaussian race,
+    max-wins, mixed over factor nodes (F, W) when loadings V are given."""
+    m = np.asarray(m, dtype=float)
+    D = np.broadcast_to(np.asarray(D, dtype=float), (2,))
+    i = int(i); j = 1 - i
+    s = float(np.sqrt(D[i] + D[j]))
+    c = np.array([m[i] - m[j]])
+    logW = np.zeros(1)
+    if V is not None and F is not None:
+        Vm = np.asarray(V, dtype=float)
+        c = (m[i] - m[j]) + np.asarray(F, dtype=float) @ (Vm[i] - Vm[j])
+        logW = np.log(np.asarray(W, dtype=float))
+    lp, dlp = _pair_contrast_logp_grad(c, s)
+    a = logW + lp
+    amax = a.max()
+    if not np.isfinite(amax):
+        return np.zeros(2), -np.inf
+    logp = float(amax + np.log(np.exp(a - amax).sum()))
+    gi = float((np.exp(a - logp) * dlp).sum())
+    g = np.zeros(2)
+    g[i], g[j] = gi, -gi
+    return g, logp
+
+
 def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
                    points=257):
     """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP.
@@ -279,6 +327,9 @@ def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
     moment identities need a Gaussian prior, not Gaussian performance.
     winning.factor.races.failure_base gives the retirement/DNF case."""
     n = len(m)
+    if base == "normal" and n == 2:
+        g, logp = _pair_winner_logp_row(m, D, i, V=V, F=F, W=W)
+        return g, float(np.exp(logp))
     Vz = np.zeros((n, 1)) if V is None else V
     Fz = _F1 if F is None else F
     Wz = _W1 if W is None else W
@@ -506,6 +557,13 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
     log-scales so 20-player orders (P ~ 1e-19) stay accurate.
     Returns (log P, d log P / d m)."""
     n = len(order)
+    if base == "normal" and curves is None and n == 2:
+        hi, lo_ = int(order[0]), int(order[1])
+        lp, dlp = _pair_contrast_logp_grad(
+            m[hi] - m[lo_], float(np.hypot(sd[hi], sd[lo_])))
+        grad = np.zeros(len(m))
+        grad[hi], grad[lo_] = float(dlp), -float(dlp)
+        return float(lp), grad
     if curves is not None:
         lo = min(float(m[j] + curves[j][0][0]) for j in order)
         hi = max(float(m[j] + curves[j][0][-1]) for j in order)
@@ -841,6 +899,13 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     sd = np.asarray(sd, dtype=float)
     Q, nm = Ms.shape
     n = len(order)
+    if base == "normal" and curves is None and n == 2:
+        hi, lo_ = int(order[0]), int(order[1])
+        lp, dlp = _pair_contrast_logp_grad(
+            Ms[:, hi] - Ms[:, lo_], float(np.hypot(sd[hi], sd[lo_])))
+        grad = np.zeros((Q, nm))
+        grad[:, hi], grad[:, lo_] = dlp, -dlp
+        return lp, grad
     pad = 8.0
     if base != "normal":
         span = getattr(base, "span", None)

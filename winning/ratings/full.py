@@ -235,6 +235,14 @@ def _winner_kernel(winner, k, points=801, base="normal"):
     e[int(winner)] = 1.0
 
     def kernel(pts, D, Vaug, F, W, psi=None, beta2=None):
+        if k == 2:
+            # a pair winner IS the two-runner order, one Gaussian
+            # contrast: priced per node in closed form (no lattice, #92)
+            # and returned per node, so the mixture -- including the
+            # Sobol recentring -- is the order kernel's exactly
+            from .nway import _order_pass_batch
+            return _order_pass_batch(pts, np.sqrt(np.maximum(D, 1e-300)),
+                                     [int(winner), 1 - int(winner)])
         mo = pts[0] - (F @ Vaug.T)[0]
         a = -mo
         p = win_probabilities_factor(a, Vaug, D, F, W)
