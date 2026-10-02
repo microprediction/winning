@@ -270,7 +270,7 @@ def _order_kernel(order, base="normal"):
     edition."""
     from .nway import _order_pass_batch, _predictive_curves
 
-    order = np.asarray(order, dtype=int)
+    order = np.asarray(order, dtype=int)   # validated by the callers
     cache = {}
 
     def kernel(pts, D, Vaug, F, W, psi=None, beta2=None):
@@ -327,6 +327,8 @@ def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
     sweeps vectorized across factor nodes, because online deployments
     are order-heavy.
     """
+    from ..outcomes import as_order
+    order = as_order(order, len(np.asarray(m)))                # #129
     kernel = _order_kernel(order, base=base)
     return _mixture_update_full(m, S, V, beta2, None, nodes_log2=nodes_log2,
                                 eps=eps, eps_rel=eps_rel, kernel=kernel)

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..outcomes import as_order
 from ..shapes import as_loadings, as_variance
 
 from scipy.special import log_ndtr, ndtr
@@ -487,7 +488,7 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     measures 0.94+ coverage on every base."""
     m = np.asarray(m, dtype=float).copy()
     v = as_variance(v, len(m)).copy()
-    order = list(order)
+    order = list(as_order(order, len(m)))                      # #129
     # per-player beta2 must shrink with the field: the whole vector was
     # forwarded to every stage, so stage two paired a two-runner state
     # with three noise entries and raised (#138)
@@ -557,6 +558,10 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
     log-scales so 20-player orders (P ~ 1e-19) stay accurate.
     Returns (log P, d log P / d m)."""
     n = len(order)
+    if n <= 1:
+        # a singleton partial order is a tautology: P = 1, no gradient.
+        # It indexed past the stage arrays and raised IndexError (#129)
+        return 0.0, np.zeros(len(m))
     if base == "normal" and curves is None and n == 2:
         hi, lo_ = int(order[0]), int(order[1])
         lp, dlp = _pair_contrast_logp_grad(
@@ -673,6 +678,7 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     better; overstating the failure rate is the one badly wrong move."""
     m = np.asarray(m, dtype=float)
     v = as_variance(v, len(m))
+    order = as_order(order, len(m))                            # #129
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     # non-normal bases price the true predictive (Gaussian belief
     # convolved with base noise) rather than the base at combined
@@ -721,8 +727,9 @@ def order_loglik(m, sd, order, L=2001, base="normal"):
     """
     m = np.asarray(m, dtype=float)
     sd = np.asarray(sd, dtype=float)
-    return _order_pass(m, sd, np.asarray(order, dtype=int), L=L,
-                       base=base)
+    # distinct labels: [0, 0] returned -log 2 with an invented gradient
+    # (#129)
+    return _order_pass(m, sd, as_order(order, len(m)), L=L, base=base)
 
 
 def _factor_grid(r, Qf=7, nodes_log2=10):
@@ -903,7 +910,7 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     curves shared across factor nodes), as update_ranking_exact does."""
     v = as_variance(v, len(np.asarray(m)))
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
-    order = np.asarray(order, dtype=int)
+    order = as_order(order, len(np.asarray(m)))                # #129
     curves = None if base == "normal" else _predictive_curves(v, beta2,
                                                               base)
 
@@ -933,6 +940,8 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     sd = np.asarray(sd, dtype=float)
     Q, nm = Ms.shape
     n = len(order)
+    if n <= 1:                                   # tautology (#129)
+        return np.zeros(Q), np.zeros((Q, nm))
     if base == "normal" and curves is None and n == 2:
         hi, lo_ = int(order[0]), int(order[1])
         lp, dlp = _pair_contrast_logp_grad(

@@ -392,7 +392,8 @@ class AbilityTracker:
             # ranking factor (matches the Gibbs reference); 'moment' is the fast
             # biased moment-match; 'augmented' is the slow Gibbs reference itself.
             # With magnitudes available, `scores` is the right path, not this.
-            order = list(order)
+            from ..outcomes import as_order
+            order = list(as_order(order, len(m)))              # #129
             if V is not None:
                 m, v, lz = update_order_correlated(m, v, order, V, beta2=b2, Qf=self.Qf,
                                                    base=self.base, nodes_log2=self.nodes_log2)

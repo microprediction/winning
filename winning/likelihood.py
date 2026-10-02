@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .outcomes import as_luce_temperature, as_order
 from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
@@ -277,7 +278,19 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     T, J = mu.shape
     V = as_loadings(V, J)
     r = V.shape[1]
-    tau = float(temperature)
+    # finite and positive, BEFORE the sharpness dispatch: -1 fitted the
+    # reversed preferences (and took the Sobol branch at sharp=inf), 0
+    # and NaN returned NaN, +-inf the uniform likelihood with a zero
+    # score (#366)
+    tau = as_luce_temperature(temperature)
+    # one valid ranking per observation, validated before any numerical
+    # work: extra rows were ignored, [0, 0] scored 1/6 with an invented
+    # gradient, -1 meant alternative J-1 and 0.9 meant 0 (#390, #129)
+    if len(orders) != T:
+        raise ValueError(
+            f"orders must hold one ranking per observation: got "
+            f"{len(orders)} for {T} rows of mu")
+    orders = [as_order(orders[t], J, name=f"orders[{t}]") for t in range(T)]
     # Dispatch on the loading sharpness, as the choice likelihood does.
     # This took a FIXED Qf=7 tensor whatever the loadings were: on a
     # rank-one field with a centred loading contrast of 4.8 the
@@ -286,7 +299,7 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     # disagreement with its own rule, so no finite-difference test
     # could see it (#272). The loadings enter as V/tau, so that is what
     # the sharpness is measured on.
-    sharp = sharpness_bound(V / tau, n=J) if tau > 0 else np.inf
+    sharp = sharpness_bound(V / tau, n=J)
     F, W = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2, sharp=sharp)
     Q = len(F)
     shift = (F @ V.T)                       # (Q, J)
@@ -294,7 +307,7 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     dmu = np.zeros((T, J))
     dV = np.zeros((J, r))
     for t in range(T):
-        order = np.asarray(orders[t], dtype=int)
+        order = orders[t]
         z = (mu[t][None, :] + shift) / tau  # (Q, J)
         logp_q = np.zeros(Q)
         grad_q = np.zeros((Q, J))

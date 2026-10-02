@@ -23,6 +23,7 @@ renormalising away a lattice that failed to capture the field.
 import numpy as np
 
 from .core import as_loadings
+from ..outcomes import as_luce_temperature, as_order, as_soft_temperature
 from ..rustconfig import load_fastrace
 from .races import _fit_cov, _factor_of_structure, _setup, _tempered_curves
 
@@ -62,6 +63,7 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     """
     if k not in (1, 2, 3):
         raise ValueError("k must be 1, 2 or 3")
+    temperature = as_soft_temperature(temperature)             # #366
     if cov is not None:
         V, D, F, W, _ = _fit_cov(cov, structure, V, D, stacklevel=3)
     elif structure is not None:
@@ -201,9 +203,11 @@ def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
     complete field; this is the prefix (exacta, trifecta) version.
     Exact for the Gumbel base and only there."""
     mu = np.asarray(mu, dtype=float)
-    tau = float(temperature)
-    prefix = np.asarray(prefix, dtype=int)
+    tau = as_luce_temperature(temperature)                     # #366
     n = len(mu)
+    # distinct labels: a repeat stayed in the numerator after leaving
+    # the denominator, and [0, 0] scored p = 52.6 (#129)
+    prefix = as_order(prefix, n, name="prefix")
 
     def _one(z):
         standing = np.ones(n, dtype=bool)
