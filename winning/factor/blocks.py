@@ -393,15 +393,23 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     ones = np.ones((n, n)) / n
     forward = lambda m: block_race_probabilities(m, cluster, loading, D,
                                                  points=points, qa=qa)
+    # The field's own scale. The warm start, the fixed-point step and the
+    # Newton trust radius were absolute (unit-variance) numbers, so the
+    # same race written with loading -> c loading, D -> c^2 D was solved
+    # at c = 1 and missed by 0.40 of a share at c = 1e-3 and 0.21 at
+    # c = 1e3 (#100). Everything below is in units of `scale`.
+    from .structures import _loading_var
+    scale = float(np.sqrt(np.median(
+        np.asarray(D, float) * np.ones(n) + _loading_var(loading, n))))
     # adaptive fixed point into Newton's basin
-    mu = -(lt - lt.mean())
+    mu = -(lt - lt.mean()) * scale
     eta = 1.0
     lp = np.log(np.maximum(forward(mu), TINY))
     err = np.abs(lp - lt).max()
     for _ in range(200):
         if err < 0.2:
             break
-        mu_n = mu - eta * (lt - lp); mu_n -= mu_n.mean()
+        mu_n = mu - eta * (lt - lp) * scale; mu_n -= mu_n.mean()
         lp_n = np.log(np.maximum(forward(mu_n), TINY))
         e_n = np.abs(lp_n - lt).max()
         if e_n < err:
@@ -418,11 +426,12 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
         if cur < tol:
             return mu - mu.mean(), float(cur), it
         J = block_race_jacobian(mu, cluster, loading, D, points=points, qa=qa)
-        Jl = J / pv[:, None]
+        Jl = J / pv[:, None] * scale         # dimensionless
         step, *_ = np.linalg.lstsq(Jl + ones, -r, rcond=1e-12)
         nn = np.linalg.norm(step)
         if nn > 5.0:
             step *= 5.0 / nn
+        step = step * scale
         for _ in range(8):
             mu_n = mu + step; mu_n -= mu_n.mean()
             p_n = np.maximum(forward(mu_n), TINY); p_n = p_n / p_n.sum()

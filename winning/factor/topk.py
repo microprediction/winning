@@ -69,12 +69,34 @@ def _count_window(mu, sd, k, base_rows, delta=1e-12, pad_sds=2.0,
     hierarchical kernels. is_normal=True routes to the compiled search
     when fastrace ships it: the ~260 sequential bracket/bisection
     evaluations dominate small-field solves in python (measured ~2.6 ms
-    of a ~5 ms forward at n = 9)."""
+    of a ~5 ms forward at n = 9).
+
+    The search runs in STANDARDISED units -- centred, divided by the
+    widest sd -- and the window is mapped back. Every membership is
+    invariant under mu -> a + c mu, sd -> c sd, but both searches
+    floored the widest sd at an absolute 1e-12, so a field written in
+    units of 1e-18 got a window 2e5 times its own width, the 8193-point
+    cap undersampled every density, and top-1 raised a "total
+    membership 66.9" where race_probabilities returned the right answer
+    (#370). In standardised units the floor can never bind (smax = 1).
+    """
+    mu = np.asarray(mu, dtype=float)
+    sd = np.asarray(sd, dtype=float)
+    m0 = float(mu.mean())
+    c = float(sd.max())
+    if not (np.isfinite(c) and c > 0.0):
+        raise ValueError("top-k window needs finite positive scales")
+    lo, hi = _count_window_std((mu - m0) / c, sd / c, k, base_rows, delta,
+                               pad_sds, is_normal)
+    return m0 + c * lo, m0 + c * hi
+
+
+def _count_window_std(mu, sd, k, base_rows, delta, pad_sds, is_normal):
     if is_normal and _HAVE_RUST and hasattr(_fastrace, "top_k_window"):
         return _fastrace.top_k_window(
             np.ascontiguousarray(mu, dtype=float),
             np.ascontiguousarray(sd, dtype=float), int(k), delta, pad_sds)
-    smax = max(float(sd.max()), 1e-12)
+    smax = float(sd.max())
 
     def mean_count(x):
         S, _, _ = base_rows((x - mu) / sd)
@@ -698,7 +720,14 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
 
     logit_t = np.log(target) - np.log1p(-target)
     logt = np.log(target)
-    mu = -(logt - logt.mean()) / 2.0
+    # The field's contrast scale, as abilities_from_race measures it: the
+    # warm start, the step cap and the slope floor were in unit-variance
+    # units, so the same race written at sd 1e-2 began 100 sd from its
+    # answer and stalled at a logit residual of 690, and at sd 1e3 the
+    # capped step was a thousandth of the distance (#100).
+    _sig_v = 0.0 if Vm is None else float(np.mean((Vm ** 2).sum(axis=1)))
+    scale = float(np.sqrt(np.median(D) + _sig_v))
+    mu = -(logt - logt.mean()) / 2.0 * scale
     # Damping, as in abilities_from_race: the photo-finish graph of a pair
     # is bipartite and the undamped Jacobi update two-cycles; the same
     # two-cycle appears at any n when two runners hold nearly all the
@@ -727,10 +756,10 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
         resid = (np.log(np.maximum(qhat, 1e-300))
                  - np.log(np.maximum(1.0 - qhat, 1e-300))) - logit_t
         dlogit = np.minimum(sl / np.maximum(qhat * (1.0 - qhat), 1e-300),
-                            -1e-6)
+                            -1e-6 / scale)
         return resid, dlogit
 
-    mu, _, resid_max, iters = _jacobi_sweeps(mu, _forward, 1.0, alpha,
+    mu, _, resid_max, iters = _jacobi_sweeps(mu, _forward, scale, alpha,
                                              n_iter, tol)
     return _topk_inverse_return(mu, resid_max < tol, resid_max, iters,
                                 floored, tol, return_info,

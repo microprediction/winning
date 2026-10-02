@@ -54,6 +54,7 @@ import numpy as np
 from scipy.special import ndtr, ndtri
 
 from .core import as_idio, as_loadings, as_weights, hermite_nodes
+from ..shapes import as_factor_law, as_points, as_target
 
 from ..rustconfig import load_fastrace
 
@@ -438,7 +439,11 @@ def _setup(mu, V, D, F, W, base):
     # above already sums to one, so this changes nothing the library
     # generates; it makes the caller's spelling not matter, which is the
     # contract everywhere else.
-    return mu, V, D, np.asarray(F, float), as_weights(W), fn, left, right
+    # as_factor_law also drops zero-weight nodes, which are no-ops for
+    # the integral but would otherwise widen every window built from F
+    # (#416).
+    F, W = as_factor_law(F, W)
+    return mu, V, D, F, W, fn, left, right
 
 
 
@@ -812,6 +817,26 @@ def _factor_of_structure(structure, verb):
         "if you need ordered prefixes under it.")
 
 
+def _as_temperature(temperature):
+    """0 is the hard-race sentinel; a positive finite value tempers.
+
+    Every branch read `if temperature and temperature > 0`, so a NEGATIVE
+    or NaN temperature fell through to the hard race and returned the
+    tau = 0 answer byte for byte, and +inf reached the tempered path and
+    died in the grid sizing (#424). A bad calibration parameter should
+    not survive as a silently different model.
+    """
+    try:
+        tau = float(temperature)
+    except (TypeError, ValueError):
+        raise ValueError(f"temperature must be a number; got {temperature!r}")
+    if not np.isfinite(tau) or tau < 0.0:
+        raise ValueError(
+            f"temperature must be finite and non-negative (0 is the hard "
+            f"race); got {temperature!r}")
+    return tau
+
+
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                        points=257, temperature=0.0, return_slopes=False,
                        structure=None, window="bulk", delta=1e-12, cov=None):
@@ -822,7 +847,10 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     one race, five grammars; V=/D= remain as sugar for the factor case.
     V is (n, rank), one row per contestant; a scalar, a length-n vector
     (rank one) and an (rank, n) matrix are all normalised to it, and any
-    other shape raises rather than reaching the compiled kernel.
+    other shape raises rather than reaching the compiled kernel. A square
+    (n, n) V is ALWAYS read as (n, rank): no shape rule can tell it from
+    its transpose, and V.T describes the different covariance V'V, so the
+    transposed shorthand is available only when rank != n (#71).
     Pass `cov=` (a dense covariance or correlation matrix) to have it
     fitted to the grammar first via winning.factor.core.fit_covariance
     (approximate: the fit residual is the price of density; see the
@@ -859,6 +887,8 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     of the nodes at about five times the error. Inversion runs the
     forward pass per Newton step, so it scales the same way."""
     nodes_given = F is not None          # the caller's nodes, not a fit's
+    temperature = _as_temperature(temperature)
+    points = as_points(points)
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
         # be answered without the fit at all; everything else (slopes for
@@ -894,7 +924,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                                       points=points, window=window,
                                       delta=delta)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
-    if temperature and temperature > 0:
+    if temperature > 0:
         return _race_tempered(mu, V, D, F, W, fn, left, right,
                               float(temperature), points, return_slopes)
     sd = np.sqrt(D)
@@ -927,7 +957,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             # relative weights, as the lattice reads them (#170: W and cW
             # are the same factor law; unnormalised, a x10 weight moved
             # the pair 0.72 -> 0.61 and its inverse "converged" 5.6e-2 off)
-            Wn = W / float(np.sum(W))
+            Wn = as_weights(W)
             Fm = Wn @ F
             Fc = F - Fm
             CovF = Fc.T @ (Fc * Wn[:, None])
@@ -1023,7 +1053,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
 
 
 def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
-                        points=257, temperature=0.0, n_iter=60, tol=1e-8,
+                        points=257, temperature=0.0, n_iter=None, tol=1e-8,
                         structure=None, cov=None, target_floor=None,
                         return_info=False):
     """Invert the general race: mean-zero mu with race_probabilities(mu) = p.
@@ -1044,6 +1074,20 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     warns rather than returning silently."""
     dense = None
     nodes_given = F is not None          # the caller's nodes, not a fit's
+    temperature = _as_temperature(temperature)       # (#424)
+    points = as_points(points)                       # (#444)
+    if structure is not None:
+        # One covariance description, as the forward door insists (#89):
+        # Independent/Factor replaced D (and V) here while a caller's V
+        # survived, so a target inverted under (structure, V) did not
+        # reprice under the identical forward call, which refuses it.
+        conflicting = [nm for nm, v in (("V", V), ("D", D), ("F", F),
+                                        ("W", W)) if v is not None]
+        if conflicting and cov is None:
+            raise ValueError(
+                f"structure= already describes the covariance; "
+                f"{', '.join(conflicting)}= would describe it again. "
+                "Pass one or the other.")
     if cov is not None:
         # The forward race routes a degraded fit to GHK (#161); the inverse
         # has to invert THAT map or the two front doors describe different
@@ -1068,7 +1112,10 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
             V = np.asarray(structure.V, float)
             D = np.asarray(structure.D, float)
             structure = None
-    target = np.asarray(p, dtype=float)
+    # finite and one-dimensional BEFORE the sign test: NaN passes
+    # `target <= 0`, and the pair closed form then certified NaN
+    # abilities as converged with residual 0 (#110)
+    target = as_target(p)
     if target_floor is not None:
         if not target_floor > 0:
             raise ValueError("target_floor must be positive")
@@ -1107,10 +1154,23 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     if structure is not None:
         # the grammar path takes the SAME contract (sixth review): the
         # target was validated or floored above, and the iteration reports
-        # convergence through the same tail rather than returning silently
+        # convergence through the same tail rather than returning silently.
+        # The hierarchical kernels are Gaussian hard races: a base= or
+        # temperature= the forward door would refuse was dropped here and
+        # a Gaussian race calibrated in its place (#89).
+        bad = [nm for nm, flag in (("base", base != "normal"),
+                                   ("temperature", temperature > 0)) if flag]
+        if bad:
+            raise NotImplementedError(
+                f"{type(structure).__name__} races do not support "
+                f"{', '.join(bad)}: the block/nested/tree kernels are "
+                "Gaussian hard races. Use structure=Factor (or V=/D=) for "
+                "a non-normal base or a finite temperature.")
+        # n_iter is the caller's budget (#89): it used to be raised to at
+        # least 120, so an n_iter=1 diagnostic call ran 120 sweeps.
         mu, converged, resid_max, iters = _abilities_from_structure(
-            target, structure, points=points, n_iter=max(n_iter, 120),
-            tol=tol)
+            target, structure, points=points,
+            n_iter=120 if n_iter is None else n_iter, tol=tol)
         return _inverse_return(mu, converged, resid_max, iters, floored,
                                tol, return_info)
     logt = np.log(target)
@@ -1135,7 +1195,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     if V is not None and nodes_given:
         _Fq = np.asarray(F, dtype=float).reshape(len(F), -1)
         _Wq = (np.ones(len(_Fq)) / len(_Fq) if W is None
-               else np.asarray(W, dtype=float) / float(np.sum(W)))
+               else as_weights(W))
         _Fm = _Wq @ _Fq
         _CovF = (_Fq - _Fm).T @ ((_Fq - _Fm) * _Wq[:, None])
     else:
@@ -1149,7 +1209,11 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
         Sig = _SigV + np.diag(_Dn)
         sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
-        gap = sd_d * float(ndtri(target[0]))
+        # the quantile of the SMALLER share: [1, 1e-17] normalises the
+        # favourite to exactly 1.0, where ndtri is inf, and the pair came
+        # back [-inf, inf] "converged"; the longshot keeps the contrast
+        gap = (sd_d * float(ndtri(target[0])) if target[0] <= 0.5
+               else -sd_d * float(ndtri(target[1])))
         mu = np.array([-0.5 * gap, 0.5 * gap])
         return _inverse_return(mu, True, 0.0, 0, floored, tol, return_info)
     mu = -(logt - logt.mean()) / 2.0 * scale
@@ -1171,6 +1235,8 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # a 150-runner field.
     _top2 = float(np.sort(target)[-2:].sum()) if len(target) > 2 else 1.0
     alpha = 0.7 if (len(target) == 2 or _top2 > 0.8) else 1.0
+    if n_iter is None:
+        n_iter = 60
 
     if dense is not None:
         # Invert the routed map itself (#164), by the same own-slope
@@ -1350,8 +1416,12 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
     from .structures import dispatch_probabilities, structure_variances
     target = np.asarray(target, dtype=float)
     logt = np.log(target)
-    mu = -(logt - logt.mean()) / 2.0
     totvar = structure_variances(structure)
+    # in the field's units: a dimensionless start and an absolute [-2, 2]
+    # step made the same Nested/Tree race fail by 0.40 of a share when
+    # written at c = 1e-3 and 0.25 at c = 1e3 (#100)
+    scale = float(np.sqrt(np.median(totvar)))
+    mu = -(logt - logt.mean()) / 2.0 * scale
     alpha, last = 0.7, np.inf
     err, iters = np.inf, 0
     for it in range(n_iter):
@@ -1366,8 +1436,8 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
         last = err
         ps, ss = race_probabilities(mu, D=totvar, points=points,
                                     return_slopes=True)
-        dlogp = np.minimum(ss / np.maximum(ps, 1e-300), -1e-6)
-        lim = np.minimum(2.0, 10.0 * np.abs(resid))
+        dlogp = np.minimum(ss / np.maximum(ps, 1e-300), -1e-6 / scale)
+        lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
         mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
     return mu, bool(err < tol), float(err), iters
@@ -1503,6 +1573,12 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
     return 0.5 * w + 0.5 * w.T      # symmetric by theory; average numerics (#279)
 
 
+_REMOVAL_CAP = 16385
+# per-runner lattice budget for the capped-field refinement (points x n),
+# the same order as ordered_probabilities' budget
+_REMOVAL_POINT_BUDGET = 4_000_000
+
+
 def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
                    points=501, mass_tol=1e-3):
     """The full single-removal ensemble q[i][j] = P(j wins | i removed),
@@ -1526,36 +1602,83 @@ def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
     union calculus, prod_i S_i (1 + sum_i (1-S_i)/S_i), an O(nL)
     byproduct of the field.
     """
+    points = as_points(points)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
-    sd = np.sqrt(D)
     n = len(mu)
+    if n < 2:
+        raise ValueError(
+            "removal_shares needs at least two runners: removing the only "
+            "one leaves no race to win")
+    if n == 2:
+        # Removing either of two runners leaves one, who wins with
+        # probability one: the answer is the constant permutation matrix
+        # whatever mu, V, F, W, D or base. Integrating it anyway let an
+        # IRRELEVANT ability gap decide whether the call succeeded -- a
+        # Laplace pair 40 apart overshot the cusp to a row mass of
+        # 1.0026 and raised (#411).
+        return np.array([[0.0, 1.0], [1.0, 0.0]])
+    sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
     span = float(M_all.max() - M_all.min()) + (left + right) * float(sd.max())
     need = int(np.ceil(span / (float(sd.min()) / 8.0))) + 1
-    pts = int(min(max(points, need), 16385))
-    if need > 16385:
+    pts = int(min(max(points, need), _REMOVAL_CAP))
+    lo_x = M_all.min() - left * sd.max()
+    hi_x = M_all.max() + right * sd.max()
+
+    def _accumulate(pts):
+        x = np.linspace(lo_x, hi_x, pts)
+        dx = x[1] - x[0]
+        q = np.zeros((n, n))
+        for c in range(len(F)):
+            z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
+            S, f, _ = fn(z)
+            f = f / sd[:, None]
+            logS = np.log(S)
+            logSfield = logS.sum(0)
+            for i in range(n):
+                rest = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
+                                      -745.0, 0.0))
+                contrib = (f * rest).sum(1) * dx
+                contrib[i] = 0.0
+                q[i] += W[c] * contrib
+        return q
+
+    q = _accumulate(pts)
+    # A capped lattice cannot be policed by the row masses: cell errors of
+    # opposite sign cancel in each row sum. The #269 fixture (sds 1e-2,
+    # 1e-4, 1e-4 over a span of 4.6) had raw row mass 1.00025 -- inside
+    # mass_tol -- while P(1 wins | 0 removed) was 0.7848 against an exact
+    # 0.7340, five percentage points. So, as ordered_probabilities does,
+    # refine by doubling and watch the CELLS until they stop moving, and
+    # raise if the budget runs out first.
+    if need > pts:
         import warnings
         warnings.warn(
             "removal_shares: the ability span is too wide to resolve the "
-            f"sharpest runner even at 16385 lattice points (needs {need}); "
-            "row masses are checked and will raise if accuracy is lost",
-            RuntimeWarning, stacklevel=2)
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), pts)
-    dx = x[1] - x[0]
-    q = np.zeros((n, n))
-    for c in range(len(F)):
-        z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
-        S, f, _ = fn(z)
-        f = f / sd[:, None]
-        logS = np.log(S)
-        logSfield = logS.sum(0)
-        for i in range(n):
-            rest = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
-                                  -745.0, 0.0))
-            contrib = (f * rest).sum(1) * dx
-            contrib[i] = 0.0
-            q[i] += W[c] * contrib
+            f"sharpest runner at {pts} lattice points (needs {need}); "
+            "refining until the shares stop moving. The row masses are NOT "
+            "the check -- cell errors of opposite sign cancel in them "
+            "(#269).", RuntimeWarning, stacklevel=2)
+        ceiling = max(pts, min(need, int(_REMOVAL_POINT_BUDGET // n)))
+        prev = q / q.sum(axis=1, keepdims=True)
+        moved = np.inf
+        while pts < ceiling:
+            pts = min(2 * pts - 1, ceiling)
+            q = _accumulate(pts)
+            cur = q / q.sum(axis=1, keepdims=True)
+            moved = float(np.abs(cur - prev).max())
+            prev = cur
+            if moved <= mass_tol:
+                break
+        if moved > mass_tol:
+            raise FloatingPointError(
+                f"removal_shares: the field needs {need} lattice points to "
+                f"resolve the sharpest runner and the budget stops at "
+                f"{ceiling}; refining to there still moved a share by "
+                f"{moved:.2e}, above mass_tol={mass_tol:.0e}. The row "
+                "masses are NOT evidence here -- cell errors of opposite "
+                "sign cancel in them. Narrow the field or widen mass_tol "
+                "deliberately.")
     mass = q.sum(axis=1)
     defect = float(np.abs(mass - 1.0).max())
     if defect > mass_tol:

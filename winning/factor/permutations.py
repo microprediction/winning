@@ -22,9 +22,11 @@ renormalising away a lattice that failed to capture the field.
 """
 import numpy as np
 
-from .core import as_loadings
+from .core import as_loadings, as_weights
 from ..rustconfig import load_fastrace
-from .races import _fit_cov, _factor_of_structure, _setup, _tempered_curves
+from .races import (_as_temperature, _fit_cov, _factor_of_structure, _setup,
+                    _tempered_curves)
+from ..shapes import as_points
 
 # this module's own ceiling (#113): it used to borrow races' flags, and
 # use_rust(True) defaults a missing _RUST_OK to True, which reported a
@@ -62,6 +64,23 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     """
     if k not in (1, 2, 3):
         raise ValueError("k must be 1, 2 or 3")
+    temperature = _as_temperature(temperature)        # (#424)
+    points = as_points(points)                        # (#444)
+    if k == 1 and structure is not None and cov is None:
+        # k = 1 IS the win race, and the win race exists for every
+        # grammar: Blocks/Nested/Tree were refused here for want of an
+        # ordered-prefix pass that k = 1 does not need, so the documented
+        # identity "k=1 reproduces race_probabilities" failed for exactly
+        # the structures the forward call prices (#73).
+        from .structures import Factor, Independent
+        if not isinstance(structure, (Independent, Factor)):
+            if any(v is not None for v in (V, D, F, W)):
+                raise ValueError("structure= replaces V=/D=/F=/W=; pass "
+                                 "one only")
+            from .races import race_probabilities
+            return np.asarray(race_probabilities(
+                mu, structure=structure, base=base, points=points,
+                temperature=temperature), float)
     if cov is not None:
         V, D, F, W, _ = _fit_cov(cov, structure, V, D, stacklevel=3)
     elif structure is not None:
@@ -227,15 +246,10 @@ def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
         # this the returned log-probability shifted by log(sum W): the
         # same factor law spelled W = [5, 5] instead of [0.5, 0.5] read
         # -1.5071 as +0.7955, exactly log(10) apart (#208).
-        W = np.asarray(W, float)
-        wtot = float(W.sum())
-        if not np.isfinite(wtot) or wtot <= 0.0:
-            raise ValueError(
-                f"W must be positive weights: they total {wtot!r}. They "
-                "are relative, so any positive multiple of a valid rule "
-                "is the same factor law, but a zero or negative total is "
-                "not one.")
-        W = W / wtot
+        # as_weights: finite, non-negative, positive total, and divided
+        # by its largest entry before summing so [1e308, 1e308] does not
+        # overflow to a zero rule (#263).
+        W = as_weights(W)
     logs = np.array([_one(-(mu + np.asarray(F)[q] @ V.T) / tau)
                      for q in range(len(F))])
     m = logs.max()
