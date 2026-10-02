@@ -7,6 +7,7 @@ use winning::*;
 use winning::ndarray::{Array1, Array2};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError;
 use rayon::prelude::*;
 
 
@@ -262,44 +263,68 @@ fn tree_race<'py>(
 
 /// state_prices_from_offsets: field from the shifted base density, then
 /// implicit prices AT those offsets (unnormalized, as the reference).
+///
+/// Like every other heavy wrapper this converts its arguments first and
+/// then computes with the GIL released (#120) inside with_usable_rayon
+/// (#122): implicit_prices is a rayon parallel region, and calling it
+/// unguarded used to warm the global pool without claiming RAYON_PID, so
+/// a forked child's first guarded kernel entered the dead inherited pool
+/// and hung.
 #[pyfunction]
-fn classic_state_prices(density: Vec<f64>, offsets: Vec<f64>) -> PyResult<Vec<f64>> {
-    let l = ((density.len() - 1) / 2) as i64;
-    let base_cdf = pdf_to_cdf(&density);
-    let cdfs: Vec<Vec<f64>> = offsets.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-    let (cdf_all, mult_all) = winner_of_many(&cdfs);
-    Ok(implicit_prices(&base_cdf, &cdf_all, &mult_all, &offsets, l))
+fn classic_state_prices(py: Python<'_>, density: Vec<f64>, offsets: Vec<f64>)
+                        -> PyResult<Vec<f64>> {
+    if density.is_empty() {
+        return Err(PyValueError::new_err(
+            "density is empty; the classic lattice needs length 2L+1"));
+    }
+    Ok(py.allow_threads(|| with_usable_rayon(|| {
+        let l = ((density.len() - 1) / 2) as i64;
+        let base_cdf = pdf_to_cdf(&density);
+        let cdfs: Vec<Vec<f64>> =
+            offsets.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+        let (cdf_all, mult_all) = winner_of_many(&cdfs);
+        implicit_prices(&base_cdf, &cdf_all, &mult_all, &offsets, l)
+    })))
 }
 
 
 /// solve_for_implied_offsets: the reference fixed-point iteration --
 /// interpolation table offset -> price rebuilt against the current field.
+/// GIL released and rayon guarded, as classic_state_prices (#120, #122).
 #[pyfunction]
 #[pyo3(signature = (density, prices, offset_samples, guess, n_iter=3))]
 fn classic_calibrate(
+    py: Python<'_>,
     density: Vec<f64>,
     prices: Vec<f64>,
     offset_samples: Vec<f64>,
     guess: Vec<f64>,
     n_iter: usize,
 ) -> PyResult<Vec<f64>> {
-    let l = ((density.len() - 1) / 2) as i64;
-    let base_cdf = pdf_to_cdf(&density);
-    let mut cdfs: Vec<Vec<f64>> =
-        guess.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-    // offset_samples arrive descending (better first); implied prices are
-    // then ascending, which is what the interpolation needs
-    let mut implied: Vec<f64> = prices.clone();
-    for _ in 0..n_iter {
-        let (cdf_all, mult_all) = winner_of_many(&cdfs);
-        let table = implicit_prices(&base_cdf, &cdf_all, &mult_all, &offset_samples, l);
-        implied = prices
-            .iter()
-            .map(|&p| interp1(p, &table, &offset_samples))
-            .collect();
-        cdfs = implied.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+    if density.is_empty() {
+        return Err(PyValueError::new_err(
+            "density is empty; the classic lattice needs length 2L+1"));
     }
-    Ok(implied)
+    Ok(py.allow_threads(|| with_usable_rayon(|| {
+        let l = ((density.len() - 1) / 2) as i64;
+        let base_cdf = pdf_to_cdf(&density);
+        let mut cdfs: Vec<Vec<f64>> =
+            guess.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+        // offset_samples arrive descending (better first); implied prices
+        // are then ascending, which is what the interpolation needs
+        let mut implied: Vec<f64> = prices.clone();
+        for _ in 0..n_iter {
+            let (cdf_all, mult_all) = winner_of_many(&cdfs);
+            let table = implicit_prices(&base_cdf, &cdf_all, &mult_all,
+                                        &offset_samples, l);
+            implied = prices
+                .iter()
+                .map(|&p| interp1(p, &table, &offset_samples))
+                .collect();
+            cdfs = implied.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+        }
+        implied
+    })))
 }
 
 
