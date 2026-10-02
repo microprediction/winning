@@ -4,7 +4,34 @@ Exact multinomial probit estimation behind the mlogit interface: the
 GHK simulator replaced by a deterministic factor-conditional product
 integral, vectorized across observations.
 
+The package depends only on base R and `stats`. `data` is long format,
+one row per (chooser, alternative), with the index in an `idx` column
+(or attribute) whose first column is the chooser and second the
+alternative -- the layout `dfidx` produces, but a plain data frame works:
+
 ```r
+library(mlogitfast)
+set.seed(1)
+J <- 3; Tn <- 60
+d <- data.frame(id = rep(seq_len(Tn), each = J),
+                alt = factor(rep(letters[1:J], Tn)), x = rnorm(Tn * J))
+u <- 0.8 * d$x + rnorm(Tn * J)
+d$choice <- as.logical(ave(u, d$id, FUN = function(v) v == max(v)))
+d$idx <- data.frame(id = d$id, alt = d$alt)
+fit <- mlogit_fast(choice ~ x, d, r = 1L)
+```
+
+## Benchmark against mlogit (external packages, not dependencies)
+
+The comparison below needs the separate `mlogit` and `dfidx` packages,
+which `mlogitfast` neither imports nor suggests; install them yourself
+to rerun it.
+
+```r
+library(mlogitfast)
+library(mlogit)            # external: mlogit(), the Fishing data
+library(dfidx)             # external: dfidx()
+data("Fishing", package = "mlogit")
 Fish <- dfidx(Fishing, varying = 2:9, shape = "wide", choice = "mode")
 fit  <- mlogit_fast(mode ~ price + catch, Fish)
 ```

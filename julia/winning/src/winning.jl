@@ -236,8 +236,27 @@ function hermite_nodes(k::Int, order::Int = 15, prune::Float64 = 1e-7)
     return (F = F[keep, :], W = W[keep])
 end
 
+"""The first `n` primes, generated. `halton_normal_nodes` used a fixed
+12-prime table, and the automatic rule sends any rank with 15^r > 1e5 to
+Halton, so a full-contrast-rank race at r = 13 raised a BoundsError at
+`primes[13]` (#402)."""
+function _first_primes(n::Int)
+    ps = Int[]
+    c = 2
+    while length(ps) < n
+        isp = true
+        for p in ps
+            p * p > c && break
+            c % p == 0 && (isp = false; break)
+        end
+        isp && push!(ps, c)
+        c += 1
+    end
+    return ps
+end
+
 function halton_normal_nodes(r::Int, n::Int)
-    primes = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37)
+    primes = _first_primes(r)
     F = zeros(n, r)
     for c in 1:r
         b = primes[c]
@@ -344,10 +363,15 @@ function _race_setup(mu, V, D, F, W, base)
             all(isfinite, Wv) || throw(ArgumentError("W has a non-finite weight"))
             all(>=(0.0), Wv) || throw(ArgumentError(
                 "W has a negative weight; a factor law has no negative mass"))
-            wtot = sum(Wv)
-            wtot > 0 || throw(ArgumentError(
-                "W must have a positive total; got " * string(wtot)))
-            Wv = Wv ./ wtot          # W and c*W are the same law
+            # W and c*W are the same law. Normalise through the LARGEST
+            # weight: finite weights such as [1e308, 1e308] overflow only
+            # in the raw total, and W ./ Inf made every weight zero and
+            # every probability NaN (#415).
+            wmax = maximum(Wv)
+            wmax > 0 || throw(ArgumentError(
+                "W must have a positive total; got " * string(sum(Wv))))
+            Wv = Wv ./ wmax
+            Wv = Wv ./ sum(Wv)
         end
     end
     fn = _base_fn(base)

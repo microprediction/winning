@@ -280,17 +280,37 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
   list(Jmu = Jm, Jsigma = Js)
 }
 
-rank_probabilities <- function(mu, D = NULL, base = "normal",
-                               points = 513) {
+.rank_matrix_node <- function(mu, sd, fn, points) {
   n <- length(mu)
-  sd <- sqrt(.as_idio(D, n))
-  fn <- if (is.function(base)) base else .BASES[[base]]
   g <- .topk_grid(mu, sd, n - 1, fn, points)
   C <- .count_distribution(g$F)
   P <- matrix(0, n, n)
   for (i in 1:n) {
     Qi <- .loo_pmf(C, g$F, i)
     P[i, ] <- colSums(Qi * (g$f[, i] / sd[i])) * g$dx
+  }
+  P
+}
+
+# V (factor rank <= 2) and qa price a factor-correlated race by mixing
+# the conditional rank matrices over the same Gauss-Hermite nodes as
+# top_k_probabilities, as the Python reference does. This port had no V,
+# so the correlated call was an "unused argument" error while the
+# adjacent top-k verbs priced it (#202).
+rank_probabilities <- function(mu, D = NULL, base = "normal",
+                               points = 513, V = NULL, qa = 15) {
+  n <- length(mu)
+  sd <- sqrt(.as_idio(D, n))
+  fn <- if (is.function(base)) base else .BASES[[base]]
+  if (is.null(V)) {
+    P <- .rank_matrix_node(mu, sd, fn, points)
+  } else {
+    fac <- .topk_factor_nodes(V, n, qa)
+    P <- matrix(0, n, n)
+    for (q in seq_len(nrow(fac$nodes))) {
+      shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
+      P <- P + fac$w[q] * .rank_matrix_node(mu + shift, sd, fn, points)
+    }
   }
   # Check what is RETURNED. Row normalisation makes every row exact and
   # MOVES the columns, so a matrix that passed the raw check could fail the

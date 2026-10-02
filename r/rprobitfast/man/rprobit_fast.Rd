@@ -12,7 +12,7 @@ likelihoods exactly, to quadrature accuracy, and reports
 boundary-seeking covariance estimates instead of hiding them.
 }
 \usage{
-rprobit_fast(df, covariates, r = 2L, Qf = 7L, Qz = 7L, maxit = 400L)
+rprobit_fast(df, covariates, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
 }
 \arguments{
   \item{df}{long-format data frame with columns \code{id} (chooser),
@@ -20,7 +20,10 @@ rprobit_fast(df, covariates, r = 2L, Qf = 7L, Qz = 7L, maxit = 400L)
     covariate columns; one row per chooser-alternative pair.}
   \item{covariates}{character vector of covariate column names.}
   \item{r}{factor rank of the utility covariance (zero reference
-    loadings, unit idiosyncratic variance).}
+    loadings, unit idiosyncratic variance). Defaults to
+    \code{min(2, J - 2)}; a rank above \code{J - 2} is an error, because
+    with unit idiosyncratic variances the utility scale is then not
+    identified.}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
     integrals, with sharpness escalation to scrambled Sobol nodes.}
   \item{maxit}{BFGS iteration cap.}

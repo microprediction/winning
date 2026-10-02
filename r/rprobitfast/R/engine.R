@@ -150,6 +150,26 @@
 # and beta / loading gradients follow by the chain rule. One extra pass
 # over arrays the likelihood already computes; replaces 2*npar numeric
 # evaluations per gradient.
+# Largest factor rank the unit-idiosyncratic parameterization
+# identifies. With D fixed to one and a zero reference row the free
+# loadings number r*J - r*(r+1)/2 while the differenced covariance has
+# J*(J-1)/2 - 1 shape degrees of freedom; at r >= J - 1 the loading
+# block is full rank, D = 1 no longer fixes the utility scale, and
+# (2 beta, V') prices every choice like (beta, V). The old default
+# r = 2 was nonidentified at J = 3 (#201).
+.check_rank <- function(r, J) {
+  rmax <- max(J - 2L, 0L)
+  if (is.null(r)) return(as.integer(min(2L, rmax)))
+  r <- as.integer(r)
+  if (length(r) != 1L || is.na(r) || r < 0L || r > rmax)
+    stop(sprintf(paste0("factor rank r = %s is not identified at J = %d ",
+                        "alternatives: with unit idiosyncratic variances ",
+                        "the utility scale is fixed only for ",
+                        "r <= J - 2 = %d (#201)"),
+                 paste(r, collapse = ","), J, rmax), call. = FALSE)
+  r
+}
+
 .nll_core <- function(theta, Xb, choice, J, r, nodes, nodes_sharp,
                       want_grad = TRUE) {
   X <- Xb[[1]]
@@ -166,7 +186,11 @@
     stop(sprintf(paste0("choice must have one entry per observation: ",
                         "got %d for %d observations"),
                  length(choice), .Tn), call. = FALSE)
-  bad <- which(is.na(choice) | choice < 1L | choice > J)
+  # A fractional label such as 1.5 is in range but matches no
+  # `choice == k_alt` bucket, so it was dropped exactly like an
+  # out-of-range one; integral doubles such as 1.0 are fine (#194).
+  bad <- which(is.na(choice) | !is.finite(choice) | choice < 1L |
+                 choice > J | choice != round(choice))
   if (length(bad))
     stop(sprintf(paste0("choice[%d] = %s is not an alternative in 1..%d; ",
                         "%d of %d observations are not. They would be ",
@@ -253,7 +277,9 @@
 #' @param formula choice ~ alternative-specific covariates,
 #'   e.g. mode ~ price + catch (intercepts added per non-reference
 #'   alternative automatically).
-#' @param data a dfidx object as used by mlogit (long format).
+#' @param data long format, one row per (chooser, alternative), with an
+#'   idx column or attribute (chooser, alternative); a plain data frame
+#'   works, and so does a dfidx object (dfidx is not a dependency).
 #' @param r number of factor columns (default 2 covers the full
 #'   identified covariance at J = 4).
 #' @param Qf,Qz Gauss-Hermite orders for factor and own-noise nodes.

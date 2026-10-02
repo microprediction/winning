@@ -10,20 +10,26 @@ data and a formula for alternative-specific covariates, as used by the
 \pkg{mlogit} package.
 }
 \usage{
-mlogit_fast(formula, data, r = 2L, Qf = 7L, Qz = 7L, maxit = 400L)
+mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
 }
 \arguments{
   \item{formula}{choice ~ covariates, with the response a logical
     chosen-alternative column and alternative-specific covariates on
     the right-hand side.}
-  \item{data}{a long-format data set carrying a \code{dfidx}-style
-    index (chooser, alternative), e.g. as produced by
-    \code{dfidx::dfidx}.}
+  \item{data}{a long-format data frame, one row per (chooser,
+    alternative), carrying an \code{idx} column or attribute whose
+    first column is the chooser and second the alternative. A plain
+    data frame works (see Examples); the layout is the one the separate
+    \pkg{dfidx} package produces, which this package does not
+    require.}
   \item{r}{factor rank of the utility covariance; the parameterization
     (rank-\code{r} loadings with zero reference loadings, unit
     idiosyncratic variance) spans the same identified space as
     \pkg{mlogit}'s differenced-Cholesky parameterization with the same
-    degrees of freedom.}
+    degrees of freedom at \code{r = J - 2}. Defaults to
+    \code{min(2, J - 2)}; a rank above \code{J - 2} is an error, because
+    with unit idiosyncratic variances the utility scale is then not
+    identified.}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
     integrals; a sharpness rule escalates to scrambled Sobol nodes when the
     conditional races become nearly deterministic.}

@@ -227,3 +227,15 @@ test_that("mlogit_fast refuses cancelling choices and fits rank four", {
                      r = 4L, Qf = 3L, Qz = 3L, maxit = 1L)
   expect_true(is.finite(fit$logLik))
 })
+
+test_that("fractional labels are refused and the rank is identified (#194, #201)", {
+  X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
+  nd <- .sobol_nodes3(1L, m = 5L)
+  ch <- as.numeric(rep(1:3, length.out = 30)); ch[2] <- 1.5
+  expect_error(.nll_core(c(0.5, 0.2, 0.3), list(X), ch, 3L, 1L, nd, nd,
+                         want_grad = FALSE), "choice\\[2\\] = 1.5")
+  for (J in 2:5) {
+    expect_identical(.check_rank(NULL, J), as.integer(min(2L, J - 2L)))
+    expect_error(.check_rank(J - 1L, J), "not identified")
+  }
+})

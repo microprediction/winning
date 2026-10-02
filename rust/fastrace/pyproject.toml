@@ -9,6 +9,10 @@ readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Peter Cotton" }]
 requires-python = ">=3.9"
+# the PyO3 numpy bindings need NumPy's C API at the first array call;
+# without this a clean `pip install fastrace` imported and then panicked
+# (#115)
+dependencies = ["numpy"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",

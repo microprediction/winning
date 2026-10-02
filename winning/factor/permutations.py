@@ -23,6 +23,7 @@ renormalising away a lattice that failed to capture the field.
 import numpy as np
 
 from .core import as_loadings
+from ..shapes import as_weights
 from ..rustconfig import load_fastrace
 from .races import _fit_cov, _factor_of_structure, _setup, _tempered_curves
 
@@ -135,6 +136,27 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
                     out[i, j] += W[c] * contrib
         return out, float(out.sum())
 
+    if k == 3 and tau <= 0:
+        # The trifecta's inner integral int_{y<z} f_j F_i dy is a
+        # cumulative trapezoid, O(dx^2), while the outer lattice sums are
+        # spectrally accurate on these smooth integrands -- so the 8
+        # points per sd that resolve the win race left 2-5e-3 of 3-prefix
+        # mass on the table and every coarse request raised (#66; the
+        # defect fell 4x per doubling, measured in the issue). Richardson
+        # on the same window, (4 A(h) - A(2h)) / 3, removes the dx^2 term
+        # for half a pass more: on the #66 negative-correlation blocks at
+        # 129 points the defect drops from 1.3e-2 to 1.4e-5 and the worst
+        # cell is 2e-7 from an 8001-point reference, for every block size
+        # and every rotation of the loadings.
+        _plain = _accumulate
+
+        def _accumulate(pts):
+            pts = pts if pts % 2 else pts + 1       # A(2h) on the same nodes
+            fine, _ = _plain(pts)
+            coarse, _ = _plain((pts + 1) // 2)
+            out = np.maximum((4.0 * fine - coarse) / 3.0, 0.0)
+            return out, float(out.sum())
+
     out, total = _accumulate(pts)
 
     # The scalar mass identity CANNOT police a capped lattice. Cell
@@ -227,15 +249,10 @@ def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
         # this the returned log-probability shifted by log(sum W): the
         # same factor law spelled W = [5, 5] instead of [0.5, 0.5] read
         # -1.5071 as +0.7955, exactly log(10) apart (#208).
-        W = np.asarray(W, float)
-        wtot = float(W.sum())
-        if not np.isfinite(wtot) or wtot <= 0.0:
-            raise ValueError(
-                f"W must be positive weights: they total {wtot!r}. They "
-                "are relative, so any positive multiple of a valid rule "
-                "is the same factor law, but a zero or negative total is "
-                "not one.")
-        W = W / wtot
+        # as_weights is the shared door: entrywise non-negative, and
+        # normalised through max(W) so finite weights whose raw total
+        # overflows are still the same law (#415)
+        W = as_weights(W)
     logs = np.array([_one(-(mu + np.asarray(F)[q] @ V.T) / tau)
                      for q in range(len(F))])
     m = logs.max()

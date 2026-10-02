@@ -59,10 +59,12 @@
 # Dependency-free Halton sequence mapped through qnorm: equal-weight
 # nodes for E over N(0, I_r). Used when the sharpness escalation calls
 # for a low-discrepancy family (see .race_setup); adequate for r <= 4.
+# The bases are the first r primes, generated: a fixed 32-prime table
+# made r = 33 index past its end, and the NA base then failed inside the
+# radical-inverse loop, on a full-contrast-rank race the API accepts and
+# the Python reference prices (#402). fit_covariance calls this too.
 .halton_normal_nodes <- function(r, n) {
-  primes <- c(2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
-              47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103,
-              107, 109, 113, 127, 131)[seq_len(r)]
+  primes <- .first_primes(r)
   H <- vapply(primes, function(b) {
     idx <- seq_len(n) + 20L          # drop the first few, standard hygiene
     h <- numeric(n)
@@ -201,15 +203,21 @@
   # invariant either way; race_jacobian does not, so J(W) and J(10W)
   # differed by 1.473 -- the same defect as #281 in the standalone
   # javascript module, and #290 in the browser tree.
+  #
+  # Normalise through the LARGEST weight, never the raw total: finite
+  # weights such as c(1e308, 1e308) overflow only in sum(W), and that
+  # was refused as a non-finite total although it is the same law as
+  # c(1, 1) (#415).
   W <- as.numeric(W)
-  Wtot <- sum(W)
-  if (!is.finite(Wtot) || Wtot <= 0)
-    stop(sprintf("W must have a positive total; got %s", format(Wtot)),
-         call. = FALSE)
   if (any(!is.finite(W)) || any(W < 0))
     stop("W must be finite and non-negative; a factor law has no negative mass",
          call. = FALSE)
-  W <- W / Wtot
+  Wmax <- if (length(W)) max(W) else 0
+  if (!(Wmax > 0))
+    stop(sprintf("W must have a positive total; got %s", format(sum(W))),
+         call. = FALSE)
+  W <- W / Wmax
+  W <- W / sum(W)
   list(mu = mu, V = V, D = D, F = as.matrix(F), W = as.numeric(W),
        fn = fn, left = span[1], right = span[2])
 }
@@ -508,7 +516,11 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   Vc <- sweep(Vn, 2, colMeans(Vn))
   if (!is.null(V) && !is.null(F)) {
     Fq <- as.matrix(F)
-    Wq <- if (is.null(W)) rep(1 / nrow(Fq), nrow(Fq)) else as.numeric(W) / sum(W)
+    # through max(W) first: sum(W) can overflow for finite weights (#415)
+    Wq <- if (is.null(W)) rep(1 / nrow(Fq), nrow(Fq)) else {
+      w0 <- as.numeric(W) / max(as.numeric(W))
+      w0 / sum(w0)
+    }
     Fc <- sweep(Fq, 2, colSums(Fq * Wq))
     CovF <- t(Fc) %*% (Fc * Wq)
   } else {

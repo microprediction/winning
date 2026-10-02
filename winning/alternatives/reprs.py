@@ -1,7 +1,7 @@
 """Reduced-rank rectangle representations of single-winner events."""
 import numpy as np
 
-from ..shapes import as_loadings
+from ..shapes import as_idio, as_loadings
 
 from ..rustconfig import load_fastrace
 
@@ -28,7 +28,7 @@ def reduced_rank_representation(mu, V, D, i):
     """
     mu = np.asarray(mu, dtype=float)
     V = as_loadings(V, len(np.asarray(mu)))
-    D = np.asarray(D, dtype=float)
+    D = as_idio(D, len(mu))                  # a scalar is everyone's (#84)
     mask = np.arange(len(mu)) != i
     B = np.column_stack([V[mask] - V[i], -np.sqrt(D[i])
                          * np.ones(mask.sum())])
@@ -46,7 +46,7 @@ def per_winner_reduced_rank_shares(mu, V, D, n_samples=512, seed=11):
     from scipy.stats import norm, qmc
     mu = np.asarray(mu, dtype=float)
     V = as_loadings(V, len(np.asarray(mu)))
-    D = np.asarray(D, dtype=float)
+    D = as_idio(D, len(mu))                  # a scalar is everyone's (#84)
     n, k = V.shape
     Z = norm.ppf(qmc.Sobol(d=k + 1, scramble=True,
                            seed=seed).random(n_samples))
