@@ -125,8 +125,10 @@ def exponential_power_base(beta):
     lesson. Very large beta makes near-edges the lattice must resolve;
     accuracy is measured in the tests at beta = 12."""
     beta = float(beta)
-    if beta <= 0.0:
-        raise ValueError("exponential_power_base needs beta > 0")
+    if not np.isfinite(beta) or beta <= 0.0:
+        # beta = inf is the uniform limit, which has no density this
+        # family can evaluate; it came back as NaN rows (#134)
+        raise ValueError("exponential_power_base needs a finite beta > 0")
     from scipy.special import gamma as _gamma, gammaincc
     a = np.sqrt(_gamma(1.0 / beta) / _gamma(3.0 / beta))
     c = beta / (2.0 * a * _gamma(1.0 / beta))
@@ -219,8 +221,13 @@ def student_base(nu):
     tails for performances with occasional wild days. Returns a callable
     for base=; the tail span widens with falling nu automatically."""
     nu = float(nu)
-    if nu <= 2.0:
+    if np.isnan(nu) or nu <= 2.0:
         raise ValueError("student_base needs nu > 2 for unit variance")
+    if np.isinf(nu):
+        # s = sqrt(inf/inf) is NaN and every row came back NaN, while the
+        # compiled kernel panicked (#134). The limit is the normal base.
+        raise ValueError("student_base needs a finite nu; use base='normal' "
+                         "for the nu -> inf limit")
     from scipy.stats import t as _t
     s = np.sqrt(nu / (nu - 2.0))            # raw x = s * z
 
@@ -363,6 +370,33 @@ def _setup(mu, V, D, F, W, base):
         # 4.43 -- the race is genuinely sharp, the raw statistic missed
         # it, and the shipped answer carried TV 9.5e-3.
         V = V - V.mean(axis=0)
+        if (F is None) != (W is None):
+            # A lone F or W used to be discarded silently and BOTH
+            # regenerated (#75): the caller's rule never ran.
+            raise ValueError(
+                "supply both F (factor nodes) and W (their weights), or "
+                f"neither; got only {'F' if W is None else 'W'}")
+        if F is not None:
+            # A supplied rule is checked before any backend dispatch: a
+            # short W or a wrong-rank F used to reach the compiled kernel
+            # and come back as an index PanicException, or as a late
+            # matmul ValueError on the pure path (#75).
+            F = np.asarray(F, dtype=float)
+            if F.ndim != 2:
+                raise ValueError(
+                    f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
+            W_arr = np.asarray(W, dtype=float)
+            if W_arr.ndim != 1:
+                raise ValueError(
+                    f"W must be a 1-D weight vector; got shape {W_arr.shape}")
+            if F.shape[1] != V.shape[1]:
+                raise ValueError(
+                    f"F has {F.shape[1]} factor columns but V has rank "
+                    f"{V.shape[1]}; F is (nodes, rank)")
+            if F.shape[0] != W_arr.shape[0]:
+                raise ValueError(
+                    f"F has {F.shape[0]} nodes but W has {W_arr.shape[0]} "
+                    "weights; they must match one-to-one")
         if F is None or W is None:
             # adaptive order: when idiosyncratic noise is small relative
             # to the loadings, the conditional race is nearly
@@ -581,6 +615,12 @@ def _ndtr_local(z):
     return ndtr(z)
 
 
+# Above this many n * Q entries the Rust front door skips the Q x n
+# location matrix and windows from per-runner extremes (a module
+# constant so tests can move the threshold, #117).
+_LARGE_DISPATCH_ENTRIES = 2e7
+
+
 def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                  delta=1e-12):
     """THE lattice: window plus any sharpness refinement, in one place.
@@ -600,6 +640,20 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     else:
         x = np.linspace(M_all.min() - left * sd.max(),
                         M_all.max() + right * sd.max(), points)
+    return _refine_grid(x, sd, V, points, stacklevel=3)
+
+
+def _refine_grid(x, sd, V, points, stacklevel=2):
+    """Sharpness refinement and the spacing warning, for ANY window.
+
+    Split out of forward_grid so that the memory-saving large-field
+    Rust branch of race_probabilities, which builds its window from
+    per-runner extremes instead of the Q x n location matrix, applies
+    the same discretization rule (#117). It used to call _bulk_window
+    and go straight to the kernel with the requested points, so
+    crossing the n*Q threshold silently dropped the refinement (TV
+    2.5e-2 on a scaled sharp field). Returns (x, points)."""
+    sd = np.asarray(sd, dtype=float)
     dx = x[1] - x[0]
     smin = float(sd.min())
     sharp_here = float(np.max(np.sqrt((np.asarray(V, float) ** 2).sum(axis=1)))
@@ -627,7 +681,7 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                 f"window of {x[-1]-x[0]:.3g}); results may carry "
                 "percent-level error. This is the near-deterministic "
                 "regime; consider larger idiosyncratic variances or "
-                "simulation.", RuntimeWarning, stacklevel=2)
+                "simulation.", RuntimeWarning, stacklevel=stacklevel)
     # A correctly bracketed window can still be unusable: a polynomial
     # tail pushes the delta-quantile so far out that the points are
     # spread too thin to resolve the bulk. A truncated window hides
@@ -639,7 +693,7 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
             f"half the smallest performance sd ({smin:.3g}): this base's "
             "tail forced a window wider than the point budget can "
             "resolve. Raise points=, raise delta=, or declare a span on "
-            "the base.", RuntimeWarning, stacklevel=2)
+            "the base.", RuntimeWarning, stacklevel=stacklevel)
     return x, points
 
 
@@ -958,7 +1012,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             dens = float(np.exp(-0.5 * u * u) / np.sqrt(2.0 * np.pi)) / sd_d
             return p, np.array([-dens, -dens])
         return p
-    if _HAVE_RUST and base == "normal" and n * len(F) > 2e7:
+    if _HAVE_RUST and base == "normal" and n * len(F) > _LARGE_DISPATCH_ENTRIES:
         # at scale, materializing the Q x n conditional-means matrix (only
         # ever used for the window) costs gigabytes and dominates runtime;
         # per-runner extremes over the node set suffice. For GH tensor
@@ -973,7 +1027,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         else:
             x = np.linspace(M_lo.min() - left * sd.max(),
                             M_hi.max() + right * sd.max(), points)
-        dx = x[1] - x[0]
+        # the same refinement/warning forward_grid applies: this branch
+        # is a storage optimization, not a different discretization
+        x, points = _refine_grid(x, sd, V, points)
         p, sl, total = _fastrace.forward_and_slopes(
             np.ascontiguousarray(mu), np.ascontiguousarray(V),
             np.ascontiguousarray(D), np.ascontiguousarray(F),
