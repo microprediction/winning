@@ -45,7 +45,10 @@ def test_gaussian_n2_matches_closed_form():
 
 def test_gaussian_n2_reports_converged():
     F, W = hermite_nodes(2)
-    V = np.zeros((2, 1))
+    # rank-2 nodes need rank-2 loadings: the old (2, 1) V only passed
+    # because the pair branch never multiplied F by V; it now reads the
+    # represented factor law (#443), and a rank mismatch is a caller error
+    V = np.zeros((2, 2))
     D = np.ones(2)
     p = np.array([0.94, 0.06])
     mu, info = abilities_from_probabilities_factor(
