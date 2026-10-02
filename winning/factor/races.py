@@ -1877,6 +1877,14 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
     fn0 = base if callable(base) else BASES[base]
     w = float(width)
     off = float(offset)
+    # width is the lump's Gaussian scale: zero divided every race into
+    # NaN and a negative width reversed the lump survival, so the
+    # probabilities stayed finite and normalised while every own-slope
+    # turned positive (#389)
+    if not (np.isfinite(w) and w > 0.0):
+        raise ValueError("failure_base needs a finite width > 0; got " + repr(width))
+    if not np.isfinite(off):
+        raise ValueError("failure_base needs a finite offset; got " + repr(offset))
     if standardize:
         m1 = q * off
         var = (1.0 - q) * 1.0 + q * (w * w + off * off) - m1 * m1
@@ -1896,6 +1904,21 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
         fp = ((1.0 - q) * fp0 + q * fpl) * sd * sd
         return np.maximum(S, 1e-300), f, fp
 
+    # A window that covers BOTH components (#135). Without a span the
+    # finite-temperature path and the ratings lattices used the generic
+    # (-12, 12), cut the lump off at offset > 12 and renormalised what
+    # was left: offset 20 priced [0.678, 0.249, 0.073] against the
+    # subset-enumeration [0.515, 0.300, 0.185] at every resolution. The
+    # running base keeps its own span (at least the generic 12) and the
+    # lump is covered to 9 widths, both in standardized units; at the
+    # default offset 6 this is the old (12, 12).
+    L0, R0 = (getattr(base, "span", (12.0, 12.0)) if callable(base)
+              else _SPANS.get(base, (12.0, 12.0)))
+    L0, R0 = max(12.0, float(L0)), max(12.0, float(R0))
+    lump_lo = (off - 9.0 * w - m1) / sd
+    lump_hi = (off + 9.0 * w - m1) / sd
+    _fail.span = (max(L0, (L0 + m1) / sd, -lump_lo),
+                  max(R0, (R0 - m1) / sd, lump_hi))
     if base == "normal":
         _fail.rust_base = (8, [q, w, off, m1, sd])
 

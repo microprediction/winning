@@ -153,3 +153,66 @@ def test_skew_normal_refuses_a_non_finite_shape(a):
     from winning.factor.races import skew_normal_base
     with pytest.raises(ValueError, match="finite"):
         skew_normal_base(a)
+
+
+# --- #389 ----------------------------------------------------------------
+
+@pytest.mark.parametrize("w", [0.0, -1.0, np.nan, np.inf, -np.inf])
+def test_failure_base_refuses_a_nonpositive_or_nonfinite_width(w):
+    from winning.factor.races import failure_base
+    with pytest.raises(ValueError, match="width"):
+        failure_base(0.9, width=w)
+
+
+def test_failure_base_refuses_a_nonfinite_offset():
+    from winning.factor.races import failure_base
+    with pytest.raises(ValueError, match="offset"):
+        failure_base(0.5, offset=np.inf)
+
+
+def test_failure_base_own_slopes_are_negative():
+    from winning.factor.races import failure_base
+    p, s = race_probabilities(mu=[-0.5, 0.2, 1.0], D=[1.0, 1.0, 1.0], points=4001,
+                              window="span", return_slopes=True,
+                              base=failure_base(0.9, width=1.0))
+    assert np.all(np.isfinite(p)) and abs(p.sum() - 1) < 1e-12
+    assert np.all(np.asarray(s) < 0)
+
+
+# --- #135 ----------------------------------------------------------------
+
+def _failure_subset_reference(mu, q, width, offset, tau):
+    import itertools
+    mu = np.asarray(mu, float)
+    n = len(mu)
+    ref = np.zeros(n)
+    for fails in itertools.product([0, 1], repeat=n):
+        pr = np.prod([q if f else 1 - q for f in fails])
+        run = [i for i in range(n) if not fails[i]]
+        if len(run) == 1:
+            ref[run[0]] += pr
+        elif run:
+            ref[run] += pr * race_probabilities(mu[run], D=np.ones(len(run)),
+                                                temperature=tau, points=4001)
+        else:
+            ref += pr * race_probabilities(mu + offset, D=np.full(n, width ** 2),
+                                           temperature=tau, points=4001)
+    return ref
+
+
+@pytest.mark.parametrize("offset", [20.0, 30.0])
+def test_failure_lump_survives_the_finite_temperature_window(offset):
+    from winning.factor.races import failure_base
+    mu = np.array([-1.0, 0.0, 1.0])
+    b = failure_base(q=0.5, width=0.35, offset=offset)
+    assert b.span[1] >= offset + 9 * 0.35 - 1e-12
+    got = race_probabilities(mu, D=np.ones(3), base=b, temperature=0.5,
+                             points=4001)
+    ref = _failure_subset_reference(mu, 0.5, 0.35, offset, 0.5)
+    assert 0.5 * np.abs(got - ref).sum() < 5e-4
+
+
+def test_failure_span_is_unchanged_at_ordinary_offsets():
+    from winning.factor.races import failure_base
+    assert failure_base(0.25).span == (12.0, 12.0)
+    assert failure_base(0.25, standardize=True).span == (12.0, 12.0)
