@@ -1019,5 +1019,17 @@ accepts("the inverse takes a scalar D, matching python",
           "treeFromLinkage refuses a zero-height merge", "height 0");
 }
 
+// #350: the tree Jacobian is the derivative of the tree forward; a common
+// root shock cancels from both
+{
+  const exact = Math.exp(-0.5 * 0.8 * 0.8 / 1.85) / Math.sqrt(2 * Math.PI * 1.85);
+  for (const r of [0, 0.8, 2]) {
+    const J = blocks.treeRaceJacobian([-0.4, 0.4], [0, 1], [0.3, 0.4], [0.7, 0.9],
+                                      [2, 2, -1], [0, 0, r]);
+    holds(`treeRaceJacobian is root-invariant (strength ${r})`,
+          Math.abs(J[0][1] - exact) < 1e-8, `J01 ${J[0][1]}`);
+  }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

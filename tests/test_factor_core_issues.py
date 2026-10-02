@@ -587,3 +587,37 @@ def test_near_duplicate_pair_prices_the_cophenetic_model_430(h):
 def test_zero_height_merge_is_refused_430():
     with pytest.raises(ValueError, match="height 0"):
         Tree.from_linkage(np.array(_linkage_fixture()["refuse_zero_height"]))
+
+
+# ---------------------------------------------------------------- #350
+
+@pytest.mark.parametrize("root", [0.0, 0.8, 2.0])
+def test_tree_jacobian_is_common_root_invariant_350(root):
+    from winning.factor.blocks import tree_race_jacobian
+    mu = np.array([-0.4, 0.4])
+    J = tree_race_jacobian(mu, np.array([0, 1]), np.array([0.3, 0.4]),
+                           np.array([0.7, 0.9]), np.array([2, 2, -1]),
+                           np.array([0.0, 0.0, root]))
+    exact = norm.pdf(0.8 / np.sqrt(1.85)) / np.sqrt(1.85)
+    assert abs(J[0, 1] - exact) < 1e-8
+    assert abs(J[0, 0] + exact) < 1e-8
+
+
+def test_tree_jacobian_is_the_forward_derivative_350():
+    """A deeper tree: siblings 0, 1 share a non-root ancestor."""
+    from winning.factor.blocks import (tree_race_jacobian,
+                                       tree_race_probabilities)
+    from winning.factor.polish import _structure_engines
+    mu = np.array([-0.5, -0.1, 0.2, 0.4])
+    args = (np.array([0, 1, 2, 2]), np.array([0.2, 0.3, -0.1, 0.4]),
+            np.array([0.8, 0.9, 1.0, 1.1]), np.array([3, 3, 4, 4, -1]),
+            np.array([0.0, 0.0, 0.0, 0.6, 0.4]))
+    J = tree_race_jacobian(mu, *args)
+    h = 1e-4
+    for j in range(4):
+        e = np.zeros(4); e[j] = h
+        fd = (tree_race_probabilities(mu + e, *args)
+              - tree_race_probabilities(mu - e, *args)) / (2 * h)
+        assert np.abs(J[:, j] - fd).max() < 1e-7
+    _, jac, _ = _structure_engines(Tree(*args), 257)     # polish's gradient
+    assert np.abs(jac(mu) - J).max() < 1e-12

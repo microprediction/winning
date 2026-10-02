@@ -543,7 +543,18 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     no ancestor effects (then it reduces to block_race_jacobian), an
     approximation otherwise. Good enough for Newton and for polish
     constraint gradients: the residual/feasibility is always measured on
-    the exact forward map. Promoted from research/pqrace (SCHUR.md)."""
+    the exact forward map. Promoted from research/pqrace (SCHUR.md).
+
+    When ANY ancestor effect is present the Gram product is not used:
+    it factorises the two-leaf-removed cavity as R_i R_j / G_root, which
+    is false once leaves share a random ancestor -- the smallest case, two
+    leaves under one common root, has a forward invariant to the root
+    strength (the shock cancels) and an exact slope
+    phi(dmu / s) / s, s^2 = 1.85, while the Gram term moved from 0.2467
+    to 0.1792 at root strength 0.8 and was not refined away by points
+    (#350). There the matrix is the central difference of the exact
+    forward instead -- the derivative of the map actually returned, at
+    2n forward passes."""
     mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(np.asarray(D, float))
@@ -552,6 +563,20 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
+    if np.any(lam[nC:] != 0.0):
+        tot = sd ** 2 + v ** 2
+        h = 1e-5 * float(np.sqrt(np.median(tot)))
+        J = np.empty((n, n))
+        for j in range(n):
+            e = np.zeros(n); e[j] = h
+            J[:, j] = (tree_race_probabilities(mu + e, cluster, loading, D,
+                                               parent, strength,
+                                               points=points, qa=qa)
+                       - tree_race_probabilities(mu - e, cluster, loading,
+                                                 D, parent, strength,
+                                                 points=points, qa=qa)
+                       ) / (2.0 * h)
+        return J
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])

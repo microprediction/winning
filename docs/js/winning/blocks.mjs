@@ -497,6 +497,29 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
 export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts = {}) {
   checkOpts(opts, TREE_RACE_JACOBIAN_OPTS, "treeRaceJacobian", OPT_HINTS);
   const { points = 257, qa = 9 } = opts;
+  // With any ancestor effect the cross-cluster Gram term is not the
+  // derivative (it factorises the two-leaf cavity as R_i R_j / G_root):
+  // two leaves under a common root priced invariantly in the root
+  // strength while J[0][1] moved 0.2467 -> 0.1792 at strength 0.8 (#350).
+  // There the matrix is the central difference of the exact forward, as
+  // in python's tree_race_jacobian.
+  const nC = new Set(cluster).size;
+  if (strength.slice(nC).some(v => v !== 0)) {
+    const n = mu.length;
+    const tot = D.map((d, i) => d + (Array.isArray(loading) ? loading[i] ** 2 : loading ** 2));
+    const srt = tot.slice().sort((a, b) => a - b);
+    const med = n % 2 ? srt[(n - 1) / 2] : 0.5 * (srt[n / 2 - 1] + srt[n / 2]);
+    const h = 1e-5 * Math.sqrt(med);
+    const J = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let j = 0; j < n; j++) {
+      const up = mu.slice(), dn = mu.slice();
+      up[j] += h; dn[j] -= h;
+      const pu = treeRaceProbabilities(up, cluster, loading, D, parent, strength, { points, qa });
+      const pd = treeRaceProbabilities(dn, cluster, loading, D, parent, strength, { points, qa });
+      for (let i = 0; i < n; i++) J[i][j] = (pu[i] - pd[i]) / (2 * h);
+    }
+    return J;
+  }
   const I = treeInternals(mu, cluster, loading, D, parent, strength, points, qa);
   const P = I.x.length;
   const Gr = I.G[I.root].map(v => Math.max(v, TINY));
