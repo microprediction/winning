@@ -1715,9 +1715,24 @@ def plackett_luce_topk_probabilities(p, k=3):
     p = np.asarray(p, dtype=float)
     p = p / p.sum()
     n = len(p)
+    if int(k) != k or k < 1:
+        raise ValueError("k must be a positive integer")
+    # Every runner is in the top k of a field of at most k, whatever the
+    # weights. An exact zero share -- which stable softmax produces by
+    # underflow -- reached a zero remaining denominator at the last
+    # place and lost its membership: softmax([1000, 0, 0]) gave top-3
+    # [0, 1, 1], summing to 2 (#384).
+    if k >= n:
+        return np.ones(n)
     if k == 1:
         return p.copy()
+    if k not in (2, 3):
+        raise ValueError("k must be 1, 2 or 3")
     out = p.copy()
+    # Simplex boundary: when the runners still unplaced all have zero
+    # weight, the next place goes to one of them uniformly at random,
+    # the limit of equal vanishing weights. Without it the place was
+    # paid to nobody and sum(top-k) fell below k.
     # the complement 1 - p_j is computed as the SUM OF THE OTHERS, never
     # by subtraction from one: at p_fav = 1 - 1e-13 the subtraction loses
     # three digits to cancellation and the exact identity sum(top-k) = k
@@ -1725,12 +1740,12 @@ def plackett_luce_topk_probabilities(p, k=3):
     rest = np.array([p[np.arange(n) != j].sum() for j in range(n)])
     # second: j first, i second -- P2[j, i] = p_j p_i / rest_j
     P2 = (p / np.maximum(rest, 1e-300))[:, None] * p[None, :]
+    exhausted = rest <= 0.0
+    P2[exhausted, :] = (p[exhausted] / (n - 1))[:, None]
     np.fill_diagonal(P2, 0.0)
     out += P2.sum(axis=0)
     if k == 2:
         return out
-    if k != 3:
-        raise ValueError("k must be 1, 2 or 3")
     # third: j first, l second, i third
     for j in range(n):
         pj = p[j]
@@ -1738,7 +1753,9 @@ def plackett_luce_topk_probabilities(p, k=3):
         for sec in range(n):
             if sec == j:
                 continue
-            w = pj * p[sec] / max(rem1, 1e-300)
+            w = P2[j, sec]
+            if w == 0.0:
+                continue
             denom2 = rem1 - p[sec]
             if denom2 < 1e-8 * rem1:
                 # same cancellation one level deeper (two large entries
@@ -1747,8 +1764,10 @@ def plackett_luce_topk_probabilities(p, k=3):
                 mask = np.ones(n, dtype=bool)
                 mask[j] = mask[sec] = False
                 denom2 = p[mask].sum()
-            denom2 = max(denom2, 1e-300)
-            contrib = w * p / denom2
+            if denom2 <= 0.0:
+                contrib = np.full(n, w / (n - 2))
+            else:
+                contrib = w * p / denom2
             contrib[j] = 0.0
             contrib[sec] = 0.0
             out += contrib
