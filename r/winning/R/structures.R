@@ -203,7 +203,8 @@ tree_from_linkage <- function(Z) {
   # the negative increment returns a covariance that is not the
   # cophenetic one promised (#133)
   bad <- numeric(0); bad_t <- integer(0)
-  for (t in (n + 1L):nT) {
+  # seq_len, not (n + 1L):nT -- at one leaf that is 2:1 = c(2, 1) (#382)
+  for (t in n + seq_len(n - 1L)) {
     pa <- parent[t]
     lam2 <- (if (pa > 0) d[pa] else 1) - d[t]     # rho_t - rho_pa
     if (lam2 < -1e-9) { bad <- c(bad, lam2); bad_t <- c(bad_t, t) }

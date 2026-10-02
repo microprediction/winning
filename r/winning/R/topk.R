@@ -219,7 +219,9 @@
 }
 
 .topk_factor_nodes <- function(V, n, qa, D = NULL) {
-  Vm <- if (is.matrix(V)) V else matrix(V, ncol = 1)
+  # one row per runner, or refuse: a short V was recycled across mu by
+  # `mu + shift` and priced a repeated-loading model in silence (#343)
+  Vm <- .as_loadings(V, n)
   r <- ncol(Vm)
   if (r > 2)
     stop("top_k_probabilities is implemented for factor rank <= 2")
@@ -246,7 +248,7 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
                                 base = "normal", points = 513, qa = NULL) {
   n <- length(mu)
   k <- .as_depth(k, n)
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V))
     return(.checked_topk(.topk_with_slopes(mu, sd, k, fn, points)$q,
@@ -315,7 +317,7 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
     }
     return(list(Jmu = Jm, Jsigma = Js))
   }
-  Dv <- if (is.null(D)) rep(1, n) else D
+  Dv <- .as_idio(D, n)
   sd <- sqrt(Dv)
   fn <- if (is.function(base)) base else .BASES[[base]]
   g <- .topk_grid(mu, sd, k, fn, points)
@@ -359,14 +361,14 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
 # so the correlated call was an "unused argument" error while the
 # adjacent top-k verbs priced it (#202).
 rank_probabilities <- function(mu, D = NULL, base = "normal",
-                               points = 513, V = NULL, qa = 15) {
+                               points = 513, V = NULL, qa = NULL) {
   n <- length(mu)
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V)) {
     P <- .rank_matrix_node(mu, sd, fn, points)
   } else {
-    fac <- .topk_factor_nodes(V, n, qa)
+    fac <- .topk_factor_nodes(V, n, qa, D)
     P <- matrix(0, n, n)
     for (q in seq_len(nrow(fac$nodes))) {
       shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
@@ -414,7 +416,7 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
       "has no finite inverse. Pass target_floor= to floor small entries ",
       "deliberately."))
   }
-  target <- target * (k / sum(target))
+  target <- .rescaled_target(target, mass = k)
   if (any(target >= 1))
     stop(paste0(
       "after renormalizing to k slots, a target membership is >= 1: ",
@@ -430,7 +432,7 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   k <- .as_depth(k, n)
   vt <- .validated_topk_target(q, k, n, target_floor)
   target <- vt$target
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
   fac <- if (is.null(V)) NULL else .topk_factor_nodes(V, n, qa, D)
 
@@ -442,10 +444,14 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   scale <- sqrt(stats::median(sd^2) + sv)
   mu <- -(logt - mean(logt)) / 2 * scale
   alpha <- if (n > 2) 1.0 else 0.7
+  n_iter <- .as_iter_budget(n_iter)
   resid_max <- Inf
-  iters <- 0
-  for (it in 1:n_iter) {
-    iters <- it
+  # iters counts UPDATES applied to mu. The residual is evaluated at the
+  # current mu before deciding to update, so the returned residual always
+  # describes the returned mu, and n_iter = 0 returns the initializer with
+  # its own residual (#441: `1:0` ran two updates and reported zero).
+  iters <- 0L
+  repeat {
     if (is.null(fac)) {
       ws <- .topk_with_slopes(mu, sd, k, fn, points)
       qraw <- ws$q
@@ -464,11 +470,12 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
     resid <- (log(pmax(qhat, 1e-300)) - log(pmax(1 - qhat, 1e-300))) -
       logit_t
     resid_max <- max(abs(resid))
-    if (resid_max < tol) break
+    if (resid_max < tol || iters >= n_iter) break
     dlogit <- pmin(sl / pmax(qhat * (1 - qhat), 1e-300), -1e-6 / scale)
     lim <- pmin(2, 10 * abs(resid)) * scale
     mu <- mu - pmin(pmax(alpha * resid / dlogit, -lim), lim)
     mu <- mu - mean(mu)
+    iters <- iters + 1L
   }
   converged <- resid_max < tol
   if (!converged && !return_info)
@@ -487,6 +494,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      n_iter = 60, tol = 1e-8, ridge = 0,
                                      mu0 = NULL, return_info = FALSE) {
   n <- length(q1)
+  n_iter <- .as_iter_budget(n_iter)
   k1 <- .as_depth(k1, n, "k1"); k2 <- .as_depth(k2, n, "k2")
   if (k1 == k2)
     stop("k1 == k2 gives one curve twice: scale is unidentified")
@@ -495,7 +503,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
   lt1 <- log(t1) - log1p(-t1)
   lt2 <- log(t2) - log1p(-t2)
 
-  sd <- if (is.null(D0)) rep(1, n) else sqrt(D0)
+  sd <- sqrt(.as_idio(D0, n, name = "D0"))
   if (!is.null(mu0)) {
     mu <- as.numeric(mu0) - mean(mu0)
     # the return gauge (mean-zero mu, geometric-mean-one sd) applied to
@@ -530,12 +538,12 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
   cost <- sum(r * r)
   resid_max <- max(abs(r[1:(2 * n)]))
   lam <- 1e-6
-  iters <- 0
+  iters <- 0L
   last_accepted <- TRUE
   last_grad <- Inf
-  for (it in 1:n_iter) {
-    iters <- it
+  for (it in seq_len(n_iter)) {
     if (resid_max < tol) break
+    iters <- it
     blocks <- list()
     pairs <- list(list(k = k1, qh = qh1), list(k = k2, qh = qh2))
     for (bi in 1:2) {
@@ -652,6 +660,7 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
   # invert one EXACT-rank marginal at frozen scales: two-branched for
   # r >= 2, mu0 selects the branch. See the python docstring.
   n <- length(p)
+  n_iter <- .as_iter_budget(n_iter)
   # a whole-number rank, refused before coercion: as.integer(1.5) solved
   # first place silently (#317)
   rr <- suppressWarnings(as.numeric(r))
@@ -665,8 +674,8 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
     stop("rank probabilities must be finite")
   if (any(p <= 0))
     stop("all rank probabilities must be positive")
-  logt <- log(p / sum(p))
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  logt <- log(.rescaled_target(as.numeric(p)))
+  sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
   zz <- c(-2.3, -1.1, -0.35, 0.6, 1.7)
   symmetric <- isTRUE(all(abs(fn(zz)$S + fn(-zz)$S - 1) < 1e-12))
@@ -685,10 +694,10 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
   cost <- sum(resid * resid)
   resid_max <- max(abs(resid))
   lam <- 1e-6
-  iters <- 0
-  for (it in 1:n_iter) {
-    iters <- it
+  iters <- 0L
+  for (it in seq_len(n_iter)) {
     if (resid_max < tol) break
+    iters <- it
     Jlog <- st$J / pmax(st$p, 1e-300)
     A <- crossprod(Jlog)
     gvec <- as.vector(crossprod(Jlog, resid))

@@ -152,6 +152,11 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
     else:
         Vv = as_loadings(V, k)
         Vaug = np.hstack([B, Vv])
+    # one representation per factor law, so the nodes cannot see a
+    # column sign, a rotation, or which eigenvector sign LAPACK chose
+    # for the belief split (#130)
+    from .nway import _canonical_loadings
+    Vaug = _canonical_loadings(Vaug)
     rank = Vaug.shape[1]
     F, W = _mixture_nodes(rank, nodes_log2)
     if rank == 0:
@@ -235,6 +240,14 @@ def _winner_kernel(winner, k, points=801, base="normal"):
     e[int(winner)] = 1.0
 
     def kernel(pts, D, Vaug, F, W, psi=None, beta2=None):
+        if k == 2:
+            # a pair winner IS the two-runner order, one Gaussian
+            # contrast: priced per node in closed form (no lattice, #92)
+            # and returned per node, so the mixture -- including the
+            # Sobol recentring -- is the order kernel's exactly
+            from .nway import _order_pass_batch
+            return _order_pass_batch(pts, np.sqrt(np.maximum(D, 1e-300)),
+                                     [int(winner), 1 - int(winner)])
         mo = pts[0] - (F @ Vaug.T)[0]
         a = -mo
         p = win_probabilities_factor(a, Vaug, D, F, W)
@@ -257,7 +270,7 @@ def _order_kernel(order, base="normal"):
     edition."""
     from .nway import _order_pass_batch, _predictive_curves
 
-    order = np.asarray(order, dtype=int)
+    order = np.asarray(order, dtype=int)   # validated by the callers
     cache = {}
 
     def kernel(pts, D, Vaug, F, W, psi=None, beta2=None):
@@ -314,6 +327,11 @@ def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
     sweeps vectorized across factor nodes, because online deployments
     are order-heavy.
     """
+    from ..outcomes import as_order
+    order = as_order(order, len(np.asarray(m)))                # #129
+    if len(order) <= 1:                  # tautology: exact, no mixture
+        return (np.asarray(m, dtype=float).copy(),
+                np.asarray(S, dtype=float).copy(), 0.0)
     kernel = _order_kernel(order, base=base)
     return _mixture_update_full(m, S, V, beta2, None, nodes_log2=nodes_log2,
                                 eps=eps, eps_rel=eps_rel, kernel=kernel)

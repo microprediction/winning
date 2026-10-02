@@ -231,3 +231,76 @@ test_that("the documented spellings all still work and agree", {
                             V = V, D = 1),
                "mean has a non-finite entry")
 })
+
+test_that("dense fallback enforces the mean/bound contract (#437)", {
+  n <- 8L
+  sigma <- outer(seq_len(n), seq_len(n), function(i, j) 0.4^abs(i - j))
+  expect_null(factorize_covariance(sigma))
+  for (m in list(c(0, 1), rep(0, n + 1L), c(0, NA, rep(0, 6)),
+                 c(0, Inf, rep(0, 6))))
+    expect_error(pmvnorm_fast(upper = rep(0, n), mean = m, sigma = sigma),
+                 "mean")
+  expect_error(pmvnorm_fast(upper = c(0, 1), sigma = sigma), "upper")
+  expect_error(pmvnorm_fast(lower = c(0, 1), sigma = sigma), "lower")
+  a <- pmvnorm_fast(upper = rep(0, n), mean = 0.3, sigma = sigma)
+  b <- pmvnorm_fast(upper = rep(0, n), mean = rep(0.3, n), sigma = sigma)
+  expect_equal(attr(a, "method"), "mvtnorm-fallback")
+  expect_equal(as.numeric(a), as.numeric(b), tolerance = 1e-4)
+})
+
+test_that("Sobol nodes match scipy's unscrambled sequence exactly", {
+  U <- .sobol_unit(64L, 16L, seed = NULL)
+  # scipy.stats.qmc.Sobol(64, scramble=False).random(16), spot rows
+  expect_equal(U[2, 1:6], rep(0.5, 6))
+  expect_equal(U[3, 1:6], c(0.75, 0.25, 0.25, 0.25, 0.75, 0.75))
+  expect_equal(U[6, 61:64], c(0.625, 0.875, 0.375, 0.625))
+  expect_equal(U[16, 41:44], c(0.6875, 0.9375, 0.1875, 0.0625))
+  S <- .sobol_unit(5L, 1024L, seed = 3L)
+  expect_true(all(S > 0 & S < 1))
+  # each coordinate of a scrambled (0, m, s)-net stratifies [0, 1)
+  for (d in 1:5) expect_true(all(tabulate(floor(S[, d] * 1024) + 1, 1024) == 1))
+  expect_identical(.sobol_unit(5L, 64L, 3L), .sobol_unit(5L, 64L, 3L))
+  expect_error(.sobol_unit(65L, 8L), "1..64")
+})
+
+test_that("explicit factor ranks past six price correctly (#143)", {
+  n <- 8L
+  for (r in c(6L, 7L, 8L)) {
+    V <- diag(n)[, seq_len(r), drop = FALSE]
+    p <- pmvnorm_fast(upper = rep(0, n), V = V, D = rep(1, n))
+    expect_true(is.finite(p))
+    expect_lt(abs(as.numeric(p) / 2^-8 - 1), 1e-2)   # independent orthants
+  }
+  # the rank-4 fixture from #143: Halton was 1.0585% high; 2^20-node
+  # scrambled Sobol reference 0.00678362718 (sd 6.4e-8). Python's own
+  # 2^13 scrambled Sobol rule scatters 0.32% (sd) across scrambles.
+  V <- matrix(c(
+    1.155293,-0.735989, 0.923019,-0.011858,
+   -0.753881,-0.515010, 0.184301, 0.777016,
+   -1.894720, 0.823414,-0.643692,-0.924496,
+    0.412713, 1.066234,-0.098867, 1.373129,
+   -0.129141, 0.909049, 0.053916, 0.035902,
+   -0.035385,-1.431643,-0.704503,-0.918110,
+    0.911552, 0.938768, 0.285907,-0.048652,
+    0.333568,-1.054822,-0.000081,-0.282932), nrow = 8, byrow = TRUE)
+  D <- c(.407550,.271454,.338354,.229573,.752137,.766874,.189252,.416435)
+  mu <- c(-.107366,-.016471,-.138773,-.452380,-.587242,-.695459,-.295145,
+          -.492104)
+  up <- c(1.118495,.463038,-.783960,-.524005,-.456286,.821062,.714821,.754770)
+  p <- pmvnorm_fast(upper = up, mean = mu, V = V, D = D)
+  expect_lt(abs(as.numeric(p) / 0.00678362718240 - 1), 0.009)
+})
+
+test_that("the recentered deep-tail path agrees with mvtnorm", {
+  set.seed(5)
+  n <- 12
+  V <- matrix(rnorm(n * 2), n, 2) * 0.5
+  D <- 0.5 + runif(n)
+  b <- rep(-1.6, n)
+  pf <- pmvnorm_fast(upper = b, V = V, D = D)
+  pm <- mvtnorm::pmvnorm(upper = b, sigma = V %*% t(V) + diag(D),
+                         algorithm = mvtnorm::GenzBretz(maxpts = 2e6,
+                                                        abseps = 1e-14))
+  expect_equal(attr(pf, "method"), "factor-recentered")
+  expect_lt(abs(as.numeric(pf) / as.numeric(pm) - 1), 2e-2)
+})

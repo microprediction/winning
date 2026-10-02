@@ -167,6 +167,16 @@ end
                                                             points = 257)
 end
 
+@testset "an overflowing target sum is rescued (#326)" begin
+    # finite entries whose SUM overflows describe the same law as their
+    # ratios; python rescales by the max first (#300) and so does julia
+    a = abilities_from_race([4e307, 2e307, 1e307, 1e307])
+    b = abilities_from_race([4.0, 2.0, 1.0, 1.0])
+    @test all(isfinite, a)
+    @test a ≈ b
+    @test maximum(abs.(abilities_from_race(fill(1e308, 4)))) < 1e-8
+end
+
 @testset "rank marginals of a factor-correlated race (#202)" begin
     # rank_probabilities had no V/qa: the correlated call was a keyword
     # error while top_k_probabilities priced the same model

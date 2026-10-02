@@ -471,7 +471,15 @@ function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
     target = Float64.(collect(p))
     all(isfinite, target) || error("target probabilities must be finite")
     any(target .<= 0) && error("all target probabilities must be positive")
-    target ./= sum(target)
+    # a target is a law up to a positive factor: when its SUM overflows
+    # (entries all finite) rescale by the max first, as python does since
+    # #300; conditional, so ordinary inputs stay bit-identical (#326)
+    tot = sum(target)
+    if !isfinite(tot)
+        target ./= maximum(target)
+        tot = sum(target)
+    end
+    target ./= tot
     logt = log.(target)
     n = length(target)
     # The field's contrast scale, as python and R measure it: the warm

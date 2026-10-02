@@ -23,6 +23,7 @@ renormalising away a lattice that failed to capture the field.
 import numpy as np
 
 from .core import as_loadings
+from ..outcomes import as_luce_temperature, as_order, as_soft_temperature
 from ..shapes import as_weights
 from ..rustconfig import load_fastrace
 from .races import (_as_temperature, _fit_cov, _factor_of_structure, _setup,
@@ -242,9 +243,11 @@ def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
     complete field; this is the prefix (exacta, trifecta) version.
     Exact for the Gumbel base and only there."""
     mu = np.asarray(mu, dtype=float)
-    tau = float(temperature)
-    prefix = np.asarray(prefix, dtype=int)
+    tau = as_luce_temperature(temperature)                     # #366
     n = len(mu)
+    # distinct labels: a repeat stayed in the numerator after leaving
+    # the denominator, and [0, 0] scored p = 52.6 (#129)
+    prefix = as_order(prefix, n, name="prefix")
 
     def _one(z):
         standing = np.ones(n, dtype=bool)

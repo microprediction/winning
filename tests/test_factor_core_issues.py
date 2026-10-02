@@ -34,9 +34,9 @@ def test_weights_normalise_without_overflow_263():
         a = np.asarray(fn(mu, V=V, F=F, W=np.array([1e307, 1e307]), **kw))
         b = np.asarray(fn(mu, V=V, F=F, W=np.array([1e308, 1e308]), **kw))
         assert np.isfinite(b).all() and np.abs(a - b).max() < 1e-12
-    la = winning.plackett_luce_order_logprob(mu, [0, 1], V=V, F=F,
+    la = winning.plackett_luce_order_logprob(mu, [0, 1, 2], V=V, F=F,
                                              W=np.array([1e307, 1e307]))
-    lb = winning.plackett_luce_order_logprob(mu, [0, 1], V=V, F=F,
+    lb = winning.plackett_luce_order_logprob(mu, [0, 1, 2], V=V, F=F,
                                              W=np.array([1e308, 1e308]))
     assert np.isfinite(lb) and abs(la - lb) < 1e-12
 
@@ -46,7 +46,7 @@ def test_ordered_logprob_refuses_a_signed_rule_263():
     V = np.array([[0.0], [1.0], [-0.5]])
     with pytest.raises(ValueError, match="negative"):
         winning.plackett_luce_order_logprob(
-            mu, [0, 1], V=V, F=np.array([[-5.0], [5.0]]),
+            mu, [0, 1, 2], V=V, F=np.array([[-5.0], [5.0]]),
             W=np.array([2.0, -1.0]))
 
 

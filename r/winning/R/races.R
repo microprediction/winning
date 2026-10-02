@@ -9,7 +9,9 @@
 .EULER <- 0.5772156649015329
 
 .base_normal <- function(z) {
-  S <- pmax(1 - stats::pnorm(z), 1e-300)
+  # the upper tail directly: 1 - pnorm(z) cancels to exactly 0 past
+  # about 8.3 sd, which made a 20-sd longshot ~95x too unlikely (#96)
+  S <- pmax(stats::pnorm(z, lower.tail = FALSE), 1e-300)
   f <- exp(-0.5 * z^2) / sqrt(2 * pi)
   list(S = S, f = f, fp = -z * f)
 }
@@ -88,18 +90,10 @@
   # D = c(2, 9) at n = 4 priced exactly the race D = c(2, 9, 2, 9)
   # prices: same numbers, no warning. Found by the cross-port
   # divergence scan, where python, the browser and julia all refuse it.
-  if (is.null(D)) D <- rep(1, n)
-  D <- as.numeric(D)
-  if (length(D) == 1L) D <- rep(D, n)
-  if (length(D) != n)
-    stop(sprintf(paste("D must be a scalar or one idiosyncratic variance",
-                       "per contestant; got %d for %d contestants"),
-                 length(D), n), call. = FALSE)
-  if (any(!is.finite(D)))
-    stop("D has a non-finite entry", call. = FALSE)
-  if (any(D < 0))
-    stop(sprintf("D[%d] = %g is a negative variance", which(D < 0)[1],
-                 D[which(D < 0)[1]]), call. = FALSE)
+  # positive, as python's as_idio(D, n, positive=TRUE): a zero D is a
+  # point mass the lattice divides by, which crashed in .bulk_window with
+  # "missing value where TRUE/FALSE needed" instead of naming D.
+  D <- .as_idio(D, n, positive = TRUE)
   if (is.null(V)) {
     V <- matrix(0, n, 1)
     F <- matrix(0, 1, 1)
@@ -169,7 +163,13 @@
     }
   }
   fn <- if (is.function(base)) base else .BASES[[base]]
-  span <- if (is.function(base)) c(12, 12) else {
+  # a callable base may declare its own span (attr(base, "span")), as
+  # python's getattr(base, "span", (12, 12)); the fixed +/-12 clipped a
+  # caller's polynomial tail under window = "span" too (#106)
+  span <- if (is.function(base)) {
+    sp <- attr(base, "span")
+    if (is.null(sp)) c(12, 12) else rep_len(as.numeric(sp), 2L)
+  } else {
     s <- .SPANS[[base]]
     if (is.null(s)) c(12, 12) else s
   }
@@ -223,35 +223,93 @@
 }
 
 # Lattice over the WINNER distribution's bulk, not the ability span --
-# port of races._bulk_window (bisection on a conservative winner-cdf
-# envelope, 2 sd base-agnostic pad).
-.bulk_window <- function(M_all, sd, points, delta) {
+# port of races._bulk_window: bisection on a conservative winner-cdf
+# envelope built from the CALLER'S base survival `fn`, both edges
+# bracketed before they are bisected, delta relaxed (by factors of 100,
+# up to 1e-4, with a warning) when the requested quantiles will not fit
+# the point budget, and the pad widened by a base's declared span.
+# It used pnorm for every base and a fixed +/-9 sd start: a Student-t
+# custom base was truncated (TV 4.8e-3 against a wide span at 2001
+# points, where python's base-aware window is 1.0e-5) and no point count
+# could repair the wrong interval (#106).
+# LOG-survival alone for the shipped bases: the window evaluates it ~160
+# times, and calling the full base also built the density and its slope
+# only to discard them -- ~0.6 ms of a 1.4 ms independent n = 10 race
+# (python's #112 removed the same cost). Floored at log(1e-300) as the
+# bases floor S.
+.LOG_TINY <- log(1e-300)
+.LOG_SURVIVALS <- list(
+  normal = function(z) pmax(stats::pnorm(z, lower.tail = FALSE, log.p = TRUE),
+                            .LOG_TINY),
+  gumbel = function(z) pmax(-exp(pmin(z * (pi / sqrt(6)) - .EULER, 30)),
+                            .LOG_TINY))
+
+.bulk_window <- function(M_all, sd, points, delta, fn = NULL) {
+  logS_of <- if (is.null(fn) || identical(fn, .base_normal))
+    .LOG_SURVIVALS$normal
+  else if (identical(fn, .base_gumbel)) .LOG_SURVIVALS$gumbel
+  else function(z) log(pmax(fn(z)$S, 1e-300))
   mu_lo <- apply(M_all, 2, min)
   mu_hi <- apply(M_all, 2, max)
   s <- sd
-  G <- function(x) {
-    logS <- log(pmax(1 - stats::pnorm((x - mu_lo) / s), 1e-300))
-    1 - exp(sum(logS))
-  }
-  H <- function(x) {
-    logS <- log(pmax(1 - stats::pnorm((x - mu_hi) / s), 1e-300))
-    1 - exp(sum(logS))
-  }
-  lo0 <- min(mu_lo) - 9 * max(s)
-  hi0 <- max(mu_hi) + 9 * max(s)
-  a <- lo0; b <- hi0
-  for (i in 1:80) {
-    m <- 0.5 * (a + b)
-    if (G(m) < delta) a <- m else b <- m
-  }
-  xlo <- a
-  a <- xlo; b <- hi0
-  for (i in 1:80) {
-    m <- 0.5 * (a + b)
-    if (H(m) < 1 - delta) a <- m else b <- m
+  G <- function(x) 1 - exp(sum(logS_of((x - mu_lo) / s)))
+  H <- function(x) 1 - exp(sum(logS_of((x - mu_hi) / s)))
+  bracket <- function(x0, step0, ok, sgn) {
+    step <- step0
+    for (i in seq_len(60)) {
+      if (ok(x0)) return(x0)
+      x0 <- x0 + sgn * step
+      step <- step * 2
+    }
+    warning(paste("bulk window could not bracket the requested quantile",
+                  "after 60 doublings; this base's tail is heavier than the",
+                  "lattice can span, and the window is truncated rather than",
+                  "quantile-exact."), call. = FALSE)
+    x0
   }
   pad <- 2 * max(s)
-  seq(xlo - pad, b + pad, length.out = points)
+  if (!is.null(fn)) {
+    sp <- attr(fn, "span")
+    if (!is.null(sp)) pad <- max(pad, 0.25 * max(sp) * max(s))
+  }
+  window_at <- function(d) {
+    step0 <- max(9 * max(s), 1e-12)
+    lo0 <- bracket(min(mu_lo) - 9 * max(s), step0, function(x) G(x) <= d, -1)
+    hi0 <- bracket(max(mu_hi) + 9 * max(s), step0,
+                   function(x) H(x) >= 1 - d, +1)
+    # up to 80 halvings, stopping once the midpoint is one of the ends
+    # (adjacent doubles): every later step would leave a and b unchanged,
+    # so the window is bit-identical and ~25 evaluations cheaper
+    a <- lo0; b <- hi0
+    for (i in 1:80) {
+      m <- 0.5 * (a + b)
+      if (m == a || m == b) break
+      if (G(m) < d) a <- m else b <- m
+    }
+    xlo <- a
+    a <- xlo; b <- hi0
+    for (i in 1:80) {
+      m <- 0.5 * (a + b)
+      if (m == a || m == b) break
+      if (H(m) < 1 - d) a <- m else b <- m
+    }
+    c(xlo - pad, b + pad)
+  }
+  budget <- 0.5 * min(s) * max(points - 1, 1)
+  d <- delta
+  w <- window_at(d)
+  while (w[2] - w[1] > budget && d < 1e-4) {
+    d <- min(d * 100, 1e-4)
+    w <- window_at(d)
+  }
+  if (d > delta)
+    warning(sprintf(paste("bulk window relaxed delta from %.0e to %.0e: this",
+                          "base's tail puts the requested quantile further",
+                          "out than %d points can resolve, so the window is",
+                          "%.3g units wide at the relaxed delta and exact",
+                          "there. Raise points= to tighten it."),
+                    delta, d, as.integer(points), w[2] - w[1]), call. = FALSE)
+  seq(w[1], w[2], length.out = points)
 }
 
 #' Win probabilities of the general race, all N in one field pass
@@ -411,7 +469,7 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   Q <- nrow(st$F)
   M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)
   x <- if (identical(window, "bulk")) {
-    .bulk_window(M_all, sd, points, delta)
+    .bulk_window(M_all, sd, points, delta, st$fn)
   } else {
     seq(min(M_all) - st$left * max(sd), max(M_all) + st$right * max(sd),
         length.out = points)
@@ -492,8 +550,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   if (length(target) == 0L || any(!is.finite(target)))
     stop("target probabilities must be finite", call. = FALSE)
   if (any(target <= 0)) stop("all target probabilities must be positive")
-  if (!is.finite(sum(target))) target <- target / max(target)
-  target <- target / sum(target)
+  target <- .rescaled_target(target)
   logt <- log(target)
   n <- length(target)
   # the field's contrast scale (matching the python reference): median
@@ -530,10 +587,11 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     # a pair is one Gaussian contrast: closed form (matching python)
     sd_d <- sqrt(max(SigV[1, 1] + SigV[2, 2] - 2 * SigV[1, 2] + Dn[1] + Dn[2],
                      1e-300))
-    # the quantile of the SMALLER share: c(1, 1e-17) normalises the
-    # favourite to exactly 1, where qnorm is Inf (#110)
-    gap <- if (target[1] <= 0.5) sd_d * qnorm(target[1])
-           else -sd_d * qnorm(target[2])
+    # invert the SMALLER share: for c(1, 1e-16) the normalized first
+    # share rounds to exactly 1 and qnorm(1) = Inf, while the
+    # permutation was finite (#412)
+    gap <- if (target[1] <= target[2]) sd_d * qnorm(target[1]) else
+      -sd_d * qnorm(target[2])
     return(c(-0.5 * gap, 0.5 * gap))
   }
   mu <- -(logt - mean(logt)) / 2 * scale
