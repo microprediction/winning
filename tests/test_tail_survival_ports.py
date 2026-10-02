@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -38,7 +39,7 @@ def test_python_normal_survival_holds_a_20_sd_longshot():
 
 
 _JS = r"""
-import { raceProbabilities } from "%s";
+import { raceProbabilities } from %s;
 const t3 = z => {
   const f = 2 / (Math.PI * (1 + z*z)**2);
   const F = 0.5 + (Math.atan(z) + z/(1 + z*z)) / Math.PI;
@@ -56,8 +57,11 @@ console.log(JSON.stringify({tail, t}));
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_browser_survival_and_base_aware_bulk_window():
-    races = os.path.join(ROOT, "docs", "js", "winning", "races.mjs")
-    out = subprocess.run([NODE, "--input-type=module", "-e", _JS % races],
+    # a file:// URI, JSON-quoted: a bare Windows path (D:\a\...) is not
+    # an ESM specifier, and its backslashes are escapes in a JS string
+    races = Path(ROOT, "docs", "js", "winning", "races.mjs").as_uri()
+    out = subprocess.run([NODE, "--input-type=module", "-e",
+                          _JS % json.dumps(races)],
                          capture_output=True, text=True, check=True,
                          timeout=300)
     got = json.loads(out.stdout)
