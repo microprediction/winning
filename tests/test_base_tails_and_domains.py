@@ -216,3 +216,34 @@ def test_failure_span_is_unchanged_at_ordinary_offsets():
     from winning.factor.races import failure_base
     assert failure_base(0.25).span == (12.0, 12.0)
     assert failure_base(0.25, standardize=True).span == (12.0, 12.0)
+
+
+# --- #103 ----------------------------------------------------------------
+
+@pytest.mark.parametrize("beta", [0.5, 0.7, 0.999, 0.0, -1.0, np.nan, np.inf])
+def test_exponential_power_refuses_the_cusp_regime(beta):
+    from winning.factor.races import exponential_power_base
+    with pytest.raises(ValueError, match="beta >= 1"):
+        exponential_power_base(beta)
+
+
+@pytest.mark.parametrize("beta", [1.0, 1.3])
+def test_exponential_power_at_and_above_one_is_accurate_with_negative_slopes(beta):
+    from scipy.special import gamma, gammaincc
+    from winning.factor.races import exponential_power_base
+    mu = np.array([-0.5, 1.1, -0.6])
+    a = np.sqrt(gamma(1 / beta) / gamma(3 / beta))
+    c = beta / (2 * a * gamma(1 / beta))
+    f = lambda z: c * np.exp(-(abs(z) / a) ** beta)
+    S = lambda z: (0.5 * gammaincc(1 / beta, (abs(z) / a) ** beta) if z >= 0
+                   else 1 - 0.5 * gammaincc(1 / beta, (abs(z) / a) ** beta))
+    ref = []
+    for i in range(3):
+        g = lambda x: f(x - mu[i]) * np.prod([S(x - mu[j]) for j in range(3) if j != i])
+        brk = [-60.0] + sorted(mu) + [60.0]
+        ref.append(sum(quad(g, brk[k], brk[k + 1], limit=500, epsabs=1e-14,
+                            epsrel=1e-12)[0] for k in range(len(brk) - 1)))
+    p, s = race_probabilities(mu, D=np.ones(3), base=exponential_power_base(beta),
+                              return_slopes=True, points=1001)
+    assert 0.5 * np.abs(p - np.array(ref)).sum() < 5e-5
+    assert np.all(np.asarray(s) < 0)

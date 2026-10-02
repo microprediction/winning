@@ -124,14 +124,30 @@ def exponential_power_base(beta):
     fast the maximum of K draws grows, (log K)^(1/beta), which is the
     knob on whether systematic components keep deciding large fields).
     The CDF is the regularised incomplete gamma, evaluated from the
-    tail side for precision. For beta < 2 the density has a kink at
+    tail side for precision. beta must be >= 1: below it the density
+    has a cusp the lattice cannot resolve (#103). For beta < 2 the density has a kink at
     zero (its second derivative is singular), and the factory says so
     to the moment updates via the fd_eps attribute -- the laplace
     lesson. Very large beta makes near-edges the lattice must resolve;
     accuracy is measured in the tests at beta = 12."""
     beta = float(beta)
-    if beta <= 0.0:
-        raise ValueError("exponential_power_base needs beta > 0")
+    # beta < 1 is refused, not approximated (#103). There the density
+    # has a cusp, f' ~ |z|^(beta-1) is unbounded at the mode, and the
+    # standardized centre is a spike of scale a = sqrt(G(1/b)/G(3/b))
+    # (0.091 at beta = 0.5) under stretched-exponential tails, which no
+    # uniform lattice over the race window resolves: beta = 0.5 carried
+    # TV 0.058 at the default points and still 1.4e-3 at 4001, its own
+    # slopes came out POSITIVE and disagreed with finite differences of
+    # the shipped map in sign, and abilities_from_race did not converge;
+    # beta = 0.7 was 1e-2 off with a wrong-signed slope. Supporting it
+    # needs cusp-aware quadrature, which the lattice engines do not have.
+    # beta in [1, 2) has only a kink and is measured accurate (laplace).
+    if not np.isfinite(beta) or beta < 1.0:
+        raise ValueError(
+            "exponential_power_base needs a finite beta >= 1; got " + repr(beta)
+            + ". Below 1 the density has a cusp the uniform race lattice "
+            "cannot resolve (accuracy and slope signs fail); use "
+            "student_base or skew_logistic_base for heavier tails")
     from scipy.special import gamma as _gamma, gammaincc
     a = np.sqrt(_gamma(1.0 / beta) / _gamma(3.0 / beta))
     c = beta / (2.0 * a * _gamma(1.0 / beta))
