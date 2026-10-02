@@ -150,6 +150,12 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
                                                nodes_log2=nodes_log2)
             info["logZ_outcome"] = lz
         else:
+            # the evidence of the order under the PRIOR predictive, as
+            # every other outcome branch reports it; this branch alone
+            # returned no logZ_outcome (#144)
+            from .tracker import _order_evidence
+            info["logZ_outcome"] = float(
+                _order_evidence(m, v, list(order), beta2, base))
             m, v = update_ranking_exact(m, v, order, beta2=beta2,
                                         base=base)
     elif winner is not None:

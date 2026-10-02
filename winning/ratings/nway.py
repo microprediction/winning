@@ -437,10 +437,14 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     m = np.asarray(m, dtype=float).copy()
     v = as_variance(v, len(m)).copy()
     order = list(order)
+    # per-player beta2 must shrink with the field: the whole vector was
+    # forwarded to every stage, so stage two paired a two-runner state
+    # with three noise entries and raised (#138)
+    b2 = _beta_per_player(beta2, len(m))
     for t in range(len(order) - 1):
         rest = np.array(order[t:])
         w_local = 0
-        mm, vv, _ = update_winner(m[rest], v[rest], w_local, beta2,
+        mm, vv, _ = update_winner(m[rest], v[rest], w_local, b2[rest],
                                   base=base)
         m[rest], v[rest] = mm, vv
     return m, v
