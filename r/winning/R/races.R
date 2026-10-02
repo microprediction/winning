@@ -232,14 +232,28 @@
 # custom base was truncated (TV 4.8e-3 against a wide span at 2001
 # points, where python's base-aware window is 1.0e-5) and no point count
 # could repair the wrong interval (#106).
+# LOG-survival alone for the shipped bases: the window evaluates it ~160
+# times, and calling the full base also built the density and its slope
+# only to discard them -- ~0.6 ms of a 1.4 ms independent n = 10 race
+# (python's #112 removed the same cost). Floored at log(1e-300) as the
+# bases floor S.
+.LOG_TINY <- log(1e-300)
+.LOG_SURVIVALS <- list(
+  normal = function(z) pmax(stats::pnorm(z, lower.tail = FALSE, log.p = TRUE),
+                            .LOG_TINY),
+  gumbel = function(z) pmax(-exp(pmin(z * (pi / sqrt(6)) - .EULER, 30)),
+                            .LOG_TINY))
+
 .bulk_window <- function(M_all, sd, points, delta, fn = NULL) {
-  S_of <- if (is.null(fn)) function(z) pmax(stats::pnorm(z, lower.tail = FALSE), 1e-300)
-          else function(z) pmax(fn(z)$S, 1e-300)
+  logS_of <- if (is.null(fn) || identical(fn, .base_normal))
+    .LOG_SURVIVALS$normal
+  else if (identical(fn, .base_gumbel)) .LOG_SURVIVALS$gumbel
+  else function(z) log(pmax(fn(z)$S, 1e-300))
   mu_lo <- apply(M_all, 2, min)
   mu_hi <- apply(M_all, 2, max)
   s <- sd
-  G <- function(x) 1 - exp(sum(log(S_of((x - mu_lo) / s))))
-  H <- function(x) 1 - exp(sum(log(S_of((x - mu_hi) / s))))
+  G <- function(x) 1 - exp(sum(logS_of((x - mu_lo) / s)))
+  H <- function(x) 1 - exp(sum(logS_of((x - mu_hi) / s)))
   bracket <- function(x0, step0, ok, sgn) {
     step <- step0
     for (i in seq_len(60)) {
@@ -263,15 +277,20 @@
     lo0 <- bracket(min(mu_lo) - 9 * max(s), step0, function(x) G(x) <= d, -1)
     hi0 <- bracket(max(mu_hi) + 9 * max(s), step0,
                    function(x) H(x) >= 1 - d, +1)
+    # up to 80 halvings, stopping once the midpoint is one of the ends
+    # (adjacent doubles): every later step would leave a and b unchanged,
+    # so the window is bit-identical and ~25 evaluations cheaper
     a <- lo0; b <- hi0
     for (i in 1:80) {
       m <- 0.5 * (a + b)
+      if (m == a || m == b) break
       if (G(m) < d) a <- m else b <- m
     }
     xlo <- a
     a <- xlo; b <- hi0
     for (i in 1:80) {
       m <- 0.5 * (a + b)
+      if (m == a || m == b) break
       if (H(m) < 1 - d) a <- m else b <- m
     }
     c(xlo - pad, b + pad)

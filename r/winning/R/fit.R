@@ -216,7 +216,20 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # x >= 0), not an unconstrained solve clipped afterwards, which is not
   # the constrained minimiser because P o P couples the coordinates. The
   # degradation test still keys on the floor close_fit uses (#189).
-  d_clamp <- 1e-6 * pmax(diag(C), 1e-6 * mean(diag(C)))
+  #
+  # The MULTIPLIER stays this port's 1e-3, not python's 1e-6. What #407
+  # needs is the per-runner scale and the bounded solve; on the #407
+  # fixture the floor is then 1e-11 against D = 1e-8, untouched. Python's
+  # 1e-6 adds nothing a caller can use -- a runner whose idiosyncratic
+  # share is under 0.1% of its own variance is the near-Dirac regime, out
+  # of scope -- and it costs: a degenerate full-rank fit (k + m + blocks
+  # >= n) puts D on the floor, so 1e-6 makes every conditional race
+  # 32x sharper than 1e-3 did (sharpness 1166 vs 37), the refinement asks
+  # for 40,000 lattice points against the 8193 cap, one forward costs 11x
+  # (3.95 s vs 0.35 s at n = 8) and its slopes are under-resolved noise,
+  # so an inverse on such a fit ran 60 sweeps for 4 minutes without
+  # converging where it had taken 4 s.
+  d_clamp <- 1e-3 * pmax(diag(C), 1e-6 * mean(diag(C)))
   close_fit <- function(Vc) {
     rhs <- diag(P %*% (C - Vc %*% t(Vc)) %*% P)
     # P o P = a I + b 11' with a = 1 - 2/n, b = 1/n^2. At n = 2, a = 0

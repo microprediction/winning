@@ -40,13 +40,8 @@ test_that("a degraded cov= fit is announced where it cannot be routed", {
   mu <- seq(-0.6, 0.6, length.out = n)
   expect_warning(race_probabilities(mu, cov = C, return_slopes = TRUE),
                  "degraded")
-  # n_iter = 2: the warning is raised before the sweeps. Since #407's
-  # relative floor this full-rank fit has D at 1e-6 (as python's), the
-  # conditional races are near-steps and a full inversion takes minutes
-  # without converging -- which is exactly what the warning announces.
   expect_warning(abilities_from_race(c(.4, .2, .1, .1, .07, .06, .04, .03),
-                                     cov = C, base = "gumbel", n_iter = 2),
-                 "degraded")
+                                     cov = C, base = "gumbel"), "degraded")
   fit <- fit_covariance(C)
   expect_true(fit$degraded)
   expect_true(fit$rank <= n)          # #180: the eigen arm used to ask for
@@ -121,7 +116,8 @@ test_that("degradation is judged against the clamp close_fit actually uses", {
   # the test compared D against 1e-6 * diag while close_fit clamped at
   # 1e-3 * mean(diag), so a clamp-bound fit counted zero bound entries and
   # was priced instead of routed, restoring the divergence #188 closed.
-  # The clamp itself is now python's RELATIVE floor (#407); the contract
+  # The clamp is now RELATIVE to each runner's variance (#407); for a
+  # correlation matrix it is the same 1e-3 as before, and the contract
   # pinned here -- bound is counted against the floor actually used -- is
   # unchanged.
   set.seed(3)
@@ -132,7 +128,7 @@ test_that("degradation is judged against the clamp close_fit actually uses", {
   C <- S / outer(s, s)
   fit <- fit_covariance(C)
   expect_true(fit$bound > 0)                    # was 0 before the fix
-  expect_equal(fit$clamp, 1e-6 * pmax(diag(C), 1e-6 * mean(diag(C))))
+  expect_equal(fit$clamp, rep(1e-3 * mean(diag(C)), n))
   expect_true(fit$degraded)
   expect_true(is.finite(fit$contrast_residual))
 })
@@ -293,7 +289,7 @@ test_that("near-singular contrasts survive the closing floor (#407)", {
   C2 <- diag(c(1e-6, 1e-6, 1, 100, 100))
   f2 <- fit_covariance(C2)
   expect_lt(f2$contrast_residual, 1e-5)
-  expect_true(all(f2$clamp == 1e-6 * pmax(diag(C2), 1e-6 * mean(diag(C2)))))
+  expect_true(all(f2$clamp == 1e-3 * pmax(diag(C2), 1e-6 * mean(diag(C2)))))
 })
 
 test_that("the closing solve is the lower-bounded least squares (#407)", {
