@@ -81,9 +81,14 @@ def _gumbel_min(z):
 def _logistic(z):
     # standardized logistic: scale s = sqrt(3)/pi gives unit variance
     c = np.pi / np.sqrt(3.0)
-    u = np.clip(c * z, -700.0, 700.0)
-    S = 1.0 / (1.0 + np.exp(u))
-    f = c * S * (1.0 - S)
+    u = c * np.asarray(z, dtype=float)
+    # Reflected, from e = exp(-|u|) <= 1: f = c e / (1+e)^2 never
+    # cancels. f = c S (1-S) rounded 1-S to zero once S hit 1 on the left
+    # tail, so a runner 25 sd behind was priced 19% low and one 50 sd
+    # behind 2e5 times low, disagreeing with the compiled kernel (#136).
+    e = np.exp(-np.abs(u))
+    S = np.where(u > 0, e / (1.0 + e), 1.0 / (1.0 + e))
+    f = c * e / (1.0 + e) ** 2
     # S' = -f, so f' = c S'(1-2S) = -c f (1-2S) (a sign the numeric
     # audit caught in the first draft)
     return np.maximum(S, 1e-300), f, -c * f * (1.0 - 2.0 * S)
