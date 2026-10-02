@@ -7,7 +7,147 @@ use winning::*;
 use winning::ndarray::{Array1, Array2};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError;
 use rayon::prelude::*;
+
+
+// ---------------------------------------------------------------------------
+// Boundary validation (#74). The published extension is its own API:
+// direct callers never pass through winning's Python normalization, and
+// the kernels index by the dimensions they are given. Every relation a
+// kernel assumes is checked here, before the GIL is released, and is a
+// ValueError naming the actual and expected sizes -- never an ndarray
+// index panic surfacing as pyo3_runtime.PanicException.
+// ---------------------------------------------------------------------------
+
+fn bad(msg: String) -> PyErr {
+    PyValueError::new_err(msg)
+}
+
+fn need_len(name: &str, got: usize, want: usize, what: &str) -> PyResult<()> {
+    if got != want {
+        return Err(bad(format!(
+            "{name} has length {got}, expected {want} ({what})")));
+    }
+    Ok(())
+}
+
+fn need_field(n: usize) -> PyResult<()> {
+    if n == 0 {
+        return Err(bad("mu is empty; a race needs at least one contestant".into()));
+    }
+    Ok(())
+}
+
+fn need_points(points: usize) -> PyResult<()> {
+    if points < 2 {
+        return Err(bad(format!(
+            "points = {points}; the lattice needs at least 2 points")));
+    }
+    Ok(())
+}
+
+/// Factor-race shapes: v is (n, r), d is (n,), f is (Q, r), w is (Q,).
+fn check_factor(mu: usize, v: (usize, usize), d: usize, f: (usize, usize),
+                w: usize) -> PyResult<()> {
+    need_field(mu)?;
+    if v.0 != mu {
+        return Err(bad(format!(
+            "v has {} rows, expected len(mu) = {mu} (v is (n, rank))", v.0)));
+    }
+    need_len("d", d, mu, "one idiosyncratic variance per contestant")?;
+    if f.1 != v.1 {
+        return Err(bad(format!(
+            "f has {} columns, expected v's rank {} (f is (Q, rank))", f.1, v.1)));
+    }
+    if f.0 == 0 {
+        return Err(bad("f has no factor nodes".into()));
+    }
+    need_len("w", w, f.0, "one weight per factor node (row of f)")
+}
+
+/// Base-family parameters (#134): finite, and inside each family's
+/// domain. nu = inf used to panic inside betai; the Python reference
+/// refuses it at construction.
+fn check_base_params(base_id: u32, params: &[f64]) -> PyResult<()> {
+    let need = match base_id { 4 | 5 => 2, 6 | 7 => 3, 8 => 5, _ => 0 };
+    if params.len() < need {
+        return Err(bad(format!(
+            "base_id = {base_id} needs {need} parameters, got {}", params.len())));
+    }
+    if let Some(i) = params.iter().take(need).position(|x| !x.is_finite()) {
+        return Err(bad(format!(
+            "base parameter {i} = {} is not finite", params[i])));
+    }
+    let p = params;
+    let ok = match base_id {
+        4 => p[0] > 0.0 && p[1] > 0.0,               // beta, a
+        5 => p[0] > 0.0 && p[1] > 0.0,               // nu, s
+        6 => p[2] > 0.0,                             // alpha, m, sd
+        7 => p[0] > 0.0 && p[2] > 0.0,               // alpha, m, c
+        8 => (0.0..=1.0).contains(&p[0]) && p[1] > 0.0 && p[4] > 0.0,
+        _ => true,
+    };
+    if !ok {
+        return Err(bad(format!(
+            "base parameters {:?} are outside base_id = {base_id}'s domain",
+            &p[..need])));
+    }
+    Ok(())
+}
+
+/// Cluster starts: first member index of each sorted cluster.
+fn check_starts(starts: &[i64], n: usize) -> PyResult<Vec<usize>> {
+    if starts.is_empty() {
+        return Err(bad("starts is empty; at least one cluster is required".into()));
+    }
+    if starts[0] != 0 {
+        return Err(bad(format!(
+            "starts[0] = {}, expected 0 (members are sorted by cluster)", starts[0])));
+    }
+    for c in 1..starts.len() {
+        if starts[c] < starts[c - 1] || starts[c] as usize > n {
+            return Err(bad(format!(
+                "starts[{c}] = {} is not a nondecreasing index in [0, {n}]",
+                starts[c])));
+        }
+    }
+    Ok(starts.iter().map(|&x| x as usize).collect())
+}
+
+/// Tree topology: nodes 0..n_leaves are the clusters, every parent is -1
+/// (a root) or another node, and following parents terminates. A cycle
+/// used to spin the kernel's depth loop forever.
+fn check_tree(parent: &[i64], n_leaves: usize) -> PyResult<()> {
+    let nt = parent.len();
+    if nt < n_leaves {
+        return Err(bad(format!(
+            "parent has {nt} nodes, fewer than the {n_leaves} cluster leaves")));
+    }
+    for (t, &p) in parent.iter().enumerate() {
+        if p < -1 || p >= nt as i64 || p == t as i64 {
+            return Err(bad(format!(
+                "parent[{t}] = {p} is not -1 or another node index in [0, {nt})")));
+        }
+    }
+    for t in 0..nt {
+        let (mut u, mut hops) = (t, 0usize);
+        while parent[u] >= 0 {
+            u = parent[u] as usize;
+            hops += 1;
+            if hops > nt {
+                return Err(bad(format!("parent has a cycle through node {t}")));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The normal-base top-k / rank kernels take (mu, sd) of equal length.
+fn check_mu_sd(mu: usize, sd: usize) -> PyResult<()> {
+    need_field(mu)?;
+    need_len("sd", sd, mu, "one scale per contestant")
+}
 
 
 /// Min-wins factor-race win probabilities (normalized), raw own-location
@@ -26,6 +166,8 @@ fn forward_and_slopes<'py>(
     lo: f64,
     hi: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, f64)> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -53,6 +195,8 @@ fn win_probabilities_factor<'py>(
     lo: f64,
     hi: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -84,6 +228,9 @@ fn jacobian_vector_product<'py>(
     points: usize,
     form: &str,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
+    need_len("h", h.as_array().len(), mu.as_array().len(), "one direction component per contestant")?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -116,6 +263,8 @@ fn win_probabilities_factor_separated<'py>(
     rm: usize,
     rs: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -142,6 +291,15 @@ fn ghk_all_shares<'py>(
     r_draws: usize,
     seed: u64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    need_field(mu.as_array().len())?;
+    if v.as_array().nrows() != mu.as_array().len() {
+        return Err(bad(format!("v has {} rows, expected len(mu) = {}",
+                               v.as_array().nrows(), mu.as_array().len())));
+    }
+    need_len("d", d.as_array().len(), mu.as_array().len(), "one idiosyncratic variance per contestant")?;
+    if r_draws == 0 {
+        return Err(bad("r_draws must be at least 1".into()));
+    }
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let mut d_o: Array1<f64> = d.as_array().to_owned();
@@ -150,21 +308,7 @@ fn ghk_all_shares<'py>(
     // python's as_idio does: D is a variance. A negative entry used to
     // pass whenever the contrast covariance stayed positive definite, so
     // D = [1, -0.5] priced a confident [0.0786, 0.9214] for a covariance
-    // with eigenvalue -0.5 (#367).
-    if n == 0 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "mu must have at least one entry"));
-    }
-    if v_o.nrows() != n {
-        return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "v must have one row per alternative: got {} rows for {} \
-             alternatives", v_o.nrows(), n)));
-    }
-    if d_o.len() != n {
-        return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "d must have one variance per alternative: got {} for {}",
-            d_o.len(), n)));
-    }
+    // with eigenvalue -0.5 (#367). Shapes are checked above (#74).
     if mu_o.iter().chain(v_o.iter()).chain(d_o.iter()).any(|x| !x.is_finite()) {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "mu, v and d must be finite"));
@@ -212,10 +356,16 @@ fn block_race<'py>(
     hi: f64,
     fast_max_entries: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let n = mu.as_array().len();
+    need_field(n)?;
+    need_len("sd", sd.as_array().len(), n, "one scale per contestant")?;
+    need_len("v", v.as_array().len(), n, "one cluster loading per contestant")?;
+    need_len("a_weights", a_weights.as_array().len(), a_nodes.as_array().len(), "one weight per node")?;
+    need_points(points)?;
+    let st = check_starts(&starts.as_array().to_vec(), n)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
     let v_o: Array1<f64> = v.as_array().to_owned();
-    let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
     let an: Array1<f64> = a_nodes.as_array().to_owned();
     let aw: Array1<f64> = a_weights.as_array().to_owned();
     let p = py.allow_threads(|| with_usable_rayon(|| {
@@ -240,10 +390,22 @@ fn block_race_r<'py>(
     lo: f64,
     hi: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let n = mu.as_array().len();
+    need_field(n)?;
+    need_len("sd", sd.as_array().len(), n, "one scale per contestant")?;
+    if v.as_array().nrows() != n {
+        return Err(bad(format!("v has {} rows, expected len(mu) = {n}", v.as_array().nrows())));
+    }
+    if nodes.as_array().ncols() != v.as_array().ncols() {
+        return Err(bad(format!("nodes has {} columns, expected v's rank {}",
+                               nodes.as_array().ncols(), v.as_array().ncols())));
+    }
+    need_len("weights", weights.as_array().len(), nodes.as_array().nrows(), "one weight per node (row of nodes)")?;
+    need_points(points)?;
+    let st = check_starts(&starts.as_array().to_vec(), n)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
-    let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
     let nd: Array2<f64> = nodes.as_array().to_owned();
     let ww: Array1<f64> = weights.as_array().to_owned();
     let p = py.allow_threads(|| with_usable_rayon(|| {
@@ -271,11 +433,19 @@ fn tree_race<'py>(
     lo: f64,
     hi: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let n = mu.as_array().len();
+    need_field(n)?;
+    need_len("sd", sd.as_array().len(), n, "one scale per contestant")?;
+    need_len("v", v.as_array().len(), n, "one cluster loading per contestant")?;
+    need_len("a_weights", a_weights.as_array().len(), a_nodes.as_array().len(), "one weight per node")?;
+    need_points(points)?;
+    let st = check_starts(&starts.as_array().to_vec(), n)?;
+    let pa: Vec<i64> = parent.as_array().to_vec();
+    check_tree(&pa, st.len())?;
+    need_len("lam", lam.as_array().len(), pa.len(), "one strength per tree node")?;
     let mu_o: Vec<f64> = mu.as_array().to_vec();
     let sd_o: Vec<f64> = sd.as_array().to_vec();
     let v_o: Vec<f64> = v.as_array().to_vec();
-    let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
-    let pa: Vec<i64> = parent.as_array().to_vec();
     let lm: Vec<f64> = lam.as_array().to_vec();
     let an: Vec<f64> = a_nodes.as_array().to_vec();
     let aw: Vec<f64> = a_weights.as_array().to_vec();
@@ -288,44 +458,68 @@ fn tree_race<'py>(
 
 /// state_prices_from_offsets: field from the shifted base density, then
 /// implicit prices AT those offsets (unnormalized, as the reference).
+///
+/// Like every other heavy wrapper this converts its arguments first and
+/// then computes with the GIL released (#120) inside with_usable_rayon
+/// (#122): implicit_prices is a rayon parallel region, and calling it
+/// unguarded used to warm the global pool without claiming RAYON_PID, so
+/// a forked child's first guarded kernel entered the dead inherited pool
+/// and hung.
 #[pyfunction]
-fn classic_state_prices(density: Vec<f64>, offsets: Vec<f64>) -> PyResult<Vec<f64>> {
-    let l = ((density.len() - 1) / 2) as i64;
-    let base_cdf = pdf_to_cdf(&density);
-    let cdfs: Vec<Vec<f64>> = offsets.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-    let (cdf_all, mult_all) = winner_of_many(&cdfs);
-    Ok(implicit_prices(&base_cdf, &cdf_all, &mult_all, &offsets, l))
+fn classic_state_prices(py: Python<'_>, density: Vec<f64>, offsets: Vec<f64>)
+                        -> PyResult<Vec<f64>> {
+    if density.is_empty() {
+        return Err(PyValueError::new_err(
+            "density is empty; the classic lattice needs length 2L+1"));
+    }
+    Ok(py.allow_threads(|| with_usable_rayon(|| {
+        let l = ((density.len() - 1) / 2) as i64;
+        let base_cdf = pdf_to_cdf(&density);
+        let cdfs: Vec<Vec<f64>> =
+            offsets.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+        let (cdf_all, mult_all) = winner_of_many(&cdfs);
+        implicit_prices(&base_cdf, &cdf_all, &mult_all, &offsets, l)
+    })))
 }
 
 
 /// solve_for_implied_offsets: the reference fixed-point iteration --
 /// interpolation table offset -> price rebuilt against the current field.
+/// GIL released and rayon guarded, as classic_state_prices (#120, #122).
 #[pyfunction]
 #[pyo3(signature = (density, prices, offset_samples, guess, n_iter=3))]
 fn classic_calibrate(
+    py: Python<'_>,
     density: Vec<f64>,
     prices: Vec<f64>,
     offset_samples: Vec<f64>,
     guess: Vec<f64>,
     n_iter: usize,
 ) -> PyResult<Vec<f64>> {
-    let l = ((density.len() - 1) / 2) as i64;
-    let base_cdf = pdf_to_cdf(&density);
-    let mut cdfs: Vec<Vec<f64>> =
-        guess.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-    // offset_samples arrive descending (better first); implied prices are
-    // then ascending, which is what the interpolation needs
-    let mut implied: Vec<f64> = prices.clone();
-    for _ in 0..n_iter {
-        let (cdf_all, mult_all) = winner_of_many(&cdfs);
-        let table = implicit_prices(&base_cdf, &cdf_all, &mult_all, &offset_samples, l);
-        implied = prices
-            .iter()
-            .map(|&p| interp1(p, &table, &offset_samples))
-            .collect();
-        cdfs = implied.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+    if density.is_empty() {
+        return Err(PyValueError::new_err(
+            "density is empty; the classic lattice needs length 2L+1"));
     }
-    Ok(implied)
+    Ok(py.allow_threads(|| with_usable_rayon(|| {
+        let l = ((density.len() - 1) / 2) as i64;
+        let base_cdf = pdf_to_cdf(&density);
+        let mut cdfs: Vec<Vec<f64>> =
+            guess.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+        // offset_samples arrive descending (better first); implied prices
+        // are then ascending, which is what the interpolation needs
+        let mut implied: Vec<f64> = prices.clone();
+        for _ in 0..n_iter {
+            let (cdf_all, mult_all) = winner_of_many(&cdfs);
+            let table = implicit_prices(&base_cdf, &cdf_all, &mult_all,
+                                        &offset_samples, l);
+            implied = prices
+                .iter()
+                .map(|&p| interp1(p, &table, &offset_samples))
+                .collect();
+            cdfs = implied.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
+        }
+        implied
+    })))
 }
 
 
@@ -343,6 +537,17 @@ fn per_winner_rr<'py>(
     d: PyReadonlyArray1<f64>,
     z: PyReadonlyArray2<f64>,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    need_field(mu.as_array().len())?;
+    if v.as_array().nrows() != mu.as_array().len() {
+        return Err(bad(format!("v has {} rows, expected len(mu) = {}",
+                               v.as_array().nrows(), mu.as_array().len())));
+    }
+    need_len("d", d.as_array().len(), mu.as_array().len(), "one idiosyncratic variance per contestant")?;
+    if z.as_array().ncols() != v.as_array().ncols() + 1 {
+        return Err(bad(format!(
+            "z has {} columns, expected rank + 1 = {} (factor coordinates and the winner's own shock)",
+            z.as_array().ncols(), v.as_array().ncols() + 1)));
+    }
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -373,6 +578,9 @@ fn ordered_prefixes<'py>(
     hi: f64,
     k: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
+    winning::check_ordered_k(k).map_err(bad)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -387,6 +595,13 @@ fn ordered_prefixes<'py>(
 
 #[pymodule]
 fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Fail at import, as an ImportError, if NumPy is missing: the numpy
+    // bindings otherwise panic on the first array call with "Failed to
+    // access NumPy array API capsule" (#115).
+    m.py().import_bound("numpy").map_err(|e| {
+        pyo3::exceptions::PyImportError::new_err(format!(
+            "fastrace needs NumPy (pip install numpy): {e}"))
+    })?;
     m.add_function(wrap_pyfunction!(forward_and_slopes, m)?)?;
     m.add_function(wrap_pyfunction!(ordered_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(block_race, m)?)?;
@@ -431,6 +646,13 @@ fn forward_and_slopes_base<'py>(
     Bound<'py, PyArray1<f64>>,
     f64,
 )> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(),
+                 f_nodes.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
+    if base_id > 8 {
+        return Err(bad(format!("base_id = {base_id} is not a shipped base family (0..=8)")));
+    }
+    check_base_params(base_id, &params)?;
     let mut pa = [0.0f64; 6];
     for (i, &x) in params.iter().take(6).enumerate() {
         pa[i] = x;
@@ -465,6 +687,8 @@ fn rank_marginals<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let p = py.allow_threads(|| with_usable_rayon(
@@ -484,6 +708,9 @@ fn rank_marginal_jacobian<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
+    winning::check_rank(r, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (p, j) = py.allow_threads(|| with_usable_rayon(
@@ -506,6 +733,8 @@ fn top_k_window(
     delta: f64,
     pad_sds: f64,
 ) -> PyResult<(f64, f64)> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    winning::check_window_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     Ok(py.allow_threads(|| with_usable_rayon(|| winning::top_k_window_kernel(&m, &s, k, delta, pad_sds))))
@@ -523,6 +752,9 @@ fn top_k_slopes<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
+    winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (q, sl) =
@@ -545,6 +777,9 @@ fn top_k_jacobians<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
+    winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (jm, js) =
@@ -566,6 +801,9 @@ fn top_k<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
+    winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let q = py.allow_threads(|| with_usable_rayon(|| winning::top_k_kernel(&m, &s, k, lo, hi, points)));

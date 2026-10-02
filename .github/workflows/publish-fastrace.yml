@@ -50,9 +50,71 @@ jobs:
           name: wheels-sdist
           path: rust/fastrace/dist
 
+  # Install-and-call every artifact before it can be uploaded (#72). The
+  # wheels used to be built and published without ever being imported,
+  # so a wheel that failed to load, or disagreed with the numpy
+  # reference, would have shipped. aarch64 is cross-built and cannot run
+  # on these runners; it is covered by the same source in the x86_64 job.
+  test-wheels:
+    needs: [wheels, sdist]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: wheels-ubuntu-latest-x86_64
+          - os: macos-latest
+            artifact: wheels-macos-latest-universal2-apple-darwin
+          - os: windows-latest
+            artifact: wheels-windows-latest-x64
+          - os: ubuntu-latest
+            artifact: wheels-sdist
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.artifact == 'wheels-sdist'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: built
+      - name: Install the built artifact (not the checkout's crate)
+        run: |
+          pip install -e ".[test]"
+          if [ "${{ matrix.artifact }}" = "wheels-sdist" ]; then
+            pip install maturin
+            pip install built/*.tar.gz
+          else
+            pip install --no-index --find-links built fastrace
+          fi
+      - name: The compiled path is live
+        run: |
+          python - <<'PY'
+          import importlib.metadata as md
+          import fastrace, winning
+          from winning import rustconfig
+          print("fastrace", md.version("fastrace"), "from", fastrace.__file__)
+          assert winning.rust_active()
+          off = [m.__name__ for m in rustconfig._rust_modules() if not getattr(m, "_HAVE_RUST", False)]
+          assert not off, off
+          PY
+      - name: Parity against the numpy reference, no skips allowed
+        run: |
+          python -m pytest -q -rs tests/test_rust_parity.py \
+            tests/test_rust_dispatch_core.py \
+            tests/test_rust_gauge_and_normalized_jvp.py \
+            tests/test_loading_shapes.py | tee native.txt
+          if grep -q "SKIPPED" native.txt; then exit 1; fi
+
   publish:
     if: ${{ inputs.publish }}
-    needs: [wheels, sdist]
+    needs: [wheels, sdist, test-wheels]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

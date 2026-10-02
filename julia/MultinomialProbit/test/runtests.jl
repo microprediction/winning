@@ -358,10 +358,148 @@ end
                                                   D = [1.0, NaN])
     @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
                                                   D = [1.0, Inf])
-    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2; D = [1.0])
-    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
-                                                  D = [1.0, 1.0, 1.0])
+    # a wrong length is the DimensionMismatch of #439's shared check
+    @test_throws DimensionMismatch MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                      D = [1.0])
+    @test_throws DimensionMismatch MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                      D = [1.0, 1.0, 1.0])
     # round-off below zero is zero, and zero is a legal variance
     p = MP.ghk_choice_prob([0.0, 1.0], V, 2; D = [1.0, -1e-15])
     @test abs(p - MP.ndtr(1.0)) < 1e-12
+end
+
+# --- integral float labels are accepted, fractional ones refused (#194) --
+@testset "choice labels: integral numerics, constructor length" begin
+    mu = zeros(3, 3)
+    V = zeros(3, 1)
+    ll_i, _, _ = choice_loglik_and_score(mu, V, [1, 2, 3])
+    ll_f, _, _ = choice_loglik_and_score(mu, V, [1.0, 2.0, 3.0])
+    @test ll_i == ll_f                    # 1.0 is the label 1, as in Python/R
+    for bad in ([1.5, 2.0, 3.0], [1.0, NaN, 3.0], [1.0, Inf, 3.0],
+                Any[1, missing, 3], [1, 0, 4])
+        @test_throws ArgumentError choice_loglik_and_score(mu, V, bad)
+    end
+    # the constructor recorded T = 3 while holding one choice
+    @test_throws ArgumentError MNProbit(zeros(3, 3, 1), [1];
+                                        intercepts = false, r = 1)
+    @test_throws ArgumentError MNProbit(zeros(3, 3, 1), [1, 2, 4];
+                                        intercepts = false, r = 1)
+    m = MNProbit(zeros(3, 3, 1), [1.0, 2.0, 3.0]; intercepts = false, r = 1)
+    @test m.choice == [1, 2, 3]
+end
+
+# --- D has exactly one entry per alternative (#439) --------------------
+@testset "D length is checked before sharpness dispatch" begin
+    mu = reshape([2.29264426, 0.64388188, -0.17180493, 3.74907237], 1, :)
+    V = [-0.0107529507 1.80970562; -0.6565907660 0.00168241106;
+         0.3133862710 0.0763054062; 0.3539574460 -1.88769344]
+    ll, _, _ = choice_loglik_and_score(mu, V, [4]; D = ones(4))
+    @test isfinite(ll)
+    # an unused fifth entry used to switch GH -> Halton: ll moved by 0.027
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu, V, [4]; D = [1.0, 1.0, 1.0, 1.0, 1e-12])
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu, V, [4]; D = ones(3))
+    @test_throws DimensionMismatch MP.ghk_choice_prob(
+        vec(mu), V, 4; D = ones(5))
+end
+
+# --- OPG never touches the Hessian (#434) ------------------------------
+@testset "vcov(:opg) is Hessian-free" begin
+    Xo = reshape([0.0, 1.0, 1.0, 0.0, 0.0, 2.0, 2.0, 0.0], 4, 2, 1)
+    m = MNProbit(Xo, [2, 1, 2, 1]; intercepts = false, r = 0)
+    m.theta .= 0.3
+    G = score_matrix(m)
+    old = MP.HESSIAN_ENGINE[]
+    try
+        MP.HESSIAN_ENGINE[] = (mm, tt) -> error("HESSIAN CALLED")
+        @test vcov(m; method = :opg) ≈ inv(G' * G)
+        @test_throws ErrorException vcov(m; method = :hessian)
+    finally
+        MP.HESSIAN_ENGINE[] = old
+    end
+    @test_throws ErrorException vcov(m; method = :bogus)
+end
+
+# --- GHK fits get no exact-likelihood inference (#214) -----------------
+@testset "inference refuses a GHK fit" begin
+    rng = Xoshiro(1)
+    Xg = randn(rng, 40, 3, 1)
+    chg = repeat([1, 2, 3, 1], 10)
+    m = MNProbit(Xg, chg; intercepts = true, r = 1)
+    fit!(m; method = :ghk, r_draws = 8, seed = 9, maxiter = 5)
+    @test m.method == :ghk
+    @test isfinite(loglikelihood(m))
+    @test_throws ArgumentError score_matrix(m)
+    @test_throws ArgumentError loglik_hessian(m)
+    for method in (:hessian, :opg, :sandwich)
+        @test_throws ArgumentError vcov(m; method = method)
+        @test_throws ArgumentError stderror(m; method = method)
+    end
+    io = IOBuffer()
+    show(io, MIME"text/plain"(), m)
+    out = String(take!(io))
+    @test occursin("not available", out)
+    # refitting exactly restores inference
+    fit!(m)
+    @test all(isfinite, stderror(m))
+end
+
+# --- Halton has as many bases as the integral has dimensions (#396) ----
+@testset "sharp likelihood at rank 8 and beyond" begin
+    @test MP._first_primes(10) == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+    for (J, r) in ((8, 7), (9, 8), (12, 11))
+        mu = zeros(1, J)
+        V = zeros(J, r)
+        V[J, r] = 3.0                  # sharpness > 3 -> Halton, r + 1 dims
+        ll, dmu, dV = choice_loglik_and_score(mu, V, [J])
+        @test isfinite(ll) && all(isfinite, dmu) && all(isfinite, dV)
+    end
+    # (the Gauss-Hermite side at these ranks is a 7^(r+1) tensor --
+    # 40M nodes at r = 8 -- in this port and the Python reference alike;
+    # it is not exercised here)
+    # Python (scipy Sobol) gives probability 0.32892 for J=9, r=8, v=3
+    mu = zeros(1, 9); V = zeros(9, 8); V[9, 8] = 3.0
+    @test abs(exp(choice_loglik_and_score(mu, V, [9])[1]) - 0.3289249) < 0.01
+end
+
+# --- ranks at or above J - 1 are not identified (#201) -----------------
+@testset "factor rank identification" begin
+    # the exact ridge: contrast covariance of Vp is 4x that of V, so
+    # (2 beta, Vp) prices every choice like (beta, V)
+    V = [0.0 0.0; 0.5 0.0; 0.2 0.7]
+    Vp = [0.0 0.0; 2.6457513110645907 0.0; 1.2850792082313727 2.543338638202044]
+    A = [-1.0 1.0 0.0; -1.0 0.0 1.0]
+    C(V) = A * (V * V' + LinearAlgebra.I) * A'
+    @test C(Vp) ≈ 4 .* C(V)
+    # GHK on the differenced covariance sees exactly the scaled law:
+    # same CRN draws, Cholesky factor doubled, so equal to rounding
+    mu = [0.3, -0.2, 0.1]
+    for k in 1:3
+        p1 = MP.ghk_choice_prob(mu, V, k; r_draws = 2000, seed = 3)
+        p2 = MP.ghk_choice_prob(2 .* mu, Vp, k; r_draws = 2000, seed = 3)
+        @test abs(p1 - p2) < 1e-6
+    end
+
+    @test max_identified_rank.((2, 3, 4, 5)) == (0, 1, 2, 3)
+    for J in 2:5
+        X = randn(Xoshiro(J), 6, J, 1)
+        ch = [mod1(t, J) for t in 1:6]
+        m = MNProbit(X, ch)                 # default rank is identified
+        @test m.r == min(2, J - 2)
+        for r in 0:(J - 2)
+            @test MNProbit(X, ch; r = r).r == r
+        end
+        for r in (J - 1, J)
+            @test_throws ArgumentError MNProbit(X, ch; r = r)
+        end
+    end
+    # the binary case fits with r = 0
+    rng = Xoshiro(4)
+    Xb = randn(rng, 300, 2, 1)
+    U = 0.8 .* Xb[:, :, 1] .+ randn(rng, 300, 2)
+    chb = [argmax(U[t, :]) for t in 1:300]
+    mb = fit!(MNProbit(Xb, chb; intercepts = false))
+    @test mb.converged && abs(mb.beta[1] - 0.8) < 0.25
+    @test all(isfinite, stderror(mb))
 end

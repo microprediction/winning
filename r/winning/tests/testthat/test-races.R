@@ -153,3 +153,40 @@ test_that("zero-rank loadings reach top-k as the independent top-k", {
                                D = D)
   expect_gt(max(abs(moved - top_k_probabilities(mu, 2, D = D))), 0.005)
 })
+
+test_that("finite weights that overflow only in their sum are one law (#415)", {
+  mu <- c(0, 0.4, 1)
+  V <- matrix(c(0.7, 0, -0.4), ncol = 1)
+  F <- matrix(c(-1, 1), ncol = 1)
+  p1 <- race_probabilities(mu, V = V, D = rep(1, 3), F = F, W = c(1, 1),
+                           points = 257L)
+  pb <- race_probabilities(mu, V = V, D = rep(1, 3), F = F,
+                           W = c(1e308, 1e308), points = 257L)
+  expect_true(all(is.finite(pb)))
+  expect_lt(max(abs(pb - p1)), 1e-15)
+  # the inverse shares the normaliser
+  a1 <- abilities_from_race(p1, V = V, D = rep(1, 3), F = F, W = c(1, 1))
+  ab <- abilities_from_race(p1, V = V, D = rep(1, 3), F = F,
+                            W = c(1e308, 1e308))
+  expect_lt(max(abs(ab - a1)), 1e-10)
+})
+
+test_that("Halton nodes extend past the old 32-prime table (#402)", {
+  for (r in c(32L, 33L, 40L)) {
+    hw <- .halton_normal_nodes(r, 64L)
+    expect_equal(dim(hw$F), c(64L, r))
+    expect_true(all(is.finite(hw$F)))
+  }
+  # the first 32 bases are unchanged
+  expect_identical(.first_primes(32L)[32], 131L)
+  n <- 34L
+  mu <- seq(-0.3, 0.3, length.out = n)
+  V <- 0.1 * diag(n)[, seq_len(n - 1L)]
+  p <- race_probabilities(mu, V = V, D = rep(1, n), points = 65L)
+  expect_length(p, n)
+  expect_true(all(is.finite(p)) && all(p > 0))
+  expect_lt(abs(sum(p) - 1), 1e-8)
+  # Python Sobol prices the same fixture in 0.0137 .. 0.0514
+  expect_gt(min(p), 0.010)
+  expect_lt(max(p), 0.06)
+})

@@ -86,10 +86,15 @@ def _as_variance(x, n, name, what, positive=False):
     mean, and a sqrt of a negative number (NaN, RuntimeWarning only) in
     simulate.correlated_draws.
 
-    Loadings are gauge-fixed to mean zero, so any non-trivial loading
-    vector HAS a negative entry, which is what makes this cheap check
-    catch the swap. A variance of exactly zero is legal (a perfectly
-    known quantity); a negative one never is.
+    The check catches a swap ONLY when the loadings arrive with a
+    negative entry -- e.g. already gauge-fixed to mean zero. It is not a
+    general discriminator (#85): the model gauge-fixes loadings itself,
+    so a caller may legally pass an all-positive, non-constant loading
+    vector such as [.2, .5, .1, .4], and that passes as a variance; a
+    positive belief-variance vector is likewise a legal rank-one loading
+    spelling. Exchanging those two is still silent. Pass them by keyword.
+    A variance of exactly zero is legal (a perfectly known quantity); a
+    negative one never is.
     """
     A = np.asarray(x, dtype=float)
     if A.ndim == 0:
@@ -153,7 +158,9 @@ def as_variance(v, n):
     The companion to as_loadings on the other side of the same
     signature: `update_winner_correlated(m, v, winner, V)` takes both,
     they have the same shape at rank one, and exchanging them was
-    silent before this existed.
+    silent before this existed. It still is when the loadings are all
+    positive (legal: they are gauge-fixed downstream) -- see
+    _as_variance; the negative-entry check catches only some swaps.
     """
     return _as_variance(v, n, "v", "belief variance")
 
@@ -182,10 +189,14 @@ def as_weights(W, name="W"):
             f"{name}[{int(neg[0])}] = {float(W[neg[0]])!r} is negative. "
             "Quadrature weights here are relative and must be "
             "non-negative; a signed rule can return values outside [0, 1].")
-    tot = float(W.sum())
-    if tot <= 0.0:
+    # Through the LARGEST weight, never the raw total: finite weights
+    # such as [1e308, 1e308] overflow only in W.sum(), and W / inf made
+    # every weight zero and every probability NaN (#415).
+    top = float(W.max()) if W.size else 0.0
+    if not top > 0.0:
         raise ValueError(
-            f"{name} must have a positive total; got {tot!r}. They are "
-            "relative, so any positive multiple of a valid rule is the "
-            "same factor law, but an all-zero rule is not one.")
-    return W / tot
+            f"{name} must have a positive total; got {float(W.sum())!r}. "
+            "They are relative, so any positive multiple of a valid rule "
+            "is the same factor law, but an all-zero rule is not one.")
+    W = W / top
+    return W / W.sum()

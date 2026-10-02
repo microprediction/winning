@@ -74,7 +74,7 @@ def sharpness_bound(V, D=None, n=None):
     caller that already holds the count should pass it.
     """
     if n is None:
-        n = len(np.asarray(D)) if D is not None else np.shape(V)[0]
+        n = np.size(D) if D is not None and np.ndim(D) > 0 else np.shape(V)[0]
     V = as_loadings(V, n)          # the same door every other verb uses
     V = V - V.mean(axis=0)
     dmin = 1.0 if D is None else float(np.min(as_idio(D, n)))
@@ -136,7 +136,7 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
             "because there is less of it.")
     V = as_loadings(V, J)
     r = V.shape[1]
-    D = np.ones(J) if D is None else np.asarray(D, dtype=float)
+    D = np.ones(J) if D is None else as_idio(D, J, positive=True)   # #84
     s = np.sqrt(D)
     # gauge-fix and dispatch on the pairwise-safe bound (eighth review):
     # only loading DIFFERENCES decide a race, and
