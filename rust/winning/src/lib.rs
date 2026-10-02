@@ -2030,9 +2030,10 @@ impl BaseSpec {
                 let l_phi_ax = log_ndtr(alpha * x);
                 let lf = std::f64::consts::LN_2 - 0.5 * x * x
                     - LN_SQRT_2PI + l_phi_ax + sd.ln();
-                let hazard = (-0.5 * alpha * alpha * x * x
-                    - LN_SQRT_2PI - l_phi_ax)
-                    .exp();
+                // (alpha x)^2, not alpha*alpha*x*x: for a saturated shape
+                // alpha*alpha is inf and inf*0 at x = 0 was NaN (#399)
+                let ax = alpha * x;
+                let hazard = (-0.5 * ax * ax - LN_SQRT_2PI - l_phi_ax).exp();
                 let dl = sd * (-x + alpha * hazard);
                 (sv.clamp(1e-300, 1.0).ln(), lf, dl)
             }

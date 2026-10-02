@@ -185,7 +185,11 @@ const PHI = (z) => Math.exp(logndtr(z));
 /* skew-normal with shape alpha, standardized to mean 0 variance 1;
  * returns a base object usable directly as opts.base */
 export function skewNormalBase(alpha) {
-  const delta = alpha / Math.sqrt(1 + alpha * alpha);
+  // hypot, not sqrt(1 + alpha^2): alpha^2 overflows past ~1.34e154 and
+  // delta became 0, an unstandardized law for a finite shape (#399)
+  if (!Number.isFinite(alpha))
+    throw new Error(`skewNormalBase needs a finite shape; got ${alpha}`);
+  const delta = alpha / Math.hypot(1, alpha);
   const m = delta * Math.sqrt(2 / Math.PI);
   const s = Math.sqrt(1 - m * m);
   const pdf = (z) => { const u = m + s * z;

@@ -266,8 +266,14 @@ def skew_normal_base(a):
     family), shape a: mean zero, unit variance. Returns a callable for
     base=."""
     a = float(a)
+    if not np.isfinite(a):
+        raise ValueError("skew_normal_base needs a finite shape a; got " + repr(a))
     from scipy.stats import skewnorm as _sn
-    delta = a / np.sqrt(1.0 + a * a)
+    # hypot, not sqrt(1 + a*a): a*a overflows past |a| ~ 1.34e154 and
+    # delta became 0, so a finite, saturated shape jumped from the
+    # standardized half-normal to an unstandardized law -- the leader's
+    # share moved 0.317 between a = 1e154 and 2e154 (#399)
+    delta = a / np.hypot(1.0, a)
     m = delta * np.sqrt(2.0 / np.pi)
     sd = np.sqrt(1.0 - 2.0 * delta * delta / np.pi)
 
@@ -277,9 +283,14 @@ def skew_normal_base(a):
         phi = np.exp(-0.5 * x * x) / np.sqrt(2.0 * np.pi)
         Phi_ax = ndtr(a * x)
         f = 2.0 * phi * Phi_ax * sd
+        # (a x)^2 may overflow to inf, whose exp(-inf/2) is the correct
+        # 0; a*a*x*x at x = 0 was inf*0 = NaN
+        with np.errstate(over="ignore", invalid="ignore"):
+            ax2 = np.square(a * x)
+            kink = np.where(np.isfinite(ax2), a * np.exp(-0.5 * ax2), 0.0)
+        kink = np.where(x == 0.0, a, kink)
         fp = 2.0 * (-x * phi * Phi_ax
-                    + a * phi * np.exp(-0.5 * a * a * x * x)
-                    / np.sqrt(2.0 * np.pi)) * sd * sd
+                    + kink * phi / np.sqrt(2.0 * np.pi)) * sd * sd
         return S, f, fp
 
     _skew.span = (10.0, 10.0)

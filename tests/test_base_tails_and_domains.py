@@ -112,3 +112,44 @@ def test_skew_logistic_tail_compiled_matches_pure():
     finally:
         rustconfig.use_rust(False)
     assert comp == pytest.approx(pure, rel=1e-8)
+
+
+# --- #399 ----------------------------------------------------------------
+
+def test_skew_normal_saturated_shape_is_continuous():
+    from winning.factor.races import skew_normal_base
+    mu = np.array([-0.6, 0.2, 1.1, 1.7])
+    D = np.array([0.25, 1.0, 2.25, 4.0])
+    at = lambda a: race_probabilities(mu, D=D, base=skew_normal_base(a),
+                                      points=4001, window="span")
+    for sign in (1.0, -1.0):
+        below = at(sign * 1e154)
+        for a in (2e154, 1e200, 1e300):
+            np.testing.assert_allclose(at(sign * a), below, atol=1e-12)
+    # and the saturated law is the standardized half-normal limit
+    b = skew_normal_base(1e200)
+    z = np.linspace(-1.2, 6, 200)
+    S, f, fp = b(z)
+    assert np.all(np.isfinite(f)) and np.all(np.isfinite(fp))
+    zz = np.linspace(-1.4, 12, 400001)
+    _, ff, _ = b(zz)
+    dz = zz[1] - zz[0]
+    assert abs(ff.sum() * dz - 1) < 1e-3          # unit mass
+    assert abs((ff * zz).sum() * dz) < 1e-3       # mean zero
+    assert abs((ff * zz * zz).sum() * dz - 1) < 1e-3   # unit variance
+
+
+def test_skew_normal_slope_is_finite_at_the_kink():
+    from winning.factor.races import skew_normal_base
+    b = skew_normal_base(2e154)
+    m_sd = b.rust_base[1][1:]
+    z0 = -m_sd[0] / m_sd[1]          # the z at which x = 0
+    _, _, fp = b(np.array([z0, 0.0, 1.0]))
+    assert not np.isnan(fp).any()
+
+
+@pytest.mark.parametrize("a", [np.inf, -np.inf, np.nan])
+def test_skew_normal_refuses_a_non_finite_shape(a):
+    from winning.factor.races import skew_normal_base
+    with pytest.raises(ValueError, match="finite"):
+        skew_normal_base(a)
