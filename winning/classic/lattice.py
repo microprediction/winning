@@ -130,8 +130,14 @@ def middle_of_density(density, L:int, do_padding=False):
         padding = [ 0 for _ in range(n_extra) ]
         return padding + list(density) + padding
     else:
+        # Crop through the CDF: the mass below the window lands on its
+        # first atom, the mass above it is dropped. This line used to
+        # read cdf_to_pdf(density) -- a PDF differenced twice -- so the
+        # "crop" was a signed second difference with mass ~0 and every
+        # convolution that actually cropped raised "too much mass loss"
+        # (#404).
         n_extra = L0-L
-        cdf = cdf_to_pdf(density)
+        cdf = pdf_to_cdf(density)
         cdf_truncated = cdf[n_extra:-n_extra]
         pdf_truncated = cdf_to_pdf(cdf_truncated)
         return pdf_truncated
@@ -178,12 +184,28 @@ def convolve_many(densities, L=None, do_padding=True):
     use np.convolve
 
     """
+    densities = list(densities)
+    if not densities:
+        raise ValueError('convolve_many needs at least one density')
     for k,d in enumerate(densities):
         assert len(d) % 2 ==1,  'Expecting odd length density['+str(k)+']'
 
     mu_sum = sum( [ mean_of_density(density, unit=1) for density in densities ])
     if L is None:
         L = implied_L(densities[0])
+    if len(densities) == 1:
+        # The convolution of one law is that law. The loop below always
+        # ended with convolve_two(full_density, densities[-1]), which for
+        # a singleton is the density convolved WITH ITSELF: mass and mean
+        # survive, the variance doubles (#405). Only the requested
+        # crop/padding applies, and the mean is restored only if a crop
+        # actually moved it.
+        d0 = np.asarray(densities[0], dtype=float)
+        out = np.asarray(middle_of_density(d0, L=L, do_padding=do_padding), dtype=float)
+        if implied_L(d0) > L:
+            mu_diff = mean_of_density(out, unit=1) - mu_sum
+            out = fractional_shift_density(out, -mu_diff)
+        return out
     full_density = [ p for p in densities[0] ]
     for density in densities[1:-1]:
         full_density = convolve_two(density1=full_density, density2=density, L=L, do_padding=False)
@@ -268,9 +290,17 @@ def winner_of_many(densities, multiplicities=None):
     :param   densities:  [ np.array   ]
     :return: np.array
     """
+    if len(densities) == 0:
+        raise ValueError('winner_of_many needs at least one density')
     d = densities[0]
     multiplicities = multiplicities or [None for _ in densities]
     m = multiplicities[0]
+    if m is None:
+        # A lone entrant is its own winner with multiplicity exactly one.
+        # This stayed None when the fold below never ran, and the None
+        # reached the multiplicity arithmetic of state_prices_from_densities
+        # as a TypeError; R and Rust start the fold at ones (#406).
+        m = np.ones(len(d))
     for d2, m2 in zip(densities[1:], multiplicities[1:]):
         d, m = _winner_of_two_pdf(d, d2, multiplicityA=m, multiplicityB=m2)
     return d, m
