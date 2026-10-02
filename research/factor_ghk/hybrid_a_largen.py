@@ -208,6 +208,22 @@ def sobol_stream(pool, arrays, state, seed, total, chunk):
     return acc / st["done"], st["done"], st["seconds"]
 
 
+def truth_pair(pool, arrays, state, total, chunk, checkpoint=lambda: None):
+    """The truth (seed 101) and its certifying second scramble (seed 202) at
+    the SAME draw count.  Each stream is extended to at least `total`; if the
+    state already holds more draws for either (a crash/retry after a larger
+    run), the other is extended to match, so the certification is never a
+    2^17 estimate compared against a 2^16 one and labelled 2^17 (#433).
+    Returns (truth, check, used, seconds101, seconds202)."""
+    truth, u1, t1 = sobol_stream(pool, arrays, state, 101, total, chunk); checkpoint()
+    check, u2, t2 = sobol_stream(pool, arrays, state, 202, max(total, u1), chunk); checkpoint()
+    if u1 < u2:
+        truth, u1, t1 = sobol_stream(pool, arrays, state, 101, u2, chunk); checkpoint()
+    if u1 != u2:
+        raise StateMismatch(f"truth streams hold unequal draw counts after extension: sobol101 {u1}, sobol202 {u2}")
+    return truth, check, u1, t1, t2
+
+
 def sobol_fixed(pool, arrays, state, m, workers):
     """The shipped rule's 2^m nodes (seed 0), all winners; cached per m."""
     key = f"cmp_m{m}"
@@ -265,8 +281,7 @@ def main():
 
     # truth: two independent scrambles, extended in parallel
     total = 2 ** args.truth_m
-    truth, used, t1 = sobol_stream(pool, arrays, state, 101, total, chunk); save(spath, state)
-    check, _, t2 = sobol_stream(pool, arrays, state, 202, total, chunk); save(spath, state)
+    truth, check, used, t1, t2 = truth_pair(pool, arrays, state, total, chunk, lambda: save(spath, state))
     args.truth_m = int(round(np.log2(used)))                          # the state may hold more than asked
     d_scr = float(np.abs(truth - check).max())
     mk = f"mc{args.paths}"

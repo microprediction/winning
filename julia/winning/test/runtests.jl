@@ -141,3 +141,60 @@ end
                                 D = D)
     @test maximum(abs.(moved .- top_k_probabilities(mu, 2; D = D))) > 0.005
 end
+
+@testset "rank marginals of a factor-correlated race (#202)" begin
+    # rank_probabilities had no V/qa: the correlated call was a keyword
+    # error while top_k_probabilities priced the same model
+    mu = [-0.4, -0.1, 0.2, 0.5]
+    D = fill(0.2, 4)
+    V = reshape([-2.0, -0.5, 0.5, 2.0], 4, 1)
+    R = rank_probabilities(mu; V = V, D = D, qa = 15)
+    q1 = top_k_probabilities(mu, 1; V = V, D = D, qa = 15)
+    q2 = top_k_probabilities(mu, 2; V = V, D = D, qa = 15)
+    @test maximum(abs.(R[:, 1] .- q1)) < 1e-6
+    @test maximum(abs.(vec(sum(R[:, 1:2], dims = 2)) .- q2)) < 1e-6
+    # the Python reference on the same fixture
+    @test maximum(abs.(R[:, 1] .- [0.53003131, 0.08960483, 0.049621,
+                                   0.33074286])) < 1e-6
+    @test abs(R[4, 1] - rank_probabilities(mu; D = D)[4, 1]) > 0.2
+    V2 = hcat(V, [0.3, -0.2, 0.4, -0.5])
+    R2 = rank_probabilities(mu; V = V2, D = D, qa = 9)
+    @test maximum(abs.(R2[:, 1] .- top_k_probabilities(mu, 1; V = V2, D = D,
+                                                       qa = 9))) < 1e-6
+    @test rank_probabilities(mu; V = zeros(4, 0), D = D) ≈
+          rank_probabilities(mu; D = D)
+end
+
+@testset "Halton bases past the old 12-prime table (#402)" begin
+    @test winning._first_primes(13) ==
+          [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41]
+    for r in (12, 13, 20)
+        hw = winning.halton_normal_nodes(r, 64)
+        @test size(hw.F) == (64, r) && all(isfinite, hw.F)
+    end
+    n = 14
+    mu = collect(range(-0.3, 0.3; length = n))
+    V = 0.15 .* [i == j ? 1.0 : 0.0 for i in 1:n, j in 1:(n - 1)]
+    p = race_probabilities(mu; V = V, D = ones(n), points = 257)
+    # Python (Sobol) on the same fixture
+    ref = [0.11508239, 0.10653908, 0.09851713, 0.09099268, 0.08394499,
+           0.07735006, 0.07118896, 0.06543323, 0.06007212, 0.05507979,
+           0.05043980, 0.04613063, 0.04213669, 0.03709245]
+    @test length(p) == n && abs(sum(p) - 1) < 1e-8
+    @test maximum(abs.(p .- ref)) < 2e-3
+end
+
+@testset "weights that overflow only in their sum (#415)" begin
+    mu = [0.0, 0.4, 1.0]
+    V = reshape([0.7, 0.0, -0.4], 3, 1)
+    F = reshape([-1.0, 1.0], 2, 1)
+    p1 = race_probabilities(mu; V = V, D = ones(3), F = F, W = [1.0, 1.0],
+                            points = 257)
+    pb = race_probabilities(mu; V = V, D = ones(3), F = F,
+                            W = [1e308, 1e308], points = 257)
+    @test all(isfinite, pb)
+    @test maximum(abs.(pb .- p1)) < 1e-15
+    @test maximum(abs.(p1 .- [0.51529828, 0.30546137, 0.17924036])) < 1e-6
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = ones(3),
+                                                  F = F, W = [0.0, 0.0])
+end

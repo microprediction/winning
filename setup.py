@@ -30,7 +30,7 @@ setup(
     include_package_data=True,
     install_requires=["numpy", "scipy"],
     extras_require={"test": ["pytest", "pandas", "matplotlib"],
-                    "benchmarks": ["pandas"],
+                    "benchmarks": ["pandas", "trueskill"],
                     # compiled kernels (rust/fastrace); pure python without
                     "fast": ["fastrace>=0.2.0"]},
     entry_points={

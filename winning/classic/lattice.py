@@ -874,6 +874,9 @@ def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, c
 # past the top: a singleton at +19 on a uniform 83-atom law was paid
 # 0.771 (#373).
 #
+# (Node count: see Q_START below -- exact rule for small fields, a
+# doubling check for big ones.)
+#
 # The inverse keeps the paper's fixed-point table: a candidate at each
 # sample offset is priced against G_q / (S_k + u_q f_k). For a field
 # member that is its exact price; for a candidate between members it is
@@ -951,6 +954,31 @@ def _n_nodes(n_runners):
     return int(n_runners) // 2 + 1
 
 
+# Exactness costs n//2 + 1 nodes, which makes a big field O(n^2 L): 3000
+# runners would need 1501 nodes. The integrand prod_j (S_j + u f_j) is
+# only of high degree where many runners carry an atom at once; on a
+# smooth lattice it is numerically low-degree and 4 nodes already agree
+# with 64 to 1e-17. So the forward map starts at Q_START nodes and
+# doubles (capped at the exact count) until two successive rules agree
+# on every price to EXACT_TOL, returning the larger rule; a field whose
+# exact rule has at most Q_START nodes uses it directly. The inverse's table
+# is a preconditioner -- the defect correction makes its fixed point the
+# exact forward map whatever the table -- so it uses at most TABLE_NODES.
+Q_START = 8
+TABLE_NODES = 16
+EXACT_TOL = 1e-14
+
+
+def _node_schedule(n_runners):
+    exact = _n_nodes(n_runners)
+    q, out = min(Q_START, exact), []
+    while True:
+        out.append(q)
+        if q >= exact:
+            return out
+        q = min(2 * q, exact)
+
+
 def _padded_base_cdf(density):
     """CDF of `density` padded by L-1 zero atoms on each side."""
     L = implied_L(density)
@@ -998,9 +1026,15 @@ def exact_state_prices_from_cdfs(cdfs):
     cdfs = [np.asarray(c, dtype=float) for c in cdfs]
     if not cdfs:
         raise ValueError('a race needs at least one runner')
-    nodes, weights = _gauss_legendre01(_n_nodes(len(cdfs)))
-    G = _exact_field(cdfs, nodes)
-    return [_exact_payoff(c, G, nodes, weights) for c in cdfs]
+    prev = None
+    for q in _node_schedule(len(cdfs)):
+        nodes, weights = _gauss_legendre01(q)
+        G = _exact_field(cdfs, nodes)
+        p = np.array([_exact_payoff(c, G, nodes, weights) for c in cdfs])
+        if prev is not None and np.max(np.abs(p - prev)) <= EXACT_TOL:
+            break
+        prev = p
+    return [float(x) for x in p]
 
 
 def _exact_offset_cdfs(density, offsets):
@@ -1011,7 +1045,7 @@ def _exact_offset_cdfs(density, offsets):
 
 def _exact_implicit_prices(base, field_cdfs, offset_samples, L):
     """The paper's interpolation table, priced against the exact field."""
-    nodes, weights = _gauss_legendre01(_n_nodes(len(field_cdfs)))
+    nodes, weights = _gauss_legendre01(min(_n_nodes(len(field_cdfs)), TABLE_NODES))
     G = _exact_field(field_cdfs, nodes)
     return [_exact_payoff(_exact_shifted_cdf(base, k, L), G, nodes, weights)
             for k in offset_samples]

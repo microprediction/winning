@@ -46,6 +46,30 @@ reviews:
       instructions: >-
         R ports of the Python package; behaviour must match winning/ and
         parity/check.R. Flag divergence from the Python implementation.
+    - path: "docs/js/winning/**"
+      instructions: >-
+        Browser JS port of the Python package; behaviour must match the
+        Python reference in winning/ and parity/check.mjs and
+        parity/check_js_api.mjs. Compare every change with the Python
+        implementation and flag divergence.
+    - path: "js/**"
+      instructions: >-
+        Standalone JS ports of the Python package; behaviour must match the
+        Python reference in winning/ and its parity harness
+        (js/factor/test_parity.mjs against vectors generated from Python).
+        Compare every change with the Python
+        implementation and flag divergence.
+    - path: "julia/**"
+      instructions: >-
+        Julia ports of the Python package; behaviour must match the Python
+        reference in winning/ and parity/check.jl. Compare every change with
+        the Python implementation and flag divergence.
+    - path: "rust/**"
+      instructions: >-
+        Rust kernels (fastrace) behind the Python package; behaviour must
+        match the pure-NumPy reference in winning/ and
+        tests/test_rust_parity.py. Compare every change with the Python
+        implementation and flag divergence.
     - path: "research/**/*.py"
       instructions: >-
         Experiment scripts. Focus on correctness of the statistics and on

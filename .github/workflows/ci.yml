@@ -41,6 +41,53 @@ jobs:
       - name: Core tests
         run: python -m pytest -q tests/test_races.py tests/test_probit.py tests_research
 
+  native:
+    # The compiled path, built from THIS checkout (#72). The matrix above
+    # installs `.[test]` without fastrace, so every compiled-path test was
+    # a skip there: tests/test_rust_parity.py and test_rust_dispatch_core.py
+    # importorskip it wholesale. Installing the published wheel would not
+    # help either -- it tests the last PyPI release, not edits under
+    # rust/fastrace in the PR. So: build the crate from source, prove the
+    # dispatch is live, and treat a skip in the compiled-path files as a
+    # failure. The pure path is the matrix above (no fastrace there).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install winning and build fastrace from the checkout
+        run: |
+          pip install maturin -e ".[test]"
+          pip install ./rust/fastrace
+      - name: The compiled path is live
+        run: |
+          python - <<'PY'
+          import importlib.metadata as md
+          import fastrace, winning
+          from winning import rustconfig
+          print("fastrace", md.version("fastrace"), "from", fastrace.__file__)
+          assert winning.rust_active(), "rust_active() is False with fastrace installed"
+          off = [m.__name__ for m in rustconfig._rust_modules() if not getattr(m, "_HAVE_RUST", False)]
+          assert not off, f"modules on the switch with the compiled path inactive: {off}"
+          PY
+      - name: Compiled-path suites, no skips allowed
+        run: |
+          python -m pytest -q -rs tests/test_rust_parity.py \
+            tests/test_rust_dispatch_core.py \
+            tests/test_rust_gauge_and_normalized_jvp.py \
+            tests/test_rust_switch_static.py tests/test_loading_shapes.py \
+            | tee native.txt
+          if grep -q "SKIPPED" native.txt; then
+            echo "::error::a compiled-path test skipped in the native job"; exit 1
+          fi
+      - name: Other suites that dispatch to the compiled kernels
+        run: |
+          python -m pytest -q tests/test_blocks.py tests/test_bases.py \
+            tests/test_permutations.py tests/test_topk.py \
+            tests/test_topk_inversion.py tests/test_shape_contract.py
+
   package:
     # What gets SHIPPED, not what is in the tree. setup.py lists packages
     # explicitly, so a new subpackage is invisible to users until someone
@@ -80,6 +127,29 @@ jobs:
           /tmp/wheelenv/bin/pip install dist/*.whl
           cd /tmp && GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             /tmp/wheelenv/bin/python "$GITHUB_WORKSPACE/.github/smoke.py"
+      - name: Benchmarks from the installed wheel write to cwd (#141)
+        # RESULTS used to be <site-packages>/bench_results; a comparator
+        # without trueskill failed at import, not with an install hint
+        run: |
+          mkdir -p /tmp/benchcwd && cd /tmp/benchcwd
+          /tmp/wheelenv/bin/python -c "import winning.bench.season_ranked, winning.bench.season_trueskill"
+          printf '%s\n' '{"problem": "p", "n": 2, "k": 1, "method": "m", "budget": null, "seconds": 0.1, "max_err": 1e-4, "max_log_err": 0.01, "info": {}}' > records.jsonl
+          /tmp/wheelenv/bin/python -m winning.bench.leaderboard --out /tmp/benchcwd
+          test -f /tmp/benchcwd/LEADERBOARD.md
+          site=$(/tmp/wheelenv/bin/python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+          test ! -e "$site/bench_results"
+          /tmp/wheelenv/bin/pip install "$(ls $GITHUB_WORKSPACE/dist/*.whl)[benchmarks]"
+          /tmp/wheelenv/bin/python -c "import trueskill"
+      - name: Every test shipped in the sdist can be collected (#141)
+        run: |
+          mkdir -p /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist
+          cd /tmp/sdist/winning-*
+          if [ -d tests ]; then
+            /tmp/wheelenv/bin/pip install pytest
+            /tmp/wheelenv/bin/python -m pytest --collect-only -q tests
+          else
+            echo "sdist ships no tests (MANIFEST.in prunes them)"
+          fi
 
   parity:
     # The cross-language comparison has always existed and has never been

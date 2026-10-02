@@ -212,13 +212,26 @@ function exactPayoff(cdf, G, gl) {
   }
   return total;
 }
+/* Node doubling for big fields, as python's Q_START: exactness needs
+   n//2 + 1 nodes, O(n^2 L) for a big field, but a smooth lattice is
+   numerically low-degree. Start at 8 nodes, double (capped at exact)
+   until two rules agree to 1e-14. The inverse table, a preconditioner,
+   uses at most 16. */
+const EXACT_Q_START = 8, EXACT_TABLE_NODES = 16, EXACT_TOL = 1e-14;
 function exactStatePrices(cdfs) {
-  const gl = gaussLegendre01(exactNodes(cdfs.length));
-  const G = exactField(cdfs, gl.nodes);
-  return cdfs.map(c => exactPayoff(c, G, gl));
+  const exact = exactNodes(cdfs.length);
+  let q = Math.min(EXACT_Q_START, exact), prev = null;
+  for (;;) {
+    const gl = gaussLegendre01(q);
+    const G = exactField(cdfs, gl.nodes);
+    const p = cdfs.map(c => exactPayoff(c, G, gl));
+    if (q >= exact || (prev && p.every((x, i) => Math.abs(x - prev[i]) <= EXACT_TOL))) return p;
+    prev = p;
+    q = Math.min(2 * q, exact);
+  }
 }
 function exactImplicitPrices(base, fieldCdfs, offsets, L) {
-  const gl = gaussLegendre01(exactNodes(fieldCdfs.length));
+  const gl = gaussLegendre01(Math.min(exactNodes(fieldCdfs.length), EXACT_TABLE_NODES));
   const G = exactField(fieldCdfs, gl.nodes);
   return offsets.map(k => exactPayoff(shiftedCdf(base, k, L), G, gl));
 }

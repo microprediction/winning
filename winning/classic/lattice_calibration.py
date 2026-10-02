@@ -155,6 +155,9 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
     https://github.com/microprediction/winning/blob/main/docs/Inferring_Relative_Ability_SIAM_updated.pdf
 
         offset_samples   Optionally supply a list of offsets which are used in the interpolation table  a_i -> p_i
+        verbose, visualize   Per-iteration diagnostics. Requesting either
+                         runs the pure-Python iteration even when the
+                         compiled kernel is installed (same answer).
 
     """
 
@@ -182,6 +185,8 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
         raise ValueError('implied_offsets_guess must have one starting offset per price: got '
                          + str(len(implied_offsets_guess)) + ' for ' + str(len(prices)) + ' prices')
 
+    # Diagnostics (verbose / visualize) need the per-iteration state, so
+    # requesting them selects the Python backend; the answer is the same.
     if _HAVE_RUST and not verbose and not visualize:
         return list(_fastrace.classic_exact_calibrate(
             [float(d) for d in density], [float(p) for p in prices],

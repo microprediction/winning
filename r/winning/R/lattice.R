@@ -175,15 +175,29 @@ exact_payoff <- function(cdf, G, gl) {
   total
 }
 
+# node doubling for big fields, as python's Q_START: start at 8 nodes and
+# double (capped at the exact count) until two rules agree to 1e-14
+EXACT_Q_START <- 8L
+EXACT_TABLE_NODES <- 16L
+EXACT_TOL <- 1e-14
+
 exact_state_prices_from_cdfs <- function(cdfs) {
-  gl <- gauss_legendre01(exact_n_nodes(length(cdfs)))
-  G <- exact_field(cdfs, gl$nodes)
-  vapply(cdfs, function(cc) exact_payoff(cc, G, gl), numeric(1))
+  exact <- exact_n_nodes(length(cdfs))
+  q <- min(EXACT_Q_START, exact)
+  prev <- NULL
+  repeat {
+    gl <- gauss_legendre01(q)
+    G <- exact_field(cdfs, gl$nodes)
+    p <- vapply(cdfs, function(cc) exact_payoff(cc, G, gl), numeric(1))
+    if (q >= exact || (!is.null(prev) && max(abs(p - prev)) <= EXACT_TOL)) return(p)
+    prev <- p
+    q <- min(2L * q, exact)
+  }
 }
 
 # The paper's interpolation table, priced against the exact field.
 exact_implicit_prices <- function(padded_cdf, field_cdfs, offsets, L) {
-  gl <- gauss_legendre01(exact_n_nodes(length(field_cdfs)))
+  gl <- gauss_legendre01(min(exact_n_nodes(length(field_cdfs)), EXACT_TABLE_NODES))
   G <- exact_field(field_cdfs, gl$nodes)
   vapply(offsets, function(k) exact_payoff(shifted_cdf(padded_cdf, k, L), G, gl),
          numeric(1))

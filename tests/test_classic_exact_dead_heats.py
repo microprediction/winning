@@ -198,3 +198,28 @@ def test_a_guess_of_the_wrong_length_is_refused():
     with pytest.raises(ValueError, match="one starting offset per price"):
         solve_for_implied_offsets([0.5, 0.5], density,
                                   implied_offsets_guess=[0, 1, 2, 3, 4])
+
+
+# --- big fields: node doubling keeps exactness without O(n^2 L) ---------
+
+def test_big_atomic_field_still_splits_ties_exactly():
+    d = np.array([0, 0, 0, 0, 0.25, 0.5, 0.25, 0, 0, 0, 0])
+    p = state_prices_from_offsets(d, [0.0] * 60)      # needs the exact 31 nodes
+    np.testing.assert_allclose(p, np.full(60, 1 / 60), atol=1e-14)
+
+
+def test_big_smooth_field_stops_doubling_early():
+    from winning.classic import lattice as Lt
+    x = np.arange(2001) - 1000
+    d = np.exp(-0.5 * (x / 80.0) ** 2)
+    d /= d.sum()
+    offsets = list(np.linspace(-100, 100, 400))
+    seen = []
+    real = Lt._gauss_legendre01
+    Lt._gauss_legendre01 = lambda q: (seen.append(q), real(q))[1]
+    try:
+        p = state_prices_from_offsets(d, offsets)
+    finally:
+        Lt._gauss_legendre01 = real
+    assert abs(sum(p) - 1) < 1e-13
+    assert max(seen) <= 32, seen          # the exact rule would be 201 nodes

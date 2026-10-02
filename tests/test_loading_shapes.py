@@ -77,6 +77,27 @@ def test_pure_python_path_agrees_with_the_compiled_one(monkeypatch):
     assert np.abs(got - ind).max() > 1e-2           # NOT the independent race
 
 
+def test_compiled_path_agrees_with_numpy_on_every_spelling(monkeypatch):
+    """What the test above's name promised and it does not do: compute the
+    COMPILED result first, then force numpy and compare (#72). Skips when
+    the compiled path is inactive; ci.yml's `native` job builds fastrace
+    from this checkout and fails on any skip in this file."""
+    import winning.factor.races as races
+    if not races._HAVE_RUST:
+        pytest.skip("compiled path inactive (fastrace absent or WINNING_PURE)")
+    for V in (V1, V1.reshape(N, 1), V1.reshape(1, N)):
+        compiled = np.asarray(races.race_probabilities(MU, V=V, D=D, points=257))
+        monkeypatch.setattr(races, "_HAVE_RUST", False)
+        numpy_ = np.asarray(races.race_probabilities(MU, V=V, D=D, points=257))
+        monkeypatch.setattr(races, "_HAVE_RUST", True)
+        assert np.abs(compiled - numpy_).max() < 1e-12, V.shape
+    for bad in (V1[:-1], np.ones((N + 1, 1))):
+        for flag in (True, False):
+            monkeypatch.setattr(races, "_HAVE_RUST", flag)
+            with pytest.raises(ValueError):
+                races.race_probabilities(MU, V=bad, D=D, points=257)
+
+
 def test_the_inverse_and_the_ordered_prefixes_inherit_the_contract():
     p = _p(V=V1.reshape(N, 1), D=D)
     m1 = np.asarray(wf.abilities_from_race(p, V=V1, D=D, points=257))
