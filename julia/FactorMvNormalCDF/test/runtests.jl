@@ -185,4 +185,62 @@ end
     @test_throws ArgumentError FactorMvNormalCDF._gh_nodes(-1, 15)
 end
 
+_diagm(d) = [i == j ? d[i] : 0.0 for i in eachindex(d), j in eachindex(d)]
+
+@testset "mean is scalar or one per coordinate (#397)" begin
+    # a short mean set the loop bound and dropped trailing coordinates:
+    # mean = [0.0] returned Phi(0) = 0.5 for the 3-d Phi(0)^3
+    V = zeros(3, 1)
+    D = ones(3)
+    S = V * V' + _diagm(D)
+    for m in (0.0, [0.0], zeros(3))
+        p, how = mvn_cdf_fast_info(upper = zeros(3), mean = m, V = V, D = D)
+        @test p ≈ 0.125 atol = 1e-12
+        @test how == "factor"
+        @test mvn_cdf_fast(upper = zeros(3), mean = m,
+                           sigma = Matrix(S)) ≈ 0.125 atol = 1e-6
+    end
+    for m in (zeros(2), zeros(4))
+        @test_throws ArgumentError mvn_cdf_fast(upper = zeros(3), mean = m,
+                                                V = V, D = D)
+        @test_throws ArgumentError mvn_cdf_fast(upper = zeros(3), mean = m,
+                                                sigma = Matrix(S))
+    end
+    @test_throws ArgumentError mvn_cdf_fast(upper = zeros(3), V = V,
+                                            D = ones(2))
+    # a dense covariance on the delegated path takes the same rule
+    Sd = [1.0 0.5 0.2; 0.5 1.0 0.3; 0.2 0.3 1.0]
+    @test_throws ArgumentError mvn_cdf_fast(upper = zeros(3), mean = zeros(2),
+                                            sigma = Sd)
+end
+
+@testset "error estimate covers the quadrature error (#336)" begin
+    v = [-2.145, 0.525, 3.328, 1.261]
+    D = [1.122, 0.142, 2.040, 0.300]
+    S = v * v' + _diagm(D)
+    mu = [0.702, 0.319, 0.254, -3.958]
+    a = fill(-Inf, 4)
+    b = [-2.305, 4.151, 1.287, 0.557]
+    ref = 0.0037867371230754           # scipy quad and 401-node GH agree
+    p, e = mvnormcdf_factor(mu, Matrix(S), a, b)
+    @test abs(p - ref) <= e            # was e = 4.2e-7 for an 8.9e-5 error
+    @test e < 1e-3
+    # nearby sharpness, rank one and rank two
+    for c in (0.6, 0.8, 1.0, 1.2)
+        p, e = mvnormcdf_factor(mu, Matrix(c^2 .* (v * v') + _diagm(D)), a, b)
+        F, W = FactorMvNormalCDF._gh_nodes(1, 401)
+        r401 = FactorMvNormalCDF._cell_expectation(F, W, reshape(c .* v, :, 1),
+                                                   sqrt.(D), mu, a, b)
+        @test abs(p - r401) <= e + 1e-15
+    end
+    V2 = hcat(v, [0.4, -0.3, 0.2, 0.5])
+    S2 = V2 * V2' + _diagm(D)
+    p2, e2 = mvnormcdf_factor(mu, Matrix(S2), a, b)
+    fd = factorize_covariance(S2)
+    F, W = FactorMvNormalCDF._gh_nodes(2, 121)
+    r121 = FactorMvNormalCDF._cell_expectation(F, W, fd[1], sqrt.(fd[2]),
+                                               mu, a, b)
+    @test abs(p2 - r121) <= e2 + 1e-15
+end
+
 println("all FactorMvNormalCDF tests passed")

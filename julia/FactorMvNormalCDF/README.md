@@ -31,8 +31,10 @@ to MvNormalCDF on that path.
 
 The package exports its own names only, so `using MvNormalCDF,
 FactorMvNormalCDF` is unambiguous. The error estimate on the exact path
-is the difference against a reduced-order quadrature (measured near
-1e-7 where the true error is near 1e-8); delegated results carry
+is the sum of the differences against a reduced-order and a much
+higher-order quadrature (201 nodes at rank one, 81^2 at rank two). The
+reduced-order difference alone could understate the error 200-fold when
+both rules shared the same-sign error; delegated results carry
 MvNormalCDF's own estimate.
 
 Tests: fixture parity with the python reference (tight on the exact
