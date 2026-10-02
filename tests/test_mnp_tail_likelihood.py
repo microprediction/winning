@@ -97,12 +97,33 @@ def test_moderate_gaps_are_accurate():
         assert abs(dmu[0, 0] - es) / es < 1e-2, (gap, dmu[0, 0], es)
 
 
+def _ternary(gap, **kw):
+    """The binary oracle on the J >= 3 path: a third alternative 80
+    units behind is never a rival (Phi(80/sqrt 2) = 1 to the last bit),
+    so P(choice 0) is still Phi(gap/sqrt 2) but the own-noise
+    quadrature, not the J = 2 closed form, computes it."""
+    return choice_loglik_and_score(np.array([[gap, 0.0, -80.0]]),
+                                   np.zeros((3, 1)), np.array([0]), **kw)
+
+
+@pytest.mark.parametrize("gap", [-8.0, -20.0, -60.0])
+def test_the_binary_tail_is_exact(gap):
+    """J = 2 is now the Gaussian contrast in closed form (#128, #270)."""
+    ll, dmu, _ = _binary(gap)
+    ex, es = _oracle(gap)
+    assert abs(ll - ex) <= 1e-12 * abs(ex)
+    assert abs(dmu[0, 0] - es) <= 1e-12 * es
+
+
 @pytest.mark.parametrize("gap", [-20.0, -60.0])
 def test_the_remaining_quadrature_error_is_recorded(gap):
     """Not a pass mark: a measurement, so that a later change closing
-    #270's third defect has something to move. At a gap of -20 the
-    likelihood is 38% away from the closed form and the score 62%."""
-    ll, dmu, _ = _binary(gap)
+    #270's third defect has something to move. The binary case is now
+    closed form, so the measurement moved to J = 3 (see _ternary), where
+    the fixed own-noise rule still under-reaches the tail: at a gap of
+    -20 the likelihood is 38% away from the closed form and the score
+    62%."""
+    ll, dmu, _ = _ternary(gap)
     ex, es = _oracle(gap)
     assert abs(ll - ex) / abs(ex) > 0.3
     assert abs(dmu[0, 0] - es) / es > 0.5

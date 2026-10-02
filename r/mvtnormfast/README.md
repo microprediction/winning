@@ -26,7 +26,7 @@ matched accuracy and Botev's `TruncatedNormal` as the tail referee):
 
 Three regimes, handled automatically:
 - mild factor loadings: adaptive-order Gauss-Hermite;
-- sharp loadings or rank > 2: Halton nodes (polynomial rules converge
+- sharp loadings or rank > 2: scrambled Sobol nodes, up to rank 64 (polynomial rules converge
   slowly on sharp integrands at any order);
 - deep tails (p < 1e-8): Laplace recentering of the node set with
   importance reweighting.

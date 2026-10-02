@@ -83,8 +83,15 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
         mu = ub + k * u * float(ub.sum())
         var = u + k * u * u
     else:
-        P = np.eye(n) - np.ones((n, n)) / n
-        G = P @ np.diag(1.0 / tau2) @ P
+        # The observation noise is P eta, covariance C = P diag(tau2) P
+        # (rank n-1), so the contrast precision is its pseudo-inverse,
+        # formed in an orthonormal basis B of the contrast space. This
+        # was P diag(1/tau2) P, which is C^+ only when tau2 is uniform:
+        # the evidence below used C and the posterior a different
+        # observation model, 0.23 off in the means against the exact
+        # full-belief update for heterogeneous tau2 (#93).
+        Bc = np.linalg.svd(np.eye(n) - np.ones((n, n)) / n)[0][:, :n - 1]
+        G = Bc @ np.linalg.solve(Bc.T @ (tau2[:, None] * Bc), Bc.T)
         free = ~known
         mu = m.copy()
         var = np.zeros(n)
@@ -93,7 +100,7 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
             # free block is the conditional given it -- not a division by
             # its zero variance
             A = np.diag(1.0 / v[free]) + G[np.ix_(free, free)]
-            rhs = m[free] / v[free] + (P @ (y / tau2))[free]
+            rhs = m[free] / v[free] + (G @ y)[free]
             if known.any():
                 rhs = rhs - G[np.ix_(free, known)] @ m[known]
             S = np.linalg.inv(A)
@@ -128,19 +135,26 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
     v = as_variance(v, len(m)).copy()
     info = {}
     if p_market is not None:
-        if V is not None and not market_model:
-            # the seam the bandits integration caught: the named V never
-            # reached **market_model, so the market leg inverted under
-            # the INDEPENDENT map while the outcome leg used the
-            # correlated one. Default the market's pricing model to the
-            # outcome model (loadings V, idio beta2); pass market_model
-            # kwargs or invert= to price the market differently.
-            from ..factor.races import abilities_from_race
-            Vm = as_loadings(V, len(m))
-            Dm = np.broadcast_to(np.asarray(beta2, dtype=float),
-                                 (len(m),)).astype(float)
-            market_model = {"invert":
-                            lambda p: -abilities_from_race(p, V=Vm, D=Dm)}
+        if "invert" not in market_model:
+            # Default the market's pricing model to the outcome model:
+            # loadings V, idiosyncratic noise D = beta2 and the base.
+            # Explicit market_model kwargs override single entries; an
+            # explicit invert= replaces the model wholesale.
+            #
+            # The bandits integration caught the first seam (a named V
+            # never reached the inversion). Three more remained (#94):
+            # without V, beta2 was dropped, so prices made at
+            # beta2 = 4 were read as beta2 = 1 and the posterior means
+            # came back half size; `base` was never forwarded, so a
+            # gumbel filter read its prices as normal (0.164 off in the
+            # means, 0.249 in market log evidence); and ANY numerical
+            # kwarg such as points=1001 suppressed the V, D default.
+            defaults = {"D": np.broadcast_to(np.asarray(beta2, dtype=float),
+                                             (len(m),)).astype(float),
+                        "base": base}
+            if V is not None:
+                defaults["V"] = as_loadings(V, len(m))
+            market_model = {**defaults, **market_model}
         m, v, lz = update_market(m, v, p_market, tau2=tau2, **market_model)
         info["logZ_market"] = lz
     if order is not None:
@@ -150,6 +164,12 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
                                                nodes_log2=nodes_log2)
             info["logZ_outcome"] = lz
         else:
+            # the evidence of the order under the PRIOR predictive, as
+            # every other outcome branch reports it; this branch alone
+            # returned no logZ_outcome (#144)
+            from .tracker import _order_evidence
+            info["logZ_outcome"] = float(
+                _order_evidence(m, v, list(order), beta2, base))
             m, v = update_ranking_exact(m, v, order, beta2=beta2,
                                         base=base)
     elif winner is not None:

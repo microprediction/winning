@@ -3,23 +3,16 @@
 # P(a <= X <= b), X ~ N(mu, VV' + diag(D)): conditional on the r-dim
 # factor f, coordinates are independent, so the probability is
 #   E_f [ prod_j { Phi((b_j - mu_j - v_j'f)/s_j) - Phi((a_j - ...)/s_j) } ],
-# an r-dimensional smooth integral evaluated on Gauss-Hermite or Halton
+# an r-dimensional smooth integral evaluated on Gauss-Hermite or Sobol
 # nodes. No lattice, no simulation, milliseconds at n in the hundreds.
 #
-# The node rule mirrors the winning package: Gauss-Hermite order scaled
-# by the sharpness ratio max ||v_i||/sqrt(D_i), with a FAMILY escalation
-# to Halton past sharpness 3 (Gauss-Hermite converges slowly on sharp
-# integrands at any order; low-discrepancy sets do not).
-
-.halton_unit <- function(r, n) {
-  primes <- c(2, 3, 5, 7, 11, 13)[seq_len(r)]
-  vapply(primes, function(b) {
-    idx <- seq_len(n) + 20L
-    h <- numeric(n); f <- 1 / b; i <- idx
-    while (any(i > 0)) { h <- h + f * (i %% b); i <- i %/% b; f <- f / b }
-    h
-  }, numeric(n))
-}
+# The node rule mirrors the python reference (winning/fastmvn.py):
+# Gauss-Hermite order scaled by the sharpness ratio max ||v_i||/sqrt(D_i),
+# with a FAMILY escalation to scrambled Sobol (R/sobol.R) past sharpness
+# 3 or rank 2 (Gauss-Hermite converges slowly on sharp integrands at any
+# order; low-discrepancy sets do not). It was fixed-prime Halton: rank 7
+# indexed a missing seventh prime and died in the radical inverse, and a
+# rank-4 rectangle was 1.06% high at 8192 points (#143).
 
 .gh_cache <- new.env(parent = emptyenv())
 
@@ -54,9 +47,7 @@
   r <- ncol(V)
   sharp <- max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
   if (sharp > 3.0 || r > 2) {
-    n <- 2^13
-    F <- qnorm(pmin(pmax(.halton_unit(r, n), 1e-12), 1 - 1e-12))
-    list(F = matrix(F, ncol = r), W = rep(1 / n, n))
+    .sobol_normal(r, 2^13, seed = 0L)
   } else {
     # The order grows like sharpness SQUARED, not 8 x sharpness: a
     # cell's transition in factor space is 1/sharpness wide, and the
@@ -287,7 +278,7 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
   }, 0L)
   bl <- lower[det] - mean[det]
   bu <- upper[det] - mean[det]
-  u <- matrix(.halton_unit(r, nn), ncol = r)
+  u <- matrix(.sobol_unit(r, nn, seed = 0L), ncol = r)
   z <- matrix(0, nn, r)
   logw <- numeric(nn)
   for (j in seq_len(r)) {
@@ -353,7 +344,16 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                          sigma = NULL, V = NULL, D = NULL, ...) {
   if (is.null(V) || is.null(D)) {
     if (is.null(sigma)) stop("supply sigma, or V and D")
-    if (is.null(mean)) mean <- rep(0, nrow(as.matrix(sigma)))
+    # Normalise every per-coordinate argument ONCE, before dispatch: the
+    # dense fallback used to forward the raw `mean` to mvtnorm, whose
+    # checker recycles it (cbind(lower, upper, mean)), so mean = c(0, 1)
+    # at n = 8 priced rep(c(0, 1), 4) in silence -- 9.6e-4 where the
+    # zero-mean answer is 2.31e-2 -- while the structured path refused
+    # the same call (#437).
+    nn <- nrow(as.matrix(sigma))
+    mean <- if (is.null(mean)) rep(0, nn) else .as_len(mean, nn, "mean")
+    lower <- .as_len(lower, nn, "lower", finite = FALSE)
+    upper <- .as_len(upper, nn, "upper", finite = FALSE)
     fd <- factorize_covariance(sigma)
     if (is.null(fd)) {
       sigma <- as.matrix(sigma)
@@ -369,7 +369,7 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
         return(.univariate(lo[keep], up[keep], mu[keep],
                            sigma[keep, keep]))
       if (all(keep)) {
-        p <- mvtnorm::pmvnorm(lower = lower, upper = upper, mean = mean,
+        p <- mvtnorm::pmvnorm(lower = lo, upper = up, mean = mu,
                               sigma = sigma, ...)
       } else {
         p <- mvtnorm::pmvnorm(lower = lo[keep], upper = up[keep],
@@ -433,8 +433,7 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     }
     f0 <- .ascend(logint, rep(0, r))
     n_nodes <- 2^13
-    Fh <- qnorm(pmin(pmax(.halton_unit(r, n_nodes), 1e-12), 1 - 1e-12))
-    Fh <- matrix(Fh, ncol = r)
+    Fh <- .sobol_normal(r, n_nodes, seed = 1L)$F
     tau <- 1.5                              # proposal sd around the mode
     Fq <- sweep(Fh * tau, 2, f0, "+")
     logw <- -0.5 * rowSums(Fq^2) + 0.5 * rowSums(Fh^2) + r * log(tau)
