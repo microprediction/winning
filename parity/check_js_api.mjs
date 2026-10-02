@@ -1068,5 +1068,56 @@ accepts("the inverse takes a scalar D, matching python",
           "not finite");
 }
 
+// factor-core race batch: #263 weights, #110 targets, #89 structured
+// controls, #100 structured inverses in the field's units
+{
+  const mu = [0, 0.3, 1], V = [[0], [1], [-0.5]], F = [[-1], [1]];
+  const a = races.raceProbabilities(mu, { V, D: [1, 1, 1], F, W: [1e307, 1e307] });
+  const b = races.raceProbabilities(mu, { V, D: [1, 1, 1], F, W: [1e308, 1e308] });
+  holds("weights normalise without overflow (#263)",
+        Math.max(...a.map((x, i) => Math.abs(x - b[i]))) < 1e-12);
+  rejects(races.abilitiesFromRace, [[0.8, NaN], { returnInfo: true }],
+          "NaN target refused (#110)", "not a finite");
+  rejects(races.abilitiesFromRace, [[Infinity, 1], { returnInfo: true }],
+          "Infinite target refused (#110)", "not a finite");
+  const pr = races.abilitiesFromRace([0.9999999999999999, 1e-20], { D: [1, 1], returnInfo: true });
+  holds("pair shortcut uses the longshot tail (#110)",
+        pr.mu.every(Number.isFinite) && Math.abs(pr.mu[1] - pr.mu[0] - 13.0989269761827) < 1e-6,
+        `${pr.mu}`);
+  const muI = [-1.88, 3.24, -0.27, 0.063], DI = [0.0557, 1.70, 14.8, 3.60];
+  const d1 = races.raceProbabilities(muI, { D: DI, points: 65, window: "span" });
+  const d2 = races.raceProbabilities(muI, { structure: structures.Independent(DI), points: 65, window: "span" });
+  holds("structured window reaches the race (#89)",
+        Math.max(...d1.map((x, i) => Math.abs(x - d2[i]))) === 0);
+  const bl = structures.Blocks([0, 0, 1, 1], [0.3, 0.2, 0.4, 0.1], [1, 1, 1, 1]);
+  rejects(races.raceProbabilities, [[-0.4, -0.1, 0.2, 0.5], { structure: bl, base: "logistic" }],
+          "structured hierarchical base refused (#89)", "base");
+  rejects(races.abilitiesFromRace, [[0.4, 0.3, 0.2, 0.1], { structure: bl, base: "logistic" }],
+          "structured hierarchical inverse base refused (#89)", "base");
+  rejects(races.raceProbabilities, [[-0.4, -0.1, 0.2, 0.5], { structure: bl, D: [1, 1, 1, 1] }],
+          "structure plus D refused (#89)", "structure");
+  const tr = structures.Tree([0, 0, 1, 1], [4, 3.2, 3.6, 2.8], [0.1, 0.12, 0.08, 0.15],
+                             [2, 2, -1], [0, 0, 0.9]);
+  const pt = races.raceProbabilities([-1.5, -0.2, 0.3, 1.4], { structure: tr, points: 257, qa: 9 });
+  const it = races.abilitiesFromRace(pt, { structure: tr, points: 257, qa: 9, nIter: 3,
+                                           returnInfo: true });
+  holds("structured inverse honours nIter and reports convergence (#89)",
+        it.iterations <= 3 && it.converged === false);
+  const target = [0.6, 0.25, 0.1, 0.05], cl = [0, 0, 1, 1];
+  const L0 = [0.9, 0.6, 0.8, 0.3], D0 = [0.19, 0.64, 0.36, 0.91];
+  let worst = 0;
+  for (const c of [1e-6, 1e-3, 1e3, 1e6]) {
+    for (const s of [structures.Blocks(cl, L0.map(x => c * x), D0.map(x => c * c * x)),
+                     structures.Nested(cl, L0.map(x => c * x), D0.map(x => c * c * x),
+                                       [[0.2 * c], [-0.1 * c], [0.3 * c], [-0.2 * c]], 0.7)]) {
+      const m = races.abilitiesFromRace(target, { structure: s });
+      const back = races.raceProbabilities(m, { structure: s });
+      worst = Math.max(worst, ...back.map((x, i) => Math.abs(x - target[i])));
+    }
+  }
+  holds("structured inverses are unit-equivariant (#100)", worst < 1e-8,
+        `worst share error ${worst.toExponential(2)}`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

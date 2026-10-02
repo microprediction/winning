@@ -245,18 +245,22 @@ export function asWeights(W, nNodes, where = "W") {
     throw new Error(
       `${where} must have one weight per factor node; got ${W.length} ` +
       `for ${nNodes} nodes`);
-  let total = 0;
+  let top = 0;
   for (let q = 0; q < W.length; q++) {
     const v = Number(W[q]);
     if (!Number.isFinite(v))
       throw new Error(`${where}[${q}] = ${W[q]} is not a finite weight`);
     if (v < 0)
       throw new Error(`${where}[${q}] = ${v} is a negative weight`);
-    total += v;
+    if (v > top) top = v;
   }
+  // divide by the largest entry BEFORE summing: [1e308, 1e308] summed to
+  // Infinity and every weight became 0, pricing NaN (#263)
+  let total = 0;
+  for (let q = 0; q < W.length; q++) total += top > 0 ? Number(W[q]) / top : 0;
   if (!(total > 0))
     throw new Error(`${where} must have a positive total; got ${total}`);
-  return Array.from(W, v => Number(v) / total);
+  return Array.from(W, v => Number(v) / top / total);
 }
 
 /* ---- options-object guards ---------------------------------------- *

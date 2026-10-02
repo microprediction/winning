@@ -545,6 +545,18 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
   return Jf.map(row => row.map(v => -v));
 }
 
+/* sqrt(median(D_i + |loading_i|^2)): the block race's contrast scale */
+export function blockScale(loading, D, n) {
+  const tot = [];
+  for (let i = 0; i < n; i++) {
+    const L = Array.isArray(loading[i]) ? loading[i] : [Number(loading[i])];
+    tot.push(Number(D[i]) + L.reduce((a, b) => a + b * b, 0));
+  }
+  tot.sort((a, b) => a - b);
+  const h = Math.floor(n / 2);
+  return Math.sqrt(n % 2 ? tot[h] : 0.5 * (tot[h - 1] + tot[h]));
+}
+
 export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) {
   checkOpts(opts, ABILITIES_FROM_BLOCK_RACE_OPTS, "abilitiesFromBlockRace", OPT_HINTS);
   const { points = 257, qa = 9, tol = 1e-10, maxIter = 25 } = opts;
@@ -559,12 +571,16 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
   const lt = pT.map(Math.log);
   const forward = m => blockRaceProbabilities(m, cluster, loading, D, { points, qa });
   const lm = mean(lt);
-  let mu = lt.map(v => -(v - lm));
+  // the field's own scale: the start, the fixed-point step and the Newton
+  // trust radius were absolute numbers, so loading -> c loading,
+  // D -> c^2 D missed by 0.40 of a share at c = 1e-3 (#100, as python)
+  const scale = blockScale(loading, D, n);
+  let mu = lt.map(v => -(v - lm) * scale);
   let eta = 1.0;
   let lp = forward(mu).map(v => Math.log(Math.max(v, TINY)));
   let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
   for (let it = 0; it < 200 && err >= 0.2; it++) {
-    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]));
+    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
     const mm = mean(muN);
     muN = muN.map(v => v - mm);
     const lpN = forward(muN).map(v => Math.log(Math.max(v, TINY)));
@@ -580,10 +596,11 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
     const cur = Math.max(...r.map(Math.abs));
     if (cur < tol) return { mu: mu.map(v => v - mean(mu)), residual: cur, iterations: it };
     const J = blockRaceJacobian(mu, cluster, loading, D, { points, qa });
-    const A = J.map((row, i) => row.map(v => v / pv[i] + 1 / n));
+    const A = J.map((row, i) => row.map(v => v / pv[i] * scale + 1 / n));
     let step = solve(A, r.map(v => -v));
     const nn = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
     if (nn > 5) step = step.map(v => v * 5 / nn);
+    step = step.map(v => v * scale);
     for (let k = 0; k < 8; k++) {
       let muN = mu.map((m, i) => m + step[i]);
       const mm = mean(muN);

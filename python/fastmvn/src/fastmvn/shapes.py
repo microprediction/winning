@@ -33,7 +33,7 @@ def as_loadings(V, n):
     ``()`` scalar       one common loading for every contestant
     ``(n,)``            rank-one loadings, one per contestant
     ``(n, rank)``       the contract shape, returned unchanged
-    ``(rank, n)``       transposed to the contract shape
+    ``(rank, n)``       transposed to the contract shape, rank != n only
     ==================  ==================================================
 
     Anything else raises ``ValueError`` naming the expected shape, so no
@@ -41,7 +41,11 @@ def as_loadings(V, n):
     kept: an empty V is the independent race, as the grammar documents.
 
     The ``(rank, n)`` transpose is a genuine ambiguity only when
-    ``rank == n``, where the contract wins: n rows is n contestants.
+    ``rank == n``, where the contract wins: n rows is n contestants. A
+    square V is therefore never transposed, and passing V.T for a square
+    V prices V'V rather than VV' -- a different race (#71). Full-rank
+    square loadings are what fit_covariance can return, so write them in
+    the contract orientation.
     """
     A = np.asarray(V, dtype=float)
     # Finiteness, as as_idio and as_weights already check it. This was
@@ -182,6 +186,13 @@ def as_weights(W, name="W"):
             f"{name}[{int(neg[0])}] = {float(W[neg[0]])!r} is negative. "
             "Quadrature weights here are relative and must be "
             "non-negative; a signed rule can return values outside [0, 1].")
+    # Divide by the largest entry BEFORE summing. W.sum() of finite
+    # entries can overflow -- [1e308, 1e308] summed to inf and W / inf
+    # returned [0, 0], so a positive common rescaling of a valid rule
+    # (the invariance this contract exists for) priced NaN (#263).
+    top = float(W.max()) if W.size else 0.0
+    if top > 0.0:
+        W = W / top
     tot = float(W.sum())
     if tot <= 0.0:
         raise ValueError(
@@ -189,3 +200,76 @@ def as_weights(W, name="W"):
             "relative, so any positive multiple of a valid rule is the "
             "same factor law, but an all-zero rule is not one.")
     return W / tot
+
+
+def as_factor_law(F, W, name="W"):
+    """A quadrature rule (F, W) for the factor law, with null nodes removed.
+
+    W goes through as_weights (finite, non-negative, positive total,
+    relative). F must carry one row per weight. Nodes of weight exactly
+    zero are then DROPPED: they are mathematical no-ops, but every
+    lattice sizes its window from all the nodes it is handed, so a
+    zero-mass atom at f = +-100 widened the window until each positive-
+    mass density spike fell between lattice points and the core's
+    recovery path priced a different law (#416: 0.46 on one share).
+    """
+    W = as_weights(W, name)
+    F = np.asarray(F, dtype=float)
+    if F.ndim == 1:
+        F = F.reshape(len(W), -1) if len(W) else F.reshape(0, 0)
+    if F.ndim != 2 or F.shape[0] != len(W):
+        raise ValueError(
+            f"F must carry one row per quadrature weight: {name} has "
+            f"{len(W)} entries and F has shape {F.shape}")
+    if not np.isfinite(F).all():
+        raise ValueError("F has a non-finite node")
+    keep = W > 0.0
+    if not keep.all():
+        F, W = F[keep], W[keep]
+        W = W / W.sum()
+    return np.ascontiguousarray(F), W
+
+
+def as_points(points, name="points", minimum=2):
+    """A lattice size: a whole number of at least two points.
+
+    A one-point rectangle rule has no spacing, and every lattice in the
+    package divides by ``points - 1``. Before this check 0 and 1 met
+    five different fates across the ports (#444): python's factor core
+    divided by zero at 0 and at 1 silently rerouted to a 257-point
+    fallback, the general race raised IndexError, the standalone JS read
+    an explicit 0 as "use the default" and returned all-NaN at 1.
+    """
+    v = np.asarray(points)
+    if (v.ndim != 0 or v.dtype == bool or not np.issubdtype(v.dtype, np.number)
+            or not np.isfinite(v) or v != np.floor(v)):
+        raise ValueError(
+            f"{name} must be a whole number of lattice points; got "
+            f"{points!r}")
+    v = int(v)
+    if v < minimum:
+        raise ValueError(
+            f"{name} must be at least {minimum}: a lattice of {v} point"
+            f"{'' if v == 1 else 's'} has no spacing to integrate on")
+    return v
+
+
+def as_target(p, name="target"):
+    """A probability target: a nonempty finite 1-D vector, positive mass.
+
+    Signs and zeros are left to the caller's own contract (some verbs
+    floor, some refuse); what is decided here is the part every inverse
+    shares. A NaN passed ``p <= 0`` -- every comparison with NaN is
+    false -- and the two-runner closed form then returned NaN abilities
+    certified ``converged=True`` with residual 0 (#110).
+    """
+    A = np.asarray(p, dtype=float)
+    if A.ndim != 1 or A.size == 0:
+        raise ValueError(f"{name} must be a nonempty one-dimensional "
+                         f"vector of probabilities; got shape {A.shape}")
+    bad = np.flatnonzero(~np.isfinite(A))
+    if bad.size:
+        raise ValueError(
+            f"{name} has a non-finite entry ({name}[{int(bad[0])}] = "
+            f"{float(A[bad[0]])!r}): a probability target must be finite")
+    return A
