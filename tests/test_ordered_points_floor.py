@@ -1,28 +1,25 @@
-"""ordered_probabilities on a negative-correlation block: the points floor.
+"""ordered_probabilities on a negative-correlation block: resolution.
 
 Reported in #66. A regular-simplex block of k front-runners (Cov = -rho,
-rank k-1) priced at k=3 prefixes succeeds at points=501 and raises
-FloatingPointError below it, at every block size k = 2..5.
+rank k-1) priced at k=3 prefixes succeeded at points=501 and raised
+FloatingPointError below it, at every block size k = 2..5: the
+trifecta's inner integral is a cumulative trapezoid, O(dx^2), and the
+win race's 8-points-per-sd floor left 2-5e-3 of mass against a 1e-3
+tolerance (the defect fell 4x per doubling).
 
-Two facts pinned here, both measured on main at 2026-09-21:
-
-1. A request below `need` is silently promoted to `need`, so the result
-   is IDENTICAL at 65 and 257 points for k >= 4 -- lowering `points`
-   there changes nothing. need = ceil(span / (sd_min / 8)) + 1 was
-   calibrated for the win race, whose lattice quadrature is spectral;
-   the 3-prefix kernel's inner integral is a cumsum, first-order, and
-   8 points per sd leaves 2-5e-3 of mass on the table against a 1e-3
-   tolerance.
-
-2. A coarse request therefore raises. When the kernel's resolution rule
-   is fixed, test_coarse_request_raises_today FAILS -- that is the
-   signal to delete it and lower the documented floor.
+The kernel now Richardson-extrapolates that term away. This file used to
+pin the old floor (test_coarse_request_raises_today, written to fail
+once the resolution rule was fixed, with the instruction to delete it,
+and test_requests_below_need_are_promoted_to_need, which asserted the
+coarse request still raised). They are replaced by what the issue's
+review asked for instead: convergence against a fine reference, and
+invariance under rotations of the loadings that leave the covariance
+unchanged -- not exact `need` values.
 """
 import numpy as np
 import pytest
 
 import winning.factor as wf
-from winning.factor.races import _setup
 
 N, RHO = 9, 0.15
 MU = np.linspace(-0.5, 0.5, N)
@@ -41,15 +38,6 @@ def negative_block(k):
     return V, D
 
 
-def need_for(V, D):
-    """The internal floor ordered_probabilities promotes `points` to."""
-    mu, V, D, F, W, fn, left, right = _setup(MU, V, D, None, None, "normal")
-    sd = np.sqrt(D)
-    M_all = mu[None, :] + F @ V.T
-    span = float(M_all.max() - M_all.min()) + (left + right) * sd.max()
-    return int(np.ceil(span / (float(sd.min()) / 8.0))) + 1
-
-
 @pytest.mark.parametrize("k", [2, 3, 4, 5])
 def test_negative_block_prices_at_501(k):
     V, D = negative_block(k)
@@ -61,27 +49,48 @@ def test_negative_block_prices_at_501(k):
         assert T[i, i, :].max() == 0 and T[i, :, i].max() == 0 and T[:, i, i].max() == 0
 
 
-@pytest.mark.parametrize("k", [4, 5])
-def test_requests_below_need_are_promoted_to_need(k):
-    """Both requests run at `need`, so the results are bit-identical and
-    the FloatingPointError message reports the same defect for both."""
-    V, D = negative_block(k)
-    need = need_for(V, D)
-    assert need > 257, f"premise: need={need} must exceed both requests"
-    msgs = []
-    for pts in (65, 257):
-        with pytest.raises(FloatingPointError) as e:
-            wf.ordered_probabilities(MU, 3, V=V, D=D, points=pts)
-        msgs.append(str(e.value))
-    assert msgs[0] == msgs[1], "65 and 257 points gave different defects, so " \
-                               "the request is no longer promoted to need"
+def _rotate(V, seed):
+    """V Q for a random orthogonal Q: the same covariance, a different
+    loading basis (the eigensolver's arbitrary choice)."""
+    r = V.shape[1]
+    Q, _ = np.linalg.qr(np.random.default_rng(seed).normal(size=(r, r)))
+    return V @ Q
 
 
 @pytest.mark.parametrize("k", [2, 3, 4, 5])
-def test_coarse_request_raises_today(k):
-    """Pins the documented floor. If this fails, the kernel resolves the
-    3-prefix mass at fewer points than it used to: delete this test and
-    lower the floor in the docs and in #66."""
+def test_coarse_requests_price_and_converge(k):
+    """points=65 and 129 used to raise "total mass ... defect 2-5e-3".
+    They now price, and agree with a 2001-point reference cell by cell."""
     V, D = negative_block(k)
-    with pytest.raises(FloatingPointError, match=r"total mass"):
-        wf.ordered_probabilities(MU, 3, V=V, D=D, points=129)
+    ref = wf.ordered_probabilities(MU, 3, V=V, D=D, points=2001)
+    for pts in (65, 129):
+        T = wf.ordered_probabilities(MU, 3, V=V, D=D, points=pts)
+        assert np.all(T >= 0)
+        assert np.max(np.abs(T - ref)) < 1e-6, (k, pts)
+
+
+@pytest.mark.parametrize("k", [3, 4, 5])
+def test_loading_rotation_invariance(k):
+    """The internal `need` depends on the loading basis (it varied
+    215-321 across rotations); the answer must not."""
+    V, D = negative_block(k)
+    base = wf.ordered_probabilities(MU, 3, V=V, D=D, points=129)
+    for seed in (1, 2, 3):
+        T = wf.ordered_probabilities(MU, 3, V=_rotate(V, seed), D=D,
+                                     points=129)
+        assert np.max(np.abs(T - base)) < 1e-5, (k, seed)
+
+
+def test_extrapolated_kernel_matches_pure_path():
+    """Richardson sits above the backend choice: compiled and NumPy
+    kernels give the same extrapolated answer."""
+    import winning
+    V, D = negative_block(3)
+    try:
+        winning.use_rust(True)
+        a = wf.ordered_probabilities(MU, 3, V=V, D=D, points=129)
+        winning.use_rust(False)
+        b = wf.ordered_probabilities(MU, 3, V=V, D=D, points=129)
+    finally:
+        winning.use_rust(True)
+    assert np.max(np.abs(a - b)) < 1e-10

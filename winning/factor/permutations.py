@@ -135,6 +135,27 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
                     out[i, j] += W[c] * contrib
         return out, float(out.sum())
 
+    if k == 3 and tau <= 0:
+        # The trifecta's inner integral int_{y<z} f_j F_i dy is a
+        # cumulative trapezoid, O(dx^2), while the outer lattice sums are
+        # spectrally accurate on these smooth integrands -- so the 8
+        # points per sd that resolve the win race left 2-5e-3 of 3-prefix
+        # mass on the table and every coarse request raised (#66; the
+        # defect fell 4x per doubling, measured in the issue). Richardson
+        # on the same window, (4 A(h) - A(2h)) / 3, removes the dx^2 term
+        # for half a pass more: on the #66 negative-correlation blocks at
+        # 129 points the defect drops from 1.3e-2 to 1.4e-5 and the worst
+        # cell is 2e-7 from an 8001-point reference, for every block size
+        # and every rotation of the loadings.
+        _plain = _accumulate
+
+        def _accumulate(pts):
+            pts = pts if pts % 2 else pts + 1       # A(2h) on the same nodes
+            fine, _ = _plain(pts)
+            coarse, _ = _plain((pts + 1) // 2)
+            out = np.maximum((4.0 * fine - coarse) / 3.0, 0.0)
+            return out, float(out.sum())
+
     out, total = _accumulate(pts)
 
     # The scalar mass identity CANNOT police a capped lattice. Cell
