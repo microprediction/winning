@@ -768,7 +768,11 @@ def _validated_topk_target(q, k, n, target_floor):
     renormalization; and a membership at or above one AFTER that
     renormalization raises, because certainty of placing has no finite
     inverse either."""
-    target = np.asarray(q, dtype=float)
+    from ..shapes import as_target
+    # finite and one-dimensional first: NaN passed `target <= 0` and died
+    # later in the lattice sizing as "cannot convert float NaN to integer"
+    # (#110)
+    target = as_target(q)
     if len(target) != n:
         raise ValueError(f"target has {len(target)} entries for {n} runners")
     if target_floor is not None:
@@ -1097,8 +1101,9 @@ def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
     solves. Each marginal is renormalized to unit mass first (the
     market overround treatment), so the top-2 target sums to its two
     slots by construction. ridge= and mu0= pass through."""
-    p1 = np.asarray(p_win, dtype=float)
-    p2 = np.asarray(p_second, dtype=float)
+    from ..shapes import as_target
+    p1 = as_target(p_win, "p_win")
+    p2 = as_target(p_second, "p_second")
     if len(p1) != len(p2):
         raise ValueError("p_win and p_second must have equal length")
     if np.any(p1 <= 0) or np.any(p2 <= 0):

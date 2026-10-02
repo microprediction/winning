@@ -654,3 +654,16 @@ def test_block_rank_three_rotation_shrinks_with_qa_392():
                                      qa=qa)
         gap[qa] = np.abs(a - b).max()
     assert gap[18] < 2e-5 and gap[18] < gap[9] / 10
+
+
+@pytest.mark.parametrize("bad", [[0.5, np.nan, 0.5], [0.5, np.inf, 0.5]])
+def test_topk_inverses_refuse_non_finite_targets_110(bad):
+    from winning.factor.topk import (loc_scale_from_topk_pair,
+                                     loc_scale_from_win_and_second)
+    with pytest.raises(ValueError, match="finite"):
+        abilities_from_topk(bad, 1, return_info=True)
+    with pytest.raises(ValueError, match="finite"):
+        loc_scale_from_topk_pair(bad, 1, [0.8, 0.6, 0.6], 2,
+                                 return_info=True)
+    with pytest.raises(ValueError, match="finite"):
+        loc_scale_from_win_and_second(bad, [0.3, 0.3, 0.4])
