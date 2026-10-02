@@ -185,7 +185,9 @@
 #' @param formula choice ~ alternative-specific covariates,
 #'   e.g. mode ~ price + catch (intercepts added per non-reference
 #'   alternative automatically).
-#' @param data a dfidx object as used by mlogit (long format).
+#' @param data long format, one row per (chooser, alternative), with an
+#'   idx column or attribute (chooser, alternative); a plain data frame
+#'   works, and so does a dfidx object (dfidx is not a dependency).
 #' @param r number of factor columns (default 2 covers the full
 #'   identified covariance at J = 4).
 #' @param Qf,Qz Gauss-Hermite orders for factor and own-noise nodes.
