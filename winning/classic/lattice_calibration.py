@@ -112,8 +112,23 @@ def normalize(p):
 
 
 def prices_from_dividends(dividends, nan_value=NAN_DIVIDEND):
-    """ Risk neutral probabilities using naive renormalization """
-    return normalize([1. / convert_nan_to(x, nan_value=nan_value) for x in dividends])
+    """ Risk neutral probabilities using naive renormalization
+
+    Only a MISSING quote (None or NaN) becomes ``nan_value``. A
+    non-positive dividend, -inf with it, is worth nothing and prices at 0;
+    +inf prices at 1/inf = 0. The total is normalised only when it is
+    positive, so an all-infinite book is all zeros. This took 1/x
+    unconditionally: a zero dividend raised ZeroDivisionError, a negative
+    one became a NEGATIVE probability that dividend_implied_ability then
+    calibrated to, and an all-infinite book divided 0 by 0 (#423). The
+    rule is StatePricer.prices_from_dividends' and the R/browser ports'.
+    """
+    inv = []
+    for x in dividends:
+        v = nan_value if (x is None or (isinstance(x, (float, np.floating)) and np.isnan(x))) else float(x)
+        inv.append(0.0 if v <= 0 else 1.0 / v)
+    S = sum(inv)
+    return [pr / S for pr in inv] if S > 0 else inv
 
 
 def dividends_from_prices(prices, multiplicity=1.0):
