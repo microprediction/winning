@@ -494,10 +494,15 @@ def _discover():
     return _discover_by_param("V")
 
 
-# winning itself needs only numpy and scipy. Anything else a module
-# imports is an optional backend -- jax, sklearn, trueskill, fastrace,
-# pandas, matplotlib -- and a minimal install legitimately lacks it.
+# winning itself needs only numpy and scipy. The optional backends a
+# minimal install legitimately lacks are NAMED: treating every missing
+# third-party root as optional let a typo (`numpyy`) or an undeclared
+# required dependency silently drop a module, and all its public V verbs,
+# from the sweep (#80). test_optional_backends_list_is_exactly_what_
+# winning_imports keeps this list true by reading the imports themselves.
 HARD_DEPS = ("numpy", "scipy")
+OPTIONAL_BACKENDS = frozenset({"fastrace", "jax", "matplotlib", "mpl_toolkits",
+                               "pandas", "trueskill"})
 # match the MESSAGE, not the class name: ModuleNotFoundError subclasses
 # ImportError and either can carry a missing optional backend
 _MISSING = re.compile(r"No module named '?([A-Za-z_][\w.]*)'?")
@@ -521,12 +526,42 @@ def _split_import_failures(unimportable):
             continue
         m = _MISSING.search(err)
         missing = m.group(1).split(".")[0] if m else None
-        if (missing and missing not in HARD_DEPS
-                and not missing.startswith("winning")):
+        if missing in OPTIONAL_BACKENDS:
             optional[mod] = missing
         else:
             real[mod] = err
     return optional, real
+
+
+def test_an_unknown_missing_module_is_a_real_failure():
+    """#80: a misspelt or undeclared dependency must fail, not warn."""
+    for missing in ("truesskill", "numpyy", "some_new_required_dependency"):
+        optional, real = _split_import_failures(
+            {"winning.some_public_module":
+             f"ModuleNotFoundError: No module named '{missing}'"})
+        assert real and not optional, missing
+    optional, real = _split_import_failures(
+        {"winning.bench.season_ranked": "No module named 'trueskill'"})
+    assert optional == {"winning.bench.season_ranked": "trueskill"} and not real
+
+
+def test_optional_backends_list_is_exactly_what_winning_imports():
+    """The allowlist is the set of third-party roots winning/ imports,
+    minus the hard deps -- read from the source, so it cannot drift."""
+    import ast
+    import pathlib
+    import sys as _sys
+    roots = set()
+    for f in pathlib.Path(winning.__file__).parent.rglob("*.py"):
+        for node in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                roots |= {a.name.split(".")[0] for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                roots.add(node.module.split(".")[0])
+    third = roots - set(_sys.stdlib_module_names) - set(HARD_DEPS) - {"winning", "__future__"}
+    assert third == OPTIONAL_BACKENDS, (
+        f"imported but not listed: {sorted(third - OPTIONAL_BACKENDS)}; "
+        f"listed but never imported: {sorted(OPTIONAL_BACKENDS - third)}")
 
 
 def test_every_public_V_is_covered():
@@ -717,6 +752,25 @@ def test_the_variance_and_the_loadings_cannot_be_exchanged(name):
     call(_V_BELIEF, _LOAD)                       # correct order: fine
     with pytest.raises(ValueError, match=r"cannot be negative"):
         call(_LOAD, _V_BELIEF)                   # exchanged: refused
+
+
+_LOAD_POSITIVE = np.array([0.2, 0.5, 0.1, 0.4, 0.3])   # legal: non-constant, all > 0
+
+
+@pytest.mark.parametrize("name", sorted(SWAPPABLE))
+def test_an_all_positive_loading_swap_is_NOT_caught(name):
+    """The limit of the guard above, pinned so its tests cannot imply
+    complete protection (#85). Loadings are gauge-fixed INSIDE the model,
+    so an all-positive non-constant vector is a legal V, and it is also a
+    legal variance: the exchange answers a different question in silence.
+    If this starts raising, the API has grown a structural discriminator
+    (keyword-only arguments or typed wrappers) and this test should be
+    inverted, not deleted."""
+    call = SWAPPABLE[name]
+    right = _flat(call(_V_BELIEF, _LOAD_POSITIVE))
+    swapped = _flat(call(_LOAD_POSITIVE, _V_BELIEF))
+    assert right.shape == swapped.shape
+    assert np.max(np.abs(right - swapped)) > 1e-3
 
 
 # every public verb taking a belief variance, and the value it must refuse
@@ -1069,3 +1123,161 @@ def test_an_individual_zero_weight_is_allowed():
     a = np.asarray(winning.factor.race_probabilities(
         W=np.array([0.0, 1.0]), **kw), float)
     assert np.isfinite(a).all() and abs(a.sum() - 1) < 1e-12
+
+
+# ---------------------------------------------------------------- D (#84)
+# The same contract for the idiosyncratic variances: `as_idio(D, n)` is
+# the one door, a scalar is everyone's variance, and a wrong length or a
+# negative/non-finite entry is the central ValueError. Five public verbs
+# normalised V and then indexed raw `np.asarray(D)`, so the documented
+# `D=1.0` died in IndexError/TypeError -- and on the compiled top-k path
+# in a pyo3 PanicException. Every public `D` is discovered, as `V` is.
+# The V drivers above read the module-level D, so they are re-run here
+# with it swapped; verbs that take `loading` rather than V get D drivers.
+D_DRIVERS = {}
+
+
+def d_driver(*names):
+    def deco(fn):
+        for nm in names:
+            D_DRIVERS[nm] = fn
+        return fn
+    return deco
+
+
+_DCL = np.array([0, 0, 1, 1, 2])
+_DLOAD = np.array([0.5, 0.3, 0.6, 0.2, 0.4])
+
+
+@d_driver("winning.factor.blocks.block_race_probabilities")
+def _dd_block(Dx):
+    from winning.factor.blocks import block_race_probabilities
+    return block_race_probabilities(MU, _DCL, _DLOAD, Dx, points=129, qa=5)
+
+
+@d_driver("winning.factor.blocks.block_race_jacobian")
+def _dd_block_jac(Dx):
+    from winning.factor.blocks import block_race_jacobian
+    return block_race_jacobian(MU, _DCL, _DLOAD, Dx, points=129, qa=5)
+
+
+@d_driver("winning.factor.blocks.abilities_from_block_race")
+def _dd_block_inv(Dx):
+    from winning.factor.blocks import abilities_from_block_race
+    return abilities_from_block_race(P, _DCL, _DLOAD, Dx, points=129, qa=5)
+
+
+@d_driver("winning.factor.blocks.nested_race_probabilities")
+def _dd_nested(Dx):
+    from winning.factor.blocks import nested_race_probabilities
+    return nested_race_probabilities(MU, _DCL, _DLOAD, Dx, coupling=V1 * 0.5,
+                                     points=129, qa=5, qf=5)
+
+
+@d_driver("winning.factor.blocks.nested_race_jacobian")
+def _dd_nested_jac(Dx):
+    from winning.factor.blocks import nested_race_jacobian
+    return nested_race_jacobian(MU, _DCL, _DLOAD, Dx, coupling=V1 * 0.5,
+                                points=129, qa=5, qf=5)
+
+
+
+def _tree():
+    # three leaf clusters under one root (index 3): parent of leaves 0,1,2
+    # is the root, the root's parent is -1
+    return np.array([3, 3, 3, -1]), np.array([0.0, 0.0, 0.0, 0.4])
+
+
+@d_driver("winning.factor.blocks.tree_race_probabilities")
+def _dd_tree(Dx):
+    from winning.factor.blocks import tree_race_probabilities
+    parent, strength = _tree()
+    return tree_race_probabilities(MU, _DCL, _DLOAD, Dx, parent, strength,
+                                   points=129, qa=5)
+
+
+@d_driver("winning.factor.blocks.tree_race_jacobian")
+def _dd_tree_jac(Dx):
+    from winning.factor.blocks import tree_race_jacobian
+    parent, strength = _tree()
+    return tree_race_jacobian(MU, _DCL, _DLOAD, Dx, parent, strength,
+                              points=129, qa=5)
+
+
+@d_driver("winning.factor.topk.top_k_jacobian")
+def _dd_topk_jac(Dx):
+    from winning.factor.topk import top_k_jacobian
+    return top_k_jacobian(MU, 2, D=Dx, points=129)
+
+
+@d_driver("winning.factor.topk.top_k_jacobian_row")
+def _dd_topk_jac_row(Dx):
+    from winning.factor.topk import top_k_jacobian_row
+    return top_k_jacobian_row(MU, 1, 2, D=Dx, points=129)
+
+
+@d_driver("winning.factor.topk.top_k_jacobian_row_sigma")
+def _dd_topk_jac_row_sigma(Dx):
+    from winning.factor.topk import top_k_jacobian_row_sigma
+    return top_k_jacobian_row_sigma(MU, 1, 2, D=Dx, points=129)
+
+
+@d_driver("winning.factor.topk.abilities_from_rank_marginal")
+def _dd_rank_marginal(Dx):
+    from winning.factor.topk import abilities_from_rank_marginal
+    return abilities_from_rank_marginal(P, 1, D=Dx, points=129, n_iter=20)
+
+
+D_EXEMPT = {
+    "winning.shapes.as_idio": "is the normaliser; tested directly",
+}
+
+
+def _d_call(name, monkeypatch):
+    """A callable Dx -> result for verb `name`."""
+    if name in D_DRIVERS:
+        return D_DRIVERS[name], N
+    fn, _, n = _driver(name)
+    g = globals()
+
+    def call(Dx):
+        monkeypatch.setitem(g, "D", Dx)
+        return fn(V1 if n == N else _rank1(n))
+    return call, n
+
+
+def _d_names():
+    found, _ = _discover_by_param("D")
+    return sorted(set(found) - set(D_EXEMPT))
+
+
+def test_every_public_D_is_covered():
+    found, unimportable = _discover_by_param("D")
+    _, real = _split_import_failures(unimportable)
+    assert not real, real
+    missing = sorted(set(found) - set(DRIVERS) - set(D_DRIVERS) - set(D_EXEMPT))
+    assert not missing, ("public functions taking D that no V driver, D "
+                         "driver or exemption covers:\n  " + "\n  ".join(missing))
+
+
+@pytest.mark.parametrize("name", _d_names())
+def test_scalar_D_is_everyones_variance(name, monkeypatch):
+    call, n = _d_call(name, monkeypatch)
+    try:
+        want = _flat(call(np.full(n, 0.9)))
+    except NotImplementedError:
+        pytest.skip(f"{name} refuses this fixture")
+    got = _flat(call(0.9))
+    np.testing.assert_allclose(got, want, rtol=1e-12, atol=1e-14)
+
+
+@pytest.mark.parametrize("name", _d_names())
+@pytest.mark.parametrize("bad", ["short", "negative", "nan"])
+def test_malformed_D_is_the_central_ValueError(name, bad, monkeypatch):
+    call, n = _d_call(name, monkeypatch)
+    Dx = {"short": np.ones(n - 1), "negative": np.r_[-0.5, np.ones(n - 1)],
+          "nan": np.r_[np.nan, np.ones(n - 1)]}[bad]
+    # verbs with no mu (fastmvn, sharpness_bound) take n from D, so a short
+    # D surfaces as the V/D length mismatch -- the same central error
+    with pytest.raises(ValueError, match=r"\bD\b|one row per contestant"):
+        call(Dx)
