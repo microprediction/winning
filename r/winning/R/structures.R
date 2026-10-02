@@ -171,7 +171,8 @@ tree_from_linkage <- function(Z) {
   # the negative increment returns a covariance that is not the
   # cophenetic one promised (#133)
   bad <- numeric(0); bad_t <- integer(0)
-  for (t in (n + 1L):nT) {
+  # seq_len, not (n + 1L):nT -- at one leaf that is 2:1 = c(2, 1) (#382)
+  for (t in n + seq_len(n - 1L)) {
     pa <- parent[t]
     lam2 <- rho[t] - if (pa > 0) rho[pa] else 0
     if (lam2 < -1e-9) { bad <- c(bad, lam2); bad_t <- c(bad_t, t) }
@@ -189,7 +190,13 @@ tree_from_linkage <- function(Z) {
       "parent/strength."), bad_t[w] - 1L, -bad[w], length(bad)),
       call. = FALSE)
   }
-  D <- pmax(1 - rho[parent[1:n]], 1e-10)
+  # a leaf whose parent is the root (0) has parent correlation zero. R's
+  # rho[0] is numeric(0), not 0, so the one-leaf tree from an empty
+  # linkage came back with D = numeric(0) and could not be priced (#382)
+  pa_leaf <- parent[seq_len(n)]
+  rho_leaf <- numeric(n)
+  rho_leaf[pa_leaf > 0] <- rho[pa_leaf[pa_leaf > 0]]
+  D <- pmax(1 - rho_leaf, 1e-10)
   Tree(cluster = seq_len(n), loading = numeric(n), D = D,
        parent = parent, strength = lam)
 }

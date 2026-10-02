@@ -65,7 +65,9 @@ _EULER = 0.5772156649015329
 
 
 def _normal(z):
-    S = np.maximum(1.0 - ndtr(z), 1e-300)
+    # the upper tail directly: 1 - ndtr(z) cancels to exactly 0 past
+    # about 8.3 sd, and a 20-sd longshot came out ~95x too unlikely (#96)
+    S = np.maximum(ndtr(-z), 1e-300)
     f = np.exp(-0.5 * z**2) / np.sqrt(2.0 * np.pi)
     return S, f, -z * f
 
@@ -509,8 +511,9 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     what it claims to be at the delta it names.
     """
     # the normal base needs only its survival here; calling _normal would
-    # also build the density and its slope, discarded, ~160 times (#112)
-    S_of = (lambda z: np.maximum(1.0 - _ndtr_local(z), 1e-300)) \
+    # also build the density and its slope, discarded, ~160 times (#112).
+    # The upper tail directly, not 1 - ndtr(z), which cancels past ~8 sd (#96)
+    S_of = (lambda z: np.maximum(_ndtr_local(-z), 1e-300)) \
         if fn is None or fn is _normal \
         else (lambda z: np.maximum(fn(z)[0], 1e-300))
     mu_lo = M_all.min(axis=0)
@@ -1940,7 +1943,7 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
         u = m1 + sd * np.asarray(z, dtype=float)      # de-standardize
         S0, f0, fp0 = fn0(u)
         zl = (u - off) / w
-        Sl = np.maximum(1.0 - ndtr(zl), 1e-300)
+        Sl = np.maximum(ndtr(-zl), 1e-300)
         fl = np.exp(-0.5 * zl * zl) / (w * np.sqrt(2.0 * np.pi))
         fpl = -zl * fl / w
         S = (1.0 - q) * S0 + q * Sl

@@ -55,15 +55,6 @@ ABSENT_STATUS = 77
 # depth says nothing about whether julia still refuses it, and calling
 # the waiver stale there told the reader to delete a live one (#310).
 EXPECTED = {
-    "inv_p_huge": {
-        "why": "#326 -- python rescues a target whose entries are finite "
-               "but whose SUM overflows, by dividing by the max before "
-               "normalising, and recovers the SAME abilities as the "
-               "finite target with identical ratios. That is #300's fix, "
-               "python-only so far; the other three still refuse. Goes "
-               "when the rescue is ported.",
-        "ports": ["python", "R", "browser", "julia"],
-    },
     "D_tiny": {
         "why": "#304 -- every port prices a contestant whose sd the "
                "lattice cannot resolve at zero, and they disagree by "

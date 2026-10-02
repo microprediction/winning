@@ -6,7 +6,9 @@ const EULER = 0.5772156649015329;
 
 export const BASES = {
   normal: z => {
-    const S = Math.max(1 - ndtr(z), 1e-300);
+    // the upper tail directly: 1 - ndtr(z) cancels to 0 past ~8.3 sd,
+    // and a 20-sd longshot came out ~92x too unlikely (#96)
+    const S = Math.max(ndtr(-z), 1e-300);
     const f = npdf(z);
     return [S, f, -z * f];
   },
@@ -137,7 +139,11 @@ function setup(mu, V, D, F, W, base) {
     }
   }
   const fn = typeof base === "function" ? base : BASES[base];
-  const span = typeof base === "function" ? [12, 12] : (SPANS[base] || [12, 12]);
+  // a callable base may declare its own span, as python's
+  // getattr(base, "span", (12, 12)) (#106)
+  const span = typeof base === "function"
+    ? (Array.isArray(base.span) ? base.span : [12, 12])
+    : (SPANS[base] || [12, 12]);
   // the caller's nodes go through the same door as V and D: every node
   // carries exactly the loadings' rank, and there is one weight per
   // node (#290)
@@ -178,36 +184,74 @@ export function invNormalRational(p) {
          (((((b[0]*r2+b[1])*r2+b[2])*r2+b[3])*r2+b[4])*r2+1);
 }
 
-function bulkWindow(Mall, sd, points, delta) {
+/* Lattice over the winner distribution's bulk -- port of python's
+ * races._bulk_window: the envelope uses the CALLER'S base survival `fn`
+ * (normal when absent), both edges are bracketed before bisection, delta
+ * is relaxed by factors of 100 (to at most 1e-4, with a warning) when the
+ * requested quantiles will not fit the point budget, and a base's
+ * declared `span` widens the pad. The hard-coded normal survival missed a
+ * custom Student-t(3) race's first share by 1.2e-4 at any point count
+ * (#106). */
+function bulkWindow(Mall, sd, points, delta, fn) {
   const n = sd.length;
   const muLo = new Array(n).fill(Infinity), muHi = new Array(n).fill(-Infinity);
   for (const row of Mall) for (let i = 0; i < n; i++) {
     if (row[i] < muLo[i]) muLo[i] = row[i];
     if (row[i] > muHi[i]) muHi[i] = row[i];
   }
-  const smax = Math.max(...sd);
+  const smax = Math.max(...sd), smin = Math.min(...sd);
+  const Sof = fn ? (z => Math.max(fn(z)[0], 1e-300))
+                 : (z => Math.max(ndtr(-z), 1e-300));
   const G = (x, mus) => {
     let ls = 0;
-    for (let i = 0; i < n; i++) ls += Math.log(Math.max(1 - ndtr((x - mus[i]) / sd[i]), 1e-300));
+    for (let i = 0; i < n; i++) ls += Math.log(Sof((x - mus[i]) / sd[i]));
     return 1 - Math.exp(ls);
   };
-  const lo0 = Math.min(...muLo) - 9 * smax;
-  const hi0 = Math.max(...muHi) + 9 * smax;
-  let a = lo0, b = hi0;
-  for (let it = 0; it < 80; it++) {
-    const m = 0.5 * (a + b);
-    if (G(m, muLo) < delta) a = m; else b = m;
+  const bracket = (x0, step0, ok, sgn) => {
+    let step = step0;
+    for (let it = 0; it < 60; it++) {
+      if (ok(x0)) return x0;
+      x0 += sgn * step;
+      step *= 2;
+    }
+    console.warn("bulk window could not bracket the requested quantile " +
+                 "after 60 doublings; the window is truncated rather than " +
+                 "quantile-exact.");
+    return x0;
+  };
+  let pad = 2 * smax;
+  if (fn && Array.isArray(fn.span)) pad = Math.max(pad, 0.25 * Math.max(...fn.span) * smax);
+  const windowAt = d => {
+    const step0 = Math.max(9 * smax, 1e-12);
+    const lo0 = bracket(Math.min(...muLo) - 9 * smax, step0, x => G(x, muLo) <= d, -1);
+    const hi0 = bracket(Math.max(...muHi) + 9 * smax, step0, x => G(x, muHi) >= 1 - d, +1);
+    let a = lo0, b = hi0;
+    for (let it = 0; it < 80; it++) {
+      const m = 0.5 * (a + b);
+      if (G(m, muLo) < d) a = m; else b = m;
+    }
+    const xlo = a;
+    a = xlo; b = hi0;
+    for (let it = 0; it < 80; it++) {
+      const m = 0.5 * (a + b);
+      if (G(m, muHi) < 1 - d) a = m; else b = m;
+    }
+    return [xlo - pad, b + pad];
+  };
+  const budget = 0.5 * smin * Math.max(points - 1, 1);
+  let d = delta;
+  let [lo, hi] = windowAt(d);
+  while (hi - lo > budget && d < 1e-4) {
+    d = Math.min(d * 100, 1e-4);
+    [lo, hi] = windowAt(d);
   }
-  const xlo = a;
-  a = xlo; b = hi0;
-  for (let it = 0; it < 80; it++) {
-    const m = 0.5 * (a + b);
-    if (G(m, muHi) < 1 - delta) a = m; else b = m;
-  }
-  const pad = 2 * smax;
+  if (d > delta)
+    console.warn(`bulk window relaxed delta from ${delta.toExponential(0)} ` +
+                 `to ${d.toExponential(0)}: the requested quantile is further ` +
+                 `out than ${points} points can resolve. Raise points= to tighten it.`);
   const out = new Array(points);
-  const step = (b + pad - (xlo - pad)) / (points - 1);
-  for (let t = 0; t < points; t++) out[t] = xlo - pad + t * step;
+  const step = (hi - lo) / (points - 1);
+  for (let t = 0; t < points; t++) out[t] = lo + t * step;
   return out;
 }
 
@@ -238,7 +282,7 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
                             delta = 1e-12) {
   let x;
   if (win === "bulk") {
-    x = bulkWindow(Mall, sd, points, delta);
+    x = bulkWindow(Mall, sd, points, delta, st.fn);
   } else {
     let mn = Infinity, mx = -Infinity;
     for (const row of Mall) for (const v of row) { if (v < mn) mn = v; if (v > mx) mx = v; }
@@ -345,7 +389,16 @@ export function abilitiesFromRace(pTarget, opts = {}) {
       "and read the result as a one-sided bound on the floored " +
       "contrasts, or supply a pseudocount upstream.");
   }
-  const s = target.reduce((a, b) => a + b, 0);
+  // a target is a law up to a positive factor: when its SUM overflows
+  // (entries all finite, e.g. [4e307, 2e307, 1e307, 1e307]) rescale by
+  // the max first, as python does since #300. Conditional, so ordinary
+  // inputs stay bit-identical (#326).
+  let s = target.reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(s)) {
+    const mx = Math.max(...target);
+    target = target.map(v => v / mx);
+    s = target.reduce((a, b) => a + b, 0);
+  }
   target = target.map(v => v / s);
   const logt = target.map(Math.log);
   const lm = mean(logt);

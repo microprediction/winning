@@ -135,6 +135,77 @@ test_that("the pair door checks both depths", {
   expect_error(loc_scale_from_topk_pair(q1, 1, q2, 1), "k1 == k2")
 })
 
+test_that("an iteration budget of zero performs no updates (#441)", {
+  q <- c(0.70, 0.20, 0.10)
+  f0 <- abilities_from_topk(q, k = 1, points = 513, n_iter = 0,
+                            return_info = TRUE)
+  f1 <- abilities_from_topk(q, k = 1, points = 513, n_iter = 1,
+                            return_info = TRUE)
+  f2 <- abilities_from_topk(q, k = 1, points = 513, n_iter = 2,
+                            return_info = TRUE)
+  logt <- log(q)
+  expect_equal(f0$mu, -(logt - mean(logt)) / 2)   # the initializer
+  expect_identical(f0$iterations, 0L)
+  expect_identical(f1$iterations, 1L)
+  expect_identical(f2$iterations, 2L)
+  expect_false(isTRUE(all.equal(f0$mu, f2$mu)))
+  # the residual describes the RETURNED mu
+  for (f in list(f0, f1, f2)) {
+    qh <- top_k_probabilities(f$mu, 1, points = 513)
+    r <- max(abs(qlogis(qh) - qlogis(q / sum(q))))
+    expect_equal(f$max_logit_residual, r, tolerance = 1e-10)
+  }
+  for (bad in list(-1, 1.5, NA, Inf, c(1, 2), "a")) {
+    expect_error(abilities_from_topk(q, 1, n_iter = bad), "n_iter")
+    expect_error(abilities_from_rank_marginal(q, 1, n_iter = bad), "n_iter")
+  }
+  mu <- c(-0.4, 0.1, 0.2, 0.5)
+  q1 <- top_k_probabilities(mu, 1); q2 <- top_k_probabilities(mu, 2)
+  expect_error(loc_scale_from_topk_pair(q1, 1, q2, 2, n_iter = -1), "n_iter")
+  z <- loc_scale_from_topk_pair(q1, 1, q2, 2, n_iter = 0, return_info = TRUE)
+  expect_identical(z$iterations, 0L)
+  z <- abilities_from_rank_marginal(q, 1, n_iter = 0, return_info = TRUE)
+  expect_identical(z$iterations, 0L)
+  expect_equal(z$mu, rep(0, 3))
+})
+
+test_that("top-k and rank doors refuse wrong-length D (#319)", {
+  mu <- c(-0.3, 0.1, 0.0, 0.2)
+  for (D in list(c(1, 4), c(1, 1, 1, 1, 1), c(1, 0, 1, 1), c(1, -1, 1, 1),
+                 c(1, NA, 1, 1), c(1, Inf, 1, 1))) {
+    expect_error(top_k_probabilities(mu, 2, D = D), "D")
+    expect_error(top_k_jacobians(mu, 2, D = D), "D")
+    expect_error(rank_probabilities(mu, D = D), "D")
+    q <- top_k_probabilities(mu, 2)
+    expect_error(abilities_from_topk(q, 2, D = D), "D")
+    expect_error(abilities_from_rank_marginal(q / 2, 1, D = D), "D")
+    expect_error(race_probabilities(mu, D = D), "D")
+  }
+  q1 <- top_k_probabilities(mu, 1); q2 <- top_k_probabilities(mu, 2)
+  expect_error(loc_scale_from_topk_pair(q1, 1, q2, 2, D0 = c(1, 4)), "D0")
+  # scalar broadcasts, length n accepted
+  expect_equal(top_k_probabilities(mu, 2, D = 2),
+               top_k_probabilities(mu, 2, D = rep(2, 4)))
+})
+
+test_that("top-k doors refuse V without one row per runner (#343)", {
+  mu <- c(-.8, -.2, .4, 1); D <- rep(1, 4)
+  V_bad <- matrix(c(-2, 2), ncol = 1)
+  expect_error(top_k_probabilities(mu, 2, V = V_bad, D = D), "one row per")
+  expect_error(top_k_jacobians(mu, 2, V = V_bad, D = D), "one row per")
+  q <- top_k_probabilities(mu, 2, D = D)
+  expect_error(abilities_from_topk(q, 2, V = V_bad, D = D), "one row per")
+  expect_error(top_k_probabilities(mu, 2, V = matrix(1, 3, 1)), "one row per")
+  expect_error(top_k_probabilities(mu, 2, V = c(1, 2, 3)), "one row per")
+  v <- c(-1, 0.5, 0.2, 0.3)
+  a <- top_k_probabilities(mu, 2, V = v)
+  expect_equal(top_k_probabilities(mu, 2, V = matrix(v, ncol = 1)), a)
+  expect_equal(top_k_probabilities(mu, 2, V = matrix(v, nrow = 1)), a)
+  # scalar common loading is the independent race after gauge fixing
+  expect_equal(top_k_probabilities(mu, 2, V = 0.7),
+               top_k_probabilities(mu, 2), tolerance = 1e-6)
+})
+
 test_that("rank_probabilities prices a factor-correlated race (#202)", {
   # R had no V/qa here, so the correlated call was an unused-argument
   # error while top_k_probabilities priced the same model
