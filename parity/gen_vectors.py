@@ -213,7 +213,7 @@ def build(inputs):
     # wrong model (#199). R does not take V in this verb yet (#202), so
     # this one is declared for the browser until it does.
     sc("rank_marginals_factor",
-       rank_probabilities(mu, D=D, V=V1, points=257), ports=["js"])
+       rank_probabilities(mu, D=D, V=V1, points=257), ports=["R", "js"])
     R = rank_probabilities(mu, D=D, points=257)
     mu_ws, sd_ws = loc_scale_from_win_and_second(R[:, 0], R[:, 1],
                                                  points=257)
