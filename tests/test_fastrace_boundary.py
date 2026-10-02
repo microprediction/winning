@@ -93,3 +93,172 @@ if __name__ == "__main__":
     # rayon region the parent ever enters
     r = subprocess.run([sys.executable, "-c", script], timeout=120)
     assert r.returncode == 0, "forked child hung (3) or mispriced (4)"
+
+
+# --- #74: cross-array shapes are ValueErrors, never PanicExceptions -------
+
+def _factor_ok(n=4, r=1, q=3):
+    mu = np.arange(n, dtype=float)
+    v = np.zeros((n, r))
+    d = np.ones(n)
+    f = np.zeros((q, r))
+    w = np.full(q, 1.0 / q)
+    return mu, v, d, f, w
+
+
+def _factor_bad_cases(n=4):
+    mu, v, d, f, w = _factor_ok(n)
+    yield "v rows", (mu, np.ones((1, n)), d, np.zeros((3, n)), w)
+    yield "d len", (mu, v, np.ones(n - 1), f, w)
+    yield "f cols", (mu, v, d, np.zeros((3, 2)), w)
+    yield "w len", (mu, v, d, f, np.full(2, 0.5))
+    yield "empty", (mu[:0], v[:0], d[:0], f, w)
+
+
+FACTOR_CALLS = {
+    "forward_and_slopes": lambda a: fastrace.forward_and_slopes(*a, 129),
+    "win_probabilities_factor":
+        lambda a: fastrace.win_probabilities_factor(*a, 129),
+    "win_probabilities_factor_separated":
+        lambda a: fastrace.win_probabilities_factor_separated(*a, 129),
+    "ordered_prefixes": lambda a: fastrace.ordered_prefixes(*a, 129, k=2),
+    "jacobian_vector_product":
+        lambda a: fastrace.jacobian_vector_product(*a, np.ones(len(a[0])),
+                                                   129),
+    "forward_and_slopes_base":
+        lambda a: fastrace.forward_and_slopes_base(*a, 129, np.nan, np.nan,
+                                                   0, []),
+}
+
+
+@pytest.mark.parametrize("name", sorted(FACTOR_CALLS))
+def test_factor_kernels_reject_mismatched_shapes(name):
+    call = FACTOR_CALLS[name]
+    call(_factor_ok())                      # the valid shapes still run
+    for label, args in _factor_bad_cases():
+        with pytest.raises(ValueError):
+            call(args)
+    with pytest.raises(ValueError, match="points"):
+        a = _factor_ok()
+        if name == "jacobian_vector_product":
+            fastrace.jacobian_vector_product(*a, np.ones(4), 1)
+        elif name == "forward_and_slopes_base":
+            fastrace.forward_and_slopes_base(*a, 1, np.nan, np.nan, 0, [])
+        else:
+            getattr(fastrace, name)(*a, 1)
+
+
+def test_jvp_direction_length_is_checked():
+    mu, v, d, f, w = _factor_ok()
+    with pytest.raises(ValueError, match="h has length 3"):
+        fastrace.jacobian_vector_product(mu, v, d, f, w, np.ones(3), 129)
+
+
+def test_public_jvp_same_exception_class_with_and_without_rust():
+    import winning
+    from winning.factor.core import hermite_nodes, jacobian_vector_product
+    mu = np.arange(4., dtype=float)
+    V = np.zeros((4, 1))
+    D = np.ones(4)
+    F, W = hermite_nodes(1, Q=3)
+    h = np.ones(3)
+    try:
+        for flag in (True, False):
+            winning.use_rust(flag)
+            with pytest.raises(ValueError):
+                jacobian_vector_product(mu, V, D, F, W, h, points=101)
+    finally:
+        winning.use_rust(True)
+
+
+def test_unknown_base_id_is_a_value_error():
+    with pytest.raises(ValueError, match="base_id"):
+        fastrace.forward_and_slopes_base(*_factor_ok(), 129, np.nan, np.nan,
+                                         99, [])
+
+
+def test_ghk_and_per_winner_shapes():
+    mu, v, d, _, _ = _factor_ok()
+    fastrace.ghk_all_shares(mu, v, d, 50)
+    with pytest.raises(ValueError):
+        fastrace.ghk_all_shares(mu, np.ones((1, 4)), d, 50)
+    with pytest.raises(ValueError):
+        fastrace.ghk_all_shares(mu, v, d[:3], 50)
+    z = np.zeros((10, 2))
+    fastrace.per_winner_reduced_rank(mu, v, d, z)
+    with pytest.raises(ValueError, match="z has 1 columns"):
+        fastrace.per_winner_reduced_rank(mu, v, d, z[:, :1])
+    with pytest.raises(ValueError):
+        fastrace.per_winner_reduced_rank(mu, v, d[:2], z)
+
+
+def _block_ok(n=4):
+    mu = np.linspace(-1, 1, n)
+    sd = np.ones(n)
+    v = np.full(n, 0.3)
+    starts = np.array([0, 2], dtype=np.int64)
+    an = np.array([-1.0, 0.0, 1.0])
+    aw = np.array([0.25, 0.5, 0.25])
+    return mu, sd, v, starts, an, aw
+
+
+def test_block_race_shapes_and_starts():
+    mu, sd, v, starts, an, aw = _block_ok()
+    fastrace.block_race(mu, sd, v, starts, an, aw, 129)
+    bad = [
+        (mu, sd[:3], v, starts, an, aw),
+        (mu, sd, v[:3], starts, an, aw),
+        (mu, sd, v, starts, an, aw[:2]),
+        (mu, sd, v, np.array([1, 2], dtype=np.int64), an, aw),
+        (mu, sd, v, np.array([0, -1], dtype=np.int64), an, aw),
+        (mu, sd, v, np.array([0, 9], dtype=np.int64), an, aw),
+        (mu, sd, v, np.array([0, 3, 1], dtype=np.int64), an, aw),
+        (mu, sd, v, np.array([], dtype=np.int64), an, aw),
+    ]
+    for args in bad:
+        with pytest.raises(ValueError):
+            fastrace.block_race(*args, 129)
+    vr = v[:, None]
+    nd = an[:, None]
+    fastrace.block_race_r(mu, sd, vr, starts, nd, aw, 129)
+    for args in [
+        (mu, sd, np.ones((3, 1)), starts, nd, aw),
+        (mu, sd, vr, starts, np.ones((3, 2)), aw),
+        (mu, sd, vr, starts, nd, aw[:2]),
+        (mu, sd, vr, np.array([0, 7], dtype=np.int64), nd, aw),
+    ]:
+        with pytest.raises(ValueError):
+            fastrace.block_race_r(*args, 129)
+
+
+def test_tree_race_shapes_and_topology():
+    mu, sd, v, starts, an, aw = _block_ok()
+    parent = np.array([2, 2, -1], dtype=np.int64)   # two leaves, one root
+    lam = np.array([0.0, 0.0, 0.3])
+    fastrace.tree_race(mu, sd, v, starts, parent, lam, an, aw, 129, -8., 8.)
+    for pa, lm in [
+        (np.array([2, 2, 5], dtype=np.int64), lam),       # out of range
+        (np.array([1, 0, -1], dtype=np.int64), lam),      # cycle
+        (np.array([2, 2, 2], dtype=np.int64), lam),       # self-parent
+        (np.array([-1], dtype=np.int64), lam[:1]),        # fewer than leaves
+        (parent, lam[:2]),                                # lam length
+    ]:
+        with pytest.raises(ValueError):
+            fastrace.tree_race(mu, sd, v, starts, pa, lm, an, aw, 129,
+                               -8., 8.)
+
+
+@pytest.mark.parametrize("name", ["top_k", "top_k_slopes", "top_k_jacobians"])
+def test_topk_mu_sd_lengths(name):
+    with pytest.raises(ValueError, match="sd has length 2"):
+        getattr(fastrace, name)(np.zeros(3), np.ones(2), 1, -8., 8., 129)
+
+
+def test_rank_and_window_mu_sd_lengths():
+    with pytest.raises(ValueError):
+        fastrace.rank_marginals(np.zeros(3), np.ones(2), -8., 8., 129)
+    with pytest.raises(ValueError):
+        fastrace.rank_marginal_jacobian(np.zeros(3), np.ones(2), 1, -8., 8.,
+                                        129)
+    with pytest.raises(ValueError):
+        fastrace.top_k_window(np.zeros(3), np.ones(2), 1)

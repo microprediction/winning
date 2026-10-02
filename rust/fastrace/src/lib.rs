@@ -11,6 +11,115 @@ use pyo3::exceptions::PyValueError;
 use rayon::prelude::*;
 
 
+// ---------------------------------------------------------------------------
+// Boundary validation (#74). The published extension is its own API:
+// direct callers never pass through winning's Python normalization, and
+// the kernels index by the dimensions they are given. Every relation a
+// kernel assumes is checked here, before the GIL is released, and is a
+// ValueError naming the actual and expected sizes -- never an ndarray
+// index panic surfacing as pyo3_runtime.PanicException.
+// ---------------------------------------------------------------------------
+
+fn bad(msg: String) -> PyErr {
+    PyValueError::new_err(msg)
+}
+
+fn need_len(name: &str, got: usize, want: usize, what: &str) -> PyResult<()> {
+    if got != want {
+        return Err(bad(format!(
+            "{name} has length {got}, expected {want} ({what})")));
+    }
+    Ok(())
+}
+
+fn need_field(n: usize) -> PyResult<()> {
+    if n == 0 {
+        return Err(bad("mu is empty; a race needs at least one contestant".into()));
+    }
+    Ok(())
+}
+
+fn need_points(points: usize) -> PyResult<()> {
+    if points < 2 {
+        return Err(bad(format!(
+            "points = {points}; the lattice needs at least 2 points")));
+    }
+    Ok(())
+}
+
+/// Factor-race shapes: v is (n, r), d is (n,), f is (Q, r), w is (Q,).
+fn check_factor(mu: usize, v: (usize, usize), d: usize, f: (usize, usize),
+                w: usize) -> PyResult<()> {
+    need_field(mu)?;
+    if v.0 != mu {
+        return Err(bad(format!(
+            "v has {} rows, expected len(mu) = {mu} (v is (n, rank))", v.0)));
+    }
+    need_len("d", d, mu, "one idiosyncratic variance per contestant")?;
+    if f.1 != v.1 {
+        return Err(bad(format!(
+            "f has {} columns, expected v's rank {} (f is (Q, rank))", f.1, v.1)));
+    }
+    if f.0 == 0 {
+        return Err(bad("f has no factor nodes".into()));
+    }
+    need_len("w", w, f.0, "one weight per factor node (row of f)")
+}
+
+/// Cluster starts: first member index of each sorted cluster.
+fn check_starts(starts: &[i64], n: usize) -> PyResult<Vec<usize>> {
+    if starts.is_empty() {
+        return Err(bad("starts is empty; at least one cluster is required".into()));
+    }
+    if starts[0] != 0 {
+        return Err(bad(format!(
+            "starts[0] = {}, expected 0 (members are sorted by cluster)", starts[0])));
+    }
+    for c in 1..starts.len() {
+        if starts[c] < starts[c - 1] || starts[c] as usize > n {
+            return Err(bad(format!(
+                "starts[{c}] = {} is not a nondecreasing index in [0, {n}]",
+                starts[c])));
+        }
+    }
+    Ok(starts.iter().map(|&x| x as usize).collect())
+}
+
+/// Tree topology: nodes 0..n_leaves are the clusters, every parent is -1
+/// (a root) or another node, and following parents terminates. A cycle
+/// used to spin the kernel's depth loop forever.
+fn check_tree(parent: &[i64], n_leaves: usize) -> PyResult<()> {
+    let nt = parent.len();
+    if nt < n_leaves {
+        return Err(bad(format!(
+            "parent has {nt} nodes, fewer than the {n_leaves} cluster leaves")));
+    }
+    for (t, &p) in parent.iter().enumerate() {
+        if p < -1 || p >= nt as i64 || p == t as i64 {
+            return Err(bad(format!(
+                "parent[{t}] = {p} is not -1 or another node index in [0, {nt})")));
+        }
+    }
+    for t in 0..nt {
+        let (mut u, mut hops) = (t, 0usize);
+        while parent[u] >= 0 {
+            u = parent[u] as usize;
+            hops += 1;
+            if hops > nt {
+                return Err(bad(format!("parent has a cycle through node {t}")));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The normal-base top-k / rank kernels take (mu, sd) of equal length.
+fn check_mu_sd(mu: usize, sd: usize) -> PyResult<()> {
+    need_field(mu)?;
+    need_len("sd", sd, mu, "one scale per contestant")
+}
+
+
 /// Min-wins factor-race win probabilities (normalized), raw own-location
 /// slopes of the unnormalized map (the inversion preconditioner), and the
 /// pre-normalization total. slope_i = d p_raw_i / d mu_i.
@@ -27,6 +136,8 @@ fn forward_and_slopes<'py>(
     lo: f64,
     hi: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, f64)> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -54,6 +165,8 @@ fn win_probabilities_factor<'py>(
     lo: f64,
     hi: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -85,6 +198,9 @@ fn jacobian_vector_product<'py>(
     points: usize,
     form: &str,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
+    need_len("h", h.as_array().len(), mu.as_array().len(), "one direction component per contestant")?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -117,6 +233,8 @@ fn win_probabilities_factor_separated<'py>(
     rm: usize,
     rs: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -143,6 +261,15 @@ fn ghk_all_shares<'py>(
     r_draws: usize,
     seed: u64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    need_field(mu.as_array().len())?;
+    if v.as_array().nrows() != mu.as_array().len() {
+        return Err(bad(format!("v has {} rows, expected len(mu) = {}",
+                               v.as_array().nrows(), mu.as_array().len())));
+    }
+    need_len("d", d.as_array().len(), mu.as_array().len(), "one idiosyncratic variance per contestant")?;
+    if r_draws == 0 {
+        return Err(bad("r_draws must be at least 1".into()));
+    }
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -187,10 +314,16 @@ fn block_race<'py>(
     hi: f64,
     fast_max_entries: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let n = mu.as_array().len();
+    need_field(n)?;
+    need_len("sd", sd.as_array().len(), n, "one scale per contestant")?;
+    need_len("v", v.as_array().len(), n, "one cluster loading per contestant")?;
+    need_len("a_weights", a_weights.as_array().len(), a_nodes.as_array().len(), "one weight per node")?;
+    need_points(points)?;
+    let st = check_starts(&starts.as_array().to_vec(), n)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
     let v_o: Array1<f64> = v.as_array().to_owned();
-    let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
     let an: Array1<f64> = a_nodes.as_array().to_owned();
     let aw: Array1<f64> = a_weights.as_array().to_owned();
     let p = py.allow_threads(|| with_usable_rayon(|| {
@@ -215,10 +348,22 @@ fn block_race_r<'py>(
     lo: f64,
     hi: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let n = mu.as_array().len();
+    need_field(n)?;
+    need_len("sd", sd.as_array().len(), n, "one scale per contestant")?;
+    if v.as_array().nrows() != n {
+        return Err(bad(format!("v has {} rows, expected len(mu) = {n}", v.as_array().nrows())));
+    }
+    if nodes.as_array().ncols() != v.as_array().ncols() {
+        return Err(bad(format!("nodes has {} columns, expected v's rank {}",
+                               nodes.as_array().ncols(), v.as_array().ncols())));
+    }
+    need_len("weights", weights.as_array().len(), nodes.as_array().nrows(), "one weight per node (row of nodes)")?;
+    need_points(points)?;
+    let st = check_starts(&starts.as_array().to_vec(), n)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
-    let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
     let nd: Array2<f64> = nodes.as_array().to_owned();
     let ww: Array1<f64> = weights.as_array().to_owned();
     let p = py.allow_threads(|| with_usable_rayon(|| {
@@ -246,11 +391,19 @@ fn tree_race<'py>(
     lo: f64,
     hi: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let n = mu.as_array().len();
+    need_field(n)?;
+    need_len("sd", sd.as_array().len(), n, "one scale per contestant")?;
+    need_len("v", v.as_array().len(), n, "one cluster loading per contestant")?;
+    need_len("a_weights", a_weights.as_array().len(), a_nodes.as_array().len(), "one weight per node")?;
+    need_points(points)?;
+    let st = check_starts(&starts.as_array().to_vec(), n)?;
+    let pa: Vec<i64> = parent.as_array().to_vec();
+    check_tree(&pa, st.len())?;
+    need_len("lam", lam.as_array().len(), pa.len(), "one strength per tree node")?;
     let mu_o: Vec<f64> = mu.as_array().to_vec();
     let sd_o: Vec<f64> = sd.as_array().to_vec();
     let v_o: Vec<f64> = v.as_array().to_vec();
-    let st: Vec<usize> = starts.as_array().iter().map(|&x| x as usize).collect();
-    let pa: Vec<i64> = parent.as_array().to_vec();
     let lm: Vec<f64> = lam.as_array().to_vec();
     let an: Vec<f64> = a_nodes.as_array().to_vec();
     let aw: Vec<f64> = a_weights.as_array().to_vec();
@@ -342,6 +495,17 @@ fn per_winner_rr<'py>(
     d: PyReadonlyArray1<f64>,
     z: PyReadonlyArray2<f64>,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    need_field(mu.as_array().len())?;
+    if v.as_array().nrows() != mu.as_array().len() {
+        return Err(bad(format!("v has {} rows, expected len(mu) = {}",
+                               v.as_array().nrows(), mu.as_array().len())));
+    }
+    need_len("d", d.as_array().len(), mu.as_array().len(), "one idiosyncratic variance per contestant")?;
+    if z.as_array().ncols() != v.as_array().ncols() + 1 {
+        return Err(bad(format!(
+            "z has {} columns, expected rank + 1 = {} (factor coordinates and the winner's own shock)",
+            z.as_array().ncols(), v.as_array().ncols() + 1)));
+    }
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -372,6 +536,8 @@ fn ordered_prefixes<'py>(
     hi: f64,
     k: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -430,6 +596,12 @@ fn forward_and_slopes_base<'py>(
     Bound<'py, PyArray1<f64>>,
     f64,
 )> {
+    check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(),
+                 f_nodes.as_array().dim(), w.as_array().len())?;
+    need_points(points)?;
+    if base_id > 8 {
+        return Err(bad(format!("base_id = {base_id} is not a shipped base family (0..=8)")));
+    }
     let mut pa = [0.0f64; 6];
     for (i, &x) in params.iter().take(6).enumerate() {
         pa[i] = x;
@@ -464,6 +636,8 @@ fn rank_marginals<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let p = py.allow_threads(|| with_usable_rayon(
@@ -483,6 +657,8 @@ fn rank_marginal_jacobian<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (p, j) = py.allow_threads(|| with_usable_rayon(
@@ -505,6 +681,7 @@ fn top_k_window(
     delta: f64,
     pad_sds: f64,
 ) -> PyResult<(f64, f64)> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     Ok(py.allow_threads(|| with_usable_rayon(|| winning::top_k_window_kernel(&m, &s, k, delta, pad_sds))))
@@ -522,6 +699,8 @@ fn top_k_slopes<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (q, sl) =
@@ -544,6 +723,8 @@ fn top_k_jacobians<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let (jm, js) =
@@ -565,6 +746,8 @@ fn top_k<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    need_points(points)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let q = py.allow_threads(|| with_usable_rayon(|| winning::top_k_kernel(&m, &s, k, lo, hi, points)));
