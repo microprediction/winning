@@ -215,6 +215,7 @@ end
     _bound_vector(x, default, n) -> Vector{Float64}
 
 `winning.fastmvn` is the specification, and it broadcasts a scalar bound
+(and a scalar mean)
 to every coordinate (`np.broadcast_to`); the R port does the same with
 `rep_len`. This port called `collect` on the argument, and a scalar
 `Float64` is not iterable, so the ordinary joint-CDF spelling
@@ -278,7 +279,7 @@ end
 
 function _dense_fallback(lower, upper, mean, sigma; kwargs...)
     n = size(sigma, 1)
-    mu = mean === nothing ? zeros(n) : Float64.(collect(mean))
+    mu = _bound_vector(mean, 0.0, n, "mean")
     lo = _bound_vector(lower, -Inf, n, "lower")
     up = _bound_vector(upper, Inf, n, "upper")
     _rectangle_status(lo, up) && return (0.0, 0.0)
@@ -287,10 +288,17 @@ end
 
 function _cell_expectation(F, W, V, s, mu, lo, up)
     M = F * V'                          # (Q, n)
+    n = size(V, 1)
+    # the model's dimension bounds the product, never an input's length:
+    # looping over eachindex(mu) let a short mean drop trailing
+    # coordinates and return Phi(0) for a 3-d Phi(0)^3 (#397)
+    (length(mu) == n && length(lo) == n && length(up) == n &&
+     length(s) == n) || throw(DimensionMismatch(
+        "mean, bounds and D must all have the model's $n coordinates"))
     total = 0.0
     for q in axes(F, 1)
         lc = 0.0
-        for j in eachindex(mu)
+        for j in 1:n
             cell = _cell(up[j] - mu[j] - M[q, j],
                          lo[j] - mu[j] - M[q, j], s[j])
             lc += log(max(cell, TINY))
@@ -317,7 +325,11 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
          reshape(Float64.(collect(V)), :, 1)
     n = size(Vm, 1)
     Dv = Float64.(collect(D))
-    mu = mean === nothing ? zeros(n) : Float64.(collect(mean))
+    length(Dv) == n || throw(ArgumentError(
+        "D has length $(length(Dv)) but V has $n rows"))
+    # scalar-or-length-n, the bounds' rule and the Python/R behaviour; a
+    # short mean used to be taken at its own length (#397)
+    mu = _bound_vector(mean, 0.0, n, "mean")
     lo = _bound_vector(lower, -Inf, n, "lower")
     up = _bound_vector(upper, Inf, n, "upper")
     _rectangle_status(lo, up) && return 0.0, "degenerate-rectangle"
@@ -391,9 +403,16 @@ mvn_cdf_fast_info(; lower = nothing, upper = nothing, mean = nothing,
 
 """MvNormalCDF's signature under this package's own name:
 mvnormcdf_factor(mu, Sigma, a, b; kwargs...) returning (p, e). On the
-exact path e is the difference between the working quadrature and a
-lower-order one, usually conservative; delegated results carry
-MvNormalCDF's own estimate, and kwargs (m, rng) go to it."""
+exact path p is the working quadrature (the same number mvn_cdf_fast
+returns) and e is the sum of its distances to a LOWER-order rule and to
+a much HIGHER-order one (201 nodes at rank one, 81^2 at rank two).
+
+The lower-order difference alone was the old estimate, and two rules
+can agree closely while sharing the same-sign error: on a rank-one case
+with sharpness 2.33, the 19- and 13-node rules differed by 4.2e-7 while
+both sat 8.9e-5 (2.4%) above the truth, an estimate 214x too small
+(#336). The high-order term measures that error directly. Delegated
+results carry MvNormalCDF's own estimate, and kwargs (m, rng) go to it."""
 function mvnormcdf_factor(mu::AbstractVector, sigma::AbstractMatrix,
                           a::AbstractVector, b::AbstractVector; kwargs...)
     fd = factorize_covariance(sigma)
@@ -403,13 +422,20 @@ function mvnormcdf_factor(mu::AbstractVector, sigma::AbstractMatrix,
     sharp = _sharpness(V, D)
     (r > 2 || sharp > 3.0) && return _dense_fallback(a, b, mu, sigma; kwargs...)
     p, _ = _impl(a, b, mu, nothing, V, D)
-    # error estimate: re-evaluate at reduced order
+    n = size(V, 1)
     s = sqrt.(D)
+    muv = _bound_vector(mu, 0.0, n, "mean")
+    av = _bound_vector(a, -Inf, n, "lower")
+    bv = _bound_vector(b, Inf, n, "upper")
+    _rectangle_status(av, bv) && return p, 0.0
     Q = Int(clamp(ceil(8.0 * sharp), 15, r == 1 ? 201 : 41))
-    F2, W2 = _gh_nodes(r, max(Q - 6, 7))
-    p2 = _cell_expectation(F2, W2, V, s, Float64.(collect(mu)),
-                           Float64.(collect(a)), Float64.(collect(b)))
-    return p, abs(p - p2)
+    est(Qe) = begin
+        Fe, We = _gh_nodes(r, Qe)
+        _cell_expectation(Fe, We, V, s, muv, av, bv)
+    end
+    e = abs(p - est(max(Q - 6, 7)))
+    r >= 1 && (e += abs(p - est(r == 1 ? 201 : 81)))
+    return p, e
 end
 
 end # module

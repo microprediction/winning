@@ -1,6 +1,8 @@
 """Run contestants over the standing problem grid; append records.
 
-    python -m winning.bench.runner [--quick]
+    python -m winning.bench.runner [--quick] [--out DIR]
+
+Writes DIR/records.jsonl (default ./bench_results; see winning.bench).
 
 Each record: problem id, method, budget, seconds, max_err, backend info.
 References are direct-MC with 2e6 draws, cached per problem id.
@@ -11,14 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from pathlib import Path
 
 import numpy as np
 
 from ..methods import METHODS
 from ..methods.native import direct_mc
-
-RESULTS = Path(__file__).resolve().parents[2] / "bench_results"
+from . import results_dir
 
 
 def problem(pid, n, k, spread, seed):
@@ -57,8 +57,9 @@ HEAVY_AT_LARGE_N = {"tilting", "factor_rqmc", "ep_orthant", "smc_orthant",
                     "genz_bretz", "ghk", "qmc_ghk", "mendell_elston"}
 
 
-def main(quick=False):
-    RESULTS.mkdir(exist_ok=True)
+def main(quick=False, out=None):
+    RESULTS = results_dir(out)
+    RESULTS.mkdir(parents=True, exist_ok=True)
     out = RESULTS / "records.jsonl"
     grid = GRID[:2] if quick else GRID
     with out.open("a") as fh:
@@ -98,4 +99,6 @@ def main(quick=False):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
-    main(ap.parse_args().quick)
+    ap.add_argument("--out", default=None, help="results directory (default ./bench_results)")
+    a = ap.parse_args()
+    main(a.quick, a.out)

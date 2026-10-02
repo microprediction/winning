@@ -202,3 +202,54 @@ def test_no_package_declares_a_dependency_nothing_uses():
     assert not unused, (
         "declared R dependencies that nothing references:\n  "
         + "\n  ".join(unused))
+
+
+def _shipped_doc_package_refs(text):
+    """Packages a shipped doc tells the reader to load: `pkg::`,
+    `library(pkg)`, `require(pkg)`, `data(..., package = "pkg")`."""
+    refs = set(re.findall(r"\b([A-Za-z][A-Za-z0-9.]*)::", text))
+    refs |= set(re.findall(r"\b(?:library|require|requireNamespace)\(\s*[\"']?([A-Za-z][A-Za-z0-9.]*)", text))
+    refs |= set(re.findall(r"package\s*=\s*[\"']([A-Za-z][A-Za-z0-9.]*)[\"']", text))
+    return refs
+
+
+def _readme_code_outside_external_sections(text):
+    """R code blocks of a README, minus those under a heading that says
+    the packages it needs are external."""
+    out, external = [], False
+    for block in re.split(r"(?m)^(#+ .*)$", text):
+        if re.match(r"#+ ", block):
+            external = "external" in block.lower()
+            continue
+        if not external:
+            out += re.findall(r"```r\n(.*?)```", block, re.S)
+    return "\n".join(out)
+
+
+def test_shipped_docs_use_only_declared_packages():
+    """The dependency guard above reads R/, tests/ and vignettes/. The
+    shipped README and manual pages are part of the artifact too: the
+    mlogitfast README opened with `dfidx(Fishing, ...)` and the Rd told
+    users to call `dfidx::dfidx`, after mlogit and dfidx had been dropped
+    from Suggests (#142). A package a shipped example needs must be
+    declared, or the example must sit under a README heading that says
+    its packages are external."""
+    bad = []
+    for pkg in sorted(_packages_on_disk()):
+        root = ROOT / "r" / pkg
+        ok = _declared_deps(pkg) | _R_BASE | {pkg, "testthat"}
+        texts = {}
+        readme = root / "README.md"
+        if readme.is_file():
+            texts["README.md"] = _readme_code_outside_external_sections(
+                readme.read_text(encoding="utf-8"))
+        for rd in sorted((root / "man").glob("*.Rd")) if (root / "man").is_dir() else []:
+            m = re.search(r"\\examples\{(.*)\}\s*$", rd.read_text(encoding="utf-8"), re.S)
+            body = rd.read_text(encoding="utf-8")
+            # code the reader is told to run: \examples and \code{} spans
+            texts[f"man/{rd.name}"] = (m.group(1) if m else "") + "\n" + "\n".join(
+                re.findall(r"\\code\{([^{}]*)\}", body))
+        for name, text in texts.items():
+            for dep in sorted(_shipped_doc_package_refs(text) - ok):
+                bad.append(f"{pkg}/{name} uses {dep}, which {pkg} does not declare")
+    assert not bad, "\n  ".join(["shipped docs need undeclared packages:"] + bad)

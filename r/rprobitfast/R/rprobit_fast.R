@@ -41,7 +41,7 @@
        call. = FALSE)
 }
 
-rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
+rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
                          maxit = 400L) {
   t0 <- Sys.time()
   alt <- as.integer(as.factor(df$alt))
@@ -55,6 +55,7 @@ rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
   .check_choice_sets(ids, alt, J)
   chosen <- which(as.logical(df$chosen))
   choice <- alt[chosen]
+  r <- .check_rank(r, J)
   Xcov <- as.matrix(df[, covariates, drop = FALSE])
   Xint <- matrix(0, nrow(Xcov), J - 1L)
   for (j in 2:J) Xint[alt == j, j - 1L] <- 1

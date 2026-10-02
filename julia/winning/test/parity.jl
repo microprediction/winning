@@ -68,6 +68,8 @@ function run_parity(vectors_path::AbstractString)
         "loc_scale_ridge_sd" => () -> loc_scale_from_topk_pair(lw, 1, lp, 3;
             ridge = 0.05, points = 257).sd,
         "rank_marginals" => () -> rank_probabilities(mu; D = D, points = 257),
+        "rank_marginals_factor" => () -> rank_probabilities(mu; D = D, V = V1,
+            points = 257),
         "win_second_mu" => () -> loc_scale_from_win_and_second(R[:, 1], R[:, 2];
             points = 257).mu,
         "win_second_sd" => () -> loc_scale_from_win_and_second(R[:, 1], R[:, 2];

@@ -47,7 +47,7 @@ checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
 
 [[package]]
 name = "fastrace"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "numpy",
  "pyo3",
@@ -68,16 +68,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79cf5c93f93228cf8efb3ba362535fb11199ac548a09ce117c9b1adc3030d706"
 dependencies = [
  "rustversion",
-]
-
-[[package]]
-name = "lambert_w"
-version = "1.2.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5f0846ee4f0299ca4c5b9ca06ff55cf88b3430a763bf591474cc734479c9b24"
-dependencies = [
- "num-complex",
- "num-traits",
 ]
 
 [[package]]
@@ -205,16 +195,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "puruspe"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c9d62b4ad8b456f2ac8a171567bd475cae8cecd53ff5a46fce4f261eef17648"
-dependencies = [
- "lambert_w",
- "num-complex",
 ]
 
 [[package]]
@@ -358,11 +338,10 @@ checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
 
 [[package]]
 name = "winning"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libm",
  "ndarray",
  "owens-t",
- "puruspe",
  "rayon",
 ]

@@ -154,7 +154,9 @@ runs <- list(
   topk2_jacobian_mu_factor = function()
     top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jmu,
   topk2_jacobian_sigma_factor = function()
-    top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jsigma
+    top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jsigma,
+  rank_marginals_factor = function()
+    rank_probabilities(mu, D = D, V = V1, points = 257)
 )
 
 fails <- 0

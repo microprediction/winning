@@ -15,9 +15,10 @@
 #
 # Covariance parameterization as in the python reference: rank-r
 # loadings with a zero reference row and a strictly-lower-triangular
-# free block, unit idiosyncratic variances -- at J alternatives and
+# free block, unit idiosyncratic variances -- at J = 4 alternatives and
 # r = 2 this spans the identified differenced covariance with the same
 # dof count as the differenced-Cholesky parameterization of R's mlogit.
+# Ranks above J - 2 are not identified and are refused (#201).
 #
 # Sharpness rule (third+ appearance in the winning repo): past
 # sqrt(2) max_j ||v_j|| / sqrt(min D) = 3 the factor integrand is a
@@ -30,7 +31,7 @@ import LinearAlgebra
 using LinearAlgebra: SymTridiagonal, eigen, cholesky, Symmetric
 using Random: Xoshiro
 
-export MNProbit, fit!, loglikelihood, predict_proba, coef, vcov,
+export MNProbit, max_identified_rank, fit!, loglikelihood, predict_proba, coef, vcov,
     stderror, score_matrix, loglik_hessian,
     choice_loglik_and_score, ghk_choice_prob
 
@@ -182,8 +183,21 @@ function _gh1(Q::Int)
     return E.values, w ./ sum(w)
 end
 
+"""The first `n` primes. The Halton table used to be a fixed tuple of
+eight, so a sharp rank-8 likelihood (r + 1 = 9 dimensions) raised a
+BoundsError at `primes[9]` (#396)."""
+function _first_primes(n::Int)
+    ps = Int[]
+    c = 2
+    while length(ps) < n
+        all(p -> c % p != 0, ps) && push!(ps, c)
+        c += 1
+    end
+    return ps
+end
+
 function _halton_normal(r::Int, n::Int)
-    primes = (2, 3, 5, 7, 11, 13, 17, 19)
+    primes = _first_primes(r)
     F = zeros(n, r)
     for c in 1:r
         b = primes[c]
@@ -284,6 +298,44 @@ function nodes_for_likelihood(r::Int; Qf = 7, Qz = 7, sharp = 0.0)
     return F, W ./ sum(W)
 end
 
+"""Validate a choice vector against T observations and J alternatives
+and return it as `Vector{Int}`. Every label must be a finite, exactly
+integral number in 1..J: an integer-valued float such as `1.0` is
+accepted (the Python and R contract), a fractional `1.5`, `NaN`,
+`missing` or an out-of-range label is refused (#194)."""
+function _check_choice(choice::AbstractVector, T::Integer, J::Integer)
+    length(choice) == T || throw(ArgumentError(
+        "choice must have one entry per observation: got " *
+        string(length(choice)) * " for " * string(T) * " rows of mu"))
+    out = Vector{Int}(undef, T)
+    for (i, c) in enumerate(choice)
+        ok = (c isa Integer) || (c isa Real && isfinite(c) && isinteger(c))
+        ok || throw(ArgumentError(
+            "choice[" * string(i) * "] = " * string(c) *
+            " is not an integer alternative index"))
+        (1 <= c <= J) || throw(ArgumentError(
+            "choice[" * string(i) * "] = " * string(c) * " is outside 1.." *
+            string(J) * "; it would be dropped in silence, which raises " *
+            "the log-likelihood because there is less of it"))
+        out[i] = Int(c)
+    end
+    return out
+end
+
+"""Idiosyncratic variances as a `Vector{Float64}` of length exactly J.
+An overlong `D` used to be accepted: the integrand reads only `D[1:J]`,
+but the sharpness dispatcher took `minimum` over ALL entries, so an
+unused tiny trailing entry switched Gauss-Hermite to Halton and moved
+the likelihood (#439)."""
+function _check_D(D, J::Integer)
+    D === nothing && return ones(J)
+    Dv = Float64.(collect(D))
+    length(Dv) == J || throw(DimensionMismatch(
+        "D must have one idiosyncratic variance per alternative: got " *
+        string(length(Dv)) * " for J = " * string(J)))
+    return Dv
+end
+
 """Log-likelihood of observed argmax choices with the ANALYTIC score.
 mu: (T, J) utilities; V: (J, r) loadings; choice: 1-based indices.
 Returns (loglik, dmu, dV). Port of winning/likelihood.py."""
@@ -300,18 +352,8 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
     # silently optimised a SUBSET while reporting it as the whole. This
     # port also accepted a choice vector SHORTER than T, dropping the
     # tail without a word (#194).
-    length(choice) == T || throw(ArgumentError(
-        "choice must have one entry per observation: got " *
-        string(length(choice)) * " for " * string(T) * " rows of mu"))
-    for (i, c) in enumerate(choice)
-        (c isa Integer) || throw(ArgumentError(
-            "choice[" * string(i) * "] is not an integer alternative index"))
-        (1 <= c <= J) || throw(ArgumentError(
-            "choice[" * string(i) * "] = " * string(c) * " is outside 1.." *
-            string(J) * "; it would be dropped in silence, which raises " *
-            "the log-likelihood because there is less of it"))
-    end
-    Dv = D === nothing ? ones(J) : Float64.(collect(D))
+    choice = _check_choice(choice, T, J)
+    Dv = _check_D(D, J)
     s = sqrt.(Dv)
     V = V .- sum(V, dims = 1) ./ J          # gauge: differences decide
     ET = promote_type(eltype(mu), eltype(V), Float64)
@@ -375,7 +417,7 @@ seed. Port of the rust core's ghk_prob_one; Sigma = V V' + diag(D)."""
 function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
                          D = nothing, r_draws = 1000, seed = 9)
     J = length(mu)
-    Dv = D === nothing ? ones(J) : Float64.(collect(D))
+    Dv = _check_D(D, J)
     Sigma = V * V' .+ [i == j ? Dv[i] : 0.0 for i in 1:J, j in 1:J]
     m = J - 1
     others = [j for j in 1:J if j != k]
@@ -430,12 +472,14 @@ _fill_positions(J, r) = [(row, col) for col in 1:r for row in (col + 1):J]
 
 """Exact multinomial probit MLE for alternative-specific covariates.
 
-    m = MNProbit(X, choice; intercepts = true, r = 2)
+    m = MNProbit(X, choice; intercepts = true)   # r = min(2, J - 2)
     fit!(m)                       # exact likelihood, analytic score
     fit!(m; method = :ghk)        # GHK simulated likelihood (CRN)
     predict_proba(m)
 
-X: (T, J, p) covariates; choice: 1-based chosen alternatives."""
+X: (T, J, p) covariates; choice: 1-based chosen alternatives.
+`r` defaults to `min(2, J - 2)`; a rank above `J - 2` is refused because
+the scale is then not identified (#201)."""
 mutable struct MNProbit
     X::Array{Float64,3}
     choice::Vector{Int}
@@ -457,9 +501,26 @@ mutable struct MNProbit
     p_raw::Int          # covariate columns the caller supplied
 end
 
+"""Largest factor rank the unit-idiosyncratic parameterization
+identifies at J alternatives. With D fixed to one and a zero reference
+row, the free loadings number r*J - r*(r+1)/2 while the differenced
+covariance has J*(J-1)/2 - 1 shape degrees of freedom; at r >= J-1 the
+loading block is full rank, D = 1 no longer fixes the utility scale, and
+(2 beta, V') prices every choice exactly like (beta, V) for a V' with
+V'V'^T + I = 4 (V V^T + I) on contrasts. Coefficients and loadings then
+move along an exact ridge (#201)."""
+max_identified_rank(J::Integer) = max(J - 2, 0)
+
 function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
-                  intercepts = true, r = 2)
+                  intercepts = true, r = nothing)
     T, J, p0 = size(X)
+    rmax = max_identified_rank(J)
+    r = r === nothing ? min(2, rmax) : Int(r)
+    (0 <= r <= rmax) || throw(ArgumentError(
+        "factor rank r = " * string(r) * " is not identified at J = " *
+        string(J) * " alternatives: with unit idiosyncratic variances " *
+        "the utility scale is fixed only for r <= J - 2 = " *
+        string(rmax) * " (#201)"))
     Xf = Float64.(X)
     if intercepts
         Z = zeros(T, J, J - 1)
@@ -470,7 +531,7 @@ function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
     end
     p = size(Xf, 3)
     pos = _fill_positions(J, r)
-    return MNProbit(Xf, Int.(choice), T, J, p, r, pos,
+    return MNProbit(Xf, _check_choice(choice, T, J), T, J, p, r, pos,
                     zeros(p + length(pos)), zeros(p), zeros(J, r),
                     NaN, false, :exact, intercepts, p0)
 end
@@ -577,9 +638,25 @@ end
 loglikelihood(m::MNProbit) = m.loglik
 coef(m::MNProbit) = copy(m.theta)
 
+# Inference is for the EXACT likelihood only. After fit!(m; method=:ghk)
+# the stored theta and loglik come from the CRN simulated likelihood, but
+# every quantity below differentiates the exact-product objective, so the
+# score, Hessian, covariance and printed standard errors described a
+# DIFFERENT objective from the one fitted (#214). Refuse rather than
+# mislabel; GHK inference would need the same CRN draws differentiated.
+function _require_exact(m::MNProbit, what::AbstractString)
+    m.method == :exact || throw(ArgumentError(
+        what * " is the exact-likelihood quantity, but this model was " *
+        "fitted with method = :" * string(m.method) * "; its theta " *
+        "optimises a different objective. Refit with fit!(m) " *
+        "(method = :exact) for inference"))
+    return nothing
+end
+
 """Per-observation score matrix G (T x nparams) at theta, from the
-analytic gradients."""
+analytic gradients. Exact-likelihood fits only (#214)."""
 function score_matrix(m::MNProbit, theta = m.theta)
+    _require_exact(m, "score_matrix")
     beta, V = _unpack(m, theta)
     mu = _mu(m, beta)
     _, dmu, _, GV = choice_loglik_and_score(mu, V, m.choice;
@@ -601,8 +678,10 @@ const HESSIAN_ENGINE = Ref{Union{Nothing,Function}}(nothing)
 
 """Hessian of the log-likelihood at theta: central differences of the
 ANALYTIC score by default (the score is exact, so this is ~1e-8);
-loading ForwardDiff arms a machine-precision dual-mode engine."""
+loading ForwardDiff arms a machine-precision dual-mode engine.
+Exact-likelihood fits only (#214)."""
 function loglik_hessian(m::MNProbit, theta = m.theta; h = 1e-5)
+    _require_exact(m, "loglik_hessian")
     eng = HESSIAN_ENGINE[]
     eng !== nothing && return eng(m, theta)
     np = length(theta)
@@ -619,16 +698,24 @@ end
 
 """Parameter covariance at the fit: method = :hessian (observed
 information, default), :opg (outer product of per-observation
-scores), or :sandwich (H^-1 B H^-1, robust)."""
+scores), or :sandwich (H^-1 B H^-1, robust).
+
+`:opg` never touches the Hessian. It used to compute and invert the
+observed information first and only then branch, so a singular or
+failing Hessian blocked the OPG fallback that exists for exactly that
+case, and paid 2 * nparams score evaluations for nothing (#434)."""
 function vcov(m::MNProbit; method = :hessian)
-    Hs = loglik_hessian(m)
-    Hinv = inv(-Hs)
+    method in (:hessian, :opg, :sandwich) ||
+        error("method must be :hessian, :opg or :sandwich")
+    _require_exact(m, "vcov")
+    if method == :opg
+        G = score_matrix(m)
+        return inv(G' * G)
+    end
+    Hinv = inv(-loglik_hessian(m))
     method == :hessian && return (Hinv .+ Hinv') ./ 2
     G = score_matrix(m)
-    B = G' * G
-    method == :opg && return inv(B)
-    method == :sandwich && return Hinv * B * Hinv
-    error("method must be :hessian, :opg or :sandwich")
+    return Hinv * (G' * G) * Hinv
 end
 
 stderror(m::MNProbit; method = :hessian) =
@@ -640,18 +727,22 @@ function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
             "  logLik=", round(m.loglik, digits = 3),
             m.converged ? "" : "  (NOT converged)")
     isnan(m.loglik) && return
-    se = try
+    # standard errors exist only for the exact objective (#214)
+    exact = m.method == :exact
+    se = !exact ? fill(NaN, length(m.theta)) : try
         stderror(m)
     catch
         fill(NaN, length(m.theta))
     end
     names = vcat(["beta[$i]" for i in 1:m.p],
                  ["v[$row,$col]" for (row, col) in m.pos])
-    println(io, rpad("param", 12), rpad("estimate", 12), "se")
+    println(io, rpad("param", 12), rpad("estimate", 12),
+            exact ? "se" : "se (not available for a :" *
+                           string(m.method) * " fit)")
     for i in eachindex(m.theta)
         println(io, rpad(names[i], 12),
                 rpad(string(round(m.theta[i], digits = 4)), 12),
-                round(se[i], digits = 4))
+                exact ? round(se[i], digits = 4) : "-")
     end
 end
 
