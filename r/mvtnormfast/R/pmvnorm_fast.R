@@ -21,7 +21,20 @@
   }, numeric(n))
 }
 
+.gh_cache <- new.env(parent = emptyenv())
+
+# cached: the rule depends on (r, Q) alone, and the eigensolve that
+# builds it cost more than the integral it serves
 .gh_nodes <- function(r, Q) {
+  key <- paste(r, Q)
+  hit <- .gh_cache[[key]]
+  if (!is.null(hit)) return(hit)
+  out <- .gh_nodes_build(r, Q)
+  assign(key, out, envir = .gh_cache)
+  out
+}
+
+.gh_nodes_build <- function(r, Q) {
   # Golub-Welsch via eigen of the Jacobi matrix for probabilists' Hermite
   J <- diag(0, Q)
   off <- sqrt(seq_len(Q - 1))
@@ -40,16 +53,20 @@
 .nodes_for <- function(V, D) {
   r <- ncol(V)
   sharp <- max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
-  if (r > 2 || sharp > 3.0 || (r == 2 && sharp > 2.0)) {
+  if (sharp > 3.0 || r > 2) {
     n <- 2^13
     F <- qnorm(pmin(pmax(.halton_unit(r, n), 1e-12), 1 - 1e-12))
     list(F = matrix(F, ncol = r), W = rep(1 / n, n))
   } else {
-    # The order is NOT 8 x sharpness: a cell's transition in factor space
-    # is 1/sharpness wide, so the order has to grow like its SQUARE. The
+    # The order grows like sharpness SQUARED, not 8 x sharpness: a
+    # cell's transition in factor space is 1/sharpness wide, and the
     # linear rule gave 0.2% relative error on a correlation-0.8 orthant
-    # (#132). Same rule as winning/fastmvn.py.
-    .gh_nodes(r, if (r == 1) 201L else 81L)
+    # (#132). Rank two keeps the old 15-point floor so ordinary inputs
+    # cost what they did; rank one floors at 61 (n x Q work, negligible
+    # once cached). Same rule as winning/fastmvn.py.
+    Q <- as.integer(min(max(ceiling(15 * sharp^2), if (r == 1) 61 else 15),
+                        if (r == 1) 201 else 41))
+    .gh_nodes(r, Q)
   }
 }
 
@@ -182,6 +199,10 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 # per-coordinate sd, recycled down the columns.
 .log_cell_mass <- function(hi, lo, s) {
   sdm <- matrix(rep(s, each = nrow(hi)), nrow = nrow(hi))
+  if (all(s > 0) && all(lo == -Inf)) {
+    # the common one-sided cell: log Phi(hi/s), stable on both sides
+    return(matrix(pnorm(hi / sdm, log.p = TRUE), nrow(hi), ncol(hi)))
+  }
   out <- matrix(-Inf, nrow(hi), ncol(hi))
   pos <- sdm > 0
   det <- !pos

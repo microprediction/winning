@@ -34,9 +34,9 @@ sequential conditioning), \code{"degenerate-rectangle"},
 \code{"outside-support"}, or \code{"mvtnorm-fallback"}.
 }
 \details{
-Node selection is automatic: Gauss-Hermite for mild loadings (201 points
-at rank one, 81 per axis at rank two), low-discrepancy nodes past
-sharpness 3 (2 at rank two) or factor rank 2, and
+Node selection is automatic: Gauss-Hermite for mild loadings (order
+15 x sharpness squared, at least 61 at rank one and 15 at rank two, at
+most 201 and 41), low-discrepancy nodes past sharpness 3 or factor rank 2, and
 Laplace recentering in deep tails. The exact-decomposition check used
 with \code{sigma} is strict (reconstruction to 1e-11 relative, verified
 against a recomputed factor), so an inexact factorization never

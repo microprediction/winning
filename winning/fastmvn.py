@@ -20,6 +20,8 @@ those calls fall back to scipy.stats.multivariate_normal.cdf unchanged.
 
 from __future__ import annotations
 
+import functools
+
 import numpy as np
 
 from .shapes import as_idio, as_loadings
@@ -46,29 +48,43 @@ def _halton_unit(r, n):
 
 
 def _gh_nodes(r, Q):
+    # Cached: the rule depends on (r, Q) alone, and rebuilding it was most
+    # of the cost of an ordinary call -- hermegauss(201) is an eigensolve
+    # of a 201 x 201 companion matrix, 2.4 ms against 0.1 ms for the
+    # integral it serves.
+    F, W = _gh_nodes_cached(int(r), int(Q))
+    return F, W
+
+
+@functools.lru_cache(maxsize=64)
+def _gh_nodes_cached(r, Q):
     # r = 0 is the EMPTY PRODUCT: one node of weight 1 with no columns,
     # so an (n, 0) loading matrix -- which the shape normalizer accepts
     # as "empty = indep" -- reduces exactly to the independent product.
     # np.meshgrid() of nothing gave "need at least one array to
     # concatenate" from inside numpy instead (#68).
     if r == 0:
-        return np.zeros((1, 0)), np.ones(1)
-    x, w = hermegauss(Q)
-    w = w / w.sum()
-    grids = np.meshgrid(*([x] * r), indexing="ij")
-    F = np.column_stack([g.ravel() for g in grids])
-    W = np.ones(len(F))
-    for c in range(r):
-        W *= w[np.searchsorted(x, F[:, c])]
-    keep = W > 1e-12 * W.max()
-    return F[keep], W[keep] / W[keep].sum()
+        F, W = np.zeros((1, 0)), np.ones(1)
+    else:
+        x, w = hermegauss(Q)
+        w = w / w.sum()
+        grids = np.meshgrid(*([x] * r), indexing="ij")
+        F = np.column_stack([g.ravel() for g in grids])
+        W = np.ones(len(F))
+        for c in range(r):
+            W *= w[np.searchsorted(x, F[:, c])]
+        keep = W > 1e-12 * W.max()
+        F, W = F[keep], W[keep] / W[keep].sum()
+    F.setflags(write=False)
+    W.setflags(write=False)
+    return F, W
 
 
 def _nodes_for(V, D):
     r = V.shape[1]
     sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1))
                          / np.sqrt(np.maximum(D, 1e-300))))
-    if r > 2 or sharp > 3.0 or (r == 2 and sharp > 2.0):
+    if sharp > 3.0 or r > 2:
         # scrambled Sobol, not Halton: plain Halton's low-dimensional
         # projections degrade badly past three dimensions (measured: a
         # rank-6 auto-detected decomposition gave 1e-4 error on Halton
@@ -78,18 +94,22 @@ def _nodes_for(V, D):
         u = qmc.Sobol(r, scramble=True, seed=0).random(n)
         F = ndtri(np.clip(u, 1e-12, 1 - 1e-12))
         return F, np.full(n, 1.0 / n)
-    # The order is NOT 8 x sharpness. A cell's transition in factor
-    # space is 1/sharpness wide and Gauss-Hermite resolves it only once
-    # its node spacing is well below that, so the order has to grow like
-    # sharpness SQUARED; the linear rule gave 0.2% relative error on a
-    # two-coordinate orthant at correlation 0.8 (sharpness 2, Q = 16)
-    # and 0.7% at 0.9, against closed forms (#132). Rank one now always
-    # takes the 201-point rule, which the weight pruning reduces to 67
-    # nodes (measured worst case 1.2e-4 relative at sharpness 3 for
-    # eight coordinates); rank two takes 81 points per axis (1361 nodes
-    # after pruning, 5e-7 at sharpness 2) and escalates to Sobol past
-    # sharpness 2, where the tensor rule is the less accurate of the two.
-    Q = 201 if r == 1 else 81
+    # The order grows like sharpness SQUARED, not 8 x sharpness. A
+    # cell's transition in factor space is 1/sharpness wide and
+    # Gauss-Hermite resolves it only once its node spacing is well below
+    # that; the linear rule gave 0.2% relative error on a two-coordinate
+    # orthant at correlation 0.8 (sharpness 2, Q = 16) and 0.7% at 0.9,
+    # against closed forms (#132). At sharpness <= 1 this is the old
+    # old 15-point floor at rank two, so ordinary inputs pay what they
+    # always did, and the rules are cached. Rank one floors at 61: its
+    # cost is n x Q evaluations (microseconds once the rule is cached),
+    # and 15 points left 2e-6 at correlation 0.5, and 2.6e-3 on a
+    # 200-coordinate field whose rows are individually mild but whose
+    # product is sharp. The caps (201, 41) and the Sobol escalation past
+    # sharpness 3 are unchanged. Measured: correlation 0.8 orthant
+    # 4e-3 -> 3e-8; a rank-two sharpness-2.8 field 2e-3 -> 2e-7 at 0.15 ms.
+    Q = int(np.clip(np.ceil(15.0 * sharp * sharp), 61 if r == 1 else 15,
+                    201 if r == 1 else 41))
     return _gh_nodes(r, Q)
 
 
@@ -589,6 +609,10 @@ def _log_interval_mass(hi, lo_, s):
     hi, lo_, s = np.broadcast_arrays(np.asarray(hi, float),
                                      np.asarray(lo_, float),
                                      np.asarray(s, float))
+    if np.all(lo_ == -np.inf) and np.all(s > 0.0):
+        # the common one-sided cell: log Phi(hi/s), which log_ndtr gives
+        # stably on both sides of zero; one call instead of six
+        return log_ndtr(hi / s)
     out = np.where((lo_ <= 0.0) & (0.0 <= hi), 0.0, -np.inf)
     g = s > 0.0
     if not g.any():

@@ -20,12 +20,7 @@ vecs = parse_json(read(joinpath(@__DIR__, "vectors.json"), String))
         up = case["upper"] === nothing ? nothing : Float64.(case["upper"])
         p, method = mvn_cdf_fast_info(lower = lo, upper = up, mean = mu,
                                       V = V, D = D)
-        if case["method"] == "factor" && method == "fallback"
-            # past sharpness 2 at rank two the reference takes its Sobol
-            # rule, which this port delegates to MvNormalCDF instead
-            @test MF._sharpness(V, D) > 2.0 && size(V, 2) == 2
-            @test abs(p - case["p"]) < 1e-3 * case["p"]
-        elseif case["method"] == "factor"
+        if case["method"] == "factor"
             @test method == "factor"
             @test abs(p - case["p"]) < 1e-9 * max(case["p"], 1e-12)
         else

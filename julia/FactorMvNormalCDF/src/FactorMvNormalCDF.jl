@@ -141,7 +141,23 @@ function _gh1(Q::Int)
     return E.values, w ./ sum(w)
 end
 
+# Rank two keeps the 15-point floor so ordinary inputs cost what they
+# did; rank one floors at 61 (n x Q work, negligible once cached).
+_gh_order(r, sharp) = Int(clamp(ceil(15.0 * sharp^2), r == 1 ? 61 : 15,
+                                r == 1 ? 201 : 41))
+
+const _GH_CACHE = Dict{Tuple{Int,Int},Tuple{Matrix{Float64},Vector{Float64}}}()
+const _GH_LOCK = ReentrantLock()
+
+# cached: the rule depends on (r, Q) alone, and its eigensolve cost more
+# than the integral it serves
 function _gh_nodes(r::Int, Q::Int)
+    lock(_GH_LOCK) do
+        get!(() -> _gh_nodes_build(r, Q), _GH_CACHE, (r, Q))
+    end
+end
+
+function _gh_nodes_build(r::Int, Q::Int)
     # r = 0 is the EMPTY PRODUCT: one node of weight 1 with no columns,
     # so an (n, 0) loading matrix reduces exactly to the independent
     # product. Every r != 1 was built as RANK TWO below, so r = 0 made a
@@ -295,15 +311,18 @@ end
 """
     _log_ndtr(x) -> Float64
 
-log Phi(x) without underflow: log of the Cephes ndtr where that is
-accurate, the erfcx form `log(erfcx(-x/sqrt 2)/2) - x^2/2` in the far
+log Phi(x) without underflow: log of the Cephes ndtr down to -30, the
+erfcx form `log(erfcx(-x/sqrt 2)/2) - x^2/2` in the far
 lower tail, and log1p(-Phi(-x)) above zero.
 """
 function _log_ndtr(x::Float64)
     x == Inf && return 0.0
     x == -Inf && return -Inf
     x > 0.0 && return log1p(-ndtr(-x))
-    x > -5.0 && return log(ndtr(x))
+    # Cephes ndtr is relatively accurate down the whole left tail until it
+    # underflows near -37.5; the 60-term erfcx continued fraction is only
+    # needed past that, and cost 6x the integral when used from -5
+    x > -30.0 && return log(ndtr(x))
     return log(0.5 * _erfcx(-x * _SQRTH)) - 0.5 * x * x
 end
 
@@ -324,6 +343,7 @@ already shifted by the mean and the factor term.
 """
 function _log_cell(hi::Float64, lo::Float64, sd::Float64)
     sd > 0.0 || return (lo <= 0.0 && 0.0 <= hi) ? 0.0 : -Inf
+    lo == -Inf && return _log_ndtr(hi / sd)    # the common one-sided cell
     b = hi / sd
     a = lo / sd
     if a > 0.0
@@ -470,14 +490,14 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
                        for j in 1:n)), "factor"
     end
     sharp = _sharpness(Vm, Dv)
-    if r > 2 || sharp > 3.0 || (r == 2 && sharp > 2.0)
+    if r > 2 || sharp > 3.0
         sigma_d = Vm * Vm' .+ [i == j ? Dv[i] : 0.0 for i in 1:n, j in 1:n]
         return _dense_fallback(lo, up, mu, sigma_d; kwargs...)[1], "fallback"
     end
     # The order grows like sharpness SQUARED, not 8 x sharpness: the
     # linear rule left 0.2% relative error on a correlation-0.8 orthant
     # (#132). Same rule as the python reference.
-    Q = r == 1 ? 201 : 81
+    Q = _gh_order(r, sharp)
     F, W = _gh_nodes(r, Q)
     p = _cell_expectation(F, W, Vm, s, mu, lo, up)
     p >= 1e-8 && return p, "factor"
@@ -485,14 +505,19 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
     # deep tail: recenter the quadrature at the Laplace point of the
     # log-integrand and importance-reweight -- DETERMINISTIC here
     # (GH on the recentered gaussian), unlike the reference's Sobol
-    logint(f) = begin
-        z = Vm * f
-        acc = -0.5 * (f' * f)
-        for j in 1:n
-            acc += _log_cell(up[j] - mu[j] - z[j], lo[j] - mu[j] - z[j],
-                             s[j])
+    # `let` rebinds the captures: Vm, mu, lo, up and n are reassigned
+    # above (constants dropped), and a closure over a reassigned variable
+    # boxes it, which made this loop type-unstable and 6x slower
+    logint = let Vm = Vm, mu = mu, lo = lo, up = up, s = s, n = n
+        f -> begin
+            z = Vm * f
+            acc = -0.5 * (f' * f)
+            for j in 1:n
+                acc += _log_cell(up[j] - mu[j] - z[j], lo[j] - mu[j] - z[j],
+                                 s[j])
+            end
+            acc
         end
-        acc
     end
     # backtracking ascent on the smooth log-integrand (python _ascend)
     f0 = zeros(r)
@@ -516,7 +541,7 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
         moved || break
     end
     tau = 1.5
-    Fh, Wh = _gh_nodes(r, r == 1 ? 201 : 81)
+    Fh, Wh = _gh_nodes(r, r == 1 ? 201 : 41)
     total = 0.0
     for q in axes(Fh, 1)
         f = f0 .+ tau .* vec(Fh[q, :])
@@ -554,14 +579,14 @@ function mvnormcdf_factor(mu::AbstractVector, sigma::AbstractMatrix,
     V, D = fd
     r = size(V, 2)
     sharp = r == 0 ? 0.0 : _sharpness(V, D)
-    (r > 2 || sharp > 3.0 || (r == 2 && sharp > 2.0)) &&
+    (r > 2 || sharp > 3.0) &&
         return _dense_fallback(a, b, mu, sigma; kwargs...)
     p, method = _impl(a, b, mu, nothing, V, D)
     r > 0 || return p, 0.0
     # error estimate: re-evaluate at reduced order
     s = sqrt.(D)
-    Q = r == 1 ? 201 : 81
-    F2, W2 = _gh_nodes(r, Q - 20)
+    Q = _gh_order(r, sharp)
+    F2, W2 = _gh_nodes(r, max(Q - 6, 7))
     p2 = _cell_expectation(F2, W2, V, s, Float64.(collect(mu)),
                            Float64.(collect(a)), Float64.(collect(b)))
     return p, abs(p - p2)
