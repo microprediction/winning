@@ -96,8 +96,8 @@ def _log_mills(a):
 # optimizing a discontinuous objective with a within-branch gradient.
 # Across this window the likelihood is the probability-weighted blend
 # (1 - w) P_GH + w P_Sobol with a C1 smoothstep w(sharp), and the score
-# carries the blend's own derivative. Outside it, each side is
-# bit-identical to the single rule it always was.
+# carries the blend's own derivative. Outside it, each side is the
+# single rule it always was (to summation roundoff).
 _BLEND_LO, _BLEND_HI = 2.9, 3.1
 
 
