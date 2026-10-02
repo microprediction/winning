@@ -26,13 +26,17 @@ pmvnorm_fast(lower = -Inf, upper = Inf, mean = NULL, sigma = NULL,
 }
 \value{
 A single probability. Attribute \code{method} records the path taken:
-\code{"factor"}, \code{"factor-recentered"} (deep tails, below 1e-8,
-evaluated by Laplace-recentered importance reweighting), or
-\code{"mvtnorm-fallback"}.
+\code{"factor"}, \code{"factor-recentered"} (deep tails, below 1e-8 or
+resolved by too few low-discrepancy nodes, evaluated by recentered
+importance reweighting), \code{"factor-ghk"} (rows with \code{D = 0} and
+a nonzero loading, whose slab constraints are integrated exactly by
+sequential conditioning), \code{"degenerate-rectangle"},
+\code{"outside-support"}, or \code{"mvtnorm-fallback"}.
 }
 \details{
-Node selection is automatic: adaptive-order Gauss-Hermite for mild
-loadings, low-discrepancy nodes past sharpness 3 or factor rank 2, and
+Node selection is automatic: Gauss-Hermite for mild loadings (order
+15 x sharpness squared, at least 61 at rank one and 15 at rank two, at
+most 201 and 41), low-discrepancy nodes past sharpness 3 or factor rank 2, and
 Laplace recentering in deep tails. The exact-decomposition check used
 with \code{sigma} is strict (reconstruction to 1e-11 relative, verified
 against a recomputed factor), so an inexact factorization never

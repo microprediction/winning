@@ -23,7 +23,11 @@ def _diff_problem(mu, Sigma, i):
     M[np.arange(n - 1), others] = 1.0
     M[:, i] -= 1.0
     C = M @ Sigma @ M.T
-    return a, C + 1e-12 * np.eye(n - 1)
+    # a ridge RELATIVE to the contrast scale: an absolute 1e-12 is model
+    # noise in the utility unit and drove a race at scale 1e-7 toward
+    # equal shares (#101, #409)
+    scale = max(float(np.trace(C)) / max(n - 1, 1), 1e-300)
+    return a, C + 1e-12 * scale * np.eye(n - 1)
 
 
 def _order_variables(a, C):

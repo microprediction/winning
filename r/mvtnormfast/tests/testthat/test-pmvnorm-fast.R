@@ -232,6 +232,100 @@ test_that("the documented spellings all still work and agree", {
                "mean has a non-finite entry")
 })
 
+# --- the rectangle depends on the Gaussian, not its spelling ----------
+#
+# Same fixtures as tests/test_fastmvn_semantics.py in the python tree.
+
+test_that("where the variance is stored does not matter (#429)", {
+  for (b in c(-3, -4, -6)) {
+    exact <- pnorm(b)^2
+    in_v <- pmvnorm_fast(upper = c(b, b), V = diag(2), D = c(0, 0))
+    in_d <- pmvnorm_fast(upper = c(b, b), V = matrix(0, 2, 2), D = c(1, 1))
+    # was 6.1e-305 at b = -4 and exactly 0 at b = -6 for V = I
+    expect_lt(abs(as.numeric(in_v) / exact - 1), 1e-10)
+    expect_lt(abs(as.numeric(in_d) / exact - 1), 1e-10)
+  }
+})
+
+test_that("a rectangle that misses the singular support is empty (#410)", {
+  V <- matrix(1, 2, 1)                   # X1 = X2 = F exactly
+  expect_identical(as.numeric(pmvnorm_fast(lower = c(-Inf, 1),
+    upper = c(0, Inf), V = V, D = c(0, 0))), 0)
+  expect_identical(as.numeric(pmvnorm_fast(lower = c(-Inf, 0),
+    upper = c(0, Inf), V = V, D = c(0, 0))), 0)
+  p <- pmvnorm_fast(lower = c(-Inf, -1), upper = c(0, Inf), V = V,
+                    D = c(0, 0))
+  expect_lt(abs(as.numeric(p) - (pnorm(0) - pnorm(-1))), 1e-13)
+})
+
+test_that("an atom on the bound carries its mass (#414)", {
+  p <- pmvnorm_fast(lower = c(0, -Inf), upper = c(0, 0), mean = c(0, 0),
+                    V = matrix(0, 2, 1), D = c(0, 1))
+  expect_lt(abs(as.numeric(p) - 0.5), 1e-15)            # was 0
+  expect_identical(as.numeric(pmvnorm_fast(lower = 0, upper = 0, mean = 0,
+    V = matrix(0, 1, 1), D = 0)), 1)                    # was 0
+  expect_identical(as.numeric(pmvnorm_fast(lower = c(0, -Inf),
+    upper = c(0, 0), mean = c(0.5, 0), V = matrix(0, 2, 1),
+    D = c(0, 1))), 0)
+  slab <- pmvnorm_fast(lower = c(0, -Inf), upper = c(0, 0),
+                       V = matrix(0, 2, 1), D = c(1, 1))
+  expect_identical(as.numeric(slab), 0)
+  expect_equal(attr(slab, "method"), "degenerate-rectangle")
+})
+
+test_that("upper-tail cells do not cancel; reflection is exact (#196, #98)", {
+  p <- pmvnorm_fast(lower = 9, upper = 10, V = matrix(0, 1, 1), D = 1)
+  want <- pnorm(9, lower.tail = FALSE) - pnorm(10, lower.tail = FALSE)
+  expect_lt(abs(as.numeric(p) / want - 1), 1e-12)
+  p89 <- pmvnorm_fast(lower = 8, upper = 9, V = matrix(0, 1, 1), D = 1)
+  w89 <- pnorm(8, lower.tail = FALSE) - pnorm(9, lower.tail = FALSE)
+  expect_lt(abs(as.numeric(p89) / w89 - 1), 1e-12)
+  for (n in 1:3) {
+    up <- pmvnorm_fast(lower = rep(9, n), V = matrix(0, n, 1), D = rep(1, n))
+    down <- pmvnorm_fast(upper = rep(-9, n), V = matrix(0, n, 1),
+                         D = rep(1, n))
+    expect_lt(abs(as.numeric(up) / pnorm(-9)^n - 1), 1e-9)
+    expect_lt(abs(as.numeric(up) / as.numeric(down) - 1), 1e-12)
+  }
+})
+
+test_that("one coordinate is the normal cdf (#395)", {
+  sd <- sqrt(1 + 1e-6)
+  for (z in c(-4.2, -4.1, -4.0)) {
+    p <- pmvnorm_fast(upper = z * sd, V = matrix(1, 1, 1), D = 1e-6)
+    expect_lt(abs(as.numeric(p) / pnorm(z) - 1), 1e-12)
+  }
+})
+
+test_that("units do not change the algorithm (#368)", {
+  V <- matrix(c(.5, -.3, .4, .2, -.4, .3), 6, 1)
+  D <- c(.8, 1.1, .9, 1.2, 1, .7)
+  S <- V %*% t(V) + diag(D)
+  mu <- c(.1, -.2, .3, 0, .4, -.1); b <- c(.5, .2, .8, -.1, .4, .6)
+  p0 <- pmvnorm_fast(mean = mu, upper = b, sigma = S)
+  for (cc in c(1e-12, 1e-6, 1e6, 1e12)) {
+    expect_false(is.null(factorize_covariance(cc * S)))   # NULL at 1e-12
+    p <- pmvnorm_fast(mean = sqrt(cc) * mu, upper = sqrt(cc) * b,
+                      sigma = cc * S)
+    expect_equal(attr(p, "method"), "factor")
+    expect_lt(abs(as.numeric(p) / as.numeric(p0) - 1), 1e-12)
+  }
+})
+
+test_that("diagonal and heterogeneous-scale covariance (#132)", {
+  D0 <- c(1, 1, 1, 1, 1e8); b <- c(10, 10, 10, 10, -5000)
+  expect_equal(ncol(factorize_covariance(diag(D0))$V), 0)
+  p <- pmvnorm_fast(upper = b, sigma = diag(D0))
+  expect_lt(abs(as.numeric(p) / prod(pnorm(b / sqrt(D0))) - 1), 1e-13)
+  for (rho in c(0.5, 0.8, 0.9)) {
+    S <- matrix(c(1, rho, 0, rho, 1, 0, 0, 0, 1e16), 3)
+    expect_equal(ncol(factorize_covariance(S)$V), 1)    # was rank zero
+    p <- pmvnorm_fast(upper = rep(0, 3), sigma = S)
+    want <- 0.5 * (0.25 + asin(rho) / (2 * pi))
+    expect_lt(abs(as.numeric(p) / want - 1), 1e-6)      # was -41.6% at 0.9
+  }
+})
+
 test_that("dense fallback enforces the mean/bound contract (#437)", {
   n <- 8L
   sigma <- outer(seq_len(n), seq_len(n), function(i, j) 0.4^abs(i - j))
