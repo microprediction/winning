@@ -32,14 +32,41 @@
   d
 }
 
-.factor_model_projected <- function(C, k, n_outer = 60L) {
+# ||P (C - V V' - diag D) P||_F^2, the identified objective
+.projected_sq <- function(C, V, D) {
+  n <- nrow(C)
+  P <- diag(n) - 1 / n
+  sum((P %*% (C - V %*% t(V) - diag(D, n)) %*% P)^2)
+}
+
+# Exact argmin_{d >= 0} d'Gd/2 - c'd for G = P o P = a I + b 11'
+# (a = 1 - 2/n, b = 1/n^2), by water-filling: port of python's
+# _nnls_centered_gram.
+.nnls_centered_gram <- function(c0, n, n_pass = 100L) {
+  a <- 1 - 2 / n
+  b <- 1 / (n * n)
+  s <- max(sum(c0), 0) / (a + b * n)
+  if (n <= 2L) return(rep(max(s, 0) / n, n))
+  for (it in seq_len(n_pass)) {
+    mask <- c0 > b * s
+    s_new <- sum(c0[mask]) / (a + b * sum(mask))
+    if (abs(s_new - s) <= 1e-15 * max(1, abs(s))) { s <- s_new; break }
+    s <- s_new
+  }
+  pmax((c0 - b * s) / a, 0)
+}
+
+.factor_model_projected <- function(C, k, n_outer = 60L, D0 = NULL) {
   n <- nrow(C)
   P <- diag(n) - 1 / n
   B <- qr.Q(qr(P))[, seq_len(n - 1), drop = FALSE]
   S <- t(B) %*% C %*% B
-  D <- rep(0.5 * mean(diag(C)), n)
+  # D0 exists for multistart: the alternation is nonconvex, and its
+  # default start can stall at a nonglobal stationary point (#427)
+  D <- if (is.null(D0)) rep(0.5 * mean(diag(C)), n) else as.numeric(D0)
   G <- P * P
   W <- matrix(0, n - 1, k)
+  best <- list(W = W, D = D, obj = Inf)
   for (it in seq_len(n_outer)) {
     R <- S - t(B * D) %*% B
     e <- eigen(R, symmetric = TRUE)
@@ -48,10 +75,19 @@
     A <- S - W %*% t(W)
     c0 <- rowSums((B %*% A) * B)
     D_new <- .nnls_active_set(G, c0)
+    # descent enforced, as python: a sweep that does not improve the
+    # objective is discarded and the alternation stops at the best iterate
+    obj <- .projected_sq(C, B %*% W, D_new)
+    if (obj > best$obj * (1 + 1e-12)) { W <- best$W; D <- best$D; break }
+    best <- list(W = W, D = D_new, obj = obj)
     if (max(abs(D_new - D)) < 1e-12) { D <- D_new; break }
     D <- D_new
   }
-  list(V = B %*% W, D = pmax(D, 1e-8))
+  # RELATIVE floor, as python's factor_model_projected: an absolute 1e-8
+  # inflates a tiny variance (C = 1e-12 I) by orders of magnitude
+  dc <- diag(C)
+  floor <- 1e-8 * pmax(dc, 1e-6 * max(mean(dc), 1e-300))
+  list(V = B %*% W, D = pmax(D, floor))
 }
 
 #' Fit a dense covariance to the race grammar
@@ -117,7 +153,25 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   }
   s <- sqrt(pmax(diag(C), 1e-12))
   corr <- C / outer(s, s)
-  fit <- .factor_model_projected(C, min(k, n - 1L))
+  kk <- min(k, n - 1L)
+  fit <- .factor_model_projected(C, kk)
+  # Multistart rescue, ported from python's fit_covariance: the default
+  # start stalled on an EXACT rank-2-plus-diagonal 12x12 matrix at
+  # projected objective 1.04 (contrast residual 0.159, a pair probability
+  # 1.79 points off) where a diagonal-heavy start reaches 1e-14 (#427).
+  # Tried only when the default objective is materially above zero.
+  Pc <- diag(n) - 1 / n
+  scale2 <- sum((Pc %*% C %*% Pc)^2)
+  obj0 <- .projected_sq(C, fit$V, fit$D)
+  if (obj0 > 1e-12 * max(scale2, 1e-300)) {
+    lam_top <- sum(sort(eigen(C, symmetric = TRUE, only.values = TRUE)$values,
+                        decreasing = TRUE)[seq_len(kk)]) / n
+    for (D_start in list(0.9 * diag(C), pmax(diag(C) - lam_top, 1e-3))) {
+      f2 <- .factor_model_projected(C, kk, D0 = D_start)
+      o2 <- .projected_sq(C, f2$V, f2$D)
+      if (o2 < obj0) { fit <- f2; obj0 <- o2 }
+    }
+  }
   V <- fit$V
   if (is.null(blocks)) blocks <- max(2L, min(n %/% 5L, 20L))
   P <- diag(n) - 1 / n
@@ -154,24 +208,27 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   keep <- colSums(Vall ^ 2) > 1e-10 * sum(diag(C)) / n
   if (!any(keep)) keep[1] <- TRUE
   Vall <- Vall[, keep, drop = FALSE]
-  # the clamp is reported, not re-derived: the degradation test used to
-  # compare D against 1e-6 * diag while close_fit clamped at 1e-3 * mean,
-  # three orders of magnitude apart, so a clamp-bound fit counted zero
-  # bound entries and was priced instead of routed (#189)
-  d_clamp <- 1e-3 * mean(diag(C))
+  # The floor is RELATIVE to each runner's own variance, as python's
+  # _close. The absolute 1e-3 * mean(diag(C)) floor destroyed near-singular
+  # contrasts: on diag(1e-8, 1e-8, 1) Var(X1 - X2) >= D1 + D2 >= 6.7e-4
+  # against the true 2e-8, a near-certain head-to-head priced as a coin
+  # flip (#407). And it is the LOWER-BOUNDED least squares (d = floor + x,
+  # x >= 0), not an unconstrained solve clipped afterwards, which is not
+  # the constrained minimiser because P o P couples the coordinates. The
+  # degradation test still keys on the floor close_fit uses (#189).
+  d_clamp <- 1e-6 * pmax(diag(C), 1e-6 * mean(diag(C)))
   close_fit <- function(Vc) {
     rhs <- diag(P %*% (C - Vc %*% t(Vc)) %*% P)
-    # The closing solve is against P o P = a I + b 11' with a = 1 - 2/n,
-    # b = 1/n^2. At n = 2 that a is exactly ZERO, so the matrix is rank
-    # one and solve() threw for EVERY 2x2 covariance, public cov= calls
-    # included (#181). The python reference has had the two-runner branch
-    # all along: one contrast, so the total is spread evenly.
+    # P o P = a I + b 11' with a = 1 - 2/n, b = 1/n^2. At n = 2, a = 0
+    # and the matrix is rank one (#181): one contrast, the total is
+    # spread evenly.
+    a <- 1 - 2 / n
+    b <- 1 / (n * n)
     if (n <= 2L) {
-      a <- 1 - 2 / n
-      b <- 1 / (n * n)
       Dc <- pmax(rep(max(sum(rhs), 0) / (a + n * b) / n, n), d_clamp)
     } else {
-      Dc <- pmax(solve(P * P, rhs), d_clamp)
+      Dc <- d_clamp + .nnls_centered_gram(rhs - (a * d_clamp +
+                                                   b * sum(d_clamp)), n)
     }
     Rm <- P %*% (C - Vc %*% t(Vc) - diag(Dc)) %*% P
     list(D = Dc, res = max(abs(Rm)))

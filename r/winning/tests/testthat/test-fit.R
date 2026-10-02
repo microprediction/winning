@@ -40,8 +40,13 @@ test_that("a degraded cov= fit is announced where it cannot be routed", {
   mu <- seq(-0.6, 0.6, length.out = n)
   expect_warning(race_probabilities(mu, cov = C, return_slopes = TRUE),
                  "degraded")
+  # n_iter = 2: the warning is raised before the sweeps. Since #407's
+  # relative floor this full-rank fit has D at 1e-6 (as python's), the
+  # conditional races are near-steps and a full inversion takes minutes
+  # without converging -- which is exactly what the warning announces.
   expect_warning(abilities_from_race(c(.4, .2, .1, .1, .07, .06, .04, .03),
-                                     cov = C, base = "gumbel"), "degraded")
+                                     cov = C, base = "gumbel", n_iter = 2),
+                 "degraded")
   fit <- fit_covariance(C)
   expect_true(fit$degraded)
   expect_true(fit$rank <= n)          # #180: the eigen arm used to ask for
@@ -115,7 +120,10 @@ test_that("GHK has no dimension cliff", {
 test_that("degradation is judged against the clamp close_fit actually uses", {
   # the test compared D against 1e-6 * diag while close_fit clamped at
   # 1e-3 * mean(diag), so a clamp-bound fit counted zero bound entries and
-  # was priced instead of routed, restoring the divergence #188 closed
+  # was priced instead of routed, restoring the divergence #188 closed.
+  # The clamp itself is now python's RELATIVE floor (#407); the contract
+  # pinned here -- bound is counted against the floor actually used -- is
+  # unchanged.
   set.seed(3)
   n <- 8
   V <- matrix(rnorm(n * 3), n, 3)
@@ -124,7 +132,7 @@ test_that("degradation is judged against the clamp close_fit actually uses", {
   C <- S / outer(s, s)
   fit <- fit_covariance(C)
   expect_true(fit$bound > 0)                    # was 0 before the fix
-  expect_equal(fit$clamp, 1e-3 * mean(diag(C)))
+  expect_equal(fit$clamp, 1e-6 * pmax(diag(C), 1e-6 * mean(diag(C))))
   expect_true(fit$degraded)
   expect_true(is.finite(fit$contrast_residual))
 })
@@ -264,4 +272,68 @@ test_that("a large two-runner cov still fits", {
     f <- fit_covariance(diag(c(v, v)))
     expect_true(all(is.finite(f$D)))
   }
+})
+
+test_that("near-singular contrasts survive the closing floor (#407)", {
+  C <- diag(c(1e-8, 1e-8, 1))
+  f <- fit_covariance(C)
+  S <- f$V %*% t(f$V) + diag(f$D)
+  expect_equal(f$D[1:2], c(1e-8, 1e-8), tolerance = 1e-6)
+  expect_lt(abs((S[1, 1] + S[2, 2] - 2 * S[1, 2]) / 2e-8 - 1), 1e-6)
+  expect_lt(f$contrast_residual, 1e-6)
+  expect_false(f$degraded)
+  exact <- pnorm(-0.001 / sqrt(2e-8))
+  p <- suppressWarnings(race_probabilities(c(0, 0.001, 10), cov = C,
+                                           return_slopes = TRUE,
+                                           points = 65537)$p)
+  expect_lt(abs(p[2] / exact - 1), 0.05)       # was 0.48 (a coin flip)
+  # heterogeneous scales: each floor is relative to its own variance, so
+  # every pairwise contrast variance is held (D itself is not identified
+  # at n = 3, only the choice-relevant contrasts are)
+  C2 <- diag(c(1e-6, 1e-6, 1, 100, 100))
+  f2 <- fit_covariance(C2)
+  expect_lt(f2$contrast_residual, 1e-5)
+  expect_true(all(f2$clamp == 1e-6 * pmax(diag(C2), 1e-6 * mean(diag(C2)))))
+})
+
+test_that("the closing solve is the lower-bounded least squares (#407)", {
+  # an active floor: the unconstrained solve goes negative on runner 1
+  set.seed(21)
+  n <- 6
+  V <- matrix(rnorm(n * 2), n, 2)
+  C <- V %*% t(V) + diag(c(1e-9, rep(1, n - 1)))
+  f <- fit_covariance(C, k = 1L, m = 0L, blocks = 1L)
+  P <- diag(n) - 1 / n
+  obj <- function(D) sum((P %*% (C - f$V %*% t(f$V) - diag(D)) %*% P)^2)
+  fl <- f$clamp
+  expect_true(all(f$D >= fl - 1e-18))
+  # KKT: no feasible coordinate move lowers the objective
+  for (i in seq_len(n)) for (h in c(-1, 1) * 1e-5) {
+    D2 <- f$D; D2[i] <- max(D2[i] + h, fl[i])
+    expect_gte(obj(D2), obj(f$D) - 1e-12)
+  }
+})
+
+test_that("an exact rank-2-plus-diagonal matrix is returned undistorted (#427)", {
+  V0 <- matrix(c(
+     0.075438132656, -0.079262917975,  0.384253590266,  0.062940070292,
+    -0.321401623897,  0.216957032946,  0.782400027078,  0.568248577878,
+    -0.422241141484, -0.759252882628, -0.373964677522,  0.024795587608,
+    -1.395018464783, -0.131274998360, -0.747546568352, -0.439360412822,
+    -0.326555389714, -0.189780093821,  0.246978321824,  0.625508021666,
+    -0.077120797766,  0.819878082330, -0.399116804092,  0.210906042056),
+    ncol = 2L, byrow = TRUE)
+  D0 <- c(1.701258166559, 0.585268443588, 9.872334718900, 9.155259899265,
+          2.350087156121, 1.999486851270, 2.381735122844, 0.599574077550,
+          0.186291487317, 2.773171194144, 1.123850763479, 0.417333983859)
+  C <- tcrossprod(V0) + diag(D0)
+  f <- fit_covariance(C, k = 2L, m = 0L, blocks = 1L, nodes = 32L)
+  Cfit <- tcrossprod(f$V) + diag(f$D)
+  P <- diag(12) - 1 / 12
+  expect_lt(max(abs(P %*% (C - Cfit) %*% P)), 1e-6)     # was 0.295
+  expect_lt(f$contrast_residual, 1e-6)                    # was 0.159
+  expect_false(f$degraded)
+  dv <- function(S, i, j) S[i, i] + S[j, j] - 2 * S[i, j]
+  expect_lt(abs(pnorm(1.471517470795 / sqrt(dv(Cfit, 11, 12))) -
+                pnorm(1.471517470795 / sqrt(dv(C, 11, 12)))), 1e-6)
 })
