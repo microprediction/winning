@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..outcomes import as_order
 from ..shapes import as_loadings, as_variance
 
-from scipy.special import ndtr
+from scipy.special import log_ndtr, ndtr
 
 from ..factor.core import jacobian_vector_product, win_probabilities_factor
 
@@ -265,6 +266,54 @@ def predictive_win_probabilities(m, v=None, beta2=1.0, base="normal", V=None,
     return p / p.sum()
 
 
+# --- the two-runner race is one Gaussian contrast (#92) ----------------
+#
+# The shared-field JVP and the ordered-statistics lattice span every
+# entrant's density on ONE grid sized by the widest sd. With variances
+# [1, 1e6] the narrow runner's density fell between nodes: the order
+# probabilities [0,1] and [1,0] summed to 1.628, the winner update's
+# posterior means were 2.5x too small and its loser variance was floored
+# at 1e-6 where the truth is 3.6e5. A pair needs no lattice at all:
+# P(i beats j) = sum_q W_q Phi(c_q / s), c_q the mean contrast at factor
+# node q and s^2 = D_i + D_j, with an analytic gradient. Every Gaussian
+# pair route -- winner, order, correlated, full-covariance, team --
+# goes through these two helpers.
+
+_LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
+
+
+def _pair_contrast_logp_grad(c, s):
+    """log Phi(c/s) and d/dc of it, elementwise over arrays c."""
+    z = np.asarray(c, dtype=float) / s
+    lp = log_ndtr(z)
+    return lp, np.exp(-0.5 * z * z - _LOG_SQRT_2PI - lp) / s
+
+
+def _pair_winner_logp_row(m, D, i, V=None, F=None, W=None):
+    """(d log p_i / d m, log p_i) for a two-runner Gaussian race,
+    max-wins, mixed over factor nodes (F, W) when loadings V are given."""
+    m = np.asarray(m, dtype=float)
+    D = np.broadcast_to(np.asarray(D, dtype=float), (2,))
+    i = int(i); j = 1 - i
+    s = float(np.sqrt(D[i] + D[j]))
+    c = np.array([m[i] - m[j]])
+    logW = np.zeros(1)
+    if V is not None and F is not None:
+        Vm = np.asarray(V, dtype=float)
+        c = (m[i] - m[j]) + np.asarray(F, dtype=float) @ (Vm[i] - Vm[j])
+        logW = np.log(np.asarray(W, dtype=float))
+    lp, dlp = _pair_contrast_logp_grad(c, s)
+    a = logW + lp
+    amax = a.max()
+    if not np.isfinite(amax):
+        return np.zeros(2), -np.inf
+    logp = float(amax + np.log(np.exp(a - amax).sum()))
+    gi = float((np.exp(a - logp) * dlp).sum())
+    g = np.zeros(2)
+    g[i], g[j] = gi, -gi
+    return g, logp
+
+
 def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
                    points=257):
     """d log p_i / d m_j for all j, via one symmetric-Jacobian JVP.
@@ -279,6 +328,9 @@ def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
     moment identities need a Gaussian prior, not Gaussian performance.
     winning.factor.races.failure_base gives the retirement/DNF case."""
     n = len(m)
+    if base == "normal" and n == 2:
+        g, logp = _pair_winner_logp_row(m, D, i, V=V, F=F, W=W)
+        return g, float(np.exp(logp))
     Vz = np.zeros((n, 1)) if V is None else V
     Fz = _F1 if F is None else F
     Wz = _W1 if W is None else W
@@ -436,11 +488,15 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     measures 0.94+ coverage on every base."""
     m = np.asarray(m, dtype=float).copy()
     v = as_variance(v, len(m)).copy()
-    order = list(order)
+    order = list(as_order(order, len(m)))                      # #129
+    # per-player beta2 must shrink with the field: the whole vector was
+    # forwarded to every stage, so stage two paired a two-runner state
+    # with three noise entries and raised (#138)
+    b2 = _beta_per_player(beta2, len(m))
     for t in range(len(order) - 1):
         rest = np.array(order[t:])
         w_local = 0
-        mm, vv, _ = update_winner(m[rest], v[rest], w_local, beta2,
+        mm, vv, _ = update_winner(m[rest], v[rest], w_local, b2[rest],
                                   base=base)
         m[rest], v[rest] = mm, vv
     return m, v
@@ -502,6 +558,17 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
     log-scales so 20-player orders (P ~ 1e-19) stay accurate.
     Returns (log P, d log P / d m)."""
     n = len(order)
+    if n <= 1:
+        # a singleton partial order is a tautology: P = 1, no gradient.
+        # It indexed past the stage arrays and raised IndexError (#129)
+        return 0.0, np.zeros(len(m))
+    if base == "normal" and curves is None and n == 2:
+        hi, lo_ = int(order[0]), int(order[1])
+        lp, dlp = _pair_contrast_logp_grad(
+            m[hi] - m[lo_], float(np.hypot(sd[hi], sd[lo_])))
+        grad = np.zeros(len(m))
+        grad[hi], grad[lo_] = float(dlp), -float(dlp)
+        return float(lp), grad
     if curves is not None:
         lo = min(float(m[j] + curves[j][0][0]) for j in order)
         hi = max(float(m[j] + curves[j][0][-1]) for j in order)
@@ -611,6 +678,7 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
     better; overstating the failure rate is the one badly wrong move."""
     m = np.asarray(m, dtype=float)
     v = as_variance(v, len(m))
+    order = as_order(order, len(m))                            # #129
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     # non-normal bases price the true predictive (Gaussian belief
     # convolved with base noise) rather than the base at combined
@@ -659,8 +727,9 @@ def order_loglik(m, sd, order, L=2001, base="normal"):
     """
     m = np.asarray(m, dtype=float)
     sd = np.asarray(sd, dtype=float)
-    return _order_pass(m, sd, np.asarray(order, dtype=int), L=L,
-                       base=base)
+    # distinct labels: [0, 0] returned -log 2 with an invented gradient
+    # (#129)
+    return _order_pass(m, sd, as_order(order, len(m)), L=L, base=base)
 
 
 def _factor_grid(r, Qf=7, nodes_log2=10):
@@ -668,6 +737,40 @@ def _factor_grid(r, Qf=7, nodes_log2=10):
     dimension) at r <= 2, 2**nodes_log2 scrambled Sobol nodes past."""
     from ..likelihood import _factor_nodes
     return _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2)
+
+
+
+def _canonical_loadings(V, rtol=1e-12):
+    """A representation of the factor law that depends on V V' alone.
+
+    Gaussian factors only enter through V V': a sign flip of a column,
+    an orthogonal rotation, or a zero column is the SAME model. A fixed
+    node cloud (Gauss-Hermite tensor or scrambled Sobol) is not
+    invariant under those maps, so equivalent loadings returned
+    different posteriors -- 0.030 in means and 0.070 in log evidence
+    for a rank-2 rotation at Qf=7, and an eigenvector sign chosen by
+    LAPACK made update_winner_full depend on entrant order (#130).
+
+    U S from the thin SVD is fixed by V V' up to the sign of each
+    column (and rotations within a repeated singular value, which this
+    cannot resolve). The sign is set by the column's sum of cubes, which
+    a permutation of entrants does not change; null directions are
+    dropped, so a zero-padded V is the unpadded one."""
+    V = np.asarray(V, dtype=float)
+    if V.shape[1] == 0 or not np.any(V):
+        return np.zeros((V.shape[0], 0))
+    U, sv, _ = np.linalg.svd(V, full_matrices=False)
+    keep = sv > rtol * sv[0]
+    C = U[:, keep] * sv[keep]
+    for c in range(C.shape[1]):
+        col = C[:, c]
+        cube = float(np.sum(col ** 3))
+        if abs(cube) <= 1e-12 * float(np.sum(np.abs(col) ** 3)):
+            # cube-symmetric column: fall back to the largest entry
+            cube = float(col[np.argmax(np.abs(col))])
+        if cube < 0:
+            C[:, c] = -col
+    return C
 
 
 _RECENTRE_INFLATE = 1.2
@@ -707,7 +810,7 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     (matching update_winner / update_ranking_exact's treatment)."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
-    V = as_loadings(V, len(m))
+    V = _canonical_loadings(as_loadings(V, len(m)))   # #130
     F, W = _factor_grid(V.shape[1], Qf=Qf, nodes_log2=nodes_log2)
     logW = np.log(W)
     shifts = F @ V.T                                  # (Q, n)
@@ -807,7 +910,13 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     curves shared across factor nodes), as update_ranking_exact does."""
     v = as_variance(v, len(np.asarray(m)))
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
-    order = np.asarray(order, dtype=int)
+    order = as_order(order, len(np.asarray(m)))                # #129
+    if len(order) <= 1:
+        # a tautology: P = 1 exactly. Through the mixture it came back as
+        # log(sum W), which is 2.2e-16 rather than 0 wherever the node
+        # weights do not sum to one to the last bit (Linux CI)
+        return (np.asarray(m, dtype=float).copy(), np.asarray(v, dtype=float).copy(),
+                0.0)
     curves = None if base == "normal" else _predictive_curves(v, beta2,
                                                               base)
 
@@ -837,6 +946,15 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     sd = np.asarray(sd, dtype=float)
     Q, nm = Ms.shape
     n = len(order)
+    if n <= 1:                                   # tautology (#129)
+        return np.zeros(Q), np.zeros((Q, nm))
+    if base == "normal" and curves is None and n == 2:
+        hi, lo_ = int(order[0]), int(order[1])
+        lp, dlp = _pair_contrast_logp_grad(
+            Ms[:, hi] - Ms[:, lo_], float(np.hypot(sd[hi], sd[lo_])))
+        grad = np.zeros((Q, nm))
+        grad[:, hi], grad[:, lo_] = dlp, -dlp
+        return lp, grad
     pad = 8.0
     if base != "normal":
         span = getattr(base, "span", None)

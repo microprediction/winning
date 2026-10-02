@@ -56,6 +56,7 @@ from scipy.special import ndtr, ndtri
 from .core import as_idio, as_loadings, as_weights, hermite_nodes
 
 from ..rustconfig import load_fastrace
+from ..outcomes import as_luce_temperature, as_order, as_soft_temperature
 
 # compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
 _fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('forward_and_slopes')
@@ -919,6 +920,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     pass F, W from winning.factor.core.qmc_nodes(r, m=11) for a quarter
     of the nodes at about five times the error. Inversion runs the
     forward pass per Newton step, so it scales the same way."""
+    # finite and >= 0; negative and NaN used to select the hard race
+    # silently, and +inf failed in grid sizing (#366)
+    temperature = as_soft_temperature(temperature)
     nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
@@ -1105,6 +1109,9 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     dict (return_info=True) reports which entries were floored, whether
     the iteration converged, and the achieved residual. Non-convergence
     warns rather than returning silently."""
+    # finite and >= 0; negative and NaN used to select the hard race
+    # silently, and +inf failed in grid sizing (#366)
+    temperature = as_soft_temperature(temperature)
     dense = None
     nodes_given = F is not None          # the caller's nodes, not a fit's
     if cov is not None:
@@ -1212,9 +1219,18 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
         Sig = _SigV + np.diag(_Dn)
         sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
-        gap = sd_d * float(ndtri(target[0]))
+        # Invert the SMALLER share, Phi^-1(p0) = -Phi^-1(p1): for
+        # [1, 1e-16] the normalized first share rounds to exactly 1, and
+        # ndtri(1) = inf was certified as converged while the
+        # permutation [1e-16, 1] gave the finite answer (#412).
+        if target[0] <= target[1]:
+            gap = sd_d * float(ndtri(target[0]))
+        else:
+            gap = -sd_d * float(ndtri(target[1]))
         mu = np.array([-0.5 * gap, 0.5 * gap])
-        return _inverse_return(mu, True, 0.0, 0, floored, tol, return_info)
+        ok = bool(np.isfinite(mu).all())
+        return _inverse_return(mu, ok, 0.0 if ok else np.inf, 0, floored,
+                               tol, return_info)
     mu = -(logt - logt.mean()) / 2.0 * scale
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
@@ -1661,9 +1677,9 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
     form; use race_probabilities(..., base="gumbel") there.
     """
     mu = np.asarray(mu, dtype=float)
-    tau = float(temperature)
-    if tau <= 0:
-        raise ValueError("temperature must be positive")
+    # finite and positive: NaN passed the old `tau <= 0` test, and +inf
+    # collapsed every field to uniform (#366)
+    tau = as_luce_temperature(temperature)
     if V is None:
         z = -mu / tau
         z -= z.max()
@@ -1706,8 +1722,9 @@ def plackett_luce_order_logprob(mu, order, temperature=1.0, V=None, F=None,
     shared-noise ranked-moments item.
     """
     mu = np.asarray(mu, dtype=float)
-    tau = float(temperature)
-    order = np.asarray(order, dtype=int)
+    tau = as_luce_temperature(temperature)                     # #366
+    # a complete order of distinct labels: [0, 0] scored p = 0.5 (#129)
+    order = as_order(order, len(mu), full=True)
 
     def _one(z):
         rest = order.copy()
@@ -1794,7 +1811,9 @@ def abilities_from_softmax(p, temperature=1.0):
     p = np.asarray(p, dtype=float)
     if np.any(p <= 0):
         raise ValueError("all target probabilities must be positive")
-    tau = float(temperature)
+    # tau = 0 mapped EVERY target to equal abilities, which the forward
+    # map then refused to price (#366)
+    tau = as_luce_temperature(temperature)
     logp = np.log(p / p.sum())
     return -tau * (logp - logp.mean())
 

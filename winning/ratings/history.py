@@ -115,6 +115,11 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
     else:
         all_ids = ids
         if all_ids is None:
+            # discovery is a SECOND pass over races, so a one-shot
+            # iterable must be materialized first: a generator was
+            # exhausted here and the update loop below then saw nothing,
+            # returning the untouched priors and zero evidence (#137)
+            races = list(races)
             seen = []
             for race in races:
                 for rid in race["runners"]:
@@ -172,11 +177,14 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
         A = np.zeros((len(idx), n_all)); A[np.arange(len(idx)), idx] = 1.0
         V = race.get("V")
         if race.get("p_market") is not None:
+            # inverted under the outcome model: beta2 and base always,
+            # V when the race has loadings (beta2 and base were dropped
+            # without V, #94)
+            mkt = {"D": np.full(len(idx), float(beta2)), "base": base}
+            if V is not None:
+                mkt["V"] = as_loadings(V, len(idx))
             m, S, lz = update_team_market_full(
-                m, S, A, race["p_market"], tau2=tau2,
-                **({} if V is None else
-                   {"V": as_loadings(V, len(idx)),
-                    "D": np.full(len(idx), beta2)}))
+                m, S, A, race["p_market"], tau2=tau2, **mkt)
             total_logZ += lz
         if race.get("margins") is not None or race.get("scores") is not None:
             m, S, lz = update_team_margins_full(
@@ -263,6 +271,7 @@ def tune_history(races, tune=("tau2", "beta2", "timescale",
     every update already returns). Returns (best_params, best_logZ)."""
     from scipy.optimize import minimize
 
+    races = list(races)   # replayed once per objective call (#137)
     defaults = dict(tau2=0.25, beta2=1.0, timescale=200.0,
                     lengths_scale=0.2)
     defaults.update(fixed)
@@ -305,7 +314,11 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
             p, _ = predict_race(state, race["runners"],
                                 t=float(race.get("t", 0.0)),
                                 V=race.get(V_key),
-                                beta2=params.get("beta2", 1.0))
+                                beta2=params.get("beta2", 1.0),
+                                # the base the filter updates under; it
+                                # was omitted, so a laplace filter was
+                                # scored on its normal predictive (#109)
+                                base=params.get("base", "normal"))
             if race.get("order") is not None:
                 w = int(race["order"][0])
             elif race.get("winner") is not None:

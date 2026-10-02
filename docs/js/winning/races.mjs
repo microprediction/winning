@@ -377,10 +377,17 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   if (n === 2 && base === "normal") {
     // a pair is one Gaussian contrast: closed form (matching python/R)
     const sdD = Math.sqrt(Math.max(sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1) + Dn[0] + Dn[1], 1e-300));
-    const gap = sdD * invNormalRational(target[0]);
+    // invert the SMALLER share: for [1, 1e-16] the normalized first
+    // share rounds to exactly 1 and invNormalRational(1) is NaN, which
+    // was certified as converged while [1e-16, 1] was finite (#412)
+    const gap = target[0] <= target[1]
+      ? sdD * invNormalRational(target[0])
+      : -sdD * invNormalRational(target[1]);
     const pair = [-0.5 * gap, 0.5 * gap];
+    const ok = pair.every(Number.isFinite);
     return returnInfo
-      ? { mu: pair, converged: true, maxLogResidual: 0, iterations: 0, floored }
+      ? { mu: pair, converged: ok, maxLogResidual: ok ? 0 : Infinity,
+          iterations: 0, floored }
       : pair;
   }
   let mu = logt.map(v => -(v - lm) / 2 * scale);

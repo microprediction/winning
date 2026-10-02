@@ -23,8 +23,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.optimize import minimize
 
-from .likelihood import (choice_loglik_and_score,
-                         nodes_for_likelihood, sharpness_bound)
+from .likelihood import choice_loglik_and_score, _choice_logprob_terms
 
 
 def max_identified_rank(J):
@@ -219,33 +218,16 @@ class MNProbit:
 
 
 def _prob_of(mu, V, k):
-    """P(alternative k wins) for each row of mu (vectorized)."""
-    from scipy.special import ndtr
-    T, J = mu.shape
-    r = V.shape[1]
-    # The SAME dispatch the likelihood uses (likelihood.py). Prediction
-    # used max_i ||V_i||: no gauge-centering, no sqrt(2), so a fitted
-    # model could optimise and report under Sobol and then be priced on
-    # the 7-point Hermite tensor. It was not even gauge-invariant -- only
-    # loading DIFFERENCES decide a race, yet adding a common offset of 5
-    # to every row moved the statistic from 2.0 to 7.0 and switched 49
-    # nodes for 1024 on an unchanged race. In the other direction a
-    # centred spread of 2.2 scored 2.2 against the likelihood's 3.11, so
-    # prediction quietly took the weaker rule and priced 2.9e-2 away from
-    # it (#213). Julia already matched its own likelihood.
-    sharp = sharpness_bound(V)
-    V = V - V.mean(axis=0)
-    F, W = nodes_for_likelihood(r, 7, 7, sharp)
-    Fq, zq = F[:, :r], F[:, r]
-    Vf = Fq @ V.T
-    rivals = [j for j in range(J) if j != k]
-    acc = np.zeros((T, len(W)))
-    for j in rivals:
-        shift = Vf[:, k] - Vf[:, j] + zq
-        a = (mu[:, k] - mu[:, j])[:, None] + shift[None, :]
-        acc += np.log(np.maximum(ndtr(a), 1e-300))
-    m = acc.max(axis=1)
-    return np.exp(m) * (np.exp(acc - m[:, None]) @ W)
+    """P(alternative k wins) for each row of mu (vectorized).
+
+    The likelihood's own per-observation map (_choice_logprob_terms), so
+    prediction prices a model exactly as fitting does: the same gauge-
+    invariant dispatch (#213), the same continuous blend across the
+    node-family switch (#420), the J = 2 closed form, and log_ndtr
+    instead of the 1e-300 probability floor this copy still carried."""
+    T = mu.shape[0]
+    lp, _, _ = _choice_logprob_terms(mu, V, choice=np.full(T, int(k)))
+    return np.exp(lp)
 
 
 class MNProbitClassifier:
