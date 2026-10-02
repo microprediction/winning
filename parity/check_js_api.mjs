@@ -885,6 +885,109 @@ accepts("the inverse takes a scalar D, matching python",
   }
 }
 
+// --- the classic input contract (#339, #377)
+{
+  const dV = classic.skewNormalDensity(50, 0.1);
+  const offs = [-3, 0.5, 2];
+  const p0 = classic.statePricesFromOffsets(dV, offs);
+  accepts("raw counts price as their frequencies (#339)",
+          () => classic.statePricesFromOffsets(dV.map(x => 10 * x), offs),
+          q => q.every((x, i) => Math.abs(x - p0[i]) < 1e-15) &&
+               Math.abs(q.reduce((a, b) => a + b, 0) - 1) < 1e-13,
+          q => `[${q.map(x => x.toFixed(10)).join(", ")}]`);
+  for (const [bad, why, msg] of [
+    [[0, 0, 0, 0, 0, 0, 0], "zero mass", "no positive mass"],
+    [[0.2, -0.1, 0.9, 0, 0, 0, 0], "a negative atom", "negative atom"],
+    [[0.25, 0.25, 0.25, 0.25, 0, 0, 0, 0], "even length", "odd length"],
+    [[0.1, NaN, 0.9, 0, 0, 0, 0], "a NaN atom", "non-finite"],
+    [[0.1, Infinity, 0.9, 0, 0, 0, 0], "an infinite atom", "non-finite"],
+    [[0.25, 0.5, 0.25], "L = 1", "L >= 3"],
+  ]) {
+    rejects(classic.statePricesFromOffsets, [bad, [0, 0]],
+            `statePricesFromOffsets refuses ${why} (#339)`, msg);
+    rejects(classic.solveForImpliedOffsets, [[0.7, 0.3], bad],
+            `solveForImpliedOffsets refuses ${why} (#339)`, msg);
+  }
+  const d7 = [0, 0, 0.25, 0.5, 0.25, 0, 0];
+  const t7 = classic.statePricesFromOffsets(d7, [0, 0]);
+  accepts("the smallest lattice round-trips (#339)",
+          () => classic.solveForImpliedOffsets(t7, d7, { guess: [0, 0] }),
+          a => a.every(Number.isFinite) &&
+               classic.statePricesFromOffsets(d7, a).every((x, i) => Math.abs(x - t7[i]) < 1e-12),
+          a => `[${a.join(", ")}]`);
+  const dS = classic.skewNormalDensity(500, 0.01, { a: 1.5 });
+  const tgt = [0.4, 0.3, 0.2, 0.1];
+  const centre = a => { const m = a.reduce((x, y) => x + y, 0) / a.length; return a.map(x => x - m); };
+  const a1 = centre(classic.solveForImpliedOffsets(tgt, dS, { guess: [0, 0, 0, 0] }));
+  for (const c of [1.1, 2, 10])
+    accepts(`the inverse is invariant to target scale ${c} (#377)`,
+            () => centre(classic.solveForImpliedOffsets(tgt.map(x => c * x), dS,
+                                                        { guess: [0, 0, 0, 0] })),
+            a => a.every((x, i) => Math.abs(x - a1[i]) < 1e-12),
+            a => `[${a.map(x => x.toFixed(6)).join(", ")}]`);
+  rejects(classic.solveForImpliedOffsets, [[0.5, -0.1, 0.6], dS],
+          "the inverse refuses a negative target (#377)", "negative");
+  rejects(classic.solveForImpliedOffsets, [[0, 0], dS],
+          "the inverse refuses a zero-mass target (#377)", "no positive mass");
+  rejects(classic.solveForImpliedOffsets, [[0.5, NaN], dS],
+          "the inverse refuses a NaN target (#377)", "non-finite");
+}
+
+// --- exact dead heats (#418, #362, #348, #373, #369)
+// Closed forms or brute-force enumeration of every joint atom outcome
+// with a tied minimum split equally; python's
+// tests/test_classic_exact_dead_heats.py checks the same fixtures.
+{
+  const close = (a, b, tol) => a.length === b.length &&
+    a.every((x, i) => Math.abs(x - b[i]) < tol);
+  const fmt = p => `[${Array.from(p, x => x.toFixed(10)).join(", ")}]`;
+  const three = Array(17).fill(0); three[7] = 0.2; three[8] = 0.3; three[9] = 0.5;
+  accepts("a compact-support pair is exact (#418)",
+          () => classic.statePricesFromOffsets(three, [-1, 1]),
+          p => close(p, [0.95, 0.05], 1e-14), fmt);
+  accepts("disjoint support pays the certain winner (#418)",
+          () => classic.statePricesFromOffsets(three, [-2, 2]),
+          p => close(p, [1, 0], 1e-14), fmt);
+  const d3 = [0, 0, 0, 0, 0.25, 0.5, 0.25, 0, 0, 0, 0];
+  accepts("twenty iid entrants split the claim equally (#362)",
+          () => classic.statePricesFromOffsets(d3, Array(20).fill(0)),
+          p => close(p, Array(20).fill(0.05), 1e-14),
+          p => `sum ${p.reduce((a, b) => a + b, 0)}`);
+  accepts("unequal eight-runner field matches enumeration (#362)",
+          () => classic.statePricesFromOffsets(d3, [0, -1, 1, 0, 0, 0, 2, 0]),
+          p => close(p, [0.0918114072, 0.5380292620, 0.0029137021, 0.0918114072,
+                         0.0918114072, 0.0918114072, 0, 0.0918114072], 1e-10), fmt);
+  let g = Array.from({ length: 83 }, (_, i) => Math.exp(-0.5 * (i - 41) ** 2));
+  const gz = g.reduce((a, b) => a + b, 0); g = g.map(x => x / gz);
+  accepts("identical fractional runners are exchangeable (#348)",
+          () => classic.statePricesFromOffsets(g, [0.5, 0.5]),
+          p => close(p, [0.5, 0.5], 1e-15), fmt);
+  accepts("a fractional three-runner field is exhaustive (#348)",
+          () => classic.statePricesFromOffsets(g, [-2.5, 0.5, 3.5]),
+          p => Math.abs(p.reduce((a, b) => a + b, 0) - 1) < 1e-13, fmt);
+  const u = Array(83).fill(1 / 83);
+  for (const k of [10, 19, 39, -19, 19.5])
+    accepts(`a translated runner keeps its mass at ${k} (#373)`,
+            () => [classic.statePricesFromOffsets(u, [k]),
+                   classic.statePricesFromOffsets(u, [k, k])],
+            ([s, pr]) => Math.abs(s[0] - 1) < 1e-14 && close(pr, [0.5, 0.5], 1e-14),
+            ([s, pr]) => `${s[0]} ${fmt(pr)}`);
+  const dS = classic.skewNormalDensity(15, 0.2, { a: 1.5 });
+  const tS = classic.statePricesFromOffsets(dS, [6, -2]);
+  accepts("the default guess is one zero per price (#369)",
+          () => [classic.solveForImpliedOffsets(tS, dS),
+                 classic.solveForImpliedOffsets(tS, dS, { guess: [0, 0] })],
+          ([a, b]) => close(a, b, 1e-15), ([a, b]) => `${fmt(a)} vs ${fmt(b)}`);
+  rejects(() => classic.solveForImpliedOffsets(tS, dS, { guess: [0, 1, 2, 3, 4] }),
+          [], "a guess of the wrong length is refused (#369)",
+          "one starting offset per price");
+  const tC = classic.statePricesFromOffsets(three, [-1.5, 0, 0.7, 2]);
+  accepts("the inverse converges to the exact forward map",
+          () => classic.statePricesFromOffsets(three,
+            classic.solveForImpliedOffsets(tC, three, { guess: [0, 0, 0, 0], nIter: 10 })),
+          p => close(p, tC, 1e-6), fmt);
+}
+
 // --- state prices stay exhaustive at boundary offsets (#292)
 // statePricesFromOffsets builds the field with shiftedCdf, which goes
 // through lowHigh and PINS any offset at or past L-2 to the boundary.
@@ -896,7 +999,7 @@ accepts("the inverse takes a scalar D, matching python",
 // clamped correctly all along.
 {
   const dB = classic.skewNormalDensity(50, 0.1);
-  const ORD = 0.9999867465;
+  const ORD = 1;   // exhaustive; 0.99998675 was the old engine's loss (#418, #362)
   const total = a => classic.statePricesFromOffsets(dB, [a, -a])
     .reduce((x, y) => x + y, 0);
 
