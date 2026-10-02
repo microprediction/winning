@@ -263,18 +263,23 @@ export function asWeights(W, nNodes, where = "W") {
     throw new Error(`${where} must be an array of factor-node weights; got ${typeof W}`);
   if (W.length !== nNodes)
     throw new Error(`${where} must have one weight per factor node; got ${W.length} for ${nNodes}`);
-  let total = 0;
+  let top = 0;
   for (let i = 0; i < W.length; i++) {
     const v = Number(W[i]);
     if (!Number.isFinite(v))
       throw new Error(`${where}[${i}] = ${W[i]} is not a finite weight`);
     if (v < 0)
       throw new Error(`${where}[${i}] = ${v} is a negative weight; a factor law has no negative mass`);
-    total += v;
+    if (v > top) top = v;
   }
-  if (!(total > 0))
-    throw new Error(`${where} must have a positive total; got ${total}`);
-  return Array.from(W, (v) => Number(v) / total);
+  if (!(top > 0))
+    throw new Error(`${where} must have a positive total; got 0`);
+  // through the LARGEST weight, never the raw total: [1e308, 1e308]
+  // overflows only in the sum, and W / Infinity made every weight zero
+  // and every probability NaN (#415)
+  const u = Array.from(W, (v) => Number(v) / top);
+  const total = u.reduce((a, b) => a + b, 0);
+  return u.map((v) => v / total);
 }
 
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {

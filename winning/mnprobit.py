@@ -4,11 +4,14 @@ and sklearn cannot express.
 Built on winning.likelihood (exact factor-conditional likelihood with
 analytic score). Covariance parameterization: rank-r factor loadings
 with a zero reference row and a strictly-lower-triangular free block,
-unit idiosyncratic variance. At J alternatives and r = 2 this covers
+unit idiosyncratic variance. At J = 4 alternatives and r = 2 this covers
 every positive-definite differenced covariance up to scale with the
 same degree-of-freedom count as the differenced-Cholesky
 parameterization used by R's mlogit (see r/mlogitfast, whose Fishing
-fit this module reproduces cross-language).
+fit this module reproduces cross-language). The rank defaults to
+min(2, J - 2); a rank above J - 2 is refused, because with unit
+idiosyncratic variances r >= J - 1 leaves the utility scale free and
+coefficients and loadings are not identified (#201).
 
     fit = MNProbit(X, choice).fit()          # X: (T, J, p) covariates
     clf = MNProbitClassifier().fit(X, y)     # sklearn-style
@@ -22,6 +25,31 @@ from scipy.optimize import minimize
 
 from .likelihood import (choice_loglik_and_score,
                          nodes_for_likelihood, sharpness_bound)
+
+
+def max_identified_rank(J):
+    """Largest factor rank the unit-idiosyncratic parameterization
+    identifies at J alternatives.
+
+    With D fixed to one and a zero reference row the free loadings number
+    r*J - r*(r+1)/2, while the differenced covariance has J*(J-1)/2 - 1
+    shape degrees of freedom. At r >= J - 1 the loading block is full
+    rank and D = 1 no longer fixes the scale: for J = 3, r = 2 there is a
+    V' whose contrast covariance is exactly 4x that of V, so (2 beta, V')
+    prices every choice like (beta, V) -- an exact ridge (#201).
+    """
+    return max(int(J) - 2, 0)
+
+
+def _check_rank(r, J):
+    rmax = max_identified_rank(J)
+    r = min(2, rmax) if r is None else int(r)
+    if not 0 <= r <= rmax:
+        raise ValueError(
+            f"factor rank r = {r} is not identified at J = {J} "
+            f"alternatives: with unit idiosyncratic variances the utility "
+            f"scale is fixed only for r <= J - 2 = {rmax} (#201)")
+    return r
 
 
 def _fill_positions(J, r):
@@ -40,14 +68,16 @@ class MNProbit:
     X : (T, J, p) array of alternative-specific covariates.
     choice : (T,) chosen alternative indices in 0..J-1.
     intercepts : add J-1 alternative intercepts (reference = 0).
-    r : factor rank (r = 2 spans the full identified covariance at J=4).
+    r : factor rank, default min(2, J - 2) (r = 2 spans the full
+        identified covariance at J=4). A rank above J - 2 is not
+        identified and raises ValueError (#201).
     """
 
-    def __init__(self, X, choice, intercepts=True, r=2):
+    def __init__(self, X, choice, intercepts=True, r=None):
         X = np.asarray(X, dtype=float)
         self.T, self.J, p = X.shape
         self.choice = np.asarray(choice)
-        self.r = int(r)
+        self.r = _check_rank(r, self.J)
         if intercepts:
             Z = np.zeros((self.T, self.J, self.J - 1))
             for j in range(1, self.J):
@@ -226,7 +256,7 @@ class MNProbitClassifier:
     y is (T,) integer choices.
     """
 
-    def __init__(self, r=2, intercepts=True):
+    def __init__(self, r=None, intercepts=True):
         self.r = r
         self.intercepts = intercepts
 

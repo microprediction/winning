@@ -23,14 +23,18 @@ interface:
 Model: utilities `U_tj = x_tj' beta + (V f_t)_j + z_tj` with
 `f_t ~ N(0, I_r)`, unit idiosyncratic noise, `choice = argmax_j U_tj`.
 Loadings carry a zero reference row and a strictly-lower-triangular
-free block; at J alternatives and r = 2 this spans the identified
+free block; at J = 4 alternatives and r = 2 this spans the identified
 differenced covariance with the same dof count as mlogit's
-differenced-Cholesky parameterization.
+differenced-Cholesky parameterization. The rank defaults to
+`min(2, J - 2)` and a rank above `J - 2` is refused: with unit
+idiosyncratic variances, `r >= J - 1` leaves the utility scale free, so
+coefficients and loadings are not identified (#201).
 
 ```julia
-m = MNProbit(X, choice; intercepts = true, r = 2)  # X: (T, J, p)
+m = MNProbit(X, choice; intercepts = true)  # X: (T, J, p); r = min(2, J-2)
 fit!(m)                       # exact likelihood, analytic score, BFGS
-fit!(m; method = :ghk)        # the simulation incumbent, same API
+fit!(m; method = :ghk)        # the simulation incumbent (no inference:
+                              # vcov/stderror/score_matrix refuse a GHK fit)
 loglikelihood(m); m.beta; m.V
 P = predict_proba(m)
 vcov(m); stderror(m)           # observed information (FD of the

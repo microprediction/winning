@@ -66,7 +66,9 @@ test_that("a binary choice fits instead of running off the end of V", {
   # two-element vector c(3, 2), not empty. The first assignment was
   # V[3, 2] on a 2x2 matrix, so every binary-choice fit died with
   # "subscript out of bounds" (#183). nw counts one free loading there, so
-  # wfree[2] was out of range too.
+  # wfree[2] was out of range too. (The default is now min(2, J - 2) = 0
+  # at J = 2, since any loading is unidentified there (#201); the loop's
+  # J = 2 behaviour is pinned directly in the next test.)
   set.seed(11)
   n <- 120L; J <- 2L
   id <- rep(seq_len(n), each = J)
@@ -153,4 +155,59 @@ test_that("a valid panel is untouched", {
   fit <- rprobit_fast(df, covariates = "x", r = 1L, Qf = 5L, Qz = 5L,
                       maxit = 10L)
   expect_true(is.finite(fit$coefficients[["x"]]))
+})
+
+test_that("fractional, infinite and NaN labels are refused; 1.0 is fine", {
+  # 1.5 is inside 1..J but matches no `choice == k_alt` bucket, so it was
+  # dropped in silence exactly like an out-of-range label (#194)
+  X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
+  th <- c(0.5, 0.2, 0.3)
+  nd <- .halton_nodes3(1L, m = 5L)
+  for (bad in list(1.5, 2.0001, Inf, NaN)) {
+    ch <- as.numeric(rep(1:3, length.out = 30))
+    ch[1] <- bad
+    expect_error(.nll_core(th, list(X), ch, 3L, 1L, nd, nd,
+                           want_grad = FALSE),
+                 "not an alternative in 1\\.\\.3")
+  }
+  chi <- rep(1:3, length.out = 30)
+  th <- c(0.5, 0.2, 0.3, 0.1)              # 2 betas + 2 loadings
+  a <- .nll_core(th, list(X), chi, 3L, 1L, nd, nd, want_grad = FALSE)
+  b <- .nll_core(th, list(X), as.numeric(chi), 3L, 1L, nd, nd,
+                 want_grad = FALSE)
+  expect_equal(a$value, b$value)
+})
+
+# --- the factor rank must be identified (#201) --------------------------
+#
+# With unit idiosyncratic variances the free loadings number
+# r*J - r*(r+1)/2 against J*(J-1)/2 - 1 shape degrees of freedom of the
+# differenced covariance; at r >= J - 1 the scale is free and
+# (2 beta, V') prices every choice like (beta, V).
+test_that("the contrast covariance ridge is exact at J = 3, r = 2", {
+  A <- rbind(c(-1, 1, 0), c(-1, 0, 1))
+  V <- rbind(c(0, 0), c(.5, 0), c(.2, .7))
+  Vp <- rbind(c(0, 0), c(2.6457513110645907, 0),
+              c(1.2850792082313727, 2.543338638202044))
+  C <- function(V) A %*% (V %*% t(V) + diag(3)) %*% t(A)
+  expect_equal(C(Vp), 4 * C(V), tolerance = 1e-12)
+})
+
+test_that("ranks above J - 2 are refused and the default is identified", {
+  for (J in 2:5) {
+    expect_identical(.check_rank(NULL, J), as.integer(min(2L, J - 2L)))
+    for (r in 0:(J - 2L)) expect_identical(.check_rank(r, J), as.integer(r))
+    for (r in c(J - 1L, J)) expect_error(.check_rank(r, J), "not identified")
+  }
+  set.seed(3)
+  n <- 40L; J <- 3L
+  df <- data.frame(id = rep(seq_len(n), each = J),
+                   alt = rep(1:J, times = n), x = rnorm(n * J))
+  u <- 0.6 * df$x + rnorm(n * J)
+  df$chosen <- unlist(lapply(split(u, df$id),
+                             function(v) as.integer(seq_along(v) == which.max(v))))
+  expect_error(rprobit_fast(df, covariates = "x", r = 2L, maxit = 5L),
+               "not identified")
+  fit <- rprobit_fast(df, covariates = "x", Qf = 5L, Qz = 5L, maxit = 20L)
+  expect_identical(fit$r, 1L)
 })

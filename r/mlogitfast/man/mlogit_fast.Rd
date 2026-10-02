@@ -10,7 +10,7 @@ data and a formula for alternative-specific covariates, as used by the
 \pkg{mlogit} package.
 }
 \usage{
-mlogit_fast(formula, data, r = 2L, Qf = 7L, Qz = 7L, maxit = 400L)
+mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
 }
 \arguments{
   \item{formula}{choice ~ covariates, with the response a logical
@@ -26,7 +26,10 @@ mlogit_fast(formula, data, r = 2L, Qf = 7L, Qz = 7L, maxit = 400L)
     (rank-\code{r} loadings with zero reference loadings, unit
     idiosyncratic variance) spans the same identified space as
     \pkg{mlogit}'s differenced-Cholesky parameterization with the same
-    degrees of freedom.}
+    degrees of freedom at \code{r = J - 2}. Defaults to
+    \code{min(2, J - 2)}; a rank above \code{J - 2} is an error, because
+    with unit idiosyncratic variances the utility scale is then not
+    identified.}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
     integrals; a sharpness rule escalates to Halton nodes when the
     conditional races become nearly deterministic.}

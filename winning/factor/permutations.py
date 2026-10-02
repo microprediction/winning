@@ -23,6 +23,7 @@ renormalising away a lattice that failed to capture the field.
 import numpy as np
 
 from .core import as_loadings
+from ..shapes import as_weights
 from ..rustconfig import load_fastrace
 from .races import _fit_cov, _factor_of_structure, _setup, _tempered_curves
 
@@ -227,15 +228,10 @@ def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
         # this the returned log-probability shifted by log(sum W): the
         # same factor law spelled W = [5, 5] instead of [0.5, 0.5] read
         # -1.5071 as +0.7955, exactly log(10) apart (#208).
-        W = np.asarray(W, float)
-        wtot = float(W.sum())
-        if not np.isfinite(wtot) or wtot <= 0.0:
-            raise ValueError(
-                f"W must be positive weights: they total {wtot!r}. They "
-                "are relative, so any positive multiple of a valid rule "
-                "is the same factor law, but a zero or negative total is "
-                "not one.")
-        W = W / wtot
+        # as_weights is the shared door: entrywise non-negative, and
+        # normalised through max(W) so finite weights whose raw total
+        # overflows are still the same law (#415)
+        W = as_weights(W)
     logs = np.array([_one(-(mu + np.asarray(F)[q] @ V.T) / tau)
                      for q in range(len(F))])
     m = logs.max()
