@@ -1,0 +1,7 @@
+# The test suite is a REPOSITORY suite: it reads parity/, r/, docs/js/,
+# julia/, rust/, .coderabbit.yaml, golden data and the committed results.
+# setuptools used to ship tests/test*.py into the sdist by default without
+# any of that, so an extracted sdist failed at collection
+# (tests/golden/race_boards.npz missing, #141) and more at run time.
+# Test from a checkout; the sdist carries the package only.
+prune tests

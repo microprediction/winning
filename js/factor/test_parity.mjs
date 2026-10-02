@@ -172,4 +172,22 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   }
 }
 
+/* --- finite weights whose SUM overflows are the same law (#415) -------
+   The normaliser divided by the raw total, so [1e308, 1e308] became
+   W / Infinity = [0, 0] and every probability NaN. */
+{
+  const mu = [0, 0.4, 1], V = [[0.7], [0], [-0.4]], D = [1, 1, 1];
+  const F = [[-1], [1]];
+  const p1 = winProbabilitiesFactor(mu, V, D, F, [1, 1], { points: 257 }).p;
+  const pb = winProbabilitiesFactor(mu, V, D, F, [1e308, 1e308], { points: 257 }).p;
+  check("W = [1e308, 1e308] prices like [1, 1]", pb, p1, 1e-15);
+  check("and matches the python reference", p1,
+        [0.51529828, 0.30546137, 0.17924036], 1e-6);
+  const ab = abilitiesFromProbabilitiesFactor(p1, V, D, F, [1e308, 1e308],
+                                             { points: 257, nIter: 50 });
+  const a1 = abilitiesFromProbabilitiesFactor(p1, V, D, F, [1, 1],
+                                             { points: 257, nIter: 50 });
+  check("the inverse shares the normaliser", ab, a1, 1e-12);
+}
+
 process.exit(failures ? 1 : 0);

@@ -134,3 +134,26 @@ test_that("the pair door checks both depths", {
   expect_error(loc_scale_from_topk_pair(q1, 0, q2, 2), "\\[1, n-1\\]")
   expect_error(loc_scale_from_topk_pair(q1, 1, q2, 1), "k1 == k2")
 })
+
+test_that("rank_probabilities prices a factor-correlated race (#202)", {
+  # R had no V/qa here, so the correlated call was an unused-argument
+  # error while top_k_probabilities priced the same model
+  mu <- c(-0.4, -0.1, 0.2, 0.5)
+  D <- rep(0.2, 4)
+  V <- matrix(c(-2, -0.5, 0.5, 2), ncol = 1)
+  R <- rank_probabilities(mu, V = V, D = D, qa = 15)
+  q1 <- top_k_probabilities(mu, 1, V = V, D = D, qa = 15)
+  q2 <- top_k_probabilities(mu, 2, V = V, D = D, qa = 15)
+  expect_lt(max(abs(R[, 1] - q1)), 1e-6)
+  expect_lt(max(abs(rowSums(R[, 1:2]) - q2)), 1e-6)
+  # Python reference, same fixture
+  expect_lt(max(abs(R[, 1] - c(0.53003131, 0.08960483, 0.049621,
+                               0.33074286))), 1e-6)
+  # and it differs from the independent answer (0.331 vs 0.031)
+  expect_gt(abs(R[4, 1] - rank_probabilities(mu, D = D)[4, 1]), 0.2)
+  # rank two
+  V2 <- cbind(V, c(0.3, -0.2, 0.4, -0.5))
+  R2 <- rank_probabilities(mu, V = V2, D = D, qa = 9)
+  expect_lt(max(abs(R2[, 1] - top_k_probabilities(mu, 1, V = V2, D = D,
+                                                  qa = 9))), 1e-6)
+})

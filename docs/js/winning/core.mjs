@@ -254,13 +254,14 @@ export function asWeights(W, nNodes, where = "W") {
       throw new Error(`${where}[${q}] = ${v} is a negative weight`);
     if (v > top) top = v;
   }
-  // divide by the largest entry BEFORE summing: [1e308, 1e308] summed to
-  // Infinity and every weight became 0, pricing NaN (#263)
-  let total = 0;
-  for (let q = 0; q < W.length; q++) total += top > 0 ? Number(W[q]) / top : 0;
-  if (!(total > 0))
-    throw new Error(`${where} must have a positive total; got ${total}`);
-  return Array.from(W, v => Number(v) / top / total);
+  if (!(top > 0))
+    throw new Error(`${where} must have a positive total; got 0`);
+  // through the LARGEST weight, never the raw total: [1e308, 1e308]
+  // overflows only in the sum, and W / Infinity made every weight zero
+  // and every probability NaN (#415)
+  const u = Array.from(W, v => Number(v) / top);
+  const total = u.reduce((a, b) => a + b, 0);
+  return u.map(v => v / total);
 }
 
 /* ---- options-object guards ---------------------------------------- *

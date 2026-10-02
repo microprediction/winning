@@ -21,7 +21,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..rustconfig import load_fastrace
-from ..shapes import as_loadings
+from ..shapes import as_idio, as_loadings
 
 from scipy.special import ndtr, roots_hermitenorm
 
@@ -320,7 +320,9 @@ def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     D[i] its idiosyncratic VARIANCE (as everywhere in winning.factor).
     The unnormalized lattice mass is checked before normalization and a
     material defect raises rather than being normalized away."""
-    raw = _block_max(-np.asarray(mu, float), np.sqrt(np.asarray(D, float)),
+    mu = np.asarray(mu, float)
+    # one door for D: a scalar is the same variance for everyone (#84)
+    raw = _block_max(-mu, np.sqrt(as_idio(D, len(mu), positive=True)),
                      cluster, loading, points, qa)
     return _checked_mass(raw, "block race")
 
@@ -347,7 +349,7 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
     # (fourteenth review)
     p = np.zeros(len(mu))
     muv = np.asarray(mu, float)
-    sdv = np.sqrt(np.asarray(D, float))
+    sdv = np.sqrt(as_idio(D, len(muv), positive=True))
     for q in range(len(fn)):
         p += fw[q] * _block_max(-(muv + gamma * (g @ fn[q])), sdv,
                                 cluster, loading, points, qa)
@@ -377,7 +379,7 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
             "block_race_probabilities, or the factor grammar if the "
             "loadings are global.")
     m = -mu
-    sd = np.sqrt(np.asarray(D, float))
+    sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = V[:, 0]; cluster = np.asarray(cluster)
     _, inv = np.unique(cluster, return_inverse=True)
     order = np.argsort(inv, kind="stable")
@@ -443,7 +445,7 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     # c = 1e3 (#100). Everything below is in units of `scale`.
     from .structures import _loading_var
     scale = float(np.sqrt(np.median(
-        np.asarray(D, float) * np.ones(n) + _loading_var(loading, n))))
+        as_idio(D, n, positive=True) + _loading_var(loading, n))))
     # adaptive fixed point into Newton's basin
     mu = -(lt - lt.mean()) * scale
     eta = 1.0
@@ -497,7 +499,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     validation history (MC to noise floor, common-root invariance 3e-7)."""
     mu = np.asarray(mu, float)
     m = -mu
-    sd = np.sqrt(np.asarray(D, float))
+    sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
     parent = np.asarray(parent, int); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
@@ -600,7 +602,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     2n forward passes."""
     mu = np.asarray(mu, float)
     m = -mu
-    sd = np.sqrt(np.asarray(D, float))
+    sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
     parent = np.asarray(parent, int); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)

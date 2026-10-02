@@ -296,18 +296,42 @@ function top_k_jacobians(mu, k; D = nothing, base = "normal",
     return (Jmu = Jm, Jsigma = Js)
 end
 
-"""The full rank marginals: entry [i, r] = P(runner i finishes r-th)."""
-function rank_probabilities(mu; D = nothing, base = "normal", points = 513)
-    mu = Float64.(collect(mu))
+function _rank_matrix_node(mu, sd, fn, points)
     n = length(mu)
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
-    fn = _base_fn(base)
     g = _topk_grid(mu, sd, n - 1, fn, points)
     C = _count_distribution(g.F)
     P = zeros(n, n)
     for i in 1:n
         Qi = _loo_pmf(C, g.F, i)
         P[i, :] .= vec(sum(Qi .* (g.f[:, i] ./ sd[i]), dims = 1)) .* g.dx
+    end
+    return P
+end
+
+"""The full rank marginals: entry [i, r] = P(runner i finishes r-th).
+
+`V` (factor rank <= 2) and `qa` price a factor-correlated race by mixing
+the conditional rank matrices over the same Gauss-Hermite factor nodes
+top_k_probabilities uses, as the Python reference does. This port used
+to have no `V` at all, so the correlated call was a keyword error while
+the adjacent top-k verbs priced it (#202). Column 1 is correlated top-1
+membership and cumulative row sums are correlated top-k."""
+function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
+                            V = nothing, qa = 15)
+    mu = Float64.(collect(mu))
+    n = length(mu)
+    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    fn = _base_fn(base)
+    P = if V === nothing
+        _rank_matrix_node(mu, sd, fn, points)
+    else
+        fac = _topk_factor_nodes(V, n, qa, "rank_probabilities")
+        acc = zeros(n, n)
+        for q in 1:size(fac.nodes, 1)
+            acc .+= fac.w[q] .* _rank_matrix_node(
+                mu .+ fac.Vm * fac.nodes[q, :], sd, fn, points)
+        end
+        acc
     end
     # Check what is RETURNED. Row normalisation makes every row exact and
     # MOVES the columns, so a matrix that passed the raw check could fail

@@ -272,13 +272,14 @@ export function asWeights(W, nNodes, where = "W") {
       throw new Error(`${where}[${i}] = ${v} is a negative weight; a factor law has no negative mass`);
     if (v > top) top = v;
   }
-  // divide by the largest entry BEFORE summing: [1e308, 1e308] summed to
-  // Infinity and normalised to [0, 0] (#263), as in python's as_weights
-  let total = 0;
-  for (let i = 0; i < W.length; i++) total += top > 0 ? Number(W[i]) / top : 0;
-  if (!(total > 0))
-    throw new Error(`${where} must have a positive total; got ${total}`);
-  return Array.from(W, (v) => Number(v) / top / total);
+  if (!(top > 0))
+    throw new Error(`${where} must have a positive total; got 0`);
+  // through the LARGEST weight, never the raw total: [1e308, 1e308]
+  // overflows only in the sum, and W / Infinity made every weight zero
+  // and every probability NaN (#415)
+  const u = Array.from(W, (v) => Number(v) / top);
+  const total = u.reduce((a, b) => a + b, 0);
+  return u.map((v) => v / total);
 }
 
 /* (F, W) with zero-weight nodes dropped (python shapes.as_factor_law). A

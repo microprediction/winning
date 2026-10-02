@@ -31,7 +31,12 @@ c = GaussMarkovChain(gmrf); argmax_marginals(gmrf)
 **The refusal contract**: bandwidth > 1 needs the lifted-state pass
 (measured in the winning repo, roadmap here) and general sparse
 precision belongs to sampling methods; both are refused with a
-pointer, never approximated silently.
+pointer, never approximated silently. The same holds below lattice
+resolution: `argmax_marginals` refuses a chain whose adjacent values
+differ on a sub-cell scale (it would otherwise split the tied cell 50/50
+and return a plausible wrong law), and asks for more `points`.
+Asymmetric precision matrices and mis-shaped chain parameters are
+refused at construction.
 
 The one-plot fact this package exists to compute: on a stationary
 AR(1) at phi = 0.9, the endpoints are ~2.6x likelier than the middle
