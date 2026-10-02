@@ -89,6 +89,178 @@ def _log_mills(a):
     return -0.5 * a * a - 0.5 * np.log(2.0 * np.pi) - log_ndtr(a)
 
 
+# The node family switches from the Hermite tensor to scrambled Sobol at
+# sharpness 3, and the two rules disagree there: on the binary #420
+# fixture a 1e-10 change in a loading moved the returned log-likelihood
+# by 0.0253 nats and the loading score from 0.123 to 0.181, so BFGS was
+# optimizing a discontinuous objective with a within-branch gradient.
+# Across this window the likelihood is the probability-weighted blend
+# (1 - w) P_GH + w P_Sobol with a C1 smoothstep w(sharp), and the score
+# carries the blend's own derivative. Outside it, each side is
+# bit-identical to the single rule it always was.
+_BLEND_LO, _BLEND_HI = 2.9, 3.1
+
+
+def _blend_weight(sharp):
+    """(w, dw/dsharp): C1 smoothstep from 0 at _BLEND_LO to 1 at _BLEND_HI."""
+    t = (sharp - _BLEND_LO) / (_BLEND_HI - _BLEND_LO)
+    if t <= 0.0:
+        return 0.0, 0.0
+    if t >= 1.0:
+        return 1.0, 0.0
+    return t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t) / (_BLEND_HI - _BLEND_LO)
+
+
+def _sharpness_grad(V, D):
+    """d sharpness_bound / dV (a.e.; the max picks one row). The bound is
+    sqrt(2) ||c_i*|| / sqrt(min D) with c = PV, so its derivative in row
+    l is sqrt(2)/sqrt(min D) * c_i*/||c_i*|| * (delta_{l i*} - 1/J)."""
+    J = V.shape[0]
+    C = V - V.mean(axis=0)
+    nrm = np.sqrt((C ** 2).sum(axis=1))
+    i = int(np.argmax(nrm))
+    G = np.zeros_like(V)
+    if nrm[i] <= 0.0:
+        return G
+    u = np.sqrt(2.0) / np.sqrt(float(np.min(D))) * C[i] / nrm[i]
+    G -= u[None, :] / J
+    G[i] += u
+    return G
+
+
+def _choice_terms(mu, V, choice, s, F, W):
+    """Per-observation log P(choice), d/dmu and d/dV on one node set.
+    V is gauge-centred; F holds (factor^r, own-noise) node columns."""
+    T, J = mu.shape
+    r = V.shape[1]
+    Fq, zq = F[:, :r], F[:, r]
+    Vf = Fq @ V.T                                  # (Q, J)
+    lp = np.zeros(T)
+    dmu = np.zeros((T, J))
+    dV = np.zeros((T, J, r))
+    for k in range(J):
+        idx = np.where(choice == k)[0]
+        if len(idx) == 0:
+            continue
+        rivals = [j for j in range(J) if j != k]
+        dmu_k = mu[idx, k][:, None] - mu[idx][:, rivals]   # (Ti, J-1)
+        acc = np.zeros((len(idx), len(W)))
+        A = {}
+        logPhi = {}
+        for c, j in enumerate(rivals):
+            shift = Vf[:, k] - Vf[:, j] + zq * s[k]
+            A[j] = (dmu_k[:, c][:, None] + shift[None, :]) / s[j]
+            # log_ndtr, not log(max(ndtr, 1e-300)): the floor made every
+            # deep tail the same -690.78 and the Mills ratio a zero
+            # score, so an optimizer stopped exactly where an
+            # observation was most badly contradicted (#270)
+            logPhi[j] = log_ndtr(A[j])
+            acc += logPhi[j]
+        m = acc.max(axis=1)
+        pw = np.exp(acc - m[:, None]) * W[None, :]
+        rs = pw.sum(axis=1)
+        lp[idx] = m + np.log(np.maximum(rs, 1e-300))
+        omega = pw / rs[:, None]
+        for j in rivals:
+            lam = np.exp(-0.5 * A[j] ** 2 - 0.5 * np.log(2 * np.pi)
+                         - logPhi[j])
+            wl = omega * lam / s[j]
+            g = wl.sum(axis=1)                     # (Ti,)
+            dmu[idx, k] += g
+            dmu[idx, j] -= g
+            H = wl @ Fq                            # (Ti, r)
+            dV[idx, k] += H
+            dV[idx, j] -= H
+    return lp, dmu, dV
+
+
+def _choice_pair(mu, V, choice, D):
+    """J = 2 in closed form: P(k) = Phi(c / s), c = mu_k - mu_j,
+    s^2 = D_k + D_j + ||V_k - V_j||^2, with its analytic score. No
+    factor or own-noise quadrature, so no tail floor (#128, #270), no
+    dependence on an unused loading column (#345), no 1/s_j blow-up
+    from a near-deterministic rival (#352) and no node-family switch
+    (#420)."""
+    T = mu.shape[0]
+    r = V.shape[1]
+    k = choice
+    j = 1 - choice
+    rows = np.arange(T)
+    c = mu[rows, k] - mu[rows, j]
+    d = V[k] - V[j]                                # (T, r)
+    s2 = D[k] + D[j] + (d ** 2).sum(axis=1)
+    s = np.sqrt(s2)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        z = np.where(s > 0, c / np.where(s > 0, s, 1.0),
+                     np.where(c > 0, np.inf, np.where(c < 0, -np.inf, 0.0)))
+    lp = log_ndtr(z)
+    with np.errstate(over="ignore", invalid="ignore"):
+        lam = np.where(np.isfinite(z),
+                       np.exp(-0.5 * z * z - 0.5 * np.log(2 * np.pi) - lp),
+                       0.0)
+    sp = np.where(s > 0, s, 1.0)
+    gc = np.where(s > 0, lam / sp, 0.0)            # d lp / d c
+    dmu = np.zeros((T, 2))
+    dmu[rows, k] = gc
+    dmu[rows, j] = -gc
+    # d lp / d d = lam * c * (-1/s^2) * d / s
+    gd = np.where(s > 0, -lam * c / sp ** 3, 0.0)[:, None] * d
+    dV = np.zeros((T, 2, r))
+    dV[rows, k] = gd
+    dV[rows, j] = -gd
+    return lp, dmu, dV
+
+
+def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
+    """Per-observation log P(choice_t), with its score rows: the one
+    probability map that fitting, reporting and prediction share.
+
+    Returns (lp (T,), dmu (T, J), dV (T, J, r)) for the observed
+    `choice`. This is the engine under choice_loglik_and_score and
+    MNProbit.predict_proba, so both price a model the same way.
+    """
+    mu = np.asarray(mu, dtype=float)
+    T, J = mu.shape
+    V = as_loadings(V, J)
+    r = V.shape[1]
+    D = np.ones(J) if D is None else as_idio(D, J)
+    choice = np.asarray(choice, dtype=int)
+    if J == 2:
+        return _choice_pair(mu, V, choice, D)
+    if float(np.min(D)) <= 0.0:
+        # the own-noise integral conditions on each rival through
+        # Phi(./sqrt(D_j)): at D_j = 0 that is 0/0 and the result was
+        # NaN, label-asymmetrically (#352). Refused rather than guessed.
+        raise ValueError(
+            "choice likelihood with J >= 3 needs every idiosyncratic "
+            "variance D_j > 0; a deterministic alternative has no "
+            "own-noise integral here")
+    s = np.sqrt(D)
+    # gauge-fix and dispatch on the pairwise-safe bound (eighth review):
+    # only loading DIFFERENCES decide a race, and
+    # sqrt(2) max_i |(PV)_i|/sqrt(D_i) bounds the pairwise sharpness
+    sharp = sharpness_bound(V, D)
+    Vc = V - V.mean(axis=0)
+    w, dw = _blend_weight(sharp)
+    if w == 0.0 or w == 1.0:
+        F, Wt = nodes_for_likelihood(r, Qf, Qz, sharp)
+        return _choice_terms(mu, Vc, choice, s, F, Wt)
+    # inside the blend window: both rules, mixed in probability
+    Fg, Wg = nodes_for_likelihood(r, Qf, Qz, 0.0)
+    Fs, Ws = nodes_for_likelihood(r, Qf, Qz, np.inf)
+    lg, dmg, dVg = _choice_terms(mu, Vc, choice, s, Fg, Wg)
+    ls, dms, dVs = _choice_terms(mu, Vc, choice, s, Fs, Ws)
+    lp = np.logaddexp(np.log1p(-w) + lg, np.log(w) + ls)
+    a = np.exp(np.log1p(-w) + lg - lp)             # posterior rule weights
+    b = np.exp(np.log(w) + ls - lp)
+    dmu = a[:, None] * dmg + b[:, None] * dms
+    dV = a[:, None, None] * dVg + b[:, None, None] * dVs
+    # d lp / d V through w: (P_S - P_GH) / P * dw/dsharp * dsharp/dV
+    gw = (np.exp(ls - lp) - np.exp(lg - lp)) * dw          # (T,)
+    dV = dV + gw[:, None, None] * _sharpness_grad(V, D)[None, :, :]
+    return lp, dmu, dV
+
+
 def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     """Log-likelihood of observed argmax choices, with analytic score.
 
@@ -104,6 +276,13 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     loglik : float
     dmu : (T, J) gradient of the log-likelihood in mu.
     dV : (J, r) gradient in the loadings.
+
+    J = 2 is the Gaussian contrast in closed form. For J >= 3 the own
+    noise and the factors are integrated on the Hermite tensor or, past
+    sharpness 3, scrambled Sobol, blended continuously across the switch.
+    Known limits at J >= 3: a large observed utility gap puts the mass
+    outside the fixed own-noise nodes (#128, #270), and a near-
+    deterministic rival makes the integrand a step (#352).
     """
     mu = np.asarray(mu, dtype=float)
     T, J = mu.shape
@@ -135,62 +314,8 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
             f"0..{J - 1}; {bad.size} of {T} observations are. They would "
             "be dropped in silence, which raises the log-likelihood "
             "because there is less of it.")
-    V = as_loadings(V, J)
-    r = V.shape[1]
-    D = np.ones(J) if D is None else np.asarray(D, dtype=float)
-    s = np.sqrt(D)
-    # gauge-fix and dispatch on the pairwise-safe bound (eighth review):
-    # only loading DIFFERENCES decide a race, and
-    # sqrt(2) max_i |(PV)_i|/sqrt(D_i) bounds the pairwise sharpness
-    sharp = sharpness_bound(V, D)
-    V = V - V.mean(axis=0)
-    F, W = nodes_for_likelihood(r, Qf, Qz, sharp)
-    Fq, zq = F[:, :r], F[:, r]
-    Q = len(W)
-    Vf = Fq @ V.T                                  # (Q, J)
-
-    loglik = 0.0
-    dmu = np.zeros((T, J))
-    dV = np.zeros((J, r))
-    choice = np.asarray(choice)
-    for k in range(J):
-        idx = np.where(choice == k)[0]
-        if len(idx) == 0:
-            continue
-        rivals = [j for j in range(J) if j != k]
-        dmu_k = mu[idx, k][:, None] - mu[idx][:, rivals]   # (Ti, J-1)
-        acc = np.zeros((len(idx), Q))
-        A = {}
-        logPhi = {}
-        for c, j in enumerate(rivals):
-            shift = Vf[:, k] - Vf[:, j] + zq * s[k]
-            A[j] = (dmu_k[:, c][:, None] + shift[None, :]) / s[j]
-            # log_ndtr, not log(max(ndtr, 1e-300)). ndtr underflows to
-            # exactly 0 below about -37, so the floor turned every deep
-            # tail into the SAME number, log(1e-300) = -690.78: the
-            # objective went flat and the Mills ratio below it, computed
-            # as exp(logphi - logPhi), underflowed to a zero score. An
-            # optimizer then declares convergence exactly where the
-            # observation is most badly contradicted (#270).
-            logPhi[j] = log_ndtr(A[j])
-            acc += logPhi[j]
-        m = acc.max(axis=1)
-        pw = np.exp(acc - m[:, None]) * W[None, :]
-        rs = pw.sum(axis=1)
-        loglik += float((m + np.log(np.maximum(rs, 1e-300))).sum())
-        omega = pw / rs[:, None]
-        for j in rivals:
-            lam = np.exp(-0.5 * A[j] ** 2 - 0.5 * np.log(2 * np.pi)
-                         - logPhi[j])
-            wl = omega * lam / s[j]
-            g = wl.sum(axis=1)                     # (Ti,)
-            dmu[idx, k] += g
-            dmu[idx, j] -= g
-            H = wl @ Fq                            # (Ti, r)
-            hc = H.sum(axis=0)
-            dV[k] += hc
-            dV[j] -= hc
-    return loglik, dmu, dV
+    lp, dmu, dV = _choice_logprob_terms(mu, V, D=D, choice=choice, Qf=Qf, Qz=Qz)
+    return float(lp.sum()), dmu, dV.sum(axis=0)
 
 
 # Where the Gauss-Hermite tensor stops being the right family for the
