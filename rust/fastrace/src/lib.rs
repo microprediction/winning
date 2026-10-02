@@ -583,6 +583,13 @@ fn ordered_prefixes<'py>(
 
 #[pymodule]
 fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Fail at import, as an ImportError, if NumPy is missing: the numpy
+    // bindings otherwise panic on the first array call with "Failed to
+    // access NumPy array API capsule" (#115).
+    m.py().import_bound("numpy").map_err(|e| {
+        pyo3::exceptions::PyImportError::new_err(format!(
+            "fastrace needs NumPy (pip install numpy): {e}"))
+    })?;
     m.add_function(wrap_pyfunction!(forward_and_slopes, m)?)?;
     m.add_function(wrap_pyfunction!(ordered_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(block_race, m)?)?;
