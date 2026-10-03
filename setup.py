@@ -29,10 +29,12 @@ setup(
     tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],
     include_package_data=True,
     install_requires=["numpy", "scipy"],
-    extras_require={"test": ["pytest", "pandas", "matplotlib"],
+    extras_require={"test": ["pytest", "pandas", "matplotlib", "python-flint>=0.6"],
                     "benchmarks": ["pandas", "trueskill"],
                     # compiled kernels (rust/fastrace); pure python without
-                    "fast": ["fastrace>=0.2.0"]},
+                    "fast": ["fastrace>=0.2.0"],
+                    # winning.certified: Arb ball arithmetic
+                    "certified": ["python-flint>=0.6"]},
     entry_points={
         "console_scripts": [
             "winning=winning.__main__:main",

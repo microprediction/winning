@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- `winning.certified`: win probabilities of the independent race as
+  Arb balls that provably contain the answer, for the normal, Gumbel,
+  logistic and Laplace bases. `certified_race_probabilities` integrates
+  with Arb's rigorous Gauss-Legendre rule (split at the Laplace kinks)
+  and bounds the tails in closed form; it returns 30 digits in under a
+  second for small fields and raises rather than return a wider ball.
+  `bracket_race_probabilities` is an independent first-order
+  certificate that uses only the monotonicity of the survival
+  functions. Tests pin both to closed forms (two-runner normal,
+  three- and four-runner arcsine orthants, Gumbel as Luce) and check
+  the float engine against them: inside 1e-13 for the smooth bases.
+  The Laplace base is not: at the default 257 points the float engine
+  is 4e-4 off on a four-runner field and 2e-6 off at 4097, first order
+  across the kink, contrary to the "measured accurate" note in
+  `races.py` (an xfail records it; likely the cause of #267). Needs
+  `pip install winning[certified]` (python-flint).
+
 - `qmc_ghk(..., cov=)` validates the matrix it is handed (#102). The
   registry lets an explicit `cov=` skip `as_loadings`/`as_idio` on the
   promise that the method checks it, and it checked only the shape: an
