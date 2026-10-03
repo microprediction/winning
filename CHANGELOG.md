@@ -12,12 +12,31 @@
   certificate that uses only the monotonicity of the survival
   functions. Tests pin both to closed forms (two-runner normal,
   three- and four-runner arcsine orthants, Gumbel as Luce) and check
-  the float engine against them: inside 1e-13 for the smooth bases.
-  The Laplace base is not: at the default 257 points the float engine
-  is 4e-4 off on a four-runner field and 2e-6 off at 4097, first order
-  across the kink, contrary to the "measured accurate" note in
-  `races.py` (an xfail records it; likely the cause of #267). Needs
+  the float engine against them: inside 1e-13 for every base. Needs
   `pip install winning[certified]` (python-flint).
+
+- `certified_factor_race_probabilities`: the same guarantee for the
+  factor race, U = mu + V f + sqrt(D) eps, on the analytic bases. An
+  adaptive tensor Gauss-Legendre cubature over (x, f) whose per-box
+  error is bounded by the Bernstein-ellipse theorem, with the integrand
+  bounded rigorously on complex boxes; the truncation is bounded by the
+  base's own tails. Five runners at rank one take seconds at 16 digits;
+  rank two takes tens of seconds. It measures the default factor node
+  rule: on a five-runner rank-one field it chose 15 Gauss-Hermite nodes
+  and was 4.9e-7 (normal), 2.2e-5 (logistic) and 3.0e-5 (gumbel) off,
+  falling to 1e-16 at 101-201 nodes, whatever the lattice size.
+
+- The Laplace base (and the exponential power family below beta = 2)
+  integrates on a lattice split at every runner's kink, Gauss-Legendre
+  on each piece (`races.kink_lattice`), in `race_probabilities` and in
+  `race_jacobian`/`race_jacobian_row`, which must share its grid. The
+  uniform lattice is second order across a kink: a four-runner laplace
+  race was 4e-4 off at the default 257 points and 2e-6 off at 4097,
+  against the certificate; it is now 3.5e-15 off at the same budget.
+  The `races.py` note calling the kinked case "measured accurate" was
+  wrong. Kinked bases no longer dispatch to the compiled kernel, which
+  has only the uniform lattice. Not yet carried over: `topk`
+  (likely #267), and the R and Julia ports.
 
 - `qmc_ghk(..., cov=)` validates the matrix it is handed (#102). The
   registry lets an explicit `cov=` skip `as_loadings`/`as_idio` on the

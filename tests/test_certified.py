@@ -12,7 +12,7 @@ from winning.certified import (  # noqa: E402
     certified_race_probabilities,
     contains,
 )
-from winning.factor import race_probabilities  # noqa: E402
+from winning.factor import hermite_nodes, race_probabilities  # noqa: E402
 
 DIGITS = 30
 
@@ -118,9 +118,10 @@ def test_bracket_narrows_first_order():
     assert 3.0 < float(r1 / r2) < 5.0
 
 
-@pytest.mark.parametrize("base", ["normal", "gumbel", "logistic"])
+@pytest.mark.parametrize("base", ["normal", "gumbel", "logistic", "laplace"])
 def test_float_engine_inside_certificate(base):
-    # the point of the module: the fast lattice answer, checked
+    # the point of the module: the fast lattice answer, checked. laplace
+    # was 4e-4 off here on the uniform lattice before kink_lattice
     rng = np.random.default_rng(7)
     mu = rng.normal(0, 1, 8)
     D = rng.uniform(0.5, 1.5, 8)
@@ -130,15 +131,21 @@ def test_float_engine_inside_certificate(base):
         assert abs(f - float(s.mid())) < 1e-13
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "the float engine's uniform lattice is first order across the Laplace "
-    "kink: 4e-4 off at the default 257 points, 2e-6 at 4097"))
-def test_float_engine_laplace_inside_certificate():
-    mu = np.array([-0.5, 0.0, 0.2, 0.3])
-    fast = race_probabilities(mu, base="laplace")
-    sure = certified_race_probabilities(mu, base="laplace", digits=20)
-    for f, s in zip(fast, sure):
-        assert abs(f - float(s.mid())) < 1e-10
+def test_kinked_jacobian_is_the_derivative_of_the_kinked_map():
+    from winning.factor.polish import race_jacobian
+    rng = np.random.default_rng(3)
+    mu = rng.normal(0, 1, 6)
+    V = rng.normal(0, 0.5, (6, 1))
+    D = rng.uniform(0.5, 1.5, 6)
+    J = race_jacobian(mu, V=V, D=D, base="laplace")
+    h = 1e-6
+    for j in range(6):
+        e = np.zeros(6)
+        e[j] = h
+        fd = (race_probabilities(mu + e, V=V, D=D, base="laplace", points=501)
+              - race_probabilities(mu - e, V=V, D=D, base="laplace",
+                                   points=501)) / (2 * h)
+        assert np.abs(J[:, j] - fd).max() < 1e-8
 
 
 def test_contains_helper():
@@ -154,3 +161,103 @@ def test_refuses_bad_fields():
         certified_race_probabilities([0.0, 1.0], D=[1.0, 0.0])
     with pytest.raises(ValueError):
         certified_race_probabilities([0.0, 1.0], base="cauchy")
+
+
+# ---------------------------------------------------------------------------
+# the factor race
+# ---------------------------------------------------------------------------
+
+from winning.certified import certified_factor_race_probabilities  # noqa: E402
+
+FDIGITS = 16
+
+
+def _diff_corr(Sigma, i, j, k):
+    """Correlation of X_j - X_i and X_k - X_i under Sigma (arb)."""
+    c = Sigma[j][k] - Sigma[i][j] - Sigma[i][k] + Sigma[i][i]
+    vj = Sigma[j][j] - 2 * Sigma[i][j] + Sigma[i][i]
+    vk = Sigma[k][k] - 2 * Sigma[i][k] + Sigma[i][i]
+    return c / (vj * vk).sqrt()
+
+
+def _sigma(V, D):
+    n = len(D)
+    return [[sum((arb(V[a][m]) * arb(V[b][m]) for m in range(len(V[0]))),
+                 arb(0)) + (arb(D[a]) if a == b else 0)
+             for b in range(n)] for a in range(n)]
+
+
+def test_factor_two_runners_with_means():
+    mu, V, D = [0.3, -0.4], [[0.8], [-0.5]], [1.0, 2.5]
+    p = certified_factor_race_probabilities(mu, V, D, digits=FDIGITS)
+    var = arb(D[0]) + arb(D[1]) + (arb(V[0][0]) - arb(V[1][0])) ** 2
+    z = (arb(mu[1]) - arb(mu[0])) / var.sqrt()
+    truth = (-z / arb(2).sqrt()).erfc() / 2
+    _close(p[0], truth, FDIGITS)
+    _close(p[1], 1 - truth, FDIGITS)
+
+
+@pytest.mark.parametrize("V, digits", [
+    ([[0.9], [-0.4], [0.2]], FDIGITS),
+    # rank two is a three-dimensional cubature: ~16 s at 10 digits
+    ([[0.9, 0.1], [-0.4, 0.5], [0.2, -0.7]], 10),
+])
+def test_factor_three_runners_arcsine(V, digits):
+    D = [0.5, 1.0, 2.0]
+    p = certified_factor_race_probabilities([0.0] * 3, V, D, digits=digits)
+    Sigma = _sigma(V, D)
+    for i in range(3):
+        j, k = [m for m in range(3) if m != i]
+        rho = _diff_corr(Sigma, i, j, k)
+        _close(p[i], arb(1) / 4 + rho.asin() / (2 * arb.pi()), digits)
+
+
+def test_factor_four_runners_orthant():
+    V, D = [[0.9], [-0.4], [0.2], [0.6]], [0.7, 1.0, 1.3, 2.2]
+    p = certified_factor_race_probabilities([0.0] * 4, V, D,
+                                            digits=FDIGITS)
+    Sigma = _sigma(V, D)
+    for i in range(4):
+        others = [m for m in range(4) if m != i]
+        s = arb(0)
+        for a in range(3):
+            for b in range(a + 1, 3):
+                s += _diff_corr(Sigma, i, others[a], others[b]).asin()
+        _close(p[i], arb(1) / 8 + s / (4 * arb.pi()), FDIGITS)
+
+
+def test_factor_common_loading_is_luce():
+    # a loading every runner shares cannot move an argmin
+    mu = [-0.5, 0.0, 0.2, 0.3]
+    p = certified_factor_race_probabilities(mu, [[0.7]] * 4, base="gumbel",
+                                            digits=FDIGITS)
+    c = arb.pi() / arb(6).sqrt()
+    w = [(-c * arb(m)).exp() for m in mu]
+    tot = sum(w[1:], w[0])
+    for pi, wi in zip(p, w):
+        _close(pi, wi / tot, FDIGITS)
+
+
+@pytest.mark.parametrize("base", ["normal", "gumbel", "logistic"])
+def test_float_factor_engine_converges_to_certificate(base):
+    # Measured on this field: the default node rule picks 15 Gauss-Hermite
+    # nodes and is 4.9e-7 (normal), 2.2e-5 (logistic) and 3.0e-5 (gumbel)
+    # off; the lattice size changes nothing. With 101 nodes the engine
+    # lands within 3e-13 of the certified values, so the gap is the
+    # factor rule, not the model.
+    rng = np.random.default_rng(11)
+    mu = rng.normal(0, 1, 5)
+    V = rng.normal(0, 0.6, (5, 1))
+    D = rng.uniform(0.5, 1.5, 5)
+    F, W = hermite_nodes(1, Q=101)
+    fast = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base)
+    sure = certified_factor_race_probabilities(mu, V, D, base=base,
+                                               digits=FDIGITS)
+    for f, s in zip(fast, sure):
+        assert abs(f - float(s.mid())) < 1e-12
+
+
+def test_factor_refuses_kinked_base():
+    with pytest.raises(NotImplementedError):
+        certified_factor_race_probabilities([0.0, 1.0], [[0.5], [0.1]],
+                                            base="laplace")

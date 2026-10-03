@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 
 from .races import (race_probabilities, abilities_from_race, _setup,
-                    forward_grid)
+                    forward_grid, kink_lattice)
 
 
 def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
@@ -59,8 +59,15 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
     a = np.zeros(n)
     A = np.zeros((len(idx), n))
     dT = np.zeros(n)
+    kinks = getattr(fn, "kinks", ())
     for q in range(len(F)):
-        z = (x[None, :] - M_all[q][:, None]) / sd[:, None]
+        # a kinked base integrates on its split lattice, exactly as the
+        # forward map does (races.kink_lattice); dx becomes weights
+        if kinks:
+            xq, w = kink_lattice(x, M_all[q], sd, kinks)
+        else:
+            xq, w = x, np.full(len(x), dx)
+        z = (xq[None, :] - M_all[q][:, None]) / sd[:, None]
         S, f, fp = fn(z)
         f = f / sd[:, None]
         logS = np.log(np.maximum(S, 1e-300))
@@ -71,14 +78,13 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
         haz = np.exp(np.clip(logf - logS, -745.0, 40.0))
         R = np.exp(np.clip(L[None, :] - logS, -745.0, 40.0))
         own = -(fp / (sd ** 2)[:, None] * R)                   # d f_i/d mu_i
-        a += W[q] * g.sum(axis=1) * dx
-        A += W[q] * (g[idx] @ haz.T) * dx
+        a += W[q] * (g @ w)
+        A += W[q] * ((g[idx] * w) @ haz.T)
         # own coordinate, differentiated rather than imposed by zero rows
-        A[np.arange(len(idx)), idx] += W[q] * dx * (
-            own[idx].sum(axis=1) - (g[idx] * haz[idx]).sum(axis=1))
+        A[np.arange(len(idx)), idx] += W[q] * (
+            own[idx] @ w - (g[idx] * haz[idx]) @ w)
         Gt = g.sum(axis=0)
-        dT += W[q] * dx * (((Gt[None, :] - g) * haz).sum(axis=1)
-                           + own.sum(axis=1))
+        dT += W[q] * (((Gt[None, :] - g) * haz) @ w + own @ w)
     return a, A, dT
 
 

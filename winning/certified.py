@@ -1,4 +1,4 @@
-"""Certified win probabilities for the independent race.
+"""Certified win probabilities for the independent and factor races.
 
 Every other path in winning returns a float that is accurate in
 practice, measured against reference computations. This module
@@ -32,15 +32,31 @@ Two certificates, which share nothing but the base formulas:
       integrator. The price is first order, width ~ 1/cells. It is the
       independent check, not the source of digits.
 
-All N probabilities come from one shared field per lattice in the
-bracket, as in the float engine: S_j and F_j are evaluated once at
-every lattice point and every runner's H_i is read off them.
+The factor race, X_i = mu_i + V_i f + sqrt(D_i) Z_i with f ~ N(0, I_k),
+has its own certificate:
+
+  certified_factor_race_probabilities   p_i is an integral over (x, f)
+      in k + 1 dimensions, done by an adaptive tensor Gauss-Legendre
+      rule whose error on each box is bounded by the Bernstein-ellipse
+      theorem (Trefethen, ATAP Thm 19.3): the integrand is bounded
+      rigorously on complex boxes covering each ellipse, so the bound
+      needs only evaluations of the formulas, never inner integrals.
+      Mass outside the truncation box is bounded by the base's own
+      tails, because prod S <= 1.
+
+All N probabilities come from one shared field per lattice point, as in
+the float engine: S_j and f_j are evaluated once at every point and
+every runner's product of the others is read off prefix and suffix
+products (no division by S, which may vanish on a complex box).
 
 Requires python-flint (pip install python-flint); importing this
 module without it raises ImportError with that instruction.
 """
 
 from __future__ import annotations
+
+import itertools
+import math
 
 try:
     from flint import acb, arb, ctx
@@ -50,6 +66,7 @@ except ImportError as exc:  # pragma: no cover - exercised only without flint
     ) from exc
 
 __all__ = ["BASES", "certified_race_probabilities",
+           "certified_factor_race_probabilities",
            "bracket_race_probabilities", "contains"]
 
 
@@ -112,11 +129,22 @@ class _Logistic(_Base):
     def _c():
         return arb.pi() / arb(3).sqrt()
 
+    # The same analytic functions, reflected where Re z > 0. On a wide
+    # ball exp(c z) is huge there and 1 + exp(c z) is a ball containing
+    # zero, which bounds nothing; exp(-c z) is small and does not.
+
+    @staticmethod
+    def _right(z):
+        return float(z.real.mid() if isinstance(z, acb) else z.mid()) > 0
+
     def S(self, z, piece=0):
+        if self._right(z):
+            e = (-self._c() * z).exp()
+            return e / (1 + e)
         return 1 / (1 + (self._c() * z).exp())
 
     def f(self, z, piece=0):
-        e = (self._c() * z).exp()
+        e = ((-1 if self._right(z) else 1) * self._c() * z).exp()
         return self._c() * e / (1 + e) ** 2
 
 
@@ -377,5 +405,272 @@ def bracket_race_probabilities(mu, D=None, base="normal", cells=2000,
             lo += FL * Hk[0]
             hi += FL + S[i][cells] * Hk[cells]
             ball = arb.union(lo, hi)
+            out.append(arb.intersection(ball, arb("[0.5 +/- 0.5]")))
+        return out
+
+
+# ---------------------------------------------------------------------------
+# certificate three: the factor race, adaptive tensor Gauss-Legendre
+# ---------------------------------------------------------------------------
+
+
+_GL = {}
+_PAD = 1.0 + 1e-9
+
+
+def _gauss_legendre(n, prec):
+    """Rigorous nodes and weights of the n-point rule on [-1, 1]."""
+    key = (n, prec)
+    if key not in _GL:
+        _GL[key] = [arb.legendre_p_root(n, j, weight=True) for j in range(n)]
+    return _GL[key]
+
+
+def _loadings(V, n):
+    try:
+        rows = [list(r) for r in V]
+    except TypeError:
+        raise ValueError("V must be (n, k) loadings") from None
+    if len(rows) != n:
+        raise ValueError(f"V has {len(rows)} rows for {n} contestants")
+    if not all(isinstance(r, list) for r in rows) or not rows[0]:
+        raise ValueError("V must be (n, k) loadings")
+    k = len(rows[0])
+    if any(len(r) != k for r in rows):
+        raise ValueError("V rows must all have the same length")
+    return [[_ball(v) for v in r] for r in rows], k
+
+
+def _factor_field(base, mu, sd, V, x, f):
+    """g_i(x, f) for every runner at one point or box: the k-variate
+    normal density of f, runner i's conditional density at x, and the
+    others' conditional survivals, by prefix and suffix products."""
+    n = len(mu)
+    S, dens = [], []
+    for j in range(n):
+        m = mu[j]
+        for vjm, fm in zip(V[j], f):
+            m = m + vjm * fm
+        u = (x - m) / sd[j]
+        S.append(base.S(u))
+        dens.append(base.f(u) / sd[j])
+    q = f[0] * f[0]
+    for fm in f[1:]:
+        q = q + fm * fm
+    phi = (-q / 2).exp() / (2 * arb.pi()) ** (arb(len(f)) / 2)
+    pre = [None] * n
+    acc = 1
+    for j in range(n):
+        pre[j] = acc
+        acc = acc * S[j]
+    out = [None] * n
+    acc = 1
+    for j in reversed(range(n)):
+        out[j] = phi * dens[j] * pre[j] * acc
+        acc = acc * S[j]
+    return out
+
+
+def _box_ball(lo, hi):
+    """A ball containing [lo, hi] exactly, padded outward: built from the
+    endpoints in Arb, never from a float midpoint and radius, which
+    round."""
+    pad = 1e-12 * (abs(lo) + abs(hi) + 1.0)
+    return arb.union(arb(lo - pad), arb(hi + pad))
+
+
+def _sup_on_ellipse(field, box, m, rho, pieces=8, others=4):
+    """Rigorous upper bounds, per runner, of |g_i| over the Bernstein
+    ellipse with parameter rho about box[m] (complex), times the real
+    box in every other coordinate. The filled ellipse is covered by
+    `pieces` complex rectangles along its real axis, each as tall as the
+    ellipse above it; the other coordinates are cut into `others` pieces
+    each to keep the interval dependency small."""
+    lo, hi = box[m]
+    c, h = (lo + hi) / 2, (hi - lo) / 2
+    A = h * (rho + 1 / rho) / 2
+    B = h * (rho - 1 / rho) / 2
+    edges = [c - A + 2 * A * t / pieces for t in range(pieces + 1)]
+    cover = []
+    for p0, p1 in zip(edges[:-1], edges[1:]):
+        near = 0.0 if p0 <= c <= p1 else min(abs(p0 - c), abs(p1 - c))
+        height = B * max(0.0, 1 - (near / A) ** 2) ** 0.5
+        cover.append(acb(_box_ball(p0, p1),
+                         _box_ball(-height * (1 + 1e-9), height * (1 + 1e-9))))
+    cuts = []
+    for d, (a, b) in enumerate(box):
+        if d == m:
+            continue
+        step = (b - a) / others
+        cuts.append([_box_ball(a + t * step, a + (t + 1) * step)
+                     for t in range(others)])
+    sup = None
+    for z in cover:
+        for rest in itertools.product(*cuts):
+            point = list(rest)
+            point.insert(m, z)
+            vals = [_upper(v) for v in field(point)]
+            sup = vals if sup is None else [max(a, b) for a, b in zip(sup, vals)]
+    return sup
+
+
+def _upper(v):
+    """|v| bounded above as a float, rounded up; an indeterminate ball
+    (NaN, or infinite on a wide complex box) is an infinite bound. The
+    max over the cover must never see a NaN: comparisons with one are
+    False, and a dropped piece would make the bound optimistic."""
+    u = abs(v).upper()
+    if not u.is_finite():
+        return math.inf
+    x = float(u)
+    return math.nextafter(x, math.inf) if math.isfinite(x) else math.inf
+
+
+def _gl_box(field, box, n, prec, n_out):
+    """The n^d tensor Gauss-Legendre sum over a real box, per runner."""
+    rule = _gauss_legendre(n, prec)
+    axes = []
+    for lo, hi in box:
+        # in Arb: a float centre and half-width round, and the rule then
+        # integrates a box a few ulps off, leaving gaps and overlaps
+        # between neighbours that no bound accounts for
+        c, h = (arb(lo) + arb(hi)) / 2, (arb(hi) - arb(lo)) / 2
+        axes.append([(c + h * t, h * w) for t, w in rule])
+    total = [arb(0)] * n_out
+    for combo in itertools.product(*axes):
+        point = [t for t, _ in combo]
+        weight = arb(1)
+        for _, w in combo:
+            weight = weight * w
+        vals = field(point)
+        total = [s + weight * v for s, v in zip(total, vals)]
+    return total
+
+
+def certified_factor_race_probabilities(mu, V, D=None, base="normal",
+                                        digits=20, orders=(8, 16, 24, 32),
+                                        max_boxes=4000):
+    """Win probabilities of the factor min-wins race as Arb balls.
+
+    X_i = mu_i + V_i f + sqrt(D_i) Z_i, f ~ N(0, I_k), Z_i iid from the
+    base. Returns one `flint.arb` per runner, each provably containing
+    p_i, with radius below 10**-digits, or raises ArithmeticError.
+
+    The work is an adaptive cubature in k + 1 dimensions, so it is for
+    small fields and low rank. Measured: five runners at rank one take
+    1 s (normal), 3 s (gumbel) and 8 s (logistic) at 16 digits; three
+    runners at rank two take 11 s at 8 digits and 24 s at 12. Its
+    purpose is to check the float engine and to supply reference
+    values, not to replace race_probabilities.
+
+    Analytic bases only (normal, gumbel, logistic). The Laplace kink
+    moves with the factors, so it is refused rather than mishandled.
+    """
+    base = _base(base)
+    if base.kinks:
+        raise NotImplementedError(
+            f"the {base.name} base has kinks that move with the factors; "
+            "the factor certificate takes analytic bases only")
+    with _Precision(digits) as P:
+        mu, sd = _field(mu, D)
+        n = len(mu)
+        V, k = _loadings(V, n)
+        target = arb(10) ** (-digits)
+        eps = arb(10) ** (-digits - 2)
+
+        # truncation: f in [-T, T]^k, x in [L, R]
+        T = 4.0
+        while not k * (arb(T) / arb(2).sqrt()).erfc() < eps:
+            T += 0.5
+        tl = tr = 4.0
+        while not _cdf(base, arb(-tl)) < eps:
+            tl *= 1.25
+        while not _sf(base, arb(tr)) < eps:
+            tr *= 1.25
+        spread = [sum((abs(v) * T for v in row), arb(0)) for row in V]
+        smax = max(float(s.upper()) for s in sd)
+        L = min(float((m - w).lower()) for m, w in zip(mu, spread)) - tl * smax
+        R = max(float((m + w).upper()) for m, w in zip(mu, spread)) + tr * smax
+        # outward, past any float rounding in the two lines above
+        L -= 1e-9 * (1.0 + abs(L))
+        R += 1e-9 * (1.0 + abs(R))
+        tail = (k * (arb(T) / arb(2).sqrt()).erfc()
+                + _cdf(base, arb(-tl)) + _sf(base, arb(tr)))
+
+        def field(point):
+            return _factor_field(base, mu, sd, V, point[0], point[1:])
+
+        root = [(L, R)] + [(-T, T)] * k
+        volume = (R - L) * (2 * T) ** k
+        budget = float((target / 4).upper())
+        core = [arb(0)] * n
+        err = [arb(0)] * n
+        stack = [root]
+        boxes = 0
+        while stack:
+            box = stack.pop()
+            boxes += 1
+            if boxes > max_boxes:
+                raise ArithmeticError(
+                    f"factor certificate needed more than {max_boxes} boxes "
+                    f"for 1e-{digits}; ask for fewer digits or a smaller field")
+            vol = 1.0
+            for a, b in box:
+                vol *= b - a
+            allow = budget * vol / volume
+            # per-dimension, per-rho sup bounds, then the best order
+            best = None
+            for rho in (2.0, 4.0):
+                sups = [_sup_on_ellipse(field, box, m, rho)
+                        for m in range(len(box))]
+                for order in orders:
+                    E = 64.0 / (15.0 * (rho * rho - 1.0) * rho ** (2 * order))
+                    per_dim = []
+                    for m, (a, b) in enumerate(box):
+                        other = vol / (b - a)
+                        h = (b - a) / 2
+                        per_dim.append([other * h * E * s for s in sups[m]])
+                    # the bound is assembled in floats: pad it so their
+                    # rounding cannot make it optimistic
+                    bound = [_PAD * sum(col) for col in zip(*per_dim)]
+                    worst = max(bound)
+                    if worst <= allow:
+                        if best is None or order < best[0]:
+                            best = (order, bound)
+                        break
+                if best is None and rho == 4.0:
+                    worst_dim = [max(per_dim[m]) for m in range(len(box))]
+                    if all(math.isinf(w) for w in worst_dim):
+                        # unbounded everywhere: the blow-up may come from
+                        # any coordinate's width, so cut the widest
+                        split = max(range(len(box)),
+                                    key=lambda m: box[m][1] - box[m][0])
+                    else:
+                        split = max(range(len(box)),
+                                    key=lambda m: worst_dim[m])
+            if best is None:
+                a, b = box[split]
+                mid = (a + b) / 2
+                if not a < mid < b or b - a < 1e-9 * (1.0 + abs(a)):
+                    raise ArithmeticError(
+                        "could not bound the integrand on a box of width "
+                        f"{b - a:.1e}; the {base.name} base is too wild "
+                        "here for this certificate")
+                left, right = list(box), list(box)
+                left[split] = (a, mid)
+                right[split] = (mid, b)
+                stack += [left, right]
+                continue
+            order, bound = best
+            vals = _gl_box(field, box, order, P.prec, n)
+            core = [c + v for c, v in zip(core, vals)]
+            err = [e + arb(b) for e, b in zip(err, bound)]
+        out = []
+        for i in range(n):
+            ball = core[i] + arb(0, err[i].upper()) + arb.union(arb(0), tail)
+            if not ball.rad() < target:
+                raise ArithmeticError(
+                    f"runner {i}: radius {ball.rad().str(3)} exceeds "
+                    f"1e-{digits}; refusing to return it")
             out.append(arb.intersection(ball, arb("[0.5 +/- 0.5]")))
         return out
