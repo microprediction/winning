@@ -83,6 +83,13 @@ export function tridiagEigen(d, e) {
 /* probabilists' Hermite nodes/weights (weights normalized to sum 1),
    matching R's .hermite1 (parity with python hermegauss to fp) */
 export function hermite1(order) {
+  // `new Array("15")` is a ONE-element array, so an order read from a
+  // form control (a string) silently became the one-node rule, node 0
+  // weight 1: the factor integral vanished and finite, normalised
+  // prices came back for a different model. null and booleans did the
+  // same (#442). The order is a count; it is checked as one here, at
+  // the one place every quadrature caller reaches.
+  order = asCount(order, "order", 1, "hermite1");
   const d = new Array(order).fill(0);
   const e = [];
   for (let i = 1; i < order; i++) e.push(Math.sqrt(i));
@@ -121,12 +128,87 @@ export function hermite1(order) {
    The guard here used to demand k >= 1, which refused it; python, R and
    julia all answer it, so refusing made this port the odd one out
    (#68). */
-function asCount(x, name, minimum) {
+export function asCount(x, name, minimum, who = "hermiteNodes") {
+  // Number.isInteger is false for "15", true and null, so a string from
+  // a form control is refused rather than coerced (#442)
   if (!Number.isInteger(x))
-    throw new Error(`hermiteNodes needs an integer ${name}; got ${x}`);
+    throw new Error(`${who} needs an integer ${name}; got ${typeof x === "string" ? JSON.stringify(x) : x}`);
   if (x < minimum)
-    throw new Error(`hermiteNodes needs ${name} >= ${minimum}; got ${x}`);
+    throw new Error(`${who} needs ${name} >= ${minimum}; got ${x}`);
   return x;
+}
+
+/* An iteration budget is a finite positive whole number of sweeps.
+
+   Every browser solver used its budget as a bare loop bound, so 0, a
+   negative number and NaN skipped the solve and returned the warm start
+   (or, in the classic solver, the target PROBABILITIES as if they were
+   offsets) as an ordinary answer; a fraction ran Math.ceil of itself;
+   and Infinity removed the only hard bound, so a stalled iteration
+   froze the page (#401, #413, #421, #428). Refused here, before any
+   lattice work. */
+export function asIterations(n, where, name = "nIter") {
+  if (!Number.isInteger(n) || n < 1)
+    throw new Error(
+      `${where}: ${name} must be a finite positive integer number of ` +
+      `iterations; got ${typeof n === "string" ? JSON.stringify(n) : n}. ` +
+      "A zero, negative or NaN budget skips the solve and returns the " +
+      "warm start as if it were an answer, and Infinity can hang the page.");
+  return n;
+}
+
+/* A convergence tolerance is a finite positive number. */
+export function asTolerance(tol, where, name = "tol") {
+  if (typeof tol !== "number" || !Number.isFinite(tol) || !(tol > 0))
+    throw new Error(`${where}: ${name} must be a finite positive number; got ${tol}`);
+  return tol;
+}
+
+/* A numeric vector, plain or typed, as a plain Array.
+
+   A Float64Array's .map keeps the typed container and coerces whatever
+   the callback returns to a number, so `mu.map(() => [0])` -- the
+   default loadings -- became a flat vector of NaN and the race failed
+   with "F[0] has 1 coordinate(s) but the loadings have rank undefined"
+   (#334); the classic lattice crashed the same way mapping offsets to
+   CDF arrays (#329). Normalising once at each door makes a typed vector
+   and a plain one the same input, as numpy arrays and lists are in
+   python. */
+export const isVector = x => Array.isArray(x) || (ArrayBuffer.isView(x) && !(x instanceof DataView));
+
+export function asFiniteVector(x, where, what = "entry", { allowEmpty = false } = {}) {
+  if (!isVector(x))
+    throw new Error(`${where} must be an array of numbers; got ${x === null ? "null" : typeof x}`);
+  if (x.length === 0 && !allowEmpty)
+    throw new Error(`${where} is empty`);
+  for (let i = 0; i < x.length; i++) {
+    // typeof first: Number.isFinite already refuses strings, null and
+    // booleans, but the message should say what arrived
+    if (typeof x[i] !== "number" || !Number.isFinite(x[i]))
+      throw new Error(
+        `${where}[${i}] = ${typeof x[i] === "string" ? JSON.stringify(x[i]) : x[i]} ` +
+        `is not a finite ${what}`);
+  }
+  return Array.from(x, Number);
+}
+
+/* Abilities: a nonempty vector of finite locations. The winner race
+   checked this at its door and the top-k/rank family did not, so a NaN
+   threw RangeError: Invalid array length, an Infinity reported a NaN
+   "mass defect" with advice to raise points=, and topKJacobians
+   returned two all-NaN matrices without complaint (#440). */
+export function asAbilities(mu, where = "mu") {
+  if (!isVector(mu))
+    throw new Error(`${where} must be an array of abilities; got ${typeof mu}`);
+  if (mu.length === 0)
+    throw new Error(`${where} is empty; a race needs at least one contestant`);
+  for (let i = 0; i < mu.length; i++) {
+    if (typeof mu[i] !== "number" || !Number.isFinite(mu[i]))
+      throw new Error(
+        `${where}[${i}] = ${mu[i]} is not finite; an ability is a finite ` +
+        `location on the performance scale`);
+  }
+  return Array.from(mu, Number);
 }
 
 export function hermiteNodes(k, order = 15, prune = 1e-7) {
@@ -210,13 +292,13 @@ export function interpClamped(x, xp, fp) {
    Distinct from #232 (the shape of V) and #281 (weight SCALE in the
    standalone js/factor module). */
 export function asFactorNodes(F, rank, where = "F") {
-  if (!Array.isArray(F))
+  if (!isVector(F))
     throw new Error(`${where} must be an array of factor nodes; got ${typeof F}`);
   if (F.length === 0)
     throw new Error(`${where} is empty; there are no quadrature nodes`);
   const out = new Array(F.length);
   for (let q = 0; q < F.length; q++) {
-    const row = Array.isArray(F[q]) ? F[q]
+    const row = isVector(F[q]) ? F[q]
       : (typeof F[q] === "number" ? [F[q]] : null);
     if (row === null)
       throw new Error(`${where}[${q}] must be a node of ${rank} coordinate(s)`);
@@ -239,7 +321,7 @@ export function asFactorNodes(F, rank, where = "F") {
    but the spelling should not matter anywhere, and a mismatched length
    must not reach the kernel. */
 export function asWeights(W, nNodes, where = "W") {
-  if (!Array.isArray(W) && !ArrayBuffer.isView(W))
+  if (!isVector(W))
     throw new Error(`${where} must be an array of node weights; got ${typeof W}`);
   if (W.length !== nNodes)
     throw new Error(
@@ -247,8 +329,8 @@ export function asWeights(W, nNodes, where = "W") {
       `for ${nNodes} nodes`);
   let top = 0;
   for (let q = 0; q < W.length; q++) {
-    const v = Number(W[q]);
-    if (!Number.isFinite(v))
+    const v = W[q];
+    if (typeof v !== "number" || !Number.isFinite(v))
       throw new Error(`${where}[${q}] = ${W[q]} is not a finite weight`);
     if (v < 0)
       throw new Error(`${where}[${q}] = ${v} is a negative weight`);
@@ -329,17 +411,17 @@ export function asIdio(D, n, where = "D", positive = true) {
   let v;
   if (typeof D === "number") {
     v = new Array(n).fill(D);
-  } else if (Array.isArray(D)) {
+  } else if (isVector(D)) {          // a typed D is the same input (#334)
     if (D.length !== n)
       throw new Error(
         `${where} must be one idiosyncratic variance per contestant; ` +
         `got ${D.length} for ${n}`);
-    v = D.slice();
+    v = Array.from(D);
   } else {
     throw new Error(`${where}: expected a number or array`);
   }
   for (let i = 0; i < n; i++) {
-    if (!Number.isFinite(v[i]))
+    if (typeof v[i] !== "number" || !Number.isFinite(v[i]))
       throw new Error(`${where} has a non-finite entry at ${i}`);
     if (v[i] < 0)
       throw new Error(
@@ -358,16 +440,21 @@ export function asLoadings(V, n, where = "V") {
     if (!Number.isFinite(V)) throw new Error(`${where}: not a finite number`);
     return Array.from({ length: n }, () => [V]);        // scalar: rank 1
   }
-  if (!Array.isArray(V)) throw new Error(`${where}: expected a number or array`);
+  if (!isVector(V)) throw new Error(`${where}: expected a number or array`);
   if (V.length === 0) throw new Error(`${where}: empty`);
-  if (!Array.isArray(V[0])) {                            // a flat vector
+  // typed vectors and typed rows are the same input as plain ones (#334)
+  if (!Array.isArray(V) || !isVector(V[0])) {            // a flat vector
     if (V.length !== n)
       throw new Error(
         `${where}: a flat vector must have one entry per contestant; ` +
         `got ${V.length} for ${n}`);
-    if (!V.every(Number.isFinite)) throw new Error(`${where}: non-finite entry`);
-    return V.map(v => [v]);
+    const flat = Array.from(V);
+    if (flat.some(isVector)) throw new Error(`${where}: mixed rows and scalars`);
+    if (!flat.every(v => typeof v === "number" && Number.isFinite(v)))
+      throw new Error(`${where}: non-finite entry`);
+    return flat.map(v => [v]);
   }
+  V = V.map(r => (isVector(r) ? Array.from(r) : r));
   const widths = new Set(V.map(r => (Array.isArray(r) ? r.length : -1)));
   if (widths.has(-1))
     throw new Error(`${where}: mixed rows and scalars`);
@@ -391,9 +478,9 @@ export function asLoadings(V, n, where = "V") {
         `(rank, n) for n = ${n}`);
     M = Array.from({ length: n }, (_, i) => V.map(row => row[i]));  // (rank,n)
   }
-  if (!M.every(r => r.every(Number.isFinite)))
+  if (!M.every(r => r.every(v => typeof v === "number" && Number.isFinite(v))))
     throw new Error(`${where}: non-finite entry`);
-  return M;
+  return M.map(r => r.slice());
 }
 
 /* Gauge-fix a loading matrix: subtract each factor's mean loading
@@ -429,4 +516,69 @@ export function firstPrimes(d) {
     if (isP) out.push(c);
   }
   return out;
+}
+
+/* Own-slope-preconditioned Jacobi sweeps on the mean-zero quotient,
+   port of python's races._jacobi_sweeps (see its docstring for the
+   measurements behind each rule): Richardson damping estimated from
+   consecutive steps and held persistently, a transient penalty after a
+   sweep that contracts neither the max nor the rms residual, and Aitken
+   summation of a geometrically decaying monotone mode.
+
+   `forward(mu)` returns {resid, dres}: residual (model minus target) and
+   own-slopes, negative and bounded away from zero. Returns {mu,
+   converged, residMax, iterations}. The top-k inverse kept the
+   original fixed `n > 2 ? 1 : 0.7` damping after python moved to this,
+   so a field with two live contenders and a tail two-cycled to the
+   iteration limit and repriced 3.8 points wrong (#408). */
+export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
+  let residMax = Infinity, residRms = Infinity, iters = 0;
+  let prev = null, prevStep = null;
+  let alphaBase = alpha, penalty = 1;
+  const n = mu.length;
+  for (let it = 0; it < nIter; it++) {
+    iters = it + 1;
+    let { resid, dres } = forward(mu);
+    residMax = Math.max(...resid.map(Math.abs));
+    residRms = Math.sqrt(resid.reduce((a, b) => a + b * b, 0) / n);
+    if (residMax < tol) break;
+    if (prev && residMax >= prev.residMax && residRms >= prev.residRms) {
+      if (penalty > 0.1) {
+        penalty = Math.max(0.5 * penalty, 0.1);
+        ({ mu, resid, dres, residMax, residRms } = prev);
+        prevStep = null;
+      }
+    } else if (prev && penalty < 1) {
+      penalty = Math.min(1, penalty / 0.75);
+    }
+    prev = { mu, resid, dres, residMax, residRms };
+    const a = alphaBase * penalty;
+    let step = resid.map((v, i) => {
+      const lim = Math.min(2, 10 * Math.abs(v)) * scale;
+      return Math.min(Math.max(a * v / dres[i], -lim), lim);
+    });
+    const sm = step.reduce((x, y) => x + y, 0) / n;
+    step = step.map(v => v - sm);
+    if (prevStep) {
+      const na = Math.sqrt(prevStep.reduce((x, y) => x + y * y, 0));
+      const nb = Math.sqrt(step.reduce((x, y) => x + y * y, 0));
+      if (na > 0) {
+        const dot = step.reduce((x, y, i) => x + y * prevStep[i], 0);
+        const rho = dot / (na * na);
+        const cosn = nb > 0 ? dot / (na * nb) : 0;
+        const ratio = nb / na;
+        if (rho < 0) {
+          const lam = 1 - (1 - rho) / a;
+          alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && residMax > 1e3 * tol) {
+          mu = mu.map((m, i) => m - step[i] / (1 - ratio));
+          prevStep = null;
+          continue;
+        }
+      }
+    }
+    prevStep = step;
+    mu = mu.map((m, i) => m - step[i]);
+  }
+  return { mu, converged: residMax < tol, residMax, iterations: iters };
 }

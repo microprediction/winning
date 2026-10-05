@@ -840,7 +840,10 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     lt1 = np.log(target1) - np.log1p(-target1)
     lt2 = np.log(target2) - np.log1p(-target2)
 
-    sd = np.ones(n) if D0 is None else np.sqrt(np.asarray(D0, float))
+    # D0 through as_idio, as every other variance here: a scalar D0 was a
+    # 0-d array that failed later with "input arrays have different
+    # dimensions", and a wrong length broadcast (#254)
+    sd = np.ones(n) if D0 is None else np.sqrt(as_idio(D0, n, positive=True))
     if mu0 is not None:
         mu = np.asarray(mu0, dtype=float) - np.mean(mu0)
     else:

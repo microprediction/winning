@@ -57,14 +57,127 @@ export function logndtr(z) {
   return Math.log(0.5 * erfcx(x)) - 0.5 * z * z;
 }
 
-function lattice(Mall, sd, points, spans) {
-  let mMin = Infinity, mMax = -Infinity, sMax = 0;
+/* One fixed grid over every conditional mean, padded by the WIDEST
+   runner -- and then refined until it resolves the NARROWEST one.
+
+   The span is set by the widest runner and by the farthest conditional
+   mean, the spacing by `points`, so a distant or diffuse runner could
+   leave the close ones between samples. Shares are normalised and hid
+   it; the unnormalised outputs could not: a runner 100 units behind a
+   close pair cut their tie density by 10.3% (#349), a removed favourite
+   left a deletion row 15% short of mass that normalisation then spread
+   over the survivors (#330), and the home page's 301-point t4 field
+   showed 0.2-point errors (#391). The spacing is now held to half the
+   smallest sd, capped at MAX_POINTS (with a warning past it), which is
+   the resolution target python's forward_grid warns at. A well-resolved
+   field is untouched: the refinement only ever adds points. */
+const MAX_POINTS = 16385;
+function lattice(Mall, sd, points, spans, resolution = 1) {
+  let mMin = Infinity, mMax = -Infinity, sMax = 0, sMin = Infinity;
   for (const row of Mall) for (const v of row) { if (v < mMin) mMin = v; if (v > mMax) mMax = v; }
-  for (const s of sd) if (s > sMax) sMax = s;
+  for (const s of sd) { if (s > sMax) sMax = s; if (s < sMin) sMin = s; }
   const lo = mMin - spans[0] * sMax, hi = mMax + spans[1] * sMax;
+  // `resolution` is the base's own feature width in standard units (1
+  // for a smooth base; a skew-normal's Phi(alpha u) step is ~1/alpha
+  // wide, and a lattice coarser than that aliases the density itself)
+  const need = Math.ceil((hi - lo) / (0.5 * sMin * resolution)) + 1;
+  if (need > points) {
+    if (need > MAX_POINTS && typeof console !== "undefined")
+      console.warn(`factor race lattice cannot resolve the narrowest runner ` +
+                   `(sd ${sMin.toExponential(1)} over ${(hi - lo).toPrecision(3)} ` +
+                   `units) even at ${MAX_POINTS} points`);
+    points = Math.min(need, MAX_POINTS);
+  }
   const x = new Float64Array(points);
   for (let l = 0; l < points; l++) x[l] = lo + (hi - lo) * l / (points - 1);
   return { x, dx: (hi - lo) / (points - 1) };
+}
+
+/* ---- the boundary: the same contracts as docs/js/winning/core.mjs ----
+   This module is standalone (it is deployed as docs/assets/js and three
+   pages import it directly), so it carries its own copies. */
+const isVec = (x) => Array.isArray(x) || (ArrayBuffer.isView(x) && !(x instanceof DataView));
+function finiteVec(x, where, what = "entry") {
+  if (!isVec(x)) throw new Error(`${where} must be an array of numbers`);
+  if (x.length === 0) throw new Error(`${where} is empty`);
+  for (let i = 0; i < x.length; i++)
+    if (typeof x[i] !== "number" || !Number.isFinite(x[i]))
+      throw new Error(`${where}[${i}] = ${x[i]} is not a finite ${what}`);
+  return Array.from(x);
+}
+/* D: a finite positive scalar or exactly one variance per contestant.
+   An extra entry used to widen the lattice by its own sd and misprice
+   the field it did not belong to (#254). */
+function asIdio(D, n, where = "D") {
+  let v;
+  if (typeof D === "number") v = new Array(n).fill(D);
+  else if (isVec(D)) {
+    if (D.length !== n)
+      throw new Error(`${where} must be one idiosyncratic variance per contestant; got ${D.length} for ${n}`);
+    v = Array.from(D);
+  } else throw new Error(`${where}: expected a number or array`);
+  for (let i = 0; i < n; i++) {
+    if (typeof v[i] !== "number" || !Number.isFinite(v[i]))
+      throw new Error(`${where} has a non-finite entry at ${i}`);
+    if (!(v[i] > 0))
+      throw new Error(`${where}[${i}] = ${v[i]} must be a strictly positive variance`);
+  }
+  return v;
+}
+/* V: (n, rank) rows (rank 0 allowed), plain or typed, rectangular. */
+function asLoadings(V, n, where = "V") {
+  if (!isVec(V) || V.length !== n)
+    throw new Error(`${where} must have one loading row per contestant; got ${isVec(V) ? V.length : typeof V} for ${n}`);
+  const rows = Array.from(V, (r, i) => {
+    if (!isVec(r)) throw new Error(`${where}[${i}] must be a row of loadings`);
+    return Array.from(r);
+  });
+  const r = rows[0].length;
+  rows.forEach((row, i) => {
+    if (row.length !== r)
+      throw new Error(`${where} is ragged: row ${i} has ${row.length} loadings, row 0 has ${r}`);
+    row.forEach((v, d) => {
+      if (typeof v !== "number" || !Number.isFinite(v))
+        throw new Error(`${where}[${i}][${d}] = ${v} is not finite`);
+    });
+  });
+  return rows;
+}
+/* F: a rectangular Q x rank(V) node matrix. condMeans read the rank off
+   F[0], so a uniformly short F priced a LOWER-rank model (0.083 share
+   move) and a ragged one silently ignored later coordinates (#290). */
+function asNodes(F, r, where = "F") {
+  if (!isVec(F) || F.length === 0)
+    throw new Error(`${where} must be a nonempty array of factor nodes`);
+  return Array.from(F, (row, q) => {
+    if (!isVec(row) || row.length !== r)
+      throw new Error(`${where}[${q}] has ${isVec(row) ? row.length : "no"} coordinate(s) but the loadings have rank ${r}`);
+    const out = Array.from(row);
+    out.forEach((v, d) => {
+      if (typeof v !== "number" || !Number.isFinite(v))
+        throw new Error(`${where}[${q}][${d}] = ${v} is not finite`);
+    });
+    return out;
+  });
+}
+function asBudget(x, dflt, where, name) {
+  if (x === undefined || x === null) return dflt;
+  if (!Number.isInteger(x) || x < 1)
+    throw new Error(`${where}: ${name} must be a finite positive integer; got ${x}. ` +
+                    "0, negatives and NaN used to mean the default or skip the " +
+                    "solve, and Infinity could hang the page (#428).");
+  return x;
+}
+function asPositive(x, dflt, where, name) {
+  if (x === undefined || x === null) return dflt;
+  if (typeof x !== "number" || !Number.isFinite(x) || !(x > 0))
+    throw new Error(`${where}: ${name} must be a finite positive number; got ${x}`);
+  return x;
+}
+function baseOf(b) {
+  const base = (b && typeof b === "object") ? b : BASES[b || "normal"];
+  if (!base) throw new Error("unknown base: " + b);
+  return base;
 }
 
 /* Standardized bases (zero mean, unit variance), matching Python
@@ -98,7 +211,7 @@ const BASES = {
  * fine grid (dx = 0.005): survival by cumulative trapezoid, slope by
  * central differences, log-survival interpolated linearly (log-linear
  * tails). Python parity vs scipy is ~1e-6, not machine precision. */
-function tabulatedBase(pdfStd, spans) {
+function tabulatedBase(pdfStd, spans, { dpdf = null, dx = 0.005 } = {}) {
   // Two tiers. The inner one is fine enough for the bulk; the outer one
   // exists because clamping the lookup at the table edge made the density
   // FLAT beyond it, so a runner 100 sd behind kept the endpoint density
@@ -108,7 +221,8 @@ function tabulatedBase(pdfStd, spans) {
   // there is no span past which the omitted mass is negligible, and the
   // old normalisation divided by the INNER mass alone, which is the same
   // error again.
-  const HALF = 40, NPTS = 16001, DX = 2 * HALF / (NPTS - 1);
+  const HALF = 40;
+  const NPTS = Math.round(2 * HALF / dx) + 1, DX = 2 * HALF / (NPTS - 1);
   const OUTER = 4000, NOUT = 8001, DXO = (OUTER - HALF) / (NOUT - 1);
   let g = null;
   const build = () => {
@@ -175,6 +289,13 @@ function tabulatedBase(pdfStd, spans) {
       }
       const k = Math.floor(t), a = t - k;
       const lerp = (arr) => arr[k] + a * (arr[k + 1] - arr[k]);
+      if (dpdf) {
+        // analytic density and slope where the base knows them (#331):
+        // a centred difference of a table cannot follow a transition
+        // narrower than its spacing, and the interpolated slope then
+        // came out with the wrong SIGN
+        return { ls: lerp(arrLs), fx: pdfStd(z) / sd, ds: -dpdf(z) / (sd * sd) };
+      }
       return { ls: lerp(arrLs), fx: lerp(arrF) / sd, ds: -lerp(arrFp) / (sd * sd) };
     },
   };
@@ -187,15 +308,25 @@ const PHI = (z) => Math.exp(logndtr(z));
 export function skewNormalBase(alpha) {
   // hypot, not sqrt(1 + alpha^2): alpha^2 overflows past ~1.34e154 and
   // delta became 0, an unstandardized law for a finite shape (#399)
-  if (!Number.isFinite(alpha))
+  if (typeof alpha !== "number" || !Number.isFinite(alpha))
     throw new Error(`skewNormalBase needs a finite shape; got ${alpha}`);
   const delta = alpha / Math.hypot(1, alpha);
   const m = delta * Math.sqrt(2 / Math.PI);
   const s = Math.sqrt(1 - m * m);
+  const phi = (u) => Math.exp(-0.5 * u * u) / SQRT_2PI;
   const pdf = (z) => { const u = m + s * z;
-    return s * 2 * Math.exp(-0.5 * u * u) / SQRT_2PI * PHI(alpha * u); };
-  const b = tabulatedBase(pdf, [12, 12]);
+    return s * 2 * phi(u) * PHI(alpha * u); };
+  // d pdf / dz, analytic: the Phi(alpha u) transition is O(1/|alpha|)
+  // wide, and a fixed 0.005 table differenced across it gave a POSITIVE
+  // own slope at alpha = 400, so the inverse walked uphill (#331)
+  const dpdf = (z) => { const u = m + s * z;
+    return s * s * 2 * phi(u) * (alpha * phi(alpha * u) - u * PHI(alpha * u)); };
+  // the survival is still tabulated; resolve the transition with a few
+  // points across it, never coarser than the default
+  const dx = Math.max(Math.min(0.005, 0.25 / Math.max(Math.abs(alpha), 1)), 1e-4);
+  const b = tabulatedBase(pdf, [12, 12], { dpdf, dx });
   b.pdf = pdf;
+  b.resolution = Math.min(1, 2 / Math.max(Math.abs(alpha), 1e-300));
   return b;
 }
 
@@ -240,6 +371,15 @@ function condMeans(mu, V, F) {
     M.push(row);
   }
   return M;
+}
+
+/* The standardized density of a base (zero mean, unit variance), as the
+   engine integrates it -- for pages that DRAW the fitted performance
+   law. fit.html drew a Gaussian for every base but Gumbel, so a t4 or
+   skew-normal fit was shown as the wrong law (#351). */
+export function basePdf(b) {
+  const base = baseOf(b);
+  return (z) => base.eval(z, 1).fx;
 }
 
 /* forward pass: shares (and optionally slopes, pairwise densities, deletions) */
@@ -287,11 +427,15 @@ export function asWeights(W, nNodes, where = "W") {
 }
 
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
-  const points = opts.points || 501;
-  const base = (opts.base && typeof opts.base === "object")
-    ? opts.base : BASES[opts.base || "normal"];
-  if (!base) throw new Error("unknown base: " + opts.base);
-  const N = mu.length, Q = F.length;
+  const points = asBudget(opts.points, 501, "winProbabilitiesFactor", "points");
+  if (points < 3) throw new Error("winProbabilitiesFactor: points must be at least 3");
+  const base = baseOf(opts.base);
+  mu = finiteVec(mu, "mu", "ability");
+  const N = mu.length;
+  V = asLoadings(V, N);
+  D = asIdio(D, N);
+  F = asNodes(F, V[0].length);
+  const Q = F.length;
   W = asWeights(W, Q, "W");
   const sd = D.map(Math.sqrt);
   // gauge-fix matching the python reference: center each factor's
@@ -301,10 +445,15 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   for (const row of V) for (let j = 0; j < r0; j++) colMean[j] += row[j] / N;
   V = V.map((row) => row.map((v, j) => v - colMean[j]));
   const M = condMeans(mu, V, F);
-  const { x, dx } = lattice(M, sd, points, base.spans);
+  const { x, dx } = lattice(M, sd, points, base.spans, base.resolution || 1);
   const L = x.length;
   const p = new Float64Array(N);
   const slope = new Float64Array(N);
+  // the derivative of the RETURNED (normalised) share needs the raw
+  // total's derivative too: d a_j / d mu_i = w_ij for j != i, so this is
+  // the row sum of the tie densities, accumulated on the same pass (#371)
+  const wantCross = !!opts.ownLogSlope;
+  const cross = new Float64Array(N);
   const w = opts.pairwise ? Array.from({ length: N }, () => new Float64Array(N)) : null;
   const q = opts.deletions ? Array.from({ length: N }, () => new Float64Array(N)) : null;
 
@@ -338,16 +487,21 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
       p[i] += Wc * acc * dx;
       slope[i] += Wc * accS * dx;
     }
-    if (w) {
+    if (w || wantCross) {
       for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
         if (j === i) continue;
+        if (!w && j < i) continue;           // symmetric: one triangle for cross
         let acc = 0;
         for (let l = 0; l < L; l++) {
           let e = logSfield[l] - logS[i][l] - logS[j][l];
           if (e > 0) e = 0;
           acc += f[i][l] * f[j][l] * (e < -745 ? 0 : Math.exp(e));
         }
-        w[i][j] += Wc * acc * dx;
+        if (w) w[i][j] += Wc * acc * dx;
+        if (wantCross) {
+          if (w) cross[i] += Wc * acc * dx;
+          else { cross[i] += Wc * acc * dx; cross[j] += Wc * acc * dx; }
+        }
       }
     }
     if (q) {
@@ -368,73 +522,219 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   let total = 0;
   for (const v of p) total += v;
   const out = Array.from(p, (v) => v / total);
-  const res = { p: out, total, slope: Array.from(slope) };
+  const res = { p: out, total, slope: Array.from(slope), points: L };
+  if (wantCross) {
+    // d log p_i / d mu_i of the normalised share: own term minus the
+    // total's, a_i' / a_i - (a_i' + sum_j w_ij) / T
+    res.ownLogSlope = Array.from(p, (a, i) =>
+      slope[i] / Math.max(a, 1e-300) - (slope[i] + cross[i]) / total);
+  }
   if (w) res.w = w.map((r) => Array.from(r));
   if (q) {
-    res.deletions = q.map((r) => {
-      let s = 0;
-      for (const v of r) s += v;
-      return Array.from(r, (v) => v / s);
-    });
+    // each removal row is its own race and carries its own mass check:
+    // the full race's `total` says nothing about it -- 0.99984 there sat
+    // beside a deletion row 13.4 points wrong (#330)
+    const mass = q.map((r) => r.reduce((a, b) => a + b, 0));
+    const worst = Math.max(...mass.map((m) => Math.abs(m - 1)));
+    if (!(worst <= 5e-3))
+      throw new Error(
+        `deletion rows captured mass ${Math.min(...mass).toFixed(4)}..` +
+        `${Math.max(...mass).toFixed(4)} where each is a whole race: the ` +
+        "lattice cannot resolve a removal counterfactual; raise points=");
+    res.deletionMass = mass;
+    res.deletions = q.map((r, i) => Array.from(r, (v) => v / mass[i]));
   }
   return res;
 }
 
 /* inverse transform: damped coordinatewise Newton (port of
- * abilities_from_probabilities_factor) */
+ * abilities_from_probabilities_factor).
+ *
+ * Returns mu; with opts.returnInfo, {mu, converged, residual,
+ * iterations}. Without it a non-converged solve WARNS rather than
+ * returning an uncertified calibration silently (#358, #428). */
 export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {}) {
-  const nIter = opts.nIter || 50, tol = opts.tol || 1e-6, points = opts.points || 501;
+  const where = "abilitiesFromProbabilitiesFactor";
+  const nIter = asBudget(opts.nIter, 50, where, "nIter");
+  const tol = asPositive(opts.tol, 1e-6, where, "tol");
+  const points = asBudget(opts.points, 501, where, "points");
   const base = opts.base || "normal";
-  const N = pTarget.length;
-  W = asWeights(W, F.length, "W");
+  baseOf(base);
+  const target = finiteVec(pTarget, "target", "probability");
+  const N = target.length;
   let psum = 0;
-  for (const v of pTarget) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
-  const p = pTarget.map((v) => v / psum);
+  for (const v of target) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
+  const p = target.map((v) => v / psum);
   const logp = p.map(Math.log);
+  V = asLoadings(V, N);
+  D = asIdio(D, N);
+  const r = V[0].length;
+  F = asNodes(F, r);
+  W = asWeights(W, F.length, "W");
   const sd = D.map(Math.sqrt);
-  const vnorm2 = V.map((row) => row.reduce((a, b) => a + b * b, 0));
+  const fwdOpts = { points, base };
+  const finish = (mu, converged, residual, iterations) => {
+    if (!converged && !opts.returnInfo && typeof console !== "undefined")
+      console.warn(`${where} did not converge: max |log residual| ` +
+                   `${residual.toExponential(2)} after ${iterations} iterations ` +
+                   `(tol ${tol}). Pass returnInfo: true for the diagnostics.`);
+    return opts.returnInfo ? { mu, converged, residual, iterations } : mu;
+  };
+  if (N === 1) return finish([0], true, 0, 0);
+
+  // The factor law actually represented, as python's abilities_from_race
+  // measures it: V -> aV, F -> F/a is the SAME forward, but reading the
+  // factor variance off raw sum(V_i^2) inflated the warm start and the
+  // step cap by a^2 and missed by 89 points at a = 100 (#443).
+  const Vc = (() => {
+    const cm = new Array(r).fill(0);
+    for (const row of V) for (let j = 0; j < r; j++) cm[j] += row[j] / N;
+    return V.map((row) => row.map((v, j) => v - cm[j]));
+  })();
+  const Fm = new Array(r).fill(0);
+  F.forEach((fq, k) => fq.forEach((v, d) => { Fm[d] += W[k] * v; }));
+  const CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>
+    F.reduce((acc, fq, k) => acc + W[k] * (fq[a] - Fm[a]) * (fq[b] - Fm[b]), 0)));
+  const quad = (u, v) => u.reduce((acc, ua, a) =>
+    acc + ua * CovF[a].reduce((acc2, c, b) => acc2 + c * v[b], 0), 0);
+  const sigV = Vc.map((row) => quad(row, row));
+  const shift = Vc.map((row) => row.reduce((acc, v, d) => acc + v * Fm[d], 0));
+  const stepCap = D.map((d, i) => Math.sqrt(d + sigV[i]));
+
   const floor = Math.max(1e-9, 1e-4 / N);
   const ident = p.map((v) => v > floor);
+  const residualOf = (phat) => {
+    let res = 0, any = false;
+    for (let i = 0; i < N; i++) if (ident[i]) { any = true; res = Math.max(res, Math.abs(Math.log(phat[i]) - logp[i])); }
+    if (!any) for (let i = 0; i < N; i++) res = Math.max(res, Math.abs(Math.log(phat[i]) - logp[i]));
+    return res;
+  };
+
+  if (N === 2) {
+    // A pair is ONE number, the gap, and p_0 is monotone in it: solve
+    // that scalar equation against the actual forward. The simultaneous
+    // update is a two-cycle on K_2 (python's closed-form comment), and
+    // this module had no pair branch at all, returning 0.770 for a
+    // target of 0.8 (#198). The Gaussian closed form -- exact for
+    // Gaussian nodes -- is the starting bracket, and the forward has
+    // the last word, so a non-Gaussian rule is handled too.
+    const s0 = Math.sqrt(D[0] + D[1] + quad(
+      Vc[0].map((v, d) => v - Vc[1][d]), Vc[0].map((v, d) => v - Vc[1][d])));
+    const g0 = s0 * ndtri(p[0]) - (shift[1] - shift[0]);
+    const p0At = (g) => winProbabilitiesFactor([-0.5 * g, 0.5 * g], V, D, F, W, fwdOpts).p;
+    let g = g0, ph = p0At(g), res = residualOf(ph.map((v) => Math.max(v, PFLOOR)));
+    let it = 0;
+    if (res >= tol) {
+      // bracket the root of h(g) = log p0(g) - log p0* (increasing in g)
+      const h = (gg) => Math.log(Math.max(p0At(gg)[0], PFLOOR)) - logp[0];
+      let lo = g0, hi = g0, step = Math.max(0.25 * s0, 1e-6);
+      let hlo = h(lo), hhi = hlo;
+      while (hlo > 0 && it < nIter) { lo -= step; step *= 2; hlo = h(lo); it++; }
+      step = Math.max(0.25 * s0, 1e-6);
+      while (hhi < 0 && it < nIter) { hi += step; step *= 2; hhi = h(hi); it++; }
+      for (; it < nIter; it++) {
+        // secant inside the bracket, bisection when it leaves it
+        let m = hhi !== hlo ? hi - hhi * (hi - lo) / (hhi - hlo) : 0.5 * (lo + hi);
+        if (!(m > lo && m < hi)) m = 0.5 * (lo + hi);
+        const hm = h(m);
+        g = m;
+        ph = p0At(g);
+        res = residualOf(ph.map((v) => Math.max(v, PFLOOR)));
+        if (res < tol) { it++; break; }
+        if (hm < 0) { lo = m; hlo = hm; } else { hi = m; hhi = hm; }
+      }
+    }
+    return finish([-0.5 * g, 0.5 * g], res < tol, res, it);
+  }
 
   let mu;
-  const anyV = V.some((row) => row.some((v) => v !== 0));
+  const anyV = Vc.some((row) => row.some((v) => v !== 0));
   if (opts.mu0) {
-    mu = opts.mu0.slice();
-  } else if (F[0].length >= 1 && anyV) {
-    const sdTot2 = D.map((d, i) => d + vnorm2[i]);
-    mu = abilitiesFromProbabilitiesFactor(
-      p, V.map(() => [0]), sdTot2, [[0]], [1], { nIter, tol, points, base });
+    mu = finiteVec(opts.mu0, "mu0", "ability");
+    if (mu.length !== N) throw new Error(`mu0 has ${mu.length} entries for ${N}`);
+  } else if (r >= 1 && anyV) {
+    // warm start: the independent race at each runner's represented
+    // total variance, shifted by the rule's mean
+    const sdTot2 = D.map((d, i) => d + sigV[i]);
+    const ind = abilitiesFromProbabilitiesFactor(
+      p, V.map(() => [0]), sdTot2, [[0]], [1], { nIter, tol, points, base, returnInfo: true });
+    mu = ind.mu.map((m, i) => m - shift[i]);
   } else {
     const m = logp.reduce((a, b) => a + b, 0) / N;
     mu = logp.map((v) => (v - m) / 2.0);
   }
-  const stepCap = D.map((d, i) => Math.sqrt(d + vnorm2[i]));
-  let prevRes = Infinity, damp = 1.0, res = Infinity;
+  // two runners holding nearly all the mass two-cycle undamped, at any N
+  // (python's abilities_from_race; #358): start damped there
+  const top2 = p.slice().sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0);
+  let damp = top2 > 0.8 ? 0.7 : 1.0;
+  let prevRes = Infinity, res = Infinity, iters = 0;
+  let prevDelta = null;
   for (let it = 0; it < nIter; it++) {
-    const fwd = winProbabilitiesFactor(mu, V, D, F, W, { points, base });
-    const phat = fwd.p.map((v) => Math.max(v / 1.0, PFLOOR));
-    const slope = fwd.slope;
+    iters = it + 1;
+    const fwd = winProbabilitiesFactor(mu, V, D, F, W, { ...fwdOpts, ownLogSlope: true });
+    const phat = fwd.p.map((v) => Math.max(v, PFLOOR));
     const resid = phat.map((v, i) => Math.log(v) - logp[i]);
-    res = 0;
-    let any = false;
-    for (let i = 0; i < N; i++) if (ident[i]) { any = true; res = Math.max(res, Math.abs(resid[i])); }
-    if (!any) for (let i = 0; i < N; i++) res = Math.max(res, Math.abs(resid[i]));
+    res = residualOf(phat);
+    if (!Number.isFinite(res)) break;
     if (res < tol) break;
     if (res > prevRes * 1.2) damp = Math.max(0.25, damp * 0.5);
     prevRes = res;
-    let mean = 0;
+    const delta = new Array(N);
     for (let i = 0; i < N; i++) {
-      let dlogp = slope[i] / phat[i];
+      // the derivative of the share the forward RETURNS (normalised), not
+      // the raw own-density slope divided by it: on a coarse lattice the
+      // two parted by 85% and the solve missed by 22 points (#371)
+      let dlogp = fwd.ownLogSlope[i];
       const ceil = -1e-3 / (sd[i] + 1e-9);
-      if (dlogp > ceil) dlogp = ceil;
-      let delta = damp * resid[i] / dlogp;
-      if (delta > stepCap[i]) delta = stepCap[i];
-      if (delta < -stepCap[i]) delta = -stepCap[i];
-      mu[i] -= delta;
-      mean += mu[i];
+      if (!(dlogp <= ceil)) dlogp = ceil;           // also catches NaN (#210)
+      let d = damp * resid[i] / dlogp;
+      if (d > stepCap[i]) d = stepCap[i];
+      if (d < -stepCap[i]) d = -stepCap[i];
+      delta[i] = d;
     }
+    // an observed two-cycle (consecutive steps pointing back) damps, as
+    // python's _jacobi_sweeps estimates it from the step pair
+    if (prevDelta) {
+      let dot = 0, nn = 0;
+      for (let i = 0; i < N; i++) { dot += delta[i] * prevDelta[i]; nn += prevDelta[i] * prevDelta[i]; }
+      if (nn > 0 && dot / nn < -0.5) damp = Math.max(0.25, damp * 0.7);
+    }
+    prevDelta = delta;
+    let mean = 0;
+    for (let i = 0; i < N; i++) { mu[i] -= delta[i]; mean += mu[i]; }
     mean /= N;
     for (let i = 0; i < N; i++) mu[i] -= mean;
   }
-  return mu;
+  if (!Number.isFinite(res) || mu.some((v) => !Number.isFinite(v)))
+    throw new Error(`${where}: the iteration produced a non-finite residual; ` +
+                    "the lattice cannot resolve this field (raise points= or narrow the base's spans)");
+  return finish(mu, res < tol, res, iters);
+}
+
+/* inverse normal cdf (Acklam, refined by one Halley step) */
+function ndtri(p) {
+  const a = [-39.6968302866538, 220.946098424521, -275.928510446969,
+             138.357751867269, -30.6647980661472, 2.50662827745924];
+  const b = [-54.4760987982241, 161.585836858041, -155.698979859887,
+             66.8013118877197, -13.2806815528857];
+  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184,
+             -2.54973253934373, 4.37466414146497, 2.93816398269878];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143,
+             3.75440866190742];
+  const pl = 0.02425;
+  let x;
+  if (p < pl) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    x = (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+        ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  } else if (p > 1 - pl) {
+    return -ndtri(1 - p);
+  } else {
+    const q = p - 0.5, r2 = q * q;
+    x = (((((a[0]*r2+a[1])*r2+a[2])*r2+a[3])*r2+a[4])*r2+a[5])*q /
+        (((((b[0]*r2+b[1])*r2+b[2])*r2+b[3])*r2+b[4])*r2+1);
+  }
+  const e = Math.exp(logndtr(x)) - p;
+  const u = e * SQRT_2PI * Math.exp(0.5 * x * x);
+  return x - u / (1 + 0.5 * x * u);
 }
