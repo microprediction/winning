@@ -21,16 +21,19 @@ Probabilities for Factor-Gaussian Beliefs}}
 
 \begin{abstract}
 \noindent Thompson sampling plays each alternative with the posterior
-probability that it is best. Methods that need that probability
-itself approximate it from marginal means and variances. We compute it
-by quadrature, for all $n$ alternatives at once, in time linear in $n$
+probability that it is best. Methods that need that probability itself approximate it from
+marginal means and variances, and entropy search in Bayesian
+optimization, whose object is the same vector, approximates it by
+expectation propagation at a cost quartic in the number of
+candidates. We compute it by quadrature, for all $n$ alternatives at once, in time linear in $n$
 at fixed resolution, whenever the posterior covariance is a low-rank
 factor term plus a diagonal. Simulation under common random numbers
 and a Gaussian bandit with a factor prior both produce such posteriors
 exactly. In the simulation, a stopping rule on the computed vector
 stops sooner than rules on the marginal approximations at the same
-nominal threshold. In the bandit, sampling from it incurs less regret
-than they do.
+nominal threshold. In the bandit, sampling from it incurs less regret than they do. For
+factor beliefs, entropy search can run on thousands of candidates
+rather than fifty.
 \end{abstract}
 
 \section{Introduction}
@@ -74,7 +77,7 @@ the $n - 1$ differences $\theta_i - \theta_j$ are all positive, a
 Gaussian orthant probability in $n - 1$ dimensions, and no general
 fast method computes it.
 
-Two literatures need this vector and approximate it. The first is
+Three literatures need this vector and approximate it. The first is
 ranking and selection, which chooses the best of $n$ simulated
 systems. Its procedures bound the probability of a correct selection
 with Bonferroni-type inequalities, or estimate it by posterior
@@ -85,9 +88,19 @@ The second is Bayesian bandits and reinforcement learning.
 that field and write that computing it ``involves computing several
 complicated integrals with respect to the posterior and is intractable
 in most cases.'' Their method, VAPOR, replaces it with a variational
-program. \citet{menet2026} fine-tune a large language model toward a
-policy that uses only the marginal means and standard deviations of
-the posterior.
+program. \citet{menet2026} fine-tune a large language model toward a policy
+that uses only the marginal means and standard deviations of the
+posterior.
+
+The third is Bayesian optimization. Entropy search
+\citep{hennig2012} takes the vector itself, the posterior probability
+that the optimum lies at each of $n$ candidate points, as what an
+optimizer should learn, and chooses each evaluation to reduce its
+entropy. \citet{hennig2012} call the vector intractable, approximate
+it by expectation propagation at a cost of $O(n^4)$, and run with
+fifty candidates. The approximation accepts any covariance. The
+computation here accepts factor covariances only, and for those it
+is linear in $n$.
 
 Correlation that comes from a few shared causes has a simple form.
 Each value is its own part plus a weighted sum of $\rho$ shared
@@ -112,10 +125,11 @@ and $W$ holds the loadings.
 For beliefs of this form, the whole vector is one integral over the
 factors, and quadrature evaluates it for all $n$ alternatives at once
 in time linear in $n$ at fixed resolution. The computation is the pricing pass for correlated contests in
-\citet{cotton2026}, restated rather than derived. One standard
-model from each literature produces a posterior of exactly
-this form after every update: simulation under common random numbers,
-and a Gaussian bandit with a factor prior. In the simulation, a
+\citet{cotton2026}, restated rather than derived. One standard model from each of the first two literatures produces a
+posterior of exactly this form after every update: simulation under
+common random numbers, and a Gaussian bandit with a factor prior. In
+Bayesian optimization the form is a modelling choice, a kernel with
+finitely many features, or a factor fit to a dense kernel. In the simulation, a
 stopping rule on the computed vector stops sooner than rules on the
 marginal approximations at the same nominal threshold. In the bandit,
 sampling from it incurs less regret than they do.
@@ -204,9 +218,8 @@ bounds. The script is \texttt{research/rs\_crn/exp3\_quadrature}.}
 \label{sec:posteriors}
 
 The computation of Section~\ref{sec:computation} needs the posterior
-covariance in the form of Equation~\eqref{eq:factor}. Two standard
-models produce it exactly after every update, one from each
-literature. In simulation, the shared factors come from running every
+covariance in the form of Equation~\eqref{eq:factor}. Two standard models produce it exactly after every update, one from
+ranking and selection and one from bandits. In simulation, the shared factors come from running every
 system on the same random inputs. In the bandit, they come from a
 prior in which arms share features.
 
