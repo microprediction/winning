@@ -697,13 +697,14 @@ is an approximation, and the posterior inherits its error. When a
 Gaussian-process kernel is dense with a short length scale, a factor
 fit has to precede the computation, and its residual is the error.
 
-The probability of optimality is not the knowledge gradient. Under
-simple-regret loss, the one-step value of a measurement is the
-knowledge-gradient quantity \citep{frazier2008}, an expectation over
-the next posterior means. \citet{tuisov2026} shows that this is the
-normative myopic value of computation, and notes that the exact
-dynamic version ``is itself generally intractable.'' Neither quantity
-is computed here.
+The vector says how uncertain the choice of best is. It does not say
+how much one more measurement would reduce that uncertainty, which is
+what a budget allocator needs. That quantity is the knowledge
+gradient \citep{frazier2008}, an expectation over what the posterior
+means will become after the measurement, and \citet{tuisov2026}
+treats it as the myopic value of computation. The computation here
+does not supply it. An allocator that spends where the entries of $p$
+are close is a heuristic, not the knowledge gradient.
 
 The regret analysis of \citet{odonoghue2021} depends on the VBOS
 tilt. Its measured distance from $p$ quantifies the approximation, but
