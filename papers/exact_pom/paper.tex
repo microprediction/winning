@@ -168,40 +168,26 @@ aligned regime of the stopping experiment every row of $W$ is the
 same, so $PW = 0$ and the contest is independent.
 
 The integral is exact. Its evaluation is not, because the lattice in
-$x$ and the quadrature rule over $z$ both have finite resolution. The
-lattice is not where the error is. Raising it from $257$ to $2{,}049$
-points changes no entry of any vector in the experiments by more than
-$4 \times 10^{-16}$. The factor rule is where the error is, and only
-when correlations are extreme. For three alternatives with $m = 0$,
+$x$ and the quadrature rule over $z$ have finite resolution. The
+lattice is converged, and the factor rule is accurate unless
+correlations are extreme. For three alternatives with $m = 0$,
 $W = (0, 1, 3)'$ and $d_i = 0.1$, two of the three correlations
 exceed $0.9$, the exact vector is known in closed form from the
 bivariate quadrant identity, and the default rule is off by $0.0015$
-in total variation. Replacing the default rule by $2^{15}$
-scrambled-Sobol nodes removes that error.
-
-The numerical details are in \citet{cotton2026}: lattice placement,
-products taken in logs, and the tails. That implementation computes
-the probability of being the minimum, and the maximum is obtained by
-negating $m$ and $W$. It is used without other change.
-
-The computation in \citet{cotton2026} is more general than the
-factor-Gaussian case. It accepts any base distribution, and a
-covariance given as factor loadings, as blocks, as nested groups or as
-a tree, or a dense covariance that is fitted to one of those
-structures on the way in. It also inverts the vector, recovering means
-from probabilities. The factor form of Equation~\eqref{eq:factor} with
-Gaussian noise is the case used here.
-
-The experiments are far from that case, since their correlations are
-at most $0.75$. On ten of their posteriors, two from each regime of
-each experiment, the $2^{15}$-node rule changes no entry by more than
-$1.2 \times 10^{-6}$. The default rule's error there is therefore
-about $10^{-6}$ per entry. Monte Carlo cannot resolve an error that
-small. Four million draws differ from the computed vectors by $1$ to
-$4 \times 10^{-4}$ per entry, which is their own standard error, and
-the $2 \times 10^5$ draws taken at sixteen posteriors during the
-experiments differ by at most $0.0042$ in total variation, again
-their own noise. These are measurements, not error bounds.
+in total variation. With $2^{15}$ scrambled-Sobol nodes in place of
+the default rule that error is gone. The experiments' correlations
+are at most $0.75$, and on their posteriors the default rule's error
+is about $10^{-6}$ per entry.\footnote{Measured on ten posteriors,
+two from each regime of each experiment. Raising the lattice from
+$257$ to $2{,}049$ points changes no entry by more than
+$4 \times 10^{-16}$. Replacing the default factor rule by $2^{15}$
+scrambled-Sobol nodes changes no entry by more than
+$1.2 \times 10^{-6}$. Four million Monte Carlo draws differ from the
+computed vectors by $1$ to $4 \times 10^{-4}$ per entry, their own
+standard error, and the $2 \times 10^5$ draws taken at sixteen
+posteriors during the experiments differ by at most $0.0042$ in total
+variation, again their own noise. These are measurements, not error
+bounds. The script is \texttt{research/rs\_crn/exp3\_quadrature}.}
 
 \section{Two models whose posteriors have exact factor form}
 \label{sec:posteriors}
