@@ -11,10 +11,8 @@
 
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{Exact Posterior Probability of Optimality\\ for
-Factor-Gaussian Beliefs}\\[0.4em]
-\large The Integral That Thompson-Style Methods Approximate,\\
-Evaluated by Quadrature at Scale}
+\title{\textbf{Computing the Posterior Probability of Optimality\\
+for Factor-Gaussian Beliefs}}
 \author{Peter Cotton}
 \date{\today}
 
@@ -22,19 +20,17 @@ Evaluated by Quadrature at Scale}
 \maketitle
 
 \begin{abstract}
-\noindent The posterior probability that each alternative is best
-drives stopping rules, budget allocation and Thompson sampling, and is
-widely treated as intractable. Under common random numbers, and under
-per-arm Gaussian observations with a factor prior, the posterior
-covariance is exactly a low-rank factor term plus a diagonal at every
-step. For such a covariance the whole probability vector is a shared
-integral over the factors, which quadrature evaluates for all $n$
-alternatives at once in time linear in $n$. In a ranking-and-selection
-experiment at a common nominal threshold, stopping rules built on
-marginal means and variances use up to three and a half times as many
-replicates as the rule built on this vector. In a correlated bandit,
-sampling from the vector matches Thompson sampling, while a variational
-policy built on marginals pays more regret.
+\noindent Stopping rules, budget allocation and Thompson sampling all
+depend on the posterior probability that each alternative is best, and
+the reinforcement learning literature treats this probability as
+intractable. When the posterior covariance is a low-rank factor term
+plus a diagonal, the whole vector is one integral over the factors,
+and quadrature evaluates it for all $n$ alternatives in time linear in
+$n$. Two standard posteriors have exactly this form after every
+update: simulation under common random numbers, and a Gaussian bandit
+with a factor prior. In both, rules that use only marginal means and
+variances do worse than rules that use the vector: they stop later at
+the same nominal threshold, and they pay more regret.
 \end{abstract}
 
 \section{Introduction}
