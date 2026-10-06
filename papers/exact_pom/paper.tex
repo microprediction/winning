@@ -20,17 +20,15 @@ for Factor-Gaussian Beliefs}}
 \maketitle
 
 \begin{abstract}
-\noindent Stopping rules, budget allocation and Thompson sampling all
-depend on the posterior probability that each alternative is best, and
-the reinforcement learning literature treats this probability as
-intractable. When the posterior covariance is a low-rank factor term
-plus a diagonal, the whole vector is one integral over the factors,
-and quadrature evaluates it for all $n$ alternatives in time linear in
-$n$. Two standard posteriors have exactly this form after every
-update: simulation under common random numbers, and a Gaussian bandit
-with a factor prior. In both, rules that use only marginal means and
-variances do worse than rules that use the vector: they stop later at
-the same nominal threshold, and they pay more regret.
+\noindent Thompson sampling plays each alternative with the posterior
+probability that it is best. Methods that need that probability
+itself approximate it from marginal means and variances. We compute it
+directly, for all $n$ alternatives at once in time linear in $n$,
+whenever the posterior covariance is a low-rank factor term plus a
+diagonal. Simulation under common random numbers and a Gaussian
+bandit with a factor prior both produce such posteriors exactly. In
+both, the computed vector stops sooner than the marginal
+approximations at the same nominal threshold, and incurs less regret.
 \end{abstract}
 
 \section{Introduction}
