@@ -17,7 +17,7 @@ on:
 # default is ever switched to read-only, this job will need an explicit
 # block (at least contents: write and issues: write).
 jobs:
-  TagBot:
+  TagBot:  # zizmor: ignore[excessive-permissions] -- see the comment above
     if: github.event_name == 'workflow_dispatch' || github.actor == 'JuliaTagBot'
     runs-on: ubuntu-latest
     steps:

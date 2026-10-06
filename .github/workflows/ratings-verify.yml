@@ -46,10 +46,16 @@ jobs:
       - name: Install core only (the verifier needs nothing beyond numpy and scipy)
         run: pip install -e .
       - name: Run the profile
+        # inputs reach the shell through env, never by template expansion
+        # into the script, so an input cannot inject shell code
+        env:
+          INPUT_PROFILE: ${{ github.event.inputs.profile || 'full' }}
+          INPUT_WORKERS: ${{ github.event.inputs.workers || '4' }}
+          INPUT_ONLY: ${{ github.event.inputs.only }}
         run: |
-          P="${{ github.event.inputs.profile || 'full' }}"
-          W="${{ github.event.inputs.workers || '4' }}"
-          O="${{ github.event.inputs.only }}"
+          P="$INPUT_PROFILE"
+          W="$INPUT_WORKERS"
+          O="$INPUT_ONLY"
           mkdir -p reports
           set +e
           if [ -n "$O" ]; then

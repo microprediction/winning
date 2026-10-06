@@ -17,7 +17,11 @@ on:
         default: "winning"
   schedule:
     - cron: "0 6 * * 1"   # Mondays 06:00 UTC
-  workflow_run:
+  # workflow_run is safe here: the upstream workflow runs only on releases
+  # and manual dispatch (never on pull requests), and this workflow checks
+  # out nothing but .github/smoke.py from the default branch, consumes no
+  # artifacts from the triggering run, and holds a read-only token.
+  workflow_run:  # zizmor: ignore[dangerous-triggers]
     workflows: ["Publish to PyPI"]
     types: [completed]
 
@@ -56,9 +60,12 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install winning from PyPI
+        # the input reaches the shell through env, not template expansion
+        env:
+          INPUT_SPEC: ${{ github.event.inputs.spec || 'winning' }}
         run: |
           python -m pip install --upgrade pip
-          SPEC="${{ github.event.inputs.spec || 'winning' }}"
+          SPEC="$INPUT_SPEC"
           echo "installing: $SPEC"
           # PyPI can lag a publish by a few seconds; retry rather than
           # failing a release check on propagation
