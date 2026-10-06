@@ -8,6 +8,14 @@ on:
       lookback:
         description: "[DEPRECATED] No longer has any effect"
         default: "3"
+# No permissions: block, deliberately. TagBot creates tags and GitHub
+# releases, reads closed issues and merged pull requests for the
+# changelog, and opens an issue when it cannot release; its README says
+# not to add an explicit permissions: block and to rely on the
+# repository's default token permissions instead. The job only runs on a
+# manual dispatch or a comment from JuliaTagBot. If the repository
+# default is ever switched to read-only, this job will need an explicit
+# block (at least contents: write and issues: write).
 jobs:
   TagBot:
     if: github.event_name == 'workflow_dispatch' || github.actor == 'JuliaTagBot'

@@ -31,6 +31,9 @@ on:
       - ".github/workflows/r-check-fastpkgs.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   check:
     name: R CMD check ${{ matrix.pkg }}
@@ -41,6 +44,8 @@ jobs:
         pkg: [mvtnormfast, mlogitfast, rprobitfast, winning]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
         with:
           # Linux binaries from the public package manager. Building from
