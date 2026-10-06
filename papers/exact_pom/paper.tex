@@ -11,8 +11,8 @@
 
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{Deterministic Evaluation of Thompson Sampling\\
-Probabilities for Factor-Gaussian Beliefs}}
+\title{\textbf{One Vector Behind Thompson Sampling, Entropy Search\\
+and Stopping Rules, Computed for Factor-Gaussian Beliefs}}
 \author{Peter Cotton}
 \date{\normalsize First version: September 1, 2026.\\ This version: October 6, 2026.}
 
@@ -21,19 +21,19 @@ Probabilities for Factor-Gaussian Beliefs}}
 
 \begin{abstract}
 \noindent Thompson sampling plays each alternative with the posterior
-probability that it is best. Methods that need that probability itself approximate it from
-marginal means and variances, and entropy search in Bayesian
-optimization, whose object is the same vector, approximates it by
-expectation propagation at a cost quartic in the number of
-candidates. We compute it by quadrature, for all $n$ alternatives at once, in time linear in $n$
+probability that it is best, and entropy search chooses evaluations
+by the same vector. Where the numbers themselves are needed they are
+approximated: from marginal means and variances in bandits, and by
+expectation propagation, at a cost quartic in the number of
+candidates, in Bayesian optimization. We compute the vector by
+quadrature, for all $n$ alternatives at once, in time linear in $n$
 at fixed resolution, whenever the posterior covariance is a low-rank
 factor term plus a diagonal. Simulation under common random numbers
-and a Gaussian bandit with a factor prior both produce such posteriors
-exactly. In the simulation, a stopping rule on the computed vector
-stops sooner than rules on the marginal approximations at the same
-nominal threshold. In the bandit, sampling from it incurs less regret than they do. For
-factor beliefs, entropy search can run on thousands of candidates
-rather than fifty.
+and a Gaussian bandit with a factor prior both produce such
+posteriors exactly. With the computed vector, a stopping rule stops
+sooner than the marginal rules at the same nominal threshold,
+sampling from it matches Thompson sampling's regret, and entropy
+search can run on thousands of candidates rather than fifty.
 \end{abstract}
 
 \section{Introduction}
