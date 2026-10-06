@@ -202,6 +202,18 @@ prior in which arms share features.
 \subsection{Simulation with common random numbers}
 \label{sec:crn}
 
+The result of this subsection is simple to state. When $n$ systems are
+simulated on shared random inputs, the uncertainty about their $n$
+unknown means is correlated, and the derivation shows that this
+correlation has the same shape as the shared inputs: a few common
+factors plus independent noise, with the number of factors equal to
+the number of shared input streams. Accumulating replicates sharpens
+the posterior but never changes that shape. So the vector of
+Section~\ref{sec:computation} can be computed after every replicate
+in time linear in $n$, and the $n \times n$ posterior covariance is
+never formed. The rest of the subsection sets up the model and proves
+the claim.
+
 A simulation study compares $n$ systems, such as the inventory
 policies of the introduction, by running each one many times and
 averaging its output. Each run is called a replicate. The unknown
@@ -297,6 +309,11 @@ systems are compared.
 
 \subsection{A bandit whose arms share features}
 \label{sec:bandit-posterior}
+
+The result here is the same as for the simulation. When the prior on
+the arms' mean rewards has a few common factors plus independent
+noise, the posterior keeps that shape after every pull, with no more
+factors than the prior, whatever arms are pulled and however often.
 
 In a bandit, a decision maker repeatedly picks one of $n$ arms and
 observes a noisy reward from it. Here $\theta_i$ is arm $i$'s mean
