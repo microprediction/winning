@@ -98,8 +98,9 @@ The third is Bayesian optimization. Entropy search
 that the optimum lies at each of $n$ candidate points, as what an
 optimizer should learn, and chooses each evaluation to reduce its
 entropy. \citet{hennig2012} call the vector intractable, approximate
-it by expectation propagation at a cost of $O(n^4)$, and run with
-fifty candidates. Expectation propagation accepts any covariance.
+it by expectation propagation at a cost of $O(n^4)$, and run with fifty candidates.
+
+Expectation propagation accepts any covariance.
 The computation here accepts covariances whose dependence runs
 through a few shared variables, described as factors, blocks, nested
 groups or a tree, and it fits a dense covariance to that grammar on
