@@ -2,12 +2,10 @@
 
 ## Reporting a vulnerability
 
-Please report security problems privately, not in a public issue:
-
-- through GitHub's private vulnerability reporting: the
-  [Report a vulnerability](https://github.com/microprediction/winning/security/advisories/new)
-  button on this repository's Security tab; or
-- by email to peter.cotton@microprediction.com.
+Please report security problems privately, not in a public issue, through GitHub's private
+vulnerability reporting: the
+[Report a vulnerability](https://github.com/microprediction/winning/security/advisories/new)
+button on this repository's Security tab. Only the maintainer sees the report.
 
 Include what you found, how to reproduce it, and which package and version it affects (the Python
 package on PyPI, or the JavaScript, R, Julia or Rust port).
