@@ -709,6 +709,10 @@ Three one-step criteria
 should be kept apart. Reducing the entropy of $p$ is entropy search.
 Raising $\max_i p_i$ aims at correct identification under zero-one
 loss, where choosing a near-identical runner-up counts as an error.
+Both are objectives of an optimizer rather than of a bandit, a
+distinction \citet{hennig2012} draw: an optimizer infers the minimum
+whatever the values at its evaluation points, and a bandit is scored
+on those values.
 The knowledge gradient raises the expected value of the final choice
 and cares about the size of the differences. The vector supplies the
 first two directly. An allocator that spends where the entries of $p$
@@ -762,23 +766,41 @@ differs from the policy's choice, about all but one in $K$ for $K$
 arms. With the propensities computed, the production log itself becomes
 the evaluation set.
 
-Bayesian optimization has the same object. With $\theta_i = f(x_i)$
-at candidate points $x_1, \dots, x_n$, the vector $p$ is the
-posterior distribution of where the optimum lies among the
-candidates, which is the central object of entropy search
-\citep{hennig2012}, where it is approximated by expectation
-propagation. For a factor-structured posterior the computation here
-is a different route to it.
+Bayesian optimization has the same object. Entropy search
+\citep{hennig2012} takes the posterior probability that the minimum
+lies at each of $n$ representer points as the quantity an optimizer
+should learn, and scores a belief by its relative entropy from a
+uniform base measure. On the representer points that probability is
+Equation~\eqref{eq:pom} in the minimum convention, a Gaussian
+integral over a polyhedral cone, which \citet{hennig2012} call
+intractable after \citet{plackett1954}. They approximate it by
+expectation propagation at a cost of $O(n^4)$ per vector, which
+limits $n$ to well below a thousand, and their implementation uses
+fifty representer points and about ten seconds per choice of
+evaluation point. Their alternative, sampling functions and recording
+each minimum, costs $O(S n^3)$ for $S$ samples and has no
+derivatives.
 
-The entropy-search acquisition
+For a factor-structured belief the computation here gives the same
+vector in time linear in $n$, so thousands of representer points cost
+milliseconds. The price is the covariance class. Expectation
+propagation takes any dense covariance, and a dense kernel on the
+representer points has to be fitted to factor form before the
+computation here applies, with the residual of that fit as the error.
+Entropy search also uses the derivatives of the vector with respect
+to the mean and covariance for a first-order expansion of the
+expected information gain. The computation here supplies the exact
+Jacobian with respect to the means, and not the covariance
+derivatives.
+
+The innovation formulas of \citet{hennig2012} give the hypothetical
+posterior after a measurement for any Gaussian process, and the
+closure of Section~\ref{sec:posteriors} is the case in which that
+posterior stays in factor form. The entropy-search acquisition
 $\alpha(a) = H(p) - \mathbb{E}_{Y_a \mid \mathcal{D}}[H(p^{Y_a})]$
-then needs three things, all available: the closure of
-Section~\ref{sec:posteriors} for the hypothetical posterior after
-measuring $a$, the computation for its vector, and a scalar
-quadrature for the expectation. The scope is finite candidates and
-factor beliefs. A continuous Gaussian process needs the candidates
-discretised and, for a dense kernel, a covariance approximation
-first.
+then needs the closure, the computation, and a scalar quadrature over
+the measurement outcome. The scope is finite candidates and factor
+beliefs.
 
 How much better the computed numbers are than counted draws depends
 on the factor rank. On the posteriors of the two experiments, where
@@ -856,6 +878,10 @@ A.~Rahimi. Thompson sampling via fine-tuning of LLMs. In
 B.~O'Donoghue and T.~Lattimore. Variational Bayesian optimistic
 sampling. In \emph{Advances in Neural Information Processing Systems
 34}, 2021. arXiv:2110.15688.
+
+\bibitem[Plackett(1954)]{plackett1954} R.~L. Plackett. A reduction
+formula for normal multivariate integrals. \emph{Biometrika},
+41(3--4):351--360, 1954.
 
 \bibitem[Tarbouriech et~al.(2023)Tarbouriech, Lattimore, and
 O'Donoghue]{tarbouriech2023} J.~Tarbouriech, T.~Lattimore, and
