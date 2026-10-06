@@ -87,8 +87,7 @@ complicated integrals with respect to the posterior and is intractable
 in most cases.'' Their method, VAPOR, replaces it with a variational
 program. \citet{menet2026} fine-tune a large language model toward a
 policy that uses only the marginal means and standard deviations of
-the posterior. Section~\ref{sec:surrogates} describes these
-approximations.
+the posterior.
 
 Correlation that comes from a few shared causes has a simple form.
 Each value is its own part plus a weighted sum of $\rho$ shared
@@ -110,17 +109,16 @@ The covariance of $\theta$ is then
 where $W$ has rows $w_i'$. The variables in $z$ are called factors,
 and $W$ holds the loadings.
 
-For beliefs of this form, Equation~\eqref{eq:pom} can be computed for
-all $n$ alternatives at once, in time linear in $n$.
-Section~\ref{sec:computation} gives the computation, which is the
-pricing pass for correlated contests in \citet{cotton2026}.
-Section~\ref{sec:posteriors} shows that one standard model from each
-literature produces a posterior of exactly this form after every
-update. Section~\ref{sec:surrogates} relates the vector to Thompson
-sampling and to the approximations above.
-Sections~\ref{sec:stopping} and~\ref{sec:bandit} measure what using
-the vector changes, in a simulation stopping problem and in a bandit.
-Section~\ref{sec:limits} states where the exact form fails.
+For beliefs of this form, the whole vector is one integral over the
+factors, and quadrature evaluates it for all $n$ alternatives at once
+in time linear in $n$ at fixed resolution. The computation is the
+pricing pass for correlated contests in \citet{cotton2026}. One
+standard model from each literature produces a posterior of exactly
+this form after every update: simulation under common random numbers,
+and a Gaussian bandit with a factor prior. In the simulation, a
+stopping rule on the computed vector stops sooner than rules on the
+marginal approximations at the same nominal threshold. In the bandit,
+sampling from it incurs less regret than they do.
 
 \section{Computing the vector for beliefs with shared factors}
 \label{sec:computation}
@@ -129,9 +127,9 @@ Write the posterior in the form of Equation~\eqref{eq:factormodel},
 $\theta = m + W z + \varepsilon$. Assume every $d_i > 0$, so the
 maximum is almost surely unique and the $p_i$ sum to one.
 
-The shared factors $z$ are what make the alternatives dependent. Fix
-$z$, and nothing is shared: the alternatives are independent, with
-means $m_i + w_i' z$ and variances $d_i$. The probability that $i$ is
+The shared factors $z$ make the alternatives dependent. Given $z$,
+nothing is shared, and the alternatives are independent with means
+$m_i + w_i' z$ and variances $d_i$. The probability that $i$ is
 best given $z$ is then a one-dimensional integral, and $p_i$ is its
 average over $z$.
 
@@ -164,17 +162,19 @@ settings of the implementation are in error by total variation
 $0.0015$. Raising the factor quadrature resolution reduces this error.
 
 The numerical details are in \citet{cotton2026}: lattice placement,
-products taken in logs, and the tails. The computation there is more
-general than this paper needs. It accepts any base distribution, not
-only the Gaussian, and a covariance given as factor loadings, as
-blocks, as nested groups or as a tree, or a dense covariance that is
-fitted to one of those structures on the way in. It also inverts the
-vector, recovering means from probabilities. The factor form of
-Equation~\eqref{eq:factor} with Gaussian noise is the case used here.
-That implementation computes the probability of being the minimum,
-and the maximum is obtained by negating $m$ and $W$. It is used here
-without other change. The
-computed vector was compared with argmax frequencies from
+products taken in logs, and the tails. That implementation computes
+the probability of being the minimum, and the maximum is obtained by
+negating $m$ and $W$. It is used without other change.
+
+The computation in \citet{cotton2026} is more general than the
+factor-Gaussian case. It accepts any base distribution, and a
+covariance given as factor loadings, as blocks, as nested groups or as
+a tree, or a dense covariance that is fitted to one of those
+structures on the way in. It also inverts the vector, recovering means
+from probabilities. The factor form of Equation~\eqref{eq:factor} with
+Gaussian noise is the case used here.
+
+The computed vector was compared with argmax frequencies from
 $2 \times 10^5$ Monte Carlo draws at sixteen posteriors: up to four
 per regime in the stopping experiment, at the twentieth replicate,
 and two per regime in the bandit, at round 50. The largest
@@ -224,8 +224,8 @@ across replicates. The loadings $v_i$ and noise scales $\sigma_i > 0$
 are known properties of the simulation. The unknown is $\theta$, with
 prior $\theta \sim N(0, s_0^2 I)$ and $s_0 > 0$.
 
-The posterior covariance of $\theta$ turns out to have factor form,
-with the same number of factors $\rho$. The derivation takes four
+The posterior covariance of $\theta$ has factor form, with the same
+number of factors $\rho$. The derivation takes four
 steps.
 
 The covariance of one replicate across systems is
@@ -271,7 +271,7 @@ $S^{-1}$ is positive definite, so $K$ is positive definite. The Schur
 complement of $\mathrm{diag}(a)$ in $K$ is $C^{-1}$, so $C^{-1}$ is
 positive definite too.
 
-The fourth step reads off the factor form:
+The fourth step gives the factor form:
 \begin{equation}
 \Sigma_{\text{post}} \;=\; \mathrm{diag}(d) + W W', \qquad
 d_i = a_i^{-1}, \quad
@@ -325,10 +325,9 @@ prior.
 \label{sec:surrogates}
 
 Bandit methods relate to the vector in two ways. Thompson sampling
-uses it implicitly, without computing it. Two other methods compute
-approximations of it from marginal means and variances. The
-experiments of Sections~\ref{sec:stopping} and~\ref{sec:bandit}
-compare all of them with the computed vector.
+uses it implicitly, without computing it. Two other methods compute approximations of it from
+marginal means and variances. The experiments compare all three with
+the computed vector.
 
 \subsection{Thompson sampling plays the vector}
 
@@ -340,16 +339,15 @@ largest under the posterior, which is $p_i$. Lemma~8 of
 occupancy of Thompson sampling equals the posterior probability of
 optimality.
 
-Pulling an arm with probability $p_i$ from the computed vector, called
-\emph{exact matching} below, is therefore Thompson sampling in
-distribution. Sampling from the computed vector $\hat p$ is Thompson
-sampling only up to the quadrature error of
-Section~\ref{sec:computation}. Section~\ref{sec:bandit} compares the
-two. The policy remains randomized. The deterministic part is the
-evaluation of its probabilities.
+Pulling an arm with probability $p_i$, called \emph{exact matching},
+is therefore Thompson sampling in distribution. Pulling from the
+computed vector $\hat p$ is Thompson sampling up to the quadrature
+error, and the bandit experiment compares the two. The policy remains
+randomized. The deterministic part is the evaluation of its
+probabilities.
 
-The computed vector gives what a single draw cannot: the numbers
-themselves. A stopping rule needs $\max_i p_i$, an allocator needs to
+The computed vector gives the numbers themselves, which a single draw
+does not. A stopping rule needs $\max_i p_i$, an allocator needs to
 know which $p_i$ are close, and a reproducible policy needs the
 probabilities it would otherwise sample.
 
@@ -377,15 +375,15 @@ the difference, so $p_1 = \Phi(3/\sqrt{2}) \approx 0.983$ for every
 $\tau$. F-LITE sees only the marginal variances $1 + \tau^2$ and gives
 $\Phi\bigl(3 / (2\sqrt{1 + \tau^2})\bigr)$, which is $0.933$ at
 $\tau = 0$, $0.682$ at $\tau = 3$, and tends to one half as $\tau$
-grows. The aligned regime of Section~\ref{sec:stopping} is this
-example with a hundred systems.
+grows. The aligned regime of the stopping experiment is this example
+with a hundred systems.
 
 The shared product in Equation~\eqref{eq:integral} has a precedent in
 the independent case. \citet{menet2025} write the independent
 probability of being best as the same product integral and evaluate it
 by quadrature, as their A-LITE estimator. Equation~\eqref{eq:cavity}
 is that evaluator conditional on the factors, averaged over them.
-A-LITE is not among the rules compared below.
+The experiments do not include A-LITE.
 
 The \emph{VBOS policy} is the variational Bayesian optimistic sampling
 rule of \citet{odonoghue2021}, extended by \citet{tarbouriech2023}. In
@@ -400,8 +398,8 @@ with $\kappa^*$ again chosen so the vector sums to one.
 
 The VBOS policy departs from $p$ on purpose, and its regret analysis
 depends on that departure. It is a policy, not an estimate of $p$.
-Its distance from $p$ is reported below because \citet{menet2026}
-use it as the trainable substitute for $p$.
+Its distance from $p$ matters because \citet{menet2026} use it as
+the trainable substitute for $p$.
 
 \section{Stopping under common random numbers}
 \label{sec:stopping}
@@ -445,9 +443,8 @@ the prior. It is not a frequentist guarantee for a fixed $\theta$, and
 it applies to the true $p$. For the computed vector $\hat p$, if
 $\|\hat p - p\|_\infty \le \eta$ at stopping, then stopping at
 $\max_i \hat p_i \ge 1 - \delta$ gives error at most $\delta + \eta$,
-and a threshold of $1 - \delta + \eta$ restores $\delta$. The Monte
-Carlo checks of Section~\ref{sec:computation} are evidence about
-$\eta$, not a bound on it.
+and a threshold of $1 - \delta + \eta$ restores $\delta$. The Monte Carlo
+checks are evidence about $\eta$, not a bound on it.
 
 The three rules share a nominal threshold, not a true confidence
 level. With two independent arms of equal posterior standard
@@ -570,7 +567,7 @@ intervals.
 
 The identification rates do not separate the policies. Their
 differences are within two binomial standard errors at 100
-replications. The regret and distance columns carry the comparison.
+replications. The comparison is in the regret and distance columns.
 
 \section{Scope}
 \label{sec:limits}
@@ -580,7 +577,7 @@ observations there are generated with factor structure. When scenario
 effects enter a simulation nonlinearly, a low-rank model of $\Lambda$
 is an approximation, and the posterior inherits its error. When a
 Gaussian-process kernel is dense with a short length scale, a factor
-fit has to precede the computation, and its residual is the cost.
+fit has to precede the computation, and its residual is the error.
 
 The probability of optimality is not the knowledge gradient. Under
 simple-regret loss, the one-step value of a measurement is the
@@ -595,10 +592,9 @@ tilt. Its measured distance from $p$ quantifies the approximation, but
 does not by itself make a case against the tilt.
 
 Thompson sampling needs one posterior sample and no vector, and the
-bandit of Section~\ref{sec:bandit} can be run that way. The computed
-vector matters where a sample is not enough: stopping, allocation,
-constraints and derandomization. The stopping problem of
-Section~\ref{sec:stopping} is of that kind.
+bandit experiment can be run that way. The computed vector matters
+where a sample is not enough: stopping, allocation, constraints and
+derandomization. The stopping problem is of that kind.
 
 The stopping experiment's loadings have rank at most one, and in the
 aligned regime the common factor cancels from every ranking. Loadings
