@@ -729,12 +729,14 @@ compared under uncertainty: advertising, recommendation, clinical
 allocation, and now the fine-tuning of language models toward it
 \citep{menet2026}. Its action probabilities are the vector $p$. The
 policy never needs them as numbers, but much that surrounds the
-policy does. Off-policy evaluation needs them as propensities. An
-audit of why an arm was shown needs them. A stopping rule, a
-shortlist of the $k$ arms most likely to be best, a constraint on how
-often any arm may be shown, and a reproducible version of the policy
-all need them. In every one of these uses they have been approximated,
-from marginals or by counting posterior draws.
+policy does.
+
+Off-policy evaluation needs them as propensities, and an audit of why
+an arm was shown needs them. A stopping rule, a shortlist of the $k$
+arms most likely to be best, a constraint on how often any arm may be
+shown, and a reproducible version of the policy all need them. In
+every one of these uses they have been approximated, from marginals
+or by counting posterior draws.
 
 For factor-Gaussian beliefs the numbers are available at the cost of
 a single Thompson draw, linear in the number of arms. That class is
@@ -754,9 +756,8 @@ posterior, the practitioner's alternative, has not been compared at
 matched cost. Shortlisting, where $\sum_{i \in S} p_i$ is the exact
 chance that the winner is retained, is the application where the
 whole vector should change a decision most visibly, and has not been
-run. And the fine-tuning target of \citet{menet2026} uses marginals
-because the true vector was out of reach; for a factor posterior it
-no longer is.
+run. And the fine-tuning target of \citet{menet2026} uses marginals because the true vector was out of reach. For a factor
+posterior it no longer is.
 
 \begin{thebibliography}{9}
 
