@@ -22,29 +22,19 @@ Computed in Closed Form at Scale}
 \maketitle
 
 \begin{abstract}
-\noindent The posterior probability that alternative $i$ is best,
-$p_i = \Pr(\theta_i = \max_j \theta_j \mid \mathcal{D})$, drives
-stopping rules, budget allocation, derandomized Thompson sampling,
-and safety constraints, and the reinforcement-learning and Bayesian
-optimization literatures describe it as intractable: recent work
-variationally approximates it from marginal means and variances
-alone. We observe that in two standard settings the posterior
-covariance is exactly of factor form $\Sigma = WW' + \mathrm{diag}(d)$
-at every step: simulation replicates under common random numbers, and
-per-arm Gaussian observations against a factor prior. In that case
-the whole vector $p$ is a one-dimensional integral per factor node,
-computable for all $n$ alternatives at once in time linear in $n$ by
-machinery previously developed for pricing correlated contests, and
-certified here against Monte Carlo. In a stopping problem under
-common random numbers, rules that stop on marginal-only estimates of
-$p$ hold their nominal error by overspending, between $1.5$ and $3.4$
-times the replicates of the exact rule, which stops earliest in every
-correlation regime at the nominal error level. In a correlated
-Gaussian bandit, sampling from the exact vector reproduces Thompson
-sampling's regret to within replication noise, as the occupancy
-identity requires, while the variational policy pays ten percent more
-regret and sits at measured total-variation distance $0.13$ to
-$0.16$ from the object it stands in for.
+\noindent The posterior probability that each alternative is best
+drives stopping rules, budget allocation and derandomized Thompson
+sampling, and is treated as intractable: recent work approximates it
+from marginal means and variances alone. Under common random numbers,
+and under per-arm Gaussian observations against a factor prior, the
+posterior covariance is exactly of factor form at every step. The whole
+probability vector then reduces to a one-dimensional integral at each
+quadrature node over the factors, exact for all $n$ alternatives at
+once in time linear in $n$. Stopping rules
+built on marginal-only estimates spend $1.5$ to $3.4$ times the
+replicates of the exact rule to hold the same error, and a variational
+bandit policy pays ten percent more regret than Thompson sampling,
+which the exact vector matches.
 \end{abstract}
 
 \section{Introduction}
