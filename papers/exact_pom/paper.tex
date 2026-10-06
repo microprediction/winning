@@ -155,14 +155,29 @@ the whole vector costs $O(nLQ)$. The accuracy depends on $L$, on the
 lattice window and on $Q$, and the $Q$ needed grows with the number of
 factors and the geometry of $W$.
 
-The integral is exact, but its evaluation is numerical, and the
-error depends on the geometry. With three alternatives, $m = 0$,
-$W = (0, 1, 3)'$ and $d_i = 0.1$, so that two of the three
-correlations exceed $0.9$, the vector is known analytically from the
-bivariate quadrant identity, and the default factor rule is in error
-by $0.0015$ in total variation. With $2^{15}$ scrambled-Sobol factor
-nodes in place of the default rule, the computed vector matches the
-analytic one.
+Only differences between loadings matter. Let $P = I - \mathbf{1}
+\mathbf{1}'/n$ and write $W z = (PW) z + \mathbf{1}(\bar{w}' z)$,
+where $\bar{w}$ is the average row of $W$. The second term shifts
+every alternative by the same amount and changes no ranking, so
+$p(m, W, d) = p(m, PW, d)$. The number of factor dimensions the
+integral has to resolve is the rank of $PW$, which centering can
+reduce below the rank of $W$. Centering, and any orthogonal rotation
+of the columns of $W$, leave the computed vector unchanged to
+$10^{-11}$ or better, which is a check on an implementation. In the
+aligned regime of the stopping experiment every row of $W$ is the
+same, so $PW = 0$ and the contest is independent.
+
+The integral is exact. Its evaluation is not, because the lattice in
+$x$ and the quadrature rule over $z$ both have finite resolution. The
+lattice is not where the error is. Raising it from $257$ to $2{,}049$
+points changes no entry of any vector in the experiments by more than
+$4 \times 10^{-16}$. The factor rule is where the error is, and only
+when correlations are extreme. For three alternatives with $m = 0$,
+$W = (0, 1, 3)'$ and $d_i = 0.1$, two of the three correlations
+exceed $0.9$, the exact vector is known in closed form from the
+bivariate quadrant identity, and the default rule is off by $0.0015$
+in total variation. Replacing the default rule by $2^{15}$
+scrambled-Sobol nodes removes that error.
 
 The numerical details are in \citet{cotton2026}: lattice placement,
 products taken in logs, and the tails. That implementation computes
@@ -177,21 +192,16 @@ structures on the way in. It also inverts the vector, recovering means
 from probabilities. The factor form of Equation~\eqref{eq:factor} with
 Gaussian noise is the case used here.
 
-On the posteriors the experiments pass through, the error is far
-smaller than in that example, because their correlations are at most
-$0.75$. On ten such posteriors, two from each regime of each
-experiment, raising the lattice from $257$ to $2{,}049$ points
-changes no entry by more than $4 \times 10^{-16}$, and replacing the
-default factor rule by $2^{15}$ scrambled-Sobol nodes changes no entry
-by more than $1.2 \times 10^{-6}$. The computed vectors differ from
-argmax frequencies over four million Monte Carlo draws by
-$1$ to $4 \times 10^{-4}$ per entry, which is the Monte Carlo standard
-error at that sample size. The quadrature error on these posteriors
-is therefore about $10^{-6}$ per entry. During the experiments
-themselves, the computed vector was also compared with $2 \times 10^5$
-Monte Carlo draws at sixteen posteriors, with a largest
-total-variation distance of $0.0042$, again at the Monte Carlo noise
-level. Both comparisons are measurements, not error bounds.
+The experiments are far from that case, since their correlations are
+at most $0.75$. On ten of their posteriors, two from each regime of
+each experiment, the $2^{15}$-node rule changes no entry by more than
+$1.2 \times 10^{-6}$. The default rule's error there is therefore
+about $10^{-6}$ per entry. Monte Carlo cannot resolve an error that
+small. Four million draws differ from the computed vectors by $1$ to
+$4 \times 10^{-4}$ per entry, which is their own standard error, and
+the $2 \times 10^5$ draws taken at sixteen posteriors during the
+experiments differ by at most $0.0042$ in total variation, again
+their own noise. These are measurements, not error bounds.
 
 \section{Two models whose posteriors have exact factor form}
 \label{sec:posteriors}
@@ -221,10 +231,8 @@ levels.
 
 Summarise the shared random inputs of replicate $r$ by $\rho$
 variables $F_r$, such as the demand level and its volatility. The
-analyst does not observe $F_r$, or does not know how each system
-responds to it. If both were known, subtracting the response would
-remove the correlation and leave a diagonal posterior. System $i$
-responds to $F_r$ with loadings $v_i$ and has its own noise
+analyst does not record $F_r$. System $i$ responds to it with
+loadings $v_i$, which are known, and has its own noise
 $\varepsilon_{ir}$:
 \begin{equation}
 Y_{ir} \;=\; \theta_i + v_i' F_r + \varepsilon_{ir}, \qquad
@@ -232,8 +240,10 @@ F_r \sim N(0, I_\rho), \quad \varepsilon_{ir} \sim N(0, \sigma_i^2).
 \end{equation}
 The $F_r$ and $\varepsilon_{ir}$ are independent of each other and
 across replicates. The loadings $v_i$ and noise scales $\sigma_i > 0$
-are known properties of the simulation. The unknown is $\theta$, with
-prior $\theta \sim N(0, s_0^2 I)$ and $s_0 > 0$.
+are known properties of the simulation, and $F_r$ is latent. If
+$F_r$ were recorded too, subtracting $v_i' F_r$ from each output would
+remove the correlation and leave a diagonal posterior. The unknown is
+$\theta$, with prior $\theta \sim N(0, s_0^2 I)$ and $s_0 > 0$.
 
 The posterior covariance of $\theta$ has factor form, with the same
 number of factors $\rho$. The derivation takes four
@@ -315,10 +325,11 @@ I_\rho)$ and independent $e_i \sim N(0, d_{0i})$, $d_{0i} > 0$. The
 prior is then $\theta \sim N(0, \Sigma_0)$ with
 $\Sigma_0 = V V' + \mathrm{diag}(d_0)$, which has factor form.
 
-Gaussian-process priors have this form only when the approximation
-replaces the conditional residual by a diagonal. A standard
-inducing-point posterior has a dense residual \citep{titsias2009}, so
-for those the diagonal is an additional approximation.
+A Gaussian-process prior with a kernel of finitely many features and
+an independent residual has this form exactly. A dense kernel does
+not, and an inducing-point approximation to one has a dense residual
+\citep{titsias2009}, so for those a diagonal residual is an added
+approximation.
 
 With per-arm pull counts $c$, the posterior precision is
 \begin{equation}
@@ -331,6 +342,23 @@ of Equation~\eqref{eq:diagminus}, with $a_i = d_{0i}^{-1} + c_i
 Section~\ref{sec:crn} apply unchanged. The posterior is exactly
 factor plus diagonal after every pull, with no more factors than the
 prior.
+
+The same posterior has a form with no subtraction inside an inverse.
+Let $\lambda_i = c_i / \sigma_n^2$ be the observation precision
+accumulated on arm $i$, $r_i = 1/(1 + d_{0i} \lambda_i)$,
+$R = \mathrm{diag}(r)$ and $H = I_\rho + V' \mathrm{diag}(\lambda_i
+r_i) V$. Then
+\begin{equation}
+\Sigma_{\text{post}} \;=\; \mathrm{diag}(d_{0i} r_i) + R V H^{-1} V' R,
+\qquad W_{\text{post}} = R V H^{-1/2}.
+\label{eq:stable}
+\end{equation}
+$H$ is the identity plus a positive semidefinite matrix, so it is
+positive definite. An arm never pulled has $\lambda_i = 0$, and arms
+observed with different noise levels enter through their own
+$\lambda_i$. Equation~\eqref{eq:stable} agrees with direct inversion
+of the dense precision to machine precision, and is the form to
+implement.
 
 \section{Thompson sampling and the approximations of the vector}
 \label{sec:surrogates}
@@ -379,8 +407,23 @@ and $N(0,1)$, it gives $0.691$ for the first arm, against the exact
 $0.760$. F-LITE therefore departs from $p$ even when the posterior is
 independent.
 
-Discarding the correlation is the larger error, and one example shows
-it without any experiment. Let $\theta_1 = 3 + Z + \varepsilon_1$ and
+Discarding correlation can produce a much larger error, because the
+marginals do not determine the vector, even within the covariance
+class of Equation~\eqref{eq:factor}. Let $\theta_1 = E_1$ and
+$\theta_i = \sqrt{1 - \epsilon}\, Z + \sqrt{\epsilon}\, E_i$ for
+$i = 2, \dots, n$, with $Z$ and the $E_i$ independent standard
+Gaussians. Every alternative has the same $N(0, 1)$ marginal, the
+covariance is rank one plus a positive diagonal, and every correlation
+is nonnegative. As $\epsilon \to 0$ the last $n - 1$ alternatives
+become copies of one another, so $p_1 \to 1/2$ and every other $p_i
+\to 1/(2(n-1))$. A method that uses only the marginals returns $1/n$
+for every alternative, since the marginals are identical. With
+$n = 100$ and $\epsilon = 10^{-4}$, $p_1 = 0.493$ against $0.01$, and
+the total-variation error of the marginal answer tends to
+$1/2 - 1/n$.
+
+A second example fixes the mean gap and varies the size of a shared
+shock. Let $\theta_1 = 3 + Z + \varepsilon_1$ and
 $\theta_2 = Z + \varepsilon_2$, with $Z \sim N(0, \tau^2)$ and
 independent $\varepsilon_i \sim N(0, 1)$. The shared $Z$ cancels from
 the difference, so $p_1 = \Phi(3/\sqrt{2}) \approx 0.983$ for every
@@ -392,10 +435,15 @@ with a hundred systems.
 
 The shared product in Equation~\eqref{eq:integral} has a precedent in
 the independent case. \citet{menet2025} write the independent
-probability of being best as the same product integral and evaluate it
-by quadrature, as their A-LITE estimator. Equation~\eqref{eq:cavity}
-is that evaluator conditional on the factors, averaged over them.
-The experiments do not include A-LITE.
+probability of being best as the same product integral, their
+Equation~(2), and their Proposition~1 evaluates it by quadrature on
+shared integration points with a convergence guarantee.
+Equation~\eqref{eq:cavity} is that evaluator conditional on the
+factors, averaged over them. Their A-LITE and F-LITE are
+approximations of the independent integral: A-LITE fits a Gaussian to
+the distribution of the largest competitor by matching quartiles, and
+F-LITE replaces it by the shared threshold above. The experiments
+include F-LITE only.
 
 The \emph{VBOS policy} is the variational Bayesian optimistic sampling
 rule of \citet{odonoghue2021}, extended by \citet{tarbouriech2023}. In
@@ -416,14 +464,29 @@ the trainable substitute for $p$.
 \section{Stopping under common random numbers}
 \label{sec:stopping}
 
-The experiment uses the posterior of Section~\ref{sec:crn} with
-$n = 100$ systems, $\rho = 2$ scenario streams and prior scale
-$s_0 = 1$. True means are drawn from the prior. Every system has
-replicate variance one, so each replicate carries the same marginal
-information in every regime. The \emph{factor share} is the fraction
-of that variance that comes from the shared scenario.
+A simulation study stops when it is confident enough that it has
+found the best system. The experiment asks whether a stopping rule
+that uses the computed vector stops earlier than rules that use the
+marginal approximations, and whether it still selects the best system
+as often as its confidence level promises. Correlation is the only
+thing that separates the rules, so everything else is held fixed and
+only the correlation geometry varies.
 
-The regimes differ only in how systems load on the scenario streams:
+The setting is the posterior of Section~\ref{sec:crn} with $n = 100$
+systems, $\rho = 2$ scenario streams and prior scale $s_0 = 1$. True
+means are drawn from the prior. Every system has replicate variance
+one, so each replicate carries the same marginal information in every
+regime, and a marginal-only rule faces the same problem in every
+regime. The \emph{factor share} is the fraction of that variance that
+comes from the shared scenario.
+
+Correlation can mislead a marginal-only rule in two directions. If
+the leading systems move together, their difference is less uncertain
+than their marginals suggest, and the rule is too cautious. If they
+move oppositely, their difference is more uncertain, and the rule is
+too confident. The regimes produce each case, with an uncorrelated
+control.
+
 \begin{itemize}
 \item \emph{Independent}: factor share zero. This is the control.
 \item \emph{Aligned}: every system loads on the same stream, with
@@ -526,7 +589,13 @@ total-variation distance of the computed vector was $0.0015$.
 \section{A correlated Gaussian bandit}
 \label{sec:bandit}
 
-The bandit uses the posterior of Section~\ref{sec:bandit-posterior}
+The bandit experiment asks two things. The first is whether pulling
+arms with the computed probabilities reproduces the regret of Thompson
+sampling, as Lemma~8 requires of the true vector. The second is how
+much regret the two marginal approximations lose when their
+probabilities are used as the policy.
+
+The setting is the posterior of Section~\ref{sec:bandit-posterior}
 with $n = 50$ arms, prior variance one per arm, observation noise
 $\sigma_n = 1$, horizon 200 and 100 replications. The prior's factor
 term has two columns. In the \emph{independent} regime it is zero. In the
@@ -613,9 +682,11 @@ where a sample is not enough: stopping, allocation, constraints and
 derandomization. The stopping problem is of that kind.
 
 The stopping experiment's loadings have rank at most one, and in the
-aligned regime the common factor cancels from every ranking. Loadings
-that vary across both columns, with unequal residual variances, would
-test the computation where the correlation does not cancel.
+aligned regime the centered loadings are zero, so the exact rule faces
+an independent contest there while the marginal rules do not know it.
+Loadings that vary across both columns, with unequal residual
+variances, would test the computation where the correlation does not
+cancel.
 
 \begin{thebibliography}{9}
 
