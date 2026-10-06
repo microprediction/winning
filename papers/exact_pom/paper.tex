@@ -703,7 +703,9 @@ how much one more measurement would reduce that uncertainty, which is
 what a budget allocator needs. That quantity is the knowledge
 gradient \citep{frazier2008}, an expectation over what the posterior
 means will become after the measurement, and \citet{tuisov2026}
-treats it as the myopic value of computation. The computation here does not supply it. Three one-step criteria
+treats it as the myopic value of computation. The computation here does not supply it.
+
+Three one-step criteria
 should be kept apart. Reducing the entropy of $p$ is entropy search.
 Raising $\max_i p_i$ aims at correct identification under zero-one
 loss, where choosing a near-identical runner-up counts as an error.
@@ -766,7 +768,9 @@ posterior distribution of where the optimum lies among the
 candidates, which is the central object of entropy search
 \citep{hennig2012}, where it is approximated by expectation
 propagation. For a factor-structured posterior the computation here
-is a different route to it. The entropy-search acquisition
+is a different route to it.
+
+The entropy-search acquisition
 $\alpha(a) = H(p) - \mathbb{E}_{Y_a \mid \mathcal{D}}[H(p^{Y_a})]$
 then needs three things, all available: the closure of
 Section~\ref{sec:posteriors} for the hypothetical posterior after
