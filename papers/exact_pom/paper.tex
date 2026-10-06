@@ -14,7 +14,7 @@
 \title{\textbf{A Deterministic Alternative to Thompson Sampling\\
 for Factor-Gaussian Beliefs}}
 \author{Peter Cotton}
-\date{\today}
+\date{\normalsize First version: September 1, 2026. This version: October 6, 2026.}
 
 \begin{document}
 \maketitle
@@ -160,9 +160,16 @@ settings of the implementation are in error by total variation
 $0.0015$. Raising the factor quadrature resolution reduces this error.
 
 The numerical details are in \citet{cotton2026}: lattice placement,
-products taken in logs, and the tails. That implementation computes
-the probability of being the minimum, and the maximum is obtained by
-negating $m$ and $W$. It is used here without other change. The
+products taken in logs, and the tails. The computation there is more
+general than this paper needs. It accepts any base distribution, not
+only the Gaussian, and a covariance given as factor loadings, as
+blocks, as nested groups or as a tree, or a dense covariance that is
+fitted to one of those structures on the way in. It also inverts the
+vector, recovering means from probabilities. The factor form of
+Equation~\eqref{eq:factor} with Gaussian noise is the case used here.
+That implementation computes the probability of being the minimum,
+and the maximum is obtained by negating $m$ and $W$. It is used here
+without other change. The
 computed vector was compared with argmax frequencies from
 $2 \times 10^5$ Monte Carlo draws at sixteen posteriors: up to four
 per regime in the stopping experiment, at the twentieth replicate,
