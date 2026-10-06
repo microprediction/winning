@@ -13,7 +13,7 @@ categories = ["algorithms", "science", "mathematics", "finance"]
 name = "winning"
 
 [dependencies]
-ndarray = "0.16"
+ndarray = "0.17"
 rayon = "1.10"
 owens-t = "0.1"
 libm = "0.2"
