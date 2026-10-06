@@ -44,11 +44,11 @@ jobs:
             python: "3.12"
     steps:
       - name: Fetch the smoke script only (not the package source)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           sparse-checkout: .github/smoke.py
           sparse-checkout-cone-mode: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python }}
       - name: Install winning from PyPI
@@ -74,7 +74,7 @@ jobs:
     if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     steps:
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable (branch head on 2026-10-05)
       - name: Build a project against the published crate
         run: |
           cargo new --lib /tmp/crate_smoke
@@ -101,7 +101,7 @@ jobs:
       matrix:
         package: [MultinomialProbit, FactorMvNormalCDF, GMRFExtremes]
     steps:
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2.7.0
         with:
           version: '1'
       - name: Add ${{ matrix.package }} from General and run its tests
