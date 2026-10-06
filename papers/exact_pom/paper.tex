@@ -11,8 +11,8 @@
 
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{A Deterministic Alternative to Thompson Sampling\\
-for Factor-Gaussian Beliefs}}
+\title{\textbf{Deterministic Evaluation of Thompson Sampling\\
+Probabilities for Factor-Gaussian Beliefs}}
 \author{Peter Cotton}
 \date{\normalsize First version: September 1, 2026.\\ This version: October 6, 2026.}
 
@@ -23,12 +23,14 @@ for Factor-Gaussian Beliefs}}
 \noindent Thompson sampling plays each alternative with the posterior
 probability that it is best. Methods that need that probability
 itself approximate it from marginal means and variances. We compute it
-directly, for all $n$ alternatives at once in time linear in $n$,
-whenever the posterior covariance is a low-rank factor term plus a
-diagonal. Simulation under common random numbers and a Gaussian
-bandit with a factor prior both produce such posteriors exactly. In
-both, the computed vector stops sooner than the marginal
-approximations at the same nominal threshold, and incurs less regret.
+by quadrature, for all $n$ alternatives at once, in time linear in $n$
+at fixed resolution, whenever the posterior covariance is a low-rank
+factor term plus a diagonal. Simulation under common random numbers
+and a Gaussian bandit with a factor prior both produce such posteriors
+exactly. In the simulation, a stopping rule on the computed vector
+stops sooner than rules on the marginal approximations at the same
+nominal threshold. In the bandit, sampling from it incurs less regret
+than they do.
 \end{abstract}
 
 \section{Introduction}
@@ -67,8 +69,10 @@ correlated, because alternatives share causes. Inventory policies
 simulated on the same demand history all do well on a quiet day and
 badly on a busy one. Advertisements aimed at the same audience have
 similar click rates. Molecules built on the same scaffold bind
-similarly. With correlated beliefs, $p_i$ is an $n$-dimensional
-Gaussian orthant probability, and no general fast method computes it.
+similarly. With correlated beliefs, $p_i$ is the probability that
+the $n - 1$ differences $\theta_i - \theta_j$ are all positive, a
+Gaussian orthant probability in $n - 1$ dimensions, and no general
+fast method computes it.
 
 Two literatures need this vector and approximate it. The first is
 ranking and selection, which chooses the best of $n$ simulated
@@ -154,7 +158,7 @@ lattice window and on $Q$, and the $Q$ needed grows with the number of
 factors and the geometry of $W$.
 
 The integral is exact, but its evaluation is numerical. With three
-alternatives, $W = (0, 1, 3)'$ and $d_i = 0.1$, the vector is known
+alternatives, $m = 0$, $W = (0, 1, 3)'$ and $d_i = 0.1$, the vector is known
 analytically from the bivariate quadrant identity, and the default
 settings of the implementation are in error by total variation
 $0.0015$. Raising the factor quadrature resolution reduces this error.
@@ -205,8 +209,11 @@ differences between policies are measured more precisely than their
 levels.
 
 Summarise the shared random inputs of replicate $r$ by $\rho$
-variables $F_r$, such as the demand level and its volatility. System
-$i$ responds to them with loadings $v_i$ and has its own noise
+variables $F_r$, such as the demand level and its volatility. The
+analyst does not observe $F_r$, or does not know how each system
+responds to it. If both were known, subtracting the response would
+remove the correlation and leave a diagonal posterior. System $i$
+responds to $F_r$ with loadings $v_i$ and has its own noise
 $\varepsilon_{ir}$:
 \begin{equation}
 Y_{ir} \;=\; \theta_i + v_i' F_r + \varepsilon_{ir}, \qquad
@@ -335,9 +342,11 @@ optimality.
 
 Pulling an arm with probability $p_i$ from the computed vector, called
 \emph{exact matching} below, is therefore Thompson sampling in
-distribution, up to the quadrature error of
-Section~\ref{sec:computation}. The two have the same expected regret,
-and Section~\ref{sec:bandit} compares them.
+distribution. Sampling from the computed vector $\hat p$ is Thompson
+sampling only up to the quadrature error of
+Section~\ref{sec:computation}. Section~\ref{sec:bandit} compares the
+two. The policy remains randomized; what is deterministic is the
+evaluation of its probabilities.
 
 The computed vector gives what a single draw cannot: the numbers
 themselves. A stopping rule needs $\max_i p_i$, an allocator needs to
@@ -359,6 +368,24 @@ step is a second approximation. With two independent arms, $N(1,1)$
 and $N(0,1)$, it gives $0.691$ for the first arm, against the exact
 $0.760$. F-LITE therefore departs from $p$ even when the posterior is
 independent.
+
+Discarding the correlation is the larger error, and one example shows
+it without any experiment. Let $\theta_1 = 3 + Z + \varepsilon_1$ and
+$\theta_2 = Z + \varepsilon_2$, with $Z \sim N(0, \tau^2)$ and
+independent $\varepsilon_i \sim N(0, 1)$. The shared $Z$ cancels from
+the difference, so $p_1 = \Phi(3/\sqrt{2}) \approx 0.983$ for every
+$\tau$. F-LITE sees only the marginal variances $1 + \tau^2$ and gives
+$\Phi\bigl(3 / (2\sqrt{1 + \tau^2})\bigr)$, which is $0.933$ at
+$\tau = 0$, $0.682$ at $\tau = 3$, and tends to one half as $\tau$
+grows. The aligned regime of Section~\ref{sec:stopping} is this
+example with a hundred systems.
+
+The shared product in Equation~\eqref{eq:integral} has a precedent in
+the independent case. \citet{menet2025} write the independent
+probability of being best as the same product integral and evaluate it
+by quadrature, as their A-LITE estimator. Equation~\eqref{eq:cavity}
+is that evaluator conditional on the factors, averaged over them.
+A-LITE is not among the rules compared below.
 
 The \emph{VBOS policy} is the variational Bayesian optimistic sampling
 rule of \citet{odonoghue2021}, extended by \citet{tarbouriech2023}. In
@@ -415,7 +442,12 @@ best. Then
 \end{equation}
 Optional stopping does not affect this statement, which averages over
 the prior. It is not a frequentist guarantee for a fixed $\theta$, and
-it applies to the true $p$, not to a numerical approximation of it.
+it applies to the true $p$. For the computed vector $\hat p$, if
+$\|\hat p - p\|_\infty \le \eta$ at stopping, then stopping at
+$\max_i \hat p_i \ge 1 - \delta$ gives error at most $\delta + \eta$,
+and a threshold of $1 - \delta + \eta$ restores $\delta$. The Monte
+Carlo checks of Section~\ref{sec:computation} are evidence about
+$\eta$, not a bound on it.
 
 The three rules share a nominal threshold, not a true confidence
 level. With two independent arms of equal posterior standard
@@ -525,9 +557,11 @@ rather than measured.}
 \label{tab:bandit}
 \end{table}
 
-Thompson sampling and exact matching have the same expected regret by
-Lemma~8, and their sample means differ by one to two percent of
-cumulative regret in both regimes. The VBOS policy's mean regret is
+Sampling from the true $p$ has the same expected regret as Thompson
+sampling, by Lemma~8. The sample means for exact matching and Thompson
+sampling differ by one to two percent of cumulative regret in both
+regimes. That agreement is consistent with a small quadrature error
+and does not prove one. The VBOS policy's mean regret is
 ten to eleven percent above Thompson sampling's, and its action
 distribution is at total-variation distance $0.13$ to $0.16$ from the
 computed vector. F-LITE's is four to five percent above. Per-replication
@@ -560,10 +594,16 @@ The regret analysis of \citet{odonoghue2021} depends on the VBOS
 tilt. Its measured distance from $p$ quantifies the approximation, but
 does not by itself make a case against the tilt.
 
-Thompson sampling needs one posterior sample and no vector. The exact
+Thompson sampling needs one posterior sample and no vector, and the
+bandit of Section~\ref{sec:bandit} can be run that way. The computed
 vector matters where a sample is not enough: stopping, allocation,
-constraints and derandomization. Both experiments above are of that
-kind.
+constraints and derandomization. The stopping problem of
+Section~\ref{sec:stopping} is of that kind.
+
+The stopping experiment's loadings have rank at most one, and in the
+aligned regime the common factor cancels from every ranking. Loadings
+that vary across both columns, with unequal residual variances, would
+test the computation where the correlation does not cancel.
 
 \begin{thebibliography}{9}
 
