@@ -13,7 +13,7 @@
 
 \title{\textbf{Deterministic Probabilities for Thompson Sampling,\\
 Entropy Search and Stopping Rules\\
-on Factor-Gaussian Beliefs}}
+under Factor-Gaussian Beliefs}}
 \author{Peter Cotton}
 \date{\normalsize First version: September 1, 2026.\\ This version: October 6, 2026.}
 
@@ -99,9 +99,12 @@ that the optimum lies at each of $n$ candidate points, as what an
 optimizer should learn, and chooses each evaluation to reduce its
 entropy. \citet{hennig2012} call the vector intractable, approximate
 it by expectation propagation at a cost of $O(n^4)$, and run with
-fifty candidates. The approximation accepts any covariance. The
-computation here accepts factor covariances only, and for those it
-is linear in $n$.
+fifty candidates. Expectation propagation accepts any covariance.
+The computation here accepts covariances whose dependence runs
+through a few shared variables, described as factors, blocks, nested
+groups or a tree, and it fits a dense covariance to that grammar on
+intake, with the residual of the fit reported as its error. For such
+covariances it is linear in $n$.
 
 Correlation that comes from a few shared causes has a simple form.
 Each value is its own part plus a weighted sum of $\rho$ shared
@@ -128,9 +131,8 @@ factors, and quadrature evaluates it for all $n$ alternatives at once
 in time linear in $n$ at fixed resolution. The computation is the pricing pass for correlated contests in
 \citet{cotton2026}, restated rather than derived. One standard model from each of the first two literatures produces a
 posterior of exactly this form after every update: simulation under
-common random numbers, and a Gaussian bandit with a factor prior. In
-Bayesian optimization the form is a modelling choice, a kernel with
-finitely many features, or a factor fit to a dense kernel. In the simulation, a
+common random numbers, and a Gaussian bandit with a factor prior. In Bayesian optimization the form is a modelling choice, a kernel
+with finitely many features, or the intake fit of a dense kernel. In the simulation, a
 stopping rule on the computed vector stops sooner than rules on the
 marginal approximations at the same nominal threshold. In the bandit,
 sampling from it incurs less regret than they do.
@@ -708,9 +710,9 @@ replications. The comparison is in the regret and distance columns.
 The derivations of Section~\ref{sec:posteriors} are exact because the
 observations there are generated with factor structure. When scenario
 effects enter a simulation nonlinearly, a low-rank model of $\Lambda$
-is an approximation, and the posterior inherits its error. When a
-Gaussian-process kernel is dense with a short length scale, a factor
-fit has to precede the computation, and its residual is the error.
+is an approximation, and the posterior inherits its error. When a Gaussian-process kernel is dense with a short length scale,
+the intake fit to the grammar has to precede the computation, and its
+residual is the error.
 
 The vector says how uncertain the choice of best is. It does not say
 how much one more measurement would reduce that uncertainty, which is
@@ -798,10 +800,11 @@ derivatives.
 
 For a factor-structured belief the computation here gives the same
 vector in time linear in $n$, so thousands of representer points cost
-milliseconds. The price is the covariance class. Expectation
-propagation takes any dense covariance, and a dense kernel on the
-representer points has to be fitted to factor form before the
-computation here applies, with the residual of that fit as the error.
+milliseconds. The price is the covariance class. Expectation propagation takes any
+dense covariance. A dense kernel on the representer points has to be
+fitted to the grammar of factors, blocks, nested groups and trees
+before the computation here applies. That fit is the dense-covariance
+intake of \citet{cotton2026}, and its residual is the error.
 Entropy search also uses the derivatives of the vector with respect
 to the mean and covariance for a first-order expansion of the
 expected information gain. The computation here supplies the exact
