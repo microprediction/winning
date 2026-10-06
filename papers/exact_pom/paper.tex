@@ -478,8 +478,11 @@ the trainable substitute for $p$.
 \section{First experiment: when a simulation study can stop}
 \label{sec:stopping}
 
-A simulation study stops when it is confident enough that it has
-found the best system. The experiment asks whether a stopping rule
+The first experiment runs the simulation study of
+Section~\ref{sec:crn}, in which $n$ systems are simulated on shared
+random inputs, and asks when it can stop. A simulation study stops
+when it is confident enough that it has found the best system. The
+experiment asks whether a stopping rule
 that uses the computed vector stops earlier than rules that use the
 marginal approximations, and whether it still selects the best system
 as often as its confidence level promises. Correlation is the only
@@ -612,7 +615,11 @@ total-variation distance of the computed vector was $0.0015$.
 \section{Second experiment: a bandit with correlated arms}
 \label{sec:bandit}
 
-The bandit experiment asks two things. The first is whether pulling
+The second experiment is different from the first. It runs the
+bandit of Section~\ref{sec:bandit-posterior}, in which arms share
+features through a factor prior, and compares the four policies of
+Section~\ref{sec:surrogates}. It asks two things. The first is
+whether pulling
 arms with the computed probabilities reproduces the regret of Thompson
 sampling, as Lemma~8 requires of the true vector. The second is how much regret the two marginal approximations lose
 when their probabilities are used as the policy. Thompson sampling
