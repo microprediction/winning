@@ -722,6 +722,42 @@ Loadings that vary across both columns, with unequal residual
 variances, would test the computation where the correlation does not
 cancel.
 
+\section{Closing}
+
+Thompson sampling runs in production wherever alternatives are
+compared under uncertainty: advertising, recommendation, clinical
+allocation, and now the fine-tuning of language models toward it
+\citep{menet2026}. Its action probabilities are the vector $p$. The
+policy never needs them as numbers, but much that surrounds the
+policy does. Off-policy evaluation needs them as propensities. An
+audit of why an arm was shown needs them. A stopping rule, a
+shortlist of the $k$ arms most likely to be best, a constraint on how
+often any arm may be shown, and a reproducible version of the policy
+all need them. In every one of these uses they have been approximated,
+from marginals or by counting posterior draws.
+
+For factor-Gaussian beliefs the numbers are available at the cost of
+a single Thompson draw, linear in the number of arms. That class is
+not a convenience. Correlation between arms comes from shared
+features or shared inputs, which is the factor form, and the two
+standard models above keep that form under every update.
+
+The marginal shortcuts are not a safe default. Their error can
+approach one half with every marginal held fixed, and in the stopping
+experiment they spent up to three times the replicates at the same
+threshold. Thompson sampling itself is not at fault, since it uses
+the correlation. The loss is confined to the side that computes
+probabilities, and that is the side the computed vector replaces.
+
+Three things are open. The Monte Carlo rule on the correlated
+posterior, the practitioner's alternative, has not been compared at
+matched cost. Shortlisting, where $\sum_{i \in S} p_i$ is the exact
+chance that the winner is retained, is the application where the
+whole vector should change a decision most visibly, and has not been
+run. And the fine-tuning target of \citet{menet2026} uses marginals
+because the true vector was out of reach; for a factor posterior it
+no longer is.
+
 \begin{thebibliography}{9}
 
 \bibitem[Cotton(2026)]{cotton2026} P.~Cotton. Scalable inversion of
