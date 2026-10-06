@@ -27,8 +27,10 @@ approximated: from marginal means and variances in bandits, and by
 expectation propagation, at a cost quartic in the number of
 candidates, in Bayesian optimization. We compute the vector by
 quadrature, for all $n$ alternatives at once, in time linear in $n$
-at fixed resolution, whenever the posterior covariance is a low-rank
-factor term plus a diagonal. Simulation under common random numbers
+at fixed resolution, whenever the posterior covariance is a few
+shared factors plus a diagonal, or one of the block, nested or tree
+structures the computation accepts, with a dense covariance fitted to
+those on intake. Simulation under common random numbers
 and a Gaussian bandit with a factor prior both produce such
 posteriors exactly. With the computed vector, a stopping rule stops
 sooner than the marginal rules at the same nominal threshold,
