@@ -155,11 +155,14 @@ the whole vector costs $O(nLQ)$. The accuracy depends on $L$, on the
 lattice window and on $Q$, and the $Q$ needed grows with the number of
 factors and the geometry of $W$.
 
-The integral is exact, but its evaluation is numerical. With three
-alternatives, $m = 0$, $W = (0, 1, 3)'$ and $d_i = 0.1$, the vector is known
-analytically from the bivariate quadrant identity, and the default
-settings of the implementation are in error by total variation
-$0.0015$. Raising the factor quadrature resolution reduces this error.
+The integral is exact, but its evaluation is numerical, and the
+error depends on the geometry. With three alternatives, $m = 0$,
+$W = (0, 1, 3)'$ and $d_i = 0.1$, so that two of the three
+correlations exceed $0.9$, the vector is known analytically from the
+bivariate quadrant identity, and the default factor rule is in error
+by $0.0015$ in total variation. With $2^{15}$ scrambled-Sobol factor
+nodes in place of the default rule, the computed vector matches the
+analytic one.
 
 The numerical details are in \citet{cotton2026}: lattice placement,
 products taken in logs, and the tails. That implementation computes
@@ -174,13 +177,21 @@ structures on the way in. It also inverts the vector, recovering means
 from probabilities. The factor form of Equation~\eqref{eq:factor} with
 Gaussian noise is the case used here.
 
-The computed vector was compared with argmax frequencies from
-$2 \times 10^5$ Monte Carlo draws at sixteen posteriors: up to four
-per regime in the stopping experiment, at the twentieth replicate,
-and two per regime in the bandit, at round 50. The largest
-total-variation distance in those comparisons is $0.0042$, which is at
-the Monte Carlo noise level for that sample size. These comparisons
-are statistical checks, not error bounds.
+On the posteriors the experiments pass through, the error is far
+smaller than in that example, because their correlations are at most
+$0.75$. On ten such posteriors, two from each regime of each
+experiment, raising the lattice from $257$ to $2{,}049$ points
+changes no entry by more than $4 \times 10^{-16}$, and replacing the
+default factor rule by $2^{15}$ scrambled-Sobol nodes changes no entry
+by more than $1.2 \times 10^{-6}$. The computed vectors differ from
+argmax frequencies over four million Monte Carlo draws by
+$1$ to $4 \times 10^{-4}$ per entry, which is the Monte Carlo standard
+error at that sample size. The quadrature error on these posteriors
+is therefore about $10^{-6}$ per entry. During the experiments
+themselves, the computed vector was also compared with $2 \times 10^5$
+Monte Carlo draws at sixteen posteriors, with a largest
+total-variation distance of $0.0042$, again at the Monte Carlo noise
+level. Both comparisons are measurements, not error bounds.
 
 \section{Two models whose posteriors have exact factor form}
 \label{sec:posteriors}
@@ -342,7 +353,8 @@ optimality.
 Pulling an arm with probability $p_i$, called \emph{exact matching},
 is therefore Thompson sampling in distribution. Pulling from the
 computed vector $\hat p$ is Thompson sampling up to the quadrature
-error, and the bandit experiment compares the two. The policy remains
+error, which is about $10^{-6}$ per entry on the bandit's posteriors.
+The bandit experiment compares the two. The policy remains
 randomized. The deterministic part is the evaluation of its
 probabilities.
 
@@ -423,11 +435,12 @@ systems in opposite halves then vary more than their marginal
 variances suggest.
 \end{itemize}
 
-Three rules compete. Each computes its own estimate of $p$ after
-every replicate, stops the first time its largest entry reaches
-$1 - \delta$ with $\delta = 0.05$, and selects that entry. The exact
-rule uses the computation of Section~\ref{sec:computation}. The other
-two use F-LITE and the VBOS policy.
+The experiment compares three stopping rules, which differ only in
+how they estimate $p$. The exact rule uses the computation of
+Section~\ref{sec:computation}, and the other two use F-LITE and the
+VBOS policy. After every replicate, a rule recomputes its estimate of
+$p$, and it stops the first time the largest entry reaches
+$1 - \delta$, with $\delta = 0.05$, selecting that entry.
 
 For the true vector the rule has a Bayesian guarantee. Let $\tau$ be
 the first time $\max_i p_i \ge 1 - \delta$, let $B$ be the budget, and
@@ -443,8 +456,10 @@ the prior. It is not a frequentist guarantee for a fixed $\theta$, and
 it applies to the true $p$. For the computed vector $\hat p$, if
 $\|\hat p - p\|_\infty \le \eta$ at stopping, then stopping at
 $\max_i \hat p_i \ge 1 - \delta$ gives error at most $\delta + \eta$,
-and a threshold of $1 - \delta + \eta$ restores $\delta$. The Monte Carlo
-checks are evidence about $\eta$, not a bound on it.
+and a threshold of $1 - \delta + \eta$ restores $\delta$. On the stopping
+posteriors, $\eta$ is about $10^{-6}$ by the measurements of
+Section~\ref{sec:computation}, which are measurements rather than a
+bound.
 
 The three rules share a nominal threshold, not a true confidence
 level. With two independent arms of equal posterior standard
@@ -518,8 +533,9 @@ term has two columns. In the \emph{independent} regime it is zero. In the
 \emph{clusters} regime each half of the arms loads on its own factor,
 which carries $0.75$ of the prior variance.
 
-Four policies act on the same posterior: Thompson sampling, exact
-matching, sampling from the VBOS policy, and sampling from F-LITE. Table~\ref{tab:bandit} reports cumulative
+The experiment compares four policies on the same posterior:
+Thompson sampling, exact matching, sampling from the VBOS policy, and
+sampling from F-LITE. Table~\ref{tab:bandit} reports cumulative
 Bayes regret and, at the horizon, whether the arm with the highest
 posterior mean is the true best and the shortfall of that arm's value
 below the best. Its last column is the total-variation distance
@@ -555,10 +571,10 @@ rather than measured.}
 \end{table}
 
 Sampling from the true $p$ has the same expected regret as Thompson
-sampling, by Lemma~8. The sample means for exact matching and Thompson
-sampling differ by one to two percent of cumulative regret in both
-regimes. That agreement is consistent with a small quadrature error
-and does not prove one. The VBOS policy's mean regret is
+sampling, by Lemma~8, and the computed vector is within about
+$10^{-6}$ of the true $p$ on these posteriors. The sample means for
+exact matching and Thompson sampling differ by one to two percent of
+cumulative regret in both regimes, which is replication noise. The VBOS policy's mean regret is
 ten to eleven percent above Thompson sampling's, and its action
 distribution is at total-variation distance $0.13$ to $0.16$ from the
 computed vector. F-LITE's is four to five percent above. Per-replication
