@@ -703,9 +703,14 @@ how much one more measurement would reduce that uncertainty, which is
 what a budget allocator needs. That quantity is the knowledge
 gradient \citep{frazier2008}, an expectation over what the posterior
 means will become after the measurement, and \citet{tuisov2026}
-treats it as the myopic value of computation. The computation here
-does not supply it. An allocator that spends where the entries of $p$
-are close is a heuristic, not the knowledge gradient.
+treats it as the myopic value of computation. The computation here does not supply it. Three one-step criteria
+should be kept apart. Reducing the entropy of $p$ is entropy search.
+Raising $\max_i p_i$ aims at correct identification under zero-one
+loss, where choosing a near-identical runner-up counts as an error.
+The knowledge gradient raises the expected value of the final choice
+and cares about the size of the differences. The vector supplies the
+first two directly. An allocator that spends where the entries of $p$
+are close is a heuristic for the second, not a criterion.
 
 The regret analysis of \citet{odonoghue2021} depends on the VBOS
 tilt. Its measured distance from $p$ quantifies the approximation, but
@@ -752,8 +757,24 @@ those samplers, the replay method of \citet{li2011}, needs a
 uniformly random log because the sampler's own propensities were not
 available, and it discards every logged event whose random arm
 differs from the policy's choice, about all but one in $K$ for $K$
-arms. With the propensities computed, the production log itself
-becomes the evaluation set.
+arms. With the propensities computed, the production log itself becomes
+the evaluation set.
+
+Bayesian optimization has the same object. With $\theta_i = f(x_i)$
+at candidate points $x_1, \dots, x_n$, the vector $p$ is the
+posterior distribution of where the optimum lies among the
+candidates, which is the central object of entropy search
+\citep{hennig2012}, where it is approximated by expectation
+propagation. For a factor-structured posterior the computation here
+is a different route to it. The entropy-search acquisition
+$\alpha(a) = H(p) - \mathbb{E}_{Y_a \mid \mathcal{D}}[H(p^{Y_a})]$
+then needs three things, all available: the closure of
+Section~\ref{sec:posteriors} for the hypothetical posterior after
+measuring $a$, the computation for its vector, and a scalar
+quadrature for the expectation. The scope is finite candidates and
+factor beliefs. A continuous Gaussian process needs the candidates
+discretised and, for a dense kernel, a covariance approximation
+first.
 
 How much better the computed numbers are than counted draws depends
 on the factor rank. On the posteriors of the two experiments, where
@@ -776,14 +797,17 @@ at fault, since it uses the correlation. The loss is confined to the
 side that computes probabilities, and that is the side the computed
 vector replaces.
 
-Three things are open. The Monte Carlo rule on the correlated
+Four things are open. The Monte Carlo rule on the correlated
 posterior, the practitioner's alternative, has not been compared at
 matched cost across ranks. Shortlisting, where $\sum_{i \in S} p_i$
 is the exact chance that the winner is retained, is the application
 where the whole vector should change a decision most visibly, and has
 not been run. And the fine-tuning target of \citet{menet2026} uses
 marginals because the true vector was out of reach. For a factor
-posterior it no longer is.
+posterior it no longer is. And entropy search on a large candidate
+set with a few shared factors would show whether the computed vector
+makes that acquisition cheaper or more accurate than expectation
+propagation.
 
 \begin{thebibliography}{9}
 
@@ -803,6 +827,11 @@ multinomial probit. arXiv:2609.01133, 2026. Also SSRN 7307363.
 P.~I. Frazier, W.~B. Powell, and S.~Dayanik. A knowledge-gradient
 policy for sequential information collection. \emph{SIAM Journal on
 Control and Optimization}, 47(5):2410--2439, 2008.
+
+\bibitem[Hennig and Schuler(2012)]{hennig2012} P.~Hennig and
+C.~J. Schuler. Entropy search for information-efficient global
+optimization. \emph{Journal of Machine Learning Research},
+13:1809--1837, 2012.
 
 \bibitem[Li et~al.(2011)Li, Chu, Langford, and Wang]{li2011} L.~Li,
 W.~Chu, J.~Langford, and X.~Wang. Unbiased offline evaluation of
