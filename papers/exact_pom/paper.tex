@@ -544,10 +544,9 @@ A fourth rule is the one a practitioner would reach for: draw $M$
 samples from the correlated posterior and estimate $p$ by the argmax
 frequencies. It uses the correlation, costs $O(M n \rho)$, and needs
 $M$ of about $500$ to resolve a threshold of $0.95$ to within $0.01$,
-with the error growing as the threshold is approached. It is not run.
-The comparators run are the two marginal rules from the literature,
-and the comparison with the Monte Carlo rule at matched cost is
-open.
+with the error growing as the threshold is approached. It is not
+among the rules run, which are the two marginal rules from the
+literature.
 
 For the true vector the rule has a Bayesian guarantee. Let $\tau$ be
 the first time $\max_i p_i \ge 1 - \delta$, let $B$ be the budget, and
@@ -748,10 +747,8 @@ derandomization. The stopping problem is of that kind.
 
 The stopping experiment's loadings have rank at most one, and in the
 aligned regime the centered loadings are zero, so the exact rule faces
-an independent contest there while the marginal rules do not know it.
-Loadings that vary across both columns, with unequal residual
-variances, would test the computation where the correlation does not
-cancel.
+an independent contest there while the marginal rules do not know
+it.
 
 \section{Discussion}
 
@@ -843,18 +840,6 @@ the replicates at the same threshold. Thompson sampling itself is not
 at fault, since it uses the correlation. The loss is confined to the
 side that computes probabilities, and that is the side the computed
 vector replaces.
-
-Four things are open. The Monte Carlo rule on the correlated
-posterior, the practitioner's alternative, has not been compared at
-matched cost across ranks. Shortlisting, where $\sum_{i \in S} p_i$
-is the exact chance that the winner is retained, is the application
-where the whole vector should change a decision most visibly, and has
-not been run. And the fine-tuning target of \citet{menet2026} uses
-marginals because the true vector was out of reach. For a factor
-posterior it no longer is. And entropy search on a large candidate
-set with a few shared factors would show whether the computed vector
-makes that acquisition cheaper or more accurate than expectation
-propagation.
 
 \begin{thebibliography}{9}
 
