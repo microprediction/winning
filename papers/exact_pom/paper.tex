@@ -231,12 +231,13 @@ prior in which arms share features.
 \subsection{Simulation with common random numbers}
 \label{sec:crn}
 
-The result of this subsection is simple to state. When $n$ systems are
-simulated on shared random inputs, the uncertainty about their $n$
-unknown means is correlated, and the derivation shows that this
-correlation has the same shape as the shared inputs: a few common
-factors plus independent noise, with the number of factors equal to
-the number of shared input streams. Accumulating replicates sharpens
+The result of this subsection is simple to state. A simulation study
+runs each of $n$ systems many times, and each run is a replicate.
+When every replicate feeds the same random inputs to all $n$ systems,
+the uncertainty about the $n$ unknown means is correlated, and the
+derivation shows that this correlation has the same shape as the
+shared inputs: a few common factors plus independent noise, with as
+many factors as there are shared input streams. Accumulating replicates sharpens
 the posterior but never changes that shape. So the vector of
 Section~\ref{sec:computation} can be computed after every replicate
 in time linear in $n$, and the $n \times n$ posterior covariance is
@@ -244,8 +245,7 @@ never formed. The rest of the subsection sets up the model and proves
 the claim.
 
 A simulation study compares $n$ systems, such as the inventory
-policies of the introduction, by running each one many times and
-averaging its output. Each run is called a replicate. The unknown
+policies of the introduction, by running each one many times and averaging its output. The unknown
 $\theta_i$ is system $i$'s long-run average output.
 
 A standard way to compare systems more precisely is to give every
