@@ -23,7 +23,7 @@ renormalising away a lattice that failed to capture the field.
 import numpy as np
 
 from .core import as_loadings
-from ..outcomes import as_luce_temperature, as_order, as_soft_temperature
+from ..outcomes import as_luce_temperature, as_order
 from ..shapes import as_weights
 from ..rustconfig import load_fastrace
 from .races import (_as_temperature, _fit_cov, _factor_of_structure, _setup,
