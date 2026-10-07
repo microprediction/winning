@@ -181,8 +181,7 @@ wherever they exist.
 
 ## The papers
 
-Six manuscript projects live here, indexed with venue status in
-[papers/README.md](papers/README.md).
+The manuscripts live under [papers/](papers/README.md), one folder each.
 
 The correlated calibration is documented in *Scalable Share Calibration
 for Factor Multinomial Probit Models*
