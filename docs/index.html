@@ -218,7 +218,8 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         probabilities for Thompson sampling and entropy search</a> (2026, draft). The probability that an alternative
         is truly best, declared intractable in reinforcement learning
         and approximated there from marginal means and variances alone,
-        is a shared integral that quadrature evaluates in linear time
+        is a shared integral that quadrature evaluates in time linear in
+        the number of alternatives, at fixed factor rank and resolution,
         whenever the posterior covariance is factor-plus-diagonal. Two
         standard observation processes, common random numbers and
         per-arm Gaussian observations, keep the posterior in that form
