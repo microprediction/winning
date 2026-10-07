@@ -100,14 +100,8 @@ The third is Bayesian optimization. Entropy search
 that the optimum lies at each of $n$ candidate points, as what an
 optimizer should learn, and chooses each evaluation to reduce its
 entropy. \citet{hennig2012} call the vector intractable, approximate
-it by expectation propagation at a cost of $O(n^4)$, and run with fifty candidates.
-
-Expectation propagation accepts any covariance.
-The computation here accepts covariances whose dependence runs
-through a few shared variables, described as factors, blocks, nested
-groups or a tree, and it fits a dense covariance to that grammar on
-intake, with the residual of the fit reported as its error. For such
-covariances it is linear in $n$.
+it by expectation propagation at a cost of $O(n^4)$, and run with fifty candidates. Expectation propagation accepts any
+covariance.
 
 Correlation that comes from a few shared causes has a simple form.
 Each value is its own part plus a weighted sum of $\rho$ shared
@@ -148,9 +142,11 @@ The computation is the correlated-contest pricing pass of
 Equation~\eqref{eq:factormodel} and specialised to Gaussian noise.
 Nothing in it is new. The original is more general: it accepts any
 base distribution, and a covariance given as factor loadings, as
-blocks, as nested groups or as a tree, or a dense covariance fitted to
-one of those structures on the way in, and it also inverts the
-vector, recovering means from probabilities. The factor form of
+blocks, as nested groups or as a tree, or a dense covariance fitted to one of those structures on the way
+in, with the residual of that fit reported as its error. It also
+inverts the vector, recovering means from probabilities. For every
+structure in that grammar the cost is linear in $n$ at fixed
+resolution. The factor form of
 Equation~\eqref{eq:factor} with Gaussian noise is the case needed
 here.
 
