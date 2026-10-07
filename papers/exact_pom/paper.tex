@@ -70,9 +70,8 @@ reproducible without randomness, needs the numbers $p_i$ themselves.
 
 Thompson sampling runs in production wherever alternatives are
 compared under uncertainty: advertising, recommendation, clinical
-allocation, and now the fine-tuning of language models toward it
-\citep{menet2026}. Its action probabilities are the vector $p$. The
-policy never needs them as numbers, but much that surrounds the
+allocation, and now the fine-tuning of language models toward it \citep{menet2026}. The policy never needs the numbers
+$p_i$, but much that surrounds the
 policy does.
 
 Off-policy evaluation needs them as propensities, and an audit of why
@@ -156,8 +155,9 @@ posterior of exactly this form after every update: simulation under
 common random numbers, and a Gaussian bandit with a factor prior. In Bayesian optimization the form is a modelling choice, a kernel
 with finitely many features, or the intake fit of a dense kernel. In the simulation, a
 stopping rule on the computed vector stops sooner than rules on the
-marginal approximations at the same nominal threshold. In the bandit,
-sampling from it incurs less regret than they do.
+marginal approximations at the same nominal threshold. In the bandit, sampling from it incurs less regret than they do. In
+Bayesian optimization, entropy search can run on thousands of
+candidates rather than fifty.
 
 \section{The computation, restated from Cotton (2026)}
 \label{sec:computation}
@@ -264,9 +264,7 @@ shared inputs: a few common factors plus independent noise, with as
 many factors as there are shared input streams. Accumulating replicates sharpens
 the posterior but never changes that shape. So the vector of
 Section~\ref{sec:computation} can be computed after every replicate
-in time linear in $n$, and the $n \times n$ posterior covariance is
-never formed. The rest of the subsection sets up the model and proves
-the claim.
+in time linear in $n$, and the $n \times n$ posterior covariance is never formed.
 
 A simulation study compares $n$ systems, such as the inventory
 policies of the introduction, by running each one many times and averaging its output. The unknown
@@ -637,9 +635,9 @@ exact rule, and hit the budget far more often. The gap is largest in
 the aligned regime, where the leading systems' differences are
 tightly coupled. There the exact rule stops after $69.7$ replicates on
 average, against $175.6$ and $240.1$, and stops in 191 of 200 runs,
-against 140 and 109. An efficiency comparison at a matched true error
-would need thresholds calibrated to a common PCS, which this
-experiment does not do.
+against 140 and 109. The thresholds are nominal and not calibrated
+to a common PCS, so these ratios compare spend at a common threshold,
+not at a matched true error.
 
 The marginal-only estimates are far from the exact vector along the
 way. Before stopping in the aligned regime, F-LITE is at median
@@ -656,8 +654,8 @@ total-variation distance of the computed vector was $0.0015$.
 \section{Second experiment: a bandit with correlated arms}
 \label{sec:bandit}
 
-The second experiment is different from the first. It runs the
-bandit of Section~\ref{sec:bandit-posterior}, in which arms share
+The second experiment runs the bandit of
+Section~\ref{sec:bandit-posterior}, in which arms share
 features through a factor prior, and compares the four policies of
 Section~\ref{sec:surrogates}. It asks two things. The first is
 whether pulling
