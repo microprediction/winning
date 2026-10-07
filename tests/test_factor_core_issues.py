@@ -374,7 +374,10 @@ def test_topk_checks_the_invariants_it_returns_99():
     q = top_k_probabilities(np.array([9.23877796, -4.9945676, 6.54831504]),
                             2, D=np.array([998.259121, 0.0465499142,
                                            0.00819385198]), points=513)
-    assert abs(q.sum() - 2) < 1e-9 and q.max() <= 1.0
+    # 1e-8, not 1e-9: the count window relaxes delta to 1e-4 on this
+    # field so the capped lattice can resolve it (#386), and the mass
+    # check is then met to 3e-9
+    assert abs(q.sum() - 2) < 1e-8 and q.max() <= 1.0
     assert abs(q[2] - 0.533930405) < 1e-6
 
 

@@ -488,6 +488,56 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     return mu - mu.mean(), float(np.abs(np.log(pv) - lt).max()), max_iter
 
 
+def _validate_tree(parent, strength, n_clusters):
+    """A tree is a tree: one root, every parent an existing node, no
+    cycles, the cluster nodes are leaves. The kernels walk parent
+    pointers with `while parent[u] >= 0`, so a cycle -- [1, 0], or a
+    self-parent -- spun forever (#328). Linear time, before any walk."""
+    parent = np.asarray(parent)
+    nT = len(parent)
+    if np.ndim(strength) != 1 or len(strength) != nT:
+        raise ValueError(
+            f"strength must have one entry per tree node; got "
+            f"{np.shape(strength)} for {nT} nodes")
+    if not np.all(np.isfinite(strength)):
+        raise ValueError("strength has a non-finite entry")
+    bad = np.flatnonzero((parent < -1) | (parent >= nT))
+    if bad.size:
+        raise ValueError(
+            f"parent[{int(bad[0])}] = {int(parent[bad[0]])} is not -1 or a "
+            f"node index in [0, {nT})")
+    selfp = np.flatnonzero(parent == np.arange(nT))
+    if selfp.size:
+        t = int(selfp[0])
+        raise ValueError(f"parent contains a cycle: {t} -> {t}")
+    roots = np.flatnonzero(parent < 0)
+    if len(roots) != 1:
+        raise ValueError(
+            f"a tree has exactly one root (parent -1); got {len(roots)}")
+    state = np.zeros(nT, np.int8)                 # 0 unseen, 1 on path, 2 done
+    for t in range(nT):
+        path = []
+        u = t
+        while u >= 0 and state[u] == 0:
+            state[u] = 1
+            path.append(u)
+            u = int(parent[u])
+        if u >= 0 and state[u] == 1:
+            k = path.index(u)
+            cyc = " -> ".join(str(x) for x in path[k:] + [u])
+            raise ValueError(f"parent contains a cycle: {cyc}")
+        for v in path:
+            state[v] = 2
+    if n_clusters > nT:
+        raise ValueError(f"{n_clusters} clusters but only {nT} tree nodes")
+    kids_of_leaves = np.flatnonzero((parent >= 0) & (parent < n_clusters))
+    if kids_of_leaves.size:
+        t = int(kids_of_leaves[0])
+        raise ValueError(
+            f"node {t} has parent {int(parent[t])}, a cluster node; the "
+            f"first {n_clusters} nodes are the clusters and must be leaves")
+
+
 def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
                             points=257, qa=9):
     """P(i wins | min-wins) under a hierarchy of uniform shared effects.
@@ -505,6 +555,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
+    _validate_tree(parent, lam, nC)                  # #328
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
@@ -608,6 +659,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
+    _validate_tree(parent, lam, nC)                  # #328
     if np.any(lam[nC:] != 0.0):
         tot = sd ** 2 + v ** 2
         h = 1e-5 * float(np.sqrt(np.median(tot)))

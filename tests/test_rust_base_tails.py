@@ -36,7 +36,8 @@ def test_exponential_power_large_beta_matches_numpy():
     assert np.max(np.abs(pr - pp)) < 1e-9, (pr, pp)
 
 
-@pytest.mark.parametrize("beta", [0.5, 1.5, 4.0, 12.0, 25.0])
+# beta < 1 is refused since #103 (cusp regime); 1.0 is the new lower edge
+@pytest.mark.parametrize("beta", [1.0, 1.5, 4.0, 12.0, 25.0])
 def test_exponential_power_range_matches_numpy(beta):
     mu = np.array([-1.0, -.3, .2, .9])
     D = np.array([.3, 1., 2., 5.])

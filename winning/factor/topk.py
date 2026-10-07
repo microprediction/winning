@@ -47,7 +47,7 @@ import numpy as np
 from ..shapes import as_idio, as_loadings
 
 
-from .races import _jacobi_sweeps, BASES
+from .races import _jacobi_sweeps, BASES, _resolution
 from .blocks import TINY, roots_hermitenorm
 
 from ..rustconfig import load_fastrace
@@ -96,6 +96,36 @@ def _count_window_std(mu, sd, k, base_rows, delta, pad_sds, is_normal):
         return _fastrace.top_k_window(
             np.ascontiguousarray(mu, dtype=float),
             np.ascontiguousarray(sd, dtype=float), int(k), delta, pad_sds)
+    # delta is a request. A polynomial tail puts the 1e-12 count quantile
+    # so far out that the capped grid cannot resolve the bulk: Student
+    # t(2.1) gave a window of 1.2e5 at dx = 14 against a central scale of
+    # 0.22, captured 0.2% of the membership and raised (#386). Relax by
+    # factors of 100 (to at most 1e-4, as the win race's bulk window
+    # does) until the window fits the cap at half the narrowest runner's
+    # sd times the base's central scale, and say so.
+    res = _resolution(base_rows)
+    afford = 0.5 * max(float(np.min(sd)), 1e-300) * res * (_MAX_TOPK_POINTS - 1)
+    d = float(delta)
+    lo, hi = _count_window_at(mu, sd, k, base_rows, d, pad_sds)
+    while hi - lo > afford and d < 1e-4:
+        d = min(d * 100.0, 1e-4)
+        lo, hi = _count_window_at(mu, sd, k, base_rows, d, pad_sds)
+    if d > delta:
+        import warnings
+        warnings.warn(
+            f"top-k window relaxed delta from {delta:.0e} to {d:.0e}: this "
+            f"base's tail puts the requested count quantile further out "
+            f"than {_MAX_TOPK_POINTS} points can resolve, so the window is "
+            f"{hi - lo:.3g} units wide at the relaxed delta and exact there.",
+            RuntimeWarning, stacklevel=3)
+    return lo, hi
+
+
+_MAX_TOPK_POINTS = 8193
+
+
+def _count_window_at(mu, sd, k, base_rows, delta, pad_sds):
+    # standardised units: the widest sd is exactly 1, so no floor (#370)
     smax = float(sd.max())
 
     def mean_count(x):
@@ -228,7 +258,7 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
         return (dens * cdf).sum(axis=1) * dx
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
-    points = _resolved_points(lo, hi, sd, points)
+    points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     if is_normal and _HAVE_RUST:
         return np.asarray(_fastrace.top_k(
             np.ascontiguousarray(mu, dtype=float),
@@ -538,7 +568,7 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows)
-    points = _resolved_points(lo, hi, sd, points)
+    points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -593,7 +623,7 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows)
-    points = _resolved_points(lo, hi, sd, points)
+    points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     x = np.linspace(lo, hi, points)
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
@@ -649,7 +679,7 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     base_rows = BASES[base] if not callable(base) else base
     lo, hi = _count_window(mu, sd, k, base_rows,
                            is_normal=(base == "normal"))
-    points = _resolved_points(lo, hi, sd, points)
+    points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     if (base == "normal" and _HAVE_RUST
             and hasattr(_fastrace, "top_k_jacobians")):
         jm, js = _fastrace.top_k_jacobians(
@@ -696,7 +726,7 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
 # instead: exactly-2nd plus win is top-2.
 
 
-def _resolved_points(lo, hi, sd, points):
+def _resolved_points(lo, hi, sd, points, res=1.0):
     """Points enough to resolve the NARROWEST density on the window.
 
     The window is set by the widest runner and the grid by `points`, so a
@@ -714,13 +744,13 @@ def _resolved_points(lo, hi, sd, points):
     narrowest sd, capped at 8193, warning when the cap still leaves the
     lattice coarse.
     """
-    smin = max(float(np.min(sd)), 1e-300)
+    smin = max(float(np.min(sd)), 1e-300) * float(res)
     need = int(np.ceil((hi - lo) / (0.5 * smin))) + 1
     if need > 8193:
         import warnings
         warnings.warn(
             "top-k lattice cannot resolve the narrowest runner even at "
-            f"8193 points (min sd {smin:.1e} over a window of "
+            f"8193 points (min sd x central scale {smin:.1e} over a window of "
             f"{hi - lo:.3g}); memberships may carry percent-level error "
             "the mass check cannot see, since it is one scalar and "
             "runner-level errors of opposite sign cancel in it.",
@@ -742,7 +772,7 @@ def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
     quadrature grid is identical)."""
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
-    points = _resolved_points(lo, hi, sd, points)
+    points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     if is_normal and _HAVE_RUST and hasattr(_fastrace, "top_k_slopes"):
         q, sl = _fastrace.top_k_slopes(
             np.ascontiguousarray(mu, dtype=float),
@@ -974,7 +1004,10 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     lt1 = np.log(target1) - np.log1p(-target1)
     lt2 = np.log(target2) - np.log1p(-target2)
 
-    sd = np.ones(n) if D0 is None else np.sqrt(np.asarray(D0, float))
+    # D0 through as_idio, as every other variance here: a scalar D0 was a
+    # 0-d array that failed later with "input arrays have different
+    # dimensions", and a wrong length broadcast (#254)
+    sd = np.ones(n) if D0 is None else np.sqrt(as_idio(D0, n, positive=True))
     if mu0 is not None:
         mu = np.asarray(mu0, dtype=float) - np.mean(mu0)
         # the RETURN gauge (mean-zero mu, geometric-mean-one sigma) applied
@@ -1131,7 +1164,7 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
     python-computed window."""
     n = len(mu)
     lo, hi = _count_window(mu, sd, n - 1, base_rows, is_normal=is_normal)
-    points = _resolved_points(lo, hi, sd, points)
+    points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     if (is_normal and _HAVE_RUST
             and hasattr(_fastrace, "rank_marginal_jacobian")):
         p, jac = _fastrace.rank_marginal_jacobian(
@@ -1295,7 +1328,7 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
                                is_normal=(base == "normal"))
         # a LOCAL name: assigning `points` here would shadow the enclosing
         # parameter and leave it unbound on the compiled branch
-        pts = _resolved_points(lo, hi, sd, points)
+        pts = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
         if (base == "normal" and _HAVE_RUST
                 and hasattr(_fastrace, "rank_marginals")):
             flat = _fastrace.rank_marginals(

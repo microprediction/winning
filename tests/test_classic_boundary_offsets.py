@@ -46,8 +46,12 @@ def density():
     return skew_normal_density(50, 0.1)
 
 
-# the lattice's own truncation error at ordinary offsets, measured
-ORDINARY = 0.9999867465
+# The exhaustive total. This was 0.9999867465, "the lattice's own
+# truncation error at ordinary offsets", which was in fact the old
+# engine's survival-division and mean-multiplicity loss; the exact
+# dead-heat engine (#418/#362) pays every outcome, so the contract is
+# now the one this file always stated -- the claims sum to one.
+ORDINARY = 1.0
 TOL = 5e-9
 
 

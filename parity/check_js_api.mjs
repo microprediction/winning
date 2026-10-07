@@ -885,6 +885,109 @@ accepts("the inverse takes a scalar D, matching python",
   }
 }
 
+// --- the classic input contract (#339, #377)
+{
+  const dV = classic.skewNormalDensity(50, 0.1);
+  const offs = [-3, 0.5, 2];
+  const p0 = classic.statePricesFromOffsets(dV, offs);
+  accepts("raw counts price as their frequencies (#339)",
+          () => classic.statePricesFromOffsets(dV.map(x => 10 * x), offs),
+          q => q.every((x, i) => Math.abs(x - p0[i]) < 1e-15) &&
+               Math.abs(q.reduce((a, b) => a + b, 0) - 1) < 1e-13,
+          q => `[${q.map(x => x.toFixed(10)).join(", ")}]`);
+  for (const [bad, why, msg] of [
+    [[0, 0, 0, 0, 0, 0, 0], "zero mass", "no positive mass"],
+    [[0.2, -0.1, 0.9, 0, 0, 0, 0], "a negative atom", "negative atom"],
+    [[0.25, 0.25, 0.25, 0.25, 0, 0, 0, 0], "even length", "odd length"],
+    [[0.1, NaN, 0.9, 0, 0, 0, 0], "a NaN atom", "non-finite"],
+    [[0.1, Infinity, 0.9, 0, 0, 0, 0], "an infinite atom", "non-finite"],
+    [[0.25, 0.5, 0.25], "L = 1", "L >= 3"],
+  ]) {
+    rejects(classic.statePricesFromOffsets, [bad, [0, 0]],
+            `statePricesFromOffsets refuses ${why} (#339)`, msg);
+    rejects(classic.solveForImpliedOffsets, [[0.7, 0.3], bad],
+            `solveForImpliedOffsets refuses ${why} (#339)`, msg);
+  }
+  const d7 = [0, 0, 0.25, 0.5, 0.25, 0, 0];
+  const t7 = classic.statePricesFromOffsets(d7, [0, 0]);
+  accepts("the smallest lattice round-trips (#339)",
+          () => classic.solveForImpliedOffsets(t7, d7, { guess: [0, 0] }),
+          a => a.every(Number.isFinite) &&
+               classic.statePricesFromOffsets(d7, a).every((x, i) => Math.abs(x - t7[i]) < 1e-12),
+          a => `[${a.join(", ")}]`);
+  const dS = classic.skewNormalDensity(500, 0.01, { a: 1.5 });
+  const tgt = [0.4, 0.3, 0.2, 0.1];
+  const centre = a => { const m = a.reduce((x, y) => x + y, 0) / a.length; return a.map(x => x - m); };
+  const a1 = centre(classic.solveForImpliedOffsets(tgt, dS, { guess: [0, 0, 0, 0] }));
+  for (const c of [1.1, 2, 10])
+    accepts(`the inverse is invariant to target scale ${c} (#377)`,
+            () => centre(classic.solveForImpliedOffsets(tgt.map(x => c * x), dS,
+                                                        { guess: [0, 0, 0, 0] })),
+            a => a.every((x, i) => Math.abs(x - a1[i]) < 1e-12),
+            a => `[${a.map(x => x.toFixed(6)).join(", ")}]`);
+  rejects(classic.solveForImpliedOffsets, [[0.5, -0.1, 0.6], dS],
+          "the inverse refuses a negative target (#377)", "negative");
+  rejects(classic.solveForImpliedOffsets, [[0, 0], dS],
+          "the inverse refuses a zero-mass target (#377)", "no positive mass");
+  rejects(classic.solveForImpliedOffsets, [[0.5, NaN], dS],
+          "the inverse refuses a NaN target (#377)", "non-finite");
+}
+
+// --- exact dead heats (#418, #362, #348, #373, #369)
+// Closed forms or brute-force enumeration of every joint atom outcome
+// with a tied minimum split equally; python's
+// tests/test_classic_exact_dead_heats.py checks the same fixtures.
+{
+  const close = (a, b, tol) => a.length === b.length &&
+    a.every((x, i) => Math.abs(x - b[i]) < tol);
+  const fmt = p => `[${Array.from(p, x => x.toFixed(10)).join(", ")}]`;
+  const three = Array(17).fill(0); three[7] = 0.2; three[8] = 0.3; three[9] = 0.5;
+  accepts("a compact-support pair is exact (#418)",
+          () => classic.statePricesFromOffsets(three, [-1, 1]),
+          p => close(p, [0.95, 0.05], 1e-14), fmt);
+  accepts("disjoint support pays the certain winner (#418)",
+          () => classic.statePricesFromOffsets(three, [-2, 2]),
+          p => close(p, [1, 0], 1e-14), fmt);
+  const d3 = [0, 0, 0, 0, 0.25, 0.5, 0.25, 0, 0, 0, 0];
+  accepts("twenty iid entrants split the claim equally (#362)",
+          () => classic.statePricesFromOffsets(d3, Array(20).fill(0)),
+          p => close(p, Array(20).fill(0.05), 1e-14),
+          p => `sum ${p.reduce((a, b) => a + b, 0)}`);
+  accepts("unequal eight-runner field matches enumeration (#362)",
+          () => classic.statePricesFromOffsets(d3, [0, -1, 1, 0, 0, 0, 2, 0]),
+          p => close(p, [0.0918114072, 0.5380292620, 0.0029137021, 0.0918114072,
+                         0.0918114072, 0.0918114072, 0, 0.0918114072], 1e-10), fmt);
+  let g = Array.from({ length: 83 }, (_, i) => Math.exp(-0.5 * (i - 41) ** 2));
+  const gz = g.reduce((a, b) => a + b, 0); g = g.map(x => x / gz);
+  accepts("identical fractional runners are exchangeable (#348)",
+          () => classic.statePricesFromOffsets(g, [0.5, 0.5]),
+          p => close(p, [0.5, 0.5], 1e-15), fmt);
+  accepts("a fractional three-runner field is exhaustive (#348)",
+          () => classic.statePricesFromOffsets(g, [-2.5, 0.5, 3.5]),
+          p => Math.abs(p.reduce((a, b) => a + b, 0) - 1) < 1e-13, fmt);
+  const u = Array(83).fill(1 / 83);
+  for (const k of [10, 19, 39, -19, 19.5])
+    accepts(`a translated runner keeps its mass at ${k} (#373)`,
+            () => [classic.statePricesFromOffsets(u, [k]),
+                   classic.statePricesFromOffsets(u, [k, k])],
+            ([s, pr]) => Math.abs(s[0] - 1) < 1e-14 && close(pr, [0.5, 0.5], 1e-14),
+            ([s, pr]) => `${s[0]} ${fmt(pr)}`);
+  const dS = classic.skewNormalDensity(15, 0.2, { a: 1.5 });
+  const tS = classic.statePricesFromOffsets(dS, [6, -2]);
+  accepts("the default guess is one zero per price (#369)",
+          () => [classic.solveForImpliedOffsets(tS, dS),
+                 classic.solveForImpliedOffsets(tS, dS, { guess: [0, 0] })],
+          ([a, b]) => close(a, b, 1e-15), ([a, b]) => `${fmt(a)} vs ${fmt(b)}`);
+  rejects(() => classic.solveForImpliedOffsets(tS, dS, { guess: [0, 1, 2, 3, 4] }),
+          [], "a guess of the wrong length is refused (#369)",
+          "one starting offset per price");
+  const tC = classic.statePricesFromOffsets(three, [-1.5, 0, 0.7, 2]);
+  accepts("the inverse converges to the exact forward map",
+          () => classic.statePricesFromOffsets(three,
+            classic.solveForImpliedOffsets(tC, three, { guess: [0, 0, 0, 0], nIter: 10 })),
+          p => close(p, tC, 1e-6), fmt);
+}
+
 // --- state prices stay exhaustive at boundary offsets (#292)
 // statePricesFromOffsets builds the field with shiftedCdf, which goes
 // through lowHigh and PINS any offset at or past L-2 to the boundary.
@@ -896,7 +999,7 @@ accepts("the inverse takes a scalar D, matching python",
 // clamped correctly all along.
 {
   const dB = classic.skewNormalDensity(50, 0.1);
-  const ORD = 0.9999867465;
+  const ORD = 1;   // exhaustive; 0.99998675 was the old engine's loss (#418, #362)
   const total = a => classic.statePricesFromOffsets(dB, [a, -a])
     .reduce((x, y) => x + y, 0);
 
@@ -1125,7 +1228,7 @@ accepts("the inverse takes a scalar D, matching python",
   holds("abilitiesFromTopk is unit-equivariant (#100)",
         f.info.converged && Math.abs(f.mu[0] / 1e-3 + 0.8) < 1e-6);
   rejects(topk.abilitiesFromTopk, [[.5, NaN, .5], 1], "non-finite top-k target refused (#110)",
-          "not finite");
+          "not a finite");
 }
 
 // factor-core race batch: #263 weights, #110 targets, #89 structured
@@ -1188,6 +1291,428 @@ accepts("the inverse takes a scalar D, matching python",
   holds("sharp rank-one top-1 equals the race (#340)",
         Math.max(...race.map((x, i) => Math.abs(x - top1[i]))) < 1e-6 &&
         Math.max(...race.map((x, i) => Math.abs(x - R[i]))) < 1e-6);
+}
+
+
+// --- quadrature orders are counts: "15" from a form control used to be
+// new Array("15") -- ONE node -- and priced a different model (#442)
+{
+  const muQ = [0.67, 0.76, -1.62, -0.01], VQ = [[-0.65], [0.69], [-1.36], [-1.30]];
+  for (const bad of ["15", true, null, 0, 1.5, NaN, Infinity])
+    rejects(topk.topKProbabilities, [muQ, 1, { V: VQ, qa: bad, points: 129 }],
+            `topKProbabilities refuses qa=${JSON.stringify(bad)}`);
+  rejects(blocks.blockRaceProbabilities,
+          [[-0.4, -0.1, 0.2, 0.5], [0, 0, 1, 1], [1.4, 0.7, 1.1, 0.3], [0.2, 0.3, 0.25, 0.4],
+           { qa: "9", points: 129 }], "blockRaceProbabilities refuses qa='9'");
+  rejects(blocks.nestedRaceProbabilities,
+          [[-0.4, -0.1, 0.2, 0.5], [0, 0, 1, 1], [1.4, 0.7, 1.1, 0.3], [0.2, 0.3, 0.25, 0.4],
+           { coupling: [[-0.7], [0.4], [-0.2], [0.6]], qf: "15", points: 129 }],
+          "nestedRaceProbabilities refuses qf='15'");
+  rejects(core.hermite1, ["15"], "hermite1 refuses a string order");
+}
+
+// --- classic: offsets and warm starts are finite numbers (#438); typed
+// vectors are the same input as plain ones (#329); nIter is a finite
+// positive integer (#401)
+{
+  const dens = classic.skewNormalDensity(50, 0.1);
+  for (const bad of [NaN, undefined, "bad", Infinity, null, true])
+    rejects(classic.statePricesFromOffsets, [dens, [0, bad]],
+            `statePricesFromOffsets refuses offset ${String(bad)}`);
+  rejects(classic.solveForImpliedOffsets, [[0.8, 0.2], dens, { guess: [0, NaN] }],
+          "solveForImpliedOffsets refuses a NaN guess");
+  const plain = classic.statePricesFromOffsets(dens, [-2, 0, 2]);
+  accepts("typed offsets price the same race (#329)",
+          () => classic.statePricesFromOffsets(dens, new Float64Array([-2, 0, 2])),
+          v => Math.max(...v.map((x, i) => Math.abs(x - plain[i]))) === 0);
+  const inv = classic.solveForImpliedOffsets([0.5, 0.3, 0.2], dens, { guess: [0, 0, 0] });
+  accepts("typed prices and guess invert the same (#329)",
+          () => classic.solveForImpliedOffsets(new Float64Array([0.5, 0.3, 0.2]), dens,
+                                               { guess: new Float64Array([0, 0, 0]) }),
+          v => Math.max(...v.map((x, i) => Math.abs(x - inv[i]))) === 0);
+  const div = classic.dividendImpliedAbility([2, 4, 8], dens);
+  accepts("dividendImpliedAbility takes a typed book (#329)",
+          () => classic.dividendImpliedAbility(new Float64Array([2, 4, 8]), dens),
+          v => Math.max(...v.map((x, i) => Math.abs(x - div[i]))) === 0);
+  for (const bad of [0, -1, 0.5, NaN, Infinity, "3", true, null])
+    rejects(classic.solveForImpliedOffsets,
+            [[0.6, 0.3, 0.1], dens, { guess: [0, 0, 0], nIter: bad }],
+            `solveForImpliedOffsets refuses nIter=${JSON.stringify(bad)}`, "nIter");
+  accepts("solveForImpliedOffsets keeps integer budgets",
+          () => classic.solveForImpliedOffsets([0.6, 0.3, 0.1], dens, { guess: [0, 0, 0], nIter: 2 }),
+          v => v.every(Number.isFinite));
+}
+
+// --- top-k/rank doors: finite nonempty abilities (#440), typed vectors
+// (#334), finite positive budgets (#413), the effective-pair damping
+// python got for #151 (#408), and D0 through asIdio (#254)
+{
+  const D3 = [1, 1, 1];
+  for (const bad of [[0, NaN, 1], [0, Infinity, 1], [0, -Infinity, 1]]) {
+    rejects(topk.topKProbabilities, [bad, 1, { D: D3, points: 65 }], "topKProbabilities refuses non-finite mu", "not finite");
+    rejects(topk.bottomKProbabilities, [bad, 1, { D: D3, points: 65 }], "bottomKProbabilities refuses non-finite mu", "not finite");
+    rejects(topk.topKJacobians, [bad, 1, { D: D3, points: 65 }], "topKJacobians refuses non-finite mu", "not finite");
+    rejects(topk.rankProbabilities, [bad, { D: D3, points: 65 }], "rankProbabilities refuses non-finite mu", "not finite");
+  }
+  rejects(topk.rankProbabilities, [[], { D: [], points: 65 }], "rankProbabilities refuses an empty field", "empty");
+  const mu = [-0.5, 0, 0.5], D = [0.7, 1, 1.3], V = [-0.4, 0.1, 0.6];
+  const ref = topk.topKProbabilities(mu, 2, { D, V });
+  accepts("typed mu/D/V give the same top-k (#334)",
+          () => topk.topKProbabilities(new Float64Array(mu), 2,
+                  { D: new Float64Array(D), V: new Float64Array(V) }),
+          v => Math.max(...v.map((x, i) => Math.abs(x - ref[i]))) === 0);
+  for (const bad of [0, -1, 0.5, NaN, Infinity, "80", true])
+    rejects(topk.abilitiesFromTopk, [[0.5, 0.3, 0.2], 1, { nIter: bad }],
+            `abilitiesFromTopk refuses nIter=${JSON.stringify(bad)}`, "nIter");
+  for (const [n, eps] of [[3, 6e-4], [10, 1e-4]]) {
+    const p = [0.6, 0.4, ...Array(n - 2).fill(eps)];
+    const t = p.reduce((a, b) => a + b, 0);
+    const pp = p.map(v => v / t);
+    const Dn = Array(n).fill(3.2 ** 2);
+    accepts(`abilitiesFromTopk converges on #151's effective pair, n=${n} (#408)`,
+            () => topk.abilitiesFromTopk(pp, 1, { D: Dn, points: 500, returnInfo: true }),
+            o => o.info.converged && o.info.maxLogitResidual < 1e-8,
+            o => `residual ${o.info.maxLogitResidual.toExponential(2)}`);
+  }
+  const q1 = topk.topKProbabilities([-1.1, -0.2, 0.4, 0.9], 1, { D: [0.5, 0.8, 1.2, 1.5], points: 513 });
+  const q2 = topk.topKProbabilities([-1.1, -0.2, 0.4, 0.9], 2, { D: [0.5, 0.8, 1.2, 1.5], points: 513 });
+  for (const bad of [0, NaN, -1, [1, 1, 1]])
+    rejects(topk.locScaleFromTopkPair, [q1, 1, q2, 2, { D0: bad, points: 513, nIter: 2 }],
+            `locScaleFromTopkPair refuses D0=${JSON.stringify(bad)} (#254)`);
+  const a1 = topk.locScaleFromTopkPair(q1, 1, q2, 2, { D0: [1, 1, 1, 1], points: 513, nIter: 3, returnInfo: true });
+  accepts("a scalar D0 is the broadcast vector (#254)",
+          () => topk.locScaleFromTopkPair(q1, 1, q2, 2, { D0: 1, points: 513, nIter: 3, returnInfo: true }),
+          o => Math.max(...o.mu.map((x, i) => Math.abs(x - a1.mu[i]))) === 0);
+}
+
+// --- block/tree doors: loadings through asLoadings (#335), tree topology
+// validated before any parent walk (#328), finite positive maxIter and a
+// no-progress break (#421), caller nodes validated (#290)
+{
+  const mu = [-0.8, -0.1, 0.3, 0.9], cl = [0, 0, 1, 1], D = [0.7, 1.0, 0.8, 1.1];
+  const v = [0.8, 0.4, 0.3, -0.2];
+  const VV = [[0.8, 0.2], [0.4, -0.5], [0.3, 0.7], [-0.2, 0.4]];
+  const VT = [[0.8, 0.4, 0.3, -0.2], [0.2, -0.5, 0.7, 0.4]];
+  const flat = blocks.blockRaceProbabilities(mu, cl, v, D);
+  accepts("a (1, n) rank-one loading is the flat one (#335)",
+          () => blocks.blockRaceProbabilities(mu, cl, [v], D),
+          p => Math.max(...p.map((x, i) => Math.abs(x - flat[i]))) < 1e-15);
+  const Jf = blocks.blockRaceJacobian(mu, cl, v, D);
+  accepts("a (1, n) rank-one loading has the flat Jacobian (#335)",
+          () => blocks.blockRaceJacobian(mu, cl, [v], D),
+          J => Math.max(...J.flat().map((x, i) => Math.abs(x - Jf.flat()[i]))) < 1e-15);
+  const r2 = blocks.blockRaceProbabilities(mu, cl, VV, D);
+  accepts("an (r, n) loading is the (n, r) one (#335)",
+          () => blocks.blockRaceProbabilities(mu, cl, VT, D),
+          p => Math.max(...p.map((x, i) => Math.abs(x - r2[i]))) < 1e-15);
+  rejects(blocks.blockRaceProbabilities, [mu, cl, [[0.8, 0.2], [0.4], [0.3, 0.7], [-0.2, 0.4]], D],
+          "a ragged block loading is refused, not zero-padded (#335)", "ragged");
+  rejects(blocks.nestedRaceProbabilities, [mu, cl, [[0.8, 0.2], [0.4], [0.3, 0.7], [-0.2, 0.4]], D,
+          { coupling: [0.2, -0.1, 0.3, 0.0] }], "nested refuses a ragged loading (#335)", "ragged");
+  // a cycle used to spin forever; each of these must come back at once
+  const tr = (parent, strength, label, expect) =>
+    rejects(blocks.treeRaceProbabilities, [[0, 0], [0, 1], [0, 0], [1, 1], parent, strength,
+            { points: 33, qa: 3 }], label, expect);
+  tr([1, 0], [0.2, 0.2], "a two-node parent cycle is refused (#328)");
+  tr([2, 2, 2], [0, 0, 0.3], "a self-parent is refused (#328)", "cycle");
+  tr([2, 2, -1, 3], [0, 0, 0.3, 0.1], "a disconnected self-loop is refused (#328)", "cycle");
+  tr([2, 2, 5], [0, 0, 0.3], "an out-of-range parent is refused (#328)");
+  tr([2, 2, -1], [0, 0], "parent/strength length mismatch is refused (#328)", "strength");
+  tr([2, -1, -1], [0, 0, 0.3], "two roots are refused (#328)", "one root");
+  rejects(blocks.treeRaceJacobian, [[0, 0], [0, 1], [0, 0], [1, 1], [1, 0], [0.2, 0.2], { points: 33, qa: 3 }],
+          "treeRaceJacobian refuses the cycle too (#328)");
+  accepts("a valid tree still prices", () => blocks.treeRaceProbabilities(
+            [0, 0.3], [0, 1], [0.2, 0.2], [1, 1], [2, 2, -1], [0, 0, 0.5], { points: 129, qa: 7 }),
+          p => Math.abs(p[0] + p[1] - 1) < 1e-12 && p[0] > p[1]);
+  const pT = [0.6, 0.25, 0.1, 0.05], clB = [0, 0, 1, 1], ldB = [0.9, 0.6, 0.8, 0.3], DB = [0.19, 0.64, 0.36, 0.91];
+  for (const bad of [0, -1, 0.5, NaN, Infinity])
+    rejects(blocks.abilitiesFromBlockRace, [pT, clB, ldB, DB, { maxIter: bad, tol: Number.MIN_VALUE }],
+            `abilitiesFromBlockRace refuses maxIter=${bad} (#421)`, "maxIter");
+  accepts("abilitiesFromBlockRace reports the Newton steps it took (#421)",
+          () => blocks.abilitiesFromBlockRace(pT, clB, ldB, DB),
+          o => o.iterations <= 5 && o.residual < 1e-10, o => `${o.iterations} steps`);
+  accepts("a sub-machine tol stops when no step can be accepted (#421)",
+          () => blocks.abilitiesFromBlockRace(pT, clB, ldB, DB, { maxIter: 1000, tol: Number.MIN_VALUE }),
+          o => o.iterations < 1000, o => `${o.iterations} steps`);
+  for (const w of [[1.01, -0.01], [0.5, 0.5, 100], [0.5, NaN]])
+    rejects(blocks.blockRaceProbabilities, [mu, cl, v, D, { points: 257, nodes: { nodes: [[-1], [1]], w } }],
+            `caller block nodes refuse w=${JSON.stringify(w)} (#290)`);
+}
+
+// --- the winner race: typed vectors (#334), whole factor rules (#290),
+// the target contract before structure dispatch (#387), honest inverse
+// diagnostics (#354), the pair shortcut only for the automatic rule
+// (#374), one factor-rule chooser for forward and Jacobian (#325), a
+// Factor structure keeps the caller's rule (#209), scalar D in the
+// Jacobian (#254), the base-aware bulk window (#380), a KKT stop in
+// polishRace (#379), typed name caps (#334)
+{
+  const mu = [-0.5, 0, 0.5], D = [0.7, 1, 1.3], V = [-0.4, 0.1, 0.6];
+  const ref = races.raceProbabilities(mu, { D, V });
+  accepts("typed mu/D/V price the same race (#334)",
+          () => races.raceProbabilities(new Float64Array(mu), { D: new Float64Array(D), V: new Float64Array(V) }),
+          p => Math.max(...p.map((x, i) => Math.abs(x - ref[i]))) === 0);
+  const inv = races.abilitiesFromRace([0.5, 0.3, 0.2], { D });
+  accepts("a typed target inverts the same (#334)",
+          () => races.abilitiesFromRace(new Float64Array([0.5, 0.3, 0.2]), { D }),
+          m => Math.max(...m.map((x, i) => Math.abs(x - inv[i]))) === 0);
+
+  const V2 = [[1], [0.2], [-0.8]];
+  rejects(races.raceProbabilities, [[-0.4, 0.2, 0.8], { V: V2, D: [1, 1, 1], F: [[1000]] }],
+          "a lone F is refused, not replaced (#290)", "BOTH");
+  rejects(races.raceProbabilities, [[-0.4, 0.2, 0.8], { V: V2, D: [1, 1, 1], W: [12345] }],
+          "a lone W is refused, not replaced (#290)", "BOTH");
+  rejects(polish.raceJacobian, [[-0.4, 0.2, 0.8], { V: V2, D: [1, 1, 1], F: [[1]] }],
+          "raceJacobian refuses a lone F (#290)", "BOTH");
+  rejects(races.abilitiesFromRace, [[0.8, 0.2], { V: [[1], [-1]], D: [1, 1], F: [[-1], [1]], W: [0.25, 0.25, 0.5] }],
+          "the pair inverse validates W before any shortcut (#290)", "one weight per");
+
+  const nested = structures.Nested([0, 0, 1], [0.2, 0.3, 0.4], [1, 1, 1], [0.1, 0.2, 0.3], 0.5);
+  for (const s of [structures.Independent([1, 1, 1]), nested]) {
+    rejects(races.abilitiesFromRace, [[0.6, 0.4, 0], { structure: s, points: 129, qa: 7, qf: 7 }],
+            `${s.kind}: a zero share is refused before dispatch (#387)`, "positive");
+    rejects(races.abilitiesFromRace, [[0.6, 0.5, -0.1], { structure: s, points: 129, qa: 7, qf: 7 }],
+            `${s.kind}: a negative share is refused (#387)`, "positive");
+    accepts(`${s.kind}: targetFloor and returnInfo reach the grammar (#387)`,
+            () => races.abilitiesFromRace([0.6, 0.4, 0], { structure: s, points: 129, qa: 7, qf: 7,
+                                                           targetFloor: 1e-4, returnInfo: true }),
+            o => o.floored[2] === true && !o.floored[0] && o.converged && o.mu.every(Number.isFinite));
+  }
+
+  // #354: a starved solve warns; iterations are the ones actually run
+  const warned = [];
+  const ow = console.warn;
+  console.warn = (...x) => warned.push(x.join(" "));
+  races.abilitiesFromRace([0.9, 0.09, 0.01], { nIter: 1, tol: 1e-12, points: 513 });
+  console.warn = ow;
+  holds("a starved inverse warns (#354)", warned.some(w => w.includes("did not converge")));
+  accepts("a uniform target reports one iteration (#354)",
+          () => races.abilitiesFromRace([1 / 3, 1 / 3, 1 / 3], { points: 513, returnInfo: true }),
+          o => o.iterations === 1 && o.converged);
+  accepts("an ordinary target reports fewer than nIter (#354)",
+          () => races.abilitiesFromRace([0.5, 0.3, 0.2], { points: 513, returnInfo: true }),
+          o => o.iterations < 60 && o.converged, o => `${o.iterations}`);
+  for (const bad of [0, -1, 0.5, NaN, Infinity])
+    rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { nIter: bad }],
+            `abilitiesFromRace refuses nIter=${bad}`, "nIter");
+
+  // #374: a translated Hermite rule and a two-point law, both through
+  // the actual forward rather than the Gaussian pair closed form
+  const { F: hF, W: hW } = core.hermiteNodes(1, 31);
+  for (const [label, opts, truth] of [
+    ["translated Hermite", { V: [[0], [1]], D: [1, 1], F: hF.map(([x]) => [x + 1]), W: hW, points: 257 }, [0, 1]],
+    ["two-point law", { V: [[0], [1]], D: [0.05, 0.05], F: [[-1], [1]], W: [0.5, 0.5], points: 1025 }, [-0.4, 0.4]],
+  ]) {
+    const target = races.raceProbabilities(truth, opts);
+    accepts(`the pair inverse reprices a ${label} rule (#374)`,
+            () => races.abilitiesFromRace(target, { ...opts, returnInfo: true }),
+            o => {
+              const back = races.raceProbabilities(o.mu, opts);
+              return o.converged && Math.max(...back.map((x, i) => Math.abs(x - target[i]))) < 1e-7;
+            });
+  }
+
+  // #325: the Jacobian differentiates the forward's own rule, on both
+  // sides of the rank-one midpoint handoff
+  const fdGap = (m, opts) => {
+    const J = polish.raceJacobian(m, opts);
+    let worst = 0;
+    for (let j = 0; j < m.length; j++) {
+      const a = m.slice(), b = m.slice(); a[j] += 1e-5; b[j] -= 1e-5;
+      const pa = races.raceProbabilities(a, opts), pb = races.raceProbabilities(b, opts);
+      for (let i = 0; i < m.length; i++)
+        worst = Math.max(worst, Math.abs(J[i][j] - (pa[i] - pb[i]) / 2e-5));
+    }
+    return worst;
+  };
+  for (const Dk of [[0.01, 0.01, 0.01], [0.5, 0.5, 0.5]])
+    accepts(`raceJacobian matches the forward's rule at D=${Dk[0]} (#325)`,
+            () => fdGap([-0.2, 0, 0.3], { V: [[-1], [0], [1]], D: Dk, points: 513 }),
+            w => w < 1e-6, w => w.toExponential(2));
+  accepts("raceJacobian matches the forward's escalated rank-2 rule (#325)",
+          () => fdGap([-0.2, 0, 0.3], { V: [[-1, 0.5], [0, -1], [1, 0.4]], D: [0.02, 0.02, 0.02], points: 257 }),
+          w => w < 1e-5, w => w.toExponential(2));
+
+  // #209: the Factor structure keeps the caller's rule in forward,
+  // Jacobian and inverse, and a rule's scale is irrelevant
+  const fo = { F: [[-3], [3]], W: [0.5, 0.5], points: 257 };
+  const sF = structures.Factor([[-1], [0], [1]], [1, 1, 1]);
+  const direct = races.raceProbabilities([0, 0.4, 1], { V: [[-1], [0], [1]], D: [1, 1, 1], ...fo });
+  accepts("structure: Factor prices with the caller's F/W (#209)",
+          () => races.raceProbabilities([0, 0.4, 1], { structure: sF, ...fo }),
+          p => Math.max(...p.map((x, i) => Math.abs(x - direct[i]))) === 0);
+  accepts("the structured Factor Jacobian is the derivative of its forward (#209)",
+          () => fdGap([0, 0.4, 1], { structure: sF, ...fo }), w => w < 1e-6, w => w.toExponential(2));
+  const J1 = polish.raceJacobian([0, 0.4, 1], { V: [[-1], [0], [1]], D: [1, 1, 1], ...fo });
+  accepts("raceJacobian is invariant to W -> cW (#209)",
+          () => polish.raceJacobian([0, 0.4, 1], { V: [[-1], [0], [1]], D: [1, 1, 1], ...fo, W: [5, 5] }),
+          J => Math.max(...J.flat().map((x, i) => Math.abs(x - J1.flat()[i]))) < 1e-15);
+  rejects(races.raceProbabilities, [[0, 0.4, 1], { structure: sF, V: [[1], [0], [-1]] }],
+          "structure= and V= together are refused", "not both");
+  rejects(races.raceProbabilities, [[0, 0.4, 1], { structure: structures.Blocks([0, 0, 1], [0.5, 0.5, 0.5], [1, 1, 1]), ...fo }],
+          "a Blocks structure refuses F/W it would ignore");
+
+  // #254: the Jacobian's D goes through asIdio like the forward's
+  const Jv = polish.raceJacobian([-0.4, 0, 0.4], { D: [1, 1, 1] });
+  accepts("raceJacobian broadcasts a scalar D (#254)",
+          () => polish.raceJacobian([-0.4, 0, 0.4], { D: 1 }),
+          J => Math.max(...J.flat().map((x, i) => Math.abs(x - Jv.flat()[i]))) === 0);
+
+  // #380: a callable base's own tail sets the bulk window; Student-t(3)
+  // at 4001 points was stuck 1.05e-3 TV from the improper integral
+  const n40 = 40;
+  const m40 = Array.from({ length: n40 }, (_, i) => 1.7 * Math.sin(1.37 * i) + 0.7 * Math.cos(0.43 * i));
+  const D40 = Array.from({ length: n40 }, (_, i) => Math.exp(1.1 * Math.sin(0.91 * i) - 0.2 * Math.cos(0.37 * i)));
+  const st3 = z => [Math.max(0.5 - (Math.atan(z) + z / (1 + z * z)) / Math.PI, 1e-300),
+                    2 / (Math.PI * (1 + z * z) ** 2), -8 * z / (Math.PI * (1 + z * z) ** 3)];
+  const owarn = console.warn; console.warn = () => {};
+  const p40 = races.raceProbabilities(m40, { D: D40, base: st3, points: 4001 });
+  console.warn = owarn;
+  holds("a Student-t(3) base gets a Student-t window (#380)",
+        Math.abs(p40[8] - 0.22863979140410515) < 2e-6 && Math.abs(p40[22] - 0.21438380857304878) < 2e-6,
+        `${p40[8]} ${p40[22]}`);
+
+  // #379: the nearest feasible race, not the first feasible iterate
+  accepts("polishRace stops at a KKT point, cap binding (#379)",
+          () => polish.polishRace({ mu0: [-1.5, -1.5, 3], D: [1, 1, 1], groups: [[[0, 1], 0.9]], points: 257 }),
+          o => Math.abs(o.p[0] + o.p[1] - 0.9) < 1e-6 && o.info.active.includes(0)
+               && Math.abs(o.info.muDistance - 2.7827022862) < 1e-5,
+          o => `group ${(o.p[0] + o.p[1]).toFixed(6)}, distance ${o.info.muDistance}`);
+  // #334: typed name caps are caps, not "no cap"
+  const capsP = polish.polishRace({ p0: [0.1, 0.1, 0.8], D: [1, 1, 1], nameCaps: [0.4, 0.4, 0.4], points: 257 });
+  accepts("typed nameCaps constrain like plain ones (#334)",
+          () => polish.polishRace({ p0: [0.1, 0.1, 0.8], D: [1, 1, 1], nameCaps: new Float64Array([0.4, 0.4, 0.4]), points: 257 }),
+          o => o.info.active.length === 1 && Math.max(...o.p.map((x, i) => Math.abs(x - capsP.p[i]))) < 1e-12);
+  const cm = polish.concentrationMatrix(3, { nameCaps: new Float64Array([0.4, 0.4, 0.4]) });
+  holds("concentrationMatrix reads typed caps (#334)", cm.A.length === 3 && cm.b.every(v => v === 0.4));
+}
+
+// --- linkage helpers: a distance matrix is symmetric (#361); maxclust
+// cuts at a distance level and keeps tied merges together (#346)
+{
+  const A = [[0, 0.1, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0.1, 0.5, 0, 0.1], [0.5, 0.1, 0.5, 0]];
+  const AT = A.map((_, i) => A.map(r => r[i]));
+  rejects(structures.averageLinkage, [A], "averageLinkage refuses an asymmetric matrix (#361)", "symmetric");
+  rejects(structures.averageLinkage, [AT], "...and its transpose (#361)", "symmetric");
+  rejects(structures.averageLinkage, [[[0, 1], [1, 0], [1, 1]]], "a non-square matrix is refused (#361)", "square");
+  rejects(structures.averageLinkage, [[[0, -1], [-1, 0]]], "a negative distance is refused (#361)", "negative");
+  rejects(structures.averageLinkage, [[[1, 1], [1, 0]]], "a nonzero diagonal is refused (#361)", "diagonal");
+  rejects(structures.averageLinkage, [[[0, NaN], [NaN, 0]]], "a NaN distance is refused (#361)", "finite");
+  accepts("tolerance-level asymmetry is averaged (#361)",
+          () => structures.averageLinkage([[0, 1, 4], [1 + 1e-12, 0, 2], [4, 2, 0]]),
+          Z => Z.length === 2 && Z[0][0] === 0 && Z[0][1] === 1);
+  const Z = [[0, 1, 0, 2], [2, 3, 0, 2], [4, 5, 1, 4]];
+  const want = { 1: [0, 0, 0, 0], 2: [0, 0, 1, 1], 3: [0, 0, 1, 1], 4: [0, 1, 2, 3], 5: [0, 1, 2, 3] };
+  for (const k of [1, 2, 3, 4, 5])
+    holds(`cutLinkage matches scipy maxclust at k=${k} (#346)`,
+          JSON.stringify(structures.cutLinkage(Z, 4, k)) === JSON.stringify(want[k]));
+  const Zs = [[2, 3, 0, 2], [0, 1, 0, 2], [4, 5, 1, 4]];
+  holds("swapping tied rows does not change the partition (#346)",
+        JSON.stringify(structures.cutLinkage(Zs, 4, 3)) === JSON.stringify([0, 0, 1, 1]));
+  const Ze = [[0, 1, 0.5, 2], [2, 3, 0.5, 2], [4, 5, 0.5, 4]];
+  holds("an all-equal linkage is indivisible below n (#346)",
+        JSON.stringify(structures.cutLinkage(Ze, 4, 3)) === JSON.stringify([0, 0, 0, 0]));
+  for (const bad of [0, 1.5, NaN])
+    rejects(structures.cutLinkage, [Z, 4, bad], `cutLinkage refuses k=${bad} (#346)`, "k must");
+}
+
+// --- demo helpers: structureCov for every grammar (#337); fitGrammar
+// validates its input (#357), keeps a pair's contrast and is scale
+// equivariant (#341), and does not cut a tied eigenspace (#383); the
+// comparison arms are scale- and common-mode-free (#375, #394); and
+// Mendell-Elston is label-free on ties (#287)
+{
+  const dsum = (A, B) => Math.max(...A.flat().map((x, i) => Math.abs(x - B.flat()[i])));
+  const Dd = [1, 4, 0.25];
+  holds("structureCov(Independent) is diag(D) (#337)",
+        dsum(demo.structureCov(structures.Independent(Dd)), Dd.map((d, i) => Dd.map((_, j) => (i === j ? d : 0)))) === 0);
+  const nest = structures.Nested([0, 0, 1, 1], [0.5, 0.2, 0.4, -0.3], [0.8, 1.1, 0.9, 1.2], [0.6, -0.4, 0.3, -0.5], 0.7);
+  const wantN = nest.D.map((d, i) => nest.D.map((_, j) => (i === j ? d : 0)
+    + (nest.cluster[i] === nest.cluster[j] ? nest.loading[i] * nest.loading[j] : 0)
+    + 0.49 * nest.coupling[i] * nest.coupling[j]));
+  holds("structureCov(Nested) adds the coupling (#337)", dsum(demo.structureCov(nest), wantN) < 1e-15);
+  const L2 = [[0.6, 0.2], [-0.2, 0.5], [0.4, -0.3], [-0.5, -0.1]], DB = [0.6, 0.7, 0.8, 0.9], clB = [0, 0, 1, 1];
+  const wantB = DB.map((d, i) => DB.map((_, j) => (i === j ? d : 0)
+    + (clB[i] === clB[j] ? L2[i][0] * L2[j][0] + L2[i][1] * L2[j][1] : 0)));
+  holds("structureCov(Blocks) dots rank-r rows (#337)",
+        dsum(demo.structureCov({ kind: "Blocks", cluster: clB, loading: L2, D: DB }), wantB) < 1e-15);
+  const Vf = [1.4, -0.8, 0.9, -1.2], Df = [0.2, 0.3, 0.25, 0.35];
+  holds("structureCov(Factor) reads a flat V as rank one (#337)",
+        dsum(demo.structureCov(structures.Factor(Vf, Df)),
+             Df.map((d, i) => Df.map((_, j) => Vf[i] * Vf[j] + (i === j ? d : 0)))) < 1e-15);
+  rejects(demo.structureCov, [{ kind: "Factr", D: [1, 1] }], "structureCov refuses an unknown kind (#337)", "unknown");
+
+  rejects(demo.fitGrammar, [[[1, 0.9, -0.6], [0, 1, 0.8], [0, 0, 1]], 2, 2], "fitGrammar refuses an asymmetric C (#357)", "symmetric");
+  rejects(demo.fitGrammar, [[[1, 1.4, 0], [1.4, 1, 0], [0, 0, 1]], 2, 2], "fitGrammar refuses an indefinite C (#357)", "semidefinite");
+  rejects(demo.fitGrammar, [[[1, 0], [0]]], "fitGrammar refuses a ragged C (#357)", "square");
+  rejects(demo.fitGrammar, [[[1, NaN], [NaN, 1]]], "fitGrammar refuses NaN (#357)", "non-finite");
+  for (const rho of [0, 0.9, 0.99, 0.999]) {
+    const f = demo.fitGrammar([[1, rho], [rho, 1]]);
+    const C2 = demo.structureCov(structures.Factor(f.V, f.D));
+    holds(`fitGrammar keeps a pair's contrast at rho=${rho} (#341)`,
+          Math.abs(C2[0][0] + C2[1][1] - 2 * C2[0][1] - 2 * (1 - rho)) < 1e-12);
+  }
+  const B = [[0.8, 0.1], [0.4, -0.3], [-0.2, 0.6], [-0.5, -0.1]], DD = [0.4, 0.7, 0.5, 0.6], m4 = [-0.5, -0.1, 0.2, 0.4];
+  const C4 = B.map((bi, i) => B.map((bj, j) => bi[0] * bj[0] + bi[1] * bj[1] + (i === j ? DD[i] : 0)));
+  const price = c => {
+    const f = demo.fitGrammar(C4.map(r => r.map(x => c * x)));
+    const q = demo.haltonNormalNodes(f.V[0].length, 4096);
+    return races.raceProbabilities(m4.map(x => Math.sqrt(c) * x), { V: f.V, D: f.D, F: q.F, W: q.W, points: 513 });
+  };
+  const p1 = price(1);
+  for (const c of [1e-2, 1e-4])
+    accepts(`fitGrammar is scale equivariant at c=${c} (#341)`, () => price(c),
+            p => Math.max(...p.map((x, i) => Math.abs(x - p1[i]))) < 1e-9);
+  const n10 = 10;
+  const Ce = Array.from({ length: n10 }, (_, i) => Array.from({ length: n10 }, (_, j) => (i === j ? 1 : 0.5)));
+  const me = Array.from({ length: n10 }, (_, i) => 1.3 * Math.sin(1.7 * i) + 0.4 * Math.cos(0.31 * i));
+  const perm = Array.from({ length: n10 }, (_, i) => (7 * i + 3) % n10);
+  const owarn = console.warn; console.warn = () => {};
+  const fe = demo.fitGrammar(Ce), fp = demo.fitGrammar(perm.map(i => perm.map(j => Ce[i][j])));
+  console.warn = owarn;
+  const o = races.raceProbabilities(me, { ...fe, points: 129 });
+  const pp = races.raceProbabilities(perm.map(i => me[i]), { ...fp, points: 129 });
+  const back = new Array(n10); perm.forEach((oi, ni) => { back[oi] = pp[ni]; });
+  holds("fitGrammar of an exchangeable C is label free (#383)",
+        Math.max(...o.map((x, i) => Math.abs(x - back[i]))) < 1e-12);
+
+  // frequency MC in the race quotient: a huge common mode costs nothing
+  const a = 2e15, Cc = [[a + 1, a], [a, a + 1]];
+  const Lc = demo.raceFactor(Cc);
+  holds("raceFactor keeps the contrast variance under a common mode (#394)",
+        Math.abs(Lc[1][1] ** 2 - 2) < 1e-12, `${Lc[1][1] ** 2}`);
+  const cnt = [0, 0];
+  demo.mcBatch([0, 1], Lc, demo.rng(123), 200000, cnt);
+  holds("frequency MC converges to Phi(1/sqrt 2) under a common mode (#394)",
+        Math.abs(cnt[0] / 200000 - 0.7602499389065233) < 4e-3);
+  // tiny-scale race: every arm unchanged by the units (#375)
+  for (const d of [1e-14]) {
+    const s = Math.sqrt(d), mu3 = [-s, 0, s];
+    const C3 = [0, 1, 2].map(i => [0, 1, 2].map(j => 1 + (i === j ? d : 0)));
+    const exact = [0.7287510153, 0.2240983048, 0.0471506799];
+    let mE = mu3.map((_, i) => demo.mendellElstonOne(mu3, C3, i));
+    const t = mE.reduce((x, y) => x + y, 0); mE = mE.map(x => x / t);
+    holds("Mendell-Elston is unit free (#375)", Math.max(...mE.map((x, i) => Math.abs(x - exact[i]))) < 5e-3);
+    const g = demo.rng(7);
+    let gh = mu3.map((_, i) => demo.ghkSampleOne(demo.ghkPrepareOne(mu3, C3, i), 20000, g));
+    const tg = gh.reduce((x, y) => x + y, 0); gh = gh.map(x => x / tg);
+    holds("GHK is unit free (#375)", Math.max(...gh.map((x, i) => Math.abs(x - exact[i]))) < 5e-3);
+    const c3 = [0, 0, 0];
+    demo.mcBatch(mu3, demo.raceFactor(C3), demo.rng(9), 200000, c3);
+    holds("frequency MC is unit free (#375)", Math.max(...c3.map((x, i) => Math.abs(x / 200000 - exact[i]))) < 5e-3);
+  }
+  // Mendell-Elston: relabelling relabels, ties included
+  const meP = (m, C) => { const r = m.map((_, i) => demo.mendellElstonOne(m, C, i)); const t = r.reduce((x, y) => x + y, 0); return r.map(x => x / t); };
+  const relabel = (m, C, pm) => {
+    const p = meP(m, C), q = meP(pm.map(i => m[i]), pm.map(i => pm.map(j => C[i][j])));
+    const b = new Array(m.length); pm.forEach((oi, ni) => { b[oi] = q[ni]; });
+    return Math.max(...p.map((x, i) => Math.abs(x - b[i])));
+  };
+  const BB = [[1, -2], [1, 0], [2, 1], [2, 2]];
+  const CB = BB.map((x, i) => BB.map((y, j) => x[0] * y[0] + x[1] * y[1] + (i === j ? 0.5 : 0)));
+  for (const pm of [[3, 1, 0, 2], [1, 0, 3, 2], [2, 3, 1, 0]])
+    holds(`Mendell-Elston with tied abilities is label free, perm ${pm} (#287)`,
+          relabel([0, 0, 0, 0], CB, pm) < 1e-14);
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

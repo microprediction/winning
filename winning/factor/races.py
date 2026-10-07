@@ -85,9 +85,14 @@ def _gumbel_min(z):
 def _logistic(z):
     # standardized logistic: scale s = sqrt(3)/pi gives unit variance
     c = np.pi / np.sqrt(3.0)
-    u = np.clip(c * z, -700.0, 700.0)
-    S = 1.0 / (1.0 + np.exp(u))
-    f = c * S * (1.0 - S)
+    u = c * np.asarray(z, dtype=float)
+    # Reflected, from e = exp(-|u|) <= 1: f = c e / (1+e)^2 never
+    # cancels. f = c S (1-S) rounded 1-S to zero once S hit 1 on the left
+    # tail, so a runner 25 sd behind was priced 19% low and one 50 sd
+    # behind 2e5 times low, disagreeing with the compiled kernel (#136).
+    e = np.exp(-np.abs(u))
+    S = np.where(u > 0, e / (1.0 + e), 1.0 / (1.0 + e))
+    f = c * e / (1.0 + e) ** 2
     # S' = -f, so f' = c S'(1-2S) = -c f (1-2S) (a sign the numeric
     # audit caught in the first draft)
     return np.maximum(S, 1e-300), f, -c * f * (1.0 - 2.0 * S)
@@ -123,16 +128,32 @@ def exponential_power_base(beta):
     fast the maximum of K draws grows, (log K)^(1/beta), which is the
     knob on whether systematic components keep deciding large fields).
     The CDF is the regularised incomplete gamma, evaluated from the
-    tail side for precision. For beta < 2 the density has a kink at
+    tail side for precision. beta must be >= 1: below it the density
+    has a cusp the lattice cannot resolve (#103). For beta < 2 the density has a kink at
     zero (its second derivative is singular), and the factory says so
     to the moment updates via the fd_eps attribute -- the laplace
     lesson. Very large beta makes near-edges the lattice must resolve;
     accuracy is measured in the tests at beta = 12."""
     beta = float(beta)
-    if not np.isfinite(beta) or beta <= 0.0:
-        # beta = inf is the uniform limit, which has no density this
-        # family can evaluate; it came back as NaN rows (#134)
-        raise ValueError("exponential_power_base needs a finite beta > 0")
+    # beta < 1 is refused, not approximated (#103). There the density
+    # has a cusp, f' ~ |z|^(beta-1) is unbounded at the mode, and the
+    # standardized centre is a spike of scale a = sqrt(G(1/b)/G(3/b))
+    # (0.091 at beta = 0.5) under stretched-exponential tails, which no
+    # uniform lattice over the race window resolves: beta = 0.5 carried
+    # TV 0.058 at the default points and still 1.4e-3 at 4001, its own
+    # slopes came out POSITIVE and disagreed with finite differences of
+    # the shipped map in sign, and abilities_from_race did not converge;
+    # beta = 0.7 was 1e-2 off with a wrong-signed slope. Supporting it
+    # needs cusp-aware quadrature, which the lattice engines do not have.
+    # beta in [1, 2) has only a kink and is measured accurate (laplace).
+    # beta = inf (the uniform limit) has no density this family can
+    # evaluate and came back as NaN rows (#134); it is refused too.
+    if not np.isfinite(beta) or beta < 1.0:
+        raise ValueError(
+            "exponential_power_base needs a finite beta >= 1; got " + repr(beta)
+            + ". Below 1 the density has a cusp the uniform race lattice "
+            "cannot resolve (accuracy and slope signs fail); use "
+            "student_base or skew_logistic_base for heavier tails")
     from scipy.special import gamma as _gamma, gammaincc
     a = np.sqrt(_gamma(1.0 / beta) / _gamma(3.0 / beta))
     c = beta / (2.0 * a * _gamma(1.0 / beta))
@@ -188,23 +209,35 @@ def skew_logistic_base(alpha):
     v = polygamma(1, alpha) + polygamma(1, 1.0)
     c = np.sqrt(v)                          # raw x = m + c z
 
+    def _softplus(u):
+        # log(1 + e^u) without overflow or the 1 + tiny cancellation
+        return np.maximum(u, 0.0) + np.log1p(np.exp(-np.abs(u)))
+
     def _skew_logistic(z):
+        # Log domain throughout (#108). S = 1 - (1+e^{-x})^{-alpha} is
+        # -expm1(-alpha * softplus(-x)); the subtraction from one lost the
+        # whole right tail (alpha = 1, the named logistic, was 14% low at
+        # a 25 sd gap and 52% low at 45), and the e^{-x} clip at 700 was a
+        # second wall on the left.
         x = m + c * np.asarray(z, dtype=float)
-        u = np.clip(-x, -700.0, 700.0)
-        eu = np.exp(u)                       # e^{-x}
-        log1p_eu = np.log1p(eu)
-        cdf = np.exp(-alpha * log1p_eu)      # (1 + e^{-x})^{-alpha}
-        S = np.maximum(1.0 - cdf, 1e-300)
-        sig = 1.0 / (1.0 + eu)               # logistic cdf of x
-        f = alpha * eu * np.exp(-(alpha + 1.0) * log1p_eu) * c
+        sp = _softplus(-x)                   # log(1 + e^{-x})
+        S = np.maximum(-np.expm1(-alpha * sp), 1e-300)
+        f = alpha * c * np.exp(-x - (alpha + 1.0) * sp)
+        sig = np.exp(-_softplus(-x))          # logistic cdf of x
         # d/dz f: chain rule through x = m + c z
         fp = f * c * ((alpha + 1.0) * (1.0 - sig) - 1.0)
         return S, f, fp
 
+    def _log_expm1(y):
+        # log(e^y - 1) for y > 0, finite for every y (no expm1 overflow)
+        y = np.asarray(y, dtype=float)
+        return y + np.log(-np.expm1(-y))
+
     # exponential tails on both sides; the left tail fattens as alpha
     # falls (raw left quantile ~ log of the alpha-th root), so place the
-    # span at the actual 1e-9 quantiles
-    q_lo = (np.log(np.expm1(np.log(1e-9) / -alpha)) if alpha < 60
+    # span at the actual 1e-9 quantiles. log(expm1(.)) overflowed to inf
+    # below alpha ~ 0.029 and every race came back NaN (#108).
+    q_lo = (float(_log_expm1(np.log(1e-9) / -alpha)) if alpha < 60
             else np.log(1e-9 / alpha))
     lo_edge = abs((-abs(q_lo) - m)) / c + 2.0
     hi_edge = abs((np.log(alpha / 1e-9) - m)) / c + 2.0
@@ -212,9 +245,11 @@ def skew_logistic_base(alpha):
     _skew_logistic.rust_base = (7, [alpha, m, c])
 
     def _skew_logistic_sample(rng, size=None):
-        # raw x has CDF (1 + e^{-x})^{-alpha}: invert, then standardize
+        # raw x has CDF (1 + e^{-x})^{-alpha}: invert, then standardize.
+        # -log(expm1(y)) overflowed to -inf whenever u < exp(-alpha*709),
+        # half of all draws at alpha = 0.001 (#108).
         u = rng.random(size)
-        x = -np.log(np.expm1(-np.log(u) / alpha))
+        x = -_log_expm1(-np.log(u) / alpha)
         return (x - m) / c
     _skew_logistic.sample = _skew_logistic_sample
     return _skew_logistic
@@ -248,6 +283,9 @@ def student_base(nu):
     # accordingly)
     edge = float(_t.isf(1e-7, nu)) / s
     _student.span = (max(12.0, edge), max(12.0, edge))
+    # central scale of the standardized law (#385): its density at the
+    # mode is that of a scale-1/s t, so resolution is set by 1/s
+    _student.resolution = 1.0 / s
     _student.rust_base = (5, [nu, s])
     _student.sample = lambda rng, size=None: rng.standard_t(nu, size) / s
     return _student
@@ -258,8 +296,14 @@ def skew_normal_base(a):
     family), shape a: mean zero, unit variance. Returns a callable for
     base=."""
     a = float(a)
+    if not np.isfinite(a):
+        raise ValueError("skew_normal_base needs a finite shape a; got " + repr(a))
     from scipy.stats import skewnorm as _sn
-    delta = a / np.sqrt(1.0 + a * a)
+    # hypot, not sqrt(1 + a*a): a*a overflows past |a| ~ 1.34e154 and
+    # delta became 0, so a finite, saturated shape jumped from the
+    # standardized half-normal to an unstandardized law -- the leader's
+    # share moved 0.317 between a = 1e154 and 2e154 (#399)
+    delta = a / np.hypot(1.0, a)
     m = delta * np.sqrt(2.0 / np.pi)
     sd = np.sqrt(1.0 - 2.0 * delta * delta / np.pi)
 
@@ -269,9 +313,14 @@ def skew_normal_base(a):
         phi = np.exp(-0.5 * x * x) / np.sqrt(2.0 * np.pi)
         Phi_ax = ndtr(a * x)
         f = 2.0 * phi * Phi_ax * sd
+        # (a x)^2 may overflow to inf, whose exp(-inf/2) is the correct
+        # 0; a*a*x*x at x = 0 was inf*0 = NaN
+        with np.errstate(over="ignore", invalid="ignore"):
+            ax2 = np.square(a * x)
+            kink = np.where(np.isfinite(ax2), a * np.exp(-0.5 * ax2), 0.0)
+        kink = np.where(x == 0.0, a, kink)
         fp = 2.0 * (-x * phi * Phi_ax
-                    + a * phi * np.exp(-0.5 * a * a * x * x)
-                    / np.sqrt(2.0 * np.pi)) * sd * sd
+                    + kink * phi / np.sqrt(2.0 * np.pi)) * sd * sd
         return S, f, fp
 
     _skew.span = (10.0, 10.0)
@@ -357,6 +406,14 @@ def _setup(mu, V, D, F, W, base):
             f"({bad.size} of {n} are); an ability is a finite location on "
             "the performance scale")
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    if (F is None) != (W is None):
+        # A factor rule is a PAIR. Either half alone was silently replaced
+        # by the automatic Gaussian rule below, so a caller's node vanished
+        # and the default race came back (a 0.58 share move on a one-node
+        # law), with the inverse calibrating a different model (#290).
+        raise ValueError(
+            "supply both F (factor nodes) and W (their weights), or "
+            f"neither; got only {'F' if W is None else 'W'}")
     if V is None:
         V = np.zeros((n, 1))
         F, W = np.zeros((1, 1)), np.ones(1)
@@ -601,7 +658,7 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     # performance sd, the same resolution target the sharpness refinement
     # uses, so relaxation fires only when the tail would genuinely
     # outrun the lattice rather than whenever the budget is modest
-    budget = 0.5 * float(s.min()) * max(points - 1, 1)
+    budget = 0.5 * float(s.min()) * _resolution(fn) * max(points - 1, 1)
     d = float(delta)
     lo, hi = window_at(d)
     while hi - lo > budget and d < 1e-4:
@@ -617,6 +674,17 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
             "there. Raise points= to tighten it.",
             RuntimeWarning, stacklevel=3)
     return np.linspace(lo, hi, points)
+
+
+def _resolution(fn):
+    """The base's central scale in standardized units: the spacing target
+    is half of it times the performance sd. A unit-variance law can
+    still have a narrow centre -- Student-t(nu) concentrates on
+    sqrt((nu-2)/nu), 0.218 at nu = 2.1 -- and measuring resolution in
+    sd alone let the window widen until about two points crossed it
+    (#385). Bases declare it as .resolution; the default is 1."""
+    r = getattr(fn, "resolution", 1.0) if fn is not None else 1.0
+    return float(r) if np.isfinite(r) and r > 0 else 1.0
 
 
 def _ndtr_local(z):
@@ -649,10 +717,10 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     else:
         x = np.linspace(M_all.min() - left * sd.max(),
                         M_all.max() + right * sd.max(), points)
-    return _refine_grid(x, sd, V, points, stacklevel=3)
+    return _refine_grid(x, sd, V, points, stacklevel=3, fn=fn)
 
 
-def _refine_grid(x, sd, V, points, stacklevel=2):
+def _refine_grid(x, sd, V, points, stacklevel=2, fn=None):
     """Sharpness refinement and the spacing warning, for ANY window.
 
     Split out of forward_grid so that the memory-saving large-field
@@ -665,6 +733,7 @@ def _refine_grid(x, sd, V, points, stacklevel=2):
     sd = np.asarray(sd, dtype=float)
     dx = x[1] - x[0]
     smin = float(sd.min())
+    res = _resolution(fn)
     sharp_here = float(np.max(np.sqrt((np.asarray(V, float) ** 2).sum(axis=1)))
                        / max(smin, 1e-300))
     if sharp_here > 25.0 and dx > 0.5 * smin:
@@ -695,11 +764,12 @@ def _refine_grid(x, sd, V, points, stacklevel=2):
     # tail pushes the delta-quantile so far out that the points are
     # spread too thin to resolve the bulk. A truncated window hides
     # that; an honest one has to say so.
-    if (x[-1] - x[0]) / max(len(x) - 1, 1) > 0.5 * smin:
+    if (x[-1] - x[0]) / max(len(x) - 1, 1) > 0.5 * smin * res:
         import warnings
         warnings.warn(
             f"lattice spacing {(x[-1]-x[0])/max(len(x)-1,1):.3g} exceeds "
-            f"half the smallest performance sd ({smin:.3g}): this base's "
+            f"half the smallest performance sd times the base's central "
+            f"scale ({smin:.3g} x {res:.3g}): this base's "
             "tail forced a window wider than the point budget can "
             "resolve. Raise points=, raise delta=, or declare a span on "
             "the base.", RuntimeWarning, stacklevel=stacklevel)
@@ -1068,7 +1138,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                             M_hi.max() + right * sd.max(), points)
         # the same refinement/warning forward_grid applies: this branch
         # is a storage optimization, not a different discretization
-        x, points = _refine_grid(x, sd, V, points)
+        x, points = _refine_grid(x, sd, V, points, fn=fn)
         p, sl, total = _fastrace.forward_and_slopes(
             np.ascontiguousarray(mu), np.ascontiguousarray(V),
             np.ascontiguousarray(D), np.ascontiguousarray(F),
@@ -1148,6 +1218,13 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # silently, and +inf failed in grid sizing (#366)
     temperature = as_soft_temperature(temperature)
     dense = None
+    if (F is None) != (W is None):
+        # the forward refuses a half rule (#290); so does its inverse,
+        # which read a lone F with uniform weights for its scale while
+        # its iterative forward discarded that same F
+        raise ValueError(
+            "supply both F (factor nodes) and W (their weights), or "
+            f"neither; got only {'F' if W is None else 'W'}")
     nodes_given = F is not None          # the caller's nodes, not a fit's
     temperature = _as_temperature(temperature)       # (#424)
     points = as_points(points)                       # (#444)
@@ -1277,26 +1354,44 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         _CovF = np.eye(_Vc.shape[1])
     _SigV = _Vc @ _CovF @ _Vc.T
     scale = float(np.sqrt(np.median(_Dn) + np.diag(_SigV).mean()))
+    mu_start = None
     if n_t == 2 and base == "normal" and not temperature and dense is None:
         # A pair is a single Gaussian contrast, so the inverse is closed
         # form (the mirror of the forward closed form): with
-        # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0) / sd_d), so
-        # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
+        # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0 + shift) / sd_d),
+        # so mu1 - mu0 = sd_d Phi^-1(p0) - shift, mean-zero; the shift is
+        # the factor rule's weighted MEAN, (v1 - v0) . E[F] (#374).
         Sig = _SigV + np.diag(_Dn)
         sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
+        shift = (float((_Vc[1] - _Vc[0]) @ _Fm)
+                 if (V is not None and nodes_given) else 0.0)
         # Invert the SMALLER share, Phi^-1(p0) = -Phi^-1(p1): for
         # [1, 1e-16] the normalized first share rounds to exactly 1, and
         # ndtri(1) = inf was certified as converged while the
         # permutation [1e-16, 1] gave the finite answer (#412).
         if target[0] <= target[1]:
-            gap = sd_d * float(ndtri(target[0]))
+            gap = sd_d * float(ndtri(target[0])) - shift
         else:
-            gap = -sd_d * float(ndtri(target[1]))
+            gap = -sd_d * float(ndtri(target[1])) - shift
         mu = np.array([-0.5 * gap, 0.5 * gap])
         ok = bool(np.isfinite(mu).all())
-        return _inverse_return(mu, ok, 0.0 if ok else np.inf, 0, floored,
-                               tol, return_info)
-    mu = -(logt - logt.mean()) / 2.0 * scale
+        if not nodes_given or not ok:
+            return _inverse_return(mu, ok, 0.0 if ok else np.inf, 0, floored,
+                                   tol, return_info)
+        # A caller's rule need not be Gaussian (a centred two-point law
+        # has the right mean and variance and a different pair map), and
+        # the forward integrates the rule itself: the closed form is a
+        # START, certified only by the forward it claims to invert. It
+        # used to be returned as exact with residual 0 and missed by up
+        # to 21.8 points (#374).
+        ph = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
+                                points=points)
+        r0 = float(np.abs(np.log(np.maximum(ph, 1e-300)) - logt).max())
+        if r0 < tol:
+            return _inverse_return(mu, True, r0, 0, floored, tol, return_info)
+        mu_start = mu
+    mu = (-(logt - logt.mean()) / 2.0 * scale if mu_start is None
+          else mu_start)
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
     # a local two-cycle. Fixed damping 0.7 restores contraction.
@@ -1635,8 +1730,21 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
     sd = np.sqrt(D)
     n = len(mu)
     M_all = mu[None, :] + F @ V.T
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), points)
+    # These densities are not normalised and carry no mass check, so the
+    # grid must RESOLVE the narrowest runner on the span the widest one
+    # and the farthest mean set: a runner 100 units behind a close pair
+    # cut that pair's density by 10.3% at 501 points (#349). Spacing held
+    # to half the smallest sd, as the standalone JS engine now does.
+    lo = float(M_all.min() - left * sd.max())
+    hi = float(M_all.max() + right * sd.max())
+    need = int(np.ceil((hi - lo) / (0.5 * float(sd.min())))) + 1
+    if need > 16385:
+        import warnings
+        warnings.warn(
+            "tie_densities: the field is too wide to resolve the sharpest "
+            f"runner even at 16385 lattice points (needs {need})",
+            RuntimeWarning, stacklevel=2)
+    x = np.linspace(lo, hi, int(min(max(points, need), 16385)))
     dx = x[1] - x[0]
     w = np.zeros((n, n))
     for c in range(len(F)):
@@ -1889,9 +1997,24 @@ def plackett_luce_topk_probabilities(p, k=3):
     p = np.asarray(p, dtype=float)
     p = p / p.sum()
     n = len(p)
+    if int(k) != k or k < 1:
+        raise ValueError("k must be a positive integer")
+    # Every runner is in the top k of a field of at most k, whatever the
+    # weights. An exact zero share -- which stable softmax produces by
+    # underflow -- reached a zero remaining denominator at the last
+    # place and lost its membership: softmax([1000, 0, 0]) gave top-3
+    # [0, 1, 1], summing to 2 (#384).
+    if k >= n:
+        return np.ones(n)
     if k == 1:
         return p.copy()
+    if k not in (2, 3):
+        raise ValueError("k must be 1, 2 or 3")
     out = p.copy()
+    # Simplex boundary: when the runners still unplaced all have zero
+    # weight, the next place goes to one of them uniformly at random,
+    # the limit of equal vanishing weights. Without it the place was
+    # paid to nobody and sum(top-k) fell below k.
     # the complement 1 - p_j is computed as the SUM OF THE OTHERS, never
     # by subtraction from one: at p_fav = 1 - 1e-13 the subtraction loses
     # three digits to cancellation and the exact identity sum(top-k) = k
@@ -1899,20 +2022,21 @@ def plackett_luce_topk_probabilities(p, k=3):
     rest = np.array([p[np.arange(n) != j].sum() for j in range(n)])
     # second: j first, i second -- P2[j, i] = p_j p_i / rest_j
     P2 = (p / np.maximum(rest, 1e-300))[:, None] * p[None, :]
+    exhausted = rest <= 0.0
+    P2[exhausted, :] = (p[exhausted] / (n - 1))[:, None]
     np.fill_diagonal(P2, 0.0)
     out += P2.sum(axis=0)
     if k == 2:
         return out
-    if k != 3:
-        raise ValueError("k must be 1, 2 or 3")
     # third: j first, l second, i third
     for j in range(n):
-        pj = p[j]
         rem1 = rest[j]
         for sec in range(n):
             if sec == j:
                 continue
-            w = pj * p[sec] / max(rem1, 1e-300)
+            w = P2[j, sec]
+            if w == 0.0:
+                continue
             denom2 = rem1 - p[sec]
             if denom2 < 1e-8 * rem1:
                 # same cancellation one level deeper (two large entries
@@ -1921,8 +2045,10 @@ def plackett_luce_topk_probabilities(p, k=3):
                 mask = np.ones(n, dtype=bool)
                 mask[j] = mask[sec] = False
                 denom2 = p[mask].sum()
-            denom2 = max(denom2, 1e-300)
-            contrib = w * p / denom2
+            if denom2 <= 0.0:
+                contrib = np.full(n, w / (n - 2))
+            else:
+                contrib = w * p / denom2
             contrib[j] = 0.0
             contrib[sec] = 0.0
             out += contrib
@@ -2053,6 +2179,14 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
     fn0 = base if callable(base) else BASES[base]
     w = float(width)
     off = float(offset)
+    # width is the lump's Gaussian scale: zero divided every race into
+    # NaN and a negative width reversed the lump survival, so the
+    # probabilities stayed finite and normalised while every own-slope
+    # turned positive (#389)
+    if not (np.isfinite(w) and w > 0.0):
+        raise ValueError("failure_base needs a finite width > 0; got " + repr(width))
+    if not np.isfinite(off):
+        raise ValueError("failure_base needs a finite offset; got " + repr(offset))
     if standardize:
         m1 = q * off
         var = (1.0 - q) * 1.0 + q * (w * w + off * off) - m1 * m1
@@ -2072,6 +2206,21 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
         fp = ((1.0 - q) * fp0 + q * fpl) * sd * sd
         return np.maximum(S, 1e-300), f, fp
 
+    # A window that covers BOTH components (#135). Without a span the
+    # finite-temperature path and the ratings lattices used the generic
+    # (-12, 12), cut the lump off at offset > 12 and renormalised what
+    # was left: offset 20 priced [0.678, 0.249, 0.073] against the
+    # subset-enumeration [0.515, 0.300, 0.185] at every resolution. The
+    # running base keeps its own span (at least the generic 12) and the
+    # lump is covered to 9 widths, both in standardized units; at the
+    # default offset 6 this is the old (12, 12).
+    L0, R0 = (getattr(base, "span", (12.0, 12.0)) if callable(base)
+              else _SPANS.get(base, (12.0, 12.0)))
+    L0, R0 = max(12.0, float(L0)), max(12.0, float(R0))
+    lump_lo = (off - 9.0 * w - m1) / sd
+    lump_hi = (off + 9.0 * w - m1) / sd
+    _fail.span = (max(L0, (L0 + m1) / sd, -lump_lo),
+                  max(R0, (R0 - m1) / sd, lump_hi))
     if base == "normal":
         _fail.rust_base = (8, [q, w, off, m1, sd])
 
