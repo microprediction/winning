@@ -68,6 +68,20 @@ show advertisement $i$ with probability $p_i$, which is Thompson
 sampling. A rule that must respect constraints, or must be
 reproducible without randomness, needs the numbers $p_i$ themselves.
 
+Thompson sampling runs in production wherever alternatives are
+compared under uncertainty: advertising, recommendation, clinical
+allocation, and now the fine-tuning of language models toward it
+\citep{menet2026}. Its action probabilities are the vector $p$. The
+policy never needs them as numbers, but much that surrounds the
+policy does.
+
+Off-policy evaluation needs them as propensities, and an audit of why
+an arm was shown needs them. A stopping rule, a shortlist of the $k$
+arms most likely to be best, a constraint on how often any arm may be
+shown, and a reproducible version of the policy all need them. In
+every one of these uses they have been approximated, from marginals
+or by counting posterior draws.
+
 When the beliefs about different alternatives are independent, each
 $p_i$ is a one-dimensional integral. In practice they are usually
 correlated, because alternatives share causes. Inventory policies
@@ -123,6 +137,16 @@ The covariance of $\theta$ is then
 \end{equation}
 where $W$ has rows $w_i'$. The variables in $z$ are called factors,
 and $W$ holds the loadings.
+
+The best-known Thompson samplers already have this form. Linear Thompson
+sampling \citep{agrawal2013}, the version \citet{chapelle2011}
+evaluated on display advertising and news recommendation, puts a
+Gaussian posterior on a coefficient vector $\beta$ of dimension equal
+to the number of features, and the arm means $\theta_i = x_i' \beta$
+then have covariance $X \Sigma_\beta X'$. That is Equation~\eqref{eq:factor}
+with the feature matrix as the loadings and a factor rank equal to
+the number of features, and Section~\ref{sec:bandit-posterior} keeps
+it in that form after every pull.
 
 For beliefs of this form, the whole vector is one integral over the
 factors, and quadrature evaluates it for all $n$ alternatives at once
@@ -752,35 +776,26 @@ it.
 
 \section{Discussion}
 
-Thompson sampling runs in production wherever alternatives are
-compared under uncertainty: advertising, recommendation, clinical
-allocation, and now the fine-tuning of language models toward it
-\citep{menet2026}. Its action probabilities are the vector $p$. The
-policy never needs them as numbers, but much that surrounds the
-policy does.
+Against the marginal shortcuts the comparison does not depend on
+rank. Their error can approach one half with every marginal held
+fixed, and in the stopping experiment they spent $1.5$ to $3.4$ times
+the replicates at the same threshold. Thompson sampling itself is not
+at fault, since it uses the correlation. The loss is confined to the
+side that computes probabilities, and that is the side the computed
+vector replaces.
 
-Off-policy evaluation needs them as propensities, and an audit of why
-an arm was shown needs them. A stopping rule, a shortlist of the $k$
-arms most likely to be best, a constraint on how often any arm may be
-shown, and a reproducible version of the policy all need them. In
-every one of these uses they have been approximated, from marginals
-or by counting posterior draws.
-
-The best-known Thompson samplers are in the class. Linear Thompson
-sampling \citep{agrawal2013}, the version \citet{chapelle2011}
-evaluated on display advertising and news recommendation, puts a
-Gaussian posterior on a coefficient vector $\beta$ of dimension equal
-to the number of features, and the arm means $\theta_i = x_i' \beta$
-then have covariance $X \Sigma_\beta X'$. That is Equation~\eqref{eq:factor}
-with the feature matrix as the loadings and a factor rank equal to
-the number of features, and Section~\ref{sec:bandit-posterior} keeps
-it in that form after every pull. The offline evaluation used for
-those samplers, the replay method of \citet{li2011}, needs a
-uniformly random log because the sampler's own propensities were not
-available, and it discards every logged event whose random arm
-differs from the policy's choice, about all but one in $K$ for $K$
-arms. With the propensities computed, the production log itself becomes
-the evaluation set.
+How much better the computed numbers are than counted draws depends
+on the factor rank. On the posteriors of the two experiments, where
+the centred loadings have rank at most two, one evaluation of a
+hundred alternatives takes about ten milliseconds and is accurate to
+$10^{-6}$ per entry. Counting draws for ten milliseconds gives about
+twenty thousand draws, and an entry near $0.01$ is then known to
+seven percent of itself. Matching $10^{-6}$ by counting would take
+$10^{11}$ draws. At factor ranks three to five, on single
+hundred-arm posteriors of a linear sampler, one evaluation takes
+$0.3$ to $1$ second and $200{,}000$ draws take $0.3$ second, with
+errors of the same order. The advantage over counting is a low-rank
+advantage, and centring the loadings is what decides the rank.
 
 Bayesian optimization has the same object. Entropy search
 \citep{hennig2012} takes the posterior probability that the minimum
@@ -820,26 +835,13 @@ then needs the closure, the computation, and a scalar quadrature over
 the measurement outcome. The scope is finite candidates and factor
 beliefs.
 
-How much better the computed numbers are than counted draws depends
-on the factor rank. On the posteriors of the two experiments, where
-the centred loadings have rank at most two, one evaluation of a
-hundred alternatives takes about ten milliseconds and is accurate to
-$10^{-6}$ per entry. Counting draws for ten milliseconds gives about
-twenty thousand draws, and an entry near $0.01$ is then known to
-seven percent of itself. Matching $10^{-6}$ by counting would take
-$10^{11}$ draws. At factor ranks three to five, on single
-hundred-arm posteriors of a linear sampler, one evaluation takes
-$0.3$ to $1$ second and $200{,}000$ draws take $0.3$ second, with
-errors of the same order. The advantage over counting is a low-rank
-advantage, and centring the loadings is what decides the rank.
-
-Against the marginal shortcuts the comparison does not depend on
-rank. Their error can approach one half with every marginal held
-fixed, and in the stopping experiment they spent $1.5$ to $3.4$ times
-the replicates at the same threshold. Thompson sampling itself is not
-at fault, since it uses the correlation. The loss is confined to the
-side that computes probabilities, and that is the side the computed
-vector replaces.
+The offline evaluation used for
+those samplers, the replay method of \citet{li2011}, needs a
+uniformly random log because the sampler's own propensities were not
+available, and it discards every logged event whose random arm
+differs from the policy's choice, about all but one in $K$ for $K$
+arms. With the propensities computed, the production log itself becomes
+the evaluation set.
 
 \begin{thebibliography}{9}
 
