@@ -339,6 +339,15 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
   return { x, dx };
 }
 
+/* The general race's factor node rule for loadings V at variances D --
+   gauge-centred V and its (F, W) -- for callers that mix their own
+   conditional kernels over the factor law (topk.mjs, #340). */
+export function _factorNodeRule(V, D) {
+  const n = asLoadings(V, V.length).length;
+  const st = setup(new Array(n).fill(0), V, D, null, null, "normal");
+  return { V: st.V, F: st.F, W: st.W };
+}
+
 /* Independent and Factor grammars ARE the V/D race, so they are priced
    (and inverted) as one, keeping the caller's F/W. The dispatcher
    rebuilt the call from s.V and s.D alone, so with structure:
@@ -371,7 +380,7 @@ export function raceProbabilities(mu, opts = {}) {
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
   const c = collapseStructure(structure, V, D, F, W, "raceProbabilities");
   if (c.structure) {
-    return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes });
+    return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes, window: win, delta });
   }
   const st = setup(mu, c.V, c.D, F, W, base);
   const n = st.mu.length;
@@ -482,8 +491,10 @@ export function abilitiesFromRace(pTarget, opts = {}) {
   const n = target.length;
   const c = collapseStructure(structure, V, D, F, W, "abilitiesFromRace");
   if (c.structure) {
+    // the caller's base, window and delta travel too, so the hierarchical
+    // kernels can refuse what they would otherwise ignore (#89)
     const r = dispatchAbilities(target, c.structure,
-      { points, qa, qf, nIter, tol });
+      { ...opts, points, qa, qf, tol });
     return inverseReturn(r.mu, r.converged, r.maxLogResidual, r.iterations,
                          floored, tol, returnInfo);
   }

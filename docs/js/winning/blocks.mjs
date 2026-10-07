@@ -599,6 +599,29 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
 export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts = {}) {
   checkOpts(opts, TREE_RACE_JACOBIAN_OPTS, "treeRaceJacobian", OPT_HINTS);
   const { points = 257, qa = 9 } = opts;
+  // With any ancestor effect the cross-cluster Gram term is not the
+  // derivative (it factorises the two-leaf cavity as R_i R_j / G_root):
+  // two leaves under a common root priced invariantly in the root
+  // strength while J[0][1] moved 0.2467 -> 0.1792 at strength 0.8 (#350).
+  // There the matrix is the central difference of the exact forward, as
+  // in python's tree_race_jacobian.
+  const nC = new Set(cluster).size;
+  if (strength.slice(nC).some(v => v !== 0)) {
+    const n = mu.length;
+    const tot = D.map((d, i) => d + (Array.isArray(loading) ? loading[i] ** 2 : loading ** 2));
+    const srt = tot.slice().sort((a, b) => a - b);
+    const med = n % 2 ? srt[(n - 1) / 2] : 0.5 * (srt[n / 2 - 1] + srt[n / 2]);
+    const h = 1e-5 * Math.sqrt(med);
+    const J = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let j = 0; j < n; j++) {
+      const up = mu.slice(), dn = mu.slice();
+      up[j] += h; dn[j] -= h;
+      const pu = treeRaceProbabilities(up, cluster, loading, D, parent, strength, { points, qa });
+      const pd = treeRaceProbabilities(dn, cluster, loading, D, parent, strength, { points, qa });
+      for (let i = 0; i < n; i++) J[i][j] = (pu[i] - pd[i]) / (2 * h);
+    }
+    return J;
+  }
   const I = treeInternals(mu, cluster, loading, D, parent, strength, points, qa);
   const P = I.x.length;
   const Gr = I.G[I.root].map(v => Math.max(v, TINY));
@@ -624,6 +647,18 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
   return Jf.map(row => row.map(v => -v));
 }
 
+/* sqrt(median(D_i + |loading_i|^2)): the block race's contrast scale */
+export function blockScale(loading, D, n) {
+  const tot = [];
+  for (let i = 0; i < n; i++) {
+    const L = Array.isArray(loading[i]) ? loading[i] : [Number(loading[i])];
+    tot.push(Number(D[i]) + L.reduce((a, b) => a + b * b, 0));
+  }
+  tot.sort((a, b) => a - b);
+  const h = Math.floor(n / 2);
+  return Math.sqrt(n % 2 ? tot[h] : 0.5 * (tot[h - 1] + tot[h]));
+}
+
 export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) {
   checkOpts(opts, ABILITIES_FROM_BLOCK_RACE_OPTS, "abilitiesFromBlockRace", OPT_HINTS);
   const { points = 257, qa = 9, tol = 1e-10, maxIter = 25 } = opts;
@@ -646,12 +681,16 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
   const lt = pT.map(Math.log);
   const forward = m => blockRaceProbabilities(m, cluster, loading, D, { points, qa });
   const lm = mean(lt);
-  let mu = lt.map(v => -(v - lm));
+  // the field's own scale: the start, the fixed-point step and the Newton
+  // trust radius were absolute numbers, so loading -> c loading,
+  // D -> c^2 D missed by 0.40 of a share at c = 1e-3 (#100, as python)
+  const scale = blockScale(loading, D, n);
+  let mu = lt.map(v => -(v - lm) * scale);
   let eta = 1.0;
   let lp = forward(mu).map(v => Math.log(Math.max(v, TINY)));
   let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
   for (let it = 0; it < 200 && err >= 0.2; it++) {
-    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]));
+    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
     const mm = mean(muN);
     muN = muN.map(v => v - mm);
     const lpN = forward(muN).map(v => Math.log(Math.max(v, TINY)));
@@ -672,10 +711,11 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
     if (cur < tol) return { mu: mu.map(v => v - mean(mu)), residual: cur, iterations };
     iterations = it + 1;
     const J = blockRaceJacobian(mu, cluster, loading, D, { points, qa });
-    const A = J.map((row, i) => row.map(v => v / pv[i] + 1 / n));
+    const A = J.map((row, i) => row.map(v => v / pv[i] * scale + 1 / n));
     let step = solve(A, r.map(v => -v));
     const nn = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
     if (nn > 5) step = step.map(v => v * 5 / nn);
+    step = step.map(v => v * scale);
     let accepted = false;
     for (let k = 0; k < 8; k++) {
       let muN = mu.map((m, i) => m + step[i]);

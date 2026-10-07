@@ -1162,6 +1162,138 @@ accepts("the inverse takes a scalar D, matching python",
           w => w > 0.1, w => `ancestors contribute ${w.toFixed(4)}`);
 }
 
+// #430: Tree.from_linkage leaf variances are 2 h^2 EXACTLY -- the shared
+// fixture python and R read -- and a merge at height 0 is refused
+{
+  const { readFileSync } = await import("node:fs");
+  const fx = JSON.parse(readFileSync(
+    here + "../tests/golden/linkage_leaf_variance.json", "utf8"));
+  for (const c of fx.cases) {
+    const t = structures.treeFromLinkage(c.Z);
+    const rel = (a, b) => Math.abs(a - b) / Math.max(Math.abs(b), 1e-300);
+    let worst = 0;
+    c.D.forEach((v, i) => { worst = Math.max(worst, rel(t.D[i], v)); });
+    for (let j = c.D.length; j < c.strength.length; j++)
+      worst = Math.max(worst, rel(t.strength[j], c.strength[j]));
+    holds(`treeFromLinkage keeps 2h^2 (${c.name})`, worst <= fx.rtol,
+          `max rel err ${worst.toExponential(2)}`);
+  }
+  rejects(structures.treeFromLinkage, [fx.refuse_zero_height],
+          "treeFromLinkage refuses a zero-height merge", "height 0");
+}
+
+// #350: the tree Jacobian is the derivative of the tree forward; a common
+// root shock cancels from both
+{
+  const exact = Math.exp(-0.5 * 0.8 * 0.8 / 1.85) / Math.sqrt(2 * Math.PI * 1.85);
+  for (const r of [0, 0.8, 2]) {
+    const J = blocks.treeRaceJacobian([-0.4, 0.4], [0, 1], [0.3, 0.4], [0.7, 0.9],
+                                      [2, 2, -1], [0, 0, r]);
+    holds(`treeRaceJacobian is root-invariant (strength ${r})`,
+          Math.abs(J[0][1] - exact) < 1e-8, `J01 ${J[0][1]}`);
+  }
+}
+
+// factor-core top-k batch, browser parity with python/R
+{
+  const mu = [-.5, .2, .8, -.1], sd = [.7, 1.1, .9, 1.3];
+  const a = topk.topKProbabilities(mu, 2, { D: sd.map(v => v * v) });
+  const b = topk.topKProbabilities(mu.map(v => v * 1e-18), 2,
+                                   { D: sd.map(v => (v * 1e-18) ** 2) });
+  holds("top-k window is scale-free (#370)",
+        Math.max(...a.map((x, i) => Math.abs(x - b[i]))) < 1e-9);
+  const bk = topk.bottomKProbabilities([-12, 0, 0], 1, { D: [1, 1, 1] });
+  holds("bottom-k keeps a 7.7e-24 last place (#365)",
+        Math.abs(bk[0] / 7.726967753938468796e-24 - 1) < 1e-6, `${bk[0]}`);
+  const warn = console.warn; console.warn = () => {};
+  const ls = topk.locScaleFromTopkPair([.8, .1, .1], 1, [.2, .9, .9], 2,
+                                       { points: 1025, ridge: 1e-4, returnInfo: true });
+  console.warn = warn;
+  holds("a ridge stall on an impossible board is not convergence (#353)",
+        !ls.info.converged && !ls.info.nested);
+  rejects(topk.abilitiesFromRankMarginal, [[.4, .3, .2, .1], 1.5],
+          "fractional rank refused (#317)", "whole-number");
+  const P = topk.rankProbabilities([-1, -.4, .05, .45, .9],
+                                   { D: [1, 1, 1, 1, 1], points: 257 }).map(r => r[2]);
+  rejects(topk.abilitiesFromRankMarginal, [P, 3, { D: [1, 1, 1, 1, 1], points: 257 }],
+          "odd-field middle rank needs mu0 (#378)", "mu0");
+  const m = [-3, -1, 1, 3], D = [4, 9, 16, 25];
+  const q1 = topk.topKProbabilities(m, 1, { D, points: 1025 });
+  const q2 = topk.topKProbabilities(m, 2, { D, points: 1025 });
+  const w = topk.locScaleFromTopkPair(q1, 1, q2, 2, { D0: D, mu0: m, points: 1025, returnInfo: true });
+  const gm = Math.exp(w.sd.reduce((x, v) => x + Math.log(v), 0) / 4);
+  holds("exact warm start returns the canonical gauge (#360)", Math.abs(gm - 1) < 1e-12);
+  const q = topk.topKProbabilities([-.8, -.3, 0, .4, .7], 2);
+  const f = topk.abilitiesFromTopk(q, 2, { D: new Array(5).fill(1e-6), returnInfo: true });
+  holds("abilitiesFromTopk is unit-equivariant (#100)",
+        f.info.converged && Math.abs(f.mu[0] / 1e-3 + 0.8) < 1e-6);
+  rejects(topk.abilitiesFromTopk, [[.5, NaN, .5], 1], "non-finite top-k target refused (#110)",
+          "not a finite");
+}
+
+// factor-core race batch: #263 weights, #110 targets, #89 structured
+// controls, #100 structured inverses in the field's units
+{
+  const mu = [0, 0.3, 1], V = [[0], [1], [-0.5]], F = [[-1], [1]];
+  const a = races.raceProbabilities(mu, { V, D: [1, 1, 1], F, W: [1e307, 1e307] });
+  const b = races.raceProbabilities(mu, { V, D: [1, 1, 1], F, W: [1e308, 1e308] });
+  holds("weights normalise without overflow (#263)",
+        Math.max(...a.map((x, i) => Math.abs(x - b[i]))) < 1e-12);
+  rejects(races.abilitiesFromRace, [[0.8, NaN], { returnInfo: true }],
+          "NaN target refused (#110)", "not a finite");
+  rejects(races.abilitiesFromRace, [[Infinity, 1], { returnInfo: true }],
+          "Infinite target refused (#110)", "not a finite");
+  const pr = races.abilitiesFromRace([0.9999999999999999, 1e-20], { D: [1, 1], returnInfo: true });
+  holds("pair shortcut uses the longshot tail (#110)",
+        pr.mu.every(Number.isFinite) && Math.abs(pr.mu[1] - pr.mu[0] - 13.0989269761827) < 1e-6,
+        `${pr.mu}`);
+  const muI = [-1.88, 3.24, -0.27, 0.063], DI = [0.0557, 1.70, 14.8, 3.60];
+  const d1 = races.raceProbabilities(muI, { D: DI, points: 65, window: "span" });
+  const d2 = races.raceProbabilities(muI, { structure: structures.Independent(DI), points: 65, window: "span" });
+  holds("structured window reaches the race (#89)",
+        Math.max(...d1.map((x, i) => Math.abs(x - d2[i]))) === 0);
+  const bl = structures.Blocks([0, 0, 1, 1], [0.3, 0.2, 0.4, 0.1], [1, 1, 1, 1]);
+  rejects(races.raceProbabilities, [[-0.4, -0.1, 0.2, 0.5], { structure: bl, base: "logistic" }],
+          "structured hierarchical base refused (#89)", "base");
+  rejects(races.abilitiesFromRace, [[0.4, 0.3, 0.2, 0.1], { structure: bl, base: "logistic" }],
+          "structured hierarchical inverse base refused (#89)", "base");
+  rejects(races.raceProbabilities, [[-0.4, -0.1, 0.2, 0.5], { structure: bl, D: [1, 1, 1, 1] }],
+          "structure plus D refused (#89)", "structure");
+  const tr = structures.Tree([0, 0, 1, 1], [4, 3.2, 3.6, 2.8], [0.1, 0.12, 0.08, 0.15],
+                             [2, 2, -1], [0, 0, 0.9]);
+  const pt = races.raceProbabilities([-1.5, -0.2, 0.3, 1.4], { structure: tr, points: 257, qa: 9 });
+  const it = races.abilitiesFromRace(pt, { structure: tr, points: 257, qa: 9, nIter: 3,
+                                           returnInfo: true });
+  holds("structured inverse honours nIter and reports convergence (#89)",
+        it.iterations <= 3 && it.converged === false);
+  const target = [0.6, 0.25, 0.1, 0.05], cl = [0, 0, 1, 1];
+  const L0 = [0.9, 0.6, 0.8, 0.3], D0 = [0.19, 0.64, 0.36, 0.91];
+  let worst = 0;
+  for (const c of [1e-6, 1e-3, 1e3, 1e6]) {
+    for (const s of [structures.Blocks(cl, L0.map(x => c * x), D0.map(x => c * c * x)),
+                     structures.Nested(cl, L0.map(x => c * x), D0.map(x => c * c * x),
+                                       [[0.2 * c], [-0.1 * c], [0.3 * c], [-0.2 * c]], 0.7)]) {
+      const m = races.abilitiesFromRace(target, { structure: s });
+      const back = races.raceProbabilities(m, { structure: s });
+      worst = Math.max(worst, ...back.map((x, i) => Math.abs(x - target[i])));
+    }
+  }
+  holds("structured inverses are unit-equivariant (#100)", worst < 1e-8,
+        `worst share error ${worst.toExponential(2)}`);
+}
+
+// #340: top-k factor nodes follow the race's sharpness rule
+{
+  const mu = [-0.15, 0.05, 0.10, 0.0], V = [[-3], [-1], [1], [3]], D = [0.01, 0.01, 0.01, 0.01];
+  const race = races.raceProbabilities(mu, { V, D, points: 1025 });
+  const top1 = topk.topKProbabilities(mu, 1, { V, D, points: 1025 });
+  const R = topk.rankProbabilities(mu, { V, D, points: 1025 }).map(r => r[0]);
+  holds("sharp rank-one top-1 equals the race (#340)",
+        Math.max(...race.map((x, i) => Math.abs(x - top1[i]))) < 1e-6 &&
+        Math.max(...race.map((x, i) => Math.abs(x - R[i]))) < 1e-6);
+}
+
+
 // --- quadrature orders are counts: "15" from a form control used to be
 // new Array("15") -- ONE node -- and priced a different model (#442)
 {

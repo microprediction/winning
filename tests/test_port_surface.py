@@ -441,8 +441,10 @@ def test_browser_allowlists_are_per_function():
 # while every source audit still passed (#237). Naming the callee instead
 # turns the exemption into a checkable claim: the two allowlists must
 # agree, because whatever one accepts the other has to.
+# bottomKProbabilities left this table when it stopped forwarding: it now
+# integrates the bottom tail directly (#365) and reads its own options,
+# so the direct audits above cover it instead of this exemption.
 FORWARDS_OPTS = {
-    "topk.mjs::bottomKProbabilities": "topk.mjs::topKProbabilities",
     "topk.mjs::locScaleFromWinAndSecond": "topk.mjs::locScaleFromTopkPair",
 }
 

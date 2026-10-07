@@ -54,16 +54,23 @@ Tree <- function(cluster, loading, D, parent, strength)
              parent = parent, strength = strength)
 
 .dispatch_probabilities <- function(mu, s, base = "normal", points = 257,
-                                    qa = 9, qf = 15, return_slopes = FALSE) {
+                                    qa = 9, qf = 15, return_slopes = FALSE,
+                                    window = "bulk", delta = 1e-12) {
   cls <- class(s)[1]
   if (cls == "Independent") {
     return(race_probabilities(mu, V = NULL, D = s$D, base = base,
-                              points = points, return_slopes = return_slopes))
+                              points = points, return_slopes = return_slopes,
+                              window = window, delta = delta))
   }
   if (cls == "Factor") {
     return(race_probabilities(mu, V = s$V, D = s$D, base = base,
-                              points = points, return_slopes = return_slopes))
+                              points = points, return_slopes = return_slopes,
+                              window = window, delta = delta))
   }
+  # the hierarchical kernels are Gaussian hard races on their own
+  # windows: a non-normal base, a window or a delta was dropped silently
+  # and a different race priced (#89); refuse them, as python does
+  .refuse_hierarchical_controls(cls, base, window, delta)
   if (return_slopes) stop("return_slopes is available for Independent/Factor only")
   if (cls == "Blocks") {
     return(block_race_probabilities(mu, s$cluster, s$loading, s$D,
@@ -82,32 +89,54 @@ Tree <- function(cluster, loading, D, parent, strength)
   stop("unknown structure ", cls)
 }
 
+.refuse_hierarchical_controls <- function(cls, base, window = "bulk",
+                                          delta = 1e-12) {
+  bad <- c(base = !identical(base, "normal"),
+           window = !identical(window, "bulk"),
+           delta = !isTRUE(all.equal(delta, 1e-12)))
+  if (any(bad))
+    stop(sprintf(paste("%s races do not support %s: the block/nested/tree",
+                       "kernels are Gaussian hard races on their own",
+                       "lattice windows. Use structure=Factor (or V=/D=)."),
+                 cls, paste(names(bad)[bad], collapse = ", ")), call. = FALSE)
+}
+
 .dispatch_abilities <- function(p, s, base = "normal", points = 257,
-                                qa = 9, qf = 15) {
+                                qa = 9, qf = 15, n_iter = NULL, tol = NULL) {
+  # n_iter and tol are the CALLER'S controls: every branch used to run
+  # its own hidden defaults (#89). NULL keeps the branch's default.
   cls <- class(s)[1]
+  ctl <- function(v, default) if (is.null(v)) default else v
   if (cls == "Independent") {
     return(abilities_from_race(p, V = NULL, D = s$D, base = base,
-                               points = points))
+                               points = points, n_iter = ctl(n_iter, 60),
+                               tol = ctl(tol, 1e-8)))
   }
   if (cls == "Factor") {
     return(abilities_from_race(p, V = s$V, D = s$D, base = base,
-                               points = points))
+                               points = points, n_iter = ctl(n_iter, 60),
+                               tol = ctl(tol, 1e-8)))
   }
+  .refuse_hierarchical_controls(cls, base)
   if (cls == "Blocks") {
     return(abilities_from_block_race(p, s$cluster, s$loading, s$D,
-                                     points = points, qa = qa)$mu)
+                                     points = points, qa = qa,
+                                     max_iter = ctl(n_iter, 25),
+                                     tol = ctl(tol, 1e-10))$mu)
   }
   if (cls == "Nested") {
     return(.invert_generic(p, function(m)
       nested_race_probabilities(m, s$cluster, s$loading, s$D,
                                 coupling = s$coupling, gamma = s$gamma,
-                                points = points, qa = qa, qf = qf)))
+                                points = points, qa = qa, qf = qf),
+      tol = ctl(tol, 1e-9), max_iter = ctl(n_iter, 400)))
   }
   if (cls == "Tree") {
     return(.invert_generic(p, function(m)
       tree_race_probabilities(m, s$cluster, s$loading, s$D,
                               s$parent, s$strength,
-                              points = points, qa = qa)))
+                              points = points, qa = qa),
+      tol = ctl(tol, 1e-9), max_iter = ctl(n_iter, 400)))
   }
   stop("unknown structure ", cls)
 }
@@ -155,15 +184,18 @@ tree_from_linkage <- function(Z) {
   n <- nrow(Z) + 1L
   nT <- 2L * n - 1L
   parent <- integer(nT)                    # 0 = root
-  rho <- numeric(nT)
+  # d[t] = 1 - rho_t = 2 h^2, kept directly: 1 - (1 - 2 h^2) cancels to
+  # a few ulps for near-duplicate leaves (python Tree.from_linkage, #430)
+  d <- rep(1, nT)
   for (k in seq_len(nrow(Z))) {
     a <- as.integer(Z[k, 1]) + 1L          # 0-based ids -> 1-based
     b <- as.integer(Z[k, 2]) + 1L
     t <- n + k
     parent[a] <- t; parent[b] <- t
-    # floor at zero: the tree race cannot represent negative dependence,
-    # so merges above the h = 1/sqrt(2) horizon leave branches independent
-    rho[t] <- max(1 - 2 * Z[k, 3]^2, 0)
+    # floor rho at zero: the tree race cannot represent negative
+    # dependence, so merges above the h = 1/sqrt(2) horizon leave
+    # branches independent
+    d[t] <- min(2 * Z[k, 3]^2, 1)
   }
   lam <- numeric(nT)
   # the nonnegative increments are a PREMISE, checked as in Python's
@@ -174,7 +206,7 @@ tree_from_linkage <- function(Z) {
   # seq_len, not (n + 1L):nT -- at one leaf that is 2:1 = c(2, 1) (#382)
   for (t in n + seq_len(n - 1L)) {
     pa <- parent[t]
-    lam2 <- rho[t] - if (pa > 0) rho[pa] else 0
+    lam2 <- (if (pa > 0) d[pa] else 1) - d[t]     # rho_t - rho_pa
     if (lam2 < -1e-9) { bad <- c(bad, lam2); bad_t <- c(bad_t, t) }
     lam[t] <- sqrt(max(lam2, 0))
   }
@@ -190,13 +222,19 @@ tree_from_linkage <- function(Z) {
       "parent/strength."), bad_t[w] - 1L, -bad[w], length(bad)),
       call. = FALSE)
   }
-  # a leaf whose parent is the root (0) has parent correlation zero. R's
-  # rho[0] is numeric(0), not 0, so the one-leaf tree from an empty
-  # linkage came back with D = numeric(0) and could not be priced (#382)
-  pa_leaf <- parent[seq_len(n)]
-  rho_leaf <- numeric(n)
-  rho_leaf[pa_leaf > 0] <- rho[pa_leaf[pa_leaf > 0]]
-  D <- pmax(1 - rho_leaf, 1e-10)
+  # D_i = 2 h^2 at the leaf's first merge, EXACTLY: the old absolute
+  # floor pmax(., 1e-10) changed every near-duplicate branch (h = 1e-6
+  # priced 0.556 where the cophenetic model gives pnorm(1)), #430. A
+  # merge at height 0 (coincident leaves) is refused by name.
+  D <- vapply(seq_len(n), function(i)
+    if (parent[i] > 0) d[parent[i]] else 1, numeric(1))
+  if (any(D <= 0)) {
+    stop(sprintf(paste0(
+      "leaf %d merges at height 0 (%d leaf/leaves do): coincident leaves ",
+      "have zero idiosyncratic variance, which a tree race cannot price. ",
+      "Merge the duplicates, or perturb them deliberately."),
+      which(D <= 0)[1] - 1L, sum(D <= 0)), call. = FALSE)
+  }
   Tree(cluster = seq_len(n), loading = numeric(n), D = D,
        parent = parent, strength = lam)
 }

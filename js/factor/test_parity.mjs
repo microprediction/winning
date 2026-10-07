@@ -129,6 +129,50 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   refuses([0.5, 0.3, 0.2], "a W of the wrong length");
 }
 
+/* factor-core batch: overflow-safe weights (#263), zero-mass nodes
+   (#416), lattice size (#444), non-finite targets (#110) and the
+   inverse's loading gauge (#70). */
+{
+  const mu0 = [-1, -0.2, 0.3, 0.9];
+  const Dg = [1, 1, 1, 1];
+  const F5 = [[-2.02018287045609], [-0.958572464613819], [0],
+              [0.958572464613819], [2.02018287045609]];
+  const W5 = [0.0112574113277207, 0.222075922005613, 0.533333333333333,
+              0.222075922005613, 0.0112574113277207];
+  let worst = 0;
+  for (const a of [0, 100]) {
+    const V = mu0.map(() => [a]);
+    const p = winProbabilitiesFactor(mu0, V, Dg, F5, W5, { points: 1001 }).p;
+    const mu = abilitiesFromProbabilitiesFactor(p, V, Dg, F5, W5,
+      { points: 1001, nIter: 50, tol: 1e-8 });
+    worst = Math.max(worst, ...mu.map((v, i) => Math.abs(v - mu0[i])));
+  }
+  check("inverse is invariant to a common loading shift (#70)", [worst], [0], 1e-6);
+
+  const Vs = [[0], [1], [-0.5]], Ds = [1, 1, 1], Fs = [[-1], [1]];
+  const a = winProbabilitiesFactor([0, 0.3, 1], Vs, Ds, Fs, [1e307, 1e307]).p;
+  const b = winProbabilitiesFactor([0, 0.3, 1], Vs, Ds, Fs, [1e308, 1e308]).p;
+  check("weights normalise without overflow (#263)", b, a, 1e-12);
+
+  const mz = [0.1, 0.2, 0.4], Vz = [[2], [0], [-2]], Dz = [1e-6, 1e-6, 1e-6];
+  const centre = winProbabilitiesFactor(mz, Vz, Dz, [[0]], [1], { points: 501 }).p;
+  const padded = winProbabilitiesFactor(mz, Vz, Dz, [[-100], [0], [100]], [0, 1, 0],
+                                        { points: 501 }).p;
+  check("zero-weight nodes are no-ops (#416)", padded, centre, 1e-12);
+
+  const throws = (fn) => { try { fn(); return 0; } catch (e) { return 1; } };
+  for (const pts of [0, 1, 2.5, NaN]) {
+    check(`refuses points=${pts} (#444)`,
+      [throws(() => winProbabilitiesFactor([-0.5, 0, 0.5], [[-0.2], [0], [0.2]], [1, 1, 1],
+                                           Fs, [0.5, 0.5], { points: pts }))], [1], 0.5);
+  }
+  for (const bad of [[NaN, 0.5, 0.5], [Infinity, 1, 1]]) {
+    check(`inverse refuses ${bad} (#110)`,
+      [throws(() => abilitiesFromProbabilitiesFactor(bad, Vs, Ds, Fs, [0.5, 0.5]))], [1], 0.5);
+  }
+}
+
+
 // --- the boundary and the inverse (#198 #210 #254 #290 #330 #331 #349
 // #358 #371 #391 #428 #443)
 {
@@ -174,7 +218,9 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   // #358: two contenders and a longshot converge, and say so
   {
     const t = [0.6, 0.3999, 0.0001];
-    const o = abilitiesFromProbabilitiesFactor(t, Z3, [1, 1, 1], [[]], [1], { returnInfo: true });
+    // tol 1e-9: the reprice check below asks for 1e-7, tighter than the
+    // default 1e-6 log-residual contract guarantees
+    const o = abilitiesFromProbabilitiesFactor(t, Z3, [1, 1, 1], [[]], [1], { returnInfo: true, tol: 1e-9 });
     check("near-pair target converges (#358)", [o.converged ? 0 : 1], [0], 0.5);
     check("near-pair target reprices (#358)", winProbabilitiesFactor(o.mu, Z3, [1, 1, 1], [[]], [1], { points: 4001 }).p, t, 1e-7);
   }

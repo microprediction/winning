@@ -12,7 +12,8 @@ from scipy.special import log_ndtr, ndtr, ndtri
 
 # the package-wide shape contract; re-exported here because
 # winning.factor.core is where the factor kernels look for it
-from ..shapes import as_idio, as_loadings, as_weights  # noqa: F401
+from ..shapes import (as_idio, as_loadings, as_weights,  # noqa: F401
+                      as_factor_law, as_points, as_target)
 
 from ..rustconfig import load_fastrace
 
@@ -715,6 +716,11 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     mu = np.asarray(mu, dtype=float)
     V = as_loadings(V, len(mu))      # before keep: rows are contestants
     D = as_idio(D, len(mu), positive=True)
+    points = as_points(points)
+    # validated, relative, and with zero-weight nodes dropped: a null
+    # node is a no-op for the integral but widened the global window
+    # below until every density spike fell between lattice points (#416)
+    F, W = as_factor_law(F, W)
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
@@ -782,8 +788,16 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
         # built for exactly this, so retry once through it (same min-wins
         # kernel, tighter lattice) before giving up. Deletion output is
         # not available on this path.
+        #
+        # Under the CALLER'S factor law: F, W are forwarded. The retry
+        # used to drop them and price the default Gaussian-factor law
+        # instead -- a different model returned as this one (#416). And
+        # return_total reports the span-window total that failed, not
+        # the fallback's normalised 1.0, so the diagnostic still says the
+        # requested integration did not resolve.
         from .races import race_probabilities
-        p_fb = race_probabilities(mu, V=V, D=D, points=max(points, 257))
+        p_fb = race_probabilities(mu, V=V, D=D, F=F, W=W,
+                                  points=max(points, 257))
         if np.all(np.isfinite(p_fb)) and p_fb.sum() > 0:
             if return_deletions:
                 raise FloatingPointError(
@@ -792,7 +806,7 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
                     "provide deletions -- call race_probabilities/"
                     "removal_shares directly for this field")
             out = p_fb / p_fb.sum()
-            return (out, float(p_fb.sum())) if return_total else out
+            return (out, float(total)) if return_total else out
         raise FloatingPointError("factor race integration failed")
     out = p / total
     if return_deletions:
@@ -821,14 +835,27 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     target probability is unidentifiably small). Typical cost: ~10 forward-pass
     equivalents, versus hundreds for the damped Picard iteration it replaces.
     """
-    p = np.asarray(p, dtype=float)
+    p = as_target(p, "p")            # finite and 1-D before the sign test
     if np.any(p <= 0):
         raise ValueError("all target probabilities must be positive")
-    p = p / p.sum()
+    with np.errstate(over="ignore"):
+        _tot = p.sum()
+    if not np.isfinite(_tot):        # relative weights: [1e308]*3 is [1]*3
+        p = p / p.max()
+        _tot = p.sum()
+    p = p / _tot
     logp = np.log(p)
     N = len(p)
+    points = as_points(points)
     V = as_loadings(V, N)
+    # The gauge the forward and JVP paths already fix: a common loading
+    # column adds the same c'f to every runner and cannot move an argmin,
+    # but the warm start, step cap and lattice window below were built
+    # from the uncentered V, so V + 100 turned a 6e-8 inversion into a
+    # residual of 33.8 (#70).
+    V = V - V.mean(axis=0)
     D = as_idio(D, N, positive=True)
+    F, W = as_factor_law(F, W)
     sd = np.sqrt(D)
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
@@ -856,7 +883,11 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         # growth safeguard (observed log-share errors up to ~1).
         dv = Vc[0] - Vc[1]
         s = float(np.sqrt(D.sum() + dv @ CovF @ dv))
-        gap = s * float(ndtri(p[0])) - float(shift[1] - shift[0])
+        # the quantile of the SMALLER share: normalising [1, 1e-17] rounds
+        # the favourite to exactly 1, where ndtri is inf, while the
+        # longshot still carries the finite contrast (#110)
+        q = float(ndtri(p[0])) if p[0] <= 0.5 else -float(ndtri(p[1]))
+        gap = s * q - float(shift[1] - shift[0])
         mu = np.array([-0.5 * gap, 0.5 * gap])
         if return_info:
             return mu, {"iterations": 0, "residual": 0.0, "converged": True}
@@ -870,12 +901,19 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
             n_iter=n_iter, tol=tol) - shift
         mu -= mu.mean()
     else:
-        mu = (logp - logp.mean()) / 2.0
+        # min-wins (a larger share is a LOWER mu), in the field's units:
+        # the start was dimensionless and favourite-high, so a field at
+        # sd 1e-3 began a thousand sd from its answer (#100)
+        mu = -(logp - logp.mean()) / 2.0 * float(np.sqrt(np.median(D)))
     step_cap = 1.0 * np.sqrt(D + sig_v)
     prev_res = np.inf
-    # two runners holding nearly all the mass two-cycle undamped at any N
-    # (races.abilities_from_race, #150/#151): start damped there
-    damp = 0.7 if float(np.sort(p)[-2:].sum()) > 0.8 else 1.0
+    # A dominant pair two-cycles under the undamped Jacobi step at any N
+    # (the photo-finish graph of the pair is bipartite), exactly as in
+    # races.abilities_from_race, whose share gate this copies. Gauge-
+    # fixing V (#70) moved one such field (top-two share 0.999) off the
+    # trajectory that had luckily converged and onto the cycle.
+    _top2 = float(np.sort(p)[-2:].sum()) if N > 2 else 1.0
+    damp = 0.7 if _top2 > 0.8 else 1.0
     for _ in range(n_iter):
         M_all = mu[None, :] + F @ V.T
         lo = M_all.min() - 8.0 * sd.max()
@@ -978,6 +1016,8 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     D = as_idio(D, N, positive=True)
     V = as_loadings(V, N)
     V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass (#114)
+    points = as_points(points)
+    F, W = as_factor_law(F, W)      # as the forward pass reads them (#416)
     if _HAVE_RUST and normalized and N > 1 and len(F) >= 2:
         # The compiled kernel returns the RAW directional derivative of the
         # unnormalized rectangle sum (#124: it matched numpy's
