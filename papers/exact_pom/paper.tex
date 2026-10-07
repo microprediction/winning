@@ -2,6 +2,7 @@
 
 \usepackage[margin=1.1in]{geometry}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{amsthm}
 \usepackage{booktabs}
 \usepackage{microtype}
@@ -10,275 +11,592 @@
 
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{Exact Posterior Probability of Optimality\\ for
-Factor-Gaussian Beliefs}\\[0.4em]
-\large the integral that Thompson-style methods approximate,
-computed in closed form at scale}
+\title{\textbf{Deterministic Probabilities for\\
+Thompson Sampling and Entropy Search}}
 \author{Peter Cotton}
-\date{\today}
+\date{\normalsize First version: September 1, 2026.\\ This version: October 6, 2026.}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-\noindent The posterior probability that alternative $i$ is best,
-$p_i = \Pr(\theta_i = \max_j \theta_j \mid \mathcal{D})$, drives
-stopping rules, budget allocation, derandomized Thompson sampling,
-and safety constraints, and the reinforcement-learning and Bayesian
-optimization literatures describe it as intractable: recent work
-variationally approximates it from marginal means and variances
-alone. We observe that in two standard settings the posterior
-covariance is exactly of factor form $\Sigma = WW' + \mathrm{diag}(d)$
-at every step: simulation replicates under common random numbers, and
-per-arm Gaussian observations against a factor prior. In that case
-the whole vector $p$ is a one-dimensional integral per factor node,
-computable for all $n$ alternatives at once in time linear in $n$ by
-machinery previously developed for pricing correlated contests, and
-certified here against Monte Carlo. In a stopping problem under
-common random numbers, rules that stop on marginal-only estimates of
-$p$ hold their nominal error by overspending, between $1.5$ and $3.4$
-times the replicates of the exact rule, which stops earliest in every
-correlation regime at the nominal error level. In a correlated
-Gaussian bandit, sampling from the exact vector reproduces Thompson
-sampling's regret to within replication noise, as the occupancy
-identity requires, while the variational policy pays ten percent more
-regret and sits at measured total-variation distance $0.13$ to
-$0.16$ from the object it stands in for.
+\noindent Thompson sampling plays each alternative with the posterior
+probability that it is best, and entropy search chooses evaluations
+by the same vector. Where the numbers themselves are needed they are
+approximated: from marginal means and variances in bandits, and by
+expectation propagation, at a cost quartic in the number of
+candidates, in Bayesian optimization. We compute the vector by
+quadrature, for all $n$ alternatives at once, in time linear in $n$
+at fixed resolution, whenever the posterior covariance is a few
+shared factors plus a diagonal, or one of the block, nested or tree
+structures the computation accepts, with a dense covariance fitted to
+those on intake. Simulation under common random numbers
+and a Gaussian bandit with a factor prior both produce such
+posteriors exactly. With the computed vector, a stopping rule stops
+sooner than the marginal rules at the same nominal threshold,
+sampling from it matches Thompson sampling's regret, and entropy
+search can run on thousands of candidates rather than fifty.
 \end{abstract}
 
 \section{Introduction}
 
-Let $\theta \in \mathbb{R}^n$ be unknown values of $n$ alternatives
-(simulated systems, bandit arms, candidate molecules) and let
-$\mathcal{D}$ be data. The posterior probability of optimality is the
-vector
+An analyst has twenty candidate inventory policies and estimates each
+one's expected profit by simulation. A website has fifty
+advertisements and records clicks on whichever one it shows. A chemist
+has predicted binding strengths for a thousand candidate molecules. In
+each case there are $n$ alternatives, and alternative $i$ has an
+unknown value $\theta_i$: the policy's true expected profit, the
+advertisement's true click rate, the molecule's true binding strength.
+The data $\mathcal{D}$ collected so far give a posterior belief about
+$\theta = (\theta_1, \dots, \theta_n)$.
+
+The posterior probability of optimality is the vector
 \begin{equation}
 p_i \;=\; \Pr\!\left(\theta_i = \max_j \theta_j \,\middle|\,
 \mathcal{D}\right), \qquad i = 1, \dots, n.
 \label{eq:pom}
 \end{equation}
-This vector is the natural currency of sequential decision problems.
-A stopping rule halts when $\max_i p_i$ clears a confidence target; a
-budget allocator spends where $p$ is contested; Thompson sampling
-draws its action from $p$ implicitly; a constrained or multi-agent
-policy needs $p$ explicitly, because a single posterior sample no
-longer suffices.
+Its entry $p_i$ is the probability, given the data, that alternative
+$i$ is truly the best. If $p_3 = 0.9$ for the inventory policies, there
+is a ninety percent chance that policy~3 has the highest expected
+profit.
 
-The literature treats Equation~\eqref{eq:pom} as out of reach.
-\citet{tarbouriech2023}, introducing the quantity as the key object
-of Bayesian reinforcement learning, write that computing it
-``involves computing several complicated integrals with respect to
-the posterior and is intractable in most cases,'' and open their
-solution section with ``computing this probability is intractable in
-general.'' Their remedy, VAPOR, is a variational program over
-occupancy measures. \citet{menet2026} fine-tune a large language
-model toward the same object under a Gaussian-process posterior; the
-tractable policy they target consumes only the marginal means and
-marginal standard deviations of that posterior, and they note of the
-prior guarantee for this family that ``the structure of the kernel is
-not taken into account, i.e., the worst-case bandit with independent
-arms is assumed.'' In ranking and selection, procedures bound the
-probability of correct selection with Bonferroni-type inequalities or
-estimate it by posterior sampling; the joint vector is not evaluated.
+Decisions about where to collect data use this vector. The analyst can
+stop simulating once the largest $p_i$ exceeds $0.95$, and until then
+can spend runs on the policies whose $p_i$ are close. The website can
+show advertisement $i$ with probability $p_i$, which is Thompson
+sampling. A rule that must respect constraints, or must be
+reproducible without randomness, needs the numbers $p_i$ themselves.
 
-This paper makes a single observation and develops its consequence.
-In the settings these literatures study, the posterior covariance
-frequently has exact factor form
+Thompson sampling runs in production wherever alternatives are
+compared under uncertainty: advertising, recommendation, clinical
+allocation, and now the fine-tuning of language models toward it \citep{menet2026}. The policy never needs the numbers
+$p_i$, but much that surrounds the
+policy does.
+
+Off-policy evaluation needs them as propensities, and an audit of why
+an arm was shown needs them. A stopping rule, a shortlist of the $k$
+arms most likely to be best, a constraint on how often any arm may be
+shown, and a reproducible version of the policy all need them. In
+every one of these uses they have been approximated, from marginals
+or by counting posterior draws.
+
+When the beliefs about different alternatives are independent, each
+$p_i$ is a one-dimensional integral. In practice they are usually
+correlated, because alternatives share causes. Inventory policies
+simulated on the same demand history all do well on a quiet day and
+badly on a busy one. Advertisements aimed at the same audience have
+similar click rates. Molecules built on the same scaffold bind similarly.
+
+With correlated beliefs, $p_i$ is the probability that
+the $n - 1$ differences $\theta_i - \theta_j$ are all positive, a Gaussian orthant probability in $n - 1$ dimensions. No general
+fast method computes it, and until recently none computed it quickly
+even when the correlation comes from a few shared factors, which is
+the case the pricing pass of \citet{cotton2026} now covers.
+
+Three literatures need this vector and approximate it. The first is
+ranking and selection, which chooses the best of $n$ simulated
+systems. Its procedures bound the probability of a correct selection
+with Bonferroni-type inequalities, or estimate it by posterior
+sampling. The joint vector is not evaluated.
+
+The second is Bayesian bandits and reinforcement learning.
+\citet{tarbouriech2023} call Equation~\eqref{eq:pom} the key object of
+that field and write that computing it ``involves computing several
+complicated integrals with respect to the posterior and is intractable
+in most cases.'' Their method, VAPOR, replaces it with a variational
+program. \citet{menet2026} fine-tune a large language model toward a policy
+that uses only the marginal means and standard deviations of the
+posterior.
+
+The third is Bayesian optimization. Entropy search
+\citep{hennig2012} takes the vector itself, the posterior probability
+that the optimum lies at each of $n$ candidate points, as what an
+optimizer should learn, and chooses each evaluation to reduce its
+entropy. \citet{hennig2012} call the vector intractable, approximate
+it by expectation propagation at a cost of $O(n^4)$, and run with fifty candidates. Expectation propagation accepts any
+covariance.
+
+Correlation that comes from a few shared causes has a simple form.
+Each value is its own part plus a weighted sum of $\rho$ shared
+variables:
+\begin{equation}
+\theta_i \;=\; m_i + w_i' z + \varepsilon_i, \qquad
+z \sim N(0, I_\rho), \quad \varepsilon_i \sim N(0, d_i),
+\label{eq:factormodel}
+\end{equation}
+with all the $\varepsilon_i$ independent of each other and of $z$. For
+the inventory policies, $z$ might be the overall demand level and its
+volatility. The row $w_i$ says how strongly policy $i$ responds to each.
+The covariance of $\theta$ is then
 \begin{equation}
 \Sigma \;=\; W W' + \mathrm{diag}(d), \qquad W \in
 \mathbb{R}^{n \times \rho}, \quad \rho \ll n,
 \label{eq:factor}
 \end{equation}
-not as a modeling approximation but as a consequence of the
-observation process, and for factor-form covariance
-Equation~\eqref{eq:pom} is computable exactly, for all $i$ at once,
-in time linear in $n$. The computation is not new to this paper: it
-is the correlated-contest pricing pass of \citet{cotton2026}, where
-it is developed together with its derivatives and its inverse and
-benchmarked to $n = 10^6$. This paper adds the derivation that two
-canonical posteriors stay inside the factor grammar at every update,
-the identification of the probability-of-optimality literature's
-central object with that pass, and measurements of what the exact
-vector buys where surrogates are currently used.
+where $W$ has rows $w_i'$. The variables in $z$ are called factors,
+and $W$ holds the loadings.
 
-\section{The computation}
+The best-known Thompson samplers already have this form. Linear Thompson
+sampling \citep{agrawal2013}, the version \citet{chapelle2011}
+evaluated on display advertising and news recommendation, puts a
+Gaussian posterior on a coefficient vector $\beta$ of dimension equal
+to the number of features, and the arm means $\theta_i = x_i' \beta$
+then have covariance $X \Sigma_\beta X'$. That is Equation~\eqref{eq:factor}
+with the feature matrix as the loadings and a factor rank equal to
+the number of features, and Section~\ref{sec:bandit-posterior} keeps
+it in that form after every pull.
+
+For beliefs of this form, the whole vector is one integral over the
+factors, and quadrature evaluates it for all $n$ alternatives at once
+in time linear in $n$ at fixed resolution. The computation is the pricing pass for correlated contests in
+\citet{cotton2026}, restated rather than derived. One standard model from each of the first two literatures produces a
+posterior of exactly this form after every update: simulation under
+common random numbers, and a Gaussian bandit with a factor prior. In Bayesian optimization the form is a modelling choice, a kernel
+with finitely many features, or the intake fit of a dense kernel.
+
+In the simulation, a stopping rule on the computed vector stops sooner than rules on the
+marginal approximations at the same nominal threshold. In the bandit, sampling from it incurs less regret than they do. In
+Bayesian optimization, entropy search can run on thousands of
+candidates rather than fifty.
+
+\section{The computation, restated from Cotton (2026)}
 \label{sec:computation}
 
-Condition on the factor variables. Write $\theta = m + W z +
-\varepsilon$ with $z \sim N(0, I_\rho)$ and $\varepsilon_i \sim
-N(0, d_i)$ independent. Given $z$, the alternatives are independent
-with means $m_i + w_i' z$ and variances $d_i$, so with $F_{i|z}$ and
-$f_{i|z}$ the conditional distribution and density functions,
+The computation is the correlated-contest pricing pass of
+\citet{cotton2026}, restated in the notation of
+Equation~\eqref{eq:factormodel} and specialised to Gaussian noise.
+Nothing in it is new.
+
+The original is more general: it accepts any
+base distribution, and a covariance given as factor loadings, as
+blocks, as nested groups or as a tree, or a dense covariance fitted to one of those structures on the way
+in, with the residual of that fit reported as its error. It also
+inverts the vector, recovering means from probabilities. For every
+structure in that grammar the cost is linear in $n$ at fixed
+resolution. The factor form of
+Equation~\eqref{eq:factor} with Gaussian noise is the case needed
+here.
+
+Write the posterior in the form of Equation~\eqref{eq:factormodel},
+$\theta = m + W z + \varepsilon$. Assume every $d_i > 0$, so the
+maximum is almost surely unique and the $p_i$ sum to one.
+
+The shared factors $z$ make the alternatives dependent. Given $z$,
+nothing is shared, and the alternatives are independent with means
+$m_i + w_i' z$ and variances $d_i$. The probability that $i$ is
+best given $z$ is then a one-dimensional integral, and $p_i$ is its
+average over $z$.
+
+Let $F_{i|z}$ and $f_{i|z}$ be the conditional distribution and
+density functions of $\theta_i$ given $z$. Alternative $i$ is the
+maximum when every other alternative falls below it, so
 \begin{equation}
 p_i \;=\; \int_{\mathbb{R}^\rho} \phi_\rho(z) \int_{\mathbb{R}}
-f_{i|z}(x) \prod_{j \neq i} \bigl(1 - F_{j|z}(x)\bigr)\, dx \, dz .
+f_{i|z}(x) \prod_{j \neq i} F_{j|z}(x)\, dx \, dz .
 \label{eq:integral}
 \end{equation}
-The inner integrand for every $i$ shares the survival field
-$G_z(x) = \prod_j (1 - F_{j|z}(x))$: dividing out the $i$th factor
-prices all $n$ alternatives from one field,
+
+The inner integrands for different $i$ share the product
+$G_z(x) = \prod_j F_{j|z}(x)$. Dividing out the $i$th term gives
+every $p_i$ from the same product:
 \begin{equation}
 p_i \;=\; \mathbb{E}_z \int f_{i|z}(x)\,
-\frac{G_z(x)}{1 - F_{i|z}(x)} \, dx .
+\frac{G_z(x)}{F_{i|z}(x)} \, dx .
 \label{eq:cavity}
 \end{equation}
-On a lattice of $L$ points with $Q$ quadrature nodes over $z$, the
-cost is $O(nLQ)$ for the whole vector, with the numerical care
-(window placement, log-domain products, tail handling) described in
-\citet{cotton2026}, whose implementation is used unchanged here. Every
-exact vector reported below is certified against Monte Carlo argmax
-frequencies at $2 \times 10^5$ draws; the worst certificate
-total-variation distance in this paper is $0.0042$, at the
-Monte Carlo noise floor for that sample size.
+On a lattice of $L$ points in $x$, with $Q$ quadrature nodes in $z$,
+the whole vector costs $O(nLQ)$. The accuracy depends on $L$, on the
+lattice window and on $Q$, and the $Q$ needed grows with the number of
+factors and the geometry of $W$.
 
-\section{Two posteriors with exact factor form}
+Only differences between loadings matter. Let $P = I - \mathbf{1}
+\mathbf{1}'/n$ and write $W z = (PW) z + \mathbf{1}(\bar{w}' z)$,
+where $\bar{w}$ is the average row of $W$. The second term shifts
+every alternative by the same amount and changes no ranking, so
+$p(m, W, d) = p(m, PW, d)$. The number of factor dimensions the
+integral has to resolve is the rank of $PW$, which centering can
+reduce below the rank of $W$. Centering, and any orthogonal rotation
+of the columns of $W$, leave the computed vector unchanged to
+$10^{-11}$ or better, which is a check on an implementation. In the
+aligned regime of the stopping experiment every row of $W$ is the
+same, so $PW = 0$ and the contest is independent.
+
+The integral is exact. Its evaluation is not, because the lattice in
+$x$ and the quadrature rule over $z$ have finite resolution. The
+lattice is converged, and the factor rule is accurate unless
+correlations are extreme. For three alternatives with $m = 0$,
+$W = (0, 1, 3)'$ and $d_i = 0.1$, two of the three correlations
+exceed $0.9$, the exact vector is known in closed form from the
+bivariate quadrant identity, and the default rule is off by $0.0015$
+in total variation. With $2^{15}$ scrambled-Sobol nodes in place of
+the default rule that error is gone. The experiments' correlations
+are at most $0.75$, and on their posteriors the default rule's error
+is about $10^{-6}$ per entry.\footnote{Measured on ten posteriors,
+two from each regime of each experiment. Raising the lattice from
+$257$ to $2{,}049$ points changes no entry by more than
+$4 \times 10^{-16}$. Replacing the default factor rule by $2^{15}$
+scrambled-Sobol nodes changes no entry by more than
+$1.2 \times 10^{-6}$. Four million Monte Carlo draws differ from the
+computed vectors by $1$ to $4 \times 10^{-4}$ per entry, their own
+standard error, and the $2 \times 10^5$ draws taken at sixteen
+posteriors during the experiments differ by at most $0.0042$ in total
+variation, again their own noise. These are measurements, not error
+bounds. The script is \texttt{research/rs\_crn/exp3\_quadrature}.}
+
+\section{Two models whose posteriors have exact factor form}
 \label{sec:posteriors}
 
-\subsection{Common random numbers}
+The computation of Section~\ref{sec:computation} needs the posterior
+covariance in the form of Equation~\eqref{eq:factor}. Two standard models produce it exactly after every update, one from
+ranking and selection and one from bandits. In simulation, the shared factors come from running every
+system on the same random inputs. In the bandit, they come from a
+prior in which arms share features.
+
+\subsection{Simulation with common random numbers}
 \label{sec:crn}
 
-Ranking and selection compares $n$ simulated systems. Under common
-random numbers, replicate $r$ scores every system on one shared
-scenario:
+The result of this subsection is simple to state. A simulation study
+runs each of $n$ systems many times, and each run is a replicate.
+When every replicate feeds the same random inputs to all $n$ systems,
+the uncertainty about the $n$ unknown means is correlated, and the
+derivation shows that this correlation has the same shape as the
+shared inputs: a few common factors plus independent noise, with as
+many factors as there are shared input streams. Accumulating replicates sharpens
+the posterior but never changes that shape. So the vector of
+Section~\ref{sec:computation} can be computed after every replicate
+in time linear in $n$, and the $n \times n$ posterior covariance is never formed.
+
+A simulation study compares $n$ systems, such as the inventory
+policies of the introduction, by running each one many times and averaging its output. The unknown
+$\theta_i$ is system $i$'s long-run average output.
+
+A standard way to compare systems more precisely is to give every
+system the same random inputs in each replicate. This is called
+common random numbers. In replicate $r$, all twenty inventory policies
+face the same simulated demand history. A high-demand history raises
+every policy's profit, so the outputs move together, and the
+differences between policies are measured more precisely than their
+levels.
+
+Summarise the shared random inputs of replicate $r$ by $\rho$
+variables $F_r$, such as the demand level and its volatility. The
+analyst does not record $F_r$. System $i$ responds to it with
+loadings $v_i$, which are known, and has its own noise
+$\varepsilon_{ir}$:
 \begin{equation}
 Y_{ir} \;=\; \theta_i + v_i' F_r + \varepsilon_{ir}, \qquad
-F_r \sim N(0, I_\rho), \quad \varepsilon_{ir} \sim N(0, \sigma_i^2),
+F_r \sim N(0, I_\rho), \quad \varepsilon_{ir} \sim N(0, \sigma_i^2).
 \end{equation}
-with $F_r$ shared across $i$. The scenario effects $v_i$ and noise
-scales $\sigma_i$ are the declared simulation structure; the unknown
-is $\theta$, with prior $\theta \sim N(0, s_0^2 I)$. The
-per-replicate covariance is
+The $F_r$ and $\varepsilon_{ir}$ are independent of each other and
+across replicates. The loadings $v_i$ and noise scales $\sigma_i > 0$
+are known properties of the simulation, and $F_r$ is latent. If
+$F_r$ were recorded too, subtracting $v_i' F_r$ from each output would
+remove the correlation and leave a diagonal posterior. The unknown is
+$\theta$, with prior $\theta \sim N(0, s_0^2 I)$ and $s_0 > 0$.
+
+The posterior covariance of $\theta$ has factor form, with the same
+number of factors $\rho$. The derivation takes four
+steps.
+
+The covariance of one replicate across systems is
 \begin{equation}
 \Lambda \;=\; V V' + D, \qquad D = \mathrm{diag}(\sigma_1^2, \dots,
 \sigma_n^2).
 \end{equation}
-After $n_r$ replicates with mean vector $\bar{Y}$, the posterior of
-$\theta$ is Gaussian with precision
+After $n_r \ge 1$ replicates with mean vector $\bar{Y}$, the posterior
+of $\theta$ is Gaussian with precision
 \begin{equation}
 A \;=\; s_0^{-2} I + n_r \Lambda^{-1}.
 \label{eq:precision}
 \end{equation}
-The Woodbury identity applied to $\Lambda$ gives
+
+The first step inverts $\Lambda$ with the Woodbury identity:
 \begin{align}
 \Lambda^{-1} &= D^{-1} - D^{-1} V M^{-1} V' D^{-1},
-& M &= I_\rho + V' D^{-1} V,
+& M &= I_\rho + V' D^{-1} V.
 \label{eq:wood1}
 \end{align}
-so that, writing $U = D^{-1} V$ and $S = n_r M^{-1}$,
-Equation~\eqref{eq:precision} becomes
+With $U = D^{-1} V$ and $S = n_r M^{-1}$, the precision becomes
 \begin{align}
 A &= \mathrm{diag}(a) - U S U', & a_i &= s_0^{-2} + n_r \sigma_i^{-2}.
 \label{eq:diagminus}
 \end{align}
-The precision is a positive diagonal minus a rank-$\rho$ positive
-semidefinite term. Applying Woodbury a second time, now to
-Equation~\eqref{eq:diagminus},
+This is a positive diagonal minus a positive semidefinite term of
+rank at most $\rho$.
+
+The second step inverts $A$, again with the Woodbury identity:
 \begin{align}
 A^{-1} &= \mathrm{diag}(a)^{-1} + \mathrm{diag}(a)^{-1} U \, C \, U'
 \mathrm{diag}(a)^{-1},
 & C &= \bigl(S^{-1} - U' \mathrm{diag}(a)^{-1} U\bigr)^{-1}.
 \label{eq:wood2}
 \end{align}
-The middle matrix $C$ is positive definite: consider the block matrix
+
+The third step shows that $C$ is positive definite, so that it has a
+square root. Let
 $K = \bigl(\begin{smallmatrix} \mathrm{diag}(a) & U \\ U' & S^{-1}
 \end{smallmatrix}\bigr)$. The Schur complement of $S^{-1}$ in $K$ is
-$\mathrm{diag}(a) - USU' = A \succ 0$, and $S^{-1} \succ 0$, so
-$K \succ 0$; but then the Schur complement of $\mathrm{diag}(a)$ in
-$K$, which is $C^{-1}$, is also positive definite. Therefore
+$\mathrm{diag}(a) - USU' = A$, which is positive definite, and
+$S^{-1}$ is positive definite, so $K$ is positive definite. The Schur
+complement of $\mathrm{diag}(a)$ in $K$ is $C^{-1}$, so $C^{-1}$ is
+positive definite too.
+
+The fourth step gives the factor form:
 \begin{equation}
 \Sigma_{\text{post}} \;=\; \mathrm{diag}(d) + W W', \qquad
 d_i = a_i^{-1}, \quad
 W = \mathrm{diag}(a)^{-1} U \, C^{1/2},
 \label{eq:postform}
 \end{equation}
-exactly, at every $n_r$, with $W$ of rank $\rho$: the number of
-shared scenario streams, not the number of systems. The posterior
-mean is $m = A^{-1} h$ with $h = n_r \Lambda^{-1} \bar{Y}$, both
-factors already expanded above. Nothing here is approximated; the
-factor form of the posterior is inherited from the factor form of the
-scenario noise.
+exactly, for every $n_r \ge 1$. Before any replicate the posterior is
+the diagonal prior. The posterior mean is $m = A^{-1} h$ with
+$h = n_r \Lambda^{-1} \bar{Y}$, and both factors are available from
+Equations~\eqref{eq:wood1} and~\eqref{eq:wood2}.
 
-\subsection{Per-arm observations against a factor prior}
+No step approximates. The posterior has factor form because the shared
+random inputs have factor form. The number of posterior factors is at
+most $\rho$, the number of shared input variables, however many
+systems are compared.
+
+\subsection{A bandit whose arms share features}
 \label{sec:bandit-posterior}
 
-In a finite Gaussian bandit, the prior on arm means carries the
-correlation: $\theta \sim N(0, \Sigma_0)$ with $\Sigma_0 = V V' +
-\mathrm{diag}(d_0)$ --- the form produced by linear models
-$\theta_i = v_i' \beta + e_i$, by inducing-point Gaussian-process
-posteriors, and by the heteroscedastic output layers of large
-classifiers. Pulling arm $a$ returns $\theta_a + N(0, \sigma_n^2)$.
-With per-arm counts $c$ the posterior precision is
-\begin{equation}
-A \;=\; \Sigma_0^{-1} + \sigma_n^{-2}\,\mathrm{diag}(c),
-\end{equation}
-and Equation~\eqref{eq:wood1} applied to $\Sigma_0$ puts $A$ in the
-form of Equation~\eqref{eq:diagminus} with $a_i = d_{0i}^{-1} +
-c_i \sigma_n^{-2}$ and $S = M_0^{-1}$, $M_0 = I_\rho + V'
-\mathrm{diag}(d_0)^{-1} V$. The argument from
-Equation~\eqref{eq:wood2} onward is unchanged: the posterior is
-exactly factor-plus-diagonal after every pull, with the same rank
-$\rho$ as the prior.
+The result here is the same as for the simulation. When the prior on
+the arms' mean rewards has a few common factors plus independent
+noise, the posterior keeps that shape after every pull, with no more
+factors than the prior, whatever arms are pulled and however often.
 
-\section{The marginal-only surrogates and the Thompson identity}
+In a bandit, a decision maker repeatedly picks one of $n$ arms and
+observes a noisy reward from it. Here $\theta_i$ is arm $i$'s mean
+reward, such as an advertisement's click rate. Pulling arm $a$ returns
+$\theta_a + N(0, \sigma_n^2)$, with $\sigma_n > 0$.
+
+The correlation comes from the prior. Advertisements that share an
+audience or a design are expected to have similar click rates. A
+linear model expresses this: arm $i$ has known features $v_i$, and
+$\theta_i = v_i' \beta + e_i$, with a shared $\beta \sim N(0,
+I_\rho)$ and independent $e_i \sim N(0, d_{0i})$, $d_{0i} > 0$. The
+prior is then $\theta \sim N(0, \Sigma_0)$ with
+$\Sigma_0 = V V' + \mathrm{diag}(d_0)$, which has factor form.
+
+A Gaussian-process prior with a kernel of finitely many features and
+an independent residual has this form exactly. A dense kernel does
+not, and an inducing-point approximation to one has a dense residual
+\citep{titsias2009}, so for those a diagonal residual is an added
+approximation.
+
+With per-arm pull counts $c$, the posterior precision is
+\begin{equation}
+A \;=\; \Sigma_0^{-1} + \sigma_n^{-2}\,\mathrm{diag}(c).
+\end{equation}
+Equation~\eqref{eq:wood1} applied to $\Sigma_0$ puts $A$ in the form
+of Equation~\eqref{eq:diagminus}, with $a_i = d_{0i}^{-1} + c_i
+\sigma_n^{-2}$, $S = M_0^{-1}$ and $M_0 = I_\rho + V'
+\mathrm{diag}(d_0)^{-1} V$. The remaining steps of
+Section~\ref{sec:crn} apply unchanged. The posterior is exactly
+factor plus diagonal after every pull, with no more factors than the
+prior.
+
+The same posterior has a form with no subtraction inside an inverse.
+Let $\lambda_i = c_i / \sigma_n^2$ be the observation precision
+accumulated on arm $i$, $r_i = 1/(1 + d_{0i} \lambda_i)$,
+$R = \mathrm{diag}(r)$ and $H = I_\rho + V' \mathrm{diag}(\lambda_i
+r_i) V$. Then
+\begin{equation}
+\Sigma_{\text{post}} \;=\; \mathrm{diag}(d_{0i} r_i) + R V H^{-1} V' R,
+\qquad W_{\text{post}} = R V H^{-1/2}.
+\label{eq:stable}
+\end{equation}
+$H$ is the identity plus a positive semidefinite matrix, so it is
+positive definite. An arm never pulled has $\lambda_i = 0$, and arms
+observed with different noise levels enter through their own
+$\lambda_i$. Equation~\eqref{eq:stable} agrees with direct inversion
+of the dense precision to machine precision, and is the form to
+implement.
+
+\section{Thompson sampling and the approximations of the vector}
 \label{sec:surrogates}
 
-Two computable policies stand in for Equation~\eqref{eq:pom} in
-current practice, and both consume only the marginal means $m_i$ and
-marginal standard deviations $s_i = \sqrt{d_i + \|w_i\|^2}$.
+Bandit methods relate to the vector in two ways. Thompson sampling
+uses it implicitly, without computing it. Two other methods compute approximations of it from
+marginal means and variances. The experiments compare all three with
+the computed vector.
 
-The first is the independence approximation: replace the posterior by
-$\prod_i N(m_i, s_i^2)$ and compute the resulting maximality
-probabilities, which \citet{menet2025} do with a shared threshold
-$\kappa^*$ solving $\sum_i \Phi((m_i - \kappa^*)/s_i) = 1$. The
-second is the variational optimistic policy of \citet{odonoghue2021},
-extended by \citet{tarbouriech2023} and given a near-closed form by
-\citet{menet2026}:
+\subsection{Thompson sampling selects arm $i$ with probability $p_i$}
+
+Thompson sampling draws one sample $\tilde{\theta}$ from the
+posterior and pulls the arm with the largest sampled value. The
+probability that it pulls arm $i$ is the probability that arm $i$ is
+largest under the posterior, which is $p_i$. Lemma~8 of
+\citet{tarbouriech2023} states the general version: the expected
+occupancy of Thompson sampling equals the posterior probability of
+optimality.
+
+Pulling an arm with probability $p_i$, called \emph{exact matching},
+is therefore Thompson sampling in distribution. Pulling from the
+computed vector $\hat p$ is Thompson sampling up to the quadrature
+error, which is about $10^{-6}$ per entry on the bandit's posteriors.
+The bandit experiment compares the two. The policy remains
+randomized. The deterministic part is the evaluation of its
+probabilities.
+
+The computed vector gives the numbers themselves, which a single draw
+does not. A stopping rule needs $\max_i p_i$, an allocator needs to
+know which $p_i$ are close, and a reproducible policy needs the
+probabilities it would otherwise sample.
+
+\subsection{Approximations from marginal means and variances}
+
+When the numbers $p_i$ are needed, current methods approximate them
+using only each alternative's marginal mean $m_i$ and marginal
+standard deviation $s_i = \sqrt{d_i + \|w_i\|^2}$. Both ignore the
+correlation between alternatives.
+
+\emph{F-LITE} \citep{menet2025} treats the alternatives as
+independent, $\prod_i N(m_i, s_i^2)$, and approximates the
+probability of being best by $\Phi((m_i - \kappa^*)/s_i)$, with a
+threshold $\kappa^*$ chosen so that these sum to one. The threshold
+step is a second approximation. With two independent arms, $N(1,1)$
+and $N(0,1)$, it gives $0.691$ for the first arm, against the exact
+$0.760$. F-LITE therefore departs from $p$ even when the posterior is
+independent.
+
+Discarding correlation can produce a much larger error, because the
+marginals do not determine the vector, even within the covariance
+class of Equation~\eqref{eq:factor}. Let $\theta_1 = E_1$ and
+$\theta_i = \sqrt{1 - \epsilon}\, Z + \sqrt{\epsilon}\, E_i$ for
+$i = 2, \dots, n$, with $Z$ and the $E_i$ independent standard
+Gaussians. Every alternative has the same $N(0, 1)$ marginal, the
+covariance is rank one plus a positive diagonal, and every correlation
+is nonnegative. As $\epsilon \to 0$ the last $n - 1$ alternatives
+become copies of one another, so $p_1 \to 1/2$ and every other $p_i
+\to 1/(2(n-1))$. A method that uses only the marginals returns $1/n$
+for every alternative, since the marginals are identical. With
+$n = 100$ and $\epsilon = 10^{-4}$, $p_1 = 0.493$ against $0.01$, and
+the total-variation error of the marginal answer tends to
+$1/2 - 1/n$.
+
+A second example fixes the mean gap and varies the size of a shared
+shock. Let $\theta_1 = 3 + Z + \varepsilon_1$ and
+$\theta_2 = Z + \varepsilon_2$, with $Z \sim N(0, \tau^2)$ and
+independent $\varepsilon_i \sim N(0, 1)$. The shared $Z$ cancels from
+the difference, so $p_1 = \Phi(3/\sqrt{2}) \approx 0.983$ for every
+$\tau$. F-LITE sees only the marginal variances $1 + \tau^2$ and gives
+$\Phi\bigl(3 / (2\sqrt{1 + \tau^2})\bigr)$, which is $0.933$ at
+$\tau = 0$, $0.682$ at $\tau = 3$, and tends to one half as $\tau$
+grows. The aligned regime of the stopping experiment is this example
+with a hundred systems.
+
+The shared product in Equation~\eqref{eq:integral} has a precedent in
+the independent case. \citet{menet2025} write the independent
+probability of being best as the same product integral, their
+Equation~(2), and their Proposition~1 evaluates it by quadrature on
+shared integration points with a convergence guarantee.
+Equation~\eqref{eq:cavity} is that evaluator conditional on the
+factors, averaged over them. Their A-LITE and F-LITE are
+approximations of the independent integral: A-LITE fits a Gaussian to
+the distribution of the largest competitor by matching quartiles, and
+F-LITE replaces it by the shared threshold above. The experiments
+include F-LITE only.
+
+The \emph{VBOS policy} is the variational Bayesian optimistic sampling
+rule of \citet{odonoghue2021}, extended by \citet{tarbouriech2023}. In
+the near-closed form of \citet{menet2026} it is
 \begin{equation}
 \tilde{\pi}_i \;=\; v\!\left(\frac{m_i - \kappa^*}{s_i}\right),
 \qquad v(c) = \exp\!\Bigl(-\tfrac{1}{8}\bigl(\sqrt{c^2 + 4} -
 c\bigr)^2\Bigr),
 \label{eq:vbos}
 \end{equation}
-with $\kappa^*$ again normalizing the sum to one. The tilt away from
-the true maximality probabilities is deliberate --- the regret
-analysis uses it --- so Equation~\eqref{eq:vbos} should be read as a
-policy, not as an estimate of $p$; the measurements below report its
-distance from $p$ because the fine-tuning literature uses it as the
-trainable stand-in for $p$.
+with $\kappa^*$ again chosen so the vector sums to one.
 
-The identity that connects Equation~\eqref{eq:pom} to Thompson
-sampling is Lemma~8 of \citet{tarbouriech2023}: the expected
-occupancy of the Thompson-sampling policy equals the posterior
-probability of optimality. In the bandit case this is immediate ---
-Thompson sampling draws $\tilde{\theta}$ from the posterior and plays
-its argmax, so its action distribution at any history is exactly $p$
-at that history. Sampling from the exact vector is therefore not a
-new policy but a derandomization-ready form of the old one, and the
-regret curves of the two must coincide in expectation. That
-coincidence is measured, not assumed, in Section~\ref{sec:bandit}.
-Under simple-regret loss the one-step value of a measurement is the
-knowledge-gradient quantity \citep{frazier2008}. \citet{tuisov2026}
-shows this is the normative myopic value of computation, noting that
-the exact dynamic version ``is itself generally intractable''; for
-factor-Gaussian beliefs the myopic quantities are exact, at scale.
+The VBOS policy departs from $p$ on purpose, and its regret analysis
+depends on that departure. It is a policy, not an estimate of $p$.
+Its distance from $p$ matters because \citet{menet2026} use it as
+the trainable substitute for $p$.
 
-\section{Stopping under common random numbers}
+\section{First experiment: when a simulation study can stop}
 \label{sec:stopping}
 
-The experiment races three stopping rules on the posterior of
-Section~\ref{sec:crn}, with $n = 100$ systems, $\rho = 2$ scenario
-streams, prior scale $s_0 = 1$, unit total replicate variance for
-every system, and true means drawn from the prior. Each rule computes
-its own estimate of $p$ after every replicate and stops the first
-time its own maximum clears $1 - \delta$ with $\delta = 0.05$,
-selecting its argmax: the exact vector by the pass of
-Section~\ref{sec:computation}; the independence construction; and
-Equation~\eqref{eq:vbos}. Correlation geometry is the treatment.
-In the \emph{aligned} regime all systems load on one stream with
-factor share $0.6$, so the leaders' differences are less uncertain
-than their marginals suggest; in the \emph{opposed} regime two blocks
-load oppositely, so the leaders' differences are more uncertain; the
-\emph{independent} regime is the control with factor share zero.
+The first experiment runs the simulation study of
+Section~\ref{sec:crn}, in which $n$ systems are simulated on shared
+random inputs, and asks when it can stop. A simulation study stops
+when it is confident enough that it has found the best system. The
+experiment asks whether a stopping rule
+that uses the computed vector stops earlier than rules that use the
+marginal approximations, and whether it still selects the best system
+as often as its confidence level promises. Correlation is the only
+thing that separates the rules, so everything else is held fixed and
+only the correlation geometry varies.
+
+The setting is the posterior of Section~\ref{sec:crn} with $n = 100$
+systems, $\rho = 2$ scenario streams and prior scale $s_0 = 1$. True
+means are drawn from the prior. Every system has replicate variance
+one, so each replicate carries the same marginal information in every
+regime, and a marginal-only rule faces the same problem in every
+regime. The \emph{factor share} is the fraction of that variance that
+comes from the shared scenario.
+
+Correlation can mislead a marginal-only rule in two directions. If
+the leading systems move together, their difference is less uncertain
+than their marginals suggest, and the rule is too cautious. If they
+move oppositely, their difference is more uncertain, and the rule is
+too confident. The regimes produce each case, with an uncorrelated
+control.
+
+\begin{itemize}
+\item \emph{Independent}: factor share zero. This is the control.
+\item \emph{Aligned}: every system loads on the same stream, with
+factor share $0.6$. Differences between systems then vary less than
+their marginal variances suggest.
+\item \emph{Opposed}: half the systems load positively and half
+negatively on one stream, with factor share $0.6$. Differences between
+systems in opposite halves then vary more than their marginal
+variances suggest.
+\end{itemize}
+
+The experiment compares three stopping rules, which differ only in
+how they estimate $p$. The exact rule uses the computation of
+Section~\ref{sec:computation}, and the other two use F-LITE and the
+VBOS policy. After every replicate, a rule recomputes its estimate of $p$, and it
+stops the first time the largest entry reaches $1 - \delta$, with
+$\delta = 0.05$, selecting that entry.
+
+A fourth rule is the one a practitioner would reach for: draw $M$
+samples from the correlated posterior and estimate $p$ by the argmax
+frequencies. It uses the correlation, costs $O(M n \rho)$, and needs
+$M$ of about $500$ to resolve a threshold of $0.95$ to within $0.01$,
+with the error growing as the threshold is approached. It is not
+among the rules run, which are the two marginal rules from the
+literature.
+
+For the true vector the rule has a Bayesian guarantee. Let $\tau$ be
+the first time $\max_i p_i \ge 1 - \delta$, let $B$ be the budget, and
+on $\{\tau \le B\}$ let $I$ be the selected alternative and $I^*$ the
+best. Then
+\begin{equation}
+\Pr(I \ne I^* \mid \tau \le B)
+\;=\; \mathbb{E}\bigl[1 - p_I(\mathcal{D}_\tau) \mid \tau \le B\bigr]
+\;\le\; \delta .
+\end{equation}
+Optional stopping does not affect this statement, which averages over
+the prior. It is not a frequentist guarantee for a fixed $\theta$, and
+it applies to the true $p$. For the computed vector $\hat p$, if
+$\|\hat p - p\|_\infty \le \eta$ at stopping, then stopping at
+$\max_i \hat p_i \ge 1 - \delta$ gives error at most $\delta + \eta$,
+and a threshold of $1 - \delta + \eta$ restores $\delta$. On the stopping
+posteriors, $\eta$ is about $10^{-6}$ by the measurements of
+Section~\ref{sec:computation}, which are measurements rather than a
+bound.
+
+The three rules share a nominal threshold, not a true confidence
+level. With two independent arms of equal posterior standard
+deviation $s$, an entry of $0.95$ requires a mean gap of $2.33\,s$ for
+the exact vector, $3.29\,s$ for F-LITE and $4.84\,s$ for the VBOS
+policy. The true posterior probability of a correct selection at
+those gaps is $0.950$, $0.990$ and $0.9997$. Part of any extra
+sampling by the marginal rules is this higher effective target.
 
 \begin{table}[h]
 \centering
@@ -287,54 +605,85 @@ load oppositely, so the leaders' differences are more uncertain; the
 regime & rule & mean replicates & realized PCS & censored of 200 \\
 \midrule
 independent & exact & 141.2 & 0.970 & 35 \\
-            & independence & 207.0 & 0.985 & 65 \\
-            & variational  & 271.5 & 1.000 & 102 \\
+            & F-LITE & 207.0 & 0.985 & 65 \\
+            & VBOS  & 271.5 & 1.000 & 102 \\
 \addlinespace
 aligned     & exact & \phantom{0}69.7 & 0.958 & \phantom{0}9 \\
-            & independence & 175.6 & 1.000 & 60 \\
-            & variational  & 240.1 & 1.000 & 91 \\
+            & F-LITE & 175.6 & 1.000 & 60 \\
+            & VBOS  & 240.1 & 1.000 & 91 \\
 \addlinespace
 opposed     & exact & 106.3 & 0.944 & 21 \\
-            & independence & 171.7 & 0.979 & 57 \\
-            & variational  & 239.0 & 0.991 & 88 \\
+            & F-LITE & 171.7 & 0.979 & 57 \\
+            & VBOS  & 239.0 & 0.991 & 88 \\
 \bottomrule
 \end{tabular}
-\caption{Stopping at nominal $95\%$ confidence, 200 replications per
-regime, budget 400 replicates (censored runs count 400 toward the
-mean). Realized PCS is the fraction of stopped runs selecting the
-true best; the exact rule's $0.944$ in the opposed regime is within
-binomial noise of nominal (179 stopped runs, standard error $0.016$).
-Every rule held its nominal error in these geometries; the
-marginal-only rules did so by conservatism, spending $1.5$ to $3.4$
-times the replicates of the exact rule and censoring at the budget
-far more often. The largest gap is where correlation helps most: with
-aligned loadings the exact rule exploits the leaders' tightly
-coupled differences and stops at $69.7$ replicates on average.}
+\caption{Stopping at nominal $95\%$ confidence. Each regime has 200
+replications and a budget of 400 replicates. Mean replicates is the
+mean of the stopping time capped at 400, so a censored run counts 400.
+Realized PCS is the fraction of stopped runs that selected the true
+best system. The stopped runs differ by rule.}
 \label{tab:stopping}
 \end{table}
 
-The mechanism is the size of the substitution error: along its own
-pre-stopping trajectory in the aligned regime, the independence
-construction sits at median total-variation distance $0.123$ from
-the exact vector it replaces (ninetieth percentile $0.174$), and the
-variational policy at $0.141$ ($0.206$). In the control regime the
-gap does not vanish --- median $0.063$ and $0.096$ respectively ---
-because the independence construction is itself a threshold
-approximation with its own bias even when the posterior really is
-independent, and the variational tilt is away from $p$ by design.
-The exact rule's distance is zero by construction, and its
-certificate against Monte Carlo is total-variation $0.0015$ at
-worst.
+In Table~\ref{tab:stopping}, every rule's realized PCS among its
+stopped runs is at or above nominal, within binomial noise. The exact
+rule's $0.944$ in the opposed regime has 179 stopped runs and a
+standard error of $0.016$.
 
-\section{A correlated Gaussian bandit}
+At this common nominal threshold and budget, the two marginal-only
+rules used $1.5$ to $3.4$ times the capped mean replicates of the
+exact rule, and hit the budget far more often. The gap is largest in
+the aligned regime, where the leading systems' differences are
+tightly coupled. There the exact rule stops after $69.7$ replicates on
+average, against $175.6$ and $240.1$, and stops in 191 of 200 runs,
+against 140 and 109. The thresholds are nominal and not calibrated
+to a common PCS, so these ratios compare spend at a common threshold,
+not at a matched true error.
+
+The marginal-only estimates are far from the exact vector along the
+way. Before stopping in the aligned regime, F-LITE is at median
+total-variation distance $0.123$ from the
+exact vector, with ninetieth percentile $0.174$. The VBOS policy is at
+$0.141$, with ninetieth percentile $0.206$.
+
+The distances do not vanish in the independent regime, where they are
+$0.063$ and $0.096$. F-LITE's threshold step is biased even when the
+posterior is independent, and the VBOS policy departs from $p$ by
+design. At the stopping experiment's Monte Carlo checks, the largest
+total-variation distance of the computed vector was $0.0015$.
+
+\section{Second experiment: a bandit with correlated arms}
 \label{sec:bandit}
 
-The bandit uses the posterior of Section~\ref{sec:bandit-posterior}:
-$n = 50$ arms, rank-$2$ prior, two regimes (independent, and two
-clusters with factor share $0.75$), horizon $200$, and $100$
-replications. Four policies act on identical posterior laws: Thompson
-sampling; probability matching on the exact vector; and sampling from
-Equation~\eqref{eq:vbos} and from the independence construction.
+The second experiment runs the bandit of
+Section~\ref{sec:bandit-posterior}, in which arms share
+features through a factor prior, and compares the four policies of
+Section~\ref{sec:surrogates}. It asks two things. The first is
+whether pulling
+arms with the computed probabilities reproduces the regret of Thompson
+sampling, as Lemma~8 requires of the true vector. The second is how much regret the two marginal approximations lose
+when their probabilities are used as the policy.
+
+Thompson sampling here draws from the full correlated posterior, so it already uses
+every correlation the computed vector uses. It is the benchmark the
+computed vector has to match, not a baseline it is expected to beat.
+The policies that lose are the two marginal approximations.
+
+The setting is the posterior of Section~\ref{sec:bandit-posterior}
+with $n = 50$ arms, prior variance one per arm, observation noise
+$\sigma_n = 1$, horizon 200 and 100 replications. The prior's factor
+term has two columns. In the \emph{independent} regime it is zero. In the
+\emph{clusters} regime each half of the arms loads on its own factor,
+which carries $0.75$ of the prior variance.
+
+The experiment compares four policies on the same posterior:
+Thompson sampling, exact matching, sampling from the VBOS policy, and
+sampling from F-LITE. Table~\ref{tab:bandit} reports cumulative
+Bayes regret and, at the horizon, whether the arm with the highest
+posterior mean is the true best and the shortfall of that arm's value
+below the best. Its last column is the total-variation distance
+between each policy's action distribution and the exact vector at
+mid-horizon, along that policy's own trajectory.
 
 \begin{table}[h]
 \centering
@@ -345,55 +694,165 @@ TV to exact $p$ \\
 \midrule
 independent & Thompson & 172.1 & 0.72 & 0.073 & 0 \\
             & exact matching & 173.9 & 0.75 & 0.055 & 0 \\
-            & variational & 190.3 & 0.76 & 0.061 & 0.159 \\
-            & independence & 179.2 & 0.79 & 0.052 & 0.057 \\
+            & VBOS & 190.3 & 0.76 & 0.061 & 0.159 \\
+            & F-LITE & 179.2 & 0.79 & 0.052 & 0.057 \\
 \addlinespace
 clusters    & Thompson & 122.7 & 0.61 & 0.097 & 0 \\
             & exact matching & 124.8 & 0.51 & 0.113 & 0 \\
-            & variational & 135.9 & 0.59 & 0.105 & 0.129 \\
-            & independence & 128.7 & 0.51 & 0.121 & 0.061 \\
+            & VBOS & 135.9 & 0.59 & 0.105 & 0.129 \\
+            & F-LITE & 128.7 & 0.51 & 0.121 & 0.061 \\
 \bottomrule
 \end{tabular}
-\caption{Bayes regret over the horizon (mean of 100 replications),
-terminal identification rate, expected shortfall of the recommended
-arm, and the mid-horizon total-variation distance between each
-policy's action distribution and the exact vector along its own
-trajectory. Thompson sampling's distance is zero by the occupancy
-identity and exact matching's by construction. The Lemma-8 check
-holds: Thompson and exact matching differ by about one percent of
-cumulative regret in both regimes, within replication noise. The
-variational tilt costs a measured ten to eleven percent of cumulative
-regret relative to Thompson sampling while sitting at
-total-variation distance $0.13$ to $0.16$ from the vector it stands
-in for. Identification rates at this horizon are statistically flat
-across policies: differences are within two binomial standard errors
-at 100 replications, so the exhibit is the regret column and the gap
-column, not identification.}
+\caption{Mean over 100 replications of cumulative Bayes regret, the
+rate at which the highest posterior mean identifies the true best arm
+at the horizon, and the shortfall of that arm. The last column is the
+total-variation distance from the computed vector at mid-horizon. It
+is zero for exact matching by construction. For Thompson sampling it
+is zero relative to the true $p$ by Lemma~8, and is entered as zero
+rather than measured.}
 \label{tab:bandit}
 \end{table}
+
+Sampling from the true $p$ has the same expected regret as Thompson
+sampling, by Lemma~8, and the computed vector is within about
+$10^{-6}$ of the true $p$ on these posteriors. The sample means for
+exact matching and Thompson sampling differ by one to two percent of
+cumulative regret in both regimes, which is replication noise. The VBOS policy's mean regret is
+ten to eleven percent above Thompson sampling's, and its action
+distribution is at total-variation distance $0.13$ to $0.16$ from the
+computed vector. F-LITE's is four to five percent above. Per-replication
+regrets were not saved, so these differences carry no paired
+intervals.
+
+The identification rates do not separate the policies. Their
+differences are within two binomial standard errors at 100
+replications. The comparison is in the regret and distance columns.
 
 \section{Scope}
 \label{sec:limits}
 
-The derivations of Section~\ref{sec:posteriors} are exact because
-the observation processes there are themselves factor-structured.
-When scenario effects enter a simulation nonlinearly, the low-rank
-model of $\Lambda$ is an approximation and the posterior inherits
-its error; when a Gaussian-process kernel is dense and short-scaled,
-a factor fit must precede the pass and its residual is the price.
-Nothing here computes the dynamic value of computation, which
-\citet{tuisov2026} is right to call intractable in general: this
-paper supplies the exact myopic quantities his Bellman
-characterization prices, and the stopping certificates. The
-optimistic tilt of Equation~\eqref{eq:vbos} carries the regret
-analysis of \citet{odonoghue2021}; measuring its distance from $p$
-quantifies the approximation, and does not by itself argue the tilt
-away. Finally, Thompson sampling needs one posterior sample and no
-vector; the vector pays where sampling does not suffice (stopping,
-allocation, constraints, derandomization), which is where the
-measurements above are taken.
+The derivations of Section~\ref{sec:posteriors} are exact because the
+observations there are generated with factor structure. When scenario
+effects enter a simulation nonlinearly, a low-rank model of $\Lambda$
+is an approximation, and the posterior inherits its error. When a Gaussian-process kernel is dense with a short length scale,
+the intake fit to the grammar has to precede the computation, and its
+residual is the error.
+
+The vector says how uncertain the choice of best is. It does not say
+how much one more measurement would reduce that uncertainty, which is
+what a budget allocator needs. That quantity is the knowledge
+gradient \citep{frazier2008}, an expectation over what the posterior
+means will become after the measurement, and \citet{tuisov2026}
+treats it as the myopic value of computation. The computation here does not supply it.
+
+Three one-step criteria
+should be kept apart. Reducing the entropy of $p$ is entropy search.
+Raising $\max_i p_i$ aims at correct identification under zero-one
+loss, where choosing a near-identical runner-up counts as an error.
+Both are objectives of an optimizer rather than of a bandit, a
+distinction \citet{hennig2012} draw: an optimizer infers the minimum
+whatever the values at its evaluation points, and a bandit is scored
+on those values.
+
+The knowledge gradient raises the expected value of the final choice
+and cares about the size of the differences. The vector supplies the
+first two directly. An allocator that spends where the entries of $p$
+are close is a heuristic for the second, not a criterion.
+
+The regret analysis of \citet{odonoghue2021} depends on the VBOS
+tilt. Its measured distance from $p$ quantifies the approximation, but
+does not by itself make a case against the tilt.
+
+Thompson sampling needs one posterior sample and no vector, and the
+bandit experiment can be run that way. The computed vector matters
+where a sample is not enough: stopping, allocation, constraints and
+derandomization. The stopping problem is of that kind.
+
+The stopping experiment's loadings have rank at most one, and in the
+aligned regime the centered loadings are zero, so the exact rule faces
+an independent contest there while the marginal rules do not know
+it.
+
+\section{Discussion}
+
+The computed vector replaces two kinds of approximation, the marginal
+shortcuts and counted posterior draws, and the gain over each is
+different. Against the marginal shortcuts it does not depend on
+rank. Their error can approach one half with every marginal held
+fixed, and in the stopping experiment they spent $1.5$ to $3.4$ times
+the replicates at the same threshold. Thompson sampling itself is not
+at fault, since it uses the correlation. The loss is confined to the
+side that computes probabilities, and that is the side the computed
+vector replaces.
+
+How much better the computed numbers are than counted draws depends
+on the factor rank. On the posteriors of the two experiments, where
+the centred loadings have rank at most two, one evaluation of a
+hundred alternatives takes about ten milliseconds and is accurate to
+$10^{-6}$ per entry. Counting draws for ten milliseconds gives about
+twenty thousand draws, and an entry near $0.01$ is then known to
+seven percent of itself. Matching $10^{-6}$ by counting would take
+$10^{11}$ draws. At factor ranks three to five, on single
+hundred-arm posteriors of a linear sampler, one evaluation takes
+$0.3$ to $1$ second and $200{,}000$ draws take $0.3$ second, with
+errors of the same order. The advantage over counting is a low-rank
+advantage, and centring the loadings is what decides the rank.
+
+Bayesian optimization has the same object. Entropy search
+\citep{hennig2012} takes the posterior probability that the minimum
+lies at each of $n$ representer points as the quantity an optimizer
+should learn, and scores a belief by its relative entropy from a
+uniform base measure. On the representer points that probability is
+Equation~\eqref{eq:pom} in the minimum convention, a Gaussian
+integral over a polyhedral cone, which \citet{hennig2012} call
+intractable after \citet{plackett1954}. They approximate it by
+expectation propagation at a cost of $O(n^4)$ per vector, which
+limits $n$ to well below a thousand, and their implementation uses
+fifty representer points and about ten seconds per choice of
+evaluation point. Their alternative, sampling functions and recording
+each minimum, costs $O(S n^3)$ for $S$ samples and has no
+derivatives.
+
+For a factor-structured belief the computation here gives the same
+vector in time linear in $n$, so thousands of representer points cost
+milliseconds. The price is the covariance class. Expectation propagation takes any
+dense covariance. A dense kernel on the representer points has to be
+fitted to the grammar of factors, blocks, nested groups and trees
+before the computation here applies. That fit is the dense-covariance
+intake of \citet{cotton2026}, and its residual is the error.
+
+Entropy search also uses the derivatives of the vector with respect
+to the mean and covariance for a first-order expansion of the
+expected information gain. The computation here supplies the exact
+Jacobian with respect to the means, and not the covariance
+derivatives.
+
+The innovation formulas of \citet{hennig2012} give the hypothetical
+posterior after a measurement for any Gaussian process, and the
+closure of Section~\ref{sec:posteriors} is the case in which that
+posterior stays in factor form. The entropy-search acquisition
+$\alpha(a) = H(p) - \mathbb{E}_{Y_a \mid \mathcal{D}}[H(p^{Y_a})]$
+then needs the closure, the computation, and a scalar quadrature over
+the measurement outcome. The scope is finite candidates and factor
+beliefs.
+
+The offline evaluation used for
+those samplers, the replay method of \citet{li2011}, needs a
+uniformly random log because the sampler's own propensities were not
+available, and it discards every logged event whose random arm
+differs from the policy's choice, about all but one in $K$ for $K$
+arms. With the propensities computed, the production log itself becomes
+the evaluation set.
 
 \begin{thebibliography}{9}
+
+\bibitem[Agrawal and Goyal(2013)]{agrawal2013} S.~Agrawal and
+N.~Goyal. Thompson sampling for contextual bandits with linear
+payoffs. In \emph{ICML}, 2013.
+
+\bibitem[Chapelle and Li(2011)]{chapelle2011} O.~Chapelle and L.~Li.
+An empirical evaluation of Thompson sampling. In \emph{Advances in
+Neural Information Processing Systems 24}, 2011.
 
 \bibitem[Cotton(2026)]{cotton2026} P.~Cotton. Scalable inversion of
 contests with correlated performances, including softmax and
@@ -403,6 +862,16 @@ multinomial probit. arXiv:2609.01133, 2026. Also SSRN 7307363.
 P.~I. Frazier, W.~B. Powell, and S.~Dayanik. A knowledge-gradient
 policy for sequential information collection. \emph{SIAM Journal on
 Control and Optimization}, 47(5):2410--2439, 2008.
+
+\bibitem[Hennig and Schuler(2012)]{hennig2012} P.~Hennig and
+C.~J. Schuler. Entropy search for information-efficient global
+optimization. \emph{Journal of Machine Learning Research},
+13:1809--1837, 2012.
+
+\bibitem[Li et~al.(2011)Li, Chu, Langford, and Wang]{li2011} L.~Li,
+W.~Chu, J.~Langford, and X.~Wang. Unbiased offline evaluation of
+contextual-bandit-based news article recommendation algorithms. In
+\emph{WSDM}, 2011.
 
 \bibitem[Menet et~al.(2025)Menet, Huebotter, Kassraie, and
 Krause]{menet2025} N.~Menet, J.~Huebotter, P.~Kassraie, and
@@ -419,11 +888,19 @@ B.~O'Donoghue and T.~Lattimore. Variational Bayesian optimistic
 sampling. In \emph{Advances in Neural Information Processing Systems
 34}, 2021. arXiv:2110.15688.
 
+\bibitem[Plackett(1954)]{plackett1954} R.~L. Plackett. A reduction
+formula for normal multivariate integrals. \emph{Biometrika},
+41(3--4):351--360, 1954.
+
 \bibitem[Tarbouriech et~al.(2023)Tarbouriech, Lattimore, and
 O'Donoghue]{tarbouriech2023} J.~Tarbouriech, T.~Lattimore, and
 B.~O'Donoghue. Probabilistic inference in reinforcement learning done
 right. In \emph{Advances in Neural Information Processing Systems
 36}, 2023. arXiv:2311.13294.
+
+\bibitem[Titsias(2009)]{titsias2009} M.~Titsias. Variational
+learning of inducing variables in sparse Gaussian processes. In
+\emph{AISTATS}, 2009.
 
 \bibitem[Tuisov(2026)]{tuisov2026} A.~Tuisov. Search as computation
 allocation. arXiv:2607.27871, 2026.
