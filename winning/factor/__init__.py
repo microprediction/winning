@@ -32,3 +32,9 @@ from .core import (  # noqa: F401
     win_probabilities_factor,
 )
 from .permutations import ordered_probabilities, plackett_luce_prefix_logprob  # noqa: F401
+from .posteriors import (  # noqa: F401
+    crn_posterior,
+    crn_posterior_replicates,
+    feature_bandit_posterior,
+    update_contrast,
+)
