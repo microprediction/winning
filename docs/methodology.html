@@ -271,9 +271,16 @@
     model guarantees when every contestant keeps idiosyncratic noise.
     So</p>
     \[ \max_\mu \; W(\mu) - \langle p^\star, \mu\rangle \]
-    <p>is a strictly concave, coercive program whose unique mean-zero
-    maximiser is the inversion: the abilities exist and are unique up to
-    a common shift.</p>
+    <p>is, for a target \(p^\star\) in the interior of the simplex
+    (\(p^\star_i &gt; 0\) for every \(i\), \(\sum_i p^\star_i = 1\)), a strictly
+    concave, coercive program whose unique mean-zero maximiser is the
+    inversion: the abilities exist and are unique up to a common shift.
+    The interior condition is necessary. With full-support noise every
+    contestant wins with positive probability at every finite ability
+    vector, so a target with some \(p^\star_i = 0\) has no finite inverse:
+    the supremum is approached only as the contrast diverges. Flooring
+    such a target gives a finite approximation whose contrast diverges as
+    the floor tends to zero.</p>
     <p>What is ours is the pair of oracles the field supplies, and it is
     worth being exact about which one does what. The demonstrated
     million-contestant inversions (about eighty seconds) run a damped
