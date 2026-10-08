@@ -111,7 +111,10 @@ the module docstrings give the measured cost of crossing over.
   cluster or a known label per entrant), and constrained polish.
 
 - `winning.factor` also prices finishing positions: top-k membership at
-  any depth (`top_k_probabilities`, `rank_probabilities`), calibration
+  any depth and factor rank, under the same `V, D, F, W` the race takes
+  (`top_k_probabilities(mu, k, V, D, F=F, W=W)` with the four from
+  `fit_covariance` prices a shortlist from a dense covariance), and
+  `rank_probabilities`; calibration
   of those curves (`abilities_from_topk`), joint location and scale per
   runner from the win and place curves (`loc_scale_from_win_and_second`),
   ordered-prefix probabilities (`ordered_probabilities`), and the

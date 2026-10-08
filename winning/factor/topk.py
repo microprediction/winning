@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..shapes import as_idio, as_loadings
+from ..shapes import as_factor_law, as_idio, as_loadings
 
 
 from .races import _jacobi_sweeps, BASES, _resolution
@@ -277,10 +277,10 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
 _TOPK_QMC_NODES = 1024
 
 
-def _factor_nodes(V, n, qa, caller, D=None):
-    """Column-centered loadings plus the factor node mixture (rank <= 2;
-    the common column is gauge), shared by every correlated entry point
-    so the quadrature is identical across them.
+def _factor_nodes(V, n, qa, caller, D=None, F=None, W=None):
+    """Column-centered loadings plus the factor node mixture (the common
+    column is gauge), shared by every correlated entry point so the
+    quadrature is identical across them.
 
     qa=None (the default) takes the GENERAL RACE'S node rule
     (races._setup: Gauss-Hermite order scaled with the centred-loading
@@ -292,14 +292,40 @@ def _factor_nodes(V, n, qa, caller, D=None):
     nothing, and both slot sums were exact, so no check fired; at rank
     two a basis rotation V -> VQ, which leaves the covariance unchanged,
     moved a top-2 membership by 1.3 points (#340). An explicit integer
-    qa keeps the fixed Gauss-Hermite rule of that order."""
+    qa keeps the fixed Gauss-Hermite rule of that order.
+
+    Any rank. Above two the default is the race's rule too -- a pruned
+    Gauss-Hermite tensor inside the 1e5-node budget, scrambled Sobol past
+    it or past the rank's sharpness threshold -- capped at the same 1024
+    Sobol nodes as rank two; it is deterministic (fixed seed), never
+    Monte Carlo. An explicit qa at rank > 2 is the pruned product rule
+    hermite_nodes(r, qa). The rank-two refusal that stood here (#12)
+    only guarded the hand-built tensor below, which ranks <= 2 still use.
+
+    F, W: the caller's own factor law, (nodes, rank) and weights, read
+    as race_probabilities reads them (relative weights, zero-weight
+    nodes dropped) -- what fit_covariance returns, for instance."""
     Vm = as_loadings(V, n)
-    if Vm.shape[1] > 2:
-        raise NotImplementedError(
-            f"{caller} mixes factor nodes and is implemented for factor "
-            "rank <= 2; higher rank needs the scrambled-Sobol escalation "
-            "(issue #12).")
     Vm = Vm - Vm.mean(axis=0, keepdims=True)
+    if F is not None or W is not None:
+        if F is None or W is None:
+            raise ValueError(
+                "supply both F (factor nodes) and W (their weights), or "
+                f"neither; got only {'F' if W is None else 'W'}")
+        if qa is not None:
+            raise ValueError(
+                f"{caller}: F, W already give the factor rule; qa= would "
+                "give another. Pass one or the other.")
+        F = np.asarray(F, dtype=float)
+        if F.ndim != 2:
+            raise ValueError(
+                f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
+        if F.shape[1] != Vm.shape[1]:
+            raise ValueError(
+                f"F has {F.shape[1]} factor columns but V has rank "
+                f"{Vm.shape[1]}; F is (nodes, rank)")
+        nodes, w = as_factor_law(F, W)
+        return Vm, nodes, w
     if Vm.shape[1] == 0:
         # the EMPTY PRODUCT: rank 1 was special-cased and every other
         # rank fell into the rank-2 tensor, so an (n, 0) matrix -- the
@@ -320,6 +346,10 @@ def _factor_nodes(V, n, qa, caller, D=None):
             from .core import qmc_nodes
             nodes, w = qmc_nodes(Vm.shape[1], m=10)
         return Vm, np.asarray(nodes, float), np.asarray(w, float)
+    if Vm.shape[1] > 2:
+        from .core import hermite_nodes
+        nodes, w = hermite_nodes(Vm.shape[1], Q=qa)
+        return Vm, nodes, w / w.sum()
     an, aw = roots_hermitenorm(qa)
     aw = aw / aw.sum()
     if Vm.shape[1] == 1:
@@ -420,19 +450,38 @@ def _as_depth(k, n, where="k"):
 
 
 def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
-                        qa=None):
+                        qa=None, F=None, W=None):
     """P(X_i among the k smallest), for every i, min-wins.
 
     mu: locations; D: idiosyncratic variances; V: optional factor
-    loadings (n, r) -- conditional on the factor draw the race is
-    independent, and the result is the Gauss-Hermite mixture of the
-    conditional memberships (rank one and two; higher ranks are
-    refused, matching the hierarchical kernels' quadrature honesty).
-    k = 1 is the win probability. The identity sum_i q_i = k is checked
-    and a material defect raises."""
+    loadings (n, r) of any rank -- conditional on the factor draw the
+    race is independent, and the result is the node mixture of the
+    conditional memberships. The node rule is the general race's
+    (Gauss-Hermite while it is cheap and the field is mild,
+    deterministic scrambled Sobol otherwise, capped at 1024 nodes since
+    every node here is a full count program); qa=Q forces a
+    Gauss-Hermite rule of order Q. F, W: the factor law as
+    race_probabilities takes it, (nodes, r) and relative weights, so
+    the covariance fit_covariance returns prices directly:
+    V, D, F, W = fit_covariance(C); top_k_probabilities(mu, k, V, D,
+    F=F, W=W). F and W are keyword arguments, after the existing ones,
+    so no positional call changes meaning. Cost is linear in
+    the node count; fit_covariance's 2048 nodes cost twice the default
+    rule's 1024, and omitting F, W selects the default.
+
+    k = 1 is the win probability. The identity sum_i q_i = k is checked.
+    A lattice that fails it (or returns a membership above one) is
+    refined, doubling up to four times the requested points; a defect
+    that survives that raises, naming points=. The cap keeps a field
+    the lattice cannot resolve from costing more than about seven
+    ordinary calls before it says so."""
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)
+    if V is None and (F is not None or W is not None):
+        raise ValueError(
+            "F, W are nodes of the factor law and need loadings V; "
+            "without V there is no factor to integrate over")
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
@@ -443,17 +492,52 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
 
     is_normal = (base == "normal")
     if V is None:
-        raw = _topk_independent(mu, sd, k, base_rows, points,
-                                is_normal=is_normal)
-        return _checked_topk(raw, k, "top-k race")
+        def raw_at(pts):
+            return _topk_independent(mu, sd, k, base_rows, pts,
+                                     is_normal=is_normal)
+    else:
+        Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_probabilities", D,
+                                     F=F, W=W)
 
-    Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_probabilities", D)
-    raw = np.zeros(n)
-    for q in range(len(nodes)):
-        shift = Vm @ nodes[q]
-        raw += w[q] * _topk_independent(mu + shift, sd, k, base_rows,
-                                        points, is_normal=is_normal)
-    return _checked_topk(raw, k, "top-k race")
+        def raw_at(pts):
+            raw = np.zeros(n)
+            for q in range(len(nodes)):
+                shift = Vm @ nodes[q]
+                raw += w[q] * _topk_independent(mu + shift, sd, k,
+                                                base_rows, pts,
+                                                is_normal=is_normal)
+            return raw
+    return _refined_topk(raw_at, k, points, "top-k race")
+
+
+def _refined_topk(raw_at, k, points, kind):
+    """_checked_topk on raw_at(points), refining a lattice that fails it.
+
+    The checks only see a defect; they cannot fix one, and the remedy
+    they name -- raise points= -- is mechanical. A field reported to
+    raise at the default 513 points priced cleanly at 2049. So a failed
+    check doubles the lattice (2p - 1 keeps the old points as a subset)
+    and tries again, up to four times the request and never past the
+    lattice cap: bounded at about seven ordinary calls, and only ever
+    paid by a call that would otherwise have raised. A field that still
+    fails raises, naming the points it tried. A call that passes first
+    time is untouched."""
+    points = int(points)
+    cap = min(4 * (points - 1) + 1, _MAX_TOPK_POINTS)
+    pts = points
+    while True:
+        try:
+            return _checked_topk(raw_at(pts), k, kind)
+        except RuntimeError as e:
+            if pts >= cap:
+                if pts == points:
+                    raise
+                raise RuntimeError(
+                    f"{e} (lattice refined from points={points} to "
+                    f"{pts} without resolving it; pass a larger points= "
+                    f"explicitly, at most {_MAX_TOPK_POINTS}, or report "
+                    "this field)") from e
+            pts = min(2 * pts - 1, cap)
 
 
 def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
@@ -652,10 +736,10 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     at n = 150 spent more time on redundant count programs than on the
     pair terms themselves.
 
-    V= admits factor rank <= 2 EXACTLY: conditional on the factor draw
-    the race is independent and the shift by V f_q leaves d/dmu and
-    d/dsigma untouched, so the correlated Jacobians are the same
-    Gauss-Hermite mixture as the forward pass,
+    V= (any rank) is EXACT given the nodes: conditional on the factor
+    draw the race is independent and the shift by V f_q leaves d/dmu and
+    d/dsigma untouched, so the correlated Jacobians are the same node
+    mixture as the forward pass,
     J = sum_q w_q J_ind(mu + V f_q, sigma)."""
     mu = np.asarray(mu, float)
     n = len(mu)
@@ -861,8 +945,8 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     abilities_from_race (zeros raise, target_floor= opts into flooring,
     non-convergence warns unless return_info=True), plus the slot
     identity: targets are renormalized to sum to k, and an entry >= 1
-    after that renormalization raises. V= admits factor rank <= 2 by
-    the usual node mixture. When k > n/2 the information lives in the
+    after that renormalization raises. V= (any rank) enters by the
+    usual node mixture. When k > n/2 the information lives in the
     longshots; inverting the complement (bottom_k_probabilities) is the
     same call at n - k on 1 - q."""
     mu_probe = np.asarray(q, dtype=float)

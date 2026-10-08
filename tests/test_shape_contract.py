@@ -1012,6 +1012,7 @@ W_VERB_EXTRA = {
     "plackett_luce_order_logprob": dict(order=[0, 1, 2]),
     "harville_prefix_logprob": dict(prefix=[0, 1]),
     "harville_order_logprob": dict(order=[0, 1, 2]),
+    "top_k_probabilities": dict(k=2),
 }
 
 
