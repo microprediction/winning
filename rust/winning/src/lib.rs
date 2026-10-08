@@ -1431,7 +1431,8 @@ pub fn exact_state_prices_from_offsets(density: &[f64], offsets: &[f64]) -> Vec<
 
 /// solve_for_implied_offsets: the paper's table iteration as a defect
 /// correction, a_i += T^{-1}(p_i) - T^{-1}(P_i(a)), so its fixed point
-/// is the exact forward map (see lattice_calibration.py).
+/// is the exact forward map (see lattice_calibration.py). The field is
+/// re-centred by the integer part of its mean after each step (#498).
 pub fn exact_calibrate(
     density: &[f64],
     prices: &[f64],
@@ -1449,6 +1450,15 @@ pub fn exact_calibrate(
         for i in 0..implied.len() {
             implied[i] += interp1(prices[i], &table, offset_samples)
                 - interp1(current[i], &table, offset_samples);
+        }
+        // re-centre by the integer part of the mean (toward zero, as
+        // python's int()): an exact lattice translation that keeps the
+        // field over the absolute table (#498)
+        let shift = (implied.iter().sum::<f64>() / implied.len() as f64).trunc();
+        if shift != 0.0 {
+            for a in implied.iter_mut() {
+                *a -= shift;
+            }
         }
         cdfs = implied.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
     }

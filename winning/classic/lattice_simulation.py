@@ -1,3 +1,4 @@
+import math
 from winning.classic.lattice_conventions import STD_UNIT, STD_SCALE, STD_L, STD_A, NAN_DIVIDEND
 from winning.classic.lattice_calibration import dividend_implied_ability, normalize_dividends, dividends_from_prices
 from winning.classic.lattice import skew_normal_density, densities_from_offsets, pdf_to_cdf, sample_from_cdf
@@ -58,8 +59,13 @@ def skew_normal_place_pricing(dividends, n_samples=N_SAMPLES, longshot_expon:flo
     density = skew_normal_density(L=L, unit=unit, scale=scale, a=a)
     adj_dividends = longshot_adjusted_dividends(dividends=dividends,longshot_expon=longshot_expon)
     offsets = dividend_implied_ability(dividends=adj_dividends, density=density,nan_value=nan_value)
-    densities = densities_from_offsets(density=density, offsets=offsets)
+    # a scratched runner (zero price) has ability +inf (#589): it never
+    # finishes ahead of anyone, so give it an infinite performance
+    scratched = [not math.isfinite(o) for o in offsets]
+    densities = densities_from_offsets(density=density, offsets=[0.0 if s else o for s, o in zip(scratched, offsets)])
     performances = simulate_performances(densities=densities, n_samples=n_samples, add_noise=True, unit=unit)
+    if any(scratched):
+        performances = [[math.inf if s else x for s, x in zip(scratched, row)] for row in performances]
     placegetters = placegetters_from_performances(performances=performances, n=4)
     the_counts = exotic_count(placegetters, do_exotics=False)
     n_runners = len(adj_dividends)
