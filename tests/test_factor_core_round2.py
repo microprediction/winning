@@ -336,3 +336,45 @@ def test_core_inverse_budget_exhaustion_is_reported_538():
     for bad in (-1, 1.5, np.inf, True):
         with pytest.raises(ValueError, match="n_iter"):
             abilities_from_probabilities_factor(t, V, D, F, W, n_iter=bad)
+
+
+# ---------------------------------------------------------------- #592
+
+def test_target_floor_is_a_probability_not_a_unit_592():
+    """Floored before normalizing, [c, 0] gave gaps 0 / 4.75 / 7.03 at
+    c = 1e-6 / 1 / 1e6."""
+    from winning.factor.races import abilities_from_race
+    race = [abilities_from_race(np.array([c, 0.0]), D=np.array([0.5, 0.5]),
+                                target_floor=1e-6, return_info=True)
+            for c in (1e-6, 1.0, 1e6, 1e308)]
+    for m, info in race[1:]:
+        assert np.abs(m - race[0][0]).max() < 1e-12
+        assert np.array_equal(info["floored"], race[0][1]["floored"])
+    tk = [abilities_from_topk(np.array([0.7, 0.3, 0.0]) * c, 1,
+                              D=np.ones(3), target_floor=1e-4, n_iter=100,
+                              return_info=True)
+          for c in (1e-3, 1.0, 1e3)]
+    for m, info in tk:
+        assert info["converged"]
+        assert np.abs(m - tk[0][0]).max() < 1e-9
+    with pytest.raises(ValueError, match="non-negative"):
+        abilities_from_race(np.array([0.5, -0.1, 0.6]), D=np.ones(3),
+                            target_floor=1e-6)
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_target_floor_is_a_probability_592():
+    got = _node(f"""
+import {{ abilitiesFromRace }} from {_mod("races.mjs")};
+import {{ abilitiesFromTopk }} from {_mod("topk.mjs")};
+console.warn = () => {{}};
+const race = [1e-6, 1, 1e6].map(c => abilitiesFromRace([c, 0],
+  {{ D: [0.5, 0.5], targetFloor: 1e-6 }}));
+const topk = [1e-3, 1, 1e3].map(c => abilitiesFromTopk([0.7 * c, 0.3 * c, 0],
+  1, {{ D: [1, 1, 1], targetFloor: 1e-4, nIter: 100 }}));
+console.log(JSON.stringify({{ race, topk }}));
+""")
+    for key, tol in (("race", 1e-12), ("topk", 1e-9)):
+        ref = np.array(got[key][0])
+        for m in got[key][1:]:
+            assert np.abs(np.array(m) - ref).max() < tol

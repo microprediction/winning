@@ -823,8 +823,11 @@ def _validated_topk_target(q, k, n, target_floor):
     if len(target) != n:
         raise ValueError(f"target has {len(target)} entries for {n} runners")
     if target_floor is not None:
-        if not target_floor > 0:
-            raise ValueError("target_floor must be positive")
+        # a membership floor, applied to memberships: normalized to k
+        # slots first, not in the caller's units (#592)
+        from .races import _floorable
+        target_floor = as_tolerance(target_floor, "target_floor")
+        target = _floorable(target, float(k))
         floored = target < target_floor
         target = np.maximum(target, target_floor)
     else:

@@ -6,7 +6,7 @@
 // the derivations and the two-branch refusal of exact-rank targets.
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
-         jacobiSweeps } from "./core.mjs";
+         jacobiSweeps, floorableTarget } from "./core.mjs";
 import { BASES, _factorNodeRule } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -586,7 +586,9 @@ function validatedTarget(q, k, n, targetFloor) {
   if (bad >= 0) throw new Error(`target[${bad}] = ${target[bad]} is not finite`);
   let floored = new Array(n).fill(false);
   if (targetFloor != null) {
-    if (!(targetFloor > 0)) throw new Error("targetFloor must be positive");
+    if (!(typeof targetFloor === "number" && targetFloor > 0 && Number.isFinite(targetFloor)))
+      throw new Error("targetFloor must be positive");
+    target = floorableTarget(target, k);   // a membership floor (#592)
     floored = target.map(v => v < targetFloor);
     target = target.map(v => Math.max(v, targetFloor));
   } else if (target.some(v => v <= 0)) {

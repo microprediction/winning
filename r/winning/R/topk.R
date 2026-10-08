@@ -419,7 +419,13 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
     stop(sprintf("target has %d entries for %d runners", length(target), n))
   floored <- rep(FALSE, n)
   if (!is.null(target_floor)) {
-    if (!(target_floor > 0)) stop("target_floor must be positive")
+    target_floor <- .as_tolerance(target_floor, "target_floor")
+    # a membership floor: applied to memberships normalized to k slots,
+    # not to the caller's units (#592)
+    if (any(!is.finite(target)) || any(target < 0))
+      stop("target entries must be finite and non-negative", call. = FALSE)
+    target <- target / max(target)
+    target <- target * (k / sum(target))
     floored <- target < target_floor
     target <- pmax(target, target_floor)
   } else if (any(target <= 0)) {

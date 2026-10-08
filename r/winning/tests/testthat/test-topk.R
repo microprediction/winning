@@ -243,3 +243,27 @@ test_that("adaptive top-k count is dyadic, so Jsigma matches the map (#515)", {
          top_k_probabilities(mu, 2, D = sm^2, base = "gumbel")[3]) / (2 * h)
   expect_lt(abs(fd - J$Jsigma[3, 3]), 1e-6)   # was 0.30 apart
 })
+
+test_that("inverses refuse tol = Inf and an invalid ridge (#551, #558)", {
+  mu <- c(-1.5, -0.4, 0.3, 1.6); D <- c(0.25, 0.64, 1.44, 2.25)
+  p1 <- top_k_probabilities(mu, 1, D = D)
+  p2 <- top_k_probabilities(mu, 2, D = D)
+  for (bad in list(Inf, NaN, 0, -1, c(1e-8, 1e-8), "1e-8")) {
+    expect_error(abilities_from_race(p1, D = D, tol = bad), "tol")
+    expect_error(abilities_from_topk(p1, 1, D = D, tol = bad), "tol")
+    expect_error(loc_scale_from_topk_pair(p1, 1, p2, 2, tol = bad), "tol")
+  }
+  for (bad in list(-1, -Inf, Inf, NaN, c(-100, 0.05), TRUE))
+    expect_error(loc_scale_from_topk_pair(p1, 1, p2, 2, ridge = bad), "ridge")
+})
+
+test_that("target_floor floors memberships, not the caller's units (#592)", {
+  ref <- .validated_topk_target(c(0.7, 0.3, 0), 1, 3, 1e-4)
+  for (c in c(1e-3, 1e3)) {
+    got <- .validated_topk_target(c(0.7, 0.3, 0) * c, 1, 3, 1e-4)
+    expect_equal(got$target, ref$target, tolerance = 1e-14)
+    expect_identical(got$floored, ref$floored)
+  }
+  expect_error(.validated_topk_target(c(0.7, -0.3, 0.6), 1, 3, 1e-4),
+               "non-negative")
+})

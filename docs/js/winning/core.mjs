@@ -558,6 +558,21 @@ export function aitkenTrial(mu, step, ratio, scale, forward, residMax,
   return { mu: cand, fwd };
 }
 
+/* A target about to be floored, as a law of total `mass`: the floor is a
+   probability, so it applies to normalized entries, never the caller's
+   arbitrary units -- [c, 0] floored at 1e-6 returned ability gaps of 0,
+   4.75 and 7.03 for c = 1e-6, 1, 1e6 (#592). Port of python's
+   races._floorable; dividing by the max first keeps the sum finite. */
+export function floorableTarget(target, mass) {
+  if (target.some(v => v < 0))
+    throw new Error("target entries must be non-negative: targetFloor " +
+                    "floors small and zero shares, not negative ones");
+  const mx = Math.max(...target);
+  const t = target.map(v => v / mx);
+  const s = t.reduce((a, b) => a + b, 0);
+  return t.map(v => v * (mass / s));
+}
+
 export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
   let residMax = Infinity, residRms = Infinity, iters = 0;
   let prev = null, prevStep = null;

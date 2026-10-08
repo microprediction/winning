@@ -373,7 +373,14 @@ function _validated_topk_target(q, k, n, target_floor)
     length(target) == n || error("target has $(length(target)) entries for $n runners")
     floored = falses(n)
     if target_floor !== nothing
-        target_floor > 0 || error("target_floor must be positive")
+        (isfinite(target_floor) && target_floor > 0) ||
+            error("target_floor must be a finite positive number")
+        # a membership floor: applied to memberships normalized to k
+        # slots, not to the caller's units (#592)
+        all(isfinite, target) && all(>=(0), target) ||
+            error("target entries must be finite and non-negative")
+        target = target ./ maximum(target)
+        target .*= k / sum(target)
         floored = target .< target_floor
         target = max.(target, target_floor)
     elseif any(target .<= 0)

@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -468,6 +468,7 @@ function validatedRaceTarget(pTarget, targetFloor) {
   if (targetFloor != null) {
     if (!(typeof targetFloor === "number" && targetFloor > 0 && Number.isFinite(targetFloor)))
       throw new Error("targetFloor must be positive");
+    target = floorableTarget(target, 1);   // a probability floor (#592)
     floored = target.map(v => v < targetFloor);
     target = target.map(v => Math.max(v, targetFloor));
   } else if (target.some(v => v <= 0)) {

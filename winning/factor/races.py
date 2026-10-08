@@ -1281,8 +1281,11 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # abilities as converged with residual 0 (#110)
     target = as_target(p)
     if target_floor is not None:
-        if not target_floor > 0:
-            raise ValueError("target_floor must be positive")
+        target_floor = as_tolerance(target_floor, "target_floor")
+        # the floor is a PROBABILITY: normalize (scale-safely) first. Floored
+        # in the caller's units, [c, 0] at c = 1e-6 / 1 / 1e6 returned gaps
+        # of 0 / 4.75 / 7.03 for one and the same relative target (#592)
+        target = _floorable(target, 1.0)
         floored = target < target_floor
         target = np.maximum(target, target_floor)
     else:
@@ -1617,6 +1620,19 @@ def _aitken_trial(mu, step, ratio, scale, forward, resid_max):
     if float(np.abs(rc).max()) > 10.0 * resid_max:
         return None
     return cand, fc
+
+
+def _floorable(target, mass):
+    """A target about to be floored, as a law of total `mass`: the floor is
+    a probability, so it applies to normalized entries, never to the
+    caller's arbitrary units (#592). Negative entries have no reading as
+    mass and raise; dividing by the max first keeps the sum finite."""
+    if np.any(target < 0):
+        raise ValueError(
+            "target entries must be non-negative: target_floor floors "
+            "small and zero shares, not negative ones")
+    target = target / target.max()
+    return target * (mass / target.sum())
 
 
 def _inverse_return(mu, converged, resid_max, iters, floored, tol,
