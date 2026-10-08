@@ -117,7 +117,11 @@
            call. = FALSE)
     v <- y == 1
   } else {
+    # labels: "TRUE"/"FALSE" (and spellings as.logical knows) or "0"/"1",
+    # which is how a factor response arrives (#512)
     v <- as.logical(y)
+    v[!is.na(y) & y == "1"] <- TRUE
+    v[!is.na(y) & y == "0"] <- FALSE
     if (any(is.na(v) & !is.na(y)))
       stop("the chosen indicator must be logical or 0/1", call. = FALSE)
   }

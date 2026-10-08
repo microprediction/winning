@@ -302,3 +302,26 @@ test_that("an idx that does not cover data is refused, not a prefix (#520)", {
   expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
                            maxit = 2L), "idx column or attribute")
 })
+
+test_that("a factor response means its labels, not its level codes (#512)", {
+  set.seed(5)
+  n <- 20L; J <- 3L
+  d <- data.frame(x = rnorm(n * J))
+  u <- 0.7 * d$x + rnorm(n * J)
+  ch <- unlist(lapply(split(u, rep(seq_len(n), each = J)),
+                      function(w) seq_along(w) == which.max(w)))
+  attr(d, "idx") <- data.frame(id = rep(seq_len(n), each = J),
+                               alt = factor(rep(c("a", "b", "c"), n)))
+  fit <- function(resp) {
+    d$chosen <- resp
+    mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L, maxit = 5L)
+  }
+  ref <- fit(ch)
+  for (resp in list(factor(ch, levels = c(FALSE, TRUE)),
+                    factor(as.integer(ch), levels = 0:1),
+                    as.integer(ch))) {
+    got <- fit(resp)
+    expect_equal(got$coefficients, ref$coefficients)
+    expect_equal(got$logLik, ref$logLik)
+  }
+})

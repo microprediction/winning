@@ -117,7 +117,11 @@
            call. = FALSE)
     v <- y == 1
   } else {
+    # labels: "TRUE"/"FALSE" (and spellings as.logical knows) or "0"/"1",
+    # which is how a factor response arrives (#512)
     v <- as.logical(y)
+    v[!is.na(y) & y == "1"] <- TRUE
+    v[!is.na(y) & y == "0"] <- FALSE
     if (any(is.na(v) & !is.na(y)))
       stop("the chosen indicator must be logical or 0/1", call. = FALSE)
   }
@@ -346,8 +350,13 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
   alt <- alt[ord]; ids <- ids[ord]
   # the same positional reshape lives here (#230)
   .check_choice_sets(ids, alt, J)
-  # dfidx wraps columns in xseries, under which %in% misbehaves; coerce
-  resp <- as.vector(unclass(data[[as.character(formula[[2]])]]))[ord]
+  # dfidx wraps columns in xseries, under which %in% misbehaves; coerce.
+  # But unclass on a factor exposes its level CODES (FALSE/TRUE -> 1/2),
+  # so a factor response goes through its labels instead (#512)
+  resp_raw <- data[[as.character(formula[[2]])]]
+  resp <- if (is.factor(resp_raw)) as.character(resp_raw) else
+    as.vector(unclass(resp_raw))
+  resp <- resp[ord]
   # exactly one chosen row per observation, keyed by id (#324, #435)
   choice <- .choices_by_id(ids, alt, resp, levels(id_f))
   Tn <- length(choice)
