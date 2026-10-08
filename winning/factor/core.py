@@ -936,8 +936,14 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
             slope += Wc @ (np.sum(z * f / sd[None, :, None] * rest, axis=2) * dx)
             # sum_{j != i} d a_j / d mu_i = sum_{j != i} w_ij, by the
             # hazard identity: f_i rest_i (H - h_i), h_j = f_j / S_j
-            # (finite in logs for the normal base)
-            haz = np.exp(np.log(np.maximum(f, 1e-300)) - logS)
+            # (finite in logs for the normal base). The log density is
+            # analytic: flooring an underflowed f at 1e-300 while logS
+            # kept falling overflowed haz to inf, and H - haz = nan
+            # turned a self-generated D = [0.01, 1, 1] target into NaN
+            # abilities (#524); h ~ z / sd there, finite.
+            log_f = (-0.5 * z**2
+                     - np.log(sd[None, :, None] * np.sqrt(2.0 * np.pi)))
+            haz = np.exp(log_f - logS)
             H = haz.sum(axis=1, keepdims=True)
             cross += Wc @ (np.sum(f * rest * (H - haz), axis=2) * dx)
         total = phat.sum()

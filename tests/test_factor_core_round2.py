@@ -68,3 +68,23 @@ console.log(JSON.stringify({{mu: fit.mu, info: fit.info, rep, q}}));
     assert np.abs(err - err.mean()).max() < 1e-6       # was ~900
     assert got["info"]["maxLogitResidual"] < 1e-5      # was 715
     assert np.abs(np.array(got["rep"]) - got["q"]).max() < 1e-9
+
+
+# ---------------------------------------------------------------- #524
+
+@pytest.mark.parametrize("d0", [0.003, 0.01, 0.03, 0.1])
+def test_core_inverse_hazard_is_analytic_524(d0):
+    """A narrow runner's density underflowed, was floored at 1e-300 while
+    log S kept falling, and inf - inf made every ability NaN."""
+    from winning.factor.core import (abilities_from_probabilities_factor,
+                                     win_probabilities_factor)
+    D = np.array([d0, 1.0, 1.0])
+    V, F, W = np.zeros((3, 1)), np.zeros((1, 1)), np.ones(1)
+    truth = np.array([0.5, 0.0, -0.5])
+    target = win_probabilities_factor(truth, V, D, F, W)
+    with np.errstate(over="raise", invalid="raise"):
+        mu, info = abilities_from_probabilities_factor(
+            target, V, D, F, W, return_info=True)
+    assert np.isfinite(mu).all() and info["converged"]
+    rep = win_probabilities_factor(mu, V, D, F, W)
+    assert np.abs(rep - target).max() < 1e-6
