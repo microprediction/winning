@@ -170,6 +170,18 @@ def convolve_two(density1, density2, L=None, do_padding=False):
     mu1 = mean_of_density(density1, unit=1)
     mu2 = mean_of_density(density2, unit=1)
     density = np.convolve(density1, density2)
+    # Mass outside the window is folded onto the first atom (lower tail)
+    # or dropped (upper tail), and the mean correction below then moves
+    # the bulk to compensate. The guard after it only saw the dropped
+    # upper tail, so a 30% lower tail pinned at the edge passed and the
+    # shift reversed a 37/63 race to 82/18 (#608). Count both tails.
+    n_extra = implied_L(density) - L
+    if n_extra > 0:
+        total = float(np.sum(density))
+        clipped = float(np.sum(density[:n_extra]) + np.sum(density[-n_extra:]))
+        if total > 0 and clipped > 0.1 * total:
+            raise ValueError('Convolution of two densities puts ' + format(clipped / total, '.3g')
+                             + ' of its mass outside the lattice window - increase L')
     middle = middle_of_density(density=density, L=L, do_padding=do_padding)
     mu = mean_of_density(middle, unit=1)
     mu_diff = mu-(mu1+mu2)
