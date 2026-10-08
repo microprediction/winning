@@ -74,3 +74,11 @@ def test_adaptive_default_table_equals_full_table():
                 a = solve_for_implied_offsets(p, d)
                 b = solve_for_implied_offsets(p, d, offset_samples=default_offset_samples(L))
             assert np.array_equal(np.asarray(a), np.asarray(b))
+
+
+@pytest.mark.parametrize("n", [0, -1, 2.5, True, None])
+def test_nonpositive_or_fractional_budget_is_refused(n):
+    # #543: nIter <= 0 returned the warm start (a tied race) as an answer
+    d = skew_normal_density(50, 0.1)
+    with pytest.raises(ValueError, match="nIter"):
+        solve_for_implied_offsets([0.6, 0.3, 0.1], d, nIter=n)

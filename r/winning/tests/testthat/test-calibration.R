@@ -246,3 +246,9 @@ test_that("an unrepresentable target warns", {
   d <- skew_normal_density(3, 1.0, a = 0)
   expect_warning(solve_for_implied_offsets(c(0.5, 0.5, 0), d), "did not reach the target")
 })
+
+test_that("a zero or negative iteration budget is refused (#543)", {
+  d <- skew_normal_density(50, 0.1)
+  for (n in list(0, -1, 2.5, NA_real_))
+    expect_error(solve_for_implied_offsets(c(0.6, 0.3, 0.1), d, n_iter = n), "n_iter")
+})

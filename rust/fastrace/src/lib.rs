@@ -495,6 +495,11 @@ fn classic_exact_calibrate(
         return Err(pyo3::exceptions::PyValueError::new_err(
             "classic calibration needs one guess per price and a nonempty offset table"));
     }
+    // zero steps returned the warm start as a calibration (#543)
+    if n_iter == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "n_iter must be a positive number of iterations; zero returns the warm start"));
+    }
     Ok(py.allow_threads(|| with_usable_rayon(|| {
         winning::exact_calibrate(&density, &prices, &offset_samples, &guess, n_iter)
     })))

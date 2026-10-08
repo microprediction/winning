@@ -175,6 +175,12 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
 
     density = as_classic_density(density)
     prices = as_classic_prices(prices)
+    # a loop bound: zero or negative skipped every step and returned the
+    # warm start as a calibration -- a tied race for an asymmetric target
+    # (#543); the browser has refused these since #401
+    if isinstance(nIter, bool) or not isinstance(nIter, (int, np.integer)) or nIter < 1:
+        raise ValueError('nIter must be a positive integer number of iterations; got ' + repr(nIter)
+                         + '. A zero or negative budget skips the solve and returns the warm start.')
     L = implied_L(density)
     core = None
     if offset_samples is None:
@@ -247,8 +253,7 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
                 print(list(zip(np.round(prices, 3),
                                np.round(exact_state_prices_from_cdfs(cdfs), 3)))[:5])
 
-    if nIter > 0:
-        _warn_if_unconverged(state_prices_from_offsets(density, implied_offsets), prices)
+    _warn_if_unconverged(state_prices_from_offsets(density, implied_offsets), prices)
     return implied_offsets
 
 

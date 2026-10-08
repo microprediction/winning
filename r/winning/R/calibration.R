@@ -57,6 +57,13 @@ solve_for_implied_offsets <- function(prices, density,
                                       n_iter = 3) {
   density <- as_classic_density(density)
   prices <- as_classic_prices(prices)
+  # a loop bound: zero or negative skipped every step and returned the
+  # warm start as a calibration (#543); the browser refuses these too
+  if (length(n_iter) != 1L || !is.numeric(n_iter) || !is.finite(n_iter) ||
+      n_iter < 1 || n_iter != round(n_iter))
+    stop("n_iter must be a positive integer number of iterations; got ",
+         deparse(n_iter), ". A zero or negative budget skips the solve and ",
+         "returns the warm start.", call. = FALSE)
   L <- implied_L(density)
   core <- NULL
   if (is.null(offset_samples)) {
@@ -95,7 +102,7 @@ solve_for_implied_offsets <- function(prices, density,
     implied <- implied - trunc(mean(implied))
     cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   }
-  if (n_iter > 0) .warn_if_unconverged(exact_state_prices_from_cdfs(cdfs), prices)
+  .warn_if_unconverged(exact_state_prices_from_cdfs(cdfs), prices)
   implied
 }
 
