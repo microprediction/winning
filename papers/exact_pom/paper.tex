@@ -25,12 +25,10 @@ probability that it is the best one, and entropy search chooses its
 next evaluation in the same manner. Where the probabilities
 themselves are needed they are approximated: from marginal means and
 variances in bandits, and by expectation propagation in Bayesian
-optimization, at a cost quartic in the number of candidates. We
-observe that when the correlation between alternatives runs through a
-few shared factors, or through blocks, nested groups or a tree, these
-probabilities are one integral over the shared variables. Quadrature
-of fixed resolution then evaluates them all at once, at a cost linear
-in the number of alternatives. Simulation under common random numbers
+optimization, at a cost quartic in the number of candidates. A recent algorithm \citep{cotton2026} computes all of these
+probabilities at once, at a cost linear in the number of alternatives,
+whenever the correlation between them runs through a few shared
+factors, blocks, nested groups or a tree. We apply it. Simulation under common random numbers
 and a Gaussian bandit with a factor prior produce such beliefs
 exactly, and a dense covariance is fitted to the form on intake. With
 the computed probabilities a stopping rule stops sooner at the same
@@ -144,7 +142,10 @@ with the feature matrix as the loadings and a factor rank equal to
 the number of features, and Section~\ref{sec:bandit-posterior} keeps
 it in that form after every pull.
 
-For beliefs of this form, all $n$ probabilities come from one integral over the factors, and quadrature evaluates them at once in time linear in $n$ at fixed resolution. The computation is the one \citet{cotton2026} uses to price correlated contests, restated here rather than derived. One standard model from each of the first two literatures produces a
+For beliefs of this form, the algorithm of \citet{cotton2026}
+computes all $n$ probabilities at once, in time linear in $n$ at
+fixed resolution. It was built to price correlated contests, and it is
+restated here rather than derived. One standard model from each of the first two literatures produces a
 posterior of exactly this form after every update: simulation under
 common random numbers, and a Gaussian bandit with a factor prior. In Bayesian optimization the form is a modelling choice, a kernel
 with finitely many features, or the intake fit of a dense kernel.
