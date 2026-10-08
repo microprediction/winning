@@ -409,6 +409,7 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
                             W = nothing, base = "normal", points = 257,
                             return_slopes = false, window = "bulk",
                             delta = 1e-12)
+    _check_points(points)
     st = _race_setup(mu, V, D, F, W, base)
     n = length(st.mu)
     sd = sqrt.(st.D)
@@ -451,12 +452,24 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
     return p ./ total
 end
 
+# A lattice size is a whole number >= 2: x[2] - x[1] raised BoundsError
+# at 1 and 0 (#444), the contract python's shapes.as_points states.
+function _check_points(points)
+    (points isa Real && isfinite(points) && points == floor(points)) ||
+        throw(ArgumentError("points must be a whole number of lattice points; got $points"))
+    points >= 2 ||
+        throw(ArgumentError("points must be at least 2: a lattice of $points point(s) has no spacing"))
+    return Int(points)
+end
+
 """Invert the general race: mean-zero mu with matching probabilities,
-by the damped own-slope iteration with residual-proportional caps."""
+by the damped own-slope iteration with residual-proportional caps,
+in the field's own units (#100)."""
 function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
                              W = nothing, base = "normal", points = 257,
                              n_iter = 60, tol = 1e-8)
     target = Float64.(collect(p))
+    all(isfinite, target) || error("target probabilities must be finite")
     any(target .<= 0) && error("all target probabilities must be positive")
     # a target is a law up to a positive factor: when its SUM overflows
     # (entries all finite) rescale by the max first, as python does since
@@ -468,19 +481,37 @@ function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
     end
     target ./= tot
     logt = log.(target)
-    mu = -(logt .- sum(logt) / length(logt)) ./ 2
-    alpha = length(target) > 2 ? 1.0 : 0.7
+    n = length(target)
+    # The field's contrast scale, as python and R measure it: the warm
+    # start and the caps were unit-variance numbers, so D = [.005, .01,
+    # .02] ended at a log residual of 51.6 while the same race at
+    # D * 100^2 converged (#100).
+    st = _race_setup(zeros(n), V, D, F, W, base)
+    Dn = sort(st.D)
+    medD = isodd(n) ? Dn[(n + 1) ÷ 2] : 0.5 * (Dn[n ÷ 2] + Dn[n ÷ 2 + 1])
+    Vc = st.V .- sum(st.V, dims = 1) ./ n
+    scale = sqrt(medD + sum(Vc .^ 2) / n)
+    mu = -(logt .- sum(logt) / n) ./ 2 .* scale
+    # damped for a pair AND for a dominant pair at any n (top-two share
+    # above 0.8), whose Jacobi step two-cycles -- python's gate
+    top2 = n > 2 ? sum(sort(target)[end-1:end]) : 1.0
+    alpha = (n == 2 || top2 > 0.8) ? 0.7 : 1.0
+    resid_max = Inf
     for _ in 1:n_iter
         ps = race_probabilities(mu; V = V, D = D, F = F, W = W,
                                 base = base, points = points,
                                 return_slopes = true)
         resid = log.(max.(ps.p, TINY)) .- logt
-        maximum(abs.(resid)) < tol && break
-        dlogp = min.(ps.slopes ./ max.(ps.p, TINY), -1e-6)
-        lim = min.(2, 10 .* abs.(resid))
+        resid_max = maximum(abs.(resid))
+        resid_max < tol && break
+        dlogp = min.(ps.slopes ./ max.(ps.p, TINY), -1e-6 / scale)
+        lim = min.(2, 10 .* abs.(resid)) .* scale
         mu .-= clamp.(alpha .* resid ./ dlogp, -lim, lim)
         mu .-= sum(mu) / length(mu)
     end
+    # it used to stop at n_iter and return a plausible vector silently
+    resid_max < tol ||
+        @warn "abilities_from_race did not converge" resid_max n_iter tol
     return mu
 end
 

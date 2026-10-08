@@ -456,39 +456,45 @@ fn tree_race<'py>(
 }
 
 
-/// state_prices_from_offsets: field from the shifted base density, then
-/// implicit prices AT those offsets (unnormalized, as the reference).
-///
-/// Like every other heavy wrapper this converts its arguments first and
-/// then computes with the GIL released (#120) inside with_usable_rayon
-/// (#122): implicit_prices is a rayon parallel region, and calling it
-/// unguarded used to warm the global pool without claiming RAYON_PID, so
-/// a forked child's first guarded kernel entered the dead inherited pool
-/// and hung.
-#[pyfunction]
-fn classic_state_prices(py: Python<'_>, density: Vec<f64>, offsets: Vec<f64>)
-                        -> PyResult<Vec<f64>> {
-    if density.is_empty() {
-        return Err(PyValueError::new_err(
-            "density is empty; the classic lattice needs length 2L+1"));
+/// state_prices_from_offsets on the exact dead-heat engine; see
+/// winning::exact_state_prices_from_offsets. The name changed with the
+/// engine (#418/#362/#348/#373) so that a wheel built before it is not
+/// dispatched to: load_fastrace finds no such kernel and the python
+/// path runs instead.
+/// The python boundary (as_classic_density) validates and normalises the
+/// atoms; this re-checks the shape so a direct caller cannot index an
+/// empty table or price a truncated lattice (#339).
+fn check_classic_density(density: &[f64]) -> PyResult<()> {
+    let n = density.len();
+    if n % 2 != 1 || n < 7 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "classic density must have odd length 2L+1 with L >= 3; got length {}", n)));
     }
+    if density.iter().any(|x| !x.is_finite() || *x < 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "classic density must be finite and nonnegative"));
+    }
+    Ok(())
+}
+
+#[pyfunction]
+fn classic_exact_state_prices(py: Python<'_>, density: Vec<f64>, offsets: Vec<f64>)
+                              -> PyResult<Vec<f64>> {
+    check_classic_density(&density)?;
+    // GIL released and rayon guarded like every heavy wrapper (#120,
+    // #122): the table pricing is a rayon parallel region
     Ok(py.allow_threads(|| with_usable_rayon(|| {
-        let l = ((density.len() - 1) / 2) as i64;
-        let base_cdf = pdf_to_cdf(&density);
-        let cdfs: Vec<Vec<f64>> =
-            offsets.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-        let (cdf_all, mult_all) = winner_of_many(&cdfs);
-        implicit_prices(&base_cdf, &cdf_all, &mult_all, &offsets, l)
+        winning::exact_state_prices_from_offsets(&density, &offsets)
     })))
 }
 
 
-/// solve_for_implied_offsets: the reference fixed-point iteration --
-/// interpolation table offset -> price rebuilt against the current field.
-/// GIL released and rayon guarded, as classic_state_prices (#120, #122).
+/// solve_for_implied_offsets: the paper's table iteration as a defect
+/// correction against the exact engine; see winning::exact_calibrate.
+/// GIL released and rayon guarded, as classic_exact_state_prices.
 #[pyfunction]
 #[pyo3(signature = (density, prices, offset_samples, guess, n_iter=3))]
-fn classic_calibrate(
+fn classic_exact_calibrate(
     py: Python<'_>,
     density: Vec<f64>,
     prices: Vec<f64>,
@@ -496,29 +502,13 @@ fn classic_calibrate(
     guess: Vec<f64>,
     n_iter: usize,
 ) -> PyResult<Vec<f64>> {
-    if density.is_empty() {
-        return Err(PyValueError::new_err(
-            "density is empty; the classic lattice needs length 2L+1"));
+    check_classic_density(&density)?;
+    if guess.len() != prices.len() || offset_samples.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "classic calibration needs one guess per price and a nonempty offset table"));
     }
     Ok(py.allow_threads(|| with_usable_rayon(|| {
-        let l = ((density.len() - 1) / 2) as i64;
-        let base_cdf = pdf_to_cdf(&density);
-        let mut cdfs: Vec<Vec<f64>> =
-            guess.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-        // offset_samples arrive descending (better first); implied prices
-        // are then ascending, which is what the interpolation needs
-        let mut implied: Vec<f64> = prices.clone();
-        for _ in 0..n_iter {
-            let (cdf_all, mult_all) = winner_of_many(&cdfs);
-            let table = implicit_prices(&base_cdf, &cdf_all, &mult_all,
-                                        &offset_samples, l);
-            implied = prices
-                .iter()
-                .map(|&p| interp1(p, &table, &offset_samples))
-                .collect();
-            cdfs = implied.iter().map(|&o| shifted_cdf(&base_cdf, o, l)).collect();
-        }
-        implied
+        winning::exact_calibrate(&density, &prices, &offset_samples, &guess, n_iter)
     })))
 }
 
@@ -618,8 +608,8 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rank_marginal_jacobian, m)?)?;
     m.add_function(wrap_pyfunction!(top_k_jacobians, m)?)?;
     m.add_function(wrap_pyfunction!(forward_and_slopes_base, m)?)?;
-    m.add_function(wrap_pyfunction!(classic_state_prices, m)?)?;
-    m.add_function(wrap_pyfunction!(classic_calibrate, m)?)?;
+    m.add_function(wrap_pyfunction!(classic_exact_state_prices, m)?)?;
+    m.add_function(wrap_pyfunction!(classic_exact_calibrate, m)?)?;
     m.add_function(wrap_pyfunction!(per_winner_rr, m)?)?;
     Ok(())
 }

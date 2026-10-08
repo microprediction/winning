@@ -7,19 +7,29 @@ on:
   pull_request:
     paths: ['julia/**', '.github/workflows/julia.yml']
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # julia-actions/cache deletes the superseded cache entry it created,
+      # which needs actions: write (see its README)
+      actions: write
     strategy:
       fail-fast: false
       matrix:
         package: [winning, MultinomialProbit, FactorMvNormalCDF, GMRFExtremes]
     steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
         with:
           version: '1'
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@e32267b41e0fa7df82a3d53e8c7273620d52c586 # v3.4.0
       - name: Test ${{ matrix.package }}
         shell: julia --color=yes {0}
         run: |

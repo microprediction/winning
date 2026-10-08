@@ -27,6 +27,29 @@ test_that("a monotonic linkage is unaffected", {
   expect_equal(length(tree_from_hclust(hc)$parent), 11L)
 })
 
+# the shared fixture tests/golden/linkage_leaf_variance.json (#430): leaf
+# variances are 2 h^2 EXACTLY -- no absolute 1e-10 floor -- and a merge at
+# height 0 is refused; python and the browser read the same file
+test_that("near-duplicate leaves keep their cophenetic variance (#430)", {
+  path <- file.path("..", "..", "..", "..", "tests", "golden",
+                    "linkage_leaf_variance.json")
+  skip_if_not(file.exists(path), "shared fixture only in the repo checkout")
+  skip_if_not_installed("jsonlite")
+  fx <- jsonlite::fromJSON(path, simplifyVector = FALSE)
+  for (case in fx$cases) {
+    Z <- do.call(rbind, lapply(case$Z, unlist))
+    tr <- tree_from_linkage(Z)
+    D <- unlist(case$D)
+    expect_equal(tr$D, D, tolerance = fx$rtol, info = case$name)
+    n <- length(D)
+    st <- unlist(case$strength)
+    expect_equal(tr$strength[-(1:n)], st[-(1:n)], tolerance = fx$rtol,
+                 info = case$name)
+  }
+  Z0 <- do.call(rbind, lapply(fx$refuse_zero_height, unlist))
+  expect_error(tree_from_linkage(Z0), "height 0")
+})
+
 test_that("an empty linkage is the one-runner tree (#382)", {
   tr <- tree_from_linkage(matrix(numeric(0), nrow = 0, ncol = 4))
   expect_equal(tr$D, 1)

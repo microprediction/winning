@@ -1,7 +1,8 @@
 // Demo support: seeded correlation generators (randomcov's ensembles in
 // miniature), dense linear algebra for the in-browser grammar fit, and
 // a Monte Carlo sampler to race against.
-import { hermite1, interpClamped, solve, firstPrimes } from "./core.mjs";
+import { hermite1, interpClamped, solve, firstPrimes, asLoadings,
+         isVector } from "./core.mjs";
 import { clusterIndex } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
@@ -155,14 +156,20 @@ export function jacobiEigh(Ain, maxSweeps = 12) {
   const A = Ain.map(row => row.slice());
   const V = Array.from({ length: n }, (_, i) =>
     Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+  // thresholds RELATIVE to the matrix's own size: absolute ones made
+  // the decomposition (and so every fit built on it) depend on the units
+  // the covariance happened to be written in (#341)
+  let tot = 0;
+  for (let p = 0; p < n; p++) for (let q = 0; q < n; q++) tot += A[p][q] * A[p][q];
+  const tiny = 1e-15 * Math.sqrt(tot);
   for (let sweep = 0; sweep < maxSweeps; sweep++) {
     let off = 0;
     for (let p = 0; p < n - 1; p++)
       for (let q = p + 1; q < n; q++) off += A[p][q] * A[p][q];
-    if (off < 1e-18 * n * n) break;
+    if (!(off > 1e-30 * tot)) break;
     for (let p = 0; p < n - 1; p++) {
       for (let q = p + 1; q < n; q++) {
-        if (Math.abs(A[p][q]) < 1e-14) continue;
+        if (Math.abs(A[p][q]) <= tiny) continue;
         const theta = (A[q][q] - A[p][p]) / (2 * A[p][q]);
         const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
         const c = 1 / Math.sqrt(t * t + 1), s = t * c;
@@ -188,6 +195,96 @@ export function jacobiEigh(Ain, maxSweeps = 12) {
   return { values: vals, vectors: V };   // columns of V are eigenvectors
 }
 
+/* A finite, square, symmetric, positive-semidefinite matrix, or a
+   refusal -- python's _validate_covariance. fitGrammar projected and
+   eigendecomposed whatever it was given: an asymmetric matrix and its
+   transpose fitted races 4.6 points apart (the projection used row
+   means for both sides), and an indefinite one was clipped into some
+   PSD model and priced as if valid (#357). Returns the symmetrised
+   copy. */
+export function validateCovariance(C, name = "C") {
+  if (!isVector(C) || C.length === 0)
+    throw new Error(`${name} must be a nonempty square matrix`);
+  const n = C.length;
+  const M = C.map((row, i) => {
+    if (!isVector(row) || row.length !== n)
+      throw new Error(
+        `${name} must be square: row ${i} has ` +
+        `${isVector(row) ? row.length : "no"} entries for ${n} rows`);
+    return Array.from(row, v => {
+      if (typeof v !== "number" || !Number.isFinite(v))
+        throw new Error(`${name} contains a non-finite entry (${v}) in row ${i}`);
+      return v;
+    });
+  });
+  let amax = 0, asym = 0;
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++) {
+      amax = Math.max(amax, Math.abs(M[i][j]));
+      asym = Math.max(asym, Math.abs(M[i][j] - M[j][i]));
+    }
+  if (asym > 1e-8 * Math.max(amax, 1e-300))
+    throw new Error(
+      `${name} is not symmetric (max asymmetry ${asym.toExponential(2)}); ` +
+      "pass (C + C')/2 if the asymmetry is numerical noise -- a fit cannot " +
+      "choose a triangle for you");
+  const S = M.map((row, i) => row.map((v, j) => 0.5 * v + 0.5 * M[j][i]));
+  let md = 0;
+  for (let i = 0; i < n; i++) md += S[i][i] / n;
+  const lamMin = Math.min(...jacobiEigh(S, 50).values);
+  if (lamMin < -1e-8 * Math.max(md, 1e-300))
+    throw new Error(
+      `${name} is not positive semidefinite (min eigenvalue ` +
+      `${lamMin.toExponential(2)}); a covariance has no negative variance ` +
+      "in any direction, and clipping it silently invents a different model");
+  return S;
+}
+
+/* argmin_{d >= 0} d'Gd/2 - c'd for G = P o P = aI + b11' -- python's
+   _nnls_centered_gram (water-filling, O(n)). */
+function nnlsCenteredGram(c, n) {
+  const a = 1 - 2 / n, b = 1 / (n * n);
+  let s = Math.max(c.reduce((x, y) => x + y, 0), 0) / (a + b * n);
+  if (n <= 2) return new Array(n).fill(Math.max(s, 0) / n);
+  for (let pass = 0; pass < 100; pass++) {
+    let sum = 0, cnt = 0;
+    for (const v of c) if (v > b * s) { sum += v; cnt++; }
+    const sN = sum / (a + b * cnt);
+    const done = Math.abs(sN - s) <= 1e-15 * Math.max(1, Math.abs(s));
+    s = sN;
+    if (done) break;
+  }
+  return c.map(v => Math.max((v - b * s) / a, 0));
+}
+
+/* How many of the leading `want` directions (of `values`, sorted
+   descending) can be taken without cutting through a tied group --
+   python's _warn_if_rank_splits_a_tie, applied rather than just warned
+   about. A cut through a tie is not an approximation but an arbitrary
+   choice of basis, so relabelling the contestants of an exchangeable
+   covariance changed the fitted race by 0.6 points (#383). The tied
+   group is DROPPED (its variance falls to the closing diagonal, which
+   is the exchangeable representation) and the caller is told. */
+function untiedRank(values, want, stage, tol = 1e-6) {
+  const lam = values;
+  if (want <= 0 || want >= lam.length || !(lam[0] > 0)) return want;
+  const scale = lam[0];
+  if (lam[want - 1] - lam[want] > tol * scale) return want;
+  if (lam[want - 1] < 0.05 * scale) return want;     // a harmless bulk tie
+  let lo = want - 1;
+  while (lo > 0 && lam[lo - 1] - lam[lo] <= tol * scale) lo--;
+  let hi = want;
+  while (hi + 1 < lam.length && lam[hi] - lam[hi + 1] <= tol * scale) hi++;
+  if (typeof console !== "undefined")
+    console.warn(
+      `fitGrammar: rank ${want} (${stage}) splits a tied eigenvalue: ` +
+      `eigenvalues ${lo + 1} to ${hi + 1} are equal, so any ${want - lo} ` +
+      `of those ${hi - lo + 1} directions are equally good and imply ` +
+      `DIFFERENT races. Using rank ${lo} for this stage instead; rank ` +
+      `${hi + 1} would include the whole group.`);
+  return lo;
+}
+
 export function fitGrammar(C, k = 3, m = 4) {
   // rank-k + promoted residual on the PROJECTED residual (the package's
   // fit_covariance pipeline; blocks omitted for browser latency, and the
@@ -195,7 +292,29 @@ export function fitGrammar(C, k = 3, m = 4) {
   // returns { V, D } columns for raceProbabilities. Only P C P is
   // choice-relevant, so every stage fits the projected matrix and the
   // closing diagonal solves (P.P) d = diag(P R P).
+  C = validateCovariance(C, "fitGrammar: C");          // #357
+  if (!Number.isInteger(k) || k < 0 || !Number.isInteger(m) || m < 0)
+    throw new Error(`fitGrammar: k and m must be non-negative integers; got k=${k}, m=${m}`);
   const n = C.length;
+  let meanDiag = 0;
+  for (let i = 0; i < n; i++) meanDiag += C[i][i] / n;
+  // the floor is RELATIVE to each runner's own variance, as python's.
+  // An absolute 0.03 floor added 0.06 to a pair's only identifiable
+  // contrast (2% -> 8%, a 16-point price move) and broke scale
+  // equivariance for every field: the same race at 1e-4 x the
+  // covariance came back nearly uniform (#341).
+  const floor = C.map((row, i) => 1e-6 * Math.max(row[i], 1e-6 * Math.max(meanDiag, 1e-300)));
+  if (n === 1) return { V: [[0]], D: [Math.max(C[0][0], floor[0])] };
+  if (n === 2) {
+    // a pair has ONE choice-relevant number, Var(X0 - X1); python returns
+    // it as two equal idiosyncratic halves with no factor, which prices
+    // the pair exactly (no near-step factor integral to resolve)
+    const half = 0.5 * Math.max(C[0][0] + C[1][1] - 2 * C[0][1], floor[0] + floor[1]);
+    return { V: [[0], [0]], D: [half, half] };
+  }
+  // a direction is dead relative to the matrix's own scale, not 1e-8
+  // absolute, which changed the fitted rank under rescaling (#341)
+  const dead = 1e-8 * Math.max(meanDiag, 1e-300);
   const proj = M => {
     // P M P with P = I - 11'/n
     const rm = M.map(row => row.reduce((a, b) => a + b, 0) / n);
@@ -203,12 +322,13 @@ export function fitGrammar(C, k = 3, m = 4) {
     return M.map((row, i) => row.map((v, j) => v - rm[i] - rm[j] + tot));
   };
   const CP = proj(C);
-  const { values, vectors } = jacobiEigh(CP);
+  const { values, vectors } = jacobiEigh(CP, 50);
   const order = values.map((v, i) => i).sort((a, b) => values[b] - values[a]);
+  const kk = untiedRank(order.map(i => values[i]), Math.min(k, n), "factor stage");
   const cols = [];
-  for (const idx of order.slice(0, k)) {
+  for (const idx of order.slice(0, kk)) {
     const lam = Math.max(values[idx], 0);
-    cols.push(vectors.map(row => row[idx] * Math.sqrt(lam)));
+    if (lam > dead) cols.push(vectors.map(row => row[idx] * Math.sqrt(lam)));
   }
   // projected residual, diagonal zeroed, top-m eigencolumns promoted
   const E = proj(C.map((row, i) => row.map((v, j) => {
@@ -217,51 +337,78 @@ export function fitGrammar(C, k = 3, m = 4) {
     return s;
   })));
   for (let i = 0; i < n; i++) E[i][i] = 0;
-  const eE = jacobiEigh(E);
+  const eE = jacobiEigh(E, 50);
   const orderE = eE.values.map((v, i) => i).sort((a, b) => eE.values[b] - eE.values[a]);
-  for (const idx of orderE.slice(0, m)) {
+  const mm = untiedRank(orderE.map(i => eE.values[i]), Math.min(m, n), "residual stage");
+  for (const idx of orderE.slice(0, mm)) {
     const lam = Math.max(eE.values[idx], 0);
-    if (lam > 1e-8) cols.push(eE.vectors.map(row => row[idx] * Math.sqrt(lam)));
+    if (lam > dead) cols.push(eE.vectors.map(row => row[idx] * Math.sqrt(lam)));
   }
-  // closing diagonal: (P.P) d = diag(P R P), R = C - VV'
+  // closing diagonal: min_d ||P(R - diag d)P||, R = C - VV', d >= floor,
+  // as the LOWER-BOUNDED least squares (python's water-filling), not a
+  // generic solve with a floor applied afterwards: P o P is singular at
+  // n = 2, where the generic solve silently zeroed a coordinate (#341)
   const R = C.map((row, i) => row.map((v, j) => {
     let s = v;
     for (const col of cols) s -= col[i] * col[j];
     return s;
   }));
   const RP = proj(R);
-  const G = Array.from({ length: n }, (_, i) =>
-    Array.from({ length: n }, (_, j) => {
-      const p = (i === j ? 1 - 1 / n : -1 / n);
-      return p * p;
-    }));
-  const d = solve(G, RP.map((row, i) => row[i]));
+  const a = 1 - 2 / n, b = 1 / (n * n);
+  const rhs = RP.map((row, i) => row[i]);
+  const fsum = floor.reduce((x, y) => x + y, 0);
+  let Dc;
+  if (n <= 2) {
+    const s = Math.max(rhs.reduce((x, y) => x + y, 0), 0) / (a + n * b) / n;
+    Dc = floor.map(f => Math.max(s, f));
+  } else {
+    const x = nnlsCenteredGram(rhs.map((v, i) => v - (a * floor[i] + b * fsum)), n);
+    Dc = floor.map((f, i) => f + x[i]);
+  }
+  if (!cols.length) cols.push(new Array(n).fill(0));
   const V = [], D = [];
   for (let i = 0; i < n; i++) {
     V.push(cols.map(col => col[i]));
-    D.push(Math.max(d[i], 0.03));
+    D.push(Dc[i]);
   }
   return { V, D };
 }
 
 export function structureCov(s) {
-  // dense covariance implied by a grammar structure (for the MC sampler)
+  // dense covariance implied by a grammar structure (for the MC sampler).
+  // Every public grammar, and loadings through the same shape door as
+  // the pricing kernels: Independent and Nested fell through to an
+  // all-zero matrix (Monte Carlo then simulated a deterministic race),
+  // rank-r Blocks rows multiplied to NaN, and a flat rank-one Factor V
+  // silently lost its factor (#337). An unknown kind is refused.
+  if (!s || typeof s !== "object") throw new Error("structureCov: expected a structure");
   const n = s.D.length;
+  const D = Array.from(s.D);
   const C = Array.from({ length: n }, (_, i) =>
-    Array.from({ length: n }, () => 0));
-  if (s.kind === "Factor") {
+    Array.from({ length: n }, (_, j) => (i === j ? D[i] : 0)));
+  const dot = (a, b) => a.reduce((acc, v, k) => acc + v * b[k], 0);
+  const addBlocks = () => {
+    const L = asLoadings(s.loading, n, "loading");
     for (let i = 0; i < n; i++)
-      for (let j = 0; j < n; j++) {
-        let v = 0;
-        for (let r = 0; r < s.V[i].length; r++) v += s.V[i][r] * s.V[j][r];
-        C[i][j] = v + (i === j ? s.D[i] : 0);
-      }
+      for (let j = 0; j < n; j++)
+        if (s.cluster[i] === s.cluster[j]) C[i][j] += dot(L[i], L[j]);
+  };
+  if (s.kind === "Independent") {
+    // diag(D), already there
+  } else if (s.kind === "Factor") {
+    const V = asLoadings(s.V, n, "V");
+    if (V) for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++) C[i][j] += dot(V[i], V[j]);
   } else if (s.kind === "Blocks") {
-    for (let i = 0; i < n; i++)
-      for (let j = 0; j < n; j++) {
-        let v = (s.cluster[i] === s.cluster[j]) ? s.loading[i] * s.loading[j] : 0;
-        C[i][j] = v + (i === j ? s.D[i] : 0);
-      }
+    addBlocks();
+  } else if (s.kind === "Nested") {
+    addBlocks();
+    if (s.coupling != null && s.gamma !== 0) {
+      const g = asLoadings(s.coupling, n, "coupling");
+      const g2 = (s.gamma ?? 1) ** 2;
+      for (let i = 0; i < n; i++)
+        for (let j = 0; j < n; j++) C[i][j] += g2 * dot(g[i], g[j]);
+    }
   } else if (s.kind === "Tree") {
     // Labels are arbitrary comparable values: the pricing kernels remap
     // them densely and this read them as node INDICES, so 10/20/30 sent
@@ -274,45 +421,79 @@ export function structureCov(s) {
     const nc = Math.max(...cluster) + 1;
     for (let c = 0; c < nc; c++) {
       const a = new Set();
-      let u = c;
-      while (s.parent[u] >= 0) { a.add(s.parent[u]); u = s.parent[u]; }
+      let u = c, hops = 0;
+      while (s.parent[u] >= 0) {
+        a.add(s.parent[u]); u = s.parent[u];
+        if (++hops > s.parent.length)
+          throw new Error("structureCov: Tree parent contains a cycle");
+      }
       anc.push(a);
     }
+    const L = asLoadings(s.loading, n, "loading");
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++) {
         let v = 0;
         for (const t of anc[cluster[i]])
           if (anc[cluster[j]].has(t)) v += s.strength[t] ** 2;
-        if (s.cluster[i] === s.cluster[j]) v += s.loading[i] * s.loading[j];
-        C[i][j] = v + (i === j ? s.D[i] : 0);
+        if (s.cluster[i] === s.cluster[j]) v += dot(L[i], L[j]);
+        C[i][j] += v;
       }
+  } else {
+    throw new Error(`structureCov: unknown structure kind ${JSON.stringify(s.kind)}`);
   }
   return C;
 }
 
-// Pivot floors are RELATIVE to the matrix's mean variance. They were
-// absolute (1e-10 here, 1e-12 in the GHK and Mendell-Elston baselines),
-// which is model noise in the utility unit: (mu, C) -> (sqrt(c) mu, c C)
-// is the same race, but at c = 1e-14 the GHK and ME leaders moved by
-// 0.266 and plain MC collapsed to 1/3 each (#101).
-function meanDiagScale(get, n) {
-  let t = 0;
-  for (let i = 0; i < n; i++) t += get(i);
-  return Math.max(t / Math.max(n, 1), 1e-300);
-}
-
+/* Cholesky with a RELATIVE pivot tolerance. The old absolute floor,
+   sqrt(max(s, 1e-10)), replaced every valid pivot below 1e-10 -- so the
+   same race written in smaller units simulated a different race (a
+   valid 3-runner field at d = 1e-14 came out [0.26, 0.37, 0.37] for
+   [0.73, 0.22, 0.05]) (#375). A pivot that is roundoff relative to its
+   own diagonal is a zero pivot, and its column is zero, which is what a
+   PSD factor of a singular matrix has there. */
 export function cholesky(Cin) {
   const n = Cin.length;
   const L = Array.from({ length: n }, () => new Array(n).fill(0));
-  const floor = 1e-10 * meanDiagScale((i) => Cin[i][i], n);
   for (let i = 0; i < n; i++) {
     for (let j = 0; j <= i; j++) {
       let s = Cin[i][j];
       for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
-      if (i === j) L[i][i] = Math.sqrt(Math.max(s, floor));
-      else L[i][j] = s / L[j][j];
+      if (i === j) {
+        L[i][i] = s > 1e-13 * Math.abs(Cin[i][i]) ? Math.sqrt(s) : 0;
+      } else {
+        L[i][j] = L[j][j] > 0 ? s / L[j][j] : 0;
+      }
     }
   }
+  return L;
+}
+
+/* The factor to SIMULATE a race with, built in the race quotient.
+
+   Adding a 11' to a covariance is a shared shift and cannot change an
+   ordering, but a Cholesky of the full matrix loses the small
+   choice-relevant eigenvalue to cancellation: C = [[a+1, a], [a, a+1]]
+   at a = 2e15 kept a contrast variance of 1.5 instead of 2, and two
+   million draws converged to [0.793, 0.207] instead of [0.760, 0.240]
+   (#394). This anchors on runner 0: the differences x_j - x_0 have
+   covariance S_jk = C_jk - C_j0 - C_0k + C_00, formed from C BEFORE any
+   factorisation, and the returned lower-triangular L has a zero first
+   row and chol(S) below it. mcBatch(mu, L, ...) then draws
+   x_0 = mu_0 and x_j = mu_j + (x_j - x_0 noise), whose argmin is the
+   race's. Scale-free by construction (#375). */
+export function raceFactor(C) {
+  const n = C.length;
+  const L = Array.from({ length: n }, () => new Array(n).fill(0));
+  if (n < 2) return L;
+  const S = [];
+  for (let j = 1; j < n; j++) {
+    const row = [];
+    for (let k = 1; k < n; k++) row.push(C[j][k] - C[j][0] - C[0][k] + C[0][0]);
+    S.push(row);
+  }
+  const Ls = cholesky(S);
+  for (let j = 1; j < n; j++)
+    for (let k = 1; k <= j; k++) L[j][k] = Ls[j - 1][k - 1];
   return L;
 }
 
@@ -345,6 +526,12 @@ import { ndtr, npdf } from "./core.mjs";
 
 function invNormalCdf(p) { return invNormal(Math.min(Math.max(p, 1e-15), 1 - 1e-15)); }
 
+function diffScale(S, d) {
+  let t = 0;
+  for (let a = 0; a < d; a++) t += S[a * d + a] / d;
+  return Math.max(t, 1e-300);
+}
+
 function diffProblem(mu, C, i) {
   // mean and covariance of (x_j - x_i)_{j != i}
   const n = mu.length, m = new Float64Array(n - 1);
@@ -365,12 +552,15 @@ export function ghkPrepareOne(mu, C, i) {
   const { m, S } = diffProblem(mu, C, i);
   const d = mu.length - 1;
   const L = new Float64Array(d * d);
-  const floor = 1e-12 * meanDiagScale((a) => S[a * d + a], d);
+  // the pivot floor is relative to the difference problem's own scale:
+  // an absolute 1e-12 replaced valid small contrast variances, so the
+  // same race in smaller units simulated a different one (#375)
+  const eps = 1e-12 * diffScale(S, d);
   for (let a = 0; a < d; a++) {
     for (let b = 0; b <= a; b++) {
       let s = S[a * d + b];
       for (let k = 0; k < b; k++) s -= L[a * d + k] * L[b * d + k];
-      if (a === b) L[a * d + a] = Math.sqrt(Math.max(s, floor));
+      if (a === b) L[a * d + a] = Math.sqrt(Math.max(s, eps));
       else L[a * d + b] = s / L[b * d + b];
     }
   }
@@ -406,7 +596,6 @@ export function mendellElstonOne(mu, C, i) {
   // flat line this arm draws).
   const { m, S } = diffProblem(mu, C, i);
   const d = mu.length - 1;
-  const floor = 1e-12 * meanDiagScale((a) => S[a * d + a], d);
   let logp = 0;
   // Hardest constraint FIRST, as python's _order_variables does.
   // Sequential moment matching is order dependent -- each step pretends
@@ -422,15 +611,33 @@ export function mendellElstonOne(mu, C, i) {
   // the initial moments, as python fixes it, not re-sorted as the
   // conditioning proceeds.
   //
-  // Exact ties stay order dependent, in this port and in python: two
-  // equally hard constraints have no canonical precedence.
+  // Exact ties used to fall back to INPUT order (a stable sort), so equal
+  // abilities -- a routine input -- were still label dependent: 0.0087 on
+  // a four-runner field and 0.0147 on a five-runner one (#287). Ties are
+  // now broken by quantities that move WITH the labels: the difference
+  // variance, then the sorted covariances to the other differences. Two
+  // constraints still tied on all of those are interchangeable by an
+  // automorphism of the problem and give the same answer either way.
+  const eps = 1e-12 * diffScale(S, d);
   const alive = [];
   for (let a = 0; a < d; a++) alive.push(a);
-  alive.sort((a, b) => (m[a] / Math.sqrt(Math.max(S[a * d + a], floor)))
-                     - (m[b] / Math.sqrt(Math.max(S[b * d + b], floor))));
+  const hard = a => m[a] / Math.sqrt(Math.max(S[a * d + a], eps));
+  const rowKey = a => {
+    const r = [];
+    for (let b = 0; b < d; b++) if (b !== a) r.push(S[a * d + b]);
+    return r.sort((x, y) => y - x);
+  };
+  const keys = alive.map(a => ({ h: hard(a), v: S[a * d + a], r: rowKey(a) }));
+  alive.sort((a, b) => {
+    const A = keys[a], B = keys[b];
+    if (A.h !== B.h) return A.h - B.h;
+    if (A.v !== B.v) return B.v - A.v;
+    for (let t = 0; t < A.r.length; t++) if (A.r[t] !== B.r[t]) return B.r[t] - A.r[t];
+    return 0;
+  });
   while (alive.length) {
     const k = alive.shift();
-    const skk = Math.max(S[k * d + k], floor), sk = Math.sqrt(skk);
+    const skk = Math.max(S[k * d + k], eps), sk = Math.sqrt(skk);
     const z = m[k] / sk;
     const Pz = Math.max(ndtr(z), 1e-300);
     logp += Math.log(Pz);

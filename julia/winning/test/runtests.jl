@@ -142,6 +142,31 @@ end
     @test maximum(abs.(moved .- top_k_probabilities(mu, 2; D = D))) > 0.005
 end
 
+@testset "factor-core batch (#100 #370 #444 #110)" begin
+    # #100: the inverse is unit-equivariant (was log residual 51.6 here)
+    p = [0.60, 0.25, 0.15]
+    D = [0.005, 0.010, 0.020]
+    mu = abilities_from_race(p; D = D)
+    q = race_probabilities(mu; D = D)
+    @test maximum(abs.(log.(q) .- log.(p))) < 1e-7
+    mu100 = abilities_from_race(p; D = D .* 100^2)
+    @test maximum(abs.(mu100 ./ 100 .- mu)) < 1e-6
+    # #370: the top-k window is scale-free
+    m = [-.5, .2, .8, -.1]; s = [.7, 1.1, .9, 1.3]
+    @test maximum(abs.(top_k_probabilities(1e-18 .* m, 2; D = (1e-18 .* s) .^ 2) .-
+                       top_k_probabilities(m, 2; D = s .^ 2))) < 1e-9
+    # #444: a lattice needs two points
+    @test_throws ArgumentError race_probabilities(m; D = ones(4), points = 1)
+    @test_throws ArgumentError race_probabilities(m; D = ones(4), points = 0)
+    # #110: non-finite targets are refused
+    @test_throws ErrorException abilities_from_race([0.5, NaN, 0.5])
+    # #317: fractional ranks are refused by name; #378: the middle rank
+    @test_throws ArgumentError abilities_from_rank_marginal([.4, .3, .2, .1], 1.5)
+    P = rank_probabilities([-1, -.4, .05, .45, .9]; D = ones(5), points = 257)
+    @test_throws ArgumentError abilities_from_rank_marginal(P[:, 3], 3; D = ones(5),
+                                                            points = 257)
+end
+
 @testset "an overflowing target sum is rescued (#326)" begin
     # finite entries whose SUM overflows describe the same law as their
     # ratios; python rescales by the max first (#300) and so does julia

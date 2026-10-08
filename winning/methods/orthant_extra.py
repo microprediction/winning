@@ -23,19 +23,32 @@ def _diff_problem(mu, Sigma, i):
     M[np.arange(n - 1), others] = 1.0
     M[:, i] -= 1.0
     C = M @ Sigma @ M.T
-    # a ridge RELATIVE to the contrast scale: an absolute 1e-12 is model
-    # noise in the utility unit and drove a race at scale 1e-7 toward
-    # equal shares (#101, #409)
-    scale = max(float(np.trace(C)) / max(n - 1, 1), 1e-300)
-    return a, C + 1e-12 * scale * np.eye(n - 1)
+    # jitter RELATIVE to the problem's own scale: an absolute 1e-12
+    # replaced valid small contrast variances, so the same race in
+    # smaller units priced differently (#375)
+    jit = 1e-12 * max(float(np.mean(np.diag(C))), 1e-300) if n > 1 else 0.0
+    return a, C + jit * np.eye(n - 1)
 
 
 def _order_variables(a, C):
     """Genz-style ordering: hardest constraints (smallest marginal
     probability of d_t < 0, i.e. largest a_t/sqrt(C_tt)) first."""
     z = a / np.sqrt(np.diag(C))
-    order = np.argsort(-z)
-    return order
+    # Exact ties (equal abilities are routine) used to fall back to
+    # argsort's input order, so Mendell-Elston still depended on the
+    # contestant labels: 0.0087 on a four-runner field, 0.0147 on a
+    # five-runner one (#287). Ties are broken by quantities that move
+    # WITH the labels -- the difference variance, then the sorted
+    # covariances to the other differences; constraints tied on all of
+    # those are interchangeable by an automorphism and give the same
+    # answer either way.
+    m = len(a)
+
+    def key(t):
+        others = sorted((-float(C[t, s]) for s in range(m) if s != t))
+        return (-float(z[t]), -float(C[t, t]), tuple(others))
+
+    return np.array(sorted(range(m), key=key), dtype=int)
 
 
 def _seq_logprob(a, L, u):

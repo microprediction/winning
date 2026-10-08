@@ -135,10 +135,43 @@ def _cluster_nodes(r, qa, seed=0):
         return nodes, w / w.sum()
     from scipy.stats import qmc
     from scipy.special import ndtri
-    m = max(4, int(np.ceil(np.log2(qa ** r))))
-    u = qmc.Sobol(r, scramble=True, seed=seed).random_base2(min(m, 10))
+    m = _sobol_log2(r, qa)
+    u = qmc.Sobol(r, scramble=True, seed=seed).random_base2(m)
     nodes = ndtri(np.clip(u, 1e-9, 1 - 1e-9))
     return nodes, np.full(len(nodes), 1.0 / len(nodes))
+
+
+# log2 of the rank-3+ Sobol budget at the default qa, and its ceiling
+_SOBOL_M_DEFAULT = 10
+_SOBOL_M_MAX = 16
+_QA_DEFAULT = 9
+
+
+def _sobol_log2(r, qa):
+    """log2 of the scrambled-Sobol node count for a rank-r (r >= 3) effect.
+
+    This was min(ceil(log2(qa ** r)), 10): at rank 6 qa = 3 already gave
+    m = 10, so qa = 5, 9, 31 and 100 all ran the identical 1024-node rule
+    and a covariance-equivalent rotation V -> VQ moved a share by 3.6e-3
+    whatever refinement was asked for (#392). Now the default qa keeps the
+    old budget and a LARGER qa grows the rule as qa^r relative to it
+    (doubling qa adds r bits), up to 2^16 nodes; a request beyond the
+    ceiling warns with the budget actually used instead of being dropped.
+    """
+    qa = float(qa)
+    m = max(4, int(np.ceil(np.log2(qa ** r))))
+    if qa <= _QA_DEFAULT:
+        return min(m, _SOBOL_M_DEFAULT)
+    m = _SOBOL_M_DEFAULT + int(np.ceil(r * np.log2(qa / _QA_DEFAULT)))
+    if m > _SOBOL_M_MAX:
+        import warnings
+        warnings.warn(
+            f"qa={qa:g} at factor rank {r} asks for 2^{m} Sobol nodes; "
+            f"using the ceiling 2^{_SOBOL_M_MAX} = {2 ** _SOBOL_M_MAX}. "
+            "The quadrature error at this budget is not reduced further "
+            "by raising qa.", RuntimeWarning, stacklevel=4)
+        m = _SOBOL_M_MAX
+    return m
 
 
 def _block_max_r(mu, sd, cluster, V, points, qa):
@@ -175,15 +208,25 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     shift = V_o @ nodes.T                                   # (n, Q)
-    z = (x[None, None, :] - mu_o[:, None, None]
-         - shift[:, :, None]) / sd_o[:, None, None]
-    logF = np.log(np.maximum(ndtr(z), TINY))
-    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
-    S = np.add.reduceat(logF, starts, axis=0)
-    G = np.einsum("q,cql->cl", w, np.exp(np.minimum(S, 0.0)))
+    # G and h are SUMS over the nodes, so they accumulate in node chunks:
+    # the (n, Q, L) cube of a 2^16-node rule would not fit in memory
+    n_c = len(starts)
+    G = np.zeros((n_c, points))
+    h = np.zeros((n, points))
+    chunk = max(1, int(4e6 // max(n * points, 1)))
+    for a in range(0, len(w), chunk):
+        sh = shift[:, a:a + chunk]
+        wc = w[a:a + chunk]
+        z = (x[None, None, :] - mu_o[:, None, None]
+             - sh[:, :, None]) / sd_o[:, None, None]
+        logF = np.log(np.maximum(ndtr(z), TINY))
+        pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+        S = np.add.reduceat(logF, starts, axis=0)
+        G += np.einsum("q,cql->cl", wc, np.exp(np.minimum(S, 0.0)))
+        h += np.einsum("q,nql->nl", wc,
+                       pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
     logG = np.log(np.maximum(G, TINY))
     rest = np.exp(np.minimum(logG.sum(axis=0)[None, :] - logG, 0.0))
-    h = np.einsum("q,nql->nl", w, pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
     p_o = (h * rest[c_o]).sum(axis=1) * dx
     p = np.empty(n); p[order] = p_o
     return np.maximum(p, 0.0)
@@ -395,15 +438,23 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     ones = np.ones((n, n)) / n
     forward = lambda m: block_race_probabilities(m, cluster, loading, D,
                                                  points=points, qa=qa)
+    # The field's own scale. The warm start, the fixed-point step and the
+    # Newton trust radius were absolute (unit-variance) numbers, so the
+    # same race written with loading -> c loading, D -> c^2 D was solved
+    # at c = 1 and missed by 0.40 of a share at c = 1e-3 and 0.21 at
+    # c = 1e3 (#100). Everything below is in units of `scale`.
+    from .structures import _loading_var
+    scale = float(np.sqrt(np.median(
+        as_idio(D, n, positive=True) + _loading_var(loading, n))))
     # adaptive fixed point into Newton's basin
-    mu = -(lt - lt.mean())
+    mu = -(lt - lt.mean()) * scale
     eta = 1.0
     lp = np.log(np.maximum(forward(mu), TINY))
     err = np.abs(lp - lt).max()
     for _ in range(200):
         if err < 0.2:
             break
-        mu_n = mu - eta * (lt - lp); mu_n -= mu_n.mean()
+        mu_n = mu - eta * (lt - lp) * scale; mu_n -= mu_n.mean()
         lp_n = np.log(np.maximum(forward(mu_n), TINY))
         e_n = np.abs(lp_n - lt).max()
         if e_n < err:
@@ -420,11 +471,12 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
         if cur < tol:
             return mu - mu.mean(), float(cur), it
         J = block_race_jacobian(mu, cluster, loading, D, points=points, qa=qa)
-        Jl = J / pv[:, None]
+        Jl = J / pv[:, None] * scale         # dimensionless
         step, *_ = np.linalg.lstsq(Jl + ones, -r, rcond=1e-12)
         nn = np.linalg.norm(step)
         if nn > 5.0:
             step *= 5.0 / nn
+        step = step * scale
         for _ in range(8):
             mu_n = mu + step; mu_n -= mu_n.mean()
             p_n = np.maximum(forward(mu_n), TINY); p_n = p_n / p_n.sum()
@@ -434,6 +486,56 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
             step *= 0.5
     pv = np.maximum(forward(mu), TINY); pv = pv / pv.sum()
     return mu - mu.mean(), float(np.abs(np.log(pv) - lt).max()), max_iter
+
+
+def _validate_tree(parent, strength, n_clusters):
+    """A tree is a tree: one root, every parent an existing node, no
+    cycles, the cluster nodes are leaves. The kernels walk parent
+    pointers with `while parent[u] >= 0`, so a cycle -- [1, 0], or a
+    self-parent -- spun forever (#328). Linear time, before any walk."""
+    parent = np.asarray(parent)
+    nT = len(parent)
+    if np.ndim(strength) != 1 or len(strength) != nT:
+        raise ValueError(
+            f"strength must have one entry per tree node; got "
+            f"{np.shape(strength)} for {nT} nodes")
+    if not np.all(np.isfinite(strength)):
+        raise ValueError("strength has a non-finite entry")
+    bad = np.flatnonzero((parent < -1) | (parent >= nT))
+    if bad.size:
+        raise ValueError(
+            f"parent[{int(bad[0])}] = {int(parent[bad[0]])} is not -1 or a "
+            f"node index in [0, {nT})")
+    selfp = np.flatnonzero(parent == np.arange(nT))
+    if selfp.size:
+        t = int(selfp[0])
+        raise ValueError(f"parent contains a cycle: {t} -> {t}")
+    roots = np.flatnonzero(parent < 0)
+    if len(roots) != 1:
+        raise ValueError(
+            f"a tree has exactly one root (parent -1); got {len(roots)}")
+    state = np.zeros(nT, np.int8)                 # 0 unseen, 1 on path, 2 done
+    for t in range(nT):
+        path = []
+        u = t
+        while u >= 0 and state[u] == 0:
+            state[u] = 1
+            path.append(u)
+            u = int(parent[u])
+        if u >= 0 and state[u] == 1:
+            k = path.index(u)
+            cyc = " -> ".join(str(x) for x in path[k:] + [u])
+            raise ValueError(f"parent contains a cycle: {cyc}")
+        for v in path:
+            state[v] = 2
+    if n_clusters > nT:
+        raise ValueError(f"{n_clusters} clusters but only {nT} tree nodes")
+    kids_of_leaves = np.flatnonzero((parent >= 0) & (parent < n_clusters))
+    if kids_of_leaves.size:
+        t = int(kids_of_leaves[0])
+        raise ValueError(
+            f"node {t} has parent {int(parent[t])}, a cluster node; the "
+            f"first {n_clusters} nodes are the clusters and must be leaves")
 
 
 def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
@@ -453,6 +555,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
+    _validate_tree(parent, lam, nC)                  # #328
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
@@ -536,7 +639,18 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     no ancestor effects (then it reduces to block_race_jacobian), an
     approximation otherwise. Good enough for Newton and for polish
     constraint gradients: the residual/feasibility is always measured on
-    the exact forward map. Promoted from research/pqrace (SCHUR.md)."""
+    the exact forward map. Promoted from research/pqrace (SCHUR.md).
+
+    When ANY ancestor effect is present the Gram product is not used:
+    it factorises the two-leaf-removed cavity as R_i R_j / G_root, which
+    is false once leaves share a random ancestor -- the smallest case, two
+    leaves under one common root, has a forward invariant to the root
+    strength (the shock cancels) and an exact slope
+    phi(dmu / s) / s, s^2 = 1.85, while the Gram term moved from 0.2467
+    to 0.1792 at root strength 0.8 and was not refined away by points
+    (#350). There the matrix is the central difference of the exact
+    forward instead -- the derivative of the map actually returned, at
+    2n forward passes."""
     mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
@@ -545,6 +659,21 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
+    _validate_tree(parent, lam, nC)                  # #328
+    if np.any(lam[nC:] != 0.0):
+        tot = sd ** 2 + v ** 2
+        h = 1e-5 * float(np.sqrt(np.median(tot)))
+        J = np.empty((n, n))
+        for j in range(n):
+            e = np.zeros(n); e[j] = h
+            J[:, j] = (tree_race_probabilities(mu + e, cluster, loading, D,
+                                               parent, strength,
+                                               points=points, qa=qa)
+                       - tree_race_probabilities(mu - e, cluster, loading,
+                                                 D, parent, strength,
+                                                 points=points, qa=qa)
+                       ) / (2.0 * h)
+        return J
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])

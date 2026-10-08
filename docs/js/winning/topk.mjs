@@ -4,8 +4,10 @@
 // winning/factor/topk.py -- the cavity count distribution with
 // stable-direction deconvolution; see the python module docstring for
 // the derivations and the two-branch refusal of exact-rank targets.
-import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio } from "./core.mjs";
-import { BASES } from "./races.mjs";
+import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
+         asAbilities, asFiniteVector, asIterations, asTolerance,
+         jacobiSweeps } from "./core.mjs";
+import { BASES, _factorNodeRule } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -30,11 +32,32 @@ const LOC_SCALE_FROM_WIN_AND_SECOND_OPTS = new Set(["D0", "base", "points", "nIt
 const ABILITIES_FROM_RANK_MARGINAL_OPTS = new Set(["D", "base", "points", "nIter", "tol", "mu0", "returnInfo"]);
 
 
+function baseFn(base) {
+  const fn = typeof base === "function" ? base : BASES[base];
+  if (typeof fn !== "function")
+    throw new Error(`unknown base ${JSON.stringify(base)}; known: ${Object.keys(BASES).join(", ")}, or a function`);
+  return fn;
+}
+
 const clip01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 
+/* searched in STANDARDISED units (centred, over the widest sd) and mapped
+   back: memberships are invariant under mu -> a + c mu, sd -> c sd, but an
+   absolute 1e-12 floor on the widest sd gave a field written in units of
+   1e-18 a window 2e5 times its width (#370, as python/R). */
 function countWindow(mu, sd, k, fn, delta = 1e-12, padSds = 2.0) {
   const n = mu.length;
-  const smax = Math.max(Math.max(...sd), 1e-12);
+  const m0 = mu.reduce((a, b) => a + b, 0) / n;
+  const c = Math.max(...sd);
+  if (!(Number.isFinite(c) && c > 0)) throw new Error("top-k window needs positive scales");
+  const [lo, hi] = countWindowStd(mu.map(v => (v - m0) / c), sd.map(v => v / c),
+                                  k, fn, delta, padSds);
+  return [m0 + c * lo, m0 + c * hi];
+}
+
+function countWindowStd(mu, sd, k, fn, delta, padSds) {
+  const n = mu.length;
+  const smax = Math.max(...sd);
   const meanCount = x => {
     let t = 0;
     for (let i = 0; i < n; i++) t += 1 - fn((x - mu[i]) / sd[i])[0];
@@ -213,6 +236,31 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   return { x, dx, F, ...g };
 }
 
+/* P(i among the k LARGEST) directly: the top-k integral with the count of
+   runners ABOVE x. 1 - topK(n - k) cancelled -- 0 for a 7.7e-24 last
+   place at 513 points and residue 3.6e-15 at 8193 (#365). */
+function bottomkIndependent(mu, sd, k, fn, points) {
+  const n = mu.length;
+  const refl = z => { const b = fn(-z); return [1 - b[0], b[1], -b[2]]; };
+  const [lr, hr] = countWindow(mu.map(v => -v), sd, k, refl);
+  const lo = -hr, hi = -lr;
+  points = resolvedPoints(lo, hi, sd, points);
+  const x = new Array(points);
+  const dx = (hi - lo) / (points - 1);
+  for (let t = 0; t < points; t++) x[t] = lo + t * dx;
+  const g = baseGrid(fn, x, mu, sd);
+  const G = g.S.map(row => row.map(clip01));
+  const C = countDistribution(G);
+  const cdf = leaveOneOutCdf(C, G, k);
+  const q = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    let s0 = 0;
+    for (let t = 0; t < points; t++) s0 += (g.f[t][i] / sd[i]) * cdf[i][t];
+    q[i] = s0 * dx;
+  }
+  return q;
+}
+
 function topkWithSlopes(mu, sd, k, fn, points) {
   const n = mu.length;
   const { dx, F, f, fp } = topkGrid(mu, sd, k, fn, points);
@@ -238,14 +286,37 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
       `${kind} captured total membership ${t.toFixed(4)} where exactly ` +
       `${k} slots exist: the window or the deconvolution missed part ` +
       `of the field. Raise points=, or report this field.`);
-  return raw.map(v => clip01(v * (k / t)));
+  // the clip is not mass-neutral: re-check what is returned (#99)
+  const q = raw.map(v => v * (k / t));
+  if (Math.max(...q) - 1 > massTol)
+    throw new Error(`${kind} produced a membership of ${Math.max(...q).toFixed(4)} > 1: ` +
+                    "the lattice did not resolve this field. Raise points=.");
+  const out = q.map(clip01);
+  const t2 = out.reduce((a, b) => a + b, 0);
+  if (Math.abs(t2 - k) > massTol * k)
+    throw new Error(`${kind} memberships total ${t2.toFixed(4)} after clipping, ` +
+                    `where exactly ${k} slots exist`);
+  return out;
 }
 
-function factorNodes(V, n, qa) {
+function factorNodes(V, n, qa, D = null) {
   const Vm = asLoadings(V, n).map(row => row.slice());
   const r = Vm[0].length;
   if (r > 2)
     throw new Error("topKProbabilities is implemented for factor rank <= 2");
+  if (qa === undefined && r > 0) {
+    // qa omitted (the default): the general race's sharpness rule, as
+    // python and R. A fixed qa = 15 Gauss-Hermite rule missed the race by
+    // 10.7 points on a sharp rank-one field and moved a top-2 membership
+    // 1.3 points under a covariance-preserving rotation (#340). Past the
+    // race's 8192-node escalation the first 1024 Halton points are used:
+    // every node here is a full count-program pass.
+    const rule = _factorNodeRule(Vm, D == null ? new Array(n).fill(1) : D);
+    let F = rule.F, W = rule.W;
+    if (W.length > 1024) { F = F.slice(0, 1024); W = new Array(1024).fill(1 / 1024); }
+    return { Vm: rule.V, nodes: F, w: W };
+  }
+  if (qa === undefined) qa = 15;   // an explicit value, null included, goes to hermite1's check
   for (let c = 0; c < r; c++) {
     let m = 0;
     for (let i = 0; i < n; i++) m += Vm[i][c];
@@ -297,14 +368,15 @@ function asDepth(k, n, where = "k") {
 
 export function topKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, TOP_K_PROBABILITIES_OPTS, "topKProbabilities", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
+  const { V = null, D = null, base = "normal", points = 513, qa } = opts;
+  mu = asAbilities(mu);        // finite and nonempty, before any lattice (#440)
   const n = mu.length;
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
-  const fn = typeof base === "function" ? base : BASES[base];
+  const fn = baseFn(base);
   if (!V) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
                              k, "top-k race");
-  const { Vm, nodes, w } = factorNodes(V, n, qa);
+  const { Vm, nodes, w } = factorNodes(V, n, qa, D);
   const raw = new Array(n).fill(0);
   for (let q = 0; q < nodes.length; q++) {
     const shifted = mu.map((m, i) => {
@@ -320,20 +392,37 @@ export function topKProbabilities(mu, k, opts = {}) {
 
 export function bottomKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, BOTTOM_K_PROBABILITIES_OPTS, "bottomKProbabilities", OPT_HINTS);
+  const { V = null, D = null, base = "normal", points = 513, qa } = opts;
+  mu = asAbilities(mu);
   const n = mu.length;
   k = asDepth(k, n);
-  return topKProbabilities(mu, n - k, opts).map(v => 1 - v);
+  const sd = asIdio(D, n).map(Math.sqrt);
+  const fn = typeof base === "function" ? base : BASES[base];
+  if (!V) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
+  const { Vm, nodes, w } = factorNodes(V, n, qa, D);
+  const raw = new Array(n).fill(0);
+  for (let q = 0; q < nodes.length; q++) {
+    const shifted = mu.map((m, i) => {
+      let s = m;
+      for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
+      return s;
+    });
+    const node = bottomkIndependent(shifted, sd, k, fn, points);
+    for (let i = 0; i < n; i++) raw[i] += w[q] * node[i];
+  }
+  return checkedTopk(raw, k, "bottom-k race");
 }
 
 export function topKJacobians(mu, k, opts = {}) {
   checkOpts(opts, TOP_K_JACOBIANS_OPTS, "topKJacobians", OPT_HINTS);
   const { D = null, base = "normal", points = 513, V = null,
-          qa = 15 } = opts;
+          qa } = opts;
+  mu = asAbilities(mu);        // an Infinity used to return all-NaN Jacobians (#440)
   const n = mu.length;
   k = asDepth(k, n);
   if (V) {
     // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
-    const { Vm, nodes, w } = factorNodes(V, n, qa);
+    const { Vm, nodes, w } = factorNodes(V, n, qa, D);
     const Jmu = [], Jsigma = [];
     for (let i = 0; i < n; i++) {
       Jmu.push(new Array(n).fill(0));
@@ -356,7 +445,7 @@ export function topKJacobians(mu, k, opts = {}) {
   }
   const Dv = asIdio(D, n);
   const sd = Dv.map(Math.sqrt);
-  const fn = typeof base === "function" ? base : BASES[base];
+  const fn = baseFn(base);
   const { dx, F, f, fp, z } = topkGrid(mu, sd, k, fn, points);
   const L = F.length;
   const dens = [];
@@ -393,10 +482,11 @@ export function topKJacobians(mu, k, opts = {}) {
 
 export function rankProbabilities(mu, opts = {}) {
   checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 513, qa = 15 } = opts;
+  const { V = null, D = null, base = "normal", points = 513, qa } = opts;
+  mu = asAbilities(mu);        // an empty field threw RangeError (#440)
   const n = mu.length;
   const sd = asIdio(D, n).map(Math.sqrt);
-  const fn = typeof base === "function" ? base : BASES[base];
+  const fn = baseFn(base);
 
   // one factor node: the cavity count pmf against each runner's own
   // density, as in python's rank_probabilities.one_node
@@ -423,7 +513,7 @@ export function rankProbabilities(mu, opts = {}) {
   if (!V) {
     P = oneNode(mu);
   } else {
-    const { Vm, nodes, w } = factorNodes(V, n, qa);
+    const { Vm, nodes, w } = factorNodes(V, n, qa, D);
     P = Array.from({ length: n }, () => new Array(n).fill(0));
     for (let q = 0; q < nodes.length; q++) {
       const shifted = mu.map((m, i) => {
@@ -472,9 +562,13 @@ export function rankProbabilities(mu, opts = {}) {
 }
 
 function validatedTarget(q, k, n, targetFloor) {
-  let target = q.slice();
+  let target = asFiniteVector(q, "target", "membership");
   if (target.length !== n)
     throw new Error(`target has ${target.length} entries for ${n} runners`);
+  // finite BEFORE flooring: NaN passed `v <= 0` and surfaced later as a
+  // RangeError from the lattice sizing (#110)
+  const bad = target.findIndex(v => !Number.isFinite(v));
+  if (bad >= 0) throw new Error(`target[${bad}] = ${target[bad]} is not finite`);
   let floored = new Array(n).fill(false);
   if (targetFloor != null) {
     if (!(targetFloor > 0)) throw new Error("targetFloor must be positive");
@@ -497,24 +591,41 @@ function validatedTarget(q, k, n, targetFloor) {
 
 export function abilitiesFromTopk(q, k, opts = {}) {
   checkOpts(opts, ABILITIES_FROM_TOPK_OPTS, "abilitiesFromTopk", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 513, qa = 15,
+  const { V = null, D = null, base = "normal", points = 513, qa,
           nIter = 80, tol = 1e-8, targetFloor = null,
           returnInfo = false } = opts;
+  // a finite positive budget: Infinity on a two-cycling field never
+  // returned, and 0/negative/NaN returned the warm start (#413)
+  asIterations(nIter, "abilitiesFromTopk");
+  asTolerance(tol, "abilitiesFromTopk");
+  if (!(Array.isArray(q) || ArrayBuffer.isView(q)))
+    throw new Error("abilitiesFromTopk: target must be an array of memberships");
   const n = q.length;
   k = asDepth(k, n);
   const { target, floored } = validatedTarget(q, k, n, targetFloor);
   const sd = asIdio(D, n).map(Math.sqrt);
-  const fn = typeof base === "function" ? base : BASES[base];
-  const fac = V ? factorNodes(V, n, qa) : null;
+  const fn = baseFn(base);
+  const fac = V ? factorNodes(V, n, qa, D) : null;
 
   const logitT = target.map(v => Math.log(v) - Math.log1p(-v));
   const logT = target.map(Math.log);
   const mLog = logT.reduce((a, b) => a + b, 0) / n;
-  let mu = logT.map(v => -(v - mLog) / 2);
-  const alpha = n > 2 ? 1.0 : 0.7;
-  let residMax = Infinity, iters = 0;
-  for (let it = 0; it < nIter; it++) {
-    iters = it + 1;
+  // in the field's own units, as python/R (#100)
+  const dsrt = sd.map(v => v * v).sort((a, b) => a - b);
+  const medD = n % 2 ? dsrt[(n - 1) / 2] : 0.5 * (dsrt[n / 2 - 1] + dsrt[n / 2]);
+  let sv = 0;
+  if (fac) { for (const row of fac.Vm) sv += row.reduce((a, b) => a + b * b, 0); sv /= n; }
+  const scale = Math.sqrt(medD + sv);
+  const mu0 = logT.map(v => -(v - mLog) / 2 * scale);
+  // Damping, as python's abilities_from_topk after #151: a pair is
+  // bipartite and two-cycles undamped, and so does ANY field at k = 1
+  // whose top two runners hold nearly all the mass. The sweeps then
+  // adapt the damping to the contraction they observe (#408).
+  const top2 = (k === 1 && n > 2)
+    ? target.slice().sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0)
+    : 1;
+  const alpha = (n === 2 || (k === 1 && top2 > 0.8)) ? 0.7 : 1.0;
+  const forward = mu => {
     let qraw, sl;
     if (!fac) {
       ({ q: qraw, slopes: sl } = topkWithSlopes(mu, sd, k, fn, points));
@@ -540,21 +651,13 @@ export function abilitiesFromTopk(q, k, opts = {}) {
     const resid = qhat.map((v, i) =>
       Math.log(Math.max(v, 1e-300)) - Math.log(Math.max(1 - v, 1e-300))
       - logitT[i]);
-    residMax = Math.max(...resid.map(Math.abs));
-    if (residMax < tol) break;
-    for (let i = 0; i < n; i++) {
-      const dlogit = Math.min(
-        sl[i] / Math.max(qhat[i] * (1 - qhat[i]), 1e-300), -1e-6);
-      const lim = Math.min(2, 10 * Math.abs(resid[i]));
-      let step = alpha * resid[i] / dlogit;
-      if (step > lim) step = lim;
-      if (step < -lim) step = -lim;
-      mu[i] -= step;
-    }
-    const mm = mu.reduce((a, b) => a + b, 0) / n;
-    mu = mu.map(v => v - mm);
-  }
-  const converged = residMax < tol;
+    const dres = sl.map((v, i) =>
+      Math.min(v / Math.max(qhat[i] * (1 - qhat[i]), 1e-300), -1e-6 / scale));
+    return { resid, dres };
+  };
+  const out = jacobiSweeps(mu0, forward, scale, alpha, nIter, tol);
+  const mu = out.mu, residMax = out.residMax, iters = out.iterations;
+  const converged = out.converged;
   if (!converged && !returnInfo)
     console.warn(`abilitiesFromTopk did not converge: max |logit residual| ` +
                  `${residMax.toExponential(2)} after ${iters} iterations`);
@@ -569,6 +672,10 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   const { D0 = null, base = "normal", points = 513, nIter = 60,
           tol = 1e-8, ridge = 0.0, mu0 = null,
           returnInfo = false } = opts;
+  asIterations(nIter, "locScaleFromTopkPair");
+  asTolerance(tol, "locScaleFromTopkPair");
+  if (!(Array.isArray(q1) || ArrayBuffer.isView(q1)))
+    throw new Error("locScaleFromTopkPair: q1 must be an array of memberships");
   const n = q1.length;
   k1 = asDepth(k1, n, "k1");
   k2 = asDepth(k2, n, "k2");
@@ -579,11 +686,22 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   const lt1 = t1.map(v => Math.log(v) - Math.log1p(-v));
   const lt2 = t2.map(v => Math.log(v) - Math.log1p(-v));
 
-  let sd = D0 ? D0.map(Math.sqrt) : new Array(n).fill(1);
+  // D0 through asIdio: a scalar threw `D0.map is not a function`, and the
+  // FALSY invalid values 0 and NaN were read as "omitted" and the solve
+  // certified converged after ignoring them (#254)
+  let sd = D0 != null ? asIdio(D0, n, "D0").map(Math.sqrt) : new Array(n).fill(1);
+  if (typeof ridge !== "number" || !Number.isFinite(ridge) || ridge < 0)
+    throw new Error(`locScaleFromTopkPair: ridge must be a finite non-negative number; got ${ridge}`);
   let mu;
   if (mu0 != null) {
-    const m0 = mu0.reduce((a, b) => a + b, 0) / n;
-    mu = mu0.map(v => v - m0);
+    const m00 = asAbilities(mu0, "mu0");
+    if (m00.length !== n) throw new Error(`mu0 has ${m00.length} entries for ${n} runners`);
+    const m0 = m00.reduce((a, b) => a + b, 0) / n;
+    // the return gauge applied to the start too: an exact warm start came
+    // back in physical units (#360)
+    const c0 = Math.exp(sd.reduce((a, b) => a + Math.log(b), 0) / n);
+    mu = m00.map(v => (v - m0) / c0);
+    sd = sd.map(v => v / c0);
   } else {
     const [ka, ta] = k1 < k2 ? [k1, t1] : [k2, t2];
     // warm start only: the LM loop refines, loose tolerance by design
@@ -612,7 +730,7 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   let { r, qh1, qh2 } = logits(mu, sd);
   let cost = r.reduce((a, b) => a + b * b, 0);
   let residMax = fitMax(r);
-  let lam = 1e-6, iters = 0, lastAccepted = true;
+  let lam = 1e-6, iters = 0, lastAccepted = true, lastGrad = Infinity;
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
     if (residMax < tol) break;
@@ -644,6 +762,7 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
       JtJ.push(row);
       for (let t = 0; t < rows; t++) Jtr[a] += J[t][a] * r[t];
     }
+    lastGrad = Math.max(...Jtr.map(Math.abs));
     let accepted = false;
     for (let attempt = 0; attempt < 8; attempt++) {
       const A = JtJ.map((row, a) =>
@@ -684,13 +803,23 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   }
   // with a ridge the penalized optimum keeps a nonzero fit residual by
   // design: an LM stall there is the answer, not a failure
-  const converged = residMax < tol || (sqr > 0 && !lastAccepted);
+  // A ridge stall is convergence only at a stationary point of the
+  // penalized objective AND on a board passing the exact nesting
+  // necessity P(top k1) <= P(top k2) for k1 < k2, as in python (#353,
+  // #105): every rejected step used to be certified.
+  const [loT, hiT] = k1 < k2 ? [t1, t2] : [t2, t1];
+  const nested = loT.every((v, i) => v <= hiT[i] + 1e-12);
+  const fitConverged = residMax < tol;
+  const stationary = fitConverged ||
+    (!lastAccepted && iters > 0 && lastGrad <= 1e-6 * Math.max(1, cost));
+  const converged = fitConverged || (sqr > 0 && stationary && nested);
   if (!converged && !returnInfo)
     console.warn(`locScaleFromTopkPair did not converge: max |logit ` +
                  `residual| ${residMax.toExponential(2)} after ${iters} iterations`);
   if (returnInfo)
     return { mu, sd, info: { converged, maxLogitResidual: residMax,
-                             iterations: iters } };
+                             iterations: iters, fitConverged, stationary,
+                             nested } };
   return { mu, sd };
 }
 
@@ -698,6 +827,8 @@ export function locScaleFromWinAndSecond(pWin, pSecond, opts = {}) {
   checkOpts(opts, LOC_SCALE_FROM_WIN_AND_SECOND_OPTS, "locScaleFromWinAndSecond", { ...OPT_HINTS, ...LOC_SCALE_HINTS });
   // win plus EXACTLY-second marginals: P(2nd) + P(win) = P(top-2),
   // the well-posed pair. Each marginal renormalized to unit mass.
+  pWin = asFiniteVector(pWin, "pWin", "probability");
+  pSecond = asFiniteVector(pSecond, "pSecond", "probability");
   const n = pWin.length;
   if (pSecond.length !== n)
     throw new Error("pWin and pSecond must have equal length");
@@ -750,20 +881,39 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
   // r >= 2, mu0 selects the branch. See the python docstring.
   const { mu0 = null, D = null, base = "normal", points = 513,
           nIter = 60, tol = 1e-8, returnInfo = false } = opts;
+  asIterations(nIter, "abilitiesFromRankMarginal");
+  asTolerance(tol, "abilitiesFromRankMarginal");
+  p = asFiniteVector(p, "target", "probability");
   const n = p.length;
-  r = Math.trunc(r);
+  // a whole-number rank, refused before coercion: Math.trunc(1.5) solved
+  // first place silently (#317)
+  if (typeof r !== "number" || !Number.isFinite(r) || r !== Math.trunc(r))
+    throw new Error(`r must be a whole-number rank; got ${r}`);
   if (!(r >= 1 && r <= n))
     throw new Error(`rank must be in [1, n]; got r=${r}, n=${n}`);
+  if (p.some(v => !Number.isFinite(v)))
+    throw new Error("rank probabilities must be finite");
   if (p.some(v => v <= 0))
     throw new Error("all rank probabilities must be positive");
   const s = p.reduce((a, b) => a + b, 0);
   const logt = p.map(v => Math.log(v / s));
   const sd = asIdio(D, n).map(Math.sqrt);
-  const fn = typeof base === "function" ? base : BASES[base];
+  const fn = baseFn(base);
+  const zz = [-2.3, -1.1, -0.35, 0.6, 1.7];
+  const symmetric = zz.every(z => Math.abs(fn(z)[0] + fn(-z)[0] - 1) < 1e-12);
+  if (mu0 == null && n % 2 === 1 && r === (n + 1) / 2 && symmetric)
+    // the exact middle rank of an odd field under a symmetric base is even
+    // in mu: zero Jacobian at the zero start, no way off it (#378)
+    throw new Error(
+      `the exact middle rank r=${r} of an odd field (n=${n}) under a ` +
+      "symmetric base is unchanged by mu -> -mu, so the zero start is " +
+      "stationary and the inverse two-branched. Pass mu0 to choose the branch.");
   let mu;
   if (mu0 != null) {
-    const m0 = mu0.reduce((a, b) => a + b, 0) / n;
-    mu = mu0.map(v => v - m0);
+    const m00 = asAbilities(mu0, "mu0");
+    if (m00.length !== n) throw new Error(`mu0 has ${m00.length} entries for ${n} runners`);
+    const m0 = m00.reduce((a, b) => a + b, 0) / n;
+    mu = m00.map(v => v - m0);
   } else {
     mu = new Array(n).fill(0);
   }

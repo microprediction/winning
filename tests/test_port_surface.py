@@ -354,7 +354,10 @@ PORT_ONLY = {
     # refusal free from numpy, which will not build a float array from
     # ragged rows and fails the matmul on a wrong rank (#290). Its
     # companion is named asWeights, matching python's as_weights.
-    "js": {"fitGrammar", "haltonNormalNodes", "asFactorNodes"},
+    "js": {"fitGrammar", "haltonNormalNodes", "asFactorNodes",
+           # boundary helpers and the demo's Monte Carlo factor (#334, #357,
+           # #394): plumbing with race-like names, no python verb
+           "asAbilities", "validateCovariance", "raceFactor"},
 }
 
 
@@ -438,8 +441,10 @@ def test_browser_allowlists_are_per_function():
 # while every source audit still passed (#237). Naming the callee instead
 # turns the exemption into a checkable claim: the two allowlists must
 # agree, because whatever one accepts the other has to.
+# bottomKProbabilities left this table when it stopped forwarding: it now
+# integrates the bottom tail directly (#365) and reads its own options,
+# so the direct audits above cover it instead of this exemption.
 FORWARDS_OPTS = {
-    "topk.mjs::bottomKProbabilities": "topk.mjs::topKProbabilities",
     "topk.mjs::locScaleFromWinAndSecond": "topk.mjs::locScaleFromTopkPair",
 }
 

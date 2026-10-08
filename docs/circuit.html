@@ -83,7 +83,7 @@
       <a href="./assets/pdf/scalable_contest_inversion.pdf">the paper</a></p>
   </main>
   <script type="module">
-    import { winProbabilitiesFactor } from "./assets/js/factor_race.mjs?v=3";
+    import { winProbabilitiesFactor } from "./assets/js/factor_race.mjs?v=4";
     window.addEventListener("error", (e) => {
       const c = document.getElementById("caption");
       if (c) c.textContent = "Demo error: " + e.message;
@@ -101,9 +101,17 @@
       const t = 2 * Math.PI * i / N - Math.PI / 2;
       return [CTR + RING * Math.cos(t), CTR + RING * Math.sin(t)];
     });
-    // colour = direction in factor space, vividness = loading strength
-    const vmax = Math.max(...V.map((r) => Math.hypot(r[0], r[1])));
-    const COL = V.map((r) => {
+    // The engine prices the gauge-CENTRED loadings (a common column adds
+    // the same c'f to every runner and cannot move a winner), so the
+    // explanation must be drawn from them too. Raw rows made the colours
+    // and the "most similar" order change under V -> V + 1c' while every
+    // number on the page stayed put; the committed fixture's columns
+    // have nonzero means, so this was live, not hypothetical (#400).
+    const colMean = [0, 1].map((d) => V.reduce((a, r) => a + r[d], 0) / N);
+    const Vc = V.map((r) => r.map((v, d) => v - colMean[d]));
+    // colour = direction in (centred) factor space, vividness = strength
+    const vmax = Math.max(...Vc.map((r) => Math.hypot(r[0], r[1])));
+    const COL = Vc.map((r) => {
       const hue = (Math.atan2(r[1], r[0]) * 180 / Math.PI + 360) % 360;
       const sat = 25 + 65 * Math.hypot(r[0], r[1]) / vmax;
       return `hsl(${hue.toFixed(0)},${sat.toFixed(0)}%,45%)`;
@@ -142,7 +150,7 @@
       if (deleted === null) { caption.textContent = "No runner deleted. Click one."; return; }
       const keep = [...Array(N).keys()].filter(i => i !== deleted);
       const rel = keep.map(j => 100 * (q[deleted][j] / (p[j] / (1 - p[deleted])) - 1));
-      const sim = keep.map(j => V[j].reduce((s, v, d) => s + v * V[deleted][d], 0));
+      const sim = keep.map(j => Vc[j].reduce((s, v, d) => s + v * Vc[deleted][d], 0));
       const order = [...keep.keys()].sort((a, b) => sim[b] - sim[a]);
       const maxAbs = Math.max(...rel.map(Math.abs), 1);
       const x0 = 180, scale = 250 / maxAbs, rowH = 420 / keep.length;

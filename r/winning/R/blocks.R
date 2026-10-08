@@ -543,6 +543,23 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   nT <- length(parent)
   inv <- .cluster_index(cluster)
   nC <- max(inv)
+  if (nT > nC && any(lam[(nC + 1):nT] != 0)) {
+    # with any ancestor effect the cross-cluster Gram product is not the
+    # derivative (two leaves under a common root: forward invariant in
+    # the root strength, J[1,2] 0.2467 -> 0.1792 at strength 0.8); use
+    # the central difference of the exact forward, as python (#350)
+    h <- 1e-5 * sqrt(stats::median(sd^2 + v^2))
+    J <- matrix(0, n, n)
+    for (j in seq_len(n)) {
+      e <- numeric(n); e[j] <- h
+      J[, j] <- (tree_race_probabilities(mu + e, cluster, loading, D, parent,
+                                         strength, points = points, qa = qa) -
+                 tree_race_probabilities(mu - e, cluster, loading, D, parent,
+                                         strength, points = points, qa = qa)) /
+        (2 * h)
+    }
+    return(J)
+  }
   ord <- order(inv)
   mu_o <- m[ord]; sd_o <- sd[ord]; v_o <- v[ord]; c_o <- inv[ord]
   h1 <- .hermite1(qa)
