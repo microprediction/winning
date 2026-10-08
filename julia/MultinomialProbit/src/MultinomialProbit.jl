@@ -28,7 +28,7 @@
 module MultinomialProbit
 
 import LinearAlgebra
-using LinearAlgebra: SymTridiagonal, eigen, cholesky, Symmetric
+using LinearAlgebra: SymTridiagonal, eigen, cholesky, Symmetric, issuccess, eigmin
 using Random: Xoshiro
 
 export MNProbit, max_identified_rank, fit!, loglikelihood, predict_proba, coef, vcov,
@@ -326,14 +326,41 @@ end
 An overlong `D` used to be accepted: the integrand reads only `D[1:J]`,
 but the sharpness dispatcher took `minimum` over ALL entries, so an
 unused tiny trailing entry switched Gauss-Hermite to Halton and moved
-the likelihood (#439)."""
+the likelihood (#439). A scalar is the same variance for every
+alternative, the python `as_idio` shorthand; `collect` cannot iterate a
+`Float64`, so `D = 1.0` failed in both exported engines (#503). Non-
+finite entries are refused here; the sign contract belongs to each
+engine (the likelihood needs D > 0, GHK admits a zero)."""
 function _check_D(D, J::Integer)
     D === nothing && return ones(J)
-    Dv = Float64.(collect(D))
+    Dv = D isa Number ? fill(Float64(D), J) : Float64.(vec(collect(D)))
     length(Dv) == J || throw(DimensionMismatch(
         "D must have one idiosyncratic variance per alternative: got " *
         string(length(Dv)) * " for J = " * string(J)))
+    all(isfinite, Dv) || throw(ArgumentError(
+        "D must be finite: it is an idiosyncratic variance"))
     return Dv
+end
+
+"""A caller's (F, W) rule for a rank-`r` likelihood: exactly `r + 1`
+columns (r factor coordinates, then own noise), one finite row per
+weight. Columns were sliced by position, so a surplus column was read
+as the own-noise coordinate and the real one dropped, moving a 0.5
+probability to 1.0 without an error (#476)."""
+function _check_nodes(nodes, r::Integer)
+    F, W = nodes
+    F isa AbstractMatrix || throw(ArgumentError(
+        "nodes F must be a matrix with r + 1 = " * string(r + 1) *
+        " columns"))
+    size(F, 2) == r + 1 || throw(DimensionMismatch(
+        "nodes F must have r + 1 = " * string(r + 1) * " columns (r " *
+        "factor coordinates, then own noise); got " * string(size(F, 2))))
+    W isa AbstractVector || throw(ArgumentError("nodes W must be a vector"))
+    (size(F, 1) == length(W) && !isempty(W)) || throw(DimensionMismatch(
+        "nodes need one weight per row of F: got " * string(length(W)) *
+        " weights for " * string(size(F, 1)) * " nodes"))
+    all(isfinite, F) || throw(ArgumentError("nodes F has a non-finite entry"))
+    return F, W
 end
 
 """Log-likelihood of observed argmax choices with the ANALYTIC score.
@@ -353,14 +380,25 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
     # port also accepted a choice vector SHORTER than T, dropping the
     # tail without a word (#194).
     choice = _check_choice(choice, T, J)
+    # one loading row per alternative, BEFORE gauge centring and the
+    # sharpness dispatch: a surplus row is never integrated but moved
+    # both, switching Gauss-Hermite to Halton and the choice probability
+    # from 0.654 to 0.637 for an unchanged model (#462)
+    size(V, 1) == J || throw(DimensionMismatch(
+        "V must have one loading row per alternative: got " *
+        string(size(V, 1)) * " rows for J = " * string(J)))
     Dv = _check_D(D, J)
+    all(>(0.0), Dv) || throw(ArgumentError(
+        "D must be strictly positive for the likelihood: the own-noise " *
+        "integral divides by each rival's sqrt(D)"))
     s = sqrt.(Dv)
     V = V .- sum(V, dims = 1) ./ J          # gauge: differences decide
     ET = promote_type(eltype(mu), eltype(V), Float64)
     sharp = sqrt(2) * maximum(sqrt.(vec(sum(V .^ 2, dims = 2)))) /
             sqrt(minimum(Dv))
     F, W = nodes === nothing ?
-           nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = sharp) : nodes
+           nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = sharp) :
+           _check_nodes(nodes, r)
     Fq = F[:, 1:r]
     zq = F[:, r + 1]
     Q = length(W)
@@ -413,19 +451,46 @@ end
 
 """P(alternative k chosen | mu row) by GHK sequential importance
 sampling on the differenced covariance, common random numbers via the
-seed. Port of the rust core's ghk_prob_one; Sigma = V V' + diag(D)."""
+seed. Port of the rust core's ghk_prob_one_factor; Sigma = V V' + diag(D).
+
+`D` is validated as a variance before anything is built from it, as the
+python reference's `as_idio` does: a negative entry passed whenever the
+contrast covariance stayed positive definite, so `D = [1, -0.5]` priced
+0.9214 for a covariance with eigenvalue -0.5 (#367). The contrast is
+formed from the factor grammar, `(V_j - V_k).(V_l - V_k) + D_k +
+[j == l] D_j`, so a common loading cancels before it can round the
+idiosyncratic variances away (#302), and the Cholesky ridge is relative
+to the contrast scale: an absolute `1e-12` made the binary favourite
+fall from 0.7602 to 0.5040 when the race was written in units 1e-8
+(#409)."""
 function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
                          D = nothing, r_draws = 1000, seed = 9)
+    _check_r_draws(r_draws)
     J = length(mu)
-    Dv = _check_D(D, J)
-    Sigma = V * V' .+ [i == j ? Dv[i] : 0.0 for i in 1:J, j in 1:J]
+    size(V, 1) == J || throw(ArgumentError(
+        "V must have one row per alternative: got $(size(V, 1)) rows " *
+        "for $J alternatives"))
+    1 <= k <= J || throw(ArgumentError("k = $k is not an alternative of $J"))
+    Dv = _check_D(D, J)                 # length J, or DimensionMismatch (#439)
+    (all(isfinite, Dv) && all(isfinite, V) && all(isfinite, mu)) ||
+        throw(ArgumentError("mu, V and D must be finite"))
+    tol = 1e-12 * max(1.0, maximum(abs, Dv))
+    for (j, x) in enumerate(Dv)
+        x < -tol && throw(ArgumentError(
+            "D[$j] = $x is negative: D is an idiosyncratic variance and " *
+            "cannot be negative"))
+    end
+    Dv = max.(Dv, 0.0)                  # within tolerance: these ARE zero
+    J == 1 && return 1.0
     m = J - 1
     others = [j for j in 1:J if j != k]
     a = [mu[j] - mu[k] for j in others]
-    C = [Sigma[jr, jc] - Sigma[jr, k] - Sigma[k, jc] + Sigma[k, k]
-         for jr in others, jc in others]
+    Vd = Float64.(V[others, :]) .- Float64.(V[k:k, :])
+    C = Vd * Vd' .+ Dv[k] .+ [r == c ? Dv[others[r]] : 0.0
+                              for r in 1:m, c in 1:m]
+    ridge = 1e-12 * max(sum(C[d, d] for d in 1:m) / m, 1e-300)
     for d in 1:m
-        C[d, d] += 1e-12
+        C[d, d] += ridge
     end
     Lc = cholesky(Symmetric(C)).L
     rng = Xoshiro(seed)
@@ -450,11 +515,21 @@ function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
     return sum(exp, logprob) / r_draws
 end
 
+# A draw budget is a positive whole number: r_draws = 0 averaged an
+# empty set, 0/0 = NaN, and fit!(method = :ghk) carried it into a NaN
+# log-likelihood. The rust/fastrace boundary already refused it (#478).
+function _check_r_draws(r_draws)
+    (r_draws isa Integer && r_draws >= 1) || throw(ArgumentError(
+        "r_draws must be at least 1; got " * string(r_draws)))
+    return nothing
+end
+
 """GHK simulated log-likelihood over all observations (CRN: the seed
 per observation is a deterministic function of its index, so the
 objective is smooth-in-parameters for a fixed draw set)."""
 function ghk_loglik(mu::AbstractMatrix, V::AbstractMatrix,
                     choice::AbstractVector; r_draws = 1000, seed = 9)
+    _check_r_draws(r_draws)
     T = size(mu, 1)
     ll = 0.0
     for t in 1:T
@@ -600,6 +675,7 @@ end
 
 function fit!(m::MNProbit; method = :exact, maxiter = 400,
               r_draws = 1000, seed = 9)
+    method == :ghk && _check_r_draws(r_draws)    # before any mutation
     theta0 = vcat(zeros(m.p), fill(0.1, length(m.pos)))
     if method == :exact
         theta, nll, conv = _bfgs(t -> _nll_grad(m, t), theta0;
@@ -703,23 +779,52 @@ scores), or :sandwich (H^-1 B H^-1, robust).
 `:opg` never touches the Hessian. It used to compute and invert the
 observed information first and only then branch, so a singular or
 failing Hessian blocked the OPG fallback that exists for exactly that
-case, and paid 2 * nparams score evaluations for nothing (#434)."""
-function vcov(m::MNProbit; method = :hessian)
+case, and paid 2 * nparams score evaluations for nothing (#434).
+
+Asymptotic covariance is a statement about a MAXIMUM. A non-converged
+fit is refused unless `allow_unconverged = true`, and the Hessian and
+sandwich forms require the observed information `-H` to be positive
+definite: at a saddle its inverse has negative variances, which
+`stderror` used to clip to a standard error of exactly zero (#493)."""
+function vcov(m::MNProbit; method = :hessian, allow_unconverged = false)
     method in (:hessian, :opg, :sandwich) ||
         error("method must be :hessian, :opg or :sandwich")
     _require_exact(m, "vcov")
+    (m.converged || allow_unconverged) || throw(ArgumentError(
+        "vcov: the fit did not converge, so theta is not a maximum and " *
+        "its curvature is not a covariance. Refit (e.g. larger maxiter) " *
+        "or pass allow_unconverged = true to inspect it anyway"))
     if method == :opg
         G = score_matrix(m)
         return inv(G' * G)
     end
-    Hinv = inv(-loglik_hessian(m))
+    info = Symmetric(-loglik_hessian(m))
+    ch = cholesky(info; check = false)
+    issuccess(ch) || throw(ArgumentError(
+        "vcov: the observed information is not positive definite (smallest " *
+        "eigenvalue " * string(round(eigmin(info), sigdigits = 4)) * "), so " *
+        "theta is not a strict local maximum and -H^-1 is not a " *
+        "covariance; method = :opg does not use the Hessian"))
+    Hinv = inv(ch)
     method == :hessian && return (Hinv .+ Hinv') ./ 2
     G = score_matrix(m)
     return Hinv * (G' * G) * Hinv
 end
 
-stderror(m::MNProbit; method = :hessian) =
-    sqrt.(max.(LinearAlgebra.diag(vcov(m; method = method)), 0.0))
+"""Standard errors: square roots of the `vcov` diagonal. A negative
+variance is refused, not clipped to a zero standard error (#493); only
+round-off, below `1e-12` of the largest diagonal entry, is read as 0."""
+function stderror(m::MNProbit; method = :hessian, allow_unconverged = false)
+    d = LinearAlgebra.diag(vcov(m; method = method,
+                                allow_unconverged = allow_unconverged))
+    tol = 1e-12 * maximum(abs, d; init = 0.0)
+    for (i, x) in enumerate(d)
+        (isfinite(x) && x >= -tol) || throw(ArgumentError(
+            "stderror: variance " * string(i) * " is " * string(x) *
+            "; a negative variance is not a standard error"))
+    end
+    return sqrt.(max.(d, 0.0))
+end
 
 function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
     println(io, "MNProbit  J=", m.J, " T=", m.T, " r=", m.r,
@@ -727,8 +832,8 @@ function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
             "  logLik=", round(m.loglik, digits = 3),
             m.converged ? "" : "  (NOT converged)")
     isnan(m.loglik) && return
-    # standard errors exist only for the exact objective (#214)
-    exact = m.method == :exact
+    # standard errors exist only for a converged exact fit (#214, #493)
+    exact = m.method == :exact && m.converged
     se = !exact ? fill(NaN, length(m.theta)) : try
         stderror(m)
     catch
@@ -737,8 +842,9 @@ function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
     names = vcat(["beta[$i]" for i in 1:m.p],
                  ["v[$row,$col]" for (row, col) in m.pos])
     println(io, rpad("param", 12), rpad("estimate", 12),
-            exact ? "se" : "se (not available for a :" *
-                           string(m.method) * " fit)")
+            exact ? "se" :
+            m.method == :exact ? "se (not available: the fit did not converge)" :
+            "se (not available for a :" * string(m.method) * " fit)")
     for i in eachindex(m.theta)
         println(io, rpad(names[i], 12),
                 rpad(string(round(m.theta[i], digits = 4)), 12),

@@ -109,7 +109,7 @@ test_that("a scalar V is the same loading for everyone", {
 
 test_that("the inverse's target and D describe the same field", {
   expect_error(abilities_from_race(c(0.5, 0.5), D = rep(1, 4)),
-               "one variance per target entry")
+               "got 4 for 2 contestants")
   m <- abilities_from_race(c(0.4, 0.3, 0.2, 0.1), D = rep(1, 4))
   expect_equal(length(m), 4L)
   expect_true(all(is.finite(m)))
@@ -246,4 +246,22 @@ test_that("race inverse warning describes the returned iterate (#497)", {
                  log(t)))
     expect_match(msg, sprintf("%.2e", a), fixed = TRUE)
   }
+})
+
+test_that("the race inverse validates D and V like the forward map (#482)", {
+  expect_error(abilities_from_race(c(.8, .2), D = c(-1, 2)),
+               "negative variance")
+  expect_error(abilities_from_race(c(.8, .2), D = c(0, 2)),
+               "strictly positive")
+  expect_error(abilities_from_race(c(.8, .2), D = c(NaN, 2)), "non-finite")
+  expect_error(abilities_from_race(c(.5, .3, .2), D = c(1, 2)),
+               "got 2 for 3")
+  expect_error(abilities_from_race(c(.5, .3, .2), V = diag(2)),
+               "one row per contestant")
+  # a common scalar loading is gauge-invisible, as in the forward map
+  expect_equal(abilities_from_race(c(.8, .2), V = 0.4, D = 1),
+               abilities_from_race(c(.8, .2), D = 1))
+  V <- c(.3, -.2, .5)
+  expect_equal(abilities_from_race(c(.5, .3, .2), V = matrix(V, 1)),
+               abilities_from_race(c(.5, .3, .2), V = V))
 })

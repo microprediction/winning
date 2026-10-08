@@ -44,9 +44,12 @@
 rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
                          maxit = 400L) {
   t0 <- Sys.time()
-  alt <- as.integer(as.factor(df$alt))
+  # droplevels: a filtered panel keeps its unused factor levels, and as
+  # integer codes those levels left gaps that were read as phantom
+  # observations or alternatives (#464). Code the OBSERVED labels only.
+  alt <- as.integer(droplevels(as.factor(df$alt)))
   J <- max(alt)
-  id_f <- as.factor(df$id)
+  id_f <- droplevels(as.factor(df$id))
   ids <- as.integer(id_f)
   ord <- order(ids, alt)
   df <- df[ord, , drop = FALSE]

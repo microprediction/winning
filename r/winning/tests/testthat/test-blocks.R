@@ -99,3 +99,44 @@ test_that("a common root shock cannot move the tree race (#489)", {
     expect_lt(max(abs(tree_race_probabilities(mu, cl, L, D, c(3L, 3L, 0L),
                                               c(0, 0, rs)) - b)), 1e-15)
 })
+
+test_that("tree races refuse forests, cycles and out-of-range parents (#517)", {
+  mu <- c(0, 1); cl <- c(1, 2); ld <- c(0, 0); D <- c(1, 1)
+  # two roots: each component used to be priced alone (total mass 2)
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(0, 0), c(0, 0),
+                                       qa = 1),
+               "exactly one root .*got 2 \\(1, 2\\)")
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(NA, NA), c(0, 0),
+                                       qa = 1), "exactly one root")
+  expect_error(tree_race_jacobian(mu, cl, ld, D, c(0, 0), c(0, 0), qa = 1),
+               "exactly one root")
+  # cycle among internal nodes, with a root elsewhere
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(3, 4, 4, 3, 0),
+                                       c(0, 0, .1, .1, 0), qa = 1),
+               "cycle: 3 -> 4 -> 3")
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(3, 3, 7), c(0, 0, 0),
+                                       qa = 1), "parent\\[3\\] = 7")
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(2, 0), c(0, 0),
+                                       qa = 1), "must be leaves")
+  # a zero-strength common root is the independent race
+  p <- tree_race_probabilities(mu, cl, ld, D, c(3, 3, 0), c(0, 0, 0),
+                               points = 257, qa = 1)
+  expect_equal(sum(p), 1, tolerance = 1e-12)
+  expect_equal(p, race_probabilities(mu), tolerance = 1e-4)
+})
+
+test_that("nested coupling must have a contestant axis, never recycled (#469)", {
+  mu <- c(-1.0, -0.2, 0.4, 0.8); cl <- 1:4; ld <- rep(0, 4); D <- rep(1, 4)
+  for (bad in list(diag(2), c(1, 0), matrix(1, 3, 2), c(1, NA, 0, 1)))
+    expect_error(nested_race_probabilities(mu, cl, ld, D, coupling = bad,
+                                           points = 257, qa = 3, qf = 5),
+                 "coupling")
+  expect_error(nested_race_jacobian(mu, cl, ld, D, coupling = diag(2),
+                                    points = 257, qa = 3, qf = 5),
+               "coupling")
+  G <- rbind(c(1, 0), c(0, 1), c(1, 0), c(0, 1))
+  expect_equal(nested_race_probabilities(mu, cl, ld, D, coupling = t(G),
+                                         points = 257, qa = 3, qf = 5),
+               nested_race_probabilities(mu, cl, ld, D, coupling = G,
+                                         points = 257, qa = 3, qf = 5))
+})

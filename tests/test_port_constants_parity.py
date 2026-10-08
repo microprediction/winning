@@ -10,6 +10,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 PY = ROOT / "winning" / "factor" / "races.py"
 R = ROOT / "r" / "winning" / "R" / "races.R"
 JS = ROOT / "docs" / "js" / "winning" / "races.mjs"
+JL = ROOT / "julia" / "winning" / "src" / "winning.jl"
 
 
 def _handover(text, pattern):
@@ -22,7 +23,31 @@ def test_rank_one_handover_threshold_agrees_across_ports():
     py = _handover(PY.read_text(), r"r == 1 and np\.ceil\(8\.0 \* sharp\) > (\d+)")
     r = _handover(R.read_text(), r"r == 1 && ceiling\(8 \* sharp\) > (\d+)")
     js = _handover(JS.read_text(), r"r === 1 && Math\.ceil\(8 \* sharp\) > (\d+)")
-    assert py == r == js, (py, r, js)
+    jl = _handover(JL.read_text(), r"r == 1 && ceil\(8 \* sharp\) > (\d+)")
+    assert py == r == js == jl, (py, r, js, jl)
+
+
+def test_per_rank_gauss_hermite_table_agrees_across_ports():
+    """GH_RULE's caps and family cutovers, not just the rank-one handover:
+    julia carried a single 3.0 cutover and rank-3 cap 15 (#528)."""
+    from winning.factor.races import GH_RULE, GH_RULE_DEFAULT
+    caps = (GH_RULE[1][0], GH_RULE[2][0], GH_RULE[3][0], GH_RULE_DEFAULT[0])
+    cuts = (GH_RULE[2][1], GH_RULE[3][1], GH_RULE_DEFAULT[1])
+    num = r"([0-9.]+)"
+    for path, cap_pat, cut_pat in [
+        (R, r"cap <- if \(r == 1\) {0} else if \(r == 2\) {0} else if "
+            r"\(r == 3\) {0} else {0}",
+         r"sharp_max <- if \(r == 2\) {0} else if \(r == 3\) {0} else {0}"),
+        (JL, r"cap = r == 1 \? {0} : r == 2 \? {0} : r == 3 \? {0} : {0}",
+         r"sharp_max = r == 2 \? {0} : r == 3 \? {0} : {0}"),
+    ]:
+        text = path.read_text()
+        m = re.search(cap_pat.format(num), text)
+        assert m, path.name
+        assert tuple(float(x) for x in m.groups()) == caps, path.name
+        m = re.search(cut_pat.format(num), text)
+        assert m, path.name
+        assert tuple(float(x) for x in m.groups()) == cuts, path.name
 
 
 def test_ports_carry_the_inverse_safeguards():

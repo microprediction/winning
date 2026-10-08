@@ -267,3 +267,17 @@ test_that("target_floor floors memberships, not the caller's units (#592)", {
   expect_error(.validated_topk_target(c(0.7, -0.3, 0.6), 1, 3, 1e-4),
                "non-negative")
 })
+
+test_that("mu0 must have one entry per runner, not redefine the field (#554)", {
+  p <- c(.4, .3, .2, .1)
+  for (m0 in list(rep(0, 8), rep(0, 3), 0, numeric(0)))
+    expect_error(abilities_from_rank_marginal(p, r = 1, mu0 = m0,
+                                              points = 129, n_iter = 1),
+                 "mu0 has .* entries for 4 runners")
+  expect_error(abilities_from_rank_marginal(p, r = 1, mu0 = c(0, NA, 0, 0),
+                                            points = 129, n_iter = 1),
+               "non-finite")
+  out <- abilities_from_rank_marginal(p, r = 1, mu0 = c(1, 0, 0, 0),
+                                      points = 129, n_iter = 1)
+  expect_length(out, 4L)
+})
