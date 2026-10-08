@@ -26,6 +26,7 @@ from .core import (  # noqa: F401
     abilities_from_win_probabilities,
     factor_model_contrast,
     factor_model_projected,
+    fit_tree,
     hermite_nodes,
     jacobian_vector_product,
     qmc_nodes,

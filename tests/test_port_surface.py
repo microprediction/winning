@@ -84,6 +84,9 @@ SURFACE = {
     "fit_covariance":                      (PRESENT, GAP,
                                         "covariance fitting, reached through cov= rather than"
                                         "called"),
+    "fit_tree":                            (GAP, GAP,
+                                        "python only: dense-covariance intake onto a known"
+                                        " genealogy (#622); the ports price the Tree it returns"),
     "harville_order_logprob":              (GAP, GAP,
                                         "order-statistics likelihood, python only"),
     "harville_place_probabilities":        (GAP, GAP,
