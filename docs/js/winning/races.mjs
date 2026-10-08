@@ -410,6 +410,11 @@ export function raceProbabilities(mu, opts = {}) {
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
+  // one of two names: every value but "bulk" -- a typo, null, a number --
+  // silently meant span and moved a share by 39 points (#582). undefined
+  // is omission, as for every option.
+  if (win !== "bulk" && win !== "span")
+    throw new Error(`raceProbabilities: window must be "bulk" or "span"; got ${typeof win === "string" ? JSON.stringify(win) : String(win)}`);
   const c = collapseStructure(structure, V, D, F, W, "raceProbabilities");
   if (c.structure) {
     return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes, window: win, delta });

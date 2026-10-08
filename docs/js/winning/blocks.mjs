@@ -290,15 +290,25 @@ export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   return checkedMass(p, "block race");
 }
 
+function asGamma(gamma, where) {
+  if (typeof gamma !== "number" || !Number.isFinite(gamma))
+    throw new Error(`${where}: gamma must be a finite number; got ${typeof gamma === "string" ? JSON.stringify(gamma) : String(gamma)}`);
+  return gamma;
+}
+
 export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   checkOpts(opts, NESTED_RACE_PROBABILITIES_OPTS, "nestedRaceProbabilities", OPT_HINTS);
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
-  if (!coupling || gamma === 0)
+  // gamma and coupling validated BEFORE the no-global-factor shortcut:
+  // truthiness sent NaN/false/"" couplings to the block race (#586), and
+  // the Jacobian let "2", true, false and null select a coupling the
+  // forward refuses (#540). Only an omitted coupling (null/undefined) or
+  // an exact numeric gamma of 0 means no global factor.
+  asGamma(gamma, "nestedRaceProbabilities");
+  if (coupling == null || gamma === 0)
     return blockRaceProbabilities(mu, cluster, loading, D, { points, qa });
   const a = blockArgs(mu, cluster, loading, D, "nestedRaceProbabilities");
   mu = a.mu;
-  if (typeof gamma !== "number" || !Number.isFinite(gamma))
-    throw new Error(`nestedRaceProbabilities: gamma must be a finite number; got ${gamma}`);
   // The shared contract, as python's atleast_2d-plus-transpose does
   // it: a (rank, n) coupling is the SAME race as (n, rank). This
   // normalised by hand and never transposed, so the transposed
@@ -569,7 +579,8 @@ export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
 export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
   checkOpts(opts, NESTED_RACE_JACOBIAN_OPTS, "nestedRaceJacobian", OPT_HINTS);
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
-  if (!coupling || gamma === 0)
+  asGamma(gamma, "nestedRaceJacobian");     // as the forward (#540, #586)
+  if (coupling == null || gamma === 0)
     return blockRaceJacobian(mu, cluster, loading, D, { points, qa });
   mu = asAbilities(mu);
   // The shared contract, as python's atleast_2d-plus-transpose does

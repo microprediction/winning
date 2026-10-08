@@ -6,6 +6,10 @@ import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS, asFiniteVector,
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
 const SOLVE_FOR_IMPLIED_OFFSETS_OPTS = new Set(["offsetSamples", "guess", "nIter"]);
+// inline-destructured signatures bypassed checkOpts, so {sacle: 0.3} and
+// {unti: 0.1} priced the defaults without a word (#561)
+const SKEW_NORMAL_DENSITY_OPTS = new Set(["loc", "scale", "a"]);
+const DIVIDEND_IMPLIED_ABILITY_OPTS = new Set(["nanValue", "unit"]);
 
 /* The interpolation table is built BY MAPPING over offsetSamples, and
    read back with interpClamped, whose xp must ascend. Descending
@@ -301,7 +305,9 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
   return implied;
 }
 
-export function skewNormalDensity(L, unit, { loc = 0, scale = 1.0, a = 2.0 } = {}) {
+export function skewNormalDensity(L, unit, opts = {}) {
+  checkOpts(opts, SKEW_NORMAL_DENSITY_OPTS, "skewNormalDensity", OPT_HINTS);
+  const { loc = 0, scale = 1.0, a = 2.0 } = opts;
   const n = 2 * L + 1;
   const density = new Array(n);
   for (let i = 0; i < n; i++) {
@@ -346,7 +352,9 @@ export function pricesFromDividends(dividends, nanValue = 2000) {
   return s > 0 ? p.map(v => v / s) : p;
 }
 
-export function dividendImpliedAbility(dividends, density, { nanValue = 2000, unit = 1.0 } = {}) {
+export function dividendImpliedAbility(dividends, density, opts = {}) {
+  checkOpts(opts, DIVIDEND_IMPLIED_ABILITY_OPTS, "dividendImpliedAbility", OPT_HINTS);
+  const { nanValue = 2000, unit = 1.0 } = opts;
   const p = pricesFromDividends(dividends, nanValue);
   const guess = new Array(p.length).fill(0);
   return solveForImpliedOffsets(p, density, { guess }).map(v => v * unit);

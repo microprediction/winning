@@ -410,7 +410,9 @@ export function topKProbabilities(mu, k, opts = {}) {
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
-  if (!V) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
+  // omission is null/undefined, never falsiness: NaN, false and "" are
+  // malformed loadings for asLoadings to refuse, not "no factor" (#549)
+  if (V == null) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
                              k, "top-k race");
   const { Vm, nodes, w } = factorNodes(V, n, qa, D);
   const raw = new Array(n).fill(0);
@@ -434,7 +436,7 @@ export function bottomKProbabilities(mu, k, opts = {}) {
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
-  if (!V) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
+  if (V == null) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
   const { Vm, nodes, w } = factorNodes(V, n, qa, D);
   const raw = new Array(n).fill(0);
   for (let q = 0; q < nodes.length; q++) {
@@ -456,7 +458,7 @@ export function topKJacobians(mu, k, opts = {}) {
   mu = asAbilities(mu);        // an Infinity used to return all-NaN Jacobians (#440)
   const n = mu.length;
   k = asDepth(k, n);
-  if (V) {
+  if (V != null) {
     // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
     const { Vm, nodes, w } = factorNodes(V, n, qa, D);
     const Jmu = [], Jsigma = [];
@@ -546,7 +548,7 @@ export function rankProbabilities(mu, opts = {}) {
   // returned -- plausible, doubly stochastic, and for the wrong model
   // (#199). The mixture is the same one topKProbabilities takes.
   let P;
-  if (!V) {
+  if (V == null) {
     P = oneNode(mu);
   } else {
     const { Vm, nodes, w } = factorNodes(V, n, qa, D);
@@ -607,7 +609,12 @@ function validatedTarget(q, k, n, targetFloor) {
   if (bad >= 0) throw new Error(`target[${bad}] = ${target[bad]} is not finite`);
   let floored = new Array(n).fill(false);
   if (targetFloor != null) {
-    if (!(targetFloor > 0)) throw new Error("targetFloor must be positive");
+    // a finite positive NUMBER: `> 0` coerced "0.1" and true (a uniform
+    // target, certified converged) and let Infinity through to a
+    // RangeError from the lattice sizing (#525)
+    if (typeof targetFloor !== "number" || !Number.isFinite(targetFloor) ||
+        !(targetFloor > 0))
+      throw new Error(`targetFloor must be a finite positive number; got ${typeof targetFloor === "string" ? JSON.stringify(targetFloor) : String(targetFloor)}`);
     floored = target.map(v => v < targetFloor);
     target = target.map(v => Math.max(v, targetFloor));
   } else if (target.some(v => v <= 0)) {
@@ -641,7 +648,7 @@ export function abilitiesFromTopk(q, k, opts = {}) {
   const { target, floored } = validatedTarget(q, k, n, targetFloor);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
-  const fac = V ? factorNodes(V, n, qa, D) : null;
+  const fac = V != null ? factorNodes(V, n, qa, D) : null;
 
   const logitT = target.map(v => Math.log(v) - Math.log1p(-v));
   const logT = target.map(Math.log);

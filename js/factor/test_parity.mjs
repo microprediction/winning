@@ -332,4 +332,35 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   check("the inverse shares the normaliser", ab, a1, 1e-12);
 }
 
+/* --- the options boundary: typed weights, an omitted base only, and no
+   unknown keys (#527, #552, #559) ----------------------------------- */
+{
+  const refuses = (name, fn) => {
+    let threw = false;
+    try { fn(); } catch (e) { threw = true; }
+    check(name, [threw ? 1 : 0], [1], 0.5);
+  };
+  const mu = [-0.4, 0.1, 0.5], V = [[-0.8], [0.2], [0.7]], D = [0.7, 0.8, 0.9];
+  const F = [[-1], [1]];
+  for (const W of [["0.5", "0.5"], [true, false], [null, 1]])
+    refuses(`weights ${JSON.stringify(W)} are refused, not coerced (#527)`,
+            () => winProbabilitiesFactor(mu, V, D, F, W));
+  const Z = [[], [], []];
+  for (const base of ["", false, 0, null]) {
+    refuses(`base ${JSON.stringify(base)} is refused, not read as normal (#552)`,
+            () => winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { base }));
+    refuses(`inverse base ${JSON.stringify(base)} is refused (#552)`,
+            () => abilitiesFromProbabilitiesFactor([0.5, 0.3, 0.2], Z, [1, 1, 1], [[]], [1], { base }));
+  }
+  check("an omitted base is still normal (#552)",
+        winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1]).p,
+        winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { base: "normal" }).p, 1e-300);
+  refuses("forward refuses {bsae} (#559)",
+          () => winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { bsae: "gumbel" }));
+  refuses("inverse refuses {bsae} (#559)",
+          () => abilitiesFromProbabilitiesFactor([0.5, 0.3, 0.2], Z, [1, 1, 1], [[]], [1], { bsae: "gumbel" }));
+  refuses("forward refuses an inverse-only key (#559)",
+          () => winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { nIter: 5 }));
+}
+
 process.exit(failures ? 1 : 0);

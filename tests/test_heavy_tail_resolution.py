@@ -113,3 +113,8 @@ def test_bottom_k_honours_the_base_resolution():
     assert abs(bot[0] - exact) < 1e-8
 
 
+@pytest.mark.parametrize("window", ["bulkk", "", None, 3, True])
+def test_race_window_is_one_of_two_names(window):
+    """Every window but "bulk" used to mean span (#582)."""
+    with pytest.raises(ValueError, match="window"):
+        race_probabilities([0.0, 1.0, 2.0], D=[0.01, 4.0, 100.0], window=window)

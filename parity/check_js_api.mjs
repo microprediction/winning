@@ -1790,5 +1790,51 @@ for (const c of [1e-8, 100]) {
         Math.abs(o.mu[2] / c - 0.7279331) < 1e-5, `${o.mu.map(x => x / c)}`);
 }
 
+// --- typed controls are not coerced, and falsy is not "omitted"
+{
+  const q = [0.6, 0.4, 0];
+  for (const tf of ["0.1", true, Infinity, NaN])
+    rejects(topk.abilitiesFromTopk, [q, 1, { D: [1, 1, 1], points: 257, targetFloor: tf }],
+            `top-k targetFloor ${String(tf)} is refused (#525)`, "targetFloor");
+  const mu = [0, 0.3, 0.8], cl = [0, 0, 1], ld = [0.4, 0.6, 0.5], D = [1, 1, 1];
+  const cp = [0.7, -0.2, 0.4];
+  for (const g of ["2", true, false, null, NaN]) {
+    rejects(blocks.nestedRaceJacobian, [mu, cl, ld, D, { coupling: cp, gamma: g, points: 129 }],
+            `nested Jacobian refuses gamma ${String(g)} (#540)`, "gamma");
+    rejects(polish.raceJacobian, [mu, { structure: structures.Nested(cl, ld, D, cp, g), points: 129 }],
+            `structured nested Jacobian refuses gamma ${String(g)} (#540)`, "gamma");
+  }
+  for (const c of [NaN, false, ""]) {
+    rejects(blocks.nestedRaceProbabilities, [mu, cl, ld, D, { coupling: c, points: 129 }],
+            `nested forward refuses coupling ${JSON.stringify(c)} (#586)`, "coupling");
+    rejects(blocks.nestedRaceJacobian, [mu, cl, ld, D, { coupling: c, points: 129 }],
+            `nested Jacobian refuses coupling ${JSON.stringify(c)} (#586)`, "coupling");
+    rejects(races.raceProbabilities, [mu, { structure: structures.Nested(cl, ld, D, c), points: 129 }],
+            `structured nested forward refuses coupling ${JSON.stringify(c)} (#586)`, "coupling");
+  }
+  accepts("an omitted coupling is still the block race (#586)",
+          () => blocks.nestedRaceProbabilities(mu, cl, ld, D, { points: 129 }),
+          p => Math.abs(p[0] - blocks.blockRaceProbabilities(mu, cl, ld, D, { points: 129 })[0]) < 1e-15);
+  const m4 = [-0.8, -0.1, 0.3, 0.9], D4 = [0.7, 1.1, 0.9, 1.3];
+  for (const V of [NaN, false, ""]) {
+    for (const [name, f, args] of [
+      ["topKProbabilities", topk.topKProbabilities, [m4, 2, { D: D4, V }]],
+      ["bottomKProbabilities", topk.bottomKProbabilities, [m4, 2, { D: D4, V }]],
+      ["topKJacobians", topk.topKJacobians, [m4, 2, { D: D4, V }]],
+      ["rankProbabilities", topk.rankProbabilities, [m4, { D: D4, V }]],
+      ["abilitiesFromTopk", topk.abilitiesFromTopk, [[0.85, 0.57, 0.38, 0.2], 2, { D: D4, V }]]])
+      rejects(f, args, `${name} refuses falsy V ${JSON.stringify(V)} (#549)`, "V");
+  }
+  for (const win of ["bulkk", "", null, 3, true])
+    rejects(races.raceProbabilities, [[0, 1, 2], { D: [0.01, 4, 100], window: win }],
+            `raceProbabilities refuses window ${JSON.stringify(win)} (#582)`, "window");
+  rejects(classic.skewNormalDensity, [50, 0.1, { sacle: 0.3 }],
+          "skewNormalDensity refuses a misspelled key (#561)", "sacle");
+  rejects(classic.dividendImpliedAbility, [[2, 4, 8], classic.skewNormalDensity(50, 0.1, { a: 0 }), { unti: 0.1 }],
+          "dividendImpliedAbility refuses a misspelled key (#561)", "unti");
+  rejects(polish.concentrationMatrix, [3, { namecaps: [0.5] }],
+          "concentrationMatrix refuses a misspelled key (#561)", "namecaps");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

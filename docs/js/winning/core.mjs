@@ -176,7 +176,10 @@ export function asTolerance(tol, where, name = "tol") {
    python. */
 export const isVector = x => Array.isArray(x) || (ArrayBuffer.isView(x) && !(x instanceof DataView));
 
-export function asFiniteVector(x, where, what = "entry", { allowEmpty = false } = {}) {
+const AS_FINITE_VECTOR_OPTS = new Set(["allowEmpty"]);
+export function asFiniteVector(x, where, what = "entry", opts = {}) {
+  checkOpts(opts, AS_FINITE_VECTOR_OPTS, "asFiniteVector");
+  const { allowEmpty = false } = opts;
   if (!isVector(x))
     throw new Error(`${where} must be an array of numbers; got ${x === null ? "null" : typeof x}`);
   if (x.length === 0 && !allowEmpty)

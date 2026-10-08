@@ -149,7 +149,12 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
    both ports rather than silently meaning different things: python's
    numpy indexing made -1 the LAST name while javascript dropped the
    member entirely, and neither is documented. */
-export function concentrationMatrix(n, { nameCaps = null, groups = null } = {}) {
+const CONCENTRATION_MATRIX_OPTS = new Set(["nameCaps", "groups"]);
+export function concentrationMatrix(n, opts = {}) {
+  // an inline-destructured signature skipped checkOpts: {namecaps: ...}
+  // returned an EMPTY constraint set (#561)
+  checkOpts(opts, CONCENTRATION_MATRIX_OPTS, "concentrationMatrix", OPT_HINTS);
+  const { nameCaps = null, groups = null } = opts;
   const A = [], b = [];
   if (nameCaps != null) {
     let caps;
