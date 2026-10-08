@@ -642,8 +642,8 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
     stop("p_win and p_second must have equal length")
   if (any(p_win <= 0) || any(p_second <= 0))
     stop("all win and second probabilities must be positive")
-  p1 <- p_win / sum(p_win)
-  top2 <- p1 + p_second / sum(p_second)
+  p1 <- .rescaled_target(as.numeric(p_win))    # scale-safe (#483)
+  top2 <- p1 + .rescaled_target(as.numeric(p_second))
   loc_scale_from_topk_pair(p1, 1, top2, 2, D0 = D0, base = base,
                            points = points, n_iter = n_iter, tol = tol,
                            ridge = ridge, mu0 = mu0,

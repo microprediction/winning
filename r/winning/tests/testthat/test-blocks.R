@@ -76,3 +76,17 @@ test_that("rank-zero block loadings are the independent race (#508)", {
   expect_equal(block_race_jacobian(mu, cl, V0, D),
                block_race_jacobian(mu, cl, rep(0, 4), D))
 })
+
+test_that("block and win/second inverses survive a sum overflow (#463, #483)", {
+  q <- c(0.8, 0.6, 0.4, 0.2); cl <- c(0L, 0L, 1L, 1L)
+  L <- c(0.25, -0.15, 0.35, -0.05); D <- c(0.8, 0.9, 1.0, 1.1)
+  a <- abilities_from_block_race(q, cl, L, D, points = 129)
+  b <- abilities_from_block_race(q * 1e308, cl, L, D, points = 129)
+  a <- if (is.list(a)) a[[1]] else a; b <- if (is.list(b)) b[[1]] else b
+  expect_equal(a, b, tolerance = 1e-9)
+  R <- rank_probabilities(c(-0.5, -0.1, 0.2, 0.4), D = rep(1, 4))
+  w <- R[, 1] / max(R[, 1]); s <- R[, 2] / max(R[, 2])
+  x <- suppressWarnings(loc_scale_from_win_and_second(w, s))
+  y <- suppressWarnings(loc_scale_from_win_and_second(w * 1e308, s * 1e308))
+  expect_equal(x$mu, y$mu, tolerance = 1e-9)
+})

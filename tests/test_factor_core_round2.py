@@ -458,3 +458,38 @@ console.log(JSON.stringify({{ d: Math.max(...a.map((v, i) => Math.abs(v - b[i]))
 """)
     assert got["d"] < 1e-15
     assert got["ms"] < 500                       # was ~2200 ms
+
+
+# ------------------------------------------------- #461 #463 #483
+
+def test_inverse_normalizers_survive_a_sum_overflow_461_463_483():
+    """[0.8, 0.6, 0.4, 0.2] * 1e308: every entry finite, the sum not; the
+    target collapsed to NaN before the solver ran."""
+    import warnings
+    from winning.factor.blocks import abilities_from_block_race
+    from winning.factor.topk import (abilities_from_rank_marginal,
+                                     loc_scale_from_win_and_second,
+                                     rank_probabilities)
+    from winning.shapes import rescaled_target
+    q = np.array([0.8, 0.6, 0.4, 0.2])
+    t = q / q.sum()
+    assert np.array_equal(rescaled_target(q), t)       # bit-identical path
+    big = q * 1e308
+    assert np.abs(rescaled_target(big) - t).max() < 1e-15
+    mu = np.array([-0.5, -0.1, 0.2, 0.4])
+    R = rank_probabilities(mu, D=np.ones(4))
+    w, s = R[:, 0], R[:, 1]
+    calls = [
+        lambda c: abilities_from_topk(q * c, 2, points=257),
+        lambda c: abilities_from_rank_marginal(q * c, 1, points=257,
+                                               n_iter=40),
+        lambda c: abilities_from_block_race(
+            q * c, [0, 0, 1, 1], [0.25, -0.15, 0.35, -0.05],
+            [0.8, 0.9, 1.0, 1.1], points=129)[0],
+        lambda c: loc_scale_from_win_and_second(w / w.max() * c,
+                                                s / s.max() * c)[0],
+    ]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for call in calls:
+            assert np.abs(call(1e308) - call(1.0)).max() < 1e-9

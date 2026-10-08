@@ -294,6 +294,28 @@ def as_nonnegative(x, name):
     return v
 
 
+def rescaled_target(t, mass=None):
+    """A relative target as a law of total `mass` (default 1), without
+    overflowing.
+
+    A market law is defined up to a positive factor, but ``t / t.sum()``
+    overflows the sum when every entry is finite and large ([1e308] * 4),
+    and the target collapsed to zeros or NaN before any solver ran
+    (#461, #463, #483; the browser's rescaledTarget, #615). Divide by the
+    max first ONLY when the plain sum is not finite, so every ordinary
+    input stays bit-identical.
+    """
+    t = np.asarray(t, dtype=float)
+    with np.errstate(over="ignore"):
+        s = t.sum()
+    if not np.isfinite(s):
+        t = t / t.max()
+        s = t.sum()
+    # `mass` keeps each caller's own arithmetic (t / s, or t * (k / s)),
+    # so the ordinary path is bit-identical to the expression it replaced
+    return t / s if mass is None else t * (mass / s)
+
+
 def as_target(p, name="target"):
     """A probability target: a nonempty finite 1-D vector, positive mass.
 

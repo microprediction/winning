@@ -437,7 +437,8 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     Sub-resolution targets are BOUNDS, not measurements: they are floored at
     max(1e-14, min-positive/1000) and the returned abilities for those
     entries are upper bounds on quality (lower bounds on mu)."""
-    p_t = np.asarray(p, float); p_t = p_t / p_t.sum()
+    from ..shapes import rescaled_target
+    p_t = rescaled_target(np.asarray(p, float))  # scale-safe (#463)
     n = len(p_t)
     floor = max(1e-14, p_t[p_t > 0].min() * 1e-3)
     p_t = np.maximum(p_t, floor); p_t = p_t / p_t.sum()

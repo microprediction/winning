@@ -476,7 +476,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
 abilities_from_block_race <- function(p, cluster, loading, D,
                                       points = 257, qa = 9,
                                       tol = 1e-10, max_iter = 25) {
-  p_t <- as.numeric(p); p_t <- p_t / sum(p_t)
+  p_t <- .rescaled_target(as.numeric(p))       # scale-safe (#463)
   n <- length(p_t)
   floor_ <- max(1e-14, min(p_t[p_t > 0]) * 1e-3)
   p_t <- pmax(p_t, floor_); p_t <- p_t / sum(p_t)

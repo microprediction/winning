@@ -44,7 +44,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..shapes import as_idio, as_loadings, as_nonnegative, as_tolerance
+from ..shapes import (as_idio, as_loadings, as_nonnegative, as_tolerance,
+                      rescaled_target)
 
 
 from .races import _jacobi_sweeps, BASES, _resolution
@@ -839,7 +840,7 @@ def _validated_topk_target(q, k, n, target_floor):
                 "approached as that runner's contrast diverges). Pass "
                 "target_floor= to floor small entries deliberately, or "
                 "supply a pseudocount upstream.")
-    target = target * (k / target.sum())
+    target = rescaled_target(target, k)          # scale-safe (#461)
     if np.any(target >= 1.0):
         raise ValueError(
             "after renormalizing to k slots, a target membership is >= 1: "
@@ -1167,8 +1168,8 @@ def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
         raise ValueError(
             "all win and second probabilities must be positive: a zero "
             "entry has no finite inverse (floor small entries upstream)")
-    p1 = p1 / p1.sum()
-    p2 = p2 / p2.sum()
+    p1 = rescaled_target(p1)                     # scale-safe (#483)
+    p2 = rescaled_target(p2)
     return loc_scale_from_topk_pair(p1, 1, p1 + p2, 2, D0=D0, base=base,
                                     points=points, n_iter=n_iter, tol=tol,
                                     ridge=ridge, mu0=mu0,
@@ -1252,7 +1253,7 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
         raise ValueError(
             "all rank probabilities must be positive: a zero entry has "
             "no finite inverse (floor small entries upstream)")
-    target = target / target.sum()
+    target = rescaled_target(target)             # scale-safe (#483)
     logt = np.log(target)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
