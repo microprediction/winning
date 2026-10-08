@@ -134,8 +134,11 @@ for (const [name, sc] of Object.entries(vec.scenarios)) {
     fails++;
     continue;
   }
-  let d = 0;
+  // a longer (or shorter) result is a mismatch, not a matching prefix
+  // (#490: a trailing extra output used to pass)
+  let d = got.length === ref.length ? 0 : Infinity;
   for (let i = 0; i < ref.length; i++) d = Math.max(d, Math.abs(got[i] - ref[i]));
+  if (Number.isNaN(d)) d = Infinity;
   const ok = d <= sc.tol;
   console.log(`${ok ? "ok  " : "FAIL"}  ${name.padEnd(22)} max|diff| ${d.toExponential(3)}  (tol ${sc.tol})  ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   if (!ok) fails++;
