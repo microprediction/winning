@@ -172,8 +172,8 @@
 .check_rank <- function(r, J) {
   rmax <- max(J - 2L, 0L)
   if (is.null(r)) return(as.integer(min(2L, rmax)))
-  r <- as.integer(r)
-  if (length(r) != 1L || is.na(r) || r < 0L || r > rmax)
+  r <- .check_count(r, "factor rank r")
+  if (r > rmax)
     stop(sprintf(paste0("factor rank r = %s is not identified at J = %d ",
                         "alternatives: with unit idiosyncratic variances ",
                         "the utility scale is fixed only for ",
@@ -284,6 +284,70 @@
             want_grad = FALSE)$value
 }
 
+# A finite, non-negative whole number. as.integer() floored r = 1.9 to
+# rank 1 and fitted a different model than the one asked for (#479);
+# optim took any maxit it was handed (#560).
+.check_count <- function(x, name) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) ||
+      x != round(x) || x < 0)
+    stop(sprintf("%s must be a finite non-negative whole number; got %s",
+                 name, paste(format(x), collapse = ",")), call. = FALSE)
+  as.integer(x)
+}
+
+# Mean-design columns that within-choice-set contrasts do not identify:
+# a covariate common to every alternative, or one duplicating a
+# generated intercept, lies on an exact likelihood ridge, and BFGS
+# reported an arbitrary point on it as converged (#581). X rows are in
+# (observation, alternative) order; a column is aliased when its
+# contrast residual on the earlier kept columns is below tol of its own
+# contrast norm (Gram scale).
+.check_identified <- function(X, Tn, J, tol = 1e-10) {
+  p <- ncol(X)
+  if (p == 0L || J < 2L) return(invisible(NULL))
+  base <- (seq_len(Tn) - 1L) * J + 1L
+  Dc <- X[-base, , drop = FALSE] -
+    X[rep(base, each = J - 1L), , drop = FALSE]
+  G <- crossprod(Dc)
+  kept <- integer(0); aliased <- integer(0)
+  for (k in seq_len(p)) {
+    gkk <- G[k, k]
+    resid <- gkk
+    if (gkk > 0 && length(kept)) {
+      g <- G[kept, k]
+      coef <- qr.solve(G[kept, kept, drop = FALSE], g, tol = 1e-14)
+      resid <- gkk - sum(g * coef)
+    }
+    if (gkk > 0 && resid > tol * gkk) kept <- c(kept, k)
+    else aliased <- c(aliased, k)
+  }
+  if (length(aliased))
+    stop(sprintf(paste("mean-design column(s) %s are not identified from",
+                       "within-choice-set contrasts: each is constant",
+                       "across the alternatives of every observation or a",
+                       "linear combination of earlier columns (the",
+                       "generated intercepts come first); drop them",
+                       "(#581)"),
+                 paste(colnames(X)[aliased], collapse = ", ")),
+         call. = FALSE)
+  invisible(NULL)
+}
+
+# With alternative intercepts, an alternative nobody chose has no
+# finite MLE: its intercept runs to -Inf, and BFGS stopped on its
+# tolerance at a tolerance-dependent point reported as converged
+# (#496). Returns the never-chosen labels (empty when all are chosen).
+.never_chosen <- function(choice, J, labels) {
+  miss <- setdiff(seq_len(J), choice)
+  if (length(miss))
+    warning(sprintf(paste("alternative(s) %s are never chosen, so their",
+                          "intercepts have no finite MLE (complete",
+                          "separation); convergence is reported as 2.",
+                          "Drop those alternatives."),
+                    paste(labels[miss], collapse = ", ")), call. = FALSE)
+  labels[miss]
+}
+
 #' Exact multinomial probit, mlogit-style interface
 #'
 #' @param formula choice ~ alternative-specific covariates,
@@ -349,6 +413,7 @@
 mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
                         maxit = 400L) {
   t0 <- Sys.time()
+  maxit <- .check_count(maxit, "maxit")
   idx <- if (!is.null(data$idx)) data$idx else attr(data, "idx")
   # a stale or short idx used to select a prefix of data in silence: ord
   # was built from idx alone, so rows past it never entered the fit (#520)
@@ -402,6 +467,10 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
            call. = FALSE)
     X <- Xcov
   }
+  .check_identified(X, Tn, J)
+  # without intercepts an unchosen alternative is not a separation
+  unchosen <- if (attr(terms(formula), "intercept") == 1L)
+    .never_chosen(choice, J, levels(alt_f)) else character(0)
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
   nodes <- .nodes3(Qf, Qz, r)
@@ -429,7 +498,9 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
   structure(list(coefficients = beta,
                  covariance_par = fit$par[-seq_len(nb)],
                  logLik = -fit$value, time = secs,
-                 convergence = fit$convergence, J = J, r = r),
+                 convergence = if (length(unchosen)) 2L
+                               else fit$convergence,
+                 J = J, r = r),
             class = "mlogit_fast")
 }
 

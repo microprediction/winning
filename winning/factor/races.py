@@ -1023,6 +1023,11 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     pass F, W from winning.factor.core.qmc_nodes(r, m=11) for a quarter
     of the nodes at about five times the error. Inversion runs the
     forward pass per Newton step, so it scales the same way."""
+    # the lattice mode is one of two names: every value but "bulk" used
+    # to mean span, so window="bulkk" moved a share by 39 points (#582)
+    if not (isinstance(window, str) and window in ("bulk", "span")):
+        raise ValueError(
+            f"window must be 'bulk' or 'span'; got {window!r}")
     # finite and >= 0; negative and NaN used to select the hard race
     # silently, and +inf failed in grid sizing (#366)
     temperature = as_soft_temperature(temperature)

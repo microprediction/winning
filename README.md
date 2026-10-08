@@ -107,15 +107,30 @@ the module docstrings give the measured cost of crossing over.
 
 - `winning.factor`: the engine. The all-share forward pass, inversion,
   exact Jacobians and tie densities, covariance fitting
-  (`fit_covariance`; `fit_tree(C, parent)` onto a known genealogy, priced
-  as `race_probabilities(mu, structure=tree)`), and constrained polish.
+  (`fit_covariance(C, k, blocks=...)`, where `blocks` is a count to
+  cluster or a known label per entrant; `fit_tree(C, parent)` onto a
+  known genealogy, priced as `race_probabilities(mu, structure=tree)`),
+  and constrained polish.
 
 - `winning.factor` also prices finishing positions: top-k membership at
-  any depth (`top_k_probabilities`, `rank_probabilities`), calibration
+  any depth and factor rank, under the same `V, D, F, W` the race takes
+  (`top_k_probabilities(mu, k, V, D, F=F, W=W)` with the four from
+  `fit_covariance` prices a shortlist from a dense covariance), and
+  `rank_probabilities`; calibration
   of those curves (`abilities_from_topk`), joint location and scale per
   runner from the win and place curves (`loc_scale_from_win_and_second`),
   ordered-prefix probabilities (`ordered_probabilities`), and the
   Plackett-Luce likelihood (`winning.factor.permutations`).
+
+- `winning.factor` keeps beliefs in the race grammar: exact factor-form
+  posteriors for common-random-number replicates (`crn_posterior`, and
+  `crn_posterior_replicates` when entrants ran on different replicates)
+  and for a shared-feature bandit (`feature_bandit_posterior`), each
+  returning `(m, d, W)` ready for `race_probabilities(-m, V=-W, D=d)`.
+  `update_contrast` conditions a dense or factor belief on one linear
+  observation `a'theta ~ N(mean, var)`, such as a judgment of child
+  minus parent (exact; a factor belief stays exact at one extra
+  column per two-entrant contrast, or is refitted on request).
 
 - `winning.probit`: the same machine in the probit literature's
   max-wins, utilities-and-shares conventions.

@@ -441,6 +441,20 @@ def _d_tmargins(V):
         MU, np.diag(D), _A, margins=np.array([0.0, 1.0, 2.0]), V=V, beta2=1.0)
 
 
+@driver("winning.factor.posteriors.crn_posterior")
+def _d_crn(V):
+    return _mod("winning.factor.posteriors.crn_posterior")(
+        V, D, 3, MU, 1.0)
+
+
+@driver("winning.factor.posteriors.crn_posterior_replicates")
+def _d_crn_reps(V):
+    Y = np.column_stack([MU, MU[::-1], MU * 0.5])
+    Y[0, 2] = np.nan
+    return _mod("winning.factor.posteriors.crn_posterior_replicates")(
+        V, D, Y, 1.0)
+
+
 # --------------------------------------------------------------- exemptions
 # Not driven, each for a stated reason. Keep this list SHORT and specific:
 # an entry here is a hole in the sweep, so it must say why.
@@ -1012,6 +1026,7 @@ W_VERB_EXTRA = {
     "plackett_luce_order_logprob": dict(order=[0, 1, 2]),
     "harville_prefix_logprob": dict(prefix=[0, 1]),
     "harville_order_logprob": dict(order=[0, 1, 2]),
+    "top_k_probabilities": dict(k=2),
 }
 
 

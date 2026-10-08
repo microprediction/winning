@@ -149,7 +149,12 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
    both ports rather than silently meaning different things: python's
    numpy indexing made -1 the LAST name while javascript dropped the
    member entirely, and neither is documented. */
-export function concentrationMatrix(n, { nameCaps = null, groups = null } = {}) {
+const CONCENTRATION_MATRIX_OPTS = new Set(["nameCaps", "groups"]);
+export function concentrationMatrix(n, opts = {}) {
+  // an inline-destructured signature skipped checkOpts: {namecaps: ...}
+  // returned an EMPTY constraint set (#561)
+  checkOpts(opts, CONCENTRATION_MATRIX_OPTS, "concentrationMatrix", OPT_HINTS);
+  const { nameCaps = null, groups = null } = opts;
   const A = [], b = [];
   if (nameCaps != null) {
     let caps;
@@ -244,8 +249,8 @@ export function polishRace(opts = {}) {
   // F/W must reach the forward, the jacobian AND the inverse that makes
   // mu0. Polishing under a different factor law than the one the caller
   // priced with silently optimises the wrong model (#209).
-  const forward = m => raceProbabilities(m, { V, D, F, W, base, points, structure });
-  const jac = m => raceJacobian(m, { V, D, F, W, base, points, structure });
+  const fwdM = m => raceProbabilities(m, { V, D, F, W, base, points, structure });
+  const jacM = m => raceJacobian(m, { V, D, F, W, base, points, structure });
   let mu0 = mu0In != null ? asAbilities(mu0In, "mu0") : null;
   if (!mu0) {
     if (!p0) throw new Error("give p0 or mu0");
@@ -279,8 +284,64 @@ export function polishRace(opts = {}) {
     });
     A0 = A0.concat(A); b0 = b0.concat(b);
   }
-  if (!b0.length) return { p: forward(mu0), mu: mu0, info: { active: [] } };
+  if (!b0.length) return { p: fwdM(mu0), mu: mu0, info: { active: [] } };
+  // Solve in the FIELD'S units. The objective, the penalty schedule and
+  // every stopping tolerance below are absolute numbers, so the same race
+  // written with abilities x c and variances x c^2 polished differently:
+  // c = 1e-8 returned a reversed race certified converged, c = 100 the
+  // original violating race (#593). The unit is 1 / median_i |J_ii| / p_i
+  // at mu0 -- degree -1 in the ability scale, so u = mu / unit is exactly
+  // equivariant -- and close to 1 for a unit-variance field.
+  const unit = (() => {
+    const pM = fwdM(mu0), JM = jacM(mu0);
+    const r = [];
+    for (let i = 0; i < n; i++)
+      if (pM[i] > 1e-12 && Number.isFinite(JM[i][i]) && JM[i][i] !== 0)
+        r.push(Math.abs(JM[i][i]) / pM[i]);
+    if (!r.length) return 1;
+    r.sort((a, b) => a - b);
+    const h = Math.floor(r.length / 2);
+    const med = r.length % 2 ? r[h] : 0.5 * (r[h - 1] + r[h]);
+    return Number.isFinite(1 / med) && med > 0 ? 1 / med : 1;
+  })();
+  const forward = u => fwdM(u.map(v => v * unit));
+  const jac = u => jacM(u.map(v => v * unit)).map(row => row.map(v => v * unit));
+  const mu0M = mu0;
+  mu0 = mu0M.map(v => v / unit);
   const applyA = p => A0.map(row => row.reduce((a, v, j) => a + v * p[j], 0));
+
+  const jacOf = (mc, useFD) => {
+    if (!useFD) return jac(mc);
+    const h = 1e-6;
+    let Jm = [];
+    for (let j = 0; j < n; j++) {
+      const e = new Array(n).fill(0); e[j] = h;
+      const pp = forward(mc.map((v, i) => v + e[i]));
+      const pm = forward(mc.map((v, i) => v - e[i]));
+      Jm.push(pp.map((v, i) => (v - pm[i]) / (2 * h)));
+    }
+    // Jm is [j][i]; transpose to [i][j]
+    return Jm[0].map((_, i) => Jm.map(col => col[i]));
+  };
+  // gauge-projected gradient of 0.5|m - mu0|^2 + sum_k psi_k (A p(m) - b)_k:
+  // the augmented-Lagrangian gradient while solving, and the KKT
+  // stationarity residual when psi is the multiplier estimate
+  const lagrangianGrad = (mc, psi, useFD) => {
+    const g = mc.map((v, j) => v - mu0[j]);
+    if (psi.some(v => v !== 0)) {
+      const Jm = jacOf(mc, useFD);
+      for (let k = 0; k < b0.length; k++) {
+        if (psi[k] === 0) continue;
+        for (let j = 0; j < n; j++) {
+          let aj = 0;
+          for (let i = 0; i < n; i++) aj += A0[k][i] * Jm[i][j];
+          g[j] += psi[k] * aj;
+        }
+      }
+    }
+    const gm = mean(g);
+    return g.map(v => v - gm);
+  };
 
   let converged = false;
   const solveAL = useFD => {
@@ -300,32 +361,7 @@ export function polishRace(opts = {}) {
         const mc = mm.map(v => v - mean(mm));
         const c = applyA(forward(mc)).map((v, k) => b0[k] - v);
         const psi = c.map((v, k) => Math.max(0, lam[k] - rho * v));
-        let Jm;
-        if (useFD) {
-          const h = 1e-6;
-          Jm = [];
-          for (let j = 0; j < n; j++) {
-            const e = new Array(n).fill(0); e[j] = h;
-            const pp = forward(mc.map((v, i) => v + e[i]));
-            const pm = forward(mc.map((v, i) => v - e[i]));
-            Jm.push(pp.map((v, i) => (v - pm[i]) / (2 * h)));
-          }
-          // Jm is [j][i]; transpose to [i][j]
-          Jm = Jm[0].map((_, i) => Jm.map(col => col[i]));
-        } else {
-          Jm = jac(mc);
-        }
-        const g = mc.map((v, j) => v - mu0[j]);
-        for (let k = 0; k < b0.length; k++) {
-          if (psi[k] === 0) continue;
-          for (let j = 0; j < n; j++) {
-            let aj = 0;
-            for (let i = 0; i < n; i++) aj += A0[k][i] * Jm[i][j];
-            g[j] += psi[k] * aj;
-          }
-        }
-        const gm = mean(g);
-        return g.map(v => v - gm);
+        return lagrangianGrad(mc, psi, useFD);
       };
       m = bfgsMin(m, obj, grad, 80);
       m = m.map(v => v - mean(m));
@@ -345,6 +381,25 @@ export function polishRace(opts = {}) {
       // binding one), so feasibility plus a settled multiplier is the
       // test. rho grows only while the iterate is still infeasible.
       if (outer > 0 && viol < 1e-8 && dLam <= 1e-7 * lamMax) { converged = true; break; }
+      // ...or certify the point DIRECTLY. Once infeasible iterates have
+      // driven rho to 1e6, a harmless 3e-9 slack on a binding row moves
+      // the multiplier by 3e-3 per outer step, so the fixed-point test
+      // could never pass at a solved point: a third to a half of
+      // ordinary capped races reported converged: false and paid for a
+      // redundant finite-difference re-solve (2-2.6x, #547). Feasible,
+      // lamN >= 0 by construction, complementarity (lamN_k = 0 unless
+      // row k is within 1e-8 of binding, as the update forces), and a
+      // stationary Lagrangian at lamN is the KKT certificate. The #379
+      // overshoot fails it: every row is slack there, so lamN = 0 and the
+      // residual is the whole distance m - mu0.
+      if (viol < 1e-8) {
+        const comp = Math.max(0, ...lamN.map((v, k) => (v > 0 ? v * Math.max(c[k], 0) : 0)));
+        const r = lagrangianGrad(m, lamN, useFD);
+        const scale = Math.max(1, ...m.map((v, j) => Math.abs(v - mu0[j])), ...lamN);
+        if (comp <= 1e-7 * scale && Math.max(...r.map(Math.abs)) <= 1e-6 * scale) {
+          converged = true; break;
+        }
+      }
       if (viol >= 1e-8) rho = Math.min(rho * 3, 1e6);
     }
     return m;
@@ -357,9 +412,10 @@ export function polishRace(opts = {}) {
     p = forward(m);
     slack = applyA(p).map((v, k) => b0[k] - v);
   }
-  return { p, mu: m,
+  const mOut = m.map(v => v * unit);
+  return { p, mu: mOut,
            info: { active: slack.map((v, k) => [v, k]).filter(([v]) => v < 1e-6).map(([, k]) => k),
                    maxViolation: Math.max(0, -Math.min(...slack)),
                    converged,
-                   muDistance: Math.sqrt(m.reduce((a, v, j) => a + (v - mu0[j]) ** 2, 0)) } };
+                   muDistance: Math.sqrt(mOut.reduce((a, v, j) => a + (v - mu0M[j]) ** 2, 0)) } };
 }

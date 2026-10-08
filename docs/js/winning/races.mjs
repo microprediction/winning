@@ -34,6 +34,21 @@ export const BASES = {
     return [Math.max(S, 1e-300), f, -Math.sign(z) * f / b];
   },
 };
+/* A base's central scale in standardized units, as python's _resolution
+   (#385): a unit-variance law can still concentrate on a much narrower
+   centre, and spacing measured in sd alone left that centre between
+   lattice points -- a 0.1-scale mixture core missed the race by 3.75
+   points at 257 with no warning (#600). Declared as fn.resolution, the
+   default 1. A value that is present but not a finite positive number is
+   refused rather than read as 1: it is metadata the caller meant. */
+export function baseResolution(fn) {
+  const r = fn == null ? undefined : fn.resolution;
+  if (r === undefined) return 1;
+  if (typeof r !== "number" || !Number.isFinite(r) || !(r > 0))
+    throw new Error(`base.resolution must be a finite positive number; got ${String(r)}`);
+  return r;
+}
+
 export const SPANS = { normal: [8, 8], gumbel: [22, 8], logistic: [16, 16], laplace: [18, 18] };
 
 export function requireWholeRule(F, W, where = "F/W") {
@@ -160,6 +175,7 @@ function setup(mu, V, D, F, W, base) {
   const fn = typeof base === "function" ? base : BASES[base];
   if (typeof fn !== "function")
     throw new Error(`unknown base ${JSON.stringify(base)}; known: ${Object.keys(BASES).join(", ")}, or a function`);
+  baseResolution(fn);          // malformed metadata fails here, not mid-grid
   // a callable base may declare its own span, as python's
   // getattr(base, "span", (12, 12)) (#106)
   const span = typeof base === "function"
@@ -260,7 +276,8 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
     }
     return [xlo - pad, b + pad];
   };
-  const budget = 0.5 * smin * Math.max(points - 1, 1);
+  // half the tightest sd TIMES the base's central scale (#600)
+  const budget = 0.5 * smin * baseResolution(fn) * Math.max(points - 1, 1);
   let d = delta;
   let [lo, hi] = windowAt(d);
   while (hi - lo > budget && d < 1e-4) {
@@ -336,8 +353,23 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
       dx = x[1] - x[0];
     }
   }
+  // A correctly bracketed window can still be unusable: a narrow-centred
+  // base (or a polynomial tail) leaves the spacing wider than the base's
+  // central scale, and the result is a plausible normalized vector for an
+  // under-resolved integral. Say so, as python's _refine_grid (#600).
+  const res = baseResolution(st.fn || null);
+  if (dx > 0.5 * smin * res && typeof console !== "undefined") {
+    const key = `${x.length}|${smin.toPrecision(3)}|${res}`;
+    if (!SPACING_WARNED.has(key) && SPACING_WARNED.add(key))
+      console.warn(
+        `lattice spacing ${dx.toPrecision(3)} exceeds half the smallest ` +
+        `performance sd times the base's central scale (${smin.toPrecision(3)} ` +
+        `x ${res}): the lattice cannot resolve this base's centre. Raise ` +
+        "points=, raise delta=, or declare a span on the base.");
+  }
   return { x, dx };
 }
+const SPACING_WARNED = new Set();
 
 /* The general race's factor node rule for loadings V at variances D --
    gauge-centred V and its (F, W) -- for callers that mix their own
@@ -378,6 +410,11 @@ export function raceProbabilities(mu, opts = {}) {
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
+  // one of two names: every value but "bulk" -- a typo, null, a number --
+  // silently meant span and moved a share by 39 points (#582). undefined
+  // is omission, as for every option.
+  if (win !== "bulk" && win !== "span")
+    throw new Error(`raceProbabilities: window must be "bulk" or "span"; got ${typeof win === "string" ? JSON.stringify(win) : String(win)}`);
   const c = collapseStructure(structure, V, D, F, W, "raceProbabilities");
   if (c.structure) {
     return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes, window: win, delta });

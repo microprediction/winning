@@ -367,3 +367,27 @@ def test_laplace_se_shapes_paths_and_calibration():
     # z^2 near one (pilot 1.00 / 1.02); a broken Hessian gives 0.1 or 10
     z = (Bh - B) / se
     assert 0.6 < np.mean(z ** 2) < 1.6
+
+
+def test_event_weights_share_one_validator_across_fit_and_se():
+    # #491: NaN/inf weights silently returned the all-zero start as a
+    # fit, and the SE helpers accepted negative and surplus weights
+    from winning.ratings.factor_ratings import (
+        design_se, factor_se, fit_design_ratings, fit_factor_ratings)
+    Z = np.eye(2)
+    events = [(Z, [0])]
+    fevents = [([0, 1], [0], [1.0])]
+    calls = [
+        lambda w: fit_design_ratings(events, 2, weights=w),
+        lambda w: fit_design_ratings(events, 2, weights=w, return_se=True),
+        lambda w: fit_factor_ratings(fevents, 2, 1, weights=w),
+        lambda w: design_se(np.zeros(2), events, 2, weights=w),
+        lambda w: factor_se(np.zeros((2, 1)), fevents, weights=w),
+    ]
+    for call in calls:
+        for bad in ([np.nan], [np.inf], [-1.0], [1.0, 999.0], []):
+            with pytest.raises(ValueError, match="weights"):
+                call(bad)
+    # zero weight is meaningful: the prior mode and the prior SE
+    assert np.allclose(fit_design_ratings(events, 2, weights=[0.0]), 0.0)
+    assert np.allclose(design_se(np.zeros(2), events, 2, weights=[0.0]), 1.0)

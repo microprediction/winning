@@ -234,6 +234,13 @@ test_that("Halton nodes extend past the old 32-prime table (#402)", {
   expect_lt(max(p), 0.06)
 })
 
+test_that("window is one of two names (#582)", {
+  for (w in list("bulkk", "", NA, 3, TRUE))
+    expect_error(race_probabilities(c(0, 1, 2), D = c(0.01, 4, 100),
+                                    window = w), "window")
+  expect_silent(race_probabilities(c(0, 1, 2), window = "span"))
+})
+
 test_that("the race inverse validates D and V like the forward map (#482)", {
   expect_error(abilities_from_race(c(.8, .2), D = c(-1, 2)),
                "negative variance")
