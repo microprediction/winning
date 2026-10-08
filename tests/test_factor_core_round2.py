@@ -242,3 +242,29 @@ def test_nan_mass_tol_is_refused_590():
             removal_shares(mu, D=D, points=3, mass_tol=bad)
         with pytest.raises(ValueError, match="mass_tol"):
             ordered_probabilities(np.zeros(3), k=2, mass_tol=bad)
+
+
+# ---------------------------------------------------------------- #523
+
+@pytest.mark.parametrize("rust", [False, True])
+def test_jvp_form_must_be_named_523(rust):
+    """Anything but "grid" ran IBP -- 0.36 apart at L = 11."""
+    import winning
+    from winning.factor.core import jacobian_vector_product
+    mu = np.array([-1.0, 0.2, 1.8])
+    V = np.array([[1.2], [-0.6], [0.3]])
+    D = np.array([0.15, 1.2, 2.5])
+    F = np.array([[-1.2], [0.4], [2.1]])
+    W = np.array([0.2, 0.5, 0.3])
+    h = np.array([0.4, -0.3, 0.1])
+    prev = winning.use_rust(rust)
+    try:
+        for bad in ("typo", "", "GRID", None):
+            with pytest.raises(ValueError, match="form"):
+                jacobian_vector_product(mu, V, D, F, W, h, points=11,
+                                        form=bad)
+        a = jacobian_vector_product(mu, V, D, F, W, h, points=11, form="ibp")
+        b = jacobian_vector_product(mu, V, D, F, W, h, points=11, form="grid")
+        assert np.abs(a - b).max() > 0.1
+    finally:
+        winning.use_rust(prev)

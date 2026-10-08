@@ -1023,6 +1023,10 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     V = as_loadings(V, N)
     V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass (#114)
     points = as_points(points)
+    # exactly two forms: only "grid" was tested, so a typo, "" or "GRID"
+    # silently ran IBP -- 0.36 apart, opposite signs, at L = 11 (#523)
+    if not isinstance(form, str) or form not in ("ibp", "grid"):
+        raise ValueError(f'form must be "ibp" or "grid"; got {form!r}')
     F, W = as_factor_law(F, W)      # as the forward pass reads them (#416)
     if _HAVE_RUST and normalized and N > 1 and len(F) >= 2:
         # The compiled kernel returns the RAW directional derivative of the
