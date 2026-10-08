@@ -2168,8 +2168,11 @@ impl BaseSpec {
                 // S = 1 - (1+e^{-x})^{-alpha}, via expm1 for the far tail
                 let sv = -libm::expm1(-alpha * sp);
                 let lf = alpha.ln() - x - (alpha + 1.0) * sp + c.ln();
-                let sig = 1.0 / (1.0 + (-x.clamp(-700.0, 700.0)).exp());
-                let dl = c * ((alpha + 1.0) * (1.0 - sig) - 1.0);
+                // 1 - sigmoid(x) directly as e^{-softplus(x)}: the
+                // subtraction lost it at large alpha and the own slopes
+                // came out positive (#499, matching python)
+                let sig_c = (-softplus(x)).exp();
+                let dl = c * ((alpha + 1.0) * sig_c - 1.0);
                 (sv.max(1e-300).ln(), lf, dl)
             }
             8 => {

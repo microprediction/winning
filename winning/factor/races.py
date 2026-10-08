@@ -223,9 +223,13 @@ def skew_logistic_base(alpha):
         sp = _softplus(-x)                   # log(1 + e^{-x})
         S = np.maximum(-np.expm1(-alpha * sp), 1e-300)
         f = alpha * c * np.exp(-x - (alpha + 1.0) * sp)
-        sig = np.exp(-_softplus(-x))          # logistic cdf of x
+        # 1 - sigmoid(x) directly, as sigmoid(-x): the subtraction lost
+        # it near x ~ log(alpha), where the bracket below is a difference
+        # of O(1) terms, and at alpha = 1e17 the own slopes came out
+        # POSITIVE and the inverse walked away from its target (#499)
+        sig_c = np.exp(-_softplus(x))         # 1 - logistic cdf of x
         # d/dz f: chain rule through x = m + c z
-        fp = f * c * ((alpha + 1.0) * (1.0 - sig) - 1.0)
+        fp = f * c * ((alpha + 1.0) * sig_c - 1.0)
         return S, f, fp
 
     def _log_expm1(y):

@@ -555,3 +555,34 @@ def test_pure_ordered_prefix_keeps_the_rare_exacta_598(monkeypatch):
                  -np.inf, np.inf, epsabs=1e-200, epsrel=1e-11, limit=500)[0]
     q = perm.ordered_probabilities(mu, k=2, points=2001, mass_tol=1e-6)
     assert abs(q[0, 1] / exact - 1) < 1e-8              # was 0.00197
+
+
+# ---------------------------------------------------------------- #499
+
+@pytest.mark.parametrize("alpha", [1e3, 1e9, 1e17])
+def test_large_skew_logistic_shape_keeps_negative_slopes_499(alpha):
+    """1 - sigmoid(x) by subtraction: at alpha = 1e17 the own slopes came
+    out positive and the inverse walked away from its own target."""
+    import winning
+    from winning.factor.races import (abilities_from_race,
+                                      race_probabilities,
+                                      skew_logistic_base)
+    prev = winning.use_rust(False)
+    try:
+        kw = dict(base=skew_logistic_base(alpha), points=1001)
+        truth = np.array([-0.5, 0.1, 0.8])
+        truth -= truth.mean()
+        t, slope = race_probabilities(truth, return_slopes=True, **kw)
+        h, fd = 1e-5, []
+        for i in range(3):
+            e = np.zeros(3)
+            e[i] = h
+            fd.append((race_probabilities(truth + e, **kw)[i]
+                       - race_probabilities(truth - e, **kw)[i]) / (2 * h))
+        assert np.all(slope < 0)
+        assert np.abs(slope - np.array(fd)).max() < 1e-6
+        mu, info = abilities_from_race(t, return_info=True, **kw)
+        assert info["converged"]
+        assert np.abs(race_probabilities(mu, **kw) - t).max() < 1e-8
+    finally:
+        winning.use_rust(prev)
