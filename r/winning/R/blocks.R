@@ -223,8 +223,10 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
                                     points = points, qa = qa))
   }
   mu <- as.numeric(mu)
-  g <- if (is.matrix(coupling)) coupling else matrix(coupling, ncol = 1)
-  if (nrow(g) != length(mu)) g <- t(g)
+  # the shared loading contract: (n, k), (k, n) or a length-n vector.
+  # Transposing once and trusting the result let a 2x2 coupling at n = 4
+  # recycle g %*% f across the field as a different loading (#469)
+  g <- .as_loadings(coupling, length(mu), name = "coupling")
   if (ncol(g) == 1) {
     h <- .hermite1(qf)
     fn <- matrix(h$nodes, ncol = 1)
@@ -498,8 +500,10 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
                                points = points, qa = qa))
   }
   mu <- as.numeric(mu)
-  g <- if (is.matrix(coupling)) coupling else matrix(coupling, ncol = 1)
-  if (nrow(g) != length(mu)) g <- t(g)
+  # the shared loading contract: (n, k), (k, n) or a length-n vector.
+  # Transposing once and trusting the result let a 2x2 coupling at n = 4
+  # recycle g %*% f across the field as a different loading (#469)
+  g <- .as_loadings(coupling, length(mu), name = "coupling")
   if (ncol(g) == 1) {
     h <- .hermite1(qf)
     fn <- matrix(h$nodes, ncol = 1); fw <- h$weights

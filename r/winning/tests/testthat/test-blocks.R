@@ -69,3 +69,19 @@ test_that("tree races refuse forests, cycles and out-of-range parents (#517)", {
   expect_equal(sum(p), 1, tolerance = 1e-12)
   expect_equal(p, race_probabilities(mu), tolerance = 1e-4)
 })
+
+test_that("nested coupling must have a contestant axis, never recycled (#469)", {
+  mu <- c(-1.0, -0.2, 0.4, 0.8); cl <- 1:4; ld <- rep(0, 4); D <- rep(1, 4)
+  for (bad in list(diag(2), c(1, 0), matrix(1, 3, 2), c(1, NA, 0, 1)))
+    expect_error(nested_race_probabilities(mu, cl, ld, D, coupling = bad,
+                                           points = 257, qa = 3, qf = 5),
+                 "coupling")
+  expect_error(nested_race_jacobian(mu, cl, ld, D, coupling = diag(2),
+                                    points = 257, qa = 3, qf = 5),
+               "coupling")
+  G <- rbind(c(1, 0), c(0, 1), c(1, 0), c(0, 1))
+  expect_equal(nested_race_probabilities(mu, cl, ld, D, coupling = t(G),
+                                         points = 257, qa = 3, qf = 5),
+               nested_race_probabilities(mu, cl, ld, D, coupling = G,
+                                         points = 257, qa = 3, qf = 5))
+})
