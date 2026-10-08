@@ -228,3 +228,17 @@ test_that("rank_probabilities prices a factor-correlated race (#202)", {
   expect_lt(max(abs(R2[, 1] - top_k_probabilities(mu, 1, V = V2, D = D,
                                                   qa = 9))), 1e-6)
 })
+
+test_that("mu0 must have one entry per runner, not redefine the field (#554)", {
+  p <- c(.4, .3, .2, .1)
+  for (m0 in list(rep(0, 8), rep(0, 3), 0, numeric(0)))
+    expect_error(abilities_from_rank_marginal(p, r = 1, mu0 = m0,
+                                              points = 129, n_iter = 1),
+                 "mu0 has .* entries for 4 runners")
+  expect_error(abilities_from_rank_marginal(p, r = 1, mu0 = c(0, NA, 0, 0),
+                                            points = 129, n_iter = 1),
+               "non-finite")
+  out <- abilities_from_rank_marginal(p, r = 1, mu0 = c(1, 0, 0, 0),
+                                      points = 129, n_iter = 1)
+  expect_length(out, 4L)
+})
