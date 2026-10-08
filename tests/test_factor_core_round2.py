@@ -536,3 +536,22 @@ console.log(JSON.stringify([0, 50, 1000].map(r => {{
 }})));
 """)
     assert max(got) < 1e-15
+
+
+# ---------------------------------------------------------------- #598
+
+def test_pure_ordered_prefix_keeps_the_rare_exacta_598(monkeypatch):
+    """1 - S rounded to zero below z = -8: P(0 first, 1 second) for
+    mu = [10, 0, -10] came out 506x small on the NumPy path."""
+    from scipy.integrate import quad
+    from scipy.special import log_ndtr
+    import winning.factor.permutations as perm
+    monkeypatch.setattr(perm, "_HAVE_RUST", False)
+    mu = np.array([10.0, 0.0, -10.0])
+    l2 = np.log(2 * np.pi)
+    exact = quad(lambda x: np.exp(-0.5 * (x - mu[1]) ** 2 - 0.5 * l2
+                                  + log_ndtr(x - mu[0])
+                                  + log_ndtr(mu[2] - x)),
+                 -np.inf, np.inf, epsabs=1e-200, epsrel=1e-11, limit=500)[0]
+    q = perm.ordered_probabilities(mu, k=2, points=2001, mass_tol=1e-6)
+    assert abs(q[0, 1] / exact - 1) < 1e-8              # was 0.00197

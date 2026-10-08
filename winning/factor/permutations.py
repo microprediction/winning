@@ -21,6 +21,7 @@ continuum identity sum over all ordered prefixes = 1, raising rather than
 renormalising away a lattice that failed to capture the field.
 """
 import numpy as np
+from scipy.special import ndtr
 
 from .core import as_loadings
 from ..outcomes import as_luce_temperature, as_order
@@ -130,7 +131,12 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
                 S, f, _ = fn(z)
                 f = f / sd[:, None]
             logS = np.log(np.maximum(S, 1e-300))
-            Fc = 1.0 - S
+            # the lower tail directly where the base has it: 1 - S rounds
+            # to 0 below z = -8 while ndtr(z) is still representable, and
+            # a rare exacta came out 506x small (the Rust kernel already
+            # stores ndtr(z), #598)
+            Fc = (ndtr(z) if tau <= 0 and isinstance(base, str)
+                  and base == "normal" else 1.0 - S)
             logSfield = logS.sum(0)
             if k == 1:
                 rest = np.exp(np.clip(logSfield[None, :] - logS, -745.0, 0.0))
