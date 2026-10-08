@@ -44,3 +44,28 @@ test_that("mass check rejects non-finite mass", {
   expect_error(winning:::.checked_mass(c(0.5, NaN), "test race"),
                "captured total mass")
 })
+
+test_that("tree races refuse forests, cycles and out-of-range parents (#517)", {
+  mu <- c(0, 1); cl <- c(1, 2); ld <- c(0, 0); D <- c(1, 1)
+  # two roots: each component used to be priced alone (total mass 2)
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(0, 0), c(0, 0),
+                                       qa = 1),
+               "exactly one root .*got 2 \\(1, 2\\)")
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(NA, NA), c(0, 0),
+                                       qa = 1), "exactly one root")
+  expect_error(tree_race_jacobian(mu, cl, ld, D, c(0, 0), c(0, 0), qa = 1),
+               "exactly one root")
+  # cycle among internal nodes, with a root elsewhere
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(3, 4, 4, 3, 0),
+                                       c(0, 0, .1, .1, 0), qa = 1),
+               "cycle: 3 -> 4 -> 3")
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(3, 3, 7), c(0, 0, 0),
+                                       qa = 1), "parent\\[3\\] = 7")
+  expect_error(tree_race_probabilities(mu, cl, ld, D, c(2, 0), c(0, 0),
+                                       qa = 1), "must be leaves")
+  # a zero-strength common root is the independent race
+  p <- tree_race_probabilities(mu, cl, ld, D, c(3, 3, 0), c(0, 0, 0),
+                               points = 257, qa = 1)
+  expect_equal(sum(p), 1, tolerance = 1e-12)
+  expect_equal(p, race_probabilities(mu), tolerance = 1e-4)
+})
