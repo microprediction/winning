@@ -531,14 +531,43 @@ export function firstPrimes(d) {
    original fixed `n > 2 ? 1 : 0.7` damping after python moved to this,
    so a field with two live contenders and a tail two-cycled to the
    iteration limit and repriced 3.8 points wrong (#408). */
+/* The Aitken-extrapolated iterate as a bounded, checked trial (#583),
+   port of python's races._aitken_trial: the summed tail step / (1 -
+   ratio), capped in the max norm at twice the field scale (never below
+   the ordinary step), and repriced. Returns {mu, fwd}, or null -- take
+   the ordinary step -- when the forward throws, is non-finite, or its
+   max residual grows tenfold; milder rises are left to the sweeps'
+   backtracking (requiring contraction stalls the dense n = 30
+   correlation, whose residual rises while its near-duplicate mode is
+   summed). Unchecked, an exact normal top-1 target at residual 20 with
+   ratio 0.998 jumped 539x to abilities in [-894, 249] and ended at
+   residual 715 after 120 sweeps. `fwdKeys` names the residual and
+   slope fields of the forward's result. */
+export function aitkenTrial(mu, step, ratio, scale, forward, residMax,
+                            fwdKeys = ["resid", "dres"]) {
+  let jump = step.map(v => v / (1 - ratio));
+  const big = Math.max(...jump.map(Math.abs));
+  const cap = Math.max(2 * scale, Math.max(...step.map(Math.abs)));
+  if (big > cap) jump = jump.map(v => v * (cap / big));
+  const cand = mu.map((m, i) => m - jump[i]);
+  let fwd;
+  try { fwd = forward(cand); } catch (e) { return null; }
+  const rc = fwd[fwdKeys[0]], dc = fwd[fwdKeys[1]];
+  if (!rc.every(Number.isFinite) || !dc.every(Number.isFinite)) return null;
+  if (Math.max(...rc.map(Math.abs)) > 10 * residMax) return null;
+  return { mu: cand, fwd };
+}
+
 export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
   let residMax = Infinity, residRms = Infinity, iters = 0;
   let prev = null, prevStep = null;
   let alphaBase = alpha, penalty = 1;
+  let cached = null;  // forward of an accepted Aitken trial
   const n = mu.length;
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
-    let { resid, dres } = forward(mu);
+    let { resid, dres } = cached || forward(mu);
+    cached = null;
     residMax = Math.max(...resid.map(Math.abs));
     residRms = Math.sqrt(resid.reduce((a, b) => a + b * b, 0) / n);
     if (residMax < tol) break;
@@ -571,9 +600,13 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
           const lam = 1 - (1 - rho) / a;
           alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && residMax > 1e3 * tol) {
-          mu = mu.map((m, i) => m - step[i] / (1 - ratio));
-          prevStep = null;
-          continue;
+          const trial = aitkenTrial(mu, step, ratio, scale, forward, residMax);
+          if (trial) {  // sum the geometric tail
+            mu = trial.mu;
+            cached = trial.fwd;
+            prevStep = null;
+            continue;
+          }
         }
       }
     }

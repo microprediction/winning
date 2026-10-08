@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -572,12 +572,17 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
   let prev = null;
   let prevStep = null;
   let iters = 0;
+  let cached = null;  // forward of an accepted Aitken trial (#583)
+  const sweepForward = m => {
+    const { p: praw, slopes: sl } = raceProbabilities(m, { V, D, F, W, base, points, returnSlopes: true });
+    const phat = praw.map(v => Math.max(v, 1e-300));
+    return { resid: phat.map((v, i) => Math.log(v) - logt[i]),
+             dlogp: sl.map((v, i) => Math.min(v / phat[i], -1e-6)) };
+  };
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
-    const { p: praw, slopes: sl } = raceProbabilities(mu, { V, D, F, W, base, points, returnSlopes: true });
-    const phat = praw.map(v => Math.max(v, 1e-300));
-    let resid = phat.map((v, i) => Math.log(v) - logt[i]);
-    let dlogp = sl.map((v, i) => Math.min(v / phat[i], -1e-6));
+    let { resid, dlogp } = cached || sweepForward(mu);
+    cached = null;
     let rmax = Math.max(...resid.map(Math.abs));
     let rrms = Math.sqrt(mean(resid.map(v => v * v)));
     if (rmax < tol) break;
@@ -612,10 +617,16 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
           const lam = 1 - (1 - rho) / alpha;
           alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && rmax > 1e3 * tol) {
-          // collinear steps decaying geometrically: sum the tail (Aitken)
-          mu = mu.map((m, i) => m - step[i] / (1 - ratio));
-          prevStep = null;
-          extrapolated = true;
+          // collinear steps decaying geometrically: sum the tail (Aitken),
+          // as a repriced, capped trial
+          const trial = aitkenTrial(mu, step, ratio, scale, sweepForward,
+                                    rmax, ["resid", "dlogp"]);
+          if (trial) {
+            mu = trial.mu;
+            cached = trial.fwd;
+            prevStep = null;
+            extrapolated = true;
+          }
         }
       }
     }

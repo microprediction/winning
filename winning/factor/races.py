@@ -1511,7 +1511,25 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
     between consecutive steps exactly 1.0), so damping was the wrong
     medicine for it and extrapolation is the right one. Dense n = 16 /
     30 / 40 take 31 / 66 / 53 sweeps where they took 120 without
-    converging."""
+    converging.
+
+    The extrapolated iterate is a bounded, checked TRIAL (#583).
+    Collinearity and a ratio in (0.5, 0.999) do not show the iteration
+    is in its linear regime: an exact normal top-1 target at residual 20
+    had ratio 0.998, so the unchecked jump moved a step of norm 1.8 by
+    539x, to abilities in [-897, 235], and backtracking never recovered
+    (logit residual 715 after 120 sweeps at 257 points). So the summed
+    tail is capped in the max norm at twice the field scale -- an
+    ordinary step's own cap -- and repriced: a trial whose forward
+    raises, is non-finite, or whose max residual grows tenfold is
+    dropped for the ordinary step. Anything milder is left to the
+    backtracking above. Requiring the trial to CONTRACT is too strict:
+    on the dense n = 30 correlation the residual rises transiently
+    (0.53 to 3.5) while the near-duplicate mode is being summed, and
+    that fixture stalled at 4e-7 instead of converging in 65. The 583
+    fixture reaches 4e-7 in 120 sweeps and converges at 513 / 1025
+    points. An accepted trial's forward is reused by the next sweep, so
+    the check costs a forward only when it rejects."""
     resid_max = np.inf
     resid_rms = np.inf
     iters = 0
@@ -1519,9 +1537,13 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
     prev_step = None
     alpha_base = float(alpha)  # the Richardson value: persistent
     penalty = 1.0              # caution after a bad sweep: transient
+    cached = None              # forward of an accepted Aitken trial
     for it in range(n_iter):
         iters = it + 1
-        resid, dlogp = forward(mu)
+        if cached is not None:
+            (resid, dlogp), cached = cached, None
+        else:
+            resid, dlogp = forward(mu)
         resid_max = float(np.abs(resid).max())
         resid_rms = float(np.sqrt(np.mean(resid * resid)))
         if resid_max < tol:
@@ -1550,12 +1572,39 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                     alpha_base = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
                 elif (cos > 0.999 and 0.5 < ratio < 0.999
                       and resid_max > 1e3 * tol):
-                    mu = mu - step / (1.0 - ratio)   # sum the geometric tail
-                    prev_step = None
-                    continue
+                    trial = _aitken_trial(mu, step, ratio, scale, forward,
+                                          resid_max)
+                    if trial is not None:   # sum the geometric tail
+                        mu, cached = trial
+                        prev_step = None
+                        continue
         prev_step = step
         mu = mu - step
     return mu, resid_max < tol, resid_max, iters
+
+
+def _aitken_trial(mu, step, ratio, scale, forward, resid_max):
+    """The Aitken-extrapolated iterate as a bounded, checked trial (#583):
+    the summed tail step / (1 - ratio), capped in the max norm at twice
+    the field scale (never below the ordinary step), and repriced. Returns
+    (mu, forward(mu)), or None -- take the ordinary step -- when the
+    forward raises, is non-finite, or its max residual grows tenfold."""
+    jump = step / (1.0 - ratio)
+    big = float(np.abs(jump).max())
+    cap = max(2.0 * float(np.max(scale)), float(np.abs(step).max()))
+    if big > cap:
+        jump = jump * (cap / big)
+    cand = mu - jump
+    try:
+        fc = forward(cand)
+    except (RuntimeError, ValueError, FloatingPointError, OverflowError):
+        return None
+    rc = np.asarray(fc[0], dtype=float)
+    if not (np.all(np.isfinite(rc)) and np.all(np.isfinite(fc[1]))):
+        return None
+    if float(np.abs(rc).max()) > 10.0 * resid_max:
+        return None
+    return cand, fc
 
 
 def _inverse_return(mu, converged, resid_max, iters, floored, tol,
