@@ -7,7 +7,7 @@
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
          jacobiSweeps } from "./core.mjs";
-import { BASES, _factorNodeRule } from "./races.mjs";
+import { BASES, _factorNodeRule, baseResolution } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -36,6 +36,7 @@ function baseFn(base) {
   const fn = typeof base === "function" ? base : BASES[base];
   if (typeof fn !== "function")
     throw new Error(`unknown base ${JSON.stringify(base)}; known: ${Object.keys(BASES).join(", ")}, or a function`);
+  baseResolution(fn);
   return fn;
 }
 
@@ -55,7 +56,36 @@ function countWindow(mu, sd, k, fn, delta = 1e-12, padSds = 2.0) {
   return [m0 + c * lo, m0 + c * hi];
 }
 
+/* delta is a REQUEST. A polynomial tail puts the 1e-12 count quantile so
+   far out that the capped grid cannot resolve the bulk: Student-t(3) got
+   a window of 7.54e3 at spacing 0.92 and every point request through the
+   cap raised a mass defect (#468; python's #386). Relax by factors of 100
+   (to at most 1e-4, as the win race's bulk window does) until the window
+   fits the cap at half the narrowest sd times the base's central scale,
+   and say so. */
+const MAX_TOPK_POINTS = 8193;
+const TOPK_RELAXED_WARNED = new Set();
 function countWindowStd(mu, sd, k, fn, delta, padSds) {
+  const afford = 0.5 * Math.max(Math.min(...sd), 1e-300) * baseResolution(fn) *
+                 (MAX_TOPK_POINTS - 1);
+  let d = delta;
+  let [lo, hi] = countWindowAt(mu, sd, k, fn, d, padSds);
+  while (hi - lo > afford && d < 1e-4) {
+    d = Math.min(d * 100, 1e-4);
+    [lo, hi] = countWindowAt(mu, sd, k, fn, d, padSds);
+  }
+  const key = `${delta}|${d}`;
+  if (d > delta && typeof console !== "undefined" && !TOPK_RELAXED_WARNED.has(key) &&
+      TOPK_RELAXED_WARNED.add(key))
+    console.warn(
+      `top-k window relaxed delta from ${delta.toExponential(0)} to ` +
+      `${d.toExponential(0)}: this base's tail puts the requested count ` +
+      `quantile further out than ${MAX_TOPK_POINTS} points can resolve, so ` +
+      "the window is exact at the relaxed delta.");
+  return [lo, hi];
+}
+
+function countWindowAt(mu, sd, k, fn, delta, padSds) {
   const n = mu.length;
   const smax = Math.max(...sd);
   const meanCount = x => {
@@ -206,20 +236,22 @@ function pairPmfAt(Qi, F, i, k) {
   return out;
 }
 
-function resolvedPoints(lo, hi, sd, points) {
+function resolvedPoints(lo, hi, sd, points, res = 1) {
   // about two points per NARROWEST sd, capped at 8193. The window is set
   // by the widest runner and the grid by `points`, so a heterogeneous
   // field leaves the narrowest density between samples, and the mass
   // check cannot see it: that check is one scalar (memberships sum to k)
   // and runner-level errors of opposite sign cancel in it (#224).
-  const smin = Math.max(Math.min(...sd), 1e-300);
+  // times the base's central scale, as python (#385/#600): a narrow-centred
+  // unit-variance base needs the spacing measured against its centre
+  const smin = Math.max(Math.min(...sd), 1e-300) * res;
   // a Number is already a double, so this cannot overflow the way R and
   // Julia did (#228); !isFinite still guards a zero-width window
   const need = Math.ceil((hi - lo) / (0.5 * smin)) + 1;
   if ((!Number.isFinite(need) || need > 8193) && typeof console !== "undefined")
     console.warn(
       `top-k lattice cannot resolve the narrowest runner even at 8193 ` +
-      `points (min sd ${smin.toExponential(1)} over a window of ` +
+      `points (min sd x central scale ${smin.toExponential(1)} over a window of ` +
       `${(hi - lo).toPrecision(3)}); memberships may carry percent-level ` +
       "error the mass check cannot see.");
   return Math.max(points, Math.min(need, 8193));
@@ -227,7 +259,7 @@ function resolvedPoints(lo, hi, sd, points) {
 
 function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   const [lo, hi] = countWindow(mu, sd, k, fn, delta);
-  points = resolvedPoints(lo, hi, sd, points);
+  points = resolvedPoints(lo, hi, sd, points, baseResolution(fn));
   const x = new Array(points);
   const dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
@@ -242,9 +274,13 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
 function bottomkIndependent(mu, sd, k, fn, points) {
   const n = mu.length;
   const refl = z => { const b = fn(-z); return [1 - b[0], b[1], -b[2]]; };
+  // the reflection has the same central scale: without it the dedicated
+  // bottom-k path ignored the base's resolution (#468 comment)
+  const res = baseResolution(fn);
+  refl.resolution = res;
   const [lr, hr] = countWindow(mu.map(v => -v), sd, k, refl);
   const lo = -hr, hi = -lr;
-  points = resolvedPoints(lo, hi, sd, points);
+  points = resolvedPoints(lo, hi, sd, points, res);
   const x = new Array(points);
   const dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
@@ -397,7 +433,7 @@ export function bottomKProbabilities(mu, k, opts = {}) {
   const n = mu.length;
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
-  const fn = typeof base === "function" ? base : BASES[base];
+  const fn = baseFn(base);
   if (!V) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
   const { Vm, nodes, w } = factorNodes(V, n, qa, D);
   const raw = new Array(n).fill(0);

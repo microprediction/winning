@@ -295,7 +295,8 @@
     }
     c(xlo - pad, b + pad)
   }
-  budget <- 0.5 * min(s) * max(points - 1, 1)
+  # times the base's central scale, as python and the browser (#600)
+  budget <- 0.5 * min(s) * .base_resolution(fn) * max(points - 1, 1)
   d <- delta
   w <- window_at(d)
   while (w[2] - w[1] > budget && d < 1e-4) {

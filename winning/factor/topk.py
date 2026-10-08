@@ -230,6 +230,9 @@ def _reflected(base_rows):
     def rows(z):
         S, f, fp = base_rows(-z)
         return 1.0 - S, f, -fp
+    # the reflection keeps the base's central scale: without it the
+    # bottom-k window budget ignored the declared resolution (#468)
+    rows.resolution = _resolution(base_rows)
     return rows
 
 
@@ -246,7 +249,7 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
         lo_r, hi_r = _count_window(-np.asarray(mu, float), sd, k,
                                    _reflected(base_rows), delta=delta)
         lo, hi = -hi_r, -lo_r
-        points = _resolved_points(lo, hi, sd, points)
+        points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
         x = np.linspace(lo, hi, points)
         dx = x[1] - x[0]
         z = (x[:, None] - mu[None, :]) / sd[None, :]

@@ -1715,5 +1715,59 @@ accepts("the inverse takes a scalar D, matching python",
           relabel([0, 0, 0, 0], CB, pm) < 1e-14);
 }
 
+// --- callable-base central resolution reaches every lattice (#468, #600)
+{
+  const student3 = z => {
+    const q = 1 + z * z, f = 2 / (Math.PI * q * q);
+    return [1 - (0.5 + (Math.atan(z) + z / q) / Math.PI), f, -8 * z / (Math.PI * q * q * q)];
+  };
+  student3.resolution = 1 / Math.sqrt(3);
+  const quad = 0.6881209595067086;        // P(X0 < X1), direct quadrature
+  accepts("Student-t(3) top-k prices at the default budget (#468)",
+          () => topk.topKProbabilities([0, 0.5], 1, { D: [1, 1], base: student3 }),
+          q => Math.abs(q[0] - quad) < 1e-7, q => `${q[0]}`);
+  accepts("Student-t(3) bottom-k is the reflection (#468)",
+          () => topk.bottomKProbabilities([0, 0.5], 1, { D: [1, 1], base: student3 }),
+          q => Math.abs(q[1] - quad) < 1e-7, q => `${q[1]}`);
+  // python's rank_probabilities returns the same matrix to 1e-8 (row
+  // 0: 0.68814369, 0.31185631): the rank route is 2.3e-5 off quadrature
+  accepts("Student-t(3) rank matrix prices at the default budget (#468)",
+          () => topk.rankProbabilities([0, 0.5], { D: [1, 1], base: student3 }),
+          P => Math.abs(P[0][0] - 0.68814369) < 1e-7 && Math.abs(P[0][0] + P[1][0] - 1) < 1e-4,
+          P => `${P[0][0]}`);
+  accepts("Student-t(3) top-k Jacobian is finite (#468)",
+          () => topk.topKJacobians([0, 0.5], 1, { D: [1, 1], base: student3 }),
+          J => J.Jmu.flat().every(Number.isFinite));
+  // a unit-variance mixture whose centre has scale 0.1
+  const w = 0.99, s = 0.1, t = Math.sqrt((1 - w * s * s) / (1 - w));
+  const narrow = z => {
+    const ps = core.npdf(z / s), pt = core.npdf(z / t);
+    return [Math.max(w * core.ndtr(-z / s) + (1 - w) * core.ndtr(-z / t), 1e-300),
+            w * ps / s + (1 - w) * pt / t,
+            -w * z * ps / s ** 3 - (1 - w) * z * pt / t ** 3];
+  };
+  narrow.span = [30, 30];
+  narrow.resolution = s;
+  const exact = w * w * core.ndtr(-0.2 / Math.sqrt(2 * s * s)) +
+    2 * w * (1 - w) * core.ndtr(-0.2 / Math.sqrt(s * s + t * t)) +
+    (1 - w) ** 2 * core.ndtr(-0.2 / Math.sqrt(2 * t * t));
+  accepts("race honours base.resolution at 257 points (python: 0.0887283) (#600)",
+          () => races.raceProbabilities([0, 0.2], { D: [1, 1], base: narrow }),
+          p => Math.abs(p[1] - 0.08872825429) < 1e-8, p => `${p[1]}`);
+  accepts("race reaches the analytic mixture by 2001 points (#600)",
+          () => races.raceProbabilities([0, 0.2], { D: [1, 1], base: narrow, points: 2001 }),
+          p => Math.abs(p[1] - exact) < 1e-8);
+  accepts("top-k and bottom-k honour base.resolution at the default budget (#468, #600)",
+          () => [topk.topKProbabilities([0, 0.2], 1, { D: [1, 1], base: narrow }),
+                 topk.bottomKProbabilities([0, 0.2], 1, { D: [1, 1], base: narrow })],
+          ([a, b]) => Math.abs(a[1] - exact) < 1e-8 && Math.abs(b[0] - exact) < 1e-8);
+  const bad = z => narrow(z);
+  bad.resolution = "0.1";
+  rejects(races.raceProbabilities, [[0, 0.2], { D: [1, 1], base: bad }],
+          "a malformed base.resolution is refused (#600)", "resolution");
+  rejects(topk.topKProbabilities, [[0, 0.2], 1, { D: [1, 1], base: bad }],
+          "top-k refuses a malformed base.resolution (#600)", "resolution");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
