@@ -271,6 +271,35 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
     return lp, dmu, dV
 
 
+def check_choice(choice, T, J):
+    """The label contract shared by every MNP boundary that consumes
+    observed choices: exactly one finite integer label in 0..J-1 per
+    observation. Returns the labels as an int array."""
+    choice = np.asarray(choice)
+    if choice.ndim != 1 or choice.shape[0] != T:
+        raise ValueError(
+            f"choice must have one entry per observation: got shape "
+            f"{choice.shape} for {T} observations")
+    if not np.issubdtype(choice.dtype, np.integer):
+        if np.issubdtype(choice.dtype, np.floating) and np.isnan(choice).any():
+            raise ValueError(
+                f"choice has {int(np.isnan(choice).sum())} missing "
+                "entries; drop those observations deliberately rather "
+                "than letting them score zero")
+        if not np.all(np.isfinite(choice)) or not np.all(
+                choice == np.floor(choice)):
+            raise ValueError("choice must be integer alternative indices")
+        choice = choice.astype(int)
+    bad = np.flatnonzero((choice < 0) | (choice >= J))
+    if bad.size:
+        raise ValueError(
+            f"choice[{int(bad[0])}] = {int(choice[bad[0]])} is outside "
+            f"0..{J - 1}; {bad.size} of {T} observations are. They would "
+            "be dropped in silence, which raises the log-likelihood "
+            "because there is less of it.")
+    return choice.astype(int, copy=False)
+
+
 def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     """Log-likelihood of observed argmax choices, with analytic score.
 
@@ -303,27 +332,7 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     # silently optimised a SUBSET of the data while reporting it as the
     # whole. Five bad rows out of forty moved the log-likelihood from
     # -55.699 to -49.134 -- better, because there was less of it (#194).
-    choice = np.asarray(choice)
-    if choice.ndim != 1 or choice.shape[0] != T:
-        raise ValueError(
-            f"choice must have one entry per observation: got shape "
-            f"{choice.shape} for {T} rows of mu")
-    if not np.issubdtype(choice.dtype, np.integer):
-        if np.issubdtype(choice.dtype, np.floating) and np.isnan(choice).any():
-            raise ValueError(
-                f"choice has {int(np.isnan(choice).sum())} missing "
-                "entries; drop those observations deliberately rather "
-                "than letting them score zero")
-        if not np.all(choice == np.floor(choice)):
-            raise ValueError("choice must be integer alternative indices")
-        choice = choice.astype(int)
-    bad = np.flatnonzero((choice < 0) | (choice >= J))
-    if bad.size:
-        raise ValueError(
-            f"choice[{int(bad[0])}] = {int(choice[bad[0]])} is outside "
-            f"0..{J - 1}; {bad.size} of {T} observations are. They would "
-            "be dropped in silence, which raises the log-likelihood "
-            "because there is less of it.")
+    choice = check_choice(choice, T, J)
     lp, dmu, dV = _choice_logprob_terms(mu, V, D=D, choice=choice, Qf=Qf, Qz=Qz)
     return float(lp.sum()), dmu, dV.sum(axis=0)
 

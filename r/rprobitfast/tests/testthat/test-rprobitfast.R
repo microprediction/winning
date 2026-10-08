@@ -213,11 +213,16 @@ test_that("rank-four fits reach the likelihood (#388)", {
   for (J in c(5L, 6L)) {
     df <- expand.grid(alt = seq_len(J), id = 1:3)
     df$chosen <- df$alt == ((df$id - 1L) %% J + 1L)
-    df$x <- seq_len(nrow(df)) / nrow(df)
+    # not linear in the row index: that made x's within-observation
+    # contrasts the same in every observation, aliased with the
+    # intercepts (#581)
+    df$x <- sin(seq_len(nrow(df)))
     # every identified rank (r <= J - 2, #201) reaches the likelihood;
-    # J = 5, r = 4 is refused by that contract, not by the node table
+    # J = 5, r = 4 is refused by that contract, not by the node table.
+    # Three observations leave alternatives unchosen (#496): warned.
     for (r in seq(3L, J - 2L)) {
-      fit <- rprobit_fast(df, "x", r = r, Qf = 3L, Qz = 3L, maxit = 1L)
+      fit <- suppressWarnings(
+        rprobit_fast(df, "x", r = r, Qf = 3L, Qz = 3L, maxit = 1L))
       expect_true(is.finite(fit$logLik))
     }
   }
@@ -299,6 +304,44 @@ test_that("ranks above J - 2 are refused and the default is identified", {
                "not identified")
   fit <- rprobit_fast(df, covariates = "x", Qf = 5L, Qz = 5L, maxit = 20L)
   expect_identical(fit$r, 1L)
+})
+
+test_that("rank and maxit are whole counts (#479, #560)", {
+  for (bad in list(1.1, 1.9, NaN, Inf, TRUE, c(1, 1)))
+    expect_error(.check_rank(bad, 4L), "whole number")
+  expect_identical(.check_rank(1.0, 4L), 1L)
+  set.seed(2)
+  d <- data.frame(id = rep(1:30, each = 3), alt = rep(1:3, 30),
+                  x = rnorm(90))
+  d$chosen <- rep(c(1, 2, 3), 10)[d$id] == d$alt
+  for (bad in list(NaN, Inf, 0.5, -1, TRUE))
+    expect_error(rprobit_fast(d, "x", r = 0L, maxit = bad), "maxit")
+})
+
+test_that("contrast-unidentified covariates are refused (#581)", {
+  Tn <- 120L; J <- 3L
+  winner <- rep(1:3, c(30, 50, 40))
+  d <- data.frame(id = rep(seq_len(Tn), each = J), alt = rep(seq_len(J), Tn))
+  d$chosen <- d$alt == rep(winner, each = J)
+  d$x <- as.numeric(d$alt == 2L)          # duplicates generated asc_2
+  expect_error(rprobit_fast(d, "x", r = 0L), "x are not identified")
+  d$x <- rep(rnorm(Tn), each = J)         # common within each observation
+  expect_error(rprobit_fast(d, "x", r = 0L), "not identified")
+  set.seed(3)
+  d$x <- rnorm(Tn * J); d$y <- -3 * d$x   # duplicate column
+  expect_error(rprobit_fast(d, c("x", "y"), r = 0L), "y are not identified")
+  expect_equal(rprobit_fast(d, "x", r = 0L)$convergence, 0)
+})
+
+test_that("a never-chosen alternative is not reported converged (#496)", {
+  set.seed(4)
+  Tn <- 60L; J <- 3L
+  d <- data.frame(id = rep(seq_len(Tn), each = J), alt = rep(seq_len(J), Tn),
+                  x = rnorm(Tn * J))
+  d$chosen <- d$alt == rep(1L + (seq_len(Tn) %% 2L), each = J)
+  expect_warning(fit <- rprobit_fast(d, "x", r = 0L), "never chosen")
+  expect_equal(fit$convergence, 2L)
+  expect_true(fit$boundary)
 })
 
 test_that("unused factor levels are not phantom observations or alternatives (#464)", {

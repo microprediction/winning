@@ -509,6 +509,54 @@ end
     @test all(isfinite, stderror(mb))
 end
 
+@testset "estimator boundary contract (#479 #495 #496 #560 #581 #591)" begin
+    X = zeros(2, 4, 1)
+    for bad in (1.1, 1.9, NaN, Inf, true)
+        @test_throws ArgumentError MNProbit(X, [1, 2]; r = bad)
+    end
+    @test MNProbit(X, [1, 2]; r = 2.0).r == 2
+    # zero observations
+    for ic in (true, false)
+        @test_throws ArgumentError MNProbit(Array{Float64}(undef, 0, 3, 0),
+                                            Int[]; intercepts = ic, r = 0)
+    end
+    # parameter-free null model
+    m0 = fit!(MNProbit(Array{Float64}(undef, 4, 2, 0), [1, 2, 1, 2];
+                       intercepts = false, r = 0))
+    @test m0.converged && isempty(coef(m0))
+    @test isapprox(m0.loglik, -4 * log(2); atol = 1e-12)
+    # maxiter / r_draws are whole counts
+    d = [-2.0, -1.0, -0.5, 0.5, 1.0, 2.0]
+    Xo = reshape(hcat(-d ./ 2, d ./ 2), 6, 2, 1)
+    cho = [1, 1, 2, 1, 2, 2]
+    for bad in (NaN, Inf, 0.5, -1, true)
+        @test_throws ArgumentError fit!(MNProbit(Xo, cho; intercepts = false,
+                                                 r = 0); maxiter = bad)
+    end
+    @test_throws ArgumentError fit!(MNProbit(Xo, cho; intercepts = false,
+                                             r = 0); method = :ghk, r_draws = 0)
+    mz = fit!(MNProbit(Xo, cho; intercepts = false, r = 0); maxiter = 0)
+    @test !mz.converged && coef(mz)[1] == 0.0
+    @test fit!(MNProbit(Xo, cho; intercepts = false, r = 0);
+               maxiter = 100.0).converged
+    # never-chosen alternative: no finite intercept MLE
+    T = 100
+    mu = @test_logs (:warn, r"never chosen") fit!(
+        MNProbit(zeros(T, 3, 0), [isodd(t) ? 1 : 2 for t in 1:T]; r = 0);
+        maxiter = 500)
+    @test !mu.converged
+    # contrast-unidentified mean design
+    ch = vcat(fill(1, 30), fill(2, 50), fill(3, 40))
+    Xa = zeros(120, 3, 1); Xa[:, 2, 1] .= 1.0
+    @test_throws ArgumentError fit!(MNProbit(Xa, ch; r = 0))
+    z = randn(Xoshiro(1), 120)
+    Xc = repeat(reshape(z, 120, 1, 1), 1, 3, 1)
+    @test_throws ArgumentError fit!(MNProbit(Xc, ch; intercepts = false, r = 0))
+    xr = randn(Xoshiro(2), 120, 3, 1)
+    @test_throws ArgumentError fit!(MNProbit(cat(xr, -3 .* xr; dims = 3), ch; r = 0))
+    @test fit!(MNProbit(randn(Xoshiro(3), 120, 3, 2), ch; r = 0)).converged
+end
+
 # --- inference needs a maximum (#493) ----------------------------------
 @testset "vcov/stderror refuse a saddle or an unconverged fit" begin
     X = reshape([0.5419522204102933 -0.3165954511658161 -0.32238911615896015
