@@ -20,10 +20,18 @@
 # loop, deterministic to quadrature accuracy.
 
 .gh1 <- function(Q) {
+  if (length(Q) != 1L || !is.numeric(Q) || !is.finite(Q) || Q < 1 ||
+      Q != round(Q))
+    stop(sprintf("a Gauss-Hermite order must be one positive integer; got %s",
+                 paste(format(Q), collapse = ", ")), call. = FALSE)
+  Q <- as.integer(Q)
   J <- diag(0, Q)
-  off <- sqrt(seq_len(Q - 1))
-  J[cbind(seq_len(Q - 1), 2:Q)] <- off
-  J[cbind(2:Q, seq_len(Q - 1))] <- off
+  # i and i + 1, not 2:Q: at Q = 1, 2:Q is c(2, 1), not empty, and the
+  # one-node rule (x = 0, w = 1) died on an out-of-bounds index (#504)
+  i <- seq_len(Q - 1L)
+  off <- sqrt(i)
+  J[cbind(i, i + 1L)] <- off
+  J[cbind(i + 1L, i)] <- off
   e <- eigen(J, symmetric = TRUE)
   list(x = e$values, w = e$vectors[1, ]^2)
 }

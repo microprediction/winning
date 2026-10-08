@@ -328,3 +328,16 @@ test_that("unused factor levels are not phantom observations or alternatives (#4
   expect_equal(got$coefficients, ref$coefficients)
   expect_equal(got$logLik, ref$logLik)
 })
+
+test_that("Gauss-Hermite order one is the one-node rule (#504)", {
+  expect_equal(.gh1(1L), list(x = 0, w = 1))
+  expect_error(.gh1(0L), "one positive integer")
+  d <- data.frame(id = rep(1:2, each = 2), alt = rep(1:2, 2),
+                  chosen = c(TRUE, FALSE, FALSE, TRUE),
+                  x = c(-1, 1, -0.5, 0.5))
+  f1 <- rprobit_fast(d, "x", r = 0L, Qf = 1L, Qz = 3L, maxit = 3L)
+  f7 <- rprobit_fast(d, "x", r = 0L, Qf = 7L, Qz = 3L, maxit = 3L)
+  expect_equal(f1$logLik, f7$logLik)
+  expect_true(is.finite(rprobit_fast(d, "x", r = 0L, Qf = 3L, Qz = 1L,
+                                     maxit = 3L)$logLik))
+})

@@ -267,3 +267,18 @@ test_that("unused factor levels are not phantom choosers or alternatives (#464)"
   expect_identical(names(ref$coefficients),
                    c("(Intercept):y", "(Intercept):z", "v"))
 })
+
+test_that("Gauss-Hermite order one is the one-node rule (#504)", {
+  expect_equal(.gh1(1L), list(x = 0, w = 1))
+  for (bad in list(0L, -1L, 1.5, NA_real_, Inf, c(2L, 3L)))
+    expect_error(.gh1(bad), "one positive integer")
+  d <- data.frame(chosen = c(TRUE, FALSE, FALSE, TRUE),
+                  x = c(-1, 1, -0.5, 0.5))
+  attr(d, "idx") <- data.frame(id = rep(1:2, each = 2),
+                               alt = factor(rep(1:2, 2)))
+  f1 <- mlogit_fast(chosen ~ x, d, r = 0L, Qf = 1L, Qz = 3L, maxit = 3L)
+  f7 <- mlogit_fast(chosen ~ x, d, r = 0L, Qf = 7L, Qz = 3L, maxit = 3L)
+  expect_equal(f1$logLik, f7$logLik)          # Qf is inert at r = 0
+  expect_true(is.finite(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 1L,
+                                    maxit = 3L)$logLik))
+})
