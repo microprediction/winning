@@ -104,4 +104,17 @@ for kind, c in [("independent", 0.0), ("aligned", 0.6), ("opposed", 0.6)]:
         m, W, d, _ = rs.posterior_factor_form(n, Y.mean(0), V, sigma)
         rows.append(compare(f"stopping {kind} n={n}", m, W, d))
 
+# raw results first, to an append-only log that no later run replaces
+import datetime
+import subprocess
+try:
+    head = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
+                                   cwd=HERE, text=True).strip()
+except Exception:
+    head = "unknown"
+with open(os.path.join(HERE, "results.jsonl"), "a") as fh:
+    fh.write(json.dumps({"when": datetime.datetime.now(datetime.timezone.utc)
+                         .isoformat(timespec="seconds"),
+                         "head": head, "rows": rows}) + "\n")
+# then the summary the paper reads, which is the latest run
 json.dump(rows, open(os.path.join(HERE, "results.json"), "w"), indent=1)
