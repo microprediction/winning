@@ -20,22 +20,23 @@ Thompson Sampling and Entropy Search}}
 \maketitle
 
 \begin{abstract}
-\noindent Thompson sampling plays each alternative with the posterior
-probability that it is best, and entropy search chooses its next
-evaluation by the same vector. Where the numbers themselves are
-needed they are approximated: from marginal means and variances in
-bandits, and by expectation propagation in Bayesian optimization, at a
-cost quartic in the number of candidates. We observe that when the
-correlation between alternatives runs through a few shared factors,
-or through blocks, nested groups or a tree, the vector is one integral
-over those shared variables. Quadrature of fixed resolution then
-evaluates it for every alternative at once, at a cost linear in their
-number. Simulation under common random numbers and a Gaussian bandit
-with a factor prior produce such beliefs exactly, and a dense
-covariance is fitted to the form on intake. With the computed vector a
-stopping rule stops sooner at the same nominal threshold, sampling
-from it reproduces Thompson sampling's regret, and entropy search runs
-on thousands of candidates rather than fifty.
+\noindent Thompson sampling plays each alternative with the
+probability that it is the best one, and entropy search uses the same
+probabilities to choose its next evaluation. Where the probabilities
+themselves are needed they are approximated: from marginal means and
+variances in bandits, and by expectation propagation in Bayesian
+optimization, at a cost quartic in the number of candidates. We
+observe that when the correlation between alternatives runs through a
+few shared factors, or through blocks, nested groups or a tree, these
+probabilities are one integral over the shared variables. Quadrature
+of fixed resolution then evaluates them all at once, at a cost linear
+in the number of alternatives. Simulation under common random numbers
+and a Gaussian bandit with a factor prior produce such beliefs
+exactly, and a dense covariance is fitted to the form on intake. With
+the computed probabilities a stopping rule stops sooner at the same
+nominal threshold, sampling from them reproduces Thompson sampling's
+regret, and entropy search runs on thousands of candidates rather than
+fifty.
 \end{abstract}
 
 \section{Introduction}
