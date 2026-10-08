@@ -577,7 +577,8 @@ pub fn cholesky(a: &mut [f64], n: usize) -> bool {
     true
 }
 
-/// GHK estimate of P(alternative i has the max utility), R draws.
+/// GHK estimate of P(alternative i has the max utility), R draws, from a
+/// dense utility covariance `sigma` (row-major n x n).
 pub fn ghk_prob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize, r_draws: usize,
                 seed: u64) -> f64 {
     let m = n - 1;
@@ -592,8 +593,54 @@ pub fn ghk_prob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize, r_draws: usiz
                 - sigma[i * n + jc] + sigma[i * n + i];
         }
     }
+    ghk_contrast(&a, c, m, r_draws, seed)
+}
+
+/// GHK estimate of P(alternative i has the max utility) for the factor
+/// grammar U = mu + V f + sqrt(D) eps, with `v` row-major n x k.
+///
+/// The contrast covariance is formed from the grammar,
+/// C[j,l] = (V_j - V_i).(V_l - V_i) + D_i + [j == l] D_j, never by
+/// materialising Sigma = V V' + diag(D) and differencing it. A common
+/// loading of 1e8 is a shared shock that cancels from every contrast,
+/// but in Sigma the unit variances round away (1e16 + 1 == 1e16) and the
+/// differenced matrix came back zero, so an ordinary 76/24 race was
+/// priced as certain (#302).
+pub fn ghk_prob_one_factor(mu: &[f64], v: &[f64], k: usize, d: &[f64], n: usize,
+                           i: usize, r_draws: usize, seed: u64) -> f64 {
+    let m = n - 1;
+    let others: Vec<usize> = (0..n).filter(|&j| j != i).collect();
+    let mut a = vec![0.0f64; m];
+    let mut c = vec![0.0f64; m * m];
+    for (r_, &jr) in others.iter().enumerate() {
+        a[r_] = mu[jr] - mu[i];
+        for (c_, &jc) in others.iter().enumerate() {
+            let mut sv = 0.0;
+            for q in 0..k {
+                sv += (v[jr * k + q] - v[i * k + q]) * (v[jc * k + q] - v[i * k + q]);
+            }
+            c[r_ * m + c_] = sv + d[i] + if jr == jc { d[jr] } else { 0.0 };
+        }
+    }
+    ghk_contrast(&a, c, m, r_draws, seed)
+}
+
+/// The GHK recursion on a contrast problem: P(d < 0), d ~ N(a, C).
+///
+/// The Cholesky ridge is RELATIVE to the contrast's mean variance. It was
+/// an absolute 1e-12 added to every diagonal, which is model noise in the
+/// utility unit: rescaling mu -> c mu, V -> c V, D -> c^2 D must leave the
+/// race unchanged, but at c = 1e-8 the binary favourite fell from
+/// Phi(1/sqrt 2) = 0.7602 to 0.5040 (#409, #101).
+fn ghk_contrast(a: &[f64], mut c: Vec<f64>, m: usize, r_draws: usize,
+                seed: u64) -> f64 {
+    let mut tr = 0.0f64;
     for d in 0..m {
-        c[d * m + d] += 1e-12;
+        tr += c[d * m + d];
+    }
+    let ridge = 1e-12 * (tr / m.max(1) as f64).max(1e-300);
+    for d in 0..m {
+        c[d * m + d] += ridge;
     }
     if !cholesky(&mut c, m) {
         return f64::NAN;

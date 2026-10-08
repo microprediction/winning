@@ -80,7 +80,11 @@
   M[cbind(seq_len(n - 1L), others)] <- 1
   M[, i] <- M[, i] - 1
   Cc <- M %*% Sigma %*% t(M)
-  L <- t(chol(Cc + diag(1e-12, n - 1L)))
+  # a ridge RELATIVE to the contrast scale: an absolute 1e-12 is model
+  # noise in the utility unit, and at scale 1e-8 it moved the binary
+  # favourite from Phi(1/sqrt 2) = 0.7602 to 0.5040 (#101, #409)
+  ridge <- 1e-12 * max(sum(diag(Cc)) / (n - 1L), 1e-300)
+  L <- t(chol(Cc + diag(ridge, n - 1L)))
   R <- nrow(u)
   z <- matrix(0, R, n - 1L)
   logprob <- numeric(R)

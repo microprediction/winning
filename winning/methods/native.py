@@ -104,7 +104,47 @@ def factor_rqmc(mu, V, D, budget=2**14, seed=11):
     return p / p.sum(), {"points": int(budget)}
 
 
-def _ghk_prob(mu, Sigma, i, R, u, return_slope=False):
+def _contrast(i, Sigma=None, V=None, D=None):
+    """Covariance of the contrasts U_j - U_i, j != i.
+
+    From the factor grammar when there is one, never by materialising
+    Sigma = V V' + diag(D) and differencing it: a common loading of 1e8
+    is a shared shock that cancels from every contrast, but in Sigma it
+    rounds the unit idiosyncratic variances away (1e16 + 1 == 1e16) and
+    the differenced matrix comes back zero -- an ordinary 76/24 race
+    priced as certain (#302). Here the loading differences are taken
+    first, so the common mode never enters the arithmetic.
+    """
+    if Sigma is not None:
+        n = len(Sigma)
+        others = [j for j in range(n) if j != i]
+        M = np.zeros((n - 1, n))
+        M[np.arange(n - 1), others] = 1.0
+        M[:, i] -= 1.0
+        return M @ Sigma @ M.T
+    n = len(D)
+    others = np.array([j for j in range(n) if j != i], dtype=int)
+    Vd = V[others] - V[i][None, :]
+    return Vd @ Vd.T + D[i] + np.diag(D[others])
+
+
+def _contrast_cholesky(C):
+    """Cholesky of a contrast covariance with a RELATIVE ridge.
+
+    The ridge was an absolute 1e-12 on every diagonal, which is model
+    noise in the utility unit, not numerical stabilisation: scaling a
+    race by c (mu -> c mu, V -> c V, D -> c^2 D) must leave it
+    unchanged, but at c = 1e-8 the binary favourite fell from
+    Phi(1/sqrt 2) = 0.7602 to 0.5040 (#409, #101). Proportional to the
+    contrast's own mean variance it is homogeneous, and at 1e-12 of it
+    it moves nothing a double can resolve.
+    """
+    m = len(C)
+    scale = max(float(np.trace(C)) / max(m, 1), 1e-300)
+    return np.linalg.cholesky(C + 1e-12 * scale * np.eye(m))
+
+
+def _ghk_prob(mu, C, i, R, u, return_slope=False):
     """log P(U_i is the maximum) by GHK sequential conditioning, in log
     space throughout so a runner far behind gets a finite log probability
     rather than an underflow to zero (the inverse under cov= Newton-steps
@@ -119,11 +159,7 @@ def _ghk_prob(mu, Sigma, i, R, u, return_slope=False):
     n = len(mu)
     others = [j for j in range(n) if j != i]
     a = mu[others] - mu[i]
-    M = np.zeros((n - 1, n))
-    M[np.arange(n - 1), others] = 1.0
-    M[:, i] -= 1.0
-    C = M @ Sigma @ M.T
-    L = np.linalg.cholesky(C + 1e-12 * np.eye(n - 1))
+    L = _contrast_cholesky(C)
     R = u.shape[0]
     z = np.zeros((R, n - 1))
     logprob = np.zeros(R)
@@ -164,9 +200,8 @@ def _ghk_assemble(logs):
 def ghk(mu, V, D, budget=1000, seed=9):
     """Per-alternative GHK / Genz separation-of-variables, pseudorandom."""
     n = len(mu)
-    Sigma = V @ V.T + np.diag(D)
     p, _, _, _ = _ghk_assemble([
-        (_ghk_prob(mu, Sigma, i, budget,
+        (_ghk_prob(mu, _contrast(i, V=V, D=D), i, budget,
                    np.random.default_rng(seed + i).random((int(budget), n - 1))),)
         for i in range(n)])
     return p, {"draws": int(budget)}
@@ -207,17 +242,18 @@ def qmc_ghk(mu, V, D, budget=1024, seed=13, return_slopes=False,
             raise ValueError(
                 f"cov must be {n}x{n} for {n} runners; got {Sigma.shape}")
     else:
-        Sigma = V @ V.T + np.diag(D)
+        Sigma = None
+    Cs = [_contrast(i, Sigma=Sigma, V=V, D=D) for i in range(n)]
     u = qmc.Sobol(d=n - 1, scramble=True, seed=seed).random(int(budget))
     info = {"draws": int(budget)}
     if return_slopes:
         p, sl, logp, dlogp = _ghk_assemble(
-            [_ghk_prob(mu, Sigma, i, budget, u, True) for i in range(n)])
+            [_ghk_prob(mu, Cs[i], i, budget, u, True) for i in range(n)])
         info["slopes"] = sl
         info["dlogp"] = dlogp
     else:
         p, _, logp, _ = _ghk_assemble(
-            [(_ghk_prob(mu, Sigma, i, budget, u),) for i in range(n)])
+            [(_ghk_prob(mu, Cs[i], i, budget, u),) for i in range(n)])
     info["logp"] = logp
     return p, info
 
@@ -242,16 +278,11 @@ def tilting(mu, V, D, budget=1000, seed=7):
     """Botev-style minimax exponential tilting, per alternative."""
     from scipy.optimize import root
     n = len(mu)
-    Sigma = V @ V.T + np.diag(D)
     p = np.zeros(n)
     for i in range(n):
         others = [j for j in range(n) if j != i]
-        M = np.zeros((n - 1, n))
-        M[np.arange(n - 1), others] = 1.0
-        M[:, i] -= 1.0
-        Sd = M @ Sigma @ M.T
         m = n - 1
-        L = np.linalg.cholesky(Sd + 1e-12 * np.eye(m))
+        L = _contrast_cholesky(_contrast(i, V=V, D=D))
         u = -(mu[np.array(others)] - mu[i])
         sol = root(_tilt_grad, np.zeros(2 * (m - 1)), args=(L, u),
                    method="hybr", options={"maxfev": 4000})

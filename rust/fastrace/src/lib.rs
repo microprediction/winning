@@ -302,25 +302,37 @@ fn ghk_all_shares<'py>(
     }
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
-    let d_o: Array1<f64> = d.as_array().to_owned();
+    let mut d_o: Array1<f64> = d.as_array().to_owned();
+    let n = mu_o.len();
+    // The factor model is validated BEFORE anything is built from it, as
+    // python's as_idio does: D is a variance. A negative entry used to
+    // pass whenever the contrast covariance stayed positive definite, so
+    // D = [1, -0.5] priced a confident [0.0786, 0.9214] for a covariance
+    // with eigenvalue -0.5 (#367). Shapes are checked above (#74).
+    if mu_o.iter().chain(v_o.iter()).chain(d_o.iter()).any(|x| !x.is_finite()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "mu, v and d must be finite"));
+    }
+    let dmax = d_o.iter().fold(0.0f64, |acc, &x| acc.max(x.abs()));
+    let tol = 1e-12 * dmax.max(1.0);
+    if let Some((j, &x)) = d_o.iter().enumerate().find(|(_, &x)| x < -tol) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "d[{}] = {} is negative: d is an idiosyncratic variance and \
+             cannot be negative", j, x)));
+    }
+    d_o.mapv_inplace(|x| x.max(0.0));    // within tolerance: these ARE zero
+    if n == 1 {
+        return Ok(Array1::from_elem(1, 1.0).into_pyarray_bound(py));
+    }
     let out = py.allow_threads(|| with_usable_rayon(|| {
-        let n = mu_o.len();
         let k = v_o.ncols();
-        let mut sigma = vec![0.0f64; n * n];
-        for i in 0..n {
-            for j in 0..n {
-                let mut sv = 0.0;
-                for r_ in 0..k {
-                    sv += v_o[[i, r_]] * v_o[[j, r_]];
-                }
-                sigma[i * n + j] = sv + if i == j { d_o[i] } else { 0.0 };
-            }
-        }
+        let vs: Vec<f64> = v_o.iter().cloned().collect();   // row-major n x k
+        let ds: Vec<f64> = d_o.iter().cloned().collect();
         let mus: Vec<f64> = mu_o.iter().cloned().collect();
         let p: Vec<f64> = (0..n)
             .into_par_iter()
-            .map(|i| ghk_prob_one(&mus, &sigma, n, i, r_draws,
-                                  seed.wrapping_add(i as u64)))
+            .map(|i| ghk_prob_one_factor(&mus, &vs, k, &ds, n, i, r_draws,
+                                         seed.wrapping_add(i as u64)))
             .collect();
         let total: f64 = p.iter().sum();
         Array1::from_iter(p.into_iter().map(|x| x / total))

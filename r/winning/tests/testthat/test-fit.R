@@ -270,6 +270,16 @@ test_that("a large two-runner cov still fits", {
   }
 })
 
+test_that("the GHK ridge is relative: a race in tiny units is the same race (#101, #409)", {
+  # binary: one truncation step, so exact. Min-wins, so runner 1 (mu 0)
+  # beats runner 2 (mu c) with probability Phi(1/sqrt 2) at every scale;
+  # the absolute 1e-12 ridge gave 0.5040 at c = 1e-8
+  for (cc in c(1, 1e-6, 1e-8)) {
+    g <- .ghk_race(c(0, cc), diag(cc^2, 2), budget = 64L)
+    expect_lt(abs(g$p[1] - pnorm(1 / sqrt(2))), 1e-10)
+  }
+})
+
 test_that("near-singular contrasts survive the closing floor (#407)", {
   C <- diag(c(1e-8, 1e-8, 1))
   f <- fit_covariance(C)

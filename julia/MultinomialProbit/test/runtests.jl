@@ -333,6 +333,41 @@ end
     @test isfinite(MP.logndtr(-300.0))
 end
 
+# --- GHK: homogeneous in the utility unit, D is a variance ------------
+# Binary races have one truncation step, so these are exact checks.
+@testset "GHK is scale free and blind to a common shock (#409, #302)" begin
+    exact = MP.ndtr(1 / sqrt(2))
+    for c in (1.0, 1e-6, 1e-8)
+        # the absolute 1e-12 ridge gave 0.7181 at 1e-6 and 0.5040 at 1e-8
+        p = MP.ghk_choice_prob([0.0, c], zeros(2, 0), 2;
+                               D = [c^2, c^2], r_draws = 32, seed = 9)
+        @test abs(p - exact) < 1e-12
+    end
+    for v in (1e4, 1e8)
+        p = MP.ghk_choice_prob([0.0, 1.0], fill(v, 2, 1), 2;
+                               D = [1.0, 1.0], r_draws = 8, seed = 9)
+        @test abs(p - exact) < 1e-12
+    end
+end
+
+@testset "GHK refuses a D that is not a variance (#367)" begin
+    V = zeros(2, 0)
+    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                  D = [1.0, -0.5])
+    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                  D = [1.0, NaN])
+    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                  D = [1.0, Inf])
+    # a wrong length is the DimensionMismatch of #439's shared check
+    @test_throws DimensionMismatch MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                      D = [1.0])
+    @test_throws DimensionMismatch MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                      D = [1.0, 1.0, 1.0])
+    # round-off below zero is zero, and zero is a legal variance
+    p = MP.ghk_choice_prob([0.0, 1.0], V, 2; D = [1.0, -1e-15])
+    @test abs(p - MP.ndtr(1.0)) < 1e-12
+end
+
 # --- integral float labels are accepted, fractional ones refused (#194) --
 @testset "choice labels: integral numerics, constructor length" begin
     mu = zeros(3, 3)

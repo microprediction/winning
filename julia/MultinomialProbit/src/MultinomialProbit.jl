@@ -451,20 +451,46 @@ end
 
 """P(alternative k chosen | mu row) by GHK sequential importance
 sampling on the differenced covariance, common random numbers via the
-seed. Port of the rust core's ghk_prob_one; Sigma = V V' + diag(D)."""
+seed. Port of the rust core's ghk_prob_one_factor; Sigma = V V' + diag(D).
+
+`D` is validated as a variance before anything is built from it, as the
+python reference's `as_idio` does: a negative entry passed whenever the
+contrast covariance stayed positive definite, so `D = [1, -0.5]` priced
+0.9214 for a covariance with eigenvalue -0.5 (#367). The contrast is
+formed from the factor grammar, `(V_j - V_k).(V_l - V_k) + D_k +
+[j == l] D_j`, so a common loading cancels before it can round the
+idiosyncratic variances away (#302), and the Cholesky ridge is relative
+to the contrast scale: an absolute `1e-12` made the binary favourite
+fall from 0.7602 to 0.5040 when the race was written in units 1e-8
+(#409)."""
 function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
                          D = nothing, r_draws = 1000, seed = 9)
     _check_r_draws(r_draws)
     J = length(mu)
-    Dv = _check_D(D, J)
-    Sigma = V * V' .+ [i == j ? Dv[i] : 0.0 for i in 1:J, j in 1:J]
+    size(V, 1) == J || throw(ArgumentError(
+        "V must have one row per alternative: got $(size(V, 1)) rows " *
+        "for $J alternatives"))
+    1 <= k <= J || throw(ArgumentError("k = $k is not an alternative of $J"))
+    Dv = _check_D(D, J)                 # length J, or DimensionMismatch (#439)
+    (all(isfinite, Dv) && all(isfinite, V) && all(isfinite, mu)) ||
+        throw(ArgumentError("mu, V and D must be finite"))
+    tol = 1e-12 * max(1.0, maximum(abs, Dv))
+    for (j, x) in enumerate(Dv)
+        x < -tol && throw(ArgumentError(
+            "D[$j] = $x is negative: D is an idiosyncratic variance and " *
+            "cannot be negative"))
+    end
+    Dv = max.(Dv, 0.0)                  # within tolerance: these ARE zero
+    J == 1 && return 1.0
     m = J - 1
     others = [j for j in 1:J if j != k]
     a = [mu[j] - mu[k] for j in others]
-    C = [Sigma[jr, jc] - Sigma[jr, k] - Sigma[k, jc] + Sigma[k, k]
-         for jr in others, jc in others]
+    Vd = Float64.(V[others, :]) .- Float64.(V[k:k, :])
+    C = Vd * Vd' .+ Dv[k] .+ [r == c ? Dv[others[r]] : 0.0
+                              for r in 1:m, c in 1:m]
+    ridge = 1e-12 * max(sum(C[d, d] for d in 1:m) / m, 1e-300)
     for d in 1:m
-        C[d, d] += 1e-12
+        C[d, d] += ridge
     end
     Lc = cholesky(Symmetric(C)).L
     rng = Xoshiro(seed)
