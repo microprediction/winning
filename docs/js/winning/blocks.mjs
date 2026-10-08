@@ -2,7 +2,7 @@
 import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
          asFactorNodes, asWeights, asIterations, asTolerance,
-         asFiniteVector } from "./core.mjs";
+         asFiniteVector, rescaledTarget } from "./core.mjs";
 import { invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -310,15 +310,25 @@ export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   return checkedMass(p, "block race");
 }
 
+function asGamma(gamma, where) {
+  if (typeof gamma !== "number" || !Number.isFinite(gamma))
+    throw new Error(`${where}: gamma must be a finite number; got ${typeof gamma === "string" ? JSON.stringify(gamma) : String(gamma)}`);
+  return gamma;
+}
+
 export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   checkOpts(opts, NESTED_RACE_PROBABILITIES_OPTS, "nestedRaceProbabilities", OPT_HINTS);
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
-  if (!coupling || gamma === 0)
+  // gamma and coupling validated BEFORE the no-global-factor shortcut:
+  // truthiness sent NaN/false/"" couplings to the block race (#586), and
+  // the Jacobian let "2", true, false and null select a coupling the
+  // forward refuses (#540). Only an omitted coupling (null/undefined) or
+  // an exact numeric gamma of 0 means no global factor.
+  asGamma(gamma, "nestedRaceProbabilities");
+  if (coupling == null || gamma === 0)
     return blockRaceProbabilities(mu, cluster, loading, D, { points, qa });
   const a = blockArgs(mu, cluster, loading, D, "nestedRaceProbabilities");
   mu = a.mu;
-  if (typeof gamma !== "number" || !Number.isFinite(gamma))
-    throw new Error(`nestedRaceProbabilities: gamma must be a finite number; got ${gamma}`);
   // The shared contract, as python's atleast_2d-plus-transpose does
   // it: a (rank, n) coupling is the SAME race as (n, rank). This
   // normalised by hand and never transposed, so the transposed
@@ -589,7 +599,8 @@ export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
 export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
   checkOpts(opts, NESTED_RACE_JACOBIAN_OPTS, "nestedRaceJacobian", OPT_HINTS);
   const { coupling = null, gamma = 1.0, points = 257, qa = 9, qf = 15 } = opts;
-  if (!coupling || gamma === 0)
+  asGamma(gamma, "nestedRaceJacobian");     // as the forward (#540, #586)
+  if (coupling == null || gamma === 0)
     return blockRaceJacobian(mu, cluster, loading, D, { points, qa });
   mu = asAbilities(mu);
   // The shared contract, as python's atleast_2d-plus-transpose does
@@ -629,8 +640,13 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
   // a common shock cancels: without it a bare root takes the exact path
   const tvJ = validateTree(parent, strength, nC, "treeRaceJacobian");
   if (withoutCommonShock(tvJ.parent, tvJ.strength, nC).slice(nC).some(v => v !== 0)) {
+    // the step from the CANONICAL D and loadings: raw D.map threw for a
+    // scalar D and a typed loading made the step NaN, though the forward
+    // accepts both spellings (#596)
+    const a = blockArgs(mu, cluster, loading, D, "treeRaceJacobian");
+    mu = a.mu;
     const n = mu.length;
-    const tot = D.map((d, i) => d + (Array.isArray(loading) ? loading[i] ** 2 : loading ** 2));
+    const tot = a.D.map((d, i) => d + a.L[i].reduce((s2, v) => s2 + v * v, 0));
     const srt = tot.slice().sort((a, b) => a - b);
     const med = n % 2 ? srt[(n - 1) / 2] : 0.5 * (srt[n / 2 - 1] + srt[n / 2]);
     const h = 1e-5 * Math.sqrt(med);
@@ -671,11 +687,13 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
 
 /* sqrt(median(D_i + |loading_i|^2)): the block race's contrast scale */
 export function blockScale(loading, D, n) {
+  // through the SAME shape contract the forwards use: indexing raw
+  // arguments made a scalar D, a scalar or (1, n) loading, or a scalar
+  // coupling NaN, and the inverse refused its own first iterate (#597)
+  const L = asLoadings(loading, n, "loading");
+  const Dv = asIdio(D, n, "D");
   const tot = [];
-  for (let i = 0; i < n; i++) {
-    const L = Array.isArray(loading[i]) ? loading[i] : [Number(loading[i])];
-    tot.push(Number(D[i]) + L.reduce((a, b) => a + b * b, 0));
-  }
+  for (let i = 0; i < n; i++) tot.push(Dv[i] + L[i].reduce((a, b) => a + b * b, 0));
   tot.sort((a, b) => a - b);
   const h = Math.floor(n / 2);
   return Math.sqrt(n % 2 ? tot[h] : 0.5 * (tot[h - 1] + tot[h]));
@@ -693,12 +711,11 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
   let pT = asFiniteVector(pTarget, "target", "probability");
   if (pT.some(v => v < 0))
     throw new Error("abilitiesFromBlockRace: a target probability is negative");
-  let s = pT.reduce((a, b) => a + b, 0);
-  pT = pT.map(v => v / s);
+  pT = rescaledTarget(pT);                 // overflow-safe (#463)
   const n = pT.length;
   const floor = Math.max(1e-14, Math.min(...pT.filter(v => v > 0)) * 1e-3);
   pT = pT.map(v => Math.max(v, floor));
-  s = pT.reduce((a, b) => a + b, 0);
+  const s = pT.reduce((a, b) => a + b, 0);
   pT = pT.map(v => v / s);
   const lt = pT.map(Math.log);
   const forward = m => blockRaceProbabilities(m, cluster, loading, D, { points, qa });

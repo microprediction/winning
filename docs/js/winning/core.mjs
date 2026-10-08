@@ -176,7 +176,10 @@ export function asTolerance(tol, where, name = "tol") {
    python. */
 export const isVector = x => Array.isArray(x) || (ArrayBuffer.isView(x) && !(x instanceof DataView));
 
-export function asFiniteVector(x, where, what = "entry", { allowEmpty = false } = {}) {
+const AS_FINITE_VECTOR_OPTS = new Set(["allowEmpty"]);
+export function asFiniteVector(x, where, what = "entry", opts = {}) {
+  checkOpts(opts, AS_FINITE_VECTOR_OPTS, "asFiniteVector");
+  const { allowEmpty = false } = opts;
   if (!isVector(x))
     throw new Error(`${where} must be an array of numbers; got ${x === null ? "null" : typeof x}`);
   if (x.length === 0 && !allowEmpty)
@@ -346,6 +349,23 @@ export function asWeights(W, nNodes, where = "W") {
   return u.map(v => v / total);
 }
 
+/* A finite nonnegative vector normalised to total `mass`, scale-safely.
+   A relative target is a law up to a positive factor, but summing first
+   overflows when every ENTRY is finite: [0.8, 0.6, 0.4, 0.2] * 1e308 has
+   an infinite total, and v / Infinity zeroed the target before any
+   solver ran (#461, #463, #483, #484). Rescale by the max only when the
+   sum overflows, so ordinary inputs stay bit-identical (as #326). */
+export function rescaledTarget(v, mass = 1) {
+  let u = Array.from(v);
+  let s = u.reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(s)) {
+    const mx = Math.max(...u.map(Math.abs));
+    u = u.map(x => x / mx);
+    s = u.reduce((a, b) => a + b, 0);
+  }
+  return u.map(x => x * (mass / s));
+}
+
 /* ---- options-object guards ---------------------------------------- *
  * A javascript object silently swallows a key nobody reads, so an API
  * whose options are an object cannot rely on the language to reject a
@@ -510,6 +530,9 @@ export function gaugeCenter(V) {
  * whole probability vector comes back NaN (#233). The same tabulated
  * cliff was in the R GHK at 30 (#190). */
 export function firstPrimes(d) {
+  // a count: NaN and negatives returned [] (a rank-zero rule), 2.5 three
+  // primes, and Infinity never returned (#557)
+  asCount(d, "count of primes", 0, "firstPrimes");
   const out = [];
   for (let c = 2; out.length < d; c++) {
     let isP = true;

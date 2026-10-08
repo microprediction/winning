@@ -1,8 +1,10 @@
 """One race, five covariance grammars.
 
-Every model in this package is the SAME Gaussian min-race, Y = mu + noise;
-these dataclasses are declarative descriptions of the noise covariance that
-admit O(N)-per-lattice-point evaluation. Pass any of them as `structure=` to
+Every grammar describes the SAME min-race, Y = mu + noise; these
+dataclasses are declarative descriptions of the noise covariance that admit
+O(N)-per-lattice-point evaluation. With the normal base they are Gaussian
+covariance grammars; Independent and Factor also accept any supported smooth
+base, while Blocks, Nested and Tree are Gaussian only. Pass any of them as `structure=` to
 the front-door verbs (race_probabilities, calibrate_abilities, race_jacobian,
 polish_race):
 

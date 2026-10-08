@@ -268,6 +268,24 @@ test_that("target_floor floors memberships, not the caller's units (#592)", {
                "non-negative")
 })
 
+test_that("a Student-t(3) base prices at the default budget (#468)", {
+  st3 <- function(z) {
+    q <- 1 + z * z
+    list(S = 1 - (0.5 + (atan(z) + z / q) / pi), f = 2 / (pi * q * q),
+         fp = -8 * z / (pi * q^3))
+  }
+  attr(st3, "resolution") <- 1 / sqrt(3)
+  ref <- 0.6881209595067086                    # direct quadrature
+  q <- suppressWarnings(top_k_probabilities(c(0, 0.5), 1, D = c(1, 1),
+                                            base = st3))
+  expect_lt(abs(q[1] - ref), 1e-7)
+  b <- suppressWarnings(bottom_k_probabilities(c(0, 0.5), 1, D = c(1, 1),
+                                               base = st3))
+  expect_lt(abs(b[2] - ref), 1e-7)
+  R <- suppressWarnings(rank_probabilities(c(0, 0.5), D = c(1, 1), base = st3))
+  expect_lt(max(abs(rowSums(R) - 1)), 1e-9)
+})
+
 test_that("mu0 must have one entry per runner, not redefine the field (#554)", {
   p <- c(.4, .3, .2, .1)
   for (m0 in list(rep(0, 8), rep(0, 3), 0, numeric(0)))

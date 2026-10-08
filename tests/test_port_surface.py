@@ -66,6 +66,11 @@ SURFACE = {
     "concentration_matrix":                (PRESENT, PRESENT,
                                         "exported by all three and exercised by none:"
                                         " a scenario would be worth adding"),
+    "crn_posterior":                       (GAP, GAP,
+                                        "python only: a belief update (#624), not a race"
+                                        " verb; its output feeds the ported verbs"),
+    "crn_posterior_replicates":            (GAP, GAP,
+                                        "python only: as crn_posterior"),
     "exponential_power_base":              (GAP, GAP,
                                         "a base density, not a verb: the ports carry normal,"
                                         "gumbel, logistic and laplace inline and take a"
@@ -81,9 +86,14 @@ SURFACE = {
                                         "a base density, not a verb: the ports carry normal,"
                                         "gumbel, logistic and laplace inline and take a"
                                         "callable for the rest"),
+    "feature_bandit_posterior":            (GAP, GAP,
+                                        "python only: as crn_posterior"),
     "fit_covariance":                      (PRESENT, GAP,
                                         "covariance fitting, reached through cov= rather than"
                                         "called"),
+    "fit_tree":                            (GAP, GAP,
+                                        "python only: dense-covariance intake onto a known"
+                                        " genealogy (#622); the ports price the Tree it returns"),
     "harville_order_logprob":              (GAP, GAP,
                                         "order-statistics likelihood, python only"),
     "harville_place_probabilities":        (GAP, GAP,
@@ -144,6 +154,9 @@ SURFACE = {
     "top_k_probabilities":                 (PARITY, PARITY, ""),
     "tree_race_jacobian":                  (PARITY, PARITY, ""),
     "tree_race_probabilities":             (PARITY, PARITY, ""),
+    "update_contrast":                     (GAP, GAP,
+                                        "python only: a belief update (#625), not a race"
+                                        " verb; its output feeds the ported verbs"),
     "win_probabilities":                   (GAP, GAP,
                                         "alias of a verb that carries the parity scenario"),
     "win_probabilities_factor":            (PRESENT, GAP,
@@ -417,6 +430,29 @@ def test_every_browser_options_api_validates_its_options():
     assert not offenders, (
         "browser exports taking an options object without validating it -- "
         "an object swallows a key nobody reads:\n  " + "\n  ".join(offenders))
+
+
+def test_browser_and_standalone_options_are_all_checked():
+    """An inline-destructured options object -- `fn(x, { loc, scale } = {})`
+    -- skips checkOpts by construction, and the audit above only matched a
+    parameter literally named `opts = {}`. skewNormalDensity({sacle})
+    and dividendImpliedAbility({unti}) priced the defaults silently
+    (#561). The standalone engine is a browser options API too (#559)."""
+    offenders = []
+    paths = sorted((ROOT / "docs/js/winning").glob("*.mjs")) + [
+        ROOT / "js/factor/factor_race.mjs"]
+    for path in paths:
+        text = path.read_text()
+        for m in re.finditer(r"export function (\w+)\(([^)]*)\)\s*\{", text):
+            if re.search(r"\{[^}]*\}\s*=\s*\{\}", m.group(2)):
+                offenders.append(f"{path.name}::{m.group(1)}")
+            elif re.search(r"\bopts\s*=\s*\{\}", m.group(2)):
+                body = text[m.end():m.end() + 400]
+                if "checkOpts(opts," not in body:
+                    offenders.append(f"{path.name}::{m.group(1)} (no checkOpts)")
+    assert not offenders, (
+        "browser exports whose options object is not validated:\n  "
+        + "\n  ".join(offenders))
 
 
 # helpers whose trailing destructured object is not a public options API

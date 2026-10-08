@@ -150,10 +150,14 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
     </p>
 
     <h2 id="grammars">One race, five covariance grammars</h2>
-    <p>Every model in the package is the same Gaussian min-race
+    <p>Every grammar describes the same min-race
     $Y = \mu + \text{noise}$; the grammars are declarative descriptions of the
-    noise covariance that admit $O(N)$-per-lattice-point evaluation. Pass any of
-    them as <code>structure=</code> to the front-door verbs.</p>
+    noise covariance that admit $O(N)$-per-lattice-point evaluation. With the
+    normal base they are Gaussian covariance grammars; <code>Independent</code>
+    and <code>Factor</code> also accept any supported smooth base, while
+    <code>Blocks</code>, <code>Nested</code> and <code>Tree</code> are
+    Gaussian only. Pass any of them as <code>structure=</code> to the
+    front-door verbs.</p>
 <pre><code>from winning import (Independent, Factor, Blocks, Nested, Tree,
                      race_probabilities, polish_race)
 

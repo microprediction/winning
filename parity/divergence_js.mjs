@@ -28,7 +28,7 @@ for (const c of cases) {
     const a = Array.from(p.flat ? p.flat(9) : p, Number);
     out[c.id] = {
       verdict: a.every(Number.isFinite) ? "ACCEPT" : "ACCEPT_NONFINITE",
-      value: a.slice(0, 6),
+      value: a,   // every entry: a prefix hid tail divergences (#490)
     };
   } catch (e) {
     out[c.id] = { verdict: "REFUSE", error: String(e.message).slice(0, 40) };

@@ -222,9 +222,12 @@ test_that("mlogit_fast refuses cancelling choices and fits rank four", {
   J <- 6L
   df <- expand.grid(alt = seq_len(J), id = 1:3)
   df$chosen <- df$alt == ((df$id - 1L) %% J + 1L)
-  df$x <- seq_len(nrow(df)) / nrow(df)
-  fit <- mlogit_fast(chosen ~ x, .fake_dfidx(df[, c("id", "alt", "chosen", "x")]),
-                     r = 4L, Qf = 3L, Qz = 3L, maxit = 1L)
+  # not linear in the row index, which aliased x with the intercepts
+  # (#581); three observations leave alternatives unchosen (#496)
+  df$x <- sin(seq_len(nrow(df)))
+  fit <- suppressWarnings(
+    mlogit_fast(chosen ~ x, .fake_dfidx(df[, c("id", "alt", "chosen", "x")]),
+                r = 4L, Qf = 3L, Qz = 3L, maxit = 1L))
   expect_true(is.finite(fit$logLik))
 })
 
@@ -238,6 +241,40 @@ test_that("fractional labels are refused and the rank is identified (#194, #201)
     expect_identical(.check_rank(NULL, J), as.integer(min(2L, J - 2L)))
     expect_error(.check_rank(J - 1L, J), "not identified")
   }
+})
+
+test_that("rank and maxit are whole counts (#479, #560)", {
+  for (bad in list(1.1, 1.9, NaN, Inf, TRUE, c(1, 1)))
+    expect_error(.check_rank(bad, 4L), "whole number")
+  expect_identical(.check_rank(2.0, 4L), 2L)
+  set.seed(2)
+  d <- data.frame(id = rep(1:30, each = 3), alt = rep(1:3, 30),
+                  x = rnorm(90))
+  d$choice <- rep(c(1, 2, 3), 10)[d$id] == d$alt
+  attr(d, "idx") <- d[, c("id", "alt")]
+  for (bad in list(NaN, Inf, 0.5, -1, TRUE))
+    expect_error(mlogit_fast(choice ~ x, d, r = 0L, maxit = bad), "maxit")
+})
+
+test_that("contrast-unidentified covariates are refused (#581)", {
+  Tn <- 120L; J <- 3L
+  winner <- rep(1:3, c(30, 50, 40))
+  d <- data.frame(id = rep(seq_len(Tn), each = J), alt = rep(seq_len(J), Tn))
+  d$choice <- d$alt == rep(winner, each = J)
+  d$x <- as.numeric(d$alt == 2L)
+  attr(d, "idx") <- d[, c("id", "alt")]
+  expect_error(mlogit_fast(choice ~ x, d, r = 0L), "x are not identified")
+})
+
+test_that("a never-chosen alternative is not reported converged (#496)", {
+  set.seed(4)
+  Tn <- 60L; J <- 3L
+  d <- data.frame(id = rep(seq_len(Tn), each = J), alt = rep(seq_len(J), Tn),
+                  x = rnorm(Tn * J))
+  d$choice <- d$alt == rep(1L + (seq_len(Tn) %% 2L), each = J)
+  attr(d, "idx") <- d[, c("id", "alt")]
+  expect_warning(fit <- mlogit_fast(choice ~ x, d, r = 0L), "never chosen")
+  expect_equal(fit$convergence, 2L)
 })
 
 test_that("unused factor levels are not phantom choosers or alternatives (#464)", {

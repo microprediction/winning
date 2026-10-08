@@ -342,6 +342,12 @@ pub fn bary_row(nodes: &[f64], wts: &[f64], q: f64) -> Vec<f64> {
     row
 }
 
+/// Validity tolerances of the separated pass (#601): the reconstructed
+/// log-survival field may exceed 0 only by rounding, and a share may
+/// leave [0, total] only by rounding.
+const SEP_FIELD_TOL: f64 = 1e-6;
+const SEP_SHARE_TOL: f64 = 1e-9;
+
 #[allow(clippy::too_many_arguments)]
 pub fn separated_kernel(
     mu: ArrayView1<f64>,
@@ -353,6 +359,9 @@ pub fn separated_kernel(
     rm: usize,
     rs_req: usize,
 ) -> (Array1<f64>, f64) {
+    if let Err(e) = check_cheb_orders(rm, rs_req) {
+        panic!("{e}");
+    }
     let n = mu.len();
     let q = f_nodes.nrows();
     let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
@@ -410,7 +419,7 @@ pub fn separated_kernel(
     // per-runner sigma rows (fixed across nodes)
     let ts_rows: Vec<Vec<f64>> = (0..n).map(|i| bary_row(&sn, &ws, sd[i])).collect();
 
-    let p: Vec<f64> = (0..q)
+    let (p, bad): (Vec<f64>, bool) = (0..q)
         .into_par_iter()
         .map(|qi| {
             let m = &m_all[qi * n..(qi + 1) * n];
@@ -429,10 +438,16 @@ pub fn separated_kernel(
             // field(x) = sum_c amat_c logS_c(x); weights = exp(field) dx
             // b_c = sum_x haz_c(x) * weights(x)
             let mut b = vec![0.0f64; r_tot];
+            let mut bad = false;
             for t in 0..points {
                 let mut field = 0.0;
                 for c in 0..r_tot {
                     field += amat[c] * logs_c[c * points + t];
+                }
+                // a sum of log survivals is <= 0: overshoot means the
+                // global polynomial has left its regime (#601)
+                if field > SEP_FIELD_TOL {
+                    bad = true;
                 }
                 if field > -745.0 {
                     let wt = field.exp() * dx;
@@ -452,19 +467,30 @@ pub fn separated_kernel(
                 }
                 acc[i] = wq * s;
             }
-            acc
+            (acc, bad)
         })
         .reduce(
-            || vec![0.0f64; n],
-            |mut a, b| {
+            || (vec![0.0f64; n], false),
+            |(mut a, fa), (b, fb)| {
                 for (x, y) in a.iter_mut().zip(b) {
                     *x += y;
                 }
-                a
+                (a, fa || fb)
             },
         );
 
     let total: f64 = p.iter().sum();
+    // Signed or super-unit shares, or an overshooting field, mean the
+    // interpolant is not a valid law here (#601: D = [1e-4, .16, .16]
+    // gave [277, -168, -108] with total 1.0). Fall back to the exact
+    // field pass on the same automatic window: at most the cost the
+    // separation was saving, never an unbounded refinement.
+    let signed = !(total > 0.0)
+        || p.iter().any(|&x| !(x >= -SEP_SHARE_TOL * total && x <= (1.0 + SEP_SHARE_TOL) * total));
+    if bad || signed {
+        let (pf, _sl, tf) = forward_kernel(mu, v, d, f_nodes, w, points, f64::NAN, f64::NAN);
+        return (pf, tf);
+    }
     let out = Array1::from_iter(p.into_iter().map(|x| x / total));
     (out, total)
 }
@@ -1079,6 +1105,9 @@ pub fn tree_kernel(
     lo: f64,
     hi: f64,
 ) -> Vec<f64> {
+    if let Err(e) = check_tree(parent, starts.len()) {
+        panic!("{e}");
+    }
     let n = mu.len();
     let nc = starts.len();
     let nt = parent.len();
@@ -1386,7 +1415,8 @@ fn survival_and_pdf(cdf: &[f64]) -> (Vec<f64>, Vec<f64>) {
 
 /// G[q][t] = prod_j (S_j(t) + u_q f_j(t)) -- the field at the nodes.
 pub fn exact_field(cdfs: &[Vec<f64>], nodes: &[f64]) -> Vec<Vec<f64>> {
-    let m = cdfs[0].len();
+    // an empty field is the empty product (#526: cdfs[0] panicked)
+    let m = cdfs.first().map_or(0, |c| c.len());
     let mut g = vec![vec![1.0f64; m]; nodes.len()];
     for c in cdfs {
         let (s, f) = survival_and_pdf(c);
@@ -1433,7 +1463,11 @@ pub const EXACT_TOL: f64 = 1e-14;
 
 /// Exact state prices (dead heats split equally) of runners with these
 /// CDFs on one common lattice.
+/// An empty field has no state prices: the result is empty (#526).
 pub fn exact_state_prices_from_cdfs(cdfs: &[Vec<f64>]) -> Vec<f64> {
+    if cdfs.is_empty() {
+        return Vec::new();
+    }
     let exact = exact_n_nodes(cdfs.len());
     let mut q = EXACT_Q_START.min(exact);
     let mut prev: Option<Vec<f64>> = None;
@@ -1476,6 +1510,25 @@ pub fn exact_state_prices_from_offsets(density: &[f64], offsets: &[f64]) -> Vec<
     exact_state_prices_from_cdfs(&cdfs)
 }
 
+/// The calibration table's offset grid (#473): nonempty, finite and
+/// descending, as winning/classic/lattice_calibration.py's
+/// _assert_descending. Price falls as the offset rises, so only a
+/// descending grid gives interp1 the ascending price axis it needs; an
+/// ascending one clamped target and current price to the same endpoint
+/// and returned the guess (a tie) unchanged.
+pub fn check_offset_samples(xs: &[f64]) -> Result<(), String> {
+    if xs.is_empty() {
+        return Err("offset_samples is empty".into());
+    }
+    check_finite("offset_samples", xs)?;
+    if let Some(i) = (1..xs.len()).find(|&i| xs[i] > xs[i - 1]) {
+        return Err(format!(
+            "offset_samples must be descending; offset_samples[{i}] = {} > offset_samples[{}] = {}",
+            xs[i], i - 1, xs[i - 1]));
+    }
+    Ok(())
+}
+
 /// solve_for_implied_offsets: the paper's table iteration as a defect
 /// correction, a_i += T^{-1}(p_i) - T^{-1}(P_i(a)), so its fixed point
 /// is the exact forward map (see lattice_calibration.py). The field is
@@ -1487,6 +1540,13 @@ pub fn exact_calibrate(
     guess: &[f64],
     n_iter: usize,
 ) -> Vec<f64> {
+    if let Err(e) = check_offset_samples(offset_samples) {
+        panic!("{e}");
+    }
+    // an empty field has nothing to calibrate, whatever n_iter (#526)
+    if prices.is_empty() {
+        return Vec::new();
+    }
     let l = ((density.len() - 1) / 2) as i64;
     let base = padded_base_cdf(density);
     let mut implied: Vec<f64> = guess.to_vec();
@@ -1577,6 +1637,126 @@ pub fn check_ordered_k(k: usize) -> Result<(), String> {
     Ok(())
 }
 
+/// Every entry of a named input is finite (#602). A NaN factor node
+/// used to contribute zero raw mass (every `e > -745` test is false)
+/// and be normalized away, pricing the law conditional on the other
+/// nodes.
+pub fn check_finite<'a>(name: &str, x: impl IntoIterator<Item = &'a f64>)
+                        -> Result<(), String> {
+    for (i, &v) in x.into_iter().enumerate() {
+        if !v.is_finite() {
+            return Err(format!("{name}[{i}] = {v} is not finite"));
+        }
+    }
+    Ok(())
+}
+
+/// Performance scales / idiosyncratic variances: finite and strictly
+/// positive (#506, #519). The lattices divide by sd and take ln(sd), so
+/// a negative scale flipped the density's sign (signed "probabilities")
+/// and a zero one produced NaN or huge signed shares.
+pub fn check_positive<'a>(name: &str, x: impl IntoIterator<Item = &'a f64>)
+                          -> Result<(), String> {
+    for (i, &v) in x.into_iter().enumerate() {
+        if !(v.is_finite() && v > 0.0) {
+            return Err(format!(
+                "{name}[{i}] = {v}; a performance scale/variance must be finite and > 0"));
+        }
+    }
+    Ok(())
+}
+
+/// An explicit lattice window: finite with hi > lo (#516). A reversed
+/// window made the spacing negative and negated every integral.
+pub fn check_window(lo: f64, hi: f64) -> Result<(), String> {
+    if !(lo.is_finite() && hi.is_finite() && hi > lo) {
+        return Err(format!(
+            "lattice window (lo, hi) = ({lo}, {hi}) must be finite with hi > lo"));
+    }
+    Ok(())
+}
+
+/// An optional lattice window: both NaN (choose automatically) or a
+/// valid explicit window.
+pub fn check_optional_window(lo: f64, hi: f64) -> Result<(), String> {
+    if lo.is_nan() && hi.is_nan() {
+        return Ok(());
+    }
+    check_window(lo, hi)
+}
+
+/// top_k_window controls (#516): tail mass 0 < delta < 1, finite
+/// padding pad_sds >= 0. A negative pad or delta >= 1 returned a
+/// reversed window.
+pub fn check_window_controls(delta: f64, pad_sds: f64) -> Result<(), String> {
+    if !(delta > 0.0 && delta < 1.0) {
+        return Err(format!("delta = {delta} must be in (0, 1)"));
+    }
+    if !(pad_sds.is_finite() && pad_sds >= 0.0) {
+        return Err(format!("pad_sds = {pad_sds} must be finite and >= 0"));
+    }
+    Ok(())
+}
+
+/// Chebyshev interpolation orders of the separated kernel (#522): at
+/// least one node each. Zero nodes has no interpolation meaning and
+/// indexed an empty barycentric row.
+pub fn check_cheb_orders(rm: usize, rs: usize) -> Result<(), String> {
+    if rm < 1 || rs < 1 {
+        return Err(format!(
+            "rm = {rm}, rs = {rs}; Chebyshev orders must be at least 1"));
+    }
+    Ok(())
+}
+
+/// Tree topology (#328, #517): nodes 0..n_leaves are the clusters,
+/// every parent is -1 (the root) or another node, following parents
+/// terminates, and there is exactly one root. A forest priced each
+/// component without the others' competitors (two roots, two leaves:
+/// shares [1, 1]).
+pub fn check_tree(parent: &[i64], n_leaves: usize) -> Result<(), String> {
+    let nt = parent.len();
+    if nt < n_leaves {
+        return Err(format!(
+            "parent has {nt} nodes, fewer than the {n_leaves} cluster leaves"));
+    }
+    for (t, &p) in parent.iter().enumerate() {
+        if p < -1 || p >= nt as i64 || p == t as i64 {
+            return Err(format!(
+                "parent[{t}] = {p} is not -1 or another node index in [0, {nt})"));
+        }
+    }
+    for t in 0..nt {
+        let (mut u, mut hops) = (t, 0usize);
+        while parent[u] >= 0 {
+            u = parent[u] as usize;
+            hops += 1;
+            if hops > nt {
+                return Err(format!("parent has a cycle through node {t}"));
+            }
+        }
+    }
+    let roots: Vec<usize> = (0..nt).filter(|&t| parent[t] < 0).collect();
+    if roots.len() != 1 {
+        let shown: Vec<String> = roots.iter().take(8).map(|r| r.to_string()).collect();
+        return Err(format!(
+            "a tree has exactly one root (parent -1); got {} ({})",
+            roots.len(), shown.join(", ")));
+    }
+    Ok(())
+}
+
+/// The normal-base top-k / rank kernels' shared preconditions: scales
+/// finite and positive, locations finite, window finite and ordered.
+fn assert_topk_inputs(mu: &[f64], sd: &[f64], lo: f64, hi: f64) {
+    let r = check_finite("mu", mu)
+        .and_then(|_| check_positive("sd", sd))
+        .and_then(|_| check_window(lo, hi));
+    if let Err(e) = r {
+        panic!("{e}");
+    }
+}
+
 /// The top-k lattice window, normal base: mirrors
 /// winning/factor/topk.py::_count_window -- geometric bracket growth
 /// then bisection on the monotone mean count, Chernoff-slack upper
@@ -1589,7 +1769,11 @@ pub fn top_k_window_kernel(
     pad_sds: f64,
 ) -> (f64, f64) {
     let n = mu.len();
-    if let Err(e) = check_window_depth(k, n) {
+    let r = check_window_depth(k, n)
+        .and_then(|_| check_finite("mu", mu))
+        .and_then(|_| check_positive("sd", sd))
+        .and_then(|_| check_window_controls(delta, pad_sds));
+    if let Err(e) = r {
         panic!("{e}");
     }
     let smax = sd.iter().cloned().fold(f64::MIN, f64::max).max(1e-12);
@@ -1805,6 +1989,7 @@ pub fn top_k_slopes_kernel(
     if let Err(e) = check_top_k_depth(k, n) {
         panic!("{e}");
     }
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
@@ -1866,6 +2051,7 @@ pub fn top_k_jacobians_kernel(
     if let Err(e) = check_top_k_depth(k, n) {
         panic!("{e}");
     }
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
@@ -1943,6 +2129,7 @@ pub fn rank_marginals_kernel(
     points: usize,
 ) -> Vec<f64> {
     let n = mu.len();
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
@@ -1991,6 +2178,7 @@ pub fn rank_jacobian_kernel(
     if let Err(e) = check_rank(r, n) {
         panic!("{e}");
     }
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
@@ -2066,6 +2254,7 @@ pub fn top_k_kernel(
     if let Err(e) = check_top_k_depth(k, n) {
         panic!("{e}");
     }
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     // shared field rows and count distribution (serial under the small-
@@ -2662,5 +2851,78 @@ mod tests {
         for (a, b) in w.iter().zip(&wc) {
             assert!((a / b - ratio).abs() < 1e-8 * ratio.abs());
         }
+    }
+
+    #[test]
+    fn value_contracts() {
+        assert!(check_positive("sd", &[1.0, 2.0]).is_ok());
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(check_positive("sd", &[1.0, bad]).is_err());
+        }
+        assert!(check_finite("f", &[0.0, f64::NAN]).is_err());
+        assert!(check_window(-8.0, 9.0).is_ok());
+        for (lo, hi) in [(9.0, -8.0), (0.0, 0.0), (f64::NAN, 9.0), (-8.0, f64::INFINITY)] {
+            assert!(check_window(lo, hi).is_err());
+        }
+        assert!(check_optional_window(f64::NAN, f64::NAN).is_ok());
+        assert!(check_optional_window(f64::NAN, 1.0).is_err());
+        assert!(check_window_controls(1e-12, 2.0).is_ok());
+        assert!(check_window_controls(1.0, 2.0).is_err());
+        assert!(check_window_controls(1e-12, -2.0).is_err());
+        assert!(check_cheb_orders(1, 1).is_ok());
+        assert!(check_cheb_orders(0, 14).is_err());
+        assert!(check_cheb_orders(48, 0).is_err());
+        assert!(check_offset_samples(&[2.0, 1.0, 1.0, 0.0]).is_ok());
+        assert!(check_offset_samples(&[0.0, 1.0]).is_err());
+        assert!(check_offset_samples(&[]).is_err());
+        assert!(check_offset_samples(&[1.0, f64::NAN]).is_err());
+    }
+
+    #[test]
+    fn tree_needs_exactly_one_root() {
+        assert!(check_tree(&[2, 2, -1], 2).is_ok());
+        let e = check_tree(&[-1, -1], 2).unwrap_err();
+        assert!(e.contains("exactly one root"), "{e}");
+        assert!(check_tree(&[1, 0, -1], 2).unwrap_err().contains("cycle"));
+    }
+
+    #[test]
+    #[should_panic(expected = "must be finite and > 0")]
+    fn top_k_kernel_refuses_negative_scale() {
+        top_k_kernel(&[0.0, 0.2, 0.7], &[1.0, -1.0, 1.0], 1, -8.0, 9.0, 1001);
+    }
+
+    #[test]
+    #[should_panic(expected = "hi > lo")]
+    fn rank_kernel_refuses_reversed_window() {
+        rank_marginals_kernel(&[0.0, 0.2, 0.7], &[1.0; 3], 9.0, -8.0, 1001);
+    }
+
+    #[test]
+    fn empty_classic_field_is_empty() {
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        assert!(exact_state_prices_from_offsets(&d, &[]).is_empty());
+        assert!(exact_calibrate(&d, &[], &[1.0, 0.0, -1.0], &[], 3).is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "descending")]
+    fn calibrate_refuses_ascending_grid() {
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        exact_calibrate(&d, &[0.5, 0.5], &[-1.0, 0.0, 1.0], &[0.0, 0.0], 1);
+    }
+
+    #[test]
+    fn separated_kernel_never_returns_signed_shares() {
+        // #601: [277, -168, -108] with total 1.0 before the fallback
+        let mu = Array1::from(vec![0.4, -1.0, -0.6]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = Array1::from(vec![1e-4, 0.16, 0.16]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = Array1::from(vec![1.0]);
+        let (p, _) = separated_kernel(mu.view(), v.view(), d.view(), f.view(),
+                                      w.view(), 1501, 48, 14);
+        assert!(p.iter().all(|&x| (0.0..=1.0).contains(&x)), "{p:?}");
+        assert!((p[1] - 0.760249107).abs() < 1e-6, "{p:?}");
     }
 }

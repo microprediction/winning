@@ -1739,6 +1739,202 @@ accepts("the inverse takes a scalar D, matching python",
           relabel([0, 0, 0, 0], CB, pm) < 1e-14);
 }
 
+// --- callable-base central resolution reaches every lattice (#468, #600)
+{
+  const student3 = z => {
+    const q = 1 + z * z, f = 2 / (Math.PI * q * q);
+    return [1 - (0.5 + (Math.atan(z) + z / q) / Math.PI), f, -8 * z / (Math.PI * q * q * q)];
+  };
+  student3.resolution = 1 / Math.sqrt(3);
+  const quad = 0.6881209595067086;        // P(X0 < X1), direct quadrature
+  accepts("Student-t(3) top-k prices at the default budget (#468)",
+          () => topk.topKProbabilities([0, 0.5], 1, { D: [1, 1], base: student3 }),
+          q => Math.abs(q[0] - quad) < 1e-7, q => `${q[0]}`);
+  accepts("Student-t(3) bottom-k is the reflection (#468)",
+          () => topk.bottomKProbabilities([0, 0.5], 1, { D: [1, 1], base: student3 }),
+          q => Math.abs(q[1] - quad) < 1e-7, q => `${q[1]}`);
+  // python's rank_probabilities returns the same matrix to 1e-8 (row
+  // 0: 0.68814385, 0.31185615 since the dyadic point count, #515): the
+  // rank route is 2.3e-5 off quadrature
+  accepts("Student-t(3) rank matrix prices at the default budget (#468)",
+          () => topk.rankProbabilities([0, 0.5], { D: [1, 1], base: student3 }),
+          P => Math.abs(P[0][0] - 0.68814385) < 1e-7 && Math.abs(P[0][0] + P[1][0] - 1) < 1e-4,
+          P => `${P[0][0]}`);
+  accepts("Student-t(3) top-k Jacobian is finite (#468)",
+          () => topk.topKJacobians([0, 0.5], 1, { D: [1, 1], base: student3 }),
+          J => J.Jmu.flat().every(Number.isFinite));
+  // a unit-variance mixture whose centre has scale 0.1
+  const w = 0.99, s = 0.1, t = Math.sqrt((1 - w * s * s) / (1 - w));
+  const narrow = z => {
+    const ps = core.npdf(z / s), pt = core.npdf(z / t);
+    return [Math.max(w * core.ndtr(-z / s) + (1 - w) * core.ndtr(-z / t), 1e-300),
+            w * ps / s + (1 - w) * pt / t,
+            -w * z * ps / s ** 3 - (1 - w) * z * pt / t ** 3];
+  };
+  narrow.span = [30, 30];
+  narrow.resolution = s;
+  const exact = w * w * core.ndtr(-0.2 / Math.sqrt(2 * s * s)) +
+    2 * w * (1 - w) * core.ndtr(-0.2 / Math.sqrt(s * s + t * t)) +
+    (1 - w) ** 2 * core.ndtr(-0.2 / Math.sqrt(2 * t * t));
+  accepts("race honours base.resolution at 257 points (python: 0.0887283) (#600)",
+          () => races.raceProbabilities([0, 0.2], { D: [1, 1], base: narrow }),
+          p => Math.abs(p[1] - 0.08872825429) < 1e-8, p => `${p[1]}`);
+  accepts("race reaches the analytic mixture by 2001 points (#600)",
+          () => races.raceProbabilities([0, 0.2], { D: [1, 1], base: narrow, points: 2001 }),
+          p => Math.abs(p[1] - exact) < 1e-8);
+  accepts("top-k and bottom-k honour base.resolution at the default budget (#468, #600)",
+          () => [topk.topKProbabilities([0, 0.2], 1, { D: [1, 1], base: narrow }),
+                 topk.bottomKProbabilities([0, 0.2], 1, { D: [1, 1], base: narrow })],
+          ([a, b]) => Math.abs(a[1] - exact) < 1e-8 && Math.abs(b[0] - exact) < 1e-8);
+  const bad = z => narrow(z);
+  bad.resolution = "0.1";
+  rejects(races.raceProbabilities, [[0, 0.2], { D: [1, 1], base: bad }],
+          "a malformed base.resolution is refused (#600)", "resolution");
+  rejects(topk.topKProbabilities, [[0, 0.2], 1, { D: [1, 1], base: bad }],
+          "top-k refuses a malformed base.resolution (#600)", "resolution");
+}
+
+// --- polishRace certifies a solved KKT point, without the FD re-solve (#547)
+{
+  const o = polish.polishRace({ mu0: [-1, 0, 1], D: [1, 1, 1], points: 129,
+                                nameCaps: [0.55, NaN, NaN], fdFallback: false });
+  const pyMu = [-0.6167863985024332, -0.3124412243042889, 0.9292276228067221];
+  holds("a binding name cap reports converged (#547)", o.info.converged === true);
+  holds("...with the right active set and no violation (#547)",
+        o.info.active.length === 1 && o.info.active[0] === 0 && o.info.maxViolation <= 1e-8);
+  holds("...at python's SLSQP optimum (#547)",
+        Math.max(...o.mu.map((v, i) => Math.abs(v - pyMu[i]))) < 1e-7 && Math.abs(o.p[0] - 0.55) < 1e-8);
+}
+
+// --- polishRace is equivariant under a change of ability units (#593)
+for (const c of [1e-8, 100]) {
+  const o = polish.polishRace({ mu0: [-1.5 * c, -1.5 * c, 3 * c], D: [c * c, c * c, c * c],
+                                groups: [[[0, 1], 0.9]], points: 257 });
+  holds(`polishRace at units x${c} is the unit-scale optimum (#593)`,
+        o.info.converged && Math.abs(o.p[0] + o.p[1] - 0.9) < 1e-7 &&
+        Math.abs(o.mu[2] / c - 0.7279331) < 1e-5, `${o.mu.map(x => x / c)}`);
+}
+
+// --- typed controls are not coerced, and falsy is not "omitted"
+{
+  const q = [0.6, 0.4, 0];
+  for (const tf of ["0.1", true, Infinity, NaN])
+    rejects(topk.abilitiesFromTopk, [q, 1, { D: [1, 1, 1], points: 257, targetFloor: tf }],
+            `top-k targetFloor ${String(tf)} is refused (#525)`, "targetFloor");
+  const mu = [0, 0.3, 0.8], cl = [0, 0, 1], ld = [0.4, 0.6, 0.5], D = [1, 1, 1];
+  const cp = [0.7, -0.2, 0.4];
+  for (const g of ["2", true, false, null, NaN]) {
+    rejects(blocks.nestedRaceJacobian, [mu, cl, ld, D, { coupling: cp, gamma: g, points: 129 }],
+            `nested Jacobian refuses gamma ${String(g)} (#540)`, "gamma");
+    rejects(polish.raceJacobian, [mu, { structure: structures.Nested(cl, ld, D, cp, g), points: 129 }],
+            `structured nested Jacobian refuses gamma ${String(g)} (#540)`, "gamma");
+  }
+  for (const c of [NaN, false, ""]) {
+    rejects(blocks.nestedRaceProbabilities, [mu, cl, ld, D, { coupling: c, points: 129 }],
+            `nested forward refuses coupling ${JSON.stringify(c)} (#586)`, "coupling");
+    rejects(blocks.nestedRaceJacobian, [mu, cl, ld, D, { coupling: c, points: 129 }],
+            `nested Jacobian refuses coupling ${JSON.stringify(c)} (#586)`, "coupling");
+    rejects(races.raceProbabilities, [mu, { structure: structures.Nested(cl, ld, D, c), points: 129 }],
+            `structured nested forward refuses coupling ${JSON.stringify(c)} (#586)`, "coupling");
+  }
+  accepts("an omitted coupling is still the block race (#586)",
+          () => blocks.nestedRaceProbabilities(mu, cl, ld, D, { points: 129 }),
+          p => Math.abs(p[0] - blocks.blockRaceProbabilities(mu, cl, ld, D, { points: 129 })[0]) < 1e-15);
+  const m4 = [-0.8, -0.1, 0.3, 0.9], D4 = [0.7, 1.1, 0.9, 1.3];
+  for (const V of [NaN, false, ""]) {
+    for (const [name, f, args] of [
+      ["topKProbabilities", topk.topKProbabilities, [m4, 2, { D: D4, V }]],
+      ["bottomKProbabilities", topk.bottomKProbabilities, [m4, 2, { D: D4, V }]],
+      ["topKJacobians", topk.topKJacobians, [m4, 2, { D: D4, V }]],
+      ["rankProbabilities", topk.rankProbabilities, [m4, { D: D4, V }]],
+      ["abilitiesFromTopk", topk.abilitiesFromTopk, [[0.85, 0.57, 0.38, 0.2], 2, { D: D4, V }]]])
+      rejects(f, args, `${name} refuses falsy V ${JSON.stringify(V)} (#549)`, "V");
+  }
+  for (const win of ["bulkk", "", null, 3, true])
+    rejects(races.raceProbabilities, [[0, 1, 2], { D: [0.01, 4, 100], window: win }],
+            `raceProbabilities refuses window ${JSON.stringify(win)} (#582)`, "window");
+  rejects(classic.skewNormalDensity, [50, 0.1, { sacle: 0.3 }],
+          "skewNormalDensity refuses a misspelled key (#561)", "sacle");
+  rejects(classic.dividendImpliedAbility, [[2, 4, 8], classic.skewNormalDensity(50, 0.1, { a: 0 }), { unti: 0.1 }],
+          "dividendImpliedAbility refuses a misspelled key (#561)", "unti");
+  rejects(polish.concentrationMatrix, [3, { namecaps: [0.5] }],
+          "concentrationMatrix refuses a misspelled key (#561)", "namecaps");
+}
+
+// --- a relative target is scale-free past the double range of its SUM
+//     (#461, #463, #483, #484)
+{
+  const q = [0.8, 0.6, 0.4, 0.2];
+  const same = (label, f) => accepts(label, () => [f(1), f(1e308)],
+    ([a, b]) => a.every(Number.isFinite) && Math.max(...a.map((v, i) => Math.abs(v - b[i]))) < 1e-9);
+  same("abilitiesFromTopk at 1e308 (#461)",
+       c => topk.abilitiesFromTopk(q.map(x => x * c), 2, { points: 257 }));
+  same("abilitiesFromRankMarginal at 1e308 (#483)",
+       c => topk.abilitiesFromRankMarginal(q.map(x => x * c), 1, { points: 257 }));
+  same("locScaleFromWinAndSecond at 1e308 (#483)",
+       c => topk.locScaleFromWinAndSecond([0.8, 0.6, 0.4, 0.2].map(x => x * c),
+                                          [0.4, 0.6, 0.6, 0.4].map(x => x * c),
+                                          { points: 257, nIter: 20 }).mu);
+  same("abilitiesFromBlockRace at 1e308 (#463)",
+       c => blocks.abilitiesFromBlockRace(q.map(x => x * c), [0, 0, 1, 1],
+                                          [0.25, -0.15, 0.35, -0.05], [0.8, 0.9, 1, 1.1],
+                                          { points: 129 }).mu);
+  same("asClassicPrices at 1e308 (#484)",
+       c => classic.asClassicPrices([0.5, 0.25, 0.125, 0.125].map(x => x * c)));
+  same("asClassicDensity at 1e308 (#484)",
+       c => classic.asClassicDensity(new Array(7).fill(c)));
+}
+
+// --- hierarchical Jacobian / inverse scale read canonical shapes (#596, #597)
+{
+  const mu = [-0.4, 0.4], c = [0, 1], v = [0.3, 0.4], pa = [2, 2, -1], st = [0, 0, 0.8];
+  const J0 = blocks.treeRaceJacobian(mu, c, v, [0.8, 0.8], pa, st)[0][1];
+  for (const [label, L, D] of [["typed loading", new Float64Array(v), [0.8, 0.8]],
+                               ["scalar D", v, 0.8]])
+    accepts(`ancestor treeRaceJacobian takes a ${label} (#596)`,
+            () => blocks.treeRaceJacobian(mu, c, L, D, pa, st)[0][1],
+            j => Math.abs(j - J0) < 1e-12);
+  for (const [label, S] of [
+    ["Blocks scalar D", structures.Blocks(c, v, 0.8)],
+    ["Blocks scalar loading", structures.Blocks(c, 0.3, [0.8, 0.8])],
+    ["Blocks (1, n) loading", structures.Blocks(c, [v], [0.7, 0.9])],
+    ["Nested scalar coupling", structures.Nested(c, v, [0.7, 0.9], 0.1, 0.5)],
+    ["Tree scalar D", structures.Tree(c, v, 0.8, pa, st)]])
+    accepts(`${label} inverts to its generating abilities (#597)`,
+            () => races.abilitiesFromRace(races.raceProbabilities(mu, { structure: S }),
+                                          { structure: S, returnInfo: true }),
+            o => o.converged && Math.max(...o.mu.map((x, i) => Math.abs(x - mu[i]))) < 1e-6);
+}
+
+// --- counts are counts; a linkage merges each cluster once (#557, #603)
+for (const r of [NaN, -1, 2.5, Infinity])
+  rejects(demo.haltonNormalNodes, [r, 3], `haltonNormalNodes refuses rank ${r} (#557)`, "rank");
+rejects(core.firstPrimes, [Infinity], "firstPrimes refuses Infinity rather than hanging (#557)");
+rejects(structures.cutLinkage, [[[0, 0, 0.1, 2], [1, 3, 0.2, 3]], 3, 1],
+        "cutLinkage refuses a self-merge (#603)", "same cluster");
+rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
+        "cutLinkage refuses a reused cluster (#603)", "same cluster");
+
+// --- demo covariance helpers keep the shape and PSD contracts (#563, #564)
+{
+  const eq = (A, B) => A.length === B.length &&
+    A.every((r, i) => r.every((v, j) => Math.abs(v - B[i][j]) < 1e-15));
+  for (const [kind, mk] of [
+    ["Factor", D => structures.Factor([-0.2, 0, 0.2], D)],
+    ["Blocks", D => structures.Blocks([0, 0, 1], [0.3, 0.2, 0.4], D)],
+    ["Nested", D => structures.Nested([0, 0, 1], [0.3, 0.2, 0.4], D, [0.1, 0.2, 0.3])],
+    ["Tree", D => structures.Tree([0, 1, 1], [0.3, 0.2, 0.4], D, [2, 2, -1], [0, 0, 0.8])]])
+    accepts(`structureCov(${kind}) is the same for scalar and vector D (#563)`,
+            () => [demo.structureCov(mk(1)), demo.structureCov(mk([1, 1, 1]))],
+            ([a, b]) => a.length === 3 && eq(a, b));
+  rejects(demo.structureCov, [structures.Independent(1)],
+          "structureCov(Independent(scalar)) refuses rather than returning [] (#563)", "field size");
+  rejects(demo.raceFactor, [[[1, 0.9, -0.6], [0, 1, 0.8], [0, 0, 1]]],
+          "raceFactor refuses an asymmetric C (#564)", "symmetric");
+  rejects(demo.raceFactor, [[[1, 1.4, 0], [1.4, 1, 0], [0, 0, 1]]],
+          "raceFactor refuses an indefinite C (#564)", "positive semidefinite");
+}
+
 // --- classic: a scratched entrant stays scratched (#589); the default
 // table covers what the forward represents (#498)
 {
