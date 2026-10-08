@@ -416,7 +416,7 @@ def _structured(lo, up, mu, V, D):
                                                np.sqrt(D)).sum())), "factor"
     s = np.sqrt(D)
     F, W = _nodes_for(V, D)
-    contrib = W * np.exp(_log_cells(F, V, s, mu, lo, up))
+    contrib = W * _cell_products(F, V, s, mu, lo, up)
     p = float(contrib.sum())
     # The answer is trusted only if it is RESOLVED. On the equal-weight
     # Sobol rule a single node is worth 1/8192 = 1.2e-4, so the 1e-8
@@ -428,6 +428,27 @@ def _structured(lo, up, mu, V, D):
     if p >= 1e-8 and (not sobol or ess >= 100.0):
         return p, "factor"
     return _recentered(V, s, mu, lo, up), "factor-recentered"
+
+
+def _cell_products(F, V, s, mu, lo, up):
+    """Product over coordinates of the conditional cell mass, per node.
+
+    In the linear domain, with upper-tail intervals reflected to the
+    lower tail (#196, #98), where ndtr is relatively accurate until it
+    underflows; a product that underflows sends the call to the
+    log-domain tail repair. Several times cheaper than summing log
+    masses, which only the tail repair needs."""
+    if not np.all(s > 0.0):
+        return np.exp(_log_cells(F, V, s, mu, lo, up))
+    M = F @ V.T
+    b = ((up - mu)[None, :] - M) / s
+    if np.all(lo == -np.inf):
+        # the common one-sided cell
+        return np.prod(ndtr(b), axis=1)
+    a = ((lo - mu)[None, :] - M) / s
+    flip = a > 0.0
+    a, b = np.where(flip, -b, a), np.where(flip, -a, b)
+    return np.prod(np.maximum(ndtr(b) - ndtr(a), 0.0), axis=1)
 
 
 def _log_cells(F, V, s, mu, lo, up):
