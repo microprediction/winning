@@ -66,6 +66,11 @@ SURFACE = {
     "concentration_matrix":                (PRESENT, PRESENT,
                                         "exported by all three and exercised by none:"
                                         " a scenario would be worth adding"),
+    "crn_posterior":                       (GAP, GAP,
+                                        "python only: a belief update (#624), not a race"
+                                        " verb; its output feeds the ported verbs"),
+    "crn_posterior_replicates":            (GAP, GAP,
+                                        "python only: as crn_posterior"),
     "exponential_power_base":              (GAP, GAP,
                                         "a base density, not a verb: the ports carry normal,"
                                         "gumbel, logistic and laplace inline and take a"
@@ -81,6 +86,8 @@ SURFACE = {
                                         "a base density, not a verb: the ports carry normal,"
                                         "gumbel, logistic and laplace inline and take a"
                                         "callable for the rest"),
+    "feature_bandit_posterior":            (GAP, GAP,
+                                        "python only: as crn_posterior"),
     "fit_covariance":                      (PRESENT, GAP,
                                         "covariance fitting, reached through cov= rather than"
                                         "called"),

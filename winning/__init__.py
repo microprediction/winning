@@ -56,6 +56,9 @@ from .factor.structures import (  # noqa: F401
     Tree,
 )
 from .factor.polish import polish_race, race_jacobian  # noqa: F401
+from .factor.posteriors import (crn_posterior,  # noqa: F401
+                                crn_posterior_replicates,
+                                feature_bandit_posterior)
 from .factor.topk import (top_k_probabilities,  # noqa: F401
                           bottom_k_probabilities,
                           rank_probabilities)
