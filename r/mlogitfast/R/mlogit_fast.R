@@ -287,8 +287,9 @@
 #' Exact multinomial probit, mlogit-style interface
 #'
 #' @param formula choice ~ alternative-specific covariates,
-#'   e.g. mode ~ price + catch (intercepts added per non-reference
-#'   alternative automatically).
+#'   e.g. mode ~ price + catch, an ordinary model formula (log(x), I(),
+#'   interactions, contrasts); intercepts per non-reference alternative
+#'   are added unless the formula has 0 + or - 1.
 #' @param data long format, one row per (chooser, alternative), with an
 #'   idx column or attribute (chooser, alternative); a plain data frame
 #'   works, and so does a dfidx object (dfidx is not a dependency).
@@ -317,6 +318,32 @@
                      "cell(s) are wrong)"),
                J, ids_lab[first[1]], count, alt_lab[first[2]], nrow(bad)),
        call. = FALSE)
+}
+
+# The right-hand side through model.frame/model.matrix, so log(x),
+# I(x^2), x:z and factor contrasts mean what they mean in R. Term labels
+# used to be looked up as literal column names, and the intercept flag
+# was ignored (#472). The global intercept is unidentified in a choice
+# model and is always dropped; the formula's intercept flag instead
+# switches the alternative-specific intercepts.
+.covariate_matrix <- function(formula, data) {
+  df <- as.data.frame(data)
+  df$idx <- NULL
+  # dfidx wraps columns in xseries; model.frame wants plain vectors
+  df[] <- lapply(df, function(col) {
+    if (inherits(col, "xseries")) class(col) <- setdiff(class(col), "xseries")
+    col
+  })
+  tt <- terms(formula, data = df)
+  if (any(grepl("|", attr(tt, "term.labels"), fixed = TRUE)))
+    stop(paste("multi-part formulas (`|`) are not supported; give",
+               "alternative-specific covariates only, and `0 +` to drop",
+               "the alternative intercepts"), call. = FALSE)
+  tt <- delete.response(tt)
+  attr(tt, "intercept") <- 1L
+  mf <- model.frame(tt, df, na.action = na.pass)
+  mm <- model.matrix(tt, mf)
+  mm[, colnames(mm) != "(Intercept)", drop = FALSE]
 }
 
 mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
@@ -361,12 +388,20 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
   choice <- .choices_by_id(ids, alt, resp, levels(id_f))
   Tn <- length(choice)
   r <- .check_rank(r, J)
-  rhs <- attr(terms(formula), "term.labels")
-  Xcov <- as.matrix(as.data.frame(data)[ord, rhs, drop = FALSE])
-  Xint <- matrix(0, nrow(Xcov), J - 1L)
-  for (j in 2:J) Xint[alt == j, j - 1L] <- 1
-  X <- cbind(Xint, Xcov)
-  colnames(X) <- c(paste0("(Intercept):", levels(alt_f)[2:J]), rhs)
+  Xcov <- .covariate_matrix(formula, data)[ord, , drop = FALSE]
+  if (attr(terms(formula), "intercept") == 1L) {
+    Xint <- matrix(0, nrow(Xcov), J - 1L)
+    for (j in 2:J) Xint[alt == j, j - 1L] <- 1
+    X <- cbind(Xint, Xcov)
+    colnames(X) <- c(paste0("(Intercept):", levels(alt_f)[2:J]),
+                     colnames(Xcov))
+  } else {
+    # `0 +` / `- 1` drops the alternative-specific intercepts (#472)
+    if (!ncol(Xcov))
+      stop("the formula has no covariates and no intercepts to fit",
+           call. = FALSE)
+    X <- Xcov
+  }
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
   nodes <- .nodes3(Qf, Qz, r)

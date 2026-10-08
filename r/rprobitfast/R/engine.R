@@ -287,8 +287,9 @@
 #' Exact multinomial probit, mlogit-style interface
 #'
 #' @param formula choice ~ alternative-specific covariates,
-#'   e.g. mode ~ price + catch (intercepts added per non-reference
-#'   alternative automatically).
+#'   e.g. mode ~ price + catch, an ordinary model formula (log(x), I(),
+#'   interactions, contrasts); intercepts per non-reference alternative
+#'   are added unless the formula has 0 + or - 1.
 #' @param data long format, one row per (chooser, alternative), with an
 #'   idx column or attribute (chooser, alternative); a plain data frame
 #'   works, and so does a dfidx object (dfidx is not a dependency).

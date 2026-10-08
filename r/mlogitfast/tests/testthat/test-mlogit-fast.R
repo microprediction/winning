@@ -325,3 +325,32 @@ test_that("a factor response means its labels, not its level codes (#512)", {
     expect_equal(got$logLik, ref$logLik)
   }
 })
+
+test_that("the formula is a model formula, not a list of columns (#472)", {
+  set.seed(6)
+  n <- 30L; J <- 3L
+  d <- data.frame(x = runif(n * J, 0.5, 3), z = rnorm(n * J),
+                  g = factor(sample(c("p", "q", "s"), n * J, TRUE)))
+  u <- 0.8 * log(d$x) + 0.3 * d$z + rnorm(n * J)
+  d$chosen <- unlist(lapply(split(u, rep(seq_len(n), each = J)),
+                            function(w) seq_along(w) == which.max(w)))
+  attr(d, "idx") <- data.frame(id = rep(seq_len(n), each = J),
+                               alt = factor(rep(c("a", "b", "c"), n)))
+  fit <- function(f, dd = d) mlogit_fast(f, dd, r = 0L, Qf = 3L, Qz = 3L,
+                                         maxit = 10L)
+  # 0 + drops the alternative intercepts instead of being ignored
+  expect_identical(names(fit(chosen ~ x)$coefficients),
+                   c("(Intercept):b", "(Intercept):c", "x"))
+  expect_identical(names(fit(chosen ~ 0 + x)$coefficients), "x")
+  expect_identical(names(fit(chosen ~ x - 1)$coefficients), "x")
+  # transformations equal the precomputed column
+  d2 <- d; d2$lx <- log(d$x); d2$x2 <- d$x^2; d2$xz <- d$x * d$z
+  a <- fit(chosen ~ log(x) + I(x^2) + x:z)
+  b <- fit(chosen ~ lx + x2 + xz, d2)
+  expect_equal(unname(a$coefficients), unname(b$coefficients))
+  expect_equal(a$logLik, b$logLik)
+  # a factor covariate gets treatment contrasts
+  expect_identical(names(fit(chosen ~ z + g)$coefficients),
+                   c("(Intercept):b", "(Intercept):c", "z", "gq", "gs"))
+  expect_error(fit(chosen ~ x | 0), "multi-part")
+})
