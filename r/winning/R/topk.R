@@ -542,7 +542,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
 
   sd <- sqrt(.as_idio(D0, n, name = "D0"))
   if (!is.null(mu0)) {
-    mu <- as.numeric(mu0) - mean(mu0)
+    mu <- .as_warm_start(mu0, n)                     # #554
     # the return gauge (mean-zero mu, geometric-mean-one sd) applied to
     # the start too: an exact warm start used to come back in physical
     # units (#360)
@@ -724,7 +724,7 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
       "base is unchanged by mu -> -mu, so the zero start is stationary and ",
       "the inverse two-branched. Pass mu0= to choose the branch."), r, n),
       call. = FALSE)
-  mu <- if (is.null(mu0)) rep(0, n) else as.numeric(mu0) - mean(mu0)
+  mu <- if (is.null(mu0)) rep(0, n) else .as_warm_start(mu0, n)  # #554
 
   st <- .rank_marginal_with_jacobian(mu, sd, r, fn, points)
   resid <- log(pmax(st$p, 1e-300)) - logt

@@ -419,7 +419,7 @@ def test_every_browser_options_api_validates_its_options():
         "an object swallows a key nobody reads:\n  " + "\n  ".join(offenders))
 
 
-def test_no_browser_export_destructures_its_options_inline():
+def test_browser_and_standalone_options_are_all_checked():
     """An inline-destructured options object -- `fn(x, { loc, scale } = {})`
     -- skips checkOpts by construction, and the audit above only matched a
     parameter literally named `opts = {}`. skewNormalDensity({sacle})
@@ -440,6 +440,24 @@ def test_no_browser_export_destructures_its_options_inline():
     assert not offenders, (
         "browser exports whose options object is not validated:\n  "
         + "\n  ".join(offenders))
+
+
+# helpers whose trailing destructured object is not a public options API
+# (asFiniteVector is a boundary helper), or that sit outside the classic
+# sweep of #561 and are tracked there (concentrationMatrix)
+INLINE_DESTRUCTURE_OK = {"asFiniteVector", "concentrationMatrix"}
+
+
+def test_no_browser_export_destructures_its_options_inline():
+    """`f(x, { loc, scale } = {})` swallows a misspelt key exactly as an
+    unchecked `opts` does, and the audit above only sees `opts = {}`: a
+    `sacle` typo priced scale 1 and `unti` returned 10x abilities (#561)."""
+    offenders = []
+    for path in sorted((ROOT / "docs/js/winning").glob("*.mjs")):
+        for m in re.finditer(r"export function (\w+)\(([^)]*)\)", path.read_text()):
+            if re.search(r"\}\s*=\s*\{\}", m.group(2)) and m.group(1) not in INLINE_DESTRUCTURE_OK:
+                offenders.append(f"{path.name}::{m.group(1)}")
+    assert not offenders, "destructure into `opts = {}` and checkOpts it:\n  " + "\n  ".join(offenders)
 
 
 def test_browser_allowlists_are_per_function():

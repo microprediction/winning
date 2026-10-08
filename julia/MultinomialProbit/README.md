@@ -47,6 +47,10 @@ and `using ForwardDiff` arms a package extension that upgrades it to
 the machine-precision dual-mode derivative of that same score.
 Per-observation scores (`score_matrix`) power the OPG and sandwich
 estimators; `show` prints a coefficient table with standard errors.
+`vcov`/`stderror` refuse a fit that did not converge (pass
+`allow_unconverged = true` to inspect it) and, for `:hessian` and
+`:sandwich`, an observed information that is not positive definite;
+a negative variance is an error, never a zero standard error.
 
 Dependency-free but for stdlib `LinearAlgebra` and `Random`.
 Sharpness rule inherited from the reference: past

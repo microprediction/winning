@@ -333,6 +333,41 @@ end
     @test isfinite(MP.logndtr(-300.0))
 end
 
+# --- GHK: homogeneous in the utility unit, D is a variance ------------
+# Binary races have one truncation step, so these are exact checks.
+@testset "GHK is scale free and blind to a common shock (#409, #302)" begin
+    exact = MP.ndtr(1 / sqrt(2))
+    for c in (1.0, 1e-6, 1e-8)
+        # the absolute 1e-12 ridge gave 0.7181 at 1e-6 and 0.5040 at 1e-8
+        p = MP.ghk_choice_prob([0.0, c], zeros(2, 0), 2;
+                               D = [c^2, c^2], r_draws = 32, seed = 9)
+        @test abs(p - exact) < 1e-12
+    end
+    for v in (1e4, 1e8)
+        p = MP.ghk_choice_prob([0.0, 1.0], fill(v, 2, 1), 2;
+                               D = [1.0, 1.0], r_draws = 8, seed = 9)
+        @test abs(p - exact) < 1e-12
+    end
+end
+
+@testset "GHK refuses a D that is not a variance (#367)" begin
+    V = zeros(2, 0)
+    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                  D = [1.0, -0.5])
+    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                  D = [1.0, NaN])
+    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                  D = [1.0, Inf])
+    # a wrong length is the DimensionMismatch of #439's shared check
+    @test_throws DimensionMismatch MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                      D = [1.0])
+    @test_throws DimensionMismatch MP.ghk_choice_prob([0.0, 1.0], V, 2;
+                                                      D = [1.0, 1.0, 1.0])
+    # round-off below zero is zero, and zero is a legal variance
+    p = MP.ghk_choice_prob([0.0, 1.0], V, 2; D = [1.0, -1e-15])
+    @test abs(p - MP.ndtr(1.0)) < 1e-12
+end
+
 # --- integral float labels are accepted, fractional ones refused (#194) --
 @testset "choice labels: integral numerics, constructor length" begin
     mu = zeros(3, 3)
@@ -374,6 +409,7 @@ end
     Xo = reshape([0.0, 1.0, 1.0, 0.0, 0.0, 2.0, 2.0, 0.0], 4, 2, 1)
     m = MNProbit(Xo, [2, 1, 2, 1]; intercepts = false, r = 0)
     m.theta .= 0.3
+    m.converged = true          # a hand-set theta; inference needs it (#493)
     G = score_matrix(m)
     old = MP.HESSIAN_ENGINE[]
     try
@@ -405,9 +441,13 @@ end
     show(io, MIME"text/plain"(), m)
     out = String(take!(io))
     @test occursin("not available", out)
-    # refitting exactly restores inference
+    # refitting exactly lifts the GHK refusal. This random-choice design
+    # has no exact maximum (BFGS stops with -H eigenvalue -1.4e4), so the
+    # #493 guards still refuse the Hessian forms; OPG under the explicit
+    # override shows the #214 refusal itself is gone.
     fit!(m)
-    @test all(isfinite, stderror(m))
+    @test m.method == :exact
+    @test all(isfinite, vcov(m; method = :opg, allow_unconverged = true))
 end
 
 # --- Halton has as many bases as the integral has dimensions (#396) ----
@@ -467,4 +507,85 @@ end
     mb = fit!(MNProbit(Xb, chb; intercepts = false))
     @test mb.converged && abs(mb.beta[1] - 0.8) < 0.25
     @test all(isfinite, stderror(mb))
+end
+
+# --- inference needs a maximum (#493) ----------------------------------
+@testset "vcov/stderror refuse a saddle or an unconverged fit" begin
+    X = reshape([0.5419522204102933 -0.3165954511658161 -0.32238911615896015
+                 0.0971673186704572 -1.5259304065189514 1.1921661041016585],
+                2, 3, 1)
+    m = MNProbit(X, [3, 1]; intercepts = false, r = 1)
+    fit!(m; maxiter = 0)
+    @test !m.converged
+    @test minimum(LinearAlgebra.eigvals(LinearAlgebra.Symmetric(-loglik_hessian(m)))) < 0
+    for method in (:hessian, :opg, :sandwich)
+        @test_throws ArgumentError vcov(m; method = method)
+        @test_throws ArgumentError stderror(m; method = method)
+    end
+    # the override still refuses the indefinite information: the third
+    # standard error used to be sqrt(max(-4.558, 0)) = 0
+    @test_throws ArgumentError vcov(m; allow_unconverged = true)
+    @test_throws ArgumentError stderror(m; allow_unconverged = true)
+    @test_throws ArgumentError stderror(m; method = :sandwich,
+                                        allow_unconverged = true)
+    io = IOBuffer()
+    show(io, MIME"text/plain"(), m)
+    out = String(take!(io))
+    @test occursin("did not converge", out)
+    rows = filter(!isempty, split(out, "\n")[3:end])
+    @test length(rows) == 3 && all(endswith.(rstrip.(rows), "-"))
+end
+
+# --- scalar D, loading rows, node columns, draw budget -----------------
+@testset "MNP argument boundaries (#503, #462, #476, #478)" begin
+    mu = zeros(2, 3)
+    V = zeros(3, 1)
+    a = choice_loglik_and_score(mu, V, [1, 2]; D = ones(3))
+    b = choice_loglik_and_score(mu, V, [1, 2]; D = 1.0)
+    @test a[1] == b[1] && a[2] == b[2] && a[3] == b[3]
+    c = choice_loglik_and_score(mu, V, [1, 2]; D = fill(2.0, 3))
+    @test c[1] == choice_loglik_and_score(mu, V, [1, 2]; D = 2.0)[1]
+    @test MP.ghk_choice_prob(zeros(3), V, 1; D = 1.0) ==
+          MP.ghk_choice_prob(zeros(3), V, 1; D = ones(3))
+    for bad in ([1.0, NaN, 1.0], [1.0, Inf, 1.0], [1.0, 0.0, 1.0],
+                [1.0, -1.0, 1.0], 0.0, NaN)
+        @test_throws ArgumentError choice_loglik_and_score(mu, V, [1, 2];
+                                                           D = bad)
+    end
+    @test_throws DimensionMismatch choice_loglik_and_score(mu, V, [1, 2];
+                                                           D = ones(2))
+    # a surplus loading row switched GH -> Halton (0.654 -> 0.637)
+    mu4 = reshape([2.29264426, 0.64388188, -0.17180493, 3.74907237], 1, :)
+    V4 = [-0.0107529507 1.80970562; -0.6565907660 0.00168241106;
+          0.3133862710 0.0763054062; 0.3539574460 -1.88769344]
+    ll = choice_loglik_and_score(mu4, V4, [4]; D = ones(4))[1]
+    @test abs(exp(ll) - 0.65439858) < 1e-6
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu4, vcat(V4, [1.0 1.0]), [4]; D = ones(4))
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu4, V4[1:3, :], [4]; D = ones(4))
+    # custom nodes: exactly r + 1 columns, one row per weight
+    mu2 = zeros(1, 2)
+    V2 = reshape([0.0, 1.0], 2, 1)
+    ok = choice_loglik_and_score(mu2, V2, [1]; D = ones(2),
+                                 nodes = ([0.0 0.0], [1.0]))
+    @test ok[1] ≈ log(0.5)
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu2, V2, [1]; D = ones(2), nodes = ([0.0 10.0 0.0], [1.0]))
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu2, V2, [1]; D = ones(2), nodes = (reshape([0.0], 1, 1), [1.0]))
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu2, V2, [1]; D = ones(2), nodes = ([0.0 0.0], [0.5, 0.5]))
+    @test_throws ArgumentError choice_loglik_and_score(
+        mu2, V2, [1]; D = ones(2), nodes = ([NaN 0.0], [1.0]))
+    # a zero draw budget averaged an empty set: NaN
+    Z = zeros(2, 0)
+    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 0.0], Z, 1;
+                                                  D = ones(2), r_draws = 0)
+    @test_throws ArgumentError MP.ghk_loglik(zeros(1, 2), Z, [1]; r_draws = 0)
+    mg = MNProbit(zeros(2, 2, 1), [1, 2]; intercepts = false)
+    th = copy(mg.theta)
+    @test_throws ArgumentError fit!(mg; method = :ghk, r_draws = 0)
+    @test mg.theta == th && isnan(mg.loglik)
+    @test MP.ghk_choice_prob([0.0, 0.0], Z, 1; D = ones(2), r_draws = 1) ≈ 0.5
 end

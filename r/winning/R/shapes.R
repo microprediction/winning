@@ -90,3 +90,16 @@
   # bit-identical to the expression it replaced
   if (is.null(mass)) target / tot else target * (mass / tot)
 }
+
+# A warm start selects a branch of an inverse; it must not redefine the
+# field. R recycled a 2n mu0 against n targets and returned 2n abilities
+# (#554). Finite, exactly n entries, then centred.
+.as_warm_start <- function(mu0, n, name = "mu0") {
+  m <- suppressWarnings(as.numeric(mu0))
+  if (length(m) != n)
+    stop(sprintf("%s has %d entries for %d runners", name, length(m), n),
+         call. = FALSE)
+  if (any(!is.finite(m)))
+    stop(sprintf("%s has a non-finite entry", name), call. = FALSE)
+  m - mean(m)
+}

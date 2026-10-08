@@ -566,14 +566,12 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   # length-4 D answered a two-runner race and returned two numbers,
   # silently, where python, julia and the browser all refuse (cross-port
   # divergence scan)
-  Dn <- if (is.null(D)) rep(1, n) else as.numeric(D)
-  if (length(Dn) == 1L) Dn <- rep(Dn, n)
-  if (length(Dn) != n)
-    stop(sprintf(paste("D must be a scalar or one variance per target",
-                       "entry; got %d for %d entries"), length(Dn), n),
-         call. = FALSE)
-  Vn <- if (is.null(V)) matrix(0, n, 1) else as.matrix(V)
-  if (nrow(Vn) != n && ncol(Vn) == n) Vn <- t(Vn)
+  # through the forward map's own validators: a length-only check let
+  # D = c(-1, 2) through to the pair closed form (contrast variance 1,
+  # finite answer for a covariance the forward refuses), and as.matrix
+  # on a scalar V gave a 1x1 that the pair branch indexed at [2, 2] (#482)
+  Dn <- .as_idio(D, n, positive = TRUE)
+  Vn <- if (is.null(V)) matrix(0, n, 1) else .as_loadings(V, n)
   Vc <- sweep(Vn, 2, colMeans(Vn))
   if (!is.null(V) && !is.null(F)) {
     Fq <- as.matrix(F)

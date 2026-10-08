@@ -2,6 +2,150 @@
 
 ## Unreleased
 
+### Issue sweep, October 2026
+
+Fixes from the port-by-port issue sweep. Each block is from the PR that made the changes, and the issue numbers are in the PR bodies.
+
+#### Meta, CI and test infrastructure (#446)
+
+- **CodeRabbit parity coverage (#431).** Path instructions covered only `winning/**/*.py` and `r/**`, so a JS-, Julia- or Rust-only PR got the generic review. Every port root now gets an instruction to compare with the Python reference and its parity checker. A test parses the config and checks that every port root is covered, along with every file under one that is not excluded.
+- **factor_ghk truth certification (#433).** Take a crash/retry state with seed 101 at 2^17 and seed 202 at 2^15, rerun at `--truth-m 16`. It compared a 2^17 estimate against a 2^16 one and labelled the result 2^17. Both streams now end at the same count because the shorter one is extended, and `largen_truth()` raises on unequal counts. The committed n=1e3/1e4/1e5 states have equal counts and still load.
+- **mlogitfast shipped docs (#142).** The README opened with `dfidx(Fishing, ...)` and the Rd pointed to `dfidx::dfidx`, but neither package is declared. The README now opens with a base-R example, which runs (logLik -52.061, converged), and the benchmark is marked as needing external packages. A new guard scans README and Rd usage for undeclared packages.
+- **Benchmarks from an installed artifact (#141).** Before:
+  - `winning[benchmarks]` did not install trueskill.
+  - The benchmark scripts wrote to `<site-packages>/bench_results`.
+  - The 1.6.0 sdist shipped 104 test files that failed collection without repo data.
+
+  Now the extra includes trueskill and output goes to cwd or `--out`. The sdist ships no tests, since the suite needs the repository. CI checks the installed wheel from a scratch directory.
+- **Discovery classifier (#80).** A missing `numpyy` used to be downgraded to "optional backend absent". Now only fastrace, jax, matplotlib, mpl_toolkits, pandas and trueskill count as optional, and a test keeps that list equal to what `winning/` actually imports.
+- **Verifier worker test (#76).** Exact dict equality failed on a one-ULP residual at zero: 1.1e-16 vs 5.6e-17, in 1 of 284 statistics. Discrete outcomes are still compared exactly; floats are compared to a few ULP.
+- **Scalar D everywhere (#84).** `D=1.0` raised IndexError or TypeError in 11 public verbs. All 53 public `D` parameters are now discovered. Each must be driven (scalar equals the full vector; malformed input raises ValueError) or explicitly exempted.
+- **v/V swap guard documented honestly (#85).** All-positive loadings are legal because they are gauge-fixed downstream, so they pass as a variance and that swap is silent. The docs now say so and a test pins the limitation. A structural fix (keyword-only or typed arguments) is left open as an API decision.
+- **Compiled-path CI (#72).** Before this, no CI job ran the compiled path. The new `native` job builds `rust/fastrace` from the PR checkout and requires 0 skips. Locally the compiled-path files gave 54 passed, 0 skipped, and the dispatching suites gave 742 passed. The fastrace publish workflow now installs and calls every wheel and the sdist before upload.
+- **Bulk-window search (#112, partial).** Base evaluations per call drop from 162 to about 112, and the density and slope are no longer computed. Results are bitwise identical over 84 random races and all 47 parity vectors. Speedups for `race_probabilities`, pure numpy:
+
+  | n | 5 | 20 | 40 | 100 | 500 | 2000 |
+  |---|---|---|---|---|---|---|
+  | speedup | 2.5x | 2.1x | 1.9x | 1.6x | 1.3x | 1.2x |
+
+#### Classic lattice engine (#448)
+
+- **Classic convolution (#404, #405, #406).** The crop branch of `middle_of_density` differenced a PDF twice, so `convolve_two(d, d)` on a 21-atom Gaussian came back with min -0.0171 and mass -0.0006 and raised "too much mass loss". It now crops the CDF, which gives mass 0.9999047 and mean -2.9e-6. `convolve_many([d])` convolved a singleton with itself (variance 0.5 -> 1.0); it is now the identity. `winner_of_many([d])` returned multiplicity `None`, which made `state_prices_from_densities([d])` raise TypeError; that call now returns `[1.0]`.
+- **Classic dividends (#423).** The Python `prices_from_dividends` took `1/x` unconditionally, so `[2, 4, -5]` became `[0.909, 0.455, -0.364]` and was calibrated as if valid. It now gives `[2/3, 1/3, 0]`; a zero dividend no longer raises, and an all-infinite book gives zeros.
+- **Classic exact dead heats (#418, #362, #348, #373).** The engine kept only the minimum's CDF and its *mean* multiplicity. That broke four cases:
+  - A compact-support pair priced `[0.9167, 0.0500]` against an exact `[0.95, 0.05]`.
+  - Twenty iid three-atom runners summed to 0.887.
+  - Identical runners at offset 0.5 summed to 1.114.
+  - A singleton shifted +19 on a uniform law priced 0.771.
+
+  The engine now computes `P_i = sum_t f_i(t) int_0^1 prod_{j!=i}(S_j + u f_j) du`. That is exactly the equal-split claim, and n//2+1 Gauss-Legendre nodes integrate it exactly. The lattice is padded by L-1 atoms, and `integer_shift` puts overflow on the boundary atom. Every fixture now matches closed forms or brute-force enumeration to 1e-14 in Python, Rust, R and the browser. State prices sum to 1, where they used to sum to 0.99998675. That old total was pinned in three boundary tests as "lattice truncation"; those tests now pin the contract they state, a sum of one.
+- **Classic inverse (#369 and convergence).** Each iteration is now a defect correction, `a += T^{-1}(p) - T^{-1}(P(a))`. Its fixed point is therefore the exact forward map. Previously the inverse converged to the table's own bias (1e-2 on a three-atom law). After 10 iterations the round-trip error is 2e-9 on a three-atom law and 1e-14 on the parity skew-normal. At the default 3 iterations it is 2e-7 to 3e-6 (the old code gave 2e-6 to 8e-5). The low-level default guess was `range(L/3)`, which sized the race by lattice width; it is now one zero per price. The parity vectors `classic_ability` and `classic_state_prices` and the R goldens are regenerated: abilities move about 1.5e-3 lattice units, prices about 3e-6. Only those two keys of `parity/vectors.json` changed.
+- **Compiled classic kernels.** They are renamed `classic_exact_state_prices` and `classic_exact_calibrate`, so a fastrace wheel built before this change is never dispatched to. Built locally, they match the pure path to 2e-16 on the forward map and 1e-13 on the inverse.
+- **Classic input contract (#339, #377).** Densities are validated and normalised in every port. Raw counts now price the same as frequencies; previously the 10x fixture priced `[0.894, -61.07, -2.82]`. Negative, non-finite and even-length vectors are rejected, and so is L <= 2, where `_low_high` pins every offset to one point. L = 3 round-trips. Target prices are normalised, so `p` and `c*p` give the same gauge-free abilities to 1e-12. Previously a 10% overround moved abilities by up to 0.90 lattice units, and a 10x book came back as an all-tie race.
+- **Logistic base (#136).** The left tail cancelled, so NumPy priced `[0, 25, 50]` at 7.30e-19 / 9.24e-44 against the compiled 8.99e-19 / 1.86e-38. The reflected density now agrees with the compiled kernel and with quadrature to 1e-6 relative.
+- **Skew-logistic base (#108).** Below alpha of about 0.029 the span overflowed to inf and every race came back NaN. At alpha = 0.001, 49% of samples were -inf. The tail also cancelled at alpha = 1: 14% low at a 25-sd gap in Python and 16.5% low in Rust. The base is now log-domain throughout and finite for alpha = 0.001 to 1. alpha = 1 matches the logistic to 1e-8 on both paths.
+- **Skew-normal base (#399).** Standardization overflowed for |a| > 1.34e154, so the leader's share jumped from 0.665 to 0.982. It now uses `hypot`, and every saturated shape prices identically in Python, Rust and the JS ports.
+- **failure_base (#389, #135).** width = 0 gave NaN, and width = -1 gave finite probabilities with positive own-slopes; both are now refused. The base also lacked a span, so at temperature 0.5 and offset 20 it priced `[0.678, 0.249, 0.073]` against `[0.515, 0.300, 0.185]` from subset enumeration. It now declares a span covering the lump: TV is 9e-5 at offsets 20 and 30, and the span stays `(12, 12)` at ordinary offsets.
+- **Harville top-k (#384).** `softmax([1000, 0, 0])` gave a top-3 summing to 2. k >= n now returns ones, and an exact zero weight now matches the limit of 1e-300.
+- **Student resolution (#385, #386).** For the bulk window at nu = 2.1, error rose from 9.4e-6 at 2001 points to 3.8e-3 at 4001. It now falls from -8.7e-7 to -3.1e-9 over 2001 to 32769 points, and the under-resolution warning fires where it applies. `top_k_probabilities` with Student nu <= 3 used to raise at every point budget. It now matches quadrature to 5e-7, with a warning that delta was relaxed.
+- **exponential_power_base (#103).** beta < 1 had TV 0.058, slopes of the wrong sign and an inverse that did not converge. Those values are now refused with an explanation; beta >= 1 is pinned accurate.
+
+#### Likelihoods and ratings (#449)
+
+- **R top-k/race shape contracts (#319, #343, #441).** `D = c(1, 4)` at n = 4 priced `D = c(1, 4, 1, 4)` in the top-k, rank and inverse doors, and a 2-row `V` was recycled (membership change up to 0.19); a zero `D` in the race door crashed in `.bulk_window`. `n_iter = 0` ran two updates and reported zero. Now every door validates `D`/`V`/`n_iter` (python's `as_idio`/`as_loadings` contract) and `n_iter = 0` returns the initializer with its own residual.
+- **mvtnormfast: scrambled Sobol at any rank (#143).** Rank 7 indexed a missing seventh Halton prime and errored; rank 4 was 1.06% high at 8192 points. Base-R scrambled Sobol (Joe-Kuo direction numbers as scipy ships them, linear matrix scramble + digital shift from a private generator, user RNG untouched) up to 64 dimensions; ranks 6-8 now within 1% of exact, rank-4 fixture 0.74% (python's own 2^13 rule scatters 0.32% across scrambles).
+- **mvtnormfast dense fallback (#437).** `mean = c(0, 1)` at n = 8 was recycled by mvtnorm (9.6e-4 vs 2.31e-2); now refused like the structured path.
+- **R MNP fitters (#388, #419, #324, #435, #215, #355).** Every rank-4 fit died in setup on a four-prime Halton table; the node dispatch used the raw row norm (fixture 0.16517 vs exact 0.151494); a double-choice observation cancelled a no-choice one and choices slid across ids; `mlogit_fast` priced rows by position (nll 0.0342 vs 23.94 for the same labelled data). Now: lazily built 2^10 Sobol in r+1 dims, the centred pairwise-safe statistic, choices keyed by id with exactly one per observation, and canonical (id, alt) order.
+- **R `tree_from_linkage` one-leaf tree (#382).** An empty linkage returned `D = numeric(0)`; now `D = 1` and probability 1.
+- **R `polish_race` controls (#426, #364).** Group member `-1` capped the complement and `0` produced a vacuous row reported as zero violation; `tol` was dead and `max_iter = 0` still ran thousands of evaluations. Members are validated; `max_iter` bounds every phase (python passes `maxiter` to each SLSQP attempt) and `tol` sets the thresholds (defaults reproduce the old fixed values).
+- **R `fit_covariance` (#407, #427).** The absolute floor `1e-3 * mean(diag)` inflated a 2e-8 contrast variance 33,333x; an exact rank-2-plus-diagonal matrix stalled at a non-global start (contrast residual 0.159, degraded). Now python's relative lower-bounded floor and multistart rescue; both fixtures are reproduced to ~1e-8.
+- **R calibration extended offsets (#393).** A runner 500 units behind turned a 75/25 pair into 50/50. Python's `state_prices_from_extended_offsets` is ported; values match python to 1e-12.
+- **Normal survival cancellation (#96).** `1 - ndtr(z)` / `1 - pnorm(z)` made a 20-sd longshot ~95x too unlikely in python, R and the browser; all three now evaluate the upper tail directly (span result exact to 1e-15 relative, as rust).
+- **Base-aware bulk window in R and the browser (#106).** A custom Student-t(3) race missed its first share by 1.2e-4 at any point count; both now port python's `_bulk_window` (caller's survival, bracketing, delta relaxation, span pad), 1.6e-8 from the SciPy reference.
+- **Overflowing target rescue in R, browser, julia (#326).** `[4e307, 2e307, 1e307, 1e307]` was refused; now inverts to the abilities of `[4, 2, 1, 1]`, as python. The `inv_p_huge` divergence waiver is gone.
+
+#### R ports (#450)
+
+- **R top-k/race shape contracts (#319, #343, #441).** `D = c(1, 4)` at n = 4 priced `D = c(1, 4, 1, 4)` in the top-k, rank and inverse doors, and a 2-row `V` was recycled (membership change up to 0.19); a zero `D` in the race door crashed in `.bulk_window`. `n_iter = 0` ran two updates and reported zero. Now every door validates `D`/`V`/`n_iter` (python's `as_idio`/`as_loadings` contract) and `n_iter = 0` returns the initializer with its own residual.
+- **mvtnormfast: scrambled Sobol at any rank (#143).** Rank 7 indexed a missing seventh Halton prime and errored; rank 4 was 1.06% high at 8192 points. Base-R scrambled Sobol (Joe-Kuo direction numbers as scipy ships them, linear matrix scramble + digital shift from a private generator, user RNG untouched) up to 64 dimensions; ranks 6-8 now within 1% of exact, rank-4 fixture 0.74% (python's own 2^13 rule scatters 0.32% across scrambles).
+- **mvtnormfast dense fallback (#437).** `mean = c(0, 1)` at n = 8 was recycled by mvtnorm (9.6e-4 vs 2.31e-2); now refused like the structured path.
+- **R MNP fitters (#388, #419, #324, #435, #215, #355).** Every rank-4 fit died in setup on a four-prime Halton table; the node dispatch used the raw row norm (fixture 0.16517 vs exact 0.151494); a double-choice observation cancelled a no-choice one and choices slid across ids; `mlogit_fast` priced rows by position (nll 0.0342 vs 23.94 for the same labelled data). Now: lazily built 2^10 Sobol in r+1 dims, the centred pairwise-safe statistic, choices keyed by id with exactly one per observation, and canonical (id, alt) order.
+- **R `tree_from_linkage` one-leaf tree (#382).** An empty linkage returned `D = numeric(0)`; now `D = 1` and probability 1.
+- **R `polish_race` controls (#426, #364).** Group member `-1` capped the complement and `0` produced a vacuous row reported as zero violation; `tol` was dead and `max_iter = 0` still ran thousands of evaluations. Members are validated; `max_iter` bounds every phase (python passes `maxiter` to each SLSQP attempt) and `tol` sets the thresholds (defaults reproduce the old fixed values).
+- **R `fit_covariance` (#407, #427).** The absolute floor `1e-3 * mean(diag)` inflated a 2e-8 contrast variance 33,333x; an exact rank-2-plus-diagonal matrix stalled at a non-global start (contrast residual 0.159, degraded). Now a per-runner floor 1e-3 * max(C_ii, 1e-6 mean) with the lower-bounded solve, and python's multistart rescue; both fixtures are reproduced to ~1e-8. The multiplier is deliberately 1e-3, not python's 1e-6: 1e-6 made a degenerate full-rank fit's conditional races 32x sharper, one forward 11x slower and the degraded gumbel inverse ~4 min without converging (base 4 s, now 4.3 s).
+- **R calibration extended offsets (#393).** A runner 500 units behind turned a 75/25 pair into 50/50. Python's `state_prices_from_extended_offsets` is ported; values match python to 1e-12.
+- **Normal survival cancellation (#96).** `1 - ndtr(z)` / `1 - pnorm(z)` made a 20-sd longshot ~95x too unlikely in python, R and the browser; all three now evaluate the upper tail directly (span result exact to 1e-15 relative, as rust).
+- **Base-aware bulk window in R and the browser (#106).** A custom Student-t(3) race missed its first share by 1.2e-4 at any point count; both now port python's `_bulk_window` (caller's survival, bracketing, delta relaxation, span pad), 1.6e-8 from the SciPy reference.
+- **Overflowing target rescue in R, browser, julia (#326).** `[4e307, 2e307, 1e307, 1e307]` was refused; now inverts to the abilities of `[4, 2, 1, 1]`, as python. The `inv_p_huge` divergence waiver is gone.
+
+#### Julia ports (#451)
+
+- **R top-k/race shape contracts (#319, #343, #441).** `D = c(1, 4)` at n = 4 priced `D = c(1, 4, 1, 4)` in the top-k, rank and inverse doors, and a 2-row `V` was recycled (membership change up to 0.19); a zero `D` in the race door crashed in `.bulk_window`. `n_iter = 0` ran two updates and reported zero. Now every door validates `D`/`V`/`n_iter` (python's `as_idio`/`as_loadings` contract) and `n_iter = 0` returns the initializer with its own residual.
+- **mvtnormfast: scrambled Sobol at any rank (#143).** Rank 7 indexed a missing seventh Halton prime and errored; rank 4 was 1.06% high at 8192 points. Base-R scrambled Sobol (Joe-Kuo direction numbers as scipy ships them, linear matrix scramble + digital shift from a private generator, user RNG untouched) up to 64 dimensions; ranks 6-8 now within 1% of exact, rank-4 fixture 0.74% (python's own 2^13 rule scatters 0.32% across scrambles).
+- **mvtnormfast dense fallback (#437).** `mean = c(0, 1)` at n = 8 was recycled by mvtnorm (9.6e-4 vs 2.31e-2); now refused like the structured path.
+- **R MNP fitters (#388, #419, #324, #435, #215, #355).** Every rank-4 fit died in setup on a four-prime Halton table; the node dispatch used the raw row norm (fixture 0.16517 vs exact 0.151494); a double-choice observation cancelled a no-choice one and choices slid across ids; `mlogit_fast` priced rows by position (nll 0.0342 vs 23.94 for the same labelled data). Now: lazily built 2^10 Sobol in r+1 dims, the centred pairwise-safe statistic, choices keyed by id with exactly one per observation, and canonical (id, alt) order.
+- **R `tree_from_linkage` one-leaf tree (#382).** An empty linkage returned `D = numeric(0)`; now `D = 1` and probability 1.
+- **R `polish_race` controls (#426, #364).** Group member `-1` capped the complement and `0` produced a vacuous row reported as zero violation; `tol` was dead and `max_iter = 0` still ran thousands of evaluations. Members are validated; `max_iter` bounds every phase (python passes `maxiter` to each SLSQP attempt) and `tol` sets the thresholds (defaults reproduce the old fixed values).
+- **R `fit_covariance` (#407, #427).** The absolute floor `1e-3 * mean(diag)` inflated a 2e-8 contrast variance 33,333x; an exact rank-2-plus-diagonal matrix stalled at a non-global start (contrast residual 0.159, degraded). Now python's relative lower-bounded floor and multistart rescue; both fixtures are reproduced to ~1e-8.
+- **R calibration extended offsets (#393).** A runner 500 units behind turned a 75/25 pair into 50/50. Python's `state_prices_from_extended_offsets` is ported; values match python to 1e-12.
+- **Normal survival cancellation (#96).** `1 - ndtr(z)` / `1 - pnorm(z)` made a 20-sd longshot ~95x too unlikely in python, R and the browser; all three now evaluate the upper tail directly (span result exact to 1e-15 relative, as rust).
+- **Base-aware bulk window in R and the browser (#106).** A custom Student-t(3) race missed its first share by 1.2e-4 at any point count; both now port python's `_bulk_window` (caller's survival, bracketing, delta relaxation, span pad), 1.6e-8 from the SciPy reference.
+- **Overflowing target rescue in R, browser, julia (#326).** `[4e307, 2e307, 1e307, 1e307]` was refused; now inverts to the abilities of `[4, 2, 1, 1]`, as python. The `inv_p_huge` divergence waiver is gone.
+
+#### Rust ports (#452)
+
+- **R top-k/race shape contracts (#319, #343, #441).** `D = c(1, 4)` at n = 4 priced `D = c(1, 4, 1, 4)` in the top-k, rank and inverse doors, and a 2-row `V` was recycled (membership change up to 0.19); a zero `D` in the race door crashed in `.bulk_window`. `n_iter = 0` ran two updates and reported zero. Now every door validates `D`/`V`/`n_iter` (python's `as_idio`/`as_loadings` contract) and `n_iter = 0` returns the initializer with its own residual.
+- **mvtnormfast: scrambled Sobol at any rank (#143).** Rank 7 indexed a missing seventh Halton prime and errored; rank 4 was 1.06% high at 8192 points. Base-R scrambled Sobol (Joe-Kuo direction numbers as scipy ships them, linear matrix scramble + digital shift from a private generator, user RNG untouched) up to 64 dimensions; ranks 6-8 now within 1% of exact, rank-4 fixture 0.74% (python's own 2^13 rule scatters 0.32% across scrambles).
+- **mvtnormfast dense fallback (#437).** `mean = c(0, 1)` at n = 8 was recycled by mvtnorm (9.6e-4 vs 2.31e-2); now refused like the structured path.
+- **R MNP fitters (#388, #419, #324, #435, #215, #355).** Every rank-4 fit died in setup on a four-prime Halton table; the node dispatch used the raw row norm (fixture 0.16517 vs exact 0.151494); a double-choice observation cancelled a no-choice one and choices slid across ids; `mlogit_fast` priced rows by position (nll 0.0342 vs 23.94 for the same labelled data). Now: lazily built 2^10 Sobol in r+1 dims, the centred pairwise-safe statistic, choices keyed by id with exactly one per observation, and canonical (id, alt) order.
+- **R `tree_from_linkage` one-leaf tree (#382).** An empty linkage returned `D = numeric(0)`; now `D = 1` and probability 1.
+- **R `polish_race` controls (#426, #364).** Group member `-1` capped the complement and `0` produced a vacuous row reported as zero violation; `tol` was dead and `max_iter = 0` still ran thousands of evaluations. Members are validated; `max_iter` bounds every phase (python passes `maxiter` to each SLSQP attempt) and `tol` sets the thresholds (defaults reproduce the old fixed values).
+- **R `fit_covariance` (#407, #427).** The absolute floor `1e-3 * mean(diag)` inflated a 2e-8 contrast variance 33,333x; an exact rank-2-plus-diagonal matrix stalled at a non-global start (contrast residual 0.159, degraded). Now python's relative lower-bounded floor and multistart rescue; both fixtures are reproduced to ~1e-8.
+- **R calibration extended offsets (#393).** A runner 500 units behind turned a 75/25 pair into 50/50. Python's `state_prices_from_extended_offsets` is ported; values match python to 1e-12.
+- **Normal survival cancellation (#96).** `1 - ndtr(z)` / `1 - pnorm(z)` made a 20-sd longshot ~95x too unlikely in python, R and the browser; all three now evaluate the upper tail directly (span result exact to 1e-15 relative, as rust).
+- **Base-aware bulk window in R and the browser (#106).** A custom Student-t(3) race missed its first share by 1.2e-4 at any point count; both now port python's `_bulk_window` (caller's survival, bracketing, delta relaxation, span pad), 1.6e-8 from the SciPy reference.
+- **Overflowing target rescue in R, browser, julia (#326).** `[4e307, 2e307, 1e307, 1e307]` was refused; now inverts to the abilities of `[4, 2, 1, 1]`, as python. The `inv_p_huge` divergence waiver is gone.
+
+#### Factor core (#453)
+
+- **Shared input contract** (`winning/shapes.py`): new `as_points` (a lattice is a whole number >= 2), `as_target` (finite, 1-D), `as_factor_law` (validated, relative, zero-weight nodes dropped); `as_weights` divides by its max before summing. Re-vendored into `python/fastmvn`.
+- **Weights (#263)**: `[1e308, 1e308]` overflowed to a zero rule and priced NaN; the Plackett–Luce node branch accepted `[2, -1]`. Both fixed in Python, R and both JS trees.
+- **Zero-mass nodes (#416)**: zero-weight atoms at f = ±100 widened the core's window until every spike was missed, and the recovery path priced the default factor law (0.46 off); the standalone JS returned NaN. Null nodes are dropped; the fallback keeps (F, W) and reports the failed total.
+- **Lattice size (#444)**: `points` 0/1 gave ZeroDivision / IndexError / a silent 257-point fallback (Python), "use the default" / NaN (JS), BoundsError (Julia), NA (R). Refused now in Python, R, Julia, standalone JS.
+- **Non-finite targets (#110)**: NaN passed `p <= 0` and the pair closed form certified NaN abilities `converged=True`; `[1, 1e-17]` gave `±inf` (Python) / NaN (browser). Refused / fixed in every port.
+- **Loading gauge in the inverse (#70)**: `V + 100` turned a 7e-8 inversion into residual 33.8 (Python) and a 94-unit miss (JS). Centred first.
+- **Unit equivariance (#100)**: top-k residual 690 at c = 1e-2; block share error 0.40 at c = 1e-3; Nested/Tree 0.40; Julia log residual 51.6. All now scale-invariant to 1e-8 or better across c = 1e-6..1e6.
+- **Top-k window (#370)**: absolute 1e-12 sd floor made top-1 raise "membership 66.9" at c = 1e-18. Window search runs in standardised units (Python, R, browser, Julia).
+- **Top-k factor nodes (#340)**: fixed qa = 15 missed the race by 10.7 points on a sharp rank-1 field and broke rank-2 rotation invariance by 1.3 points. Default now follows the race's rule (top-1 = race to 3e-16; rotation 2e-4).
+- **Bottom-k (#365)**: `1 - top_k(n-k)` returned 0 for a 7.7e-24 last place; direct now.
+- **Ridge convergence (#353, #105)**: impossible boards reported `converged=True` at residual 1.57 / 3.11. Now requires stationarity and the nesting necessity.
+- **Warm-start gauge (#360)**, **fractional ranks (#317)**, **middle-rank symmetry (#378)**, **post-clip invariants (#99)**.
+- **Structure dispatch (#89)**: Python inverse refuses a second covariance, refuses base/temperature on hierarchical grammars, honours `n_iter`. R and browser: same, plus window/delta forwarding, refusal of dropped controls, n_iter/tol/returnInfo reaching every grammar.
+- **ordered_probabilities k=1 (#73)**, **two-runner removal (#411)**, **capped removal lattice (#269)**: 5.1-point error at raw row mass 1.00025 now refined to exact.
+- **polish_race (#104)**: returned the original violating race silently; now restores feasibility first (pair cap lands on ±0.9062) and reports converged/feasible/status.
+- **Tree Jacobian (#350)**: Gram cross-cluster term moved 0.2467 → 0.1792 with an irrelevant root shock; exact forward derivative now.
+- **Block Sobol budget (#392)**: qa above 9 was silently capped at 1024 nodes at rank >= 3; refinement now works (rank-6 rotation 3.6e-3 → 7.5e-5).
+- **Tree.from_linkage (#430)**: absolute 1e-10 leaf floor changed near-duplicate monotone linkages (0.556 for Φ(1) = 0.841); exact 2h² now, height-0 refused, same in Python/R/browser.
+- **Temperature (#424)**: negative/NaN silently priced the hard race; refused.
+- **Square V (#71)**: documented and pinned.
+- Small: the core inverse gained the dominant-pair damping gate (gauge-centring moved one rank-2 field onto its two-cycle); `bottomKProbabilities` left the browser forwarder exemption table since it no longer forwards.
+
+#### Browser (JS) port (#454)
+
+- **Browser quadrature orders (#442).** `qa: "15"` built `new Array("15")`, a one-node rule, and priced a different model (0.116 share error). Orders are validated integers everywhere.
+- **Browser boundaries (#334 #440 #438 #329).** Typed arrays coerced nested arrays to NaN (crash in classic, wrong rank in races, every name cap dropped in polish); non-finite/empty abilities reached the top-k lattice; NaN classic offsets became near-certain favourites. Shared `asAbilities`/`asFiniteVector` doors; typed and plain inputs agree bit for bit.
+- **Iteration budgets (#401 #413 #421 #428).** 0/NaN skipped solves (27-point miss in classic), Infinity froze the page. All solvers require finite positive integers; block inverse reports steps taken and stops when no step is accepted.
+- **Top-k effective pair (#408).** Ported python's top-two damping and adaptive sweeps: #151 fixtures go from 3.84-point misses to 3.1e-9 / 9.5e-9 residuals.
+- **Tree topology (#328).** Parent cycles hung forward/Jacobian/inverse in browser and python; validated in linear time.
+- **Factor rules (#290 #325 #209 #374).** Half rules refused; forward and Jacobian share one rule chooser (FD gap 0.058 -> <1e-6); structured Factor keeps caller F/W; pair shortcut includes the rule mean and is verified by the forward for caller rules (8.2/12.2-point misses, 21.8 in python).
+- **Inverse contract (#387 #354).** Target validated before structure dispatch (no more +-230 "inverses" of zero shares); warnings on non-convergence; true iteration counts.
+- **Bulk window (#380).** Callable bases set the window: Student-t(3) error now falls with points (1.05e-3 TV floor removed).
+- **polishRace (#379).** KKT stop: nearest feasible race (distance 2.7827 vs 3.0299 before), active set reported.
+- **Linkage (#361 #346).** Asymmetric distance matrices refused; cutLinkage matches scipy maxclust on tied heights.
+- **Demo helpers (#337 #341 #357 #383 #375 #394 #287).** structureCov covers all grammars; fitGrammar refuses invalid covariances, preserves pair contrasts, is scale equivariant (to 1e-9 over 1e-4 scale) and label-free on tied spectra; MC/GHK/ME floors relative; MC factorised in the race quotient (common-mode contrast 1.5 -> 2); Mendell-Elston ties broken by label-moving keys (browser and python).
+- **Standalone factor engine (#198 #210 #254 #330 #331 #349 #358 #371 #391 #428 #443).** Validated D/V/F/W/nIter; lattice refined to half the smallest sd (tie density 10.3% error, deletion rows 9-13 points, home page 0.2 points all gone); deletion row masses checked; analytic skew-normal slope (alpha=400 round trip 0.014 -> 1.6e-10); pair solved against the forward; top-two damping and returnInfo/warnings; represented factor law (89-point miss at V*100 gone); normalised-share Newton slope (21-point lattice 22-point miss -> 4e-10). Python `abilities_from_probabilities_factor` gets the same represented-law and quotient-rule fixes (now also gauge-free) and `tie_densities` the same refinement.
+- **Pages (#351 #398 #400 #391).** fit.html draws the fitted mixture for the selected base and states the pi/sqrt(6) temperature; circuit.html uses centred loadings; pages import factor_race v=4.
+
 - `qmc_ghk(..., cov=)` validates the matrix it is handed (#102). The
   registry lets an explicit `cov=` skip `as_loadings`/`as_idio` on the
   promise that the method checks it, and it checked only the shape: an
