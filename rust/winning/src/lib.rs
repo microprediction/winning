@@ -1607,9 +1607,11 @@ pub fn check_cheb_orders(rm: usize, rs: usize) -> Result<(), String> {
     Ok(())
 }
 
-/// Tree topology (#328): nodes 0..n_leaves are the clusters, every
-/// parent is -1 (a root) or another node, and following parents
-/// terminates. A cycle used to spin the kernel's depth loop forever.
+/// Tree topology (#328, #517): nodes 0..n_leaves are the clusters,
+/// every parent is -1 (the root) or another node, following parents
+/// terminates, and there is exactly one root. A forest priced each
+/// component without the others' competitors (two roots, two leaves:
+/// shares [1, 1]).
 pub fn check_tree(parent: &[i64], n_leaves: usize) -> Result<(), String> {
     let nt = parent.len();
     if nt < n_leaves {
@@ -1631,6 +1633,13 @@ pub fn check_tree(parent: &[i64], n_leaves: usize) -> Result<(), String> {
                 return Err(format!("parent has a cycle through node {t}"));
             }
         }
+    }
+    let roots: Vec<usize> = (0..nt).filter(|&t| parent[t] < 0).collect();
+    if roots.len() != 1 {
+        let shown: Vec<String> = roots.iter().take(8).map(|r| r.to_string()).collect();
+        return Err(format!(
+            "a tree has exactly one root (parent -1); got {} ({})",
+            roots.len(), shown.join(", ")));
     }
     Ok(())
 }
@@ -2758,6 +2767,14 @@ mod tests {
         assert!(check_cheb_orders(1, 1).is_ok());
         assert!(check_cheb_orders(0, 14).is_err());
         assert!(check_cheb_orders(48, 0).is_err());
+    }
+
+    #[test]
+    fn tree_needs_exactly_one_root() {
+        assert!(check_tree(&[2, 2, -1], 2).is_ok());
+        let e = check_tree(&[-1, -1], 2).unwrap_err();
+        assert!(e.contains("exactly one root"), "{e}");
+        assert!(check_tree(&[1, 0, -1], 2).unwrap_err().contains("cycle"));
     }
 
     #[test]

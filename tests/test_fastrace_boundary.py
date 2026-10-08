@@ -534,3 +534,20 @@ def test_classic_empty_field_is_a_value_error():
     with pytest.raises(ValueError, match="not finite"):
         fastrace.classic_exact_state_prices(CLASSIC_DENSITY, [0.0, np.nan])
 
+
+# --- #517: a tree has exactly one root ------------------------------------
+
+def test_tree_race_rejects_a_forest():
+    mu = np.array([0.0, 1.0])
+    starts = np.array([0, 1], dtype=np.int64)
+    args = (-mu, np.ones(2), np.zeros(2), starts)
+    with pytest.raises(ValueError, match="exactly one root.*got 2"):
+        fastrace.tree_race(*args, np.array([-1, -1], dtype=np.int64),
+                           np.zeros(2), np.array([0.0]), np.ones(1),
+                           257, -9.0, 10.0)
+    # the zero-strength common root is the independent race
+    p = np.asarray(fastrace.tree_race(
+        *args, np.array([2, 2, -1], dtype=np.int64), np.zeros(3),
+        np.array([0.0]), np.ones(1), 257, -9.0, 10.0))
+    assert abs(p.sum() - 1) < 1e-6 and p[0] > p[1]
+

@@ -148,7 +148,8 @@ fn check_starts(starts: &[i64], n: usize) -> PyResult<Vec<usize>> {
     Ok(starts.iter().map(|&x| x as usize).collect())
 }
 
-/// Tree topology (#328); see winning::check_tree.
+/// Tree topology, including the single-root rule (#328, #517); see
+/// winning::check_tree.
 fn check_tree(parent: &[i64], n_leaves: usize) -> PyResult<()> {
     winning::check_tree(parent, n_leaves).map_err(bad)
 }
