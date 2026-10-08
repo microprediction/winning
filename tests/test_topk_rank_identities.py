@@ -235,10 +235,12 @@ def test_the_ports_clamp_in_floating_point_before_converting():
     and the failure is a conversion, not a value."""
     root = pathlib.Path(__file__).resolve().parents[1]
     r = (root / "r" / "winning" / "R" / "topk.R").read_text()
-    assert "as.integer(min(need, 8193))" in r, \
+    # the dyadic count (#515) clamps in double too, after the
+    # non-finite / over-cap early return
+    assert "as.integer(min(2^ceiling(log2(need - 1)) + 1, 8193))" in r, \
         "R must clamp in double and convert after"
     assert "!is.finite(need)" in r
     jl = (root / "julia" / "winning" / "src" / "topk.jl").read_text()
-    assert "Int(min(need, 8193.0))" in jl, \
+    assert "Int(min(2.0^ceil(log2(need - 1)) + 1, 8193.0))" in jl, \
         "julia must clamp in Float64 and convert after"
     assert "!isfinite(need)" in jl
