@@ -258,6 +258,64 @@ def as_points(points, name="points", minimum=2):
     return v
 
 
+def _real_scalar(x, name):
+    v = np.asarray(x)
+    if (v.ndim != 0 or v.dtype == bool
+            or not np.issubdtype(v.dtype, np.number)
+            or np.iscomplexobj(v)):
+        raise ValueError(f"{name} must be one real number; got {x!r}")
+    return float(v)
+
+
+def as_tolerance(tol, name="tol"):
+    """A convergence or mass tolerance: one finite positive real number.
+
+    Every certificate in the package is ``residual < tol`` or ``defect >
+    tol``. An infinite tol certified the first finite residual, returning
+    warm starts 15-24 points off as converged (#551); a NaN made every
+    ``defect > tol`` false and renormalized an 18% mass defect into a
+    certified-looking row (#590). The browser has refused both since
+    asTolerance.
+    """
+    v = _real_scalar(tol, name)
+    if not (np.isfinite(v) and v > 0):
+        raise ValueError(f"{name} must be a finite positive number; got {tol!r}")
+    return v
+
+
+def as_nonnegative(x, name):
+    """One finite non-negative real number (a penalty weight): a negative
+    ridge used to be read as zero by max(ridge, 0), silently fitting the
+    unregularized model (#558)."""
+    v = _real_scalar(x, name)
+    if not (np.isfinite(v) and v >= 0):
+        raise ValueError(
+            f"{name} must be a finite non-negative number; got {x!r}")
+    return v
+
+
+def rescaled_target(t, mass=None):
+    """A relative target as a law of total `mass` (default 1), without
+    overflowing.
+
+    A market law is defined up to a positive factor, but ``t / t.sum()``
+    overflows the sum when every entry is finite and large ([1e308] * 4),
+    and the target collapsed to zeros or NaN before any solver ran
+    (#461, #463, #483; the browser's rescaledTarget, #615). Divide by the
+    max first ONLY when the plain sum is not finite, so every ordinary
+    input stays bit-identical.
+    """
+    t = np.asarray(t, dtype=float)
+    with np.errstate(over="ignore"):
+        s = t.sum()
+    if not np.isfinite(s):
+        t = t / t.max()
+        s = t.sum()
+    # `mass` keeps each caller's own arithmetic (t / s, or t * (k / s)),
+    # so the ordinary path is bit-identical to the expression it replaced
+    return t / s if mass is None else t * (mass / s)
+
+
 def as_target(p, name="target"):
     """A probability target: a nonempty finite 1-D vector, positive mass.
 
