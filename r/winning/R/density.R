@@ -31,6 +31,14 @@ center_density <- function(density) {
 #' @return numeric density of length 2L+1, centered then shifted by loc
 #' @export
 skew_normal_density <- function(L, unit, loc = 0, scale = 1.0, a = 2.0) {
+  # a lattice spacing and a scale are positive: a negative one was
+  # normalised away into a different law (#509)
+  for (nm in c("unit", "scale")) {
+    v <- get(nm)
+    if (length(v) != 1L || !is.numeric(v) || !is.finite(v) || v <= 0)
+      stop("skew_normal_density: ", nm, " must be a finite positive number; got ",
+           deparse(v), call. = FALSE)
+  }
   x <- symmetric_lattice(L, unit)
   t <- (x - loc) / scale
   density <- 2 / scale * stats::dnorm(t) * stats::pnorm(a * t)

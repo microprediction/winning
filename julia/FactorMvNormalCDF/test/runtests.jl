@@ -185,6 +185,81 @@ end
     @test_throws ArgumentError FactorMvNormalCDF._gh_nodes(-1, 15)
 end
 
+
+# --- the rectangle depends on the Gaussian, not its spelling ----------
+# Same fixtures as tests/test_fastmvn_semantics.py in the python tree.
+@testset "upper-tail cells do not cancel (#196)" begin
+    for (lo, hi, want) in ((9.0, 10.0, 1.1285122074235907e-19),
+                           (8.0, 9.0, 6.219831985865787e-16),
+                           (-10.0, -9.0, 1.1285122074235907e-19))
+        p = mvn_cdf_fast(lower = [lo], upper = [hi], V = zeros(1, 1), D = [1.0])
+        @test abs(p / want - 1) < 1e-9
+    end
+    for n in 2:3
+        up = mvn_cdf_fast(lower = fill(9.0, n), V = zeros(n, 1), D = ones(n))
+        dn = mvn_cdf_fast(upper = fill(-9.0, n), V = zeros(n, 1), D = ones(n))
+        @test up > 0
+        @test abs(up / dn - 1) < 1e-12
+    end
+end
+
+@testset "units do not change the algorithm (#368)" begin
+    V = reshape([0.5, -0.3, 0.4, 0.2, -0.4, 0.3], 6, 1)
+    D = [0.8, 1.1, 0.9, 1.2, 1.0, 0.7]
+    S = V * V' .+ [i == j ? D[i] : 0.0 for i in 1:6, j in 1:6]
+    mu = [0.1, -0.2, 0.3, 0.0, 0.4, -0.1]
+    b = [0.5, 0.2, 0.8, -0.1, 0.4, 0.6]
+    p0, m0 = mvn_cdf_fast_info(mean = mu, upper = b, sigma = S)
+    for c in (1e-12, 1e-6, 1e6, 1e12)
+        @test factorize_covariance(c .* S) !== nothing   # nothing at 1e-12
+        p, m = mvn_cdf_fast_info(mean = sqrt(c) .* mu, upper = sqrt(c) .* b,
+                                 sigma = c .* S)
+        @test m == m0 == "factor"
+        @test abs(p / p0 - 1) < 1e-12
+    end
+end
+
+@testset "diagonal and heterogeneous-scale covariance (#132)" begin
+    D0 = [1.0, 1.0, 1.0, 1.0, 1e8]
+    b = [10.0, 10.0, 10.0, 10.0, -5000.0]
+    S = [i == j ? D0[i] : 0.0 for i in 1:5, j in 1:5]
+    V, D = factorize_covariance(S)
+    @test size(V, 2) == 0
+    p, _ = mvn_cdf_fast_info(upper = b, mean = zeros(5), sigma = S)
+    exact = prod(MF.ndtr(b[i] / sqrt(D0[i])) for i in 1:5)
+    @test abs(p / exact - 1) < 1e-13                 # was -1.8e-3
+    for rho in (0.5, 0.8, 0.9)
+        S3 = [1.0 rho 0.0; rho 1.0 0.0; 0.0 0.0 1e16]
+        @test size(factorize_covariance(S3)[1], 2) == 1
+        p3, _ = mvn_cdf_fast_info(upper = zeros(3), sigma = S3)
+        want = 0.5 * (0.25 + asin(rho) / (2pi))
+        @test abs(p3 / want - 1) < 1e-6
+    end
+end
+
+@testset "sigma must be a covariance (#359)" begin
+    S = [1.0 0.7 0.2; 0.1 1.0 0.3; 0.2 0.3 1.0]
+    for A in (S, Matrix(transpose(S)))
+        @test_throws ArgumentError mvn_cdf_fast(sigma = A, upper = zeros(3))
+        @test_throws ArgumentError mvnormcdf_factor(zeros(3), A,
+                                                    fill(-Inf, 3), zeros(3))
+    end
+    @test_throws ArgumentError mvn_cdf_fast(sigma = [1.0 2.0; 2.0 1.0],
+                                            upper = 0.0)
+    @test_throws ArgumentError mvn_cdf_fast(sigma = [1.0 NaN; NaN 1.0],
+                                            upper = 0.0)
+    v = [1.0, 2.0, 3.0]
+    @test abs(mvn_cdf_fast(sigma = v * v', upper = zeros(3)) - 0.5) < 1e-3
+end
+
+@testset "one coordinate is the normal cdf (#395)" begin
+    sd = sqrt(1 + 1e-6)
+    for z in (-4.2, -4.1, -4.0)
+        p = mvn_cdf_fast(V = ones(1, 1), D = [1e-6], upper = [z * sd])
+        @test abs(p / MF.ndtr(z) - 1) < 1e-12
+    end
+end
+
 _diagm(d) = [i == j ? d[i] : 0.0 for i in eachindex(d), j in eachindex(d)]
 
 @testset "mean is scalar or one per coordinate (#397)" begin

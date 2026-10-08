@@ -1,3 +1,4 @@
+import math
 from winning.classic.lattice_conventions import STD_UNIT, STD_SCALE, STD_L, STD_A, NAN_DIVIDEND
 from winning.classic.lattice_calibration import dividend_implied_ability, normalize_dividends, dividends_from_prices
 from winning.classic.lattice import skew_normal_density, densities_from_offsets, pdf_to_cdf, sample_from_cdf
@@ -58,8 +59,13 @@ def skew_normal_place_pricing(dividends, n_samples=N_SAMPLES, longshot_expon:flo
     density = skew_normal_density(L=L, unit=unit, scale=scale, a=a)
     adj_dividends = longshot_adjusted_dividends(dividends=dividends,longshot_expon=longshot_expon)
     offsets = dividend_implied_ability(dividends=adj_dividends, density=density,nan_value=nan_value)
-    densities = densities_from_offsets(density=density, offsets=offsets)
+    # a scratched runner (zero price) has ability +inf (#589): it never
+    # finishes ahead of anyone, so give it an infinite performance
+    scratched = [not math.isfinite(o) for o in offsets]
+    densities = densities_from_offsets(density=density, offsets=[0.0 if s else o for s, o in zip(scratched, offsets)])
     performances = simulate_performances(densities=densities, n_samples=n_samples, add_noise=True, unit=unit)
+    if any(scratched):
+        performances = [[math.inf if s else x for s, x in zip(scratched, row)] for row in performances]
     placegetters = placegetters_from_performances(performances=performances, n=4)
     the_counts = exotic_count(placegetters, do_exotics=False)
     n_runners = len(adj_dividends)
@@ -73,8 +79,21 @@ def longshot_adjusted_dividends(dividends,longshot_expon=1.17):
     """ Use power law to approximately unwind longshot effect
         Obviously this is market dependent
     """
-    dividends = [(o + 1.0) ** (longshot_expon) for o in dividends]
-    return normalize_dividends(dividends)
+    # A scratched entrant -- a +inf, zero or negative dividend, which
+    # prices_from_dividends maps to an exact zero -- stays scratched (+inf).
+    # The normalize_dividends round trip turned it into NaN, which the
+    # inverse then read as a MISSING quote (nan_value=2000), so the
+    # scratched runner was simulated as a live longshot (#620).
+    def scratched(o):
+        return o is not None and not (isinstance(o, float) and math.isnan(o)) and (o <= 0 or o == math.inf)
+
+    mask = [scratched(o) for o in dividends]
+    adjusted = [1.0 if m else (o + 1.0) ** (longshot_expon) for m, o in zip(mask, dividends)]
+    if all(mask):
+        return [math.inf for _ in dividends]
+    live = normalize_dividends([a for m, a in zip(mask, adjusted) if not m])
+    it = iter(live)
+    return [math.inf if m else next(it) for m in mask]
 
 
 def exotic_count(placegetters, do_exotics=False):

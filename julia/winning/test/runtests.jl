@@ -233,3 +233,86 @@ end
     @test_throws ArgumentError race_probabilities(mu; V = V, D = ones(3),
                                                   F = F, W = [0.0, 0.0])
 end
+
+@testset "adaptive node schedule matches GH_RULE (#528)" begin
+    # the 8-runner stress field at centred sharpness 21.07, ceil(8s) = 169:
+    # julia kept Gauss-Hermite to Q = 201 and moved the leaders by 42bp
+    mu = [-1.2778325156570909, -1.0099930645736255, -0.2838848030639649,
+          -0.22632464605522293, -0.11596618882209474, -0.10779858154488295,
+          0.20904942336288942, 1.0204595606925912]
+    v = [-0.8571701970944656, 3.3310423958253588, 0.2338294924083979,
+         -0.34458791516111925, -0.27324453897087425, -0.6600034669284740,
+         -1.0471076720246453, -0.3827580980541786]
+    V = reshape(v, :, 1)
+    D = fill(0.05, 8)
+    p = race_probabilities(mu; V = V, D = D, points = 257)
+    Q = 169
+    Fmid = reshape(winning.qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
+    pmid = race_probabilities(mu; V = V, D = D, F = Fmid, W = fill(1.0 / Q, Q),
+                              points = 257)
+    @test maximum(abs.(p .- pmid)) < 1e-14          # the midpoint family
+    mc = [0.5254543333, 0.4744646667]               # 3M-path reference
+    @test maximum(abs.(p[1:2] .- mc)) < 3e-4        # GH-169 was 4.2e-3 off
+    # rank 2 between the old 3.0 and the reference 3.75 cutover stays
+    # Gauss-Hermite at the capped order
+    mu3 = [0.0, 0.2, -0.1]
+    V2 = [1.0 0.5; -0.6 0.4; -0.4 -0.9]
+    Vc = V2 .- sum(V2, dims = 1) ./ 3
+    s = sqrt(2) * maximum(sqrt.(vec(sum(Vc .^ 2, dims = 2))))
+    D2 = fill((s / 3.4)^2, 3)                        # sharpness 3.4
+    q = Int(min(max(ceil(8 * 3.4), 15), 41))
+    h = hermite_nodes(2, q)
+    @test race_probabilities(mu3; V = V2, D = D2, points = 257) ≈
+          race_probabilities(mu3; V = V2, D = D2, F = h.F, W = h.W,
+                             points = 257) atol = 1e-14
+end
+
+@testset "scalar D through every top-k/rank entry point (#485)" begin
+    mu = [0.0, 0.3, -0.2, 0.5]
+    Jv = top_k_jacobians(mu, 2; D = ones(4), points = 257)
+    Js = top_k_jacobians(mu, 2; D = 1.0, points = 257)
+    @test Js.Jmu == Jv.Jmu && Js.Jsigma == Jv.Jsigma
+    V = reshape([0.4, -0.2, 0.1, -0.3], 4, 1)
+    @test top_k_jacobians(mu, 2; D = 1.0, V = V, points = 257).Jmu ==
+          top_k_jacobians(mu, 2; D = ones(4), V = V, points = 257).Jmu
+    @test top_k_probabilities(mu, 2; D = 2.0, points = 257) ==
+          top_k_probabilities(mu, 2; D = fill(2.0, 4), points = 257)
+    @test rank_probabilities(mu; D = 1.0, points = 257) ==
+          rank_probabilities(mu; D = ones(4), points = 257)
+    q1 = top_k_probabilities(mu, 1; points = 257)
+    q2 = top_k_probabilities(mu, 2; points = 257)
+    a = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = 1.0, points = 257)
+    b = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = ones(4), points = 257)
+    @test a.mu == b.mu && a.sd == b.sd
+    for bad in ([1.0, 1.0], [1.0, 1.0, 0.0, 1.0], [1.0, -1.0, 1.0, 1.0],
+                [1.0, NaN, 1.0, 1.0], [1.0, Inf, 1.0, 1.0], 0.0)
+        @test_throws ArgumentError top_k_jacobians(mu, 2; D = bad, points = 257)
+        @test_throws ArgumentError top_k_probabilities(mu, 2; D = bad,
+                                                       points = 257)
+        @test_throws ArgumentError loc_scale_from_topk_pair(q1, 1, q2, 2;
+                                                            D0 = bad,
+                                                            points = 257)
+    end
+end
+
+@testset "exact loc/scale warm start returns in the gauge (#595)" begin
+    mu = [-3.0, -1.0, 1.0, 3.0]
+    sd = [2.0, 3.0, 4.0, 5.0]
+    D = sd .^ 2
+    q1 = top_k_probabilities(mu, 1; D = D, points = 1025)
+    q2 = top_k_probabilities(mu, 2; D = D, points = 1025)
+    fit = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = D, mu0 = mu,
+                                   points = 1025, return_info = true)
+    @test fit.converged
+    @test abs(sum(fit.mu)) < 1e-12
+    @test abs(sum(log.(fit.sd))) < 1e-12
+    c = exp(sum(log.(sd)) / 4)
+    @test fit.mu ≈ mu ./ c atol = 1e-12
+    @test fit.sd ≈ sd ./ c atol = 1e-12
+    @test fit.sd ≈ [0.604275079471354, 0.906412619207030,
+                    1.208550158942707, 1.510687698678384] atol = 1e-12
+    p2 = q2 .- q1
+    w = loc_scale_from_win_and_second(q1, p2; D0 = D, mu0 = mu,
+                                      points = 1025, return_info = true)
+    @test abs(sum(w.mu)) < 1e-12 && abs(sum(log.(w.sd))) < 1e-12
+end
