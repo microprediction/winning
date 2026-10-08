@@ -504,11 +504,14 @@ def densities_from_events(scores:[int], events:[[float]], L:int, unit:float):
     assert len(scores)==len(events)
     low_score = min(scores)
     adjusted_scores = [ s-low_score for s in scores ]
-    if True:
-        for k,adj_score in enumerate(adjusted_scores):
-            adapted_L = int(math.ceil(abs(adj_score/unit)))
-            events[k].append( density_from_samples(x=[adj_score],L=adapted_L, unit=unit) )
-    densities = [ convolve_many( densities=event, L=L ) for event in events ]
+    # Build each state's augmented list locally. This appended the score
+    # density into the caller's ``events[k]``, so reusing one event model
+    # stacked another score shift on every call (#607).
+    densities = []
+    for event, adj_score in zip(events, adjusted_scores):
+        adapted_L = int(math.ceil(abs(adj_score/unit)))
+        score_density = density_from_samples(x=[adj_score], L=adapted_L, unit=unit)
+        densities.append(convolve_many(densities=list(event) + [score_density], L=L))
     return densities
 
 
