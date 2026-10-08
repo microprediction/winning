@@ -229,7 +229,7 @@ function top_k_probabilities(mu, k; V = nothing, D = nothing,
     n = length(mu)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     V === nothing &&
         return _checked_topk(_topk_with_slopes(mu, sd, k, fn, points).q,
@@ -270,7 +270,7 @@ function top_k_jacobians(mu, k; D = nothing, base = "normal",
         end
         return (Jmu = Jm, Jsigma = Js)
     end
-    Dv = D === nothing ? ones(n) : Float64.(collect(D))
+    Dv = _as_idio(D, n)
     sd = sqrt.(Dv)
     fn = _base_fn(base)
     g = _topk_grid(mu, sd, k, fn, points)
@@ -320,7 +320,7 @@ function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
                             V = nothing, qa = 15)
     mu = Float64.(collect(mu))
     n = length(mu)
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     P = if V === nothing
         _rank_matrix_node(mu, sd, fn, points)
@@ -384,7 +384,7 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
     vt = _validated_topk_target(q, k, n, target_floor)
     target = vt.target
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     fac = V === nothing ? nothing :
           _topk_factor_nodes(V, n, qa, "abilities_from_topk")
@@ -447,7 +447,7 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
     t2 = _validated_topk_target(q2, k2, n, nothing).target
     lt1 = log.(t1) .- log1p.(-t1)
     lt2 = log.(t2) .- log1p.(-t2)
-    sd = D0 === nothing ? ones(n) : sqrt.(Float64.(collect(D0)))
+    sd = sqrt.(_as_idio(D0, n; name = "D0"))
     local mu
     if mu0 !== nothing
         mu = Float64.(collect(mu0)) .- sum(mu0) / n
@@ -458,6 +458,15 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
                                  points = points, n_iter = 20, tol = 1e-3,
                                  return_info = true).mu
     end
+    # the RETURN gauge (mean-zero mu, geometric-mean-one sd) applied to
+    # the start as well: it was applied only to accepted LM steps, so an
+    # exact warm start converged before any step and came back in the
+    # caller's units -- sd [2, 3, 4, 5] where python returns
+    # [0.60, 0.91, 1.21, 1.51] (#595, julia's copy of #360). Ranks are
+    # invariant to it, so no probability moves.
+    c0 = exp(sum(log.(sd)) / n)
+    mu = (mu .- sum(mu) / n) ./ c0
+    sd = sd ./ c0
     sqr = sqrt(max(ridge, 0.0))
     function logits(m, s)
         qh1 = clamp.(top_k_probabilities(m, k1; D = s .^ 2, base = base,
@@ -586,7 +595,7 @@ function abilities_from_rank_marginal(p, r; mu0 = nothing, D = nothing,
     all(isfinite, p) || error("rank probabilities must be finite")
     any(p .<= 0) && error("all rank probabilities must be positive")
     logt = log.(p ./ sum(p))
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     zz = [-2.3, -1.1, -0.35, 0.6, 1.7]
     symmetric = all(abs.(fn(zz).S .+ fn(-zz).S .- 1) .< 1e-12)

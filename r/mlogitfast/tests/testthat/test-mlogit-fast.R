@@ -276,3 +276,118 @@ test_that("a never-chosen alternative is not reported converged (#496)", {
   expect_warning(fit <- mlogit_fast(choice ~ x, d, r = 0L), "never chosen")
   expect_equal(fit$convergence, 2L)
 })
+
+test_that("unused factor levels are not phantom choosers or alternatives (#464)", {
+  set.seed(4)
+  n <- 30L; J <- 3L
+  id <- rep(seq_len(n), each = J)
+  alt <- rep(c("x", "y", "z"), times = n)
+  d <- data.frame(v = rnorm(n * J))
+  u <- 0.7 * d$v + rnorm(n * J)
+  d$chosen <- unlist(lapply(split(u, id),
+                            function(w) seq_along(w) == which.max(w)))
+  fit <- function(id, alt) {
+    dd <- d
+    attr(dd, "idx") <- data.frame(id = id, alt = alt)
+    mlogit_fast(chosen ~ v, dd, r = 1L, Qf = 3L, Qz = 3L, maxit = 5L)
+  }
+  id_f <- factor(id * 2L, levels = seq_len(2L * n + 1L))
+  alt_f <- factor(alt, levels = c("x", "w", "y", "z", "zz"))
+  ref <- fit(droplevels(id_f), droplevels(alt_f))
+  for (got in list(fit(id_f, droplevels(alt_f)),
+                   fit(droplevels(id_f), alt_f),
+                   fit(id_f, alt_f))) {
+    expect_identical(got$J, 3L)
+    expect_equal(got$coefficients, ref$coefficients)
+    expect_equal(got$logLik, ref$logLik)
+  }
+  expect_identical(names(ref$coefficients),
+                   c("(Intercept):y", "(Intercept):z", "v"))
+})
+
+test_that("Gauss-Hermite order one is the one-node rule (#504)", {
+  expect_equal(.gh1(1L), list(x = 0, w = 1))
+  for (bad in list(0L, -1L, 1.5, NA_real_, Inf, c(2L, 3L)))
+    expect_error(.gh1(bad), "one positive integer")
+  d <- data.frame(chosen = c(TRUE, FALSE, FALSE, TRUE),
+                  x = c(-1, 1, -0.5, 0.5))
+  attr(d, "idx") <- data.frame(id = rep(1:2, each = 2),
+                               alt = factor(rep(1:2, 2)))
+  f1 <- mlogit_fast(chosen ~ x, d, r = 0L, Qf = 1L, Qz = 3L, maxit = 3L)
+  f7 <- mlogit_fast(chosen ~ x, d, r = 0L, Qf = 7L, Qz = 3L, maxit = 3L)
+  expect_equal(f1$logLik, f7$logLik)          # Qf is inert at r = 0
+  expect_true(is.finite(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 1L,
+                                    maxit = 3L)$logLik))
+})
+
+test_that("an idx that does not cover data is refused, not a prefix (#520)", {
+  idx1 <- data.frame(id = rep(1L, 3L), alt = factor(c("a", "b", "c")))
+  d <- data.frame(chosen = c(TRUE, FALSE, FALSE, FALSE, FALSE, TRUE),
+                  x = c(-1, 0, 1, 10, 0, -10))
+  attr(d, "idx") <- idx1
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "got 3 for 6 data rows")
+  short <- d[1:3, , drop = FALSE]
+  attr(short, "idx") <- data.frame(id = rep(1:2, each = 3),
+                                   alt = factor(rep(c("a", "b", "c"), 2)))
+  expect_error(mlogit_fast(chosen ~ x, short, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "got 6 for 3 data rows")
+  attr(d, "idx") <- NULL
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "idx column or attribute")
+  attr(d, "idx") <- data.frame(id = rep(1:2, each = 3))
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "idx column or attribute")
+})
+
+test_that("a factor response means its labels, not its level codes (#512)", {
+  set.seed(5)
+  n <- 20L; J <- 3L
+  d <- data.frame(x = rnorm(n * J))
+  u <- 0.7 * d$x + rnorm(n * J)
+  ch <- unlist(lapply(split(u, rep(seq_len(n), each = J)),
+                      function(w) seq_along(w) == which.max(w)))
+  attr(d, "idx") <- data.frame(id = rep(seq_len(n), each = J),
+                               alt = factor(rep(c("a", "b", "c"), n)))
+  fit <- function(resp) {
+    d$chosen <- resp
+    mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L, maxit = 5L)
+  }
+  ref <- fit(ch)
+  for (resp in list(factor(ch, levels = c(FALSE, TRUE)),
+                    factor(as.integer(ch), levels = 0:1),
+                    as.integer(ch))) {
+    got <- fit(resp)
+    expect_equal(got$coefficients, ref$coefficients)
+    expect_equal(got$logLik, ref$logLik)
+  }
+})
+
+test_that("the formula is a model formula, not a list of columns (#472)", {
+  set.seed(6)
+  n <- 30L; J <- 3L
+  d <- data.frame(x = runif(n * J, 0.5, 3), z = rnorm(n * J),
+                  g = factor(sample(c("p", "q", "s"), n * J, TRUE)))
+  u <- 0.8 * log(d$x) + 0.3 * d$z + rnorm(n * J)
+  d$chosen <- unlist(lapply(split(u, rep(seq_len(n), each = J)),
+                            function(w) seq_along(w) == which.max(w)))
+  attr(d, "idx") <- data.frame(id = rep(seq_len(n), each = J),
+                               alt = factor(rep(c("a", "b", "c"), n)))
+  fit <- function(f, dd = d) mlogit_fast(f, dd, r = 0L, Qf = 3L, Qz = 3L,
+                                         maxit = 10L)
+  # 0 + drops the alternative intercepts instead of being ignored
+  expect_identical(names(fit(chosen ~ x)$coefficients),
+                   c("(Intercept):b", "(Intercept):c", "x"))
+  expect_identical(names(fit(chosen ~ 0 + x)$coefficients), "x")
+  expect_identical(names(fit(chosen ~ x - 1)$coefficients), "x")
+  # transformations equal the precomputed column
+  d2 <- d; d2$lx <- log(d$x); d2$x2 <- d$x^2; d2$xz <- d$x * d$z
+  a <- fit(chosen ~ log(x) + I(x^2) + x:z)
+  b <- fit(chosen ~ lx + x2 + xz, d2)
+  expect_equal(unname(a$coefficients), unname(b$coefficients))
+  expect_equal(a$logLik, b$logLik)
+  # a factor covariate gets treatment contrasts
+  expect_identical(names(fit(chosen ~ z + g)$coefficients),
+                   c("(Intercept):b", "(Intercept):c", "z", "gq", "gs"))
+  expect_error(fit(chosen ~ x | 0), "multi-part")
+})

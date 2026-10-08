@@ -15,7 +15,12 @@ mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
 \arguments{
   \item{formula}{choice ~ covariates, with the response a logical
     chosen-alternative column and alternative-specific covariates on
-    the right-hand side.}
+    the right-hand side. The right-hand side is an ordinary model
+    formula (transformations such as \code{log(x)} or \code{I(x^2)},
+    interactions, factor contrasts). Alternative-specific intercepts
+    are added unless the formula removes the intercept with
+    \code{0 +} or \code{- 1}; multi-part (\code{|}) formulas are not
+    supported.}
   \item{data}{a long-format data frame, one row per (chooser,
     alternative), carrying an \code{idx} column or attribute whose
     first column is the chooser and second the alternative. A plain

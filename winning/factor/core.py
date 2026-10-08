@@ -469,6 +469,22 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                                 "sharpness": 0.0,
                                 "contrast_residual_max": 0.0}
         return V, D, F, W
+    # Fit at UNIT scale and scale back. Several stages carry absolute
+    # constants (start values, convergence tests, dead-column and
+    # clipping thresholds), so the same standardized race fitted at
+    # 1e-10 times the covariance came back at rank 6 and sharpness 1113
+    # instead of rank 3 and 3.16, and priced 2.7e-3 away in total
+    # variation (#101). The working scale is a power of FOUR, so C / s
+    # and sqrt(s) are exact in binary and the fit of s * C is the fit of
+    # C, bit for bit, scaled.
+    md = float(np.mean(np.diag(C)))
+    k2 = int(np.round(np.log2(md) / 2.0)) if md > 0 else 0
+    if k2 != 0:
+        out = fit_covariance(np.ldexp(C, -2 * k2), k=k, m=m, blocks=blocks,
+                             nodes_log2=nodes_log2, seed=seed,
+                             return_report=return_report)
+        Vu, Du = out[0], out[1]
+        return (np.ldexp(Vu, k2), np.ldexp(Du, 2 * k2)) + tuple(out[2:])
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)

@@ -277,23 +277,30 @@ end
 
 # ---- race setup (adaptive factor quadrature, matching R) -----------
 
+# A scalar D is the same variance for everyone, as as_idio states;
+# a zero variance is a contestant with no idiosyncratic noise, which
+# this lattice cannot represent -- it returned NaN where python, R
+# and the browser all refuse. Found by the cross-port divergence
+# scan. Shared by the winner race and every top-k/rank entry point,
+# which used to collect(D) themselves and failed on a scalar (#485).
+function _as_idio(D, n::Integer; name = "D")
+    D === nothing && return ones(n)
+    Dv = D isa Number ? [Float64(D)] : Float64.(vec(collect(D)))
+    length(Dv) == 1 && (Dv = fill(Dv[1], n))
+    length(Dv) == n || throw(ArgumentError(
+        name * " must be a scalar or one idiosyncratic variance per " *
+        "contestant; got " * string(length(Dv)) * " for " * string(n)))
+    all(isfinite, Dv) || throw(ArgumentError(name * " has a non-finite entry"))
+    all(>(0.0), Dv) || throw(ArgumentError(
+        name * " must be strictly positive here: a zero variance is a " *
+        "contestant the lattice cannot represent"))
+    return Dv
+end
+
 function _race_setup(mu, V, D, F, W, base)
     mu = Float64.(collect(mu))
     n = length(mu)
-    D = D === nothing ? ones(n) : Float64.(collect(D))
-    # A scalar D is the same variance for everyone, as as_idio states;
-    # a zero variance is a contestant with no idiosyncratic noise, which
-    # this lattice cannot represent -- it returned NaN where python, R
-    # and the browser all refuse. Found by the cross-port divergence
-    # scan.
-    length(D) == 1 && (D = fill(D[1], n))
-    length(D) == n || throw(ArgumentError(
-        "D must be a scalar or one idiosyncratic variance per contestant; " *
-        "got " * string(length(D)) * " for " * string(n)))
-    all(isfinite, D) || throw(ArgumentError("D has a non-finite entry"))
-    all(>(0.0), D) || throw(ArgumentError(
-        "D must be strictly positive here: a zero variance is a " *
-        "contestant the lattice cannot represent"))
+    D = _as_idio(D, n)
     if V === nothing
         Vm = zeros(n, 1)
         Fm = zeros(1, 1)
@@ -319,18 +326,25 @@ function _race_setup(mu, V, D, F, W, base)
             sharp = sqrt(2) * maximum(sqrt.(vec(sum(Vm .^ 2, dims = 2))) ./
                                       sqrt.(max.(D, TINY)))
             r = size(Vm, 2)
-            if r >= 2 && sharp > 3.0
+            # per-rank (Gauss-Hermite order cap, sharpness past which even
+            # that order loses to the low-discrepancy family): GH_RULE in
+            # the python reference, identical in R and the browser. Julia
+            # kept the older single 3.0 cutover, rank-3 cap 15 and the
+            # rank-one handover at Q > 201, where GH-169 was 42bp off on
+            # the 8-runner stress field at sharpness 21 (#528, #153).
+            cap = r == 1 ? 201 : r == 2 ? 41 : r == 3 ? 31 : 15
+            sharp_max = r == 2 ? 3.75 : r == 3 ? 4.75 : 3.0
+            if r >= 2 && sharp > sharp_max
                 hw = halton_normal_nodes(r, 2^13)
                 Fm, Wv = hw.F, hw.W
-            elseif r == 1 && ceil(8 * sharp) > 201
+            elseif r == 1 && ceil(8 * sharp) > 80
                 Q = Int(min(ceil(8 * sharp), 4001))
                 Fm = reshape(qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
                 Wv = fill(1.0 / Q, Q)
-            elseif 15.0^r > 1e5
+            elseif Float64(cap)^r > 1e5
                 hw = halton_normal_nodes(r, 2^13)
                 Fm, Wv = hw.F, hw.W
             else
-                cap = r == 1 ? 201 : r == 2 ? 41 : 15
                 Q = Int(min(max(ceil(8 * sharp), 15), cap))
                 hw = hermite_nodes(size(Vm, 2), Q)
                 Fm, Wv = hw.F, hw.W

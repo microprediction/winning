@@ -715,6 +715,30 @@ accepts("the inverse takes a scalar D, matching python",
           b => Math.max(...b.map((x, i) => Math.abs(x - REF[i]))) < 1e-12,
           b => `max |diff| ${Math.max(...b.map((x, i) =>
             Math.abs(x - REF[i]))).toExponential(2)}`);
+
+  // --- the baselines are scale free (#101): (mu, C) -> (sqrt(c) mu, c C)
+  // is the same race. The absolute pivot floors moved the GHK and ME
+  // leaders by 0.266 at c = 1e-14, and cholesky(1e-12 I) returned
+  // 1e-5 I (covariance 1e-10 I).
+  const scaled = (c) => [muME.map(x => Math.sqrt(c) * x),
+                         CME.map(r => r.map(x => c * x))];
+  for (const c of [1e-10, 1e-14, 1e-16]) {
+    const [m2, C2] = scaled(c);
+    accepts(`mendell-elston is scale free at c = ${c}`,
+            () => shares(m2, C2),
+            b => Math.max(...b.map((x, i) => Math.abs(x - base[i]))) < 1e-9,
+            b => `max |diff| ${Math.max(...b.map((x, i) =>
+              Math.abs(x - base[i]))).toExponential(2)}`);
+    accepts(`ghk preparation is scale free at c = ${c}`,
+            () => [0, 1, 2, 3].map(i => [demo.ghkPrepareOne(muME, CME, i),
+                                         demo.ghkPrepareOne(m2, C2, i)]),
+            v => v.every(([a, b]) => a.L.every((x, k) =>
+              Math.abs(b.L[k] / Math.sqrt(c) - x) <= 1e-9 * Math.abs(x) + 1e-300)));
+  }
+  accepts("cholesky keeps the covariance scale at 1e-12 I",
+          () => demo.cholesky([[1e-12, 0], [0, 1e-12]]),
+          L => Math.abs(L[0][0] - 1e-6) < 1e-18 && Math.abs(L[1][1] - 1e-6) < 1e-18,
+          L => `L00 ${L[0][0]}`);
 }
 
 {
@@ -1714,6 +1738,52 @@ accepts("the inverse takes a scalar D, matching python",
     holds(`Mendell-Elston with tied abilities is label free, perm ${pm} (#287)`,
           relabel([0, 0, 0, 0], CB, pm) < 1e-14);
 }
+
+// --- classic: a scratched entrant stays scratched (#589); the default
+// table covers what the forward represents (#498)
+{
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  for (const [L, unit] of [[3, 1.0], [15, 0.2]]) {
+    const d = classic.skewNormalDensity(L, unit, { a: 0 });
+    const live = classic.dividendImpliedAbility([2, 4], d);
+    for (const scratch of [Infinity, 0, -1]) {
+      const a = classic.dividendImpliedAbility([2, 4, scratch], d);
+      holds(`L=${L} dividend ${scratch} is ability +Infinity, the rest the reduced race (#589)`,
+            a[2] === Infinity && maxAbs(a.slice(0, 2), live) < 1e-12, String(a));
+    }
+  }
+  const d15 = classic.skewNormalDensity(15, 0.1, { a: 0 });
+  const t = classic.statePricesFromOffsets(d15, [-10, 10]);
+  accepts("a 97/3 book round-trips at defaults (#498)",
+          () => classic.solveForImpliedOffsets(t, d15),
+          mu => maxAbs(classic.statePricesFromOffsets(d15, mu), t) < 1e-4,
+          mu => String(classic.statePricesFromOffsets(d15, mu)));
+  accepts("the adaptive default table equals the full table (#498)",
+          () => [classic.solveForImpliedOffsets([0.5, 0.3, 0.15, 0.05], d15),
+                 classic.solveForImpliedOffsets([0.5, 0.3, 0.15, 0.05], d15,
+                   { offsetSamples: classic.defaultOffsetSamples(15) })],
+          ([a, b]) => maxAbs(a, b) === 0);
+  const warned = [];
+  const keep = console.warn;
+  console.warn = m => warned.push(m);
+  try {
+    classic.solveForImpliedOffsets([0.5, 0.5, 0], classic.skewNormalDensity(3, 1.0, { a: 0 }));
+  } finally { console.warn = keep; }
+  holds("an unrepresentable target warns (#498)",
+        warned.length === 1 && warned[0].includes("did not reach the target"));
+}
+
+// --- classic: skewNormalDensity's domain (#509) and option typos (#561)
+for (const [args, why] of [[[50, 0], "unit 0"], [[50, -0.1], "unit < 0"],
+                           [[50, 0.1, { scale: -1 }], "scale < 0"], [[50, 0.1, { scale: 0 }], "scale 0"]])
+  rejects(classic.skewNormalDensity, args, `skewNormalDensity refuses ${why} (#509)`, "finite positive");
+rejects(classic.skewNormalDensity, [50, 0.1, { sacle: 0.3 }],
+        "skewNormalDensity refuses a misspelt option (#561)", "unknown option 'sacle'");
+rejects(classic.dividendImpliedAbility, [[2, 4, 8], classic.skewNormalDensity(50, 0.1), { unti: 0.1 }],
+        "dividendImpliedAbility refuses a misspelt option (#561)", "unknown option 'unti'");
+accepts("dividendImpliedAbility still takes unit (#561)",
+        () => classic.dividendImpliedAbility([2, 4, 8], classic.skewNormalDensity(50, 0.1), { unit: 0.1 }),
+        a => a.every(Number.isFinite));
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

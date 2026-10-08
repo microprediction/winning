@@ -1,3 +1,4 @@
 export(mlogit_fast)
-importFrom(stats, pnorm, dnorm, optim, model.matrix, qnorm, terms)
+importFrom(stats, pnorm, dnorm, optim, model.matrix, model.frame, na.pass,
+           delete.response, qnorm, terms)
 S3method(print, mlogit_fast)
