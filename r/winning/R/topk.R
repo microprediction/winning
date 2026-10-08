@@ -47,7 +47,19 @@
                           "window of %.3g); memberships may carry",
                           "percent-level error the mass check cannot see."),
                     smin, hi - lo), call. = FALSE)
-  max(as.integer(points), as.integer(min(need, 8193)))
+  max(as.integer(points), .dyadic_points(need))
+}
+
+# The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped at
+# 8193), so it is piecewise constant over a factor-of-two band of the
+# narrowest scale instead of stepping by one point at every ceil: a count
+# moving 611 -> 610 under a 1e-5 relative change of one sd made the
+# public map disagree with its scale Jacobian by 100x, and the loc/scale
+# inverse stalled on an exact target (#515). At most twice the points.
+.dyadic_points <- function(need) {
+  if (!is.finite(need) || need >= 8193) return(8193L)
+  if (need <= 2) return(2L)
+  as.integer(min(2^ceiling(log2(need - 1)) + 1, 8193))
 }
 
 .count_window <- function(mu, sd, k, fn, delta = 1e-12, pad_sds = 2.0) {

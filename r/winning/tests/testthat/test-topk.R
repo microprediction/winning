@@ -228,3 +228,18 @@ test_that("rank_probabilities prices a factor-correlated race (#202)", {
   expect_lt(max(abs(R2[, 1] - top_k_probabilities(mu, 1, V = V2, D = D,
                                                   qa = 9))), 1e-6)
 })
+
+test_that("adaptive top-k count is dyadic, so Jsigma matches the map (#515)", {
+  expect_equal(vapply(c(2, 513, 514, 611, 1025, 1026, 9000), .dyadic_points,
+                      integer(1)), c(2L, 513L, 1025L, 1025L, 1025L, 2049L, 8193L))
+  mu <- c(1.168799682867873, -0.8531654023507033, -3.006600202361091,
+          1.7494547072828357, 0.9415112145610854)
+  sd <- c(1.1139780430874056, 0.9672196804840659, 0.30363853046872963,
+          3.389862172988461, 0.7137810123811725)
+  J <- top_k_jacobians(mu, 2, D = sd^2, base = "gumbel", points = 513)
+  h <- sd[3] * 1e-5; sp <- sd; sm <- sd
+  sp[3] <- sp[3] + h; sm[3] <- sm[3] - h
+  fd <- (top_k_probabilities(mu, 2, D = sp^2, base = "gumbel")[3] -
+         top_k_probabilities(mu, 2, D = sm^2, base = "gumbel")[3]) / (2 * h)
+  expect_lt(abs(fd - J$Jsigma[3, 3]), 1e-6)   # was 0.30 apart
+})

@@ -16,7 +16,18 @@ function _resolved_points(lo, hi, sd, points)
     if !isfinite(need) || need > 8193
         @warn "top-k lattice cannot resolve the narrowest runner even at 8193 points" smin window=(hi - lo)
     end
-    return max(Int(points), Int(min(need, 8193.0)))
+    return max(Int(points), _dyadic_points(need))
+end
+
+# The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped at
+# 8193), so it is piecewise constant over a factor-of-two band of the
+# narrowest scale instead of stepping by one point at every ceil: a count
+# moving 611 -> 610 under a 1e-5 relative change of one sd made the
+# public map disagree with its scale Jacobian by 100x (#515).
+function _dyadic_points(need)
+    (!isfinite(need) || need >= 8193) && return 8193
+    need <= 2 && return 2
+    return Int(min(2.0^ceil(log2(need - 1)) + 1, 8193.0))
 end
 
 # searched in STANDARDISED units and mapped back: an absolute 1e-12 floor

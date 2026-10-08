@@ -742,7 +742,7 @@ def _resolved_points(lo, hi, sd, points, res=1.0):
 
     Same rule as the win race (races.forward_grid): about two points per
     narrowest sd, capped at 8193, warning when the cap still leaves the
-    lattice coarse.
+    lattice coarse -- rounded up to a dyadic count (#515, below).
     """
     smin = max(float(np.min(sd)), 1e-300) * float(res)
     need = int(np.ceil((hi - lo) / (0.5 * smin))) + 1
@@ -755,7 +755,24 @@ def _resolved_points(lo, hi, sd, points, res=1.0):
             "the mass check cannot see, since it is one scalar and "
             "runner-level errors of opposite sign cancel in it.",
             RuntimeWarning, stacklevel=3)
-    return max(int(points), min(need, 8193))
+    return max(int(points), _dyadic_points(need))
+
+
+def _dyadic_points(need):
+    """The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped
+    at 8193), so it is piecewise constant over a factor-of-two band of
+    the narrowest scale instead of stepping by one point at every ceil.
+    A count that moved 611 -> 610 under a 1e-5 relative change of one sd
+    jumped a membership by 1.9e-6, so a central difference of the public
+    map read 0.30 against a continuum scale Jacobian of 0.003, and the
+    loc/scale inverse that consumes that Jacobian stalled at logit
+    residual 3e-4 on an exact target (#515). Costs at most twice the
+    points, and only when the adaptive count binds."""
+    if need <= 2:
+        return 2
+    if need >= 8193:
+        return 8193
+    return min((1 << int(np.ceil(np.log2(need - 1)))) + 1, 8193)
 
 
 def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,

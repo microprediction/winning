@@ -120,3 +120,72 @@ def test_structured_inverse_reads_a_scalar_D_510(which):
     mv = abilities_from_race(p, structure=v, points=257)
     assert info["converged"] and np.abs(m - mu).max() < 1e-7
     assert np.abs(m - mv).max() < 1e-12
+
+
+# ---------------------------------------------------------------- #515
+
+MU_515 = np.array([1.168799682867873, -0.8531654023507033,
+                   -3.006600202361091, 1.7494547072828357,
+                   0.9415112145610854])
+SD_515 = np.array([1.1139780430874056, 0.9672196804840659,
+                   0.30363853046872963, 3.389862172988461,
+                   0.7137810123811725])
+
+
+def test_adaptive_count_is_dyadic_515():
+    from winning.factor.topk import _dyadic_points
+    assert [_dyadic_points(n) for n in (2, 3, 513, 514, 610, 611, 1025,
+                                        1026, 8192, 8193, 10 ** 6)] == \
+        [2, 3, 513, 1025, 1025, 1025, 1025, 2049, 8193, 8193, 8193]
+
+
+@pytest.mark.parametrize("points", [257, 513])
+def test_topk_scale_jacobian_matches_the_public_map_515(points):
+    """The auto count stepped 611 -> 610 under a 1e-5 change of one sd:
+    the central difference read -0.307 against Jsigma -0.0029, and the
+    loc/scale inverse stalled at 1.3e-5 on an exact target."""
+    from winning.factor.topk import (loc_scale_from_topk_pair,
+                                     top_k_jacobians)
+    D, base = SD_515 ** 2, "gumbel"
+    _, Js = top_k_jacobians(MU_515, 2, D=D, base=base, points=points)
+    h = SD_515[2] * 1e-5
+    sp, sm = SD_515.copy(), SD_515.copy()
+    sp[2] += h
+    sm[2] -= h
+    fd = (top_k_probabilities(MU_515, 2, D=sp ** 2, base=base,
+                              points=points)[2]
+          - top_k_probabilities(MU_515, 2, D=sm ** 2, base=base,
+                                points=points)[2]) / (2 * h)
+    assert abs(fd - Js[2][2]) < 1e-6
+    q1 = top_k_probabilities(MU_515, 1, D=D, base=base, points=points)
+    q2 = top_k_probabilities(MU_515, 2, D=D, base=base, points=points)
+    *_, info = loc_scale_from_topk_pair(q1, 1, q2, 2, base=base,
+                                        points=points, n_iter=60, tol=1e-8,
+                                        return_info=True)
+    assert info["converged"], info
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_topk_scale_jacobian_matches_the_public_map_515():
+    got = _node(f"""
+import {{ topKProbabilities, topKJacobians, locScaleFromTopkPair,
+         dyadicPoints }} from {_mod("topk.mjs")};
+console.warn = () => {{}};
+const mu = {json.dumps(MU_515.tolist())};
+const sd = {json.dumps(SD_515.tolist())};
+const D = sd.map(x => x * x), base = "gumbel", points = 513;
+const {{ Jsigma }} = topKJacobians(mu, 2, {{ D, base, points }});
+const h = sd[2] * 1e-5, sp = sd.slice(), sm = sd.slice();
+sp[2] += h; sm[2] -= h;
+const fd = (topKProbabilities(mu, 2, {{ D: sp.map(x => x * x), base, points }})[2]
+  - topKProbabilities(mu, 2, {{ D: sm.map(x => x * x), base, points }})[2]) / (2 * h);
+const q1 = topKProbabilities(mu, 1, {{ D, base, points }});
+const q2 = topKProbabilities(mu, 2, {{ D, base, points }});
+const fit = locScaleFromTopkPair(q1, 1, q2, 2, {{ base, points, nIter: 60,
+                                                tol: 1e-8, returnInfo: true }});
+console.log(JSON.stringify({{ an: Jsigma[2][2], fd, info: fit.info,
+  dy: [514, 611, 1025, 1026, 9000].map(dyadicPoints) }}));
+""")
+    assert abs(got["fd"] - got["an"]) < 1e-6           # was 0.30 apart
+    assert got["info"]["converged"], got["info"]
+    assert got["dy"] == [1025, 1025, 1025, 2049, 8193]

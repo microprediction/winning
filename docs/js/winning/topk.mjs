@@ -222,7 +222,22 @@ function resolvedPoints(lo, hi, sd, points) {
       `points (min sd ${smin.toExponential(1)} over a window of ` +
       `${(hi - lo).toPrecision(3)}); memberships may carry percent-level ` +
       "error the mass check cannot see.");
-  return Math.max(points, Math.min(need, 8193));
+  return Math.max(points, dyadicPoints(need));
+}
+
+/* The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped at
+   8193), so it is piecewise constant over a factor-of-two band of the
+   narrowest scale instead of stepping by one point at every ceil. A
+   count that moved 611 -> 610 under a 1e-5 relative change of one sd
+   jumped q by 1.9e-6, so a central difference of the public map read
+   -0.307 against the continuum Jsigma -0.0029, and the loc/scale
+   inverse, consuming that Jacobian while its trials crossed the
+   boundary, stopped at logit residual 3e-4 on an exact target (#515).
+   Costs at most twice the points, only when the adaptive count binds. */
+export function dyadicPoints(need) {
+  if (!(need > 2)) return 2;
+  if (!(need < 8193)) return 8193;
+  return Math.min(2 ** Math.ceil(Math.log2(need - 1)) + 1, 8193);
 }
 
 function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
