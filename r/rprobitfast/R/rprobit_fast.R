@@ -44,7 +44,9 @@
 rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
                          maxit = 400L) {
   t0 <- Sys.time()
-  alt <- as.integer(as.factor(df$alt))
+  maxit <- .check_count(maxit, "maxit")
+  alt_f <- as.factor(df$alt)
+  alt <- as.integer(alt_f)
   J <- max(alt)
   id_f <- as.factor(df$id)
   ids <- as.integer(id_f)
@@ -62,6 +64,8 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
   for (j in 2:J) Xint[alt == j, j - 1L] <- 1
   X <- cbind(Xint, Xcov)
   colnames(X) <- c(paste0("asc_", 2:J), covariates)
+  .check_identified(X, Tn, J)
+  unchosen <- .never_chosen(choice, J, levels(alt_f))
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
   nodes <- .nodes3(Qf, Qz, r)
@@ -101,9 +105,12 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
   }
   structure(list(coefficients = beta,
                  covariance_par = fit$par[-seq_len(nb)],
-                 boundary = max(sqrt(rowSums(V^2))) > 50,
+                 boundary = max(sqrt(rowSums(V^2))) > 50 ||
+                   length(unchosen) > 0L,
                  logLik = -fit$value, time = secs,
-                 convergence = fit$convergence, J = J, r = r),
+                 convergence = if (length(unchosen)) 2L
+                               else fit$convergence,
+                 J = J, r = r),
             class = "rprobit_fast")
 }
 

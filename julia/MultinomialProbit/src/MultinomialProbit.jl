@@ -306,7 +306,7 @@ accepted (the Python and R contract), a fractional `1.5`, `NaN`,
 function _check_choice(choice::AbstractVector, T::Integer, J::Integer)
     length(choice) == T || throw(ArgumentError(
         "choice must have one entry per observation: got " *
-        string(length(choice)) * " for " * string(T) * " rows of mu"))
+        string(length(choice)) * " for " * string(T) * " observations"))
     out = Vector{Int}(undef, T)
     for (i, c) in enumerate(choice)
         ok = (c isa Integer) || (c isa Real && isfinite(c) && isinteger(c))
@@ -511,11 +511,25 @@ V'V'^T + I = 4 (V V^T + I) on contrasts. Coefficients and loadings then
 move along an exact ridge (#201)."""
 max_identified_rank(J::Integer) = max(J - 2, 0)
 
+"""A finite, non-negative whole number. `Int(1.9)` threw an
+InexactError rather than an argument error (#479), and an unchecked
+`maxiter` went straight into a range (#560)."""
+function _as_count(x, name::AbstractString)
+    ok = !(x isa Bool) && x isa Real && isfinite(x) && isinteger(x) && x >= 0
+    ok || throw(ArgumentError(name * " must be a finite non-negative " *
+                              "whole number; got " * repr(x)))
+    return Int(x)
+end
+
 function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
                   intercepts = true, r = nothing)
     T, J, p0 = size(X)
+    # An empty design has an empty-sum likelihood with zero score, so
+    # BFGS stopped at once and reported the initial coefficients as a
+    # converged fit (#591).
+    T > 0 || throw(ArgumentError("at least one observation is required"))
     rmax = max_identified_rank(J)
-    r = r === nothing ? min(2, rmax) : Int(r)
+    r = r === nothing ? min(2, rmax) : _as_count(r, "factor rank r")
     (0 <= r <= rmax) || throw(ArgumentError(
         "factor rank r = " * string(r) * " is not identified at J = " *
         string(J) * " alternatives: with unit idiosyncratic variances " *
@@ -568,6 +582,9 @@ function _bfgs(f_g, theta0; maxiter = 400, gtol = 1e-6)
     n = length(theta0)
     theta = copy(theta0)
     f, g = f_g(theta)
+    # parameter-free (the equal-choice null): nothing to optimise, and
+    # maximum(abs.(g)) of an empty gradient threw (#495)
+    n == 0 && return theta, f, true
     H = [i == j ? 1.0 : 0.0 for i in 1:n, j in 1:n]
     for _ in 1:maxiter
         maximum(abs.(g)) < gtol && return theta, f, true
@@ -598,8 +615,51 @@ function _bfgs(f_g, theta0; maxiter = 400, gtol = 1e-6)
     return theta, f, maximum(abs.(g)) < gtol
 end
 
+"""Refuse mean-design columns that within-choice-set contrasts do not
+identify: a covariate common to every alternative, or one duplicating a
+generated intercept, lies on an exact likelihood ridge, and BFGS
+reported an arbitrary point on it as converged (#581). Left to right, a
+column is aliased when its contrast residual on the earlier kept
+columns is below `tol` of its own contrast norm (Gram scale)."""
+function _check_contrast_rank(m::MNProbit; tol = 1e-10)
+    (m.p == 0 || m.J < 2) && return nothing
+    Dc = reshape(m.X[:, 2:m.J, :] .- m.X[:, 1:1, :], :, m.p)
+    G = Dc' * Dc
+    kept = Int[]
+    aliased = Int[]
+    for k in 1:m.p
+        gkk = G[k, k]
+        resid = gkk
+        if gkk > 0 && !isempty(kept)
+            g = G[kept, k]
+            resid = gkk - LinearAlgebra.dot(
+                g, LinearAlgebra.pinv(G[kept, kept]) * g)
+        end
+        if gkk > 0 && resid > tol * gkk
+            push!(kept, k)
+        else
+            push!(aliased, k)
+        end
+    end
+    isempty(aliased) && return nothing
+    nint = m.intercepts ? m.J - 1 : 0
+    names = [k <= nint ? "intercept[" * string(k + 1) * "]" :
+             "X[:, :, " * string(k - nint) * "]" for k in aliased]
+    throw(ArgumentError("mean-design column(s) " * join(names, ", ") *
+        " are not identified from within-choice-set contrasts: each is " *
+        "constant across the alternatives of every observation or a " *
+        "linear combination of earlier columns (the generated intercepts " *
+        "come first); drop them (#581)"))
+end
+
 function fit!(m::MNProbit; method = :exact, maxiter = 400,
               r_draws = 1000, seed = 9)
+    maxiter = _as_count(maxiter, "maxiter")
+    if method == :ghk
+        r_draws = _as_count(r_draws, "r_draws")
+        r_draws > 0 || throw(ArgumentError("r_draws must be positive"))
+    end
+    _check_contrast_rank(m)
     theta0 = vcat(zeros(m.p), fill(0.1, length(m.pos)))
     if method == :exact
         theta, nll, conv = _bfgs(t -> _nll_grad(m, t), theta0;
@@ -632,6 +692,20 @@ function fit!(m::MNProbit; method = :exact, maxiter = 400,
     m.loglik = -nll
     m.converged = conv
     m.method = method
+    # With generated intercepts an alternative nobody chose has no finite
+    # MLE: its intercept runs to -Inf and BFGS stopped on the score
+    # tolerance at a tolerance-dependent point, reported as converged
+    # (#496).
+    if m.intercepts
+        unchosen = [j for j in 1:m.J if !any(==(j), m.choice)]
+        if !isempty(unchosen)
+            m.converged = false
+            @warn "alternative(s) $(unchosen) are never chosen, so their " *
+                  "intercepts have no finite MLE (complete separation); " *
+                  "the fit is flagged converged = false. Drop those " *
+                  "alternatives or fit without intercepts."
+        end
+    end
     return m
 end
 
