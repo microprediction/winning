@@ -244,6 +244,11 @@ def convolve_many(densities, L=None, do_padding=True):
 
 def skew_normal_density(L, unit, loc=0, scale=1.0, a=2.0):
     """ Skew normal as a lattice density """
+    # a lattice spacing and a scale are positive: a negative one was
+    # normalised away into a different law (#509)
+    for name, v in (('unit', unit), ('scale', scale)):
+        if not (np.isfinite(v) and v > 0):
+            raise ValueError('skew_normal_density: ' + name + ' must be a finite positive number; got ' + repr(v))
     lattice = symmetric_lattice(L=L, unit=unit)
     density = np.array([_unnormalized_skew_cdf(x, loc=loc, scale=scale, a=a) for x in lattice])
     density = density / np.sum(density)

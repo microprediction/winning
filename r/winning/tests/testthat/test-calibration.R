@@ -252,3 +252,10 @@ test_that("a zero or negative iteration budget is refused (#543)", {
   for (n in list(0, -1, 2.5, NA_real_))
     expect_error(solve_for_implied_offsets(c(0.6, 0.3, 0.1), d, n_iter = n), "n_iter")
 })
+
+test_that("skew_normal_density refuses a nonpositive unit or scale (#509)", {
+  expect_error(skew_normal_density(50, 0), "finite positive")
+  expect_error(skew_normal_density(50, -0.1), "finite positive")
+  expect_error(skew_normal_density(50, 0.1, scale = -1), "finite positive")
+  expect_error(skew_normal_density(50, 0.1, scale = 0), "finite positive")
+})

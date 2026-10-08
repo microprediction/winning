@@ -350,7 +350,24 @@ function warnIfUnconverged(repriced, prices) {
       `wider L or finer unit), or nIter is too small.`);
 }
 
-export function skewNormalDensity(L, unit, { loc = 0, scale = 1.0, a = 2.0 } = {}) {
+/* unit is a lattice spacing and scale a skew-normal scale: both finite
+   and positive. A negative one was normalised away into a different law
+   and unit = 0 sent loc/unit to NaN, which the shift silently routed to
+   a boundary (#509). Options are checked like every other options API:
+   a misspelt `sacle` silently priced scale 1 (#561). */
+const SKEW_NORMAL_DENSITY_OPTS = new Set(["loc", "scale", "a"]);
+const positiveFinite = (v, name) => {
+  if (typeof v !== "number" || !Number.isFinite(v) || !(v > 0))
+    throw new Error(`skewNormalDensity: ${name} must be a finite positive number; got ${v}`);
+};
+export function skewNormalDensity(L, unit, opts = {}) {
+  checkOpts(opts, SKEW_NORMAL_DENSITY_OPTS, "skewNormalDensity", OPT_HINTS);
+  const { loc = 0, scale = 1.0, a = 2.0 } = opts;
+  positiveFinite(unit, "unit");
+  positiveFinite(scale, "scale");
+  for (const [name, v] of [["loc", loc], ["a", a]])
+    if (typeof v !== "number" || !Number.isFinite(v))
+      throw new Error(`skewNormalDensity: ${name} must be a finite number; got ${v}`);
   const n = 2 * L + 1;
   const density = new Array(n);
   for (let i = 0; i < n; i++) {
@@ -401,7 +418,11 @@ export function pricesFromDividends(dividends, nanValue = 2000) {
    are calibrated among themselves. Handing the zero to the finite
    lattice inverse returned an ordinary offset that repriced the
    scratched runner at 4.5% (16% at L=3) (#589). */
-export function dividendImpliedAbility(dividends, density, { nanValue = 2000, unit = 1.0 } = {}) {
+const DIVIDEND_IMPLIED_ABILITY_OPTS = new Set(["nanValue", "unit"]);
+export function dividendImpliedAbility(dividends, density, opts = {}) {
+  // a misspelt `unti` silently returned abilities 10x the intended (#561)
+  checkOpts(opts, DIVIDEND_IMPLIED_ABILITY_OPTS, "dividendImpliedAbility", OPT_HINTS);
+  const { nanValue = 2000, unit = 1.0 } = opts;
   const p = asClassicPrices(pricesFromDividends(dividends, nanValue));
   const live = [];
   p.forEach((x, i) => { if (x > 0) live.push(i); });

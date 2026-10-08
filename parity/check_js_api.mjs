@@ -1749,5 +1749,17 @@ accepts("the inverse takes a scalar D, matching python",
         warned.length === 1 && warned[0].includes("did not reach the target"));
 }
 
+// --- classic: skewNormalDensity's domain (#509) and option typos (#561)
+for (const [args, why] of [[[50, 0], "unit 0"], [[50, -0.1], "unit < 0"],
+                           [[50, 0.1, { scale: -1 }], "scale < 0"], [[50, 0.1, { scale: 0 }], "scale 0"]])
+  rejects(classic.skewNormalDensity, args, `skewNormalDensity refuses ${why} (#509)`, "finite positive");
+rejects(classic.skewNormalDensity, [50, 0.1, { sacle: 0.3 }],
+        "skewNormalDensity refuses a misspelt option (#561)", "unknown option 'sacle'");
+rejects(classic.dividendImpliedAbility, [[2, 4, 8], classic.skewNormalDensity(50, 0.1), { unti: 0.1 }],
+        "dividendImpliedAbility refuses a misspelt option (#561)", "unknown option 'unti'");
+accepts("dividendImpliedAbility still takes unit (#561)",
+        () => classic.dividendImpliedAbility([2, 4, 8], classic.skewNormalDensity(50, 0.1), { unit: 0.1 }),
+        a => a.every(Number.isFinite));
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
