@@ -423,8 +423,37 @@ def _validate_covariance(C, name="cov="):
     return C
 
 
+def _as_block_labels(blocks, n):
+    """A caller's block membership: one integer label per entrant.
+
+    Returns 0-based dense labels (np.unique's inverse), so any integer
+    spelling of the same partition -- 1-based, gapped, negative -- is the
+    same partition and fits identically."""
+    lab = np.asarray(blocks)
+    if lab.ndim != 1:
+        raise ValueError(
+            f"blocks= must be a block count or a 1-D array of integer "
+            f"labels, one per entrant; got shape {lab.shape}")
+    if len(lab) != n:
+        raise ValueError(
+            f"blocks= has {len(lab)} labels for {n} entrants; pass one "
+            "block label per row of C")
+    if lab.dtype == bool or not (np.issubdtype(lab.dtype, np.integer)
+                                 or np.issubdtype(lab.dtype, np.floating)):
+        raise ValueError(
+            f"blocks= labels must be integers; got dtype {lab.dtype}")
+    if np.issubdtype(lab.dtype, np.floating):
+        if not np.isfinite(lab).all():
+            raise ValueError("blocks= labels contain NaN or inf")
+        if (lab != np.floor(lab)).any():
+            raise ValueError(
+                "blocks= labels must be whole numbers; a label names a "
+                "block, it is not a weight")
+    return np.unique(lab.astype(np.int64), return_inverse=True)[1]
+
+
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
-                   blocks: int | None = None, nodes_log2: int = 11,
+                   blocks=None, nodes_log2: int = 11,
                    seed: int = 0, return_report: bool = False):
     """One-call dense-covariance intake: fit C to the race grammar and
     return (V, D, F, W) ready for race_probabilities.
@@ -440,12 +469,27 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     Numerically dead columns are dropped so the Sobol node rank stays
     honest. Works on covariances; correlation matrices are the special
     case with unit diagonal.
+
+    blocks: None (a count chosen from n), an integer count for stage (2)'s
+    clustering, or a length-n integer label array giving the block
+    membership directly -- for entrants whose families are known (siblings
+    sharing an edit, candidates sharing a construction), which the
+    clustering would only rediscover imperfectly. Given labels replace
+    the clustering stage and nothing else; a singleton block carries no
+    off-diagonal residual and gets no loading, as on the clustered path.
+    The report's "blocks" entry says "given", "clustered", or "none"
+    (stage skipped: a count below 2, or n < 3), and "block_labels" the
+    0-based membership the fit used; "arm" is "pipeline", or "eigen" when
+    a pure eigen fit at the same rank left the smaller residual and
+    replaced the staged fit, blocks included.
     """
     from scipy.cluster.hierarchy import fcluster, linkage
     from scipy.spatial.distance import squareform
 
     C = _validate_covariance(C)
     n = len(C)
+    labels = None if blocks is None or np.ndim(blocks) == 0 \
+        else _as_block_labels(blocks, n)
     if n == 1:
         # A one-runner field has no covariance STRUCTURE: there is
         # nothing for a factor to correlate, the whole variance is
@@ -467,7 +511,11 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                                 "projected_residual_max": 0.0,
                                 "rank": 0,
                                 "sharpness": 0.0,
-                                "contrast_residual_max": 0.0}
+                                "contrast_residual_max": 0.0,
+                                "blocks": "none" if labels is None
+                                else "given",
+                                "block_labels": np.zeros(1, dtype=int),
+                                "arm": "pipeline"}
         return V, D, F, W
     # Fit at UNIT scale and scale back. Several stages carry absolute
     # constants (start values, convergence tests, dead-column and
@@ -480,7 +528,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     md = float(np.mean(np.diag(C)))
     k2 = int(np.round(np.log2(md) / 2.0)) if md > 0 else 0
     if k2 != 0:
-        out = fit_covariance(np.ldexp(C, -2 * k2), k=k, m=m, blocks=blocks,
+        out = fit_covariance(np.ldexp(C, -2 * k2), k=k, m=m,
+                             blocks=blocks if labels is None else labels,
                              nodes_log2=nodes_log2, seed=seed,
                              return_report=return_report)
         Vu, Du = out[0], out[1]
@@ -510,6 +559,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     _warn_if_rank_splits_a_tie(C, D0, kk)
     if blocks is None:
         blocks = max(2, min(n // 5, 20))
+    block_source = "none"
     # everything downstream fits the CHOICE-RELEVANT residual: the raw
     # residual C - VV' - D0 contains a common component the quotient fit
     # rightly ignored; chasing it with block loadings would trade real
@@ -518,10 +568,18 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     R = _center2(C - V @ V.T - np.diag(D0))
     v = np.zeros(n)
     cluster = np.zeros(n, dtype=int)
-    if n >= 3 and blocks >= 2:
-        d = np.sqrt(np.clip(0.5 * (1.0 - corr), 0.0, 1.0))
-        Z = linkage(squareform(d, checks=False), method="average")
-        cluster = fcluster(Z, blocks, criterion="maxclust") - 1
+    if labels is not None or (n >= 3 and blocks >= 2):
+        if labels is not None:
+            # the caller's membership replaces the clustering stage and
+            # nothing else: the per-block rank-1 loadings below are fitted
+            # to the same projected residual either way
+            cluster = labels
+            block_source = "given"
+        else:
+            d = np.sqrt(np.clip(0.5 * (1.0 - corr), 0.0, 1.0))
+            Z = linkage(squareform(d, checks=False), method="average")
+            cluster = fcluster(Z, blocks, criterion="maxclust") - 1
+            block_source = "clustered"
         for c in np.unique(cluster):
             idx = np.where(cluster == c)[0]
             if len(idx) < 2:
@@ -594,8 +652,10 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     lamC, UC, _ = _top_eigen(C, rank, pad=10, sweeps=40)
     Veig = UC * np.sqrt(np.maximum(lamC, 0.0))
     Deig, res_eig = _close(Veig)
+    arm = "pipeline"
     if res_eig < res_pipe:
         Vall, D, res_pipe = Veig, Deig, res_eig
+        arm = "eigen"
     F, W = qmc_nodes(Vall.shape[1], m=nodes_log2, seed=seed)
     if return_report:
         Rfin = _center2(C - Vall @ Vall.T - np.diag(D))
@@ -613,7 +673,10 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                   "projected_residual_max": absmax,
                   "rank": Vall.shape[1],
                   "sharpness": sharp,
-                  "contrast_residual_max": _worst_contrast_ratio(C, Rfin)}
+                  "contrast_residual_max": _worst_contrast_ratio(C, Rfin),
+                  "blocks": block_source,
+                  "block_labels": np.asarray(cluster, dtype=int).copy(),
+                  "arm": arm}
         return Vall, D, F, W, report
     return Vall, D, F, W
 
