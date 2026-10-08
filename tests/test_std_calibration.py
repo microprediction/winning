@@ -20,7 +20,11 @@ def test_dividend_implied_ability_with_unit():
     divs_back = std_ability_implied_dividends(abilities,unit=unit)
     assert all( [ abs(d1-d2)<1e-1 for d1,d2 in zip(divs_back,dividends)])
     abilities_back = std_dividend_implied_ability(divs_back)
-    assert all( [abs(a1-a2)<1e-2 for a1,a2 in zip(abilities,abilities_back)] )
+    # abilities are relative: the inverse re-centres its field by whole
+    # lattice units (#498), so two lattice units leave different common
+    # offsets; compare the race, not the gauge
+    m1, m2 = sum(abilities) / len(abilities), sum(abilities_back) / len(abilities_back)
+    assert all( [abs((a1-m1)-(a2-m2))<1e-2 for a1,a2 in zip(abilities,abilities_back)] )
 
 if __name__=='__main__':
     test_dividend_implied_ability_with_unit()
