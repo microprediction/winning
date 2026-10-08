@@ -698,6 +698,15 @@ def _ndtr_local(z):
 _LARGE_DISPATCH_ENTRIES = 2e7
 
 
+def _as_window(window):
+    """The lattice window: "bulk" or "span", nothing else. Every other
+    value used to mean span, so window="bulkk" moved a share by 39 points
+    against the bulk default it misspelled (#582)."""
+    if not isinstance(window, str) or window not in ("bulk", "span"):
+        raise ValueError(f'window must be "bulk" or "span"; got {window!r}')
+    return window
+
+
 def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                  delta=1e-12):
     """THE lattice: window plus any sharpness refinement, in one place.
@@ -712,6 +721,7 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     Returns (x, points); points may exceed the request after refinement.
     """
     sd = np.asarray(sd, dtype=float)
+    _as_window(window)
     if window == "bulk":
         x = _bulk_window(M_all, sd, points, delta, fn)
     else:
@@ -1029,6 +1039,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     nodes_given = F is not None          # the caller's nodes, not a fit's
     temperature = _as_temperature(temperature)
     points = as_points(points)
+    window = _as_window(window)                      # (#582)
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
         # be answered without the fit at all; everything else (slopes for

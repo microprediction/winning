@@ -307,8 +307,18 @@ const INVERSE_OPTS = new Set([
  * `forward_grid` -- was 1.7e-8. Both converge by 1025 points, which is
  * why it went unnoticed (#212).
  */
+/* The lattice window: "bulk" or "span", nothing else. Every other value
+   used to mean span, so window: "bulkk" moved a share by 39 points
+   against the bulk default it misspelled (#582). */
+export function asWindow(win, where = "raceProbabilities") {
+  if (win !== "bulk" && win !== "span")
+    throw new Error(`${where}: window must be "bulk" or "span"; got ${JSON.stringify(win)}`);
+  return win;
+}
+
 export function forwardGrid(Mall, sd, st, points, win = "bulk",
                             delta = 1e-12) {
+  asWindow(win, "forwardGrid");
   let x;
   if (win === "bulk") {
     x = bulkWindow(Mall, sd, points, delta, st.fn || null);
@@ -378,6 +388,7 @@ export function raceProbabilities(mu, opts = {}) {
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
+  asWindow(win);
   const c = collapseStructure(structure, V, D, F, W, "raceProbabilities");
   if (c.structure) {
     return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes, window: win, delta });

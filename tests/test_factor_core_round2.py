@@ -268,3 +268,33 @@ def test_jvp_form_must_be_named_523(rust):
         assert np.abs(a - b).max() > 0.1
     finally:
         winning.use_rust(prev)
+
+
+# ---------------------------------------------------------------- #582
+
+def test_race_window_must_be_named_582():
+    """window="bulkk" silently meant span: 39 points off the bulk price."""
+    from winning.factor.races import race_probabilities
+    mu, D = np.array([0.0, 1.0, 2.0]), np.array([0.01, 4.0, 100.0])
+    for bad in ("bulkk", "", "Bulk", None, 3):
+        with pytest.raises(ValueError, match="window"):
+            race_probabilities(mu, D=D, points=257, window=bad)
+    a = race_probabilities(mu, D=D, points=257, window="span")
+    b = race_probabilities(mu, D=D, points=257)
+    assert np.abs(a - b).max() > 0.3
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_race_window_must_be_named_582():
+    got = _node(f"""
+import {{ raceProbabilities }} from {_mod("races.mjs")};
+console.warn = () => {{}};
+const out = [];
+for (const w of ["bulkk", "", null, 3]) {{
+  try {{ raceProbabilities([0, 1, 2], {{ D: [0.01, 4, 100], window: w }});
+        out.push("accepted"); }}
+  catch (e) {{ out.push(e.message.includes("window") ? "refused" : e.message); }}
+}}
+console.log(JSON.stringify(out));
+""")
+    assert got == ["refused"] * 4
