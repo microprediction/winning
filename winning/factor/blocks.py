@@ -236,6 +236,11 @@ def _block_max(mu, sd, cluster, v, points, qa):
     """Max-wins kernel (numpy reference); public functions negate."""
     mu = np.asarray(mu, float); sd = np.asarray(sd, float)
     v = np.asarray(v, float); cluster = np.asarray(cluster)
+    if v.ndim == 2 and v.shape[-1] == 0:
+        # rank zero is the independent race (Blocks with zero loadings,
+        # the containment the grammar documents); it fell into the
+        # rank-one reshape and raised a broadcast error (#508)
+        v = np.zeros(len(mu))
     _warn_if_sharp(v, sd, qa)
     if v.ndim == 2 and v.shape[-1] > 1:
         return _block_max_r(mu, sd, cluster, v, points, qa)
@@ -371,6 +376,8 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
     mu = np.asarray(mu, float)
     n = len(mu)
     V = as_loadings(loading, n)          # (n, rank), one ROW per entity
+    if V.shape[1] == 0:                  # rank zero: no shared effect (#508)
+        V = np.zeros((n, 1))
     if V.shape[1] > 1:
         raise NotImplementedError(
             "block_race_jacobian supports rank-one cluster loadings only; "

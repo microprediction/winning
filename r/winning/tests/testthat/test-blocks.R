@@ -67,3 +67,12 @@ test_that("hierarchical races read a scalar D as one variance each (#510)", {
   m <- if (is.list(m)) m$mu else m
   expect_lt(max(abs(m - mu)), 1e-6)
 })
+
+test_that("rank-zero block loadings are the independent race (#508)", {
+  mu <- c(-0.5, -0.1, 0.2, 0.4); D <- c(0.8, 0.9, 1.0, 1.1)
+  cl <- c(0L, 0L, 1L, 1L); V0 <- matrix(numeric(0), 4, 0)
+  expect_equal(block_race_probabilities(mu, cl, V0, D),
+               block_race_probabilities(mu, cl, rep(0, 4), D))
+  expect_equal(block_race_jacobian(mu, cl, V0, D),
+               block_race_jacobian(mu, cl, rep(0, 4), D))
+})

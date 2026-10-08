@@ -45,7 +45,10 @@ function blockArgs(mu, cluster, loading, D, where) {
       `${isVector(cluster) ? cluster.length : typeof cluster} for ${n}`);
   if (loading == null)
     throw new Error(`${where}: loading is required (use 0 for no cluster effect)`);
-  const L = asLoadings(loading, n, "loading");
+  let L = asLoadings(loading, n, "loading");
+  // rank zero is the independent race: as a zero rank-one loading, not
+  // the rank >= 3 route's 8192 identical empty nodes (2.2 s vs 4 ms, #508)
+  if (L.length && L[0].length === 0) L = L.map(() => [0]);
   return { mu, cluster: Array.from(cluster), L, D: asIdio(D, n, "D") };
 }
 

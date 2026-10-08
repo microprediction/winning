@@ -106,6 +106,9 @@
 
 # Max-wins rank-1 field kernel (public functions negate).
 .block_max <- function(mu, sd, cluster, v, points, qa) {
+  # rank zero is the independent race; as.numeric() made it numeric(0)
+  # and the kernel indexed past it (#508)
+  if (is.matrix(v) && ncol(v) == 0L) v <- rep(0, length(mu))
   if (is.matrix(v) && ncol(v) > 1) {
     return(.block_max_r(mu, sd, cluster, v, points, qa))
   }
@@ -365,7 +368,9 @@ block_race_jacobian <- function(mu, cluster, loading, D,
   mu <- as.numeric(mu)
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
-  v <- as.numeric(loading)
+  # rank zero: no shared effect (#508)
+  v <- if (is.matrix(loading) && ncol(loading) == 0L) rep(0, length(mu))
+       else as.numeric(loading)
   n <- length(mu)
   inv <- .cluster_index(cluster)
   ord <- order(inv)

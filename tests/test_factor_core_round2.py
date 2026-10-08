@@ -417,3 +417,44 @@ console.log(JSON.stringify(out));
 """)
     for reported, actual in got:
         assert abs(reported - actual) < 1e-12
+
+
+# ---------------------------------------------------------------- #508
+
+def test_rank_zero_block_loadings_are_the_independent_race_508():
+    """An (n, 0) loading fell into the rank-one reshape and raised."""
+    from winning.factor import race_probabilities
+    from winning.factor.blocks import (block_race_jacobian,
+                                       block_race_probabilities,
+                                       nested_race_probabilities)
+    from winning.factor.structures import Blocks
+    mu = np.array([-0.5, -0.1, 0.2, 0.4])
+    D = np.array([0.8, 0.9, 1.0, 1.1])
+    c = np.array([0, 0, 1, 1])
+    V0, Z = np.empty((4, 0)), np.zeros(4)
+    ref = block_race_probabilities(mu, c, Z, D, points=1025)
+    assert np.abs(block_race_probabilities(mu, c, V0, D, points=1025)
+                  - ref).max() < 1e-15
+    assert np.abs(race_probabilities(mu, structure=Blocks(c, V0, D),
+                                     points=1025) - ref).max() < 1e-15
+    assert np.abs(block_race_jacobian(mu, c, V0, D, points=1025)
+                  - block_race_jacobian(mu, c, Z, D, points=1025)).max() == 0
+    g = np.array([0.2, -0.1, 0.3, 0.0])
+    assert np.abs(nested_race_probabilities(mu, c, V0, D, coupling=g)
+                  - nested_race_probabilities(mu, c, Z, D,
+                                              coupling=g)).max() < 1e-15
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_rank_zero_block_loadings_take_the_rank_one_path_508():
+    got = _node(f"""
+import {{ blockRaceProbabilities }} from {_mod("blocks.mjs")};
+const mu = [-0.5, -0.1, 0.2, 0.4], c = [0, 0, 1, 1], D = [0.8, 0.9, 1.0, 1.1];
+const t0 = Date.now();
+const a = blockRaceProbabilities(mu, c, [[], [], [], []], D);
+const ms = Date.now() - t0;
+const b = blockRaceProbabilities(mu, c, [0, 0, 0, 0], D);
+console.log(JSON.stringify({{ d: Math.max(...a.map((v, i) => Math.abs(v - b[i]))), ms }}));
+""")
+    assert got["d"] < 1e-15
+    assert got["ms"] < 500                       # was ~2200 ms
