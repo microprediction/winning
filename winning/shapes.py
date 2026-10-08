@@ -258,6 +258,42 @@ def as_points(points, name="points", minimum=2):
     return v
 
 
+def _real_scalar(x, name):
+    v = np.asarray(x)
+    if (v.ndim != 0 or v.dtype == bool
+            or not np.issubdtype(v.dtype, np.number)
+            or np.iscomplexobj(v)):
+        raise ValueError(f"{name} must be one real number; got {x!r}")
+    return float(v)
+
+
+def as_tolerance(tol, name="tol"):
+    """A convergence or mass tolerance: one finite positive real number.
+
+    Every certificate in the package is ``residual < tol`` or ``defect >
+    tol``. An infinite tol certified the first finite residual, returning
+    warm starts 15-24 points off as converged (#551); a NaN made every
+    ``defect > tol`` false and renormalized an 18% mass defect into a
+    certified-looking row (#590). The browser has refused both since
+    asTolerance.
+    """
+    v = _real_scalar(tol, name)
+    if not (np.isfinite(v) and v > 0):
+        raise ValueError(f"{name} must be a finite positive number; got {tol!r}")
+    return v
+
+
+def as_nonnegative(x, name):
+    """One finite non-negative real number (a penalty weight): a negative
+    ridge used to be read as zero by max(ridge, 0), silently fitting the
+    unregularized model (#558)."""
+    v = _real_scalar(x, name)
+    if not (np.isfinite(v) and v >= 0):
+        raise ValueError(
+            f"{name} must be a finite non-negative number; got {x!r}")
+    return v
+
+
 def as_target(p, name="target"):
     """A probability target: a nonempty finite 1-D vector, positive mass.
 

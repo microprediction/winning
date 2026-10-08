@@ -524,6 +524,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                 n_iter = 60, tol = 1e-8,
                                 structure = NULL, qa = 9, qf = 15, cov = NULL) {
   points <- .as_points(points)
+  tol <- .as_tolerance(tol)                                   # (#551)
   dense <- NULL
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))

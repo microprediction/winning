@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..shapes import as_idio, as_loadings
+from ..shapes import as_idio, as_loadings, as_nonnegative, as_tolerance
 
 
 from .races import _jacobi_sweeps, BASES, _resolution
@@ -885,6 +885,7 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     mu_probe = np.asarray(q, dtype=float)
     n = len(mu_probe)
     k = _as_depth(k, n)
+    tol = as_tolerance(tol)                                   # (#551)
     target, floored = _validated_topk_target(q, k, n, target_floor)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
@@ -1012,6 +1013,9 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     n = len(t1)
     k1 = _as_depth(k1, n, "k1")
     k2 = _as_depth(k2, n, "k2")
+    tol = as_tolerance(tol)                                   # (#551)
+    # a negative ridge was max(ridge, 0) = 0: the unregularized fit (#558)
+    ridge = as_nonnegative(ridge, "ridge")
     if k1 == k2:
         raise ValueError(
             "k1 == k2 gives one curve twice: scale is unidentified "
@@ -1042,7 +1046,7 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
         mu, _info0 = abilities_from_topk(ta, ka, D=sd ** 2, base=base,
                                          points=points, n_iter=20,
                                          tol=1e-3, return_info=True)
-    sqr = float(np.sqrt(max(ridge, 0.0)))
+    sqr = float(np.sqrt(ridge))
 
     def logits(m, s):
         qh1 = top_k_probabilities(m, k1, D=s ** 2, base=base, points=points)
@@ -1240,6 +1244,7 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
     target = as_target(p, "p")
     n = len(target)
     r = _as_rank(r, n)
+    tol = as_tolerance(tol)                                   # (#551)
     if np.any(target <= 0):
         raise ValueError(
             "all rank probabilities must be positive: a zero entry has "

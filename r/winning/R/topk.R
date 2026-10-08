@@ -457,6 +457,7 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   mu <- -(logt - mean(logt)) / 2 * scale
   alpha <- if (n > 2) 1.0 else 0.7
   n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
   resid_max <- Inf
   # iters counts UPDATES applied to mu. The residual is evaluated at the
   # current mu before deciding to update, so the returned residual always
@@ -507,6 +508,8 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      mu0 = NULL, return_info = FALSE) {
   n <- length(q1)
   n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
+  ridge <- .as_nonnegative(ridge, "ridge")                    # (#558)
   k1 <- .as_depth(k1, n, "k1"); k2 <- .as_depth(k2, n, "k2")
   if (k1 == k2)
     stop("k1 == k2 gives one curve twice: scale is unidentified")
@@ -530,7 +533,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                               points = points, n_iter = 20, tol = 1e-3,
                               return_info = TRUE)$mu
   }
-  sqr <- sqrt(max(ridge, 0))
+  sqr <- sqrt(ridge)
 
   logits <- function(m, s) {
     qh1 <- pmin(pmax(top_k_probabilities(m, k1, D = s^2, base = base,
@@ -673,6 +676,7 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
   # r >= 2, mu0 selects the branch. See the python docstring.
   n <- length(p)
   n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
   # a whole-number rank, refused before coercion: as.integer(1.5) solved
   # first place silently (#317)
   rr <- suppressWarnings(as.numeric(r))

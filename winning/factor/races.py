@@ -54,7 +54,7 @@ import numpy as np
 from scipy.special import ndtr, ndtri
 
 from .core import as_idio, as_loadings, as_weights, hermite_nodes
-from ..shapes import as_factor_law, as_points, as_target
+from ..shapes import as_factor_law, as_points, as_target, as_tolerance
 
 from ..rustconfig import load_fastrace
 from ..outcomes import as_luce_temperature, as_order, as_soft_temperature
@@ -1228,6 +1228,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     nodes_given = F is not None          # the caller's nodes, not a fit's
     temperature = _as_temperature(temperature)       # (#424)
     points = as_points(points)                       # (#444)
+    tol = as_tolerance(tol)                          # (#551)
     if structure is not None:
         # One covariance description, as the forward door insists (#89):
         # Independent/Factor replaced D (and V) here while a caller's V
@@ -1840,6 +1841,7 @@ def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
     byproduct of the field.
     """
     points = as_points(points)
+    mass_tol = as_tolerance(mass_tol, "mass_tol")   # (#590)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     n = len(mu)
     if n < 2:

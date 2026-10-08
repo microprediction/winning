@@ -28,7 +28,7 @@ from ..shapes import as_weights
 from ..rustconfig import load_fastrace
 from .races import (_as_temperature, _fit_cov, _factor_of_structure, _setup,
                     _tempered_curves)
-from ..shapes import as_points
+from ..shapes import as_points, as_tolerance
 
 # this module's own ceiling (#113): it used to borrow races' flags, and
 # use_rust(True) defaults a missing _RUST_OK to True, which reported a
@@ -68,6 +68,7 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
         raise ValueError("k must be 1, 2 or 3")
     temperature = _as_temperature(temperature)        # (#424)
     points = as_points(points)                        # (#444)
+    mass_tol = as_tolerance(mass_tol, "mass_tol")     # (#590)
     if k == 1 and structure is not None and cov is None:
         # k = 1 IS the win race, and the win race exists for every
         # grammar: Blocks/Nested/Tree were refused here for want of an

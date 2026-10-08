@@ -189,3 +189,56 @@ console.log(JSON.stringify({{ an: Jsigma[2][2], fd, info: fit.info,
     assert abs(got["fd"] - got["an"]) < 1e-6           # was 0.30 apart
     assert got["info"]["converged"], got["info"]
     assert got["dy"] == [1025, 1025, 1025, 2049, 8193]
+
+
+# ---------------------------------------------------------------- #551
+
+@pytest.mark.parametrize("bad", [np.inf, np.nan, 0.0, -1e-8, True, "1e-8",
+                                 [1e-8]])
+def test_inverses_refuse_a_tolerance_that_certifies_anything_551(bad):
+    """tol=inf certified warm starts 15-24 points off as converged."""
+    from winning.factor.races import abilities_from_race
+    from winning.factor.topk import (abilities_from_rank_marginal,
+                                     loc_scale_from_topk_pair)
+    mu = np.array([-1.5, -0.4, 0.3, 1.6])
+    D = np.array([0.25, 0.64, 1.44, 2.25])
+    p1 = top_k_probabilities(mu, 1, D=D)
+    p2 = top_k_probabilities(mu, 2, D=D)
+    for call in (lambda: abilities_from_race(p1, D=D, tol=bad),
+                 lambda: abilities_from_topk(p1, 1, D=D, tol=bad),
+                 lambda: loc_scale_from_topk_pair(p1, 1, p2, 2, tol=bad),
+                 lambda: abilities_from_rank_marginal(p1, 1, D=D, tol=bad)):
+        with pytest.raises(ValueError, match="tol"):
+            call()
+
+
+# ---------------------------------------------------------------- #558
+
+@pytest.mark.parametrize("bad", [-1.0, -np.inf, np.inf, np.nan, True,
+                                 [0.0, 0.05]])
+def test_loc_scale_refuses_an_invalid_ridge_558(bad):
+    """A negative ridge was max(ridge, 0): the unregularized fit."""
+    from winning.factor.topk import (loc_scale_from_topk_pair,
+                                     loc_scale_from_win_and_second)
+    mu = np.array([-0.7, -0.1, 0.2, 0.6])
+    D = np.array([0.3, 0.8, 1.5, 2.0])
+    q1 = top_k_probabilities(mu, 1, D=D)
+    q2 = top_k_probabilities(mu, 2, D=D)
+    with pytest.raises(ValueError, match="ridge"):
+        loc_scale_from_topk_pair(q1, 1, q2, 2, ridge=bad)
+    with pytest.raises(ValueError, match="ridge"):
+        loc_scale_from_win_and_second(q1, q2 - q1, ridge=bad)
+
+
+# ---------------------------------------------------------------- #590
+
+def test_nan_mass_tol_is_refused_590():
+    """NaN made `defect > mass_tol` false: an 18% defect renormalized."""
+    from winning.factor.permutations import ordered_probabilities
+    from winning.factor.races import removal_shares
+    mu, D = [-5000.0, 0.0, 0.1, 0.2], [0.01] * 4
+    for bad in (np.nan, -1.0, np.inf):
+        with pytest.raises(ValueError, match="mass_tol"):
+            removal_shares(mu, D=D, points=3, mass_tol=bad)
+        with pytest.raises(ValueError, match="mass_tol"):
+            ordered_probabilities(np.zeros(3), k=2, mass_tol=bad)
