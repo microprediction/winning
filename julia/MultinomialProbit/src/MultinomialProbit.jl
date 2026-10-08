@@ -326,14 +326,41 @@ end
 An overlong `D` used to be accepted: the integrand reads only `D[1:J]`,
 but the sharpness dispatcher took `minimum` over ALL entries, so an
 unused tiny trailing entry switched Gauss-Hermite to Halton and moved
-the likelihood (#439)."""
+the likelihood (#439). A scalar is the same variance for every
+alternative, the python `as_idio` shorthand; `collect` cannot iterate a
+`Float64`, so `D = 1.0` failed in both exported engines (#503). Non-
+finite entries are refused here; the sign contract belongs to each
+engine (the likelihood needs D > 0, GHK admits a zero)."""
 function _check_D(D, J::Integer)
     D === nothing && return ones(J)
-    Dv = Float64.(collect(D))
+    Dv = D isa Number ? fill(Float64(D), J) : Float64.(vec(collect(D)))
     length(Dv) == J || throw(DimensionMismatch(
         "D must have one idiosyncratic variance per alternative: got " *
         string(length(Dv)) * " for J = " * string(J)))
+    all(isfinite, Dv) || throw(ArgumentError(
+        "D must be finite: it is an idiosyncratic variance"))
     return Dv
+end
+
+"""A caller's (F, W) rule for a rank-`r` likelihood: exactly `r + 1`
+columns (r factor coordinates, then own noise), one finite row per
+weight. Columns were sliced by position, so a surplus column was read
+as the own-noise coordinate and the real one dropped, moving a 0.5
+probability to 1.0 without an error (#476)."""
+function _check_nodes(nodes, r::Integer)
+    F, W = nodes
+    F isa AbstractMatrix || throw(ArgumentError(
+        "nodes F must be a matrix with r + 1 = " * string(r + 1) *
+        " columns"))
+    size(F, 2) == r + 1 || throw(DimensionMismatch(
+        "nodes F must have r + 1 = " * string(r + 1) * " columns (r " *
+        "factor coordinates, then own noise); got " * string(size(F, 2))))
+    W isa AbstractVector || throw(ArgumentError("nodes W must be a vector"))
+    (size(F, 1) == length(W) && !isempty(W)) || throw(DimensionMismatch(
+        "nodes need one weight per row of F: got " * string(length(W)) *
+        " weights for " * string(size(F, 1)) * " nodes"))
+    all(isfinite, F) || throw(ArgumentError("nodes F has a non-finite entry"))
+    return F, W
 end
 
 """Log-likelihood of observed argmax choices with the ANALYTIC score.
@@ -353,14 +380,25 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
     # port also accepted a choice vector SHORTER than T, dropping the
     # tail without a word (#194).
     choice = _check_choice(choice, T, J)
+    # one loading row per alternative, BEFORE gauge centring and the
+    # sharpness dispatch: a surplus row is never integrated but moved
+    # both, switching Gauss-Hermite to Halton and the choice probability
+    # from 0.654 to 0.637 for an unchanged model (#462)
+    size(V, 1) == J || throw(DimensionMismatch(
+        "V must have one loading row per alternative: got " *
+        string(size(V, 1)) * " rows for J = " * string(J)))
     Dv = _check_D(D, J)
+    all(>(0.0), Dv) || throw(ArgumentError(
+        "D must be strictly positive for the likelihood: the own-noise " *
+        "integral divides by each rival's sqrt(D)"))
     s = sqrt.(Dv)
     V = V .- sum(V, dims = 1) ./ J          # gauge: differences decide
     ET = promote_type(eltype(mu), eltype(V), Float64)
     sharp = sqrt(2) * maximum(sqrt.(vec(sum(V .^ 2, dims = 2)))) /
             sqrt(minimum(Dv))
     F, W = nodes === nothing ?
-           nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = sharp) : nodes
+           nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = sharp) :
+           _check_nodes(nodes, r)
     Fq = F[:, 1:r]
     zq = F[:, r + 1]
     Q = length(W)
@@ -416,6 +454,7 @@ sampling on the differenced covariance, common random numbers via the
 seed. Port of the rust core's ghk_prob_one; Sigma = V V' + diag(D)."""
 function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
                          D = nothing, r_draws = 1000, seed = 9)
+    _check_r_draws(r_draws)
     J = length(mu)
     Dv = _check_D(D, J)
     Sigma = V * V' .+ [i == j ? Dv[i] : 0.0 for i in 1:J, j in 1:J]
@@ -450,11 +489,21 @@ function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
     return sum(exp, logprob) / r_draws
 end
 
+# A draw budget is a positive whole number: r_draws = 0 averaged an
+# empty set, 0/0 = NaN, and fit!(method = :ghk) carried it into a NaN
+# log-likelihood. The rust/fastrace boundary already refused it (#478).
+function _check_r_draws(r_draws)
+    (r_draws isa Integer && r_draws >= 1) || throw(ArgumentError(
+        "r_draws must be at least 1; got " * string(r_draws)))
+    return nothing
+end
+
 """GHK simulated log-likelihood over all observations (CRN: the seed
 per observation is a deterministic function of its index, so the
 objective is smooth-in-parameters for a fixed draw set)."""
 function ghk_loglik(mu::AbstractMatrix, V::AbstractMatrix,
                     choice::AbstractVector; r_draws = 1000, seed = 9)
+    _check_r_draws(r_draws)
     T = size(mu, 1)
     ll = 0.0
     for t in 1:T
@@ -600,6 +649,7 @@ end
 
 function fit!(m::MNProbit; method = :exact, maxiter = 400,
               r_draws = 1000, seed = 9)
+    method == :ghk && _check_r_draws(r_draws)    # before any mutation
     theta0 = vcat(zeros(m.p), fill(0.1, length(m.pos)))
     if method == :exact
         theta, nll, conv = _bfgs(t -> _nll_grad(m, t), theta0;

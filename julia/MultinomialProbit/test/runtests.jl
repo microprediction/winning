@@ -468,3 +468,57 @@ end
     @test mb.converged && abs(mb.beta[1] - 0.8) < 0.25
     @test all(isfinite, stderror(mb))
 end
+
+# --- scalar D, loading rows, node columns, draw budget -----------------
+@testset "MNP argument boundaries (#503, #462, #476, #478)" begin
+    mu = zeros(2, 3)
+    V = zeros(3, 1)
+    a = choice_loglik_and_score(mu, V, [1, 2]; D = ones(3))
+    b = choice_loglik_and_score(mu, V, [1, 2]; D = 1.0)
+    @test a[1] == b[1] && a[2] == b[2] && a[3] == b[3]
+    c = choice_loglik_and_score(mu, V, [1, 2]; D = fill(2.0, 3))
+    @test c[1] == choice_loglik_and_score(mu, V, [1, 2]; D = 2.0)[1]
+    @test MP.ghk_choice_prob(zeros(3), V, 1; D = 1.0) ==
+          MP.ghk_choice_prob(zeros(3), V, 1; D = ones(3))
+    for bad in ([1.0, NaN, 1.0], [1.0, Inf, 1.0], [1.0, 0.0, 1.0],
+                [1.0, -1.0, 1.0], 0.0, NaN)
+        @test_throws ArgumentError choice_loglik_and_score(mu, V, [1, 2];
+                                                           D = bad)
+    end
+    @test_throws DimensionMismatch choice_loglik_and_score(mu, V, [1, 2];
+                                                           D = ones(2))
+    # a surplus loading row switched GH -> Halton (0.654 -> 0.637)
+    mu4 = reshape([2.29264426, 0.64388188, -0.17180493, 3.74907237], 1, :)
+    V4 = [-0.0107529507 1.80970562; -0.6565907660 0.00168241106;
+          0.3133862710 0.0763054062; 0.3539574460 -1.88769344]
+    ll = choice_loglik_and_score(mu4, V4, [4]; D = ones(4))[1]
+    @test abs(exp(ll) - 0.65439858) < 1e-6
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu4, vcat(V4, [1.0 1.0]), [4]; D = ones(4))
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu4, V4[1:3, :], [4]; D = ones(4))
+    # custom nodes: exactly r + 1 columns, one row per weight
+    mu2 = zeros(1, 2)
+    V2 = reshape([0.0, 1.0], 2, 1)
+    ok = choice_loglik_and_score(mu2, V2, [1]; D = ones(2),
+                                 nodes = ([0.0 0.0], [1.0]))
+    @test ok[1] ≈ log(0.5)
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu2, V2, [1]; D = ones(2), nodes = ([0.0 10.0 0.0], [1.0]))
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu2, V2, [1]; D = ones(2), nodes = (reshape([0.0], 1, 1), [1.0]))
+    @test_throws DimensionMismatch choice_loglik_and_score(
+        mu2, V2, [1]; D = ones(2), nodes = ([0.0 0.0], [0.5, 0.5]))
+    @test_throws ArgumentError choice_loglik_and_score(
+        mu2, V2, [1]; D = ones(2), nodes = ([NaN 0.0], [1.0]))
+    # a zero draw budget averaged an empty set: NaN
+    Z = zeros(2, 0)
+    @test_throws ArgumentError MP.ghk_choice_prob([0.0, 0.0], Z, 1;
+                                                  D = ones(2), r_draws = 0)
+    @test_throws ArgumentError MP.ghk_loglik(zeros(1, 2), Z, [1]; r_draws = 0)
+    mg = MNProbit(zeros(2, 2, 1), [1, 2]; intercepts = false)
+    th = copy(mg.theta)
+    @test_throws ArgumentError fit!(mg; method = :ghk, r_draws = 0)
+    @test mg.theta == th && isnan(mg.loglik)
+    @test MP.ghk_choice_prob([0.0, 0.0], Z, 1; D = ones(2), r_draws = 1) ≈ 0.5
+end
