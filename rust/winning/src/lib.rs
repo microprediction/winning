@@ -1440,6 +1440,25 @@ pub fn exact_state_prices_from_offsets(density: &[f64], offsets: &[f64]) -> Vec<
     exact_state_prices_from_cdfs(&cdfs)
 }
 
+/// The calibration table's offset grid (#473): nonempty, finite and
+/// descending, as winning/classic/lattice_calibration.py's
+/// _assert_descending. Price falls as the offset rises, so only a
+/// descending grid gives interp1 the ascending price axis it needs; an
+/// ascending one clamped target and current price to the same endpoint
+/// and returned the guess (a tie) unchanged.
+pub fn check_offset_samples(xs: &[f64]) -> Result<(), String> {
+    if xs.is_empty() {
+        return Err("offset_samples is empty".into());
+    }
+    check_finite("offset_samples", xs)?;
+    if let Some(i) = (1..xs.len()).find(|&i| xs[i] > xs[i - 1]) {
+        return Err(format!(
+            "offset_samples must be descending; offset_samples[{i}] = {} > offset_samples[{}] = {}",
+            xs[i], i - 1, xs[i - 1]));
+    }
+    Ok(())
+}
+
 /// solve_for_implied_offsets: the paper's table iteration as a defect
 /// correction, a_i += T^{-1}(p_i) - T^{-1}(P_i(a)), so its fixed point
 /// is the exact forward map (see lattice_calibration.py).
@@ -1450,6 +1469,9 @@ pub fn exact_calibrate(
     guess: &[f64],
     n_iter: usize,
 ) -> Vec<f64> {
+    if let Err(e) = check_offset_samples(offset_samples) {
+        panic!("{e}");
+    }
     // an empty field has nothing to calibrate, whatever n_iter (#526)
     if prices.is_empty() {
         return Vec::new();
@@ -2767,6 +2789,10 @@ mod tests {
         assert!(check_cheb_orders(1, 1).is_ok());
         assert!(check_cheb_orders(0, 14).is_err());
         assert!(check_cheb_orders(48, 0).is_err());
+        assert!(check_offset_samples(&[2.0, 1.0, 1.0, 0.0]).is_ok());
+        assert!(check_offset_samples(&[0.0, 1.0]).is_err());
+        assert!(check_offset_samples(&[]).is_err());
+        assert!(check_offset_samples(&[1.0, f64::NAN]).is_err());
     }
 
     #[test]
@@ -2794,5 +2820,12 @@ mod tests {
         let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
         assert!(exact_state_prices_from_offsets(&d, &[]).is_empty());
         assert!(exact_calibrate(&d, &[], &[1.0, 0.0, -1.0], &[], 3).is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "descending")]
+    fn calibrate_refuses_ascending_grid() {
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        exact_calibrate(&d, &[0.5, 0.5], &[-1.0, 0.0, 1.0], &[0.0, 0.0], 1);
     }
 }

@@ -556,6 +556,7 @@ fn classic_exact_calibrate(
         return Err(pyo3::exceptions::PyValueError::new_err(
             "classic calibration needs one guess per price and a nonempty offset table"));
     }
+    winning::check_offset_samples(&offset_samples).map_err(bad)?;
     check_classic_field("prices", &prices)?;
     winning::check_finite("guess", &guess).map_err(bad)?;
     Ok(py.allow_threads(|| with_usable_rayon(|| {

@@ -551,3 +551,19 @@ def test_tree_race_rejects_a_forest():
         np.array([0.0]), np.ones(1), 257, -9.0, 10.0))
     assert abs(p.sum() - 1) < 1e-6 and p[0] > p[1]
 
+
+# --- #473: the calibration offset grid must descend -----------------------
+
+def test_classic_calibrate_requires_descending_offsets():
+    from winning.classic.lattice import skew_normal_density
+    d = list(skew_normal_density(50, 0.1))
+    target = fastrace.classic_exact_state_prices(d, [-3.0, 0.5, 2.0])
+    desc = [float(x) for x in range(24, -26, -1)]
+    a = fastrace.classic_exact_calibrate(d, target, desc, [0.0] * 3, 3)
+    back = fastrace.classic_exact_state_prices(d, a)
+    assert max(abs(x - y) for x, y in zip(back, target)) < 1e-4
+    for bad in (desc[::-1], desc[:10] + [30.0] + desc[10:],
+                desc[:5] + [np.nan] + desc[5:]):
+        with pytest.raises(ValueError, match="offset_samples"):
+            fastrace.classic_exact_calibrate(d, target, bad, [0.0] * 3, 3)
+
