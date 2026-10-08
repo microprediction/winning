@@ -342,6 +342,12 @@ pub fn bary_row(nodes: &[f64], wts: &[f64], q: f64) -> Vec<f64> {
     row
 }
 
+/// Validity tolerances of the separated pass (#601): the reconstructed
+/// log-survival field may exceed 0 only by rounding, and a share may
+/// leave [0, total] only by rounding.
+const SEP_FIELD_TOL: f64 = 1e-6;
+const SEP_SHARE_TOL: f64 = 1e-9;
+
 #[allow(clippy::too_many_arguments)]
 pub fn separated_kernel(
     mu: ArrayView1<f64>,
@@ -413,7 +419,7 @@ pub fn separated_kernel(
     // per-runner sigma rows (fixed across nodes)
     let ts_rows: Vec<Vec<f64>> = (0..n).map(|i| bary_row(&sn, &ws, sd[i])).collect();
 
-    let p: Vec<f64> = (0..q)
+    let (p, bad): (Vec<f64>, bool) = (0..q)
         .into_par_iter()
         .map(|qi| {
             let m = &m_all[qi * n..(qi + 1) * n];
@@ -432,10 +438,16 @@ pub fn separated_kernel(
             // field(x) = sum_c amat_c logS_c(x); weights = exp(field) dx
             // b_c = sum_x haz_c(x) * weights(x)
             let mut b = vec![0.0f64; r_tot];
+            let mut bad = false;
             for t in 0..points {
                 let mut field = 0.0;
                 for c in 0..r_tot {
                     field += amat[c] * logs_c[c * points + t];
+                }
+                // a sum of log survivals is <= 0: overshoot means the
+                // global polynomial has left its regime (#601)
+                if field > SEP_FIELD_TOL {
+                    bad = true;
                 }
                 if field > -745.0 {
                     let wt = field.exp() * dx;
@@ -455,19 +467,30 @@ pub fn separated_kernel(
                 }
                 acc[i] = wq * s;
             }
-            acc
+            (acc, bad)
         })
         .reduce(
-            || vec![0.0f64; n],
-            |mut a, b| {
+            || (vec![0.0f64; n], false),
+            |(mut a, fa), (b, fb)| {
                 for (x, y) in a.iter_mut().zip(b) {
                     *x += y;
                 }
-                a
+                (a, fa || fb)
             },
         );
 
     let total: f64 = p.iter().sum();
+    // Signed or super-unit shares, or an overshooting field, mean the
+    // interpolant is not a valid law here (#601: D = [1e-4, .16, .16]
+    // gave [277, -168, -108] with total 1.0). Fall back to the exact
+    // field pass on the same automatic window: at most the cost the
+    // separation was saving, never an unbounded refinement.
+    let signed = !(total > 0.0)
+        || p.iter().any(|&x| !(x >= -SEP_SHARE_TOL * total && x <= (1.0 + SEP_SHARE_TOL) * total));
+    if bad || signed {
+        let (pf, _sl, tf) = forward_kernel(mu, v, d, f_nodes, w, points, f64::NAN, f64::NAN);
+        return (pf, tf);
+    }
     let out = Array1::from_iter(p.into_iter().map(|x| x / total));
     (out, total)
 }
@@ -2827,5 +2850,19 @@ mod tests {
     fn calibrate_refuses_ascending_grid() {
         let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
         exact_calibrate(&d, &[0.5, 0.5], &[-1.0, 0.0, 1.0], &[0.0, 0.0], 1);
+    }
+
+    #[test]
+    fn separated_kernel_never_returns_signed_shares() {
+        // #601: [277, -168, -108] with total 1.0 before the fallback
+        let mu = Array1::from(vec![0.4, -1.0, -0.6]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = Array1::from(vec![1e-4, 0.16, 0.16]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = Array1::from(vec![1.0]);
+        let (p, _) = separated_kernel(mu.view(), v.view(), d.view(), f.view(),
+                                      w.view(), 1501, 48, 14);
+        assert!(p.iter().all(|&x| (0.0..=1.0).contains(&x)), "{p:?}");
+        assert!((p[1] - 0.760249107).abs() < 1e-6, "{p:?}");
     }
 }

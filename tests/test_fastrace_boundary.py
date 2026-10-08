@@ -567,3 +567,17 @@ def test_classic_calibrate_requires_descending_offsets():
         with pytest.raises(ValueError, match="offset_samples"):
             fastrace.classic_exact_calibrate(d, target, bad, [0.0] * 3, 3)
 
+
+# --- #601: the separated pass never returns an impossible law -------------
+
+def test_separated_kernel_falls_back_outside_its_regime():
+    mu = np.array([0.4, -1.0, -0.6])
+    V, F, W = np.zeros((3, 1)), np.zeros((1, 1)), np.ones(1)
+    D = np.array([1e-4, 0.16, 0.16])
+    p, total = fastrace.win_probabilities_factor_separated(
+        mu, V, D, F, W, points=1501, rm=48, rs=14)
+    p = np.asarray(p)
+    ref, _ = fastrace.win_probabilities_factor(mu, V, D, F, W, 1501)
+    assert np.all(p >= 0) and np.all(p <= 1)
+    assert np.max(np.abs(p - np.asarray(ref))) < 1e-9
+    assert abs(total - 1) < 1e-6
