@@ -628,5 +628,14 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
     prevStep = step;
     mu = mu.map((m, i) => m - step[i]);
   }
+  if (!(residMax < tol)) {
+    // exhausted after a step no sweep priced: price the returned iterate
+    // (one forward, only here) and keep the better of the two, so the
+    // diagnostics describe the mu returned (#497, port of python)
+    const fwd = cached || forward(mu);
+    const rEnd = Math.max(...fwd.resid.map(Math.abs));
+    if (prev && !(rEnd < prev.residMax)) mu = prev.mu;
+    else residMax = rEnd;
+  }
   return { mu, converged: residMax < tol, residMax, iterations: iters };
 }

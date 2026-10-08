@@ -412,17 +412,16 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
     alpha = n > 2 ? 1.0 : 0.7
     resid_max = Inf
     iters = 0
-    for it in 1:n_iter
-        iters = it
+    function fwd(m)
         local qraw, sl
         if fac === nothing
-            ws = _topk_with_slopes(mu, sd, k, fn, points)
+            ws = _topk_with_slopes(m, sd, k, fn, points)
             qraw, sl = ws.q, ws.slopes
         else
             qraw = zeros(n)
             sl = zeros(n)
             for j in 1:size(fac.nodes, 1)
-                ws = _topk_with_slopes(mu .+ fac.Vm * fac.nodes[j, :],
+                ws = _topk_with_slopes(m .+ fac.Vm * fac.nodes[j, :],
                                        sd, k, fn, points)
                 qraw .+= fac.w[j] .* ws.q
                 sl .+= fac.w[j] .* ws.slopes
@@ -430,12 +429,30 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
         end
         qhat = _checked_topk(qraw, k, "top-k inversion")
         resid = (log.(max.(qhat, TINY)) .- log.(max.(1 .- qhat, TINY))) .- logit_t
+        return resid, qhat, sl
+    end
+    prev_mu = nothing
+    for it in 1:n_iter
+        iters = it
+        resid, qhat, sl = fwd(mu)
         resid_max = maximum(abs.(resid))
         resid_max < tol && break
+        prev_mu = copy(mu)
         dlogit = min.(sl ./ max.(qhat .* (1 .- qhat), TINY), -1e-6)
         lim = min.(2, 10 .* abs.(resid))
         mu .-= clamp.(alpha .* resid ./ dlogit, -lim, lim)
         mu .-= sum(mu) / n
+    end
+    if !(resid_max < tol)
+        # exhausted after a step no sweep priced: price the returned
+        # iterate and keep the better of the two, so the diagnostics
+        # describe the mu returned (#497, matching python)
+        r_end = maximum(abs.(fwd(mu)[1]))
+        if prev_mu !== nothing && !(r_end < resid_max)
+            mu = prev_mu
+        else
+            resid_max = r_end
+        end
     end
     converged = resid_max < tol
     return_info && return (mu = mu, converged = converged,

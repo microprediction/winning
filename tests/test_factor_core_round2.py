@@ -378,3 +378,42 @@ console.log(JSON.stringify({{ race, topk }}));
         ref = np.array(got[key][0])
         for m in got[key][1:]:
             assert np.abs(np.array(m) - ref).max() < tol
+
+
+# ---------------------------------------------------------------- #497
+
+@pytest.mark.parametrize("n_iter", [0, 1, 2])
+def test_inverse_diagnostics_describe_the_returned_iterate_497(n_iter):
+    """The residual came from the iterate before the last step (0.497
+    reported, 0.071 actual at n_iter=1), and inf at n_iter=0."""
+    from winning.factor.races import abilities_from_race, race_probabilities
+    t = np.array([0.7, 0.2, 0.1])
+    mu, info = abilities_from_race(t, D=np.ones(3), points=257,
+                                   n_iter=n_iter, return_info=True)
+    actual = np.abs(np.log(race_probabilities(mu, D=np.ones(3), points=257))
+                    - np.log(t)).max()
+    assert abs(info["max_log_residual"] - actual) < 1e-12
+    mk, ik = abilities_from_topk(t, 1, D=np.ones(3), points=257,
+                                 n_iter=n_iter, return_info=True)
+    q = top_k_probabilities(mk, 1, D=np.ones(3), points=257)
+    actual = np.abs((np.log(q) - np.log1p(-q))
+                    - (np.log(t) - np.log1p(-t))).max()
+    assert abs(ik["max_logit_residual"] - actual) < 1e-12
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_topk_diagnostics_describe_the_returned_iterate_497():
+    got = _node(f"""
+import {{ abilitiesFromTopk, topKProbabilities }} from {_mod("topk.mjs")};
+const t = [0.7, 0.2, 0.1], out = [];
+for (const n of [1, 2]) {{
+  const r = abilitiesFromTopk(t, 1, {{ D: [1, 1, 1], points: 257, nIter: n,
+                                      returnInfo: true }});
+  const q = topKProbabilities(r.mu, 1, {{ D: [1, 1, 1], points: 257 }});
+  out.push([r.info.maxLogitResidual, Math.max(...q.map((v, i) =>
+    Math.abs(Math.log(v) - Math.log1p(-v) - Math.log(t[i]) + Math.log1p(-t[i]))))]);
+}}
+console.log(JSON.stringify(out));
+""")
+    for reported, actual in got:
+        assert abs(reported - actual) < 1e-12

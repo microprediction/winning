@@ -1595,6 +1595,19 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                         continue
         prev_step = step
         mu = mu - step
+    if not resid_max < tol:
+        # The budget ran out after a step no sweep priced: the residual
+        # above belongs to the iterate BEFORE it, so the diagnostics
+        # described a different mu, and n_iter=0 reported inf for a
+        # finite initializer (#497). Price the returned iterate -- one
+        # forward, only on exhaustion -- and keep the better of the two.
+        last = (mu, resid_max) if prev is None else (prev[0], prev[3])
+        fwd = cached if cached is not None else forward(mu)
+        r_end = np.abs(np.asarray(fwd[0], dtype=float)).max()
+        if prev is not None and not r_end < last[1]:
+            mu = last[0]
+        else:
+            resid_max = float(r_end)
     return mu, resid_max < tol, resid_max, iters
 
 
