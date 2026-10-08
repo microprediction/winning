@@ -1715,5 +1715,39 @@ accepts("the inverse takes a scalar D, matching python",
           relabel([0, 0, 0, 0], CB, pm) < 1e-14);
 }
 
+// --- classic: a scratched entrant stays scratched (#589); the default
+// table covers what the forward represents (#498)
+{
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  for (const [L, unit] of [[3, 1.0], [15, 0.2]]) {
+    const d = classic.skewNormalDensity(L, unit, { a: 0 });
+    const live = classic.dividendImpliedAbility([2, 4], d);
+    for (const scratch of [Infinity, 0, -1]) {
+      const a = classic.dividendImpliedAbility([2, 4, scratch], d);
+      holds(`L=${L} dividend ${scratch} is ability +Infinity, the rest the reduced race (#589)`,
+            a[2] === Infinity && maxAbs(a.slice(0, 2), live) < 1e-12, String(a));
+    }
+  }
+  const d15 = classic.skewNormalDensity(15, 0.1, { a: 0 });
+  const t = classic.statePricesFromOffsets(d15, [-10, 10]);
+  accepts("a 97/3 book round-trips at defaults (#498)",
+          () => classic.solveForImpliedOffsets(t, d15),
+          mu => maxAbs(classic.statePricesFromOffsets(d15, mu), t) < 1e-4,
+          mu => String(classic.statePricesFromOffsets(d15, mu)));
+  accepts("the adaptive default table equals the full table (#498)",
+          () => [classic.solveForImpliedOffsets([0.5, 0.3, 0.15, 0.05], d15),
+                 classic.solveForImpliedOffsets([0.5, 0.3, 0.15, 0.05], d15,
+                   { offsetSamples: classic.defaultOffsetSamples(15) })],
+          ([a, b]) => maxAbs(a, b) === 0);
+  const warned = [];
+  const keep = console.warn;
+  console.warn = m => warned.push(m);
+  try {
+    classic.solveForImpliedOffsets([0.5, 0.5, 0], classic.skewNormalDensity(3, 1.0, { a: 0 }));
+  } finally { console.warn = keep; }
+  holds("an unrepresentable target warns (#498)",
+        warned.length === 1 && warned[0].includes("did not reach the target"));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

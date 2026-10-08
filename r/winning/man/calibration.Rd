@@ -29,7 +29,7 @@ lower is better}
 \item{max_depth}{recursion budget for the reference's wide-field clustering (infinite and far-off-lattice abilities are handled as in python's \code{state_prices_from_extended_offsets})}
 \item{unit}{lattice spacing assumed when the density was constructed}
 \item{offset_samples}{descending offsets for the interpolation table
-(default: the reference's half-lattice grid)}
+(default: every representable offset, L-2 down to -(L-2))}
 \item{implied_offsets_guess}{starting offsets, one per price (default zeros)}
 \item{n_iter}{fixed-point iterations (default 3)}
 }

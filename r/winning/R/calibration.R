@@ -46,7 +46,7 @@ dividends_from_prices <- function(prices, multiplicity = 1.0) {
 #' @param prices numeric state prices (positive, ideally summing to one)
 #' @param density performance density on the symmetric lattice
 #' @param offset_samples descending offsets for the interpolation table
-#'   (default: the reference's half-lattice grid)
+#'   (default: every representable offset, L-2 down to -(L-2))
 #' @param implied_offsets_guess starting offsets, one per price (default zeros)
 #' @param n_iter fixed-point iterations (default 3)
 #' @return numeric offsets in lattice units (lower is better)
@@ -58,8 +58,10 @@ solve_for_implied_offsets <- function(prices, density,
   density <- as_classic_density(density)
   prices <- as_classic_prices(prices)
   L <- implied_L(density)
+  core <- NULL
   if (is.null(offset_samples)) {
-    offset_samples <- rev(seq.int(-(L %/% 2), (L %/% 2) - 1L))
+    offset_samples <- .default_offset_samples(L)
+    core <- rev(seq.int(-(L %/% 2), (L %/% 2) - 1L))   # the old half table
   } else if (length(offset_samples) == 0) {
     stop("offset_samples is empty; there is nothing to interpolate against")
   } else if (!all(is.finite(offset_samples))) {
@@ -81,26 +83,86 @@ solve_for_implied_offsets <- function(prices, density,
   base <- padded_base_cdf(density)
   implied <- as.numeric(implied_offsets_guess)
   cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
+  # after each step the field is re-centred by the integer part of its
+  # mean (an exact lattice translation): the table is absolute, so a
+  # drifting field wasted half of it and a 97/3 book stalled at 88/12
+  # however many iterations ran (#498)
   for (i in seq_len(n_iter)) {
-    tab <- exact_implicit_prices(base, cdfs, offset_samples, L)
     current <- exact_state_prices_from_cdfs(cdfs)
-    implied <- implied + np_interp(prices, tab, offset_samples) -
-      np_interp(current, tab, offset_samples)
+    st <- .step_table(base, cdfs, offset_samples, core, L, prices, current)
+    implied <- implied + np_interp(prices, st$tab, st$samples) -
+      np_interp(current, st$tab, st$samples)
+    implied <- implied - trunc(mean(implied))
     cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   }
+  if (n_iter > 0) .warn_if_unconverged(exact_state_prices_from_cdfs(cdfs), prices)
   implied
 }
 
+# Default interpolation table for the classic inverse: every integer
+# offset the lattice represents, L-2 down to -(L-2) (low_high pins
+# anything beyond). The half-lattice default endpoint-clamped targets the
+# forward reaches: a 97/3 book repriced at 88/12 (#498). python's
+# default_offset_samples.
+.default_offset_samples <- function(L) rev(seq.int(-(L - 2L), L - 2L))
+
+# With the default table, price the central slice first and extend to the
+# full range only when a lookup reaches the slice's ends: inside it the
+# interpolation is identical (same integer samples, same field), so the
+# answer is the full table's at the half table's cost.
+.step_table <- function(base, cdfs, offset_samples, core, L, prices, current) {
+  if (is.null(core))
+    return(list(samples = offset_samples,
+                tab = exact_implicit_prices(base, cdfs, offset_samples, L)))
+  t <- exact_implicit_prices(base, cdfs, core, L)
+  lo <- t[1]; hi <- t[length(t)]
+  x <- c(prices, current)
+  if (all(x > lo & x < hi)) return(list(samples = core, tab = t))
+  top <- offset_samples[offset_samples > core[1]]
+  bottom <- offset_samples[offset_samples < core[length(core)]]
+  ext <- function(k) if (length(k)) exact_implicit_prices(base, cdfs, k, L) else numeric(0)
+  list(samples = offset_samples, tab = c(ext(top), t, ext(bottom)))
+}
+
+# a calibration whose own reprice misses its target by more than this is
+# reported: the target is outside what the lattice represents or n_iter
+# is too small (#498); python's CALIBRATION_WARN_TOL
+CALIBRATION_WARN_TOL <- 1e-3
+
+.warn_if_unconverged <- function(repriced, prices) {
+  miss <- max(abs(repriced - prices))
+  if (miss > CALIBRATION_WARN_TOL)
+    warning(sprintf(paste0(
+      "solve_for_implied_offsets did not reach the target: max |price error| = %.3g ",
+      "after calibration. The target may lie outside what this lattice represents ",
+      "(an exact zero, or a longshot past the lattice edge: use a wider L or finer ",
+      "unit), or n_iter is too small."), miss), call. = FALSE)
+  invisible(miss)
+}
+
 #' Ability implied by state prices
-#' @param prices numeric win probabilities (positive)
+#' @param prices numeric win probabilities (nonnegative; a zero price
+#'   returns ability Inf)
 #' @param density performance density on the symmetric lattice
 #' @param unit lattice spacing used when the density was constructed
 #' @return numeric abilities (lower is better), in units of `unit`
 #' @export
 state_price_implied_ability <- function(prices, density, unit = 1.0) {
-  guess <- rep(0, length(prices))
-  solve_for_implied_offsets(prices, density,
-                            implied_offsets_guess = guess) * unit
+  # A zero price -- a scratched runner, or the zero, negative or infinite
+  # dividend prices_from_dividends maps to 0 -- is not calibrated: its
+  # ability is Inf (lower is better, so it never wins;
+  # ability_implied_state_prices prices it at 0) and the rest are
+  # calibrated among themselves. The finite lattice inverse returned an
+  # ordinary offset that repriced it at 4.5% (16% at L=3) (#589).
+  p <- as_classic_prices(prices)
+  live <- which(p > 0)
+  ability <- rep(Inf, length(p))
+  if (length(live) == 1L) {
+    ability[live] <- 0
+  } else {
+    ability[live] <- solve_for_implied_offsets(p[live], density) * unit
+  }
+  ability
 }
 
 #' Ability implied by dividends (decimal odds)

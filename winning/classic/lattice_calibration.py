@@ -1,7 +1,9 @@
 from winning.classic.lattice import state_prices_from_extended_offsets, densities_and_coefs_from_offsets, \
     winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices, implied_L, cdf_to_pdf, \
     _exact_offset_cdfs, _exact_implicit_prices, _exact_shifted_cdf, exact_state_prices_from_cdfs, \
-    as_classic_density, as_classic_prices
+    as_classic_density, as_classic_prices, state_prices_from_offsets
+import warnings
+
 import numpy as np
 from winning.classic.lattice_conventions import NAN_DIVIDEND
 
@@ -42,18 +44,28 @@ def dividend_implied_ability(dividends, density, nan_value=NAN_DIVIDEND, unit=1.
 
 
 def state_price_implied_ability(prices, density, unit=1.0):
-    """ Calibrate offsets (translations of the performance density) to match state prices """
+    """ Calibrate offsets (translations of the performance density) to match state prices
+
+    An entrant priced at exactly zero -- a scratched runner, or a zero,
+    negative or infinite dividend, which prices_from_dividends maps to 0 --
+    gets ability +inf (never wins; ability_implied_state_prices prices it
+    at 0) and the rest are calibrated among themselves. Handing the zero
+    to the finite lattice inverse returned an ordinary offset that
+    repriced the scratched runner at 4.5% (16% at L=3) (#589).
+    """
     # By default this returns scale free offsets.
     # User should supply the lattice unit if they wish ability to be commensurate with some lattice
     # width that was assumed when generating the density
-    implied_offsets_guess = [0 for _ in prices]
-    L = implied_L(density)
-    offset_samples = list(range(int(-L / 2), int(L / 2)))[::-1]
-    scale_free_ability = solve_for_implied_offsets(prices=prices, density=density, \
-                                                   offset_samples=offset_samples,
-                                                   implied_offsets_guess=implied_offsets_guess,
-                                                   nIter=3)
-    return [ sfa*unit for sfa in scale_free_ability ]
+    p = as_classic_prices(prices)
+    live = [i for i, x in enumerate(p) if x > 0]
+    ability = [float('inf')] * len(p)
+    if len(live) == 1:
+        ability[live[0]] = 0.0
+    else:
+        offsets = solve_for_implied_offsets(prices=[p[i] for i in live], density=density, nIter=3)
+        for i, o in zip(live, offsets):
+            ability[i] = float(o) * unit
+    return ability
 
 
 # Although a unit can be provided, these calculations are morally scale free - which is to say that
@@ -164,9 +176,10 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
     density = as_classic_density(density)
     prices = as_classic_prices(prices)
     L = implied_L(density)
+    core = None
     if offset_samples is None:
-        offset_samples = list(range(int(-L / 2), int(L / 2)))[
-                         ::-1]
+        offset_samples = default_offset_samples(L)
+        core = _core_offset_samples(L)
     else:
         if len(offset_samples) == 0:
             raise ValueError('offset_samples is empty; there is nothing to interpolate against')
@@ -185,14 +198,6 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
         raise ValueError('implied_offsets_guess must have one starting offset per price: got '
                          + str(len(implied_offsets_guess)) + ' for ' + str(len(prices)) + ' prices')
 
-    # Diagnostics (verbose / visualize) need the per-iteration state, so
-    # requesting them selects the Python backend; the answer is the same.
-    if _HAVE_RUST and not verbose and not visualize:
-        return list(_fastrace.classic_exact_calibrate(
-            [float(d) for d in density], [float(p) for p in prices],
-            [float(o) for o in offset_samples],
-            [float(o) for o in implied_offsets_guess], nIter))
-
     # The paper's fixed point: tabulate offset -> price against the
     # current field and read the targets off the table. The field and
     # the table are priced by the exact dead-heat engine
@@ -209,23 +214,97 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
     # iterations ran. Subtracting the table's own reading of the current
     # price cancels that bias, so the fixed point is P(a) = p exactly;
     # where the table is exact the step is the paper's.
-    base, cdfs, L = _exact_offset_cdfs(density, implied_offsets_guess)
+    #
+    # After each step the field is re-centred by the integer part of its
+    # mean (the gauge; integer shifts are exact on the lattice). The table
+    # is absolute, so a field that drifted to one side wasted half of it
+    # and a 97/3 book stalled at 88/12 however many iterations ran (#498).
     implied_offsets = np.asarray(implied_offsets_guess, dtype=float)
-    for _ in range(nIter):
-        if visualize:
-            from winning.classic.lattice_plot import densitiesPlot
-            densitiesPlot([cdf_to_pdf(c) for c in cdfs], unit=0.1)
-        implied_prices = _exact_implicit_prices(base, cdfs, offset_samples, L)
-        current = exact_state_prices_from_cdfs(cdfs)
-        implied_offsets = implied_offsets + (
-            np.interp(prices, implied_prices, offset_samples)
-            - np.interp(current, implied_prices, offset_samples))
-        cdfs = [_exact_shifted_cdf(base, o, L) for o in implied_offsets]
-        if verbose:
-            print(list(zip(np.round(prices, 3),
-                           np.round(exact_state_prices_from_cdfs(cdfs), 3)))[:5])
+    # Diagnostics (verbose / visualize) need the per-iteration state, so
+    # requesting them selects the Python backend; the answer is the same.
+    if _HAVE_RUST and not verbose and not visualize:
+        d_list = [float(d) for d in density]
+        p_list = [float(p) for p in prices]
+        s_list = [float(o) for o in offset_samples]
+        for _ in range(nIter):
+            # one step per call, centred here, so an older fastrace
+            # without the centring gives the same iterates
+            implied_offsets = _gauge_centred(np.asarray(_fastrace.classic_exact_calibrate(
+                d_list, p_list, s_list, [float(o) for o in implied_offsets], 1), dtype=float))
+    else:
+        base, cdfs, L = _exact_offset_cdfs(density, implied_offsets)
+        for _ in range(nIter):
+            if visualize:
+                from winning.classic.lattice_plot import densitiesPlot
+                densitiesPlot([cdf_to_pdf(c) for c in cdfs], unit=0.1)
+            current = exact_state_prices_from_cdfs(cdfs)
+            samples, implied_prices = _table(base, cdfs, offset_samples, core, L, prices, current)
+            implied_offsets = _gauge_centred(implied_offsets + (
+                np.interp(prices, implied_prices, samples)
+                - np.interp(current, implied_prices, samples)))
+            cdfs = [_exact_shifted_cdf(base, o, L) for o in implied_offsets]
+            if verbose:
+                print(list(zip(np.round(prices, 3),
+                               np.round(exact_state_prices_from_cdfs(cdfs), 3)))[:5])
 
+    if nIter > 0:
+        _warn_if_unconverged(state_prices_from_offsets(density, implied_offsets), prices)
     return implied_offsets
+
+
+# A calibration whose own reprice misses a target by more than this is
+# reported. The table iteration on the full representable grid reaches
+# ~1e-4 or better in three steps on ordinary books; a miss beyond 1e-3
+# means the target is outside what the lattice can represent (an exact
+# zero, a longshot past the lattice edge) or nIter was too small (#498).
+CALIBRATION_WARN_TOL = 1e-3
+
+
+def default_offset_samples(L):
+    """The default interpolation table: every integer offset the lattice
+    represents, L-2 down to -(L-2) (low_high pins anything beyond). The
+    half-lattice grid range(-L/2, L/2) endpoint-clamped targets the
+    forward could reach: a 97/3 book repriced at 88/12 (#498)."""
+    return list(range(-(L - 2), L - 1))[::-1]
+
+
+def _core_offset_samples(L):
+    """The old half-lattice table, a contiguous slice of the default."""
+    return list(range(int(-L / 2), int(L / 2)))[::-1]
+
+
+def _table(base, cdfs, offset_samples, core, L, prices, current):
+    """(samples, prices) for one step. With the default table, price the
+    central slice first and extend to the full range only when a lookup
+    reaches the slice's ends: inside it the interpolation is identical
+    (same integer samples, same field), so the answer is the full table's
+    at the half table's cost on ordinary books."""
+    if core is None:
+        return offset_samples, _exact_implicit_prices(base, cdfs, offset_samples, L)
+    t = _exact_implicit_prices(base, cdfs, core, L)
+    lo, hi = t[0], t[-1]
+    if all(lo < x < hi for x in prices) and all(lo < x < hi for x in current):
+        return core, t
+    top = [k for k in offset_samples if k > core[0]]
+    bottom = [k for k in offset_samples if k < core[-1]]
+    return offset_samples, (_exact_implicit_prices(base, cdfs, top, L) + list(t)
+                            + _exact_implicit_prices(base, cdfs, bottom, L))
+
+
+def _gauge_centred(offsets):
+    """Shift by the integer part of the mean (toward zero, as int()), an
+    exact lattice translation that keeps the field over the table."""
+    offsets = np.asarray(offsets, dtype=float)
+    return offsets - float(int(np.mean(offsets))) if offsets.size else offsets
+
+
+def _warn_if_unconverged(repriced, prices):
+    miss = float(np.max(np.abs(np.asarray(repriced, dtype=float) - np.asarray(prices, dtype=float))))
+    if miss > CALIBRATION_WARN_TOL:
+        warnings.warn('solve_for_implied_offsets did not reach the target: max |price error| = '
+                      + format(miss, '.3g') + ' after calibration. The target may lie outside what '
+                      'this lattice represents (an exact zero, or a longshot past the lattice edge: '
+                      'use a wider L or finer unit), or nIter is too small.', RuntimeWarning, stacklevel=3)
 
 
 def _assert_descending(xs):

@@ -205,3 +205,44 @@ test_that("a distant runner does not collapse the viable field (#393)", {
                tolerance = 1e-8)
   expect_true(is.infinite(ability_implied_dividends(c(0, 1, 500), d)[3]))
 })
+
+# --- a scratched entrant stays scratched end to end (#589) -------------
+#
+# prices_from_dividends maps a zero, negative or infinite dividend to 0;
+# the finite lattice inverse then returned an ordinary offset that
+# repriced the scratched runner at 4.5% (16% at L=3). It is now ability
+# Inf (never wins) and the rest are the reduced race.
+
+test_that("a scratched entrant is Inf and the rest are the reduced race", {
+  for (Lu in list(c(3, 1.0), c(15, 0.2))) {
+    d <- skew_normal_density(Lu[1], Lu[2], a = 0)
+    live <- dividend_implied_ability(c(2, 4), d)
+    for (s in c(Inf, 0, -1)) {
+      a <- dividend_implied_ability(c(2, 4, s), d)
+      expect_identical(a[3], Inf)
+      expect_lt(max(abs(a[1:2] - live)), 1e-12)
+      expect_identical(ability_implied_state_prices(a, d)[3], 0)
+    }
+  }
+})
+
+# --- the default table covers what the forward represents (#498) ------
+
+test_that("a 97/3 book round-trips at defaults", {
+  d <- skew_normal_density(15, 0.1, a = 0)
+  t <- state_prices_from_offsets(d, c(-10, 10))
+  mu <- expect_silent(solve_for_implied_offsets(t, d))
+  expect_lt(max(abs(state_prices_from_offsets(d, mu) - t)), 1e-4)   # was 0.091
+})
+
+test_that("the adaptive default table equals the full table", {
+  d <- skew_normal_density(15, 0.1, a = 0)
+  p <- c(0.5, 0.3, 0.15, 0.05)
+  expect_identical(solve_for_implied_offsets(p, d),
+                   solve_for_implied_offsets(p, d, offset_samples = 13:-13))
+})
+
+test_that("an unrepresentable target warns", {
+  d <- skew_normal_density(3, 1.0, a = 0)
+  expect_warning(solve_for_implied_offsets(c(0.5, 0.5, 0), d), "did not reach the target")
+})
