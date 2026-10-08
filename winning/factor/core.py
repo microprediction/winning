@@ -12,7 +12,7 @@ from scipy.special import log_ndtr, ndtr, ndtri
 
 # the package-wide shape contract; re-exported here because
 # winning.factor.core is where the factor kernels look for it
-from ..shapes import (as_idio, as_loadings, as_weights,  # noqa: F401
+from ..shapes import (as_idio, as_loadings, as_tolerance, as_weights,  # noqa: F401
                       as_factor_law, as_points, as_target)
 
 from ..rustconfig import load_fastrace
@@ -838,6 +838,13 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     p = as_target(p, "p")            # finite and 1-D before the sign test
     if np.any(p <= 0):
         raise ValueError("all target probabilities must be positive")
+    tol = as_tolerance(tol)
+    _n = np.asarray(n_iter)
+    if (_n.ndim or _n.dtype == bool or not np.issubdtype(_n.dtype, np.integer)
+            or int(_n) < 0):
+        raise ValueError("n_iter must be a non-negative whole number; got "
+                         f"{n_iter!r}")
+    n_iter = int(_n)
     with np.errstate(over="ignore"):
         _tot = p.sum()
     if not np.isfinite(_tot):        # relative weights: [1e308]*3 is [1]*3
@@ -898,7 +905,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         sd_tot = np.sqrt(D + sig_v)
         mu = abilities_from_probabilities_factor(
             p, np.zeros((N, 1)), sd_tot**2, np.zeros((1, 1)), np.ones(1),
-            n_iter=n_iter, tol=tol) - shift
+            n_iter=n_iter, tol=tol, return_info=True)[0] - shift
         mu -= mu.mean()
     else:
         # min-wins (a larger share is a LOWER mu), in the field's units:
@@ -914,7 +921,9 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     # trajectory that had luckily converged and onto the cycle.
     _top2 = float(np.sort(p)[-2:].sum()) if N > 2 else 1.0
     damp = 0.7 if _top2 > 0.8 else 1.0
-    for _ in range(n_iter):
+    iters, res, converged = 0, np.inf, False
+    for it in range(n_iter):
+        iters = it + 1
         M_all = mu[None, :] + F @ V.T
         lo = M_all.min() - 8.0 * sd.max()
         hi = M_all.max() + 8.0 * sd.max()
@@ -957,6 +966,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         resid = np.log(phat) - logp
         res = np.abs(resid[ident]).max() if np.any(ident) else np.abs(resid).max()
         if res < tol:
+            converged = True
             break
         if res > prev_res * 1.2:
             damp = max(0.25, damp * 0.5)     # simple safeguard
@@ -965,9 +975,28 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         delta = np.clip(damp * resid / dlogp, -step_cap, step_cap)
         mu = mu - delta                      # Newton: mu <- mu - resid / dlogp
         mu -= mu.mean()
+    if not converged:
+        # The budget ran out after a step the loop never priced: report
+        # the residual of the iterate actually returned (one forward,
+        # only on exhaustion), and say so unless diagnostics were asked
+        # for. n_iter=0 raised UnboundLocalError on the loop variable,
+        # and every exhaustion returned silently (#538).
+        phat = np.maximum(win_probabilities_factor(mu, V, D, F, W,
+                                                   points=points), _PFLOOR)
+        resid = np.log(phat / phat.sum()) - logp
+        res = float(np.abs(resid[ident]).max() if np.any(ident)
+                    else np.abs(resid).max())
+        converged = bool(res < tol)
+        if not converged and not return_info:
+            import warnings
+            warnings.warn(
+                f"abilities_from_probabilities_factor did not converge: max "
+                f"|log residual| {res:.2e} after {iters} iterations (tol "
+                f"{tol:.0e}). Pass return_info=True for the diagnostics "
+                "instead of this warning.", RuntimeWarning, stacklevel=2)
     if return_info:
-        return mu, {"iterations": _ + 1, "residual": float(res),
-                    "converged": bool(res < tol)}
+        return mu, {"iterations": int(iters), "residual": float(res),
+                    "converged": bool(converged)}
     return mu
 
 

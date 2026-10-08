@@ -298,3 +298,41 @@ for (const w of ["bulkk", "", null, 3]) {{
 console.log(JSON.stringify(out));
 """)
     assert got == ["refused"] * 4
+
+
+# ---------------------------------------------------------------- #538
+
+def test_core_inverse_budget_exhaustion_is_reported_538():
+    """Exhaustion returned silently; n_iter=0 with return_info raised
+    UnboundLocalError."""
+    import warnings
+    from winning.factor.core import (abilities_from_probabilities_factor,
+                                     hermite_nodes, win_probabilities_factor)
+    mu = np.array([-2.0, -0.2, 1.1, 2.4])
+    V = np.array([[-0.8], [-0.1], [0.3], [0.9]])
+    D = np.array([0.35, 0.8, 0.5, 1.2])
+    F, W = hermite_nodes(1, Q=11)
+    t = win_probabilities_factor(mu, V, D, F, W, points=1001)
+    for budget in (0, 1, 2):
+        with pytest.warns(RuntimeWarning, match="did not converge"):
+            m = abilities_from_probabilities_factor(t, V, D, F, W,
+                                                    n_iter=budget,
+                                                    points=1001)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            m2, info = abilities_from_probabilities_factor(
+                t, V, D, F, W, n_iter=budget, points=1001, return_info=True)
+        assert np.array_equal(m, m2)
+        assert info["iterations"] == budget and not info["converged"]
+        rep = win_probabilities_factor(m, V, D, F, W, points=1001)
+        assert abs(np.abs(np.log(rep) - np.log(t)).max()
+                   - info["residual"]) < 1e-9
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        m, info = abilities_from_probabilities_factor(t, V, D, F, W,
+                                                      points=1001,
+                                                      return_info=True)
+    assert info["converged"]
+    for bad in (-1, 1.5, np.inf, True):
+        with pytest.raises(ValueError, match="n_iter"):
+            abilities_from_probabilities_factor(t, V, D, F, W, n_iter=bad)

@@ -67,3 +67,17 @@ test_that("the factor core validates its law and gauge (#263, #416, #444, #70)",
   b <- abilities_from_probabilities_factor(p, Vg + 100, rep(1, 4), points = 1001, tol = 1e-8)
   expect_equal(a, b, tolerance = 1e-6)
 })
+
+test_that("factor inverse warns on budget exhaustion (#538)", {
+  mu <- c(-2.0, -0.2, 1.1, 2.4); V <- matrix(c(-0.8, -0.1, 0.3, 0.9), ncol = 1)
+  D <- c(0.35, 0.8, 0.5, 1.2); nodes <- hermite_nodes(1, 11)
+  t <- win_probabilities_factor(mu, V, D, nodes = nodes, points = 1001)
+  for (b in 0:2)
+    expect_warning(abilities_from_probabilities_factor(t, V, D, nodes = nodes,
+                                                       n_iter = b, points = 1001),
+                   "did not converge")
+  expect_silent(m <- abilities_from_probabilities_factor(t, V, D, nodes = nodes,
+                                                         points = 1001))
+  expect_lt(max(abs(m - (mu - mean(mu)))), 1e-5)
+  expect_error(abilities_from_probabilities_factor(t, V, D, tol = Inf), "tol")
+})
