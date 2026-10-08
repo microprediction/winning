@@ -28,7 +28,7 @@
 module MultinomialProbit
 
 import LinearAlgebra
-using LinearAlgebra: SymTridiagonal, eigen, cholesky, Symmetric
+using LinearAlgebra: SymTridiagonal, eigen, cholesky, Symmetric, issuccess, eigmin
 using Random: Xoshiro
 
 export MNProbit, max_identified_rank, fit!, loglikelihood, predict_proba, coef, vcov,
@@ -753,23 +753,52 @@ scores), or :sandwich (H^-1 B H^-1, robust).
 `:opg` never touches the Hessian. It used to compute and invert the
 observed information first and only then branch, so a singular or
 failing Hessian blocked the OPG fallback that exists for exactly that
-case, and paid 2 * nparams score evaluations for nothing (#434)."""
-function vcov(m::MNProbit; method = :hessian)
+case, and paid 2 * nparams score evaluations for nothing (#434).
+
+Asymptotic covariance is a statement about a MAXIMUM. A non-converged
+fit is refused unless `allow_unconverged = true`, and the Hessian and
+sandwich forms require the observed information `-H` to be positive
+definite: at a saddle its inverse has negative variances, which
+`stderror` used to clip to a standard error of exactly zero (#493)."""
+function vcov(m::MNProbit; method = :hessian, allow_unconverged = false)
     method in (:hessian, :opg, :sandwich) ||
         error("method must be :hessian, :opg or :sandwich")
     _require_exact(m, "vcov")
+    (m.converged || allow_unconverged) || throw(ArgumentError(
+        "vcov: the fit did not converge, so theta is not a maximum and " *
+        "its curvature is not a covariance. Refit (e.g. larger maxiter) " *
+        "or pass allow_unconverged = true to inspect it anyway"))
     if method == :opg
         G = score_matrix(m)
         return inv(G' * G)
     end
-    Hinv = inv(-loglik_hessian(m))
+    info = Symmetric(-loglik_hessian(m))
+    ch = cholesky(info; check = false)
+    issuccess(ch) || throw(ArgumentError(
+        "vcov: the observed information is not positive definite (smallest " *
+        "eigenvalue " * string(round(eigmin(info), sigdigits = 4)) * "), so " *
+        "theta is not a strict local maximum and -H^-1 is not a " *
+        "covariance; method = :opg does not use the Hessian"))
+    Hinv = inv(ch)
     method == :hessian && return (Hinv .+ Hinv') ./ 2
     G = score_matrix(m)
     return Hinv * (G' * G) * Hinv
 end
 
-stderror(m::MNProbit; method = :hessian) =
-    sqrt.(max.(LinearAlgebra.diag(vcov(m; method = method)), 0.0))
+"""Standard errors: square roots of the `vcov` diagonal. A negative
+variance is refused, not clipped to a zero standard error (#493); only
+round-off, below `1e-12` of the largest diagonal entry, is read as 0."""
+function stderror(m::MNProbit; method = :hessian, allow_unconverged = false)
+    d = LinearAlgebra.diag(vcov(m; method = method,
+                                allow_unconverged = allow_unconverged))
+    tol = 1e-12 * maximum(abs, d; init = 0.0)
+    for (i, x) in enumerate(d)
+        (isfinite(x) && x >= -tol) || throw(ArgumentError(
+            "stderror: variance " * string(i) * " is " * string(x) *
+            "; a negative variance is not a standard error"))
+    end
+    return sqrt.(max.(d, 0.0))
+end
 
 function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
     println(io, "MNProbit  J=", m.J, " T=", m.T, " r=", m.r,
@@ -777,8 +806,8 @@ function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
             "  logLik=", round(m.loglik, digits = 3),
             m.converged ? "" : "  (NOT converged)")
     isnan(m.loglik) && return
-    # standard errors exist only for the exact objective (#214)
-    exact = m.method == :exact
+    # standard errors exist only for a converged exact fit (#214, #493)
+    exact = m.method == :exact && m.converged
     se = !exact ? fill(NaN, length(m.theta)) : try
         stderror(m)
     catch
@@ -787,8 +816,9 @@ function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
     names = vcat(["beta[$i]" for i in 1:m.p],
                  ["v[$row,$col]" for (row, col) in m.pos])
     println(io, rpad("param", 12), rpad("estimate", 12),
-            exact ? "se" : "se (not available for a :" *
-                           string(m.method) * " fit)")
+            exact ? "se" :
+            m.method == :exact ? "se (not available: the fit did not converge)" :
+            "se (not available for a :" * string(m.method) * " fit)")
     for i in eachindex(m.theta)
         println(io, rpad(names[i], 12),
                 rpad(string(round(m.theta[i], digits = 4)), 12),

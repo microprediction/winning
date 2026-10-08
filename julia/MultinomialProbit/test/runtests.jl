@@ -374,6 +374,7 @@ end
     Xo = reshape([0.0, 1.0, 1.0, 0.0, 0.0, 2.0, 2.0, 0.0], 4, 2, 1)
     m = MNProbit(Xo, [2, 1, 2, 1]; intercepts = false, r = 0)
     m.theta .= 0.3
+    m.converged = true          # a hand-set theta; inference needs it (#493)
     G = score_matrix(m)
     old = MP.HESSIAN_ENGINE[]
     try
@@ -405,9 +406,13 @@ end
     show(io, MIME"text/plain"(), m)
     out = String(take!(io))
     @test occursin("not available", out)
-    # refitting exactly restores inference
+    # refitting exactly lifts the GHK refusal. This random-choice design
+    # has no exact maximum (BFGS stops with -H eigenvalue -1.4e4), so the
+    # #493 guards still refuse the Hessian forms; OPG under the explicit
+    # override shows the #214 refusal itself is gone.
     fit!(m)
-    @test all(isfinite, stderror(m))
+    @test m.method == :exact
+    @test all(isfinite, vcov(m; method = :opg, allow_unconverged = true))
 end
 
 # --- Halton has as many bases as the integral has dimensions (#396) ----
@@ -467,6 +472,33 @@ end
     mb = fit!(MNProbit(Xb, chb; intercepts = false))
     @test mb.converged && abs(mb.beta[1] - 0.8) < 0.25
     @test all(isfinite, stderror(mb))
+end
+
+# --- inference needs a maximum (#493) ----------------------------------
+@testset "vcov/stderror refuse a saddle or an unconverged fit" begin
+    X = reshape([0.5419522204102933 -0.3165954511658161 -0.32238911615896015
+                 0.0971673186704572 -1.5259304065189514 1.1921661041016585],
+                2, 3, 1)
+    m = MNProbit(X, [3, 1]; intercepts = false, r = 1)
+    fit!(m; maxiter = 0)
+    @test !m.converged
+    @test minimum(LinearAlgebra.eigvals(LinearAlgebra.Symmetric(-loglik_hessian(m)))) < 0
+    for method in (:hessian, :opg, :sandwich)
+        @test_throws ArgumentError vcov(m; method = method)
+        @test_throws ArgumentError stderror(m; method = method)
+    end
+    # the override still refuses the indefinite information: the third
+    # standard error used to be sqrt(max(-4.558, 0)) = 0
+    @test_throws ArgumentError vcov(m; allow_unconverged = true)
+    @test_throws ArgumentError stderror(m; allow_unconverged = true)
+    @test_throws ArgumentError stderror(m; method = :sandwich,
+                                        allow_unconverged = true)
+    io = IOBuffer()
+    show(io, MIME"text/plain"(), m)
+    out = String(take!(io))
+    @test occursin("did not converge", out)
+    rows = filter(!isempty, split(out, "\n")[3:end])
+    @test length(rows) == 3 && all(endswith.(rstrip.(rows), "-"))
 end
 
 # --- scalar D, loading rows, node columns, draw budget -----------------
