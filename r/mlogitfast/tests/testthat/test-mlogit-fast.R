@@ -282,3 +282,23 @@ test_that("Gauss-Hermite order one is the one-node rule (#504)", {
   expect_true(is.finite(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 1L,
                                     maxit = 3L)$logLik))
 })
+
+test_that("an idx that does not cover data is refused, not a prefix (#520)", {
+  idx1 <- data.frame(id = rep(1L, 3L), alt = factor(c("a", "b", "c")))
+  d <- data.frame(chosen = c(TRUE, FALSE, FALSE, FALSE, FALSE, TRUE),
+                  x = c(-1, 0, 1, 10, 0, -10))
+  attr(d, "idx") <- idx1
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "got 3 for 6 data rows")
+  short <- d[1:3, , drop = FALSE]
+  attr(short, "idx") <- data.frame(id = rep(1:2, each = 3),
+                                   alt = factor(rep(c("a", "b", "c"), 2)))
+  expect_error(mlogit_fast(chosen ~ x, short, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "got 6 for 3 data rows")
+  attr(d, "idx") <- NULL
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "idx column or attribute")
+  attr(d, "idx") <- data.frame(id = rep(1:2, each = 3))
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "idx column or attribute")
+})

@@ -319,6 +319,16 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
                         maxit = 400L) {
   t0 <- Sys.time()
   idx <- if (!is.null(data$idx)) data$idx else attr(data, "idx")
+  # a stale or short idx used to select a prefix of data in silence: ord
+  # was built from idx alone, so rows past it never entered the fit (#520)
+  # (dfidx may append nesting columns after these two)
+  if (is.null(idx) || length(dim(idx)) != 2L || ncol(idx) < 2L)
+    stop(paste("data needs an idx column or attribute whose first two",
+               "columns are (chooser, alternative)"), call. = FALSE)
+  if (NROW(idx) != nrow(data))
+    stop(sprintf("idx must have exactly nrow(data) rows (got %d for %d data rows)",
+                 NROW(idx), nrow(data)), call. = FALSE)
+  idx <- as.data.frame(idx)
   # droplevels: a filtered panel keeps its unused factor levels, and as
   # integer codes those levels left gaps that were read as phantom
   # choosers or alternatives (#464). Code the OBSERVED labels only.
