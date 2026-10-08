@@ -363,4 +363,15 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
           () => winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { nIter: 5 }));
 }
 
+/* --- a relative target whose SUM overflows is the same law (#475) ---- */
+{
+  const V = [[0], [0], [0], [0]], D = [1, 1, 1, 1];
+  const q = [0.8, 0.6, 0.4, 0.2];
+  const a1 = abilitiesFromProbabilitiesFactor(q, V, D, [[0]], [1]);
+  const ab = abilitiesFromProbabilitiesFactor(q.map((x) => x * 1e308), V, D, [[0]], [1]);
+  check("target * 1e308 calibrates like the target (#475)", ab, a1, 1e-12);
+  const pair = abilitiesFromProbabilitiesFactor([1e308, 1e308], [[0], [0]], [1, 1], [[0]], [1]);
+  check("a 1e308 pair is the even race, not +-Infinity (#475)", pair, [0, 0], 1e-12);
+}
+
 process.exit(failures ? 1 : 0);

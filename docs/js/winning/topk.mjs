@@ -6,7 +6,7 @@
 // the derivations and the two-branch refusal of exact-rank targets.
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
-         jacobiSweeps } from "./core.mjs";
+         jacobiSweeps, rescaledTarget } from "./core.mjs";
 import { BASES, _factorNodeRule, baseResolution } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -623,8 +623,9 @@ function validatedTarget(q, k, n, targetFloor) {
       "has no finite inverse. Pass targetFloor to floor small entries " +
       "deliberately.");
   }
-  const s = target.reduce((a, b) => a + b, 0);
-  target = target.map(v => v * (k / s));
+  // scale-safe: a 1e308-scaled target overflowed in the sum (#461). With
+  // a finite sum this is the old v * (k / s) exactly.
+  target = rescaledTarget(target, k);
   if (target.some(v => v >= 1))
     throw new Error(
       "after renormalizing to k slots, a target membership is >= 1: " +
@@ -877,10 +878,10 @@ export function locScaleFromWinAndSecond(pWin, pSecond, opts = {}) {
     throw new Error("pWin and pSecond must have equal length");
   if (pWin.some(v => v <= 0) || pSecond.some(v => v <= 0))
     throw new Error("all win and second probabilities must be positive");
-  const s1 = pWin.reduce((a, b) => a + b, 0);
-  const s2 = pSecond.reduce((a, b) => a + b, 0);
-  const p1 = pWin.map(v => v / s1);
-  const top2 = p1.map((v, i) => v + pSecond[i] / s2);
+  // each normalised scale-safely: a raw sum can overflow (#483)
+  const p1 = rescaledTarget(pWin);
+  const p2 = rescaledTarget(pSecond);
+  const top2 = p1.map((v, i) => v + p2[i]);
   return locScaleFromTopkPair(p1, 1, top2, 2, opts);
 }
 
@@ -938,8 +939,7 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
     throw new Error("rank probabilities must be finite");
   if (p.some(v => v <= 0))
     throw new Error("all rank probabilities must be positive");
-  const s = p.reduce((a, b) => a + b, 0);
-  const logt = p.map(v => Math.log(v / s));
+  const logt = rescaledTarget(p).map(Math.log);     // overflow-safe (#483)
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
   const zz = [-2.3, -1.1, -0.35, 0.6, 1.7];

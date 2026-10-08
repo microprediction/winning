@@ -1,8 +1,9 @@
 // One race, five covariance grammars -- port of winning/factor/structures.py.
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
-         abilitiesFromBlockRace, blockScale } from "./blocks.mjs";
-import { mean, asIterations, asTolerance, asFiniteVector, isVector } from "./core.mjs";
+         abilitiesFromBlockRace, validateTree } from "./blocks.mjs";
+import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
+         asLoadings, asIdio } from "./core.mjs";
 
 export const Independent = D => ({ kind: "Independent", D });
 export const Factor = (V, D) => ({ kind: "Factor", V, D });
@@ -97,8 +98,7 @@ function invertGenericInfo(p, forward, tol = 1e-9, maxIter = 400, scale = 1) {
       "all target probabilities must be positive: a zero share has no " +
       "finite inverse. Pass targetFloor to abilitiesFromRace to floor " +
       "small entries deliberately.");
-  const s = pv.reduce((a, b) => a + b, 0);
-  pv = pv.map(v => v / s);
+  pv = rescaledTarget(pv);                 // overflow-safe (#463)
   const lt = pv.map(v => Math.log(v));
   const lm = mean(lt);
   let mu = lt.map(v => -(v - lm) * scale);

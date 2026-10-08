@@ -1,6 +1,6 @@
 // The classic state-price lattice calibration -- port of
 // winning/lattice.py + lattice_calibration.py, dead heats included.
-import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS, asFiniteVector,
+import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS, asFiniteVector, rescaledTarget,
          asIterations, isVector } from "./core.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -78,9 +78,18 @@ export function asClassicDensity(density, where = "density") {
     if (!Number.isFinite(v)) throw new Error(`${where}[${i}] = ${density[i]} is a non-finite atom`);
     total += v; lo = Math.min(lo, v);
   }
+  // finite atoms can overflow only in the SUM: 1e308 counts per atom
+  // normalised to all zeros (#484). Rescale by the max first, only then.
+  let scale = 1;
+  if (!Number.isFinite(total)) {
+    scale = 0;
+    for (let i = 0; i < n; i++) scale = Math.max(scale, Math.abs(Number(density[i])));
+    total = 0; lo /= scale;
+    for (let i = 0; i < n; i++) total += Number(density[i]) / scale;
+  }
   if (!(total > 0)) throw new Error(`${where} has no positive mass`);
-  if (lo < -1e-12 * total) throw new Error(`${where} has a negative atom (${lo})`);
-  return Array.from(density, v => Math.max(Number(v), 0) / total);
+  if (lo < -1e-12 * total) throw new Error(`${where} has a negative atom (${lo * scale})`);
+  return Array.from(density, v => Math.max(Number(v) / scale, 0) / total);
 }
 
 /* Target state prices carry only relative mass (#377): the inverse read
@@ -99,6 +108,12 @@ export function asClassicPrices(prices, where = "prices") {
     total += v;
   }
   if (!(total > 0)) throw new Error(`${where} has no positive mass`);
+  if (!Number.isFinite(total)) {
+    // finite entries, overflowing sum: through the max (#484)
+    let mx = 0;
+    for (let i = 0; i < prices.length; i++) mx = Math.max(mx, Number(prices[i]));
+    return rescaledTarget(Array.from(prices, v => Number(v) / mx));
+  }
   return Array.from(prices, v => Number(v) / total);
 }
 

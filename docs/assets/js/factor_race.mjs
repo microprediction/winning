@@ -624,9 +624,14 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
   const target = finiteVec(pTarget, "target", "probability");
   const N = target.length;
   ({ F, W } = asFactorLaw(F, W, "W"));   // zero-weight nodes dropped (#416)
-  let psum = 0;
-  for (const v of target) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
-  const p = target.map((v) => v / psum);
+  // through the LARGEST entry first: a relative target of finite entries
+  // can overflow only in its sum, and [0.8, 0.6, 0.4, 0.2] * 1e308 came
+  // back all NaN where * 1e307 calibrated (#475)
+  let top = 0;
+  for (const v of target) { if (v <= 0) throw new Error("targets must be positive"); if (v > top) top = v; }
+  const u = target.map((v) => v / top);
+  const usum = u.reduce((a, b) => a + b, 0);
+  const p = u.map((v) => v / usum);
   const logp = p.map(Math.log);
   V = asLoadings(V, N);
   D = asIdio(D, N);

@@ -1836,5 +1836,29 @@ for (const c of [1e-8, 100]) {
           "concentrationMatrix refuses a misspelled key (#561)", "namecaps");
 }
 
+// --- a relative target is scale-free past the double range of its SUM
+//     (#461, #463, #483, #484)
+{
+  const q = [0.8, 0.6, 0.4, 0.2];
+  const same = (label, f) => accepts(label, () => [f(1), f(1e308)],
+    ([a, b]) => a.every(Number.isFinite) && Math.max(...a.map((v, i) => Math.abs(v - b[i]))) < 1e-9);
+  same("abilitiesFromTopk at 1e308 (#461)",
+       c => topk.abilitiesFromTopk(q.map(x => x * c), 2, { points: 257 }));
+  same("abilitiesFromRankMarginal at 1e308 (#483)",
+       c => topk.abilitiesFromRankMarginal(q.map(x => x * c), 1, { points: 257 }));
+  same("locScaleFromWinAndSecond at 1e308 (#483)",
+       c => topk.locScaleFromWinAndSecond([0.8, 0.6, 0.4, 0.2].map(x => x * c),
+                                          [0.4, 0.6, 0.6, 0.4].map(x => x * c),
+                                          { points: 257, nIter: 20 }).mu);
+  same("abilitiesFromBlockRace at 1e308 (#463)",
+       c => blocks.abilitiesFromBlockRace(q.map(x => x * c), [0, 0, 1, 1],
+                                          [0.25, -0.15, 0.35, -0.05], [0.8, 0.9, 1, 1.1],
+                                          { points: 129 }).mu);
+  same("asClassicPrices at 1e308 (#484)",
+       c => classic.asClassicPrices([0.5, 0.25, 0.125, 0.125].map(x => x * c)));
+  same("asClassicDensity at 1e308 (#484)",
+       c => classic.asClassicDensity(new Array(7).fill(c)));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

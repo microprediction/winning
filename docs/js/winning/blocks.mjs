@@ -2,7 +2,7 @@
 import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
          asFactorNodes, asWeights, asIterations, asTolerance,
-         asFiniteVector } from "./core.mjs";
+         asFiniteVector, rescaledTarget } from "./core.mjs";
 import { invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -682,12 +682,11 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
   let pT = asFiniteVector(pTarget, "target", "probability");
   if (pT.some(v => v < 0))
     throw new Error("abilitiesFromBlockRace: a target probability is negative");
-  let s = pT.reduce((a, b) => a + b, 0);
-  pT = pT.map(v => v / s);
+  pT = rescaledTarget(pT);                 // overflow-safe (#463)
   const n = pT.length;
   const floor = Math.max(1e-14, Math.min(...pT.filter(v => v > 0)) * 1e-3);
   pT = pT.map(v => Math.max(v, floor));
-  s = pT.reduce((a, b) => a + b, 0);
+  const s = pT.reduce((a, b) => a + b, 0);
   pT = pT.map(v => v / s);
   const lt = pT.map(Math.log);
   const forward = m => blockRaceProbabilities(m, cluster, loading, D, { points, qa });
