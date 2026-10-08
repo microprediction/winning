@@ -300,3 +300,31 @@ test_that("ranks above J - 2 are refused and the default is identified", {
   fit <- rprobit_fast(df, covariates = "x", Qf = 5L, Qz = 5L, maxit = 20L)
   expect_identical(fit$r, 1L)
 })
+
+test_that("unused factor levels are not phantom observations or alternatives (#464)", {
+  set.seed(4)
+  n <- 30L; J <- 3L
+  base <- data.frame(id = rep(seq_len(n), each = J),
+                     alt = rep(c("x", "y", "z"), times = n),
+                     v = rnorm(n * J))
+  u <- 0.7 * base$v + rnorm(n * J)
+  base$chosen <- unlist(lapply(split(u, base$id),
+                               function(w) seq_along(w) == which.max(w)))
+  fit <- function(d) rprobit_fast(d, "v", r = 1L, Qf = 3L, Qz = 3L,
+                                  maxit = 5L)
+  # unused middle and trailing id levels
+  d <- base
+  d$id <- factor(d$id * 2L, levels = seq_len(2L * n + 1L))
+  ref <- fit(droplevels(d))
+  got <- fit(d)
+  expect_equal(got$coefficients, ref$coefficients)
+  expect_equal(got$logLik, ref$logLik)
+  # unused middle and trailing alternative levels
+  d <- base
+  d$alt <- factor(d$alt, levels = c("x", "w", "y", "z", "zz"))
+  ref <- fit(droplevels(d))
+  got <- fit(d)
+  expect_identical(got$J, 3L)
+  expect_equal(got$coefficients, ref$coefficients)
+  expect_equal(got$logLik, ref$logLik)
+})

@@ -239,3 +239,31 @@ test_that("fractional labels are refused and the rank is identified (#194, #201)
     expect_error(.check_rank(J - 1L, J), "not identified")
   }
 })
+
+test_that("unused factor levels are not phantom choosers or alternatives (#464)", {
+  set.seed(4)
+  n <- 30L; J <- 3L
+  id <- rep(seq_len(n), each = J)
+  alt <- rep(c("x", "y", "z"), times = n)
+  d <- data.frame(v = rnorm(n * J))
+  u <- 0.7 * d$v + rnorm(n * J)
+  d$chosen <- unlist(lapply(split(u, id),
+                            function(w) seq_along(w) == which.max(w)))
+  fit <- function(id, alt) {
+    dd <- d
+    attr(dd, "idx") <- data.frame(id = id, alt = alt)
+    mlogit_fast(chosen ~ v, dd, r = 1L, Qf = 3L, Qz = 3L, maxit = 5L)
+  }
+  id_f <- factor(id * 2L, levels = seq_len(2L * n + 1L))
+  alt_f <- factor(alt, levels = c("x", "w", "y", "z", "zz"))
+  ref <- fit(droplevels(id_f), droplevels(alt_f))
+  for (got in list(fit(id_f, droplevels(alt_f)),
+                   fit(droplevels(id_f), alt_f),
+                   fit(id_f, alt_f))) {
+    expect_identical(got$J, 3L)
+    expect_equal(got$coefficients, ref$coefficients)
+    expect_equal(got$logLik, ref$logLik)
+  }
+  expect_identical(names(ref$coefficients),
+                   c("(Intercept):y", "(Intercept):z", "v"))
+})

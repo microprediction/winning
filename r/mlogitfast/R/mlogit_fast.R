@@ -311,10 +311,13 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
                         maxit = 400L) {
   t0 <- Sys.time()
   idx <- if (!is.null(data$idx)) data$idx else attr(data, "idx")
-  alt_f <- as.factor(idx[[2]])
+  # droplevels: a filtered panel keeps its unused factor levels, and as
+  # integer codes those levels left gaps that were read as phantom
+  # choosers or alternatives (#464). Code the OBSERVED labels only.
+  alt_f <- droplevels(as.factor(idx[[2]]))
   alt <- as.integer(alt_f)
   J <- max(alt)
-  id_f <- as.factor(idx[[1]])
+  id_f <- droplevels(as.factor(idx[[1]]))
   ids <- as.integer(id_f)
   # Canonical (observation, alternative) order BEFORE anything is built.
   # The core reshape is positional, so a dfidx in alternative-major or
