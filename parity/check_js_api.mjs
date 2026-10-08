@@ -1769,5 +1769,26 @@ accepts("the inverse takes a scalar D, matching python",
           "top-k refuses a malformed base.resolution (#600)", "resolution");
 }
 
+// --- polishRace certifies a solved KKT point, without the FD re-solve (#547)
+{
+  const o = polish.polishRace({ mu0: [-1, 0, 1], D: [1, 1, 1], points: 129,
+                                nameCaps: [0.55, NaN, NaN], fdFallback: false });
+  const pyMu = [-0.6167863985024332, -0.3124412243042889, 0.9292276228067221];
+  holds("a binding name cap reports converged (#547)", o.info.converged === true);
+  holds("...with the right active set and no violation (#547)",
+        o.info.active.length === 1 && o.info.active[0] === 0 && o.info.maxViolation <= 1e-8);
+  holds("...at python's SLSQP optimum (#547)",
+        Math.max(...o.mu.map((v, i) => Math.abs(v - pyMu[i]))) < 1e-7 && Math.abs(o.p[0] - 0.55) < 1e-8);
+}
+
+// --- polishRace is equivariant under a change of ability units (#593)
+for (const c of [1e-8, 100]) {
+  const o = polish.polishRace({ mu0: [-1.5 * c, -1.5 * c, 3 * c], D: [c * c, c * c, c * c],
+                                groups: [[[0, 1], 0.9]], points: 257 });
+  holds(`polishRace at units x${c} is the unit-scale optimum (#593)`,
+        o.info.converged && Math.abs(o.p[0] + o.p[1] - 0.9) < 1e-7 &&
+        Math.abs(o.mu[2] / c - 0.7279331) < 1e-5, `${o.mu.map(x => x / c)}`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
