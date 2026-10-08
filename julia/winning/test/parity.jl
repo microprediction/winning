@@ -93,7 +93,8 @@ function run_parity(vectors_path::AbstractString)
             fails += 1
             continue
         end
-        d = maximum(abs.(got .- ref))
+        # a length mismatch is a failure, not a broadcast (#490)
+        d = length(got) == length(ref) ? maximum(abs.(got .- ref)) : Inf
         ok = d <= tol
         println("$(ok ? "ok  " : "FAIL")  $(rpad(name, 28)) max|diff| " *
                 "$(round(d, sigdigits = 3))  (tol $tol)")

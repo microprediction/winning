@@ -38,7 +38,7 @@ def run(c):
         p = top_k_probabilities(np.asarray(mu, float), c["k"], V=V, D=D)
     a = np.asarray(p, float)
     return ("ACCEPT" if np.isfinite(a).all() else "ACCEPT_NONFINITE",
-            [float(v) for v in a.ravel()[:6]])
+            [float(v) for v in a.ravel()])   # all of it (#490)
 
 out = {}
 cases = json.load(open(sys.argv[1]))["cases"]
