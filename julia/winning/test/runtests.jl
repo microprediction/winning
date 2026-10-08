@@ -266,3 +266,53 @@ end
           race_probabilities(mu3; V = V2, D = D2, F = h.F, W = h.W,
                              points = 257) atol = 1e-14
 end
+
+@testset "scalar D through every top-k/rank entry point (#485)" begin
+    mu = [0.0, 0.3, -0.2, 0.5]
+    Jv = top_k_jacobians(mu, 2; D = ones(4), points = 257)
+    Js = top_k_jacobians(mu, 2; D = 1.0, points = 257)
+    @test Js.Jmu == Jv.Jmu && Js.Jsigma == Jv.Jsigma
+    V = reshape([0.4, -0.2, 0.1, -0.3], 4, 1)
+    @test top_k_jacobians(mu, 2; D = 1.0, V = V, points = 257).Jmu ==
+          top_k_jacobians(mu, 2; D = ones(4), V = V, points = 257).Jmu
+    @test top_k_probabilities(mu, 2; D = 2.0, points = 257) ==
+          top_k_probabilities(mu, 2; D = fill(2.0, 4), points = 257)
+    @test rank_probabilities(mu; D = 1.0, points = 257) ==
+          rank_probabilities(mu; D = ones(4), points = 257)
+    q1 = top_k_probabilities(mu, 1; points = 257)
+    q2 = top_k_probabilities(mu, 2; points = 257)
+    a = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = 1.0, points = 257)
+    b = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = ones(4), points = 257)
+    @test a.mu == b.mu && a.sd == b.sd
+    for bad in ([1.0, 1.0], [1.0, 1.0, 0.0, 1.0], [1.0, -1.0, 1.0, 1.0],
+                [1.0, NaN, 1.0, 1.0], [1.0, Inf, 1.0, 1.0], 0.0)
+        @test_throws ArgumentError top_k_jacobians(mu, 2; D = bad, points = 257)
+        @test_throws ArgumentError top_k_probabilities(mu, 2; D = bad,
+                                                       points = 257)
+        @test_throws ArgumentError loc_scale_from_topk_pair(q1, 1, q2, 2;
+                                                            D0 = bad,
+                                                            points = 257)
+    end
+end
+
+@testset "exact loc/scale warm start returns in the gauge (#595)" begin
+    mu = [-3.0, -1.0, 1.0, 3.0]
+    sd = [2.0, 3.0, 4.0, 5.0]
+    D = sd .^ 2
+    q1 = top_k_probabilities(mu, 1; D = D, points = 1025)
+    q2 = top_k_probabilities(mu, 2; D = D, points = 1025)
+    fit = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = D, mu0 = mu,
+                                   points = 1025, return_info = true)
+    @test fit.converged
+    @test abs(sum(fit.mu)) < 1e-12
+    @test abs(sum(log.(fit.sd))) < 1e-12
+    c = exp(sum(log.(sd)) / 4)
+    @test fit.mu ≈ mu ./ c atol = 1e-12
+    @test fit.sd ≈ sd ./ c atol = 1e-12
+    @test fit.sd ≈ [0.604275079471354, 0.906412619207030,
+                    1.208550158942707, 1.510687698678384] atol = 1e-12
+    p2 = q2 .- q1
+    w = loc_scale_from_win_and_second(q1, p2; D0 = D, mu0 = mu,
+                                      points = 1025, return_info = true)
+    @test abs(sum(w.mu)) < 1e-12 && abs(sum(log.(w.sd))) < 1e-12
+end

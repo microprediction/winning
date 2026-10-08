@@ -277,23 +277,30 @@ end
 
 # ---- race setup (adaptive factor quadrature, matching R) -----------
 
+# A scalar D is the same variance for everyone, as as_idio states;
+# a zero variance is a contestant with no idiosyncratic noise, which
+# this lattice cannot represent -- it returned NaN where python, R
+# and the browser all refuse. Found by the cross-port divergence
+# scan. Shared by the winner race and every top-k/rank entry point,
+# which used to collect(D) themselves and failed on a scalar (#485).
+function _as_idio(D, n::Integer; name = "D")
+    D === nothing && return ones(n)
+    Dv = D isa Number ? [Float64(D)] : Float64.(vec(collect(D)))
+    length(Dv) == 1 && (Dv = fill(Dv[1], n))
+    length(Dv) == n || throw(ArgumentError(
+        name * " must be a scalar or one idiosyncratic variance per " *
+        "contestant; got " * string(length(Dv)) * " for " * string(n)))
+    all(isfinite, Dv) || throw(ArgumentError(name * " has a non-finite entry"))
+    all(>(0.0), Dv) || throw(ArgumentError(
+        name * " must be strictly positive here: a zero variance is a " *
+        "contestant the lattice cannot represent"))
+    return Dv
+end
+
 function _race_setup(mu, V, D, F, W, base)
     mu = Float64.(collect(mu))
     n = length(mu)
-    D = D === nothing ? ones(n) : Float64.(collect(D))
-    # A scalar D is the same variance for everyone, as as_idio states;
-    # a zero variance is a contestant with no idiosyncratic noise, which
-    # this lattice cannot represent -- it returned NaN where python, R
-    # and the browser all refuse. Found by the cross-port divergence
-    # scan.
-    length(D) == 1 && (D = fill(D[1], n))
-    length(D) == n || throw(ArgumentError(
-        "D must be a scalar or one idiosyncratic variance per contestant; " *
-        "got " * string(length(D)) * " for " * string(n)))
-    all(isfinite, D) || throw(ArgumentError("D has a non-finite entry"))
-    all(>(0.0), D) || throw(ArgumentError(
-        "D must be strictly positive here: a zero variance is a " *
-        "contestant the lattice cannot represent"))
+    D = _as_idio(D, n)
     if V === nothing
         Vm = zeros(n, 1)
         Fm = zeros(1, 1)
