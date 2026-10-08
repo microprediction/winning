@@ -2,8 +2,9 @@
 
 The race verbs price N(m, diag(d) + W W') in time linear in the number
 of entrants, so a belief that keeps that form after every observation
-can be priced after every observation. Three updates do keep it, and
-are implemented here exactly (papers/exact_pom, Section 3):
+can be priced after every observation. Three updates keep it at a
+known rank and are implemented here exactly (papers/exact_pom,
+Section 3):
 
     crn_posterior             n common-random-number replicates of every
                               entrant (Section 3.1). Rank = the number of
@@ -15,6 +16,13 @@ are implemented here exactly (papers/exact_pom, Section 3):
     feature_bandit_posterior  per-arm pulls under a shared-feature prior
                               (Section 3.2, the stable form of Eq. 14).
                               Rank = the prior's.
+
+A fourth, observing a contrast a'theta (update_contrast), keeps it only
+at a cost in rank: the posterior covariance Sigma - g g'/s is a rank-one
+DOWNDATE, which diag(D) + V V' cannot absorb with the same D and rank.
+update_contrast represents it exactly with |support(a)| - 1 extra
+columns and a smaller D on a's support, or (refit=True) refits it to a
+bounded rank with fit_covariance and reports the residual.
 
 Max-wins and min-wins are the caller's affair: these are beliefs about
 theta, and race_probabilities(-m, V=-W, D=d) is the max race on them.
@@ -254,3 +262,131 @@ def feature_bandit_posterior(V0, d0, counts, sums, sigma_n):
     m = d * h + W @ (W.T @ h)
     return m, d, W
 
+
+def _psd_sqrt(C):
+    """Symmetric square root of a positive semidefinite matrix."""
+    lam, Q = np.linalg.eigh(0.5 * (C + C.T))
+    return (Q * np.sqrt(np.maximum(lam, 0.0))) @ Q.T
+
+
+def update_contrast(m, cov, a, mean, var, refit=False):
+    """Condition a Gaussian belief on a'theta ~ N(mean, var), exactly.
+
+    The Kalman update for one linear observation: g = Sigma a,
+    s = a' Sigma a + var, m' = m + g (mean - a'm)/s,
+    Sigma' = Sigma - g g'/s. Typical a: child minus parent (e_i - e_j),
+    an external judgment of their difference with its own error
+    variance. (update_team_margins_full reaches the same update with
+    A = [e_i; e_j], scores=[mean, 0] and beta2 = var/2.)
+
+    cov is a dense Sigma, returning (m', Sigma'), or a factor belief
+    (V, D) / (V, D, F, W) with Sigma = V V' + diag(D), D > 0 (F, W:
+    quadrature nodes and weights, as fit_covariance returns them),
+    returning (m', V', D', F', W', report).
+
+    The factor form is kept EXACTLY, at a cost in rank. Sigma' is a
+    rank-one downdate, which diag(D) + V V' cannot absorb with the same
+    D and rank (a orthogonal to every loading does not rescue it: then
+    g = D a, still off-diagonal once a touches two entrants). Write
+    theta = m + V f + e. Given f the observation sees only a'e, so with
+    S the support of a, b = V'a, s_e = a'Da + var:
+
+        theta | data = m'' + Vt f + zeta,   Vt = V - D a b'/s_e,
+        f | data ~ N(fhat, I - b b'/(b'b + s_e)),
+        zeta ~ N(0, diag(D) - (D a)(D a)'/s_e)   (differs from D on S only).
+
+    The S x S block Z of Cov(zeta) splits as c diag(Z) + (Z - c diag(Z))
+    with c the smallest eigenvalue of Z's correlation matrix (c > 0
+    because var > 0); the second part is PSD of rank |S| - 1. So
+
+        V' = [Vt (I - b b'/(b'b + s_e))^{1/2},  E_S (Z - c diag Z)^{1/2}],
+        D' = D off S,  c diag(Z) on S,
+
+    exact, rank rho + |S| - 1: unchanged for a single-entrant
+    observation, one more column per two-entrant contrast. D' shrinks
+    on S as var -> 0 (the contrast becomes known; var = 0 is a point
+    mass and is refused). F, W are passed through when the rank is
+    unchanged and given, else a fresh Sobol rule of the new rank.
+    report: {"exact": True, "rank": ...}.
+
+    refit=True instead forms Sigma' densely (exactly) and refits it with
+    fit_covariance(k = rank of V), returning its residual diagnostics
+    in report with report["exact"] False. That bounds the rank, at the
+    price of the fit residual (measured: contrast_residual_max 0.26 on
+    a 40-entrant rank-2 example), and the fit is to the choice-relevant
+    part of Sigma' only, so chain further updates on the exact form.
+
+    a must be finite and nonzero, var finite and > 0. The exact factor
+    path costs O(n rho^2 + |S|^3); dense and refit paths O(n^2) memory.
+    """
+    mv = np.asarray(m, dtype=float)
+    if mv.ndim != 1:
+        raise ValueError(f"m must be a vector; got shape {mv.shape}")
+    K = len(mv)
+    mv = _finite_vector(mv, K, "m")
+    av = _finite_vector(a, K, "a")
+    if not (av != 0).any():
+        raise ValueError("a is the zero vector: it observes nothing")
+    mean = float(mean)
+    if not np.isfinite(mean):
+        raise ValueError("mean must be finite")
+    var = float(var)
+    if not (np.isfinite(var) and var > 0.0):
+        raise ValueError(
+            f"var must be finite and > 0; got {var!r}. var = 0 is a hard "
+            "constraint (a point mass on a'theta), outside the scope of "
+            "this update")
+    if not isinstance(cov, tuple):
+        S = np.asarray(cov, dtype=float)
+        if S.shape != (K, K):
+            raise ValueError(f"cov must be ({K}, {K}) or a factor tuple; "
+                             f"got shape {S.shape}")
+        if not np.isfinite(S).all():
+            raise ValueError("cov has a non-finite entry")
+        g = S @ av
+        s = float(av @ g) + var
+        m_new = mv + g * ((mean - float(av @ mv)) / s)
+        S_new = S - np.outer(g, g) / s
+        return m_new, 0.5 * (S_new + S_new.T)
+    if len(cov) not in (2, 4):
+        raise ValueError("a factor cov is (V, D) or (V, D, F, W)")
+    Vm = as_loadings(cov[0], K)
+    Dv = as_idio(cov[1], K, positive=True)
+    rho = Vm.shape[1]
+    b = Vm.T @ av
+    Da = Dv * av
+    s_e = float(av @ Da) + var
+    s = float(b @ b) + s_e
+    g = Vm @ b + Da
+    m_new = mv + g * ((mean - float(av @ mv)) / s)
+    if refit:
+        from .core import fit_covariance
+        S_new = Vm @ Vm.T + np.diag(Dv) - np.outer(g, g) / s
+        S_new = 0.5 * (S_new + S_new.T)
+        V_new, D_new, F, Wq, report = fit_covariance(
+            S_new, k=max(rho, 1), return_report=True)
+        return m_new, V_new, D_new, F, Wq, dict(report, exact=False)
+    sup = np.flatnonzero(av)
+    Vt = Vm - np.outer(Da, b) / s_e
+    cols = [Vt @ _psd_sqrt(np.eye(rho) - np.outer(b, b) / s)]
+    Z = np.diag(Dv[sup]) - np.outer(Da[sup], Da[sup]) / s_e
+    z = np.sqrt(np.diag(Z))
+    lam, U = np.linalg.eigh(Z / np.outer(z, z))
+    c = max(float(lam[0]), 0.0)
+    D_new = Dv.copy()
+    D_new[sup] = c * z ** 2
+    if len(sup) > 1:
+        E = np.zeros((K, len(sup) - 1))
+        E[sup] = (z[:, None] * U[:, 1:]) * np.sqrt(np.maximum(lam[1:] - c,
+                                                               0.0))
+        cols.append(E)
+    V_new = np.hstack(cols)
+    r = V_new.shape[1]
+    if len(cov) == 4 and r == rho:
+        F, Wq = cov[2], cov[3]
+    elif r == 0:
+        F, Wq = np.zeros((1, 0)), np.ones(1)
+    else:
+        from .core import qmc_nodes
+        F, Wq = qmc_nodes(r, m=11, seed=0)
+    return m_new, V_new, D_new, F, Wq, {"exact": True, "rank": r}

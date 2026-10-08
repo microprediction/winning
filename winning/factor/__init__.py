@@ -36,4 +36,5 @@ from .posteriors import (  # noqa: F401
     crn_posterior,
     crn_posterior_replicates,
     feature_bandit_posterior,
+    update_contrast,
 )

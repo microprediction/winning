@@ -151,6 +151,9 @@ SURFACE = {
     "top_k_probabilities":                 (PARITY, PARITY, ""),
     "tree_race_jacobian":                  (PARITY, PARITY, ""),
     "tree_race_probabilities":             (PARITY, PARITY, ""),
+    "update_contrast":                     (GAP, GAP,
+                                        "python only: a belief update (#625), not a race"
+                                        " verb; its output feeds the ported verbs"),
     "win_probabilities":                   (GAP, GAP,
                                         "alias of a verb that carries the parity scenario"),
     "win_probabilities_factor":            (PRESENT, GAP,

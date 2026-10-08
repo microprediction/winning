@@ -121,6 +121,10 @@ the module docstrings give the measured cost of crossing over.
   `crn_posterior_replicates` when entrants ran on different replicates)
   and for a shared-feature bandit (`feature_bandit_posterior`), each
   returning `(m, d, W)` ready for `race_probabilities(-m, V=-W, D=d)`.
+  `update_contrast` conditions a dense or factor belief on one linear
+  observation `a'theta ~ N(mean, var)`, such as a judgment of child
+  minus parent (exact; a factor belief stays exact at one extra
+  column per two-entrant contrast, or is refitted on request).
 
 - `winning.probit`: the same machine in the probit literature's
   max-wins, utilities-and-shares conventions.
