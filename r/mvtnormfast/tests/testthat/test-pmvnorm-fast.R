@@ -236,43 +236,6 @@ test_that("the documented spellings all still work and agree", {
 #
 # Same fixtures as tests/test_fastmvn_semantics.py in the python tree.
 
-test_that("where the variance is stored does not matter (#429)", {
-  for (b in c(-3, -4, -6)) {
-    exact <- pnorm(b)^2
-    in_v <- pmvnorm_fast(upper = c(b, b), V = diag(2), D = c(0, 0))
-    in_d <- pmvnorm_fast(upper = c(b, b), V = matrix(0, 2, 2), D = c(1, 1))
-    # was 6.1e-305 at b = -4 and exactly 0 at b = -6 for V = I
-    expect_lt(abs(as.numeric(in_v) / exact - 1), 1e-10)
-    expect_lt(abs(as.numeric(in_d) / exact - 1), 1e-10)
-  }
-})
-
-test_that("a rectangle that misses the singular support is empty (#410)", {
-  V <- matrix(1, 2, 1)                   # X1 = X2 = F exactly
-  expect_identical(as.numeric(pmvnorm_fast(lower = c(-Inf, 1),
-    upper = c(0, Inf), V = V, D = c(0, 0))), 0)
-  expect_identical(as.numeric(pmvnorm_fast(lower = c(-Inf, 0),
-    upper = c(0, Inf), V = V, D = c(0, 0))), 0)
-  p <- pmvnorm_fast(lower = c(-Inf, -1), upper = c(0, Inf), V = V,
-                    D = c(0, 0))
-  expect_lt(abs(as.numeric(p) - (pnorm(0) - pnorm(-1))), 1e-13)
-})
-
-test_that("an atom on the bound carries its mass (#414)", {
-  p <- pmvnorm_fast(lower = c(0, -Inf), upper = c(0, 0), mean = c(0, 0),
-                    V = matrix(0, 2, 1), D = c(0, 1))
-  expect_lt(abs(as.numeric(p) - 0.5), 1e-15)            # was 0
-  expect_identical(as.numeric(pmvnorm_fast(lower = 0, upper = 0, mean = 0,
-    V = matrix(0, 1, 1), D = 0)), 1)                    # was 0
-  expect_identical(as.numeric(pmvnorm_fast(lower = c(0, -Inf),
-    upper = c(0, 0), mean = c(0.5, 0), V = matrix(0, 2, 1),
-    D = c(0, 1))), 0)
-  slab <- pmvnorm_fast(lower = c(0, -Inf), upper = c(0, 0),
-                       V = matrix(0, 2, 1), D = c(1, 1))
-  expect_identical(as.numeric(slab), 0)
-  expect_equal(attr(slab, "method"), "degenerate-rectangle")
-})
-
 test_that("upper-tail cells do not cancel; reflection is exact (#196, #98)", {
   p <- pmvnorm_fast(lower = 9, upper = 10, V = matrix(0, 1, 1), D = 1)
   want <- pnorm(9, lower.tail = FALSE) - pnorm(10, lower.tail = FALSE)

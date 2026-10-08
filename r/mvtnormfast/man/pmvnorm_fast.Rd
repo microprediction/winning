@@ -28,9 +28,7 @@ pmvnorm_fast(lower = -Inf, upper = Inf, mean = NULL, sigma = NULL,
 A single probability. Attribute \code{method} records the path taken:
 \code{"factor"}, \code{"factor-recentered"} (deep tails, below 1e-8 or
 resolved by too few low-discrepancy nodes, evaluated by recentered
-importance reweighting), \code{"factor-ghk"} (rows with \code{D = 0} and
-a nonzero loading, whose slab constraints are integrated exactly by
-sequential conditioning), \code{"degenerate-rectangle"},
+importance reweighting), \code{"degenerate-rectangle"},
 \code{"outside-support"}, or \code{"mvtnorm-fallback"}.
 }
 \details{

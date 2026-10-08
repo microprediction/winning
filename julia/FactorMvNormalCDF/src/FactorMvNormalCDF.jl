@@ -366,8 +366,7 @@ every port used to clamp its negative conditional cell to the underflow
 floor and return a finite probability (#235). `mvtnorm::pmvnorm`, which
 the R port is a drop-in for, raises on reversed bounds.
 
-What `lower == upper` means is decided by `_drop_constants`, because it
-depends on the covariance (#414).
+`lower == upper` is a zero-mass slab; `_drop_constants` returns it.
 """
 function _check_bounds(lo, up)
     for i in eachindex(lo, up)
@@ -386,15 +385,16 @@ end
 """
     _drop_constants(var, mu, lo, up) -> (keep, answer)
 
-A coordinate of zero marginal variance is the constant `mu_i`: it
-contributes the INDICATOR `lo_i <= mu_i <= up_i`, inclusive, and is
-independent of the rest. A miss is an empty rectangle and a hit leaves
-the integral. `lower == upper` is then zero mass only where the
-variance is positive; it used to be zero mass everywhere, so an atom at
-the bound beside N(0, 1) priced 0 where the answer is 0.5 (#414).
-`answer` is `nothing` or the `(p, method)` result.
+`lower == upper` on any coordinate is a zero-mass slab, as in
+`mvtnorm::pmvnorm`. A coordinate of zero marginal variance is the
+constant `mu_i`: outside its interval the rectangle is empty; inside, it
+leaves the integral. Near-deterministic (Dirac) inputs are otherwise out
+of scope. `answer` is `nothing` or the `(p, method)` result.
 """
 function _drop_constants(var, mu, lo, up)
+    for i in eachindex(var)
+        lo[i] == up[i] && return falses(length(var)), (0.0, "degenerate-rectangle")
+    end
     const_ = var .== 0.0
     for i in eachindex(var)
         if const_[i] && (mu[i] < lo[i] || mu[i] > up[i])
@@ -402,9 +402,6 @@ function _drop_constants(var, mu, lo, up)
         end
     end
     keep = .!const_
-    for i in eachindex(var)
-        keep[i] && lo[i] == up[i] && return keep, (0.0, "degenerate-rectangle")
-    end
     any(keep) || return keep, (1.0, "factor")
     return keep, nothing
 end

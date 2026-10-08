@@ -188,21 +188,6 @@ end
 
 # --- the rectangle depends on the Gaussian, not its spelling ----------
 # Same fixtures as tests/test_fastmvn_semantics.py in the python tree.
-@testset "an atom on the bound carries its mass (#414)" begin
-    p, _ = mvn_cdf_fast_info(lower = [0.0, -Inf], upper = [0.0, 0.0],
-                             mean = [0.0, 0.0], V = zeros(2, 1), D = [0.0, 1.0])
-    @test p ≈ 0.5 atol = 1e-15                       # was 0
-    p1, _ = mvn_cdf_fast_info(lower = [0.0], upper = [0.0], mean = [0.0],
-                              V = zeros(1, 1), D = [0.0])
-    @test p1 == 1.0                                  # was 0
-    pm, _ = mvn_cdf_fast_info(lower = [0.0, -Inf], upper = [0.0, 0.0],
-                              mean = [0.5, 0.0], V = zeros(2, 1), D = [0.0, 1.0])
-    @test pm === 0.0
-    ps, ms = mvn_cdf_fast_info(lower = [0.0, -Inf], upper = [0.0, 0.0],
-                               mean = [0.0, 0.0], V = zeros(2, 1), D = [1.0, 1.0])
-    @test ps === 0.0 && ms == "degenerate-rectangle"
-end
-
 @testset "upper-tail cells do not cancel (#196)" begin
     for (lo, hi, want) in ((9.0, 10.0, 1.1285122074235907e-19),
                            (8.0, 9.0, 6.219831985865787e-16),

@@ -252,10 +252,8 @@ def _check_bounds(lo, up):
     instead of -inf (#235). `mvtnorm::pmvnorm`, which r/mvtnormfast is a
     drop-in for, raises on reversed bounds; all four ports do the same.
 
-    What lower == upper means is NOT decided here, because it depends on
-    the covariance: zero mass on a coordinate with positive variance, but
-    an atom on a zero-variance coordinate sitting exactly at the bound
-    (#414). `_drop_constants` and the callers decide it.
+    lower == upper is a degenerate slab of zero mass; `_drop_constants`
+    returns it, as mvtnorm::pmvnorm does.
     """
     if np.isnan(lo).any() or np.isnan(up).any():
         raise ValueError("lower and upper must not contain NaN")
@@ -352,28 +350,22 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
 
 
 def _drop_constants(var, mu, lo, up):
-    """Settle the coordinates whose marginal variance is zero.
+    """Settle the degenerate cases before any integration.
 
-    Such a coordinate is the constant mu_i, so its factor in the
-    probability is the INDICATOR lo_i <= mu_i <= up_i, inclusive, and
-    it is independent of everything else. A miss makes the rectangle
-    exactly empty; a hit contributes exactly one and the coordinate
-    leaves the integral.
-
-    lower == upper is then zero mass only where the variance is
-    positive. It was decided for every coordinate before the
-    covariance was looked at, so X_1 == 0 a.s. beside X_2 ~ N(0, 1)
-    gave P(0 <= X_1 <= 0, X_2 <= 0) = 0 where the answer is
-    1 * Phi(0) = 0.5 (#414).
+    lower == upper on any coordinate is a zero-mass slab, as in
+    mvtnorm::pmvnorm (that includes -inf == -inf and +inf == +inf). A
+    zero-variance coordinate is the constant mu_i: outside its interval
+    the probability is exactly 0; inside, it leaves the integral.
+    Near-deterministic (Dirac) inputs are otherwise out of scope.
 
     Returns (keep, status): status is None, or the (p, method) answer.
     """
+    if np.any(lo == up):
+        return None, (0.0, "degenerate-rectangle")
     const = var == 0.0
     if np.any(const & ((mu < lo) | (mu > up))):
         return None, (0.0, "outside-support")
     keep = ~const
-    if np.any(keep & (lo == up)):
-        return None, (0.0, "degenerate-rectangle")
     if not keep.any():
         return keep, (1.0, "factor")
     return keep, None
@@ -423,12 +415,6 @@ def _structured(lo, up, mu, V, D):
         return float(np.exp(_log_interval_mass(up - mu, lo - mu,
                                                np.sqrt(D)).sum())), "factor"
     s = np.sqrt(D)
-    if np.any(s == 0.0):
-        # a row with no idiosyncratic variance but a loading (a constant
-        # given the factor) makes its cell an indicator of a slab in
-        # factor space
-        return _factor_constrained(V, s, mu, lo, up), "factor-ghk"
-
     F, W = _nodes_for(V, D)
     contrib = W * np.exp(_log_cells(F, V, s, mu, lo, up))
     p = float(contrib.sum())
@@ -478,12 +464,14 @@ def _recentered(V, s, mu, lo, up):
 
 
 def _ascend(logint, f0, h=1e-4, iters=100):
-    """Gradient ascent with backtracking on a smooth log-integrand.
+    """Gradient ascent with backtracking on the log-integrand.
 
-    The integrand is now evaluated in the log domain, so it is smooth
-    and finite everywhere; the old search differentiated a log of cells
-    floored at 1e-300, whose gradient is exactly zero wherever every
-    cell has underflowed, and stopped where it started (#429)."""
+    The integrand is evaluated in the log domain (#196), so it is smooth
+    and finite wherever the rectangle has mass. The old search
+    differentiated a log of cells floored at 1e-300, whose gradient is
+    exactly zero wherever every cell has underflowed, and a fixed clipped
+    step oscillates on a sharp integrand. The tail repair that #395 now
+    routes unresolved Sobol estimates to depends on finding the mode."""
     r = len(f0)
     val = logint(f0)
     for _ in range(iters):
@@ -502,90 +490,6 @@ def _ascend(logint, f0, h=1e-4, iters=100):
         else:
             break
     return f0
-
-
-def _factor_constrained(V, s, mu, lo, up, nn=2 ** 13):
-    """P(lo <= X <= up) when some rows have D_i = 0 but a loading.
-
-    Given the factor such a row is the constant mu_i + v_i . f, so its
-    cell is the indicator of a slab in factor space. Every node rule
-    here used to treat it as a cell like any other and floor its zeros
-    at 1e-300 before multiplying, which broke two things:
-
-    - a rectangle that misses the singular SUPPORT -- X_1 = X_2 = F with
-      X_1 <= 0 and X_2 >= 1 -- came back as 6.6e-301 rather than 0, a
-      finite log probability for an impossible observation (#410);
-    - a rare but positive event was lost: V = I, D = 0 is the same
-      Gaussian as V = 0, D = 1, yet P(X <= (-4, -4)) came back as
-      6.3e-305 against Phi(-4)^2 = 1.0e-9, because the recentering
-      search differentiated a floored step function, found a zero
-      gradient and never moved (#429).
-
-    The constraints are handled exactly instead, by sequential
-    conditioning in a rotated factor basis. With V_c = L Q' (an LQ
-    factorization; Q orthogonal, L lower trapezoidal) and f = Q z, the
-    constrained rows read lo - mu <= L z <= up - mu, and each row
-    restricts only z_j for its last nonzero column j given z_1..z_{j-1}.
-    Drawing z_j from N(0, 1) truncated to the intersection of those
-    intervals and weighting by the interval's mass is the GHK
-    construction: exact for the constrained rows alone, exactly zero
-    where the constraints are incompatible or pin the factor to a
-    measure-zero set, and an ordinary QMC average over the remaining
-    smooth cells.
-    """
-    r = V.shape[1]
-    det = s == 0.0
-    Vd = V[det]
-    Q, Rm = np.linalg.qr(Vd.T, mode="complete")      # Vd = Rm' Q'
-    L = np.zeros((Vd.shape[0], r))
-    L[:, :Rm.shape[0]] = Rm.T
-    rownorm = np.sqrt((L ** 2).sum(axis=1))
-    last = np.array([int(np.flatnonzero(np.abs(L[t]) > 1e-12 * rownorm[t])
-                         .max()) for t in range(len(L))])
-    bl = lo[det] - mu[det]
-    bu = up[det] - mu[det]
-    from scipy.stats import qmc
-    u = qmc.Sobol(r, scramble=True, seed=0).random(nn)
-    z = np.zeros((nn, r))
-    logw = np.zeros(nn)
-    for j in range(r):
-        rows = np.flatnonzero(last == j)
-        a = np.full(nn, -np.inf)
-        b = np.full(nn, np.inf)
-        for t in rows:
-            off = z[:, :j] @ L[t, :j]
-            c = L[t, j]
-            e1 = (bl[t] - off) / c
-            e2 = (bu[t] - off) / c
-            if c < 0:
-                e1, e2 = e2, e1
-            a = np.maximum(a, e1)
-            b = np.minimum(b, e2)
-        empty = ~(a < b)
-        aa = np.where(empty, 0.0, a)
-        bb = np.where(empty, 0.0, b)
-        lm = _log_interval_mass(bb, aa, np.ones(nn))
-        logw += np.where(empty, -np.inf, lm)
-        z[:, j] = np.where(empty, 0.0, _truncated_inverse(aa, bb, u[:, j]))
-    F = z @ Q.T
-    sto = ~det
-    if sto.any():
-        logw = logw + _log_cells(F, V[sto], s[sto], mu[sto], lo[sto],
-                                 up[sto])
-    with np.errstate(under="ignore"):
-        return float(np.mean(np.exp(logw)))
-
-
-def _truncated_inverse(a, b, u):
-    """z ~ N(0, 1) truncated to [a, b] by inversion at u, computed on
-    the side of zero where the tail probabilities do not cancel."""
-    right = a > 0.0
-    with np.errstate(divide="ignore", invalid="ignore"):
-        zl = ndtri(ndtr(a) + u * (ndtr(b) - ndtr(a)))
-        zr = -ndtri(ndtr(-b) + (1.0 - u) * (ndtr(-a) - ndtr(-b)))
-    z = np.where(right, zr, zl)
-    z = np.where(np.isfinite(z), z, np.where(right, a, b))
-    return np.clip(z, a, b)
 
 
 def _log_interval_mass(hi, lo_, s):

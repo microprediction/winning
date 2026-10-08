@@ -134,9 +134,7 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 # back as a finite probability (#235). mvtnorm::pmvnorm raises on reversed
 # bounds; all four ports agree with it.
 #
-# What lower == upper means is decided by .drop_constants, because it
-# depends on the covariance: zero mass where the variance is positive, an
-# atom on a zero-variance coordinate sitting at the bound (#414).
+# lower == upper is a zero-mass slab; .drop_constants returns it.
 .check_bounds <- function(lower, upper) {
   bad <- which(lower > upper)
   if (length(bad)) {
@@ -149,19 +147,18 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
   invisible(TRUE)
 }
 
-# Settle the coordinates whose marginal variance is zero: each is the
-# constant mean_i, so it contributes the INDICATOR lower_i <= mean_i <=
-# upper_i, inclusive, and is independent of the rest. A miss is an empty
-# rectangle; a hit leaves the integral. lower == upper is then zero mass
-# only where the variance is positive (#414: an atom at the bound beside
-# N(0, 1) returned 0 where the answer is 0.5).
+# Settle the degenerate cases before any integration. lower == upper on
+# any coordinate is a zero-mass slab, as in mvtnorm::pmvnorm. A
+# zero-variance coordinate is the constant mean_i: outside its interval
+# the rectangle is empty; inside, it leaves the integral. Near-
+# deterministic (Dirac) inputs are otherwise out of scope.
 .drop_constants <- function(var, mean, lower, upper) {
+  if (any(lower == upper))
+    return(list(done = structure(0, method = "degenerate-rectangle")))
   const <- var == 0
   if (any(const & (mean < lower | mean > upper)))
     return(list(done = structure(0, method = "outside-support")))
   keep <- !const
-  if (any(keep & lower == upper))
-    return(list(done = structure(0, method = "degenerate-rectangle")))
   if (!any(keep)) return(list(done = structure(1, method = "factor")))
   list(keep = keep, done = NULL)
 }
@@ -182,7 +179,7 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 # rectangle and its reflection got different probabilities (#98, #196).
 # Upper-tail intervals are reflected to the lower tail and
 # pnorm(log.p = TRUE) carries the deep tail, so nothing needs a floor: an
-# exactly empty cell is -Inf and stays -Inf (#410).
+# exactly empty cell is -Inf and stays -Inf.
 #
 # A coordinate with zero idiosyncratic variance is DETERMINISTIC given the
 # factor draw, so its cell is an INDICATOR (#206). `hi` and `lo` are
@@ -216,9 +213,10 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
   out
 }
 
-# Gradient ascent with backtracking on a smooth log-integrand. The old
-# search differentiated a log of cells floored at 1e-300, whose gradient
-# is exactly zero wherever every cell has underflowed (#429).
+# Gradient ascent with backtracking on the log-integrand. The old search
+# differentiated a log of cells floored at 1e-300, whose gradient is
+# exactly zero wherever every cell has underflowed; the tail repair that
+# #395 routes unresolved estimates to depends on finding the mode.
 .ascend <- function(logint, f0, h = 1e-4, iters = 100L) {
   r <- length(f0)
   val <- logint(f0)
@@ -239,74 +237,6 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
     if (!moved) break
   }
   f0
-}
-
-# z ~ N(0, 1) truncated to [a, b] by inversion at u, on the side of zero
-# where the tail probabilities do not cancel.
-.truncated_inverse <- function(a, b, u) {
-  right <- a > 0
-  zl <- suppressWarnings(qnorm(pnorm(a) + u * (pnorm(b) - pnorm(a))))
-  pa <- pnorm(a, lower.tail = FALSE); pb <- pnorm(b, lower.tail = FALSE)
-  zr <- suppressWarnings(qnorm(pb + (1 - u) * (pa - pb),
-                               lower.tail = FALSE))
-  z <- ifelse(right, zr, zl)
-  z <- ifelse(is.finite(z), z, ifelse(right, a, b))
-  pmin(pmax(z, a), b)
-}
-
-# P(lower <= X <= upper) when some rows have D_i = 0 but a loading: given
-# the factor such a row is constant, so its cell is the indicator of a
-# slab in factor space. Flooring those zeros at 1e-300 gave an impossible
-# rectangle a finite probability (#410) and lost a rare positive one --
-# V = I, D = 0 against V = 0, D = 1 differed by 295 orders of magnitude
-# (#429). Handled exactly by sequential conditioning (GHK) in a rotated
-# factor basis: with Vd = L Q' and f = Q z, each constrained row
-# restricts only z_j for its last nonzero column j given z_1..z_{j-1}.
-# Same construction as winning/fastmvn.py::_factor_constrained.
-.factor_constrained <- function(V, s, mean, lower, upper, nn = 2^13) {
-  r <- ncol(V)
-  det <- s == 0
-  Vd <- V[det, , drop = FALSE]
-  k <- nrow(Vd)
-  qrd <- qr(t(Vd))
-  Q <- qr.Q(qrd, complete = TRUE)
-  Rm <- qr.R(qrd, complete = TRUE)
-  L <- matrix(0, k, r)
-  L[qrd$pivot, seq_len(nrow(Rm))] <- t(Rm)
-  last <- vapply(seq_len(k), function(t) {
-    max(which(abs(L[t, ]) > 1e-12 * sqrt(sum(L[t, ]^2))))
-  }, 0L)
-  bl <- lower[det] - mean[det]
-  bu <- upper[det] - mean[det]
-  u <- matrix(.sobol_unit(r, nn, seed = 0L), ncol = r)
-  z <- matrix(0, nn, r)
-  logw <- numeric(nn)
-  for (j in seq_len(r)) {
-    a <- rep(-Inf, nn); b <- rep(Inf, nn)
-    for (t in which(last == j)) {
-      off <- if (j > 1) as.vector(z[, seq_len(j - 1), drop = FALSE] %*%
-                                    L[t, seq_len(j - 1)]) else 0
-      cc <- L[t, j]
-      e1 <- (bl[t] - off) / cc
-      e2 <- (bu[t] - off) / cc
-      if (cc < 0) { tmp <- e1; e1 <- e2; e2 <- tmp }
-      a <- pmax(a, e1); b <- pmin(b, e2)
-    }
-    empty <- !(a < b)
-    aa <- ifelse(empty, 0, a); bb <- ifelse(empty, 0, b)
-    lm <- .log_cell_mass(matrix(bb, ncol = 1), matrix(aa, ncol = 1), 1)[, 1]
-    logw <- logw + ifelse(empty, -Inf, lm)
-    z[, j] <- ifelse(empty, 0, .truncated_inverse(aa, bb, u[, j]))
-  }
-  Fz <- z %*% t(Q)
-  sto <- !det
-  if (any(sto)) {
-    M <- Fz %*% t(V[sto, , drop = FALSE])
-    lo <- sweep(-M, 2, lower[sto] - mean[sto], "+")
-    hi <- sweep(-M, 2, upper[sto] - mean[sto], "+")
-    logw <- logw + rowSums(.log_cell_mass(hi, lo, s[sto]))
-  }
-  mean(exp(logw))
 }
 
 # One place decides what "one value per coordinate" means here, the way
@@ -406,9 +336,6 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     lm <- .log_cell_mass(matrix(upper - mean, 1), matrix(lower - mean, 1), s)
     return(structure(exp(sum(lm)), method = "factor", nodes = 1L))
   }
-  if (any(s == 0))
-    return(structure(.factor_constrained(V, s, mean, lower, upper),
-                     method = "factor-ghk", nodes = 2^13))
   nd <- .nodes_for(V, D)
   M <- nd$F %*% t(V)                        # (Q, n) conditional shifts
   lo <- sweep(-M, 2, lower - mean, "+")     # (Q, n): lower - mean - v'f
