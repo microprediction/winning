@@ -526,6 +526,9 @@ export function gaugeCenter(V) {
  * whole probability vector comes back NaN (#233). The same tabulated
  * cliff was in the R GHK at 30 (#190). */
 export function firstPrimes(d) {
+  // a count: NaN and negatives returned [] (a rank-zero rule), 2.5 three
+  // primes, and Infinity never returned (#557)
+  asCount(d, "count of primes", 0, "firstPrimes");
   const out = [];
   for (let c = 2; out.length < d; c++) {
     let isP = true;

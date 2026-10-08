@@ -134,18 +134,24 @@ function refuseHierarchical(kind, opts) {
 }
 
 function structureScale(s) {
-  const n = s.D.length;
+  if (!isVector(s.cluster))
+    throw new Error(`${s.kind}: cluster must have one label per contestant`);
+  const n = s.cluster.length;
+  // canonical shapes, as the forwards read them: raw indexing made a
+  // scalar D, a scalar or (1, n) loading and a scalar coupling NaN (#597)
+  const L = asLoadings(s.loading, n, "loading");
+  const Dv = asIdio(s.D, n, "D");
+  const G = s.kind === "Nested" && s.coupling != null ? asLoadings(s.coupling, n, "coupling") : null;
   const tot = [];
   for (let i = 0; i < n; i++) {
-    const L = Array.isArray(s.loading[i]) ? s.loading[i] : [Number(s.loading[i])];
-    let v = Number(s.D[i]) + L.reduce((a, b) => a + b * b, 0);
-    if (s.kind === "Nested" && s.coupling) {
-      const g = Array.isArray(s.coupling[i]) ? s.coupling[i] : [Number(s.coupling[i])];
-      v += (s.gamma ?? 1) ** 2 * g.reduce((a, b) => a + b * b, 0);
-    }
+    let v = Dv[i] + L[i].reduce((a, b) => a + b * b, 0);
+    if (G) v += (s.gamma ?? 1) ** 2 * G[i].reduce((a, b) => a + b * b, 0);
     tot.push(v);
   }
   if (s.kind === "Tree") {
+    // the walk below follows parent pointers: validate first, as the
+    // kernels do, or a cyclic tree spins here before they can refuse it
+    validateTree(s.parent, s.strength, new Set(s.cluster).size, "Tree");
     // add each leaf cluster's ancestor variance (labels remapped as the
     // kernel does: sorted unique labels are leaf node ids)
     const labels = [...new Set(s.cluster)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
@@ -310,6 +316,11 @@ export function cutLinkage(Z, n, k) {
     const a = Math.round(Z[m][0]), b = Math.round(Z[m][1]), h = Number(Z[m][2]);
     if (!(a >= 0 && a < n + m && b >= 0 && b < n + m) || !Number.isFinite(h))
       throw new Error(`cutLinkage: row ${m} of the linkage is malformed`);
+    // each cluster is merged exactly once, and never with itself: a
+    // self-merge left the tree disconnected and k = 1 returned two
+    // clusters (#603), as scipy's is_valid_linkage refuses
+    if (a === b || parent[a] !== -1 || parent[b] !== -1)
+      throw new Error(`cutLinkage: row ${m} uses the same cluster more than once`);
     parent[a] = n + m;
     parent[b] = n + m;
     maxd[n + m] = Math.max(h, maxd[a], maxd[b]);

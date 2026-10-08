@@ -617,9 +617,14 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
   // There the matrix is the central difference of the exact forward, as
   // in python's tree_race_jacobian.
   const nC = new Set(cluster).size;
-  if (strength.slice(nC).some(v => v !== 0)) {
+  if (Array.from(strength).slice(nC).some(v => v !== 0)) {
+    // the step from the CANONICAL D and loadings: raw D.map threw for a
+    // scalar D and a typed loading made the step NaN, though the forward
+    // accepts both spellings (#596)
+    const a = blockArgs(mu, cluster, loading, D, "treeRaceJacobian");
+    mu = a.mu;
     const n = mu.length;
-    const tot = D.map((d, i) => d + (Array.isArray(loading) ? loading[i] ** 2 : loading ** 2));
+    const tot = a.D.map((d, i) => d + a.L[i].reduce((s2, v) => s2 + v * v, 0));
     const srt = tot.slice().sort((a, b) => a - b);
     const med = n % 2 ? srt[(n - 1) / 2] : 0.5 * (srt[n / 2 - 1] + srt[n / 2]);
     const h = 1e-5 * Math.sqrt(med);
@@ -660,11 +665,13 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
 
 /* sqrt(median(D_i + |loading_i|^2)): the block race's contrast scale */
 export function blockScale(loading, D, n) {
+  // through the SAME shape contract the forwards use: indexing raw
+  // arguments made a scalar D, a scalar or (1, n) loading, or a scalar
+  // coupling NaN, and the inverse refused its own first iterate (#597)
+  const L = asLoadings(loading, n, "loading");
+  const Dv = asIdio(D, n, "D");
   const tot = [];
-  for (let i = 0; i < n; i++) {
-    const L = Array.isArray(loading[i]) ? loading[i] : [Number(loading[i])];
-    tot.push(Number(D[i]) + L.reduce((a, b) => a + b * b, 0));
-  }
+  for (let i = 0; i < n; i++) tot.push(Dv[i] + L[i].reduce((a, b) => a + b * b, 0));
   tot.sort((a, b) => a - b);
   const h = Math.floor(n / 2);
   return Math.sqrt(n % 2 ? tot[h] : 0.5 * (tot[h - 1] + tot[h]));

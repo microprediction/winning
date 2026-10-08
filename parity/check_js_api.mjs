@@ -1860,5 +1860,55 @@ for (const c of [1e-8, 100]) {
        c => classic.asClassicDensity(new Array(7).fill(c)));
 }
 
+// --- hierarchical Jacobian / inverse scale read canonical shapes (#596, #597)
+{
+  const mu = [-0.4, 0.4], c = [0, 1], v = [0.3, 0.4], pa = [2, 2, -1], st = [0, 0, 0.8];
+  const J0 = blocks.treeRaceJacobian(mu, c, v, [0.8, 0.8], pa, st)[0][1];
+  for (const [label, L, D] of [["typed loading", new Float64Array(v), [0.8, 0.8]],
+                               ["scalar D", v, 0.8]])
+    accepts(`ancestor treeRaceJacobian takes a ${label} (#596)`,
+            () => blocks.treeRaceJacobian(mu, c, L, D, pa, st)[0][1],
+            j => Math.abs(j - J0) < 1e-12);
+  for (const [label, S] of [
+    ["Blocks scalar D", structures.Blocks(c, v, 0.8)],
+    ["Blocks scalar loading", structures.Blocks(c, 0.3, [0.8, 0.8])],
+    ["Blocks (1, n) loading", structures.Blocks(c, [v], [0.7, 0.9])],
+    ["Nested scalar coupling", structures.Nested(c, v, [0.7, 0.9], 0.1, 0.5)],
+    ["Tree scalar D", structures.Tree(c, v, 0.8, pa, st)]])
+    accepts(`${label} inverts to its generating abilities (#597)`,
+            () => races.abilitiesFromRace(races.raceProbabilities(mu, { structure: S }),
+                                          { structure: S, returnInfo: true }),
+            o => o.converged && Math.max(...o.mu.map((x, i) => Math.abs(x - mu[i]))) < 1e-6);
+}
+
+// --- counts are counts; a linkage merges each cluster once (#557, #603)
+for (const r of [NaN, -1, 2.5, Infinity])
+  rejects(demo.haltonNormalNodes, [r, 3], `haltonNormalNodes refuses rank ${r} (#557)`, "rank");
+rejects(core.firstPrimes, [Infinity], "firstPrimes refuses Infinity rather than hanging (#557)");
+rejects(structures.cutLinkage, [[[0, 0, 0.1, 2], [1, 3, 0.2, 3]], 3, 1],
+        "cutLinkage refuses a self-merge (#603)", "same cluster");
+rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
+        "cutLinkage refuses a reused cluster (#603)", "same cluster");
+
+// --- demo covariance helpers keep the shape and PSD contracts (#563, #564)
+{
+  const eq = (A, B) => A.length === B.length &&
+    A.every((r, i) => r.every((v, j) => Math.abs(v - B[i][j]) < 1e-15));
+  for (const [kind, mk] of [
+    ["Factor", D => structures.Factor([-0.2, 0, 0.2], D)],
+    ["Blocks", D => structures.Blocks([0, 0, 1], [0.3, 0.2, 0.4], D)],
+    ["Nested", D => structures.Nested([0, 0, 1], [0.3, 0.2, 0.4], D, [0.1, 0.2, 0.3])],
+    ["Tree", D => structures.Tree([0, 1, 1], [0.3, 0.2, 0.4], D, [2, 2, -1], [0, 0, 0.8])]])
+    accepts(`structureCov(${kind}) is the same for scalar and vector D (#563)`,
+            () => [demo.structureCov(mk(1)), demo.structureCov(mk([1, 1, 1]))],
+            ([a, b]) => a.length === 3 && eq(a, b));
+  rejects(demo.structureCov, [structures.Independent(1)],
+          "structureCov(Independent(scalar)) refuses rather than returning [] (#563)", "field size");
+  rejects(demo.raceFactor, [[[1, 0.9, -0.6], [0, 1, 0.8], [0, 0, 1]]],
+          "raceFactor refuses an asymmetric C (#564)", "symmetric");
+  rejects(demo.raceFactor, [[[1, 1.4, 0], [1.4, 1, 0], [0, 0, 1]]],
+          "raceFactor refuses an indefinite C (#564)", "positive semidefinite");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

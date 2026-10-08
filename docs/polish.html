@@ -175,7 +175,9 @@
     }
     for (const el of [capEl, gcapEl, rhoEl]) {
       el.addEventListener("input", labelsOnly);
-      el.addEventListener("change", computeAndRender);
+      // release cancels the pending debounce: it used to fire 150ms
+      // later and run the same solve a second time (#532)
+      el.addEventListener("change", () => { clearTimeout(pending); pending = null; computeAndRender(); });
     }
     computeAndRender();
   </script>

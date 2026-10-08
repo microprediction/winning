@@ -2,7 +2,7 @@
 // miniature), dense linear algebra for the in-browser grammar fit, and
 // a Monte Carlo sampler to race against.
 import { hermite1, interpClamped, solve, firstPrimes, asLoadings,
-         isVector } from "./core.mjs";
+         isVector, asCount, asIdio } from "./core.mjs";
 import { clusterIndex } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
@@ -31,6 +31,10 @@ function invNormal(p) {
          (((((b[0]*r2+b[1])*r2+b[2])*r2+b[3])*r2+b[4])*r2+1);
 }
 export function haltonNormalNodes(r, count) {
+  // a factor dimension >= 0 and a node count >= 1, both whole: NaN gave a
+  // rank-zero rule, 2.5 three-dimensional nodes, Infinity hung (#557)
+  asCount(r, "rank", 0, "haltonNormalNodes");
+  asCount(count, "count", 1, "haltonNormalNodes");
   const F = [], W = new Array(count).fill(1 / count);
   const primes = firstPrimes(r);   // generated: a literal table had a
   // silent cliff at rank 17, past which every node was NaN (#233)
@@ -382,8 +386,18 @@ export function structureCov(s) {
   // rank-r Blocks rows multiplied to NaN, and a flat rank-one Factor V
   // silently lost its factor (#337). An unknown kind is refused.
   if (!s || typeof s !== "object") throw new Error("structureCov: expected a structure");
-  const n = s.D.length;
-  const D = Array.from(s.D);
+  // the field size from contestant-bearing data, never from D alone: a
+  // scalar D (the package's own spelling) gave n = undefined -- an empty
+  // matrix for Independent(1) and loading errors "for undefined" (#563)
+  let n;
+  if (isVector(s.D)) n = s.D.length;
+  else if (s.kind === "Factor" && isVector(s.V)) n = s.V.length;
+  else if (isVector(s.cluster)) n = s.cluster.length;
+  else
+    throw new Error(
+      `structureCov: a ${s.kind} structure with scalar D carries no field ` +
+      "size; pass D as one variance per contestant");
+  const D = asIdio(s.D, n, "D");
   const C = Array.from({ length: n }, (_, i) =>
     Array.from({ length: n }, (_, j) => (i === j ? D[i] : 0)));
   const dot = (a, b) => a.reduce((acc, v, k) => acc + v * b[k], 0);
@@ -482,6 +496,10 @@ export function cholesky(Cin) {
    x_0 = mu_0 and x_j = mu_j + (x_j - x_0 noise), whose argmin is the
    race's. Scale-free by construction (#375). */
 export function raceFactor(C) {
+  // through the covariance boundary: cholesky zeroes non-positive pivots,
+  // so an asymmetric or indefinite C was silently simulated as some other
+  // PSD law (#564)
+  C = validateCovariance(C, "raceFactor: C");
   const n = C.length;
   const L = Array.from({ length: n }, () => new Array(n).fill(0));
   if (n < 2) return L;
