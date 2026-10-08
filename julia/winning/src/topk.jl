@@ -16,7 +16,18 @@ function _resolved_points(lo, hi, sd, points)
     if !isfinite(need) || need > 8193
         @warn "top-k lattice cannot resolve the narrowest runner even at 8193 points" smin window=(hi - lo)
     end
-    return max(Int(points), Int(min(need, 8193.0)))
+    return max(Int(points), _dyadic_points(need))
+end
+
+# The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped at
+# 8193), so it is piecewise constant over a factor-of-two band of the
+# narrowest scale instead of stepping by one point at every ceil: a count
+# moving 611 -> 610 under a 1e-5 relative change of one sd made the
+# public map disagree with its scale Jacobian by 100x (#515).
+function _dyadic_points(need)
+    (!isfinite(need) || need >= 8193) && return 8193
+    need <= 2 && return 2
+    return Int(min(2.0^ceil(log2(need - 1)) + 1, 8193.0))
 end
 
 # searched in STANDARDISED units and mapped back: an absolute 1e-12 floor
@@ -362,7 +373,14 @@ function _validated_topk_target(q, k, n, target_floor)
     length(target) == n || error("target has $(length(target)) entries for $n runners")
     floored = falses(n)
     if target_floor !== nothing
-        target_floor > 0 || error("target_floor must be positive")
+        (isfinite(target_floor) && target_floor > 0) ||
+            error("target_floor must be a finite positive number")
+        # a membership floor: applied to memberships normalized to k
+        # slots, not to the caller's units (#592)
+        all(isfinite, target) && all(>=(0), target) ||
+            error("target entries must be finite and non-negative")
+        target = target ./ maximum(target)
+        target .*= k / sum(target)
         floored = target .< target_floor
         target = max.(target, target_floor)
     elseif any(target .<= 0)
@@ -394,17 +412,16 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
     alpha = n > 2 ? 1.0 : 0.7
     resid_max = Inf
     iters = 0
-    for it in 1:n_iter
-        iters = it
+    function fwd(m)
         local qraw, sl
         if fac === nothing
-            ws = _topk_with_slopes(mu, sd, k, fn, points)
+            ws = _topk_with_slopes(m, sd, k, fn, points)
             qraw, sl = ws.q, ws.slopes
         else
             qraw = zeros(n)
             sl = zeros(n)
             for j in 1:size(fac.nodes, 1)
-                ws = _topk_with_slopes(mu .+ fac.Vm * fac.nodes[j, :],
+                ws = _topk_with_slopes(m .+ fac.Vm * fac.nodes[j, :],
                                        sd, k, fn, points)
                 qraw .+= fac.w[j] .* ws.q
                 sl .+= fac.w[j] .* ws.slopes
@@ -412,12 +429,30 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
         end
         qhat = _checked_topk(qraw, k, "top-k inversion")
         resid = (log.(max.(qhat, TINY)) .- log.(max.(1 .- qhat, TINY))) .- logit_t
+        return resid, qhat, sl
+    end
+    prev_mu = nothing
+    for it in 1:n_iter
+        iters = it
+        resid, qhat, sl = fwd(mu)
         resid_max = maximum(abs.(resid))
         resid_max < tol && break
+        prev_mu = copy(mu)
         dlogit = min.(sl ./ max.(qhat .* (1 .- qhat), TINY), -1e-6)
         lim = min.(2, 10 .* abs.(resid))
         mu .-= clamp.(alpha .* resid ./ dlogit, -lim, lim)
         mu .-= sum(mu) / n
+    end
+    if !(resid_max < tol)
+        # exhausted after a step no sweep priced: price the returned
+        # iterate and keep the better of the two, so the diagnostics
+        # describe the mu returned (#497, matching python)
+        r_end = maximum(abs.(fwd(mu)[1]))
+        if prev_mu !== nothing && !(r_end < resid_max)
+            mu = prev_mu
+        else
+            resid_max = r_end
+        end
     end
     converged = resid_max < tol
     return_info && return (mu = mu, converged = converged,

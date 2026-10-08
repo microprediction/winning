@@ -44,7 +44,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..shapes import as_factor_law, as_idio, as_loadings
+from ..shapes import (as_factor_law, as_idio, as_loadings, as_nonnegative,
+                      as_tolerance, rescaled_target)
 
 
 from .races import _jacobi_sweeps, BASES, _resolution
@@ -829,7 +830,7 @@ def _resolved_points(lo, hi, sd, points, res=1.0):
 
     Same rule as the win race (races.forward_grid): about two points per
     narrowest sd, capped at 8193, warning when the cap still leaves the
-    lattice coarse.
+    lattice coarse -- rounded up to a dyadic count (#515, below).
     """
     smin = max(float(np.min(sd)), 1e-300) * float(res)
     need = int(np.ceil((hi - lo) / (0.5 * smin))) + 1
@@ -842,7 +843,24 @@ def _resolved_points(lo, hi, sd, points, res=1.0):
             "the mass check cannot see, since it is one scalar and "
             "runner-level errors of opposite sign cancel in it.",
             RuntimeWarning, stacklevel=3)
-    return max(int(points), min(need, 8193))
+    return max(int(points), _dyadic_points(need))
+
+
+def _dyadic_points(need):
+    """The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped
+    at 8193), so it is piecewise constant over a factor-of-two band of
+    the narrowest scale instead of stepping by one point at every ceil.
+    A count that moved 611 -> 610 under a 1e-5 relative change of one sd
+    jumped a membership by 1.9e-6, so a central difference of the public
+    map read 0.30 against a continuum scale Jacobian of 0.003, and the
+    loc/scale inverse that consumes that Jacobian stalled at logit
+    residual 3e-4 on an exact target (#515). Costs at most twice the
+    points, and only when the adaptive count binds."""
+    if need <= 2:
+        return 2
+    if need >= 8193:
+        return 8193
+    return min((1 << int(np.ceil(np.log2(need - 1)))) + 1, 8193)
 
 
 def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
@@ -893,8 +911,11 @@ def _validated_topk_target(q, k, n, target_floor):
     if len(target) != n:
         raise ValueError(f"target has {len(target)} entries for {n} runners")
     if target_floor is not None:
-        if not target_floor > 0:
-            raise ValueError("target_floor must be positive")
+        # a membership floor, applied to memberships: normalized to k
+        # slots first, not in the caller's units (#592)
+        from .races import _floorable
+        target_floor = as_tolerance(target_floor, "target_floor")
+        target = _floorable(target, float(k))
         floored = target < target_floor
         target = np.maximum(target, target_floor)
     else:
@@ -906,7 +927,7 @@ def _validated_topk_target(q, k, n, target_floor):
                 "approached as that runner's contrast diverges). Pass "
                 "target_floor= to floor small entries deliberately, or "
                 "supply a pseudocount upstream.")
-    target = target * (k / target.sum())
+    target = rescaled_target(target, k)          # scale-safe (#461)
     if np.any(target >= 1.0):
         raise ValueError(
             "after renormalizing to k slots, a target membership is >= 1: "
@@ -955,6 +976,7 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     mu_probe = np.asarray(q, dtype=float)
     n = len(mu_probe)
     k = _as_depth(k, n)
+    tol = as_tolerance(tol)                                   # (#551)
     target, floored = _validated_topk_target(q, k, n, target_floor)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
@@ -1082,6 +1104,9 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     n = len(t1)
     k1 = _as_depth(k1, n, "k1")
     k2 = _as_depth(k2, n, "k2")
+    tol = as_tolerance(tol)                                   # (#551)
+    # a negative ridge was max(ridge, 0) = 0: the unregularized fit (#558)
+    ridge = as_nonnegative(ridge, "ridge")
     if k1 == k2:
         raise ValueError(
             "k1 == k2 gives one curve twice: scale is unidentified "
@@ -1112,7 +1137,7 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
         mu, _info0 = abilities_from_topk(ta, ka, D=sd ** 2, base=base,
                                          points=points, n_iter=20,
                                          tol=1e-3, return_info=True)
-    sqr = float(np.sqrt(max(ridge, 0.0)))
+    sqr = float(np.sqrt(ridge))
 
     def logits(m, s):
         qh1 = top_k_probabilities(m, k1, D=s ** 2, base=base, points=points)
@@ -1230,8 +1255,8 @@ def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
         raise ValueError(
             "all win and second probabilities must be positive: a zero "
             "entry has no finite inverse (floor small entries upstream)")
-    p1 = p1 / p1.sum()
-    p2 = p2 / p2.sum()
+    p1 = rescaled_target(p1)                     # scale-safe (#483)
+    p2 = rescaled_target(p2)
     return loc_scale_from_topk_pair(p1, 1, p1 + p2, 2, D0=D0, base=base,
                                     points=points, n_iter=n_iter, tol=tol,
                                     ridge=ridge, mu0=mu0,
@@ -1310,11 +1335,12 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
     target = as_target(p, "p")
     n = len(target)
     r = _as_rank(r, n)
+    tol = as_tolerance(tol)                                   # (#551)
     if np.any(target <= 0):
         raise ValueError(
             "all rank probabilities must be positive: a zero entry has "
             "no finite inverse (floor small entries upstream)")
-    target = target / target.sum()
+    target = rescaled_target(target)             # scale-safe (#483)
     logt = np.log(target)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no

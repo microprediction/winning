@@ -267,7 +267,13 @@ fn jacobian_vector_product<'py>(
     let f_o: Array2<f64> = f.as_array().to_owned();
     let w_o: Array1<f64> = w.as_array().to_owned();
     let h_o: Array1<f64> = h.as_array().to_owned();
-    let grid = form == "grid";
+    // exactly two forms: anything but "grid" used to run IBP (#523)
+    let grid = match form {
+        "grid" => true,
+        "ibp" => false,
+        other => return Err(PyValueError::new_err(format!(
+            "form must be \"ibp\" or \"grid\"; got {:?}", other))),
+    };
     let out = py.allow_threads(|| with_usable_rayon(|| {
         jvp_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                    w_o.view(), h_o.view(), points, grid)

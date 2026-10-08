@@ -229,6 +229,45 @@ test_that("rank_probabilities prices a factor-correlated race (#202)", {
                                                   qa = 9))), 1e-6)
 })
 
+test_that("adaptive top-k count is dyadic, so Jsigma matches the map (#515)", {
+  expect_equal(vapply(c(2, 513, 514, 611, 1025, 1026, 9000), .dyadic_points,
+                      integer(1)), c(2L, 513L, 1025L, 1025L, 1025L, 2049L, 8193L))
+  mu <- c(1.168799682867873, -0.8531654023507033, -3.006600202361091,
+          1.7494547072828357, 0.9415112145610854)
+  sd <- c(1.1139780430874056, 0.9672196804840659, 0.30363853046872963,
+          3.389862172988461, 0.7137810123811725)
+  J <- top_k_jacobians(mu, 2, D = sd^2, base = "gumbel", points = 513)
+  h <- sd[3] * 1e-5; sp <- sd; sm <- sd
+  sp[3] <- sp[3] + h; sm[3] <- sm[3] - h
+  fd <- (top_k_probabilities(mu, 2, D = sp^2, base = "gumbel")[3] -
+         top_k_probabilities(mu, 2, D = sm^2, base = "gumbel")[3]) / (2 * h)
+  expect_lt(abs(fd - J$Jsigma[3, 3]), 1e-6)   # was 0.30 apart
+})
+
+test_that("inverses refuse tol = Inf and an invalid ridge (#551, #558)", {
+  mu <- c(-1.5, -0.4, 0.3, 1.6); D <- c(0.25, 0.64, 1.44, 2.25)
+  p1 <- top_k_probabilities(mu, 1, D = D)
+  p2 <- top_k_probabilities(mu, 2, D = D)
+  for (bad in list(Inf, NaN, 0, -1, c(1e-8, 1e-8), "1e-8")) {
+    expect_error(abilities_from_race(p1, D = D, tol = bad), "tol")
+    expect_error(abilities_from_topk(p1, 1, D = D, tol = bad), "tol")
+    expect_error(loc_scale_from_topk_pair(p1, 1, p2, 2, tol = bad), "tol")
+  }
+  for (bad in list(-1, -Inf, Inf, NaN, c(-100, 0.05), TRUE))
+    expect_error(loc_scale_from_topk_pair(p1, 1, p2, 2, ridge = bad), "ridge")
+})
+
+test_that("target_floor floors memberships, not the caller's units (#592)", {
+  ref <- .validated_topk_target(c(0.7, 0.3, 0), 1, 3, 1e-4)
+  for (c in c(1e-3, 1e3)) {
+    got <- .validated_topk_target(c(0.7, 0.3, 0) * c, 1, 3, 1e-4)
+    expect_equal(got$target, ref$target, tolerance = 1e-14)
+    expect_identical(got$floored, ref$floored)
+  }
+  expect_error(.validated_topk_target(c(0.7, -0.3, 0.6), 1, 3, 1e-4),
+               "non-negative")
+})
+
 test_that("a Student-t(3) base prices at the default budget (#468)", {
   st3 <- function(z) {
     q <- 1 + z * z

@@ -1,7 +1,7 @@
 // One race, five covariance grammars -- port of winning/factor/structures.py.
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
-         abilitiesFromBlockRace, validateTree } from "./blocks.mjs";
+         abilitiesFromBlockRace, validateTree, withoutCommonShock } from "./blocks.mjs";
 import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
          asLoadings, asIdio } from "./core.mjs";
 
@@ -156,9 +156,11 @@ function structureScale(s) {
     // kernel does: sorted unique labels are leaf node ids)
     const labels = [...new Set(s.cluster)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     const idx = new Map(labels.map((v, k) => [v, k]));
+    // a common ancestor's shock cancels: not part of the surrogate (#489)
+    const lam = withoutCommonShock(s.parent, s.strength, labels.length);
     for (let i = 0; i < n; i++) {
       let u = idx.get(s.cluster[i]), a = 0;
-      while (s.parent[u] >= 0) { u = s.parent[u]; a += s.strength[u] ** 2; }
+      while (s.parent[u] >= 0) { u = s.parent[u]; a += lam[u] ** 2; }
       tot[i] += a;
     }
   }

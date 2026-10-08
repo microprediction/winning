@@ -515,8 +515,12 @@ export function asLoadings(V, n, where = "V") {
 export function gaugeCenter(V) {
   if (!V || !V.length) return V;
   const n = V.length, r = V[0].length;
-  const colMean = new Array(r).fill(0);
-  for (const row of V) for (let j = 0; j < r; j++) colMean[j] += row[j] / n;
+  // centred on the first row, so an exactly common column is exactly
+  // zero: summing row / n left -2e292 of a [1e308] * 9 column (and a
+  // residue at 1e20) as a huge loading, and the race went uniform (#471)
+  const v0 = V[0];
+  const colMean = v0.slice();
+  for (const row of V) for (let j = 0; j < r; j++) colMean[j] += (row[j] - v0[j]) / n;
   return V.map(row => row.map((x, j) => x - colMean[j]));
 }
 
@@ -554,14 +558,58 @@ export function firstPrimes(d) {
    original fixed `n > 2 ? 1 : 0.7` damping after python moved to this,
    so a field with two live contenders and a tail two-cycled to the
    iteration limit and repriced 3.8 points wrong (#408). */
+/* The Aitken-extrapolated iterate as a bounded, checked trial (#583),
+   port of python's races._aitken_trial: the summed tail step / (1 -
+   ratio), capped in the max norm at twice the field scale (never below
+   the ordinary step), and repriced. Returns {mu, fwd}, or null -- take
+   the ordinary step -- when the forward throws, is non-finite, or its
+   max residual grows tenfold; milder rises are left to the sweeps'
+   backtracking (requiring contraction stalls the dense n = 30
+   correlation, whose residual rises while its near-duplicate mode is
+   summed). Unchecked, an exact normal top-1 target at residual 20 with
+   ratio 0.998 jumped 539x to abilities in [-894, 249] and ended at
+   residual 715 after 120 sweeps. `fwdKeys` names the residual and
+   slope fields of the forward's result. */
+export function aitkenTrial(mu, step, ratio, scale, forward, residMax,
+                            fwdKeys = ["resid", "dres"]) {
+  let jump = step.map(v => v / (1 - ratio));
+  const big = Math.max(...jump.map(Math.abs));
+  const cap = Math.max(2 * scale, Math.max(...step.map(Math.abs)));
+  if (big > cap) jump = jump.map(v => v * (cap / big));
+  const cand = mu.map((m, i) => m - jump[i]);
+  let fwd;
+  try { fwd = forward(cand); } catch (e) { return null; }
+  const rc = fwd[fwdKeys[0]], dc = fwd[fwdKeys[1]];
+  if (!rc.every(Number.isFinite) || !dc.every(Number.isFinite)) return null;
+  if (Math.max(...rc.map(Math.abs)) > 10 * residMax) return null;
+  return { mu: cand, fwd };
+}
+
+/* A target about to be floored, as a law of total `mass`: the floor is a
+   probability, so it applies to normalized entries, never the caller's
+   arbitrary units -- [c, 0] floored at 1e-6 returned ability gaps of 0,
+   4.75 and 7.03 for c = 1e-6, 1, 1e6 (#592). Port of python's
+   races._floorable; dividing by the max first keeps the sum finite. */
+export function floorableTarget(target, mass) {
+  if (target.some(v => v < 0))
+    throw new Error("target entries must be non-negative: targetFloor " +
+                    "floors small and zero shares, not negative ones");
+  const mx = Math.max(...target);
+  const t = target.map(v => v / mx);
+  const s = t.reduce((a, b) => a + b, 0);
+  return t.map(v => v * (mass / s));
+}
+
 export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
   let residMax = Infinity, residRms = Infinity, iters = 0;
   let prev = null, prevStep = null;
   let alphaBase = alpha, penalty = 1;
+  let cached = null;  // forward of an accepted Aitken trial
   const n = mu.length;
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
-    let { resid, dres } = forward(mu);
+    let { resid, dres } = cached || forward(mu);
+    cached = null;
     residMax = Math.max(...resid.map(Math.abs));
     residRms = Math.sqrt(resid.reduce((a, b) => a + b * b, 0) / n);
     if (residMax < tol) break;
@@ -594,14 +642,27 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
           const lam = 1 - (1 - rho) / a;
           alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && residMax > 1e3 * tol) {
-          mu = mu.map((m, i) => m - step[i] / (1 - ratio));
-          prevStep = null;
-          continue;
+          const trial = aitkenTrial(mu, step, ratio, scale, forward, residMax);
+          if (trial) {  // sum the geometric tail
+            mu = trial.mu;
+            cached = trial.fwd;
+            prevStep = null;
+            continue;
+          }
         }
       }
     }
     prevStep = step;
     mu = mu.map((m, i) => m - step[i]);
+  }
+  if (!(residMax < tol)) {
+    // exhausted after a step no sweep priced: price the returned iterate
+    // (one forward, only here) and keep the better of the two, so the
+    // diagnostics describe the mu returned (#497, port of python)
+    const fwd = cached || forward(mu);
+    const rEnd = Math.max(...fwd.resid.map(Math.abs));
+    if (prev && !(rEnd < prev.residMax)) mu = prev.mu;
+    else residMax = rEnd;
   }
   return { mu, converged: residMax < tol, residMax, iterations: iters };
 }

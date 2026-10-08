@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -134,6 +134,19 @@ export function factorRule(V, D, F = null, W = null) {
   return hermiteNodes(r, Q);
 }
 
+/* mu moved next to the origin when a common offset dwarfs the field
+   (python's races._translated_home). The origin is a gauge, but the
+   lattice is built in the caller's units: at an offset of 1e15 its
+   points collapsed to the float spacing there and every share came back
+   NaN (#477). Shifting by a middle entry is exact for such offsets;
+   below a million field scales nothing moves. */
+export function translatedHome(mu, D) {
+  const s = mu.slice().sort((a, b) => a - b);
+  const off = s[Math.floor(s.length / 2)];
+  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(Math.max(...D));
+  return Math.abs(off) > 1e6 * scale ? mu.map(v => v - off) : mu;
+}
+
 function setup(mu, V, D, F, W, base) {
   // mu was the one argument nobody checked: D goes through asIdio, V
   // through asLoadings, W through asWeights, and the abilities
@@ -147,6 +160,7 @@ function setup(mu, V, D, F, W, base) {
   mu = asAbilities(mu);
   const n = mu.length;
   D = asIdio(D, n);        // the companion of asLoadings, #254
+  mu = translatedHome(mu, D);                      // #477
   // the shape contract at the door, as python's _setup does it: a
   // scalar, a length-n vector, (n, rank) and (rank, n) are the same
   // race, and a ragged V raises instead of being truncated to the first
@@ -324,8 +338,18 @@ const INVERSE_OPTS = new Set([
  * `forward_grid` -- was 1.7e-8. Both converge by 1025 points, which is
  * why it went unnoticed (#212).
  */
+/* The lattice window: "bulk" or "span", nothing else. Every other value
+   used to mean span, so window: "bulkk" moved a share by 39 points
+   against the bulk default it misspelled (#582). */
+export function asWindow(win, where = "raceProbabilities") {
+  if (win !== "bulk" && win !== "span")
+    throw new Error(`${where}: window must be "bulk" or "span"; got ${JSON.stringify(win)}`);
+  return win;
+}
+
 export function forwardGrid(Mall, sd, st, points, win = "bulk",
                             delta = 1e-12) {
+  asWindow(win, "forwardGrid");
   let x;
   if (win === "bulk") {
     x = bulkWindow(Mall, sd, points, delta, st.fn || null);
@@ -494,6 +518,7 @@ function validatedRaceTarget(pTarget, targetFloor) {
   if (targetFloor != null) {
     if (!(typeof targetFloor === "number" && targetFloor > 0 && Number.isFinite(targetFloor)))
       throw new Error("targetFloor must be positive");
+    target = floorableTarget(target, 1);   // a probability floor (#592)
     floored = target.map(v => v < targetFloor);
     target = target.map(v => Math.max(v, targetFloor));
   } else if (target.some(v => v <= 0)) {
@@ -609,12 +634,17 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
   let prev = null;
   let prevStep = null;
   let iters = 0;
+  let cached = null;  // forward of an accepted Aitken trial (#583)
+  const sweepForward = m => {
+    const { p: praw, slopes: sl } = raceProbabilities(m, { V, D, F, W, base, points, returnSlopes: true });
+    const phat = praw.map(v => Math.max(v, 1e-300));
+    return { resid: phat.map((v, i) => Math.log(v) - logt[i]),
+             dlogp: sl.map((v, i) => Math.min(v / phat[i], -1e-6)) };
+  };
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
-    const { p: praw, slopes: sl } = raceProbabilities(mu, { V, D, F, W, base, points, returnSlopes: true });
-    const phat = praw.map(v => Math.max(v, 1e-300));
-    let resid = phat.map((v, i) => Math.log(v) - logt[i]);
-    let dlogp = sl.map((v, i) => Math.min(v / phat[i], -1e-6));
+    let { resid, dlogp } = cached || sweepForward(mu);
+    cached = null;
     let rmax = Math.max(...resid.map(Math.abs));
     let rrms = Math.sqrt(mean(resid.map(v => v * v)));
     if (rmax < tol) break;
@@ -649,10 +679,16 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
           const lam = 1 - (1 - rho) / alpha;
           alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && rmax > 1e3 * tol) {
-          // collinear steps decaying geometrically: sum the tail (Aitken)
-          mu = mu.map((m, i) => m - step[i] / (1 - ratio));
-          prevStep = null;
-          extrapolated = true;
+          // collinear steps decaying geometrically: sum the tail (Aitken),
+          // as a repriced, capped trial
+          const trial = aitkenTrial(mu, step, ratio, scale, sweepForward,
+                                    rmax, ["resid", "dlogp"]);
+          if (trial) {
+            mu = trial.mu;
+            cached = trial.fwd;
+            prevStep = null;
+            extrapolated = true;
+          }
         }
       }
     }

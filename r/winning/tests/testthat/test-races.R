@@ -234,6 +234,20 @@ test_that("Halton nodes extend past the old 32-prime table (#402)", {
   expect_lt(max(p), 0.06)
 })
 
+test_that("race inverse warning describes the returned iterate (#497)", {
+  t <- c(0.7, 0.2, 0.1)
+  for (n in 0:2) {
+    msg <- NULL
+    mu <- withCallingHandlers(
+      abilities_from_race(t, D = rep(1, 3), points = 257, n_iter = n),
+      warning = function(w) { msg <<- conditionMessage(w)
+                              invokeRestart("muffleWarning") })
+    a <- max(abs(log(race_probabilities(mu, D = rep(1, 3), points = 257)) -
+                 log(t)))
+    expect_match(msg, sprintf("%.2e", a), fixed = TRUE)
+  }
+})
+
 test_that("window is one of two names (#582)", {
   for (w in list("bulkk", "", NA, 3, TRUE))
     expect_error(race_probabilities(c(0, 1, 2), D = c(0.01, 4, 100),

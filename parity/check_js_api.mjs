@@ -1754,10 +1754,11 @@ accepts("the inverse takes a scalar D, matching python",
           () => topk.bottomKProbabilities([0, 0.5], 1, { D: [1, 1], base: student3 }),
           q => Math.abs(q[1] - quad) < 1e-7, q => `${q[1]}`);
   // python's rank_probabilities returns the same matrix to 1e-8 (row
-  // 0: 0.68814369, 0.31185631): the rank route is 2.3e-5 off quadrature
+  // 0: 0.68814385, 0.31185615 since the dyadic point count, #515): the
+  // rank route is 2.3e-5 off quadrature
   accepts("Student-t(3) rank matrix prices at the default budget (#468)",
           () => topk.rankProbabilities([0, 0.5], { D: [1, 1], base: student3 }),
-          P => Math.abs(P[0][0] - 0.68814369) < 1e-7 && Math.abs(P[0][0] + P[1][0] - 1) < 1e-4,
+          P => Math.abs(P[0][0] - 0.68814385) < 1e-7 && Math.abs(P[0][0] + P[1][0] - 1) < 1e-4,
           P => `${P[0][0]}`);
   accepts("Student-t(3) top-k Jacobian is finite (#468)",
           () => topk.topKJacobians([0, 0.5], 1, { D: [1, 1], base: student3 }),

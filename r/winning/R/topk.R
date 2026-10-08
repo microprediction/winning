@@ -59,7 +59,19 @@
                           "window of %.3g); memberships may carry",
                           "percent-level error the mass check cannot see."),
                     smin, hi - lo), call. = FALSE)
-  max(as.integer(points), as.integer(min(need, 8193)))
+  max(as.integer(points), .dyadic_points(need))
+}
+
+# The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped at
+# 8193), so it is piecewise constant over a factor-of-two band of the
+# narrowest scale instead of stepping by one point at every ceil: a count
+# moving 611 -> 610 under a 1e-5 relative change of one sd made the
+# public map disagree with its scale Jacobian by 100x, and the loc/scale
+# inverse stalled on an exact target (#515). At most twice the points.
+.dyadic_points <- function(need) {
+  if (!is.finite(need) || need >= 8193) return(8193L)
+  if (need <= 2) return(2L)
+  as.integer(min(2^ceiling(log2(need - 1)) + 1, 8193))
 }
 
 .count_window <- function(mu, sd, k, fn, delta = 1e-12, pad_sds = 2.0) {
@@ -444,7 +456,13 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
     stop(sprintf("target has %d entries for %d runners", length(target), n))
   floored <- rep(FALSE, n)
   if (!is.null(target_floor)) {
-    if (!(target_floor > 0)) stop("target_floor must be positive")
+    target_floor <- .as_tolerance(target_floor, "target_floor")
+    # a membership floor: applied to memberships normalized to k slots,
+    # not to the caller's units (#592)
+    if (any(!is.finite(target)) || any(target < 0))
+      stop("target entries must be finite and non-negative", call. = FALSE)
+    target <- target / max(target)
+    target <- target * (k / sum(target))
     floored <- target < target_floor
     target <- pmax(target, target_floor)
   } else if (any(target <= 0)) {
@@ -482,6 +500,7 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   mu <- -(logt - mean(logt)) / 2 * scale
   alpha <- if (n > 2) 1.0 else 0.7
   n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
   resid_max <- Inf
   # iters counts UPDATES applied to mu. The residual is evaluated at the
   # current mu before deciding to update, so the returned residual always
@@ -532,6 +551,8 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      mu0 = NULL, return_info = FALSE) {
   n <- length(q1)
   n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
+  ridge <- .as_nonnegative(ridge, "ridge")                    # (#558)
   k1 <- .as_depth(k1, n, "k1"); k2 <- .as_depth(k2, n, "k2")
   if (k1 == k2)
     stop("k1 == k2 gives one curve twice: scale is unidentified")
@@ -555,7 +576,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                               points = points, n_iter = 20, tol = 1e-3,
                               return_info = TRUE)$mu
   }
-  sqr <- sqrt(max(ridge, 0))
+  sqr <- sqrt(ridge)
 
   logits <- function(m, s) {
     qh1 <- pmin(pmax(top_k_probabilities(m, k1, D = s^2, base = base,
@@ -658,8 +679,8 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
     stop("p_win and p_second must have equal length")
   if (any(p_win <= 0) || any(p_second <= 0))
     stop("all win and second probabilities must be positive")
-  p1 <- p_win / sum(p_win)
-  top2 <- p1 + p_second / sum(p_second)
+  p1 <- .rescaled_target(as.numeric(p_win))    # scale-safe (#483)
+  top2 <- p1 + .rescaled_target(as.numeric(p_second))
   loc_scale_from_topk_pair(p1, 1, top2, 2, D0 = D0, base = base,
                            points = points, n_iter = n_iter, tol = tol,
                            ridge = ridge, mu0 = mu0,
@@ -698,6 +719,7 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
   # r >= 2, mu0 selects the branch. See the python docstring.
   n <- length(p)
   n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
   # a whole-number rank, refused before coercion: as.integer(1.5) solved
   # first place silently (#317)
   rr <- suppressWarnings(as.numeric(r))

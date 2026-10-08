@@ -12,7 +12,7 @@ from scipy.special import log_ndtr, ndtr, ndtri
 
 # the package-wide shape contract; re-exported here because
 # winning.factor.core is where the factor kernels look for it
-from ..shapes import (as_idio, as_loadings, as_weights,  # noqa: F401
+from ..shapes import (as_idio, as_loadings, as_tolerance, as_weights,  # noqa: F401
                       as_factor_law, as_points, as_target)
 
 from ..rustconfig import load_fastrace
@@ -1026,6 +1026,20 @@ def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
     return F, W / W.sum()
 
 
+def _gauge_center(V):
+    """V minus each factor's mean loading across contestants -- the
+    gauge every factor path fixes -- without overflowing: a column of
+    [1e308] * 9 has an infinite plain mean, and inf - inf made the race
+    NaN where the exactly common column should vanish (#471). Centred on
+    the first row only when the plain mean is not finite, so ordinary
+    loadings stay bit-identical."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        m = V.mean(axis=0)
+    if not np.all(np.isfinite(m)):
+        m = V[0] + (V - V[0]).mean(axis=0)
+    return V - m
+
+
 def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
                              F: np.ndarray, W: np.ndarray,
                              keep: np.ndarray | None = None,
@@ -1064,7 +1078,7 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     # BEFORE the compiled dispatch: the kernel does not center, and an
     # uncentered column widened its window by the common shift (#114:
     # a shift of 100 moved the answer by 3e-2 with rust on, 3e-16 off).
-    V = V - V.mean(axis=0)
+    V = _gauge_center(V)
     if (_HAVE_RUST and not return_deletions and not per_node_interval
             and N > 1 and len(F) >= 2):
         # The compiled kernel is the same lattice on the same global
@@ -1172,6 +1186,13 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     p = as_target(p, "p")            # finite and 1-D before the sign test
     if np.any(p <= 0):
         raise ValueError("all target probabilities must be positive")
+    tol = as_tolerance(tol)
+    _n = np.asarray(n_iter)
+    if (_n.ndim or _n.dtype == bool or not np.issubdtype(_n.dtype, np.integer)
+            or int(_n) < 0):
+        raise ValueError("n_iter must be a non-negative whole number; got "
+                         f"{n_iter!r}")
+    n_iter = int(_n)
     with np.errstate(over="ignore"):
         _tot = p.sum()
     if not np.isfinite(_tot):        # relative weights: [1e308]*3 is [1]*3
@@ -1187,7 +1208,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     # but the warm start, step cap and lattice window below were built
     # from the uncentered V, so V + 100 turned a 6e-8 inversion into a
     # residual of 33.8 (#70).
-    V = V - V.mean(axis=0)
+    V = _gauge_center(V)
     D = as_idio(D, N, positive=True)
     F, W = as_factor_law(F, W)
     sd = np.sqrt(D)
@@ -1202,7 +1223,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     F = np.asarray(F, dtype=float).reshape(len(F), -1)
     W = np.asarray(W, dtype=float)
     Wn = W / W.sum()
-    Vc = V - V.mean(axis=0)
+    Vc = _gauge_center(V)
     Fm = Wn @ F
     CovF = (F - Fm).T @ ((F - Fm) * Wn[:, None])
     sig_v = np.einsum("ij,jk,ik->i", Vc, CovF, Vc)
@@ -1232,7 +1253,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         sd_tot = np.sqrt(D + sig_v)
         mu = abilities_from_probabilities_factor(
             p, np.zeros((N, 1)), sd_tot**2, np.zeros((1, 1)), np.ones(1),
-            n_iter=n_iter, tol=tol) - shift
+            n_iter=n_iter, tol=tol, return_info=True)[0] - shift
         mu -= mu.mean()
     else:
         # min-wins (a larger share is a LOWER mu), in the field's units:
@@ -1248,7 +1269,9 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     # trajectory that had luckily converged and onto the cycle.
     _top2 = float(np.sort(p)[-2:].sum()) if N > 2 else 1.0
     damp = 0.7 if _top2 > 0.8 else 1.0
-    for _ in range(n_iter):
+    iters, res, converged = 0, np.inf, False
+    for it in range(n_iter):
+        iters = it + 1
         M_all = mu[None, :] + F @ V.T
         lo = M_all.min() - 8.0 * sd.max()
         hi = M_all.max() + 8.0 * sd.max()
@@ -1270,8 +1293,14 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
             slope += Wc @ (np.sum(z * f / sd[None, :, None] * rest, axis=2) * dx)
             # sum_{j != i} d a_j / d mu_i = sum_{j != i} w_ij, by the
             # hazard identity: f_i rest_i (H - h_i), h_j = f_j / S_j
-            # (finite in logs for the normal base)
-            haz = np.exp(np.log(np.maximum(f, 1e-300)) - logS)
+            # (finite in logs for the normal base). The log density is
+            # analytic: flooring an underflowed f at 1e-300 while logS
+            # kept falling overflowed haz to inf, and H - haz = nan
+            # turned a self-generated D = [0.01, 1, 1] target into NaN
+            # abilities (#524); h ~ z / sd there, finite.
+            log_f = (-0.5 * z**2
+                     - np.log(sd[None, :, None] * np.sqrt(2.0 * np.pi)))
+            haz = np.exp(log_f - logS)
             H = haz.sum(axis=1, keepdims=True)
             cross += Wc @ (np.sum(f * rest * (H - haz), axis=2) * dx)
         total = phat.sum()
@@ -1285,6 +1314,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         resid = np.log(phat) - logp
         res = np.abs(resid[ident]).max() if np.any(ident) else np.abs(resid).max()
         if res < tol:
+            converged = True
             break
         if res > prev_res * 1.2:
             damp = max(0.25, damp * 0.5)     # simple safeguard
@@ -1293,9 +1323,28 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         delta = np.clip(damp * resid / dlogp, -step_cap, step_cap)
         mu = mu - delta                      # Newton: mu <- mu - resid / dlogp
         mu -= mu.mean()
+    if not converged:
+        # The budget ran out after a step the loop never priced: report
+        # the residual of the iterate actually returned (one forward,
+        # only on exhaustion), and say so unless diagnostics were asked
+        # for. n_iter=0 raised UnboundLocalError on the loop variable,
+        # and every exhaustion returned silently (#538).
+        phat = np.maximum(win_probabilities_factor(mu, V, D, F, W,
+                                                   points=points), _PFLOOR)
+        resid = np.log(phat / phat.sum()) - logp
+        res = float(np.abs(resid[ident]).max() if np.any(ident)
+                    else np.abs(resid).max())
+        converged = bool(res < tol)
+        if not converged and not return_info:
+            import warnings
+            warnings.warn(
+                f"abilities_from_probabilities_factor did not converge: max "
+                f"|log residual| {res:.2e} after {iters} iterations (tol "
+                f"{tol:.0e}). Pass return_info=True for the diagnostics "
+                "instead of this warning.", RuntimeWarning, stacklevel=2)
     if return_info:
-        return mu, {"iterations": _ + 1, "residual": float(res),
-                    "converged": bool(res < tol)}
+        return mu, {"iterations": int(iters), "residual": float(res),
+                    "converged": bool(converged)}
     return mu
 
 
@@ -1349,8 +1398,12 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     N = len(mu)
     D = as_idio(D, N, positive=True)
     V = as_loadings(V, N)
-    V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass (#114)
+    V = _gauge_center(V)             # gauge-fix, as in the forward pass (#114)
     points = as_points(points)
+    # exactly two forms: only "grid" was tested, so a typo, "" or "GRID"
+    # silently ran IBP -- 0.36 apart, opposite signs, at L = 11 (#523)
+    if not isinstance(form, str) or form not in ("ibp", "grid"):
+        raise ValueError(f'form must be "ibp" or "grid"; got {form!r}')
     F, W = as_factor_law(F, W)      # as the forward pass reads them (#416)
     if _HAVE_RUST and normalized and N > 1 and len(F) >= 2:
         # The compiled kernel returns the RAW directional derivative of the

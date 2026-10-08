@@ -137,6 +137,8 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
                                                 n_iter = 50, tol = 1e-6,
                                                 points = 501) {
   points <- .as_points(points)
+  n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)
   if (any(!is.finite(p))) stop("target probabilities must be finite")
   if (any(p <= 0)) stop("all target probabilities must be positive")
   p <- p / max(p)
@@ -155,10 +157,11 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
   ident <- p > floor_
   if (any(V != 0)) {
     sd_tot2 <- D + rowSums(V^2)
-    mu <- abilities_from_probabilities_factor(
+    # a warm start: its own exhaustion is not the caller's (#538)
+    mu <- suppressWarnings(abilities_from_probabilities_factor(
       p, matrix(0, N, 1), sd_tot2,
       nodes = list(F = matrix(0, 1, 1), W = 1),
-      n_iter = n_iter, tol = tol, points = points)
+      n_iter = n_iter, tol = tol, points = points))
   } else {
     # min-wins and in the field's units (#100)
     mu <- -(logp - mean(logp)) / 2 * sqrt(stats::median(D))
@@ -168,6 +171,7 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
   # python's dominant-pair gate: the undamped step two-cycles there
   top2 <- if (N > 2) sum(sort(p, decreasing = TRUE)[1:2]) else 1
   damp <- if (top2 > 0.8) 0.7 else 1
+  converged <- FALSE
   for (it in seq_len(n_iter)) {
     M <- matrix(mu, nrow(F), N, byrow = TRUE) + F %*% t(V)
     pad <- 8 * max(sd)
@@ -187,13 +191,27 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
     phat <- pmax(phat / sum(phat), 1e-300)
     resid <- log(phat) - logp
     res <- if (any(ident)) max(abs(resid[ident])) else max(abs(resid))
-    if (res < tol) break
+    if (res < tol) { converged <- TRUE; break }
     if (res > prev_res * 1.2) damp <- max(0.25, damp * 0.5)
     prev_res <- res
     dlogp <- pmin(slope / phat, -1e-3 / (sd + 1e-9))
     delta <- pmin(pmax(damp * resid / dlogp, -step_cap), step_cap)
     mu <- mu - delta
     mu <- mu - mean(mu)
+  }
+  if (!converged) {
+    # the budget ran out after a step the loop never priced: check the
+    # iterate actually returned, and say so -- exhaustion used to return
+    # silently (#538)
+    ph <- win_probabilities_factor(mu, V, D, nodes = list(F = F, W = W),
+                                   points = points)
+    r <- log(pmax(ph, 1e-300)) - logp
+    res <- if (any(ident)) max(abs(r[ident])) else max(abs(r))
+    if (!(res < tol))
+      warning(sprintf(paste("abilities_from_probabilities_factor did not",
+                            "converge: max |log residual| %.2e after %d",
+                            "iterations (tol %.0e)"), res, n_iter, tol),
+              call. = FALSE)
   }
   mu
 }

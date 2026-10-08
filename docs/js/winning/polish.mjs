@@ -5,7 +5,7 @@ import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asAbilities,
          asIdio, isVector } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES, SPANS,
          forwardGrid, factorRule, requireWholeRule,
-         collapseStructure } from "./races.mjs";
+         collapseStructure, translatedHome } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./blocks.mjs";
 
 export function raceJacobian(mu, opts = {}) {
@@ -31,6 +31,7 @@ export function raceJacobian(mu, opts = {}) {
   mu = asAbilities(mu);
   const n = mu.length;
   const Dv = asIdio(c.D, n);
+  mu = translatedHome(mu, Dv);                     // as the forward (#477)
   return raceJacobianExplicit(mu, c.V, Dv, base, points, F, W);
 }
 

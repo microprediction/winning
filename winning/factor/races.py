@@ -53,8 +53,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import ndtr, ndtri
 
-from .core import as_idio, as_loadings, as_weights, hermite_nodes
-from ..shapes import as_factor_law, as_points, as_target
+from .core import as_idio, as_loadings, as_weights, _gauge_center, hermite_nodes
+from ..shapes import as_factor_law, as_points, as_target, as_tolerance
 
 from ..rustconfig import load_fastrace
 from ..outcomes import as_luce_temperature, as_order, as_soft_temperature
@@ -223,9 +223,13 @@ def skew_logistic_base(alpha):
         sp = _softplus(-x)                   # log(1 + e^{-x})
         S = np.maximum(-np.expm1(-alpha * sp), 1e-300)
         f = alpha * c * np.exp(-x - (alpha + 1.0) * sp)
-        sig = np.exp(-_softplus(-x))          # logistic cdf of x
+        # 1 - sigmoid(x) directly, as sigmoid(-x): the subtraction lost
+        # it near x ~ log(alpha), where the bracket below is a difference
+        # of O(1) terms, and at alpha = 1e17 the own slopes came out
+        # POSITIVE and the inverse walked away from its target (#499)
+        sig_c = np.exp(-_softplus(x))         # 1 - logistic cdf of x
         # d/dz f: chain rule through x = m + c z
-        fp = f * c * ((alpha + 1.0) * (1.0 - sig) - 1.0)
+        fp = f * c * ((alpha + 1.0) * sig_c - 1.0)
         return S, f, fp
 
     def _log_expm1(y):
@@ -388,6 +392,23 @@ GH_RULE = {1: (201, float("inf")), 2: (41, 3.75), 3: (31, 4.75)}
 GH_RULE_DEFAULT = (15, 3.0)
 
 
+def _translated_home(mu, D):
+    """mu moved next to the origin when a common offset dwarfs the field.
+
+    The origin is a gauge: every race probability depends on differences
+    only. But the lattice is built in the caller's units, and at an
+    offset of 1e15 its points collapse to the float spacing there and
+    every share came back NaN (#477). Shifting by a middle entry (an
+    element, so no sum can overflow) is exact for such offsets; below
+    a million field scales nothing moves, so ordinary inputs stay
+    bit-identical."""
+    off = float(np.sort(mu)[len(mu) // 2])
+    scale = float(mu.max() - mu.min()) + float(np.sqrt(np.max(D)))
+    if abs(off) > 1e6 * scale:
+        return mu - off
+    return mu
+
+
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
@@ -406,6 +427,7 @@ def _setup(mu, V, D, F, W, base):
             f"({bad.size} of {n} are); an ability is a finite location on "
             "the performance scale")
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    mu = _translated_home(mu, D)                     # (#477)
     if (F is None) != (W is None):
         # A factor rule is a PAIR. Either half alone was silently replaced
         # by the automatic Gaussian rule below, so a caller's node vanished
@@ -430,7 +452,7 @@ def _setup(mu, V, D, F, W, base):
         # under the escalation threshold, while the centered rows reach
         # 4.43 -- the race is genuinely sharp, the raw statistic missed
         # it, and the shipped answer carried TV 9.5e-3.
-        V = V - V.mean(axis=0)
+        V = _gauge_center(V)                          # scale-safe (#471)
         if (F is None) != (W is None):
             # A lone F or W used to be discarded silently and BOTH
             # regenerated (#75): the caller's rule never ran.
@@ -698,6 +720,15 @@ def _ndtr_local(z):
 _LARGE_DISPATCH_ENTRIES = 2e7
 
 
+def _as_window(window):
+    """The lattice window: "bulk" or "span", nothing else. Every other
+    value used to mean span, so window="bulkk" moved a share by 39 points
+    against the bulk default it misspelled (#582)."""
+    if not isinstance(window, str) or window not in ("bulk", "span"):
+        raise ValueError(f'window must be "bulk" or "span"; got {window!r}')
+    return window
+
+
 def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                  delta=1e-12):
     """THE lattice: window plus any sharpness refinement, in one place.
@@ -712,6 +743,7 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     Returns (x, points); points may exceed the request after refinement.
     """
     sd = np.asarray(sd, dtype=float)
+    _as_window(window)
     if window == "bulk":
         x = _bulk_window(M_all, sd, points, delta, fn)
     else:
@@ -1034,6 +1066,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     nodes_given = F is not None          # the caller's nodes, not a fit's
     temperature = _as_temperature(temperature)
     points = as_points(points)
+    window = _as_window(window)                      # (#582)
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
         # be answered without the fit at all; everything else (slopes for
@@ -1233,6 +1266,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     nodes_given = F is not None          # the caller's nodes, not a fit's
     temperature = _as_temperature(temperature)       # (#424)
     points = as_points(points)                       # (#444)
+    tol = as_tolerance(tol)                          # (#551)
     if structure is not None:
         # One covariance description, as the forward door insists (#89):
         # Independent/Factor replaced D (and V) here while a caller's V
@@ -1274,8 +1308,11 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # abilities as converged with residual 0 (#110)
     target = as_target(p)
     if target_floor is not None:
-        if not target_floor > 0:
-            raise ValueError("target_floor must be positive")
+        target_floor = as_tolerance(target_floor, "target_floor")
+        # the floor is a PROBABILITY: normalize (scale-safely) first. Floored
+        # in the caller's units, [c, 0] at c = 1e-6 / 1 / 1e6 returned gaps
+        # of 0 / 4.75 / 7.03 for one and the same relative target (#592)
+        target = _floorable(target, 1.0)
         floored = target < target_floor
         target = np.maximum(target, target_floor)
     else:
@@ -1516,7 +1553,25 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
     between consecutive steps exactly 1.0), so damping was the wrong
     medicine for it and extrapolation is the right one. Dense n = 16 /
     30 / 40 take 31 / 66 / 53 sweeps where they took 120 without
-    converging."""
+    converging.
+
+    The extrapolated iterate is a bounded, checked TRIAL (#583).
+    Collinearity and a ratio in (0.5, 0.999) do not show the iteration
+    is in its linear regime: an exact normal top-1 target at residual 20
+    had ratio 0.998, so the unchecked jump moved a step of norm 1.8 by
+    539x, to abilities in [-897, 235], and backtracking never recovered
+    (logit residual 715 after 120 sweeps at 257 points). So the summed
+    tail is capped in the max norm at twice the field scale -- an
+    ordinary step's own cap -- and repriced: a trial whose forward
+    raises, is non-finite, or whose max residual grows tenfold is
+    dropped for the ordinary step. Anything milder is left to the
+    backtracking above. Requiring the trial to CONTRACT is too strict:
+    on the dense n = 30 correlation the residual rises transiently
+    (0.53 to 3.5) while the near-duplicate mode is being summed, and
+    that fixture stalled at 4e-7 instead of converging in 65. The 583
+    fixture reaches 4e-7 in 120 sweeps and converges at 513 / 1025
+    points. An accepted trial's forward is reused by the next sweep, so
+    the check costs a forward only when it rejects."""
     resid_max = np.inf
     resid_rms = np.inf
     iters = 0
@@ -1524,9 +1579,13 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
     prev_step = None
     alpha_base = float(alpha)  # the Richardson value: persistent
     penalty = 1.0              # caution after a bad sweep: transient
+    cached = None              # forward of an accepted Aitken trial
     for it in range(n_iter):
         iters = it + 1
-        resid, dlogp = forward(mu)
+        if cached is not None:
+            (resid, dlogp), cached = cached, None
+        else:
+            resid, dlogp = forward(mu)
         resid_max = float(np.abs(resid).max())
         resid_rms = float(np.sqrt(np.mean(resid * resid)))
         if resid_max < tol:
@@ -1555,12 +1614,65 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                     alpha_base = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
                 elif (cos > 0.999 and 0.5 < ratio < 0.999
                       and resid_max > 1e3 * tol):
-                    mu = mu - step / (1.0 - ratio)   # sum the geometric tail
-                    prev_step = None
-                    continue
+                    trial = _aitken_trial(mu, step, ratio, scale, forward,
+                                          resid_max)
+                    if trial is not None:   # sum the geometric tail
+                        mu, cached = trial
+                        prev_step = None
+                        continue
         prev_step = step
         mu = mu - step
+    if not resid_max < tol:
+        # The budget ran out after a step no sweep priced: the residual
+        # above belongs to the iterate BEFORE it, so the diagnostics
+        # described a different mu, and n_iter=0 reported inf for a
+        # finite initializer (#497). Price the returned iterate -- one
+        # forward, only on exhaustion -- and keep the better of the two.
+        last = (mu, resid_max) if prev is None else (prev[0], prev[3])
+        fwd = cached if cached is not None else forward(mu)
+        r_end = np.abs(np.asarray(fwd[0], dtype=float)).max()
+        if prev is not None and not r_end < last[1]:
+            mu = last[0]
+        else:
+            resid_max = float(r_end)
     return mu, resid_max < tol, resid_max, iters
+
+
+def _aitken_trial(mu, step, ratio, scale, forward, resid_max):
+    """The Aitken-extrapolated iterate as a bounded, checked trial (#583):
+    the summed tail step / (1 - ratio), capped in the max norm at twice
+    the field scale (never below the ordinary step), and repriced. Returns
+    (mu, forward(mu)), or None -- take the ordinary step -- when the
+    forward raises, is non-finite, or its max residual grows tenfold."""
+    jump = step / (1.0 - ratio)
+    big = float(np.abs(jump).max())
+    cap = max(2.0 * float(np.max(scale)), float(np.abs(step).max()))
+    if big > cap:
+        jump = jump * (cap / big)
+    cand = mu - jump
+    try:
+        fc = forward(cand)
+    except (RuntimeError, ValueError, FloatingPointError, OverflowError):
+        return None
+    rc = np.asarray(fc[0], dtype=float)
+    if not (np.all(np.isfinite(rc)) and np.all(np.isfinite(fc[1]))):
+        return None
+    if float(np.abs(rc).max()) > 10.0 * resid_max:
+        return None
+    return cand, fc
+
+
+def _floorable(target, mass):
+    """A target about to be floored, as a law of total `mass`: the floor is
+    a probability, so it applies to normalized entries, never to the
+    caller's arbitrary units (#592). Negative entries have no reading as
+    mass and raise; dividing by the max first keeps the sum finite."""
+    if np.any(target < 0):
+        raise ValueError(
+            "target entries must be non-negative: target_floor floors "
+            "small and zero shares, not negative ones")
+    target = target / target.max()
+    return target * (mass / target.sum())
 
 
 def _inverse_return(mu, converged, resid_max, iters, floored, tol,
@@ -1796,6 +1908,7 @@ def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
     byproduct of the field.
     """
     points = as_points(points)
+    mass_tol = as_tolerance(mass_tol, "mass_tol")   # (#590)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     n = len(mu)
     if n < 2:

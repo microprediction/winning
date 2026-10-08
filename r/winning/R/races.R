@@ -359,8 +359,10 @@
   prev <- NULL
   prev_step <- NULL
   rmax <- Inf
+  cached <- NULL  # forward of an accepted Aitken trial
   for (it in seq_len(n_iter)) {
-    fw <- forward(mu)
+    fw <- if (is.null(cached)) forward(mu) else cached
+    cached <- NULL
     resid <- fw$resid
     dlogp <- fw$dres
     rmax <- max(abs(resid))
@@ -398,10 +400,15 @@
           alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
                    rmax > 1e3 * tol) {
-          # collinear steps decaying geometrically: sum the tail (Aitken)
-          mu <- mu - step / (1 - ratio)
-          prev_step <- NULL
-          extrapolated <- TRUE
+          # collinear steps decaying geometrically: sum the tail (Aitken),
+          # as a capped, repriced trial (#583, matching python)
+          trial <- .aitken_trial(mu, step, ratio, scale, forward, rmax)
+          if (!is.null(trial)) {
+            mu <- trial$mu
+            cached <- trial$fwd
+            prev_step <- NULL
+            extrapolated <- TRUE
+          }
         }
       }
     }
@@ -410,7 +417,34 @@
       mu <- mu - step
     }
   }
+  if (!(rmax < tol)) {
+    # exhausted after a step no sweep priced: price the returned iterate
+    # (one forward, only here) and keep the better of the two, so the
+    # warning describes the mu returned (#497, matching python)
+    fw <- if (is.null(cached)) forward(mu) else cached
+    r_end <- max(abs(fw$resid))
+    if (!is.null(prev) && !isTRUE(r_end < prev$rmax)) mu <- prev$mu
+    else rmax <- r_end
+  }
   list(mu = mu, converged = rmax < tol, resid = rmax)
+}
+
+# The Aitken-extrapolated iterate as a bounded, checked trial (#583),
+# matching python's races._aitken_trial: the summed tail capped in the max
+# norm at twice the field scale (never below the ordinary step) and
+# repriced; NULL -- take the ordinary step -- when the forward errors, is
+# non-finite, or its max residual grows tenfold.
+.aitken_trial <- function(mu, step, ratio, scale, forward, rmax) {
+  jump <- step / (1 - ratio)
+  big <- max(abs(jump))
+  cap <- max(2 * max(scale), max(abs(step)))
+  if (big > cap) jump <- jump * (cap / big)
+  cand <- mu - jump
+  fw <- tryCatch(forward(cand), error = function(e) NULL)
+  if (is.null(fw) || any(!is.finite(fw$resid)) || any(!is.finite(fw$dres)))
+    return(NULL)
+  if (max(abs(fw$resid)) > 10 * rmax) return(NULL)
+  list(mu = cand, fwd = fw)
 }
 
 # A lattice size: a whole number >= 2 (python shapes.as_points, #444).
@@ -530,6 +564,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                 n_iter = 60, tol = 1e-8,
                                 structure = NULL, qa = 9, qf = 15, cov = NULL) {
   points <- .as_points(points)
+  tol <- .as_tolerance(tol)                                   # (#551)
   dense <- NULL
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))

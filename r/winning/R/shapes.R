@@ -74,6 +74,27 @@
   as.integer(v)
 }
 
+# A tolerance is one finite positive number: `resid < Inf` certified the
+# first finite residual of every inverse as converged, returning warm
+# starts 15-24 points off (#551). The browser's asTolerance refuses it.
+.as_tolerance <- function(tol, name = "tol") {
+  if (!is.numeric(tol) || length(tol) != 1L || is.na(tol) ||
+      !is.finite(tol) || tol <= 0)
+    stop(sprintf("%s must be a single finite positive number; got %s",
+                 name, paste(format(tol), collapse = " ")), call. = FALSE)
+  as.numeric(tol)
+}
+
+# A penalty weight: one finite non-negative number. sqrt(max(ridge, 0))
+# read every negative ridge as 0 and a vector as its max (#558).
+.as_nonnegative <- function(x, name) {
+  if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) ||
+      x < 0)
+    stop(sprintf("%s must be a single finite non-negative number; got %s",
+                 name, paste(format(x), collapse = " ")), call. = FALSE)
+  as.numeric(x)
+}
+
 # A target is a law up to a positive factor. When its SUM overflows --
 # every entry finite, e.g. c(4e307, 2e307, 1e307, 1e307) -- rescale by
 # the max first, as python does since #300; the ratios, which are all a

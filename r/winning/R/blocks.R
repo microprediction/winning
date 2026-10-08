@@ -106,6 +106,9 @@
 
 # Max-wins rank-1 field kernel (public functions negate).
 .block_max <- function(mu, sd, cluster, v, points, qa) {
+  # rank zero is the independent race; as.numeric() made it numeric(0)
+  # and the kernel indexed past it (#508)
+  if (is.matrix(v) && ncol(v) == 0L) v <- rep(0, length(mu))
   if (is.matrix(v) && ncol(v) > 1) {
     return(.block_max_r(mu, sd, cluster, v, points, qa))
   }
@@ -200,7 +203,8 @@
 block_race_probabilities <- function(mu, cluster, loading, D,
                                      points = 257, qa = 9) {
   mu <- as.numeric(mu)
-  sd <- sqrt(as.numeric(D))
+  # a scalar D is one variance per contestant, as at every boundary (#510)
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- .block_max(-mu, sd, cluster, loading, points, qa)
   .checked_mass(p, "block race")
 }
@@ -235,7 +239,7 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
     cn <- .cluster_nodes(ncol(g), qf)
     fn <- cn$nodes; fw <- cn$w
   }
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- numeric(length(mu))
   for (q in seq_len(nrow(fn))) {
     # average the RAW conditional masses (each near one) and normalize
@@ -244,6 +248,21 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
                                 sd, cluster, loading, points, qa)
   }
   .checked_mass(p, "nested race")
+}
+
+# Strengths with every COMMON ancestor's set to zero (python's
+# blocks._without_common_shock). A node above every cluster adds the same
+# shock to everyone and cancels from every difference; kept, it widened
+# the lattice window until an irrelevant root strength of 50 raised a
+# mass defect at 257 points (#489). `parent` is 1-based with 0 = root.
+.without_common_shock <- function(parent, lam, nC) {
+  hits <- integer(length(parent))
+  for (cc in seq_len(nC)) {
+    u <- cc
+    while (parent[u] > 0) { u <- parent[u]; hits[u] <- hits[u] + 1L }
+  }
+  lam[hits == nC] <- 0
+  lam
 }
 
 # A tree is a tree: one root, every parent an existing node, no cycles,
@@ -323,7 +342,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
                                     strength, points = 257, qa = 9) {
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
   lam <- as.numeric(strength)
   n <- length(m)
@@ -331,6 +350,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
   nT <- length(parent)
+  lam <- .without_common_shock(parent, lam, nC)          # #489
   ord <- order(inv)
   mu_o <- m[ord]; sd_o <- sd[ord]; v_o <- v[ord]; c_o <- inv[ord]
   h <- .hermite1(qa)
@@ -426,8 +446,10 @@ block_race_jacobian <- function(mu, cluster, loading, D,
   }
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
-  v <- as.numeric(loading)
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
+  # rank zero: no shared effect (#508)
+  v <- if (is.matrix(loading) && ncol(loading) == 0L) rep(0, length(mu))
+       else as.numeric(loading)
   n <- length(mu)
   inv <- .cluster_index(cluster)
   ord <- order(inv)
@@ -535,7 +557,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
 abilities_from_block_race <- function(p, cluster, loading, D,
                                       points = 257, qa = 9,
                                       tol = 1e-10, max_iter = 25) {
-  p_t <- as.numeric(p); p_t <- p_t / sum(p_t)
+  p_t <- .rescaled_target(as.numeric(p))       # scale-safe (#463)
   n <- length(p_t)
   floor_ <- max(1e-14, min(p_t[p_t > 0]) * 1e-3)
   p_t <- pmax(p_t, floor_); p_t <- p_t / sum(p_t)
@@ -600,7 +622,7 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
                                points = 257, qa = 9) {
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
   lam <- as.numeric(strength)
   n <- length(m)
@@ -608,6 +630,9 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
   nT <- length(parent)
+  # a common shock cancels: without it a bare root takes the exact path
+  lam <- .without_common_shock(parent, lam, nC)          # #489
+  strength <- lam
   if (nT > nC && any(lam[(nC + 1):nT] != 0)) {
     # with any ancestor effect the cross-cluster Gram product is not the
     # derivative (two leaves under a common root: forward invariant in

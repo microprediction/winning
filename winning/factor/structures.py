@@ -56,7 +56,10 @@ class Factor:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from V, not D: a scalar D is one variance for every contestant
+        # and carries no count (#510)
+        V = np.asarray(self.V)
+        return len(V) if V.ndim else len(np.asarray(self.D))
 
 
 @dataclass(frozen=True)
@@ -67,7 +70,9 @@ class Blocks:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
 
 @dataclass(frozen=True)
@@ -80,7 +85,9 @@ class Nested:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
 
 @dataclass(frozen=True)
@@ -93,7 +100,9 @@ class Tree:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
     @classmethod
     def from_linkage(cls, Z):
@@ -258,10 +267,15 @@ def _loading_var(loading, n):
 def structure_variances(structure):
     """Total per-runner variance implied by a grammar structure (shared
     effects plus idiosyncratic): the marginal the generic inverter's
-    independent surrogate preconditioner matches."""
-    D = np.asarray(structure.D, float)
+    independent surrogate preconditioner matches. A scalar D is the same
+    variance for every contestant, as at every other boundary: it was
+    taken as a zero-dimensional array and len(D) raised TypeError, so a
+    scalar-D Blocks/Nested target priced by the forward could not be
+    inverted through the same structure (#510)."""
+    from ..shapes import as_idio
     if isinstance(structure, Independent):
-        return D.copy()
+        return np.array(np.asarray(structure.D, float), ndmin=1)
+    D = as_idio(structure.D, structure.n)
     if isinstance(structure, Factor):
         V = np.asarray(structure.V, float)
         return D + (V ** 2).sum(axis=1)
@@ -278,8 +292,13 @@ def structure_variances(structure):
     if isinstance(structure, Tree):
         from .blocks import _scalar_loading
         tot = D + _scalar_loading(structure.loading, "tree races") ** 2
+        from .blocks import _without_common_shock
         parent = np.asarray(structure.parent, int)
-        strength = np.asarray(structure.strength, float)
+        # Cluster labels are remapped below; a common ancestor's shock
+        # cancels and is no part of the surrogate's variance (#489)
+        n_clusters = len(np.unique(np.asarray(structure.cluster)))
+        strength = _without_common_shock(
+            parent, np.asarray(structure.strength, float), n_clusters)
         # Cluster labels are arbitrary comparable values, and the forward
         # dispatch says so: every tree/block kernel in blocks.py remaps
         # them with np.unique(..., return_inverse=True). This cast them
