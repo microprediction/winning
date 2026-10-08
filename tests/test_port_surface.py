@@ -429,6 +429,29 @@ def test_every_browser_options_api_validates_its_options():
         "an object swallows a key nobody reads:\n  " + "\n  ".join(offenders))
 
 
+def test_browser_and_standalone_options_are_all_checked():
+    """An inline-destructured options object -- `fn(x, { loc, scale } = {})`
+    -- skips checkOpts by construction, and the audit above only matched a
+    parameter literally named `opts = {}`. skewNormalDensity({sacle})
+    and dividendImpliedAbility({unti}) priced the defaults silently
+    (#561). The standalone engine is a browser options API too (#559)."""
+    offenders = []
+    paths = sorted((ROOT / "docs/js/winning").glob("*.mjs")) + [
+        ROOT / "js/factor/factor_race.mjs"]
+    for path in paths:
+        text = path.read_text()
+        for m in re.finditer(r"export function (\w+)\(([^)]*)\)\s*\{", text):
+            if re.search(r"\{[^}]*\}\s*=\s*\{\}", m.group(2)):
+                offenders.append(f"{path.name}::{m.group(1)}")
+            elif re.search(r"\bopts\s*=\s*\{\}", m.group(2)):
+                body = text[m.end():m.end() + 400]
+                if "checkOpts(opts," not in body:
+                    offenders.append(f"{path.name}::{m.group(1)} (no checkOpts)")
+    assert not offenders, (
+        "browser exports whose options object is not validated:\n  "
+        + "\n  ".join(offenders))
+
+
 # helpers whose trailing destructured object is not a public options API
 # (asFiniteVector is a boundary helper), or that sit outside the classic
 # sweep of #561 and are tracked there (concentrationMatrix)

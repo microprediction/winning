@@ -33,8 +33,20 @@
 
 .clip01 <- function(v) pmin(pmax(v, 0), 1)
 
-.resolved_points <- function(lo, hi, sd, points) {
-  smin <- max(min(sd), 1e-300)
+# A base's central scale in standardized units (attr(fn, "resolution"),
+# default 1), as python's _resolution (#385) and the browser (#600): a
+# unit-variance law can still concentrate on a much narrower centre.
+.base_resolution <- function(fn) {
+  r <- if (is.null(fn)) NULL else attr(fn, "resolution")
+  if (is.null(r)) return(1)
+  if (!is.numeric(r) || length(r) != 1L || !is.finite(r) || r <= 0)
+    stop("base resolution must be a single finite positive number",
+         call. = FALSE)
+  as.numeric(r)
+}
+
+.resolved_points <- function(lo, hi, sd, points, res = 1) {
+  smin <- max(min(sd), 1e-300) * res
   # in DOUBLE, and clamp before converting: a narrow enough runner makes
   # the requirement exceed .Machine$integer.max, and as.integer() then
   # returns NA, so the very `if (need > 8193)` meant to handle that
@@ -61,7 +73,30 @@
   m0 + cs * w
 }
 
+# delta is a REQUEST. A polynomial tail puts the 1e-12 count quantile so
+# far out that the capped grid cannot resolve the bulk: Student-t(3) got
+# a window of 7.54e3 at spacing 0.92 and failed the mass check at every
+# point request through the cap (#468; python's #386). Relax by factors of
+# 100 (to at most 1e-4) until the window fits the cap at half the
+# narrowest sd times the base's central scale, and say so.
 .count_window_std <- function(mu, sd, k, fn, delta, pad_sds) {
+  afford <- 0.5 * max(min(sd), 1e-300) * .base_resolution(fn) * (8193 - 1)
+  d <- delta
+  w <- .count_window_at(mu, sd, k, fn, d, pad_sds)
+  while (w[2] - w[1] > afford && d < 1e-4) {
+    d <- min(d * 100, 1e-4)
+    w <- .count_window_at(mu, sd, k, fn, d, pad_sds)
+  }
+  if (d > delta)
+    warning(sprintf(paste("top-k window relaxed delta from %.0e to %.0e:",
+                          "this base's tail puts the requested count",
+                          "quantile further out than 8193 points can",
+                          "resolve, so the window is exact at the relaxed",
+                          "delta."), delta, d), call. = FALSE)
+  w
+}
+
+.count_window_at <- function(mu, sd, k, fn, delta, pad_sds) {
   n <- length(mu)
   smax <- max(sd)
   mean_count <- function(x) sum(1 - fn((x - mu) / sd)$S)
@@ -102,7 +137,7 @@
 # field leaves the narrowest density between samples, and the mass check
 # cannot see it: that check is one scalar (memberships sum to k) and
 # runner-level errors of opposite sign cancel in it (#224).
-  points <- .resolved_points(w[1], w[2], sd, points)
+  points <- .resolved_points(w[1], w[2], sd, points, .base_resolution(fn))
   x <- seq(w[1], w[2], length.out = points)
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
@@ -268,9 +303,11 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 # for a 7.7e-24 last place and lattice residue when refined (#365)
 .bottomk_independent <- function(mu, sd, k, fn, points) {
   refl <- function(z) { b <- fn(-z); list(S = 1 - b$S, f = b$f, fp = -b$fp) }
+  res <- .base_resolution(fn)
+  attr(refl, "resolution") <- res   # the reflection keeps the centre (#468)
   wr <- .count_window(-mu, sd, k, refl)
   w <- c(-wr[2], -wr[1])
-  points <- .resolved_points(w[1], w[2], sd, points)
+  points <- .resolved_points(w[1], w[2], sd, points, res)
   x <- seq(w[1], w[2], length.out = points)
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)

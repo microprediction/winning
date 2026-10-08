@@ -174,10 +174,32 @@ function asPositive(x, dflt, where, name) {
     throw new Error(`${where}: ${name} must be a finite positive number; got ${x}`);
   return x;
 }
+/* Only an OMITTED base (undefined) means normal. `b || "normal"` read
+   "", false, 0 and null as the default too, so an invalid base priced --
+   and certified a calibration of -- the normal model (#552). */
 function baseOf(b) {
-  const base = (b && typeof b === "object") ? b : BASES[b || "normal"];
-  if (!base) throw new Error("unknown base: " + b);
+  if (b === undefined) b = "normal";
+  const base = (b !== null && typeof b === "object") ? b
+    : (typeof b === "string" && Object.prototype.hasOwnProperty.call(BASES, b)) ? BASES[b]
+    : null;
+  if (!base || typeof base.eval !== "function")
+    throw new Error(`unknown base: ${typeof b === "string" ? JSON.stringify(b) : String(b)}; ` +
+                    `known: ${Object.keys(BASES).join(", ")}, or a base object with eval()`);
   return base;
+}
+
+/* Each options object declares its keys: a JavaScript object swallows a
+   key nobody reads, so {bsae: "gumbel"} priced -- and certified a
+   calibration of -- the normal model (#559), the failure the modular
+   browser API closed in #186. */
+const WIN_PROBABILITIES_FACTOR_OPTS = new Set(["points", "base", "ownLogSlope", "pairwise", "deletions"]);
+const ABILITIES_FROM_PROBABILITIES_FACTOR_OPTS = new Set(["nIter", "tol", "points", "base", "mu0", "returnInfo"]);
+function checkOpts(opts, known, where) {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts))
+    throw new Error(`${where}: options must be an object; got ${opts === null ? "null" : typeof opts}`);
+  for (const k of Object.keys(opts))
+    if (!known.has(k))
+      throw new Error(`${where}: unknown option '${k}'. Known: ${[...known].join(", ")}.`);
 }
 
 /* Standardized bases (zero mean, unit variance), matching Python
@@ -409,8 +431,10 @@ export function asWeights(W, nNodes, where = "W") {
     throw new Error(`${where} must have one weight per factor node; got ${W.length} for ${nNodes}`);
   let top = 0;
   for (let i = 0; i < W.length; i++) {
-    const v = Number(W[i]);
-    if (!Number.isFinite(v))
+    // a NUMBER, as core.mjs asWeights: Number() made "0.5", true and null
+    // weights, and [true, false] priced the law [1, 0] (#527)
+    const v = W[i];
+    if (typeof v !== "number" || !Number.isFinite(v))
       throw new Error(`${where}[${i}] = ${W[i]} is not a finite weight`);
     if (v < 0)
       throw new Error(`${where}[${i}] = ${v} is a negative weight; a factor law has no negative mass`);
@@ -460,6 +484,7 @@ function centredLoadings(V, N) {
 }
 
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
+  checkOpts(opts, WIN_PROBABILITIES_FACTOR_OPTS, "winProbabilitiesFactor");
   const points = asBudget(opts.points, 501, "winProbabilitiesFactor", "points");
   if (points < 3) throw new Error("winProbabilitiesFactor: points must be at least 3");
   const base = baseOf(opts.base);
@@ -590,17 +615,23 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
  * returning an uncertified calibration silently (#358, #428). */
 export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {}) {
   const where = "abilitiesFromProbabilitiesFactor";
+  checkOpts(opts, ABILITIES_FROM_PROBABILITIES_FACTOR_OPTS, where);
   const nIter = asBudget(opts.nIter, 50, where, "nIter");
   const tol = asPositive(opts.tol, 1e-6, where, "tol");
   const points = asBudget(opts.points, 501, where, "points");
-  const base = opts.base || "normal";
+  const base = opts.base === undefined ? "normal" : opts.base;   // #552
   baseOf(base);
   const target = finiteVec(pTarget, "target", "probability");
   const N = target.length;
   ({ F, W } = asFactorLaw(F, W, "W"));   // zero-weight nodes dropped (#416)
-  let psum = 0;
-  for (const v of target) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
-  const p = target.map((v) => v / psum);
+  // through the LARGEST entry first: a relative target of finite entries
+  // can overflow only in its sum, and [0.8, 0.6, 0.4, 0.2] * 1e308 came
+  // back all NaN where * 1e307 calibrated (#475)
+  let top = 0;
+  for (const v of target) { if (v <= 0) throw new Error("targets must be positive"); if (v > top) top = v; }
+  const u = target.map((v) => v / top);
+  const usum = u.reduce((a, b) => a + b, 0);
+  const p = u.map((v) => v / usum);
   const logp = p.map(Math.log);
   V = asLoadings(V, N);
   D = asIdio(D, N);
@@ -685,7 +716,7 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
 
   let mu;
   const anyV = Vc.some((row) => row.some((v) => v !== 0));
-  if (opts.mu0) {
+  if (opts.mu0 != null) {
     mu = finiteVec(opts.mu0, "mu0", "ability");
     if (mu.length !== N) throw new Error(`mu0 has ${mu.length} entries for ${N}`);
   } else if (r >= 1 && anyV) {

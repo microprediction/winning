@@ -6,8 +6,8 @@
 // the derivations and the two-branch refusal of exact-rank targets.
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
-         jacobiSweeps } from "./core.mjs";
-import { BASES, _factorNodeRule } from "./races.mjs";
+         jacobiSweeps, rescaledTarget } from "./core.mjs";
+import { BASES, _factorNodeRule, baseResolution } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -36,6 +36,7 @@ function baseFn(base) {
   const fn = typeof base === "function" ? base : BASES[base];
   if (typeof fn !== "function")
     throw new Error(`unknown base ${JSON.stringify(base)}; known: ${Object.keys(BASES).join(", ")}, or a function`);
+  baseResolution(fn);
   return fn;
 }
 
@@ -55,7 +56,36 @@ function countWindow(mu, sd, k, fn, delta = 1e-12, padSds = 2.0) {
   return [m0 + c * lo, m0 + c * hi];
 }
 
+/* delta is a REQUEST. A polynomial tail puts the 1e-12 count quantile so
+   far out that the capped grid cannot resolve the bulk: Student-t(3) got
+   a window of 7.54e3 at spacing 0.92 and every point request through the
+   cap raised a mass defect (#468; python's #386). Relax by factors of 100
+   (to at most 1e-4, as the win race's bulk window does) until the window
+   fits the cap at half the narrowest sd times the base's central scale,
+   and say so. */
+const MAX_TOPK_POINTS = 8193;
+const TOPK_RELAXED_WARNED = new Set();
 function countWindowStd(mu, sd, k, fn, delta, padSds) {
+  const afford = 0.5 * Math.max(Math.min(...sd), 1e-300) * baseResolution(fn) *
+                 (MAX_TOPK_POINTS - 1);
+  let d = delta;
+  let [lo, hi] = countWindowAt(mu, sd, k, fn, d, padSds);
+  while (hi - lo > afford && d < 1e-4) {
+    d = Math.min(d * 100, 1e-4);
+    [lo, hi] = countWindowAt(mu, sd, k, fn, d, padSds);
+  }
+  const key = `${delta}|${d}`;
+  if (d > delta && typeof console !== "undefined" && !TOPK_RELAXED_WARNED.has(key) &&
+      TOPK_RELAXED_WARNED.add(key))
+    console.warn(
+      `top-k window relaxed delta from ${delta.toExponential(0)} to ` +
+      `${d.toExponential(0)}: this base's tail puts the requested count ` +
+      `quantile further out than ${MAX_TOPK_POINTS} points can resolve, so ` +
+      "the window is exact at the relaxed delta.");
+  return [lo, hi];
+}
+
+function countWindowAt(mu, sd, k, fn, delta, padSds) {
   const n = mu.length;
   const smax = Math.max(...sd);
   const meanCount = x => {
@@ -206,20 +236,22 @@ function pairPmfAt(Qi, F, i, k) {
   return out;
 }
 
-function resolvedPoints(lo, hi, sd, points) {
+function resolvedPoints(lo, hi, sd, points, res = 1) {
   // about two points per NARROWEST sd, capped at 8193. The window is set
   // by the widest runner and the grid by `points`, so a heterogeneous
   // field leaves the narrowest density between samples, and the mass
   // check cannot see it: that check is one scalar (memberships sum to k)
   // and runner-level errors of opposite sign cancel in it (#224).
-  const smin = Math.max(Math.min(...sd), 1e-300);
+  // times the base's central scale, as python (#385/#600): a narrow-centred
+  // unit-variance base needs the spacing measured against its centre
+  const smin = Math.max(Math.min(...sd), 1e-300) * res;
   // a Number is already a double, so this cannot overflow the way R and
   // Julia did (#228); !isFinite still guards a zero-width window
   const need = Math.ceil((hi - lo) / (0.5 * smin)) + 1;
   if ((!Number.isFinite(need) || need > 8193) && typeof console !== "undefined")
     console.warn(
       `top-k lattice cannot resolve the narrowest runner even at 8193 ` +
-      `points (min sd ${smin.toExponential(1)} over a window of ` +
+      `points (min sd x central scale ${smin.toExponential(1)} over a window of ` +
       `${(hi - lo).toPrecision(3)}); memberships may carry percent-level ` +
       "error the mass check cannot see.");
   return Math.max(points, Math.min(need, 8193));
@@ -227,7 +259,7 @@ function resolvedPoints(lo, hi, sd, points) {
 
 function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   const [lo, hi] = countWindow(mu, sd, k, fn, delta);
-  points = resolvedPoints(lo, hi, sd, points);
+  points = resolvedPoints(lo, hi, sd, points, baseResolution(fn));
   const x = new Array(points);
   const dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
@@ -242,9 +274,13 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
 function bottomkIndependent(mu, sd, k, fn, points) {
   const n = mu.length;
   const refl = z => { const b = fn(-z); return [1 - b[0], b[1], -b[2]]; };
+  // the reflection has the same central scale: without it the dedicated
+  // bottom-k path ignored the base's resolution (#468 comment)
+  const res = baseResolution(fn);
+  refl.resolution = res;
   const [lr, hr] = countWindow(mu.map(v => -v), sd, k, refl);
   const lo = -hr, hi = -lr;
-  points = resolvedPoints(lo, hi, sd, points);
+  points = resolvedPoints(lo, hi, sd, points, res);
   const x = new Array(points);
   const dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
@@ -374,7 +410,9 @@ export function topKProbabilities(mu, k, opts = {}) {
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
-  if (!V) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
+  // omission is null/undefined, never falsiness: NaN, false and "" are
+  // malformed loadings for asLoadings to refuse, not "no factor" (#549)
+  if (V == null) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
                              k, "top-k race");
   const { Vm, nodes, w } = factorNodes(V, n, qa, D);
   const raw = new Array(n).fill(0);
@@ -397,8 +435,8 @@ export function bottomKProbabilities(mu, k, opts = {}) {
   const n = mu.length;
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
-  const fn = typeof base === "function" ? base : BASES[base];
-  if (!V) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
+  const fn = baseFn(base);
+  if (V == null) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
   const { Vm, nodes, w } = factorNodes(V, n, qa, D);
   const raw = new Array(n).fill(0);
   for (let q = 0; q < nodes.length; q++) {
@@ -420,7 +458,7 @@ export function topKJacobians(mu, k, opts = {}) {
   mu = asAbilities(mu);        // an Infinity used to return all-NaN Jacobians (#440)
   const n = mu.length;
   k = asDepth(k, n);
-  if (V) {
+  if (V != null) {
     // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
     const { Vm, nodes, w } = factorNodes(V, n, qa, D);
     const Jmu = [], Jsigma = [];
@@ -510,7 +548,7 @@ export function rankProbabilities(mu, opts = {}) {
   // returned -- plausible, doubly stochastic, and for the wrong model
   // (#199). The mixture is the same one topKProbabilities takes.
   let P;
-  if (!V) {
+  if (V == null) {
     P = oneNode(mu);
   } else {
     const { Vm, nodes, w } = factorNodes(V, n, qa, D);
@@ -571,7 +609,12 @@ function validatedTarget(q, k, n, targetFloor) {
   if (bad >= 0) throw new Error(`target[${bad}] = ${target[bad]} is not finite`);
   let floored = new Array(n).fill(false);
   if (targetFloor != null) {
-    if (!(targetFloor > 0)) throw new Error("targetFloor must be positive");
+    // a finite positive NUMBER: `> 0` coerced "0.1" and true (a uniform
+    // target, certified converged) and let Infinity through to a
+    // RangeError from the lattice sizing (#525)
+    if (typeof targetFloor !== "number" || !Number.isFinite(targetFloor) ||
+        !(targetFloor > 0))
+      throw new Error(`targetFloor must be a finite positive number; got ${typeof targetFloor === "string" ? JSON.stringify(targetFloor) : String(targetFloor)}`);
     floored = target.map(v => v < targetFloor);
     target = target.map(v => Math.max(v, targetFloor));
   } else if (target.some(v => v <= 0)) {
@@ -580,8 +623,9 @@ function validatedTarget(q, k, n, targetFloor) {
       "has no finite inverse. Pass targetFloor to floor small entries " +
       "deliberately.");
   }
-  const s = target.reduce((a, b) => a + b, 0);
-  target = target.map(v => v * (k / s));
+  // scale-safe: a 1e308-scaled target overflowed in the sum (#461). With
+  // a finite sum this is the old v * (k / s) exactly.
+  target = rescaledTarget(target, k);
   if (target.some(v => v >= 1))
     throw new Error(
       "after renormalizing to k slots, a target membership is >= 1: " +
@@ -605,7 +649,7 @@ export function abilitiesFromTopk(q, k, opts = {}) {
   const { target, floored } = validatedTarget(q, k, n, targetFloor);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
-  const fac = V ? factorNodes(V, n, qa, D) : null;
+  const fac = V != null ? factorNodes(V, n, qa, D) : null;
 
   const logitT = target.map(v => Math.log(v) - Math.log1p(-v));
   const logT = target.map(Math.log);
@@ -834,10 +878,10 @@ export function locScaleFromWinAndSecond(pWin, pSecond, opts = {}) {
     throw new Error("pWin and pSecond must have equal length");
   if (pWin.some(v => v <= 0) || pSecond.some(v => v <= 0))
     throw new Error("all win and second probabilities must be positive");
-  const s1 = pWin.reduce((a, b) => a + b, 0);
-  const s2 = pSecond.reduce((a, b) => a + b, 0);
-  const p1 = pWin.map(v => v / s1);
-  const top2 = p1.map((v, i) => v + pSecond[i] / s2);
+  // each normalised scale-safely: a raw sum can overflow (#483)
+  const p1 = rescaledTarget(pWin);
+  const p2 = rescaledTarget(pSecond);
+  const top2 = p1.map((v, i) => v + p2[i]);
   return locScaleFromTopkPair(p1, 1, top2, 2, opts);
 }
 
@@ -895,8 +939,7 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
     throw new Error("rank probabilities must be finite");
   if (p.some(v => v <= 0))
     throw new Error("all rank probabilities must be positive");
-  const s = p.reduce((a, b) => a + b, 0);
-  const logt = p.map(v => Math.log(v / s));
+  const logt = rescaledTarget(p).map(Math.log);     // overflow-safe (#483)
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
   const zz = [-2.3, -1.1, -0.35, 0.6, 1.7];

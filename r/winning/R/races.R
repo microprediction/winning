@@ -295,7 +295,8 @@
     }
     c(xlo - pad, b + pad)
   }
-  budget <- 0.5 * min(s) * max(points - 1, 1)
+  # times the base's central scale, as python and the browser (#600)
+  budget <- 0.5 * min(s) * .base_resolution(fn) * max(points - 1, 1)
   d <- delta
   w <- window_at(d)
   while (w[2] - w[1] > budget && d < 1e-4) {
@@ -442,6 +443,11 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                window = "bulk", delta = 1e-12,
                                qa = 9, qf = 15, nodes = NULL, cov = NULL) {
   points <- .as_points(points)
+  # one of two names: every value but "bulk" used to mean span (#582)
+  if (!(is.character(window) && length(window) == 1L && !is.na(window) &&
+        window %in% c("bulk", "span")))
+    stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
+                 paste(deparse(window), collapse = " ")), call. = FALSE)
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
