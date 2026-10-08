@@ -681,6 +681,261 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     return Vall, D, F, W
 
 
+def _nnls_gram(G, r, max_iter=50):
+    """argmin_{y >= 0} y'Gy/2 - r'y for SPD G, from the normal equations.
+
+    Primal-dual active set (semismooth Newton on the KKT system): guess
+    the zero set from y - grad/diag(G), solve the free block exactly,
+    repeat until the guess is stable. Each pass is one Cholesky of the
+    free block; it stops at an exact KKT point, checked below. An
+    in-grammar C is solved by the first pass. scipy's Lawson-Hanson nnls
+    adds one column per iteration and took 26 s at n = 2000; it remains
+    the fallback should the active-set iteration cycle."""
+    from scipy.linalg import cho_factor, cho_solve
+    from scipy.optimize import nnls
+    m = len(r)
+    dg = np.diag(G).copy()
+    y = np.zeros(m)
+    lam = -r.copy()                                  # gradient at y = 0
+    free = None
+    tol = 1e-12 * max(float(np.abs(r).max()), 1e-300)
+    for _ in range(max_iter):
+        new_free = (y - lam / dg) > 0
+        if free is not None and np.array_equal(new_free, free):
+            break
+        free = new_free
+        y = np.zeros(m)
+        if free.any():
+            Gf = G[np.ix_(free, free)]
+            y[free] = cho_solve(cho_factor(Gf), r[free])
+        lam = G @ y - r
+        lam[free] = 0.0
+    if (y >= -tol).all() and (lam >= -tol * m).all():
+        return np.maximum(y, 0.0)
+    L = np.linalg.cholesky(G)
+    y, _ = nnls(L.T, np.linalg.solve(L, r), maxiter=50 * m)
+    return y
+
+
+def _genealogy_parent(parent, n):
+    """An integer parent array over n entrants (-1 for a root), checked to
+    be a forest, or a refusal naming the defect. Returns it as int64."""
+    p = np.asarray(parent)
+    if p.ndim != 1 or len(p) != n:
+        raise ValueError(
+            f"parent must be a 1-D array with one entry per entrant ({n}); "
+            f"got shape {p.shape}")
+    if p.dtype.kind not in "iu":
+        if (p.dtype.kind != "f" or not np.isfinite(p).all()
+                or (p != np.floor(p)).any()):
+            raise ValueError(
+                f"parent must hold integers (-1 for a root); got dtype "
+                f"{p.dtype}")
+    p = p.astype(np.int64)
+    bad = np.flatnonzero((p < -1) | (p >= n))
+    if bad.size:
+        raise ValueError(
+            f"parent[{int(bad[0])}] = {int(p[bad[0]])} is not -1 or an "
+            f"entrant index in [0, {n})")
+    state = np.zeros(n, np.int8)             # 0 unseen, 1 on path, 2 done
+    for t in range(n):
+        path = []
+        u = t
+        while u >= 0 and state[u] == 0:
+            state[u] = 1
+            path.append(u)
+            u = int(p[u])
+        if u >= 0 and state[u] == 1:
+            k = path.index(u)
+            cyc = " -> ".join(str(x) for x in path[k:] + [u])
+            raise ValueError(
+                f"parent contains a cycle: {cyc}; a genealogy is a forest")
+        for v in path:
+            state[v] = 2
+    return p
+
+
+def fit_tree(C, parent, k: int = 0, max_n: int = 2000):
+    """Dense-covariance intake onto a KNOWN genealogy: fit C to the tree
+    race whose clades are given by `parent`, and return (V, D, tree,
+    report) with `tree` a structures.Tree ready for
+    race_probabilities(mu, structure=tree).
+
+    The genealogy. parent[i] is the entrant i was derived from, -1 for a
+    root (a forest is allowed). Each edit is shared by everything derived
+    from it, so the model is the random walk on the genealogy:
+
+        theta_i = sum over ancestors-or-self a of i of  sqrt(s_a) z_a
+                  + sqrt(D_i) eps_i,
+
+    i.e. Sigma = sum_a s_a 1_{clade(a)} 1_{clade(a)}' + diag(D), where
+    clade(a) is a together with all its descendants.
+
+    Entrants are NOT restricted to the leaves of the genealogy: a parent
+    is itself a candidate. The mapping to a Tree therefore makes every
+    entrant a Tree LEAF (its own cluster, carrying D_i) and every clade an
+    INTERNAL node: entrant j's leaf is node j, clade(j) is node n + j with
+    strength sqrt(s_j), leaf j hangs under node n + j, node n + j hangs
+    under node n + parent[j], and the genealogy roots hang under one added
+    node 2n of strength 0 (a Tree has one root; a shift common to every
+    entrant moves no race). So a parent with children is a leaf sibling
+    of its children's clades, inside its own clade.
+
+    The fit. Only contrasts are choice-relevant, so the strengths are the
+    nonnegative least squares fit of the n(n-1)/2 contrast variances
+    Var(theta_i - theta_j) = C_ii + C_jj - 2 C_ij onto D_i + D_j + sum of
+    s_a over the clades that SEPARATE i from j (contain exactly one).
+    Clades whose cut duplicates another column are not identifiable from
+    contrasts and are held at zero, their effect carried by the
+    equivalent column: a single-entrant clade (a genealogy leaf) is
+    D_i; a clade of all n entrants or of all but one is the common shift
+    or the outsider's D; and of two root clades that partition the field,
+    the higher-indexed root's is held. The remaining columns are
+    linearly independent (compatible splits), so the fit is unique. D
+    carries the same relative floor as fit_covariance (1e-6 of each
+    entrant's own variance), as a lower bound inside the least squares,
+    not a clip afterwards. The normal equations are assembled from clade
+    sums in O(n^2) time and memory without forming the pair design.
+
+    k > 0 global factors are refused: the front door has no kernel for
+    factors PLUS a tree (structure= and V=/D= are exclusive, and Tree's
+    leaf loadings are per-cluster, not global), and building one is out
+    of scope here. V is returned as the empty (n, 0) loading so the
+    signature already carries it; D is tree.D.
+
+    Fields above max_n (default 2000; the Gram matrix is up to (2n)^2
+    doubles, ~128 MB at n = 2000) are refused rather than subsampled: a
+    subsample would drop entrants from the race being priced.
+
+    report: projected_residual_rel (||P (C - Sigma_hat) P||_F over
+    ||P C P||_F, as fit_covariance), projected_residual_max (worst
+    centered entry over the mean variance), contrast_residual_max (worst
+    pair residual over its contrast variance), clades_fitted (identifiable
+    clades), clades_zero (identifiable clades the fit set to zero) and
+    floored (entrants whose D sits on its floor).
+    """
+    from .structures import Tree
+
+    kk = np.asarray(k)
+    if kk.ndim != 0 or not np.isfinite(kk) or kk != np.floor(kk) or kk < 0:
+        raise ValueError(f"fit_tree needs an integer k >= 0; got {k!r}")
+    if int(kk) > 0:
+        raise NotImplementedError(
+            "fit_tree(k > 0): no kernel prices k global factors PLUS a "
+            "tree -- race_probabilities takes structure= or V=/D=, not "
+            "both, and a Tree's leaf loadings are per cluster. Fit k = 0, "
+            "or fit_covariance for factors alone.")
+    C = _validate_covariance(C, name="C")
+    n = len(C)
+    if n > max_n:
+        raise ValueError(
+            f"fit_tree is O(n^2) in time and memory and n = {n} exceeds "
+            f"max_n = {max_n}; raise max_n deliberately (the Gram matrix "
+            "alone is up to 32 n^2 bytes), or fit a sub-genealogy")
+    p = _genealogy_parent(parent, n)
+    c = np.diag(C).copy()
+    floor = 1e-6 * np.maximum(c, 1e-6 * max(float(np.mean(c)), 1e-300))
+
+    # ancestry: anc[i, j] = j is i or an ancestor of i, i.e. i in clade(j)
+    depth = np.full(n, -1, np.int64)
+    for t in range(n):
+        path = []
+        u = t
+        while u >= 0 and depth[u] < 0:
+            path.append(u)
+            u = int(p[u])
+        d = depth[u] if u >= 0 else -1
+        for v in reversed(path):
+            d += 1
+            depth[v] = d
+    order = np.argsort(depth, kind="stable")             # parents first
+    anc = np.zeros((n, n), dtype=bool)
+    for i in order:
+        if p[i] >= 0:
+            anc[i] = anc[p[i]]
+        anc[i, i] = True
+    size = anc.sum(axis=0)
+
+    roots = np.flatnonzero(p < 0)
+    keep = (size >= 2) & (size <= n - 2)
+    if len(roots) == 2 and keep[roots].all():
+        keep[roots[1]] = False                          # same cut as roots[0]
+    J = np.flatnonzero(keep)
+    K = len(J)
+
+    s = np.zeros(n)
+    if n == 1:
+        D = np.maximum(c, floor)
+    elif n == 2:
+        v = max(float(c.sum() - 2.0 * C[0, 1]), 0.0)
+        D = np.maximum(np.full(2, v / 2.0), floor)
+    else:
+        rsum = C.sum(axis=1)
+        tot = float(c.sum())
+        # A'b, where b is the contrast-variance vector over pairs
+        h = np.empty(n + K)
+        h[:n] = n * c + tot - 2.0 * rsum
+        if K:
+            # W[:, j] = C 1_{clade(j)}, accumulated children-first: O(n^2)
+            Wc = C.copy()
+            for i in order[::-1]:
+                if p[i] >= 0:
+                    Wc[:, p[i]] += Wc[:, i]
+            Ak = anc[:, J].astype(float)
+            q = np.einsum("ij,ij->j", Wc[:, J], Ak)      # 1' C_clade 1
+            del Wc
+            mc = Ak.T @ c
+            mr = Ak.T @ rsum
+            sz = size[J].astype(float)
+            h[n:] = (n - sz) * mc + sz * (tot - mc) - 2.0 * (mr - q)
+        # A'A: pairs separated by both cuts
+        G = np.empty((n + K, n + K))
+        G[:n, :n] = 1.0
+        G[np.arange(n), np.arange(n)] = n - 1.0
+        if K:
+            G[:n, n:] = np.where(anc[:, J], n - sz[None, :], sz[None, :])
+            G[n:, :n] = G[:n, n:].T
+            nest = anc[np.ix_(J, J)]                     # clade(J_a) in clade(J_b)
+            x = np.where(nest, sz[:, None], np.where(nest.T, sz[None, :], 0.0))
+            G[n:, n:] = (x * (n - sz[:, None] - sz[None, :] + x)
+                         + (sz[:, None] - x) * (sz[None, :] - x))
+        lb = np.concatenate([floor, np.zeros(K)])
+        rhs = h - G @ lb
+        y = _nnls_gram(G, rhs)
+        x_ = lb + np.maximum(y, 0.0)
+        D = x_[:n]
+        s[J] = x_[n:]
+
+    strength = np.zeros(2 * n + 1)
+    strength[n:2 * n] = np.sqrt(s)
+    tparent = np.empty(2 * n + 1, np.int64)
+    tparent[:n] = n + np.arange(n)
+    tparent[n:2 * n] = np.where(p >= 0, n + p, 2 * n)
+    tparent[2 * n] = -1
+    tree = Tree(cluster=np.arange(n), loading=np.zeros(n), D=D.copy(),
+                parent=tparent, strength=strength)
+
+    # fitted covariance and the choice-relevant residual
+    pos = np.flatnonzero(s > 0)
+    Am = anc[:, pos] * np.sqrt(s[pos])[None, :]
+    Sig = Am @ Am.T
+    Sig[np.arange(n), np.arange(n)] += D
+    Rfin = _center2(C - Sig)
+    denom = float(np.linalg.norm(_center2(C)))
+    report = {
+        "projected_residual_rel":
+            float(np.linalg.norm(Rfin)) / denom if denom > 0 else 0.0,
+        "projected_residual_max":
+            float(np.abs(Rfin).max() / max(float(np.mean(c)), 1e-300)),
+        "contrast_residual_max":
+            _worst_contrast_ratio(C, Rfin) if n >= 2 else 0.0,
+        "clades_fitted": int(K),
+        "clades_zero": int(np.sum(s[J] <= 0.0)),
+        "floored": int(np.sum(D <= floor * (1.0 + 1e-12))),
+    }
+    return np.zeros((n, 0)), D, tree, report
+
+
 def _worst_contrast_ratio(C, R, cap_n=4000):
     """max over pairs of |contrast residual| / contrast variance.
 

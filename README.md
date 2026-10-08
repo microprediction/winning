@@ -108,7 +108,9 @@ the module docstrings give the measured cost of crossing over.
 - `winning.factor`: the engine. The all-share forward pass, inversion,
   exact Jacobians and tie densities, covariance fitting
   (`fit_covariance(C, k, blocks=...)`, where `blocks` is a count to
-  cluster or a known label per entrant), and constrained polish.
+  cluster or a known label per entrant; `fit_tree(C, parent)` onto a
+  known genealogy, priced as `race_probabilities(mu, structure=tree)`),
+  and constrained polish.
 
 - `winning.factor` also prices finishing positions: top-k membership at
   any depth and factor rank, under the same `V, D, F, W` the race takes
