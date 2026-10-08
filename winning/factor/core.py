@@ -692,6 +692,20 @@ def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
     return F, W / W.sum()
 
 
+def _gauge_center(V):
+    """V minus each factor's mean loading across contestants -- the
+    gauge every factor path fixes -- without overflowing: a column of
+    [1e308] * 9 has an infinite plain mean, and inf - inf made the race
+    NaN where the exactly common column should vanish (#471). Centred on
+    the first row only when the plain mean is not finite, so ordinary
+    loadings stay bit-identical."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        m = V.mean(axis=0)
+    if not np.all(np.isfinite(m)):
+        m = V[0] + (V - V[0]).mean(axis=0)
+    return V - m
+
+
 def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
                              F: np.ndarray, W: np.ndarray,
                              keep: np.ndarray | None = None,
@@ -730,7 +744,7 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     # BEFORE the compiled dispatch: the kernel does not center, and an
     # uncentered column widened its window by the common shift (#114:
     # a shift of 100 moved the answer by 3e-2 with rust on, 3e-16 off).
-    V = V - V.mean(axis=0)
+    V = _gauge_center(V)
     if (_HAVE_RUST and not return_deletions and not per_node_interval
             and N > 1 and len(F) >= 2):
         # The compiled kernel is the same lattice on the same global
@@ -860,7 +874,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     # but the warm start, step cap and lattice window below were built
     # from the uncentered V, so V + 100 turned a 6e-8 inversion into a
     # residual of 33.8 (#70).
-    V = V - V.mean(axis=0)
+    V = _gauge_center(V)
     D = as_idio(D, N, positive=True)
     F, W = as_factor_law(F, W)
     sd = np.sqrt(D)
@@ -875,7 +889,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     F = np.asarray(F, dtype=float).reshape(len(F), -1)
     W = np.asarray(W, dtype=float)
     Wn = W / W.sum()
-    Vc = V - V.mean(axis=0)
+    Vc = _gauge_center(V)
     Fm = Wn @ F
     CovF = (F - Fm).T @ ((F - Fm) * Wn[:, None])
     sig_v = np.einsum("ij,jk,ik->i", Vc, CovF, Vc)
@@ -1050,7 +1064,7 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     N = len(mu)
     D = as_idio(D, N, positive=True)
     V = as_loadings(V, N)
-    V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass (#114)
+    V = _gauge_center(V)             # gauge-fix, as in the forward pass (#114)
     points = as_points(points)
     # exactly two forms: only "grid" was tested, so a typo, "" or "GRID"
     # silently ran IBP -- 0.36 apart, opposite signs, at L = 11 (#523)

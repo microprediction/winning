@@ -586,3 +586,57 @@ def test_large_skew_logistic_shape_keeps_negative_slopes_499(alpha):
         assert np.abs(race_probabilities(mu, **kw) - t).max() < 1e-8
     finally:
         winning.use_rust(prev)
+
+
+# ------------------------------------------------------------ #471 #477
+
+def test_common_offsets_cannot_move_the_race_471_477():
+    """A 1e15 translation collapsed the lattice to NaN; a [1e308] * 9
+    common loading column overflowed its gauge mean to NaN."""
+    import warnings
+    from winning.factor.polish import race_jacobian
+    from winning.factor.races import race_probabilities
+    base = np.array([-1.0, 0.0, 1.0])
+    p0 = race_probabilities(base, D=np.ones(3), points=257)
+    J0 = race_jacobian(base, D=np.ones(3), points=257)
+    for c in (1e15, -1e300):
+        sh = base + c
+        if np.ptp(sh) != 2.0:
+            continue                       # contrasts not representable
+        assert np.abs(race_probabilities(sh, D=np.ones(3), points=257)
+                      - p0).max() < 1e-15
+        assert np.abs(race_jacobian(sh, D=np.ones(3), points=257)
+                      - J0).max() < 1e-15
+    mu = (np.arange(9) - 4) * 0.1
+    ind = race_probabilities(mu, D=np.ones(9), points=257)
+    F, W = np.array([[-1.0], [1.0]]), np.array([0.5, 0.5])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for c in (1e20, 1e308):
+            got = race_probabilities(mu, V=np.full((9, 1), c), D=np.ones(9),
+                                     F=F, W=W, points=257)
+            assert np.abs(got - ind).max() < 1e-12
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_common_offsets_cannot_move_the_race_471_477():
+    got = _node(f"""
+import {{ raceProbabilities }} from {_mod("races.mjs")};
+import {{ raceJacobian }} from {_mod("polish.mjs")};
+console.warn = () => {{}};
+const o = {{ D: [1, 1, 1], points: 257 }};
+const sh = [-1 + 1e15, 1e15, 1 + 1e15];
+const n = 9, mu = Array.from({{ length: n }}, (_, i) => (i - 4) * 0.1);
+const D = Array(n).fill(1);
+const common = [1e20, 1e308].map(c => raceProbabilities(mu, {{
+  V: Array.from({{ length: n }}, () => [c]), D, F: [[-1], [1]], W: [0.5, 0.5],
+  points: 257 }}));
+console.log(JSON.stringify({{
+  p: [raceProbabilities([-1, 0, 1], o), raceProbabilities(sh, o)],
+  J: [raceJacobian([-1, 0, 1], o), raceJacobian(sh, o)],
+  ind: raceProbabilities(mu, {{ D, points: 257 }}), common }}));
+""")
+    assert np.abs(np.subtract(*got["p"])).max() < 1e-15      # was NaN
+    assert np.abs(np.subtract(*got["J"])).max() < 1e-15      # was zeros
+    for c in got["common"]:
+        assert np.abs(np.array(c) - got["ind"]).max() < 1e-12  # was uniform

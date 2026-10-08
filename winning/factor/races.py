@@ -53,7 +53,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import ndtr, ndtri
 
-from .core import as_idio, as_loadings, as_weights, hermite_nodes
+from .core import as_idio, as_loadings, as_weights, _gauge_center, hermite_nodes
 from ..shapes import as_factor_law, as_points, as_target, as_tolerance
 
 from ..rustconfig import load_fastrace
@@ -392,6 +392,23 @@ GH_RULE = {1: (201, float("inf")), 2: (41, 3.75), 3: (31, 4.75)}
 GH_RULE_DEFAULT = (15, 3.0)
 
 
+def _translated_home(mu, D):
+    """mu moved next to the origin when a common offset dwarfs the field.
+
+    The origin is a gauge: every race probability depends on differences
+    only. But the lattice is built in the caller's units, and at an
+    offset of 1e15 its points collapse to the float spacing there and
+    every share came back NaN (#477). Shifting by a middle entry (an
+    element, so no sum can overflow) is exact for such offsets; below
+    a million field scales nothing moves, so ordinary inputs stay
+    bit-identical."""
+    off = float(np.sort(mu)[len(mu) // 2])
+    scale = float(mu.max() - mu.min()) + float(np.sqrt(np.max(D)))
+    if abs(off) > 1e6 * scale:
+        return mu - off
+    return mu
+
+
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
@@ -410,6 +427,7 @@ def _setup(mu, V, D, F, W, base):
             f"({bad.size} of {n} are); an ability is a finite location on "
             "the performance scale")
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    mu = _translated_home(mu, D)                     # (#477)
     if (F is None) != (W is None):
         # A factor rule is a PAIR. Either half alone was silently replaced
         # by the automatic Gaussian rule below, so a caller's node vanished
@@ -434,7 +452,7 @@ def _setup(mu, V, D, F, W, base):
         # under the escalation threshold, while the centered rows reach
         # 4.43 -- the race is genuinely sharp, the raw statistic missed
         # it, and the shipped answer carried TV 9.5e-3.
-        V = V - V.mean(axis=0)
+        V = _gauge_center(V)                          # scale-safe (#471)
         if (F is None) != (W is None):
             # A lone F or W used to be discarded silently and BOTH
             # regenerated (#75): the caller's rule never ran.

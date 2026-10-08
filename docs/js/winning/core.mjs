@@ -495,8 +495,12 @@ export function asLoadings(V, n, where = "V") {
 export function gaugeCenter(V) {
   if (!V || !V.length) return V;
   const n = V.length, r = V[0].length;
-  const colMean = new Array(r).fill(0);
-  for (const row of V) for (let j = 0; j < r; j++) colMean[j] += row[j] / n;
+  // centred on the first row, so an exactly common column is exactly
+  // zero: summing row / n left -2e292 of a [1e308] * 9 column (and a
+  // residue at 1e20) as a huge loading, and the race went uniform (#471)
+  const v0 = V[0];
+  const colMean = v0.slice();
+  for (const row of V) for (let j = 0; j < r; j++) colMean[j] += (row[j] - v0[j]) / n;
   return V.map(row => row.map((x, j) => x - colMean[j]));
 }
 

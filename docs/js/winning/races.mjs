@@ -119,6 +119,19 @@ export function factorRule(V, D, F = null, W = null) {
   return hermiteNodes(r, Q);
 }
 
+/* mu moved next to the origin when a common offset dwarfs the field
+   (python's races._translated_home). The origin is a gauge, but the
+   lattice is built in the caller's units: at an offset of 1e15 its
+   points collapsed to the float spacing there and every share came back
+   NaN (#477). Shifting by a middle entry is exact for such offsets;
+   below a million field scales nothing moves. */
+export function translatedHome(mu, D) {
+  const s = mu.slice().sort((a, b) => a - b);
+  const off = s[Math.floor(s.length / 2)];
+  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(Math.max(...D));
+  return Math.abs(off) > 1e6 * scale ? mu.map(v => v - off) : mu;
+}
+
 function setup(mu, V, D, F, W, base) {
   // mu was the one argument nobody checked: D goes through asIdio, V
   // through asLoadings, W through asWeights, and the abilities
@@ -132,6 +145,7 @@ function setup(mu, V, D, F, W, base) {
   mu = asAbilities(mu);
   const n = mu.length;
   D = asIdio(D, n);        // the companion of asLoadings, #254
+  mu = translatedHome(mu, D);                      // #477
   // the shape contract at the door, as python's _setup does it: a
   // scalar, a length-n vector, (n, rank) and (rank, n) are the same
   // race, and a ragged V raises instead of being truncated to the first
