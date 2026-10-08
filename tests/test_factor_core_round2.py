@@ -493,3 +493,46 @@ def test_inverse_normalizers_survive_a_sum_overflow_461_463_483():
         warnings.simplefilter("ignore")
         for call in calls:
             assert np.abs(call(1e308) - call(1.0)).max() < 1e-9
+
+
+# ---------------------------------------------------------------- #489
+
+@pytest.mark.parametrize("root", [0.0, 50.0, 1000.0])
+def test_common_root_shock_cannot_move_the_tree_race_489(root):
+    """Root strength 50 widened the window until the root-zero race raised
+    a 3.7% mass defect at 257 points."""
+    from winning.factor.blocks import (block_race_jacobian,
+                                       block_race_probabilities,
+                                       tree_race_jacobian,
+                                       tree_race_probabilities)
+    from winning.factor.races import abilities_from_race
+    from winning.factor.structures import Tree
+    mu = np.array([-0.7, -0.1, 0.2, 0.8])
+    c = np.array([0, 0, 1, 1])
+    L = np.array([0.4, 0.2, 0.5, 0.1])
+    D = np.array([0.8, 1.1, 0.9, 1.2])
+    pa, lam = np.array([2, 2, -1]), np.array([0.0, 0.0, root])
+    b = block_race_probabilities(mu, c, L, D, points=257)
+    t = tree_race_probabilities(mu, c, L, D, pa, lam, points=257)
+    assert np.abs(t - b).max() < 1e-15
+    assert np.abs(tree_race_jacobian(mu, c, L, D, pa, lam, points=257)
+                  - block_race_jacobian(mu, c, L, D, points=257)
+                  ).max() < 1e-15
+    m, info = abilities_from_race(t, structure=Tree(c, L, D, pa, lam),
+                                  points=257, return_info=True)
+    assert info["converged"] and np.abs(m - (mu - mu.mean())).max() < 1e-7
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_common_root_shock_cannot_move_the_tree_race_489():
+    got = _node(f"""
+import {{ treeRaceProbabilities, blockRaceProbabilities }} from {_mod("blocks.mjs")};
+const mu = [-0.7, -0.1, 0.2, 0.8], c = [0, 0, 1, 1], L = [0.4, 0.2, 0.5, 0.1];
+const D = [0.8, 1.1, 0.9, 1.2];
+const b = blockRaceProbabilities(mu, c, L, D, {{ points: 257 }});
+console.log(JSON.stringify([0, 50, 1000].map(r => {{
+  const t = treeRaceProbabilities(mu, c, L, D, [2, 2, -1], [0, 0, r], {{ points: 257 }});
+  return Math.max(...t.map((v, i) => Math.abs(v - b[i])));
+}})));
+""")
+    assert max(got) < 1e-15

@@ -290,8 +290,13 @@ def structure_variances(structure):
     if isinstance(structure, Tree):
         from .blocks import _scalar_loading
         tot = D + _scalar_loading(structure.loading, "tree races") ** 2
+        from .blocks import _without_common_shock
         parent = np.asarray(structure.parent, int)
-        strength = np.asarray(structure.strength, float)
+        # Cluster labels are remapped below; a common ancestor's shock
+        # cancels and is no part of the surrogate's variance (#489)
+        n_clusters = len(np.unique(np.asarray(structure.cluster)))
+        strength = _without_common_shock(
+            parent, np.asarray(structure.strength, float), n_clusters)
         # Cluster labels are arbitrary comparable values, and the forward
         # dispatch says so: every tree/block kernel in blocks.py remaps
         # them with np.unique(..., return_inverse=True). This cast them

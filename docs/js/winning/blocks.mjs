@@ -57,6 +57,23 @@ function blockArgs(mu, cluster, loading, D, where) {
    with `while (par[u] >= 0)`, so a cycle -- [1, 0], or a self-parent --
    spun synchronously forever and froze the page (#328). Checked once,
    in linear time, before any walk. */
+/* Strengths with every COMMON ancestor's set to zero (port of python's
+   blocks._without_common_shock). A node above every cluster adds the same
+   shock to everyone and cancels from every difference; kept, it widened
+   the lattice window, so root strength 50 on a race identical to the
+   root-zero one raised a 3.7% mass defect at 257 points (#489). `parent`
+   uses -1 for the root. */
+export function withoutCommonShock(parent, strength, nC) {
+  const lam = Array.from(strength, Number);
+  const hits = new Array(parent.length).fill(0);
+  for (let c = 0; c < nC; c++) {
+    let u = c;
+    while (parent[u] >= 0) { u = parent[u]; hits[u] += 1; }
+  }
+  for (let t = 0; t < lam.length; t++) if (hits[t] === nC) lam[t] = 0;
+  return lam;
+}
+
 export function validateTree(parent, strength, nC, where = "tree") {
   if (!isVector(parent))
     throw new Error(`${where}: parent must be an array of node indices`);
@@ -344,7 +361,7 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
   const inv = clusterIndex(cluster);
   const nC = Math.max(...inv) + 1;
   const tv = validateTree(parent, strength, nC, "tree race");   // #328
-  const lam = tv.strength;
+  const lam = withoutCommonShock(tv.parent, tv.strength, nC);   // #489
   const par = tv.parent;                             // -1 = root (python style)
   const n = m.length, nT = par.length;
   const ord = stableOrder(inv);
@@ -609,7 +626,9 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
   // There the matrix is the central difference of the exact forward, as
   // in python's tree_race_jacobian.
   const nC = new Set(cluster).size;
-  if (strength.slice(nC).some(v => v !== 0)) {
+  // a common shock cancels: without it a bare root takes the exact path
+  const tvJ = validateTree(parent, strength, nC, "treeRaceJacobian");
+  if (withoutCommonShock(tvJ.parent, tvJ.strength, nC).slice(nC).some(v => v !== 0)) {
     const n = mu.length;
     const tot = D.map((d, i) => d + (Array.isArray(loading) ? loading[i] ** 2 : loading ** 2));
     const srt = tot.slice().sort((a, b) => a - b);

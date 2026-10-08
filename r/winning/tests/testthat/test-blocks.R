@@ -90,3 +90,12 @@ test_that("block and win/second inverses survive a sum overflow (#463, #483)", {
   y <- suppressWarnings(loc_scale_from_win_and_second(w * 1e308, s * 1e308))
   expect_equal(x$mu, y$mu, tolerance = 1e-9)
 })
+
+test_that("a common root shock cannot move the tree race (#489)", {
+  mu <- c(-0.7, -0.1, 0.2, 0.8); cl <- c(0L, 0L, 1L, 1L)
+  L <- c(0.4, 0.2, 0.5, 0.1); D <- c(0.8, 1.1, 0.9, 1.2)
+  b <- block_race_probabilities(mu, cl, L, D)
+  for (rs in c(0, 50, 1000))
+    expect_lt(max(abs(tree_race_probabilities(mu, cl, L, D, c(3L, 3L, 0L),
+                                              c(0, 0, rs)) - b)), 1e-15)
+})

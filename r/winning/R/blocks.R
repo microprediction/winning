@@ -248,6 +248,21 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
   .checked_mass(p, "nested race")
 }
 
+# Strengths with every COMMON ancestor's set to zero (python's
+# blocks._without_common_shock). A node above every cluster adds the same
+# shock to everyone and cancels from every difference; kept, it widened
+# the lattice window until an irrelevant root strength of 50 raised a
+# mass defect at 257 points (#489). `parent` is 1-based with 0 = root.
+.without_common_shock <- function(parent, lam, nC) {
+  hits <- integer(length(parent))
+  for (cc in seq_len(nC)) {
+    u <- cc
+    while (parent[u] > 0) { u <- parent[u]; hits[u] <- hits[u] + 1L }
+  }
+  lam[hits == nC] <- 0
+  lam
+}
+
 #' Tree race: hierarchy of uniform shared effects
 #'
 #' Leaf clusters keep per-member loadings; each internal node t applies
@@ -272,6 +287,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   nT <- length(parent)
   inv <- .cluster_index(cluster)
   nC <- max(inv)
+  lam <- .without_common_shock(parent, lam, nC)          # #489
   ord <- order(inv)
   mu_o <- m[ord]; sd_o <- sd[ord]; v_o <- v[ord]; c_o <- inv[ord]
   h <- .hermite1(qa)
@@ -549,6 +565,9 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   nT <- length(parent)
   inv <- .cluster_index(cluster)
   nC <- max(inv)
+  # a common shock cancels: without it a bare root takes the exact path
+  lam <- .without_common_shock(parent, lam, nC)          # #489
+  strength <- lam
   if (nT > nC && any(lam[(nC + 1):nT] != 0)) {
     # with any ancestor effect the cross-cluster Gram product is not the
     # derivative (two leaves under a common root: forward invariant in

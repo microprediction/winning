@@ -496,6 +496,30 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     return mu - mu.mean(), float(np.abs(np.log(pv) - lt).max()), max_iter
 
 
+def _without_common_shock(parent, strength, n_clusters):
+    """Strengths with every COMMON ancestor's set to zero.
+
+    A node above every cluster adds the same shock to every contestant,
+    which cancels from every performance difference: the race is exactly
+    invariant to it. Kept, it still widened the lattice window by its
+    quadrature amplitude, so a root strength of 50 on a race identical to
+    the root-zero one raised a 3.7% mass defect at 257 points (#489), and
+    it entered the inverse's surrogate variance. Zeroing it prices the
+    same race; trees without a common shock are untouched."""
+    lam = np.array(strength, dtype=float)
+    parent = np.asarray(parent, int)
+    hits = np.zeros(len(parent), int)
+    for c in range(n_clusters):
+        u = c
+        while parent[u] >= 0:
+            u = parent[u]
+            hits[u] += 1
+    common = hits == n_clusters
+    if np.any(lam[common] != 0.0):
+        lam[common] = 0.0
+    return lam
+
+
 def _validate_tree(parent, strength, n_clusters):
     """A tree is a tree: one root, every parent an existing node, no
     cycles, the cluster nodes are leaves. The kernels walk parent
@@ -564,6 +588,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
     _validate_tree(parent, lam, nC)                  # #328
+    lam = _without_common_shock(parent, lam, nC)     # #489
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
@@ -668,6 +693,10 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
     _validate_tree(parent, lam, nC)                  # #328
+    # a common shock cancels: with it gone, two leaves under a bare root
+    # take the exact one-pass path below (#489)
+    lam = _without_common_shock(parent, lam, nC)
+    strength = lam
     if np.any(lam[nC:] != 0.0):
         tot = sd ** 2 + v ** 2
         h = 1e-5 * float(np.sqrt(np.median(tot)))
