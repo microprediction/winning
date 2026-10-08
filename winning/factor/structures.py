@@ -54,7 +54,10 @@ class Factor:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from V, not D: a scalar D is one variance for every contestant
+        # and carries no count (#510)
+        V = np.asarray(self.V)
+        return len(V) if V.ndim else len(np.asarray(self.D))
 
 
 @dataclass(frozen=True)
@@ -65,7 +68,9 @@ class Blocks:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
 
 @dataclass(frozen=True)
@@ -78,7 +83,9 @@ class Nested:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
 
 @dataclass(frozen=True)
@@ -91,7 +98,9 @@ class Tree:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
     @classmethod
     def from_linkage(cls, Z):
@@ -256,10 +265,15 @@ def _loading_var(loading, n):
 def structure_variances(structure):
     """Total per-runner variance implied by a grammar structure (shared
     effects plus idiosyncratic): the marginal the generic inverter's
-    independent surrogate preconditioner matches."""
-    D = np.asarray(structure.D, float)
+    independent surrogate preconditioner matches. A scalar D is the same
+    variance for every contestant, as at every other boundary: it was
+    taken as a zero-dimensional array and len(D) raised TypeError, so a
+    scalar-D Blocks/Nested target priced by the forward could not be
+    inverted through the same structure (#510)."""
+    from ..shapes import as_idio
     if isinstance(structure, Independent):
-        return D.copy()
+        return np.array(np.asarray(structure.D, float), ndmin=1)
+    D = as_idio(structure.D, structure.n)
     if isinstance(structure, Factor):
         V = np.asarray(structure.V, float)
         return D + (V ** 2).sum(axis=1)

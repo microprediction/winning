@@ -88,3 +88,35 @@ def test_core_inverse_hazard_is_analytic_524(d0):
     assert np.isfinite(mu).all() and info["converged"]
     rep = win_probabilities_factor(mu, V, D, F, W)
     assert np.abs(rep - target).max() < 1e-6
+
+
+# ---------------------------------------------------------------- #510
+
+def _hier_510():
+    from winning.factor.structures import Blocks, Nested, Tree
+    c = np.array([0, 0, 1, 1])
+    L = np.array([0.2, 0.3, -0.1, 0.4])
+    g = np.array([0.1, -0.2, 0.3, -0.1])
+    return [lambda D: Blocks(c, L, D),
+            lambda D: Nested(c, L, D, g, 0.5),
+            lambda D: Tree(c, L, D, [2, 2, -1], [0.3, 0.3, 0.2])]
+
+
+@pytest.mark.parametrize("which", [0, 1, 2])
+def test_structured_inverse_reads_a_scalar_D_510(which):
+    """structure_variances took len() of a 0-d D: the forward priced a
+    scalar-D Blocks/Nested race and its own inverse raised TypeError."""
+    from winning.factor.races import abilities_from_race, race_probabilities
+    from winning.factor.structures import structure_variances
+    make = _hier_510()[which]
+    mu = np.array([-0.5, -0.1, 0.2, 0.4])
+    mu -= mu.mean()
+    s, v = make(1.0), make(np.ones(4))
+    assert s.n == 4
+    assert np.array_equal(structure_variances(s), structure_variances(v))
+    p = race_probabilities(mu, structure=s, points=257)
+    m, info = abilities_from_race(p, structure=s, points=257,
+                                  return_info=True)
+    mv = abilities_from_race(p, structure=v, points=257)
+    assert info["converged"] and np.abs(m - mu).max() < 1e-7
+    assert np.abs(m - mv).max() < 1e-12

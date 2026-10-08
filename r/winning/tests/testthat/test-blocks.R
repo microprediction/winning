@@ -44,3 +44,26 @@ test_that("mass check rejects non-finite mass", {
   expect_error(winning:::.checked_mass(c(0.5, NaN), "test race"),
                "captured total mass")
 })
+
+test_that("hierarchical races read a scalar D as one variance each (#510)", {
+  # sqrt(as.numeric(D)) kept a scalar as a one-element sd vector, so
+  # sd[ord] was NA past the first contestant and the window failed
+  mu <- c(-0.5, -0.1, 0.2, 0.4); mu <- mu - mean(mu)
+  cl <- c(0L, 0L, 1L, 1L); L <- c(0.2, 0.3, -0.1, 0.4)
+  g <- c(0.1, -0.2, 0.3, -0.1)
+  expect_equal(block_race_probabilities(mu, cl, L, 1.0),
+               block_race_probabilities(mu, cl, L, rep(1, 4)))
+  expect_equal(nested_race_probabilities(mu, cl, L, 1.0, coupling = g,
+                                         gamma = 0.5),
+               nested_race_probabilities(mu, cl, L, rep(1, 4),
+                                         coupling = g, gamma = 0.5))
+  pa <- c(3L, 3L, 0L); st <- c(0.3, 0.3, 0.2)
+  expect_equal(tree_race_probabilities(mu, cl, L, 1.0, pa, st),
+               tree_race_probabilities(mu, cl, L, rep(1, 4), pa, st))
+  expect_equal(block_race_jacobian(mu, cl, L, 1.0),
+               block_race_jacobian(mu, cl, L, rep(1, 4)))
+  p <- race_probabilities(mu, structure = Nested(cl, L, 1.0, g, 0.5))
+  m <- abilities_from_race(p, structure = Nested(cl, L, 1.0, g, 0.5))
+  m <- if (is.list(m)) m$mu else m
+  expect_lt(max(abs(m - mu)), 1e-6)
+})

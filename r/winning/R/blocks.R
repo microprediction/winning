@@ -200,7 +200,8 @@
 block_race_probabilities <- function(mu, cluster, loading, D,
                                      points = 257, qa = 9) {
   mu <- as.numeric(mu)
-  sd <- sqrt(as.numeric(D))
+  # a scalar D is one variance per contestant, as at every boundary (#510)
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- .block_max(-mu, sd, cluster, loading, points, qa)
   .checked_mass(p, "block race")
 }
@@ -233,7 +234,7 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
     cn <- .cluster_nodes(ncol(g), qf)
     fn <- cn$nodes; fw <- cn$w
   }
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- numeric(length(mu))
   for (q in seq_len(nrow(fn))) {
     # average the RAW conditional masses (each near one) and normalize
@@ -260,7 +261,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
                                     strength, points = 257, qa = 9) {
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
   parent <- as.integer(ifelse(is.na(parent), 0L, parent))  # 0 = root
   lam <- as.numeric(strength)
@@ -363,7 +364,7 @@ block_race_jacobian <- function(mu, cluster, loading, D,
   }
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- as.numeric(loading)
   n <- length(mu)
   inv <- .cluster_index(cluster)
@@ -535,7 +536,7 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
                                points = 257, qa = 9) {
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
   parent <- as.integer(ifelse(is.na(parent), 0L, parent))
   lam <- as.numeric(strength)
