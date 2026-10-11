@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Genius and major prizes — winning</title>
+  <meta name="description" content="Retrospective frequencies of conservative genius classifications among Nobel, Abel, Fields and Turing laureates, with sensitivity calculations and a complete editable audit." />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="winning" />
+  <meta property="og:title" content="Genius and major prizes" />
+  <meta property="og:description" content="What does a major prize tell us about exceptional individual originality? A transparent first-pass tally with the names behind the judgments." />
+  <meta property="og:url" content="https://winning.microprediction.org/genius.html" />
+  <link rel="stylesheet" href="./academic.css" />
+  <style>
+    .table-wrap { overflow-x: auto; }
+    .prize-table { min-width: 520px; }
+    .prize-table th.num { text-align: right; }
+    .prize-table caption { text-align: left; color: var(--muted); margin-bottom: 10px; }
+    .prize-table tbody th { background: transparent; font-weight: 500; }
+    .prize-table tfoot th, .prize-table tfoot td { background: #efeefa; font-weight: 600; }
+    .classification { background: var(--panel); border: 1px solid var(--border);
+      border-radius: 6px; margin: 12px 0; padding: 12px 16px; }
+    .classification summary { cursor: pointer; font-weight: 600; }
+    .classification h3 { margin-top: 20px; }
+    .name-list { columns: 3 190px; column-gap: 28px; }
+    .name-list li { break-inside: avoid; }
+    .small { font-size: .9rem; color: var(--muted); }
+    .section-links { display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 0; list-style: none; }
+    @media (max-width: 600px) {
+      .classification { padding: 10px 12px; }
+      .name-list { columns: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="brand" href="/">winning</a>
+      <nav>
+        <a href="/">Home</a>
+        <span class="menu" tabindex="0"><span class="menu-label">Demos &#9662;</span>
+          <span class="drop">
+            <a href="/converge.html">Watch it converge</a>
+            <a href="/polish.html">Polish your portfolio</a>
+            <a href="/fit.html">Fit a correlated race</a>
+            <a href="/circuit.html">The photo-finish circuit</a>
+          </span>
+        </span>
+        <span class="menu" tabindex="0"><span class="menu-label">Docs &#9662;</span>
+          <span class="drop">
+            <a href="/methodology.html">How it works</a>
+            <a href="/classic.html">The classic engine</a>
+            <a href="/genius.html">Genius and major prizes</a>
+            <a href="/#grammars">Grammars</a>
+            <a href="/#languages">Languages</a>
+          </span>
+        </span>
+        <a href="/faq.html">FAQ</a>
+        <a href="/alternatives.html">Alternatives</a>
+        <a href="/heritage.html">Heritage</a>
+        <a href="/#papers">Papers</a>
+        <a href="/ratings.html">Ratings</a>
+        <a href="https://github.com/microprediction/winning">GitHub</a>
+        <a href="https://pypi.org/project/winning/">PyPI</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <h1>Genius and major prizes</h1>
+    <p class="subtitle">Does a prize winner meet the Euler / Feynman / Nash / Einstein bar?</p>
+    <p class="byline">A first-pass retrospective classification produced by ChatGPT on 11 October 2026.</p>
+
+    <p class="lead">At this high threshold, the conservative tally is about 86% for
+      Abel, 59% for Fields, 47% for Turing, and 2–17% across the Nobel categories.
+      The arithmetic counts an explicitly stated set of judgments about the
+      laureates. The judgments require much more interpretation than the arithmetic.</p>
+
+    <div class="callout">
+      <strong>Prize records are factual; genius classifications are judgments.</strong>
+      This is one assistant’s screen of complete laureate lists, informed by selected
+      biographies. It has no independent raters, measured IQ or exhaustive
+      biographical review. The percentages are frequencies under that coding.
+    </div>
+
+    <ul class="section-links" aria-label="Page sections">
+      <li><a href="#definition">Definition</a></li>
+      <li><a href="#comparison">Comparison</a></li>
+      <li><a href="#judgments">Names and judgments</a></li>
+      <li><a href="#audit">Audit and calculation</a></li>
+      <li><a href="#limits">Limitations</a></li>
+      <li><a href="#sources">Sources</a></li>
+    </ul>
+
+    <h2 id="definition">The threshold</h2>
+    <p>The benchmark is exceptional individual conceptual or creative originality,
+      with enduring stature comparable to Feynman or Nash. Euler and Einstein
+      mark the exceptional upper end. Winning an important award is insufficient
+      by itself: the assessment asks whether the person’s originality warrants
+      the description independently of the prize. Euler is a calibration example;
+      he lived before these awards.</p>
+    <p>A <strong>clear</strong> case is a comfortable affirmative judgment at that
+      threshold. A <strong>borderline</strong> case has a plausible claim under a
+      more generous reading. <strong>Not established here</strong> means the person
+      is outside the affirmative shortlist; it does not establish absence of
+      genius. Organizations are marked <strong>not applicable</strong>.</p>
+    <p>For Literature, the assessment includes comparable artistic originality.
+      That comparison is especially subjective and makes no claim about the
+      laureate’s scientific or mathematical ability.</p>
+
+    <h2 id="comparison">The comparison</h2>
+    <p>The population is all distinct people within each prize, through
+      <strong>award year 2025</strong>. Fields therefore ends at its 2022 awards.
+      Repeat awards within a category count once, shared prizes contribute each
+      individual, and Peace organizations are excluded from the denominator.
+      Perelman is included as a Fields honoree although he declined the medal.
+      Abel’s honorary pre-2003 award is outside the population.</p>
+    <div class="table-wrap" role="region" aria-label="Prize comparison" tabindex="0">
+      <table class="prize-table">
+        <caption>Retrospective label frequencies. The last column includes every marked borderline case.</caption>
+        <thead><tr><th scope="col">Prize</th><th scope="col" class="num">Clear / people</th>
+          <th scope="col" class="num">Strict frequency</th><th scope="col" class="num">With borderlines</th></tr></thead>
+        <tbody>
+          <tr data-prize="Abel"><th scope="row">Abel</th>
+            <td class="num">24 / 28</td><td class="num"><strong>85.7%</strong></td>
+            <td class="num">100.0%</td></tr>
+          <tr data-prize="Fields"><th scope="row">Fields</th>
+            <td class="num">38 / 64</td><td class="num"><strong>59.4%</strong></td>
+            <td class="num">100.0%</td></tr>
+          <tr data-prize="Turing"><th scope="row">Turing</th>
+            <td class="num">38 / 81</td><td class="num"><strong>46.9%</strong></td>
+            <td class="num">72.8%</td></tr>
+          <tr data-prize="Physics"><th scope="row">Nobel Physics</th>
+            <td class="num">38 / 229</td><td class="num"><strong>16.6%</strong></td>
+            <td class="num">34.1%</td></tr>
+          <tr data-prize="Chemistry"><th scope="row">Nobel Chemistry</th>
+            <td class="num">24 / 198</td><td class="num"><strong>12.1%</strong></td>
+            <td class="num">27.8%</td></tr>
+          <tr data-prize="Literature"><th scope="row">Nobel Literature</th>
+            <td class="num">14 / 122</td><td class="num"><strong>11.5%</strong></td>
+            <td class="num">32.8%</td></tr>
+          <tr data-prize="Economics"><th scope="row">Nobel Economics</th>
+            <td class="num">8 / 99</td><td class="num"><strong>8.1%</strong></td>
+            <td class="num">33.3%</td></tr>
+          <tr data-prize="Medicine"><th scope="row">Nobel Medicine</th>
+            <td class="num">16 / 232</td><td class="num"><strong>6.9%</strong></td>
+            <td class="num">19.8%</td></tr>
+          <tr data-prize="Peace"><th scope="row">Nobel Peace</th>
+            <td class="num">2 / 112</td><td class="num"><strong>1.8%</strong></td>
+            <td class="num">5.4%</td></tr>
+        </tbody>
+        <tfoot><tr><th scope="row">All six Nobels</th><td class="num">102 / 992</td>
+          <td class="num">10.3%</td><td class="num">26.0%</td></tr></tfoot>
+      </table>
+    </div>
+    <p class="small">The pooled Nobel row counts person-category memberships:
+      Curie and Pauling each occur in two categories. It weights categories by
+      their numbers of individual laureates.</p>
+    <p>The strict frequency is <code>clear cases / distinct people</code>. The
+      inclusive frequency is <code>(clear + borderline cases) / distinct people</code>.
+      The second is a sensitivity endpoint, not a confidence interval or a
+      rigorous upper bound on the prevalence of genius.</p>
+
+    <h2 id="judgments">The names behind the counts</h2>
+    <p>Some choices make the threshold easier to assess. In Economics, the eight
+      clear cases are Nash, Arrow, Samuelson, Kantorovich, Simon, Debreu, Aumann
+      and Shapley. Friedman, Hayek, Coase, Markowitz and Kahneman are among the
+      borderline cases. In Abel, Varadhan, Meyer, Uhlenbeck and Caffarelli are
+      the four borderline cases. Calling all four geniuses is entirely defensible;
+      the strict tally withholds “unequivocal” at the stated threshold.</p>
+    <p>Peace’s two clear cases, Pauling and Sakharov, qualify through their scientific
+      originality. Literature’s clear cases include Faulkner, Beckett and García
+      Márquez, assessed as creative minds. These are coding decisions, not
+      endorsements supplied by the prize organizations.</p>
+    <p>Open a category to see every clear and borderline name. The downloads
+      also include all remaining laureates and the reasons recorded for the
+      judgments.</p>
+    <details class="classification" data-prize="Abel">
+      <summary>Abel: 24 clear cases, 4 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Jean-Pierre Serre</li>
+              <li>Isadore Singer</li>
+              <li>Michael Atiyah</li>
+              <li>Peter Lax</li>
+              <li>Lennart Carleson</li>
+              <li>Jacques Tits</li>
+              <li>John G. Thompson</li>
+              <li>Mikhail Gromov</li>
+              <li>John Tate</li>
+              <li>John Milnor</li>
+              <li>Endre Szemerédi</li>
+              <li>Pierre Deligne</li>
+              <li>Yakov Sinai</li>
+              <li>John Nash</li>
+              <li>Louis Nirenberg</li>
+              <li>Andrew Wiles</li>
+              <li>Robert Langlands</li>
+              <li>Gregory Margulis</li>
+              <li>Hillel Furstenberg</li>
+              <li>Avi Wigderson</li>
+              <li>László Lovász</li>
+              <li>Dennis Sullivan</li>
+              <li>Michel Talagrand</li>
+              <li>Masaki Kashiwara</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>S. R. Srinivasa Varadhan</li>
+              <li>Yves Meyer</li>
+              <li>Karen Uhlenbeck</li>
+              <li>Luis Caffarelli</li>
+      </ul>
+    </details>
+    <details class="classification" data-prize="Fields">
+      <summary>Fields: 38 clear cases, 26 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Atle Selberg</li>
+              <li>Laurent Schwartz</li>
+              <li>Jean-Pierre Serre</li>
+              <li>Kunihiko Kodaira</li>
+              <li>René Thom</li>
+              <li>John Willard Milnor</li>
+              <li>Lars Hörmander</li>
+              <li>Alexander Grothendieck</li>
+              <li>Michael Francis Atiyah</li>
+              <li>Paul Joseph Cohen</li>
+              <li>Stephen Smale</li>
+              <li>John Griggs Thompson</li>
+              <li>Serge Novikov</li>
+              <li>David Bryant Mumford</li>
+              <li>Enrico Bombieri</li>
+              <li>Charles Louis Fefferman</li>
+              <li>Daniel G. Quillen</li>
+              <li>Gregori Alexandrovitch Margulis</li>
+              <li>Pierre René Deligne</li>
+              <li>Alain Connes</li>
+              <li>Shing-Tung Yau</li>
+              <li>William P. Thurston</li>
+              <li>Gerd Faltings</li>
+              <li>Michael H. Freedman</li>
+              <li>Simon K. Donaldson</li>
+              <li>Edward Witten</li>
+              <li>Vladimir Drinfeld</li>
+              <li>Jean Bourgain</li>
+              <li>Maxim Kontsevich</li>
+              <li>W. Timothy Gowers</li>
+              <li>Vladimir Voevodsky</li>
+              <li>Grigori Perelman</li>
+              <li>Terence Tao</li>
+              <li>Manjul Bhargava</li>
+              <li>Martin Hairer</li>
+              <li>Maryam Mirzakhani</li>
+              <li>Peter Scholze</li>
+              <li>Maryna Viazovska</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>Jesse Douglas</li>
+              <li>Lars Valerian Ahlfors</li>
+              <li>Klaus Friedrich Roth</li>
+              <li>Alan Baker</li>
+              <li>Heisuke Hironaka</li>
+              <li>Shigefumi Mori</li>
+              <li>Vaughan F.R. Jones</li>
+              <li>Efim Zelmanov</li>
+              <li>Jean-Christophe Yoccoz</li>
+              <li>Pierre-Louis Lions</li>
+              <li>Curtis T. Mcmullen</li>
+              <li>Richard E. Borcherds</li>
+              <li>Laurent Lafforgue</li>
+              <li>Andrei Okounkov</li>
+              <li>Wendelin Werner</li>
+              <li>Cédric Villani</li>
+              <li>Elon Lindenstrauss</li>
+              <li>Ngô Bào Châu</li>
+              <li>Stanislav Smirnov</li>
+              <li>Artur Avila</li>
+              <li>Akshay Venkatesh</li>
+              <li>Alessio Figalli</li>
+              <li>Caucher Birkar</li>
+              <li>Hugo Duminil-Copin</li>
+              <li>James Maynard</li>
+              <li>June Huh</li>
+      </ul>
+    </details>
+    <details class="classification" data-prize="Turing">
+      <summary>Turing: 38 clear cases, 21 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Richard Hamming</li>
+              <li>Marvin Minsky</li>
+              <li>John McCarthy</li>
+              <li>Edsger W. Dijkstra</li>
+              <li>Donald Knuth</li>
+              <li>Allen Newell</li>
+              <li>Herbert A. Simon</li>
+              <li>Dana Scott</li>
+              <li>Michael O. Rabin</li>
+              <li>John Backus</li>
+              <li>Robert W. Floyd</li>
+              <li>Kenneth E. Iverson</li>
+              <li>Tony Hoare</li>
+              <li>Edgar F. Codd</li>
+              <li>Stephen Cook</li>
+              <li>Dennis Ritchie</li>
+              <li>Ken Thompson</li>
+              <li>Richard M. Karp</li>
+              <li>Robert Tarjan</li>
+              <li>Ivan Sutherland</li>
+              <li>William Kahan</li>
+              <li>Robin Milner</li>
+              <li>Manuel Blum</li>
+              <li>Douglas Engelbart</li>
+              <li>Andrew Yao</li>
+              <li>Adi Shamir</li>
+              <li>Leonard Adleman</li>
+              <li>Ron Rivest</li>
+              <li>Alan Kay</li>
+              <li>Leslie Valiant</li>
+              <li>Judea Pearl</li>
+              <li>Shafi Goldwasser</li>
+              <li>Silvio Micali</li>
+              <li>Leslie Lamport</li>
+              <li>Geoffrey Hinton</li>
+              <li>Avi Wigderson</li>
+              <li>Charles H. Bennett</li>
+              <li>Gilles Brassard</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>Alan Perlis</li>
+              <li>Maurice Wilkes</li>
+              <li>James H. Wilkinson</li>
+              <li>Niklaus Wirth</li>
+              <li>John Hopcroft</li>
+              <li>Butler Lampson</li>
+              <li>Juris Hartmanis</li>
+              <li>Richard E. Stearns</li>
+              <li>Amir Pnueli</li>
+              <li>Jim Gray</li>
+              <li>Kristen Nygaard</li>
+              <li>Ole-Johan Dahl</li>
+              <li>Peter Naur</li>
+              <li>Frances Allen</li>
+              <li>Barbara Liskov</li>
+              <li>Martin Hellman</li>
+              <li>Whitfield Diffie</li>
+              <li>Tim Berners-Lee</li>
+              <li>Yann LeCun</li>
+              <li>Yoshua Bengio</li>
+              <li>Richard S. Sutton</li>
+      </ul>
+    </details>
+    <details class="classification" data-prize="Physics">
+      <summary>Nobel Physics: 38 clear cases, 40 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Hendrik Lorentz</li>
+              <li>Marie Curie</li>
+              <li>The Lord Rayleigh</li>
+              <li>Max Planck</li>
+              <li>Albert Einstein</li>
+              <li>Niels Bohr</li>
+              <li>Louis de Broglie</li>
+              <li>Werner Heisenberg</li>
+              <li>Erwin Schrödinger</li>
+              <li>Paul Dirac</li>
+              <li>Enrico Fermi</li>
+              <li>Wolfgang Pauli</li>
+              <li>Max Born</li>
+              <li>John Bardeen</li>
+              <li>Yang Chen-Ning</li>
+              <li>Lev Landau</li>
+              <li>Eugene Wigner</li>
+              <li>Julian Schwinger</li>
+              <li>Richard Feynman</li>
+              <li>Shin&#x27;ichirō Tomonaga</li>
+              <li>Hans Bethe</li>
+              <li>Murray Gell-Mann</li>
+              <li>Brian Josephson</li>
+              <li>Philip Anderson</li>
+              <li>Abdus Salam</li>
+              <li>Sheldon Glashow</li>
+              <li>Steven Weinberg</li>
+              <li>Kenneth G. Wilson</li>
+              <li>Subrahmanyan Chandrasekhar</li>
+              <li>Pierre-Gilles de Gennes</li>
+              <li>Gerard &#x27;t Hooft</li>
+              <li>Yoichiro Nambu</li>
+              <li>David Thouless</li>
+              <li>Duncan Haldane</li>
+              <li>Roger Penrose</li>
+              <li>Giorgio Parisi</li>
+              <li>Geoffrey Hinton</li>
+              <li>John Hopfield</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>Pierre Curie</li>
+              <li>Joseph Thomson</li>
+              <li>Guglielmo Marconi</li>
+              <li>Johannes Diderik van der Waals</li>
+              <li>Lawrence Bragg</li>
+              <li>C. V. Raman</li>
+              <li>Ernest Lawrence</li>
+              <li>Isidor Rabi</li>
+              <li>Hideki Yukawa</li>
+              <li>Edward Mills Purcell</li>
+              <li>Felix Bloch</li>
+              <li>Willis Lamb</li>
+              <li>William Shockley</li>
+              <li>Tsung-Dao Lee</li>
+              <li>Maria Goeppert Mayer</li>
+              <li>Charles Townes</li>
+              <li>Hannes Alfvén</li>
+              <li>Dennis Gabor</li>
+              <li>John Hasbrouck Van Vleck</li>
+              <li>Nevill Mott</li>
+              <li>Pyotr Kapitsa</li>
+              <li>Claude Cohen-Tannoudji</li>
+              <li>Robert B. Laughlin</li>
+              <li>Alexei Abrikosov</li>
+              <li>Anthony Leggett</li>
+              <li>Vitaly Ginzburg</li>
+              <li>David Gross</li>
+              <li>David Politzer</li>
+              <li>Frank Wilczek</li>
+              <li>Roy J. Glauber</li>
+              <li>Andre Geim</li>
+              <li>Serge Haroche</li>
+              <li>François Englert</li>
+              <li>Peter Higgs</li>
+              <li>Kip Thorne</li>
+              <li>Arthur Ashkin</li>
+              <li>Jim Peebles</li>
+              <li>Klaus Hasselmann</li>
+              <li>Syukuro Manabe</li>
+              <li>Anton Zeilinger</li>
+      </ul>
+    </details>
+    <details class="classification" data-prize="Chemistry">
+      <summary>Nobel Chemistry: 24 clear cases, 31 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Jacobus Henricus van &#x27;t Hoff</li>
+              <li>Hermann Emil Fischer</li>
+              <li>Svante Arrhenius</li>
+              <li>Ernest Rutherford</li>
+              <li>Marie Curie</li>
+              <li>Alfred Werner</li>
+              <li>Walther Nernst</li>
+              <li>Irving Langmuir</li>
+              <li>Peter Debye</li>
+              <li>Linus Pauling</li>
+              <li>Frederick Sanger</li>
+              <li>Robert Burns Woodward</li>
+              <li>Robert S. Mulliken</li>
+              <li>Manfred Eigen</li>
+              <li>Lars Onsager</li>
+              <li>Paul Flory</li>
+              <li>Peter D. Mitchell</li>
+              <li>Roald Hoffmann</li>
+              <li>Jean-Marie Lehn</li>
+              <li>Elias James Corey</li>
+              <li>Rudolph A. Marcus</li>
+              <li>Walter Kohn</li>
+              <li>Barry Sharpless</li>
+              <li>Roger Y. Tsien</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>William Ramsay</li>
+              <li>Adolf von Baeyer</li>
+              <li>Wilhelm Ostwald</li>
+              <li>Fritz Haber</li>
+              <li>Harold Urey</li>
+              <li>Robert Robinson</li>
+              <li>Hermann Staudinger</li>
+              <li>Max Perutz</li>
+              <li>Dorothy Hodgkin</li>
+              <li>Derek Barton</li>
+              <li>Gerhard Herzberg</li>
+              <li>Ilya Prigogine</li>
+              <li>Georg Wittig</li>
+              <li>Herbert A. Hauptman</li>
+              <li>Jerome Karle</li>
+              <li>Donald J. Cram</li>
+              <li>Thomas Cech</li>
+              <li>Kary Mullis</li>
+              <li>Roger D. Kornberg</li>
+              <li>Arieh Warshel</li>
+              <li>Martin Karplus</li>
+              <li>Michael Levitt</li>
+              <li>Eric Betzig</li>
+              <li>Stefan Hell</li>
+              <li>Frances Arnold</li>
+              <li>Emmanuelle Charpentier</li>
+              <li>Jennifer Doudna</li>
+              <li>Carolyn Bertozzi</li>
+              <li>David Baker</li>
+              <li>Demis Hassabis</li>
+              <li>John M. Jumper</li>
+      </ul>
+    </details>
+    <details class="classification" data-prize="Literature">
+      <summary>Nobel Literature: 14 clear cases, 26 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Rabindranath Tagore</li>
+              <li>W. B. Yeats</li>
+              <li>George Bernard Shaw</li>
+              <li>Thomas Mann</li>
+              <li>Luigi Pirandello</li>
+              <li>T. S. Eliot</li>
+              <li>William Faulkner</li>
+              <li>Bertrand Russell</li>
+              <li>Ernest Hemingway</li>
+              <li>Samuel Beckett</li>
+              <li>Pablo Neruda</li>
+              <li>Gabriel García Márquez</li>
+              <li>Toni Morrison</li>
+              <li>Bob Dylan</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>Rudyard Kipling</li>
+              <li>Knut Hamsun</li>
+              <li>Henri Bergson</li>
+              <li>Eugene O&#x27;Neill</li>
+              <li>Hermann Hesse</li>
+              <li>André Gide</li>
+              <li>Albert Camus</li>
+              <li>Boris Pasternak</li>
+              <li>Jean-Paul Sartre</li>
+              <li>Aleksandr Solzhenitsyn</li>
+              <li>Saul Bellow</li>
+              <li>Isaac Bashevis Singer</li>
+              <li>Czesław Miłosz</li>
+              <li>Joseph Brodsky</li>
+              <li>Naguib Mahfouz</li>
+              <li>Octavio Paz</li>
+              <li>Seamus Heaney</li>
+              <li>Wisława Szymborska</li>
+              <li>José Saramago</li>
+              <li>Günter Grass</li>
+              <li>V. S. Naipaul</li>
+              <li>J. M. Coetzee</li>
+              <li>Harold Pinter</li>
+              <li>Alice Munro</li>
+              <li>Olga Tokarczuk</li>
+              <li>László Krasznahorkai</li>
+      </ul>
+    </details>
+    <details class="classification" data-prize="Economics">
+      <summary>Nobel Economics: 8 clear cases, 25 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Paul Samuelson</li>
+              <li>Kenneth Arrow</li>
+              <li>Leonid Kantorovich</li>
+              <li>Herbert A. Simon</li>
+              <li>Gérard Debreu</li>
+              <li>John Forbes Nash Jr.</li>
+              <li>Robert Aumann</li>
+              <li>Lloyd Shapley</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>Jan Tinbergen</li>
+              <li>Wassily Leontief</li>
+              <li>Friedrich Hayek</li>
+              <li>Milton Friedman</li>
+              <li>Robert Solow</li>
+              <li>Maurice Allais</li>
+              <li>Harry Markowitz</li>
+              <li>Ronald Coase</li>
+              <li>Gary Becker</li>
+              <li>Robert Lucas Jr.</li>
+              <li>James Mirrlees</li>
+              <li>Robert C. Merton</li>
+              <li>Amartya Sen</li>
+              <li>Joseph Stiglitz</li>
+              <li>Daniel Kahneman</li>
+              <li>Thomas Schelling</li>
+              <li>Leonid Hurwicz</li>
+              <li>Roger Myerson</li>
+              <li>Paul Krugman</li>
+              <li>Elinor Ostrom</li>
+              <li>Eugene Fama</li>
+              <li>Lars Peter Hansen</li>
+              <li>Jean Tirole</li>
+              <li>Paul Romer</li>
+              <li>Paul Milgrom</li>
+      </ul>
+    </details>
+    <details class="classification" data-prize="Medicine">
+      <summary>Nobel Medicine: 16 clear cases, 30 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Ivan Pavlov</li>
+              <li>Robert Koch</li>
+              <li>Santiago Ramón y Cajal</li>
+              <li>Paul Ehrlich</li>
+              <li>Charles Scott Sherrington</li>
+              <li>Thomas Hunt Morgan</li>
+              <li>Joshua Lederberg</li>
+              <li>Francis Crick</li>
+              <li>Alan Lloyd Hodgkin</li>
+              <li>Andrew Huxley</li>
+              <li>François Jacob</li>
+              <li>Jacques Monod</li>
+              <li>Max Delbrück</li>
+              <li>Barbara McClintock</li>
+              <li>Niels Jerne</li>
+              <li>Sydney Brenner</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>Élie Metchnikoff</li>
+              <li>Karl Landsteiner</li>
+              <li>Otto Heinrich Warburg</li>
+              <li>Hans Spemann</li>
+              <li>Albert Szent-Györgyi</li>
+              <li>Hermann Joseph Muller</li>
+              <li>Hans Adolf Krebs</li>
+              <li>Arthur Kornberg</li>
+              <li>Peter Medawar</li>
+              <li>James Watson</li>
+              <li>John Eccles</li>
+              <li>Har Gobind Khorana</li>
+              <li>Marshall Nirenberg</li>
+              <li>Gerald Edelman</li>
+              <li>David Baltimore</li>
+              <li>Roger Sperry</li>
+              <li>Susumu Tonegawa</li>
+              <li>Gertrude B. Elion</li>
+              <li>Christiane Nüsslein-Volhard</li>
+              <li>Stanley B. Prusiner</li>
+              <li>Eric Kandel</li>
+              <li>Paul Lauterbur</li>
+              <li>Peter Mansfield</li>
+              <li>Mario Capecchi</li>
+              <li>Jack W. Szostak</li>
+              <li>John Gurdon</li>
+              <li>Shinya Yamanaka</li>
+              <li>Svante Pääbo</li>
+              <li>Drew Weissman</li>
+              <li>Katalin Karikó</li>
+      </ul>
+    </details>
+    <details class="classification" data-prize="Peace">
+      <summary>Nobel Peace: 2 clear cases, 4 borderline</summary>
+      <h3>Clear cases</h3>
+      <ul class="name-list" data-coding="Clear">
+              <li>Linus Pauling</li>
+              <li>Andrei Sakharov</li>
+      </ul>
+      <h3>Borderline cases</h3>
+      <ul class="name-list" data-coding="Borderline">
+              <li>Fridtjof Nansen</li>
+              <li>Albert Schweitzer</li>
+              <li>Martin Luther King Jr.</li>
+              <li>Norman Borlaug</li>
+      </ul>
+    </details>
+
+    <h2 id="audit">The complete audit</h2>
+    <p>The audit has 1,193 rows: 1,165 person-category records and 28 distinct
+      Peace organizations. Each row records the prize, name, award years,
+      recipient type, classification and rationale. The organization rows
+      preserve the full roster while contributing nothing to the person counts.</p>
+    <div class="btn-row">
+      <a class="btn" href="./assets/data/genius-prize-audit.xlsx" download>Editable spreadsheet</a>
+      <a class="btn secondary" href="./assets/data/genius-prize-audit.csv" download>Complete audit CSV</a>
+    </div>
+    <p>In the spreadsheet, change <strong>Coding</strong> on the Laureates tab to
+      challenge an individual judgment. The counts and shares on the Comparison
+      tab recalculate. The CSV provides the same row-level classifications for
+      independent calculations.</p>
+    <h3>Reproduce the calculation</h3>
+    <p>Download the CSV and run this Python code in the same directory. It uses
+      the standard library and calculates both columns from the recorded labels.</p>
+<pre><code class="language-python">from collections import Counter
+import csv
+
+people = Counter()
+clear = Counter()
+borderline = Counter()
+with open(&quot;genius-prize-audit.csv&quot;, encoding=&quot;utf-8&quot;, newline=&quot;&quot;) as f:
+    for row in csv.DictReader(f):
+        if row[&quot;Recipient type&quot;] != &quot;Person&quot;:
+            continue
+        prize = row[&quot;Prize&quot;]
+        people[prize] += 1
+        clear[prize] += row[&quot;Coding&quot;] == &quot;Clear&quot;
+        borderline[prize] += row[&quot;Coding&quot;] == &quot;Borderline&quot;
+
+for prize, n in people.items():
+    strict = clear[prize] / n
+    inclusive = (clear[prize] + borderline[prize]) / n
+    print(f&quot;{prize}: {clear[prize]}/{n}, {strict:.1%}, {inclusive:.1%}&quot;)</code></pre>
+
+    <h2 id="limits">What the numbers can support</h2>
+    <p>Classification uncertainty dominates. Familiarity with a field, the
+      visibility of a person’s work, historical reputation and the meaning of
+      intellectual versus artistic originality can all change the labels.
+      Screening an entire roster does not remove those biases. Independent
+      raters working to a more detailed common rubric would provide a stronger
+      assessment.</p>
+    <p>All remaining Abel and Fields laureates were marked borderline. Their
+      100% inclusive values are therefore permissive endpoints of this coding,
+      not evidence that every recipient unequivocally meets the benchmark.
+      The Nobel and Turing borderline lists are also judgments, not exhaustive
+      sets of all possible claims.</p>
+    <p>The prize populations differ in era, career stage, age restrictions and
+      selection criteria. These are retrospective judgments about lifetime
+      work, including work after a prize was awarded, rather than forecasts
+      about the latest winner. The broad separation in this particular coding
+      is more credible than the fine ordering among Nobel categories.</p>
+    <p>The direction of conditioning also matters. A frequency among prize
+      winners does not give the probability that a genius wins a prize, and
+      gives no estimate of genius prevalence in the general population.</p>
+    <p>This question sits beside winning’s concern with the relationship between
+      observed winners and latent qualities. Here, the classifications were
+      assigned by judgment and counted directly. No race or ability model
+      has been fitted to prize decisions.</p>
+
+    <h2 id="sources">Prize records and source rosters</h2>
+    <p>Nobel rosters were parsed from Wikipedia and reconciled with Nobel
+      Foundation totals. Physics has 230 award-recipient entries through 2025
+      but 229 people because Bardeen appears twice. Chemistry has 200 entries
+      but 198 people because Sanger and Sharpless each appear twice. Peace has
+      112 people and 31 organization awards to 28 distinct organizations.
+      Abel and Fields use their official laureate lists. The Turing roster
+      was parsed from Wikipedia and checked against ACM’s records.</p>
+    <table aria-label="Prize records and rosters">
+      <thead><tr><th scope="col">Prize</th><th scope="col">Population record</th>
+        <th scope="col">Roster</th></tr></thead>
+      <tbody>
+          <tr><th scope="row">Abel</th>
+            <td><a href="https://abelprize.no/winners">Prize records</a></td>
+            <td><a href="https://abelprize.no/winners">Laureate roster</a></td></tr>
+          <tr><th scope="row">Fields</th>
+            <td><a href="https://www.mathunion.org/imu-awards/fields-medal">Prize records</a></td>
+            <td><a href="https://www.mathunion.org/imu-awards/fields-medal">Laureate roster</a></td></tr>
+          <tr><th scope="row">Turing</th>
+            <td><a href="https://prod-amturing.acm.bloomreach.cloud/laureates">Prize records</a></td>
+            <td><a href="https://en.wikipedia.org/wiki/Turing_Award">Laureate roster</a></td></tr>
+          <tr><th scope="row">Physics</th>
+            <td><a href="https://www.nobelprize.org/prizes/physics/facts-on-the-nobel-prize-in-physics/">Prize records</a></td>
+            <td><a href="https://en.wikipedia.org/wiki/List_of_Nobel_laureates_in_Physics">Laureate roster</a></td></tr>
+          <tr><th scope="row">Chemistry</th>
+            <td><a href="https://www.nobelprize.org/prizes/chemistry/facts-on-the-nobel-prize-in-chemistry/">Prize records</a></td>
+            <td><a href="https://en.wikipedia.org/wiki/List_of_Nobel_laureates_in_Chemistry">Laureate roster</a></td></tr>
+          <tr><th scope="row">Literature</th>
+            <td><a href="https://www.nobelprize.org/prizes/lists/all-nobel-prizes-in-literature/">Prize records</a></td>
+            <td><a href="https://en.wikipedia.org/wiki/List_of_Nobel_laureates_in_Literature">Laureate roster</a></td></tr>
+          <tr><th scope="row">Economics</th>
+            <td><a href="https://www.nobelprize.org/prizes/lists/all-prizes-in-economic-sciences/">Prize records</a></td>
+            <td><a href="https://en.wikipedia.org/wiki/List_of_Nobel_Memorial_Prize_laureates_in_Economic_Sciences">Laureate roster</a></td></tr>
+          <tr><th scope="row">Medicine</th>
+            <td><a href="https://www.nobelprize.org/prizes/medicine/facts-on-the-nobel-prize-in-physiology-or-medicine/">Prize records</a></td>
+            <td><a href="https://en.wikipedia.org/wiki/List_of_Nobel_laureates_in_Physiology_or_Medicine">Laureate roster</a></td></tr>
+          <tr><th scope="row">Peace</th>
+            <td><a href="https://www.nobelprize.org/prizes/lists/all-nobel-peace-prizes/">Prize records</a></td>
+            <td><a href="https://en.wikipedia.org/wiki/List_of_Nobel_Peace_Prize_laureates">Laureate roster</a></td></tr>
+      </tbody>
+    </table>
+    <p>Selected supporting material:
+      <a href="https://abelprize.no/abel-prize-laureates/2015">Nash and Nirenberg’s Abel citation</a>,
+      <a href="https://scarc.library.oregonstate.edu/coll/pauling/bond/narrative/page1.html">Pauling and the chemical bond</a>,
+      <a href="https://cern-courier.web.cern.ch/a/whats-next-for-cp-violation/">Sakharov’s baryogenesis conditions</a>,
+      <a href="https://www.nobelprize.org/prizes/physics/2016/press-release/">Thouless, Haldane and Kosterlitz</a>,
+      <a href="https://www.ias.edu/news/2021/abel-prize">Wigderson’s theoretical-computing contributions</a>, and
+      <a href="https://library.cshl.edu/oralhistory/topic/cshl/barbara-mcclintock/">McClintock’s scientific work</a>.</p>
+    <p class="small">The award-year cutoff and classifications are frozen in
+      the audit downloads. Source websites may subsequently display newer totals.</p>
+    <p><a href="./heritage.html">Heritage</a> &middot;
+      <a href="./ratings.html">Ratings</a> &middot; <a href="./index.html">Back to winning</a></p>
+  </main>
+</body>
+</html>
