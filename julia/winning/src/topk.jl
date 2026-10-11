@@ -16,12 +16,34 @@ function _resolved_points(lo, hi, sd, points)
     if !isfinite(need) || need > 8193
         @warn "top-k lattice cannot resolve the narrowest runner even at 8193 points" smin window=(hi - lo)
     end
-    return max(Int(points), Int(min(need, 8193.0)))
+    return max(Int(points), _dyadic_points(need))
 end
 
+# The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped at
+# 8193), so it is piecewise constant over a factor-of-two band of the
+# narrowest scale instead of stepping by one point at every ceil: a count
+# moving 611 -> 610 under a 1e-5 relative change of one sd made the
+# public map disagree with its scale Jacobian by 100x (#515).
+function _dyadic_points(need)
+    (!isfinite(need) || need >= 8193) && return 8193
+    need <= 2 && return 2
+    return Int(min(2.0^ceil(log2(need - 1)) + 1, 8193.0))
+end
+
+# searched in STANDARDISED units and mapped back: an absolute 1e-12 floor
+# on the widest sd gave a field in units of 1e-18 a window 2e5 times its
+# width (#370, as python/R/browser)
 function _count_window(mu, sd, k, fn; delta = 1e-12, pad_sds = 2.0)
+    m0 = sum(mu) / length(mu)
+    c = maximum(sd)
+    (isfinite(c) && c > 0) || error("top-k window needs positive scales")
+    lo, hi = _count_window_std((mu .- m0) ./ c, sd ./ c, k, fn, delta, pad_sds)
+    return (m0 + c * lo, m0 + c * hi)
+end
+
+function _count_window_std(mu, sd, k, fn, delta, pad_sds)
     n = length(mu)
-    smax = max(maximum(sd), 1e-12)
+    smax = maximum(sd)
     mean_count(x) = sum(1 .- fn((x .- mu) ./ sd).S)
     lo = minimum(mu) - 9 * smax
     step = 9 * smax
@@ -218,7 +240,7 @@ function top_k_probabilities(mu, k; V = nothing, D = nothing,
     n = length(mu)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     V === nothing &&
         return _checked_topk(_topk_with_slopes(mu, sd, k, fn, points).q,
@@ -259,7 +281,7 @@ function top_k_jacobians(mu, k; D = nothing, base = "normal",
         end
         return (Jmu = Jm, Jsigma = Js)
     end
-    Dv = D === nothing ? ones(n) : Float64.(collect(D))
+    Dv = _as_idio(D, n)
     sd = sqrt.(Dv)
     fn = _base_fn(base)
     g = _topk_grid(mu, sd, k, fn, points)
@@ -309,7 +331,7 @@ function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
                             V = nothing, qa = 15)
     mu = Float64.(collect(mu))
     n = length(mu)
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     P = if V === nothing
         _rank_matrix_node(mu, sd, fn, points)
@@ -351,7 +373,14 @@ function _validated_topk_target(q, k, n, target_floor)
     length(target) == n || error("target has $(length(target)) entries for $n runners")
     floored = falses(n)
     if target_floor !== nothing
-        target_floor > 0 || error("target_floor must be positive")
+        (isfinite(target_floor) && target_floor > 0) ||
+            error("target_floor must be a finite positive number")
+        # a membership floor: applied to memberships normalized to k
+        # slots, not to the caller's units (#592)
+        all(isfinite, target) && all(>=(0), target) ||
+            error("target entries must be finite and non-negative")
+        target = target ./ maximum(target)
+        target .*= k / sum(target)
         floored = target .< target_floor
         target = max.(target, target_floor)
     elseif any(target .<= 0)
@@ -373,7 +402,7 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
     vt = _validated_topk_target(q, k, n, target_floor)
     target = vt.target
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     fac = V === nothing ? nothing :
           _topk_factor_nodes(V, n, qa, "abilities_from_topk")
@@ -383,17 +412,16 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
     alpha = n > 2 ? 1.0 : 0.7
     resid_max = Inf
     iters = 0
-    for it in 1:n_iter
-        iters = it
+    function fwd(m)
         local qraw, sl
         if fac === nothing
-            ws = _topk_with_slopes(mu, sd, k, fn, points)
+            ws = _topk_with_slopes(m, sd, k, fn, points)
             qraw, sl = ws.q, ws.slopes
         else
             qraw = zeros(n)
             sl = zeros(n)
             for j in 1:size(fac.nodes, 1)
-                ws = _topk_with_slopes(mu .+ fac.Vm * fac.nodes[j, :],
+                ws = _topk_with_slopes(m .+ fac.Vm * fac.nodes[j, :],
                                        sd, k, fn, points)
                 qraw .+= fac.w[j] .* ws.q
                 sl .+= fac.w[j] .* ws.slopes
@@ -401,12 +429,30 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
         end
         qhat = _checked_topk(qraw, k, "top-k inversion")
         resid = (log.(max.(qhat, TINY)) .- log.(max.(1 .- qhat, TINY))) .- logit_t
+        return resid, qhat, sl
+    end
+    prev_mu = nothing
+    for it in 1:n_iter
+        iters = it
+        resid, qhat, sl = fwd(mu)
         resid_max = maximum(abs.(resid))
         resid_max < tol && break
+        prev_mu = copy(mu)
         dlogit = min.(sl ./ max.(qhat .* (1 .- qhat), TINY), -1e-6)
         lim = min.(2, 10 .* abs.(resid))
         mu .-= clamp.(alpha .* resid ./ dlogit, -lim, lim)
         mu .-= sum(mu) / n
+    end
+    if !(resid_max < tol)
+        # exhausted after a step no sweep priced: price the returned
+        # iterate and keep the better of the two, so the diagnostics
+        # describe the mu returned (#497, matching python)
+        r_end = maximum(abs.(fwd(mu)[1]))
+        if prev_mu !== nothing && !(r_end < resid_max)
+            mu = prev_mu
+        else
+            resid_max = r_end
+        end
     end
     converged = resid_max < tol
     return_info && return (mu = mu, converged = converged,
@@ -436,7 +482,7 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
     t2 = _validated_topk_target(q2, k2, n, nothing).target
     lt1 = log.(t1) .- log1p.(-t1)
     lt2 = log.(t2) .- log1p.(-t2)
-    sd = D0 === nothing ? ones(n) : sqrt.(Float64.(collect(D0)))
+    sd = sqrt.(_as_idio(D0, n; name = "D0"))
     local mu
     if mu0 !== nothing
         mu = Float64.(collect(mu0)) .- sum(mu0) / n
@@ -447,6 +493,15 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
                                  points = points, n_iter = 20, tol = 1e-3,
                                  return_info = true).mu
     end
+    # the RETURN gauge (mean-zero mu, geometric-mean-one sd) applied to
+    # the start as well: it was applied only to accepted LM steps, so an
+    # exact warm start converged before any step and came back in the
+    # caller's units -- sd [2, 3, 4, 5] where python returns
+    # [0.60, 0.91, 1.21, 1.51] (#595, julia's copy of #360). Ranks are
+    # invariant to it, so no probability moves.
+    c0 = exp(sum(log.(sd)) / n)
+    mu = (mu .- sum(mu) / n) ./ c0
+    sd = sd ./ c0
     sqr = sqrt(max(ridge, 0.0))
     function logits(m, s)
         qh1 = clamp.(top_k_probabilities(m, k1; D = s .^ 2, base = base,
@@ -566,12 +621,26 @@ function abilities_from_rank_marginal(p, r; mu0 = nothing, D = nothing,
                                       n_iter = 60, tol = 1e-8,
                                       return_info = false)
     n = length(p)
+    # a whole-number rank with a descriptive refusal (#317; Int(1.5)
+    # threw an InexactError naming nothing the caller passed)
+    (r isa Real && !(r isa Bool) && isfinite(r) && r == floor(r)) ||
+        throw(ArgumentError("r must be a whole-number rank; got $r"))
     r = Int(r)
     1 <= r <= n || error("rank must be in [1, n]; got r=$r, n=$n")
+    all(isfinite, p) || error("rank probabilities must be finite")
     any(p .<= 0) && error("all rank probabilities must be positive")
     logt = log.(p ./ sum(p))
-    sd = sqrt.(D === nothing ? ones(n) : Float64.(collect(D)))
+    sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
+    zz = [-2.3, -1.1, -0.35, 0.6, 1.7]
+    symmetric = all(abs.(fn(zz).S .+ fn(-zz).S .- 1) .< 1e-12)
+    if mu0 === nothing && isodd(n) && r == (n + 1) ÷ 2 && symmetric
+        # the exact middle rank of an odd field under a symmetric base is
+        # even in mu: zero Jacobian at the zero start (#378)
+        throw(ArgumentError("the exact middle rank r=$r of an odd field " *
+            "(n=$n) under a symmetric base is unchanged by mu -> -mu, so " *
+            "the zero start is stationary; pass mu0 to choose the branch"))
+    end
     mu = mu0 === nothing ? zeros(n) : Float64.(collect(mu0)) .- sum(mu0) / n
     st = _rank_marginal_with_jacobian(mu, sd, r, fn, points)
     resid = log.(max.(st.p, TINY)) .- logt

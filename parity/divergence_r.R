@@ -40,7 +40,8 @@ for (cs in d$cases) {
     # SHAPE for the node rule, values for everything else
     val <- if (cs$verb == "hermite") as.numeric(dim(p))
            # R fills a matrix COLUMN-major; the reference ravels ROW-major
-           else as.numeric(head(as.numeric(if (is.matrix(p)) t(p) else p), 6))
+           # every entry, not a prefix (#490)
+           else as.numeric(if (is.matrix(p)) t(p) else p)
     list(verdict = if (all(is.finite(p))) "ACCEPT" else "ACCEPT_NONFINITE",
          value = val)
   }, error = function(err) list(verdict = "REFUSE",

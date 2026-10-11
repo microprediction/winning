@@ -170,6 +170,18 @@ def convolve_two(density1, density2, L=None, do_padding=False):
     mu1 = mean_of_density(density1, unit=1)
     mu2 = mean_of_density(density2, unit=1)
     density = np.convolve(density1, density2)
+    # Mass outside the window is folded onto the first atom (lower tail)
+    # or dropped (upper tail), and the mean correction below then moves
+    # the bulk to compensate. The guard after it only saw the dropped
+    # upper tail, so a 30% lower tail pinned at the edge passed and the
+    # shift reversed a 37/63 race to 82/18 (#608). Count both tails.
+    n_extra = implied_L(density) - L
+    if n_extra > 0:
+        total = float(np.sum(density))
+        clipped = float(np.sum(density[:n_extra]) + np.sum(density[-n_extra:]))
+        if total > 0 and clipped > 0.1 * total:
+            raise ValueError('Convolution of two densities puts ' + format(clipped / total, '.3g')
+                             + ' of its mass outside the lattice window - increase L')
     middle = middle_of_density(density=density, L=L, do_padding=do_padding)
     mu = mean_of_density(middle, unit=1)
     mu_diff = mu-(mu1+mu2)
@@ -232,6 +244,11 @@ def convolve_many(densities, L=None, do_padding=True):
 
 def skew_normal_density(L, unit, loc=0, scale=1.0, a=2.0):
     """ Skew normal as a lattice density """
+    # a lattice spacing and a scale are positive: a negative one was
+    # normalised away into a different law (#509)
+    for name, v in (('unit', unit), ('scale', scale)):
+        if not (np.isfinite(v) and v > 0):
+            raise ValueError('skew_normal_density: ' + name + ' must be a finite positive number; got ' + repr(v))
     lattice = symmetric_lattice(L=L, unit=unit)
     density = np.array([_unnormalized_skew_cdf(x, loc=loc, scale=scale, a=a) for x in lattice])
     density = density / np.sum(density)
@@ -504,11 +521,14 @@ def densities_from_events(scores:[int], events:[[float]], L:int, unit:float):
     assert len(scores)==len(events)
     low_score = min(scores)
     adjusted_scores = [ s-low_score for s in scores ]
-    if True:
-        for k,adj_score in enumerate(adjusted_scores):
-            adapted_L = int(math.ceil(abs(adj_score/unit)))
-            events[k].append( density_from_samples(x=[adj_score],L=adapted_L, unit=unit) )
-    densities = [ convolve_many( densities=event, L=L ) for event in events ]
+    # Build each state's augmented list locally. This appended the score
+    # density into the caller's ``events[k]``, so reusing one event model
+    # stacked another score shift on every call (#607).
+    densities = []
+    for event, adj_score in zip(events, adjusted_scores):
+        adapted_L = int(math.ceil(abs(adj_score/unit)))
+        score_density = density_from_samples(x=[adj_score], L=adapted_L, unit=unit)
+        densities.append(convolve_many(densities=list(event) + [score_density], L=L))
     return densities
 
 

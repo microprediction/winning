@@ -66,6 +66,39 @@ fn check_factor(mu: usize, v: (usize, usize), d: usize, f: (usize, usize),
     need_len("w", w, f.0, "one weight per factor node (row of f)")
 }
 
+/// Values the lattice kernels assume (#506, #516, #519, #522, #602):
+/// shape checks alone let NaN nodes, signed scales and reversed windows
+/// through to finite but wrong answers. Shared rules live in the
+/// winning crate so pure-Rust callers can apply the same contract.
+fn finite1(name: &str, x: &PyReadonlyArray1<f64>) -> PyResult<()> {
+    winning::check_finite(name, x.as_array().iter()).map_err(bad)
+}
+
+fn finite2(name: &str, x: &PyReadonlyArray2<f64>) -> PyResult<()> {
+    let a = x.as_array();
+    for ((i, j), &v) in a.indexed_iter() {
+        if !v.is_finite() {
+            return Err(bad(format!("{name}[{i}, {j}] = {v} is not finite")));
+        }
+    }
+    Ok(())
+}
+
+fn positive1(name: &str, x: &PyReadonlyArray1<f64>) -> PyResult<()> {
+    winning::check_positive(name, x.as_array().iter()).map_err(bad)
+}
+
+/// Factor-race values: finite mu, v, f, w and h; d finite and > 0.
+fn check_factor_values(mu: &PyReadonlyArray1<f64>, v: &PyReadonlyArray2<f64>,
+                       d: &PyReadonlyArray1<f64>, f: &PyReadonlyArray2<f64>,
+                       w: &PyReadonlyArray1<f64>) -> PyResult<()> {
+    finite1("mu", mu)?;
+    finite2("v", v)?;
+    positive1("d", d)?;
+    finite2("f", f)?;
+    finite1("w", w)
+}
+
 /// Base-family parameters (#134): finite, and inside each family's
 /// domain. nu = inf used to panic inside betai; the Python reference
 /// refuses it at construction.
@@ -115,38 +148,29 @@ fn check_starts(starts: &[i64], n: usize) -> PyResult<Vec<usize>> {
     Ok(starts.iter().map(|&x| x as usize).collect())
 }
 
-/// Tree topology: nodes 0..n_leaves are the clusters, every parent is -1
-/// (a root) or another node, and following parents terminates. A cycle
-/// used to spin the kernel's depth loop forever.
+/// Tree topology, including the single-root rule (#328, #517); see
+/// winning::check_tree.
 fn check_tree(parent: &[i64], n_leaves: usize) -> PyResult<()> {
-    let nt = parent.len();
-    if nt < n_leaves {
-        return Err(bad(format!(
-            "parent has {nt} nodes, fewer than the {n_leaves} cluster leaves")));
-    }
-    for (t, &p) in parent.iter().enumerate() {
-        if p < -1 || p >= nt as i64 || p == t as i64 {
-            return Err(bad(format!(
-                "parent[{t}] = {p} is not -1 or another node index in [0, {nt})")));
-        }
-    }
-    for t in 0..nt {
-        let (mut u, mut hops) = (t, 0usize);
-        while parent[u] >= 0 {
-            u = parent[u] as usize;
-            hops += 1;
-            if hops > nt {
-                return Err(bad(format!("parent has a cycle through node {t}")));
-            }
-        }
-    }
-    Ok(())
+    winning::check_tree(parent, n_leaves).map_err(bad)
 }
 
-/// The normal-base top-k / rank kernels take (mu, sd) of equal length.
-fn check_mu_sd(mu: usize, sd: usize) -> PyResult<()> {
-    need_field(mu)?;
-    need_len("sd", sd, mu, "one scale per contestant")
+/// The normal-base top-k / rank kernels take (mu, sd) of equal length,
+/// mu finite and sd finite and > 0 (#506).
+fn check_mu_sd(mu: &PyReadonlyArray1<f64>, sd: &PyReadonlyArray1<f64>) -> PyResult<()> {
+    need_field(mu.as_array().len())?;
+    need_len("sd", sd.as_array().len(), mu.as_array().len(), "one scale per contestant")?;
+    finite1("mu", mu)?;
+    positive1("sd", sd)
+}
+
+/// An explicit lattice window: finite, hi > lo (#516).
+fn check_window(lo: f64, hi: f64) -> PyResult<()> {
+    winning::check_window(lo, hi).map_err(bad)
+}
+
+/// An optional window: both NaN (automatic) or finite with hi > lo.
+fn check_optional_window(lo: f64, hi: f64) -> PyResult<()> {
+    winning::check_optional_window(lo, hi).map_err(bad)
 }
 
 
@@ -167,7 +191,9 @@ fn forward_and_slopes<'py>(
     hi: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, f64)> {
     check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    check_factor_values(&mu, &v, &d, &f, &w)?;
     need_points(points)?;
+    check_optional_window(lo, hi)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -196,7 +222,9 @@ fn win_probabilities_factor<'py>(
     hi: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
     check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    check_factor_values(&mu, &v, &d, &f, &w)?;
     need_points(points)?;
+    check_optional_window(lo, hi)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -229,15 +257,23 @@ fn jacobian_vector_product<'py>(
     form: &str,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    check_factor_values(&mu, &v, &d, &f, &w)?;
     need_points(points)?;
     need_len("h", h.as_array().len(), mu.as_array().len(), "one direction component per contestant")?;
+    finite1("h", &h)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
     let w_o: Array1<f64> = w.as_array().to_owned();
     let h_o: Array1<f64> = h.as_array().to_owned();
-    let grid = form == "grid";
+    // exactly two forms: anything but "grid" used to run IBP (#523)
+    let grid = match form {
+        "grid" => true,
+        "ibp" => false,
+        other => return Err(PyValueError::new_err(format!(
+            "form must be \"ibp\" or \"grid\"; got {:?}", other))),
+    };
     let out = py.allow_threads(|| with_usable_rayon(|| {
         jvp_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                    w_o.view(), h_o.view(), points, grid)
@@ -264,7 +300,9 @@ fn win_probabilities_factor_separated<'py>(
     rs: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
     check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    check_factor_values(&mu, &v, &d, &f, &w)?;
     need_points(points)?;
+    winning::check_cheb_orders(rm, rs).map_err(bad)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -302,25 +340,37 @@ fn ghk_all_shares<'py>(
     }
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
-    let d_o: Array1<f64> = d.as_array().to_owned();
+    let mut d_o: Array1<f64> = d.as_array().to_owned();
+    let n = mu_o.len();
+    // The factor model is validated BEFORE anything is built from it, as
+    // python's as_idio does: D is a variance. A negative entry used to
+    // pass whenever the contrast covariance stayed positive definite, so
+    // D = [1, -0.5] priced a confident [0.0786, 0.9214] for a covariance
+    // with eigenvalue -0.5 (#367). Shapes are checked above (#74).
+    if mu_o.iter().chain(v_o.iter()).chain(d_o.iter()).any(|x| !x.is_finite()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "mu, v and d must be finite"));
+    }
+    let dmax = d_o.iter().fold(0.0f64, |acc, &x| acc.max(x.abs()));
+    let tol = 1e-12 * dmax.max(1.0);
+    if let Some((j, &x)) = d_o.iter().enumerate().find(|(_, &x)| x < -tol) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "d[{}] = {} is negative: d is an idiosyncratic variance and \
+             cannot be negative", j, x)));
+    }
+    d_o.mapv_inplace(|x| x.max(0.0));    // within tolerance: these ARE zero
+    if n == 1 {
+        return Ok(Array1::from_elem(1, 1.0).into_pyarray_bound(py));
+    }
     let out = py.allow_threads(|| with_usable_rayon(|| {
-        let n = mu_o.len();
         let k = v_o.ncols();
-        let mut sigma = vec![0.0f64; n * n];
-        for i in 0..n {
-            for j in 0..n {
-                let mut sv = 0.0;
-                for r_ in 0..k {
-                    sv += v_o[[i, r_]] * v_o[[j, r_]];
-                }
-                sigma[i * n + j] = sv + if i == j { d_o[i] } else { 0.0 };
-            }
-        }
+        let vs: Vec<f64> = v_o.iter().cloned().collect();   // row-major n x k
+        let ds: Vec<f64> = d_o.iter().cloned().collect();
         let mus: Vec<f64> = mu_o.iter().cloned().collect();
         let p: Vec<f64> = (0..n)
             .into_par_iter()
-            .map(|i| ghk_prob_one(&mus, &sigma, n, i, r_draws,
-                                  seed.wrapping_add(i as u64)))
+            .map(|i| ghk_prob_one_factor(&mus, &vs, k, &ds, n, i, r_draws,
+                                         seed.wrapping_add(i as u64)))
             .collect();
         let total: f64 = p.iter().sum();
         Array1::from_iter(p.into_iter().map(|x| x / total))
@@ -350,6 +400,12 @@ fn block_race<'py>(
     need_len("v", v.as_array().len(), n, "one cluster loading per contestant")?;
     need_len("a_weights", a_weights.as_array().len(), a_nodes.as_array().len(), "one weight per node")?;
     need_points(points)?;
+    finite1("mu", &mu)?;
+    positive1("sd", &sd)?;
+    finite1("v", &v)?;
+    finite1("a_nodes", &a_nodes)?;
+    finite1("a_weights", &a_weights)?;
+    check_optional_window(lo, hi)?;
     let st = check_starts(&starts.as_array().to_vec(), n)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
@@ -390,6 +446,12 @@ fn block_race_r<'py>(
     }
     need_len("weights", weights.as_array().len(), nodes.as_array().nrows(), "one weight per node (row of nodes)")?;
     need_points(points)?;
+    finite1("mu", &mu)?;
+    positive1("sd", &sd)?;
+    finite2("v", &v)?;
+    finite2("nodes", &nodes)?;
+    finite1("weights", &weights)?;
+    check_optional_window(lo, hi)?;
     let st = check_starts(&starts.as_array().to_vec(), n)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
@@ -431,6 +493,13 @@ fn tree_race<'py>(
     let pa: Vec<i64> = parent.as_array().to_vec();
     check_tree(&pa, st.len())?;
     need_len("lam", lam.as_array().len(), pa.len(), "one strength per tree node")?;
+    finite1("mu", &mu)?;
+    positive1("sd", &sd)?;
+    finite1("v", &v)?;
+    finite1("lam", &lam)?;
+    finite1("a_nodes", &a_nodes)?;
+    finite1("a_weights", &a_weights)?;
+    check_window(lo, hi)?;
     let mu_o: Vec<f64> = mu.as_array().to_vec();
     let sd_o: Vec<f64> = sd.as_array().to_vec();
     let v_o: Vec<f64> = v.as_array().to_vec();
@@ -465,10 +534,20 @@ fn check_classic_density(density: &[f64]) -> PyResult<()> {
     Ok(())
 }
 
+/// A classic race needs at least one runner (#526: an empty field
+/// indexed cdfs[0] and panicked), each finite.
+fn check_classic_field(name: &str, x: &[f64]) -> PyResult<()> {
+    if x.is_empty() {
+        return Err(bad(format!("{name} is empty; a race needs at least one runner")));
+    }
+    winning::check_finite(name, x).map_err(bad)
+}
+
 #[pyfunction]
 fn classic_exact_state_prices(py: Python<'_>, density: Vec<f64>, offsets: Vec<f64>)
                               -> PyResult<Vec<f64>> {
     check_classic_density(&density)?;
+    check_classic_field("offsets", &offsets)?;
     // GIL released and rayon guarded like every heavy wrapper (#120,
     // #122): the table pricing is a rayon parallel region
     Ok(py.allow_threads(|| with_usable_rayon(|| {
@@ -494,6 +573,14 @@ fn classic_exact_calibrate(
     if guess.len() != prices.len() || offset_samples.is_empty() {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "classic calibration needs one guess per price and a nonempty offset table"));
+    }
+    winning::check_offset_samples(&offset_samples).map_err(bad)?;
+    check_classic_field("prices", &prices)?;
+    winning::check_finite("guess", &guess).map_err(bad)?;
+    // zero steps returned the warm start as a calibration (#543)
+    if n_iter == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "n_iter must be a positive number of iterations; zero returns the warm start"));
     }
     Ok(py.allow_threads(|| with_usable_rayon(|| {
         winning::exact_calibrate(&density, &prices, &offset_samples, &guess, n_iter)
@@ -526,6 +613,10 @@ fn per_winner_rr<'py>(
             "z has {} columns, expected rank + 1 = {} (factor coordinates and the winner's own shock)",
             z.as_array().ncols(), v.as_array().ncols() + 1)));
     }
+    finite1("mu", &mu)?;
+    finite2("v", &v)?;
+    positive1("d", &d)?;
+    finite2("z", &z)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
@@ -557,7 +648,9 @@ fn ordered_prefixes<'py>(
     k: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
     check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(), f.as_array().dim(), w.as_array().len())?;
+    check_factor_values(&mu, &v, &d, &f, &w)?;
     need_points(points)?;
+    check_optional_window(lo, hi)?;
     winning::check_ordered_k(k).map_err(bad)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
@@ -626,6 +719,8 @@ fn forward_and_slopes_base<'py>(
 )> {
     check_factor(mu.as_array().len(), v.as_array().dim(), d.as_array().len(),
                  f_nodes.as_array().dim(), w.as_array().len())?;
+    check_factor_values(&mu, &v, &d, &f_nodes, &w)?;
+    check_optional_window(lo, hi)?;
     need_points(points)?;
     if base_id > 8 {
         return Err(bad(format!("base_id = {base_id} is not a shipped base family (0..=8)")));
@@ -665,8 +760,9 @@ fn rank_marginals<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    check_mu_sd(&mu, &sd)?;
     need_points(points)?;
+    check_window(lo, hi)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
     let p = py.allow_threads(|| with_usable_rayon(
@@ -686,8 +782,9 @@ fn rank_marginal_jacobian<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
-    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    check_mu_sd(&mu, &sd)?;
     need_points(points)?;
+    check_window(lo, hi)?;
     winning::check_rank(r, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
@@ -711,11 +808,16 @@ fn top_k_window(
     delta: f64,
     pad_sds: f64,
 ) -> PyResult<(f64, f64)> {
-    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    check_mu_sd(&mu, &sd)?;
     winning::check_window_depth(k, mu.as_array().len()).map_err(bad)?;
+    winning::check_window_controls(delta, pad_sds).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
-    Ok(py.allow_threads(|| with_usable_rayon(|| winning::top_k_window_kernel(&m, &s, k, delta, pad_sds))))
+    let (lo, hi) = py.allow_threads(|| with_usable_rayon(|| winning::top_k_window_kernel(&m, &s, k, delta, pad_sds)));
+    // valid inputs can still overflow (locations near f64::MAX): refuse
+    // rather than hand back a window the lattice kernels would reject
+    check_window(lo, hi).map_err(|e| bad(format!("top_k_window: {e}")))?;
+    Ok((lo, hi))
 }
 
 /// Top-k memberships and their own translation slopes, normal base;
@@ -730,8 +832,9 @@ fn top_k_slopes<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
-    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    check_mu_sd(&mu, &sd)?;
     need_points(points)?;
+    check_window(lo, hi)?;
     winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
@@ -755,8 +858,9 @@ fn top_k_jacobians<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
-    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    check_mu_sd(&mu, &sd)?;
     need_points(points)?;
+    check_window(lo, hi)?;
     winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();
@@ -779,8 +883,9 @@ fn top_k<'py>(
     hi: f64,
     points: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    check_mu_sd(mu.as_array().len(), sd.as_array().len())?;
+    check_mu_sd(&mu, &sd)?;
     need_points(points)?;
+    check_window(lo, hi)?;
     winning::check_top_k_depth(k, mu.as_array().len()).map_err(bad)?;
     let m: Vec<f64> = mu.as_array().to_vec();
     let s: Vec<f64> = sd.as_array().to_vec();

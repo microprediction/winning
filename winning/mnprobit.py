@@ -20,10 +20,15 @@ coefficients and loadings are not identified (#201).
 
 from __future__ import annotations
 
+import numbers
+import warnings
+from types import SimpleNamespace
+
 import numpy as np
 from scipy.optimize import minimize
 
-from .likelihood import choice_loglik_and_score, _choice_logprob_terms
+from .likelihood import (check_choice, choice_loglik_and_score,
+                         _choice_logprob_terms)
 
 
 def max_identified_rank(J):
@@ -40,15 +45,68 @@ def max_identified_rank(J):
     return max(int(J) - 2, 0)
 
 
+def _as_count(x, name):
+    """A finite, non-negative whole number. int() floored 1.9 to 1 and
+    fitted a different model than the one asked for (#479), and SciPy
+    read maxiter=nan as zero iterations with success=True (#560)."""
+    if isinstance(x, (bool, np.bool_)) or not isinstance(x, numbers.Real):
+        raise ValueError(f"{name} must be a whole number; got {x!r}")
+    if not np.isfinite(x) or float(x) != int(x) or x < 0:
+        raise ValueError(
+            f"{name} must be a finite non-negative whole number; got {x!r}")
+    return int(x)
+
+
 def _check_rank(r, J):
     rmax = max_identified_rank(J)
-    r = min(2, rmax) if r is None else int(r)
+    r = min(2, rmax) if r is None else _as_count(r, "factor rank r")
     if not 0 <= r <= rmax:
         raise ValueError(
             f"factor rank r = {r} is not identified at J = {J} "
             f"alternatives: with unit idiosyncratic variances the utility "
             f"scale is fixed only for r <= J - 2 = {rmax} (#201)")
     return r
+
+
+def _check_contrast_rank(X, names, tol=1e-10):
+    """Refuse mean-design columns that within-choice-set contrasts do
+    not identify. A choice model sees beta only through utility
+    DIFFERENCES between the alternatives of one observation, so a
+    covariate common to all alternatives, or one duplicating a generated
+    intercept, lies on an exact likelihood ridge: the fitter reported an
+    arbitrary point on it as a converged estimate whose split depended
+    on the covariate's units (#581). Columns are taken left to right and
+    a column is aliased when its contrast residual on the earlier kept
+    columns is below tol of its own contrast norm (Gram scale)."""
+    T, J, p = X.shape
+    if p == 0 or J < 2:
+        return
+    Dc = (X[:, 1:, :] - X[:, :1, :]).reshape(-1, p)
+    G = Dc.T @ Dc
+    kept, aliased = [], []
+    for k in range(p):
+        gkk = G[k, k]
+        if gkk > 0.0 and kept:
+            S = np.array(kept)
+            g = G[S, k]
+            coef = np.linalg.lstsq(G[np.ix_(S, S)], g, rcond=None)[0]
+            resid = gkk - g @ coef
+        else:
+            resid = gkk
+        if gkk > 0.0 and resid > tol * gkk:
+            kept.append(k)
+        else:
+            aliased.append(k)
+    if aliased:
+        raise ValueError(
+            "mean-design column(s) "
+            + ", ".join(names[k] for k in aliased)
+            + " are not identified from within-choice-set contrasts: each "
+            "is constant across the alternatives of every observation or "
+            "a linear combination of earlier columns (the generated "
+            "intercepts come first). The likelihood is flat along them, "
+            "so any reported coefficient would be arbitrary; drop them "
+            "(#581)")
 
 
 def _fill_positions(J, r):
@@ -74,8 +132,17 @@ class MNProbit:
 
     def __init__(self, X, choice, intercepts=True, r=None):
         X = np.asarray(X, dtype=float)
+        if X.ndim != 3:
+            raise ValueError(
+                f"X must be (observations, alternatives, covariates); "
+                f"got {X.ndim} dimensions")
         self.T, self.J, p = X.shape
-        self.choice = np.asarray(choice)
+        # An empty design has an empty-sum likelihood with zero score,
+        # so the optimiser stopped at once and reported the arbitrary
+        # initial coefficients as a converged fit (#591).
+        if self.T == 0:
+            raise ValueError("at least one observation is required")
+        self.choice = check_choice(choice, self.T, self.J)
         self.r = _check_rank(r, self.J)
         if intercepts:
             Z = np.zeros((self.T, self.J, self.J - 1))
@@ -122,11 +189,23 @@ class MNProbit:
         maximum -- a known multinomial-probit pathology that GHK's
         simulation noise accidentally regularizes. The boundary_ flag
         reports detection either way."""
+        maxiter = _as_count(maxiter, "maxiter")
+        names = ([f"intercept[{j}]" for j in range(1, self.J)]
+                 if self.intercepts else []) + [
+                     f"X[:, :, {k}]" for k in range(self.p_raw)]
+        _check_contrast_rank(self.X, names)
         theta0 = np.concatenate([np.zeros(self.p),
                                  np.full(len(self.pos), 0.1)])
-        res = minimize(self._negloglik_grad, theta0, jac=True,
-                       method="BFGS",
-                       options={"maxiter": maxiter, "gtol": 1e-6})
+        if theta0.size == 0:
+            # A parameter-free model (no covariates, no intercepts,
+            # r = 0) is the equal-choice null: nothing to optimise, and
+            # BFGS died taking the max of an empty gradient (#495).
+            res = SimpleNamespace(x=theta0, success=True)
+            polish = False
+        else:
+            res = minimize(self._negloglik_grad, theta0, jac=True,
+                           method="BFGS",
+                           options={"maxiter": maxiter, "gtol": 1e-6})
         if polish:
             import winning.likelihood as _L
             from scipy.stats import qmc
@@ -148,6 +227,24 @@ class MNProbit:
         self.theta_ = res.x
         self.boundary_ = bool(
             np.sqrt((self.V_ ** 2).sum(axis=1)).max() > 50.0)
+        # With generated intercepts, an alternative nobody chose has no
+        # finite MLE: lowering its intercept (or raising every other one,
+        # for the reference) raises the likelihood without limit, and
+        # BFGS stopped only when the score fell under gtol, at a point
+        # set by the tolerance -- reported as converged (#496).
+        self.never_chosen_ = (
+            np.flatnonzero(np.bincount(self.choice, minlength=self.J) == 0)
+            if self.intercepts else np.array([], dtype=int))
+        if self.never_chosen_.size:
+            self.converged_ = False
+            self.boundary_ = True
+            warnings.warn(
+                f"alternative(s) {self.never_chosen_.tolist()} are never "
+                "chosen, so their intercepts have no finite MLE (complete "
+                "separation); the reported fit is a tolerance-dependent "
+                "point on the way to -inf, flagged converged_=False, "
+                "boundary_=True. Drop those alternatives or fit without "
+                "intercepts.", RuntimeWarning, stacklevel=2)
         # referee likelihood: independent scrambles, reported with se
         import winning.likelihood as _L
         from scipy.stats import qmc as _qmc
@@ -255,5 +352,9 @@ class MNProbitClassifier:
 
     def score(self, X, y):
         P = self.predict_proba(X)
+        # the fit's label contract: one label in 0..J-1 per row of X. A
+        # bare index scored a short y on a prefix of X and read -1 as
+        # the last alternative (#492).
+        y = check_choice(y, P.shape[0], P.shape[1])
         return float(np.mean(np.log(np.maximum(
-            P[np.arange(len(y)), np.asarray(y)], 1e-300))))
+            P[np.arange(len(y)), y], 1e-300))))

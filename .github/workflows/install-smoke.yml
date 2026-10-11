@@ -17,13 +17,20 @@ on:
         default: "winning"
   schedule:
     - cron: "0 6 * * 1"   # Mondays 06:00 UTC
-  workflow_run:
+  # workflow_run is safe here: the upstream workflow runs only on releases
+  # and manual dispatch (never on pull requests), and this workflow checks
+  # out nothing but .github/smoke.py from the default branch, consumes no
+  # artifacts from the triggering run, and holds a read-only token.
+  workflow_run:  # zizmor: ignore[dangerous-triggers]
     workflows: ["Publish to PyPI"]
     types: [completed]
 
 defaults:
   run:
     shell: bash   # uniform across ubuntu/macos/windows runners
+
+permissions:
+  contents: read
 
 jobs:
   smoke:
@@ -44,17 +51,21 @@ jobs:
             python: "3.12"
     steps:
       - name: Fetch the smoke script only (not the package source)
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           sparse-checkout: .github/smoke.py
           sparse-checkout-cone-mode: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
       - name: Install winning from PyPI
+        # the input reaches the shell through env, not template expansion
+        env:
+          INPUT_SPEC: ${{ github.event.inputs.spec || 'winning' }}
         run: |
           python -m pip install --upgrade pip
-          SPEC="${{ github.event.inputs.spec || 'winning' }}"
+          SPEC="$INPUT_SPEC"
           echo "installing: $SPEC"
           # PyPI can lag a publish by a few seconds; retry rather than
           # failing a release check on propagation
@@ -74,7 +85,7 @@ jobs:
     if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     steps:
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable (branch head on 2026-10-05)
       - name: Build a project against the published crate
         run: |
           cargo new --lib /tmp/crate_smoke
@@ -101,7 +112,7 @@ jobs:
       matrix:
         package: [MultinomialProbit, FactorMvNormalCDF, GMRFExtremes]
     steps:
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
         with:
           version: '1'
       - name: Add ${{ matrix.package }} from General and run its tests

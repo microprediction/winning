@@ -26,14 +26,16 @@ rprobit_fast(df, covariates, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
     identified.}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
     integrals, with sharpness escalation to scrambled Sobol nodes.}
-  \item{maxit}{BFGS iteration cap.}
+  \item{maxit}{BFGS iteration cap, a non-negative whole number.}
 }
 \value{
 An object of class \code{rprobit_fast}: a list with
 \code{coefficients}, \code{covariance_par}, \code{boundary} (TRUE when
 the loading norm runs to the boundary, a real feature of exact MNP
 likelihoods that simulation noise masks), \code{logLik}, \code{time},
-\code{convergence}, \code{J} and \code{r}. A \code{print} method
+\code{convergence} (0 for success; 2, with a warning, when an
+alternative is never chosen, so its intercept has no finite MLE),
+\code{J} and \code{r}. A \code{print} method
 summarizes the fit.
 }
 \examples{

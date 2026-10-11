@@ -19,7 +19,7 @@
 \large Established Empirical Bayes, Measured on Released Rollouts}
 \author{Peter Cotton}
 \date{\normalsize First version: September 2, 2026. This version:
-September 2, 2026.}
+September 28, 2026.}
 
 \begin{document}
 \maketitle
@@ -127,7 +127,16 @@ the prior expectation of coverage from the average of posterior
 predictions, the same distinction Proposition~\ref{prop:bayes}'s
 cautions require. They go further than this note in two respects,
 zero-one inflated priors and an ordering theorem for population
-pass@$k$ at fixed pass@1. Elsewhere in the
+pass@$k$ at fixed pass@1. \citet{yang2026} apply the same
+held-out design to a different question, whether a post-training
+crossover in pass@$k$ is statistically established: difficulty
+heterogeneity is fitted on one half of a model's generations and
+scored by the posterior-predictive likelihood of the other half on
+the same prompts. Their confidence bands stay within $k \le n$,
+where the unbiased estimator exists, and extrapolation beyond it
+adopts the fit of \citet{kazdan2025}, so the plug-in defect measured
+here enters their extrapolation stage and not their bands.
+Elsewhere in the
 evaluation literature, \citet{hariri2025} replace pass@$k$ reporting
 with Bayesian credible intervals at the model level, and
 \citet{miller2024} bring frequentist standard errors to eval
@@ -464,6 +473,10 @@ and Negrevergne]{verine2026} A.~V\'erine, F.~Le~Bronnec,
 A.~Allauzen, and B.~Negrevergne. Estimating pass@$k$ from fewer
 samples with hierarchical Bayesian priors. In \emph{1st Workshop on
 Combining Theory and Benchmarks (CTB@ICML 2026)}, 2026.
+
+\bibitem[Yang and Chen(2026)]{yang2026} C.~Yang and J.~Chen. RLVR
+is a kernel, not a function: statistical inference for pass@$k$
+crossovers. arXiv:2609.22547, 2026.
 
 \end{thebibliography}
 

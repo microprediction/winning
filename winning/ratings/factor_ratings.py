@@ -426,14 +426,30 @@ def _as_ridge(ridge, n_feat):
     return lam
 
 
-def _fit(st, ridge, weights, base, n_iter, theta0):
-    lam = _as_ridge(ridge, st.n_feat)
-    w = (np.ones(st.n_events) if weights is None
-         else np.asarray(weights, dtype=float).ravel())
-    if w.shape != (st.n_events,):
-        raise ValueError("weights must have one entry per event")
+def _as_event_weights(weights, n_events):
+    """One finite, non-negative weight per event, the contract of every
+    function here that takes event weights. NaN or inf reached the
+    optimiser, which failed at its first step and returned the all-zero
+    initial point as an ordinary fit, and the SE helpers checked nothing:
+    a surplus weight was ignored and a negative one the fitter refuses
+    became negative information with plausible finite SEs (#491). Zero
+    weights stay legal: with a positive ridge they reduce to the prior."""
+    if weights is None:
+        return np.ones(n_events)
+    w = np.asarray(weights, dtype=float).ravel()
+    if w.shape != (n_events,):
+        raise ValueError(f"weights must have one entry per event: got "
+                         f"{w.size} for {n_events} events")
+    if not np.all(np.isfinite(w)):
+        raise ValueError("weights must be finite")
     if np.any(w < 0.0):
         raise ValueError("weights must be non-negative")
+    return w
+
+
+def _fit(st, ridge, weights, base, n_iter, theta0):
+    lam = _as_ridge(ridge, st.n_feat)
+    w = _as_event_weights(weights, st.n_events)
     row_w = w[st.row_event]
 
     def nlp(theta):
@@ -508,7 +524,7 @@ def fit_design_ratings(events, n_feat, ridge=1.0, weights=None, base="normal",
     out = (theta,)
     if return_se:
         lam = _as_ridge(ridge, n_feat)
-        w = np.ones(st.n_events) if weights is None else np.asarray(weights, float).ravel()
+        w = _as_event_weights(weights, st.n_events)
         out += (np.sqrt(_diag_inverse(_penalised_hessian(theta, st, lam, w, base))),)
     if return_info:
         out += (info,)
@@ -525,8 +541,7 @@ def design_se(theta, events, n_feat, ridge=1.0, weights=None, base="normal",
     theta = np.asarray(theta, dtype=float).ravel()
     st = _Stacked(_design_triplets(events, n_feat), n_feat)
     lam = _as_ridge(ridge, n_feat)
-    w = (np.ones(st.n_events) if weights is None
-         else np.asarray(weights, dtype=float).ravel())
+    w = _as_event_weights(weights, st.n_events)
     Lam = _penalised_hessian(theta, st, lam, w, base)
     return np.sqrt(_diag_inverse(Lam, se_for=se_for))
 
@@ -537,8 +552,7 @@ def factor_se(B, events, ridge=1.0, weights=None, base="normal"):
     n_entities, n_cov = B.shape
     st = _Stacked(_factor_triplets(events, n_entities, n_cov), n_entities * n_cov)
     lam = _as_ridge(_factor_ridge(ridge, n_entities, n_cov), n_entities * n_cov)
-    w = (np.ones(st.n_events) if weights is None
-         else np.asarray(weights, dtype=float).ravel())
+    w = _as_event_weights(weights, st.n_events)
     Lam = _penalised_hessian(B.reshape(-1), st, lam, w, base)
     return np.sqrt(_diag_inverse(Lam)).reshape(n_entities, n_cov)
 
@@ -600,7 +614,7 @@ def fit_factor_ratings(events, n_entities, n_cov, ridge=1.0, weights=None,
     out = (B,)
     if return_se:
         lam = _as_ridge(ridge_full, n_entities * n_cov)
-        w = np.ones(st.n_events) if weights is None else np.asarray(weights, float).ravel()
+        w = _as_event_weights(weights, st.n_events)
         se = np.sqrt(_diag_inverse(_penalised_hessian(theta, st, lam, w, base)))
         out += (se.reshape(n_entities, n_cov),)
     if return_info:

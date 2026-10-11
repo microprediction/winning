@@ -53,7 +53,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import ndtr, ndtri
 
-from .core import as_idio, as_loadings, as_weights, hermite_nodes
+from .core import as_idio, as_loadings, as_weights, _gauge_center, hermite_nodes
+from ..shapes import as_factor_law, as_points, as_target, as_tolerance
 
 from ..rustconfig import load_fastrace
 from ..outcomes import as_luce_temperature, as_order, as_soft_temperature
@@ -228,9 +229,13 @@ def skew_logistic_base(alpha):
         sp = _softplus(-x)                   # log(1 + e^{-x})
         S = np.maximum(-np.expm1(-alpha * sp), 1e-300)
         f = alpha * c * np.exp(-x - (alpha + 1.0) * sp)
-        sig = np.exp(-_softplus(-x))          # logistic cdf of x
+        # 1 - sigmoid(x) directly, as sigmoid(-x): the subtraction lost
+        # it near x ~ log(alpha), where the bracket below is a difference
+        # of O(1) terms, and at alpha = 1e17 the own slopes came out
+        # POSITIVE and the inverse walked away from its target (#499)
+        sig_c = np.exp(-_softplus(x))         # 1 - logistic cdf of x
         # d/dz f: chain rule through x = m + c z
-        fp = f * c * ((alpha + 1.0) * (1.0 - sig) - 1.0)
+        fp = f * c * ((alpha + 1.0) * sig_c - 1.0)
         return S, f, fp
 
     def _log_expm1(y):
@@ -393,6 +398,23 @@ GH_RULE = {1: (201, float("inf")), 2: (41, 3.75), 3: (31, 4.75)}
 GH_RULE_DEFAULT = (15, 3.0)
 
 
+def _translated_home(mu, D):
+    """mu moved next to the origin when a common offset dwarfs the field.
+
+    The origin is a gauge: every race probability depends on differences
+    only. But the lattice is built in the caller's units, and at an
+    offset of 1e15 its points collapse to the float spacing there and
+    every share came back NaN (#477). Shifting by a middle entry (an
+    element, so no sum can overflow) is exact for such offsets; below
+    a million field scales nothing moves, so ordinary inputs stay
+    bit-identical."""
+    off = float(np.sort(mu)[len(mu) // 2])
+    scale = float(mu.max() - mu.min()) + float(np.sqrt(np.max(D)))
+    if abs(off) > 1e6 * scale:
+        return mu - off
+    return mu
+
+
 def _setup(mu, V, D, F, W, base):
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
@@ -411,6 +433,15 @@ def _setup(mu, V, D, F, W, base):
             f"({bad.size} of {n} are); an ability is a finite location on "
             "the performance scale")
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    mu = _translated_home(mu, D)                     # (#477)
+    if (F is None) != (W is None):
+        # A factor rule is a PAIR. Either half alone was silently replaced
+        # by the automatic Gaussian rule below, so a caller's node vanished
+        # and the default race came back (a 0.58 share move on a one-node
+        # law), with the inverse calibrating a different model (#290).
+        raise ValueError(
+            "supply both F (factor nodes) and W (their weights), or "
+            f"neither; got only {'F' if W is None else 'W'}")
     if V is None:
         V = np.zeros((n, 1))
         F, W = np.zeros((1, 1)), np.ones(1)
@@ -427,7 +458,7 @@ def _setup(mu, V, D, F, W, base):
         # under the escalation threshold, while the centered rows reach
         # 4.43 -- the race is genuinely sharp, the raw statistic missed
         # it, and the shipped answer carried TV 9.5e-3.
-        V = V - V.mean(axis=0)
+        V = _gauge_center(V)                          # scale-safe (#471)
         if (F is None) != (W is None):
             # A lone F or W used to be discarded silently and BOTH
             # regenerated (#75): the caller's rule never ran.
@@ -530,7 +561,11 @@ def _setup(mu, V, D, F, W, base):
     # above already sums to one, so this changes nothing the library
     # generates; it makes the caller's spelling not matter, which is the
     # contract everywhere else.
-    return mu, V, D, np.asarray(F, float), as_weights(W), fn, left, right
+    # as_factor_law also drops zero-weight nodes, which are no-ops for
+    # the integral but would otherwise widen every window built from F
+    # (#416).
+    F, W = as_factor_law(F, W)
+    return mu, V, D, F, W, fn, left, right
 
 
 
@@ -735,6 +770,15 @@ def _legendre(m):
     return _LEGENDRE[m]
 
 
+def _as_window(window):
+    """The lattice window: "bulk" or "span", nothing else. Every other
+    value used to mean span, so window="bulkk" moved a share by 39 points
+    against the bulk default it misspelled (#582)."""
+    if not isinstance(window, str) or window not in ("bulk", "span"):
+        raise ValueError(f'window must be "bulk" or "span"; got {window!r}')
+    return window
+
+
 def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                  delta=1e-12):
     """THE lattice: window plus any sharpness refinement, in one place.
@@ -749,6 +793,7 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     Returns (x, points); points may exceed the request after refinement.
     """
     sd = np.asarray(sd, dtype=float)
+    _as_window(window)
     if window == "bulk":
         x = _bulk_window(M_all, sd, points, delta, fn)
     else:
@@ -989,6 +1034,28 @@ def _factor_of_structure(structure, verb):
         "if you need ordered prefixes under it.")
 
 
+def _as_temperature(temperature):
+    """0 is the hard-race sentinel; a positive finite value tempers.
+
+    Every branch read `if temperature and temperature > 0`, so a NEGATIVE
+    or NaN temperature fell through to the hard race and returned the
+    tau = 0 answer byte for byte, and +inf reached the tempered path and
+    died in the grid sizing (#424). A bad calibration parameter should
+    not survive as a silently different model.
+    """
+    if temperature is None:          # None is the hard race too (#366)
+        return 0.0
+    try:
+        tau = float(temperature)
+    except (TypeError, ValueError):
+        raise ValueError(f"temperature must be a number; got {temperature!r}")
+    if not np.isfinite(tau) or tau < 0.0:
+        raise ValueError(
+            f"temperature must be finite and non-negative (0 is the hard "
+            f"race); got {temperature!r}")
+    return tau
+
+
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                        points=257, temperature=0.0, return_slopes=False,
                        structure=None, window="bulk", delta=1e-12, cov=None):
@@ -999,7 +1066,10 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     one race, five grammars; V=/D= remain as sugar for the factor case.
     V is (n, rank), one row per contestant; a scalar, a length-n vector
     (rank one) and an (rank, n) matrix are all normalised to it, and any
-    other shape raises rather than reaching the compiled kernel.
+    other shape raises rather than reaching the compiled kernel. A square
+    (n, n) V is ALWAYS read as (n, rank): no shape rule can tell it from
+    its transpose, and V.T describes the different covariance V'V, so the
+    transposed shorthand is available only when rank != n (#71).
     Pass `cov=` (a dense covariance or correlation matrix) to have it
     fitted to the grammar first via winning.factor.core.fit_covariance
     (approximate: the fit residual is the price of density; see the
@@ -1035,10 +1105,18 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     pass F, W from winning.factor.core.qmc_nodes(r, m=11) for a quarter
     of the nodes at about five times the error. Inversion runs the
     forward pass per Newton step, so it scales the same way."""
+    # the lattice mode is one of two names: every value but "bulk" used
+    # to mean span, so window="bulkk" moved a share by 39 points (#582)
+    if not (isinstance(window, str) and window in ("bulk", "span")):
+        raise ValueError(
+            f"window must be 'bulk' or 'span'; got {window!r}")
     # finite and >= 0; negative and NaN used to select the hard race
     # silently, and +inf failed in grid sizing (#366)
     temperature = as_soft_temperature(temperature)
     nodes_given = F is not None          # the caller's nodes, not a fit's
+    temperature = _as_temperature(temperature)
+    points = as_points(points)
+    window = _as_window(window)                      # (#582)
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
         # be answered without the fit at all; everything else (slopes for
@@ -1074,7 +1152,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                                       points=points, window=window,
                                       delta=delta)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
-    if temperature and temperature > 0:
+    if temperature > 0:
         return _race_tempered(mu, V, D, F, W, fn, left, right,
                               float(temperature), points, return_slopes)
     sd = np.sqrt(D)
@@ -1225,7 +1303,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
 
 
 def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
-                        points=257, temperature=0.0, n_iter=60, tol=1e-8,
+                        points=257, temperature=0.0, n_iter=None, tol=1e-8,
                         structure=None, cov=None, target_floor=None,
                         return_info=False):
     """Invert the general race: mean-zero mu with race_probabilities(mu) = p.
@@ -1248,7 +1326,29 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # silently, and +inf failed in grid sizing (#366)
     temperature = as_soft_temperature(temperature)
     dense = None
+    if (F is None) != (W is None):
+        # the forward refuses a half rule (#290); so does its inverse,
+        # which read a lone F with uniform weights for its scale while
+        # its iterative forward discarded that same F
+        raise ValueError(
+            "supply both F (factor nodes) and W (their weights), or "
+            f"neither; got only {'F' if W is None else 'W'}")
     nodes_given = F is not None          # the caller's nodes, not a fit's
+    temperature = _as_temperature(temperature)       # (#424)
+    points = as_points(points)                       # (#444)
+    tol = as_tolerance(tol)                          # (#551)
+    if structure is not None:
+        # One covariance description, as the forward door insists (#89):
+        # Independent/Factor replaced D (and V) here while a caller's V
+        # survived, so a target inverted under (structure, V) did not
+        # reprice under the identical forward call, which refuses it.
+        conflicting = [nm for nm, v in (("V", V), ("D", D), ("F", F),
+                                        ("W", W)) if v is not None]
+        if conflicting and cov is None:
+            raise ValueError(
+                f"structure= already describes the covariance; "
+                f"{', '.join(conflicting)}= would describe it again. "
+                "Pass one or the other.")
     if cov is not None:
         # The forward race routes a degraded fit to GHK (#161); the inverse
         # has to invert THAT map or the two front doors describe different
@@ -1273,10 +1373,16 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
             V = np.asarray(structure.V, float)
             D = np.asarray(structure.D, float)
             structure = None
-    target = np.asarray(p, dtype=float)
+    # finite and one-dimensional BEFORE the sign test: NaN passes
+    # `target <= 0`, and the pair closed form then certified NaN
+    # abilities as converged with residual 0 (#110)
+    target = as_target(p)
     if target_floor is not None:
-        if not target_floor > 0:
-            raise ValueError("target_floor must be positive")
+        target_floor = as_tolerance(target_floor, "target_floor")
+        # the floor is a PROBABILITY: normalize (scale-safely) first. Floored
+        # in the caller's units, [c, 0] at c = 1e-6 / 1 / 1e6 returned gaps
+        # of 0 / 4.75 / 7.03 for one and the same relative target (#592)
+        target = _floorable(target, 1.0)
         floored = target < target_floor
         target = np.maximum(target, target_floor)
     else:
@@ -1312,10 +1418,23 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     if structure is not None:
         # the grammar path takes the SAME contract (sixth review): the
         # target was validated or floored above, and the iteration reports
-        # convergence through the same tail rather than returning silently
+        # convergence through the same tail rather than returning silently.
+        # The hierarchical kernels are Gaussian hard races: a base= or
+        # temperature= the forward door would refuse was dropped here and
+        # a Gaussian race calibrated in its place (#89).
+        bad = [nm for nm, flag in (("base", base != "normal"),
+                                   ("temperature", temperature > 0)) if flag]
+        if bad:
+            raise NotImplementedError(
+                f"{type(structure).__name__} races do not support "
+                f"{', '.join(bad)}: the block/nested/tree kernels are "
+                "Gaussian hard races. Use structure=Factor (or V=/D=) for "
+                "a non-normal base or a finite temperature.")
+        # n_iter is the caller's budget (#89): it used to be raised to at
+        # least 120, so an n_iter=1 diagnostic call ran 120 sweeps.
         mu, converged, resid_max, iters = _abilities_from_structure(
-            target, structure, points=points, n_iter=max(n_iter, 120),
-            tol=tol)
+            target, structure, points=points,
+            n_iter=120 if n_iter is None else n_iter, tol=tol)
         return _inverse_return(mu, converged, resid_max, iters, floored,
                                tol, return_info)
     logt = np.log(target)
@@ -1347,26 +1466,44 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         _CovF = np.eye(_Vc.shape[1])
     _SigV = _Vc @ _CovF @ _Vc.T
     scale = float(np.sqrt(np.median(_Dn) + np.diag(_SigV).mean()))
+    mu_start = None
     if n_t == 2 and base == "normal" and not temperature and dense is None:
         # A pair is a single Gaussian contrast, so the inverse is closed
         # form (the mirror of the forward closed form): with
-        # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0) / sd_d), so
-        # mu1 - mu0 = sd_d Phi^-1(p0), mean-zero.
+        # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0 + shift) / sd_d),
+        # so mu1 - mu0 = sd_d Phi^-1(p0) - shift, mean-zero; the shift is
+        # the factor rule's weighted MEAN, (v1 - v0) . E[F] (#374).
         Sig = _SigV + np.diag(_Dn)
         sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
+        shift = (float((_Vc[1] - _Vc[0]) @ _Fm)
+                 if (V is not None and nodes_given) else 0.0)
         # Invert the SMALLER share, Phi^-1(p0) = -Phi^-1(p1): for
         # [1, 1e-16] the normalized first share rounds to exactly 1, and
         # ndtri(1) = inf was certified as converged while the
         # permutation [1e-16, 1] gave the finite answer (#412).
         if target[0] <= target[1]:
-            gap = sd_d * float(ndtri(target[0]))
+            gap = sd_d * float(ndtri(target[0])) - shift
         else:
-            gap = -sd_d * float(ndtri(target[1]))
+            gap = -sd_d * float(ndtri(target[1])) - shift
         mu = np.array([-0.5 * gap, 0.5 * gap])
         ok = bool(np.isfinite(mu).all())
-        return _inverse_return(mu, ok, 0.0 if ok else np.inf, 0, floored,
-                               tol, return_info)
-    mu = -(logt - logt.mean()) / 2.0 * scale
+        if not nodes_given or not ok:
+            return _inverse_return(mu, ok, 0.0 if ok else np.inf, 0, floored,
+                                   tol, return_info)
+        # A caller's rule need not be Gaussian (a centred two-point law
+        # has the right mean and variance and a different pair map), and
+        # the forward integrates the rule itself: the closed form is a
+        # START, certified only by the forward it claims to invert. It
+        # used to be returned as exact with residual 0 and missed by up
+        # to 21.8 points (#374).
+        ph = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
+                                points=points)
+        r0 = float(np.abs(np.log(np.maximum(ph, 1e-300)) - logt).max())
+        if r0 < tol:
+            return _inverse_return(mu, True, r0, 0, floored, tol, return_info)
+        mu_start = mu
+    mu = (-(logt - logt.mean()) / 2.0 * scale if mu_start is None
+          else mu_start)
     # N = 2: the photo-finish graph K_2 is bipartite, so the undamped
     # Jacobi update on the mean-zero quotient has eigenvalue 1 - 2 = -1,
     # a local two-cycle. Fixed damping 0.7 restores contraction.
@@ -1385,6 +1522,8 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # a 150-runner field.
     _top2 = float(np.sort(target)[-2:].sum()) if len(target) > 2 else 1.0
     alpha = 0.7 if (len(target) == 2 or _top2 > 0.8) else 1.0
+    if n_iter is None:
+        n_iter = 60
 
     if dense is not None:
         # Invert the routed map itself (#164), by the same own-slope
@@ -1484,7 +1623,25 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
     between consecutive steps exactly 1.0), so damping was the wrong
     medicine for it and extrapolation is the right one. Dense n = 16 /
     30 / 40 take 31 / 66 / 53 sweeps where they took 120 without
-    converging."""
+    converging.
+
+    The extrapolated iterate is a bounded, checked TRIAL (#583).
+    Collinearity and a ratio in (0.5, 0.999) do not show the iteration
+    is in its linear regime: an exact normal top-1 target at residual 20
+    had ratio 0.998, so the unchecked jump moved a step of norm 1.8 by
+    539x, to abilities in [-897, 235], and backtracking never recovered
+    (logit residual 715 after 120 sweeps at 257 points). So the summed
+    tail is capped in the max norm at twice the field scale -- an
+    ordinary step's own cap -- and repriced: a trial whose forward
+    raises, is non-finite, or whose max residual grows tenfold is
+    dropped for the ordinary step. Anything milder is left to the
+    backtracking above. Requiring the trial to CONTRACT is too strict:
+    on the dense n = 30 correlation the residual rises transiently
+    (0.53 to 3.5) while the near-duplicate mode is being summed, and
+    that fixture stalled at 4e-7 instead of converging in 65. The 583
+    fixture reaches 4e-7 in 120 sweeps and converges at 513 / 1025
+    points. An accepted trial's forward is reused by the next sweep, so
+    the check costs a forward only when it rejects."""
     resid_max = np.inf
     resid_rms = np.inf
     iters = 0
@@ -1492,9 +1649,13 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
     prev_step = None
     alpha_base = float(alpha)  # the Richardson value: persistent
     penalty = 1.0              # caution after a bad sweep: transient
+    cached = None              # forward of an accepted Aitken trial
     for it in range(n_iter):
         iters = it + 1
-        resid, dlogp = forward(mu)
+        if cached is not None:
+            (resid, dlogp), cached = cached, None
+        else:
+            resid, dlogp = forward(mu)
         resid_max = float(np.abs(resid).max())
         resid_rms = float(np.sqrt(np.mean(resid * resid)))
         if resid_max < tol:
@@ -1523,12 +1684,65 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                     alpha_base = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
                 elif (cos > 0.999 and 0.5 < ratio < 0.999
                       and resid_max > 1e3 * tol):
-                    mu = mu - step / (1.0 - ratio)   # sum the geometric tail
-                    prev_step = None
-                    continue
+                    trial = _aitken_trial(mu, step, ratio, scale, forward,
+                                          resid_max)
+                    if trial is not None:   # sum the geometric tail
+                        mu, cached = trial
+                        prev_step = None
+                        continue
         prev_step = step
         mu = mu - step
+    if not resid_max < tol:
+        # The budget ran out after a step no sweep priced: the residual
+        # above belongs to the iterate BEFORE it, so the diagnostics
+        # described a different mu, and n_iter=0 reported inf for a
+        # finite initializer (#497). Price the returned iterate -- one
+        # forward, only on exhaustion -- and keep the better of the two.
+        last = (mu, resid_max) if prev is None else (prev[0], prev[3])
+        fwd = cached if cached is not None else forward(mu)
+        r_end = np.abs(np.asarray(fwd[0], dtype=float)).max()
+        if prev is not None and not r_end < last[1]:
+            mu = last[0]
+        else:
+            resid_max = float(r_end)
     return mu, resid_max < tol, resid_max, iters
+
+
+def _aitken_trial(mu, step, ratio, scale, forward, resid_max):
+    """The Aitken-extrapolated iterate as a bounded, checked trial (#583):
+    the summed tail step / (1 - ratio), capped in the max norm at twice
+    the field scale (never below the ordinary step), and repriced. Returns
+    (mu, forward(mu)), or None -- take the ordinary step -- when the
+    forward raises, is non-finite, or its max residual grows tenfold."""
+    jump = step / (1.0 - ratio)
+    big = float(np.abs(jump).max())
+    cap = max(2.0 * float(np.max(scale)), float(np.abs(step).max()))
+    if big > cap:
+        jump = jump * (cap / big)
+    cand = mu - jump
+    try:
+        fc = forward(cand)
+    except (RuntimeError, ValueError, FloatingPointError, OverflowError):
+        return None
+    rc = np.asarray(fc[0], dtype=float)
+    if not (np.all(np.isfinite(rc)) and np.all(np.isfinite(fc[1]))):
+        return None
+    if float(np.abs(rc).max()) > 10.0 * resid_max:
+        return None
+    return cand, fc
+
+
+def _floorable(target, mass):
+    """A target about to be floored, as a law of total `mass`: the floor is
+    a probability, so it applies to normalized entries, never to the
+    caller's arbitrary units (#592). Negative entries have no reading as
+    mass and raise; dividing by the max first keeps the sum finite."""
+    if np.any(target < 0):
+        raise ValueError(
+            "target entries must be non-negative: target_floor floors "
+            "small and zero shares, not negative ones")
+    target = target / target.max()
+    return target * (mass / target.sum())
 
 
 def _inverse_return(mu, converged, resid_max, iters, floored, tol,
@@ -1564,8 +1778,12 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
     from .structures import dispatch_probabilities, structure_variances
     target = np.asarray(target, dtype=float)
     logt = np.log(target)
-    mu = -(logt - logt.mean()) / 2.0
     totvar = structure_variances(structure)
+    # in the field's units: a dimensionless start and an absolute [-2, 2]
+    # step made the same Nested/Tree race fail by 0.40 of a share when
+    # written at c = 1e-3 and 0.25 at c = 1e3 (#100)
+    scale = float(np.sqrt(np.median(totvar)))
+    mu = -(logt - logt.mean()) / 2.0 * scale
     alpha, last = 0.7, np.inf
     err, iters = np.inf, 0
     for it in range(n_iter):
@@ -1580,8 +1798,8 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
         last = err
         ps, ss = race_probabilities(mu, D=totvar, points=points,
                                     return_slopes=True)
-        dlogp = np.minimum(ss / np.maximum(ps, 1e-300), -1e-6)
-        lim = np.minimum(2.0, 10.0 * np.abs(resid))
+        dlogp = np.minimum(ss / np.maximum(ps, 1e-300), -1e-6 / scale)
+        lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
         mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
     return mu, bool(err < tol), float(err), iters
@@ -1699,8 +1917,21 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
     sd = np.sqrt(D)
     n = len(mu)
     M_all = mu[None, :] + F @ V.T
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), points)
+    # These densities are not normalised and carry no mass check, so the
+    # grid must RESOLVE the narrowest runner on the span the widest one
+    # and the farthest mean set: a runner 100 units behind a close pair
+    # cut that pair's density by 10.3% at 501 points (#349). Spacing held
+    # to half the smallest sd, as the standalone JS engine now does.
+    lo = float(M_all.min() - left * sd.max())
+    hi = float(M_all.max() + right * sd.max())
+    need = int(np.ceil((hi - lo) / (0.5 * float(sd.min())))) + 1
+    if need > 16385:
+        import warnings
+        warnings.warn(
+            "tie_densities: the field is too wide to resolve the sharpest "
+            f"runner even at 16385 lattice points (needs {need})",
+            RuntimeWarning, stacklevel=2)
+    x = np.linspace(lo, hi, int(min(max(points, need), 16385)))
     dx = x[1] - x[0]
     w = np.zeros((n, n))
     for c in range(len(F)):
@@ -1715,6 +1946,12 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
             w[i] += W[c] * (f[i] * f * rest).sum(1) * dx
     np.fill_diagonal(w, 0.0)
     return 0.5 * w + 0.5 * w.T      # symmetric by theory; average numerics (#279)
+
+
+_REMOVAL_CAP = 16385
+# per-runner lattice budget for the capped-field refinement (points x n),
+# the same order as ordered_probabilities' budget
+_REMOVAL_POINT_BUDGET = 4_000_000
 
 
 def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
@@ -1740,36 +1977,84 @@ def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
     union calculus, prod_i S_i (1 + sum_i (1-S_i)/S_i), an O(nL)
     byproduct of the field.
     """
+    points = as_points(points)
+    mass_tol = as_tolerance(mass_tol, "mass_tol")   # (#590)
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
-    sd = np.sqrt(D)
     n = len(mu)
+    if n < 2:
+        raise ValueError(
+            "removal_shares needs at least two runners: removing the only "
+            "one leaves no race to win")
+    if n == 2:
+        # Removing either of two runners leaves one, who wins with
+        # probability one: the answer is the constant permutation matrix
+        # whatever mu, V, F, W, D or base. Integrating it anyway let an
+        # IRRELEVANT ability gap decide whether the call succeeded -- a
+        # Laplace pair 40 apart overshot the cusp to a row mass of
+        # 1.0026 and raised (#411).
+        return np.array([[0.0, 1.0], [1.0, 0.0]])
+    sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
     span = float(M_all.max() - M_all.min()) + (left + right) * float(sd.max())
     need = int(np.ceil(span / (float(sd.min()) / 8.0))) + 1
-    pts = int(min(max(points, need), 16385))
-    if need > 16385:
+    pts = int(min(max(points, need), _REMOVAL_CAP))
+    lo_x = M_all.min() - left * sd.max()
+    hi_x = M_all.max() + right * sd.max()
+
+    def _accumulate(pts):
+        x = np.linspace(lo_x, hi_x, pts)
+        dx = x[1] - x[0]
+        q = np.zeros((n, n))
+        for c in range(len(F)):
+            z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
+            S, f, _ = fn(z)
+            f = f / sd[:, None]
+            logS = np.log(S)
+            logSfield = logS.sum(0)
+            for i in range(n):
+                rest = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
+                                      -745.0, 0.0))
+                contrib = (f * rest).sum(1) * dx
+                contrib[i] = 0.0
+                q[i] += W[c] * contrib
+        return q
+
+    q = _accumulate(pts)
+    # A capped lattice cannot be policed by the row masses: cell errors of
+    # opposite sign cancel in each row sum. The #269 fixture (sds 1e-2,
+    # 1e-4, 1e-4 over a span of 4.6) had raw row mass 1.00025 -- inside
+    # mass_tol -- while P(1 wins | 0 removed) was 0.7848 against an exact
+    # 0.7340, five percentage points. So, as ordered_probabilities does,
+    # refine by doubling and watch the CELLS until they stop moving, and
+    # raise if the budget runs out first.
+    if need > pts:
         import warnings
         warnings.warn(
             "removal_shares: the ability span is too wide to resolve the "
-            f"sharpest runner even at 16385 lattice points (needs {need}); "
-            "row masses are checked and will raise if accuracy is lost",
-            RuntimeWarning, stacklevel=2)
-    x = np.linspace(M_all.min() - left * sd.max(),
-                    M_all.max() + right * sd.max(), pts)
-    dx = x[1] - x[0]
-    q = np.zeros((n, n))
-    for c in range(len(F)):
-        z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
-        S, f, _ = fn(z)
-        f = f / sd[:, None]
-        logS = np.log(S)
-        logSfield = logS.sum(0)
-        for i in range(n):
-            rest = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
-                                  -745.0, 0.0))
-            contrib = (f * rest).sum(1) * dx
-            contrib[i] = 0.0
-            q[i] += W[c] * contrib
+            f"sharpest runner at {pts} lattice points (needs {need}); "
+            "refining until the shares stop moving. The row masses are NOT "
+            "the check -- cell errors of opposite sign cancel in them "
+            "(#269).", RuntimeWarning, stacklevel=2)
+        ceiling = max(pts, min(need, int(_REMOVAL_POINT_BUDGET // n)))
+        prev = q / q.sum(axis=1, keepdims=True)
+        moved = np.inf
+        while pts < ceiling:
+            pts = min(2 * pts - 1, ceiling)
+            q = _accumulate(pts)
+            cur = q / q.sum(axis=1, keepdims=True)
+            moved = float(np.abs(cur - prev).max())
+            prev = cur
+            if moved <= mass_tol:
+                break
+        if moved > mass_tol:
+            raise FloatingPointError(
+                f"removal_shares: the field needs {need} lattice points to "
+                f"resolve the sharpest runner and the budget stops at "
+                f"{ceiling}; refining to there still moved a share by "
+                f"{moved:.2e}, above mass_tol={mass_tol:.0e}. The row "
+                "masses are NOT evidence here -- cell errors of opposite "
+                "sign cancel in them. Narrow the field or widen mass_tol "
+                "deliberately.")
     mass = q.sum(axis=1)
     defect = float(np.abs(mass - 1.0).max())
     if defect > mass_tol:

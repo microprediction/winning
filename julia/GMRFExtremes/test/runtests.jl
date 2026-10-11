@@ -395,4 +395,79 @@ end
     end
 end
 
+@testset "NaN thresholds are refused, infinities are limits (#513)" begin
+    c1 = GaussMarkovChain([0.0], 1.0, Float64[], Float64[])
+    c2 = GaussMarkovChain([0.0, 0.2], 1.0, [0.5], [0.8])
+    for c in (c1, c2)
+        @test_throws ArgumentError max_cdf(c, NaN)
+        @test_throws ArgumentError excursion_probability(c, NaN)
+        @test_throws ArgumentError first_passage(c, NaN)
+        @test_throws ArgumentError max_cdf(c, [0.0, NaN])
+        @test_throws ArgumentError excursion_probability(c, [0.0, NaN])
+        @test abs(max_cdf(c, Inf) - 1) < 1e-12 && max_cdf(c, -Inf) == 0.0
+        f = first_passage(c, 0.3)
+        @test abs(sum(f) - 1) < 1e-12
+        @test abs(max_cdf(c, 0.3) + excursion_probability(c, 0.3) - 1) < 1e-12
+    end
+end
+
+@testset "lattice budgets below two are refused (#550)" begin
+    c = GaussMarkovChain([0.0, 0.2], 1.0, [0.5], [0.8])
+    for points in (0, 1, 2.5)
+        @test_throws ArgumentError max_cdf(c, 0.0; points = points)
+        @test_throws ArgumentError excursion_probability(c, 0.0; points = points)
+        @test_throws ArgumentError first_passage(c, 0.0; points = points)
+        @test_throws ArgumentError expected_max(c; points = points)
+        @test_throws ArgumentError argmax_marginals(c; points = points)
+    end
+    for nu in (0, 1)
+        @test_throws ArgumentError expected_max(c; nu = nu)
+    end
+    @test isfinite(max_cdf(c, 0.0; points = 2))
+    @test isfinite(expected_max(c; nu = 2))
+end
+
+@testset "chain_from_precision tol must be finite and nonnegative (#562)" begin
+    Q = [2.0 0.0 0.5; 0.0 2.0 0.0; 0.5 0.0 2.0]
+    for tol in (Inf, NaN, -1e-3)
+        @test_throws ArgumentError chain_from_precision(zeros(3), Q; tol = tol)
+    end
+    @test_throws ErrorException chain_from_precision(zeros(3), Q; tol = 0.1)
+    Qr = [2.0 -0.5 1e-14; -0.5 2.0 -0.5; 1e-14 -0.5 2.0]
+    c = chain_from_precision(zeros(3), Qr; tol = 1e-12)
+    @test length(c) == 3
+end
+
+@testset "memory is O(L^2), not O(n L^2) (#533)" begin
+    # 1000 nodes kept 999 dense 400 x 400 transitions, 1.28 GB under a
+    # promised 160 MB; the passes now stream one transition
+    n = 1000
+    c = stationary_ar1(0.8, n)
+    max_cdf(c, 3.0)
+    bytes = @allocated max_cdf(c, 3.0)
+    @test bytes < 20_000_000
+    p = max_cdf(c, 3.0)
+    @test 0 < p < 1
+    # streaming is the same arithmetic as the stored transitions
+    cs = stationary_ar1(0.6, 12)
+    x, dx = GE._grid(cs, 120)
+    T = GE._transitions(cs, x, dx)
+    v = [GE._interval_mass(xi - dx / 2, min(xi + dx / 2, 0.7), 0.0, 1.0)
+         for xi in x]
+    keep = clamp.((0.7 .- (x .- dx / 2)) ./ dx, 0.0, 1.0)
+    for M in T
+        v = keep .* (M * v)
+    end
+    @test abs(GE._restricted_masses(cs, x, dx, [0.7])[1][end, 1] - sum(v)) <
+          1e-14
+    # an explicit lattice past the one-matrix budget is refused up front
+    @test_throws ArgumentError max_cdf(stationary_ar1(0.5, 3), 0.0;
+                                       points = 10_000)
+    @test_throws ArgumentError argmax_marginals(stationary_ar1(0.5, 3);
+                                                points = 10_000)
+    # a single node has no transition, so no matrix to budget
+    @test isfinite(max_cdf(GaussMarkovChain([0.0], 1.0, Float64[], Float64[]),
+                           0.0; points = 10_000))
+end
+
 println("all GMRFExtremes tests passed")

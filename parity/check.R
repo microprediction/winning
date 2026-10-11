@@ -176,7 +176,8 @@ for (name in names(vec$scenarios)) {
     fails <- fails + 1
     next
   }
-  d <- max(abs(got - ref))
+  # R recycles the shorter vector: a length mismatch must fail (#490)
+  d <- if (length(got) != length(ref)) Inf else max(abs(got - ref))
   ok <- d <= sc$tol
   cat(sprintf("%s  %-22s max|diff| %.3e  (tol %.0e)\n",
               if (ok) "ok  " else "FAIL", name, d, sc$tol))

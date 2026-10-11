@@ -195,3 +195,37 @@ def test_the_case_file_covers_every_verb_the_runners_implement():
     verbs = {c["verb"] for c in cases}
     assert {"race", "inverse", "topk", "rank", "bottomk", "hermite"} <= verbs
     assert len(cases) >= 44
+
+
+def test_runners_report_every_entry_not_a_prefix(tmp_path):
+    """#490: every runner kept only the first six values, so the 4x4
+    rank_ok matrix was compared on entries 0-5 alone and a 0.25 error at
+    entry 6 passed."""
+    import subprocess
+    cases = json.load(open(os.path.join(ROOT, "parity",
+                                        "divergence_cases.json")))["cases"]
+    one = tmp_path / "cases.json"
+    one.write_text(json.dumps(
+        {"cases": [c for c in cases if c["id"] == "rank_ok"]}))
+    out = subprocess.run(
+        [sys.executable, os.path.join(ROOT, "parity", "divergence_py.py"),
+         str(one)], cwd=ROOT, capture_output=True, text=True, check=True)
+    got = json.loads(out.stdout.strip().splitlines()[-1])["rank_ok"]
+    n = len(next(c for c in cases if c["id"] == "rank_ok")["mu"])
+    assert len(got["value"]) == n * n
+    for runner in ("divergence_js.mjs", "divergence_r.R", "divergence_jl.jl"):
+        src = open(os.path.join(ROOT, "parity", runner)).read()
+        assert "slice(0, 6)" not in src and "head(" not in src \
+            and "min(6" not in src, runner
+
+
+def test_value_checkers_fail_a_length_mismatch():
+    """#490: check.mjs looped over ref.length only, so an extra trailing
+    output passed; R would recycle the shorter vector."""
+    mjs = open(os.path.join(ROOT, "parity", "check.mjs")).read()
+    assert "got.length === ref.length" in mjs
+    r = open(os.path.join(ROOT, "parity", "check.R")).read()
+    assert "length(got) != length(ref)" in r
+    jl = open(os.path.join(ROOT, "julia", "winning", "test",
+                           "parity.jl")).read()
+    assert "length(got) == length(ref)" in jl

@@ -32,6 +32,15 @@ def _cached_factorization(cov):
     return _FACTOR_CACHE[key]
 
 
+def _positive_definite(c):
+    """Cholesky succeeds: what scipy requires when allow_singular=False."""
+    try:
+        np.linalg.cholesky(0.5 * (c + c.T))
+        return True
+    except np.linalg.LinAlgError:
+        return False
+
+
 def patch_scipy():
     """Route scipy.stats.multivariate_normal.cdf through fastmvn when the
     covariance is exactly factor-plus-diagonal; identical results
@@ -42,10 +51,26 @@ def patch_scipy():
     _ORIGINAL["cdf"] = m.multivariate_normal_gen.cdf
 
     def cdf(self, x, mean=None, cov=1, allow_singular=False, maxpts=None,
-            abseps=1e-5, releps=1e-5, *, lower_limit=None):
+            abseps=1e-5, releps=1e-5, *, lower_limit=None, **kwargs):
+        # **kwargs, forwarded untouched: scipy 1.16 added rng= to this
+        # method, and a wrapper that copied the older signature made
+        # every rng= call raise TypeError at argument binding -- even
+        # one whose covariance would have gone straight back to scipy
+        # (#333). The fast path is deterministic, so rng is the one
+        # keyword it may ignore; anything else it does not understand
+        # goes to scipy, which accepts it or raises as scipy would.
+        fast_ok = set(kwargs) <= {"rng"}
         try:
             c = np.atleast_2d(np.asarray(cov, dtype=float))
-            if c.ndim == 2 and c.shape[0] == c.shape[1] and c.shape[0] > 2:
+            if fast_ok and c.ndim == 2 and c.shape[0] == c.shape[1] \
+                    and c.shape[0] > 2 \
+                    and (allow_singular or _positive_definite(c)):
+                # allow_singular=False is part of scipy's contract: a
+                # singular covariance raises there. The fast path used
+                # to answer it anyway, because the factorizer represents
+                # a rank-one matrix within tolerance (#332), so without
+                # allow_singular only a positive-definite covariance may
+                # take it and scipy validates everything else.
                 fd = _cached_factorization(c)
                 if fd is not None:
                     V, D = fd
@@ -60,7 +85,8 @@ def patch_scipy():
         return _ORIGINAL["cdf"](self, x, mean=mean, cov=cov,
                                 allow_singular=allow_singular,
                                 maxpts=maxpts, abseps=abseps,
-                                releps=releps, lower_limit=lower_limit)
+                                releps=releps, lower_limit=lower_limit,
+                                **kwargs)
 
     m.multivariate_normal_gen.cdf = cdf
 

@@ -122,7 +122,7 @@
   <script type="module">
     import { raceProbabilities } from "./js/winning/races.mjs";
     import "./js/winning/structures.mjs";
-    import { GENERATORS, rng, fitGrammar, structureCov, cholesky, mcBatch,
+    import { GENERATORS, rng, fitGrammar, structureCov, raceFactor, mcBatch,
              haltonNormalNodes, ghkPrepareOne, ghkSampleOne,
              mendellElstonOne } from "./js/winning/demo.mjs";
 
@@ -175,7 +175,10 @@
 
       const st = {
         n, mu, C, pLat, tLat, tvInd,
-        mc: { L: cholesky(C), counts: new Array(n).fill(0), draws: 0,
+        // factorised in the race quotient (anchored differences), so a
+        // common mode or a small overall scale cannot leak into the
+        // simulated contrasts (#394, #375)
+        mc: { L: raceFactor(C), counts: new Array(n).fill(0), draws: 0,
               ms: 0, r: rng(seed + 2000), pts: [] },
         ghk: { probs: new Array(n).fill(null), cursor: 0, sums: new Float64Array(n),
                reps: new Float64Array(n), sweep: 0, ms: 0, r: rng(seed + 3000),

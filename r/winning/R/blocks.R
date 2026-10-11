@@ -106,6 +106,9 @@
 
 # Max-wins rank-1 field kernel (public functions negate).
 .block_max <- function(mu, sd, cluster, v, points, qa) {
+  # rank zero is the independent race; as.numeric() made it numeric(0)
+  # and the kernel indexed past it (#508)
+  if (is.matrix(v) && ncol(v) == 0L) v <- rep(0, length(mu))
   if (is.matrix(v) && ncol(v) > 1) {
     return(.block_max_r(mu, sd, cluster, v, points, qa))
   }
@@ -200,7 +203,8 @@
 block_race_probabilities <- function(mu, cluster, loading, D,
                                      points = 257, qa = 9) {
   mu <- as.numeric(mu)
-  sd <- sqrt(as.numeric(D))
+  # a scalar D is one variance per contestant, as at every boundary (#510)
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- .block_max(-mu, sd, cluster, loading, points, qa)
   .checked_mass(p, "block race")
 }
@@ -223,8 +227,10 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
                                     points = points, qa = qa))
   }
   mu <- as.numeric(mu)
-  g <- if (is.matrix(coupling)) coupling else matrix(coupling, ncol = 1)
-  if (nrow(g) != length(mu)) g <- t(g)
+  # the shared loading contract: (n, k), (k, n) or a length-n vector.
+  # Transposing once and trusting the result let a 2x2 coupling at n = 4
+  # recycle g %*% f across the field as a different loading (#469)
+  g <- .as_loadings(coupling, length(mu), name = "coupling")
   if (ncol(g) == 1) {
     h <- .hermite1(qf)
     fn <- matrix(h$nodes, ncol = 1)
@@ -233,7 +239,7 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
     cn <- .cluster_nodes(ncol(g), qf)
     fn <- cn$nodes; fw <- cn$w
   }
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- numeric(length(mu))
   for (q in seq_len(nrow(fn))) {
     # average the RAW conditional masses (each near one) and normalize
@@ -242,6 +248,82 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
                                 sd, cluster, loading, points, qa)
   }
   .checked_mass(p, "nested race")
+}
+
+# Strengths with every COMMON ancestor's set to zero (python's
+# blocks._without_common_shock). A node above every cluster adds the same
+# shock to everyone and cancels from every difference; kept, it widened
+# the lattice window until an irrelevant root strength of 50 raised a
+# mass defect at 257 points (#489). `parent` is 1-based with 0 = root.
+.without_common_shock <- function(parent, lam, nC) {
+  hits <- integer(length(parent))
+  for (cc in seq_len(nC)) {
+    u <- cc
+    while (parent[u] > 0) { u <- parent[u]; hits[u] <- hits[u] + 1L }
+  }
+  lam[hits == nC] <- 0
+  lam
+}
+
+# A tree is a tree: one root, every parent an existing node, no cycles,
+# the cluster nodes are leaves -- the contract of python's
+# _validate_tree. Each parent == 0 node kept its own unit cavity, so a
+# forest (parent = c(0, 0)) priced each component without the others
+# and reached .checked_mass with total mass 2, misreported as a lattice
+# defect (#517); a cycle spun the `while (parent[u] > 0)` walks forever.
+.validate_tree <- function(parent, strength, n_clusters) {
+  if (!is.numeric(parent) && !is.logical(parent))
+    stop("parent must be a numeric vector of 1-based node indices",
+         call. = FALSE)
+  parent <- as.numeric(parent)
+  parent[is.na(parent)] <- 0                      # 0/NA = root
+  nT <- length(parent)
+  if (length(strength) != nT)
+    stop(sprintf(paste("strength must have one entry per tree node;",
+                       "got %d for %d nodes"), length(strength), nT),
+         call. = FALSE)
+  if (any(!is.finite(strength)))
+    stop("strength has a non-finite entry", call. = FALSE)
+  bad <- which(!is.finite(parent) | parent != round(parent) | parent < 0 |
+               parent > nT)
+  if (length(bad))
+    stop(sprintf("parent[%d] = %s is not 0/NA or a node index in 1..%d",
+                 bad[1], format(parent[bad[1]]), nT), call. = FALSE)
+  parent <- as.integer(parent)
+  selfp <- which(parent == seq_len(nT))
+  if (length(selfp))
+    stop(sprintf("parent contains a cycle: %d -> %d", selfp[1], selfp[1]),
+         call. = FALSE)
+  roots <- which(parent == 0L)
+  if (length(roots) != 1L)
+    stop(sprintf("a tree has exactly one root (parent 0/NA); got %d%s",
+                 length(roots),
+                 if (length(roots)) paste0(" (", paste(roots, collapse = ", "),
+                                           ")") else ""),
+         call. = FALSE)
+  state <- integer(nT)                    # 0 unseen, 1 on path, 2 done
+  for (t in seq_len(nT)) {
+    path <- integer(0); u <- t
+    while (u > 0L && state[u] == 0L) {
+      state[u] <- 1L; path <- c(path, u); u <- parent[u]
+    }
+    if (u > 0L && state[u] == 1L) {
+      k <- match(u, path)
+      stop(paste("parent contains a cycle:",
+                 paste(c(path[k:length(path)], u), collapse = " -> ")),
+           call. = FALSE)
+    }
+    state[path] <- 2L
+  }
+  if (n_clusters > nT)
+    stop(sprintf("%d clusters but only %d tree nodes", n_clusters, nT),
+         call. = FALSE)
+  kids <- which(parent > 0L & parent <= n_clusters)
+  if (length(kids))
+    stop(sprintf(paste("node %d has parent %d, a cluster node; the first %d",
+                       "nodes are the clusters and must be leaves"),
+                 kids[1], parent[kids[1]], n_clusters), call. = FALSE)
+  parent
 }
 
 #' Tree race: hierarchy of uniform shared effects
@@ -260,14 +342,15 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
                                     strength, points = 257, qa = 9) {
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
-  parent <- as.integer(ifelse(is.na(parent), 0L, parent))  # 0 = root
   lam <- as.numeric(strength)
   n <- length(m)
-  nT <- length(parent)
   inv <- .cluster_index(cluster)
   nC <- max(inv)
+  parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
+  nT <- length(parent)
+  lam <- .without_common_shock(parent, lam, nC)          # #489
   ord <- order(inv)
   mu_o <- m[ord]; sd_o <- sd[ord]; v_o <- v[ord]; c_o <- inv[ord]
   h <- .hermite1(qa)
@@ -363,8 +446,10 @@ block_race_jacobian <- function(mu, cluster, loading, D,
   }
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
-  v <- as.numeric(loading)
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
+  # rank zero: no shared effect (#508)
+  v <- if (is.matrix(loading) && ncol(loading) == 0L) rep(0, length(mu))
+       else as.numeric(loading)
   n <- length(mu)
   inv <- .cluster_index(cluster)
   ord <- order(inv)
@@ -437,8 +522,10 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
                                points = points, qa = qa))
   }
   mu <- as.numeric(mu)
-  g <- if (is.matrix(coupling)) coupling else matrix(coupling, ncol = 1)
-  if (nrow(g) != length(mu)) g <- t(g)
+  # the shared loading contract: (n, k), (k, n) or a length-n vector.
+  # Transposing once and trusting the result let a 2x2 coupling at n = 4
+  # recycle g %*% f across the field as a different loading (#469)
+  g <- .as_loadings(coupling, length(mu), name = "coupling")
   if (ncol(g) == 1) {
     h <- .hermite1(qf)
     fn <- matrix(h$nodes, ncol = 1); fw <- h$weights
@@ -470,7 +557,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
 abilities_from_block_race <- function(p, cluster, loading, D,
                                       points = 257, qa = 9,
                                       tol = 1e-10, max_iter = 25) {
-  p_t <- as.numeric(p); p_t <- p_t / sum(p_t)
+  p_t <- .rescaled_target(as.numeric(p))       # scale-safe (#463)
   n <- length(p_t)
   floor_ <- max(1e-14, min(p_t[p_t > 0]) * 1e-3)
   p_t <- pmax(p_t, floor_); p_t <- p_t / sum(p_t)
@@ -535,14 +622,34 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
                                points = 257, qa = 9) {
   mu <- as.numeric(mu)
   m <- -mu
-  sd <- sqrt(as.numeric(D))
+  sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
-  parent <- as.integer(ifelse(is.na(parent), 0L, parent))
   lam <- as.numeric(strength)
   n <- length(m)
-  nT <- length(parent)
   inv <- .cluster_index(cluster)
   nC <- max(inv)
+  parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
+  nT <- length(parent)
+  # a common shock cancels: without it a bare root takes the exact path
+  lam <- .without_common_shock(parent, lam, nC)          # #489
+  strength <- lam
+  if (nT > nC && any(lam[(nC + 1):nT] != 0)) {
+    # with any ancestor effect the cross-cluster Gram product is not the
+    # derivative (two leaves under a common root: forward invariant in
+    # the root strength, J[1,2] 0.2467 -> 0.1792 at strength 0.8); use
+    # the central difference of the exact forward, as python (#350)
+    h <- 1e-5 * sqrt(stats::median(sd^2 + v^2))
+    J <- matrix(0, n, n)
+    for (j in seq_len(n)) {
+      e <- numeric(n); e[j] <- h
+      J[, j] <- (tree_race_probabilities(mu + e, cluster, loading, D, parent,
+                                         strength, points = points, qa = qa) -
+                 tree_race_probabilities(mu - e, cluster, loading, D, parent,
+                                         strength, points = points, qa = qa)) /
+        (2 * h)
+    }
+    return(J)
+  }
   ord <- order(inv)
   mu_o <- m[ord]; sd_o <- sd[ord]; v_o <- v[ord]; c_o <- inv[ord]
   h1 <- .hermite1(qa)

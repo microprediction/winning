@@ -74,6 +74,27 @@
   as.integer(v)
 }
 
+# A tolerance is one finite positive number: `resid < Inf` certified the
+# first finite residual of every inverse as converged, returning warm
+# starts 15-24 points off (#551). The browser's asTolerance refuses it.
+.as_tolerance <- function(tol, name = "tol") {
+  if (!is.numeric(tol) || length(tol) != 1L || is.na(tol) ||
+      !is.finite(tol) || tol <= 0)
+    stop(sprintf("%s must be a single finite positive number; got %s",
+                 name, paste(format(tol), collapse = " ")), call. = FALSE)
+  as.numeric(tol)
+}
+
+# A penalty weight: one finite non-negative number. sqrt(max(ridge, 0))
+# read every negative ridge as 0 and a vector as its max (#558).
+.as_nonnegative <- function(x, name) {
+  if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) ||
+      x < 0)
+    stop(sprintf("%s must be a single finite non-negative number; got %s",
+                 name, paste(format(x), collapse = " ")), call. = FALSE)
+  as.numeric(x)
+}
+
 # A target is a law up to a positive factor. When its SUM overflows --
 # every entry finite, e.g. c(4e307, 2e307, 1e307, 1e307) -- rescale by
 # the max first, as python does since #300; the ratios, which are all a
@@ -89,4 +110,17 @@
   # `mass` keeps the caller's own arithmetic, so the ordinary path is
   # bit-identical to the expression it replaced
   if (is.null(mass)) target / tot else target * (mass / tot)
+}
+
+# A warm start selects a branch of an inverse; it must not redefine the
+# field. R recycled a 2n mu0 against n targets and returned 2n abilities
+# (#554). Finite, exactly n entries, then centred.
+.as_warm_start <- function(mu0, n, name = "mu0") {
+  m <- suppressWarnings(as.numeric(mu0))
+  if (length(m) != n)
+    stop(sprintf("%s has %d entries for %d runners", name, length(m), n),
+         call. = FALSE)
+  if (any(!is.finite(m)))
+    stop(sprintf("%s has a non-finite entry", name), call. = FALSE)
+  m - mean(m)
 }

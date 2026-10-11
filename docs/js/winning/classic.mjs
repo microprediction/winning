@@ -1,6 +1,7 @@
 // The classic state-price lattice calibration -- port of
 // winning/lattice.py + lattice_calibration.py, dead heats included.
-import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS } from "./core.mjs";
+import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS, asFiniteVector, rescaledTarget,
+         asIterations, isVector } from "./core.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -73,9 +74,18 @@ export function asClassicDensity(density, where = "density") {
     if (!Number.isFinite(v)) throw new Error(`${where}[${i}] = ${density[i]} is a non-finite atom`);
     total += v; lo = Math.min(lo, v);
   }
+  // finite atoms can overflow only in the SUM: 1e308 counts per atom
+  // normalised to all zeros (#484). Rescale by the max first, only then.
+  let scale = 1;
+  if (!Number.isFinite(total)) {
+    scale = 0;
+    for (let i = 0; i < n; i++) scale = Math.max(scale, Math.abs(Number(density[i])));
+    total = 0; lo /= scale;
+    for (let i = 0; i < n; i++) total += Number(density[i]) / scale;
+  }
   if (!(total > 0)) throw new Error(`${where} has no positive mass`);
-  if (lo < -1e-12 * total) throw new Error(`${where} has a negative atom (${lo})`);
-  return Array.from(density, v => Math.max(Number(v), 0) / total);
+  if (lo < -1e-12 * total) throw new Error(`${where} has a negative atom (${lo * scale})`);
+  return Array.from(density, v => Math.max(Number(v) / scale, 0) / total);
 }
 
 /* Target state prices carry only relative mass (#377): the inverse read
@@ -94,6 +104,12 @@ export function asClassicPrices(prices, where = "prices") {
     total += v;
   }
   if (!(total > 0)) throw new Error(`${where} has no positive mass`);
+  if (!Number.isFinite(total)) {
+    // finite entries, overflowing sum: through the max (#484)
+    let mx = 0;
+    for (let i = 0; i < prices.length; i++) mx = Math.max(mx, Number(prices[i]));
+    return rescaledTarget(Array.from(prices, v => Number(v) / mx));
+  }
   return Array.from(prices, v => Number(v) / total);
 }
 
@@ -236,8 +252,20 @@ function exactImplicitPrices(base, fieldCdfs, offsets, L) {
   return offsets.map(k => exactPayoff(shiftedCdf(base, k, L), G, gl));
 }
 
+/* Contestant offsets (and an inverse's warm start) are finite numbers.
+   lowHigh has two tested branches and an unconditional fallback to the
+   most FAVOURABLE boundary, so NaN, undefined and "bad" all fell
+   through to it: one invalid entry in a tied pair priced 0.9999978 to
+   win. null and true were coerced to 0 and 1 (#438). A Float64Array is
+   accepted and copied to a plain array, since mapping a typed array to
+   CDF arrays coerced each CDF to NaN (#329). */
+function asOffsets(x, where) {
+  return asFiniteVector(x, where, "offset");
+}
+
 export function statePricesFromOffsets(density, offsets) {
   density = asClassicDensity(density);
+  offsets = asOffsets(offsets, "offsets");
   const L = impliedL(density);
   const base = paddedBaseCdf(density);
   return exactStatePrices(Array.from(offsets, o => shiftedCdf(base, o, L)));
@@ -249,9 +277,16 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
   prices = asClassicPrices(prices);
   const L = impliedL(density);
   let { offsetSamples = null, guess = null, nIter = 3 } = opts;
+  // a loop bound: 0, negative and NaN returned the target PROBABILITIES
+  // as if they were offsets (27 points off on reprice), a fraction ran
+  // Math.ceil of itself, and Infinity never returned (#401)
+  asIterations(nIter, "solveForImpliedOffsets");
+  prices = asFiniteVector(prices, "prices", "price");
+  let core = null;
   if (offsetSamples === null || offsetSamples === undefined) {
-    offsetSamples = [];
-    for (let k = Math.trunc(L / 2) - 1; k >= -Math.trunc(L / 2); k--) offsetSamples.push(k);
+    offsetSamples = defaultOffsetSamples(L);
+    core = [];                     // the old half-lattice table, a slice of it
+    for (let k = Math.trunc(L / 2) - 1; k >= -Math.trunc(L / 2); k--) core.push(k);
   } else {
     offsetSamples = asDescendingOffsets(offsetSamples, "offsetSamples");
   }
@@ -261,9 +296,11 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
   // (#369); dividendImpliedAbility always passed zeros.
   if (guess === null || guess === undefined) {
     guess = new Array(prices.length).fill(0);
-  } else if (guess.length !== prices.length) {
-    throw new Error(`guess must have one starting offset per price: got ` +
-      `${guess.length} for ${prices.length} prices`);
+  } else {
+    guess = asOffsets(guess, "guess");        // finite numbers (#438)
+    if (guess.length !== prices.length)
+      throw new Error(`guess must have one starting offset per price: got ` +
+        `${guess.length} for ${prices.length} prices`);
   }
   // Defect correction a <- a + T^{-1}(p) - T^{-1}(P(a)) against the
   // exact engine, so the fixed point is the exact forward map; reading
@@ -271,17 +308,81 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
   const base = paddedBaseCdf(density);
   let implied = Array.from(guess, Number);
   let cdfs = implied.map(o => shiftedCdf(base, o, L));
+  // After each step the field is re-centred by the integer part of its
+  // mean (an exact lattice translation): the table is absolute, so a
+  // drifting field wasted half of it and a 97/3 book stalled at 88/12
+  // however many iterations ran (#498).
   for (let it = 0; it < nIter; it++) {
-    const table = exactImplicitPrices(base, cdfs, offsetSamples, L);
     const current = exactStatePrices(cdfs);
-    implied = implied.map((a, i) => a + interpClamped(prices[i], table, offsetSamples)
-      - interpClamped(current[i], table, offsetSamples));
+    const [samples, table] = stepTable(base, cdfs, offsetSamples, core, L, prices, current);
+    implied = gaugeCentred(implied.map((a, i) => a + interpClamped(prices[i], table, samples)
+      - interpClamped(current[i], table, samples)));
     cdfs = implied.map(o => shiftedCdf(base, o, L));
   }
+  warnIfUnconverged(exactStatePrices(cdfs), prices);
   return implied;
 }
 
-export function skewNormalDensity(L, unit, { loc = 0, scale = 1.0, a = 2.0 } = {}) {
+/* The default interpolation table: every integer offset the lattice
+   represents, L-2 down to -(L-2) (lowHigh pins anything beyond). The
+   half-lattice default endpoint-clamped targets the forward reaches: a
+   97/3 book repriced at 88/12 (#498). */
+export function defaultOffsetSamples(L) {
+  const out = [];
+  for (let k = L - 2; k >= -(L - 2); k--) out.push(k);
+  return out;
+}
+/* With the default table, price the central slice first and extend to
+   the full range only when a lookup reaches the slice's ends: inside it
+   the interpolation is identical (same integer samples, same field), so
+   the answer is the full table's at the half table's cost. */
+function stepTable(base, cdfs, offsetSamples, core, L, prices, current) {
+  if (core === null) return [offsetSamples, exactImplicitPrices(base, cdfs, offsetSamples, L)];
+  const t = exactImplicitPrices(base, cdfs, core, L);
+  const lo = t[0], hi = t[t.length - 1];
+  const inside = x => lo < x && x < hi;
+  if (prices.every(inside) && current.every(inside)) return [core, t];
+  const top = offsetSamples.filter(k => k > core[0]);
+  const bottom = offsetSamples.filter(k => k < core[core.length - 1]);
+  return [offsetSamples, exactImplicitPrices(base, cdfs, top, L).concat(
+    t, exactImplicitPrices(base, cdfs, bottom, L))];
+}
+function gaugeCentred(a) {
+  const shift = Math.trunc(a.reduce((x, y) => x + y, 0) / a.length);
+  return shift === 0 ? a : a.map(v => v - shift);
+}
+/* A calibration whose own reprice misses its target by more than this is
+   reported, as python's warnings.warn: the target is outside what the
+   lattice represents or nIter is too small (#498). */
+export const CALIBRATION_WARN_TOL = 1e-3;
+function warnIfUnconverged(repriced, prices) {
+  let miss = 0;
+  for (let i = 0; i < prices.length; i++) miss = Math.max(miss, Math.abs(repriced[i] - prices[i]));
+  if (miss > CALIBRATION_WARN_TOL && typeof console !== "undefined")
+    console.warn(`solveForImpliedOffsets did not reach the target: max |price error| = ` +
+      `${miss.toPrecision(3)} after calibration. The target may lie outside what this ` +
+      `lattice represents (an exact zero, or a longshot past the lattice edge: use a ` +
+      `wider L or finer unit), or nIter is too small.`);
+}
+
+/* unit is a lattice spacing and scale a skew-normal scale: both finite
+   and positive. A negative one was normalised away into a different law
+   and unit = 0 sent loc/unit to NaN, which the shift silently routed to
+   a boundary (#509). Options are checked like every other options API:
+   a misspelt `sacle` silently priced scale 1 (#561). */
+const SKEW_NORMAL_DENSITY_OPTS = new Set(["loc", "scale", "a"]);
+const positiveFinite = (v, name) => {
+  if (typeof v !== "number" || !Number.isFinite(v) || !(v > 0))
+    throw new Error(`skewNormalDensity: ${name} must be a finite positive number; got ${v}`);
+};
+export function skewNormalDensity(L, unit, opts = {}) {
+  checkOpts(opts, SKEW_NORMAL_DENSITY_OPTS, "skewNormalDensity", OPT_HINTS);
+  const { loc = 0, scale = 1.0, a = 2.0 } = opts;
+  positiveFinite(unit, "unit");
+  positiveFinite(scale, "scale");
+  for (const [name, v] of [["loc", loc], ["a", a]])
+    if (typeof v !== "number" || !Number.isFinite(v))
+      throw new Error(`skewNormalDensity: ${name} must be a finite number; got ${v}`);
   const n = 2 * L + 1;
   const density = new Array(n);
   for (let i = 0; i < n; i++) {
@@ -312,7 +413,12 @@ export function skewNormalDensity(L, unit, { loc = 0, scale = 1.0, a = 2.0 } = {
    total is positive is python's rule too: an all-infinite book is all
    zeros, not 0/0. */
 export function pricesFromDividends(dividends, nanValue = 2000) {
-  const p = dividends.map(x => {
+  // a plain array whatever came in: a typed input used to come back
+  // typed, and the next call in dividendImpliedAbility could not map it
+  // (#329)
+  if (!isVector(dividends))
+    throw new Error(`dividends must be an array; got ${typeof dividends}`);
+  const p = Array.from(dividends).map(x => {
     const v = (x === null || x === undefined || Number.isNaN(x))
       ? nanValue : Number(x);
     return v <= 0 ? 0 : 1 / v;
@@ -321,8 +427,26 @@ export function pricesFromDividends(dividends, nanValue = 2000) {
   return s > 0 ? p.map(v => v / s) : p;
 }
 
-export function dividendImpliedAbility(dividends, density, { nanValue = 2000, unit = 1.0 } = {}) {
-  const p = pricesFromDividends(dividends, nanValue);
-  const guess = new Array(p.length).fill(0);
-  return solveForImpliedOffsets(p, density, { guess }).map(v => v * unit);
+/* A zero price -- a scratched runner, or the zero, negative or infinite
+   dividend pricesFromDividends maps to 0 -- is not calibrated: its
+   ability is +Infinity (lower is better, so it never wins) and the rest
+   are calibrated among themselves. Handing the zero to the finite
+   lattice inverse returned an ordinary offset that repriced the
+   scratched runner at 4.5% (16% at L=3) (#589). */
+const DIVIDEND_IMPLIED_ABILITY_OPTS = new Set(["nanValue", "unit"]);
+export function dividendImpliedAbility(dividends, density, opts = {}) {
+  // a misspelt `unti` silently returned abilities 10x the intended (#561)
+  checkOpts(opts, DIVIDEND_IMPLIED_ABILITY_OPTS, "dividendImpliedAbility", OPT_HINTS);
+  const { nanValue = 2000, unit = 1.0 } = opts;
+  const p = asClassicPrices(pricesFromDividends(dividends, nanValue));
+  const live = [];
+  p.forEach((x, i) => { if (x > 0) live.push(i); });
+  const ability = new Array(p.length).fill(Infinity);
+  if (live.length === 1) {
+    ability[live[0]] = 0;
+  } else {
+    const mu = solveForImpliedOffsets(live.map(i => p[i]), density);
+    live.forEach((i, k) => { ability[i] = mu[k] * unit; });
+  }
+  return ability;
 }

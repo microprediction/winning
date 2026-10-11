@@ -295,7 +295,8 @@
     }
     c(xlo - pad, b + pad)
   }
-  budget <- 0.5 * min(s) * max(points - 1, 1)
+  # times the base's central scale, as python and the browser (#600)
+  budget <- 0.5 * min(s) * .base_resolution(fn) * max(points - 1, 1)
   d <- delta
   w <- window_at(d)
   while (w[2] - w[1] > budget && d < 1e-4) {
@@ -358,8 +359,10 @@
   prev <- NULL
   prev_step <- NULL
   rmax <- Inf
+  cached <- NULL  # forward of an accepted Aitken trial
   for (it in seq_len(n_iter)) {
-    fw <- forward(mu)
+    fw <- if (is.null(cached)) forward(mu) else cached
+    cached <- NULL
     resid <- fw$resid
     dlogp <- fw$dres
     rmax <- max(abs(resid))
@@ -397,10 +400,15 @@
           alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
                    rmax > 1e3 * tol) {
-          # collinear steps decaying geometrically: sum the tail (Aitken)
-          mu <- mu - step / (1 - ratio)
-          prev_step <- NULL
-          extrapolated <- TRUE
+          # collinear steps decaying geometrically: sum the tail (Aitken),
+          # as a capped, repriced trial (#583, matching python)
+          trial <- .aitken_trial(mu, step, ratio, scale, forward, rmax)
+          if (!is.null(trial)) {
+            mu <- trial$mu
+            cached <- trial$fwd
+            prev_step <- NULL
+            extrapolated <- TRUE
+          }
         }
       }
     }
@@ -409,7 +417,58 @@
       mu <- mu - step
     }
   }
+  if (!(rmax < tol)) {
+    # exhausted after a step no sweep priced: price the returned iterate
+    # (one forward, only here) and keep the better of the two, so the
+    # warning describes the mu returned (#497, matching python)
+    fw <- if (is.null(cached)) forward(mu) else cached
+    r_end <- max(abs(fw$resid))
+    if (!is.null(prev) && !isTRUE(r_end < prev$rmax)) mu <- prev$mu
+    else rmax <- r_end
+  }
   list(mu = mu, converged = rmax < tol, resid = rmax)
+}
+
+# The Aitken-extrapolated iterate as a bounded, checked trial (#583),
+# matching python's races._aitken_trial: the summed tail capped in the max
+# norm at twice the field scale (never below the ordinary step) and
+# repriced; NULL -- take the ordinary step -- when the forward errors, is
+# non-finite, or its max residual grows tenfold.
+.aitken_trial <- function(mu, step, ratio, scale, forward, rmax) {
+  jump <- step / (1 - ratio)
+  big <- max(abs(jump))
+  cap <- max(2 * max(scale), max(abs(step)))
+  if (big > cap) jump <- jump * (cap / big)
+  cand <- mu - jump
+  fw <- tryCatch(forward(cand), error = function(e) NULL)
+  if (is.null(fw) || any(!is.finite(fw$resid)) || any(!is.finite(fw$dres)))
+    return(NULL)
+  if (max(abs(fw$resid)) > 10 * rmax) return(NULL)
+  list(mu = cand, fwd = fw)
+}
+
+# A lattice size: a whole number >= 2 (python shapes.as_points, #444).
+# dx = x[2] - x[1] was NA at points = 1 and the race returned NaN.
+.as_points <- function(points) {
+  v <- suppressWarnings(as.numeric(points))
+  if (length(v) != 1L || is.logical(points) || !is.finite(v) || v != trunc(v))
+    stop(sprintf("points must be a whole number of lattice points; got %s",
+                 format(points)), call. = FALSE)
+  if (v < 2)
+    stop(sprintf(paste("points must be at least 2: a lattice of %d point(s)",
+                       "has no spacing to integrate on"), as.integer(v)),
+         call. = FALSE)
+  as.integer(v)
+}
+
+# structure= describes the covariance; V/D/F/W would describe it again,
+# and the forward silently dropped them while the inverse kept some (#89)
+.refuse_second_covariance <- function(V, D, F, W) {
+  given <- c(V = !is.null(V), D = !is.null(D), F = !is.null(F), W = !is.null(W))
+  if (any(given))
+    stop(sprintf(paste("structure= already describes the covariance; %s=",
+                       "would describe it again. Pass one or the other."),
+                 paste(names(given)[given], collapse = ", ")), call. = FALSE)
 }
 
 race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
@@ -417,6 +476,12 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                return_slopes = FALSE, structure = NULL,
                                window = "bulk", delta = 1e-12,
                                qa = 9, qf = 15, nodes = NULL, cov = NULL) {
+  points <- .as_points(points)
+  # one of two names: every value but "bulk" used to mean span (#582)
+  if (!(is.character(window) && length(window) == 1L && !is.na(window) &&
+        window %in% c("bulk", "span")))
+    stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
+                 paste(deparse(window), collapse = " ")), call. = FALSE)
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
@@ -431,9 +496,11 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
+    if (is.null(cov)) .refuse_second_covariance(V, D, F, W)
     return(.dispatch_probabilities(mu, structure, base = base,
                                    points = points, qa = qa, qf = qf,
-                                   return_slopes = return_slopes))
+                                   return_slopes = return_slopes,
+                                   window = window, delta = delta))
   }
   if (!is.null(nodes)) { F <- nodes$F; W <- nodes$W }
   st <- .race_setup(mu, V, D, F, W, base)
@@ -496,6 +563,8 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                 base = "normal", points = 257,
                                 n_iter = 60, tol = 1e-8,
                                 structure = NULL, qa = 9, qf = 15, cov = NULL) {
+  points <- .as_points(points)
+  tol <- .as_tolerance(tol)                                   # (#551)
   dense <- NULL
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
@@ -509,10 +578,18 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
   if (!is.null(structure)) {
+    if (is.null(cov)) .refuse_second_covariance(V, D, F, W)
+    # an explicit n_iter/tol reaches every grammar; left missing, each
+    # branch keeps its own default budget
     return(.dispatch_abilities(p, structure, base = base, points = points,
-                               qa = qa, qf = qf))
+                               qa = qa, qf = qf,
+                               n_iter = if (missing(n_iter)) NULL else n_iter,
+                               tol = if (missing(tol)) NULL else tol))
   }
   target <- as.numeric(p)
+  # finite BEFORE the sign test: NaN slips past `<= 0` (#110)
+  if (length(target) == 0L || any(!is.finite(target)))
+    stop("target probabilities must be finite", call. = FALSE)
   if (any(target <= 0)) stop("all target probabilities must be positive")
   target <- .rescaled_target(target)
   logt <- log(target)
@@ -524,14 +601,12 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   # length-4 D answered a two-runner race and returned two numbers,
   # silently, where python, julia and the browser all refuse (cross-port
   # divergence scan)
-  Dn <- if (is.null(D)) rep(1, n) else as.numeric(D)
-  if (length(Dn) == 1L) Dn <- rep(Dn, n)
-  if (length(Dn) != n)
-    stop(sprintf(paste("D must be a scalar or one variance per target",
-                       "entry; got %d for %d entries"), length(Dn), n),
-         call. = FALSE)
-  Vn <- if (is.null(V)) matrix(0, n, 1) else as.matrix(V)
-  if (nrow(Vn) != n && ncol(Vn) == n) Vn <- t(Vn)
+  # through the forward map's own validators: a length-only check let
+  # D = c(-1, 2) through to the pair closed form (contrast variance 1,
+  # finite answer for a covariance the forward refuses), and as.matrix
+  # on a scalar V gave a 1x1 that the pair branch indexed at [2, 2] (#482)
+  Dn <- .as_idio(D, n, positive = TRUE)
+  Vn <- if (is.null(V)) matrix(0, n, 1) else .as_loadings(V, n)
   Vc <- sweep(Vn, 2, colMeans(Vn))
   if (!is.null(V) && !is.null(F)) {
     Fq <- as.matrix(F)

@@ -33,8 +33,20 @@
 
 .clip01 <- function(v) pmin(pmax(v, 0), 1)
 
-.resolved_points <- function(lo, hi, sd, points) {
-  smin <- max(min(sd), 1e-300)
+# A base's central scale in standardized units (attr(fn, "resolution"),
+# default 1), as python's _resolution (#385) and the browser (#600): a
+# unit-variance law can still concentrate on a much narrower centre.
+.base_resolution <- function(fn) {
+  r <- if (is.null(fn)) NULL else attr(fn, "resolution")
+  if (is.null(r)) return(1)
+  if (!is.numeric(r) || length(r) != 1L || !is.finite(r) || r <= 0)
+    stop("base resolution must be a single finite positive number",
+         call. = FALSE)
+  as.numeric(r)
+}
+
+.resolved_points <- function(lo, hi, sd, points, res = 1) {
+  smin <- max(min(sd), 1e-300) * res
   # in DOUBLE, and clamp before converting: a narrow enough runner makes
   # the requirement exceed .Machine$integer.max, and as.integer() then
   # returns NA, so the very `if (need > 8193)` meant to handle that
@@ -47,12 +59,58 @@
                           "window of %.3g); memberships may carry",
                           "percent-level error the mass check cannot see."),
                     smin, hi - lo), call. = FALSE)
-  max(as.integer(points), as.integer(min(need, 8193)))
+  max(as.integer(points), .dyadic_points(need))
+}
+
+# The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped at
+# 8193), so it is piecewise constant over a factor-of-two band of the
+# narrowest scale instead of stepping by one point at every ceil: a count
+# moving 611 -> 610 under a 1e-5 relative change of one sd made the
+# public map disagree with its scale Jacobian by 100x, and the loc/scale
+# inverse stalled on an exact target (#515). At most twice the points.
+.dyadic_points <- function(need) {
+  if (!is.finite(need) || need >= 8193) return(8193L)
+  if (need <= 2) return(2L)
+  as.integer(min(2^ceiling(log2(need - 1)) + 1, 8193))
 }
 
 .count_window <- function(mu, sd, k, fn, delta = 1e-12, pad_sds = 2.0) {
+  # searched in STANDARDISED units (centred, over the widest sd) and
+  # mapped back: memberships are invariant under mu -> a + c mu,
+  # sd -> c sd, but an absolute 1e-12 floor on the widest sd gave a field
+  # in units of 1e-18 a window 2e5 times its width (#370, python topk)
+  m0 <- mean(mu); cs <- max(sd)
+  if (!is.finite(cs) || cs <= 0) stop("top-k window needs positive scales")
+  w <- .count_window_std((mu - m0) / cs, sd / cs, k, fn, delta, pad_sds)
+  m0 + cs * w
+}
+
+# delta is a REQUEST. A polynomial tail puts the 1e-12 count quantile so
+# far out that the capped grid cannot resolve the bulk: Student-t(3) got
+# a window of 7.54e3 at spacing 0.92 and failed the mass check at every
+# point request through the cap (#468; python's #386). Relax by factors of
+# 100 (to at most 1e-4) until the window fits the cap at half the
+# narrowest sd times the base's central scale, and say so.
+.count_window_std <- function(mu, sd, k, fn, delta, pad_sds) {
+  afford <- 0.5 * max(min(sd), 1e-300) * .base_resolution(fn) * (8193 - 1)
+  d <- delta
+  w <- .count_window_at(mu, sd, k, fn, d, pad_sds)
+  while (w[2] - w[1] > afford && d < 1e-4) {
+    d <- min(d * 100, 1e-4)
+    w <- .count_window_at(mu, sd, k, fn, d, pad_sds)
+  }
+  if (d > delta)
+    warning(sprintf(paste("top-k window relaxed delta from %.0e to %.0e:",
+                          "this base's tail puts the requested count",
+                          "quantile further out than 8193 points can",
+                          "resolve, so the window is exact at the relaxed",
+                          "delta."), delta, d), call. = FALSE)
+  w
+}
+
+.count_window_at <- function(mu, sd, k, fn, delta, pad_sds) {
   n <- length(mu)
-  smax <- max(max(sd), 1e-12)
+  smax <- max(sd)
   mean_count <- function(x) sum(1 - fn((x - mu) / sd)$S)
   lo <- min(mu) - 9 * smax
   step <- 9 * smax
@@ -91,7 +149,7 @@
 # field leaves the narrowest density between samples, and the mass check
 # cannot see it: that check is one scalar (memberships sum to k) and
 # runner-level errors of opposite sign cancel in it (#224).
-  points <- .resolved_points(w[1], w[2], sd, points)
+  points <- .resolved_points(w[1], w[2], sd, points, .base_resolution(fn))
   x <- seq(w[1], w[2], length.out = points)
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
@@ -194,10 +252,20 @@
       "%s captured total membership %.4f where exactly %d slots exist: ",
       "the window or the deconvolution missed part of the field. Raise ",
       "points=, or report this field."), kind, t, k))
-  .clip01(raw * (k / t))
+  q <- raw * (k / t)
+  # the clip is not mass-neutral: re-check what is returned (#99)
+  if (max(q) - 1 > mass_tol)
+    stop(sprintf(paste0("%s produced a membership of %.4f > 1: the ",
+                        "lattice did not resolve this field. Raise points=."),
+                 kind, max(q)))
+  q <- .clip01(q)
+  if (abs(sum(q) - k) > mass_tol * k)
+    stop(sprintf("%s memberships total %.4f after clipping, where exactly %d slots exist",
+                 kind, sum(q), k))
+  q
 }
 
-.topk_factor_nodes <- function(V, n, qa) {
+.topk_factor_nodes <- function(V, n, qa, D = NULL) {
   # one row per runner, or refuse: a short V was recycled across mu by
   # `mu + shift` and priced a repeated-loading model in silence (#343)
   Vm <- .as_loadings(V, n)
@@ -205,12 +273,26 @@
   if (r > 2)
     stop("top_k_probabilities is implemented for factor rank <= 2")
   Vm <- sweep(Vm, 2, colMeans(Vm))
+  if (is.null(qa)) {
+    # qa = NULL (the default): the general race's sharpness rule, as in
+    # python's topk._factor_nodes. A fixed 15-node rule missed the race by
+    # 10.7 points on a sharp rank-one field and was not rotation
+    # invariant at rank two (#340). The 8192-node escalation is capped
+    # at 1024 here, where every node is a full count-program pass.
+    st <- .race_setup(rep(0, n), Vm, D, NULL, NULL, "normal")
+    nodes <- st$F; w <- st$W
+    if (length(w) > 1024) {
+      hw <- .halton_normal_nodes(r, 2^10)
+      nodes <- hw$F; w <- hw$W
+    }
+    return(list(Vm = Vm, nodes = as.matrix(nodes), w = w / sum(w)))
+  }
   cn <- .cluster_nodes(r, qa)
   list(Vm = Vm, nodes = cn$nodes, w = cn$w / sum(cn$w))
 }
 
 top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
-                                base = "normal", points = 513, qa = 15) {
+                                base = "normal", points = 513, qa = NULL) {
   n <- length(mu)
   k <- .as_depth(k, n)
   sd <- sqrt(.as_idio(D, n))
@@ -218,7 +300,7 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
   if (is.null(V))
     return(.checked_topk(.topk_with_slopes(mu, sd, k, fn, points)$q,
                          k, "top-k race"))
-  fac <- .topk_factor_nodes(V, n, qa)
+  fac <- .topk_factor_nodes(V, n, qa, D)
   raw <- rep(0, n)
   for (q in seq_len(nrow(fac$nodes))) {
     shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
@@ -228,21 +310,51 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
   .checked_topk(raw, k, "top-k race")
 }
 
+# P(i among the k LARGEST), computed directly as the top-k integral with
+# the count of runners ABOVE x: 1 - top_k(n - k) cancelled, returning 0
+# for a 7.7e-24 last place and lattice residue when refined (#365)
+.bottomk_independent <- function(mu, sd, k, fn, points) {
+  refl <- function(z) { b <- fn(-z); list(S = 1 - b$S, f = b$f, fp = -b$fp) }
+  res <- .base_resolution(fn)
+  attr(refl, "resolution") <- res   # the reflection keeps the centre (#468)
+  wr <- .count_window(-mu, sd, k, refl)
+  w <- c(-wr[2], -wr[1])
+  points <- .resolved_points(w[1], w[2], sd, points, res)
+  x <- seq(w[1], w[2], length.out = points)
+  z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
+  b <- fn(z)
+  G <- .clip01(b$S)
+  C <- .count_distribution(G)
+  cdf <- .loo_cdf(C, G, k)
+  dens <- t(b$f) / sd
+  rowSums(dens * cdf) * (x[2] - x[1])
+}
+
 bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
-                                   base = "normal", points = 513, qa = 15) {
+                                   base = "normal", points = 513, qa = NULL) {
   n <- length(mu)
   k <- .as_depth(k, n)
-  1 - top_k_probabilities(mu, n - k, V = V, D = D, base = base,
-                          points = points, qa = qa)
+  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  fn <- if (is.function(base)) base else .BASES[[base]]
+  if (is.null(V))
+    return(.checked_topk(.bottomk_independent(mu, sd, k, fn, points), k,
+                         "bottom-k race"))
+  fac <- .topk_factor_nodes(V, n, qa, D)
+  raw <- rep(0, n)
+  for (q in seq_len(nrow(fac$nodes))) {
+    shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
+    raw <- raw + fac$w[q] * .bottomk_independent(mu + shift, sd, k, fn, points)
+  }
+  .checked_topk(raw, k, "bottom-k race")
 }
 
 top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
-                            points = 513, V = NULL, qa = 15) {
+                            points = 513, V = NULL, qa = NULL) {
   n <- length(mu)
   k <- .as_depth(k, n)
   if (!is.null(V)) {
     # exact node mixture: the factor shift commutes with d/dmu, d/dsigma
-    fac <- .topk_factor_nodes(V, n, qa)
+    fac <- .topk_factor_nodes(V, n, qa, D)
     Jm <- matrix(0, n, n)
     Js <- matrix(0, n, n)
     for (q in seq_len(nrow(fac$nodes))) {
@@ -298,14 +410,14 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
 # so the correlated call was an "unused argument" error while the
 # adjacent top-k verbs priced it (#202).
 rank_probabilities <- function(mu, D = NULL, base = "normal",
-                               points = 513, V = NULL, qa = 15) {
+                               points = 513, V = NULL, qa = NULL) {
   n <- length(mu)
   sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V)) {
     P <- .rank_matrix_node(mu, sd, fn, points)
   } else {
-    fac <- .topk_factor_nodes(V, n, qa)
+    fac <- .topk_factor_nodes(V, n, qa, D)
     P <- matrix(0, n, n)
     for (q in seq_len(nrow(fac$nodes))) {
       shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
@@ -344,7 +456,13 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
     stop(sprintf("target has %d entries for %d runners", length(target), n))
   floored <- rep(FALSE, n)
   if (!is.null(target_floor)) {
-    if (!(target_floor > 0)) stop("target_floor must be positive")
+    target_floor <- .as_tolerance(target_floor, "target_floor")
+    # a membership floor: applied to memberships normalized to k slots,
+    # not to the caller's units (#592)
+    if (any(!is.finite(target)) || any(target < 0))
+      stop("target entries must be finite and non-negative", call. = FALSE)
+    target <- target / max(target)
+    target <- target * (k / sum(target))
     floored <- target < target_floor
     target <- pmax(target, target_floor)
   } else if (any(target <= 0)) {
@@ -362,7 +480,7 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
 }
 
 abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
-                                points = 513, qa = 15, n_iter = 80,
+                                points = 513, qa = NULL, n_iter = 80,
                                 tol = 1e-8, target_floor = NULL,
                                 return_info = FALSE) {
   n <- length(q)
@@ -371,13 +489,18 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   target <- vt$target
   sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
-  fac <- if (is.null(V)) NULL else .topk_factor_nodes(V, n, qa)
+  fac <- if (is.null(V)) NULL else .topk_factor_nodes(V, n, qa, D)
 
   logit_t <- log(target) - log1p(-target)
   logt <- log(target)
-  mu <- -(logt - mean(logt)) / 2
+  # in the field's own units, as python (#100): a dimensionless start and
+  # absolute caps stalled at a logit residual of 690 at sd 1e-2
+  sv <- if (is.null(fac)) 0 else mean(rowSums(fac$Vm^2))
+  scale <- sqrt(stats::median(sd^2) + sv)
+  mu <- -(logt - mean(logt)) / 2 * scale
   alpha <- if (n > 2) 1.0 else 0.7
   n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
   resid_max <- Inf
   # iters counts UPDATES applied to mu. The residual is evaluated at the
   # current mu before deciding to update, so the returned residual always
@@ -404,8 +527,8 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
       logit_t
     resid_max <- max(abs(resid))
     if (resid_max < tol || iters >= n_iter) break
-    dlogit <- pmin(sl / pmax(qhat * (1 - qhat), 1e-300), -1e-6)
-    lim <- pmin(2, 10 * abs(resid))
+    dlogit <- pmin(sl / pmax(qhat * (1 - qhat), 1e-300), -1e-6 / scale)
+    lim <- pmin(2, 10 * abs(resid)) * scale
     mu <- mu - pmin(pmax(alpha * resid / dlogit, -lim), lim)
     mu <- mu - mean(mu)
     iters <- iters + 1L
@@ -428,6 +551,8 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      mu0 = NULL, return_info = FALSE) {
   n <- length(q1)
   n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
+  ridge <- .as_nonnegative(ridge, "ridge")                    # (#558)
   k1 <- .as_depth(k1, n, "k1"); k2 <- .as_depth(k2, n, "k2")
   if (k1 == k2)
     stop("k1 == k2 gives one curve twice: scale is unidentified")
@@ -438,7 +563,12 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
 
   sd <- sqrt(.as_idio(D0, n, name = "D0"))
   if (!is.null(mu0)) {
-    mu <- as.numeric(mu0) - mean(mu0)
+    mu <- .as_warm_start(mu0, n)                     # #554
+    # the return gauge (mean-zero mu, geometric-mean-one sd) applied to
+    # the start too: an exact warm start used to come back in physical
+    # units (#360)
+    c0 <- exp(mean(log(sd)))
+    mu <- mu / c0; sd <- sd / c0
   } else {
     if (k1 < k2) { ka <- k1; ta <- t1 } else { ka <- k2; ta <- t2 }
     # warm start only: the LM loop refines, loose tolerance by design
@@ -446,7 +576,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                               points = points, n_iter = 20, tol = 1e-3,
                               return_info = TRUE)$mu
   }
-  sqr <- sqrt(max(ridge, 0))
+  sqr <- sqrt(ridge)
 
   logits <- function(m, s) {
     qh1 <- pmin(pmax(top_k_probabilities(m, k1, D = s^2, base = base,
@@ -468,6 +598,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
   lam <- 1e-6
   iters <- 0L
   last_accepted <- TRUE
+  last_grad <- Inf
   for (it in seq_len(n_iter)) {
     if (resid_max < tol) break
     iters <- it
@@ -484,6 +615,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                cbind(matrix(0, n, n), sqr * diag(n)))
     JtJ <- crossprod(J)
     Jtr <- as.vector(crossprod(J, r))
+    last_grad <- max(abs(Jtr))
     accepted <- FALSE
     for (attempt in 1:8) {
       step <- tryCatch(solve(JtJ + lam * diag(2 * n), -Jtr),
@@ -511,16 +643,27 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
     last_accepted <- accepted
     if (!accepted) break
   }
-  # with a ridge the penalized optimum keeps a nonzero fit residual by
-  # design: an LM stall there is the answer, not a failure
-  converged <- resid_max < tol || (sqr > 0 && !last_accepted)
+  # A ridge stall counts as convergence only at a stationary point of the
+  # penalized objective AND on a board passing the exact nesting
+  # necessity P(top k1) <= P(top k2), k1 < k2 -- as in python (#353,
+  # #105). Every rejected step used to be certified, including boards no
+  # (mu, sd) can fit.
+  lo_t <- if (k1 < k2) t1 else t2
+  hi_t <- if (k1 < k2) t2 else t1
+  nested <- all(lo_t <= hi_t + 1e-12)
+  fit_ok <- resid_max < tol
+  stationary <- fit_ok || (!last_accepted && iters > 0 &&
+                             last_grad <= 1e-6 * max(1, cost))
+  converged <- fit_ok || (sqr > 0 && stationary && nested)
   if (!converged && !return_info)
     warning(sprintf(paste0(
       "loc_scale_from_topk_pair did not converge: max |logit residual| ",
       "%.2e after %d iterations (tol %.0e)"), resid_max, iters, tol))
   if (return_info)
     return(list(mu = mu, sd = sd, converged = converged,
-                max_logit_residual = resid_max, iterations = iters))
+                max_logit_residual = resid_max, iterations = iters,
+                fit_converged = fit_ok, stationary = stationary,
+                nested = nested))
   list(mu = mu, sd = sd)
 }
 
@@ -536,8 +679,8 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
     stop("p_win and p_second must have equal length")
   if (any(p_win <= 0) || any(p_second <= 0))
     stop("all win and second probabilities must be positive")
-  p1 <- p_win / sum(p_win)
-  top2 <- p1 + p_second / sum(p_second)
+  p1 <- .rescaled_target(as.numeric(p_win))    # scale-safe (#483)
+  top2 <- p1 + .rescaled_target(as.numeric(p_second))
   loc_scale_from_topk_pair(p1, 1, top2, 2, D0 = D0, base = base,
                            points = points, n_iter = n_iter, tol = tol,
                            ridge = ridge, mu0 = mu0,
@@ -576,15 +719,34 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
   # r >= 2, mu0 selects the branch. See the python docstring.
   n <- length(p)
   n_iter <- .as_iter_budget(n_iter)
-  r <- as.integer(r)
+  tol <- .as_tolerance(tol)                                   # (#551)
+  # a whole-number rank, refused before coercion: as.integer(1.5) solved
+  # first place silently (#317)
+  rr <- suppressWarnings(as.numeric(r))
+  if (length(rr) != 1L || is.logical(r) || !is.finite(rr) || rr != trunc(rr))
+    stop(sprintf("r must be a whole-number rank; got %s", format(r)),
+         call. = FALSE)
+  r <- as.integer(rr)
   if (r < 1 || r > n)
     stop(sprintf("rank must be in [1, n]; got r=%d, n=%d", r, n))
+  if (any(!is.finite(p)))
+    stop("rank probabilities must be finite")
   if (any(p <= 0))
     stop("all rank probabilities must be positive")
   logt <- log(.rescaled_target(as.numeric(p)))
   sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
-  mu <- if (is.null(mu0)) rep(0, n) else as.numeric(mu0) - mean(mu0)
+  zz <- c(-2.3, -1.1, -0.35, 0.6, 1.7)
+  symmetric <- isTRUE(all(abs(fn(zz)$S + fn(-zz)$S - 1) < 1e-12))
+  if (is.null(mu0) && n %% 2 == 1 && r == (n + 1) %/% 2 && symmetric)
+    # the exact middle rank of an odd field under a symmetric base is even
+    # in mu: the zero start has a zero Jacobian and no way off it (#378)
+    stop(sprintf(paste0(
+      "the exact middle rank r=%d of an odd field (n=%d) under a symmetric ",
+      "base is unchanged by mu -> -mu, so the zero start is stationary and ",
+      "the inverse two-branched. Pass mu0= to choose the branch."), r, n),
+      call. = FALSE)
+  mu <- if (is.null(mu0)) rep(0, n) else .as_warm_start(mu0, n)  # #554
 
   st <- .rank_marginal_with_jacobian(mu, sd, r, fn, points)
   resid <- log(pmax(st$p, 1e-300)) - logt

@@ -3,6 +3,14 @@
 Read this before touching `winning.ratings`. Most of it exists because a
 session spent hours reinventing things the package already does.
 
+## Publishing notes go in winning-private
+
+Venue choices, submission status, reviewer correspondence and briefs,
+prior-art positioning and submission builds belong in the private
+repository `microprediction/winning-private`, under the same
+`papers/<project>/` paths, never here. This repository holds the
+manuscripts, their sources and the scripts behind their numbers.
+
 ## Pick the right filter FIRST
 
 There are two ratings filters. Choosing the wrong one cost a machine reboot.

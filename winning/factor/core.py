@@ -12,7 +12,8 @@ from scipy.special import log_ndtr, ndtr, ndtri
 
 # the package-wide shape contract; re-exported here because
 # winning.factor.core is where the factor kernels look for it
-from ..shapes import as_idio, as_loadings, as_weights  # noqa: F401
+from ..shapes import (as_idio, as_loadings, as_tolerance, as_weights,  # noqa: F401
+                      as_factor_law, as_points, as_target)
 
 from ..rustconfig import load_fastrace
 
@@ -422,8 +423,37 @@ def _validate_covariance(C, name="cov="):
     return C
 
 
+def _as_block_labels(blocks, n):
+    """A caller's block membership: one integer label per entrant.
+
+    Returns 0-based dense labels (np.unique's inverse), so any integer
+    spelling of the same partition -- 1-based, gapped, negative -- is the
+    same partition and fits identically."""
+    lab = np.asarray(blocks)
+    if lab.ndim != 1:
+        raise ValueError(
+            f"blocks= must be a block count or a 1-D array of integer "
+            f"labels, one per entrant; got shape {lab.shape}")
+    if len(lab) != n:
+        raise ValueError(
+            f"blocks= has {len(lab)} labels for {n} entrants; pass one "
+            "block label per row of C")
+    if lab.dtype == bool or not (np.issubdtype(lab.dtype, np.integer)
+                                 or np.issubdtype(lab.dtype, np.floating)):
+        raise ValueError(
+            f"blocks= labels must be integers; got dtype {lab.dtype}")
+    if np.issubdtype(lab.dtype, np.floating):
+        if not np.isfinite(lab).all():
+            raise ValueError("blocks= labels contain NaN or inf")
+        if (lab != np.floor(lab)).any():
+            raise ValueError(
+                "blocks= labels must be whole numbers; a label names a "
+                "block, it is not a weight")
+    return np.unique(lab.astype(np.int64), return_inverse=True)[1]
+
+
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
-                   blocks: int | None = None, nodes_log2: int = 11,
+                   blocks=None, nodes_log2: int = 11,
                    seed: int = 0, return_report: bool = False):
     """One-call dense-covariance intake: fit C to the race grammar and
     return (V, D, F, W) ready for race_probabilities.
@@ -439,12 +469,27 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     Numerically dead columns are dropped so the Sobol node rank stays
     honest. Works on covariances; correlation matrices are the special
     case with unit diagonal.
+
+    blocks: None (a count chosen from n), an integer count for stage (2)'s
+    clustering, or a length-n integer label array giving the block
+    membership directly -- for entrants whose families are known (siblings
+    sharing an edit, candidates sharing a construction), which the
+    clustering would only rediscover imperfectly. Given labels replace
+    the clustering stage and nothing else; a singleton block carries no
+    off-diagonal residual and gets no loading, as on the clustered path.
+    The report's "blocks" entry says "given", "clustered", or "none"
+    (stage skipped: a count below 2, or n < 3), and "block_labels" the
+    0-based membership the fit used; "arm" is "pipeline", or "eigen" when
+    a pure eigen fit at the same rank left the smaller residual and
+    replaced the staged fit, blocks included.
     """
     from scipy.cluster.hierarchy import fcluster, linkage
     from scipy.spatial.distance import squareform
 
     C = _validate_covariance(C)
     n = len(C)
+    labels = None if blocks is None or np.ndim(blocks) == 0 \
+        else _as_block_labels(blocks, n)
     if n == 1:
         # A one-runner field has no covariance STRUCTURE: there is
         # nothing for a factor to correlate, the whole variance is
@@ -466,8 +511,29 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                                 "projected_residual_max": 0.0,
                                 "rank": 0,
                                 "sharpness": 0.0,
-                                "contrast_residual_max": 0.0}
+                                "contrast_residual_max": 0.0,
+                                "blocks": "none" if labels is None
+                                else "given",
+                                "block_labels": np.zeros(1, dtype=int),
+                                "arm": "pipeline"}
         return V, D, F, W
+    # Fit at UNIT scale and scale back. Several stages carry absolute
+    # constants (start values, convergence tests, dead-column and
+    # clipping thresholds), so the same standardized race fitted at
+    # 1e-10 times the covariance came back at rank 6 and sharpness 1113
+    # instead of rank 3 and 3.16, and priced 2.7e-3 away in total
+    # variation (#101). The working scale is a power of FOUR, so C / s
+    # and sqrt(s) are exact in binary and the fit of s * C is the fit of
+    # C, bit for bit, scaled.
+    md = float(np.mean(np.diag(C)))
+    k2 = int(np.round(np.log2(md) / 2.0)) if md > 0 else 0
+    if k2 != 0:
+        out = fit_covariance(np.ldexp(C, -2 * k2), k=k, m=m,
+                             blocks=blocks if labels is None else labels,
+                             nodes_log2=nodes_log2, seed=seed,
+                             return_report=return_report)
+        Vu, Du = out[0], out[1]
+        return (np.ldexp(Vu, k2), np.ldexp(Du, 2 * k2)) + tuple(out[2:])
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)
@@ -493,6 +559,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     _warn_if_rank_splits_a_tie(C, D0, kk)
     if blocks is None:
         blocks = max(2, min(n // 5, 20))
+    block_source = "none"
     # everything downstream fits the CHOICE-RELEVANT residual: the raw
     # residual C - VV' - D0 contains a common component the quotient fit
     # rightly ignored; chasing it with block loadings would trade real
@@ -501,10 +568,18 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     R = _center2(C - V @ V.T - np.diag(D0))
     v = np.zeros(n)
     cluster = np.zeros(n, dtype=int)
-    if n >= 3 and blocks >= 2:
-        d = np.sqrt(np.clip(0.5 * (1.0 - corr), 0.0, 1.0))
-        Z = linkage(squareform(d, checks=False), method="average")
-        cluster = fcluster(Z, blocks, criterion="maxclust") - 1
+    if labels is not None or (n >= 3 and blocks >= 2):
+        if labels is not None:
+            # the caller's membership replaces the clustering stage and
+            # nothing else: the per-block rank-1 loadings below are fitted
+            # to the same projected residual either way
+            cluster = labels
+            block_source = "given"
+        else:
+            d = np.sqrt(np.clip(0.5 * (1.0 - corr), 0.0, 1.0))
+            Z = linkage(squareform(d, checks=False), method="average")
+            cluster = fcluster(Z, blocks, criterion="maxclust") - 1
+            block_source = "clustered"
         for c in np.unique(cluster):
             idx = np.where(cluster == c)[0]
             if len(idx) < 2:
@@ -577,8 +652,10 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     lamC, UC, _ = _top_eigen(C, rank, pad=10, sweeps=40)
     Veig = UC * np.sqrt(np.maximum(lamC, 0.0))
     Deig, res_eig = _close(Veig)
+    arm = "pipeline"
     if res_eig < res_pipe:
         Vall, D, res_pipe = Veig, Deig, res_eig
+        arm = "eigen"
     F, W = qmc_nodes(Vall.shape[1], m=nodes_log2, seed=seed)
     if return_report:
         Rfin = _center2(C - Vall @ Vall.T - np.diag(D))
@@ -596,9 +673,267 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                   "projected_residual_max": absmax,
                   "rank": Vall.shape[1],
                   "sharpness": sharp,
-                  "contrast_residual_max": _worst_contrast_ratio(C, Rfin)}
+                  "contrast_residual_max": _worst_contrast_ratio(C, Rfin),
+                  "blocks": block_source,
+                  "block_labels": np.asarray(cluster, dtype=int).copy(),
+                  "arm": arm}
         return Vall, D, F, W, report
     return Vall, D, F, W
+
+
+def _nnls_gram(G, r, max_iter=50):
+    """argmin_{y >= 0} y'Gy/2 - r'y for SPD G, from the normal equations.
+
+    Primal-dual active set (semismooth Newton on the KKT system): guess
+    the zero set from y - grad/diag(G), solve the free block exactly,
+    repeat until the guess is stable. Each pass is one Cholesky of the
+    free block; it stops at an exact KKT point, checked below. An
+    in-grammar C is solved by the first pass. scipy's Lawson-Hanson nnls
+    adds one column per iteration and took 26 s at n = 2000; it remains
+    the fallback should the active-set iteration cycle."""
+    from scipy.linalg import cho_factor, cho_solve
+    from scipy.optimize import nnls
+    m = len(r)
+    dg = np.diag(G).copy()
+    y = np.zeros(m)
+    lam = -r.copy()                                  # gradient at y = 0
+    free = None
+    tol = 1e-12 * max(float(np.abs(r).max()), 1e-300)
+    for _ in range(max_iter):
+        new_free = (y - lam / dg) > 0
+        if free is not None and np.array_equal(new_free, free):
+            break
+        free = new_free
+        y = np.zeros(m)
+        if free.any():
+            Gf = G[np.ix_(free, free)]
+            y[free] = cho_solve(cho_factor(Gf), r[free])
+        lam = G @ y - r
+        lam[free] = 0.0
+    if (y >= -tol).all() and (lam >= -tol * m).all():
+        return np.maximum(y, 0.0)
+    L = np.linalg.cholesky(G)
+    y, _ = nnls(L.T, np.linalg.solve(L, r), maxiter=50 * m)
+    return y
+
+
+def _genealogy_parent(parent, n):
+    """An integer parent array over n entrants (-1 for a root), checked to
+    be a forest, or a refusal naming the defect. Returns it as int64."""
+    p = np.asarray(parent)
+    if p.ndim != 1 or len(p) != n:
+        raise ValueError(
+            f"parent must be a 1-D array with one entry per entrant ({n}); "
+            f"got shape {p.shape}")
+    if p.dtype.kind not in "iu":
+        if (p.dtype.kind != "f" or not np.isfinite(p).all()
+                or (p != np.floor(p)).any()):
+            raise ValueError(
+                f"parent must hold integers (-1 for a root); got dtype "
+                f"{p.dtype}")
+    p = p.astype(np.int64)
+    bad = np.flatnonzero((p < -1) | (p >= n))
+    if bad.size:
+        raise ValueError(
+            f"parent[{int(bad[0])}] = {int(p[bad[0]])} is not -1 or an "
+            f"entrant index in [0, {n})")
+    state = np.zeros(n, np.int8)             # 0 unseen, 1 on path, 2 done
+    for t in range(n):
+        path = []
+        u = t
+        while u >= 0 and state[u] == 0:
+            state[u] = 1
+            path.append(u)
+            u = int(p[u])
+        if u >= 0 and state[u] == 1:
+            k = path.index(u)
+            cyc = " -> ".join(str(x) for x in path[k:] + [u])
+            raise ValueError(
+                f"parent contains a cycle: {cyc}; a genealogy is a forest")
+        for v in path:
+            state[v] = 2
+    return p
+
+
+def fit_tree(C, parent, k: int = 0, max_n: int = 2000):
+    """Dense-covariance intake onto a KNOWN genealogy: fit C to the tree
+    race whose clades are given by `parent`, and return (V, D, tree,
+    report) with `tree` a structures.Tree ready for
+    race_probabilities(mu, structure=tree).
+
+    The genealogy. parent[i] is the entrant i was derived from, -1 for a
+    root (a forest is allowed). Each edit is shared by everything derived
+    from it, so the model is the random walk on the genealogy:
+
+        theta_i = sum over ancestors-or-self a of i of  sqrt(s_a) z_a
+                  + sqrt(D_i) eps_i,
+
+    i.e. Sigma = sum_a s_a 1_{clade(a)} 1_{clade(a)}' + diag(D), where
+    clade(a) is a together with all its descendants.
+
+    Entrants are NOT restricted to the leaves of the genealogy: a parent
+    is itself a candidate. The mapping to a Tree therefore makes every
+    entrant a Tree LEAF (its own cluster, carrying D_i) and every clade an
+    INTERNAL node: entrant j's leaf is node j, clade(j) is node n + j with
+    strength sqrt(s_j), leaf j hangs under node n + j, node n + j hangs
+    under node n + parent[j], and the genealogy roots hang under one added
+    node 2n of strength 0 (a Tree has one root; a shift common to every
+    entrant moves no race). So a parent with children is a leaf sibling
+    of its children's clades, inside its own clade.
+
+    The fit. Only contrasts are choice-relevant, so the strengths are the
+    nonnegative least squares fit of the n(n-1)/2 contrast variances
+    Var(theta_i - theta_j) = C_ii + C_jj - 2 C_ij onto D_i + D_j + sum of
+    s_a over the clades that SEPARATE i from j (contain exactly one).
+    Clades whose cut duplicates another column are not identifiable from
+    contrasts and are held at zero, their effect carried by the
+    equivalent column: a single-entrant clade (a genealogy leaf) is
+    D_i; a clade of all n entrants or of all but one is the common shift
+    or the outsider's D; and of two root clades that partition the field,
+    the higher-indexed root's is held. The remaining columns are
+    linearly independent (compatible splits), so the fit is unique. D
+    carries the same relative floor as fit_covariance (1e-6 of each
+    entrant's own variance), as a lower bound inside the least squares,
+    not a clip afterwards. The normal equations are assembled from clade
+    sums in O(n^2) time and memory without forming the pair design.
+
+    k > 0 global factors are refused: the front door has no kernel for
+    factors PLUS a tree (structure= and V=/D= are exclusive, and Tree's
+    leaf loadings are per-cluster, not global), and building one is out
+    of scope here. V is returned as the empty (n, 0) loading so the
+    signature already carries it; D is tree.D.
+
+    Fields above max_n (default 2000; the Gram matrix is up to (2n)^2
+    doubles, ~128 MB at n = 2000) are refused rather than subsampled: a
+    subsample would drop entrants from the race being priced.
+
+    report: projected_residual_rel (||P (C - Sigma_hat) P||_F over
+    ||P C P||_F, as fit_covariance), projected_residual_max (worst
+    centered entry over the mean variance), contrast_residual_max (worst
+    pair residual over its contrast variance), clades_fitted (identifiable
+    clades), clades_zero (identifiable clades the fit set to zero) and
+    floored (entrants whose D sits on its floor).
+    """
+    from .structures import Tree
+
+    kk = np.asarray(k)
+    if kk.ndim != 0 or not np.isfinite(kk) or kk != np.floor(kk) or kk < 0:
+        raise ValueError(f"fit_tree needs an integer k >= 0; got {k!r}")
+    if int(kk) > 0:
+        raise NotImplementedError(
+            "fit_tree(k > 0): no kernel prices k global factors PLUS a "
+            "tree -- race_probabilities takes structure= or V=/D=, not "
+            "both, and a Tree's leaf loadings are per cluster. Fit k = 0, "
+            "or fit_covariance for factors alone.")
+    C = _validate_covariance(C, name="C")
+    n = len(C)
+    if n > max_n:
+        raise ValueError(
+            f"fit_tree is O(n^2) in time and memory and n = {n} exceeds "
+            f"max_n = {max_n}; raise max_n deliberately (the Gram matrix "
+            "alone is up to 32 n^2 bytes), or fit a sub-genealogy")
+    p = _genealogy_parent(parent, n)
+    c = np.diag(C).copy()
+    floor = 1e-6 * np.maximum(c, 1e-6 * max(float(np.mean(c)), 1e-300))
+
+    # ancestry: anc[i, j] = j is i or an ancestor of i, i.e. i in clade(j)
+    depth = np.full(n, -1, np.int64)
+    for t in range(n):
+        path = []
+        u = t
+        while u >= 0 and depth[u] < 0:
+            path.append(u)
+            u = int(p[u])
+        d = depth[u] if u >= 0 else -1
+        for v in reversed(path):
+            d += 1
+            depth[v] = d
+    order = np.argsort(depth, kind="stable")             # parents first
+    anc = np.zeros((n, n), dtype=bool)
+    for i in order:
+        if p[i] >= 0:
+            anc[i] = anc[p[i]]
+        anc[i, i] = True
+    size = anc.sum(axis=0)
+
+    roots = np.flatnonzero(p < 0)
+    keep = (size >= 2) & (size <= n - 2)
+    if len(roots) == 2 and keep[roots].all():
+        keep[roots[1]] = False                          # same cut as roots[0]
+    J = np.flatnonzero(keep)
+    K = len(J)
+
+    s = np.zeros(n)
+    if n == 1:
+        D = np.maximum(c, floor)
+    elif n == 2:
+        v = max(float(c.sum() - 2.0 * C[0, 1]), 0.0)
+        D = np.maximum(np.full(2, v / 2.0), floor)
+    else:
+        rsum = C.sum(axis=1)
+        tot = float(c.sum())
+        # A'b, where b is the contrast-variance vector over pairs
+        h = np.empty(n + K)
+        h[:n] = n * c + tot - 2.0 * rsum
+        if K:
+            # W[:, j] = C 1_{clade(j)}, accumulated children-first: O(n^2)
+            Wc = C.copy()
+            for i in order[::-1]:
+                if p[i] >= 0:
+                    Wc[:, p[i]] += Wc[:, i]
+            Ak = anc[:, J].astype(float)
+            q = np.einsum("ij,ij->j", Wc[:, J], Ak)      # 1' C_clade 1
+            del Wc
+            mc = Ak.T @ c
+            mr = Ak.T @ rsum
+            sz = size[J].astype(float)
+            h[n:] = (n - sz) * mc + sz * (tot - mc) - 2.0 * (mr - q)
+        # A'A: pairs separated by both cuts
+        G = np.empty((n + K, n + K))
+        G[:n, :n] = 1.0
+        G[np.arange(n), np.arange(n)] = n - 1.0
+        if K:
+            G[:n, n:] = np.where(anc[:, J], n - sz[None, :], sz[None, :])
+            G[n:, :n] = G[:n, n:].T
+            nest = anc[np.ix_(J, J)]                     # clade(J_a) in clade(J_b)
+            x = np.where(nest, sz[:, None], np.where(nest.T, sz[None, :], 0.0))
+            G[n:, n:] = (x * (n - sz[:, None] - sz[None, :] + x)
+                         + (sz[:, None] - x) * (sz[None, :] - x))
+        lb = np.concatenate([floor, np.zeros(K)])
+        rhs = h - G @ lb
+        y = _nnls_gram(G, rhs)
+        x_ = lb + np.maximum(y, 0.0)
+        D = x_[:n]
+        s[J] = x_[n:]
+
+    strength = np.zeros(2 * n + 1)
+    strength[n:2 * n] = np.sqrt(s)
+    tparent = np.empty(2 * n + 1, np.int64)
+    tparent[:n] = n + np.arange(n)
+    tparent[n:2 * n] = np.where(p >= 0, n + p, 2 * n)
+    tparent[2 * n] = -1
+    tree = Tree(cluster=np.arange(n), loading=np.zeros(n), D=D.copy(),
+                parent=tparent, strength=strength)
+
+    # fitted covariance and the choice-relevant residual
+    pos = np.flatnonzero(s > 0)
+    Am = anc[:, pos] * np.sqrt(s[pos])[None, :]
+    Sig = Am @ Am.T
+    Sig[np.arange(n), np.arange(n)] += D
+    Rfin = _center2(C - Sig)
+    denom = float(np.linalg.norm(_center2(C)))
+    report = {
+        "projected_residual_rel":
+            float(np.linalg.norm(Rfin)) / denom if denom > 0 else 0.0,
+        "projected_residual_max":
+            float(np.abs(Rfin).max() / max(float(np.mean(c)), 1e-300)),
+        "contrast_residual_max":
+            _worst_contrast_ratio(C, Rfin) if n >= 2 else 0.0,
+        "clades_fitted": int(K),
+        "clades_zero": int(np.sum(s[J] <= 0.0)),
+        "floored": int(np.sum(D <= floor * (1.0 + 1e-12))),
+    }
+    return np.zeros((n, 0)), D, tree, report
 
 
 def _worst_contrast_ratio(C, R, cap_n=4000):
@@ -691,6 +1026,20 @@ def hermite_nodes(k: int, Q: int = 15, prune: float = 1e-7):
     return F, W / W.sum()
 
 
+def _gauge_center(V):
+    """V minus each factor's mean loading across contestants -- the
+    gauge every factor path fixes -- without overflowing: a column of
+    [1e308] * 9 has an infinite plain mean, and inf - inf made the race
+    NaN where the exactly common column should vanish (#471). Centred on
+    the first row only when the plain mean is not finite, so ordinary
+    loadings stay bit-identical."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        m = V.mean(axis=0)
+    if not np.all(np.isfinite(m)):
+        m = V[0] + (V - V[0]).mean(axis=0)
+    return V - m
+
+
 def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
                              F: np.ndarray, W: np.ndarray,
                              keep: np.ndarray | None = None,
@@ -715,6 +1064,11 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     mu = np.asarray(mu, dtype=float)
     V = as_loadings(V, len(mu))      # before keep: rows are contestants
     D = as_idio(D, len(mu), positive=True)
+    points = as_points(points)
+    # validated, relative, and with zero-weight nodes dropped: a null
+    # node is a no-op for the integral but widened the global window
+    # below until every density spike fell between lattice points (#416)
+    F, W = as_factor_law(F, W)
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
@@ -724,7 +1078,7 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     # BEFORE the compiled dispatch: the kernel does not center, and an
     # uncentered column widened its window by the common shift (#114:
     # a shift of 100 moved the answer by 3e-2 with rust on, 3e-16 off).
-    V = V - V.mean(axis=0)
+    V = _gauge_center(V)
     if (_HAVE_RUST and not return_deletions and not per_node_interval
             and N > 1 and len(F) >= 2):
         # The compiled kernel is the same lattice on the same global
@@ -782,8 +1136,16 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
         # built for exactly this, so retry once through it (same min-wins
         # kernel, tighter lattice) before giving up. Deletion output is
         # not available on this path.
+        #
+        # Under the CALLER'S factor law: F, W are forwarded. The retry
+        # used to drop them and price the default Gaussian-factor law
+        # instead -- a different model returned as this one (#416). And
+        # return_total reports the span-window total that failed, not
+        # the fallback's normalised 1.0, so the diagnostic still says the
+        # requested integration did not resolve.
         from .races import race_probabilities
-        p_fb = race_probabilities(mu, V=V, D=D, points=max(points, 257))
+        p_fb = race_probabilities(mu, V=V, D=D, F=F, W=W,
+                                  points=max(points, 257))
         if np.all(np.isfinite(p_fb)) and p_fb.sum() > 0:
             if return_deletions:
                 raise FloatingPointError(
@@ -792,7 +1154,7 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
                     "provide deletions -- call race_probabilities/"
                     "removal_shares directly for this field")
             out = p_fb / p_fb.sum()
-            return (out, float(p_fb.sum())) if return_total else out
+            return (out, float(total)) if return_total else out
         raise FloatingPointError("factor race integration failed")
     out = p / total
     if return_deletions:
@@ -821,44 +1183,95 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     target probability is unidentifiably small). Typical cost: ~10 forward-pass
     equivalents, versus hundreds for the damped Picard iteration it replaces.
     """
-    p = np.asarray(p, dtype=float)
+    p = as_target(p, "p")            # finite and 1-D before the sign test
     if np.any(p <= 0):
         raise ValueError("all target probabilities must be positive")
-    p = p / p.sum()
+    tol = as_tolerance(tol)
+    _n = np.asarray(n_iter)
+    if (_n.ndim or _n.dtype == bool or not np.issubdtype(_n.dtype, np.integer)
+            or int(_n) < 0):
+        raise ValueError("n_iter must be a non-negative whole number; got "
+                         f"{n_iter!r}")
+    n_iter = int(_n)
+    with np.errstate(over="ignore"):
+        _tot = p.sum()
+    if not np.isfinite(_tot):        # relative weights: [1e308]*3 is [1]*3
+        p = p / p.max()
+        _tot = p.sum()
+    p = p / _tot
     logp = np.log(p)
     N = len(p)
+    points = as_points(points)
     V = as_loadings(V, N)
+    # The gauge the forward and JVP paths already fix: a common loading
+    # column adds the same c'f to every runner and cannot move an argmin,
+    # but the warm start, step cap and lattice window below were built
+    # from the uncentered V, so V + 100 turned a 6e-8 inversion into a
+    # residual of 33.8 (#70).
+    V = _gauge_center(V)
     D = as_idio(D, N, positive=True)
+    F, W = as_factor_law(F, W)
     sd = np.sqrt(D)
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
     ident = p > floor
+    # The factor law actually REPRESENTED by (F, W): V -> aV, F -> F/a is
+    # the same forward map, but reading the factor variance off raw
+    # sum(V_i^2) inflated the warm start and the step cap by a^2, and the
+    # inverse missed a self-generated target by 89 points at a = 100
+    # (#443). Weighted node mean and covariance, on the centred loadings.
+    F = np.asarray(F, dtype=float).reshape(len(F), -1)
+    W = np.asarray(W, dtype=float)
+    Wn = W / W.sum()
+    Vc = _gauge_center(V)
+    Fm = Wn @ F
+    CovF = (F - Fm).T @ ((F - Fm) * Wn[:, None])
+    sig_v = np.einsum("ij,jk,ik->i", Vc, CovF, Vc)
+    shift = Vc @ Fm
     if N == 2:
-        # Closed form. Min-wins: p_1 = Phi((mu_2 - mu_1)/s) with
-        # s^2 = D_1 + D_2 + ||v_1 - v_2||^2. The loop below must not be
+        # Closed form. Min-wins: p_1 = Phi((mu_2 - mu_1 + shift)/s) with
+        # s^2 = D_1 + D_2 + (v_1 - v_2)' Cov(F) (v_1 - v_2), the
+        # represented factor law (#443). The loop below must not be
         # used here: K_2 is bipartite, the normalized photo-finish
         # Laplacian eigenvalue is exactly 2, and the undamped Jacobi
         # update is a local two-cycle whose flat residual defeats the
         # growth safeguard (observed log-share errors up to ~1).
-        s = float(np.sqrt(D.sum() + np.sum((V[0] - V[1]) ** 2)))
-        half = 0.5 * s * float(ndtri(p[0]))
-        mu = np.array([-half, half])
+        dv = Vc[0] - Vc[1]
+        s = float(np.sqrt(D.sum() + dv @ CovF @ dv))
+        # the quantile of the SMALLER share: normalising [1, 1e-17] rounds
+        # the favourite to exactly 1, where ndtri is inf, while the
+        # longshot still carries the finite contrast (#110)
+        q = float(ndtri(p[0])) if p[0] <= 0.5 else -float(ndtri(p[1]))
+        gap = s * q - float(shift[1] - shift[0])
+        mu = np.array([-0.5 * gap, 0.5 * gap])
         if return_info:
             return mu, {"iterations": 0, "residual": 0.0, "converged": True}
         return mu
     # warm start: exact INDEPENDENT inversion (allocation's design), using each
     # runner's total sd, via this same Newton with a single zero factor node
-    if F.shape[1] >= 1 and np.any(V != 0.0):
-        sd_tot = np.sqrt(D + np.sum(V**2, axis=1))
+    if F.shape[1] >= 1 and np.any(Vc != 0.0):
+        sd_tot = np.sqrt(D + sig_v)
         mu = abilities_from_probabilities_factor(
             p, np.zeros((N, 1)), sd_tot**2, np.zeros((1, 1)), np.ones(1),
-            n_iter=n_iter, tol=tol)
+            n_iter=n_iter, tol=tol, return_info=True)[0] - shift
+        mu -= mu.mean()
     else:
-        mu = (logp - logp.mean()) / 2.0
-    step_cap = 1.0 * np.sqrt(D + np.sum(V**2, axis=1))
+        # min-wins (a larger share is a LOWER mu), in the field's units:
+        # the start was dimensionless and favourite-high, so a field at
+        # sd 1e-3 began a thousand sd from its answer (#100)
+        mu = -(logp - logp.mean()) / 2.0 * float(np.sqrt(np.median(D)))
+    step_cap = 1.0 * np.sqrt(D + sig_v)
     prev_res = np.inf
-    damp = 1.0
-    for _ in range(n_iter):
+    # A dominant pair two-cycles under the undamped Jacobi step at any N
+    # (the photo-finish graph of the pair is bipartite), exactly as in
+    # races.abilities_from_race, whose share gate this copies. Gauge-
+    # fixing V (#70) moved one such field (top-two share 0.999) off the
+    # trajectory that had luckily converged and onto the cycle.
+    _top2 = float(np.sort(p)[-2:].sum()) if N > 2 else 1.0
+    damp = 0.7 if _top2 > 0.8 else 1.0
+    iters, res, converged = 0, np.inf, False
+    for it in range(n_iter):
+        iters = it + 1
         M_all = mu[None, :] + F @ V.T
         lo = M_all.min() - 8.0 * sd.max()
         hi = M_all.max() + 8.0 * sd.max()
@@ -866,6 +1279,7 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         dx = x[1] - x[0]
         phat = np.zeros(N)
         slope = np.zeros(N)
+        cross = np.zeros(N)
         chunk = max(1, int(5e6 / (N * len(x))))
         for a in range(0, len(F), chunk):
             M = M_all[a:a + chunk]
@@ -877,22 +1291,60 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
             rest = np.exp(np.clip(logSfield[:, None, :] - logS, -745.0, 0.0))
             phat += Wc @ (np.sum(f * rest, axis=2) * dx)
             slope += Wc @ (np.sum(z * f / sd[None, :, None] * rest, axis=2) * dx)
-        phat = np.maximum(phat / phat.sum(), _PFLOOR)
+            # sum_{j != i} d a_j / d mu_i = sum_{j != i} w_ij, by the
+            # hazard identity: f_i rest_i (H - h_i), h_j = f_j / S_j
+            # (finite in logs for the normal base). The log density is
+            # analytic: flooring an underflowed f at 1e-300 while logS
+            # kept falling overflowed haz to inf, and H - haz = nan
+            # turned a self-generated D = [0.01, 1, 1] target into NaN
+            # abilities (#524); h ~ z / sd there, finite.
+            log_f = (-0.5 * z**2
+                     - np.log(sd[None, :, None] * np.sqrt(2.0 * np.pi)))
+            haz = np.exp(log_f - logS)
+            H = haz.sum(axis=1, keepdims=True)
+            cross += Wc @ (np.sum(f * rest * (H - haz), axis=2) * dx)
+        total = phat.sum()
+        # d log p_i / d mu_i of the NORMALISED share the residual is
+        # measured on: a_i'/a_i - (a_i' + sum_j w_ij)/T. Dividing the raw
+        # own-slope by the normalised share instead parted from finite
+        # differences by 85% on a coarse lattice, and the solve missed a
+        # self-generated target by 22 points (#371).
+        dlogp = slope / np.maximum(phat, 1e-300) - (slope + cross) / total
+        phat = np.maximum(phat / total, _PFLOOR)
         resid = np.log(phat) - logp
         res = np.abs(resid[ident]).max() if np.any(ident) else np.abs(resid).max()
         if res < tol:
+            converged = True
             break
         if res > prev_res * 1.2:
             damp = max(0.25, damp * 0.5)     # simple safeguard
         prev_res = res
-        dlogp = slope / phat                  # negative for min-wins
         dlogp = np.minimum(dlogp, -1e-3 / (sd + 1e-9))
         delta = np.clip(damp * resid / dlogp, -step_cap, step_cap)
         mu = mu - delta                      # Newton: mu <- mu - resid / dlogp
         mu -= mu.mean()
+    if not converged:
+        # The budget ran out after a step the loop never priced: report
+        # the residual of the iterate actually returned (one forward,
+        # only on exhaustion), and say so unless diagnostics were asked
+        # for. n_iter=0 raised UnboundLocalError on the loop variable,
+        # and every exhaustion returned silently (#538).
+        phat = np.maximum(win_probabilities_factor(mu, V, D, F, W,
+                                                   points=points), _PFLOOR)
+        resid = np.log(phat / phat.sum()) - logp
+        res = float(np.abs(resid[ident]).max() if np.any(ident)
+                    else np.abs(resid).max())
+        converged = bool(res < tol)
+        if not converged and not return_info:
+            import warnings
+            warnings.warn(
+                f"abilities_from_probabilities_factor did not converge: max "
+                f"|log residual| {res:.2e} after {iters} iterations (tol "
+                f"{tol:.0e}). Pass return_info=True for the diagnostics "
+                "instead of this warning.", RuntimeWarning, stacklevel=2)
     if return_info:
-        return mu, {"iterations": _ + 1, "residual": float(res),
-                    "converged": bool(res < tol)}
+        return mu, {"iterations": int(iters), "residual": float(res),
+                    "converged": bool(converged)}
     return mu
 
 
@@ -946,7 +1398,13 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     N = len(mu)
     D = as_idio(D, N, positive=True)
     V = as_loadings(V, N)
-    V = V - V.mean(axis=0)          # gauge-fix, as in the forward pass (#114)
+    V = _gauge_center(V)             # gauge-fix, as in the forward pass (#114)
+    points = as_points(points)
+    # exactly two forms: only "grid" was tested, so a typo, "" or "GRID"
+    # silently ran IBP -- 0.36 apart, opposite signs, at L = 11 (#523)
+    if not isinstance(form, str) or form not in ("ibp", "grid"):
+        raise ValueError(f'form must be "ibp" or "grid"; got {form!r}')
+    F, W = as_factor_law(F, W)      # as the forward pass reads them (#416)
     if _HAVE_RUST and normalized and N > 1 and len(F) >= 2:
         # The compiled kernel returns the RAW directional derivative of the
         # unnormalized rectangle sum (#124: it matched numpy's

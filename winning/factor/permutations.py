@@ -21,12 +21,15 @@ continuum identity sum over all ordered prefixes = 1, raising rather than
 renormalising away a lattice that failed to capture the field.
 """
 import numpy as np
+from scipy.special import ndtr
 
 from .core import as_loadings
-from ..outcomes import as_luce_temperature, as_order, as_soft_temperature
+from ..outcomes import as_luce_temperature, as_order
 from ..shapes import as_weights
 from ..rustconfig import load_fastrace
-from .races import _fit_cov, _factor_of_structure, _setup, _tempered_curves
+from .races import (_as_temperature, _fit_cov, _factor_of_structure, _setup,
+                    _tempered_curves)
+from ..shapes import as_points, as_tolerance
 
 # this module's own ceiling (#113): it used to borrow races' flags, and
 # use_rust(True) defaults a missing _RUST_OK to True, which reported a
@@ -64,7 +67,24 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     """
     if k not in (1, 2, 3):
         raise ValueError("k must be 1, 2 or 3")
-    temperature = as_soft_temperature(temperature)             # #366
+    temperature = _as_temperature(temperature)        # (#424)
+    points = as_points(points)                        # (#444)
+    mass_tol = as_tolerance(mass_tol, "mass_tol")     # (#590)
+    if k == 1 and structure is not None and cov is None:
+        # k = 1 IS the win race, and the win race exists for every
+        # grammar: Blocks/Nested/Tree were refused here for want of an
+        # ordered-prefix pass that k = 1 does not need, so the documented
+        # identity "k=1 reproduces race_probabilities" failed for exactly
+        # the structures the forward call prices (#73).
+        from .structures import Factor, Independent
+        if not isinstance(structure, (Independent, Factor)):
+            if any(v is not None for v in (V, D, F, W)):
+                raise ValueError("structure= replaces V=/D=/F=/W=; pass "
+                                 "one only")
+            from .races import race_probabilities
+            return np.asarray(race_probabilities(
+                mu, structure=structure, base=base, points=points,
+                temperature=temperature), float)
     if cov is not None:
         V, D, F, W, _ = _fit_cov(cov, structure, V, D, stacklevel=3)
     elif structure is not None:
@@ -111,7 +131,12 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
                 S, f, _ = fn(z)
                 f = f / sd[:, None]
             logS = np.log(np.maximum(S, 1e-300))
-            Fc = 1.0 - S
+            # the lower tail directly where the base has it: 1 - S rounds
+            # to 0 below z = -8 while ndtr(z) is still representable, and
+            # a rare exacta came out 506x small (the Rust kernel already
+            # stores ndtr(z), #598)
+            Fc = (ndtr(z) if tau <= 0 and isinstance(base, str)
+                  and base == "normal" else 1.0 - S)
             logSfield = logS.sum(0)
             if k == 1:
                 rest = np.exp(np.clip(logSfield[None, :] - logS, -745.0, 0.0))

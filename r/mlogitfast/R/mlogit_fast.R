@@ -20,10 +20,18 @@
 # loop, deterministic to quadrature accuracy.
 
 .gh1 <- function(Q) {
+  if (length(Q) != 1L || !is.numeric(Q) || !is.finite(Q) || Q < 1 ||
+      Q != round(Q))
+    stop(sprintf("a Gauss-Hermite order must be one positive integer; got %s",
+                 paste(format(Q), collapse = ", ")), call. = FALSE)
+  Q <- as.integer(Q)
   J <- diag(0, Q)
-  off <- sqrt(seq_len(Q - 1))
-  J[cbind(seq_len(Q - 1), 2:Q)] <- off
-  J[cbind(2:Q, seq_len(Q - 1))] <- off
+  # i and i + 1, not 2:Q: at Q = 1, 2:Q is c(2, 1), not empty, and the
+  # one-node rule (x = 0, w = 1) died on an out-of-bounds index (#504)
+  i <- seq_len(Q - 1L)
+  off <- sqrt(i)
+  J[cbind(i, i + 1L)] <- off
+  J[cbind(i + 1L, i)] <- off
   e <- eigen(J, symmetric = TRUE)
   list(x = e$values, w = e$vectors[1, ]^2)
 }
@@ -109,7 +117,11 @@
            call. = FALSE)
     v <- y == 1
   } else {
+    # labels: "TRUE"/"FALSE" (and spellings as.logical knows) or "0"/"1",
+    # which is how a factor response arrives (#512)
     v <- as.logical(y)
+    v[!is.na(y) & y == "1"] <- TRUE
+    v[!is.na(y) & y == "0"] <- FALSE
     if (any(is.na(v) & !is.na(y)))
       stop("the chosen indicator must be logical or 0/1", call. = FALSE)
   }
@@ -160,8 +172,8 @@
 .check_rank <- function(r, J) {
   rmax <- max(J - 2L, 0L)
   if (is.null(r)) return(as.integer(min(2L, rmax)))
-  r <- as.integer(r)
-  if (length(r) != 1L || is.na(r) || r < 0L || r > rmax)
+  r <- .check_count(r, "factor rank r")
+  if (r > rmax)
     stop(sprintf(paste0("factor rank r = %s is not identified at J = %d ",
                         "alternatives: with unit idiosyncratic variances ",
                         "the utility scale is fixed only for ",
@@ -272,11 +284,76 @@
             want_grad = FALSE)$value
 }
 
+# A finite, non-negative whole number. as.integer() floored r = 1.9 to
+# rank 1 and fitted a different model than the one asked for (#479);
+# optim took any maxit it was handed (#560).
+.check_count <- function(x, name) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) ||
+      x != round(x) || x < 0)
+    stop(sprintf("%s must be a finite non-negative whole number; got %s",
+                 name, paste(format(x), collapse = ",")), call. = FALSE)
+  as.integer(x)
+}
+
+# Mean-design columns that within-choice-set contrasts do not identify:
+# a covariate common to every alternative, or one duplicating a
+# generated intercept, lies on an exact likelihood ridge, and BFGS
+# reported an arbitrary point on it as converged (#581). X rows are in
+# (observation, alternative) order; a column is aliased when its
+# contrast residual on the earlier kept columns is below tol of its own
+# contrast norm (Gram scale).
+.check_identified <- function(X, Tn, J, tol = 1e-10) {
+  p <- ncol(X)
+  if (p == 0L || J < 2L) return(invisible(NULL))
+  base <- (seq_len(Tn) - 1L) * J + 1L
+  Dc <- X[-base, , drop = FALSE] -
+    X[rep(base, each = J - 1L), , drop = FALSE]
+  G <- crossprod(Dc)
+  kept <- integer(0); aliased <- integer(0)
+  for (k in seq_len(p)) {
+    gkk <- G[k, k]
+    resid <- gkk
+    if (gkk > 0 && length(kept)) {
+      g <- G[kept, k]
+      coef <- qr.solve(G[kept, kept, drop = FALSE], g, tol = 1e-14)
+      resid <- gkk - sum(g * coef)
+    }
+    if (gkk > 0 && resid > tol * gkk) kept <- c(kept, k)
+    else aliased <- c(aliased, k)
+  }
+  if (length(aliased))
+    stop(sprintf(paste("mean-design column(s) %s are not identified from",
+                       "within-choice-set contrasts: each is constant",
+                       "across the alternatives of every observation or a",
+                       "linear combination of earlier columns (the",
+                       "generated intercepts come first); drop them",
+                       "(#581)"),
+                 paste(colnames(X)[aliased], collapse = ", ")),
+         call. = FALSE)
+  invisible(NULL)
+}
+
+# With alternative intercepts, an alternative nobody chose has no
+# finite MLE: its intercept runs to -Inf, and BFGS stopped on its
+# tolerance at a tolerance-dependent point reported as converged
+# (#496). Returns the never-chosen labels (empty when all are chosen).
+.never_chosen <- function(choice, J, labels) {
+  miss <- setdiff(seq_len(J), choice)
+  if (length(miss))
+    warning(sprintf(paste("alternative(s) %s are never chosen, so their",
+                          "intercepts have no finite MLE (complete",
+                          "separation); convergence is reported as 2.",
+                          "Drop those alternatives."),
+                    paste(labels[miss], collapse = ", ")), call. = FALSE)
+  labels[miss]
+}
+
 #' Exact multinomial probit, mlogit-style interface
 #'
 #' @param formula choice ~ alternative-specific covariates,
-#'   e.g. mode ~ price + catch (intercepts added per non-reference
-#'   alternative automatically).
+#'   e.g. mode ~ price + catch, an ordinary model formula (log(x), I(),
+#'   interactions, contrasts); intercepts per non-reference alternative
+#'   are added unless the formula has 0 + or - 1.
 #' @param data long format, one row per (chooser, alternative), with an
 #'   idx column or attribute (chooser, alternative); a plain data frame
 #'   works, and so does a dfidx object (dfidx is not a dependency).
@@ -307,14 +384,54 @@
        call. = FALSE)
 }
 
+# The right-hand side through model.frame/model.matrix, so log(x),
+# I(x^2), x:z and factor contrasts mean what they mean in R. Term labels
+# used to be looked up as literal column names, and the intercept flag
+# was ignored (#472). The global intercept is unidentified in a choice
+# model and is always dropped; the formula's intercept flag instead
+# switches the alternative-specific intercepts.
+.covariate_matrix <- function(formula, data) {
+  df <- as.data.frame(data)
+  df$idx <- NULL
+  # dfidx wraps columns in xseries; model.frame wants plain vectors
+  df[] <- lapply(df, function(col) {
+    if (inherits(col, "xseries")) class(col) <- setdiff(class(col), "xseries")
+    col
+  })
+  tt <- terms(formula, data = df)
+  if (any(grepl("|", attr(tt, "term.labels"), fixed = TRUE)))
+    stop(paste("multi-part formulas (`|`) are not supported; give",
+               "alternative-specific covariates only, and `0 +` to drop",
+               "the alternative intercepts"), call. = FALSE)
+  tt <- delete.response(tt)
+  attr(tt, "intercept") <- 1L
+  mf <- model.frame(tt, df, na.action = na.pass)
+  mm <- model.matrix(tt, mf)
+  mm[, colnames(mm) != "(Intercept)", drop = FALSE]
+}
+
 mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
                         maxit = 400L) {
   t0 <- Sys.time()
+  maxit <- .check_count(maxit, "maxit")
   idx <- if (!is.null(data$idx)) data$idx else attr(data, "idx")
-  alt_f <- as.factor(idx[[2]])
+  # a stale or short idx used to select a prefix of data in silence: ord
+  # was built from idx alone, so rows past it never entered the fit (#520)
+  # (dfidx may append nesting columns after these two)
+  if (is.null(idx) || length(dim(idx)) != 2L || ncol(idx) < 2L)
+    stop(paste("data needs an idx column or attribute whose first two",
+               "columns are (chooser, alternative)"), call. = FALSE)
+  if (NROW(idx) != nrow(data))
+    stop(sprintf("idx must have exactly nrow(data) rows (got %d for %d data rows)",
+                 NROW(idx), nrow(data)), call. = FALSE)
+  idx <- as.data.frame(idx)
+  # droplevels: a filtered panel keeps its unused factor levels, and as
+  # integer codes those levels left gaps that were read as phantom
+  # choosers or alternatives (#464). Code the OBSERVED labels only.
+  alt_f <- droplevels(as.factor(idx[[2]]))
   alt <- as.integer(alt_f)
   J <- max(alt)
-  id_f <- as.factor(idx[[1]])
+  id_f <- droplevels(as.factor(idx[[1]]))
   ids <- as.integer(id_f)
   # Canonical (observation, alternative) order BEFORE anything is built.
   # The core reshape is positional, so a dfidx in alternative-major or
@@ -325,18 +442,35 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
   alt <- alt[ord]; ids <- ids[ord]
   # the same positional reshape lives here (#230)
   .check_choice_sets(ids, alt, J)
-  # dfidx wraps columns in xseries, under which %in% misbehaves; coerce
-  resp <- as.vector(unclass(data[[as.character(formula[[2]])]]))[ord]
+  # dfidx wraps columns in xseries, under which %in% misbehaves; coerce.
+  # But unclass on a factor exposes its level CODES (FALSE/TRUE -> 1/2),
+  # so a factor response goes through its labels instead (#512)
+  resp_raw <- data[[as.character(formula[[2]])]]
+  resp <- if (is.factor(resp_raw)) as.character(resp_raw) else
+    as.vector(unclass(resp_raw))
+  resp <- resp[ord]
   # exactly one chosen row per observation, keyed by id (#324, #435)
   choice <- .choices_by_id(ids, alt, resp, levels(id_f))
   Tn <- length(choice)
   r <- .check_rank(r, J)
-  rhs <- attr(terms(formula), "term.labels")
-  Xcov <- as.matrix(as.data.frame(data)[ord, rhs, drop = FALSE])
-  Xint <- matrix(0, nrow(Xcov), J - 1L)
-  for (j in 2:J) Xint[alt == j, j - 1L] <- 1
-  X <- cbind(Xint, Xcov)
-  colnames(X) <- c(paste0("(Intercept):", levels(alt_f)[2:J]), rhs)
+  Xcov <- .covariate_matrix(formula, data)[ord, , drop = FALSE]
+  if (attr(terms(formula), "intercept") == 1L) {
+    Xint <- matrix(0, nrow(Xcov), J - 1L)
+    for (j in 2:J) Xint[alt == j, j - 1L] <- 1
+    X <- cbind(Xint, Xcov)
+    colnames(X) <- c(paste0("(Intercept):", levels(alt_f)[2:J]),
+                     colnames(Xcov))
+  } else {
+    # `0 +` / `- 1` drops the alternative-specific intercepts (#472)
+    if (!ncol(Xcov))
+      stop("the formula has no covariates and no intercepts to fit",
+           call. = FALSE)
+    X <- Xcov
+  }
+  .check_identified(X, Tn, J)
+  # without intercepts an unchosen alternative is not a separation
+  unchosen <- if (attr(terms(formula), "intercept") == 1L)
+    .never_chosen(choice, J, levels(alt_f)) else character(0)
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
   nodes <- .nodes3(Qf, Qz, r)
@@ -364,7 +498,9 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
   structure(list(coefficients = beta,
                  covariance_par = fit$par[-seq_len(nb)],
                  logLik = -fit$value, time = secs,
-                 convergence = fit$convergence, J = J, r = r),
+                 convergence = if (length(unchosen)) 2L
+                               else fit$convergence,
+                 J = J, r = r),
             class = "mlogit_fast")
 }
 

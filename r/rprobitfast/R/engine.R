@@ -20,10 +20,18 @@
 # loop, deterministic to quadrature accuracy.
 
 .gh1 <- function(Q) {
+  if (length(Q) != 1L || !is.numeric(Q) || !is.finite(Q) || Q < 1 ||
+      Q != round(Q))
+    stop(sprintf("a Gauss-Hermite order must be one positive integer; got %s",
+                 paste(format(Q), collapse = ", ")), call. = FALSE)
+  Q <- as.integer(Q)
   J <- diag(0, Q)
-  off <- sqrt(seq_len(Q - 1))
-  J[cbind(seq_len(Q - 1), 2:Q)] <- off
-  J[cbind(2:Q, seq_len(Q - 1))] <- off
+  # i and i + 1, not 2:Q: at Q = 1, 2:Q is c(2, 1), not empty, and the
+  # one-node rule (x = 0, w = 1) died on an out-of-bounds index (#504)
+  i <- seq_len(Q - 1L)
+  off <- sqrt(i)
+  J[cbind(i, i + 1L)] <- off
+  J[cbind(i + 1L, i)] <- off
   e <- eigen(J, symmetric = TRUE)
   list(x = e$values, w = e$vectors[1, ]^2)
 }
@@ -109,7 +117,11 @@
            call. = FALSE)
     v <- y == 1
   } else {
+    # labels: "TRUE"/"FALSE" (and spellings as.logical knows) or "0"/"1",
+    # which is how a factor response arrives (#512)
     v <- as.logical(y)
+    v[!is.na(y) & y == "1"] <- TRUE
+    v[!is.na(y) & y == "0"] <- FALSE
     if (any(is.na(v) & !is.na(y)))
       stop("the chosen indicator must be logical or 0/1", call. = FALSE)
   }
@@ -160,8 +172,8 @@
 .check_rank <- function(r, J) {
   rmax <- max(J - 2L, 0L)
   if (is.null(r)) return(as.integer(min(2L, rmax)))
-  r <- as.integer(r)
-  if (length(r) != 1L || is.na(r) || r < 0L || r > rmax)
+  r <- .check_count(r, "factor rank r")
+  if (r > rmax)
     stop(sprintf(paste0("factor rank r = %s is not identified at J = %d ",
                         "alternatives: with unit idiosyncratic variances ",
                         "the utility scale is fixed only for ",
@@ -272,11 +284,76 @@
             want_grad = FALSE)$value
 }
 
+# A finite, non-negative whole number. as.integer() floored r = 1.9 to
+# rank 1 and fitted a different model than the one asked for (#479);
+# optim took any maxit it was handed (#560).
+.check_count <- function(x, name) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) ||
+      x != round(x) || x < 0)
+    stop(sprintf("%s must be a finite non-negative whole number; got %s",
+                 name, paste(format(x), collapse = ",")), call. = FALSE)
+  as.integer(x)
+}
+
+# Mean-design columns that within-choice-set contrasts do not identify:
+# a covariate common to every alternative, or one duplicating a
+# generated intercept, lies on an exact likelihood ridge, and BFGS
+# reported an arbitrary point on it as converged (#581). X rows are in
+# (observation, alternative) order; a column is aliased when its
+# contrast residual on the earlier kept columns is below tol of its own
+# contrast norm (Gram scale).
+.check_identified <- function(X, Tn, J, tol = 1e-10) {
+  p <- ncol(X)
+  if (p == 0L || J < 2L) return(invisible(NULL))
+  base <- (seq_len(Tn) - 1L) * J + 1L
+  Dc <- X[-base, , drop = FALSE] -
+    X[rep(base, each = J - 1L), , drop = FALSE]
+  G <- crossprod(Dc)
+  kept <- integer(0); aliased <- integer(0)
+  for (k in seq_len(p)) {
+    gkk <- G[k, k]
+    resid <- gkk
+    if (gkk > 0 && length(kept)) {
+      g <- G[kept, k]
+      coef <- qr.solve(G[kept, kept, drop = FALSE], g, tol = 1e-14)
+      resid <- gkk - sum(g * coef)
+    }
+    if (gkk > 0 && resid > tol * gkk) kept <- c(kept, k)
+    else aliased <- c(aliased, k)
+  }
+  if (length(aliased))
+    stop(sprintf(paste("mean-design column(s) %s are not identified from",
+                       "within-choice-set contrasts: each is constant",
+                       "across the alternatives of every observation or a",
+                       "linear combination of earlier columns (the",
+                       "generated intercepts come first); drop them",
+                       "(#581)"),
+                 paste(colnames(X)[aliased], collapse = ", ")),
+         call. = FALSE)
+  invisible(NULL)
+}
+
+# With alternative intercepts, an alternative nobody chose has no
+# finite MLE: its intercept runs to -Inf, and BFGS stopped on its
+# tolerance at a tolerance-dependent point reported as converged
+# (#496). Returns the never-chosen labels (empty when all are chosen).
+.never_chosen <- function(choice, J, labels) {
+  miss <- setdiff(seq_len(J), choice)
+  if (length(miss))
+    warning(sprintf(paste("alternative(s) %s are never chosen, so their",
+                          "intercepts have no finite MLE (complete",
+                          "separation); convergence is reported as 2.",
+                          "Drop those alternatives."),
+                    paste(labels[miss], collapse = ", ")), call. = FALSE)
+  labels[miss]
+}
+
 #' Exact multinomial probit, mlogit-style interface
 #'
 #' @param formula choice ~ alternative-specific covariates,
-#'   e.g. mode ~ price + catch (intercepts added per non-reference
-#'   alternative automatically).
+#'   e.g. mode ~ price + catch, an ordinary model formula (log(x), I(),
+#'   interactions, contrasts); intercepts per non-reference alternative
+#'   are added unless the formula has 0 + or - 1.
 #' @param data long format, one row per (chooser, alternative), with an
 #'   idx column or attribute (chooser, alternative); a plain data frame
 #'   works, and so does a dfidx object (dfidx is not a dependency).

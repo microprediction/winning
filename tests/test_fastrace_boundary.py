@@ -346,3 +346,238 @@ def test_separated_kernel_scale_invariance(spread):
         pc = price(10.0 ** e)
         assert np.all(np.isfinite(pc)), e
         assert np.max(np.abs(pc - p1)) < 1e-9, (e, pc, p1)
+
+
+# --- #506 #516 #519 #522 #602: values are checked, not only shapes --------
+# Signed scales, reversed windows, NaN factor nodes and zero Chebyshev
+# orders used to reach the lattices and return finite but impossible
+# answers (negative "probabilities", or the law of a different model).
+
+BAD_SCALES = [0.0, -1.0, np.nan, np.inf]
+TOPK_MU = np.array([0.0, 0.2, 0.7])
+
+TOPK_VALUE_CALLS = {
+    "top_k": lambda mu, sd, lo, hi: fastrace.top_k(mu, sd, 1, lo, hi, 1001),
+    "top_k_slopes":
+        lambda mu, sd, lo, hi: fastrace.top_k_slopes(mu, sd, 1, lo, hi, 1001),
+    "top_k_jacobians":
+        lambda mu, sd, lo, hi: fastrace.top_k_jacobians(mu, sd, 1, lo, hi,
+                                                        1001),
+    "rank_marginals":
+        lambda mu, sd, lo, hi: fastrace.rank_marginals(mu, sd, lo, hi, 1001),
+    "rank_marginal_jacobian":
+        lambda mu, sd, lo, hi: fastrace.rank_marginal_jacobian(mu, sd, 1, lo,
+                                                               hi, 1001),
+}
+
+
+@pytest.mark.parametrize("name", sorted(TOPK_VALUE_CALLS))
+def test_topk_rank_reject_bad_scales_and_windows(name):
+    call = TOPK_VALUE_CALLS[name]
+    call(TOPK_MU, np.ones(3), -8.0, 9.0)                    # valid control
+    for s in BAD_SCALES:                                    # #506
+        with pytest.raises(ValueError, match=r"sd\[1\]"):
+            call(TOPK_MU, np.array([1.0, s, 1.0]), -8.0, 9.0)
+    with pytest.raises(ValueError, match=r"mu\[0\]"):
+        call(np.array([np.nan, 0.2, 0.7]), np.ones(3), -8.0, 9.0)
+    for lo, hi in [(9.0, -8.0), (0.0, 0.0), (np.nan, 9.0), (-8.0, np.inf),
+                   (-np.inf, 9.0)]:                         # #516
+        with pytest.raises(ValueError, match="window"):
+            call(TOPK_MU, np.ones(3), lo, hi)
+
+
+def test_topk_reversed_window_used_to_negate_mass():
+    q = np.asarray(fastrace.top_k(TOPK_MU, np.ones(3), 1, -8.0, 9.0, 1001))
+    assert np.all(q > 0) and abs(q.sum() - 1) < 1e-9
+
+
+def test_top_k_window_controls_and_scales():
+    lo, hi = fastrace.top_k_window(TOPK_MU, np.ones(3), 1)
+    assert np.isfinite(lo) and np.isfinite(hi) and hi > lo
+    for s in BAD_SCALES:
+        with pytest.raises(ValueError, match=r"sd\[1\]"):
+            fastrace.top_k_window(TOPK_MU, np.array([1.0, s, 1.0]), 1)
+    for delta, pad in [(1.0, 2.0), (np.inf, 2.0), (0.0, 2.0), (np.nan, 2.0),
+                       (1e-12, -2.0), (1e-12, np.nan), (1e-12, np.inf)]:
+        with pytest.raises(ValueError, match="delta|pad_sds"):
+            fastrace.top_k_window(TOPK_MU, np.ones(3), 1, delta, pad)
+
+
+@pytest.mark.parametrize("name", sorted(FACTOR_CALLS))
+def test_factor_kernels_reject_bad_values(name):
+    call = FACTOR_CALLS[name]
+    for s in BAD_SCALES:                                    # #519
+        mu, v, d, f, w = _factor_ok()
+        d[1] = s
+        with pytest.raises(ValueError, match=r"d\[1\]"):
+            call((mu, v, d, f, w))
+    for which, idx in [("mu", 2), ("v", (1, 0)), ("f", (1, 0)),
+                       ("w", 0)]:                           # #602
+        for bad in (np.nan, np.inf):
+            a = list(_factor_ok())
+            pos = "mu v d f w".split().index(which)
+            a[pos] = a[pos].copy()
+            a[pos][idx] = bad
+            with pytest.raises(ValueError, match=rf"{which}\["):
+                call(tuple(a))
+
+
+def test_nan_factor_node_no_longer_prices_another_law():
+    # #602: the bad two-node rule returned exactly the one-node law
+    mu = np.array([0.0, 0.3, 1.0])
+    V = np.array([[0.0], [1.0], [-0.5]])
+    good = fastrace.win_probabilities_factor(
+        mu, V, np.ones(3), np.array([[-5.0], [5.0]]), np.array([.5, .5]), 501)
+    assert abs(good[1] - 1) < 1e-9
+    with pytest.raises(ValueError, match=r"f\[1, 0\] = NaN"):
+        fastrace.win_probabilities_factor(
+            mu, V, np.ones(3), np.array([[-5.0], [np.nan]]),
+            np.array([.5, .5]), 501)
+
+
+def test_factor_jvp_direction_must_be_finite():
+    mu, v, d, f, w = _factor_ok()
+    with pytest.raises(ValueError, match=r"h\[1\]"):
+        fastrace.jacobian_vector_product(mu, v, d, f, w,
+                                         np.array([0., np.nan, 0., 0.]), 129)
+
+
+@pytest.mark.parametrize("name", ["forward_and_slopes",
+                                  "win_probabilities_factor",
+                                  "ordered_prefixes"])
+def test_factor_explicit_windows_are_checked(name):
+    a = _factor_ok()
+    extra = {"k": 2} if name == "ordered_prefixes" else {}
+    call = getattr(fastrace, name)
+    call(*a, 129, np.nan, np.nan, **extra)                  # automatic
+    call(*a, 129, -9.0, 12.0, **extra)                      # explicit
+    for lo, hi in [(12.0, -9.0), (1.0, 1.0), (np.nan, 12.0), (-9.0, np.inf)]:
+        with pytest.raises(ValueError, match="window"):
+            call(*a, 129, lo, hi, **extra)
+
+
+def test_separated_kernel_orders_must_be_positive():
+    # #522: rm = 0 or rs = 0 panicked (heterogeneous D) or was silently
+    # replaced by 1 (homogeneous D)
+    mu = np.array([0.0, 0.4, 1.0])
+    V, F, W = np.zeros((3, 1)), np.zeros((2, 1)), np.array([0.5, 0.5])
+    for D in (np.ones(3), np.array([1.0, 2.0, 3.0])):
+        fastrace.win_probabilities_factor_separated(mu, V, D, F, W,
+                                                    points=101, rm=1, rs=1)
+        for rm, rs in [(0, 14), (48, 0), (0, 0)]:
+            with pytest.raises(ValueError, match="Chebyshev orders"):
+                fastrace.win_probabilities_factor_separated(
+                    mu, V, D, F, W, points=101, rm=rm, rs=rs)
+
+
+def test_structured_kernels_reject_bad_values():
+    mu, sd, v, starts, an, aw = _block_ok()
+    parent = np.array([2, 2, -1], dtype=np.int64)
+    lam = np.array([0.0, 0.0, 0.3])
+    calls = {
+        "block_race": lambda mu, sd, v, an, aw, lo=np.nan, hi=np.nan:
+            fastrace.block_race(mu, sd, v, starts, an, aw, 129, lo, hi),
+        "block_race_r": lambda mu, sd, v, an, aw, lo=np.nan, hi=np.nan:
+            fastrace.block_race_r(mu, sd, v[:, None], starts, an[:, None],
+                                  aw, 129, lo, hi),
+        "tree_race": lambda mu, sd, v, an, aw, lo=-8.0, hi=8.0:
+            fastrace.tree_race(mu, sd, v, starts, parent, lam, an, aw, 129,
+                               lo, hi),
+    }
+    for name, call in calls.items():
+        p = np.asarray(call(mu, sd, v, an, aw))             # valid control
+        assert abs(p.sum() - 1) < 1e-6, name
+        for s in BAD_SCALES:                                # #519
+            bad = sd.copy(); bad[1] = s
+            with pytest.raises(ValueError, match=r"sd\[1\]"):
+                call(mu, bad, v, an, aw)
+        for arg in range(5):                                # #602 family
+            if arg == 1:
+                continue
+            a = [mu.copy(), sd, v.copy(), an.copy(), aw.copy()]
+            a[arg][0] = np.nan
+            with pytest.raises(ValueError, match="not finite"):
+                call(*a)
+        for lo, hi in [(8.0, -8.0), (np.nan, 8.0), (-8.0, np.inf)]:  # #516
+            with pytest.raises(ValueError, match="window"):
+                call(mu, sd, v, an, aw, lo, hi)
+    with pytest.raises(ValueError, match="window"):
+        calls["tree_race"](mu, sd, v, an, aw, np.nan, np.nan)
+
+
+def test_per_winner_reduced_rank_rejects_bad_values():
+    mu, v, d, _, _ = _factor_ok()
+    z = np.zeros((10, 2))
+    for s in BAD_SCALES:
+        dd = d.copy(); dd[1] = s
+        with pytest.raises(ValueError, match=r"d\[1\]"):
+            fastrace.per_winner_reduced_rank(mu, v, dd, z)
+    zz = z.copy(); zz[3, 1] = np.nan
+    with pytest.raises(ValueError, match=r"z\[3, 1\]"):
+        fastrace.per_winner_reduced_rank(mu, v, d, zz)
+
+
+# --- #526: an empty classic field is a ValueError, not a panic ------------
+
+CLASSIC_DENSITY = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05]
+
+
+def test_classic_empty_field_is_a_value_error():
+    assert len(fastrace.classic_exact_state_prices(CLASSIC_DENSITY,
+                                                   [0.0])) == 1
+    with pytest.raises(ValueError, match="offsets is empty"):
+        fastrace.classic_exact_state_prices(CLASSIC_DENSITY, [])
+    for n_iter in (0, 1, 3):
+        with pytest.raises(ValueError, match="prices is empty"):
+            fastrace.classic_exact_calibrate(CLASSIC_DENSITY, [],
+                                             [1.0, 0.0, -1.0], [], n_iter)
+    with pytest.raises(ValueError, match="not finite"):
+        fastrace.classic_exact_state_prices(CLASSIC_DENSITY, [0.0, np.nan])
+
+
+# --- #517: a tree has exactly one root ------------------------------------
+
+def test_tree_race_rejects_a_forest():
+    mu = np.array([0.0, 1.0])
+    starts = np.array([0, 1], dtype=np.int64)
+    args = (-mu, np.ones(2), np.zeros(2), starts)
+    with pytest.raises(ValueError, match="exactly one root.*got 2"):
+        fastrace.tree_race(*args, np.array([-1, -1], dtype=np.int64),
+                           np.zeros(2), np.array([0.0]), np.ones(1),
+                           257, -9.0, 10.0)
+    # the zero-strength common root is the independent race
+    p = np.asarray(fastrace.tree_race(
+        *args, np.array([2, 2, -1], dtype=np.int64), np.zeros(3),
+        np.array([0.0]), np.ones(1), 257, -9.0, 10.0))
+    assert abs(p.sum() - 1) < 1e-6 and p[0] > p[1]
+
+
+# --- #473: the calibration offset grid must descend -----------------------
+
+def test_classic_calibrate_requires_descending_offsets():
+    from winning.classic.lattice import skew_normal_density
+    d = list(skew_normal_density(50, 0.1))
+    target = fastrace.classic_exact_state_prices(d, [-3.0, 0.5, 2.0])
+    desc = [float(x) for x in range(24, -26, -1)]
+    a = fastrace.classic_exact_calibrate(d, target, desc, [0.0] * 3, 3)
+    back = fastrace.classic_exact_state_prices(d, a)
+    assert max(abs(x - y) for x, y in zip(back, target)) < 1e-4
+    for bad in (desc[::-1], desc[:10] + [30.0] + desc[10:],
+                desc[:5] + [np.nan] + desc[5:]):
+        with pytest.raises(ValueError, match="offset_samples"):
+            fastrace.classic_exact_calibrate(d, target, bad, [0.0] * 3, 3)
+
+
+# --- #601: the separated pass never returns an impossible law -------------
+
+def test_separated_kernel_falls_back_outside_its_regime():
+    mu = np.array([0.4, -1.0, -0.6])
+    V, F, W = np.zeros((3, 1)), np.zeros((1, 1)), np.ones(1)
+    D = np.array([1e-4, 0.16, 0.16])
+    p, total = fastrace.win_probabilities_factor_separated(
+        mu, V, D, F, W, points=1501, rm=48, rs=14)
+    p = np.asarray(p)
+    ref, _ = fastrace.win_probabilities_factor(mu, V, D, F, W, 1501)
+    assert np.all(p >= 0) and np.all(p <= 1)
+    assert np.max(np.abs(p - np.asarray(ref))) < 1e-9
+    assert abs(total - 1) < 1e-6

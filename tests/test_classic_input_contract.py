@@ -103,3 +103,12 @@ def test_inverse_refuses_a_target_that_is_not_relative_mass(bad, msg):
     d = skew_normal_density(50, 0.1)
     with pytest.raises(ValueError, match=msg):
         state_price_implied_ability(bad, d)
+
+
+@pytest.mark.parametrize("kw", [dict(unit=0), dict(unit=-0.1), dict(unit=0.1, scale=0),
+                                dict(unit=0.1, scale=-1), dict(unit=float("nan"))])
+def test_skew_normal_density_refuses_nonpositive_unit_or_scale(kw):
+    # #509: a negative unit or scale was normalised away into another law
+    from winning.classic.lattice import skew_normal_density
+    with pytest.raises(ValueError, match="finite positive"):
+        skew_normal_density(50, **kw)

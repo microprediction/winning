@@ -31,7 +31,7 @@ for cs in d["cases"]
         v = cs["verb"] == "hermite" ?
             Float64[size(p, 1), size(p, 2)] :
             Float64[x for x in (ndims(p) == 2 ? vec(permutedims(p)) :
-                                vec(collect(p)))[1:min(6, length(p))]]
+                                vec(collect(p)))]   # all of it (#490)
         (all(isfinite, p) ? "ACCEPT" : "ACCEPT_NONFINITE",
          all(isfinite, v) ? v : Float64[])
     catch e

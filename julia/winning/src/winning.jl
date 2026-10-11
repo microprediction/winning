@@ -277,23 +277,30 @@ end
 
 # ---- race setup (adaptive factor quadrature, matching R) -----------
 
+# A scalar D is the same variance for everyone, as as_idio states;
+# a zero variance is a contestant with no idiosyncratic noise, which
+# this lattice cannot represent -- it returned NaN where python, R
+# and the browser all refuse. Found by the cross-port divergence
+# scan. Shared by the winner race and every top-k/rank entry point,
+# which used to collect(D) themselves and failed on a scalar (#485).
+function _as_idio(D, n::Integer; name = "D")
+    D === nothing && return ones(n)
+    Dv = D isa Number ? [Float64(D)] : Float64.(vec(collect(D)))
+    length(Dv) == 1 && (Dv = fill(Dv[1], n))
+    length(Dv) == n || throw(ArgumentError(
+        name * " must be a scalar or one idiosyncratic variance per " *
+        "contestant; got " * string(length(Dv)) * " for " * string(n)))
+    all(isfinite, Dv) || throw(ArgumentError(name * " has a non-finite entry"))
+    all(>(0.0), Dv) || throw(ArgumentError(
+        name * " must be strictly positive here: a zero variance is a " *
+        "contestant the lattice cannot represent"))
+    return Dv
+end
+
 function _race_setup(mu, V, D, F, W, base)
     mu = Float64.(collect(mu))
     n = length(mu)
-    D = D === nothing ? ones(n) : Float64.(collect(D))
-    # A scalar D is the same variance for everyone, as as_idio states;
-    # a zero variance is a contestant with no idiosyncratic noise, which
-    # this lattice cannot represent -- it returned NaN where python, R
-    # and the browser all refuse. Found by the cross-port divergence
-    # scan.
-    length(D) == 1 && (D = fill(D[1], n))
-    length(D) == n || throw(ArgumentError(
-        "D must be a scalar or one idiosyncratic variance per contestant; " *
-        "got " * string(length(D)) * " for " * string(n)))
-    all(isfinite, D) || throw(ArgumentError("D has a non-finite entry"))
-    all(>(0.0), D) || throw(ArgumentError(
-        "D must be strictly positive here: a zero variance is a " *
-        "contestant the lattice cannot represent"))
+    D = _as_idio(D, n)
     if V === nothing
         Vm = zeros(n, 1)
         Fm = zeros(1, 1)
@@ -319,18 +326,25 @@ function _race_setup(mu, V, D, F, W, base)
             sharp = sqrt(2) * maximum(sqrt.(vec(sum(Vm .^ 2, dims = 2))) ./
                                       sqrt.(max.(D, TINY)))
             r = size(Vm, 2)
-            if r >= 2 && sharp > 3.0
+            # per-rank (Gauss-Hermite order cap, sharpness past which even
+            # that order loses to the low-discrepancy family): GH_RULE in
+            # the python reference, identical in R and the browser. Julia
+            # kept the older single 3.0 cutover, rank-3 cap 15 and the
+            # rank-one handover at Q > 201, where GH-169 was 42bp off on
+            # the 8-runner stress field at sharpness 21 (#528, #153).
+            cap = r == 1 ? 201 : r == 2 ? 41 : r == 3 ? 31 : 15
+            sharp_max = r == 2 ? 3.75 : r == 3 ? 4.75 : 3.0
+            if r >= 2 && sharp > sharp_max
                 hw = halton_normal_nodes(r, 2^13)
                 Fm, Wv = hw.F, hw.W
-            elseif r == 1 && ceil(8 * sharp) > 201
+            elseif r == 1 && ceil(8 * sharp) > 80
                 Q = Int(min(ceil(8 * sharp), 4001))
                 Fm = reshape(qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
                 Wv = fill(1.0 / Q, Q)
-            elseif 15.0^r > 1e5
+            elseif Float64(cap)^r > 1e5
                 hw = halton_normal_nodes(r, 2^13)
                 Fm, Wv = hw.F, hw.W
             else
-                cap = r == 1 ? 201 : r == 2 ? 41 : 15
                 Q = Int(min(max(ceil(8 * sharp), 15), cap))
                 hw = hermite_nodes(size(Vm, 2), Q)
                 Fm, Wv = hw.F, hw.W
@@ -409,6 +423,7 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
                             W = nothing, base = "normal", points = 257,
                             return_slopes = false, window = "bulk",
                             delta = 1e-12)
+    _check_points(points)
     st = _race_setup(mu, V, D, F, W, base)
     n = length(st.mu)
     sd = sqrt.(st.D)
@@ -451,12 +466,24 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
     return p ./ total
 end
 
+# A lattice size is a whole number >= 2: x[2] - x[1] raised BoundsError
+# at 1 and 0 (#444), the contract python's shapes.as_points states.
+function _check_points(points)
+    (points isa Real && isfinite(points) && points == floor(points)) ||
+        throw(ArgumentError("points must be a whole number of lattice points; got $points"))
+    points >= 2 ||
+        throw(ArgumentError("points must be at least 2: a lattice of $points point(s) has no spacing"))
+    return Int(points)
+end
+
 """Invert the general race: mean-zero mu with matching probabilities,
-by the damped own-slope iteration with residual-proportional caps."""
+by the damped own-slope iteration with residual-proportional caps,
+in the field's own units (#100)."""
 function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
                              W = nothing, base = "normal", points = 257,
                              n_iter = 60, tol = 1e-8)
     target = Float64.(collect(p))
+    all(isfinite, target) || error("target probabilities must be finite")
     any(target .<= 0) && error("all target probabilities must be positive")
     # a target is a law up to a positive factor: when its SUM overflows
     # (entries all finite) rescale by the max first, as python does since
@@ -468,19 +495,37 @@ function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
     end
     target ./= tot
     logt = log.(target)
-    mu = -(logt .- sum(logt) / length(logt)) ./ 2
-    alpha = length(target) > 2 ? 1.0 : 0.7
+    n = length(target)
+    # The field's contrast scale, as python and R measure it: the warm
+    # start and the caps were unit-variance numbers, so D = [.005, .01,
+    # .02] ended at a log residual of 51.6 while the same race at
+    # D * 100^2 converged (#100).
+    st = _race_setup(zeros(n), V, D, F, W, base)
+    Dn = sort(st.D)
+    medD = isodd(n) ? Dn[(n + 1) ÷ 2] : 0.5 * (Dn[n ÷ 2] + Dn[n ÷ 2 + 1])
+    Vc = st.V .- sum(st.V, dims = 1) ./ n
+    scale = sqrt(medD + sum(Vc .^ 2) / n)
+    mu = -(logt .- sum(logt) / n) ./ 2 .* scale
+    # damped for a pair AND for a dominant pair at any n (top-two share
+    # above 0.8), whose Jacobi step two-cycles -- python's gate
+    top2 = n > 2 ? sum(sort(target)[end-1:end]) : 1.0
+    alpha = (n == 2 || top2 > 0.8) ? 0.7 : 1.0
+    resid_max = Inf
     for _ in 1:n_iter
         ps = race_probabilities(mu; V = V, D = D, F = F, W = W,
                                 base = base, points = points,
                                 return_slopes = true)
         resid = log.(max.(ps.p, TINY)) .- logt
-        maximum(abs.(resid)) < tol && break
-        dlogp = min.(ps.slopes ./ max.(ps.p, TINY), -1e-6)
-        lim = min.(2, 10 .* abs.(resid))
+        resid_max = maximum(abs.(resid))
+        resid_max < tol && break
+        dlogp = min.(ps.slopes ./ max.(ps.p, TINY), -1e-6 / scale)
+        lim = min.(2, 10 .* abs.(resid)) .* scale
         mu .-= clamp.(alpha .* resid ./ dlogp, -lim, lim)
         mu .-= sum(mu) / length(mu)
     end
+    # it used to stop at n_iter and return a plausible vector silently
+    resid_max < tol ||
+        @warn "abilities_from_race did not converge" resid_max n_iter tol
     return mu
 end
 

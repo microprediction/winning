@@ -77,3 +77,44 @@ def test_top_k_relaxation_is_reported():
         warnings.simplefilter("always")
         top_k_probabilities([0.0, 0.5], 1, D=[1.0, 1.0], base=student_base(2.1))
     assert any("relaxed delta" in str(w.message) for w in seen)
+
+
+def _narrow_core_base():
+    """Unit-variance normal mixture whose centre has scale 0.1 (#600)."""
+    from scipy.stats import norm
+    w, s = 0.99, 0.1
+    tt = np.sqrt((1 - w * s * s) / (1 - w))
+
+    def rows(z):
+        z = np.asarray(z, float)
+        S = w * norm.sf(z / s) + (1 - w) * norm.sf(z / tt)
+        f = w * norm.pdf(z / s) / s + (1 - w) * norm.pdf(z / tt) / tt
+        fp = (-w * z * norm.pdf(z / s) / s ** 3
+              - (1 - w) * z * norm.pdf(z / tt) / tt ** 3)
+        return np.maximum(S, 1e-300), f, fp
+    rows.resolution = s
+    rows.span = (30, 30)
+    exact = (w * w * norm.cdf(-0.2 / np.sqrt(2 * s * s))
+             + 2 * w * (1 - w) * norm.cdf(-0.2 / np.sqrt(s * s + tt * tt))
+             + (1 - w) ** 2 * norm.cdf(-0.2 / np.sqrt(2 * tt * tt)))
+    return rows, exact
+
+
+def test_bottom_k_honours_the_base_resolution():
+    """The reflected bottom-k grid dropped .resolution: the default 513
+    points raised a 1.0068 mass defect where top-k priced (#468)."""
+    from winning.factor.topk import bottom_k_probabilities, top_k_probabilities
+    base, exact = _narrow_core_base()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        top = top_k_probabilities([0.0, 0.2], 1, D=[1.0, 1.0], base=base)
+        bot = bottom_k_probabilities([0.0, 0.2], 1, D=[1.0, 1.0], base=base)
+    assert abs(top[1] - exact) < 1e-8
+    assert abs(bot[0] - exact) < 1e-8
+
+
+@pytest.mark.parametrize("window", ["bulkk", "", None, 3, True])
+def test_race_window_is_one_of_two_names(window):
+    """Every window but "bulk" used to mean span (#582)."""
+    with pytest.raises(ValueError, match="window"):
+        race_probabilities([0.0, 1.0, 2.0], D=[0.01, 4.0, 100.0], window=window)

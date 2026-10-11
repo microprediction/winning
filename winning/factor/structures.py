@@ -1,8 +1,10 @@
 """One race, five covariance grammars.
 
-Every model in this package is the SAME Gaussian min-race, Y = mu + noise;
-these dataclasses are declarative descriptions of the noise covariance that
-admit O(N)-per-lattice-point evaluation. Pass any of them as `structure=` to
+Every grammar describes the SAME min-race, Y = mu + noise; these
+dataclasses are declarative descriptions of the noise covariance that admit
+O(N)-per-lattice-point evaluation. With the normal base they are Gaussian
+covariance grammars; Independent and Factor also accept any supported smooth
+base, while Blocks, Nested and Tree are Gaussian only. Pass any of them as `structure=` to
 the front-door verbs (race_probabilities, calibrate_abilities, race_jacobian,
 polish_race):
 
@@ -54,7 +56,10 @@ class Factor:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from V, not D: a scalar D is one variance for every contestant
+        # and carries no count (#510)
+        V = np.asarray(self.V)
+        return len(V) if V.ndim else len(np.asarray(self.D))
 
 
 @dataclass(frozen=True)
@@ -65,7 +70,9 @@ class Blocks:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
 
 @dataclass(frozen=True)
@@ -78,7 +85,9 @@ class Nested:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
 
 @dataclass(frozen=True)
@@ -91,7 +100,9 @@ class Tree:
 
     @property
     def n(self):
-        return len(np.asarray(self.D))
+        # from the labels, not D: a scalar D is one variance for every
+        # contestant and carries no count (#510)
+        return len(np.asarray(self.cluster))
 
     @classmethod
     def from_linkage(cls, Z):
@@ -107,7 +118,12 @@ class Tree:
         n = len(Z) + 1
         nT = 2 * n - 1
         parent = -np.ones(nT, int)
-        rho = np.zeros(nT)
+        # d[t] = 1 - rho_t, the cophenetic DISTANCE-variance 2 h^2 at node
+        # t, kept directly rather than as 1 - rho: for near-duplicate
+        # leaves 1 - (1 - 2h^2) cancels to a few ulps (h = 1e-8 gives
+        # 2.2e-16 for an exact 2e-16), and every quantity below is a
+        # difference of these. A node with no parent has d = 1 (rho = 0).
+        d = np.ones(nT)
         for k in range(len(Z)):
             a, b, h = int(Z[k, 0]), int(Z[k, 1]), Z[k, 2]
             t = n + k
@@ -118,7 +134,7 @@ class Tree:
             # the h = 1/sqrt(2) horizon leave their branches independent.
             # Without the floor, clipping the negative root increment
             # silently inflates every other implied correlation.
-            rho[t] = max(1.0 - 2.0 * h * h, 0.0)
+            d[t] = min(2.0 * h * h, 1.0)
         lam = np.zeros(nT)
         # "increments nonnegative by linkage monotonicity" is a PREMISE
         # of this construction, and it was never checked. centroid and
@@ -131,7 +147,7 @@ class Tree:
         bad = []
         for t in range(n, nT):
             pa = parent[t]
-            lam2 = rho[t] - (rho[pa] if pa >= 0 else 0.0)
+            lam2 = (d[pa] if pa >= 0 else 1.0) - d[t]   # rho_t - rho_pa
             if lam2 < -1e-9:
                 bad.append((t, lam2))
             lam[t] = np.sqrt(max(lam2, 0.0))
@@ -147,9 +163,26 @@ class Tree:
                 "method (average, complete, ward), check with "
                 "scipy.cluster.hierarchy.is_monotonic first, or build "
                 "the Tree with explicit parent/strength.")
-        D = np.array([1.0 - rho[parent[i]] for i in range(n)])
+        # D_i = 1 - rho at the leaf's first merge = 2 h^2, EXACTLY. This
+        # was max(D, 1e-10): an absolute floor that changed every
+        # near-duplicate branch -- a two-leaf linkage at h = 1e-6 has
+        # D = 2e-12, the floor made it 1e-10, and the pair priced 0.556
+        # where the cophenetic model gives Phi(1) = 0.841 at every h,
+        # with off-unit marginal variances (#430). A positive residual is
+        # kept as it is; exactly zero (a merge at height 0: coincident
+        # leaves) has no representation as a lattice noise and is refused
+        # by name, as a zero D is everywhere else.
+        D = np.array([d[parent[i]] if parent[i] >= 0 else 1.0
+                      for i in range(n)])
+        zero = np.flatnonzero(D <= 0.0)
+        if zero.size:
+            raise ValueError(
+                f"leaf {int(zero[0])} merges at height 0 ({zero.size} "
+                "leaf/leaves do): coincident leaves have zero idiosyncratic "
+                "variance, which a tree race cannot price. Merge the "
+                "duplicates, or perturb them deliberately.")
         return cls(cluster=np.arange(n), loading=np.zeros(n),
-                   D=np.maximum(D, 1e-10), parent=parent, strength=lam)
+                   D=D, parent=parent, strength=lam)
 
 
 def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
@@ -234,10 +267,15 @@ def _loading_var(loading, n):
 def structure_variances(structure):
     """Total per-runner variance implied by a grammar structure (shared
     effects plus idiosyncratic): the marginal the generic inverter's
-    independent surrogate preconditioner matches."""
-    D = np.asarray(structure.D, float)
+    independent surrogate preconditioner matches. A scalar D is the same
+    variance for every contestant, as at every other boundary: it was
+    taken as a zero-dimensional array and len(D) raised TypeError, so a
+    scalar-D Blocks/Nested target priced by the forward could not be
+    inverted through the same structure (#510)."""
+    from ..shapes import as_idio
     if isinstance(structure, Independent):
-        return D.copy()
+        return np.array(np.asarray(structure.D, float), ndmin=1)
+    D = as_idio(structure.D, structure.n)
     if isinstance(structure, Factor):
         V = np.asarray(structure.V, float)
         return D + (V ** 2).sum(axis=1)
@@ -254,8 +292,13 @@ def structure_variances(structure):
     if isinstance(structure, Tree):
         from .blocks import _scalar_loading
         tot = D + _scalar_loading(structure.loading, "tree races") ** 2
+        from .blocks import _without_common_shock
         parent = np.asarray(structure.parent, int)
-        strength = np.asarray(structure.strength, float)
+        # Cluster labels are remapped below; a common ancestor's shock
+        # cancels and is no part of the surrogate's variance (#489)
+        n_clusters = len(np.unique(np.asarray(structure.cluster)))
+        strength = _without_common_shock(
+            parent, np.asarray(structure.strength, float), n_clusters)
         # Cluster labels are arbitrary comparable values, and the forward
         # dispatch says so: every tree/block kernel in blocks.py remaps
         # them with np.unique(..., return_inverse=True). This cast them

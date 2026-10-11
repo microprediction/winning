@@ -82,3 +82,25 @@ def test_singleton_fold_has_unit_multiplicity_and_price_one():
 def test_empty_fold_is_refused():
     with pytest.raises(ValueError, match="at least one"):
         winner_of_many([])
+
+
+def test_convolve_two_refuses_a_heavily_clipped_lower_tail():
+    # #608: 30% of runner A's convolved mass lies below the window; it was
+    # folded onto the edge atom, the mean correction then shifted the bulk,
+    # and a 37/63 race came back 82/18 with mass exactly one.
+    import numpy as np
+    import pytest
+    from winning.classic.lattice import convolve_two
+    L = 10
+
+    def atoms(spec):
+        d = np.zeros(2 * L + 1)
+        for k, p in spec:
+            d[L + k] = p
+        return d
+
+    with pytest.raises(ValueError, match="increase L"):
+        convolve_two(atoms([(7, .7), (-8, .3)]), atoms([(-7, .99), (-8, .01)]), L=L)
+    # the other runner's convolution is inside the window and unchanged
+    out = convolve_two(atoms([(-5, .9), (-3, .1)]), atoms([(2, .05), (4, .95)]), L=L)
+    assert abs(float(np.sum(out)) - 1) < 1e-12

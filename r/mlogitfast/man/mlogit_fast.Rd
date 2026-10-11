@@ -15,7 +15,12 @@ mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
 \arguments{
   \item{formula}{choice ~ covariates, with the response a logical
     chosen-alternative column and alternative-specific covariates on
-    the right-hand side.}
+    the right-hand side. The right-hand side is an ordinary model
+    formula (transformations such as \code{log(x)} or \code{I(x^2)},
+    interactions, factor contrasts). Alternative-specific intercepts
+    are added unless the formula removes the intercept with
+    \code{0 +} or \code{- 1}; multi-part (\code{|}) formulas are not
+    supported.}
   \item{data}{a long-format data frame, one row per (chooser,
     alternative), carrying an \code{idx} column or attribute whose
     first column is the chooser and second the alternative. A plain
@@ -33,13 +38,15 @@ mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
     integrals; a sharpness rule escalates to scrambled Sobol nodes when the
     conditional races become nearly deterministic.}
-  \item{maxit}{BFGS iteration cap.}
+  \item{maxit}{BFGS iteration cap, a non-negative whole number.}
 }
 \value{
 An object of class \code{mlogit_fast}: a list with
 \code{coefficients} (named covariate effects),
 \code{covariance_par} (loading parameters), \code{logLik},
-\code{time} (seconds), \code{convergence} (0 for success), \code{J}
+\code{time} (seconds), \code{convergence} (0 for success; 2, with a
+warning, when an alternative is never chosen, so its intercept has no
+finite MLE), \code{J}
 and \code{r}. A \code{print} method summarizes the fit.
 }
 \examples{
