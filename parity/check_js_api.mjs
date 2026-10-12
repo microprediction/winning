@@ -1988,6 +1988,63 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
         warned.length === 1 && warned[0].includes("did not reach the target"));
 }
 
+// --- classic: the ability forward takes the scratch sentinel (#662);
+// statePricesFromOffsets still refuses it (#438). Reference values are
+// python's ability_implied_state_prices on the same inputs.
+{
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const d = classic.skewNormalDensity(15, 0.2, { a: 0 });
+  for (const scratch of [Infinity, 0, -1]) {
+    const a = classic.dividendImpliedAbility([2, 4, scratch], d);
+    accepts(`dividends [2, 4, ${scratch}] round-trip through abilityImpliedStatePrices (#662)`,
+            () => classic.abilityImpliedStatePrices(a, d),
+            p => p[2] === 0 && maxAbs(p, [0.6553529940305943, 0.3446470059694057, 0]) < 1e-12,
+            p => String(p));
+  }
+  accepts("one live runner and a scratch price exactly [1, 0] (#662)",
+          () => classic.abilityImpliedStatePrices(classic.dividendImpliedAbility([2, Infinity], d), d),
+          p => p[0] === 1 && p[1] === 0, p => String(p));
+  // python: ability_implied_state_prices([-0.4, 0.3], d) (the support is
+  // wider than L here, so this is the clustered branch, not the plain one)
+  const live = [0.5367196595728523, 0.4632803404271477];
+  for (const at of [0, 1, 2]) {
+    const a = [-0.4, 0.3]; a.splice(at, 0, Infinity);
+    accepts(`a scratch at index ${at} keeps shape and order (#662)`,
+            () => classic.abilityImpliedStatePrices(a, d),
+            p => p.length === 3 && p[at] === 0
+                 && maxAbs(p.filter((_, i) => i !== at), live) < 1e-14, p => String(p));
+  }
+  const d200 = classic.skewNormalDensity(200, 0.1, { a: 0 });
+  accepts("an all-live in-window field equals statePricesFromOffsets (#662)",
+          () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], d200),
+          p => maxAbs(p, classic.statePricesFromOffsets(d200, [0, 0.7, 1.3, 2.1])) < 1e-15);
+  accepts("an all-live field wider than the lattice matches python (#662)",
+          () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], classic.skewNormalDensity(40, 0.1, { a: 0 })),
+          p => maxAbs(p, [0.28573759854465663, 0.2577847581738416, 0.23941631079393647,
+                          0.2170613324875653]) < 1e-14, p => String(p));
+  accepts("-Infinity runners split the pot, +Infinity alone is uniform (#662)",
+          () => [classic.abilityImpliedStatePrices([-Infinity, 0.3, -Infinity], d),
+                 classic.abilityImpliedStatePrices([Infinity, Infinity], d)],
+          ([a, b]) => maxAbs(a, [0.5, 0, 0.5]) === 0 && maxAbs(b, [0.5, 0.5]) === 0);
+  const d50 = classic.skewNormalDensity(50, 0.1, { a: 0 });
+  accepts("a far-separated field is clustered as python (#662)",
+          () => classic.abilityImpliedStatePrices([-40, -39, 40, 41, 42.5], d50),
+          p => maxAbs(p, [0.5277153991928714, 0.472284600798019, 3.4847031497493502e-12,
+                          3.072512437648325e-12, 2.5524467876884387e-12]) < 1e-14, p => String(p));
+  accepts("a no-chance runner far behind prices 0 (#662)",
+          () => classic.abilityImpliedStatePrices([0, 0.5, 400], d50),
+          p => p[2] === 0 && maxAbs(p, [0.5138576995988393, 0.4861423004011607, 0]) < 1e-14);
+  accepts("unit rescales the abilities (#662)",
+          () => classic.abilityImpliedStatePrices([-0.08, 0.06, Infinity], d, { unit: 0.2 }),
+          p => maxAbs(p, classic.abilityImpliedStatePrices([-0.4, 0.3, Infinity], d)) === 0);
+  rejects(classic.statePricesFromOffsets, [d, [0, Infinity]],
+          "statePricesFromOffsets still refuses the sentinel (#438, #662)", "finite");
+  rejects(classic.abilityImpliedStatePrices, [[0, NaN], d], "abilityImpliedStatePrices refuses NaN (#662)", "not a number");
+  rejects(classic.abilityImpliedStatePrices, [[0, "1"], d], "abilityImpliedStatePrices refuses a string (#662)", "not a number");
+  rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unti: 1 }], "abilityImpliedStatePrices refuses a misspelt option (#662)", "unknown option 'unti'");
+  rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unit: 0 }], "abilityImpliedStatePrices refuses unit 0 (#662)", "finite positive");
+}
+
 // --- classic: skewNormalDensity's domain (#509) and option typos (#561)
 for (const [args, why] of [[[50, 0], "unit 0"], [[50, -0.1], "unit < 0"],
                            [[50, 0.1, { scale: -1 }], "scale < 0"], [[50, 0.1, { scale: 0 }], "scale 0"]])
