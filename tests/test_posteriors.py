@@ -245,6 +245,25 @@ def test_validation(setup):
         feature_bandit_posterior(V, np.zeros(K), np.ones(K), y, 1.0)
 
 
+# ---------------------------------------------------------------- #634
+
+@pytest.mark.parametrize("S", [np.array([[1.0, 2.0], [2.0, 1.0]]),
+                               np.array([[1.0, 10.0], [0.0, 1.0]])],
+                         ids=["indefinite", "asymmetric"])
+def test_update_contrast_refuses_a_matrix_that_is_not_a_covariance_634(S):
+    with pytest.raises(ValueError, match="cov"):
+        wf.update_contrast(np.zeros(2), S, np.array([1.0, -1.0]),
+                           mean=0.0, var=1.0)
+
+
+def test_update_contrast_accepts_a_singular_covariance_634():
+    # a degenerate but valid prior (both coordinates equal) is conditioning
+    m, S2 = wf.update_contrast(np.zeros(2), np.ones((2, 2)),
+                               np.array([1.0, 0.0]), mean=1.0, var=1.0)
+    np.testing.assert_allclose(m, [0.5, 0.5])
+    np.testing.assert_allclose(S2, np.full((2, 2), 0.5))
+
+
 # ---------------------------------------------------------------- #669
 
 def _exact_contrast_posterior(V, D, a, var):

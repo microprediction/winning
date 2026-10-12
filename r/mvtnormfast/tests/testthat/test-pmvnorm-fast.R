@@ -361,3 +361,16 @@ test_that("the recentered deep-tail path agrees with mvtnorm", {
   expect_equal(attr(pf, "method"), "factor-recentered")
   expect_lt(abs(as.numeric(pf) / as.numeric(pm) - 1), 2e-2)
 })
+
+test_that("factorize_covariance refuses a tolerance outside (0, 1) and bad controls (#658)", {
+  # tol is on correlations: tol = Inf, or any tol >= 1, accepted the
+  # 0.9-equicorrelation matrix as diagonal and dropped its correlations
+  S <- matrix(0.9, 3, 3); diag(S) <- 1
+  for (t in list(Inf, 1, 2, 0, -1e-3, NaN, NA_real_, "1e-11"))
+    expect_error(factorize_covariance(S, tol = t), "tol")
+  for (r in list(-1, 1.5, Inf)) expect_error(factorize_covariance(S, max_rank = r), "max_rank")
+  for (k in list(0, 2.5, NaN)) expect_error(factorize_covariance(S, n_iter = k), "n_iter")
+  fd <- factorize_covariance(S)
+  expect_equal(ncol(fd$V), 1)
+  expect_lt(max(abs(fd$V %*% t(fd$V) + diag(fd$D) - S)), 1e-10)
+})
