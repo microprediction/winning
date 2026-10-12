@@ -653,23 +653,61 @@ pub fn ghk_prob_one_factor(mu: &[f64], v: &[f64], k: usize, d: &[f64], n: usize,
 
 /// The GHK recursion on a contrast problem: P(d < 0), d ~ N(a, C).
 ///
-/// The Cholesky ridge is RELATIVE to the contrast's mean variance. It was
-/// an absolute 1e-12 added to every diagonal, which is model noise in the
-/// utility unit: rescaling mu -> c mu, V -> c V, D -> c^2 D must leave the
-/// race unchanged, but at c = 1e-8 the binary favourite fell from
-/// Phi(1/sqrt 2) = 0.7602 to 0.5040 (#409, #101).
+/// The contrast covariance is factorised AS GIVEN whenever it has a
+/// Cholesky factor (python: _contrast_cholesky). An absolute 1e-12 ridge
+/// was model noise in the utility unit (#409, #101), and the relative
+/// ridge that replaced it, added always, still inflated a valid small
+/// pivot: two near-twins with variance 2^-43 priced [0.5, 0.167, 0.333]
+/// against the exact [0.5, 0.079, 0.421]; its 1e-300 floor was an
+/// absolute ridge below that scale. The matrix is brought to unit scale
+/// by an exact power of two, factorised unmodified, and given a ridge of
+/// 1e-12 of its unit mean variance only if that fails; the factor is
+/// scaled back exactly. An exactly zero contrast (a tie, Dirac scope)
+/// keeps the old floor.
 fn ghk_contrast(a: &[f64], mut c: Vec<f64>, m: usize, r_draws: usize,
                 seed: u64) -> f64 {
     let mut tr = 0.0f64;
     for d in 0..m {
         tr += c[d * m + d];
     }
-    let ridge = 1e-12 * (tr / m.max(1) as f64).max(1e-300);
-    for d in 0..m {
-        c[d * m + d] += ridge;
-    }
-    if !cholesky(&mut c, m) {
-        return f64::NAN;
+    tr /= m.max(1) as f64;
+    if tr > 0.0 && tr.is_finite() {
+        // tr = f 2^e with f in [0.5, 1); scale by 2^(2k), k = -floor(e/2),
+        // applied as two exact multiplications by 2^k so that a subnormal
+        // scale never needs an overflowing 2^(2k)
+        let e = tr.log2().floor() as i32 + 1;
+        let k = -(e.div_euclid(2));
+        let pk = 2f64.powi(k);
+        for x in c.iter_mut() {
+            *x = *x * pk * pk;
+        }
+        let saved = c.clone();
+        if !cholesky(&mut c, m) {
+            c = saved;
+            let mut ts = 0.0f64;
+            for d in 0..m {
+                ts += c[d * m + d];
+            }
+            let ridge = 1e-12 * ts / m as f64;
+            for d in 0..m {
+                c[d * m + d] += ridge;
+            }
+            if !cholesky(&mut c, m) {
+                return f64::NAN;
+            }
+        }
+        let back = 2f64.powi(-k);
+        for x in c.iter_mut() {
+            *x *= back;
+        }
+    } else {
+        let ridge = 1e-12 * tr.max(1e-300);
+        for d in 0..m {
+            c[d * m + d] += ridge;
+        }
+        if !cholesky(&mut c, m) {
+            return f64::NAN;
+        }
     }
     let mut rng = Xo::new(seed);
     // draw-major layout: z[t] is an R-vector; the running mean for step t is

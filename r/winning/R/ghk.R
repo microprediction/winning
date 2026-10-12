@@ -72,6 +72,35 @@
 # truncation, which this omits, so it is an own-slope for a preconditioner
 # and not a gradient for an optimiser (measured 5-25% above central
 # differences, which the adaptive damping absorbs).
+# k with x 2^(2k) of order one (x > 0 finite), else 0.
+.pow2_half_exponent <- function(x) {
+  if (!(is.finite(x) && x > 0)) return(0)
+  -(floor(log2(x)) + 1) %/% 2
+}
+
+# Lower Cholesky factor of a contrast covariance, AS GIVEN whenever it has
+# one (python: winning.methods.native._contrast_cholesky). An absolute
+# 1e-12 ridge was model noise in the utility unit (#101, #409), and the
+# relative ridge that replaced it, added always, still inflated a valid
+# small pivot (near-twins with variance 2^-43 priced [0.5, 0.167, 0.333]
+# for the exact [0.5, 0.079, 0.421]), and its 1e-300 floor was an absolute
+# ridge below that scale (max error 0.159 at scale 2^-525). The matrix is
+# brought to unit scale by an exact power of two, factorised unmodified,
+# given a ridge of 1e-12 of its unit mean variance only if that fails, and
+# the factor scaled back exactly. An exactly zero contrast (a tie, Dirac
+# scope) keeps the old floor.
+.contrast_chol <- function(C) {
+  m <- nrow(C)
+  tr <- sum(diag(C)) / m
+  if (!(is.finite(tr) && tr > 0))
+    return(t(chol(C + diag(1e-12 * max(tr, 1e-300), m))))
+  k <- .pow2_half_exponent(tr)
+  Cs <- C * 2^k * 2^k
+  U <- tryCatch(chol(Cs), error = function(e) NULL)
+  if (is.null(U)) U <- chol(Cs + diag(1e-12 * sum(diag(Cs)) / m, m))
+  t(U) * 2^-k
+}
+
 .ghk_one <- function(mu, Sigma, i, u, want_slope = FALSE) {
   n <- length(mu)
   others <- seq_len(n)[-i]
@@ -79,12 +108,11 @@
   M <- matrix(0, n - 1L, n)
   M[cbind(seq_len(n - 1L), others)] <- 1
   M[, i] <- M[, i] - 1
-  Cc <- M %*% Sigma %*% t(M)
-  # a ridge RELATIVE to the contrast scale: an absolute 1e-12 is model
-  # noise in the utility unit, and at scale 1e-8 it moved the binary
-  # favourite from Phi(1/sqrt 2) = 0.7602 to 0.5040 (#101, #409)
-  ridge <- 1e-12 * max(sum(diag(Cc)) / (n - 1L), 1e-300)
-  L <- t(chol(Cc + diag(ridge, n - 1L)))
+  # Sigma at unit scale by an exact power of two first, so a race in tiny
+  # units is differenced in normal, not subnormal, arithmetic (#409)
+  ks <- .pow2_half_exponent(mean(diag(Sigma)))
+  Cc <- M %*% (Sigma * 2^ks * 2^ks) %*% t(M)
+  L <- .contrast_chol(Cc) * 2^-ks
   R <- nrow(u)
   z <- matrix(0, R, n - 1L)
   logprob <- numeric(R)

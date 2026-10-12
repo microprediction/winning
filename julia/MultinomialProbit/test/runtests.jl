@@ -350,6 +350,25 @@ end
     end
 end
 
+@testset "GHK keeps a valid small pivot and subnormal scales (#409)" begin
+    exact = MP.ndtr(1 / sqrt(2))
+    for c in (1e-150, 1e-155)
+        # the 1e-300 floor was an absolute 1e-312 ridge below it
+        p = MP.ghk_choice_prob([0.0, c], zeros(2, 0), 2;
+                               D = [c^2, c^2], r_draws = 32, seed = 9)
+        @test abs(p - exact) < 1e-12
+    end
+    # near-twins sharing a unit factor with variance 2^-43; the always-on
+    # relative ridge priced [0.5, 0.167, 0.333]
+    delta = 2.0^-43
+    a = 0.5 * sqrt(2 * delta)
+    mu = [0.0, -a, a]
+    p = [MP.ghk_choice_prob(mu, reshape([0.0, 1.0, 1.0], 3, 1), k;
+                            D = [1.0, delta, delta], r_draws = 200_000,
+                            seed = 7 + k) for k in 1:3]
+    @test maximum(abs.(p ./ sum(p) .- [0.49999992, 0.07932763, 0.42067245])) < 3e-3
+end
+
 @testset "GHK refuses a D that is not a variance (#367)" begin
     V = zeros(2, 0)
     @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
