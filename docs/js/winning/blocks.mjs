@@ -135,7 +135,10 @@ function windowNodes(mu, sd, amp, delta = 1e-12, padSds = 2) {
   const n = mu.length;
   const mLo = mu.map((m, i) => m - amp[i]);
   const mHi = mu.map((m, i) => m + amp[i]);
-  const smax = Math.max(Math.max(...sd), 1e-12);
+  // the field's own scale (sds are positive): an absolute 1e-12 floor
+  // stopped the window shrinking with the model, and the same block race
+  // in units of 1e-14 lost 0.7% of its mass and raised (#100)
+  const smax = Math.max(...sd);
   const F = (x, m) => {
     let ls = 0;
     for (let i = 0; i < n; i++) ls += Math.log(Math.max(ndtr((x - m[i]) / sd[i]), TINY));

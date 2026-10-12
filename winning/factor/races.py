@@ -1142,9 +1142,18 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             var_d = float(dV @ CovF @ dV + D[0] + D[1])
             shift = float(dV @ Fm)
         else:
-            var_d = float(dV @ dV + D[0] + D[1])
+            var_d = None
             shift = 0.0
-        sd_d = np.sqrt(max(var_d, 1e-300))
+        # The contrast sd in units of the largest term, so it neither
+        # overflows (D = [9e307, 9e307] summed to inf and priced [.5, .5])
+        # nor meets an absolute floor (max(var, 1e-300) changed the model
+        # below contrast sd 1e-150: 0.540 for an exact 0.760, #100).
+        if var_d is None:
+            sd_d = _contrast_sd(dV @ dV, D[0], D[1])
+        else:
+            sd_d = np.sqrt(max(var_d, 0.0))
+        if not sd_d > 0.0:
+            sd_d = 1e-150     # an exactly deterministic contrast: as before
         u = float((mu[1] - mu[0] + shift) / sd_d)
         # Each tail directly: 1 - ndtr(u) rounds the loser to exactly 0 at
         # a 9 sd contrast where the true value is 1.1e-19, and the pair
@@ -1395,7 +1404,10 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     else:
         _CovF = np.eye(_Vc.shape[1])
     _SigV = _Vc @ _CovF @ _Vc.T
-    scale = float(np.sqrt(np.median(_Dn) + np.diag(_SigV).mean()))
+    # median's midpoint of two finite variances near the top of the range
+    # overflows to inf; the pair's closed form below does not use it (#100)
+    with np.errstate(over='ignore'):
+        scale = float(np.sqrt(np.median(_Dn) + np.diag(_SigV).mean()))
     mu_start = None
     if n_t == 2 and base == "normal" and not temperature and dense is None:
         # A pair is a single Gaussian contrast, so the inverse is closed
@@ -1403,8 +1415,10 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         # Sigma = V V' + diag(D), p0 = Phi((mu1 - mu0 + shift) / sd_d),
         # so mu1 - mu0 = sd_d Phi^-1(p0) - shift, mean-zero; the shift is
         # the factor rule's weighted MEAN, (v1 - v0) . E[F] (#374).
-        Sig = _SigV + np.diag(_Dn)
-        sd_d = float(np.sqrt(max(Sig[0, 0] + Sig[1, 1] - 2.0 * Sig[0, 1], 1e-300)))
+        # in units of the largest term: no 1e-300 floor, no overflow of
+        # the variance sum at D = 9e307 (#100)
+        sd_d = _contrast_sd(_SigV[0, 0] + _SigV[1, 1] - 2.0 * _SigV[0, 1],
+                            _Dn[0], _Dn[1])
         shift = (float((_Vc[1] - _Vc[0]) @ _Fm)
                  if (V is not None and nodes_given) else 0.0)
         # Invert the SMALLER share, Phi^-1(p0) = -Phi^-1(p1): for
@@ -1470,7 +1484,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
 
         def _dense_fwd(m):
             lp, dl = _race_dense(m, dense, return_slopes=True, log=True)
-            return lp - logt, np.minimum(dl, -1e-6)
+            return lp - logt, np.minimum(dl, -1e-6 / scale)
 
         mu, converged, resid_max, iters = _jacobi_sweeps(
             mu, _dense_fwd, scale, alpha, max(n_iter, 120), tol)
@@ -1482,12 +1496,27 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                                       points=points, temperature=temperature,
                                       return_slopes=True)
         phat = np.maximum(phat, 1e-300)
-        return np.log(phat) - logt, np.minimum(sl / phat, -1e-6)
+        # the slope floor in the field's units: d log p / d mu scales as
+        # 1 / scale, so an absolute -1e-6 took over past scale 1e6 and the
+        # same race at D = 1e20 stopped 0.062 of a share short (#100)
+        return np.log(phat) - logt, np.minimum(sl / phat, -1e-6 / scale)
 
     mu, converged, resid_max, iters = _jacobi_sweeps(
         mu, _lattice, scale, alpha, n_iter, tol)
     return _inverse_return(mu, converged, resid_max, iters, floored,
                            tol, return_info)
+
+
+def _contrast_sd(shared, d0, d1):
+    """sqrt(shared + d0 + d1), the sd of a pair's Gaussian contrast, formed
+    in units of the largest term so a finite huge variance cannot overflow
+    the sum and a tiny one meets no absolute floor (#100). Exact zero is
+    zero."""
+    big = max(abs(float(shared)), float(d0), float(d1))
+    if not big > 0.0:
+        return 0.0
+    v = float(shared) / big + float(d0) / big + float(d1) / big
+    return float(np.sqrt(big) * np.sqrt(max(v, 0.0)))
 
 
 def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
