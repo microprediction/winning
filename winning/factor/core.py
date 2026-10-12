@@ -397,7 +397,6 @@ def _validate_covariance(C, name="cov="):
     if C.ndim != 2 or C.shape[0] != C.shape[1]:
         raise ValueError(
             f"{name} must be square; got shape {C.shape}")
-    n = len(C)
     if not np.isfinite(C).all():
         raise ValueError(f"{name} contains NaN or inf")
     asym = float(np.abs(C - C.T).max())
