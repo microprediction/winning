@@ -70,3 +70,22 @@ def test_patch_accepts_scipys_rng(patched):
     assert got == want
     with pytest.raises(TypeError):
         multivariate_normal.cdf(np.zeros(3), cov=np.eye(3), bogus=1)
+
+
+def test_patch_keeps_scipys_shapes_332(patched):
+    # unpatched scipy refuses a scalar x and a scalar mean beside a 3 x 3
+    # covariance; the fast path broadcast both and answered 0.2232
+    from scipy.stats import multivariate_normal
+    S = np.full((3, 3), 0.4)
+    np.fill_diagonal(S, 1.0)
+    with pytest.raises(ValueError):
+        multivariate_normal.cdf(0.0, mean=np.zeros(3), cov=S)
+    with pytest.raises(ValueError):
+        multivariate_normal.cdf(np.zeros(3), mean=0.0, cov=S)
+    # the canonical spellings, and a scalar lower_limit, still answer
+    want = patched.mvn_cdf_fast(upper=np.zeros(3), sigma=S)
+    assert multivariate_normal.cdf(np.zeros(3), mean=np.zeros(3),
+                                   cov=S) == pytest.approx(want, abs=1e-15)
+    assert multivariate_normal.cdf(np.zeros(3), cov=S, lower_limit=-1.0) \
+        == pytest.approx(patched.mvn_cdf_fast(lower=-1.0, upper=0.0,
+                                              sigma=S), abs=1e-15)

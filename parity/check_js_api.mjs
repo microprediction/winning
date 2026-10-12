@@ -735,6 +735,24 @@ accepts("the inverse takes a scalar D, matching python",
             v => v.every(([a, b]) => a.L.every((x, k) =>
               Math.abs(b.L[k] / Math.sqrt(c) - x) <= 1e-9 * Math.abs(x) + 1e-300)));
   }
+  // #409: the relative floor raised EVERY pivot below it, so near-twins
+  // with variance 2^-43 (a valid small contrast) priced [0.5, 0.158,
+  // 0.342] for the exact [0.49999992, 0.07932763, 0.42067245]
+  {
+    const delta = 2 ** -43, a = 0.5 * Math.sqrt(2 * delta);
+    const muT = [0, a, -a];
+    const CT = [[1, 0, 0], [0, 1 + delta, 1], [0, 1, 1 + delta]];
+    accepts("ghk keeps a valid small pivot (#409)",
+            () => {
+              const raw = muT.map((_, i) => demo.ghkSampleOne(
+                demo.ghkPrepareOne(muT, CT, i), 100000, demo.rng(1234 + i)));
+              const t = raw.reduce((x, y) => x + y, 0);
+              return raw.map(x => x / t);
+            },
+            p => Math.abs(p[1] - 0.07932763) < 3e-3 &&
+                 Math.abs(p[2] - 0.42067245) < 3e-3,
+            p => `shares ${p.map(x => x.toFixed(5))}`);
+  }
   accepts("cholesky keeps the covariance scale at 1e-12 I",
           () => demo.cholesky([[1e-12, 0], [0, 1e-12]]),
           L => Math.abs(L[0][0] - 1e-6) < 1e-18 && Math.abs(L[1][1] - 1e-6) < 1e-18,
