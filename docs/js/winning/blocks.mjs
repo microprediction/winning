@@ -55,8 +55,9 @@ export function treeLeafIndex(cluster, leaves = null) {
   return out;
 }
 
-/* A Tree structure's runner-to-leaf indices: the explicit map when given. */
-export const treeCluster = s => (s.leaves == null ? s.cluster : treeLeafIndex(s.cluster, s.leaves));
+/* A Tree structure's runner-to-leaf indices (0..nC-1): the explicit map
+   when given, the sorted-label order otherwise. */
+export const treeCluster = s => treeLeafIndex(s.cluster, s.leaves);
 
 /* One door for the block/nested/tree arguments.
 
