@@ -1898,6 +1898,54 @@ for (const c of [1e-8, 100]) {
         Math.abs(o.mu[2] / c - 0.7279331) < 1e-5, `${o.mu.map(x => x / c)}`);
 }
 
+// --- a constraint row means the same thing at any positive scale (#653)
+{
+  const base = { mu0: [-1.5, -1.5, 3], D: [1, 1, 1], points: 257 };
+  const ref = polish.polishRace({ ...base, A: [[1, 1, 0]], b: [0.9] });
+  const refL = polish.polishRace({ ...base, A: [[0, 0, -1]], b: [-0.2] });
+  for (const c of [1e-12, 1e-8, 1, 1e8]) {
+    const o = polish.polishRace({ ...base, A: [[c, c, 0]], b: [0.9 * c] });
+    holds(`a cap row scaled by ${c} is the unit-row optimum (#653)`,
+          o.info.converged && o.info.active.length === 1 && o.info.active[0] === 0 &&
+          Math.abs(o.p[0] + o.p[1] - 0.9) < 1e-7 &&
+          Math.max(...o.mu.map((v, i) => Math.abs(v - ref.mu[i]))) < 1e-6,
+          `${o.p} ${o.info.converged} [${o.info.active}]`);
+    const l = polish.polishRace({ ...base, A: [[0, 0, -c]], b: [-0.2 * c] });
+    holds(`a lower-bound row scaled by ${c} is the unit-row optimum (#653)`,
+          l.info.converged && l.info.active.length === 1 && Math.abs(l.p[2] - 0.2) < 1e-7 &&
+          Math.max(...l.mu.map((v, i) => Math.abs(v - refL.mu[i]))) < 1e-6,
+          `${l.p} ${l.info.converged} [${l.info.active}]`);
+  }
+  const r = polish.polishRace({ ...base, A: [[1, 1, 0], [1e-8, 1e-8, 0]], b: [0.9, 9e-9] });
+  holds("a redundant scaled copy of a row changes nothing (#653)",
+        r.info.converged && Math.abs(r.p[0] + r.p[1] - 0.9) < 1e-7 &&
+        Math.max(...r.mu.map((v, i) => Math.abs(v - ref.mu[i]))) < 1e-6, `${r.p}`);
+}
+
+// --- a saturated capped pair lands on the exact boundary, not the
+// opposite deterministic winner (#683). Exact: mu = -+Phi^-1(0.9)/sqrt 2.
+{
+  const xs = 0.9061938024368232;
+  // starting longshot shares 2.1e-12 (above the old 1e-12 cut), 7.7e-13
+  // (below it) and 6.2e-16 (the issue's fixture)
+  for (const a of [4.9, 5, 8 / Math.SQRT2])
+    for (const points of [129, 257, 1025])
+      for (const fdFallback of [false, true]) {
+        const o = polish.polishRace({ mu0: [-a, a], D: [1, 1], nameCaps: [0.9, NaN],
+                                      points, fdFallback });
+        holds(`saturated pair a=${a.toFixed(3)} points=${points} fd=${fdFallback} is the exact cap (#683)`,
+              o.info.converged && o.info.active.length === 1 && o.info.active[0] === 0 &&
+              Math.abs(o.p[0] - 0.9) < 1e-8 && Math.abs(o.mu[0] + xs) < 1e-8 &&
+              Math.abs(o.mu[1] - xs) < 1e-8, `${o.p} ${o.mu} ${o.info.converged}`);
+      }
+}
+
+// --- a structured Jacobian refuses a base its forward refuses (#89)
+for (const s of [structures.Blocks([0, 0, 1], 0.8, 0.2),
+                 structures.Tree([0, 0, 1], 0.8, 0.2, [2, 2, -1], [0, 0, 0.5])])
+  rejects(polish.raceJacobian, [[0, 0.3, 0.8], { structure: s, base: "logistic" }],
+          `${s.kind} raceJacobian refuses base "logistic" like its forward (#89)`, "support base");
+
 // --- typed controls are not coerced, and falsy is not "omitted"
 {
   const q = [0.6, 0.4, 0];
