@@ -121,11 +121,12 @@ def test_bracket_narrows_first_order():
 @pytest.mark.parametrize("base", ["normal", "gumbel", "logistic", "laplace"])
 def test_float_engine_inside_certificate(base):
     # the point of the module: the fast lattice answer, checked. laplace
-    # was 4e-4 off here on the uniform lattice before kink_lattice
+    # is 1e-4 off here on the default uniform lattice; kink_split=True
+    # (kink_lattice) is the opt-in that closes it
     rng = np.random.default_rng(7)
     mu = rng.normal(0, 1, 8)
     D = rng.uniform(0.5, 1.5, 8)
-    fast = race_probabilities(mu, D=D, base=base)
+    fast = race_probabilities(mu, D=D, base=base, kink_split=True)
     sure = certified_race_probabilities(mu, D, base=base, digits=20)
     for f, s in zip(fast, sure):
         assert abs(f - float(s.mid())) < 1e-13
@@ -137,14 +138,14 @@ def test_kinked_jacobian_is_the_derivative_of_the_kinked_map():
     mu = rng.normal(0, 1, 6)
     V = rng.normal(0, 0.5, (6, 1))
     D = rng.uniform(0.5, 1.5, 6)
-    J = race_jacobian(mu, V=V, D=D, base="laplace")
+    J = race_jacobian(mu, V=V, D=D, base="laplace", kink_split=True)
     h = 1e-6
+    kw = dict(V=V, D=D, base="laplace", points=501, kink_split=True)
     for j in range(6):
         e = np.zeros(6)
         e[j] = h
-        fd = (race_probabilities(mu + e, V=V, D=D, base="laplace", points=501)
-              - race_probabilities(mu - e, V=V, D=D, base="laplace",
-                                   points=501)) / (2 * h)
+        fd = (race_probabilities(mu + e, **kw)
+              - race_probabilities(mu - e, **kw)) / (2 * h)
         assert np.abs(J[:, j] - fd).max() < 1e-8
 
 

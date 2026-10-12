@@ -25,6 +25,11 @@ grammar on the way in.
 
     pip install winning        # core depends only on numpy and scipy
 
+`winning.certified` (optional) returns race win probabilities as Arb
+balls that provably contain the answer, for checking the fast engines;
+it needs `pip install winning[certified]` (python-flint) and is never
+imported by `import winning`.
+
 ## Quick start
 
 Independent race: shares from abilities, and back.

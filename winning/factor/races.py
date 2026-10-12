@@ -111,7 +111,8 @@ def _laplace(z):
     return np.maximum(S, 1e-300), f, -np.sign(z) * f / b
 
 
-# the density is not analytic at z = 0: lattices split there (kink_lattice)
+# the density is not analytic at z = 0: kink_split=True lattices split
+# there (kink_lattice); the default uniform lattice ignores this
 _laplace.kinks = (0.0,)
 
 
@@ -149,8 +150,9 @@ def exponential_power_base(beta):
     # the shipped map in sign, and abilities_from_race did not converge;
     # beta = 0.7 was 1e-2 off with a wrong-signed slope. Supporting it
     # needs cusp-aware quadrature, which the lattice engines do not have.
-    # beta in [1, 2) has only a kink, which the lattice splits at
-    # (kink_lattice): uniform, laplace was 4e-4 off at 257 points.
+    # beta in [1, 2) has only a kink. The default uniform lattice is
+    # second order across it (laplace 4e-4 off at 257 points);
+    # kink_split=True splits there (kink_lattice) and is ~1e-14.
     # beta = inf (the uniform limit) has no density this family can
     # evaluate and came back as NaN rows (#134); it is refused too.
     if not np.isfinite(beta) or beta < 1.0:
@@ -728,7 +730,8 @@ _LARGE_DISPATCH_ENTRIES = 2e7
 
 def kink_lattice(x, M, sd, kinks):
     """Nodes and weights over the window of the uniform lattice x, split
-    at every runner's kink and Gauss-Legendre on each piece.
+    at every runner's kink and Gauss-Legendre on each piece. Used only
+    on the opt-in kink_split=True path.
 
     A uniform rectangle sum is spectrally accurate only for a smooth
     integrand. A base whose density has a kink (laplace, and the
@@ -743,21 +746,37 @@ def kink_lattice(x, M, sd, kinks):
     M: this node's runner locations. The budget len(x) is shared in
     proportion to piece length, the two outer pieces (exponential tails)
     at a quarter weight, with at least four nodes per piece.
+
+    Cost bound: at most len(x) // 4 interior kinks are kept. A larger
+    field's kinks are merged onto that many equal-width bins (one kink
+    kept per bin), so the node count stays under about 2 * len(x) however
+    many runners there are; a merged kink is integrated through at the
+    rectangle rule's order, which is the default path's accuracy anyway.
+    Small fields (the ones the split is for) are never merged.
     """
     a, b = float(x[0]), float(x[-1])
-    K = (M[:, None] + np.asarray(kinks, dtype=float)[None, :] * sd[:, None]).ravel()
+    L = len(x)
+    K = (M[:, None] + np.asarray(kinks, dtype=float)[None, :]
+         * sd[:, None]).ravel()
     K = np.unique(K[(K > a) & (K < b)])
+    cap = max(1, L // 4)
+    if len(K) > cap:
+        width = (b - a) / cap
+        _, first = np.unique(np.floor((K - a) / width), return_index=True)
+        K = K[first]
     cuts = np.concatenate([[a], K, [b]])
-    length = np.diff(cuts)
-    eff = length.copy()
+    lo, hi = cuts[:-1], cuts[1:]
+    eff = hi - lo
     eff[0] *= 0.25
     eff[-1] *= 0.25
-    count = np.maximum(4, np.round(len(x) * eff / eff.sum()).astype(int))
+    count = np.maximum(4, np.round(L * eff / eff.sum()).astype(int))
+    mid, half = 0.5 * (hi + lo), 0.5 * (hi - lo)
     xs, ws = [], []
-    for lo, hi, m in zip(cuts[:-1], cuts[1:], count):
+    for m in np.unique(count):
+        sel = count == m
         t, w = _legendre(int(m))
-        xs.append(0.5 * (hi + lo) + 0.5 * (hi - lo) * t)
-        ws.append(0.5 * (hi - lo) * w)
+        xs.append((mid[sel, None] + half[sel, None] * t[None, :]).ravel())
+        ws.append((half[sel, None] * w[None, :]).ravel())
     return np.concatenate(xs), np.concatenate(ws)
 
 
@@ -1058,7 +1077,8 @@ def _as_temperature(temperature):
 
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                        points=257, temperature=0.0, return_slopes=False,
-                       structure=None, window="bulk", delta=1e-12, cov=None):
+                       structure=None, window="bulk", delta=1e-12, cov=None,
+                       kink_split=False):
     """Win probabilities of the general race, all N in one field pass.
 
     Pass `structure=` (Independent/Factor/Blocks/Nested/Tree from
@@ -1104,7 +1124,23 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     thing to optimise for real inputs; if the capped cost is too high,
     pass F, W from winning.factor.core.qmc_nodes(r, m=11) for a quarter
     of the nodes at about five times the error. Inversion runs the
-    forward pass per Newton step, so it scales the same way."""
+    forward pass per Newton step, so it scales the same way.
+
+    kink_split: opt-in, default False (the uniform lattice, unchanged).
+    A base whose density has a kink -- laplace, and exponential_power_base
+    with beta < 2 -- makes the winner integrand kinked at every runner's
+    location, and the uniform rectangle sum is then only second order: a
+    four-runner laplace race is 4e-4 off at the default 257 points.
+    kink_split=True integrates on kink_lattice instead (Gauss-Legendre on
+    the pieces between kinks), which brings that race to ~4e-15 at the
+    same budget. At most points // 4 kinks are kept (a larger field's
+    are merged onto that many bins), so the node count stays under about
+    2 * points however many runners there are. The path is numpy only
+    (no compiled kernel): measured without fastrace it costs 1.0-1.7x
+    the default, from four runners to a thousand at rank two, and more
+    than that against a compiled default. Smooth bases ignore it, as
+    does a tempered race (the softmin kernel smooths the kink); with
+    structure= it raises."""
     # the lattice mode is one of two names: every value but "bulk" used
     # to mean span, so window="bulkk" moved a share by 39 points (#582)
     if not (isinstance(window, str) and window in ("bulk", "span")):
@@ -1140,6 +1176,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                 f"structure= already describes the covariance; "
                 f"{', '.join(conflicting)}= would describe it again. "
                 "Pass one or the other.")
+        if kink_split:
+            raise ValueError("kink_split applies to the factor lattice "
+                             "(V=/D=), not to structure=")
         from .structures import dispatch_probabilities
         # points/window/delta are the NUMERICAL controls, and dropping
         # them meant a caller asking for more resolution got the
@@ -1252,9 +1291,11 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             pass       # older fastrace without window arguments: numpy path
     spec = _RUST_BASE_IDS.get(base) if isinstance(base, str) \
         else getattr(base, "rust_base", None)
-    kinks = getattr(fn, "kinks", ())
-    # the compiled kernel integrates on the uniform lattice only; a
-    # kinked base needs the split one (kink_lattice), so it stays here
+    # kink_split (opt-in): a kinked base on the split lattice
+    # (kink_lattice). The compiled kernel integrates on the uniform
+    # lattice only, so the opt-in path stays in numpy; the default keeps
+    # main's dispatch and arithmetic exactly.
+    kinks = getattr(fn, "kinks", ()) if kink_split else ()
     if _HAVE_RUST and spec is not None and not kinks \
             and hasattr(_fastrace, "forward_and_slopes_base"):
         bid, prm = (spec, []) if isinstance(spec, int) else spec

@@ -267,6 +267,8 @@ OPTION_WAIVERS = {
         "W": "as F",
         "window": "covered by factor2_span",
         "delta": "a numerical floor, not a mode",
+        "kink_split": "python-only opt-in (the split lattice); the ports "
+                      "have the default uniform lattice the scenarios pin",
     },
     "abilities_from_race": {
         "temperature": "softmin is python only",

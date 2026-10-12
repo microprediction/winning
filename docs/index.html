@@ -196,6 +196,7 @@ polish_race(p0=w, structure=tree, name_caps=0.05)     # nearest race under caps<
     three fit- or optimizer-mediated ones to between 5e-4 and 5e-3.</p>
 <pre><code>pip install winning          # pure python (numpy/scipy)
 pip install winning[fast]    # + compiled kernels (abi3 wheels)
+pip install winning[certified]  # + winning.certified: Arb-ball enclosures (python-flint)
 remotes::install_github("microprediction/winning", subdir = "r/winning")</code></pre>
     <p>Random test covariances come from
     <a href="https://randomcov.microprediction.org/">randomcov</a>: fifteen

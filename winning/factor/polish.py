@@ -26,7 +26,8 @@ from .races import (race_probabilities, abilities_from_race, _setup,
                     forward_grid, kink_lattice)
 
 
-def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
+def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None,
+                        kink_split=False):
     """Unnormalized lattice masses a_i and their exact derivative on THIS
     grid: A[i, j] = d a_i / d mu_j.
 
@@ -59,14 +60,15 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
     a = np.zeros(n)
     A = np.zeros((len(idx), n))
     dT = np.zeros(n)
-    kinks = getattr(fn, "kinks", ())
+    # kink_split (opt-in): a kinked base integrates on its split lattice,
+    # exactly as the forward map does (races.kink_lattice); dx becomes
+    # weights. Off, this is main's uniform rectangle sum, bit for bit.
+    kinks = getattr(fn, "kinks", ()) if kink_split else ()
     for q in range(len(F)):
-        # a kinked base integrates on its split lattice, exactly as the
-        # forward map does (races.kink_lattice); dx becomes weights
         if kinks:
             xq, w = kink_lattice(x, M_all[q], sd, kinks)
         else:
-            xq, w = x, np.full(len(x), dx)
+            xq = x
         z = (xq[None, :] - M_all[q][:, None]) / sd[:, None]
         S, f, fp = fn(z)
         f = f / sd[:, None]
@@ -78,18 +80,27 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
         haz = np.exp(np.clip(logf - logS, -745.0, 40.0))
         R = np.exp(np.clip(L[None, :] - logS, -745.0, 40.0))
         own = -(fp / (sd ** 2)[:, None] * R)                   # d f_i/d mu_i
-        a += W[q] * (g @ w)
-        A += W[q] * ((g[idx] * w) @ haz.T)
-        # own coordinate, differentiated rather than imposed by zero rows
-        A[np.arange(len(idx)), idx] += W[q] * (
-            own[idx] @ w - (g[idx] * haz[idx]) @ w)
         Gt = g.sum(axis=0)
-        dT += W[q] * (((Gt[None, :] - g) * haz) @ w + own @ w)
+        if kinks:
+            a += W[q] * (g @ w)
+            A += W[q] * ((g[idx] * w) @ haz.T)
+            # own coordinate, differentiated rather than imposed
+            A[np.arange(len(idx)), idx] += W[q] * (
+                own[idx] @ w - (g[idx] * haz[idx]) @ w)
+            dT += W[q] * (((Gt[None, :] - g) * haz) @ w + own @ w)
+            continue
+        a += W[q] * g.sum(axis=1) * dx
+        A += W[q] * (g[idx] @ haz.T) * dx
+        # own coordinate, differentiated rather than imposed by zero rows
+        A[np.arange(len(idx)), idx] += W[q] * dx * (
+            own[idx].sum(axis=1) - (g[idx] * haz[idx]).sum(axis=1))
+        dT += W[q] * dx * (((Gt[None, :] - g) * haz).sum(axis=1)
+                           + own.sum(axis=1))
     return a, A, dT
 
 
 def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
-                  points=501, window="bulk", delta=1e-12):
+                  points=501, window="bulk", delta=1e-12, kink_split=False):
     """Fixed-grid-exact J[i, j] = d p_i / d mu_j, one field pass.
 
     Exact for the normalized rectangle sum CONDITIONAL ON THE SELECTED
@@ -111,6 +122,11 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
 
     Raising mu_j (slower j, min-wins) raises every other p_i:
     off-diagonals are positive.
+
+    kink_split: opt-in, default False. True differentiates the split
+    lattice race_probabilities(..., kink_split=True) integrates on for a
+    kinked base (laplace, exponential power with beta < 2); see there.
+    False, or a smooth base, is the uniform lattice unchanged.
     """
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
@@ -118,14 +134,16 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
     x, points = forward_grid(M_all, sd, V, fn, left, right, points,
                              window=window, delta=delta)
     dx = x[1] - x[0]
-    a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx)
+    a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx,
+                                   kink_split=kink_split)
     T = float(a.sum())
     p = a / T
     return (A - np.outer(p, dT)) / T
 
 
 def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
-                      points=257, window="bulk", delta=1e-12):
+                      points=257, window="bulk", delta=1e-12,
+                      kink_split=False):
     """One row of the race Jacobian: d p_y / d mu_j for all j, one field
     pass (the estimation score needs only the observed alternative's row,
     not the full matrix).
@@ -133,7 +151,8 @@ def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
     Same construction as race_jacobian restricted to i = y, including
     the shared lattice and the quotient rule, so the score it feeds is
     the fixed-grid-exact gradient of the objective the forward map
-    defines (grid motion omitted; see race_jacobian)."""
+    defines (grid motion omitted; see race_jacobian). kink_split as in
+    race_jacobian."""
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
@@ -141,7 +160,7 @@ def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
                              window=window, delta=delta)
     dx = x[1] - x[0]
     a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx,
-                                   rows=[int(y)])
+                                   rows=[int(y)], kink_split=kink_split)
     T = float(a.sum())
     p_y = float(a[int(y)]) / T
     return (A[0] - p_y * dT) / T
