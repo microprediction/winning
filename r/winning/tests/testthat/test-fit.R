@@ -343,3 +343,16 @@ test_that("an exact rank-2-plus-diagonal matrix is returned undistorted (#427)",
   expect_lt(abs(pnorm(1.471517470795 / sqrt(dv(Cfit, 11, 12))) -
                 pnorm(1.471517470795 / sqrt(dv(C, 11, 12)))), 1e-6)
 })
+
+test_that("a rank that splits a tied eigenspace warns, as python (#383)", {
+  n <- 24L; nb <- 6L
+  lab <- rep(0:(nb - 1L), each = n / nb)
+  C <- outer(lab, lab, "==") * 0.7
+  diag(C) <- 1
+  expect_warning(fit_covariance(C), "splits a tied eigenvalue")
+  # a clean boundary stays quiet
+  set.seed(3)
+  V <- matrix(rnorm(n * 3), n, 3)
+  C2 <- tcrossprod(V) + diag(runif(n, 0.5, 1.5))
+  expect_no_warning(.warn_if_rank_splits_a_tie(C2, 3L))
+})

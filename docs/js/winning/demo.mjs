@@ -274,12 +274,20 @@ function untiedRank(values, want, stage, tol = 1e-6) {
   if (want <= 0 || want >= lam.length || !(lam[0] > 0)) return want;
   const scale = lam[0];
   if (lam[want - 1] - lam[want] > tol * scale) return want;
-  if (lam[want - 1] < 0.05 * scale) return want;     // a harmless bulk tie
   let lo = want - 1;
   while (lo > 0 && lam[lo - 1] - lam[lo] <= tol * scale) lo--;
   let hi = want;
   while (hi + 1 < lam.length && lam[hi] - lam[hi + 1] <= tol * scale) hi++;
-  if (typeof console !== "undefined")
+  // A tie in a low-variance subspace is NOT harmless: once the leading
+  // direction puts one contestant out of contention, the rest can be
+  // decided entirely inside it. A 5% exemption here let the tie at 0.04
+  // of [1, 0.04, 0.04] be sliced, and relabelling moved a contrast
+  // variance 0.064 -> 0.094 (4.2 points of an exact pair price; #383).
+  // So the tied group is always dropped -- that is the exchangeable
+  // representation, and costs nothing -- but only a material tie (python's
+  // 5% judgment) is worth a console message: every centred spectrum ends
+  // in a tied bulk.
+  if (lam[want - 1] >= 0.05 * scale && typeof console !== "undefined")
     console.warn(
       `fitGrammar: rank ${want} (${stage}) splits a tied eigenvalue: ` +
       `eigenvalues ${lo + 1} to ${hi + 1} are equal, so any ${want - lo} ` +

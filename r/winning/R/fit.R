@@ -90,6 +90,42 @@
   list(V = B %*% W, D = pmax(D, floor))
 }
 
+# Warn when the rank cuts through a degenerate eigenvalue of the
+# centred covariance (port of python's _warn_if_rank_splits_a_tie). Any
+# k directions from a tied group fit equally well and imply DIFFERENT
+# races: six equal blocks at k = 3 moved a pair price 3.6 points under a
+# relabelling, with no warning in this port (#383). The 5% filter is
+# python's: every centred spectrum ends in a tied bulk.
+.warn_if_rank_splits_a_tie <- function(C, k, tol = 1e-6) {
+  n <- nrow(C)
+  if (k >= n - 1L || k < 1L) return(invisible(NULL))
+  P <- diag(n) - 1 / n
+  lam <- eigen(P %*% C %*% P, symmetric = TRUE, only.values = TRUE)$values
+  probe <- min(2L * k + 4L, n - 1L)
+  lam <- lam[seq_len(probe)]
+  if (length(lam) <= k || lam[1] <= 0) return(invisible(NULL))
+  scale <- lam[1]
+  if (lam[k] - lam[k + 1L] > tol * scale) return(invisible(NULL))
+  if (lam[k] < 0.05 * scale) return(invisible(NULL))
+  lo <- k                       # 1-based index of the first tied value
+  while (lo > 1L && lam[lo - 1L] - lam[lo] <= tol * scale) lo <- lo - 1L
+  hi <- k + 1L
+  while (hi + 1L <= length(lam) && lam[hi] - lam[hi + 1L] <= tol * scale)
+    hi <- hi + 1L
+  tied <- hi - lo + 1L
+  warning(sprintf(paste0(
+    "rank %d splits a tied eigenvalue of the centered covariance: ",
+    "eigenvalues %d to %d are equal to within %g relative%s, so the fit ",
+    "picks an arbitrary %d of %d equally optimal directions. Every choice ",
+    "gives the same residual and a DIFFERENT race. This is not ",
+    "approximation error and no optimizer fixes it; pass k=%d or more to ",
+    "take the whole tied group."),
+    k, lo, hi, tol,
+    if (hi >= probe) " (and the tie may extend past the probe)" else "",
+    k - lo + 1L, tied, hi), call. = FALSE)
+  invisible(NULL)
+}
+
 #' Fit a dense covariance to the race grammar
 #'
 #' One-call intake for \code{race_probabilities(mu, cov = )}: k global
@@ -155,6 +191,7 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   corr <- C / outer(s, s)
   kk <- min(k, n - 1L)
   fit <- .factor_model_projected(C, kk)
+  .warn_if_rank_splits_a_tie(C, kk)          # #383, python parity
   # Multistart rescue, ported from python's fit_covariance: the default
   # start stalled on an EXACT rank-2-plus-diagonal 12x12 matrix at
   # projected objective 1.04 (contrast residual 0.159, a pair probability
