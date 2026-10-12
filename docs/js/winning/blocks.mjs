@@ -1,7 +1,7 @@
 // Block, nested and tree races -- port of winning/factor/blocks.py.
 import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
-         asFactorNodes, asWeights, asIterations, asTolerance,
+         asFactorNodes, asWeights, asFactorLaw, asIterations, asTolerance,
          asFiniteVector, rescaledTarget } from "./core.mjs";
 import { invNormalRational } from "./races.mjs";
 
@@ -226,8 +226,10 @@ function clusterNodes(r, qa) {
 function checkedNodes(o, r) {
   if (!o || typeof o !== "object" || !("nodes" in o) || !("w" in o))
     throw new Error("nodes must be {nodes, w}: the factor nodes and their weights");
-  const nodes = asFactorNodes(o.nodes, r, "nodes.nodes");
-  return { nodes, w: asWeights(o.w, nodes.length, "nodes.w") };
+  // paired, with null nodes dropped: zero-weight padding sized the
+  // block window and threw "captured total mass 0" (#416)
+  const law = asFactorLaw(o.nodes, o.w, r, "nodes.nodes", "nodes.w");
+  return { nodes: law.F, w: law.W };
 }
 
 function fieldPass(muO, sdO, shifts, cO, nC, x) {

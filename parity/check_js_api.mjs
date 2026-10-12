@@ -1989,5 +1989,21 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
         () => races.raceProbabilities([-1, 0, 1], { D: [1, 1, 1], delta: 1e-3 }),
         p => p.every(Number.isFinite));
 
+// --- null and negligible factor nodes are no-ops for the price (#416)
+{
+  const mu = [-0.8, -0.1, 0.5, 1.0], V = [[-1], [-0.2], [0.4], [0.8]], D = [1, 1, 1, 1];
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const base = races.raceProbabilities(mu, { V, D, F: [[-1], [1]], W: [0.5, 0.5], points: 257 });
+  for (const w of [0, 1e-300, 1e-17])
+    accepts(`a weight-${w} node far out leaves the race unchanged (#416)`,
+            () => races.raceProbabilities(mu, { V, D, F: [[-1], [1], [1000]], W: [0.5, 0.5, w], points: 257 }),
+            p => md(p, base) < 1e-12);
+  const m2 = [0.1, 0.2, 0.4], V2 = [[2], [0], [-2]], D2 = [1e-6, 1e-6, 1e-6];
+  const c = blocks.blockRaceProbabilities(m2, [0, 1, 2], V2, D2, { points: 501, qa: 7, nodes: { nodes: [[0]], w: [1] } });
+  accepts("zero-weight block node padding is a no-op (#416)",
+          () => blocks.blockRaceProbabilities(m2, [0, 1, 2], V2, D2, { points: 501, qa: 7, nodes: { nodes: [[-100], [0], [100]], w: [0, 1, 0] } }),
+          p => md(p, c) < 1e-12);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

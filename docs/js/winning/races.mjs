@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -96,8 +96,8 @@ export function factorRule(V, D, F = null, W = null) {
     // the caller's nodes go through the same door as V and D: every node
     // carries exactly the loadings' rank, and there is one weight per
     // node (#290)
-    const Fv = asFactorNodes(F, r, "F");
-    return { F: Fv, W: asWeights(W, Fv.length, "W") };
+    // paired, with null nodes dropped (#416)
+    return asFactorLaw(F, W, r, "F", "W");
   }
   // adaptive order: sharpness rule identical to python/R. The statistic
   // is the pairwise-safe bound sqrt(2) * max_i |(PV)_i| / sqrt(D_i), on

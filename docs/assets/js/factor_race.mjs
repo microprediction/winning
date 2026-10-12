@@ -457,9 +457,20 @@ export function asWeights(W, nNodes, where = "W") {
    forward returned NaN (#416). */
 export function asFactorLaw(F, W, where = "W") {
   const Wn = asWeights(W, F.length, where);
+  // ... and the lightest nodes whose COMBINED relative mass is at most
+  // 1e-15: they change no share at double precision but size the
+  // window (#416; python shapes.as_factor_law, the browser's asFactorLaw)
+  const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
+  const drop = new Array(Wn.length).fill(false);
+  let cum = 0;
+  for (const q of order) {
+    cum += Wn[q];
+    if (cum > 1e-15) break;
+    drop[q] = true;
+  }
   const keepF = [], keepW = [];
   let tot = 0;
-  for (let q = 0; q < Wn.length; q++) if (Wn[q] > 0) { keepF.push(F[q]); keepW.push(Wn[q]); tot += Wn[q]; }
+  for (let q = 0; q < Wn.length; q++) if (!drop[q] && Wn[q] > 0) { keepF.push(F[q]); keepW.push(Wn[q]); tot += Wn[q]; }
   return { F: keepF, W: keepW.map((v) => v / tot) };
 }
 

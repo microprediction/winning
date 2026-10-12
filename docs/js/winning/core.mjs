@@ -349,6 +349,33 @@ export function asWeights(W, nNodes, where = "W") {
   return u.map(v => v / total);
 }
 
+/* A quadrature rule with its null nodes removed -- python's
+   shapes.as_factor_law. Nodes of weight zero, and the lightest nodes
+   whose COMBINED relative mass is at most 1e-15, change no share at
+   double precision, but every lattice sizes its window from all the
+   nodes it is handed: a zero (or 1e-300) atom at f = 1000 widened the
+   window until the real density spikes fell between lattice points
+   (0.69 against 0.54 on one share), and padded block nodes threw
+   "captured total mass 0" (#416). */
+export function asFactorLaw(F, W, rank, whereF = "F", whereW = "W") {
+  const Fv = asFactorNodes(F, rank, whereF);
+  const Wn = asWeights(W, Fv.length, whereW);
+  const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
+  const drop = new Array(Wn.length).fill(false);
+  let cum = 0;
+  for (const q of order) {
+    cum += Wn[q];
+    if (cum > 1e-15) break;
+    drop[q] = true;
+  }
+  if (!drop.some(Boolean)) return { F: Fv, W: Wn };
+  const keepF = [], keepW = [];
+  let tot = 0;
+  for (let q = 0; q < Wn.length; q++)
+    if (!drop[q]) { keepF.push(Fv[q]); keepW.push(Wn[q]); tot += Wn[q]; }
+  return { F: keepF, W: keepW.map(v => v / tot) };
+}
+
 /* A finite nonnegative vector normalised to total `mass`, scale-safely.
    A relative target is a law up to a positive factor, but summing first
    overflows when every ENTRY is finite: [0.8, 0.6, 0.4, 0.2] * 1e308 has

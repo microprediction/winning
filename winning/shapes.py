@@ -211,7 +211,8 @@ def as_factor_law(F, W, name="W"):
 
     W goes through as_weights (finite, non-negative, positive total,
     relative). F must carry one row per weight. Nodes of weight exactly
-    zero are then DROPPED: they are mathematical no-ops, but every
+    zero -- and the lightest nodes whose combined relative mass is at
+    most 1e-15 -- are then DROPPED: they are no-ops for the result, but every
     lattice sizes its window from all the nodes it is handed, so a
     zero-mass atom at f = +-100 widened the window until each positive-
     mass density spike fell between lattice points and the core's
@@ -228,10 +229,24 @@ def as_factor_law(F, W, name="W"):
     if not np.isfinite(F).all():
         raise ValueError("F has a non-finite node")
     keep = W > 0.0
+    # ... and so are nodes too light to register: an atom of mass 1e-300
+    # at f = 1000 moved shares by 0.15 through the same window (#416),
+    # though its own contribution to every share is below 1e-300. The
+    # lightest nodes whose COMBINED relative mass is at most _NEGLIGIBLE
+    # are dropped; that bounds the change to every normalised share by
+    # the same amount, under double-precision resolution of the result.
+    if len(W) > 1:
+        o = np.argsort(W, kind="stable")
+        light = np.cumsum(W[o]) <= _NEGLIGIBLE * W.sum()
+        keep[o[light]] = False
     if not keep.all():
         F, W = F[keep], W[keep]
         W = W / W.sum()
     return np.ascontiguousarray(F), W
+
+
+# Combined relative mass of factor nodes as_factor_law may drop (#416).
+_NEGLIGIBLE = 1e-15
 
 
 def as_points(points, name="points", minimum=2):
