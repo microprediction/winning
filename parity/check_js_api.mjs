@@ -1640,6 +1640,30 @@ accepts("the inverse takes a scalar D, matching python",
     rejects(structures.cutLinkage, [Z, 4, bad], `cutLinkage refuses k=${bad} (#346)`, "k must");
 }
 
+// --- cutLinkage refuses an inverted linkage (#667): scipy's maxclust on
+// one is an artifact of binary-searching unsorted row heights (it gives
+// [1,1,1,1] at k=3 here; the browser gave three clusters while claiming
+// parity). R's cutree and treeFromLinkage (#133) refuse it too.
+{
+  rejects(structures.cutLinkage, [[[0, 1, 3, 2], [2, 3, 1, 2], [4, 5, 2, 4]], 4, 3],
+          "cutLinkage refuses an inverted linkage (#667)", "not monotonic");
+  rejects(structures.cutLinkage, [[[0, 1, 0.5, 2], [2, 3, 0.3, 3]], 3, 2],
+          "cutLinkage refuses a parent below its child (#667)", "not monotonic");
+  // computed average linkages are monotone up to round-off: never refused
+  const g = demo.rng(667);
+  let refused = 0;
+  for (let rep = 0; rep < 50; rep++) {
+    const m = 3 + (rep % 9);
+    const P = Array.from({ length: m }, () => [g.n(), g.n(), g.n()]);
+    const Dm = P.map(a => P.map(b => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])));
+    const Zr = structures.averageLinkage(Dm);
+    for (let k = 1; k <= m; k++) {
+      try { structures.cutLinkage(Zr, m, k); } catch (e) { refused++; }
+    }
+  }
+  holds("average linkages are never refused as inverted (#667)", refused === 0, String(refused));
+}
+
 // --- demo helpers: structureCov for every grammar (#337); fitGrammar
 // validates its input (#357), keeps a pair's contrast and is scale
 // equivariant (#341), and does not cut a tied eigenspace (#383); the
