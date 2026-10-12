@@ -290,9 +290,9 @@ end
 # of exactly ZERO, so an optimizer declares convergence precisely where
 # an observation is most badly contradicted.
 #
-# logndtr removes both. It does NOT remove the quadrature error
-# underneath, and the last testset pins that rather than pretending
-# otherwise.
+# logndtr removes both. The quadrature error underneath (the fixed rule
+# sampled the own noise where the prior has mass) is closed by the
+# closed-form binary and the tilted own-noise nodes.
 @testset "tail likelihood is finite with a nonzero score" begin
     binary(gap) = choice_loglik_and_score(
         reshape([gap, 0.0], 1, 2), zeros(2, 1), [1])
@@ -319,11 +319,19 @@ end
         @test abs(ll - ex) / abs(ex) < 1e-3
     end
 
-    # recorded, not claimed fixed: 38% away at a gap of -20
+    # was 38% away at a gap of -20: J = 2 is now the closed form, and
+    # J >= 3 tilts the own-noise nodes to the integrand's mode
     ll20, _, _ = binary(-20.0)
     ex20 = MP.logndtr(-20.0 / sqrt(2))
-    @test abs(ll20 - ex20) / abs(ex20) > 0.3
-    @test ll20 < ex20                     # understates the probability
+    @test abs(ll20 - ex20) <= 1e-12 * abs(ex20)
+    for gap in (-3.0, -8.0, -20.0, -60.0)
+        llt, dmt, _ = choice_loglik_and_score(
+            reshape([gap, 0.0, -80.0], 1, 3), zeros(3, 1), [1])
+        ext = MP.logndtr(gap / sqrt(2))
+        @test abs(llt - ext) <= 1e-7 * abs(ext)
+        es = exp(-0.5 * (gap / sqrt(2))^2 - 0.5 * log(2pi) - ext) / sqrt(2)
+        @test abs(dmt[1, 1] - es) <= 1e-5 * es
+    end
 
     # logndtr itself, against the naive form where the naive form works
     for z in (-3.0, -1.0, 0.0, 0.5, 2.0)
@@ -607,7 +615,7 @@ end
     V4 = [-0.0107529507 1.80970562; -0.6565907660 0.00168241106;
           0.3133862710 0.0763054062; 0.3539574460 -1.88769344]
     ll = choice_loglik_and_score(mu4, V4, [4]; D = ones(4))[1]
-    @test abs(exp(ll) - 0.65439858) < 1e-6
+    @test abs(exp(ll) - 0.65440808) < 1e-6        # python reference, tilted rule
     @test_throws DimensionMismatch choice_loglik_and_score(
         mu4, vcat(V4, [1.0 1.0]), [4]; D = ones(4))
     @test_throws DimensionMismatch choice_loglik_and_score(
@@ -636,4 +644,119 @@ end
     @test_throws ArgumentError fit!(mg; method = :ghk, r_draws = 0)
     @test mg.theta == th && isnan(mg.loglik)
     @test MP.ghk_choice_prob([0.0, 0.0], Z, 1; D = ones(2), r_draws = 1) ≈ 0.5
+end
+
+@testset "round 3: tilt, blend, symmetry, weights, separation, chart" begin
+    # #352: a less noisy rival (D = 0.1) was 3.3% off; exact 0.367756
+    p = exp(choice_loglik_and_score(zeros(1, 3), zeros(3, 1), [2];
+                                    D = [0.1, 1.0, 1.0])[1])
+    @test abs(p / 0.3677556825410359 - 1) < 2e-4
+    # #128: mu = [g, 0, 1] with no factor, exact by a dense 1-D integral
+    for (g, ex) in ((-8.0, -28.888414298356473), (-20.0, -146.579926526795))
+        ll = choice_loglik_and_score(reshape([g, 0.0, 1.0], 1, 3),
+                                     zeros(3, 1), [1])[1]
+        @test abs(ll - ex) < 1e-6
+    end
+    # #345: a zero-padded binary loading is the same model, closed form
+    g, a = -7.5, 4.3
+    l1 = choice_loglik_and_score(reshape([g, 0.0], 1, 2),
+                                 reshape([0.0, a], 2, 1), [1])
+    l2 = choice_loglik_and_score(reshape([g, 0.0], 1, 2),
+                                 [0.0 0.0; a 0.0], [1])
+    @test l1[1] == l2[1] && l1[2] == l2[2]
+    @test abs(l1[1] - MP.logndtr(g / sqrt(2 + a^2))) < 1e-12
+    mu3 = [0.3 -0.2 0.5; -1.0 0.4 0.1]
+    V3 = [0.2; -0.5; 0.4;;]
+    a3 = choice_loglik_and_score(mu3, V3, [1, 3])
+    b3 = choice_loglik_and_score(mu3, hcat(V3, zeros(3)), [1, 3])
+    @test abs(a3[1] - b3[1]) < 1e-12 && all(b3[3][:, 2] .== 0)
+    # #263: node weights are relative, finite, non-negative
+    F = [0.0 -2.0; 0.0 2.0]
+    base = choice_loglik_and_score(zeros(1, 2), zeros(2, 1), [1];
+                                   nodes = (F, [0.5, 0.5]))
+    for W in ([5.0, 5.0], [1e308, 1e308])
+        o = choice_loglik_and_score(zeros(1, 2), zeros(2, 1), [1];
+                                    nodes = (F, W))
+        @test o[1] ≈ base[1] && o[2] ≈ base[2]
+    end
+    for W in ([-1.0, 2.0], [0.0, 0.0], [NaN, 1.0], [Inf, 1.0])
+        @test_throws ArgumentError choice_loglik_and_score(
+            zeros(1, 2), zeros(2, 1), [1]; nodes = (F, W))
+    end
+    # #420: no jump at the family switch, no cusp at tied rows
+    a0 = 3 * sqrt(2.0)
+    out = [choice_loglik_and_score(reshape([-3.0, 0.0, -60.0], 1, 3),
+                                   [0.0; aa; 0.0;;], [1]) for aa in
+           (a0 * (1 - 1e-10), a0 * (1 + 1e-10))]
+    @test abs(out[1][1] - out[2][1]) < 1e-8
+    @test abs(out[1][3][2, 1] - out[2][3][2, 1]) < 1e-6
+    at = 3 / sqrt(2)
+    Vt = [-at; 0.0; at;;]
+    mut = [-2.0 0.4 1.1; 0.2 -1.0 0.7]
+    ll, _, dV = choice_loglik_and_score(mut, Vt, [1, 2])
+    h = 1e-7
+    for i in 1:3
+        vp = copy(Vt); vp[i, 1] += h
+        vm = copy(Vt); vm[i, 1] -= h
+        right = (choice_loglik_and_score(mut, vp, [1, 2])[1] - ll) / h
+        left = (ll - choice_loglik_and_score(mut, vm, [1, 2])[1]) / h
+        @test abs(right - left) < 1e-5
+        @test abs(dV[i, 1] - (left + right) / 2) < 1e-5
+    end
+    # #605: the sharp cloud ignores factor signs and order
+    mu5 = reshape([0.14067943910283115, -0.1688419276279345,
+                   0.8188357505677056, -0.7906732620426022], 1, 4)
+    V5 = [-4.44796743024364 2.0653322851949887;
+          1.5404628475279805 -3.7535504592745266;
+          6.505591205368869 0.2331481770537056;
+          -3.5980866226532098 1.4550699970258316]
+    pr(A) = [exp(choice_loglik_and_score(mu5, A, [k])[1]) for k in 1:4]
+    p0 = pr(V5)
+    for A in (V5 .* [-1.0 1.0], V5 .* [1.0 -1.0], V5[:, [2, 1]])
+        @test maximum(abs.(pr(A) .- p0)) < 1e-12
+    end
+    @test maximum(abs.(p0 ./ sum(p0) .-
+                       [0.3610138, 0.1938048, 0.4039584, 0.0412231])) < 3e-3
+    # #581: one alternative is no choice
+    @test_throws ArgumentError MNProbit(reshape(collect(0.0:7.0), 8, 1, 1),
+                                        ones(Int, 8); intercepts = false, r = 0)
+    # #642: separation flagged, not converged
+    Ts = 100
+    Xs = zeros(Ts, 2, 1)
+    chs = zeros(Int, Ts)
+    Xs[1:50, :, 1] .= [1.0 -1.0]; chs[1:50] .= 1
+    Xs[51:end, :, 1] .= [-1.0 1.0]; chs[51:end] .= 2
+    ms = @test_logs (:warn, r"separated") fit!(MNProbit(Xs, chs;
+                                               intercepts = false, r = 0);
+                                               maxiter = 500)
+    @test !ms.converged && ms.separation ≈ [1.0]
+    rng = Xoshiro(7)
+    Xn = randn(rng, 200, 3, 2)
+    chn = [argmax(Xn[t, :, 1] .* 0.6 .+ randn(rng, 3)) for t in 1:200]
+    @test MP._separation_direction(Xn, chn) === nothing
+    chq = [argmax(Xn[t, :, 1]) for t in 1:200]
+    d = MP._separation_direction(Xn, chq)
+    @test d !== nothing && d[1] > 0.99
+    # #376: both normalisations and the mass defect
+    mn = fit!(MNProbit(Xn, chn; r = 1))
+    raw = predict_proba(mn; normalize = false)
+    @test maximum(abs.(sum(predict_proba(mn), dims = 2) .- 1)) < 1e-12
+    @test mass_defect(mn) ≈ 1 .- vec(sum(raw, dims = 2))
+    @test mn.mass_defect ≈ maximum(abs, mass_defect(mn)) && mn.mass_defect < 1e-3
+    # #645: a zero pivot makes the chart singular; vcov refuses
+    T6, J6 = 400, 4
+    X6 = Array{Float64}(undef, T6, J6, 1)
+    for t in 1:T6, j in 1:J6
+        X6[t, j, 1] = 0.7sin(0.13t + 0.7j) + 0.2cos(0.071t * j)
+    end
+    ch6 = [1 + mod(37t, J6) for t in 1:T6]
+    m6 = MNProbit(X6, ch6; intercepts = false, r = 2)
+    m6.theta .= [1.0, 0.0, 0.65, -0.25, 0.35, 0.80]
+    m6.beta, m6.V = MP._unpack(m6, m6.theta)
+    m6.converged = true
+    @test_throws ArgumentError vcov(m6; method = :opg)
+    @test all(isfinite, vcov(m6; method = :opg, allow_singular_chart = true))
+    m6.theta[2] = 0.2
+    m6.beta, m6.V = MP._unpack(m6, m6.theta)
+    @test all(isfinite, vcov(m6; method = :opg))
 end

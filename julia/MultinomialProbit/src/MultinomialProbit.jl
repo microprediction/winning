@@ -32,6 +32,7 @@ using LinearAlgebra: SymTridiagonal, eigen, cholesky, Symmetric, issuccess, eigm
 using Random: Xoshiro
 
 export MNProbit, max_identified_rank, fit!, loglikelihood, predict_proba, coef, vcov,
+    mass_defect,
     stderror, score_matrix, loglik_hessian,
     choice_loglik_and_score, ghk_choice_prob
 
@@ -244,40 +245,75 @@ end
 """log of phi(a)/Phi(a), the inverse Mills ratio, stable in the far tail."""
 _log_mills(a::Real) = -0.5 * a * a - 0.5 * log(2 * pi) - logndtr(a)
 
-"""Laplace-tilt the chosen alternative's own-noise quadrature.
+# ---- node rules -------------------------------------------------------
 
-The fixed Gauss-Hermite rule samples z where the PRIOR has its mass, and
-for a large observed contrast the integrand's mass is far outside it: at
-a gap of -20 the mode is at z = 10 and a 7-node rule reaches |z| < 3.8.
-With g(z) = -z^2/2 + sum_j logPhi(A_j(z)),
+"""All permutations of 1:r (lexicographic)."""
+function _permutations(r::Int)
+    r == 0 && return [Int[]]
+    out = Vector{Vector{Int}}()
+    for p in _permutations(r - 1)
+        for i in 0:(r - 1)
+            q = copy(p)
+            insert!(q, i + 1, r)
+            push!(out, q)
+        end
+    end
+    return sort(out)
+end
 
-    g'(z)  = -z + sum_j (s_k/s_j) lam(A_j)
-    g''(z) = -1 - sum_j (s_k/s_j)^2 lam(A_j)(A_j + lam(A_j))
+# Factor orientation is arbitrary: V and V*Q price the same law for any
+# orthogonal Q, and in particular for a column sign flip or permutation.
+# The Gauss-Hermite tensor is invariant under both; a Halton cloud is
+# not, so the sharp-branch probability moved by 0.0029 when one loading
+# column changed sign (#605). The cloud is the orbit of base points under
+# the signed permutations of the factor coordinates (all 2^r r! of them
+# while that is at most 384, i.e. r <= 4; the 2^r sign flips beyond), at
+# about the same node count. General rotations are not covered.
+const _MAX_SYMMETRY_ORDER = 384
 
-and lam(a)(a + lam(a)) = -lam'(a) > 0 for every a, so g'' <= -1: g is
-strictly concave, its mode is unique and Newton converges from anywhere.
-The change of measure is undone exactly by log sigma - z^2/2 + x^2/2, so
-the shift moves the NODES and not the integrand (#270)."""
-# The tilt is a choice of NODES, so it must not carry derivative
-# information: if duals flowed through the Newton solve, ForwardDiff
-# would return the derivative of the re-tilted objective while the
-# analytic score -- correctly -- returns the quadrature of the true
-# derivative, and the two would disagree by a quadrature-order amount.
-# Stripping to the value makes the shift a constant, so dual-mode
-# differentiation of this code reproduces the analytic score exactly.
-#
-# Done WITHOUT a ForwardDiff dependency, and deliberately not through
-# the package extension: correctness must not depend on an extension
-# having been loaded. A dual carries its value in a `value` field, and
-# the recursion peels nested duals (forward-over-forward) down to the
-# float underneath.
-"""(F, W): nodes over (factor^r, own-noise); Halton past sharpness 3
-(the dependency-free escalation of the R port)."""
+function _factor_symmetries(r::Int, n::Int)
+    r == 0 && return [Int[]], [Float64[]]
+    signs = [Float64[((s >> (c - 1)) & 1) == 0 ? 1.0 : -1.0 for c in 1:r]
+             for s in 0:(2^r - 1)]
+    full = 2^r * factorial(r)
+    if full <= min(_MAX_SYMMETRY_ORDER, n)
+        return _permutations(r), signs
+    elseif 2^r <= n
+        return [collect(1:r)], signs
+    end
+    return [collect(1:r)], [ones(r)]
+end
+
+"""Halton normal cloud of about `n` points over (factor^r, extra) whose
+factor coordinates are closed under the signed permutations of
+`_factor_symmetries` (#605). Equal weights."""
+function _symmetric_halton(r::Int, extra::Int, n::Int)
+    perms, signs = _factor_symmetries(r, n)
+    order = length(perms) * length(signs)
+    nb = cld(n, order)
+    X, _ = _halton_normal(r + extra, nb)
+    F = zeros(nb * order, r + extra)
+    row = 0
+    for pm in perms, sg in signs
+        for b in 1:nb
+            row += 1
+            for c in 1:r
+                F[row, c] = sg[c] * X[b, pm[c]]
+            end
+            for c in (r + 1):(r + extra)
+                F[row, c] = X[b, c]
+            end
+        end
+    end
+    return F, fill(1.0 / size(F, 1), size(F, 1))
+end
+
+"""(F, W): nodes over (factor^r, own-noise); a symmetrised Halton cloud
+past sharpness 3 (the dependency-free escalation of the R port, #605)."""
 function nodes_for_likelihood(r::Int; Qf = 7, Qz = 7, sharp = 0.0)
-    sharp > 3.0 && return _halton_normal(r + 1, 2^10)
+    sharp > 3.0 && return _symmetric_halton(r, 1, 2^10)
     xf, wf = _gh1(Qf)
     xz, wz = _gh1(Qz)
-    dims = ntuple(_ -> Qf, r)
     npts = Qf^r * Qz
     F = zeros(npts, r + 1)
     W = ones(npts)
@@ -346,7 +382,14 @@ end
 columns (r factor coordinates, then own noise), one finite row per
 weight. Columns were sliced by position, so a surplus column was read
 as the own-noise coordinate and the real one dropped, moving a 0.5
-probability to 1.0 without an error (#476)."""
+probability to 1.0 without an error (#476).
+
+The weights are RELATIVE, as every other port's quadrature boundary
+treats them: finite, non-negative, positive total, and normalized here
+(by the maximum first, so a finite 1e308 rule does not overflow). They
+were used as given, so `W = [5, 5]` added log(10) per observation, a
+signed rule returned a log-likelihood above zero and an all-zero rule a
+NaN score (#263)."""
 function _check_nodes(nodes, r::Integer)
     F, W = nodes
     F isa AbstractMatrix || throw(ArgumentError(
@@ -360,91 +403,363 @@ function _check_nodes(nodes, r::Integer)
         "nodes need one weight per row of F: got " * string(length(W)) *
         " weights for " * string(size(F, 1)) * " nodes"))
     all(isfinite, F) || throw(ArgumentError("nodes F has a non-finite entry"))
-    return F, W
+    Wv = Float64.(collect(W))
+    for (i, w) in enumerate(Wv)
+        isfinite(w) || throw(ArgumentError(
+            "nodes W[" * string(i) * "] = " * string(w) * " is not finite"))
+        w >= 0 || throw(ArgumentError(
+            "nodes W[" * string(i) * "] = " * string(w) * " is negative: " *
+            "quadrature weights are relative masses (#263)"))
+    end
+    mx = maximum(Wv)
+    mx > 0 || throw(ArgumentError(
+        "nodes W are all zero: a quadrature rule needs positive total " *
+        "weight (#263)"))
+    Wv = Wv ./ mx
+    return F, Wv ./ sum(Wv)
+end
+
+# ---- the sharpness blend (#420) ----------------------------------------
+
+# The node family switches from the Hermite tensor to the Halton cloud at
+# sharpness 3, and the two rules disagree there: at the binary #420
+# fixture the hard switch moved the log-likelihood by 0.0243 for a 1e-10
+# change in a loading. Across this window the likelihood is the
+# probability-weighted blend (1 - w) P_GH + w P_Halton with a C1
+# smoothstep w, and the score carries the blend's own derivative.
+const _BLEND_LO, _BLEND_HI = 2.9, 3.1
+
+function _blend_weight(sharp::Real)
+    t = (sharp - _BLEND_LO) / (_BLEND_HI - _BLEND_LO)
+    t <= 0 && return 0.0, 0.0
+    t >= 1 && return 1.0, 0.0
+    return t * t * (3 - 2t), 6t * (1 - t) / (_BLEND_HI - _BLEND_LO)
+end
+
+# The blend's statistic must be differentiable and symmetric in the
+# alternatives: a max over row norms has a cusp at ties. A p-norm of the
+# centred row norms is smooth, permutation symmetric, at least the max
+# and at most J^(1/p) above it (the python reference's _smooth_sharpness).
+const _SHARP_P = 32.0
+
+function _smooth_sharpness(V::AbstractMatrix, Dv::AbstractVector)
+    J = size(V, 1)
+    C = V .- sum(V, dims = 1) ./ J
+    n2 = vec(sum(C .^ 2, dims = 2))
+    M = maximum(n2)
+    sc = sqrt(2) / sqrt(minimum(Dv))
+    M > 0 || return zero(eltype(n2)), zeros(eltype(V), size(V))
+    u = n2 ./ M
+    up = u .^ (_SHARP_P / 2)
+    Su = sum(up)
+    sn = sqrt(M) * Su^(1 / _SHARP_P)
+    dn2 = 0.5 .* sn .* (u .^ (_SHARP_P / 2 - 1)) ./ (M * Su)
+    G = 2 .* dn2 .* C
+    G = G .- sum(G, dims = 1) ./ J
+    return sc * sn, sc .* G
+end
+
+# ---- the own-noise tilt (#128, #270, #352) -----------------------------
+
+# The nodes sample the chosen alternative's own noise z where its PRIOR
+# has mass, but when the chosen alternative is behind, the integrand
+# h(z) = phi(z) prod_j Phi((c_j + s_k z)/s_j) has its mass far to the
+# right (at a gap of -20 the binary likelihood was -143.2 against
+# -103.6). On the Gauss-Hermite tensor each observation's own-noise nodes
+# move to the mode m of log h and scale with the curvature there,
+# z = m + sigma x, and the change of measure rides in the weights,
+# log sigma - z^2/2 + x^2/2. The mode is taken with the factors
+# integrated out in the Gaussian approximation (rival noise widened to
+# t_j^2 = s_j^2 + |v_k - v_j|^2). m is a FIXED smooth map -- four Newton
+# steps on a Mills-ratio surrogate, then two exact ones -- whose
+# derivatives are carried along, so the analytic score is the exact
+# gradient of the returned value (an earlier, converged-Newton tilt with
+# a frozen shift made fits ten times slower and stop converging). Port
+# of winning/likelihood.py::_tilt_mode; the Halton branch is not tilted.
+const _TILT_SURROGATE_STEPS, _TILT_EXACT_STEPS = 4, 2
+
+"""(m, h, dm_c, dh_c, dm_t, dh_t) for one observation: the tilt centre,
+the curvature at the last exact point, and their derivatives in the
+contrasts c_j and the effective rival scales t_j."""
+function _tilt_mode(c0::AbstractVector, t::AbstractVector, sk::Real)
+    R = length(c0)
+    ET = promote_type(eltype(c0), eltype(t), typeof(sk))
+    m = zero(ET)
+    dm_c = zeros(ET, R)
+    dm_t = zeros(ET, R)
+    dh_c = zeros(ET, R)
+    dh_t = zeros(ET, R)
+    h = one(ET)
+    lam = zeros(ET, R); kap = zeros(ET, R); kp = zeros(ET, R)
+    a = zeros(ET, R)
+    for it in 1:(_TILT_SURROGATE_STEPS + _TILT_EXACT_STEPS)
+        for j in 1:R
+            a[j] = (c0[j] + sk * m) / t[j]
+            if it <= _TILT_SURROGATE_STEPS
+                q = sqrt(a[j]^2 + 4)
+                lam[j] = (q - a[j]) / 2
+                kap[j] = (1 - a[j] / q) / 2
+                kp[j] = -2 / q^3
+            else
+                lam[j] = exp(-a[j]^2 / 2 - 0.5 * log(2 * pi) - logndtr(a[j]))
+                kap[j] = lam[j] * (a[j] + lam[j])
+                kp[j] = lam[j] * (1 - kap[j]) - kap[j] * (a[j] + lam[j])
+            end
+        end
+        g1 = -m
+        h = one(ET)
+        S3 = zero(ET)
+        for j in 1:R
+            rho = sk / t[j]
+            g1 += rho * lam[j]
+            h += rho^2 * kap[j]
+            S3 += rho^3 * kp[j]
+        end
+        sc = g1 / h^2
+        for j in 1:R
+            rho = sk / t[j]
+            dg1c = -(rho * kap[j]) / t[j] - h * dm_c[j]
+            dh_c[j] = rho^2 * kp[j] / t[j] + S3 * dm_c[j]
+            dg1t = rho * (kap[j] * a[j] - lam[j]) / t[j] - h * dm_t[j]
+            dh_t[j] = -rho^2 * (2 * kap[j] + kp[j] * a[j]) / t[j] +
+                      S3 * dm_t[j]
+            dm_c[j] += dg1c / h - sc * dh_c[j]
+            dm_t[j] += dg1t / h - sc * dh_t[j]
+        end
+        m += g1 / h
+    end
+    return m, h, dm_c, dh_c, dm_t, dh_t
+end
+
+"""Per-observation log P(choice), d/dmu and d/dV (T, J, r) on one node
+set; V gauge-centred; `tilt` moves each observation's own-noise nodes
+(Gauss-Hermite branch only). Port of winning/likelihood.py::_choice_terms."""
+function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
+                       choice::AbstractVector{Int}, s::AbstractVector,
+                       F::AbstractMatrix, W::AbstractVector; tilt = true)
+    T, J = size(mu)
+    r = size(V, 2)
+    ET = promote_type(eltype(mu), eltype(V), Float64)
+    Q = length(W)
+    Fq = F[:, 1:r]
+    xq = F[:, r + 1]
+    logW = log.(W)
+    Vf = Fq * V'                                # (Q, J)
+    lp = zeros(ET, T)
+    dmu = zeros(ET, T, J)
+    GV = zeros(ET, T, J, r)
+    R = J - 1
+    logPhi = zeros(ET, R, Q)
+    lam = zeros(ET, R, Q)
+    acc = zeros(ET, Q)
+    z = zeros(ET, Q)
+    c0 = zeros(ET, R)
+    tj = zeros(ET, R)
+    for t in 1:T
+        k = choice[t]
+        rv = [j for j in 1:J if j != k]
+        for (i, j) in enumerate(rv)
+            c0[i] = mu[t, k] - mu[t, j]
+            tj[i] = sqrt(s[j]^2 + sum((V[k, c] - V[j, c])^2 for c in 1:r;
+                                      init = zero(ET)))
+        end
+        if tilt
+            m, h, dm_c, dh_c, dm_t, dh_t = _tilt_mode(c0, tj, s[k])
+            sig = 1 / sqrt(h)
+        else
+            m, sig = zero(ET), one(ET)
+        end
+        for q in 1:Q
+            z[q] = m + sig * xq[q]
+            a_acc = logW[q]
+            for (i, j) in enumerate(rv)
+                A = (c0[i] + Vf[q, k] - Vf[q, j] + s[k] * z[q]) / s[j]
+                lP = logndtr(A)
+                logPhi[i, q] = lP
+                lam[i, q] = exp(-A^2 / 2 - 0.5 * log(2 * pi) - lP)
+                a_acc += lP
+            end
+            tilt && (a_acc += xq[q]^2 / 2 - z[q]^2 / 2)
+            acc[q] = a_acc
+        end
+        mx = maximum(acc)
+        rs = zero(ET)
+        for q in 1:Q
+            acc[q] = exp(acc[q] - mx)
+            rs += acc[q]
+        end
+        lp[t] = log(sig) + mx + log(max(rs, TINY))
+        Eg = zero(ET); Egx = zero(ET)
+        dcs = zeros(ET, R)
+        for q in 1:Q
+            om = acc[q] / rs
+            gp = -z[q]
+            for (i, j) in enumerate(rv)
+                wl = om * lam[i, q] / s[j]
+                dcs[i] += wl
+                for c in 1:r
+                    GV[t, k, c] += wl * Fq[q, c]
+                    GV[t, j, c] -= wl * Fq[q, c]
+                end
+                gp += s[k] / s[j] * lam[i, q]
+            end
+            Eg += om * gp
+            Egx += om * gp * xq[q]
+        end
+        for (i, j) in enumerate(rv)
+            dci = dcs[i]
+            if tilt
+                dsc = -0.5 * sig / h * dh_c[i]
+                dst = -0.5 * sig / h * dh_t[i]
+                dci += dsc / sig + Eg * dm_c[i] + Egx * dsc
+                dt = dst / sig + Eg * dm_t[i] + Egx * dst
+                # t_j = sqrt(s_j^2 + |v_k - v_j|^2)
+                for c in 1:r
+                    gvc = dt / tj[i] * (V[k, c] - V[j, c])
+                    GV[t, k, c] += gvc
+                    GV[t, j, c] -= gvc
+                end
+            end
+            dmu[t, k] += dci
+            dmu[t, j] -= dci
+        end
+    end
+    return lp, dmu, GV
+end
+
+"""J = 2 in closed form: P(k) = Phi(c/s), c = mu_k - mu_j,
+s^2 = D_k + D_j + |v_k - v_j|^2, with its analytic score. No quadrature,
+so no tail, no dependence on a null loading column (#345)."""
+function _choice_pair(mu::AbstractMatrix, V::AbstractMatrix,
+                      choice::AbstractVector{Int}, Dv::AbstractVector)
+    T = size(mu, 1)
+    r = size(V, 2)
+    ET = promote_type(eltype(mu), eltype(V), Float64)
+    lp = zeros(ET, T)
+    dmu = zeros(ET, T, 2)
+    GV = zeros(ET, T, 2, r)
+    for t in 1:T
+        k = choice[t]
+        j = 3 - k
+        c = mu[t, k] - mu[t, j]
+        s2 = Dv[k] + Dv[j] + sum((V[k, cc] - V[j, cc])^2 for cc in 1:r;
+                                 init = zero(ET))
+        if s2 > 0
+            s = sqrt(s2)
+            zz = c / s
+            l = logndtr(zz)
+            lam = exp(-zz^2 / 2 - 0.5 * log(2 * pi) - l)
+            lp[t] = l
+            dmu[t, k] = lam / s
+            dmu[t, j] = -lam / s
+            for cc in 1:r
+                g = -lam * c / s^3 * (V[k, cc] - V[j, cc])
+                GV[t, k, cc] = g
+                GV[t, j, cc] = -g
+            end
+        else
+            lp[t] = c > 0 ? zero(ET) : (c < 0 ? ET(-Inf) : log(ET(0.5)))
+        end
+    end
+    return lp, dmu, GV
+end
+
+"""Per-observation log P(choice_t) with score rows (lp, dmu, GV): the
+one probability map that fitting, inference and prediction share."""
+function _choice_logprob_terms(mu::AbstractMatrix, V::AbstractMatrix,
+                               choice::Vector{Int}, Dv::Vector{Float64};
+                               Qf = 7, Qz = 7, nodes = nothing)
+    T, J = size(mu)
+    r = size(V, 2)
+    if nodes === nothing && J == 2
+        # the closed form needs only D_k + D_j + |v_k - v_j|^2 > 0
+        all(>=(0.0), Dv) || throw(ArgumentError(
+            "D must be non-negative: it is an idiosyncratic variance"))
+        return _choice_pair(mu, V, choice, Dv)
+    end
+    all(>(0.0), Dv) || throw(ArgumentError(
+        "D must be strictly positive for the likelihood: the own-noise " *
+        "integral divides by each rival's sqrt(D)"))
+    s = sqrt.(Dv)
+    Vc = V .- sum(V, dims = 1) ./ J          # gauge: differences decide
+    if nodes !== nothing
+        F, W = _check_nodes(nodes, r)
+        # a caller's rule is integrated as given (no tilt)
+        return _choice_terms(mu, Vc, choice, s, F, W; tilt = false)
+    end
+    # A loading column that is zero after centring changes no choice
+    # probability, but it changed the node dimension, so a zero-padded V
+    # priced differently from the unpadded one (#345). Integrate over
+    # the live columns only; a null column's score is exactly zero.
+    live = [c for c in 1:r if any(!=(0), Vc[:, c])]
+    if length(live) < r
+        lp, dmu, GVl = _choice_logprob_terms(mu, V[:, live], choice, Dv;
+                                             Qf = Qf, Qz = Qz)
+        GV = zeros(eltype(GVl), T, J, r)
+        GV[:, :, live] .= GVl
+        return lp, dmu, GV
+    end
+    # a rival much less noisy than the chosen alternative makes the
+    # own-noise integrand a step of width s_j/s_k: more own-noise nodes,
+    # capped at 4x (#352); D = 1 is unaffected
+    ratio = sqrt(maximum(Dv) / minimum(Dv))
+    Qz = ratio > 1 ? Int(min(4 * Qz, ceil(Qz * ratio))) : Qz
+    sharp, sgrad = _smooth_sharpness(V, Dv)
+    w, dw = _blend_weight(sharp)
+    if w == 0.0 || w == 1.0
+        F, W = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = sharp)
+        return _choice_terms(mu, Vc, choice, s, F, W; tilt = (w == 0.0))
+    end
+    Fg, Wg = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = 0.0)
+    Fs, Ws = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = Inf)
+    lg, dmg, GVg = _choice_terms(mu, Vc, choice, s, Fg, Wg; tilt = true)
+    ls, dms, GVs = _choice_terms(mu, Vc, choice, s, Fs, Ws; tilt = false)
+    lp = similar(lg)
+    dmu = similar(dmg)
+    GV = similar(GVg)
+    for t in eachindex(lg)
+        x1 = log1p(-w) + lg[t]
+        x2 = log(w) + ls[t]
+        mx = max(x1, x2)
+        lp[t] = mx + log(exp(x1 - mx) + exp(x2 - mx))
+        a = exp(x1 - lp[t])
+        b = exp(x2 - lp[t])
+        dmu[t, :] .= a .* dmg[t, :] .+ b .* dms[t, :]
+        gw = (exp(ls[t] - lp[t]) - exp(lg[t] - lp[t])) * dw
+        GV[t, :, :] .= a .* GVg[t, :, :] .+ b .* GVs[t, :, :] .+ gw .* sgrad
+    end
+    return lp, dmu, GV
 end
 
 """Log-likelihood of observed argmax choices with the ANALYTIC score.
 mu: (T, J) utilities; V: (J, r) loadings; choice: 1-based indices.
-Returns (loglik, dmu, dV). Port of winning/likelihood.py."""
+Returns (loglik, dmu, dV), plus the per-observation loading scores
+(T, J, r) with `per_obs = true`. Port of winning/likelihood.py: J = 2
+in closed form; J >= 3 integrates the factors and the chosen
+alternative's own noise on a Gauss-Hermite tensor with tilted own-noise
+nodes, or past sharpness 3 a symmetrised Halton cloud, blended
+continuously across the switch. `nodes = (F, W)` integrates the
+caller's rule as given."""
 function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
                                  choice::AbstractVector;
                                  D = nothing, Qf = 7, Qz = 7,
                                  nodes = nothing, per_obs = false)
     T, J = size(mu)
-    r = size(V, 2)
-    # Every observation must be accounted for. The loop below walks the
-    # LEGAL labels and gathers the rows matching each, so a row whose
-    # choice is outside 1..J is never visited: it contributed nothing to
-    # the log-likelihood and a zero row to the score, and the fit
-    # silently optimised a SUBSET while reporting it as the whole. This
-    # port also accepted a choice vector SHORTER than T, dropping the
-    # tail without a word (#194).
+    # Every observation must be accounted for: a row whose choice is
+    # outside 1..J was never visited, and a SHORTER choice vector
+    # dropped the tail without a word (#194).
     choice = _check_choice(choice, T, J)
     # one loading row per alternative, BEFORE gauge centring and the
-    # sharpness dispatch: a surplus row is never integrated but moved
-    # both, switching Gauss-Hermite to Halton and the choice probability
-    # from 0.654 to 0.637 for an unchanged model (#462)
+    # sharpness dispatch (#462)
     size(V, 1) == J || throw(DimensionMismatch(
         "V must have one loading row per alternative: got " *
         string(size(V, 1)) * " rows for J = " * string(J)))
     Dv = _check_D(D, J)
-    all(>(0.0), Dv) || throw(ArgumentError(
-        "D must be strictly positive for the likelihood: the own-noise " *
-        "integral divides by each rival's sqrt(D)"))
-    s = sqrt.(Dv)
-    V = V .- sum(V, dims = 1) ./ J          # gauge: differences decide
-    ET = promote_type(eltype(mu), eltype(V), Float64)
-    sharp = sqrt(2) * maximum(sqrt.(vec(sum(V .^ 2, dims = 2)))) /
-            sqrt(minimum(Dv))
-    F, W = nodes === nothing ?
-           nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = sharp) :
-           _check_nodes(nodes, r)
-    Fq = F[:, 1:r]
-    zq = F[:, r + 1]
-    Q = length(W)
-    Vf = Fq * V'                             # (Q, J)
-
-    loglik = zero(ET)
-    dmu = zeros(ET, T, J)
-    dV = zeros(ET, J, r)
-    GV = per_obs ? zeros(ET, T, J, r) : zeros(ET, 0, 0, 0)
-    for k in 1:J
-        idx = findall(==(k), choice)
-        isempty(idx) && continue
-        rivals = [j for j in 1:J if j != k]
-        Ti = length(idx)
-        acc = zeros(ET, Ti, Q)
-        A = Dict{Int,Matrix{ET}}()
-        logPhi = Dict{Int,Matrix{ET}}()
-        for j in rivals
-            shift = Vf[:, k] .- Vf[:, j] .+ zq .* s[k]      # (Q,)
-            Aj = ((mu[idx, k] .- mu[idx, j]) .+ shift') ./ s[j]  # (Ti, Q)
-            A[j] = Aj
-            lp = logndtr.(Aj)
-            logPhi[j] = lp
-            acc .+= lp
-        end
-        m = vec(maximum(acc, dims = 2))
-        pw = exp.(acc .- m) .* W'
-        rs = vec(sum(pw, dims = 2))
-        loglik += sum(m .+ log.(max.(rs, TINY)))
-        omega = pw ./ rs
-        for j in rivals
-            lam = exp.(-0.5 .* A[j] .^ 2 .- 0.5 * log(2 * pi) .- logPhi[j])
-            wl = omega .* lam ./ s[j]
-            g = vec(sum(wl, dims = 2))
-            dmu[idx, k] .+= g
-            dmu[idx, j] .-= g
-            H = wl * Fq                       # (Ti, r)
-            hc = vec(sum(H, dims = 1))
-            dV[k, :] .+= hc
-            dV[j, :] .-= hc
-            if per_obs
-                GV[idx, k, :] .+= H
-                GV[idx, j, :] .-= H
-            end
-        end
-    end
+    nodes === nothing || _check_nodes(nodes, size(V, 2))
+    lp, dmu, GV = _choice_logprob_terms(mu, V, choice, Dv;
+                                        Qf = Qf, Qz = Qz, nodes = nodes)
+    loglik = sum(lp)
+    dV = dropdims(sum(GV, dims = 1), dims = 1)
     per_obs && return loglik, dmu, dV, GV
     return loglik, dmu, dV
 end
@@ -574,6 +889,12 @@ mutable struct MNProbit
     # column count, and guessed wrong: see its docstring (#195).
     intercepts::Bool
     p_raw::Int          # covariate columns the caller supplied
+    # largest |1 - sum_k raw P_k| on the training rows: how far the raw
+    # per-choice masses the fit maximizes are from the normalized
+    # predict_proba (#376); NaN before an exact fit
+    mass_defect::Float64
+    # a recession direction of the mean design (no finite MLE), or empty
+    separation::Vector{Float64}
 end
 
 """Largest factor rank the unit-idiosyncratic parameterization
@@ -603,6 +924,12 @@ function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
     # BFGS stopped at once and reported the initial coefficients as a
     # converged fit (#591).
     T > 0 || throw(ArgumentError("at least one observation is required"))
+    # One alternative is no choice at all: every probability is one and
+    # the objective is flat, so the fit returned its initializer as a
+    # converged estimate (#581).
+    J >= 2 || throw(ArgumentError(
+        "a choice model needs at least two alternatives; X has " *
+        string(J) * ". With one, every coefficient is unidentified (#581)"))
     rmax = max_identified_rank(J)
     r = r === nothing ? min(2, rmax) : _as_count(r, "factor rank r")
     (0 <= r <= rmax) || throw(ArgumentError(
@@ -622,7 +949,7 @@ function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
     pos = _fill_positions(J, r)
     return MNProbit(Xf, _check_choice(choice, T, J), T, J, p, r, pos,
                     zeros(p + length(pos)), zeros(p), zeros(J, r),
-                    NaN, false, :exact, intercepts, p0)
+                    NaN, false, :exact, intercepts, p0, NaN, Float64[])
 end
 
 function _unpack(m::MNProbit, theta)
@@ -651,6 +978,19 @@ function _nll_grad(m::MNProbit, theta)
     return -ll, -vcat(gbeta, gw)
 end
 
+# A stationary point to double precision. Near the optimum of a
+# likelihood summed over hundreds of observations the Newton decrement
+# g' H g falls below the resolution of f (eps |f|) while the score is
+# still a little above gtol: no step can then be confirmed by the
+# objective, and BFGS spun to maxiter (or failed its line search) at a
+# score of 3e-6 -- converged or not depending on summation order, i.e.
+# on whether bounds checking was on. Within 100 gtol, that is a stop.
+function _precision_stop(f, g, H; gtol = 1e-6)
+    isempty(g) && return true
+    maximum(abs.(g)) < 100 * gtol || return false
+    return abs(g' * (H * g)) <= 64 * eps(Float64) * max(1.0, abs(f))
+end
+
 """Self-contained BFGS with backtracking (the winning house rule:
 dependency-free; the analytic score makes this adequate)."""
 function _bfgs(f_g, theta0; maxiter = 400, gtol = 1e-6)
@@ -663,6 +1003,7 @@ function _bfgs(f_g, theta0; maxiter = 400, gtol = 1e-6)
     H = [i == j ? 1.0 : 0.0 for i in 1:n, j in 1:n]
     for _ in 1:maxiter
         maximum(abs.(g)) < gtol && return theta, f, true
+        _precision_stop(f, g, H; gtol = gtol) && return theta, f, true
         d = -(H * g)
         step = 1.0
         f_new, g_new, theta_new = f, g, theta
@@ -676,7 +1017,7 @@ function _bfgs(f_g, theta0; maxiter = 400, gtol = 1e-6)
             end
             step *= 0.5
         end
-        ok || return theta, f, false
+        ok || return theta, f, _precision_stop(f, g, H; gtol = gtol)
         sdiff = theta_new .- theta
         y = g_new .- g
         sy = sdiff' * y
@@ -697,7 +1038,10 @@ reported an arbitrary point on it as converged (#581). Left to right, a
 column is aliased when its contrast residual on the earlier kept
 columns is below `tol` of its own contrast norm (Gram scale)."""
 function _check_contrast_rank(m::MNProbit; tol = 1e-10)
-    (m.p == 0 || m.J < 2) && return nothing
+    m.p == 0 && return nothing
+    m.J >= 2 || throw(ArgumentError(
+        "with fewer than two alternatives no mean-design column is " *
+        "identified from within-choice-set contrasts (#581)"))
     Dc = reshape(m.X[:, 2:m.J, :] .- m.X[:, 1:1, :], :, m.p)
     G = Dc' * Dc
     kept = Int[]
@@ -725,6 +1069,100 @@ function _check_contrast_rank(m::MNProbit; tol = 1e-10)
         "constant across the alternatives of every observation or a " *
         "linear combination of earlier columns (the generated intercepts " *
         "come first); drop them (#581)"))
+end
+
+"""max c'x s.t. A x <= b, x >= 0 (b >= 0) by the condensed-tableau
+simplex with Bland's rule, which terminates on the degenerate b = 0 rows
+the separation problem is made of. Returns (x, objective, ok)."""
+function _lp_max(c::Vector{Float64}, A::Matrix{Float64}, b::Vector{Float64};
+                 tol = 1e-12)
+    m, n = size(A)
+    T = zeros(m + 1, n + 1)
+    T[1:m, 1:n] .= A
+    T[1:m, n + 1] .= b
+    T[m + 1, 1:n] .= -c
+    basis = collect((n + 1):(n + m))
+    nonbasis = collect(1:n)
+    for _ in 1:(50 * (m + n))
+        e = 0
+        for j in 1:n
+            if T[m + 1, j] < -tol && (e == 0 || nonbasis[j] < nonbasis[e])
+                e = j
+            end
+        end
+        if e == 0
+            x = zeros(n + m)
+            for i in 1:m
+                x[basis[i]] = T[i, n + 1]
+            end
+            return x[1:n], T[m + 1, n + 1], true
+        end
+        r = 0
+        best = Inf
+        for i in 1:m
+            T[i, e] > tol || continue
+            ratio = T[i, n + 1] / T[i, e]
+            if ratio < best - 1e-15 ||
+               (abs(ratio - best) <= 1e-15 && basis[i] < basis[r])
+                best = ratio
+                r = i
+            end
+        end
+        r == 0 && return zeros(n), Inf, false            # unbounded
+        p = T[r, e]
+        for i in 1:(m + 1)
+            i == r && continue
+            f = T[i, e] / p
+            f == 0 && continue
+            for j in 1:(n + 1)
+                j == e && continue
+                T[i, j] -= f * T[r, j]
+            end
+            T[i, e] = -f
+        end
+        for j in 1:(n + 1)
+            j == e && continue
+            T[r, j] /= p
+        end
+        T[r, e] = 1 / p
+        basis[r], nonbasis[e] = nonbasis[e], basis[r]
+    end
+    return zeros(n), 0.0, false
+end
+
+"""A recession direction of the mean design, or `nothing`: if some d
+gives every observed contrast (X[t, chosen] - X[t, j]) d >= 0, with at
+least one strict, every choice probability is nondecreasing along
+beta + s d and one rises for ever, so there is no finite MLE (complete
+or quasi-complete separation). BFGS stopped where the score fell under
+gtol and called it converged (#642). Port of
+winning/mnprobit.py::_separation_direction: the LP
+max 1'(A d) s.t. A d >= 0, |d|_inf <= 1 on unit-scaled columns."""
+function _separation_direction(X::AbstractArray{<:Real,3},
+                               choice::AbstractVector{Int})
+    T, J, p = size(X)
+    (p == 0 || J < 2) && return nothing
+    rows = Vector{Vector{Float64}}()
+    for t in 1:T, j in 1:J
+        j == choice[t] && continue
+        push!(rows, [X[t, choice[t], c] - X[t, j, c] for c in 1:p])
+    end
+    A = permutedims(hcat(rows...))
+    cs = [max(maximum(abs, A[:, c]), 0.0) for c in 1:p]
+    cs = [x > 0 ? x : 1.0 for x in cs]
+    As = A ./ cs'
+    nr = size(As, 1)
+    g = vec(sum(As, dims = 1))
+    Ilp = Matrix{Float64}(LinearAlgebra.I, p, p)
+    Alp = vcat(hcat(-As, As), hcat(Ilp, zeros(p, p)), hcat(zeros(p, p), Ilp))
+    blp = vcat(zeros(nr), ones(2p))
+    x, obj, ok = _lp_max(vcat(g, -g), Alp, blp)
+    (ok && obj > 1e-9) || return nothing
+    d = x[1:p] .- x[(p + 1):(2p)]
+    marg = As * d
+    (minimum(marg) >= -1e-9 && maximum(marg) > 1e-7) || return nothing
+    d = d ./ cs
+    return d ./ LinearAlgebra.norm(d)
 end
 
 function fit!(m::MNProbit; method = :exact, maxiter = 400,
@@ -777,7 +1215,22 @@ function fit!(m::MNProbit; method = :exact, maxiter = 400,
                   "the fit is flagged converged = false. Drop those " *
                   "alternatives or fit without intercepts."
         end
+    else
+        unchosen = Int[]
     end
+    sep = _separation_direction(m.X, m.choice)
+    m.separation = sep === nothing ? Float64[] : sep
+    if sep !== nothing && isempty(unchosen)
+        m.converged = false
+        @warn "the mean design is separated: moving the coefficients " *
+              "along $(round.(sep, digits = 6)) never lowers any observed " *
+              "choice probability and raises at least one, so the " *
+              "likelihood has no finite maximizer; the fit is flagged " *
+              "converged = false (see m.separation, #642)."
+    end
+    # the fit maximized raw per-choice masses; prediction normalizes
+    # them: report how far apart the two maps are (#376)
+    m.mass_defect = maximum(abs, mass_defect(m))
     return m
 end
 
@@ -842,6 +1295,37 @@ function loglik_hessian(m::MNProbit, theta = m.theta; h = 1e-5)
     return (Hs .+ Hs') ./ 2
 end
 
+"""Refuse inference in a singular loading chart. The free loadings are
+lower triangular with a zero reference row, which pins the factor
+rotation only while each pivot V[c + 1, c], c < r, is nonzero. When
+alternative c + 1 loads like the reference on the first c factors, a
+continuous rotation of the factors keeps every imposed zero and every
+probability: the exact likelihood is flat along it, and the finite
+quadrature's small artificial curvature turned that ridge into large
+but finite standard errors whose very existence depended on the
+alternative ORDER (condition number 4384 against 19 for a relabelled,
+identical covariance, #645)."""
+function _check_chart(m::MNProbit; tol = 1e-6)
+    m.r >= 2 || return nothing
+    scale = max(maximum(abs, m.V; init = 0.0), 1.0)
+    for c in 1:(m.r - 1)
+        if abs(m.V[c + 1, c]) <= tol * scale
+            throw(ArgumentError(
+                "vcov: the loading chart is singular at its pivot V[" *
+                string(c + 1) * ", " * string(c) * "] = " *
+                string(m.V[c + 1, c]) * ": alternative " * string(c + 1) *
+                " loads like the reference on the first " * string(c) *
+                " factor(s), so a factor rotation leaves every probability " *
+                "unchanged and the raw loadings have no standard errors. " *
+                "Reorder the alternatives so one with a distinct loading " *
+                "takes row " * string(c + 1) * " and refit, or pass " *
+                "allow_singular_chart = true to see the quadrature's " *
+                "pseudo-information anyway (#645)"))
+        end
+    end
+    return nothing
+end
+
 """Parameter covariance at the fit: method = :hessian (observed
 information, default), :opg (outer product of per-observation
 scores), or :sandwich (H^-1 B H^-1, robust).
@@ -856,10 +1340,12 @@ fit is refused unless `allow_unconverged = true`, and the Hessian and
 sandwich forms require the observed information `-H` to be positive
 definite: at a saddle its inverse has negative variances, which
 `stderror` used to clip to a standard error of exactly zero (#493)."""
-function vcov(m::MNProbit; method = :hessian, allow_unconverged = false)
+function vcov(m::MNProbit; method = :hessian, allow_unconverged = false,
+              allow_singular_chart = false)
     method in (:hessian, :opg, :sandwich) ||
         error("method must be :hessian, :opg or :sandwich")
     _require_exact(m, "vcov")
+    allow_singular_chart || _check_chart(m)
     (m.converged || allow_unconverged) || throw(ArgumentError(
         "vcov: the fit did not converge, so theta is not a maximum and " *
         "its curvature is not a covariance. Refit (e.g. larger maxiter) " *
@@ -884,9 +1370,11 @@ end
 """Standard errors: square roots of the `vcov` diagonal. A negative
 variance is refused, not clipped to a zero standard error (#493); only
 round-off, below `1e-12` of the largest diagonal entry, is read as 0."""
-function stderror(m::MNProbit; method = :hessian, allow_unconverged = false)
+function stderror(m::MNProbit; method = :hessian, allow_unconverged = false,
+                  allow_singular_chart = false)
     d = LinearAlgebra.diag(vcov(m; method = method,
-                                allow_unconverged = allow_unconverged))
+                                allow_unconverged = allow_unconverged,
+                                allow_singular_chart = allow_singular_chart))
     tol = 1e-12 * maximum(abs, d; init = 0.0)
     for (i, x) in enumerate(d)
         (isfinite(x) && x >= -tol) || throw(ArgumentError(
@@ -923,7 +1411,10 @@ function Base.show(io::IO, ::MIME"text/plain", m::MNProbit)
 end
 
 """Choice probabilities under the fitted parameters, by the same
-factor-conditional product integrals (normalized across alternatives).
+factor-conditional product integrals the likelihood uses. The raw
+per-alternative masses do not sum to one exactly; `normalize = true`
+(default) divides by the row total, `normalize = false` returns the raw
+masses `fit!` maximized, and `mass_defect` reports the gap (#376).
 
 New data must carry the design the model was FITTED on. This used to decide whether to prepend generated intercept columns from
 the column count alone -- `size(Xr, 3) != m.p` -- and the model recorded
@@ -940,7 +1431,7 @@ The model now records both, so the column count is checked rather than
 guessed. `p_raw` columns means raw covariates, and the intercepts are
 generated exactly when the fit generated them; `p` columns means the
 design is already assembled. Anything else raises."""
-function predict_proba(m::MNProbit; X = nothing)
+function predict_proba(m::MNProbit; X = nothing, normalize = true)
     Xf = X === nothing ? m.X : begin
         Xr = Float64.(X)
         size(Xr, 2) == m.J || throw(DimensionMismatch(
@@ -972,24 +1463,24 @@ function predict_proba(m::MNProbit; X = nothing)
     for pp in 1:m.p
         mu .+= Xf[:, :, pp] .* m.beta[pp]
     end
-    V = m.V .- sum(m.V, dims = 1) ./ m.J
-    sharp = sqrt(2) * maximum(sqrt.(vec(sum(V .^ 2, dims = 2))))
-    F, W = nodes_for_likelihood(m.r; sharp = sharp)
-    Fq = F[:, 1:m.r]
-    zq = F[:, m.r + 1]
-    Vf = Fq * V'
+    # the likelihood's own per-observation map, so prediction prices a
+    # model exactly as fitting does (the same tilt, blend and closed
+    # form); this copy had its own untilted rule and a 1e-300 floor
     P = zeros(T2, m.J)
+    Dv = ones(m.J)
     for k in 1:m.J
-        acc = zeros(T2, length(W))
-        for j in 1:m.J
-            j == k && continue
-            shift = Vf[:, k] .- Vf[:, j] .+ zq
-            acc .+= log.(max.(ndtr.((mu[:, k] .- mu[:, j]) .+ shift'), TINY))
-        end
-        mx = vec(maximum(acc, dims = 2))
-        P[:, k] = exp.(mx) .* (exp.(acc .- mx) * W)
+        lp, _, _ = _choice_logprob_terms(mu, m.V, fill(k, T2), Dv)
+        P[:, k] .= exp.(lp)
     end
+    normalize || return P
     return P ./ sum(P, dims = 2)
 end
+
+"""`1 - sum_k raw P_k` per observation: the gap between the raw
+per-choice masses `fit!` maximizes and the normalized `predict_proba`
+(#376). `fit!` stores the largest absolute value on the training rows in
+`m.mass_defect`."""
+mass_defect(m::MNProbit; X = nothing) =
+    1 .- vec(sum(predict_proba(m; X = X, normalize = false), dims = 2))
 
 end # module

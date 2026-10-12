@@ -249,7 +249,7 @@ def _tilt_mode(c0, t, sk):
             q = np.sqrt(a * a + 4.0)
             lam = 0.5 * (q - a)
             kap = 0.5 * (1.0 - a / q)            # -d lam / da
-            kp = 2.0 / (q * q * q)               # d kap / da
+            kp = -2.0 / (q * q * q)              # d kap / da
         else:
             lam = np.exp(-0.5 * a * a - 0.5 * np.log(2 * np.pi)
                          - log_ndtr(a))
