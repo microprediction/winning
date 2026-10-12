@@ -61,8 +61,10 @@
     field's standard tools on honest wall time &mdash; each method charged only
     for its own compute, on your machine. The
     <span class="lat">lattice race</span> prices every contestant at once
-    &mdash; milliseconds for the structured grammars, a second or two of
-    single-threaded JavaScript for the dense fits (the compiled engines
+    &mdash; milliseconds for the block and tree grammars, a second or two of
+    single-threaded JavaScript for the dense fits, and seconds for a sharp
+    rank-2 factor field, which takes the 8,192-node quasi-Monte Carlo rule
+    (computed in a background worker, so the page stays live) (the compiled engines
     are another two orders of magnitude faster).
     Generic dense <span class="ghk">GHK</span> factors one
     (n&minus;1)-dimensional difference covariance <em>per contestant</em>
@@ -122,9 +124,11 @@
   <script type="module">
     import { raceProbabilities } from "./js/winning/races.mjs";
     import "./js/winning/structures.mjs";
-    import { GENERATORS, rng, fitGrammar, structureCov, raceFactor, mcBatch,
-             haltonNormalNodes, ghkPrepareOne, ghkSampleOne,
+    import { GENERATORS, rng, structureCov, raceFactor, mcBatch,
+             ghkPrepareOne, ghkSampleOne,
              mendellElstonOne } from "./js/winning/demo.mjs";
+    import { demoField, referenceNodes,
+             latticeReference } from "./js/converge_worker.mjs";
 
     const sel = document.getElementById("gen");
     for (const name of Object.keys(GENERATORS)) {
@@ -145,53 +149,78 @@
       return Math.max(s / 2, 1e-6);
     }
 
+    // The lattice reference runs in a module worker (#647): a sharp
+    // rank-2 factor field takes the 8,192-node rule, seconds of work, and
+    // the page must render and answer its controls meanwhile. The other
+    // arms start at once; their estimates are kept and scored against the
+    // reference when it lands.
+    let worker = null, token = 0;
+    function startReference(st, gen) {
+      const mine = ++token;
+      const land = ({ pLat, tLat, error }) => {
+        if (mine !== token) return;            // a newer run superseded this
+        if (error) { $("note").textContent = "lattice reference failed: " + error; return; }
+        st.pLat = pLat; st.tLat = tLat;
+        st.tvInd = tv(st.pInd, pLat);
+        score(st);
+        render(st);
+      };
+      const sync = () => setTimeout(() => {   // no module workers: inline
+        if (mine === token) land(latticeReference(gen, st.n, st.seed));
+      }, 0);
+      try {
+        worker = new Worker(new URL("./js/converge_worker.mjs", import.meta.url),
+                            { type: "module" });
+        worker.onmessage = ({ data }) => land(data);
+        worker.onerror = e => { e.preventDefault(); worker.terminate(); worker = null; sync(); };
+        worker.postMessage({ token: mine, gen, n: st.n, seed: st.seed });
+      } catch (e) { worker = null; sync(); }
+    }
+
     function run() {
       clearInterval(timer);
+      if (worker) { worker.terminate(); worker = null; }
       const n = +$("n").value, seed = +$("seed").value;
-      const gen = GENERATORS[sel.value];
-      const g = gen(n, rng(seed));
-      $("note").textContent = g.note;
-      const rmu = rng(seed + 1000);
-      const mu = Array.from({ length: n }, () => rmu.n() * 0.9);
+      const { g, mu } = demoField(sel.value, n, seed);
+      const nodes = referenceNodes(g);
+      $("note").textContent = g.note +
+        (nodes > 1024 ? ` (sharp: the reference uses ${nodes} QMC nodes, seconds of work)` : "");
 
-      // the lattice answer (timed, includes any fit)
-      const t0 = performance.now();
-      let pLat;
-      if (g.structure) {
-        pLat = raceProbabilities(mu, { structure: g.structure, points: 257 });
-      } else {
-        const fit = fitGrammar(g.C, 3, 5);
-        const nodes = haltonNormalNodes(fit.V[0].length, 1024);
-        pLat = raceProbabilities(mu, { V: fit.V, D: fit.D,
-                                       F: nodes.F, W: nodes.W, points: 129 });
-      }
-      const tLat = performance.now() - t0;
-
-      // the structure-ignoring answer (flat bias line)
+      // the structure-ignoring answer (flat bias line once the reference lands)
       const C = g.structure ? structureCov(g.structure) : g.C;
       const pInd = raceProbabilities(mu, { D: C.map((r_, i) => C[i][i]),
                                            points: 257 });
-      const tvInd = tv(pInd, pLat);
 
       const st = {
-        n, mu, C, pLat, tLat, tvInd,
+        n, seed, mu, C, pInd, pLat: null, tLat: NaN, tvInd: NaN, t0: performance.now(),
         // factorised in the race quotient (anchored differences), so a
         // common mode or a small overall scale cannot leak into the
         // simulated contrasts (#394, #375)
         mc: { L: raceFactor(C), counts: new Array(n).fill(0), draws: 0,
-              ms: 0, r: rng(seed + 2000), pts: [] },
+              ms: 0, r: rng(seed + 2000), est: [], pts: [] },
         ghk: { probs: new Array(n).fill(null), cursor: 0, sums: new Float64Array(n),
                reps: new Float64Array(n), sweep: 0, ms: 0, r: rng(seed + 3000),
-               pts: [], repsPerVisit: Math.max(8, Math.floor(20000 / (n * n))) },
-        me: { p: new Array(n).fill(0), cursor: 0, ms: 0, done: false, tv: NaN },
+               est: [], pts: [], repsPerVisit: Math.max(8, Math.floor(20000 / (n * n))) },
+        me: { p: new Array(n).fill(0), cursor: 0, ms: 0, done: false, est: null, tv: NaN },
       };
 
+      startReference(st, sel.value);
       timer = setInterval(() => step(st), 40);
       step(st);
     }
 
+    // score the arms' kept estimates once the reference is known
+    function score(st) {
+      if (!st.pLat) return;
+      for (const arm of [st.mc, st.ghk]) {
+        for (const [t, p] of arm.est) arm.pts.push([t, tv(p, st.pLat)]);
+        arm.est = [];
+      }
+      if (st.me.done && st.me.est) { st.me.tv = tv(st.me.est, st.pLat); st.me.est = null; }
+    }
+
     function step(st) {
-      const { n, mu, C, pLat } = st;
+      const { n, mu, C } = st;
 
       // Monte Carlo slice
       if (st.mc.ms < BUDGET) {
@@ -202,8 +231,7 @@
           st.mc.draws += batch;
         }
         st.mc.ms += performance.now() - a0;
-        st.mc.pts.push([st.mc.ms,
-          tv(st.mc.counts.map(c => c / st.mc.draws), pLat)]);
+        st.mc.est.push([st.mc.ms, st.mc.counts.map(c => c / st.mc.draws)]);
       }
 
       // GHK slice: setup Choleskys first (the honest per-alternative cost),
@@ -228,7 +256,7 @@
           let s = 0;
           for (let i = 0; i < n; i++) { p[i] = st.ghk.sums[i] / st.ghk.reps[i]; s += p[i]; }
           for (let i = 0; i < n; i++) p[i] /= s;
-          st.ghk.pts.push([st.ghk.ms, tv(p, pLat)]);
+          st.ghk.est.push([st.ghk.ms, p]);
         }
       }
 
@@ -242,14 +270,15 @@
         st.me.ms += performance.now() - a0;
         if (st.me.cursor >= n) {
           const s = st.me.p.reduce((a, b) => a + b, 0);
-          st.me.tv = tv(st.me.p.map(v => v / s), pLat);
+          st.me.est = st.me.p.map(v => v / s);
           st.me.done = true;
         }
       }
 
+      score(st);
       render(st);
       if (st.mc.ms >= BUDGET && st.ghk.ms >= BUDGET && st.me.done)
-        clearInterval(timer);
+        clearInterval(timer);   // a pending reference still renders on landing
     }
 
     function render(st) {
@@ -277,12 +306,12 @@
                  stroke="#c2571a" stroke-dasharray="3 5" opacity="0.5"/>`;
       }
       // structure-ignoring flat line
-      sv += `<line x1="${padL}" x2="${W - padR}" y1="${Y(st.tvInd)}" y2="${Y(st.tvInd)}"
+      if (st.pLat) sv += `<line x1="${padL}" x2="${W - padR}" y1="${Y(st.tvInd)}" y2="${Y(st.tvInd)}"
                stroke="#999" stroke-dasharray="6 4"/>`;
-      sv += `<text x="${W - padR - 4}" y="${Y(st.tvInd) - 5}" font-size="11" fill="#777"
+      if (st.pLat) sv += `<text x="${W - padR - 4}" y="${Y(st.tvInd) - 5}" font-size="11" fill="#777"
                text-anchor="end">ignore correlation</text>`;
       // Mendell-Elston: flat from its completion time (bias, not noise)
-      if (st.me.done) {
+      if (st.me.done && st.pLat) {
         sv += `<line x1="${X(st.me.ms)}" x2="${W - padR}" y1="${Y(st.me.tv)}" y2="${Y(st.me.tv)}"
                  stroke="#2e7d32" stroke-dasharray="8 4" stroke-width="2"/>`;
         sv += `<circle cx="${X(st.me.ms)}" cy="${Y(st.me.tv)}" r="4" fill="#2e7d32"/>`;
@@ -291,6 +320,10 @@
       }
       // lattice: it ARRIVES at its wall time and sits on the floor (it is
       // the reference, so its own error plots at the axis floor)
+      if (!st.pLat) {
+        const waited = (performance.now() - st.t0) / 1000;
+        sv += `<text x="${padL + 8}" y="${Y(2e-4) - 7}" font-size="11" fill="#4b4bd8">lattice reference computing in a background worker&#8230; ${waited.toFixed(1)} s (the other arms keep running; their curves appear when it lands)</text>`;
+      } else {
       const xLat = X(st.tLat), xSolid = Math.min(xLat + 60, W - padR);
       sv += `<line x1="${xLat}" x2="${xSolid}" y1="${Y(2e-4)}" y2="${Y(2e-4)}"
                stroke="#4b4bd8" stroke-width="2.5"/>`;
@@ -298,6 +331,7 @@
                stroke="#4b4bd8" stroke-width="2" stroke-dasharray="2 5"/>`;
       sv += `<circle cx="${X(st.tLat)}" cy="${Y(2e-4)}" r="4" fill="#4b4bd8"/>`;
       sv += `<text x="${Math.min(X(st.tLat) + 6, W - 250)}" y="${Y(2e-4) - 7}" font-size="11" fill="#4b4bd8">lattice: all ${st.n} priced at ${st.tLat >= 1000 ? (st.tLat / 1000).toFixed(1) + " s" : st.tLat.toFixed(0) + " ms"}</text>`;
+      }
       // paths
       for (const [pts, color] of [[st.mc.pts, "#c2571a"], [st.ghk.pts, "#7a3fa8"]]) {
         if (!pts.length) continue;
@@ -317,15 +351,15 @@
       const mcLast = st.mc.pts.length ? st.mc.pts[st.mc.pts.length - 1][1] : NaN;
       const ghkLast = st.ghk.pts.length ? st.ghk.pts[st.ghk.pts.length - 1][1] : NaN;
       document.getElementById("stats").innerHTML =
-        `<span class="lat">lattice: ${st.tLat.toFixed(1)} ms</span> &middot; ` +
+        `<span class="lat">lattice: ${st.pLat ? st.tLat.toFixed(1) + " ms" : "computing&#8230;"}</span> &middot; ` +
         `<span class="ghk">GHK: ${st.ghk.cursor < st.n
             ? `setup ${st.ghk.cursor}/${st.n}`
             : `TV ${isFinite(ghkLast) ? ghkLast.toExponential(2) : "—"}`} in ${(st.ghk.ms / 1000).toFixed(1)} s</span> &middot; ` +
-        `<span class="me">Mendell&#8211;Elston: ${st.me.done
+        `<span class="me">Mendell&#8211;Elston: ${st.me.done && st.pLat
             ? `TV ${st.me.tv.toExponential(2)} in ${(st.me.ms / 1000).toFixed(2)} s, flat forever`
-            : `${st.me.cursor}/${st.n}`}</span> &middot; ` +
+            : st.me.done ? `done in ${(st.me.ms / 1000).toFixed(2)} s` : `${st.me.cursor}/${st.n}`}</span> &middot; ` +
         `<span class="mc">simulation: ${st.mc.draws.toLocaleString()} draws, TV ${isFinite(mcLast) ? mcLast.toExponential(2) : "—"}</span> &middot; ` +
-        `<span class="ind">ignore correlation: TV ${st.tvInd.toExponential(2)}, forever</span>`;
+        `<span class="ind">ignore correlation: ${st.pLat ? `TV ${st.tvInd.toExponential(2)}, forever` : "&#8212;"}</span>`;
     }
 
     document.getElementById("go").addEventListener("click", run);

@@ -1739,6 +1739,25 @@ accepts("the inverse takes a scalar D, matching python",
           relabel([0, 0, 0, 0], CB, pm) < 1e-14);
 }
 
+// --- converge.html's lattice reference runs in a worker (#647): the
+// default rank-2 Factor fixture really does take the 8,192-node rule (so
+// it must stay off the main thread), and the worker's reference is the
+// ordinary race on the field the page builds from (generator, n, seed)
+{
+  const cw = await import(here + "../docs/js/converge_worker.mjs");
+  const dflt = Object.keys(demo.GENERATORS)[0];
+  const { g } = cw.demoField(dflt, 60, 7);
+  holds("the default converge fixture reports its 8,192-node reference (#647)",
+        cw.referenceNodes(g) === 8192, String(cw.referenceNodes(g)));
+  const { g: gb, mu: mb } = cw.demoField("sectors (blocks)", 12, 3);
+  accepts("the worker's reference is the page's race (#647)",
+          () => cw.latticeReference("sectors (blocks)", 12, 3),
+          r => Number.isFinite(r.tLat)
+               && Math.max(...r.pLat.map((x, i) => Math.abs(x - races.raceProbabilities(
+                    mb, { structure: gb.structure, points: 257 })[i]))) === 0);
+  rejects(cw.demoField, ["factr", 10, 1], "the worker refuses an unknown generator (#647)", "unknown generator");
+}
+
 // --- callable-base central resolution reaches every lattice (#468, #600)
 {
   const student3 = z => {
