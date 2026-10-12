@@ -343,6 +343,11 @@ def update_contrast(m, cov, a, mean, var, refit=False):
                              f"got shape {S.shape}")
         if not np.isfinite(S).all():
             raise ValueError("cov has a non-finite entry")
+        # a Kalman update is Gaussian conditioning only on a covariance:
+        # an indefinite [[1, 2], [2, 1]] came back as a valid-looking
+        # posterior (#634). The shared validator also symmetrises.
+        from .core import _validate_covariance
+        S = _validate_covariance(S, name="cov")
         g = S @ av
         s = float(av @ g) + var
         m_new = mv + g * ((mean - float(av @ mv)) / s)
