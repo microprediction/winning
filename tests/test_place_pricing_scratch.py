@@ -55,3 +55,24 @@ def test_placegetter_skips_infinite_scores():
     from winning.classic.lattice_simulation import placegetter
     row = [math.inf, 3.0, math.inf, 1.0]
     assert [placegetter(row, k) for k in range(4)] == [3, 1, None, None]
+
+
+@pytest.mark.parametrize("sentinel", [2000.0, 9999.0, math.inf])
+def test_scratched_dividend_round_trips(sentinel):
+    # nan_value was accepted and ignored: the scratch came back NaN, and
+    # prices_from_dividends revived it as a missing quote at ~0.0005 (#665)
+    from winning.classic.lattice_calibration import ability_implied_dividends, prices_from_dividends
+    d = skew_normal_density(50, 0.1, a=0)
+    divs = ability_implied_dividends([0.0, 1.0, math.inf, math.inf], d, nan_value=sentinel)
+    assert divs[2] == divs[3] == math.inf
+    assert all(math.isfinite(x) for x in divs[:2])
+    back = prices_from_dividends(divs)
+    assert back[2] == back[3] == 0.0
+    np.testing.assert_allclose(back[:2], ability_implied_state_prices([0.0, 1.0, math.inf, math.inf], d)[:2], rtol=1e-12)
+
+
+def test_ability_implied_dividends_finite_book_unchanged():
+    from winning.classic.lattice_calibration import ability_implied_dividends
+    d = skew_normal_density(50, 0.1, a=0)
+    sp = ability_implied_state_prices([0.0, 1.0, 2.5], d)
+    np.testing.assert_allclose(ability_implied_dividends([0.0, 1.0, 2.5], d), [1 / x for x in sp], rtol=0)

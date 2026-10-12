@@ -2,6 +2,7 @@ from winning.classic.lattice import state_prices_from_extended_offsets, densitie
     winner_of_many, expected_payoff, densities_from_offsets, implicit_state_prices, implied_L, cdf_to_pdf, \
     _exact_offset_cdfs, _exact_implicit_prices, _exact_shifted_cdf, exact_state_prices_from_cdfs, \
     as_classic_density, as_classic_prices, state_prices_from_offsets
+import math
 import warnings
 
 import numpy as np
@@ -100,12 +101,19 @@ def ability_implied_dividends(ability, density, unit=1.0, nan_value=NAN_DIVIDEND
     """ Return inverse state prices from (by default scale free) ability
         If ability is instead interpreted in reference to an implied lattice width, then user must supply that unit length
         This should be the unit that was assumed when creating the densities.
+    A runner priced at exactly zero (a scratched runner, ability +inf)
+    gets dividend +inf, which prices_from_dividends maps back to 0, as in
+    the R port. ``nan_value`` is returned only for a state price that is
+    not a number. The argument was accepted and ignored, so the scratch
+    came back NaN, which prices_from_dividends read as a missing quote and
+    revived at ~0.0005 (#665).
     :param ability:  [ float ]
     :param density:  [ float ]
     :return: [ 7.6, 12.3, ... ]
     """
     state_prices = ability_implied_state_prices(ability=ability, density=density, unit=unit)
-    return [ safe_inv(sp) for sp in state_prices]
+    return [math.inf if sp == 0 else (nan_value if math.isnan(sp) else 1.0 / sp)
+            for sp in map(float, state_prices)]
 
 
 
