@@ -449,7 +449,10 @@ def _as_block_labels(blocks, n):
             raise ValueError(
                 "blocks= labels must be whole numbers; a label names a "
                 "block, it is not a weight")
-    return np.unique(lab.astype(np.int64), return_inverse=True)[1]
+    # densify the validated labels as they are: casting to int64 first
+    # sent every whole-valued float beyond its range to one value, so
+    # [1e20, 2e20, 1e20, 2e20] became a single block (#633)
+    return np.unique(lab, return_inverse=True)[1]
 
 
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
