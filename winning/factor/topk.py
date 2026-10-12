@@ -176,52 +176,218 @@ def _count_window_at(mu, sd, k, base_rows, delta, pad_sds):
     return xlo - pad_sds * smax, b + pad_sds * smax
 
 
-def _count_distribution(F):
+def _count_distribution(F, S=None):
     """Full-field Poisson-binomial: C[l, m] = P(exactly m of the n
     runners are below lattice point l). One shared dynamic program,
     O(n^2 L); every column of C also prices an order statistic, since
-    P(X_(k) <= x_l) = sum_{m >= k} C[l, m]."""
+    P(X_(k) <= x_l) = sum_{m >= k} C[l, m]. S, when given, is the
+    survival to use in place of 1 - F (accurate where 1 - F cancels)."""
     L, n = F.shape
+    S = 1.0 - F if S is None else S
     C = np.zeros((L, n + 1))
     C[:, 0] = 1.0
     for j in range(n):
         f = F[:, j:j + 1]
-        C[:, 1:j + 2] = C[:, 1:j + 2] * (1.0 - f) + C[:, :j + 1] * f
-        C[:, 0] *= (1.0 - f[:, 0])
+        s = S[:, j:j + 1]
+        C[:, 1:j + 2] = C[:, 1:j + 2] * s + C[:, :j + 1] * f
+        C[:, 0] *= s[:, 0]
     return C
 
 
-def _leave_one_out_cdf(C, F, k, chunk=256):
-    """P(N_{-i} <= k-1) for every runner at every lattice point, by
-    stable-direction deconvolution of the shared count distribution.
-    O(L max(k, n-k)) per runner, vectorized over runner chunks."""
+_SYMMETRIC_BASES = (BASES["normal"], BASES["logistic"], BASES["laplace"])
+
+
+def _cdf_rows(base_rows, z, S):
+    """(F, S) for the count program. 1 - S rounds a lower-tail CDF to
+    zero (or to a few digits) once S is near one, and those CDFs are
+    exactly what a last place or a top-k cavity multiplies together; for
+    a base symmetric about zero the CDF is the reflected survival
+    S(-z), accurate to full relative precision (#511)."""
+    S = np.clip(S, 0.0, 1.0)
+    F = 1.0 - S
+    if base_rows in _SYMMETRIC_BASES:
+        lower = S > 0.5
+        if lower.any():
+            F = np.where(lower, base_rows(-z)[0], F)
+    return np.clip(F, 0.0, 1.0), S
+
+
+# Cavity deconvolution with error bounds (#511). Every entry of the count
+# distribution C is a sum of nonnegative products formed in at most n+1
+# multiply-add steps, so it carries relative error <= 2 (n+1) eps, plus an
+# underflow floor once tail products flush below the normal range. Each
+# recursion step adds one subtraction and one division; the running
+# first-order bound below tracks the absolute error of every recovered
+# coefficient, capped at 1 (a clipped probability can be no further off).
+#
+# The forward pass, Q_m = (C_m - F_i Q_{m-1}) / S_i, is exact at m = 0 (a
+# pure product of survivals); the backward pass, Q_m = (C_{m+1} -
+# S_i Q_{m+1}) / F_i, is exact at m = n-1 (a pure product of CDFs). The
+# old rule picked ONE direction per lattice point (whichever divides by
+# the larger factor). That bounds error growth but not the cancellation
+# in the subtraction itself: a rare coefficient came back as the
+# roundoff residue (~eps x its neighbour) of the other two terms, and
+# integrating that residue fabricated exact-place mass -- 62x too much
+# last place in a Gumbel field, 1.6e12x at mu = [-12, -4, 4, 12], and a
+# 1.8e5x top-1 share at mu = [-14, 0, 0] (#511). Running both passes and
+# taking each coefficient from the one with the smaller bound fixes it;
+# against a directly multiplied cavity on the same grid every
+# coefficient then agrees to ~1e-15 relative.
+_EPS = np.finfo(float).eps
+_REALMIN = np.finfo(float).tiny
+
+
+def _count_error(C):
+    """Absolute error bound on each count coefficient, with one eps each
+    folded in for the subtraction (its subtrahend is at most the entry)
+    and the division of the recursion step that consumes it."""
+    n = C.shape[-1] - 1
+    return (2.0 * (n + 1) + 2.0) * _EPS * C + (n + 1) * _REALMIN
+
+
+def _deconv(C, Cerr, Fi, Si, forward, stop=0):
+    """One deconvolution pass, yielding (m, Q_m, bound_m).
+
+    Vectorised over the shape of Fi (lattice points, or runners x lattice
+    points); C[..., j] and Cerr[..., j] must broadcast against it. The
+    forward pass runs m = 0 .. n-1-stop, the backward m = n-1 .. stop. A
+    pass whose divisor is numerically zero recovers nothing -- C then
+    holds no information about the coefficients it would divide out --
+    so every bound it reports is the trivial one."""
+    n = C.shape[-1] - 1
+    if forward:
+        dead = Si < TINY
+        inv = 1.0 / np.maximum(Si, TINY)
+        mul = Fi
+        order = [(m, m) for m in range(0, n - stop)]
+    else:
+        dead = Fi < TINY
+        inv = 1.0 / np.maximum(Fi, TINY)
+        mul = Si
+        order = [(m, m + 1) for m in range(n - 1, stop - 1, -1)]
+    q = e = None
+    for m, j in order:
+        if q is None:
+            q = np.minimum(C[..., j] * inv, 1.0)
+            e = np.where(dead, 1.0, np.minimum(Cerr[..., j] * inv, 1.0))
+        else:
+            q = np.minimum(np.maximum((C[..., j] - mul * q) * inv, 0.0),
+                           1.0)
+            e = np.minimum((Cerr[..., j] + mul * e) * inv, 1.0)
+        yield m, q, e
+
+
+def _cdf_both(Cp, Ep, Fp, Sp, k):
+    """Per-coefficient cavity cdf for a flat batch of (runner, lattice
+    point) pairs: both passes in full, each coefficient from the pass
+    with the smaller bound, then the head sum or one minus the tail sum,
+    whichever is better bounded."""
+    fwd = list(_deconv(Cp, Ep, Fp, Sp, True))
+    head = np.zeros_like(Fp)
+    head_e = np.zeros_like(Fp)
+    tail = np.zeros_like(Fp)
+    tail_e = np.full_like(Fp, _EPS)
+    for m, qb, eb in _deconv(Cp, Ep, Fp, Sp, False):
+        _, qf, ef = fwd[m]
+        better = ef <= eb
+        q = np.where(better, qf, qb)
+        e = np.where(better, ef, eb)
+        if m < k:
+            head += q
+            head_e += e
+        else:
+            tail += q
+            tail_e += e
+    return np.where(head_e <= tail_e, head, 1.0 - tail)
+
+
+# a cdf whose bound exceeds this fraction of itself is recomputed per
+# coefficient; below it the two-estimate answer is already that accurate
+_CDF_REL = 1e-6
+
+
+def _leave_one_out_cdf(C, F, k, chunk=256, S=None):
+    """P(N_{-i} <= k-1) for every runner at every lattice point.
+
+    First two estimates per lattice point, each with its error bound: the
+    head sum Q_0 + .. + Q_{k-1} by the forward pass, and one minus the
+    tail sum Q_k + .. + Q_{n-1} by the backward pass; the smaller bound
+    wins. That is the old recursion length, and the old rule chose
+    between the same two by the size of F_i alone -- at k = 1, mu =
+    [-14, 0, 0] it returned a 3.7e-18 residue for a top-1 probability of
+    2.09e-23 that race_probabilities prices right (#511). Where even the
+    better bound exceeds 1e-6 of the value (a rare interior cavity), the
+    pair is redone with both passes in full and a per-coefficient choice.
+    Those pairs are few on ordinary fields; at worst every pair is redone
+    and the cost is about three times the old one."""
     L, n = F.shape
+    if k >= n:
+        return np.ones((n, L))
     out = np.empty((n, L))
-    for a in range(0, n, chunk):
-        b = min(a + chunk, n)
-        Fc = F[:, a:b].T                      # (c, L)
-        Sc = 1.0 - Fc
-        fwd = Sc >= Fc                        # stable-direction mask
-        # forward: accumulate Q_0 .. Q_{k-1}
-        Sc_safe = np.maximum(Sc, TINY)
-        # each true Q_m is a probability, so clipping the recursion
-        # state is exact where the direction is stable and stops the
-        # discarded unstable branch from overflowing into warnings
-        Q = np.clip(C[None, :, 0] / Sc_safe, 0.0, 1.0)
-        acc_f = Q.copy()
-        for m in range(1, k):
-            Q = np.clip((C[None, :, m] - Fc * Q) / Sc_safe, 0.0, 1.0)
-            acc_f += Q
-        # backward: accumulate Q_{n-1} down to Q_k, report 1 - tail
-        Fc_safe = np.maximum(Fc, TINY)
-        Qb = np.clip(C[None, :, n] / Fc_safe, 0.0, 1.0)
-        acc_b = Qb.copy()
-        for m in range(n - 2, k - 1, -1):
-            Qb = np.clip((C[None, :, m + 1] - Sc * Qb) / Fc_safe, 0.0, 1.0)
-            acc_b += Qb
-        cdf = np.where(fwd, acc_f, 1.0 - acc_b)
-        out[a:b] = np.clip(cdf, 0.0, 1.0)
+    Cerr = _count_error(C)
+    Ct, Et = C[None], Cerr[None]
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        for a in range(0, n, chunk):
+            b = min(a + chunk, n)
+            Fc = F[:, a:b].T                      # (c, L)
+            Sc = 1.0 - Fc if S is None else S[:, a:b].T
+            head = np.zeros_like(Fc)
+            head_e = np.zeros_like(Fc)
+            for _, q, e in _deconv(Ct, Et, Fc, Sc, True, stop=n - k):
+                head += q
+                head_e += e
+            tail = np.zeros_like(Fc)
+            tail_e = np.full_like(Fc, _EPS)
+            for _, q, e in _deconv(Ct, Et, Fc, Sc, False, stop=k):
+                tail += q
+                tail_e += e
+            use_head = head_e <= tail_e
+            cdf = np.where(use_head, head, 1.0 - tail)
+            bound = np.where(use_head, head_e, tail_e)
+            loose = bound > np.maximum(_CDF_REL * cdf, 1e-280)
+            if loose.any():
+                ri, li = np.nonzero(loose)
+                per = max(1, int(2e6 // (n + 1)))
+                for s0 in range(0, len(ri), per):
+                    r_, l_ = ri[s0:s0 + per], li[s0:s0 + per]
+                    cdf[r_, l_] = _cdf_both(C[l_], Cerr[l_], Fc[r_, l_],
+                                            Sc[r_, l_], k)
+            out[a:b] = np.clip(cdf, 0.0, 1.0)
     return out
+
+
+def _loo_pmfs(C, F, S=None, runners=None):
+    """Leave-one-out pmfs for several runners at once, yielding
+    (i, m, Q^{-i}_m over the lattice) runner-chunk by runner-chunk: both
+    passes run in full and each coefficient is taken from the pass whose
+    bound is smaller (#511)."""
+    L, n = F.shape
+    runners = list(range(n)) if runners is None else list(runners)
+    Cerr = _count_error(C)
+    Ct, Et = C[None], Cerr[None]
+    # both passes are held whole, 4 n x chunk x L numbers
+    chunk = max(1, min(len(runners), int(2e6 // max(1, n * L))))
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        for a in range(0, len(runners), chunk):
+            idx = runners[a:a + chunk]
+            Fc = F[:, idx].T
+            Sc = 1.0 - Fc if S is None else S[:, idx].T
+            fwd = list(_deconv(Ct, Et, Fc, Sc, True))
+            bwd = {m: (q, e) for m, q, e in _deconv(Ct, Et, Fc, Sc, False)}
+            for m, qf, ef in fwd:
+                qb, eb = bwd[m]
+                yield idx, m, np.where(ef <= eb, qf, qb)
+
+
+def _loo_pmf(C, F, i, S=None):
+    """Full leave-one-out pmf Q^{-i}[l, m], m = 0..n-1, each coefficient
+    from whichever deconvolution direction has the smaller error bound
+    at that lattice point (#511)."""
+    L, n = F.shape
+    Q = np.empty((L, n))
+    for _, m, q in _loo_pmfs(C, F, S, runners=[i]):
+        Q[:, m] = q[0]
+    return Q
 
 
 def _reflected(base_rows):
@@ -271,9 +437,9 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, _ = base_rows(z)
-    F = np.clip(1.0 - S, 0.0, 1.0)
-    C = _count_distribution(F)
-    cdf = _leave_one_out_cdf(C, F, k)         # (n, L)
+    F, S = _cdf_rows(base_rows, z, S)
+    C = _count_distribution(F, S)
+    cdf = _leave_one_out_cdf(C, F, k, S=S)    # (n, L)
     dens = (f / sd[None, :]).T                # (n, L)
     return (dens * cdf).sum(axis=1) * dx
 
@@ -573,41 +739,6 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     return _checked_topk(raw, k, "bottom-k race")
 
 
-def _loo_pmf(C, F, i):
-    """Full leave-one-out pmf Q^{-i}[l, m], m = 0..n-1, by one
-    stable-direction deconvolution per lattice point: forward everywhere
-    S_i >= F_i, backward everywhere else, so the recursion error decays
-    along its whole length."""
-    L, n = F.shape
-    Fi = F[:, i]
-    Si = 1.0 - Fi
-    Q = np.empty((L, n))
-    fwd = Si >= Fi
-    # forward, full length
-    if fwd.any():
-        s = np.maximum(Si[fwd], TINY)[:, None]
-        f = Fi[fwd][:, None]
-        Cf = C[fwd]
-        Qf = np.empty((fwd.sum(), n))
-        Qf[:, 0] = np.clip(Cf[:, 0] / s[:, 0], 0.0, 1.0)
-        for m in range(1, n):
-            Qf[:, m] = np.clip((Cf[:, m] - f[:, 0] * Qf[:, m - 1])
-                               / s[:, 0], 0.0, 1.0)
-        Q[fwd] = Qf
-    bwd = ~fwd
-    if bwd.any():
-        f = np.maximum(Fi[bwd], TINY)[:, None]
-        s = Si[bwd][:, None]
-        Cb = C[bwd]
-        Qb = np.empty((bwd.sum(), n))
-        Qb[:, n - 1] = np.clip(Cb[:, n] / f[:, 0], 0.0, 1.0)
-        for m in range(n - 2, -1, -1):
-            Qb[:, m] = np.clip((Cb[:, m + 1] - s[:, 0] * Qb[:, m + 1])
-                               / f[:, 0], 0.0, 1.0)
-        Q[bwd] = Qb
-    return Q
-
-
 def _pair_pmf_at(Qi, F, i, k, chunk=256):
     """P(N_{-ij} = k-1) for every j != i at every lattice point:
     deconvolve runner j's Bernoulli from the leave-i pmf Qi (L, n),
@@ -661,10 +792,10 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, _ = base_rows(z)
-    F = np.clip(1.0 - S, 0.0, 1.0)
+    F, S = _cdf_rows(base_rows, z, S)
     dens = f / sd[None, :]                     # (L, n)
-    C = _count_distribution(F)
-    Qi = _loo_pmf(C, F, i)
+    C = _count_distribution(F, S)
+    Qi = _loo_pmf(C, F, i, S=S)
     pair = _pair_pmf_at(Qi, F, i, k)           # (n, L)
     row = (pair * dens.T * dens[:, i][None, :]).sum(axis=1) * dx
     row[i] = 0.0
@@ -716,10 +847,10 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, fp = base_rows(z)
-    F = np.clip(1.0 - S, 0.0, 1.0)
+    F, S = _cdf_rows(base_rows, z, S)
     dens = f / sd[None, :]                       # (L, n)
-    C = _count_distribution(F)
-    Qi = _loo_pmf(C, F, i)
+    C = _count_distribution(F, S)
+    Qi = _loo_pmf(C, F, i, S=S)
     pair = _pair_pmf_at(Qi, F, i, k)             # (n, L)
     kern = pair * dens[:, i][None, :]
     row_mu = (kern * dens.T).sum(axis=1) * dx
@@ -779,14 +910,14 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, fp = base_rows(z)
-    F = np.clip(1.0 - S, 0.0, 1.0)
+    F, S = _cdf_rows(base_rows, z, S)
     dens = f / sd[None, :]
     zdens = (z * dens).T
-    C = _count_distribution(F)
+    C = _count_distribution(F, S)
     Jm = np.empty((n, n))
     Js = np.empty((n, n))
     for i in range(n):
-        Qi = _loo_pmf(C, F, i)
+        Qi = _loo_pmf(C, F, i, S=S)
         pair = _pair_pmf_at(Qi, F, i, k)
         kern = pair * dens[:, i][None, :]
         row_mu = (kern * dens.T).sum(axis=1) * dx
@@ -890,9 +1021,9 @@ def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, fp = base_rows(z)
-    F = np.clip(1.0 - S, 0.0, 1.0)
-    C = _count_distribution(F)
-    cdf = _leave_one_out_cdf(C, F, k)          # (n, L)
+    F, S = _cdf_rows(base_rows, z, S)
+    C = _count_distribution(F, S)
+    cdf = _leave_one_out_cdf(C, F, k, S=S)     # (n, L)
     dens = (f / sd[None, :]).T
     q = (dens * cdf).sum(axis=1) * dx
     slopes = -((fp / (sd ** 2)[None, :]).T * cdf).sum(axis=1) * dx
@@ -1291,13 +1422,13 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
     dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, _ = base_rows(z)
-    F = np.clip(1.0 - S, 0.0, 1.0)
+    F, S = _cdf_rows(base_rows, z, S)
     dens = f / sd[None, :]
-    C = _count_distribution(F)
+    C = _count_distribution(F, S)
     p = np.empty(n)
     J = np.zeros((n, n))
     for i in range(n):
-        Qi = _loo_pmf(C, F, i)
+        Qi = _loo_pmf(C, F, i, S=S)
         p[i] = (Qi[:, r - 1] * dens[:, i]).sum() * dx
         if r <= n - 1:
             hi_pair = _pair_pmf_at(Qi, F, i, r)      # P(N_{-ij} = r-1)
@@ -1455,13 +1586,12 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
         dx = x[1] - x[0]
         z = (x[:, None] - m[None, :]) / sd[None, :]
         S, f, _ = base_rows(z)
-        F = np.clip(1.0 - S, 0.0, 1.0)
+        F, S = _cdf_rows(base_rows, z, S)
         dens = f / sd[None, :]
-        C = _count_distribution(F)
+        C = _count_distribution(F, S)
         P = np.empty((n, n))
-        for i in range(n):
-            Qi = _loo_pmf(C, F, i)
-            P[i] = (Qi * dens[:, i][:, None]).sum(axis=0) * dx
+        for idx, r, q in _loo_pmfs(C, F, S):
+            P[idx, r] = (q * dens[:, idx].T).sum(axis=1) * dx
         return P
 
     if V is None:
