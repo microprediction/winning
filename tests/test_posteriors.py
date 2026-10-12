@@ -292,3 +292,53 @@ def test_update_contrast_stays_finite_and_exact_for_a_precise_observation_669(a,
             D1[i], Dl[i] * var / (Dl[i] * av[i] ** 2 + var), rtol=1e-12)
     p = wf.race_probabilities(-m, V=-V1, D=D1)        # consumable downstream
     assert np.isfinite(p).all() and abs(p.sum() - 1) < 1e-9
+
+
+# ---------------------------------------------------------------- #670
+
+def test_representable_posterior_at_the_bottom_of_the_float_range_670():
+    # every input is a normal float and the exact posterior variance,
+    # c^2 / 11 = 3.6e-309, is representable; n/D overflowed and both
+    # constructors returned d = 0 (the bandit also lost its mean)
+    c = 2e-154
+    D = np.full(2, c * c)
+    m, d, _ = crn_posterior(np.zeros((2, 0)), D, n=10,
+                            ybar=np.array([c, -c]), s0=c)
+    np.testing.assert_allclose(m / c, [10 / 11, -10 / 11], rtol=1e-14)
+    np.testing.assert_allclose(d, c * c / 11, rtol=1e-12)
+    m, d, _ = feature_bandit_posterior(np.zeros((2, 0)), D,
+                                       counts=np.array([10.0, 0.0]),
+                                       sums=np.array([10 * c, 0.0]),
+                                       sigma_n=c)
+    np.testing.assert_allclose(m / c, [10 / 11, 0.0], rtol=1e-14, atol=0)
+    np.testing.assert_allclose(d, [c * c / 11, c * c], rtol=1e-12)
+
+
+@pytest.mark.parametrize("c", [2e-154, 1e-100, 1e-20, 1e20, 1e100, 1e150])
+def test_all_three_constructors_are_scale_equivariant_670(c):
+    # locations scale by c and variances by c^2; the answer must follow
+    # exactly, at the ends of the float range as in the middle
+    rng = np.random.default_rng(3)
+    K, rho = 5, 2
+    V = rng.normal(size=(K, rho))
+    D = rng.uniform(0.3, 1.5, K)
+    s0 = rng.uniform(0.6, 1.4, K)
+    yb = rng.normal(size=K)
+    Y = rng.normal(size=(K, 9))
+    Y[rng.random((K, 9)) < 0.3] = np.nan
+    cnt = np.array([4.0, 0.0, 7.0, 1.0, 3.0])
+    sm = np.where(cnt > 0, rng.normal(size=K) * cnt, 0.0)
+    sn = rng.uniform(0.5, 1.5, K)
+    cases = [
+        (crn_posterior, (V, D, 6, yb, s0), (V * c, D * c * c, 6, yb * c, s0 * c)),
+        (crn_posterior_replicates, (V, D, Y, s0), (V * c, D * c * c, Y * c, s0 * c)),
+        (feature_bandit_posterior, (V, D, cnt, sm, sn),
+         (V * c, D * c * c, cnt, sm * c, sn * c)),
+    ]
+    for fn, unit_args, scaled_args in cases:
+        m1, d1, W1 = fn(*unit_args)
+        m2, d2, W2 = fn(*scaled_args)
+        np.testing.assert_allclose(m2 / c, m1, rtol=1e-12, atol=1e-14)
+        np.testing.assert_allclose(d2 / c / c, d1, rtol=1e-12)
+        np.testing.assert_allclose((W2 / c) @ (W2 / c).T, W1 @ W1.T,
+                                   rtol=1e-12, atol=1e-14)
