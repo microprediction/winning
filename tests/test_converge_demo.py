@@ -3,7 +3,8 @@
 #647: the default rank-2 Factor fixture takes the 8,192-node QMC rule
 (correctly; #534), and the page used to compute it synchronously before
 its first render, freezing the tab for ~48 s. The reference now runs in
-docs/js/converge_worker.mjs.
+docs/js/converge_worker.mjs. #672: frequency simulation's covariance
+factorisation is charged to its own clock, inside the timed slice.
 """
 import re
 from pathlib import Path
@@ -32,3 +33,11 @@ def test_run_does_not_price_the_structured_reference_on_the_main_thread():
     assert "D: C.map(" in run
     assert "fitGrammar(" not in run and "latticeReference(" not in run
 
+
+def test_monte_carlo_factor_is_built_inside_its_timed_slice():
+    run, step = _body("run"), _body("step")
+    assert "raceFactor(" not in run
+    a0 = step.index("const a0 = performance.now();")
+    factor = step.index("raceFactor(C)")
+    charged = step.index("st.mc.ms += performance.now() - a0;")
+    assert a0 < factor < charged

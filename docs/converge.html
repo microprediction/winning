@@ -193,10 +193,8 @@
 
       const st = {
         n, seed, mu, C, pInd, pLat: null, tLat: NaN, tvInd: NaN, t0: performance.now(),
-        // factorised in the race quotient (anchored differences), so a
-        // common mode or a small overall scale cannot leak into the
-        // simulated contrasts (#394, #375)
-        mc: { L: raceFactor(C), counts: new Array(n).fill(0), draws: 0,
+        // the factor is built lazily inside the MC clock (#672)
+        mc: { L: null, counts: new Array(n).fill(0), draws: 0,
               ms: 0, r: rng(seed + 2000), est: [], pts: [] },
         ghk: { probs: new Array(n).fill(null), cursor: 0, sums: new Float64Array(n),
                reps: new Float64Array(n), sweep: 0, ms: 0, r: rng(seed + 3000),
@@ -225,13 +223,20 @@
       // Monte Carlo slice
       if (st.mc.ms < BUDGET) {
         const a0 = performance.now();
+        // factorised in the race quotient (anchored differences), so a
+        // common mode or a small overall scale cannot leak into the
+        // simulated contrasts (#394, #375). Built here, on the MC clock:
+        // it is that method's setup, as GHK's Choleskys are GHK's; built
+        // in run() it shifted the first MC point left 18x at n=200 (#672)
+        if (st.mc.L === null) st.mc.L = raceFactor(C);
         while (performance.now() - a0 < SLICE) {
           const batch = Math.max(500, Math.min(8000, Math.floor(st.mc.draws / 4) || 500));
           mcBatch(mu, st.mc.L, st.mc.r, batch, st.mc.counts);
           st.mc.draws += batch;
         }
         st.mc.ms += performance.now() - a0;
-        st.mc.est.push([st.mc.ms, st.mc.counts.map(c => c / st.mc.draws)]);
+        if (st.mc.draws > 0)
+          st.mc.est.push([st.mc.ms, st.mc.counts.map(c => c / st.mc.draws)]);
       }
 
       // GHK slice: setup Choleskys first (the honest per-alternative cost),
