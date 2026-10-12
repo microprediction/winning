@@ -106,15 +106,19 @@ export function factorRule(V, D, F = null, W = null, maxNodes = Infinity) {
   // depends on V V' alone: padding two active columns to positions 68,
   // 69 of 80 moved a share by 0.078 through the high-dimensional Halton
   // projections, and a rank-12 column reversal moved one by 0.0053
-  // (#130). The rank that picks the family is the canonical one. A
-  // Gauss-Hermite tensor at full rank stays in V's coordinates, exactly
-  // the rule python and R build (and symmetric under the permutations
-  // and sign flips that matter there).
+  // (#130). Wherever python and R would build a Gauss-Hermite tensor in
+  // V's own axes, that exact rule is kept (it is symmetric under the
+  // permutations and sign flips that matter there, and the ports stay
+  // in parity); only a low-discrepancy family goes canonical, with the
+  // canonical rank picking it.
+  if (ruleFamily(V, D) === "hermite") {
+    const raw = canonicalRule(V, D, maxNodes);
+    if (raw.hermite) return raw;
+  }
   const { C, Q } = canonicalBasis(V);
   const rc = C[0].length;
   if (rc === 0) return { F: [new Array(r).fill(0)], W: [1] };
   const rule = canonicalRule(C, D, maxNodes);
-  if (rule.hermite && rc === r) return canonicalRule(V, D, maxNodes);
   const Fo = rule.F.map(f => Q.map(row => {
     let a = 0;
     for (let k = 0; k < rc; k++) a += row[k] * f[k];
@@ -127,6 +131,22 @@ function midpointRule(Q) {
   const F = [];
   for (let q = 0; q < Q; q++) F.push([invNormalRational((q + 0.5) / Q)]);
   return { F, W: new Array(Q).fill(1 / Q) };
+}
+
+function ruleFamily(V, D) {
+  const n = V.length, r = V[0].length;
+  let sharp = 0;
+  for (let i = 0; i < n; i++) {
+    const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
+    sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
+  }
+  sharp *= Math.SQRT2;
+  const cap = r === 1 ? 201 : r === 2 ? 41 : r === 3 ? 31 : 15;
+  const sharpMax = r === 2 ? 3.75 : r === 3 ? 4.75 : 3.0;
+  if (r >= 2 && sharp > sharpMax) return "halton";
+  if (r === 1 && Math.ceil(8 * sharp) > 80) return "midpoint";
+  if (Math.pow(cap, r) > 100000) return "halton";
+  return "hermite";
 }
 
 function canonicalRule(V, D, maxNodes) {

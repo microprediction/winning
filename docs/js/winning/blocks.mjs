@@ -227,21 +227,18 @@ function clusterNodes(r, qa) {
    high-dimensional Halton projections (#130). Each cluster's rows are
    put in canonical form (canonicalBasis: principal axes, null
    directions dropped, cube-sum signs) and zero-padded to the largest
-   cluster rank, so the rule depends on each V_c V_c' alone. Rank one is
-   left as given (a sign flip of a symmetric rule changes nothing). */
+   cluster rank, so the rule depends on each V_c V_c' alone. Ranks one
+   and two keep python's Gauss-Hermite tensor in the caller's axes. */
 function canonicalBlockLoadings(L, cluster) {
-  if (L[0].length < 2) return L;
+  // rank <= 2 is python's tensor Gauss-Hermite in the caller's axes:
+  // kept exactly, for parity (symmetric under permutations and signs)
+  if (L[0].length < 3) return L;
   const inv = clusterIndex(cluster);
   const nC = Math.max(...inv) + 1;
   const members = Array.from({ length: nC }, () => []);
   inv.forEach((c, i) => members[c].push(i));
   const parts = members.map(ix => canonicalBasis(ix.map(i => L[i])).C);
   const R = Math.max(1, ...parts.map(C => (C.length ? C[0].length : 0)));
-  // a full rank-two loading keeps the tensor Gauss-Hermite rule in the
-  // caller's coordinates, exactly python's (symmetric under the column
-  // permutations and sign flips); only the Halton family (rank >= 3) and
-  // a padded loading change representation
-  if (R === L[0].length && R <= 2) return L;
   const out = L.map(() => new Array(R).fill(0));
   members.forEach((ix, c) => ix.forEach((i, k) => {
     parts[c][k].forEach((v, j) => { out[i][j] = v; });
@@ -274,9 +271,8 @@ function warnIfSharp(V, sd, qa, threshold = 3.0) {
 /* The nested coupling is one global factor: V -> V Q is the same law,
    so its node rule is built for the canonical coupling (#130). */
 function canonicalCoupling(g) {
-  if (g[0].length < 2) return g;
+  if (g[0].length < 3) return g;     // tensor GH in the caller's axes, as python
   const { C } = canonicalBasis(g);
-  if (C[0].length === g[0].length && C[0].length <= 2) return g;  // tensor GH, as python
   return C[0].length ? C : g.map(() => [0]);
 }
 
