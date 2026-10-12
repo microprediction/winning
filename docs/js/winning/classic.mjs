@@ -271,6 +271,131 @@ export function statePricesFromOffsets(density, offsets) {
   return exactStatePrices(Array.from(offsets, o => shiftedCdf(base, o, L)));
 }
 
+/* The ability forward, extended offsets included: port of python's
+   ability_implied_state_prices / state_prices_from_extended_offsets and
+   R's (r/winning/R/calibration.R). +Infinity -- the scratched-runner
+   ability dividendImpliedAbility returns (#589) -- never wins and prices
+   at exactly 0; -Infinity runners split the pot; a runner further than
+   the density's support behind the best is +Infinity; and a field too
+   wide for the lattice is clustered and dilated. statePricesFromOffsets
+   keeps refusing non-finite offsets (#438): this is the explicitly
+   named door for the sentinel, so a browser caller can reprice what the
+   inverse returned (#662). NaN is still refused. */
+const ABILITY_IMPLIED_STATE_PRICES_OPTS = new Set(["unit", "maxDepth"]);
+export function abilityImpliedStatePrices(ability, density, opts = {}) {
+  checkOpts(opts, ABILITY_IMPLIED_STATE_PRICES_OPTS, "abilityImpliedStatePrices", OPT_HINTS);
+  const { unit = 1.0, maxDepth = 3 } = opts;
+  if (typeof unit !== "number" || !Number.isFinite(unit) || !(unit > 0))
+    throw new Error(`abilityImpliedStatePrices: unit must be a finite positive number; got ${unit}`);
+  if (!Number.isInteger(maxDepth) || maxDepth < 0)
+    throw new Error(`abilityImpliedStatePrices: maxDepth must be a whole number >= 0; got ${maxDepth}`);
+  if (!isVector(ability))
+    throw new Error(`ability must be an array of numbers; got ${ability === null ? "null" : typeof ability}`);
+  if (ability.length === 0) throw new Error("ability is empty");
+  const a = Array.from(ability);
+  a.forEach((v, i) => {
+    if (typeof v !== "number" || Number.isNaN(v))
+      throw new Error(`ability[${i}] = ${typeof v === "string" ? JSON.stringify(v) : v} ` +
+        "is not a number (+Infinity, a scratch, and -Infinity are allowed)");
+  });
+  density = asClassicDensity(density);
+  return extendedStatePrices(density, a.map(v => v / unit), maxDepth, 3);
+}
+
+const meanIgnoringInf = o => {
+  const f = o.filter(Number.isFinite);
+  return f.reduce((x, y) => x + y, 0) / f.length;
+};
+const intCentred = o => { const m = Math.trunc(meanIgnoringInf(o)); return o.map(v => v - m); };
+function supportIndices(density, tol = 1e-12) {
+  const idx = [];
+  density.forEach((d, i) => { if (d > tol) idx.push(i); });
+  return idx;
+}
+function dilateDensity(density, unitRatio) {
+  const L = impliedL(density), out = new Array(2 * L + 1).fill(0);
+  for (let k = 0; k < density.length; k++) {
+    for (const [lo, coef] of lowHigh((k - L) / unitRatio, L)) {
+      out[Math.min(2 * L, Math.max(lo + L, 0))] += density[k] * coef;
+    }
+  }
+  const s = out.reduce((x, y) => x + y, 0);
+  return out.map(v => v / s);
+}
+function divideOffsets(c) {
+  const n = c.length;
+  if (n === 2) return (c[0] + c[1]) / 2;
+  const srt = c.slice().sort((x, y) => x - y);
+  const maxBest = Math.min(20, Math.trunc(n / 6 + 2));
+  const gaps = [0];
+  for (let i = 1; i < n; i++) gaps.push(Math.abs(srt[i] - srt[i - 1]));
+  const g = gaps.slice(0, maxBest + 1);
+  const i0 = Math.max(1, g.indexOf(Math.max(...g)));
+  return (srt[i0 - 1] + srt[i0]) / 2;
+}
+function clusteredStatePrices(density, offsets, fast, unitRatio, maxDepth) {
+  const dd = dilateDensity(density, unitRatio);
+  const doff = offsets.map(o => o / unitRatio);
+  const dsp = extendedStatePrices(dd, doff, maxDepth - 1, unitRatio);
+  const n = offsets.length;
+  if (fast.length === n || fast.length === 0 || maxDepth <= 0) return dsp;
+  const isFast = new Array(n).fill(false);
+  fast.forEach(i => { isFast[i] = true; });
+  const slow = [];
+  for (let i = 0; i < n; i++) if (!isFast[i]) slow.push(i);
+  const slowRel = slow.length === 1 ? [1]
+    : extendedStatePrices(dd, intCentred(slow.map(i => doff[i])), maxDepth - 2, unitRatio);
+  const fastRel = extendedStatePrices(density, intCentred(fast.map(i => offsets[i])), maxDepth - 1, unitRatio);
+  const slowShare = slow.reduce((t, i) => t + dsp[i], 0);
+  const sp = new Array(n).fill(0);
+  slow.forEach((i, k) => { sp[i] = slowRel[k] * slowShare; });
+  fast.forEach((i, k) => { sp[i] = fastRel[k] * (1 - slowShare); });
+  const tot = sp.reduce((x, y) => x + y, 0);
+  return sp.map(v => v / tot);
+}
+function extendedStatePrices(density, offsets, maxDepth, unitRatio) {
+  const n = offsets.length;
+  if (n === 1) return [1];
+  const pinf = offsets.map(o => o === Infinity);
+  if (pinf.some(Boolean)) {
+    if (pinf.every(Boolean)) return new Array(n).fill(1 / n);
+    const live = [];
+    pinf.forEach((p, i) => { if (!p) live.push(i); });
+    const sub = extendedStatePrices(density, intCentred(live.map(i => offsets[i])), maxDepth, unitRatio);
+    const sp = new Array(n).fill(0);
+    live.forEach((i, k) => { sp[i] = sub[k]; });
+    return sp;
+  }
+  const ninf = offsets.filter(o => o === -Infinity).length;
+  if (ninf) return offsets.map(o => (o === -Infinity ? 1 / ninf : 0));
+  const L = impliedL(density);
+  const supp = supportIndices(density);
+  const W = supp[supp.length - 1] - supp[0];
+  const best = Math.min(...offsets);
+  if (offsets.some(o => o > best + W))       // no chance of winning
+    return extendedStatePrices(density, intCentred(offsets.map(o => (o > best + W ? Infinity : o))),
+                               maxDepth, unitRatio);
+  const co = intCentred(offsets);
+  // R's hanging test: would the shifted density lose mass off the
+  // lattice (or pass lowHigh's exact range)? See calibration.R.
+  const sLo = supp[0] - L, sHi = supp[supp.length - 1] - L;
+  const left = [], right = [];
+  co.forEach((o, i) => {
+    if (Math.floor(o) + sLo < -L || o <= -L + 2) left.push(i);
+    if (Math.ceil(o) + sHi > L || o >= L - 2) right.push(i);
+  });
+  if (!left.length && !right.length) return statePricesFromOffsets(density, co);
+  if (maxDepth === 0) {
+    right.forEach(i => { co[i] = Infinity; });
+    left.forEach(i => { co[i] = -Infinity; });
+    return extendedStatePrices(density, co, 0, unitRatio);
+  }
+  const divider = divideOffsets(co);
+  const fast = [];
+  co.forEach((o, i) => { if (o < divider) fast.push(i); });
+  return clusteredStatePrices(density, co, fast, unitRatio, maxDepth - 1);
+}
+
 export function solveForImpliedOffsets(prices, density, opts = {}) {
   checkOpts(opts, SOLVE_FOR_IMPLIED_OFFSETS_OPTS, "solveForImpliedOffsets", OPT_HINTS);
   density = asClassicDensity(density);
