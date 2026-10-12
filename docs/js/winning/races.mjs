@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget, canonicalBasis } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -89,9 +89,9 @@ function haltonRule(r, Q) {
 
    `V` must already be shape-normalised and gauge-centred, `D` validated.
    A caller rule is validated, never replaced (#290). */
-export function factorRule(V, D, F = null, W = null) {
+export function factorRule(V, D, F = null, W = null, maxNodes = Infinity) {
   requireWholeRule(F, W);
-  const n = V.length, r = V[0].length;
+  const r = V[0].length;
   if (F != null) {
     // the caller's nodes go through the same door as V and D: every node
     // carries exactly the loadings' rank, and there is one weight per
@@ -99,6 +99,38 @@ export function factorRule(V, D, F = null, W = null) {
     const Fv = asFactorNodes(F, r, "F");
     return { F: Fv, W: asWeights(W, Fv.length, "W") };
   }
+  // The low-discrepancy rules are built for the CANONICAL loadings
+  // C = V Q (null directions dropped, principal axes, cube-sum signs) and
+  // handed back in V's own coordinates as Q f'. V f = C f' is the same
+  // law, so every caller keeps using V, but the Halton placement now
+  // depends on V V' alone: padding two active columns to positions 68,
+  // 69 of 80 moved a share by 0.078 through the high-dimensional Halton
+  // projections, and a rank-12 column reversal moved one by 0.0053
+  // (#130). The rank that picks the family is the canonical one. A
+  // Gauss-Hermite tensor at full rank stays in V's coordinates, exactly
+  // the rule python and R build (and symmetric under the permutations
+  // and sign flips that matter there).
+  const { C, Q } = canonicalBasis(V);
+  const rc = C[0].length;
+  if (rc === 0) return { F: [new Array(r).fill(0)], W: [1] };
+  const rule = canonicalRule(C, D, maxNodes);
+  if (rule.hermite && rc === r) return canonicalRule(V, D, maxNodes);
+  const Fo = rule.F.map(f => Q.map(row => {
+    let a = 0;
+    for (let k = 0; k < rc; k++) a += row[k] * f[k];
+    return a;
+  }));
+  return { F: Fo, W: rule.W };
+}
+
+function midpointRule(Q) {
+  const F = [];
+  for (let q = 0; q < Q; q++) F.push([invNormalRational((q + 0.5) / Q)]);
+  return { F, W: new Array(Q).fill(1 / Q) };
+}
+
+function canonicalRule(V, D, maxNodes) {
+  const n = V.length, r = V[0].length;
   // adaptive order: sharpness rule identical to python/R. The statistic
   // is the pairwise-safe bound sqrt(2) * max_i |(PV)_i| / sqrt(D_i), on
   // the CENTERED rows: what decides a race is loading DIFFERENCES, and
@@ -114,24 +146,28 @@ export function factorRule(V, D, F = null, W = null) {
   // python reference for the measurements behind each number
   const cap = r === 1 ? 201 : r === 2 ? 41 : r === 3 ? 31 : 15;
   const sharpMax = r === 2 ? 3.75 : r === 3 ? 4.75 : 3.0;
+  let rule;
   if (r >= 2 && sharp > sharpMax) {
     // escalate the FAMILY, not the order (matching python/R)
-    return haltonRule(r, 8192);
-  }
-  if (r === 1 && Math.ceil(8 * sharp) > 80) {
+    rule = haltonRule(r, 8192);
+  } else if (r === 1 && Math.ceil(8 * sharp) > 80) {
     // rank-1 extreme sharpness (matching python/R): equal-weight
     // midpoint-quantile grid scaled with sharpness replaces GH
-    const Q = Math.min(Math.ceil(8 * sharp), 4001);
-    const Fq = [];
-    for (let q = 0; q < Q; q++) Fq.push([invNormalRational((q + 0.5) / Q)]);
-    return { F: Fq, W: new Array(Q).fill(1 / Q) };
-  }
-  if (Math.pow(cap, r) > 100000) {
+    rule = midpointRule(Math.min(Math.ceil(8 * sharp), 4001));
+  } else if (Math.pow(cap, r) > 100000) {
     // high-rank tensor footgun (matching python/R): Halton fallback
-    return haltonRule(r, 8192);
+    rule = haltonRule(r, 8192);
+  } else {
+    rule = { ...hermiteNodes(r, Math.min(Math.max(Math.ceil(8 * sharp), 15), cap)), hermite: true };
   }
-  const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);
-  return hermiteNodes(r, Q);
+  if (rule.W.length > maxNodes) {
+    // a node budget (top-k: every node is a full count-program pass) is
+    // met with a WHOLE rule of that size, as python's 2^10 scrambled
+    // Sobol: the first 1024 nodes of a 3393-node midpoint grid are its
+    // lower quarter, and top-1 missed the race by 0.50 (#340)
+    rule = r === 1 ? midpointRule(maxNodes) : haltonRule(r, maxNodes);
+  }
+  return rule;
 }
 
 /* mu moved next to the origin when a common offset dwarfs the field
@@ -398,10 +434,11 @@ const SPACING_WARNED = new Set();
 /* The general race's factor node rule for loadings V at variances D --
    gauge-centred V and its (F, W) -- for callers that mix their own
    conditional kernels over the factor law (topk.mjs, #340). */
-export function _factorNodeRule(V, D) {
+export function _factorNodeRule(V, D, maxNodes = Infinity) {
   const n = asLoadings(V, V.length).length;
   const st = setup(new Array(n).fill(0), V, D, null, null, "normal");
-  return { V: st.V, F: st.F, W: st.W };
+  if (st.W.length <= maxNodes) return { V: st.V, F: st.F, W: st.W };
+  return { V: st.V, ...factorRule(st.V, st.D, null, null, maxNodes) };
 }
 
 /* Independent and Factor grammars ARE the V/D race, so they are priced

@@ -222,6 +222,54 @@ rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { D: [1, 1, 1], targetFloor: 
         Math.max(...plain.map((v, i) => Math.abs(v - info.mu[i]))) < 1e-12);
 }
 
+// --- the automatic node rule depends on V V' alone (#130) and the top-k
+// node budget is met with a whole rule, not a prefix (#340)
+{
+  const mx = (p, q) => Math.max(...p.map((x, i) => Math.abs(x - q[i])));
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const mu = [-0.5, 0.1, 0.7], D = [0.19, 0.19, 1.0], b = [[0.9, 0], [0, 0.9], [0, 0]];
+    const pad = (a, c) => b.map(r => { const o = Array(80).fill(0); o[a] = r[0]; o[c] = r[1]; return o; });
+    const p0 = races.raceProbabilities(mu, { V: pad(0, 1), D, points: 257 });
+    holds("80-column padding: placement and swap of the active columns (#130)",
+          mx(p0, races.raceProbabilities(mu, { V: pad(68, 69), D, points: 257 })) < 1e-12
+          && mx(p0, races.raceProbabilities(mu, { V: pad(69, 68), D, points: 257 })) < 1e-12
+          // the unpadded spelling keeps python's rule in its own axes: 1.1e-5
+          && mx(p0, races.raceProbabilities(mu, { V: b, D, points: 257 })) < 5e-5);
+    const n = 4, r = 12;
+    const m4 = Array.from({ length: n }, (_, i) => 0.7 * Math.sin((i + 1) * 9 * 0.37) + 0.2 * i);
+    const V12 = Array.from({ length: n }, (_, i) =>
+      Array.from({ length: r }, (_, j) => 0.25 * Math.sin((i + 1) * (j + 2) + 8 * 0.31)));
+    const D4 = [0.03, 0.045, 0.06, 0.075];
+    holds("rank-12 column reversal prices the same race (#130)",
+          mx(races.raceProbabilities(m4, { V: V12, D: D4 }),
+             races.raceProbabilities(m4, { V: V12.map(row => row.slice().reverse()), D: D4 })) < 1e-12);
+    const bm = [-0.7, -0.1, 0.35, 0.9], cl = [0, 0, 0, 0], bD = [0.08, 0.08, 0.08, 0.08];
+    const bb = [[2.5, 0], [0, 2.5], [-2.5, 0], [0, -2.5]];
+    const bpad = (a, c) => bb.map(x => Array.from({ length: 80 }, (_, j) => j === a ? x[0] : j === c ? x[1] : 0));
+    const q0 = blocks.blockRaceProbabilities(bm, cl, bb, bD, { points: 257, qa: 9 });
+    holds("block loading padding and column swap price the same race (#130)",
+          [[0, 1], [68, 69], [69, 68]].every(([a, c]) =>
+            mx(q0, blocks.blockRaceProbabilities(bm, cl, bpad(a, c), bD, { points: 257, qa: 9 })) < 1e-12));
+    const V1 = [[-3], [-1], [1], [3]];
+    for (const d of [1e-3, 1e-4]) {
+      const m = [-0.015, 0.005, 0.010, 0.0], Dd = [d, d, d, d];
+      holds(`sharp rank-one top-1 is the race at D=${d} (#340)`,
+            mx(races.raceProbabilities(m, { V: V1, D: Dd, points: 257 }),
+               topk.topKProbabilities(m, 1, { V: V1, D: Dd, points: 257 })) < 1e-9);
+    }
+    const tm = [0.15270157009363175, -0.2301855193451047, 0.23726646788418293, 0.15630929786711933];
+    const tD = [0.009629986205992744, 0.0018727096736087688, 0.00503595103127878, 0.010563698968609512];
+    const tV = [[1.2288664504885674, 0.8170432653278112], [-1.1702364422380924, 2.074527421966195],
+                [0.64559206366539, -1.9816835839301348], [0.021002475172281265, 1.0335299242287874]];
+    const th = 0.47, c = Math.cos(th), s = Math.sin(th);
+    const tVr = tV.map(([a, bq]) => [a * c + bq * s, -a * s + bq * c]);
+    holds("a sharp rank-two rotation leaves top-3 alone (#340)",
+          mx(topk.topKProbabilities(tm, 3, { V: tV, D: tD, points: 513 }),
+             topk.topKProbabilities(tm, 3, { V: tVr, D: tD, points: 513 })) < 1e-12);
+  } finally { console.warn = warn; }
+}
 // --- an allowlist names PUBLIC keys, not destructured locals (#207)
 // polishRace reads `const { mu0: mu0In = null } = opts`, and #204 put the
 // LOCAL name in its allowlist. So the supported call was refused as an

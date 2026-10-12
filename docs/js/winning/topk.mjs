@@ -359,13 +359,14 @@ function factorNodes(V, n, qa, D = null) {
     // qa omitted (the default): the general race's sharpness rule, as
     // python and R. A fixed qa = 15 Gauss-Hermite rule missed the race by
     // 10.7 points on a sharp rank-one field and moved a top-2 membership
-    // 1.3 points under a covariance-preserving rotation (#340). Past the
-    // race's 8192-node escalation the first 1024 Halton points are used:
-    // every node here is a full count-program pass.
-    const rule = _factorNodeRule(Vm, D == null ? new Array(n).fill(1) : D);
-    let F = rule.F, W = rule.W;
-    if (W.length > 1024) { F = F.slice(0, 1024); W = new Array(1024).fill(1 / 1024); }
-    return { Vm: rule.V, nodes: F, w: W };
+    // 1.3 points under a covariance-preserving rotation (#340). Past 1024
+    // nodes a whole 1024-node rule of the same family is built, as
+    // python's 2^10 Sobol (every node here is a full count-program pass):
+    // the first 1024 nodes of a longer rule are NOT a rule -- of a
+    // 3393-node midpoint grid they are its lower quarter, and top-1
+    // missed the race by 0.50.
+    const rule = _factorNodeRule(Vm, D == null ? new Array(n).fill(1) : D, 1024);
+    return { Vm: rule.V, nodes: rule.F, w: rule.W };
   }
   if (qa === undefined) qa = 15;   // an explicit value, null included, goes to hermite1's check
   for (let c = 0; c < r; c++) {

@@ -524,6 +524,69 @@ export function gaugeCenter(V) {
   return V.map(row => row.map((x, j) => x - colMean[j]));
 }
 
+/* A representation of a Gaussian factor law that depends on V V' alone
+ * (port of python's ratings _canonical_loadings). Gaussian factors
+ * enter only through V V': a sign flip, a column permutation, an
+ * orthogonal rotation or a zero column is the SAME race. A fixed node
+ * cloud is not invariant under those maps, so moving two loading
+ * columns from positions 0, 1 to 68, 69 of an 80-column matrix moved a
+ * share by 0.078 through the plain-Halton projections, and a column
+ * swap in a block moved one by 0.234 (#130).
+ *
+ * One-sided Jacobi (Hestenes) on the columns: V Q = C with Q orthogonal,
+ * C's columns orthogonal, sorted by norm, null directions (norm <=
+ * rtol x the largest) dropped, each sign set by the column's sum of
+ * cubes (a permutation of contestants does not change it). Returns
+ * { C (n x r'), Q (r x r') } with V Q = C, so a node f' for C is the
+ * node Q f' for V. Rotations within a repeated singular value cannot be
+ * resolved, as in python. */
+export function canonicalBasis(V, rtol = 1e-12) {
+  const n = V.length, r = n ? V[0].length : 0;
+  const A = V.map(row => row.slice());
+  const Q = Array.from({ length: r }, (_, i) => Array.from({ length: r }, (_, j) => (i === j ? 1 : 0)));
+  for (let sweep = 0; sweep < 60; sweep++) {
+    let rotated = false;
+    for (let p = 0; p < r - 1; p++) for (let q = p + 1; q < r; q++) {
+      let a = 0, b = 0, g = 0;
+      for (let i = 0; i < n; i++) { const x = A[i][p], y = A[i][q]; a += x * x; b += y * y; g += x * y; }
+      if (!(Math.abs(g) > 1e-15 * Math.sqrt(a * b)) || g === 0) continue;
+      rotated = true;
+      const zeta = (b - a) / (2 * g);
+      const t = (zeta >= 0 ? 1 : -1) / (Math.abs(zeta) + Math.hypot(1, zeta));
+      const c = 1 / Math.hypot(1, t), s = c * t;
+      for (let i = 0; i < n; i++) {
+        const x = A[i][p], y = A[i][q];
+        A[i][p] = c * x - s * y; A[i][q] = s * x + c * y;
+      }
+      for (let i = 0; i < r; i++) {
+        const x = Q[i][p], y = Q[i][q];
+        Q[i][p] = c * x - s * y; Q[i][q] = s * x + c * y;
+      }
+    }
+    if (!rotated) break;
+  }
+  const norm = Array.from({ length: r }, (_, j) => Math.hypot(...A.map(row => row[j])));
+  const top = Math.max(0, ...norm);
+  const keep = [...Array(r).keys()]
+    .filter(j => norm[j] > rtol * top && norm[j] > 0)
+    .sort((x, y) => norm[y] - norm[x] || x - y);
+  const C = A.map(() => []), Qk = Q.map(() => []);
+  for (const j of keep) {
+    let cube = 0, abs3 = 0, big = 0;
+    for (let i = 0; i < n; i++) {
+      const v = A[i][j];
+      cube += v * v * v; abs3 += Math.abs(v) ** 3;
+      if (Math.abs(v) > Math.abs(big)) big = v;
+    }
+    // cube-symmetric column: the largest entry decides, as python
+    if (Math.abs(cube) <= 1e-12 * abs3) cube = big;
+    const sg = cube < 0 ? -1 : 1;
+    for (let i = 0; i < n; i++) C[i].push(sg * A[i][j]);
+    for (let i = 0; i < r; i++) Qk[i].push(sg * Q[i][j]);
+  }
+  return { C, Q: Qk };
+}
+
 /* First d primes, generated. Literal tables put silent cliffs in the
  * Halton constructions: 16 in demo.mjs and 24 here, past which
  * `primes[dim]` is undefined, the radical inverse becomes NaN, and the
