@@ -130,6 +130,12 @@ def test_float_engine_inside_certificate(base):
     sure = certified_race_probabilities(mu, D, base=base, digits=20)
     for f, s in zip(fast, sure):
         assert abs(f - float(s.mid())) < 1e-13
+    # the default stays the uniform lattice: second order across the
+    # laplace kink, measured 8.4e-5 on this field; smooth bases unchanged
+    default = race_probabilities(mu, D=D, base=base)
+    tol = 1e-3 if base == "laplace" else 1e-13
+    for f, s in zip(default, sure):
+        assert abs(f - float(s.mid())) < tol
 
 
 def test_kinked_jacobian_is_the_derivative_of_the_kinked_map():
