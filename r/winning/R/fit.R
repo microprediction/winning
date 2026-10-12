@@ -128,17 +128,34 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # halve BEFORE adding, or C + t(C) overflows to Inf for finite
   # entries near the double ceiling (#279)
   C <- 0.5 * C + 0.5 * t(C)
-  lam_min <- min(eigen(C, symmetric = TRUE, only.values = TRUE)$values)
-  # mean diagonal, divided BEFORE summing: sum(diag(C)) overflows to
-  # Inf for finite entries near the ceiling, and the tolerance is
-  # then -Inf, so the comparison is always FALSE and the check
-  # accepts a matrix with a large negative eigenvalue (#279)
-  if (lam_min < -1e-8 * max(sum(diag(C) / n), 1e-300))
-    stop(sprintf(paste("cov= is not positive semidefinite (min eigenvalue",
-                       "%.2e); this is not a covariance matrix. Project to",
-                       "the PSD cone first if it came from noisy",
-                       "estimation."),
-                 lam_min))
+  # positive semidefiniteness in CORRELATION units (#666, as python
+  # core._validate_covariance): a tolerance of 1e-8 times the mean raw
+  # variance let an unrelated variance of 1e12 hide a pair with
+  # correlation 2, and the absolute 1e-300 floor passed [[0, c], [c, 0]]
+  # at c = 1e-309. No negative variance; a zero variance has a zero row;
+  # the standardised positive-variance block has min eigenvalue >= -1e-8.
+  psd_msg <- paste("cov= is not positive semidefinite; this is not a",
+                   "covariance matrix. Project to the PSD cone first if",
+                   "it came from noisy estimation.")
+  d <- diag(C)
+  if (any(d < 0))
+    stop(sprintf("%s (variance [%d] = %.2e < 0)", psd_msg,
+                 which(d < 0)[1], d[which(d < 0)[1]]), call. = FALSE)
+  pos <- d > 0
+  if (!all(pos)) {
+    for (i in which(!pos))
+      if (any(C[i, -i] != 0))
+        stop(sprintf("%s (variance [%d] is zero but its row is not)",
+                     psd_msg, i), call. = FALSE)
+  }
+  if (any(pos)) {
+    sd_ <- sqrt(d[pos])
+    R <- C[pos, pos, drop = FALSE] / outer(sd_, sd_)
+    lam_min <- min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)
+    if (lam_min < -1e-8)
+      stop(sprintf("%s (min eigenvalue of the correlation matrix %.2e)",
+                   psd_msg, lam_min), call. = FALSE)
+  }
   if (n == 1L) {
     # A one-runner field has no covariance STRUCTURE: nothing for a
     # factor to correlate, the whole variance idiosyncratic, and the

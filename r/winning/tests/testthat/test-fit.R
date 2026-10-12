@@ -343,3 +343,11 @@ test_that("an exact rank-2-plus-diagonal matrix is returned undistorted (#427)",
   expect_lt(abs(pnorm(1.471517470795 / sqrt(dv(Cfit, 11, 12))) -
                 pnorm(1.471517470795 / sqrt(dv(C, 11, 12)))), 1e-6)
 })
+
+# positive semidefiniteness in correlation units (#666)
+test_that("fit_covariance refuses an indefinite block hidden by scale", {
+  expect_error(fit_covariance(rbind(c(1, 2, 0), c(2, 1, 0), c(0, 0, 1e12))),
+               "not positive semidefinite")
+  expect_error(fit_covariance(rbind(c(0, 1e-309), c(1e-309, 0))),
+               "not positive semidefinite")
+})

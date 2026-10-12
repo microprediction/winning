@@ -411,15 +411,36 @@ def _validate_covariance(C, name="cov="):
     # came back out as a non-finite variance (#279). The two are
     # the same number everywhere else.
     C = 0.5 * C + 0.5 * C.T
-    lam_min = float(np.linalg.eigvalsh(C).min())
-    # mean diagonal, divided BEFORE summing: np.trace overflows for
-    # finite entries near the ceiling, which made the tolerance inf
-    # and the comparison meaningless (#279)
-    if lam_min < -1e-8 * max(float(np.sum(np.diag(C) / n)), 1e-300):
-        raise ValueError(
-            f"{name} is not positive semidefinite (min eigenvalue "
-            f"{lam_min:.2e}); this is not a covariance matrix. Project "
-            "to the PSD cone first if it came from noisy estimation.")
+    # Positive semidefiniteness is judged in CORRELATION units (#666).
+    # The tolerance used to be 1e-8 times the mean raw variance, so an
+    # unrelated variance of 1e12 hid a pair with correlation 2 (eigenvalue
+    # -1), and an absolute 1e-300 floor let [[0, c], [c, 0]] through at
+    # c = 1e-309. Now: no negative variance; a zero-variance coordinate
+    # has a zero row (its 2x2 minors are -C_ij^2 otherwise); and the
+    # positive-variance block, standardised, has min eigenvalue >= -1e-8.
+    d = np.diag(C).copy()
+    _psd_refusal = (f"{name} is not positive semidefinite; this is not a "
+                    "covariance matrix. Project to the PSD cone first if "
+                    "it came from noisy estimation.")
+    if np.any(d < 0):
+        i = int(np.flatnonzero(d < 0)[0])
+        raise ValueError(f"{_psd_refusal} (variance [{i}] = {d[i]:.2e} < 0)")
+    pos = d > 0
+    if not pos.all():
+        off = C[~pos].copy()
+        off[np.arange(int((~pos).sum())), np.flatnonzero(~pos)] = 0.0
+        if np.any(off != 0.0):
+            i = int(np.flatnonzero(~pos)[np.flatnonzero((off != 0).any(1))[0]])
+            raise ValueError(
+                f"{_psd_refusal} (variance [{i}] is zero but its row is not)")
+    if pos.any():
+        s = np.sqrt(d[pos])
+        R = C[np.ix_(pos, pos)] / s[:, None] / s[None, :]
+        lam_min = float(np.linalg.eigvalsh(R).min())
+        if lam_min < -1e-8:
+            raise ValueError(
+                f"{_psd_refusal} (min eigenvalue of the correlation matrix "
+                f"{lam_min:.2e})")
     return C
 
 

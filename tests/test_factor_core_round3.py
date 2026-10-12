@@ -285,3 +285,27 @@ def test_structured_inverse_round_trips_a_default_target(kind):
 def test_block_mass_check_is_strict_outside_inverses():
     from winning.factor.blocks import _MASS_TOL
     assert _MASS_TOL.get() == 5e-3
+
+
+# #666: positive semidefiniteness is judged in correlation units.
+@pytest.mark.parametrize("S", [
+    [[1.0, 2.0, 0.0], [2.0, 1.0, 0.0], [0.0, 0.0, 1e12]],
+    [[0.0, 1e-309], [1e-309, 0.0]],
+    [[0.0, 1.0], [1.0, 0.0]],
+])
+def test_covariance_validation_is_scale_free(S):
+    from winning.factor.core import _validate_covariance, fit_covariance
+    S = np.array(S)
+    with pytest.raises(ValueError, match="not positive semidefinite"):
+        _validate_covariance(S)
+    with pytest.raises(ValueError, match="not positive semidefinite"):
+        fit_covariance(S)
+
+
+def test_covariance_validation_accepts_heterogeneous_scales():
+    from winning.factor.core import _validate_covariance
+    A = np.array([[1.0, 0.5], [0.5, 1.0]])
+    for c in (1e-150, 1.0, 1e150):
+        _validate_covariance(A * c)
+    _validate_covariance(np.diag([1e-12, 1.0, 1e12]))
+    _validate_covariance(np.zeros((2, 2)))
