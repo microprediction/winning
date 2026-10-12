@@ -19,7 +19,8 @@ from ..factor.core import (
     hermite_nodes,
     win_probabilities_factor,
 )
-from .registry import register
+from .registry import as_draws, register
+from ..shapes import as_points
 
 from ..rustconfig import load_fastrace
 
@@ -36,7 +37,9 @@ def _nodes(k):
 def lattice(mu, V, D, budget=None, seed=None):
     """The shared-survival-field transform (this package's algorithm,
     factor-generalized). budget = lattice points L (default 501)."""
-    L = int(budget) if budget else 501
+    # None is the default; an explicit size is a lattice size. 2.5 used
+    # to truncate to a two-point lattice and price [0, .997, .003] (#668)
+    L = 501 if budget is None else as_points(budget, "budget")
     F, W = _nodes(V.shape[1])
     if _HAVE_RUST:                       # honours WINNING_PURE and use_rust()
         # gauge-fix as the numpy path does inside win_probabilities_factor:
@@ -56,6 +59,7 @@ def lattice(mu, V, D, budget=None, seed=None):
 @register("direct_mc")
 def direct_mc(mu, V, D, budget=100_000, seed=9):
     """Draw utilities, argmax, average. budget = draws."""
+    budget = as_draws(budget)
     n, k = V.shape
     rng = np.random.default_rng(seed)
     chunk = max(10_000, int(1.5e9 / (n * 32)))
@@ -73,6 +77,7 @@ def direct_mc(mu, V, D, budget=100_000, seed=9):
 @register("sobol_direct")
 def sobol_direct(mu, V, D, budget=2**17, seed=55):
     """Direct simulation with scrambled-Sobol points in dimension k + N."""
+    budget = as_draws(budget)
     n, k = V.shape
     sob = qmc.Sobol(d=k + n, scramble=True, seed=seed)
     counts = np.zeros(n)
@@ -90,6 +95,7 @@ def sobol_direct(mu, V, D, budget=2**17, seed=55):
 def factor_rqmc(mu, V, D, budget=2**14, seed=11):
     """Per-alternative (k+1)-dimensional conditioned RQMC: the obvious
     fair competitor with the same factor structure, O(R N^2) total."""
+    budget = as_draws(budget)
     n, k = V.shape
     X = qmc.MultivariateNormalQMC(np.zeros(k + 1), np.eye(k + 1),
                                   seed=seed).random(int(budget))
@@ -199,6 +205,7 @@ def _ghk_assemble(logs):
 @register("ghk")
 def ghk(mu, V, D, budget=1000, seed=9):
     """Per-alternative GHK / Genz separation-of-variables, pseudorandom."""
+    budget = as_draws(budget)
     n = len(mu)
     p, _, _, _ = _ghk_assemble([
         (_ghk_prob(mu, _contrast(i, V=V, D=D), i, budget,
@@ -224,6 +231,7 @@ def qmc_ghk(mu, V, D, budget=1024, seed=13, return_slopes=False,
     forms `M @ Sigma @ M.T` from whatever it is handed, so handing it
     the original matrix makes the route invariant to adding `a 11'`,
     as the R port already was (#302)."""
+    budget = as_draws(budget)
     n = len(mu)
     if cov is not None:
         # The registry lets an explicit cov= past as_loadings/as_idio on
@@ -276,6 +284,7 @@ def _tilt_grad(par, L, u):
 @register("tilting")
 def tilting(mu, V, D, budget=1000, seed=7):
     """Botev-style minimax exponential tilting, per alternative."""
+    budget = as_draws(budget)
     from scipy.optimize import root
     n = len(mu)
     p = np.zeros(n)
@@ -314,6 +323,7 @@ def stern(mu, V, D, budget=1024, seed=0):
     implementations evaluated one alternative at a time; the estimator's
     statistical behavior (R^{-1/2} in the remainder draws) is unchanged
     by the shared-field assembly used here."""
+    budget = as_draws(budget)
     mu = np.asarray(mu, dtype=float)
     V = np.asarray(V, dtype=float)
     D = np.asarray(D, dtype=float)

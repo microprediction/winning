@@ -11,7 +11,7 @@ import numpy as np
 from scipy.special import log_ndtr, ndtr, ndtri
 from scipy.stats import qmc
 
-from .registry import register
+from .registry import as_draws, register
 
 
 def _diff_problem(mu, Sigma, i):
@@ -86,6 +86,7 @@ def _genz_orthant(a, C, points, shifts, seed):
 def genz_bretz(mu, V, D, budget=1024, seed=13):
     """Canonical Genz-Bretz RQMC: variable reordering, scrambled Sobol,
     random shifts (3). budget = points per shift."""
+    budget = as_draws(budget)
     n = len(mu)
     Sigma = V @ V.T + np.diag(D)
     p = np.zeros(n)
@@ -201,6 +202,7 @@ def ep_orthant(mu, V, D, budget=None, seed=None):
 def smc_orthant(mu, V, D, budget=1000, seed=17):
     """Basic Ridgway-style SMC: GHK proposals with systematic resampling
     when the effective sample size drops below half."""
+    budget = as_draws(budget)
     n = len(mu)
     Sigma = V @ V.T + np.diag(D)
     rng = np.random.default_rng(seed)

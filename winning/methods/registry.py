@@ -16,6 +16,25 @@ from ..shapes import as_idio, as_loadings
 METHODS = {}
 
 
+def as_draws(budget, name="budget"):
+    """A simulation budget: a whole number of at least one draw.
+
+    The sampling methods used the budget as an array length or a divisor
+    unchecked. Zero draws returned an all-NaN probability vector from
+    five of them (log 0 minus log 0, then a normalisation), a fraction
+    was truncated without a word, and True ran one draw (#668).
+    """
+    v = np.asarray(budget)
+    if (v.ndim != 0 or v.dtype == bool or not np.issubdtype(v.dtype, np.number)
+            or np.iscomplexobj(v) or not np.isfinite(v) or v != np.floor(v)):
+        raise ValueError(
+            f"{name} must be a whole number of draws; got {budget!r}")
+    v = int(v)
+    if v < 1:
+        raise ValueError(f"{name} must be at least 1 draw; got {v}")
+    return v
+
+
 def register(name):
     def deco(fn):
         @functools.wraps(fn)
