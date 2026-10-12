@@ -369,10 +369,24 @@ def update_contrast(m, cov, a, mean, var, refit=False):
     sup = np.flatnonzero(av)
     Vt = Vm - np.outer(Da, b) / s_e
     cols = [Vt @ _psd_sqrt(np.eye(rho) - np.outer(b, b) / s)]
-    Z = np.diag(Dv[sup]) - np.outer(Da[sup], Da[sup]) / s_e
-    z = np.sqrt(np.diag(Z))
-    lam, U = np.linalg.eigh(Z / np.outer(z, z))
-    c = max(float(lam[0]), 0.0)
+    # Cov(zeta) on the support, built without cancelling. Its diagonal
+    # is D_i (s_e - D_i a_i^2)/s_e, and s_e - D_i a_i^2 is the sum of
+    # positive terms var + sum_{j != i} D_j a_j^2; forming it as
+    # D_i - (D_i a_i)^2/s_e instead gave exactly 0 once var fell below
+    # machine precision relative to a'Da, then 0/0 in the correlation
+    # and a NaN in D' (#669).
+    q = Da[sup] * av[sup]                           # D_i a_i^2 >= 0
+    # s_e - D_i a_i^2 as a sum of the OTHER terms, never a difference
+    rest = var + np.array([np.delete(q, i).sum() for i in range(len(sup))])
+    zz = Dv[sup] * rest / s_e                       # diag of Cov(zeta)
+    z = np.sqrt(zz)
+    Rz = -np.outer(Da[sup], Da[sup]) / s_e / np.outer(z, z)
+    np.fill_diagonal(Rz, 1.0)
+    lam, U = np.linalg.eigh(Rz)
+    # the smallest eigenvalue is at least var/s_e (Rz = L (I - w w'/s_e) L
+    # with L >= I and w'w = a'Da), which is what keeps D' positive when
+    # the computed eigenvalue has rounded to zero or below
+    c = max(float(lam[0]), var / s_e)
     D_new = Dv.copy()
     D_new[sup] = c * z ** 2
     if len(sup) > 1:
