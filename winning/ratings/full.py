@@ -445,11 +445,11 @@ def update_market_full(m, S, p_market, tau2=0.25, invert=None,
     S_new = S - SL @ np.linalg.solve(K, SL.T)
     m_new = m + SL @ np.linalg.solve(K, it * (y - P @ m))
     M = P @ (S + np.diag(tau2)) @ P
-    lam, U = np.linalg.eigh(M)
-    keep = lam > 1e-12
+    # contrast-space evidence with a scale-aware rank test: the absolute
+    # lam > 1e-12 dropped every contrast at ability unit 1e-7 and
+    # returned logZ = 0 for any prices (#651)
+    from ._contrast import contrast_gaussian
     r = y - P @ m
-    z = U[:, keep].T @ r
-    logZ = float(-0.5 * (np.sum(z * z / lam[keep])
-                         + np.sum(np.log(lam[keep]))
-                         + keep.sum() * np.log(2.0 * np.pi)))
+    logZ, _ = contrast_gaussian(
+        r, M, scale=float(np.linalg.norm(y)) + float(np.linalg.norm(P @ m)))
     return m_new, _psd_repair(S_new), logZ

@@ -147,3 +147,43 @@ def test_market_full_accepts_a_singular_belief():
                                    invert=lambda p: y)
     assert np.all(np.isfinite(m)) and np.all(np.isfinite(Sp))
     assert np.allclose(m, 0.0) and np.allclose(Sp, S)
+
+
+# --- #651: every resolved contrast enters the conjugate evidence
+
+def test_team_margins_keep_a_precise_contrast_beside_a_noisy_one():
+    from winning.ratings.teams import update_team_margins_full
+    A = np.array([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    beta2 = np.array([1e-4, 1e-4, 1e8])
+    lz = [update_team_margins_full(np.zeros(2), np.eye(2), A, scores=s,
+                                   beta2=beta2)[2]
+          for s in ([0.0, 0.0, 0.0], [0.01, -0.01, 0.0])]
+    want0 = -0.5 * (np.log(1e-4) + np.log(4 / 3 + 1e-4 / 3 + 2e8 / 3)
+                    + 2 * np.log(2 * np.pi))
+    assert lz[0] == pytest.approx(want0, abs=1e-6)
+    assert lz[1] - lz[0] == pytest.approx(-1.0, abs=1e-5)
+
+
+def test_unsupported_contrast_is_refused():
+    from winning.ratings.teams import update_team_margins_full
+    A = np.array([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    with pytest.raises(ValueError, match="support"):
+        update_team_margins_full(np.zeros(2), np.eye(2), A,
+                                 scores=[1.0, -1.0, 0.0], beta2=0.0)
+    # the same contrast held at zero is fine
+    update_team_margins_full(np.zeros(2), np.eye(2), A,
+                             scores=[0.5, 0.5, 0.0], beta2=0.0)
+
+
+@pytest.mark.parametrize("c", [1.0, 1e-3, 1e-6, 1e-7, 1e-12, 1e6])
+def test_market_evidence_obeys_the_unit_law(c):
+    from winning.ratings.full import update_market_full
+    from winning.ratings.market import update_market
+    y = c * np.array([1.0, 0.0, -1.0])
+    want = -0.5 * (1.0 + 2 * np.log(2 * c * c) + 2 * np.log(2 * np.pi))
+    a = update_market(np.zeros(3), np.full(3, c * c), None, tau2=c * c,
+                      invert=lambda _p: y)
+    b = update_market_full(np.zeros(3), np.eye(3) * c * c, None,
+                           tau2=c * c, invert=lambda _p: y)
+    assert a[2] == pytest.approx(want, abs=1e-9)
+    assert b[2] == pytest.approx(want, abs=1e-9)
