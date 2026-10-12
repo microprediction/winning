@@ -316,3 +316,10 @@ end
                                       points = 1025, return_info = true)
     @test abs(sum(w.mu)) < 1e-12 && abs(sum(log.(w.sd))) < 1e-12
 end
+
+@testset "bulk-window delta is validated (#445)" begin
+    for d in (-1, 0, 0.5, 1, NaN, Inf, true)
+        @test_throws ArgumentError race_probabilities([-1.0, 0, 1]; D = [1.0, 1, 1], delta = d)
+    end
+    @test all(isfinite, race_probabilities([-1.0, 0, 1]; D = [1.0, 1, 1], delta = 1e-3))
+end

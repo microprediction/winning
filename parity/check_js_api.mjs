@@ -1981,5 +1981,13 @@ accepts("dividendImpliedAbility still takes unit (#561)",
         () => classic.dividendImpliedAbility([2, 4, 8], classic.skewNormalDensity(50, 0.1), { unit: 0.1 }),
         a => a.every(Number.isFinite));
 
+// --- the bulk window's delta: (0, 0.5), and -1 used to hang (#445)
+for (const d of [-1, -1e-9, 0, 0.5, 1, 2, NaN, Infinity, "1e-2", null, true])
+  rejects(races.raceProbabilities, [[-1, 0, 1], { D: [1, 1, 1], delta: d, points: 257 }],
+          `raceProbabilities refuses delta=${String(d)} (#445)`, "delta must be");
+accepts("raceProbabilities takes delta=1e-3 (#445)",
+        () => races.raceProbabilities([-1, 0, 1], { D: [1, 1, 1], delta: 1e-3 }),
+        p => p.every(Number.isFinite));
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

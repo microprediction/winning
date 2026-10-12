@@ -297,7 +297,7 @@
   }
   # times the base's central scale, as python and the browser (#600)
   budget <- 0.5 * min(s) * .base_resolution(fn) * max(points - 1, 1)
-  d <- delta
+  d <- .as_delta(delta)
   w <- window_at(d)
   while (w[2] - w[1] > budget && d < 1e-4) {
     d <- min(d * 100, 1e-4)
@@ -471,6 +471,17 @@
                  paste(names(given)[given], collapse = ", ")), call. = FALSE)
 }
 
+# The bulk window's tail mass: a number in (0, 0.5). delta = -1 hung the
+# relaxation loop and 1 or 2 priced a different race (#445, matching
+# python's races._as_delta and the browser's asDelta).
+.as_delta <- function(delta) {
+  if (!is.numeric(delta) || length(delta) != 1L || !is.finite(delta) ||
+      !(delta > 0 && delta < 0.5))
+    stop(sprintf("delta must be a number in (0, 0.5); got %s",
+                 paste(deparse(delta), collapse = " ")), call. = FALSE)
+  as.numeric(delta)
+}
+
 race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                base = "normal", points = 257,
                                return_slopes = FALSE, structure = NULL,
@@ -482,6 +493,7 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
         window %in% c("bulk", "span")))
     stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
                  paste(deparse(window), collapse = " ")), call. = FALSE)
+  delta <- .as_delta(delta)                                    # (#445)
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")

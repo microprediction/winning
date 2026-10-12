@@ -681,7 +681,7 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     # uses, so relaxation fires only when the tail would genuinely
     # outrun the lattice rather than whenever the budget is modest
     budget = 0.5 * float(s.min()) * _resolution(fn) * max(points - 1, 1)
-    d = float(delta)
+    d = _as_delta(delta)
     lo, hi = window_at(d)
     while hi - lo > budget and d < 1e-4:
         d = min(d * 100.0, 1e-4)
@@ -729,6 +729,20 @@ def _as_window(window):
     return window
 
 
+def _as_delta(delta):
+    """The bulk window's tail mass: a real number in (0, 0.5). It was
+    unvalidated: delta=-1 made the relaxation loop multiply a negative
+    number by 100 forever (a hang), delta=1 or 2 put both quantiles past
+    each other and priced a different race, and NaN returned NaN (#445)."""
+    if (isinstance(delta, (bool, np.bool_))
+            or not isinstance(delta, (int, float, np.integer, np.floating))):
+        raise ValueError(f"delta must be a number in (0, 0.5); got {delta!r}")
+    d = float(delta)
+    if not (np.isfinite(d) and 0.0 < d < 0.5):
+        raise ValueError(f"delta must be a number in (0, 0.5); got {delta!r}")
+    return d
+
+
 def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                  delta=1e-12):
     """THE lattice: window plus any sharpness refinement, in one place.
@@ -744,6 +758,7 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     """
     sd = np.asarray(sd, dtype=float)
     _as_window(window)
+    delta = _as_delta(delta)                          # (#445)
     if window == "bulk":
         x = _bulk_window(M_all, sd, points, delta, fn)
     else:
@@ -1067,6 +1082,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     temperature = _as_temperature(temperature)
     points = as_points(points)
     window = _as_window(window)                      # (#582)
+    delta = _as_delta(delta)                          # (#445)
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
         # be answered without the fit at all; everything else (slopes for

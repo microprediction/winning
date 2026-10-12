@@ -424,6 +424,12 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
                             return_slopes = false, window = "bulk",
                             delta = 1e-12)
     _check_points(points)
+    # the bulk window's tail mass: a number in (0, 0.5); delta = -1 hung
+    # python's and the browser's relaxation loop and 1 or 2 priced a
+    # different race (#445)
+    (delta isa Real && !(delta isa Bool) && isfinite(delta) &&
+     0 < delta < 0.5) ||
+        throw(ArgumentError("delta must be a number in (0, 0.5); got $delta"))
     st = _race_setup(mu, V, D, F, W, base)
     n = length(st.mu)
     sd = sqrt.(st.D)
