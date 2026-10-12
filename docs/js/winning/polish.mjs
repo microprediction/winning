@@ -311,8 +311,33 @@ export function polishRace(opts = {}) {
   // original violating race (#593). The unit is 1 / median_i |J_ii| / p_i
   // at mu0 -- degree -1 in the ability scale, so u = mu / unit is exactly
   // equivariant -- and close to 1 for a unit-variance field.
+  // Restore feasibility BEFORE optimising, as python does (#104). From a
+  // saturated race, p = [1, 6e-16], the constraint gradient A J vanishes
+  // and the unit below came from the favourite alone (2.8e14): the
+  // optimiser then walked to the opposite deterministic winner, 4.2e7
+  // ability units away, and certified it converged (#683). Shrinking
+  // toward the uniform race, mu -> t mu0, moves every share toward 1/n;
+  // the largest feasible t on that ray is found by bisection and is a
+  // start where the gradients are alive (for a capped pair it is already
+  // the answer). Scale-free in both mu and the rows, so #593 and #653
+  // still hold.
+  const feasibleAt = m => {
+    const pm = fwdM(m);
+    return A0.every((row, k) => row.reduce((a, v, j) => a + v * pm[j], 0) <= b0[k]);
+  };
+  let startM = mu0;
+  if (!feasibleAt(mu0) && feasibleAt(mu0.map(() => 0))) {
+    let lo = 0, hi = 1;
+    for (let it = 0; it < 40; it++) {
+      const mid = 0.5 * (lo + hi);
+      if (feasibleAt(mu0.map(v => mid * v))) lo = mid; else hi = mid;
+    }
+    startM = mu0.map(v => lo * v);
+  }
   const unit = (() => {
-    const pM = fwdM(mu0), JM = jacM(mu0);
+    // read at the START: at a saturated mu0 the informative longshot rows
+    // fall below the 1e-12 floor and only the flat favourite is left
+    const pM = fwdM(startM), JM = jacM(startM);
     const r = [];
     for (let i = 0; i < n; i++)
       if (pM[i] > 1e-12 && Number.isFinite(JM[i][i]) && JM[i][i] !== 0)
@@ -327,6 +352,20 @@ export function polishRace(opts = {}) {
   const jac = u => jacM(u.map(v => v * unit)).map(row => row.map(v => v * unit));
   const mu0M = mu0;
   mu0 = mu0M.map(v => v / unit);
+  const start = startM.map(v => v / unit);
+  // The penalty is bounded -- shares live in [0, 1] -- so from a restored
+  // start a rho of 10 made the saturated mu0 itself the cheaper point and
+  // the first line search jumped straight back to it. Start rho where
+  // every point with at least half mu0's violation costs more than the
+  // restored start: the iterates then stay in the live region.
+  const rho0 = (() => {
+    if (startM === mu0M) return 10;
+    const p = fwdM(mu0M);
+    const v0 = Math.max(...A0.map((row, k) =>
+      row.reduce((a, v, j) => a + v * p[j], 0) - b0[k]));
+    const d2 = start.reduce((a, v, j) => a + (v - mu0[j]) ** 2, 0);
+    return v0 > 0 ? Math.min(Math.max(10, 4 * d2 / (v0 * v0)), 1e6) : 10;
+  })();
   const applyA = p => A0.map(row => row.reduce((a, v, j) => a + v * p[j], 0));
 
   const jacOf = (mc, useFD) => {
@@ -365,8 +404,8 @@ export function polishRace(opts = {}) {
   let converged = false;
   const solveAL = useFD => {
     let lam = new Array(b0.length).fill(0);
-    let rho = 10;
-    let m = mu0.slice();
+    let rho = rho0;
+    let m = start.slice();
     converged = false;
     for (let outer = 0; outer < 40; outer++) {
       const obj = mm => {
@@ -414,7 +453,11 @@ export function polishRace(opts = {}) {
       if (viol < 1e-8) {
         const comp = Math.max(0, ...lamN.map((v, k) => (v > 0 ? v * Math.max(c[k], 0) : 0)));
         const r = lagrangianGrad(m, lamN, useFD);
-        const scale = Math.max(1, ...m.map((v, j) => Math.abs(v - mu0[j])), ...lamN);
+        // relative to the problem's own size, not floored at 1: a residual
+        // of 1e-7 in coordinates whose whole displacement is 1e-7 is not
+        // stationary (#683)
+        const scale = Math.max(...mu0.map(Math.abs), ...m.map(Math.abs),
+                               ...m.map((v, j) => Math.abs(v - mu0[j])), ...lamN) || 1;
         if (comp <= 1e-7 * scale && Math.max(...r.map(Math.abs)) <= 1e-6 * scale) {
           converged = true; break;
         }

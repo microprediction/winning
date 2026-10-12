@@ -1839,6 +1839,24 @@ for (const c of [1e-8, 100]) {
         Math.max(...r.mu.map((v, i) => Math.abs(v - ref.mu[i]))) < 1e-6, `${r.p}`);
 }
 
+// --- a saturated capped pair lands on the exact boundary, not the
+// opposite deterministic winner (#683). Exact: mu = -+Phi^-1(0.9)/sqrt 2.
+{
+  const xs = 0.9061938024368232;
+  // starting longshot shares 2.1e-12 (above the old 1e-12 cut), 7.7e-13
+  // (below it) and 6.2e-16 (the issue's fixture)
+  for (const a of [4.9, 5, 8 / Math.SQRT2])
+    for (const points of [129, 257, 1025])
+      for (const fdFallback of [false, true]) {
+        const o = polish.polishRace({ mu0: [-a, a], D: [1, 1], nameCaps: [0.9, NaN],
+                                      points, fdFallback });
+        holds(`saturated pair a=${a.toFixed(3)} points=${points} fd=${fdFallback} is the exact cap (#683)`,
+              o.info.converged && o.info.active.length === 1 && o.info.active[0] === 0 &&
+              Math.abs(o.p[0] - 0.9) < 1e-8 && Math.abs(o.mu[0] + xs) < 1e-8 &&
+              Math.abs(o.mu[1] - xs) < 1e-8, `${o.p} ${o.mu} ${o.info.converged}`);
+      }
+}
+
 // --- a structured Jacobian refuses a base its forward refuses (#89)
 for (const s of [structures.Blocks([0, 0, 1], 0.8, 0.2),
                  structures.Tree([0, 0, 1], 0.8, 0.2, [2, 2, -1], [0, 0, 0.5])])
