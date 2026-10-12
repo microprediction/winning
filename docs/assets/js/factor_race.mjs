@@ -788,8 +788,12 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
       while (hlo > 0 && it < nIter) { lo -= step; step *= 2; hlo = h(lo); it++; }
       step = Math.max(0.25 * s0, 1e-6);
       while (hhi < 0 && it < nIter) { hi += step; step *= 2; hhi = h(hi); it++; }
+      let side = 0;
       for (; it < nIter; it++) {
-        // secant inside the bracket, bisection when it leaves it
+        // false position inside the bracket (Illinois: an endpoint kept
+        // twice running has its value halved, so the bracket closes from
+        // both sides instead of creeping in from one), bisection when the
+        // secant leaves it
         let mid = hhi !== hlo ? hi - hhi * (hi - lo) / (hhi - hlo) : 0.5 * (lo + hi);
         if (!(mid > lo && mid < hi)) mid = 0.5 * (lo + hi);
         const hm = h(mid);
@@ -797,7 +801,15 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
         ph = p0At(g);
         res = residualOf(ph.map((v) => Math.max(v, PFLOOR)));
         if (res < tol) { it++; break; }
-        if (hm < 0) { lo = mid; hlo = hm; } else { hi = mid; hhi = hm; }
+        if (hm < 0) {
+          lo = mid; hlo = hm;
+          if (side === -1) hhi *= 0.5;
+          side = -1;
+        } else {
+          hi = mid; hhi = hm;
+          if (side === 1) hlo *= 0.5;
+          side = 1;
+        }
       }
     }
     return finish([-0.5 * g, 0.5 * g], res < tol, res, it);
