@@ -163,7 +163,25 @@ def concentration_matrix(n, name_caps=None, groups=None):
                 rows.append(r); bs.append(float(caps[i]))
     if groups is not None:
         for idx, cap in groups:
-            members = np.asarray(idx, int)
+            # validate BEFORE the integer cast: np.asarray(idx, int) turned
+            # 1.9 into 1 and True into 1, so a typo constrained a different
+            # name and polish_race certified that portfolio as feasible
+            # (#671). The browser and R ports already refuse these.
+            raw = np.asarray(idx)
+            if raw.ndim > 1:
+                raise ValueError(
+                    f"group members must be a flat list of indices; got "
+                    f"shape {raw.shape}")
+            raw = raw.ravel()
+            if raw.size and (raw.dtype == bool
+                             or not np.issubdtype(raw.dtype, np.number)
+                             or np.iscomplexobj(raw)
+                             or not np.isfinite(raw).all()
+                             or (raw != np.floor(raw)).any()):
+                raise ValueError(
+                    f"group members must be whole-number contestant "
+                    f"indices in [0, {n}); got {idx!r}")
+            members = raw.astype(int)
             # numpy read a negative index as counting from the END, so a
             # typo silently capped the LAST name instead; the browser,
             # which stores a negative index as a non-element property,

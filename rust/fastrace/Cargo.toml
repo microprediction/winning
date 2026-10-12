@@ -11,10 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 winning = { path = "../winning", version = "0.3.0" }
-pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
-numpy = "0.22"
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
+numpy = "0.29"
 rayon = "1.10"
 
-[profile.release]
-lto = true
-codegen-units = 1

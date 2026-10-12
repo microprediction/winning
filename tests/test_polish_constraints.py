@@ -62,3 +62,37 @@ def test_a_group_cap_actually_binds():
                       points=129, groups=[([0, 1], 0.45)])
     p = np.asarray(res.p if hasattr(res, "p") else res[0])
     assert abs(p[0] + p[1] - 0.45) < 1e-6
+
+
+# ---------------------------------------------------------------- #671
+
+@pytest.mark.parametrize("bad", [[1.9], [True], [np.nan], [np.inf], [0.5, 2],
+                                 ["1"], [[0, 1]]])
+def test_group_members_must_be_whole_numbers_before_any_cast_671(bad):
+    # np.asarray(idx, int) truncated 1.9 to 1 and read True as 1, so a typo
+    # constrained a different name and polish_race certified it feasible
+    with pytest.raises(ValueError, match="group members"):
+        concentration_matrix(3, groups=[(bad, 0.2)])
+
+
+@pytest.mark.parametrize("bad", [[-1], [3]])
+def test_group_members_out_of_range_still_refused_671(bad):
+    with pytest.raises(IndexError):
+        concentration_matrix(3, groups=[(bad, 0.2)])
+
+
+def test_polish_race_refuses_a_fractional_group_member_671():
+    with pytest.raises(ValueError, match="group members"):
+        polish_race(p0=[0.1, 0.8, 0.1], D=np.ones(3), groups=[([1.9], 0.2)],
+                    points=257)
+
+
+def test_whole_number_members_in_any_numeric_dtype_are_the_same_group_671():
+    want = concentration_matrix(4, groups=[([0, 2], 0.3)])
+    for idx in ([0.0, 2.0], np.array([0, 2], dtype=np.int32), (0, 2), [],):
+        A, b = concentration_matrix(4, groups=[(idx, 0.3)])
+        if len(idx) == 0:
+            assert A.shape == (1, 4) and not A.any()
+            continue
+        np.testing.assert_array_equal(A, want[0])
+        np.testing.assert_array_equal(b, want[1])

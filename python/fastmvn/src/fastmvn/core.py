@@ -142,6 +142,23 @@ def factorize_covariance(sigma, max_rank=6, tol=1e-11, n_iter=300):
     (9487 on diag([1, 1, 1, 1, 1e8])), which turns an independent
     product into a near-step factor integrand (#132).
     """
+    # the controls are checked before anything else (#658). tol is in
+    # correlation units, where no off-diagonal exceeds 1: tol = inf, or
+    # any tol >= 1, accepted every matrix as diagonal and returned a
+    # factorization that dropped all its correlations as a success
+    if not (isinstance(tol, (int, float, np.integer, np.floating))
+            and not isinstance(tol, (bool, np.bool_))
+            and np.isfinite(tol) and 0.0 < tol < 1.0):
+        raise ValueError(
+            f"tol must be a finite number in (0, 1), a tolerance on "
+            f"correlations; got {tol!r}")
+    for name, v, lo in (("max_rank", max_rank, 0), ("n_iter", n_iter, 1)):
+        if (isinstance(v, (bool, np.bool_))
+                or not isinstance(v, (int, float, np.integer, np.floating))
+                or not np.isfinite(v) or v != np.floor(v) or v < lo):
+            raise ValueError(
+                f"{name} must be a whole number >= {lo}; got {v!r}")
+    max_rank, n_iter = int(max_rank), int(n_iter)
     sigma = np.asarray(sigma, dtype=float)
     if sigma.ndim != 2 or sigma.shape[0] != sigma.shape[1] \
             or not np.isfinite(sigma).all():

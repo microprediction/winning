@@ -43,10 +43,11 @@ updates:
       python:
         patterns: ["*"]
 
+  # rust/ is one Cargo workspace with one Cargo.lock, so an update is
+  # proposed against the whole build: the core crate and the fastrace
+  # bindings cannot be moved to versions the other side does not accept
   - package-ecosystem: cargo
-    directories:
-      - /rust/winning
-      - /rust/fastrace
+    directory: /rust
     schedule:
       interval: weekly
       day: monday

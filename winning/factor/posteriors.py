@@ -45,6 +45,25 @@ def _psd_inv_sqrt(H):
     return (Q / np.sqrt(lam)) @ Q.T
 
 
+def _unit(*variances):
+    """A power of two near the square root of the typical variance.
+
+    The three constructors are scale-equivariant: multiplying every
+    location by c and every variance by c^2 multiplies m and W by c and
+    d by c^2. Dividing the inputs by an exact power of two near their
+    own scale and multiplying the outputs back is therefore exact, bit
+    for bit, wherever no intermediate over- or underflows, and it keeps
+    the precisions (n/D, counts/sigma_n^2) finite when the variances sit
+    near the bottom of the float range: at D = 4e-308, n/D overflowed and
+    a representable posterior variance of 3.6e-309 came back as 0 (#670).
+    """
+    v = np.concatenate([np.ravel(x) for x in variances])
+    v = v[np.isfinite(v) & (v > 0)]
+    if v.size == 0:
+        return 1.0
+    return float(np.ldexp(1.0, int(np.round(0.5 * np.log2(np.median(v))))))
+
+
 def _positive_vector(x, n, name, what):
     A = np.asarray(x, dtype=float)
     if A.ndim == 0:
@@ -129,9 +148,11 @@ def crn_posterior(V, D, n, ybar, s0, m0=None):
         raise ValueError(f"n must be a non-negative integer; got {n!r}")
     nr = float(nn)
     rho = Vm.shape[1]
-    s02 = s0v ** 2
     if nr == 0:
-        return m0v.copy(), s02.copy(), np.zeros((K, rho))
+        return m0v.copy(), s0v ** 2, np.zeros((K, rho))
+    u = _unit(Dv, s0v ** 2)
+    Vm, Dv, s0v, yb, m0v = Vm / u, Dv / u / u, s0v / u, yb / u, m0v / u
+    s02 = s0v ** 2
     tau = s02 + Dv / nr
     k = s02 / tau
     d = 1.0 / (1.0 / s02 + nr / Dv)
@@ -140,7 +161,7 @@ def crn_posterior(V, D, n, ybar, s0, m0=None):
     r = yb - m0v
     fhat = np.linalg.solve(H, Vm.T @ (r / tau)) if rho else np.zeros(0)
     m = m0v + k * (r - Vm @ fhat)
-    return m, d, W
+    return m * u, d * u * u, W * u
 
 
 def crn_posterior_replicates(V, D, Y, s0, m0=None):
@@ -180,12 +201,14 @@ def crn_posterior_replicates(V, D, Y, s0, m0=None):
     s0v = _positive_vector(s0, K, "s0", "a prior sd")
     m0v = np.zeros(K) if m0 is None else _finite_vector(m0, K, "m0")
     rho = Vm.shape[1]
+    u = _unit(Dv, s0v ** 2)
+    Vm, Dv, s0v, Ym, m0v = Vm / u, Dv / u / u, s0v / u, Ym / u, m0v / u
     obs = ~np.isnan(Ym)
     keep = obs.any(axis=0)
     obs, Yz = obs[:, keep], np.where(obs, Ym, 0.0)[:, keep]
     s02 = s0v ** 2
     if obs.shape[1] == 0:
-        return m0v.copy(), s02.copy(), np.zeros((K, rho))
+        return m0v * u, s02 * u * u, np.zeros((K, rho))
     pats, inv = np.unique(obs.T, axis=0, return_inverse=True)
     inv = np.asarray(inv).ravel()
     L = len(pats)
@@ -218,7 +241,7 @@ def crn_posterior_replicates(V, D, Y, s0, m0=None):
     if W.shape[1] > K:
         U, s, _ = np.linalg.svd(W, full_matrices=False)
         W = U * s
-    return m, 1.0 / a, W
+    return m * u, (1.0 / a) * u * u, W * u
 
 
 def feature_bandit_posterior(V0, d0, counts, sums, sigma_n):
@@ -252,6 +275,8 @@ def feature_bandit_posterior(V0, d0, counts, sums, sigma_n):
     Vm = as_loadings(V0, K)
     d0v = as_idio(d0, K, positive=True)
     sn = _positive_vector(sigma_n, K, "sigma_n", "a noise sd")
+    u = _unit(d0v, sn ** 2)
+    Vm, d0v, sn, sm = Vm / u, d0v / u / u, sn / u, sm / u
     lam = cnt / sn ** 2
     r = 1.0 / (1.0 + d0v * lam)
     rho = Vm.shape[1]
@@ -260,7 +285,7 @@ def feature_bandit_posterior(V0, d0, counts, sums, sigma_n):
     d = d0v * r
     h = sm / sn ** 2
     m = d * h + W @ (W.T @ h)
-    return m, d, W
+    return m * u, d * u * u, W * u
 
 
 def _psd_sqrt(C):
@@ -343,6 +368,11 @@ def update_contrast(m, cov, a, mean, var, refit=False):
                              f"got shape {S.shape}")
         if not np.isfinite(S).all():
             raise ValueError("cov has a non-finite entry")
+        # a Kalman update is Gaussian conditioning only on a covariance:
+        # an indefinite [[1, 2], [2, 1]] came back as a valid-looking
+        # posterior (#634). The shared validator also symmetrises.
+        from .core import _validate_covariance
+        S = _validate_covariance(S, name="cov")
         g = S @ av
         s = float(av @ g) + var
         m_new = mv + g * ((mean - float(av @ mv)) / s)
@@ -369,10 +399,24 @@ def update_contrast(m, cov, a, mean, var, refit=False):
     sup = np.flatnonzero(av)
     Vt = Vm - np.outer(Da, b) / s_e
     cols = [Vt @ _psd_sqrt(np.eye(rho) - np.outer(b, b) / s)]
-    Z = np.diag(Dv[sup]) - np.outer(Da[sup], Da[sup]) / s_e
-    z = np.sqrt(np.diag(Z))
-    lam, U = np.linalg.eigh(Z / np.outer(z, z))
-    c = max(float(lam[0]), 0.0)
+    # Cov(zeta) on the support, built without cancelling. Its diagonal
+    # is D_i (s_e - D_i a_i^2)/s_e, and s_e - D_i a_i^2 is the sum of
+    # positive terms var + sum_{j != i} D_j a_j^2; forming it as
+    # D_i - (D_i a_i)^2/s_e instead gave exactly 0 once var fell below
+    # machine precision relative to a'Da, then 0/0 in the correlation
+    # and a NaN in D' (#669).
+    q = Da[sup] * av[sup]                           # D_i a_i^2 >= 0
+    # s_e - D_i a_i^2 as a sum of the OTHER terms, never a difference
+    rest = var + np.array([np.delete(q, i).sum() for i in range(len(sup))])
+    zz = Dv[sup] * rest / s_e                       # diag of Cov(zeta)
+    z = np.sqrt(zz)
+    Rz = -np.outer(Da[sup], Da[sup]) / s_e / np.outer(z, z)
+    np.fill_diagonal(Rz, 1.0)
+    lam, U = np.linalg.eigh(Rz)
+    # the smallest eigenvalue is at least var/s_e (Rz = L (I - w w'/s_e) L
+    # with L >= I and w'w = a'Da), which is what keeps D' positive when
+    # the computed eigenvalue has rounded to zero or below
+    c = max(float(lam[0]), var / s_e)
     D_new = Dv.copy()
     D_new[sup] = c * z ** 2
     if len(sup) > 1:

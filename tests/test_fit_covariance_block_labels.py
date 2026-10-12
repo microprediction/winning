@@ -127,3 +127,20 @@ def test_label_validation(bad, match):
     C, _ = _family_cov()
     with pytest.raises(ValueError, match=match):
         fit_covariance(C, k=3, blocks=bad)
+
+
+def test_large_float_labels_keep_their_partition_633():
+    # whole-valued float labels beyond int64 overflowed to one value in
+    # the cast, so two blocks became one and the fit used the wrong one
+    from winning.factor.core import _as_block_labels, fit_covariance
+    big = np.array([1e20, 2e20, 1e20, 2e20])
+    np.testing.assert_array_equal(_as_block_labels(big, 4), [0, 1, 0, 1])
+    C = np.eye(4)
+    C[0, 2] = C[2, 0] = 0.7
+    C[1, 3] = C[3, 1] = 0.5
+    a = fit_covariance(C, k=0, m=0, blocks=big, return_report=True)
+    b = fit_covariance(C, k=0, m=0, blocks=np.array([0, 1, 0, 1]),
+                       return_report=True)
+    np.testing.assert_array_equal(a[-1]["block_labels"], [0, 1, 0, 1])
+    for x, y in zip(a[:-1], b[:-1]):
+        np.testing.assert_array_equal(x, y)
