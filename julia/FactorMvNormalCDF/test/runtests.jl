@@ -337,3 +337,101 @@ end
 end
 
 println("all FactorMvNormalCDF tests passed")
+
+@testset "many mild rows make a narrow integrand (#470)" begin
+    n = 200; th = 2pi .* (0:n-1) ./ n
+    p, m = mvn_cdf_fast_info(upper = fill(2.0, n), V = hcat(cos.(th), sin.(th)),
+                             D = ones(n))
+    @test m == "factor"
+    @test abs(p / 0.0007891258848216968 - 1) < 1e-8
+end
+
+@testset "the answer depends on VV', not the factor basis (#518, #457)" begin
+    V = [0.30812945940123476 -1.8936005031221805;
+         0.05423700319905680 -1.8882188805898732;
+         -0.04568751096449155 1.2303149108078115;
+         -1.2824267666411462 -0.7947487032502422]
+    D = [0.48381594889619123, 0.607241434401239, 0.2137039397661559,
+         0.5038986029743953]
+    mu = [1.3435081180060733, 0.48784958537212353, 0.20068268880906692,
+          1.449261738300165]
+    up = [0.3670668335351432, -0.9140137229005407, -0.16906974496655425,
+          0.6067127817398206]
+    base = mvn_cdf_fast(upper = up, mean = mu, V = V, D = D)
+    @test abs(base / 1.4197622e-4 - 1) < 2e-6     # was 7.3% apart
+    for t in (0.3, 1.7, 4.0)
+        O = [cos(t) -sin(t); sin(t) cos(t)]
+        @test isapprox(mvn_cdf_fast(upper = up, mean = mu, V = V * O, D = D),
+                       base, rtol = 1e-12)
+    end
+    @test isapprox(mvn_cdf_fast(upper = up, mean = mu, V = V .* [1.0 -1.0],
+                                D = D), base, rtol = 1e-12)
+    v = [-1.19009272, 2.32396446, -1.49968514, 2.14990819]
+    Dv = [0.24428964, 0.62490739, 0.25676327, 1.17899935]
+    b = [1.21213156, -1.15078308, 1.50271797, 6.29628221]
+    p1, m1 = mvn_cdf_fast_info(upper = b, V = reshape(v, :, 1), D = Dv)
+    @test abs(p1 / 0.11879131458669231 - 1) < 1e-9
+    for W in (hcat(v, zeros(4, 2)), hcat(v, v) ./ sqrt(2))
+        p, m = mvn_cdf_fast_info(upper = b, V = W, D = Dv)
+        @test m == "factor"                        # zero columns: no fallback
+        @test isapprox(p, p1, rtol = 1e-12)
+    end
+end
+
+@testset "an unconstrained coordinate is marginalised out (#487)" begin
+    v = [-2.145, 0.525, 3.328, 1.261]; D = [1.122, 0.142, 2.040, 0.300]
+    mu = [0.702, 0.319, 0.254, -3.958]; up = [-2.305, 4.151, 1.287, 0.557]
+    base = mvn_cdf_fast(upper = up, mean = mu, V = reshape(v, :, 1), D = D)
+    @test abs(base / 0.0037867371230754 - 1) < 1e-9
+    for load in (3.0, 4.0, 40.0)
+        @test mvn_cdf_fast(upper = [up; Inf], mean = [mu; 123.0],
+                           V = reshape([v; load], :, 1), D = [D; 1.0]) == base
+    end
+    @test mvn_cdf_fast_info(upper = Inf, V = reshape(v, :, 1), D = D) ==
+        (1.0, "factor")
+end
+
+@testset "exactly one covariance representation (#480, #89)" begin
+    b = zeros(2); S = [1.0 0.0; 0.0 1.0]; V = [10.0, -10.0]; D = ones(2)
+    for kw in ((sigma = S, V = V), (sigma = S, D = 100 .* D),
+               (sigma = S, V = V, D = D), (V = V,), (D = D,), NamedTuple())
+        @test_throws ArgumentError mvn_cdf_fast_info(; upper = b, kw...)
+    end
+    @test mvn_cdf_fast(upper = b, sigma = S) ≈ 0.25 atol = 1e-15
+end
+
+@testset "D and mean are validated values (#500, #531)" begin
+    V = zeros(3, 1)
+    @test mvn_cdf_fast(upper = 0.0, V = V, D = 1.0) ≈ 0.125 atol = 1e-15
+    @test mvn_cdf_fast(upper = 0.0, V = V, D = [1.0]) ≈ 0.125 atol = 1e-15
+    for bad in ([NaN, 1.0, 1.0], [Inf, 1.0, 1.0], [-1.0, 1.0, 1.0], NaN)
+        @test_throws ArgumentError mvn_cdf_fast(upper = 0.0, V = V, D = bad)
+    end
+    # zero is a legal variance (the indicator cell), round-off below it too
+    @test mvn_cdf_fast(upper = 0.0, V = zeros(2, 1), D = [0.0, 1.0]) ≈ 0.5
+    @test mvn_cdf_fast(upper = 0.0, V = zeros(2, 1), D = [-1e-18, 1.0]) ≈ 0.5
+    for m in ([0.0, Inf], [0.0, NaN], -Inf)
+        @test_throws ArgumentError mvn_cdf_fast(upper = zeros(2),
+                                                V = zeros(2, 1), D = ones(2),
+                                                mean = m)
+    end
+end
+
+@testset "scalar and transposed loadings are the same model (#556)" begin
+    v = [0.7, -0.2, 0.4]; D = ones(3)
+    p = mvn_cdf_fast(upper = 0.0, V = reshape(v, :, 1), D = D)
+    @test mvn_cdf_fast(upper = 0.0, V = reshape(v, 1, :), D = D) == p
+    @test mvn_cdf_fast(upper = 0.0, V = v, D = D) == p
+    rho = 0.49 / 1.49
+    @test abs(mvn_cdf_fast(upper = 0.0, V = 0.7, D = D) -
+              (1 / 8 + 3 * asin(rho) / (4pi))) < 1e-8
+end
+
+@testset "a narrow central interval keeps its mass (#664)" begin
+    for eps in (1e-15, 1e-16, 1e-17, 1e-100, 1e-300)
+        exact = eps * sqrt(2 / pi)
+        p = mvn_cdf_fast(lower = [-eps], upper = [eps], V = zeros(1, 0),
+                         D = [1.0])
+        @test abs(p / exact - 1) < 1e-12
+    end
+end

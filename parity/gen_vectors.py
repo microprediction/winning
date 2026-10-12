@@ -15,29 +15,42 @@ from __future__ import annotations
 import json
 import warnings
 import os
+import sys
 
 import numpy as np
 
-from winning.factor.races import race_probabilities, abilities_from_race
-from winning.factor.blocks import (block_race_probabilities,
+# Pin THIS checkout's winning. Run as a script, sys.path[0] is parity/,
+# so `import winning` found whatever was installed -- an editable install
+# from another worktree -- and the checker certified, or the generator
+# overwrote, vectors.json with another revision's numbers (#460).
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if sys.path[:1] != [_ROOT]:
+    sys.path.insert(0, _ROOT)
+_pre = getattr(sys.modules.get('winning'), '__file__', None)
+if _pre and not os.path.abspath(_pre).startswith(_ROOT + os.sep):
+    raise ImportError('parity/gen_vectors.py: winning was already imported from '
+                      + _pre + ', not this checkout ' + _ROOT)
+
+from winning.factor.races import race_probabilities, abilities_from_race  # noqa: E402
+from winning.factor.blocks import (block_race_probabilities,  # noqa: E402
                                    nested_race_probabilities,
                                    tree_race_probabilities,
                                    block_race_jacobian,
                                    nested_race_jacobian,
                                    tree_race_jacobian,
                                    abilities_from_block_race)
-from winning.factor.structures import Tree
-from winning.factor.polish import race_jacobian, polish_race
-from winning.factor.core import hermite_nodes
-from winning.factor.topk import (bottom_k_probabilities,
+from winning.factor.structures import Tree  # noqa: E402
+from winning.factor.polish import race_jacobian, polish_race  # noqa: E402
+from winning.factor.core import hermite_nodes  # noqa: E402
+from winning.factor.topk import (bottom_k_probabilities,  # noqa: E402
                                  top_k_probabilities, top_k_jacobians,
                                  abilities_from_topk,
                                  loc_scale_from_topk_pair,
                                  loc_scale_from_win_and_second,
                                  abilities_from_rank_marginal,
                                  rank_probabilities)
-from winning.lattice import skew_normal_density, state_prices_from_offsets
-from winning.lattice_calibration import dividend_implied_ability
+from winning.lattice import skew_normal_density, state_prices_from_offsets  # noqa: E402
+from winning.lattice_calibration import dividend_implied_ability  # noqa: E402
 
 TOL_DEFAULT = 1e-10
 

@@ -610,7 +610,15 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     // a pair is one Gaussian contrast: closed form (matching python/R),
     // including the rule's weighted MEAN, (v1 - v0) . E[F], which this
     // dropped -- a translated Hermite rule missed by 8.2 points (#374)
-    const sdD = Math.sqrt(Math.max(sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1) + Dn[0] + Dn[1], 1e-300));
+    // the contrast sd in units of the largest term: D = [9e307, 9e307]
+    // summed to Infinity and returned [-Infinity, Infinity], and the
+    // absolute 1e-300 variance floor changed the model below contrast sd
+    // 1e-150 (#100)
+    const shared = sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1);
+    const big = Math.max(Math.abs(shared), Dn[0], Dn[1]);
+    const sdD = big > 0
+      ? Math.sqrt(big) * Math.sqrt(Math.max(shared / big + (Math.min(Dn[0], Dn[1]) / big + Math.max(Dn[0], Dn[1]) / big), 0))
+      : 0;
     const shift = Vc[1].reduce((acc, v, c) => acc + (v - Vc[0][c]) * Fm[c], 0);
     // invert the SMALLER share: for [1, 1e-16] the normalized first
     // share rounds to exactly 1 and invNormalRational(1) is NaN, which
@@ -651,7 +659,9 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     const { p: praw, slopes: sl } = raceProbabilities(m, { V, D, F, W, base, points, returnSlopes: true });
     const phat = praw.map(v => Math.max(v, 1e-300));
     return { resid: phat.map((v, i) => Math.log(v) - logt[i]),
-             dlogp: sl.map((v, i) => Math.min(v / phat[i], -1e-6)) };
+             // in the field's units: an absolute -1e-6 took over past
+             // scale 1e6, and D = 1e20 stopped 0.062 short (#100)
+             dlogp: sl.map((v, i) => Math.min(v / phat[i], -1e-6 / scale)) };
   };
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;

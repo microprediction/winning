@@ -334,7 +334,9 @@ bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
                                    base = "normal", points = 513, qa = NULL) {
   n <- length(mu)
   k <- .as_depth(k, n)
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  # through .as_idio like every other top-k path: a bare sqrt(D) let
+  # D = c(1, 9) at n = 4 recycle silently into c(1, 9, 1, 9) (#319)
+  sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V))
     return(.checked_topk(.bottomk_independent(mu, sd, k, fn, points), k,
@@ -515,18 +517,17 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   sv <- if (is.null(fac)) 0 else mean(rowSums(fac$Vm^2))
   scale <- sqrt(stats::median(sd^2) + sv)
   mu <- -(logt - mean(logt)) / 2 * scale
-  alpha <- if (n > 2) 1.0 else 0.7
+  # damping, as python: the k = 1 gate is the win race's top-two share
+  # (two runners holding nearly all the win mass two-cycle undamped at any
+  # n -- `if (n > 2) 1 else 0.7` failed #151's fixtures at n = 3, 10, 30,
+  # #408), and the sweeps adapt it to the contraction they observe
+  top2 <- if (k == 1 && n > 2) sum(sort(target, decreasing = TRUE)[1:2]) else 1
+  alpha <- if (n == 2 || (k == 1 && top2 > 0.8)) 0.7 else 1.0
   n_iter <- .as_iter_budget(n_iter)
   tol <- .as_tolerance(tol)                                   # (#551)
-  resid_max <- Inf
-  # iters counts UPDATES applied to mu. The residual is evaluated at the
-  # current mu before deciding to update, so the returned residual always
-  # describes the returned mu, and n_iter = 0 returns the initializer with
-  # its own residual (#441: `1:0` ran two updates and reported zero).
-  iters <- 0L
-  repeat {
+  fwd <- function(m) {
     if (is.null(fac)) {
-      ws <- .topk_with_slopes(mu, sd, k, fn, points)
+      ws <- .topk_with_slopes(m, sd, k, fn, points)
       qraw <- ws$q
       sl <- ws$slopes
     } else {
@@ -534,7 +535,7 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
       sl <- rep(0, n)
       for (j in seq_len(nrow(fac$nodes))) {
         shift <- as.vector(fac$Vm %*% fac$nodes[j, ])
-        ws <- .topk_with_slopes(mu + shift, sd, k, fn, points)
+        ws <- .topk_with_slopes(m + shift, sd, k, fn, points)
         qraw <- qraw + fac$w[j] * ws$q
         sl <- sl + fac$w[j] * ws$slopes
       }
@@ -542,14 +543,15 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
     qhat <- .checked_topk(qraw, k, "top-k inversion")
     resid <- (log(pmax(qhat, 1e-300)) - log(pmax(1 - qhat, 1e-300))) -
       logit_t
-    resid_max <- max(abs(resid))
-    if (resid_max < tol || iters >= n_iter) break
-    dlogit <- pmin(sl / pmax(qhat * (1 - qhat), 1e-300), -1e-6 / scale)
-    lim <- pmin(2, 10 * abs(resid)) * scale
-    mu <- mu - pmin(pmax(alpha * resid / dlogit, -lim), lim)
-    mu <- mu - mean(mu)
-    iters <- iters + 1L
+    list(resid = resid,
+         dres = pmin(sl / pmax(qhat * (1 - qhat), 1e-300), -1e-6 / scale))
   }
+  # the residual returned always describes the returned mu, and
+  # n_iter = 0 prices the initializer (#441, #497)
+  out <- .jacobi_sweeps(mu, fwd, scale, alpha, n_iter, tol)
+  mu <- out$mu
+  resid_max <- out$resid
+  iters <- out$iters
   converged <- resid_max < tol
   if (!converged && !return_info)
     warning(sprintf(paste0(

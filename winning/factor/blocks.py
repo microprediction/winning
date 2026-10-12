@@ -84,7 +84,11 @@ def _window_nodes(mu, sd, amp, delta=1e-12, pad_sds=2.0):
     amp = np.broadcast_to(np.asarray(amp, float), mu.shape)
     m_lo = mu - amp
     m_hi = mu + amp
-    smax = max(float(sd.max()), 1e-12)
+    # the field's own scale (every caller passes positive sds): an
+    # absolute 1e-12 floor stopped the window shrinking with the model, so
+    # the same block race in units of 1e-14 lost 0.7% of its mass at 257
+    # points and raised (#100)
+    smax = float(sd.max())
 
     def F(x, m):
         return np.exp(np.log(np.maximum(ndtr((x - m) / sd), TINY)).sum())

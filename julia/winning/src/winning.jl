@@ -556,6 +556,113 @@ function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
     return mu
 end
 
+"""Own-slope-preconditioned coordinate (Jacobi) sweeps on the mean-zero
+quotient, mu <- mu - alpha resid / dres, capped and recentred: python's
+`races._jacobi_sweeps`, line for line (R has `.jacobi_sweeps`).
+`forward(mu)` returns (resid, dres), the residual in the caller's space
+and its own-slopes (negative). Damping adapts to the contraction
+observed: consecutive steps estimate the dominant Jacobi eigenvalue and
+set the Richardson alpha (2/3 for a pair's two-cycle), a sweep that
+contracts neither the max nor the rms residual is undone under a
+transient penalty, and collinear geometrically decaying steps are summed
+(Aitken) as a capped, repriced trial while the residual is still a
+thousand tolerances out. Returns (mu, converged, resid_max, iters)."""
+function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
+    mu = copy(mu)
+    resid_max = Inf
+    iters = 0
+    prev = nothing
+    prev_step = nothing
+    alpha_base = Float64(alpha)
+    penalty = 1.0
+    cached = nothing
+    for it in 1:n_iter
+        iters = it
+        if cached !== nothing
+            resid, dres = cached
+            cached = nothing
+        else
+            resid, dres = forward(mu)
+        end
+        resid_max = maximum(abs.(resid))
+        resid_rms = sqrt(sum(abs2, resid) / length(resid))
+        resid_max < tol && break
+        if prev !== nothing && resid_max >= prev[4] && resid_rms >= prev[5]
+            if penalty > 0.1
+                penalty = max(0.5 * penalty, 0.1)
+                mu, resid, dres, resid_max, resid_rms = prev
+                prev_step = nothing
+            end
+        elseif prev !== nothing && penalty < 1.0
+            penalty = min(1.0, penalty / 0.75)
+        end
+        prev = (mu, resid, dres, resid_max, resid_rms)
+        a = alpha_base * penalty
+        lim = min.(2.0, 10.0 .* abs.(resid)) .* scale
+        step = clamp.(a .* resid ./ dres, -lim, lim)
+        step .-= sum(step) / length(step)
+        if prev_step !== nothing
+            na = sqrt(sum(abs2, prev_step))
+            nb = sqrt(sum(abs2, step))
+            if na > 0
+                dot = sum(step .* prev_step)
+                rho = dot / (na * na)
+                cosn = nb > 0 ? dot / (na * nb) : 0.0
+                ratio = nb / na
+                if rho < 0
+                    lam = 1.0 - (1.0 - rho) / a
+                    alpha_base = clamp(2.0 / (2.0 - lam), 0.1, 1.0)
+                elseif cosn > 0.999 && 0.5 < ratio < 0.999 &&
+                       resid_max > 1e3 * tol
+                    trial = _aitken_trial(mu, step, ratio, scale, forward,
+                                          resid_max)
+                    if trial !== nothing      # sum the geometric tail
+                        mu, cached = trial
+                        prev_step = nothing
+                        continue
+                    end
+                end
+            end
+        end
+        prev_step = step
+        mu = mu .- step
+    end
+    if !(resid_max < tol)
+        # exhausted after a step no sweep priced: price the returned
+        # iterate (one forward, only here) and keep the better (#497)
+        last = prev === nothing ? (mu, resid_max) : (prev[1], prev[4])
+        fwd = cached !== nothing ? cached : forward(mu)
+        r_end = maximum(abs.(fwd[1]))
+        if prev !== nothing && !(r_end < last[2])
+            mu = last[1]
+        else
+            resid_max = r_end
+        end
+    end
+    return mu, resid_max < tol, resid_max, iters
+end
+
+"""The Aitken-extrapolated iterate as a bounded, checked trial (#583),
+python's `races._aitken_trial`: the summed tail capped in the max norm at
+twice the field scale (never below the ordinary step) and repriced;
+`nothing` -- take the ordinary step -- when the forward throws, is
+non-finite, or its max residual grows tenfold."""
+function _aitken_trial(mu, step, ratio, scale, forward, resid_max)
+    jump = step ./ (1.0 - ratio)
+    big = maximum(abs.(jump))
+    cap = max(2.0 * maximum(scale), maximum(abs.(step)))
+    big > cap && (jump = jump .* (cap / big))
+    cand = mu .- jump
+    fc = try
+        forward(cand)
+    catch
+        return nothing
+    end
+    (all(isfinite, fc[1]) && all(isfinite, fc[2])) || return nothing
+    maximum(abs.(fc[1])) > 10.0 * resid_max && return nothing
+    return cand, fc
+end
+
 include("topk.jl")
 
 end # module

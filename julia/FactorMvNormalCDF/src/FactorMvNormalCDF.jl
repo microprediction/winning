@@ -6,8 +6,9 @@
 #
 # Conditional on the r-dimensional factor the coordinates are
 # independent, so P(a <= X <= b) is an r-dimensional smooth integral
-# of a product of univariate normal CDFs: exact Gauss-Hermite
-# quadrature at rank <= 2 and sharpness <= 3, with a deterministic
+# of a product of univariate normal CDFs: Gauss-Hermite quadrature
+# placed at the integrand's mode and scaled by its curvature (#470) at
+# rank <= 2 and sharpness <= 3, with a deterministic
 # Laplace-recentered evaluation for deep tails. The exact path claims
 # only what it computes exactly. Past rank 2 or sharpness 3 the
 # reference escalates to scrambled Sobol and plain Halton measurably
@@ -368,7 +369,13 @@ function _log_cell(hi::Float64, lo::Float64, sd::Float64)
         lb = _log_ndtr(b)
         return lb + log1p(-exp(_log_ndtr(a) - lb))
     end
-    return log1p(-(ndtr(a) + ndtr(-b)))
+    # straddling zero: 1 - Phi(a) - Phi(-b) while the mass is the larger
+    # part; a narrow central interval is (erf(b/r2) + erf(-a/r2)) / 2, two
+    # same-signed small terms. The complement alone rounded
+    # [-1e-17, 1e-17] to exactly 0 (#664).
+    out = ndtr(a) + ndtr(-b)
+    out < 0.5 && return log1p(-out)
+    return log(0.5 * (_cephes_erf(b * _SQRTH) - _cephes_erf(a * _SQRTH)))
 end
 
 """
@@ -426,7 +433,7 @@ _univariate(lo, up, mu, var) =
 
 function _dense_fallback(lower, upper, mean, sigma; kwargs...)
     n = size(sigma, 1)
-    mu = _bound_vector(mean, 0.0, n, "mean")
+    mu = _mean_vector(mean, n)
     lo = _bound_vector(lower, -Inf, n, "lower")
     up = _bound_vector(upper, Inf, n, "upper")
     _check_bounds(lo, up)
@@ -439,6 +446,196 @@ function _dense_fallback(lower, upper, mean, sigma; kwargs...)
     end
     return MvNormalCDF.mvnormcdf(mu[keep], S[keep, keep], lo[keep],
                                  up[keep]; kwargs...)
+end
+
+"""
+    _canonical_loadings(V) -> Matrix{Float64}
+
+`V` with the factor basis fixed by `V V'` alone (python reference:
+`_canonical_loadings`). Directions carrying nothing are dropped -- zero
+columns, and one factor split across dependent columns -- so the rank
+that picks the rule is the covariance's, not the column count: two
+appended zero columns sent a rank-one model to the dense fallback (#457).
+The columns are `V W`, `W` the eigenvectors of `V'V` in decreasing order.
+"""
+function _canonical_loadings(V::AbstractMatrix)
+    V = V[:, [any(!=(0.0), view(V, :, c)) for c in 1:size(V, 2)]]
+    size(V, 2) > 1 || return V
+    E = eigen(Symmetric(V' * V))
+    idx = sortperm(E.values, rev = true)
+    lam = E.values[idx]
+    keep = idx[lam .> 1e-13 * lam[1]]
+    return V * E.vectors[:, keep]
+end
+
+function _eigh_small(P::AbstractMatrix)
+    size(P, 1) == 1 && return [P[1, 1]], ones(1, 1)
+    a, b, c = P[1, 1], 0.5 * (P[1, 2] + P[2, 1]), P[2, 2]
+    b == 0.0 && return [a, c], [1.0 0.0; 0.0 1.0]
+    h = 0.5 * (a - c)
+    rad = hypot(h, b)
+    l1 = 0.5 * (a + c) + rad
+    v = h <= 0.0 ? [b, l1 - a] : [l1 - c, b]
+    v ./= hypot(v[1], v[2])
+    return [l1, 0.5 * (a + c) - rad], [v[1] -v[2]; v[2] v[1]]
+end
+
+const _LOG_SQRT_2PI = 0.5 * log(2pi)
+
+"""
+    _adaptive_rule(V, D, mu, lo, up, Q) -> (F, W) or nothing
+
+Adaptive Gauss-Hermite nodes and weights at rank <= 2 (python reference:
+`_adaptive_rule`). The integrand's width in factor space is set by the
+SUM of the cells' curvatures, not by the sharpest row: 200 individually
+mild rows on a ring made an integrand 0.28 wide, which the fixed 15 x 15
+rule at unit scale saw through one node, 36.7% high (#470). The rule is
+placed at the mode `f0` of the log-integrand (damped Newton from the
+origin; the log-integrand is concave), along the eigenvectors `U` of its
+curvature `P` there, with widths `sig`: `f = f0 + U diag(sig) x`, the
+ratio of the standard normal to that Gaussian folded into the weights.
+`sig` starts at `P`'s eigenvalues^-1/2 and is widened, never past 1, to
+the width the log-integrand's drop three widths out implies on its
+flatter side (a soft-step cell leaves only the prior on one side). `f0`,
+`U` and `sig` follow the Gaussian, not the factor basis, so `V O` prices
+like `V` (#518). `nothing` when a cell is empty at a visited point.
+"""
+function _adaptive_rule(V::Matrix{Float64}, D::Vector{Float64},
+                        mu::Vector{Float64}, lo::Vector{Float64},
+                        up::Vector{Float64}, Q::Int)
+    n, r = size(V)
+    s = sqrt.(D)
+    Ws = V ./ s
+    cb = (up .- mu) ./ s
+    ca = (lo .- mu) ./ s
+    one_sided = all(==(-Inf), lo)
+    f = zeros(r)
+    G = zeros(r)
+    P = zeros(r, r)
+    fn = zeros(r)
+    Gn = zeros(r)
+    Pn = zeros(r, r)
+    ok, val = _ar_evaluate!(G, P, f, Ws, cb, ca, one_sided)
+    ok || return nothing
+    for _ in 1:50
+        step = _solve_small(P, G)
+        dec = sum(G .* step)
+        isfinite(dec) || return nothing
+        # dec / 2 is the predicted rise to the mode: 1e-4 is within a
+        # hundredth of a width of it
+        dec < 1e-4 && break
+        t = 1.0
+        vn = -Inf
+        while true
+            fn .= f .+ t .* step
+            okn, vn = _ar_evaluate!(Gn, Pn, fn, Ws, cb, ca, one_sided)
+            (okn && vn >= val - 1e-12) && break
+            t *= 0.5
+            t < 1e-6 && break
+        end
+        t < 1e-6 && break
+        f, fn = fn, f
+        G, Gn = Gn, G
+        P, Pn = Pn, P
+        val = vn
+    end
+    lam, U = _eigh_small(P)
+    sig = 1.0 ./ sqrt.(max.(lam, 1.0))
+    for c in 1:r
+        dp = _ar_logint(f .+ 3.0 .* sig[c] .* U[:, c], Ws, cb, ca, one_sided)
+        dm = _ar_logint(f .- 3.0 .* sig[c] .* U[:, c], Ws, cb, ca, one_sided)
+        drop = min(val - dp, val - dm)
+        eff = drop > 0.0 ? 3.0 * sig[c] / sqrt(2.0 * drop) : 1.0
+        sig[c] = min(max(sig[c], eff), 1.0)
+    end
+    X, W0 = _gh_nodes(r, Q)
+    nq = size(X, 1)
+    F = Matrix{Float64}(undef, nq, r)
+    W = similar(W0)
+    lsig = sum(log, sig)
+    @inbounds for q in 1:nq
+        x2 = 0.0
+        f2 = 0.0
+        for c in 1:r
+            x2 += X[q, c]^2
+            v = f[c]
+            for k in 1:r
+                v += U[c, k] * sig[k] * X[q, k]
+            end
+            F[q, c] = v
+            f2 += v * v
+        end
+        W[q] = W0[q] * exp(0.5 * (x2 - f2) + lsig)
+    end
+    return F, W
+end
+
+_solve_small(P, G) = length(G) == 1 ? [G[1] / P[1, 1]] :
+    [P[2, 2] * G[1] - P[1, 2] * G[2], P[1, 1] * G[2] - P[2, 1] * G[1]] ./
+    (P[1, 1] * P[2, 2] - P[1, 2] * P[2, 1])
+
+# the log-integrand at f (python _adaptive_rule's probe)
+function _ar_logint(f, Ws, cb, ca, one_sided::Bool)
+    n, r = size(Ws)
+    acc = -0.5 * sum(abs2, f)
+    @inbounds for j in 1:n
+        m = 0.0
+        for c in 1:r
+            m += Ws[j, c] * f[c]
+        end
+        acc += one_sided ? _log_ndtr(cb[j] - m) :
+            _log_cell(cb[j] - m, ca[j] - m, 1.0)
+    end
+    return acc
+end
+
+# The log-integrand at f, with its gradient into G and minus its Hessian
+# into P; false if a cell is empty there. With u = -v_j.f / s_j a cell is
+# Phi(b + u) - Phi(a + u), so d/du log C = (phi(b) - phi(a)) / C and
+# d2/du2 = (a phi(a) - b phi(b)) / C - (d/du)^2, formed as ratios in the
+# log domain so the tails neither underflow nor cancel.
+function _ar_evaluate!(G, P, f, Ws, cb, ca, one_sided::Bool)
+    n, r = size(Ws)
+    tot = 0.0
+    @inbounds begin
+        for c in 1:r
+            G[c] = -f[c]
+            for c2 in 1:r
+                P[c, c2] = c == c2 ? 1.0 : 0.0
+            end
+        end
+        for j in 1:n
+            m = 0.0
+            for c in 1:r
+                m += Ws[j, c] * f[c]
+            end
+            b = cb[j] - m
+            if one_sided
+                lC = _log_ndtr(b)
+                isfinite(lC) || return false, -Inf
+                eb = exp(-0.5 * b * b - _LOG_SQRT_2PI - lC)
+                g1 = eb
+                g2 = -(b + eb) * eb
+            else
+                a = ca[j] - m
+                lC = _log_cell(b, a, 1.0)
+                isfinite(lC) || return false, -Inf
+                eb = exp(-0.5 * b * b - _LOG_SQRT_2PI - lC)
+                ea = exp(-0.5 * a * a - _LOG_SQRT_2PI - lC)
+                g1 = eb - ea
+                g2 = (ea > 0.0 ? a * ea : 0.0) - (eb > 0.0 ? b * eb : 0.0) -
+                    g1 * g1
+            end
+            tot += lC
+            for c in 1:r
+                G[c] -= g1 * Ws[j, c]
+                for c2 in 1:r
+                    P[c, c2] -= g2 * Ws[j, c] * Ws[j, c2]
+                end
+            end
+        end
+    end
+    return true, tot - 0.5 * sum(abs2, f)
 end
 
 function _cell_expectation(F, W, V, s, mu, lo, up)
@@ -462,37 +659,138 @@ function _cell_expectation(F, W, V, s, mu, lo, up)
     return total
 end
 
-function _impl(lower, upper, mean, sigma, V, D; kwargs...)
-    if V === nothing || D === nothing
-        sigma === nothing && error("supply sigma, or V and D")
+# Coordinates bounded by (-Inf, Inf): their cell is 1 for every factor
+# draw, so they are marginalised out exactly, before any rule is chosen.
+# Left in, an irrelevant row's loading sized the quadrature and moved the
+# answer 2-3%, or sent the call to the dense fallback (#487).
+_unconstrained(lo, up) = (lo .== -Inf) .& (up .== Inf)
+
+# Exactly one complete covariance: sigma alone, or V and D together. Any
+# other mix used to be resolved in silence -- sigma beside one of V, D
+# dropped the factor half, a complete (V, D) beside sigma dropped sigma --
+# so a stale argument priced a different Gaussian (#480, #89).
+function _check_covariance_inputs(sigma, V, D)
+    have = [name for (name, x) in (("sigma", sigma), ("V", V), ("D", D))
+            if x !== nothing]
+    (have == ["sigma"] || have == ["V", "D"]) && return nothing
+    isempty(have) && throw(ArgumentError("supply sigma, or V and D"))
+    throw(ArgumentError(
+        "supply exactly one covariance: sigma alone, or V and D together " *
+        "(sigma = V V' + diag(D)); got " * join(have, " and ")))
+end
+
+# The mean is one finite value per coordinate: an infinite mean made an
+# impossible cell, and a NaN propagated, both into a plausible-looking
+# number (#531).
+function _mean_vector(mean, n::Int)
+    mu = _bound_vector(mean, 0.0, n, "mean")
+    all(isfinite, mu) || throw(ArgumentError("mean must be finite"))
+    return mu
+end
+
+# Idiosyncratic VARIANCES, scalar or length n, finite and non-negative
+# (python: winning.shapes.as_idio). A NaN went through sqrt and the
+# `sd > 0` test read it as a point mass at zero: D = [NaN, 1] priced
+# (0.5, "factor") (#500). Negative only by round-off is zero.
+function _variance_vector(D, n::Int)
+    Dv = _bound_vector(D, 0.0, n, "D")
+    all(isfinite, Dv) || throw(ArgumentError(
+        "D has a non-finite entry: D is an idiosyncratic variance and " *
+        "must be finite"))
+    tol = 1e-12 * max(1.0, maximum(abs, Dv; init = 0.0))
+    any(<(-tol), Dv) && throw(ArgumentError(
+        "D has a negative entry (min $(minimum(Dv))): D is an " *
+        "idiosyncratic variance and cannot be negative"))
+    return max.(Dv, 0.0)
+end
+
+# The number of coordinates (python: _infer_dimension, R: .infer_dimension).
+# It came from size(V, 1) alone, so a scalar loading failed outright and
+# the (rank, n) spelling redefined an n-coordinate rectangle as one
+# coordinate (#556). A loading MATRIX decides by its rows -- unless no
+# length-bearing argument has that many entries and one has size(V, 2).
+function _infer_dimension(V, D, mean, lower, upper)
+    lens = Int[]
+    for x in (D, mean, lower, upper)
+        x === nothing && continue
+        x isa Number && continue
+        length(x) > 1 && push!(lens, length(x))
+    end
+    if V isa AbstractMatrix
+        (isempty(lens) || size(V, 1) in lens || !(size(V, 2) in lens)) &&
+            return size(V, 1)
+        return size(V, 2)
+    end
+    isempty(lens) || return lens[1]
+    return V isa Number ? 1 : length(V)
+end
+
+# Loadings as the (n, rank) matrix: a scalar is one common loading, a
+# length-n vector rank one, an (n, rank) matrix as given, a (rank, n)
+# matrix transposed (rank != n only).
+function _as_loadings(V, n::Int)
+    if V isa Number
+        A = fill(Float64(V), n, 1)
+    elseif V isa AbstractMatrix
+        A = Float64.(Matrix(V))
+        if size(A, 1) != n
+            size(A, 2) == n || throw(ArgumentError(
+                "V must carry one row per coordinate: expected an ($n, " *
+                "rank) matrix; got size $(size(A))"))
+            A = permutedims(A)
+        end
+    else
+        v = Float64.(collect(V))
+        length(v) == n || throw(ArgumentError(
+            "V has length $(length(v)) but the problem has $n coordinates"))
+        A = reshape(v, n, 1)
+    end
+    all(isfinite, A) || throw(ArgumentError("V has a non-finite entry"))
+    return A
+end
+
+function _impl(lower, upper, mean, sigma, V, D; gh_order = nothing,
+               kwargs...)
+    _check_covariance_inputs(sigma, V, D)
+    if sigma !== nothing
         sigma = _as_covariance(sigma)
         nn = size(sigma, 1)
         lo0 = _bound_vector(lower, -Inf, nn, "lower")
         up0 = _bound_vector(upper, Inf, nn, "upper")
         _check_bounds(lo0, up0)
+        # scalar-or-length-n on this branch too (#397)
+        mu0 = _mean_vector(mean, nn)
+        free = _unconstrained(lo0, up0)
+        all(free) && return 1.0, "factor"
+        if any(free)
+            k = findall(.!free)
+            sigma = sigma[k, k]; lo0 = lo0[k]; up0 = up0[k]; mu0 = mu0[k]
+        end
         fd = factorize_covariance(sigma)
         if fd === nothing
-            mu0 = mean === nothing ? zeros(nn) : Float64.(collect(mean))
             keep, done = _drop_constants(diag(sigma), mu0, lo0, up0)
             done === nothing || return done
             return _dense_fallback(lo0, up0, mu0, sigma; kwargs...)[1], "fallback"
         end
         V, D = fd
+        lower, upper, mean = lo0, up0, mu0
     end
-    Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
-         reshape(Float64.(collect(V)), :, 1)
-    n = size(Vm, 1)
-    Dv = D isa Number ? fill(Float64(D), n) : Float64.(collect(D))
-    # a one-element D is the scalar shorthand, as in python and R (#422)
-    length(Dv) == 1 && (Dv = fill(Dv[1], n))
-    length(Dv) == n || throw(ArgumentError(
-        "D has length $(length(Dv)) but V has $n rows"))
+    n = _infer_dimension(V, D, mean, lower, upper)
+    Vm = _as_loadings(V, n)
+    # scalar-or-length-n, finite and non-negative (#422, #500)
+    Dv = _variance_vector(D, n)
     # scalar-or-length-n, the bounds' rule and the Python/R behaviour; a
     # short mean used to be taken at its own length (#397)
-    mu = _bound_vector(mean, 0.0, n, "mean")
+    mu = _mean_vector(mean, n)
     lo = _bound_vector(lower, -Inf, n, "lower")
     up = _bound_vector(upper, Inf, n, "upper")
     _check_bounds(lo, up)
+    free = _unconstrained(lo, up)
+    all(free) && return 1.0, "factor"
+    if any(free)
+        k = .!free
+        Vm = Vm[k, :]; Dv = Dv[k]; mu = mu[k]; lo = lo[k]; up = up[k]
+    end
     var = vec(sum(Vm .^ 2, dims = 2)) .+ Dv
     keep, done = _drop_constants(var, mu, lo, up)
     done === nothing || return done
@@ -502,8 +800,8 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
     end
     n = length(Dv)
     n == 1 && return _univariate(lo[1], up[1], mu[1], var[1])
-    # a factor no coordinate loads on integrates out exactly
-    Vm = Vm[:, [any(!=(0.0), Vm[:, c]) for c in 1:size(Vm, 2)]]
+    # the rank is the covariance's, not the column count (#457)
+    Vm = _canonical_loadings(Vm)
     s = sqrt.(Dv)
     r = size(Vm, 2)
     if r == 0
@@ -518,10 +816,11 @@ function _impl(lower, upper, mean, sigma, V, D; kwargs...)
     # The order grows like sharpness SQUARED, not 8 x sharpness: the
     # linear rule left 0.2% relative error on a correlation-0.8 orthant
     # (#132). Same rule as the python reference.
-    Q = _gh_order(r, sharp)
-    F, W = _gh_nodes(r, Q)
+    Q = gh_order === nothing ? _gh_order(r, sharp) : gh_order
+    rule = _adaptive_rule(Vm, Dv, mu, lo, up, Q)
+    F, W = rule === nothing ? _gh_nodes(r, Q) : rule
     p = _cell_expectation(F, W, Vm, s, mu, lo, up)
-    p >= 1e-8 && return p, "factor"
+    (p >= 1e-8 || gh_order !== nothing) && return p, "factor"
 
     # deep tail: recenter the quadrature at the Laplace point of the
     # log-integrand and importance-reweight -- DETERMINISTIC here
@@ -597,7 +896,8 @@ The lower-order difference alone was the old estimate, and two rules
 can agree closely while sharing the same-sign error: on a rank-one case
 with sharpness 2.33, the 19- and 13-node rules differed by 4.2e-7 while
 both sat 8.9e-5 (2.4%) above the truth, an estimate 214x too small
-(#336). The high-order term measures that error directly. Delegated
+(#336). The high-order term measures that error directly. The rules are
+the adaptive ones the answer uses (#470), plus a 1e-10 relative floor. Delegated
 results carry MvNormalCDF's own estimate, and kwargs (m, rng) go to it."""
 function mvnormcdf_factor(mu::AbstractVector, sigma::AbstractMatrix,
                           a::AbstractVector, b::AbstractVector; kwargs...)
@@ -610,7 +910,6 @@ function mvnormcdf_factor(mu::AbstractVector, sigma::AbstractMatrix,
     (r > 2 || sharp > 3.0) && return _dense_fallback(a, b, mu, sigma; kwargs...)
     p, method = _impl(a, b, mu, nothing, V, D)
     n = size(V, 1)
-    s = sqrt.(D)
     muv = _bound_vector(mu, 0.0, n, "mean")
     av = _bound_vector(a, -Inf, n, "lower")
     bv = _bound_vector(b, Inf, n, "upper")
@@ -619,12 +918,15 @@ function mvnormcdf_factor(mu::AbstractVector, sigma::AbstractMatrix,
     (r == 0 || any(==(0.0), D) || any(av .== bv) || n == 1 ||
      !(method in ("factor", "factor-recentered"))) && return p, 0.0
     Q = _gh_order(r, sharp)
-    est(Qe) = begin
-        Fe, We = _gh_nodes(r, Qe)
-        _cell_expectation(Fe, We, V, s, muv, av, bv)
-    end
+    # the same reduction and adaptive rule at other orders
+    est(Qe) = _impl(a, b, mu, nothing, V, D; gh_order = Qe)[1]
     e = abs(p - est(max(Q - 6, 7)))
     e += abs(p - est(r == 1 ? 201 : 81))
+    # The adaptive rules converge together, so on a resolved integrand
+    # both differences are round-off (5e-18 on the #336 case) while the
+    # rule's own floor -- nodes pruned below 1e-12 of the largest
+    # weight, and summation -- sits near 1e-11 relative. Never claim less.
+    e += 1e-10 * p
     return p, e
 end
 

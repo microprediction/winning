@@ -263,10 +263,24 @@ function asOffsets(x, where) {
   return asFiniteVector(x, where, "offset");
 }
 
+/* Only differences between offsets matter. Each offset past +/-(L-2)
+   was clamped on its own, so translating a book across the lattice edge
+   erased its contrast: [-3, 3] priced [1, 0] and [17, 23] [0.5, 0.5] at
+   L=15 (#585). A book with an entry out of range is first moved by the
+   integer nearest its midpoint; an in-range book is untouched. */
+function edgeCentred(offsets, L) {
+  if (!offsets.length) return offsets;
+  const lo = Math.min(...offsets), hi = Math.max(...offsets);
+  if (lo >= -(L - 2) && hi <= L - 2) return offsets;
+  const c = Math.floor((lo + hi) / 2 + 0.5);
+  return offsets.map(o => o - c);
+}
+
 export function statePricesFromOffsets(density, offsets) {
   density = asClassicDensity(density);
   offsets = asOffsets(offsets, "offsets");
   const L = impliedL(density);
+  offsets = edgeCentred(offsets, L);
   const base = paddedBaseCdf(density);
   return exactStatePrices(Array.from(offsets, o => shiftedCdf(base, o, L)));
 }
@@ -438,6 +452,10 @@ export function dividendImpliedAbility(dividends, density, opts = {}) {
   // a misspelt `unti` silently returned abilities 10x the intended (#561)
   checkOpts(opts, DIVIDEND_IMPLIED_ABILITY_OPTS, "dividendImpliedAbility", OPT_HINTS);
   const { nanValue = 2000, unit = 1.0 } = opts;
+  // a negative unit reversed every ability, zero tied the field and
+  // NaN/Infinity returned non-finite abilities (#649)
+  if (typeof unit !== "number" || !Number.isFinite(unit) || !(unit > 0))
+    throw new Error(`dividendImpliedAbility: unit must be a finite positive number; got ${unit}`);
   const p = asClassicPrices(pricesFromDividends(dividends, nanValue));
   const live = [];
   p.forEach((x, i) => { if (x > 0) live.push(i); });

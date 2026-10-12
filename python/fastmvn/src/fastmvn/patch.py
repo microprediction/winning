@@ -72,9 +72,17 @@ def patch_scipy():
                 # allow_singular only a positive-definite covariance may
                 # take it and scipy validates everything else.
                 fd = _cached_factorization(c)
-                if fd is not None:
+                n = c.shape[0]
+                # scipy's shapes, not fastmvn's: x and mean are one value
+                # per coordinate there, and a scalar is refused. The fast
+                # path broadcast them, so patching turned an invalid call
+                # into an answer (#332). Anything else goes to scipy,
+                # which answers or raises as it always did; lower_limit
+                # stays scalar-friendly, as it is in scipy.
+                shapes_ok = np.shape(x) == (n,) and (
+                    mean is None or np.shape(mean) == (n,))
+                if fd is not None and shapes_ok:
                     V, D = fd
-                    n = c.shape[0]
                     mu = np.zeros(n) if mean is None else \
                         np.asarray(mean, dtype=float)
                     lo = None if lower_limit is None else lower_limit

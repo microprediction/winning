@@ -735,6 +735,24 @@ accepts("the inverse takes a scalar D, matching python",
             v => v.every(([a, b]) => a.L.every((x, k) =>
               Math.abs(b.L[k] / Math.sqrt(c) - x) <= 1e-9 * Math.abs(x) + 1e-300)));
   }
+  // #409: the relative floor raised EVERY pivot below it, so near-twins
+  // with variance 2^-43 (a valid small contrast) priced [0.5, 0.158,
+  // 0.342] for the exact [0.49999992, 0.07932763, 0.42067245]
+  {
+    const delta = 2 ** -43, a = 0.5 * Math.sqrt(2 * delta);
+    const muT = [0, a, -a];
+    const CT = [[1, 0, 0], [0, 1 + delta, 1], [0, 1, 1 + delta]];
+    accepts("ghk keeps a valid small pivot (#409)",
+            () => {
+              const raw = muT.map((_, i) => demo.ghkSampleOne(
+                demo.ghkPrepareOne(muT, CT, i), 100000, demo.rng(1234 + i)));
+              const t = raw.reduce((x, y) => x + y, 0);
+              return raw.map(x => x / t);
+            },
+            p => Math.abs(p[1] - 0.07932763) < 3e-3 &&
+                 Math.abs(p[2] - 0.42067245) < 3e-3,
+            p => `shares ${p.map(x => x.toFixed(5))}`);
+  }
   accepts("cholesky keeps the covariance scale at 1e-12 I",
           () => demo.cholesky([[1e-12, 0], [0, 1e-12]]),
           L => Math.abs(L[0][0] - 1e-6) < 1e-18 && Math.abs(L[1][1] - 1e-6) < 1e-18,
@@ -2108,6 +2126,26 @@ rejects(races.abilitiesFromRace, [[0.5, 0.5, 0], { targetFloor: 0.4 }],
     accepts(`fitGrammar(C + ${a} 11') fits C (#465)`, () => fitAt(a),
             f => JSON.stringify(f) === JSON.stringify(f0) &&
                  contr(demo.structureCov({ kind: "Factor", ...f })).every(c => Math.abs(c - 2) < 1e-5));
+}
+
+// --- classic: dividendImpliedAbility's output unit is a lattice spacing (#649)
+for (const unit of [0, -0.1, NaN, Infinity, -Infinity, "0.1"])
+  rejects(classic.dividendImpliedAbility, [[2, 4], classic.skewNormalDensity(50, 0.1, { a: 0 }), { unit }],
+          `dividendImpliedAbility refuses unit ${String(unit)} (#649)`, "finite positive");
+accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
+        () => classic.dividendImpliedAbility([2, 4], classic.skewNormalDensity(50, 0.1, { a: 0 }), { unit: 0.1 }),
+        a => a[0] < a[1] && Math.abs(a[0] + 0.2646016516) < 1e-8 && Math.abs(a[1] - 0.3455146431) < 1e-8,
+        a => JSON.stringify(a));
+
+// --- classic: a common translation across the lattice edge keeps the contrast (#585)
+{
+  const d = classic.skewNormalDensity(15, 0.5, { a: 0 });
+  const base = classic.statePricesFromOffsets(d, [-3, 3, 1]);
+  for (const c of [11, 20, -20, 40, -55])
+    accepts(`statePricesFromOffsets is translation-free at shift ${c} (#585)`,
+            () => classic.statePricesFromOffsets(d, [-3 + c, 3 + c, 1 + c]),
+            p => p.every((x, i) => Math.abs(x - base[i]) < 1e-12) && base[0] > 0.9,
+            p => JSON.stringify(p));
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
