@@ -11,18 +11,13 @@ ZERO. Together those mean an optimizer declares convergence precisely
 where an observation is most badly contradicted -- it cannot tell a
 maximum from a floor.
 
-`log_ndtr` removes both. What it does NOT remove is the quadrature
-error underneath: the fixed Gauss-Hermite rule samples the chosen
-alternative's own noise where the PRIOR has mass, and for a large
-observed contrast the integrand's mass is far outside it -- at a gap of
--20 the mode is at z = 10 and a 7-node rule reaches |z| < 3.8. So the
-values here are still wrong, by 38% at a gap of -20, and this file
-PINS that rather than pretending otherwise. A Laplace-tilted rule fixes
-it to machine precision, but the tilt makes the quadrature depend on
-the parameters, which breaks the identity between the analytic score
-and the gradient of the computed objective and left `fit` reporting
-`converged = False` after ten times the work. That needs the tilt's own
-derivative, and belongs in its own change.
+`log_ndtr` removes both. The third was the quadrature underneath: the
+fixed Gauss-Hermite rule sampled the chosen alternative's own noise
+where the PRIOR has mass, and at a gap of -20 the integrand's mode is
+at z = 10 while a 7-node rule reaches |z| < 3.8 (38% off). The own-noise
+nodes are now tilted to each observation's mode, with the tilt's own
+derivative carried in the score so the score stays the exact gradient
+of the computed objective (likelihood._tilt_mode).
 """
 import numpy as np
 import pytest
@@ -115,22 +110,41 @@ def test_the_binary_tail_is_exact(gap):
     assert abs(dmu[0, 0] - es) <= 1e-12 * es
 
 
-@pytest.mark.parametrize("gap", [-20.0, -60.0])
-def test_the_remaining_quadrature_error_is_recorded(gap):
-    """Not a pass mark: a measurement, so that a later change closing
-    #270's third defect has something to move. The binary case is now
-    closed form, so the measurement moved to J = 3 (see _ternary), where
-    the fixed own-noise rule still under-reaches the tail: at a gap of
-    -20 the likelihood is 38% away from the closed form and the score
-    62%."""
+@pytest.mark.parametrize("gap", [-3.0, -8.0, -20.0, -60.0])
+def test_the_ternary_tail_is_now_resolved(gap):
+    """The third defect, closed: the own-noise nodes are tilted to each
+    observation's mode with the tilt's own derivative in the score
+    (likelihood._tilt_mode). It was 38% off at -20 and 62% in the score;
+    the tilted 7-node rule is within 1e-7 of it."""
     ll, dmu, _ = _ternary(gap)
     ex, es = _oracle(gap)
-    assert abs(ll - ex) / abs(ex) > 0.3
-    assert abs(dmu[0, 0] - es) / es > 0.5
-    # but bounded, and on the correct side: the rule UNDERSTATES the
-    # probability, so the log-likelihood is too negative
-    assert ll < ex
-    assert 1.0 < abs(ll / ex) < 3.0
+    assert abs(ll - ex) <= 1e-7 * abs(ex)
+    assert abs(dmu[0, 0] - es) <= 1e-5 * es
+
+
+@pytest.mark.parametrize("gap", [-1.0, -3.0, -8.0, -20.0])
+def test_the_ternary_score_is_the_gradient_of_the_returned_value(gap):
+    """The property that kept the tilt out the first time: the analytic
+    score must differentiate the computed objective, not just the true
+    one, or BFGS cannot converge."""
+    mu = np.array([[gap, 0.0, 1.0], [0.3, -gap / 4, 0.1]])
+    V = np.array([[0.2, 0.0], [-0.4, 0.3], [0.1, -0.5]])
+    D = np.array([1.0, 0.7, 1.4])
+    ch = np.array([0, 2])
+    ll, dmu, dV = choice_loglik_and_score(mu, V, ch, D=D)
+    h = 1e-6
+    for t, j in [(0, 0), (0, 2), (1, 1)]:
+        e = np.zeros_like(mu)
+        e[t, j] = h
+        fd = (choice_loglik_and_score(mu + e, V, ch, D=D)[0]
+              - choice_loglik_and_score(mu - e, V, ch, D=D)[0]) / (2 * h)
+        assert abs(fd - dmu[t, j]) < 1e-6 * max(1.0, abs(fd))
+    for j, c in [(0, 0), (1, 1), (2, 0)]:
+        e = np.zeros_like(V)
+        e[j, c] = h
+        fd = (choice_loglik_and_score(mu, V + e, ch, D=D)[0]
+              - choice_loglik_and_score(mu, V - e, ch, D=D)[0]) / (2 * h)
+        assert abs(fd - dV[j, c]) < 1e-6 * max(1.0, abs(fd))
 
 
 def test_an_extreme_observation_does_not_poison_the_ordinary_ones():
