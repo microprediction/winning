@@ -702,7 +702,15 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
   // whether to warn when the caller did not ask for the diagnostics
   const pf = raceProbabilities(mu, { V, D, F, W, base, points });
   const resid = pf.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
-  const maxLogResidual = Math.max(...resid.map(Math.abs));
+  let maxLogResidual = Math.max(...resid.map(Math.abs));
+  // exhausted after a step no sweep priced: keep the better of it and the
+  // preceding priced iterate, as python's _jacobi_sweeps and core.mjs
+  // jacobiSweeps do -- one more sweep returned a residual of 1.66 where
+  // the budget before it had 0.71 (#646)
+  if (!(maxLogResidual < tol) && prev && !(maxLogResidual < prev.rmax)) {
+    mu = prev.mu;
+    maxLogResidual = prev.rmax;
+  }
   return inverseReturn(mu, maxLogResidual < tol, maxLogResidual, iters,
                        floored, tol, returnInfo);
 }

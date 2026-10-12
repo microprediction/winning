@@ -131,6 +131,22 @@ for (const [t, z] of [[1e-12, -7.034483825301272], [1e-16, -8.222082216130435],
         && Math.abs((b.mu[0] - b.mu[1]) - z) <= 1e-8 * Math.abs(z),
         `a=${a.mu} b=${b.mu}`);
 }
+// --- a larger budget never returns a worse race inverse (#646); python
+// returns 0.70704802702675 at n_iter 2, 3 and 4
+{
+  const D = [4.109124193642786, 1.1933390070735221, 0.22399089188231003,
+             0.14226868263033934, 0.156512843473103];
+  const t = [0.14786642573393072, 0.04868820314808961, 0.015147330702447054,
+             0.01374172467779407, 0.7745563157377385];
+  const r = [2, 3, 4].map(nIter => {
+    const o = races.abilitiesFromRace(t, { D, points: 2049, nIter, tol: 1e-12, returnInfo: true });
+    const p = races.raceProbabilities(o.mu, { D, points: 2049 });
+    return [o.maxLogResidual, Math.max(...p.map((x, i) => Math.abs(Math.log(x / t[i]))))];
+  });
+  holds("race inverse keeps the better of its last two iterates (#646)",
+        r.every(([rep, act]) => Math.abs(rep - 0.70704802702675) < 1e-9 && Math.abs(act - rep) < 1e-12),
+        JSON.stringify(r));
+}
 // --- the loadings shape contract, in every module that takes V (#232)
 // V is (n, rank), one ROW per contestant, and as_loadings is the one
 // place that rule is decided. The browser indexed V directly instead, so
