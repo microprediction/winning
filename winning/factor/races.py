@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.special import ndtr, ndtri
+from scipy.special import log_ndtr as _log_ndtr
 
 from .core import as_idio, as_loadings, as_weights, _gauge_center, hermite_nodes
 from ..shapes import as_factor_law, as_points, as_target, as_tolerance
@@ -695,7 +696,104 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
             f"{hi - lo:.3g} units wide at the relaxed delta and exact "
             "there. Raise points= to tighten it.",
             RuntimeWarning, stacklevel=3)
+    if fn is None or fn is _normal:
+        lo, hi, points = _rare_winner_edges(mu_lo, mu_hi, s, lo, hi, points)
     return np.linspace(lo, hi, points)
+
+
+# Relative tail mass a runner's win integrand may leave outside the bulk
+# window, and the most the window's point count may grow to cover it.
+_EDGE_REL_TOL = 1e-6
+_EDGE_POINTS_CAP = 4
+
+
+def _edge_terms(x, m, s):
+    """At the points x (shape (K,)): every runner's log win-integrand
+    log g_i = log f_i + sum_{j != i} log S_j and its slope, for normal
+    performances at locations m, sds s. Shapes (K, n); O(K n)."""
+    z = (np.asarray(x, dtype=float)[:, None] - m[None, :]) / s[None, :]
+    logS = _log_ndtr(-z)
+    logphi = -0.5 * z * z - 0.5 * np.log(2.0 * np.pi)
+    haz = np.exp(logphi - logS) / s[None, :]
+    logg = logphi - np.log(s)[None, :] + logS.sum(axis=1, keepdims=True) - logS
+    slope = -z / s[None, :] - haz.sum(axis=1, keepdims=True) + haz
+    return logg, slope
+
+
+def _rare_winner_edges(mu_lo, mu_hi, s, lo, hi, points):
+    """Post-check the bulk window's edges against each runner's OWN win
+    integrand, and widen within a bounded cap (#97).
+
+    [G^-1(delta), H^-1(1 - delta)] holds all but 2 delta of the WINNER
+    distribution, which bounds every share's error by delta absolutely
+    but not relatively: at mu = [0, 20, 40] the middle runner wins near
+    x = 10, past the right edge, and came back at 0.099 of its 1.04e-45.
+    For a log-concave (normal) integrand, the mass beyond an edge is at
+    most g(edge) / |slope| (tangent bound) and the mass inside is at
+    least the chord integral over any inner stretch next to the edge
+    (the best of a geometric ladder of lengths is used); a runner whose
+    ratio exceeds _EDGE_REL_TOL (or whose integrand still rises at the
+    edge) is truncated. The edge then moves out until every runner
+    passes, with the point count scaled to keep the spacing, up to
+    _EDGE_POINTS_CAP times the request; past the cap the window stops
+    there and a warning says so. One O(13 n) probe per edge; ordinary
+    fields pass it and are unchanged."""
+    width0 = hi - lo
+    if not (width0 > 0) or len(s) < 2:
+        return lo, hi, points
+    spacing = width0 / max(points - 1, 1)
+    max_width = spacing * (_EDGE_POINTS_CAP * points - 1)
+    ws = 0.5 * width0 * 0.25 ** np.arange(6)
+    log_ws = np.log(ws)[:, None]
+
+    def bad(edge, m, sign):
+        # sign +1: right edge (integrand must FALL outward), -1: left
+        logg_all, slope_all = _edge_terms(np.r_[edge, edge - sign * ws], m, s)
+        logg, out_slope = logg_all[0], sign * slope_all[0]
+        logg_in = logg_all[1:]
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            tail = logg - np.log(np.maximum(-out_slope, 1e-300))
+            d = np.abs(logg_in - logg[None, :])
+            big = np.maximum(logg_in, logg[None, :])
+            # log of the chord integral w (e^A - e^B) / (A - B)
+            c = np.where(d < 1e-12, logg[None, :] + log_ws,
+                         big + log_ws + np.log(-np.expm1(-d))
+                         - np.log(np.maximum(d, 1e-300)))
+            ratio = tail - c.max(axis=0)
+        # NaN (an unrepresentable field) is not evidence of truncation
+        return (out_slope >= 0) | (ratio >= np.log(_EDGE_REL_TOL))
+
+    new_lo, new_hi = lo, hi
+    for sign, m in ((+1, mu_hi), (-1, mu_lo)):
+        edge = new_hi if sign > 0 else new_lo
+        if not bad(edge, m, sign).any():
+            continue
+        step = float(s.max())
+        for _ in range(60):
+            cand = edge + sign * step
+            if (max(new_hi, cand) - min(new_lo, cand)) > max_width:
+                edge = (new_lo + max_width) if sign > 0 else (new_hi - max_width)
+                import warnings
+                warnings.warn(
+                    "bulk window: a rare winner's integrand extends past "
+                    f"the window even at {_EDGE_POINTS_CAP}x the point "
+                    "budget, so its share is truncated (relatively; the "
+                    "absolute error stays below delta). Raise points= or "
+                    "use window='span' for relative accuracy on such "
+                    "shares.", RuntimeWarning, stacklevel=4)
+                break
+            edge = cand
+            if not bad(edge, m, sign).any():
+                break
+            step *= 2.0
+        if sign > 0:
+            new_hi = edge
+        else:
+            new_lo = edge
+    if (new_lo, new_hi) == (lo, hi):
+        return lo, hi, points
+    pts = int(np.ceil((new_hi - new_lo) / spacing)) + 1
+    return new_lo, new_hi, max(points, min(pts, _EDGE_POINTS_CAP * points))
 
 
 def _resolution(fn):
@@ -778,6 +876,9 @@ def _refine_grid(x, sd, V, points, stacklevel=2, fn=None):
     crossing the n*Q threshold silently dropped the refinement (TV
     2.5e-2 on a scaled sharp field). Returns (x, points)."""
     sd = np.asarray(sd, dtype=float)
+    # the window may arrive longer than requested: the rare-winner edge
+    # check widens it at the requested spacing (#97)
+    points = max(points, len(x))
     dx = x[1] - x[0]
     smin = float(sd.min())
     res = _resolution(fn)

@@ -385,3 +385,33 @@ def test_fit_covariance_leaves_mixed_sign_fields_alone():
     assert _without_common_shift(C) is C
     B = _without_common_shift(np.array([[1.0, 0.5], [0.5, 0.3]]))
     assert np.linalg.eigvalsh(B).min() > -1e-12
+
+
+# #97: the bulk window covers each runner's own win integrand.
+@pytest.mark.parametrize("gap", [8.0, 16.0, 20.0])
+def test_bulk_window_keeps_rare_winners_relatively_accurate(gap):
+    from scipy.integrate import quad
+    from scipy.stats import norm
+    from winning.factor.races import race_probabilities
+    mu = np.array([0.0, gap, 2 * gap])
+
+    def exact(i):
+        f = lambda x: norm.pdf(x - mu[i]) * np.prod(
+            [norm.sf(x - mu[j]) for j in range(3) if j != i])
+        return quad(f, mu[i] - 60, mu[i] + 60, points=list(mu), limit=500,
+                    epsabs=0, epsrel=1e-12)[0]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        p = race_probabilities(mu, D=np.ones(3), points=257)
+    for i in (1, 2):
+        assert abs(p[i] / exact(i) - 1) < 1e-9
+
+
+def test_bulk_window_edge_check_leaves_ordinary_fields_alone():
+    from winning.factor import races
+    rng = np.random.default_rng(0)
+    for _ in range(20):
+        n = int(rng.integers(2, 40))
+        mu = rng.normal(size=n); s = np.exp(0.3 * rng.normal(size=n))
+        x = races._bulk_window(mu[None, :], s, 257, 1e-12)
+        assert len(x) == 257
