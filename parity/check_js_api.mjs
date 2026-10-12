@@ -2097,5 +2097,18 @@ rejects(races.abilitiesFromRace, [[0.5, 0.5, 0], { targetFloor: 0.4 }],
   } finally { console.warn = keep; }
 }
 
+// --- fitGrammar reads C through its contrasts: a common shift cancels (#465)
+{
+  const n = 4;
+  const contr = M => { const o = []; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) o.push(M[i][i] + M[j][j] - 2 * M[i][j]); return o; };
+  const fitAt = a => demo.fitGrammar(Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => a + (i === j ? 1 : 0))), 3, 4);
+  const f0 = fitAt(0);
+  for (const a of [2 ** 20, 2 ** 51])
+    accepts(`fitGrammar(C + ${a} 11') fits C (#465)`, () => fitAt(a),
+            f => JSON.stringify(f) === JSON.stringify(f0) &&
+                 contr(demo.structureCov({ kind: "Factor", ...f })).every(c => Math.abs(c - 2) < 1e-5));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

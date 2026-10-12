@@ -476,6 +476,51 @@ def _as_block_labels(blocks, n):
     return np.unique(lab, return_inverse=True)[1]
 
 
+def _without_common_shift(C):
+    """A race-equivalent representative of C with its removable common
+    shift taken out, so fit_covariance(C + a 11') fits the SAME matrix
+    for every a >= 0 (#465).
+
+    A shared shock a 11' cannot change an ordering, but the fitter's
+    stages (unit scaling by the mean variance, clustering correlations,
+    the eigen arm, dead-column and floor thresholds) read the raw matrix:
+    a common shift of 1e6 on a unit-scale field moved a fitted price by
+    0.037, and at 2**51 the fit came back as four equal variances of
+    2.25e9 with every contrast destroyed.
+
+    When every off-diagonal is positive, m = min_{i != j} C_ij is removed
+    elementwise, C - m, which is exact in floating point for the entries
+    near the shift (Sterbenz), so the representative depends only on the
+    stored contrasts. If that over-removes (C - m 11' indefinite: possible
+    when variances differ), the largest removable part is restored to
+    keep it a covariance: t = -min_{1'x = 1} x'(C - m)x, from one KKT
+    solve. A field with any non-positive covariance is returned unchanged,
+    bit for bit."""
+    n = len(C)
+    if n < 2:
+        return C
+    off = C[~np.eye(n, dtype=bool)]
+    m = float(off.min())
+    if not m > 0.0:
+        return C
+    B = C - m
+    K = np.zeros((n + 1, n + 1))
+    K[:n, :n] = B
+    K[:n, n] = 1.0
+    K[n, :n] = 1.0
+    rhs = np.zeros(n + 1)
+    rhs[n] = 1.0
+    try:
+        sol = np.linalg.solve(K, rhs)
+    except np.linalg.LinAlgError:
+        sol = np.linalg.lstsq(K, rhs, rcond=None)[0]
+    x = sol[:n]
+    v = float(x @ B @ x)
+    if np.isfinite(v) and v < 0.0:
+        B = B - v
+    return B
+
+
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                    blocks=None, nodes_log2: int = 11,
                    seed: int = 0, return_report: bool = False):
@@ -511,6 +556,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     from scipy.spatial.distance import squareform
 
     C = _validate_covariance(C)
+    # a common shift cancels from every contrast: fit the representative
+    # without it, so C and C + a 11' are fitted identically (#465)
+    C = _without_common_shift(C)
     n = len(C)
     labels = None if blocks is None or np.ndim(blocks) == 0 \
         else _as_block_labels(blocks, n)

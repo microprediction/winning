@@ -349,3 +349,39 @@ def test_scalar_block_loading_is_accepted_everywhere():
                   - p).max() < 1e-15
     assert np.abs(abilities_from_race(p, structure=s, points=129)
                   - (mu - mu.mean())).max() < 1e-6
+
+
+# #465: fit_covariance(C + a 11') fits the same race for every a >= 0.
+@pytest.mark.parametrize("a", [1e3, 1e6, 2.0 ** 30])
+def test_fit_covariance_is_invariant_to_a_common_shift(a):
+    from winning.factor.core import fit_covariance
+    from winning.factor.races import race_probabilities
+    rng = np.random.default_rng(1); n = 6
+    A = rng.normal(size=(n, 2)); C0 = A @ A.T + np.diag(0.3 + rng.random(n))
+    mu = np.linspace(-1, 1, n)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ref = race_probabilities(mu, *fit_covariance(C0 + 1.0)[:2],
+                                 *fit_covariance(C0 + 1.0)[2:])
+        V, D, F, W = fit_covariance(C0 + a)
+        got = race_probabilities(mu, V=V, D=D, F=F, W=W)
+    assert np.abs(got - ref).max() < 1e-5
+
+
+def test_fit_covariance_keeps_contrasts_under_a_huge_shift():
+    from winning.factor.core import fit_covariance
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        V, D, _, _ = fit_covariance(np.eye(4) + 2.0 ** 51)
+    S = V @ V.T + np.diag(D)
+    d = np.diag(S)
+    contrasts = d[:, None] + d[None, :] - 2 * S
+    assert np.allclose(contrasts[~np.eye(4, dtype=bool)], 2.0, rtol=1e-5)
+
+
+def test_fit_covariance_leaves_mixed_sign_fields_alone():
+    from winning.factor.core import _without_common_shift
+    C = np.array([[1.0, -0.2, 0.1], [-0.2, 1.0, 0.3], [0.1, 0.3, 1.0]])
+    assert _without_common_shift(C) is C
+    B = _without_common_shift(np.array([[1.0, 0.5], [0.5, 0.3]]))
+    assert np.linalg.eigvalsh(B).min() > -1e-12

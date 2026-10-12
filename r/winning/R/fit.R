@@ -168,6 +168,10 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
                 rank = 0L, n = 1L, bound = 0, clamp = 0,
                 residual = 0, contrast_residual = 0, degraded = FALSE))
   }
+  # a common shift cancels from every contrast: fit the representative
+  # without it, so C and C + a 11' are fitted identically (#465, python
+  # core._without_common_shift)
+  C <- .without_common_shift(C)
   s <- sqrt(pmax(diag(C), 1e-12))
   corr <- C / outer(s, s)
   kk <- min(k, n - 1L)
@@ -307,4 +311,26 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
        degraded = (bound > 0 || ncol(Vall) >= n ||
                    contrast_res > 0.05 ||
                    residual > 0.05 * mean(diag(C))))
+}
+
+
+# A race-equivalent representative of C with its removable common shift
+# taken out (#465). When every off-diagonal is positive, m = min C_ij is
+# removed elementwise (exact near the shift); if that over-removes, the
+# largest removable part t = -min_{1'x=1} x'(C - m)x is restored from one
+# KKT solve. A field with any non-positive covariance is unchanged.
+.without_common_shift <- function(C) {
+  n <- nrow(C)
+  if (n < 2L) return(C)
+  m <- min(C[row(C) != col(C)])
+  if (!(m > 0)) return(C)
+  B <- C - m
+  K <- rbind(cbind(B, 1), c(rep(1, n), 0))
+  rhs <- c(rep(0, n), 1)
+  sol <- tryCatch(solve(K, rhs),
+                  error = function(e) qr.solve(K, rhs, tol = 1e-12))
+  x <- sol[seq_len(n)]
+  v <- sum(x * (B %*% x))
+  if (is.finite(v) && v < 0) B <- B - v
+  B
 }
