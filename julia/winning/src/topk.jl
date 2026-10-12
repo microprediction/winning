@@ -308,7 +308,7 @@ last-place probability keeps its relative precision. It was
 returned 0.0 at 513 points and 2.4e-15 at 2049 for a true 7.73e-24
 (#365, as python/R/browser)."""
 function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
-                                base = "normal", points = 513, qa = 15)
+                                base = "normal", points = 513, qa = nothing)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -318,7 +318,7 @@ function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
     V === nothing &&
         return _checked_topk(_bottomk_independent(mu, sd, k, fn, points),
                              k, "bottom-k race")
-    fac = _topk_factor_nodes(V, n, qa, "bottom_k_probabilities")
+    fac = _topk_factor_nodes(V, n, qa, "bottom_k_probabilities", D)
     raw = zeros(n)
     for q in 1:size(fac.nodes, 1)
         raw .+= fac.w[q] .* _bottomk_independent(
