@@ -605,7 +605,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     const shared = sigV(0, 0) + sigV(1, 1) - 2 * sigV(0, 1);
     const big = Math.max(Math.abs(shared), Dn[0], Dn[1]);
     const sdD = big > 0
-      ? Math.sqrt(big) * Math.sqrt(Math.max(shared / big + Dn[0] / big + Dn[1] / big, 0))
+      ? Math.sqrt(big) * Math.sqrt(Math.max(shared / big + (Math.min(Dn[0], Dn[1]) / big + Math.max(Dn[0], Dn[1]) / big), 0))
       : 0;
     const shift = Vc[1].reduce((acc, v, c) => acc + (v - Vc[0][c]) * Fm[c], 0);
     // invert the SMALLER share: for [1, 1e-16] the normalized first

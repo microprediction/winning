@@ -637,7 +637,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     cs <- sqrt(max(Dn[1], Dn[2], abs(SigV[1, 1]), abs(SigV[2, 2])))
     sd_d <- cs * sqrt(max((SigV[1, 1] / cs) / cs + (SigV[2, 2] / cs) / cs -
                           2 * (SigV[1, 2] / cs) / cs +
-                          (Dn[1] / cs) / cs + (Dn[2] / cs) / cs, 0))
+                          ((min(Dn[1:2]) / cs) / cs + (max(Dn[1:2]) / cs) / cs), 0))
     # invert the SMALLER share: for c(1, 1e-16) the normalized first
     # share rounds to exactly 1 and qnorm(1) = Inf, while the
     # permutation was finite (#412)

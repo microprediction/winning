@@ -1512,10 +1512,11 @@ def _contrast_sd(shared, d0, d1):
     in units of the largest term so a finite huge variance cannot overflow
     the sum and a tiny one meets no absolute floor (#100). Exact zero is
     zero."""
-    big = max(abs(float(shared)), float(d0), float(d1))
+    lo, hi = sorted((float(d0), float(d1)))   # order-free: a permuted
+    big = max(abs(float(shared)), hi)          # pair is the same contrast
     if not big > 0.0:
         return 0.0
-    v = float(shared) / big + float(d0) / big + float(d1) / big
+    v = float(shared) / big + (lo / big + hi / big)
     return float(np.sqrt(big) * np.sqrt(max(v, 0.0)))
 
 
