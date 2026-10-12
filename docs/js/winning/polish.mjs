@@ -15,6 +15,14 @@ export function raceJacobian(mu, opts = {}) {
   const c = collapseStructure(structure, V, D, F, W, "raceJacobian");
   if (c.structure) {
     const s = c.structure;
+    // the hierarchical kernels are Gaussian hard races: the forward and the
+    // inverse refuse another base, and this silently returned the normal
+    // Jacobian for base "logistic" -- the derivative of a model the caller
+    // did not ask for (#89)
+    if (base !== "normal")
+      throw new Error(`${s.kind} races do not support base: the ` +
+        "block/nested/tree kernels are Gaussian hard races on their own " +
+        "lattice windows. Use structure Factor (or V/D).");
     if (s.kind === "Blocks")
       return blockRaceJacobian(mu, s.cluster, s.loading, s.D, { points, qa });
     if (s.kind === "Nested")

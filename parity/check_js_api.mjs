@@ -1815,6 +1815,12 @@ for (const c of [1e-8, 100]) {
         Math.abs(o.mu[2] / c - 0.7279331) < 1e-5, `${o.mu.map(x => x / c)}`);
 }
 
+// --- a structured Jacobian refuses a base its forward refuses (#89)
+for (const s of [structures.Blocks([0, 0, 1], 0.8, 0.2),
+                 structures.Tree([0, 0, 1], 0.8, 0.2, [2, 2, -1], [0, 0, 0.5])])
+  rejects(polish.raceJacobian, [[0, 0.3, 0.8], { structure: s, base: "logistic" }],
+          `${s.kind} raceJacobian refuses base "logistic" like its forward (#89)`, "support base");
+
 // --- typed controls are not coerced, and falsy is not "omitted"
 {
   const q = [0.6, 0.4, 0];
