@@ -23,6 +23,7 @@ those calls fall back to scipy.stats.multivariate_normal.cdf unchanged.
 from __future__ import annotations
 
 import functools
+import math
 
 import numpy as np
 
@@ -526,8 +527,8 @@ def _gh_order(r, sharp):
     # n x Q evaluations, and 15 points left 2e-6 at correlation 0.5. The
     # caps (201, 41) and the Sobol escalation past sharpness 3 are
     # unchanged.
-    return int(np.clip(np.ceil(15.0 * sharp * sharp), 61 if r == 1 else 15,
-                       201 if r == 1 else 41))
+    return int(min(max(math.ceil(15.0 * sharp * sharp), 61 if r == 1 else 15),
+                   201 if r == 1 else 41))
 
 
 def _adaptive_rule(V, D, mu, lo, up):
@@ -570,6 +571,8 @@ def _adaptive_rule(V, D, mu, lo, up):
     cb = (up - mu) / s
     one_sided = bool(np.all(lo == -np.inf))
     ca = None if one_sided else (lo - mu) / s
+    if r == 1:
+        return _adaptive_rule_rank1(Ws[:, 0], cb, ca, sharp)
     eye = np.eye(r)
 
     def logcells(m):
@@ -643,6 +646,75 @@ def _adaptive_rule(V, D, mu, lo, up):
     X, W, X2 = _gh_rule(r, _gh_order(r, sharp))
     F = f + (X * sig) @ U.T
     logw = 0.5 * (X2 - (F * F).sum(axis=1)) + float(np.log(sig).sum())
+    return F, W * np.exp(logw)
+
+
+def _adaptive_rule_rank1(w, cb, ca, sharp):
+    """_adaptive_rule at rank one, in scalars: the same Newton search,
+    probe and placement, without the 1 x 1 matrix algebra that cost more
+    than the cells on a ten-coordinate rectangle."""
+    one_sided = ca is None
+
+    def logcells(m):
+        if one_sided:
+            return log_ndtr(cb - m), None
+        a = ca - m
+        return _log_interval_mass(cb - m, a, 1.0), a
+
+    def evaluate(f):
+        m = w * f
+        lC, a = logcells(m)
+        tot = float(lC.sum())
+        if not math.isfinite(tot):
+            return None
+        b = cb - m
+        eb = np.exp(-0.5 * b * b - _LOG_SQRT_2PI - lC)
+        if one_sided:
+            g1 = eb
+            g2 = -(b + eb) * eb
+        else:
+            ea = np.exp(-0.5 * a * a - _LOG_SQRT_2PI - lC)
+            g1 = eb - ea
+            g2 = (np.where(ea > 0.0, a * ea, 0.0)
+                  - np.where(eb > 0.0, b * eb, 0.0) - g1 * g1)
+        return (tot - 0.5 * f * f, -float(g1 @ w) - f,
+                1.0 - float(g2 @ (w * w)))
+
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        f = 0.0
+        d = evaluate(f)
+        if d is None:
+            return None
+        val, G, P = d
+        for _ in range(50):
+            step = G / P
+            dec = G * step
+            if not math.isfinite(dec):
+                return None
+            if dec < 1e-4:
+                break
+            t = 1.0
+            while True:
+                fn = f + t * step
+                dn = evaluate(fn)
+                if dn is not None and dn[0] >= val - 1e-12:
+                    break
+                t *= 0.5
+                if t < 1e-6:
+                    break
+            if t < 1e-6:
+                break
+            f, (val, G, P) = fn, dn
+        sig = 1.0 / math.sqrt(max(P, 1.0))
+        probe = np.array([f + 3.0 * sig, f - 3.0 * sig])
+        lC, _ = logcells(probe[:, None] * w[None, :])
+        drop = val - lC.sum(axis=1) + 0.5 * probe * probe
+        eff = 3.0 * sig / math.sqrt(2.0 * min(drop[0], drop[1])) \
+            if min(drop[0], drop[1]) > 0.0 else 1.0
+        sig = min(max(sig, eff), 1.0)
+    X, W, X2 = _gh_rule(1, _gh_order(1, sharp))
+    F = f + sig * X
+    logw = 0.5 * (X2 - F[:, 0] * F[:, 0]) + math.log(sig)
     return F, W * np.exp(logw)
 
 
