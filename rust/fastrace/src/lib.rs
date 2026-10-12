@@ -96,7 +96,45 @@ fn check_factor_values(mu: &PyReadonlyArray1<f64>, v: &PyReadonlyArray2<f64>,
     finite2("v", v)?;
     positive1("d", d)?;
     finite2("f", f)?;
-    finite1("w", w)
+    rel_weights("w", w).map(|_| ())
+}
+
+/// Quadrature weights are RELATIVE masses, as every Python, R, Julia and
+/// browser door already treats them: finite, non-negative, positive
+/// total, normalized here (by the maximum first, so a finite 1e308 rule
+/// does not overflow the sum). Only finiteness was checked, so a
+/// positive-total signed rule returned probabilities of -0.14 and 1.999,
+/// an all-zero rule NaN, and the block and tree kernels, which reuse the
+/// weights across clusters, returned totals of 100 and 1000 for a 10x
+/// rescaled rule (#263). A rule already summing to one is passed through
+/// bit for bit.
+fn rel_weights(name: &str, x: &PyReadonlyArray1<f64>) -> PyResult<Array1<f64>> {
+    let a = x.as_array();
+    let mut mx = 0.0f64;
+    for (i, &w) in a.iter().enumerate() {
+        if !w.is_finite() {
+            return Err(bad(format!("{name}[{i}] = {w} is not finite")));
+        }
+        if w < 0.0 {
+            return Err(bad(format!(
+                "{name}[{i}] = {w} is negative: quadrature weights are relative \
+                 masses (#263)")));
+        }
+        if w > mx {
+            mx = w;
+        }
+    }
+    if !(mx > 0.0) {
+        return Err(bad(format!(
+            "{name} are all zero: a quadrature rule needs positive total weight (#263)")));
+    }
+    let total: f64 = a.iter().sum();
+    if (total - 1.0).abs() <= 4.0 * f64::EPSILON * (a.len() as f64) {
+        return Ok(a.to_owned());
+    }
+    let scaled: Array1<f64> = a.mapv(|w| w / mx);
+    let t: f64 = scaled.sum();
+    Ok(scaled.mapv(|w| w / t))
 }
 
 /// Base-family parameters (#134): finite, and inside each family's
@@ -198,7 +236,7 @@ fn forward_and_slopes<'py>(
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
-    let w_o: Array1<f64> = w.as_array().to_owned();
+    let w_o: Array1<f64> = rel_weights("w", &w)?;
     let (p, sl, total) = py.detach(|| with_usable_rayon(|| {
         forward_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                        w_o.view(), points, lo, hi)
@@ -229,7 +267,7 @@ fn win_probabilities_factor<'py>(
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
-    let w_o: Array1<f64> = w.as_array().to_owned();
+    let w_o: Array1<f64> = rel_weights("w", &w)?;
     let (p, _sl, total) = py.detach(|| with_usable_rayon(|| {
         forward_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                        w_o.view(), points, lo, hi)
@@ -265,7 +303,7 @@ fn jacobian_vector_product<'py>(
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
-    let w_o: Array1<f64> = w.as_array().to_owned();
+    let w_o: Array1<f64> = rel_weights("w", &w)?;
     let h_o: Array1<f64> = h.as_array().to_owned();
     // exactly two forms: anything but "grid" used to run IBP (#523)
     let grid = match form {
@@ -307,7 +345,7 @@ fn win_probabilities_factor_separated<'py>(
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
-    let w_o: Array1<f64> = w.as_array().to_owned();
+    let w_o: Array1<f64> = rel_weights("w", &w)?;
     let (p, total) = py.detach(|| with_usable_rayon(|| {
         separated_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                          w_o.view(), points, rm, rs)
@@ -404,14 +442,14 @@ fn block_race<'py>(
     positive1("sd", &sd)?;
     finite1("v", &v)?;
     finite1("a_nodes", &a_nodes)?;
-    finite1("a_weights", &a_weights)?;
+    rel_weights("a_weights", &a_weights)?;
     check_optional_window(lo, hi)?;
     let st = check_starts(&starts.as_array().to_vec(), n)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
     let v_o: Array1<f64> = v.as_array().to_owned();
     let an: Array1<f64> = a_nodes.as_array().to_owned();
-    let aw: Array1<f64> = a_weights.as_array().to_owned();
+    let aw: Array1<f64> = rel_weights("a_weights", &a_weights)?;
     let p = py.detach(|| with_usable_rayon(|| {
         block_kernel(mu_o.view(), sd_o.view(), v_o.view(), &st, an.view(),
                      aw.view(), points, lo, hi, fast_max_entries)
@@ -450,14 +488,14 @@ fn block_race_r<'py>(
     positive1("sd", &sd)?;
     finite2("v", &v)?;
     finite2("nodes", &nodes)?;
-    finite1("weights", &weights)?;
+    rel_weights("weights", &weights)?;
     check_optional_window(lo, hi)?;
     let st = check_starts(&starts.as_array().to_vec(), n)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let sd_o: Array1<f64> = sd.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let nd: Array2<f64> = nodes.as_array().to_owned();
-    let ww: Array1<f64> = weights.as_array().to_owned();
+    let ww: Array1<f64> = rel_weights("weights", &weights)?;
     let p = py.detach(|| with_usable_rayon(|| {
         block_kernel_r(mu_o.view(), sd_o.view(), v_o.view(), &st, nd.view(),
                        ww.view(), points, lo, hi)
@@ -498,14 +536,14 @@ fn tree_race<'py>(
     finite1("v", &v)?;
     finite1("lam", &lam)?;
     finite1("a_nodes", &a_nodes)?;
-    finite1("a_weights", &a_weights)?;
+    rel_weights("a_weights", &a_weights)?;
     check_window(lo, hi)?;
     let mu_o: Vec<f64> = mu.as_array().to_vec();
     let sd_o: Vec<f64> = sd.as_array().to_vec();
     let v_o: Vec<f64> = v.as_array().to_vec();
     let lm: Vec<f64> = lam.as_array().to_vec();
     let an: Vec<f64> = a_nodes.as_array().to_vec();
-    let aw: Vec<f64> = a_weights.as_array().to_vec();
+    let aw: Vec<f64> = rel_weights("a_weights", &a_weights)?.to_vec();
     let p = py.detach(|| with_usable_rayon(|| {
         tree_kernel(&mu_o, &sd_o, &v_o, &st, &pa, &lm, &an, &aw, points, lo, hi)
     }));
@@ -656,7 +694,7 @@ fn ordered_prefixes<'py>(
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f.as_array().to_owned();
-    let w_o: Array1<f64> = w.as_array().to_owned();
+    let w_o: Array1<f64> = rel_weights("w", &w)?;
     let (out, total) = py.detach(|| with_usable_rayon(|| {
         ordered_kernel(mu_o.view(), v_o.view(), d_o.view(), f_o.view(),
                        w_o.view(), points, lo, hi, k)
@@ -735,7 +773,7 @@ fn forward_and_slopes_base<'py>(
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f_nodes.as_array().to_owned();
-    let w_o: Array1<f64> = w.as_array().to_owned();
+    let w_o: Array1<f64> = rel_weights("w", &w)?;
     let (p, sl, total) = py.detach(|| with_usable_rayon(|| {
         winning::forward_kernel_base(
             mu_o.view(), v_o.view(), d_o.view(), f_o.view(), w_o.view(),
