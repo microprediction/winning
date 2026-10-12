@@ -2079,5 +2079,23 @@ rejects(races.abilitiesFromRace, [[0.5, 0.5, 0], { targetFloor: 0.4 }],
           "an active wrong-length coupling is still refused (#644)", "coupling");
 }
 
+// --- a default hierarchical target inverts with default controls (#656)
+{
+  const mu = [0.36, -0.92, 0.30, 0.26], cl = [0, 0, 1, 2];
+  const L = [0.022, 1.28, -0.083, -0.04], D = [0.035, 25, 0.062, 0.015];
+  const keep = console.warn; console.warn = () => {};
+  try {
+    const t = blocks.blockRaceProbabilities(mu, cl, L, D);
+    accepts("abilitiesFromBlockRace round-trips a default target (#656)",
+            () => blocks.abilitiesFromBlockRace(t, cl, L, D, { tol: 1e-8 }),
+            o => o.residual < 1e-8 && Math.abs(o.mu[1] + 0.92) < 1e-6);
+    const tr = structures.Tree(cl, L, D, [3, 3, 4, 4, -1], [0, 0, 0, 0.2, 0]);
+    const p = races.raceProbabilities(mu, { structure: tr });
+    accepts("structured Tree inverse round-trips a default target (#656)",
+            () => races.abilitiesFromRace(p, { structure: tr, returnInfo: true }),
+            o => o.converged && Math.abs(o.mu[1] + 0.92) < 1e-6);
+  } finally { console.warn = keep; }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

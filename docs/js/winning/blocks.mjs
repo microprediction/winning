@@ -202,7 +202,17 @@ function windowNodes(mu, sd, amp, delta = 1e-12, padSds = 2) {
 // Raw lattice mass is a diagnostic, not a nuisance: a material defect means
 // the window missed the winner's region, and normalizing it away returns
 // confident wrong shares. Stop instead.
-function checkedMass(raw, kind, massTol = 5e-3) {
+/* The mass tolerance in force (python blocks._MASS_TOL): an inverse's
+   internal trial states are priced under a looser one, and the state it
+   returns is re-priced strictly (#656). */
+let MASS_TOL = 5e-3;
+export function withTrialMassTolerance(fn) {
+  const prev = MASS_TOL;
+  MASS_TOL = Math.max(prev, 0.05);
+  try { return fn(); } finally { MASS_TOL = prev; }
+}
+
+function checkedMass(raw, kind, massTol = MASS_TOL) {
   const t = raw.reduce((a, b) => a + b, 0);
   // NaN compares false against any tolerance, so test finiteness
   // explicitly or a NaN mass sails through the check
@@ -760,54 +770,62 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
   // trust radius were absolute numbers, so loading -> c loading,
   // D -> c^2 D missed by 0.40 of a share at c = 1e-3 (#100, as python)
   const scale = blockScale(loading, D, n);
-  let mu = lt.map(v => -(v - lm) * scale);
-  let eta = 1.0;
-  let lp = forward(mu).map(v => Math.log(Math.max(v, TINY)));
-  let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
-  for (let it = 0; it < 200 && err >= 0.2; it++) {
-    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
-    const mm = mean(muN);
-    muN = muN.map(v => v - mm);
-    const lpN = forward(muN).map(v => Math.log(Math.max(v, TINY)));
-    const eN = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
-    if (eN < err) { mu = muN; lp = lpN; err = eN; eta = Math.min(eta * 1.2, 1.5); }
-    else { eta *= 0.5; if (eta < 1e-4) break; }
-  }
   const residualAt = m => {
     let pv = forward(m).map(v => Math.max(v, TINY));
     const sv = pv.reduce((a, b) => a + b, 0);
     pv = pv.map(v => v / sv);
     return { pv, r: pv.map((v, i) => Math.log(v) - lt[i]) };
   };
-  let iterations = 0;
-  for (let it = 0; it < maxIter; it++) {
-    const { pv, r } = residualAt(mu);
-    const cur = Math.max(...r.map(Math.abs));
-    if (cur < tol) return { mu: mu.map(v => v - mean(mu)), residual: cur, iterations };
-    iterations = it + 1;
-    const J = blockRaceJacobian(mu, cluster, loading, D, { points, qa });
-    const A = J.map((row, i) => row.map(v => v / pv[i] * scale + 1 / n));
-    let step = solve(A, r.map(v => -v));
-    const nn = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
-    if (nn > 5) step = step.map(v => v * 5 / nn);
-    step = step.map(v => v * scale);
-    let accepted = false;
-    for (let k = 0; k < 8; k++) {
-      let muN = mu.map((m, i) => m + step[i]);
+  // trial states (warm start, line search) under the looser trial mass
+  // tolerance: they only steer, and the strict 0.5% check rejected a
+  // self-generated target at its own warm start (#656). The returned
+  // state is re-priced below under the strict check.
+  const solved = withTrialMassTolerance(() => {
+    let mu = lt.map(v => -(v - lm) * scale);
+    let eta = 1.0;
+    let lp = forward(mu).map(v => Math.log(Math.max(v, TINY)));
+    let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+    for (let it = 0; it < 200 && err >= 0.2; it++) {
+      let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
       const mm = mean(muN);
       muN = muN.map(v => v - mm);
-      let pN = forward(muN).map(v => Math.max(v, TINY));
-      const sN = pN.reduce((a, b) => a + b, 0);
-      pN = pN.map(v => v / sN);
-      if (Math.max(...pN.map((v, i) => Math.abs(Math.log(v) - lt[i]))) < cur) {
-        mu = muN; accepted = true; break;
-      }
-      step = step.map(v => v * 0.5);
+      const lpN = forward(muN).map(v => Math.log(Math.max(v, TINY)));
+      const eN = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
+      if (eN < err) { mu = muN; lp = lpN; err = eN; eta = Math.min(eta * 1.2, 1.5); }
+      else { eta *= 0.5; if (eta < 1e-4) break; }
     }
-    // no line-search step improved: the state cannot change, so further
-    // sweeps would repeat this one exactly. Stop and report (#421).
-    if (!accepted) break;
-  }
+    let iterations = 0;
+    for (let it = 0; it < maxIter; it++) {
+      const { pv, r } = residualAt(mu);
+      const cur = Math.max(...r.map(Math.abs));
+      if (cur < tol) return { mu, iterations };
+      iterations = it + 1;
+      const J = blockRaceJacobian(mu, cluster, loading, D, { points, qa });
+      const A = J.map((row, i) => row.map(v => v / pv[i] * scale + 1 / n));
+      let step = solve(A, r.map(v => -v));
+      const nn = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
+      if (nn > 5) step = step.map(v => v * 5 / nn);
+      step = step.map(v => v * scale);
+      let accepted = false;
+      for (let k = 0; k < 8; k++) {
+        let muN = mu.map((m, i) => m + step[i]);
+        const mm = mean(muN);
+        muN = muN.map(v => v - mm);
+        let pN = forward(muN).map(v => Math.max(v, TINY));
+        const sN = pN.reduce((a, b) => a + b, 0);
+        pN = pN.map(v => v / sN);
+        if (Math.max(...pN.map((v, i) => Math.abs(Math.log(v) - lt[i]))) < cur) {
+          mu = muN; accepted = true; break;
+        }
+        step = step.map(v => v * 0.5);
+      }
+      // no line-search step improved: the state cannot change, so further
+      // sweeps would repeat this one exactly. Stop and report (#421).
+      if (!accepted) break;
+    }
+    return { mu, iterations };
+  });
+  const mu = solved.mu, iterations = solved.iterations;
   const { pv } = residualAt(mu);
   return { mu: mu.map(v => v - mean(mu)),
            residual: Math.max(...pv.map((v, i) => Math.abs(Math.log(v) - lt[i]))),

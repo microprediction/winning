@@ -245,3 +245,43 @@ def test_overflowing_loading_with_compensating_nodes_prices_the_same_race():
     got = race_probabilities(mu, V=c * np.array([1., 1., -1.]), D=D,
                              F=np.array([[-1.], [1.]]) / c, W=W)
     assert np.all(np.isfinite(got)) and np.abs(got - ref).max() < 1e-12
+
+
+# #656: a target priced by the default hierarchical forward inverts with
+# the same controls; the warm start's mass defect no longer aborts it.
+_F656 = dict(mu=np.array([0.36, -0.92, 0.30, 0.26]), cluster=[0, 0, 1, 2],
+             loading=[0.022, 1.28, -0.083, -0.04], D=[0.035, 25, 0.062, 0.015])
+
+
+def test_block_inverse_round_trips_a_default_target():
+    from winning.factor.blocks import (abilities_from_block_race,
+                                       block_race_probabilities)
+    f = _F656
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        t = block_race_probabilities(f["mu"], f["cluster"], f["loading"], f["D"])
+        mu, res, _ = abilities_from_block_race(t, f["cluster"], f["loading"],
+                                               f["D"], tol=1e-8)
+    assert res < 1e-8 and np.abs(mu - f["mu"]).max() < 1e-6
+
+
+@pytest.mark.parametrize("kind", ["blocks", "nested", "tree"])
+def test_structured_inverse_round_trips_a_default_target(kind):
+    from winning import Blocks, Nested, Tree
+    from winning.factor.races import abilities_from_race, race_probabilities
+    f = _F656
+    s = {"blocks": Blocks(f["cluster"], f["loading"], f["D"]),
+         "nested": Nested(f["cluster"], f["loading"], f["D"],
+                          [0.05, -0.1, 0.08, 0.02], 0.5),
+         "tree": Tree(f["cluster"], f["loading"], f["D"], [3, 3, 4, 4, -1],
+                      [0, 0, 0, 0.2, 0])}[kind]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = race_probabilities(f["mu"], structure=s)
+        mu, info = abilities_from_race(p, structure=s, return_info=True)
+    assert info["converged"] and np.abs(mu - f["mu"]).max() < 1e-6
+
+
+def test_block_mass_check_is_strict_outside_inverses():
+    from winning.factor.blocks import _MASS_TOL
+    assert _MASS_TOL.get() == 5e-3

@@ -2,7 +2,7 @@
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
          abilitiesFromBlockRace, validateTree, withoutCommonShock,
-         treeCluster } from "./blocks.mjs";
+         treeCluster, withTrialMassTolerance } from "./blocks.mjs";
 import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
          asLoadings, asIdio } from "./core.mjs";
 
@@ -136,21 +136,28 @@ function invertGenericInfo(p, forward, tol = 1e-9, maxIter = 400, scale = 1) {
   pv = rescaledTarget(pv);                 // overflow-safe (#463)
   const lt = pv.map(v => Math.log(v));
   const lm = mean(lt);
-  let mu = lt.map(v => -(v - lm) * scale);
-  let eta = 1.0;
-  let lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
-  let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
-  let iters = 0;
-  for (let it = 0; it < maxIter && err >= tol; it++) {
-    iters = it + 1;
-    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
-    const mm = mean(muN);
-    muN = muN.map(v => v - mm);
-    const lpN = forward(muN).map(v => Math.log(Math.max(v, 1e-300)));
-    const e = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
-    if (e < err) { mu = muN; lp = lpN; err = e; eta = Math.min(eta * 1.2, 1.5); }
-    else { eta *= 0.5; if (eta < 1e-4) break; }
-  }
+  // trial states under the hierarchical kernels' looser trial mass
+  // tolerance; the returned state is re-priced strictly (#656)
+  let { mu, iters } = withTrialMassTolerance(() => {
+    let mu = lt.map(v => -(v - lm) * scale);
+    let eta = 1.0;
+    let lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
+    let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+    let iters = 0;
+    for (let it = 0; it < maxIter && err >= tol; it++) {
+      iters = it + 1;
+      let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
+      const mm = mean(muN);
+      muN = muN.map(v => v - mm);
+      const lpN = forward(muN).map(v => Math.log(Math.max(v, 1e-300)));
+      const e = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
+      if (e < err) { mu = muN; lp = lpN; err = e; eta = Math.min(eta * 1.2, 1.5); }
+      else { eta *= 0.5; if (eta < 1e-4) break; }
+    }
+    return { mu, iters };
+  });
+  const lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
+  const err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
   return { mu, converged: err < tol, maxLogResidual: err, iterations: iters };
 }
 

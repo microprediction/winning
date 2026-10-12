@@ -1756,6 +1756,23 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
     # written at c = 1e-3 and 0.25 at c = 1e3 (#100)
     scale = float(np.sqrt(np.median(totvar)))
     mu = -(logt - logt.mean()) / 2.0 * scale
+    # Trial states are priced under the hierarchical kernels' looser trial
+    # mass tolerance: they only steer, and the strict 0.5% check rejected
+    # a self-generated target at its own warm start (#656). The state
+    # returned as converged is re-priced under the strict check below.
+    from .blocks import _trial_mass_tolerance
+    with _trial_mass_tolerance():
+        mu, err, iters = _structure_sweeps(mu, logt, structure, totvar,
+                                           scale, points, n_iter, tol)
+    if err < tol:
+        phat = dispatch_probabilities(mu, structure, points=points)
+        err = float(np.abs(np.log(np.maximum(phat, 1e-300)) - logt).max())
+    return mu, bool(err < tol), float(err), iters
+
+
+def _structure_sweeps(mu, logt, structure, totvar, scale, points, n_iter,
+                      tol):
+    from .structures import dispatch_probabilities
     alpha, last = 0.7, np.inf
     err, iters = np.inf, 0
     for it in range(n_iter):
@@ -1774,7 +1791,7 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
         lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
         mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
-    return mu, bool(err < tol), float(err), iters
+    return mu, float(err), iters
 
 
 # ---------------------------------------------------------------------------

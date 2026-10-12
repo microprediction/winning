@@ -18,6 +18,9 @@ accelerates the block field pass transparently.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
+
 import numpy as np
 
 from ..rustconfig import load_fastrace
@@ -300,11 +303,31 @@ def _scalar_loading(loading, kind):
     return L
 
 
-def _checked_mass(raw, kind, mass_tol=5e-3):
+# The mass tolerance in force. An inverse's INTERNAL trial states (warm
+# start, line-search trials) are priced under a looser one: their shares
+# only steer the solve, and the 0.5% check rejected a self-generated
+# target at its own warm start before the first update (#656). The state
+# an inverse returns is always re-priced under the strict default.
+_MASS_TOL = contextvars.ContextVar("winning_block_mass_tol", default=5e-3)
+_TRIAL_MASS_TOL = 0.05
+
+
+@contextlib.contextmanager
+def _trial_mass_tolerance():
+    token = _MASS_TOL.set(max(_MASS_TOL.get(), _TRIAL_MASS_TOL))
+    try:
+        yield
+    finally:
+        _MASS_TOL.reset(token)
+
+
+def _checked_mass(raw, kind, mass_tol=None):
     """Raw lattice mass is a diagnostic, not a nuisance: a material
     defect means the window missed the winner's region, and normalizing
     it away returns confident wrong shares (the fourteenth review's
     0.68/0.32 against a forced 0.50/0.50). Raise instead."""
+    if mass_tol is None:
+        mass_tol = _MASS_TOL.get()
     t = float(raw.sum())
     # NaN compares false against any tolerance, so test finiteness
     # explicitly or a NaN mass sails through the check
@@ -454,7 +477,18 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     from .structures import _loading_var
     scale = float(np.sqrt(np.median(
         as_idio(D, n, positive=True) + _loading_var(loading, n))))
-    # adaptive fixed point into Newton's basin
+    # adaptive fixed point into Newton's basin; trial states under the
+    # trial mass tolerance, the returned state re-priced strictly (#656)
+    with _trial_mass_tolerance():
+        mu, cur, it = _block_inverse_solve(lt, forward, cluster, loading, D,
+                                           points, qa, scale, ones, tol,
+                                           max_iter)
+    pv = forward(mu); pv = np.maximum(pv, TINY); pv = pv / pv.sum()
+    return mu - mu.mean(), float(np.abs(np.log(pv) - lt).max()), it
+
+
+def _block_inverse_solve(lt, forward, cluster, loading, D, points, qa,
+                         scale, ones, tol, max_iter):
     mu = -(lt - lt.mean()) * scale
     eta = 1.0
     lp = np.log(np.maximum(forward(mu), TINY))
@@ -477,7 +511,7 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
         r = np.log(pv) - lt
         cur = np.abs(r).max()
         if cur < tol:
-            return mu - mu.mean(), float(cur), it
+            return mu, float(cur), it
         J = block_race_jacobian(mu, cluster, loading, D, points=points, qa=qa)
         Jl = J / pv[:, None] * scale         # dimensionless
         step, *_ = np.linalg.lstsq(Jl + ones, -r, rcond=1e-12)
@@ -492,8 +526,7 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
                 mu = mu_n
                 break
             step *= 0.5
-    pv = np.maximum(forward(mu), TINY); pv = pv / pv.sum()
-    return mu - mu.mean(), float(np.abs(np.log(pv) - lt).max()), max_iter
+    return mu, np.inf, max_iter
 
 
 def _without_common_shock(parent, strength, n_clusters):
