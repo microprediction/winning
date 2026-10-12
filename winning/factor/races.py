@@ -2155,8 +2155,13 @@ def plackett_luce_topk_probabilities(p, k=3):
     # drifted to k + 3e-3 (caught by the gap-stress battery)
     rest = np.array([p[np.arange(n) != j].sum() for j in range(n)])
     # second: j first, i second -- P2[j, i] = p_j p_i / rest_j
-    P2 = (p / np.maximum(rest, 1e-300))[:, None] * p[None, :]
+    # as p_j * (p_i / rest_j): p_i <= rest_j off the diagonal, so the
+    # ratio is at most one and every POSITIVE rest is a valid divisor. A
+    # floor of 1e-300 under rest underpaid subnormal longshots, so
+    # [1, 1e-301 x3] gave top-2 memberships summing to 1.3, not 2 (#384).
     exhausted = rest <= 0.0
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        P2 = p[:, None] * (p[None, :] / np.where(exhausted, 1.0, rest)[:, None])
     P2[exhausted, :] = (p[exhausted] / (n - 1))[:, None]
     np.fill_diagonal(P2, 0.0)
     out += P2.sum(axis=0)
@@ -2182,7 +2187,10 @@ def plackett_luce_topk_probabilities(p, k=3):
             if denom2 <= 0.0:
                 contrib = np.full(n, w / (n - 2))
             else:
-                contrib = w * p / denom2
+                # w * (p / denom2): the product w * p underflows first
+                # for subnormal longshots (#384)
+                with np.errstate(over="ignore", invalid="ignore"):
+                    contrib = w * (p / denom2)
             contrib[j] = 0.0
             contrib[sec] = 0.0
             out += contrib
