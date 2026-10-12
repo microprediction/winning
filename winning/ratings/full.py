@@ -57,8 +57,77 @@ def _psd_repair(S, floor_frac=1e-8):
             "observation under a very diffuse prior)")
     S = 0.5 * S + 0.5 * S.T        # halved first: see #279
     lam, U = np.linalg.eigh(S)
-    floor = floor_frac * max(float(np.trace(S)) / len(S), 1e-12)
-    return (U * np.maximum(lam, floor)) @ U.T
+    # Clip only NEGATIVE eigenvalues (roundoff), and leave a PSD matrix
+    # alone. This raised every eigenvalue to floor_frac * trace / n, so a
+    # perfectly common component (S = eps I + 11') turned a contrast
+    # variance of 2e-12 into ~2e-8 and the update priced a different
+    # race (#650). Small and zero eigenvalues are model, not noise;
+    # callers that need an inverse use forms that do not (update_market_full).
+    if lam.min() >= 0.0:
+        return S
+    return (U * np.maximum(lam, 0.0)) @ U.T
+
+
+def _check_full_inputs(m, S, V=None, A=None, beta2=1.0):
+    """The shape contract of every full-covariance update, checked up
+    front: m a finite (n,) vector, S an (n, n) matrix, A (k, n) when
+    given, V loadings for the k observed rows and beta2 broadcastable to
+    k. A singleton order returns before any of these is touched, so it
+    certified a length-2 "covariance" for a length-3 mean, or a team map
+    with the wrong number of players, as an exact posterior (#456)."""
+    m = np.asarray(m, dtype=float)
+    if m.ndim != 1:
+        raise ValueError(f"m must be a vector of belief means; got shape {m.shape}")
+    n = m.shape[0]
+    S = np.asarray(S, dtype=float)
+    if S.shape != (n, n):
+        raise ValueError(
+            f"S must be the ({n}, {n}) belief covariance of the {n} means; "
+            f"got shape {S.shape}")
+    k = n
+    if A is not None:
+        A = np.atleast_2d(np.asarray(A, dtype=float))
+        if A.ndim != 2 or A.shape[1] != n:
+            raise ValueError(
+                f"A must map the {n} players to the observed rows, shape "
+                f"(k, {n}); got shape {A.shape}")
+        k = A.shape[0]
+    if V is not None:
+        as_loadings(V, k)
+    try:
+        np.broadcast_to(np.asarray(beta2, dtype=float), (k,))
+    except ValueError:
+        raise ValueError(
+            f"beta2 must be a scalar or one variance per observed row "
+            f"({k}); got shape {np.shape(beta2)}") from None
+    return k
+
+
+def _drop_common_mode(Sobs):
+    """Remove a perfectly common component c 11' from the observation-
+    space belief, which no winner or order can see (it shifts every
+    performance equally), before it is split into loadings.
+
+    Left in, it dominated the split: with S = eps I + 11' the contrast
+    variance 2 eps was a 1e-12 remainder of an order-one factor, the
+    split's tolerance swallowed it, and the update priced a different
+    race (P 0.76 against the exact 0.69 at eps = 1e-12; posterior
+    contrast variance 40% off already at eps = 1e-6, #650). c is the
+    smallest off-diagonal entry, clipped to [0, c*] where c* is the
+    largest c that leaves the belief PSD, so a diagonal or
+    contrast-dominated belief (the common filter state) is unchanged."""
+    k = Sobs.shape[0]
+    if k < 2:
+        return Sobs
+    off = Sobs[~np.eye(k, dtype=bool)]
+    c = float(off.min())
+    if not c > 0.0:
+        return Sobs
+    one = np.ones(k)
+    q = float(one @ np.linalg.pinv(Sobs, hermitian=True) @ one)
+    if q > 0.0:
+        c = min(c, 1.0 / q)
+    return Sobs - c * np.outer(one, one)
 
 
 def _belief_split(S, tol=1e-8, max_rank=8):
@@ -142,7 +211,7 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
     else:
         A = np.atleast_2d(np.asarray(A, dtype=float))
     k = A.shape[0]
-    Sobs = A @ S @ A.T
+    Sobs = _drop_common_mode(A @ S @ A.T)
     B, psi = _belief_split(Sobs)
     beta2b = np.broadcast_to(np.asarray(beta2, dtype=float),
                              (k,)).astype(float)
@@ -203,6 +272,7 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
         return omega @ grads, logZ
 
     G, logZ = mixture(mu_obs)
+    G = G - G.mean()               # contrasts only, as H below (#650)
     m_new = m + S @ (A.T @ G)
     # coordinate steps in the belief's own units
     sd_obs = np.sqrt(np.maximum(np.diag(Sobs), 0.0))
@@ -217,7 +287,14 @@ def _mixture_update_full(m, S, V, beta2, node_logp_grad, nodes_log2=10,
         gm, _ = mixture(mu_obs - ej)
         H[j] = (gp - gm) / (2 * steps[j])
     H = 0.5 * H + 0.5 * H.T        # halved first: see #279
-    SAt = S @ A.T
+    # Winner and order likelihoods see only contrasts of mu_obs, so the
+    # exact H annihilates 1. Projecting the difference-noise out keeps a
+    # large common belief component from being multiplied into it: with
+    # S = eps I + 11' the lift S A' H A S otherwise moved the posterior
+    # contrast variance 100x at eps = 1e-12 (#650).
+    Pk = np.eye(k) - np.ones((k, k)) / k
+    H = Pk @ H @ Pk
+    SAt = S @ A.T @ Pk
     S_new = _psd_repair(S + SAt @ H @ SAt.T)
     return m_new, S_new, float(logZ)
 
@@ -328,6 +405,7 @@ def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
     are order-heavy.
     """
     from ..outcomes import as_order
+    _check_full_inputs(m, S, V=V, beta2=beta2)                 # #456
     order = as_order(order, len(np.asarray(m)))                # #129
     if len(order) <= 1:                  # tautology: exact, no mixture
         return (np.asarray(m, dtype=float).copy(),
@@ -355,16 +433,23 @@ def update_market_full(m, S, p_market, tau2=0.25, invert=None,
     y = y - y.mean()
     tau2 = np.broadcast_to(np.asarray(tau2, dtype=float), (n,)).astype(float)
     P = np.eye(n) - np.ones((n, n)) / n
-    Sinv = np.linalg.inv(_psd_repair(S))
-    A = Sinv + P @ np.diag(1.0 / tau2) @ P
-    S_new = np.linalg.inv(A)
-    m_new = S_new @ (Sinv @ m + P @ (y / tau2))
+    S = _psd_repair(S)
+    # posterior (S^-1 + P T^-1 P)^-1 in Woodbury form with L = P T^-1/2,
+    # so a singular or near-singular belief needs no inverse (#650):
+    # S_new = S - S L K^-1 L' S, K = I + L' S L, and
+    # m_new = m + S L K^-1 T^-1/2 (y - P m)
+    it = 1.0 / np.sqrt(tau2)
+    Lw = P * it[None, :]
+    SL = S @ Lw
+    K = np.eye(n) + Lw.T @ SL
+    S_new = S - SL @ np.linalg.solve(K, SL.T)
+    m_new = m + SL @ np.linalg.solve(K, it * (y - P @ m))
     M = P @ (S + np.diag(tau2)) @ P
-    lam, U = np.linalg.eigh(M)
-    keep = lam > 1e-12
+    # contrast-space evidence with a scale-aware rank test: the absolute
+    # lam > 1e-12 dropped every contrast at ability unit 1e-7 and
+    # returned logZ = 0 for any prices (#651)
+    from ._contrast import contrast_gaussian
     r = y - P @ m
-    z = U[:, keep].T @ r
-    logZ = float(-0.5 * (np.sum(z * z / lam[keep])
-                         + np.sum(np.log(lam[keep]))
-                         + keep.sum() * np.log(2.0 * np.pi)))
+    logZ, _ = contrast_gaussian(
+        r, M, scale=float(np.linalg.norm(y)) + float(np.linalg.norm(P @ m)))
     return m_new, _psd_repair(S_new), logZ

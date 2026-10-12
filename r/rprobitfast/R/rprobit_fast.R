@@ -51,6 +51,7 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
   alt_f <- droplevels(as.factor(df$alt))
   alt <- as.integer(alt_f)
   J <- max(alt)
+  .check_two_alternatives(J)
   id_f <- droplevels(as.factor(df$id))
   ids <- as.integer(id_f)
   ord <- order(ids, alt)
@@ -66,7 +67,11 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
   Xint <- matrix(0, nrow(Xcov), J - 1L)
   for (j in 2:J) Xint[alt == j, j - 1L] <- 1
   X <- cbind(Xint, Xcov)
-  colnames(X) <- c(paste0("asc_", 2:J), covariates)
+  # named by the caller's alternative labels, as mlogit_fast does: the
+  # internal codes made asc_2 mean rail-vs-bus in one fit and
+  # bus-vs-walk after a relevel, under the same name (#643). Integer
+  # alternatives 1..J keep their old names.
+  colnames(X) <- c(paste0("asc_", levels(alt_f)[2:J]), covariates)
   .check_identified(X, Tn, J)
   unchosen <- .never_chosen(choice, J, levels(alt_f))
   nb <- ncol(X)
@@ -90,6 +95,9 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
   theta0 <- c(rep(0, nb), rep(0.1, nw))
   fit <- optim(theta0, fn, gr, method = "BFGS",
                control = list(maxit = maxit, reltol = 1e-8))
+  sep <- .separation_direction(X, choice, J)
+  if (!is.null(sep) && !length(unchosen)) .warn_separated(sep)
+  P <- .raw_probabilities(fit$par, X, J, r, nodes, nodes_sharp)
   secs <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
   beta <- fit$par[seq_len(nb)]
   names(beta) <- colnames(X)
@@ -106,13 +114,20 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
   for (col in seq_len(r)) for (row in col + seq_len(J - col)) {
     V[row, col] <- fit$par[nb + ki]; ki <- ki + 1L
   }
+  lab <- .loading_labels(fit$par[-seq_len(nb)], J, r, levels(alt_f))
   structure(list(coefficients = beta,
-                 covariance_par = fit$par[-seq_len(nb)],
+                 covariance_par = lab$par,
+                 loadings = lab$V,
+                 alternatives = levels(alt_f),
                  boundary = max(sqrt(rowSums(V^2))) > 50 ||
-                   length(unchosen) > 0L,
+                   length(unchosen) > 0L || !is.null(sep),
                  logLik = -fit$value, time = secs,
-                 convergence = if (length(unchosen)) 2L
+                 convergence = if (length(unchosen) || !is.null(sep)) 2L
                                else fit$convergence,
+                 separation = sep,
+                 # raw per-choice masses are fitted; their row sums miss
+                 # one by at most this much (#376)
+                 mass_defect = max(abs(1 - rowSums(P))),
                  J = J, r = r),
             class = "rprobit_fast")
 }

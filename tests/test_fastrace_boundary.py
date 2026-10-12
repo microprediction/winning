@@ -581,3 +581,51 @@ def test_separated_kernel_falls_back_outside_its_regime():
     assert np.all(p >= 0) and np.all(p <= 1)
     assert np.max(np.abs(p - np.asarray(ref))) < 1e-9
     assert abs(total - 1) < 1e-6
+
+
+# --- #263: quadrature weights are relative at the PyO3 boundary -----------
+
+def _weights_case():
+    mu = np.array([0.0, 0.3, 1.0])
+    V = np.array([[0.0], [1.0], [-0.5]])
+    return mu, V, np.ones(3), np.array([[-5.0], [5.0]])
+
+
+@pytest.mark.parametrize("W", [[5.0, 5.0], [1e308, 1e308], [0.5, 0.5]])
+def test_factor_weights_are_scale_free(W):
+    mu, V, D, F = _weights_case()
+    base = fastrace.win_probabilities_factor(mu, V, D, F,
+                                             np.array([0.5, 0.5]), 501)[0]
+    got = fastrace.win_probabilities_factor(mu, V, D, F, np.array(W), 501)[0]
+    assert np.abs(got - base).max() < 1e-15
+
+
+@pytest.mark.parametrize("W", [[2.0, -1.0], [0.0, 0.0], [np.nan, 1.0],
+                               [np.inf, 1.0]])
+def test_signed_zero_or_nonfinite_weights_are_refused(W):
+    mu, V, D, F = _weights_case()
+    with pytest.raises(ValueError):
+        fastrace.win_probabilities_factor(mu, V, D, F, np.array(W), 501)
+    with pytest.raises(ValueError):
+        fastrace.ordered_prefixes(mu, V, D, F, np.array(W), 501,
+                                  float("nan"), float("nan"), 1)
+
+
+def test_block_kernels_are_scale_free():
+    mu = np.array([0.0, 0.3, -0.2, 0.5])
+    sd = np.ones(4)
+    v = np.array([0.5, 0.4, 0.3, 0.6])
+    starts = np.array([0, 2], dtype=np.int64)
+    an = np.array([-1.732, 0.0, 1.732])
+    aw = np.array([1 / 6, 2 / 3, 1 / 6])
+    for w in (aw * 10, aw * 1e300):
+        assert np.allclose(fastrace.block_race(mu, sd, v, starts, an, w, 257),
+                           fastrace.block_race(mu, sd, v, starts, an, aw, 257),
+                           atol=1e-14)
+        assert np.allclose(
+            fastrace.block_race_r(mu, sd, v[:, None], starts, an[:, None], w,
+                                  257),
+            fastrace.block_race_r(mu, sd, v[:, None], starts, an[:, None], aw,
+                                  257), atol=1e-14)
+    with pytest.raises(ValueError):
+        fastrace.block_race(mu, sd, v, starts, an, -aw, 257)

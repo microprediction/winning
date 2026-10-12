@@ -350,7 +350,7 @@ def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
     return -Ji / max(p[i], 1e-300), p[i]
 
 
-def _floor_v(v_prior, v_post):
+def _floor_v(v_prior, v_post, frac=1e-6):
     """Floor the posterior variance, except where the caller declared
     the coordinate perfectly known.
 
@@ -361,8 +361,17 @@ def _floor_v(v_prior, v_post):
     belief could not stay known across an update (#78). Unchanged
     wherever v > 0, which is where the floor exists to keep a
     downstream 1/v finite.
+
+    The floor is a FRACTION of the prior variance, not an absolute
+    number in ability units: an absolute 1e-6 (1e-4 on the ranked
+    paths) imposed a unit the API never declares, so the same model
+    written at ability scale 1e-6 had its posterior variance inflated
+    a million-fold and the next race moved abilities by 800 natural
+    units (#660). At unit prior variance the floors are unchanged.
     """
-    return np.where(v_prior <= 0.0, 0.0, np.maximum(v_post, 1e-6))
+    v_prior = np.asarray(v_prior, dtype=float)
+    return np.where(v_prior <= 0.0, 0.0,
+                    np.maximum(v_post, frac * v_prior))
 
 
 def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
@@ -533,6 +542,78 @@ def _curve_rows(curve, x, m_j):
     return g, dg, F
 
 
+# Relative size below which a linear-domain stage product is treated as
+# underflowed: the stages are rescaled only AFTER each multiplication,
+# so a product of two densities that barely overlap in double range lost
+# whole coordinates of the adjoint (a contradicted 4-runner order
+# returned a score of [22.5, 0, 0, 0], and slightly further out -inf and
+# a no-op update, #655). Below this the Gaussian pass reruns in the log
+# domain, which agrees with the linear pass to rounding wherever both
+# are representable.
+_ORDER_TINY = 1e-250
+
+
+def _log_cum(a, logdx):
+    """Log of the trapezoidal cumulative integral of exp(a), row-wise:
+    c_0 = 0, c_i = dx (y_0/2 + y_1 + ... + y_{i-1} + y_i/2)."""
+    Q, L = a.shape
+    out = np.full((Q, L), -np.inf)
+    if L < 2:
+        return out
+    half = np.log(0.5)
+    ends = np.logaddexp(half + a[:, :1], half + a[:, 1:])      # i >= 1
+    inner = np.full((Q, L - 1), -np.inf)
+    if L > 2:
+        inner[:, 1:] = np.logaddexp.accumulate(a[:, 1:L - 1], axis=1)
+    out[:, 1:] = logdx + np.logaddexp(ends, inner)
+    return out
+
+
+def _order_pass_log(Ms, sd, order, x):
+    """The Gaussian ordered-statistics pass and its adjoint carried in
+    the log domain, batched over rows of Ms: the fallback for orders
+    whose linear-domain stage products underflow (#655).
+    Returns (logP (Q,), grad (Q, nm))."""
+    Ms = np.atleast_2d(Ms)
+    Q, nm = Ms.shape
+    n = len(order)
+    dx = x[1] - x[0]
+    logdx = np.log(dx)
+    lg = np.empty((n, Q, len(x)))
+    rr = np.empty((n, Q, len(x)))
+    for t, j in enumerate(order):
+        z = (x[None, :] - Ms[:, j][:, None]) / sd[j]
+        lg[t] = -0.5 * z * z - np.log(sd[j] * np.sqrt(2 * np.pi))
+        rr[t] = z / sd[j]                    # d log g / d m
+    zl = (x[None, :] - Ms[:, order[-1]][:, None]) / sd[order[-1]]
+    lT = [None] * (n + 1)
+    lT[n] = log_ndtr(zl)
+    for t in range(n - 1, 1, -1):
+        lT[t] = _log_cum(lg[t - 1] + lT[t + 1], logdx)
+
+    def lse(a):
+        mx = a.max(axis=1)
+        safe = np.where(np.isfinite(mx), mx, 0.0)
+        return safe + np.log(np.exp(a - safe[:, None]).sum(axis=1))
+
+    with np.errstate(divide="ignore", invalid="ignore", under="ignore"):
+        a0 = lg[0] + lT[2]
+        logP = logdx + lse(a0)
+        grad = np.zeros((Q, nm))
+        ok = np.isfinite(logP)
+        lP = np.where(ok, logP, 0.0)[:, None]
+        grad[:, order[0]] = (np.exp(a0 + logdx - lP) * rr[0]).sum(axis=1)
+        lu = lg[0] + logdx
+        for t in range(2, n):
+            lw = _log_cum(lu[:, ::-1], logdx)[:, ::-1]      # C^T u
+            grad[:, order[t - 1]] = (np.exp(lw + lg[t - 1] + lT[t + 1] - lP)
+                                     * rr[t - 1]).sum(axis=1)
+            lu = lw + lg[t - 1]
+        grad[:, order[-1]] = -np.exp(lu + lg[n - 1] - lP).sum(axis=1)
+    grad[~ok] = 0.0
+    return np.where(ok, logP, -np.inf), grad
+
+
 def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
     """Joint ordered-statistics likelihood and its exact gradient, by one
     forward and one adjoint sweep, O(nL).
@@ -581,8 +662,14 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
                 pad = max(pad, float(max(span)))
             else:
                 pad = max(pad, 12.0)
-        lo = float((m - pad * sd.max()).min())
-        hi = float((m + pad * sd.max()).max())
+        # sized from the RANKED runners only: an omitted runner is
+        # integrated out and never enters the integrand, but a diffuse
+        # one stretched the grid until the likelihood exceeded one and a
+        # distant one moved it off the field altogether (#648)
+        act = np.asarray(order, dtype=int)
+        ma, sda = m[act], sd[act]
+        lo = float((ma - pad * sda.max()).min())
+        hi = float((ma + pad * sda.max()).max())
     x = np.linspace(lo, hi, L)
     dx = x[1] - x[0]
 
@@ -603,18 +690,29 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
     for t, j in enumerate(order):
         g[t], dg[t], _ = rows(j)
 
+    log_ok = base == "normal" and curves is None
+
+    def in_logs():
+        lp, gr = _order_pass_log(np.asarray(m, dtype=float)[None, :],
+                                 np.asarray(sd, dtype=float), order, x)
+        return float(lp[0]), gr[0]
+
     # forward sweep: scaled T_t for t = n .. 2
     T = np.empty((n + 1, L)); sT = np.zeros(n + 1)
     T[n] = rows(order[-1])[2]
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])
         mx = raw.max()
+        if mx <= _ORDER_TINY * g[t - 1].max() * dx and log_ok:
+            return in_logs()                               # #655
         if mx <= 0:
             return -np.inf, np.zeros(len(m))
         T[t] = raw / mx
         sT[t] = sT[t + 1] + np.log(mx)
 
     raw_p = float(np.sum(g[0] * T[2]) * dx)
+    if raw_p <= _ORDER_TINY * g[0].max() * dx and log_ok:
+        return in_logs()                                   # #655
     if raw_p <= 0:
         return -np.inf, np.zeros(len(m))
     logP = np.log(raw_p) + sT[2]
@@ -629,6 +727,8 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
         w = cum_T(u)                                   # C^T u_t
         # denominator in matching scales: P = <u_t, T_t> e^{su+sT_t}
         denom = float(np.sum(u * T[t]))
+        if denom <= _ORDER_TINY * u.max() and log_ok:
+            return in_logs()                               # #655
         if denom <= 0.0:
             # the running product underflowed in this scaling: the order
             # is numerically impossible at these means/sds, remaining
@@ -641,6 +741,8 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
         grad[order[t - 1]] = (num / denom) * np.exp(sT[t + 1] - sT[t])
         u = w * g[t - 1]
         mx = u.max()
+        if mx <= _ORDER_TINY * w.max() * g[t - 1].max() and log_ok:
+            return in_logs()                               # #655
         if mx <= 0:
             return logP, grad
         u = u / mx
@@ -698,7 +800,7 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
         _, gm = _order_pass(m - ej, sd, order, base=base, curves=curves)
         d2[j] = (gp[j] - gm[j]) / (2 * step[j])
     d2 = _clamp_d2(d2, base)
-    v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
+    v_new = _floor_v(v, v + v ** 2 * d2, frac=1e-4)          # #660
     return m_new, v_new
 
 
@@ -850,7 +952,7 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
         gm, _ = mixture(m - ej)
         d2[j] = (gp[j] - gm[j]) / (2 * step[j])
     d2 = _clamp_d2(d2, base)
-    v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
+    v_new = _floor_v(v, v + v ** 2 * d2, frac=1e-4)          # #660
     return m_new, v_new, float(logZ)
 
 
@@ -911,6 +1013,11 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     v = as_variance(v, len(np.asarray(m)))
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     order = as_order(order, len(np.asarray(m)))                # #129
+    # the loading and noise shapes, before the tautology return: a
+    # singleton order skipped the mixture, where a wrong-shaped V was
+    # the only thing that would have been refused (#456)
+    as_loadings(V, len(v))
+    _beta_per_player(beta2, len(v))
     if len(order) <= 1:
         # a tautology: P = 1 exactly. Through the mixture it came back as
         # log(sum W), which is 2.2e-16 rather than 0 wherever the node
@@ -959,16 +1066,20 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     if base != "normal":
         span = getattr(base, "span", None)
         pad = max(pad, float(max(span))) if span is not None else max(pad, 12.0)
+    # every extent from the ranked columns only: unranked runners are
+    # integrated out and must not size the lattice (#648)
+    act = np.asarray(order, dtype=int)
+    Ma, sda = Ms[:, act], sd[act]
     if curves is not None:
         ext_lo = min(float(curves[j][0][0]) for j in order)
         ext_hi = max(float(curves[j][0][-1]) for j in order)
-        lo = float(Ms.min()) + ext_lo
-        hi = float(Ms.max()) + ext_hi
+        lo = float(Ma.min()) + ext_lo
+        hi = float(Ma.max()) + ext_hi
     else:
-        lo = float((Ms - pad * sd.max()).min())
-        hi = float((Ms + pad * sd.max()).max())
+        lo = float((Ma - pad * sda.max()).min())
+        hi = float((Ma + pad * sda.max()).max())
     if L is None:
-        span_single = float(Ms[0].max() - Ms[0].min()) + 16 * float(sd.max())
+        span_single = float(Ma[0].max() - Ma[0].min()) + 16 * float(sda.max())
         dx_t = span_single / 2001.0
         L = int(np.clip(np.ceil((hi - lo) / max(dx_t, 1e-12)), 2001, 8001))
     x = np.linspace(lo, hi, L)
@@ -994,9 +1105,11 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     T = np.empty((n + 1, Q, L)); sT = np.zeros((n + 1, Q))
     T[n] = rows(order[-1])[2]
     alive = np.ones(Q, dtype=bool)
+    redo = np.zeros(Q, dtype=bool)        # rows to rerun in logs (#655)
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])
         mx = raw.max(axis=1)
+        redo |= mx <= _ORDER_TINY * g[t - 1].max(axis=1) * dx
         dead = mx <= 0
         alive &= ~dead
         mx = np.where(mx > 0, mx, 1.0)
@@ -1004,6 +1117,7 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
         sT[t] = sT[t + 1] + np.where(alive, np.log(mx), 0.0)
 
     raw_p = (g[0] * T[2]).sum(axis=1) * dx
+    redo |= raw_p <= _ORDER_TINY * g[0].max(axis=1) * dx
     alive &= raw_p > 0
     logP = np.where(alive,
                     np.log(np.maximum(raw_p, 1e-300)) + sT[2],
@@ -1017,6 +1131,7 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     for t in range(2, n):
         w = cum_T(u)
         denom = (u * T[t]).sum(axis=1)
+        redo |= denom <= _ORDER_TINY * u.max(axis=1)
         ok = alive & (denom > 0)
         num = (w * dg[t - 1] * T[t + 1]).sum(axis=1)
         with np.errstate(over="ignore", invalid="ignore"):
@@ -1025,6 +1140,7 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
         alive = ok
         u = w * g[t - 1]
         mx = u.max(axis=1)
+        redo |= mx <= _ORDER_TINY * w.max(axis=1) * g[t - 1].max(axis=1)
         ok2 = mx > 0
         alive &= ok2
         u = u / np.where(ok2, mx, 1.0)[:, None]
@@ -1039,4 +1155,6 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     ok = alive & (denom > 0)
     num = (u * (-g[n - 1])).sum(axis=1)
     grad[:, order[-1]] = np.where(ok, num / np.where(ok, denom, 1.0), 0.0)
+    if redo.any() and base == "normal" and curves is None:
+        logP[redo], grad[redo] = _order_pass_log(Ms[redo], sd, order, x)
     return logP, grad

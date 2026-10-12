@@ -60,11 +60,10 @@ test_that("the triangular loading loop is empty at J = 2, not backwards", {
 # to a score of exactly ZERO. An optimizer declares convergence
 # precisely where an observation is most badly contradicted.
 #
-# pnorm(log.p = TRUE) removes both. It does NOT remove the quadrature
-# error underneath -- the fixed rule samples the own noise where the
-# prior has mass, not the integrand -- so the values are still wrong
-# in the tail, and the last test here pins that rather than pretending
-# otherwise.
+# pnorm(log.p = TRUE) removes both. The quadrature error underneath --
+# the fixed rule sampled the own noise where the prior has mass, not the
+# integrand -- is closed by the closed-form binary and the tilted
+# own-noise nodes.
 
 .binary_ll <- function(gap, Qf = 7L, Qz = 7L) {
   nd <- .nodes3(Qf = Qf, Qz = Qz, r = 1L)
@@ -104,13 +103,19 @@ test_that("moderate gaps are accurate, so the tail failure is the rule", {
   }
 })
 
-test_that("the remaining quadrature error is recorded, not claimed fixed", {
-  # a measurement so a later change closing #270's third defect has
-  # something to move: at a gap of -20 this is 38% away
+test_that("the binary tail is exact and the ternary tail is tilted (#270)", {
+  # was 38% away at a gap of -20: J = 2 is the closed form now, and
+  # J >= 3 tilts the own-noise nodes to each observation's mode
   ex <- pnorm(-20 / sqrt(2), log.p = TRUE)
-  got <- .binary_ll(-20)
-  expect_gt(abs(got - ex) / abs(ex), 0.3)
-  expect_lt(got, ex)                        # understates the probability
+  expect_lt(abs(.binary_ll(-20) - ex), 1e-12 * abs(ex))
+  nd <- .nodes3(7L, 7L, 0L); ndS <- .sobol_nodes3(0L, 10L)
+  for (gap in c(-3, -8, -20, -60)) {
+    X <- matrix(c(gap, 0, -80), ncol = 1L)
+    got <- -.nll_core(1, list(X), 1L, 3L, 0L, nd, ndS,
+                      want_grad = FALSE)$value
+    ex <- pnorm(gap / sqrt(2), log.p = TRUE)
+    expect_lt(abs(got - ex), 1e-7 * abs(ex))
+  }
 })
 
 test_that("an ordinary panel still fits", {
@@ -161,7 +166,10 @@ test_that("node dispatch uses the centred pairwise-safe bound (#419)", {
   gh <- .nodes3(7L, 7L, 1L)
   got <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
                         nodes_sharp = .sobol_nodes3(1L, 10L))$value)
-  expect_lt(abs(got - 0.15149432190016066), 2e-3)
+  # smooth sharpness 3.017 sits inside the blend window (#420), so this
+  # is the continuous mix of the tilted tensor and the Sobol cloud, as in
+  # python (0.15682 there; Sobol generators differ)
+  expect_lt(abs(got - 0.15149432190016066), 6e-3)
   forced_gh <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
                               nodes_sharp = gh)$value)
   expect_gt(abs(forced_gh - 0.15149432190016066), 1e-2)
@@ -313,11 +321,14 @@ test_that("Gauss-Hermite order one is the one-node rule (#504)", {
                   x = c(-1, 1, -0.5, 0.5))
   attr(d, "idx") <- data.frame(id = rep(1:2, each = 2),
                                alt = factor(rep(1:2, 2)))
-  f1 <- mlogit_fast(chosen ~ x, d, r = 0L, Qf = 1L, Qz = 3L, maxit = 3L)
-  f7 <- mlogit_fast(chosen ~ x, d, r = 0L, Qf = 7L, Qz = 3L, maxit = 3L)
+  # two observations are separated (#642): the warning is expected here
+  f1 <- suppressWarnings(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 1L,
+                                     Qz = 3L, maxit = 3L))
+  f7 <- suppressWarnings(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 7L,
+                                     Qz = 3L, maxit = 3L))
   expect_equal(f1$logLik, f7$logLik)          # Qf is inert at r = 0
-  expect_true(is.finite(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 1L,
-                                    maxit = 3L)$logLik))
+  expect_true(is.finite(suppressWarnings(
+    mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 1L, maxit = 3L))$logLik))
 })
 
 test_that("an idx that does not cover data is refused, not a prefix (#520)", {
@@ -390,4 +401,60 @@ test_that("the formula is a model formula, not a list of columns (#472)", {
   expect_identical(names(fit(chosen ~ z + g)$coefficients),
                    c("(Intercept):b", "(Intercept):c", "z", "gq", "gs"))
   expect_error(fit(chosen ~ x | 0), "multi-part")
+})
+
+# --- round 3 (#641, #581, #642, #376) ---
+
+.binary_offset_data <- function(off = c(5, 0, 0, 5)) {
+  d <- data.frame(chosen = c(TRUE, FALSE, FALSE, TRUE), off = off,
+                  off2 = c(1, 2, 3, 4))
+  attr(d, "idx") <- data.frame(id = rep(1:2, each = 2), alt = rep(1:2, 2))
+  d
+}
+
+test_that("formula offsets enter the utilities (#641)", {
+  d <- .binary_offset_data()
+  plain <- suppressWarnings(mlogit_fast(chosen ~ 1, d, r = 0L, maxit = 0L))
+  wo <- mlogit_fast(chosen ~ offset(off), d, r = 0L, maxit = 0L)
+  expect_equal(plain$logLik, 2 * log(0.5))
+  expect_equal(wo$logLik, 2 * pnorm(5 / sqrt(2), log.p = TRUE),
+               tolerance = 1e-10)
+  # a common per-choice-set offset changes nothing
+  d2 <- d; d2$off <- d2$off + c(7, 7, -3, -3)
+  expect_equal(mlogit_fast(chosen ~ offset(off), d2, r = 0L,
+                           maxit = 0L)$logLik, wo$logLik)
+  # several offset() terms add
+  two <- mlogit_fast(chosen ~ offset(off) + offset(off2), d, r = 0L,
+                     maxit = 0L)
+  d3 <- d; d3$off <- d$off + d$off2
+  expect_equal(two$logLik, mlogit_fast(chosen ~ offset(off), d3, r = 0L,
+                                       maxit = 0L)$logLik)
+  # row order is canonicalised with the offset
+  dp <- d[c(2, 1, 4, 3), ]
+  attr(dp, "idx") <- attr(d, "idx")[c(2, 1, 4, 3), ]
+  expect_equal(mlogit_fast(chosen ~ offset(off), dp, r = 0L,
+                           maxit = 0L)$logLik, wo$logLik)
+  bad <- .binary_offset_data(c(5, NA, 0, 5))
+  expect_error(mlogit_fast(chosen ~ offset(off), bad, r = 0L), "finite")
+})
+
+test_that("one alternative is refused (#581)", {
+  d <- data.frame(chosen = rep(TRUE, 4), x = 1:4)
+  attr(d, "idx") <- data.frame(id = 1:4, alt = rep(1L, 4))
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L), "at least two")
+})
+
+test_that("a separated design is flagged and the mass defect reported", {
+  Tn <- 100L
+  d <- data.frame(id = rep(seq_len(Tn), each = 2), alt = rep(1:2, Tn))
+  d$x <- ifelse((d$id <= Tn / 2 & d$alt == 1) | (d$id > Tn / 2 & d$alt == 2),
+                1, -1)
+  d$chosen <- d$x == 1
+  attr(d, "idx") <- d[, c("id", "alt")]
+  expect_warning(f <- mlogit_fast(chosen ~ 0 + x, d, r = 0L, maxit = 500L),
+                 "separated")
+  expect_equal(f$convergence, 2L)
+  expect_gt(abs(f$separation[["x"]]), 0.5)
+  expect_equal(f$alternatives, c("1", "2"))
+  expect_true(f$mass_defect < 1e-12)          # J = 2 is the closed form
 })
