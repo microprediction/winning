@@ -373,8 +373,10 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
     # same-signed small terms. The complement alone rounded
     # [-1e-17, 1e-17] to exactly 0 (#664).
     out_ <- pnorm(a2) + pnorm(-b2)
-    mid <- suppressWarnings(ifelse(out_ < 0.5, log1p(-out_),
-                                   log(0.5 * (.erf_r2(b2) - .erf_r2(a2)))))
+    mid <- log1p(-out_)
+    nar <- which(out_ >= 0.5 & a2 < 0 & b2 > 0)   # only these pay for erf
+    if (length(nar))
+      mid[nar] <- log(0.5 * (.erf_r2(b2[nar]) - .erf_r2(a2[nar])))
     lm <- ifelse(b2 <= 0, left, mid)
     lm[a2 >= b2] <- -Inf
     out[pos] <- lm
