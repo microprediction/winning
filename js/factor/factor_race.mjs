@@ -457,9 +457,20 @@ export function asWeights(W, nNodes, where = "W") {
    forward returned NaN (#416). */
 export function asFactorLaw(F, W, where = "W") {
   const Wn = asWeights(W, F.length, where);
+  // ... and the lightest nodes whose COMBINED relative mass is at most
+  // 1e-15: they change no share at double precision but size the
+  // window (#416; python shapes.as_factor_law, the browser's asFactorLaw)
+  const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
+  const drop = new Array(Wn.length).fill(false);
+  let cum = 0;
+  for (const q of order) {
+    cum += Wn[q];
+    if (cum > 1e-15) break;
+    drop[q] = true;
+  }
   const keepF = [], keepW = [];
   let tot = 0;
-  for (let q = 0; q < Wn.length; q++) if (Wn[q] > 0) { keepF.push(F[q]); keepW.push(Wn[q]); tot += Wn[q]; }
+  for (let q = 0; q < Wn.length; q++) if (!drop[q] && Wn[q] > 0) { keepF.push(F[q]); keepW.push(Wn[q]); tot += Wn[q]; }
   return { F: keepF, W: keepW.map((v) => v / tot) };
 }
 
@@ -476,11 +487,29 @@ export function asPoints(points, fallback = 501) {
   return v;
 }
 
+/* The gauge, scale-safe (python core._gauge_center, #471): an exactly
+   common column centres to exactly zero -- summing row / N left a residue
+   at [1e20] * 9 (a 0.0055 share error) and turned [1e100] * 9 into the
+   uniform vector -- and a column whose mean or differences overflow is
+   centred in units of its largest entry, (V/s - mean) * s. */
 function centredLoadings(V, N) {
   const r0 = V[0].length;
   const colMean = new Array(r0).fill(0);
   for (const row of V) for (let j = 0; j < r0; j++) colMean[j] += row[j] / N;
-  return V.map((row) => row.map((v, j) => v - colMean[j]));
+  const out = V.map((row) => row.map((v, j) => v - colMean[j]));
+  for (let j = 0; j < r0; j++) {
+    if (V.every((row) => row[j] === V[0][j])) {
+      for (const row of out) row[j] = 0;
+      continue;
+    }
+    if (out.every((row) => Number.isFinite(row[j]))) continue;
+    let s = 0;
+    for (const row of V) s = Math.max(s, Math.abs(row[j]));
+    let m = 0;
+    for (const row of V) m += row[j] / s / N;
+    for (let i = 0; i < N; i++) out[i][j] = (V[i][j] / s - m) * s;
+  }
+  return out;
 }
 
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
@@ -653,11 +682,7 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
   // measures it: V -> aV, F -> F/a is the SAME forward, but reading the
   // factor variance off raw sum(V_i^2) inflated the warm start and the
   // step cap by a^2 and missed by 89 points at a = 100 (#443).
-  const Vc = (() => {
-    const cm = new Array(r).fill(0);
-    for (const row of V) for (let j = 0; j < r; j++) cm[j] += row[j] / N;
-    return V.map((row) => row.map((v, j) => v - cm[j]));
-  })();
+  const Vc = centredLoadings(V, N);                 // scale-safe (#471)
   const Fm = new Array(r).fill(0);
   F.forEach((fq, k) => fq.forEach((v, d) => { Fm[d] += W[k] * v; }));
   const CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>

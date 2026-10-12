@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -96,8 +96,8 @@ export function factorRule(V, D, F = null, W = null) {
     // the caller's nodes go through the same door as V and D: every node
     // carries exactly the loadings' rank, and there is one weight per
     // node (#290)
-    const Fv = asFactorNodes(F, r, "F");
-    return { F: Fv, W: asWeights(W, Fv.length, "W") };
+    // paired, with null nodes dropped (#416)
+    return asFactorLaw(F, W, r, "F", "W");
   }
   // adaptive order: sharpness rule identical to python/R. The statistic
   // is the pairwise-safe bound sqrt(2) * max_i |(PV)_i| / sqrt(D_i), on
@@ -292,7 +292,7 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
   };
   // half the tightest sd TIMES the base's central scale (#600)
   const budget = 0.5 * smin * baseResolution(fn) * Math.max(points - 1, 1);
-  let d = delta;
+  let d = asDelta(delta, "bulkWindow");
   let [lo, hi] = windowAt(d);
   while (hi - lo > budget && d < 1e-4) {
     d = Math.min(d * 100, 1e-4);
@@ -347,9 +347,21 @@ export function asWindow(win, where = "raceProbabilities") {
   return win;
 }
 
+/* The bulk window's tail mass: a number in (0, 0.5). delta: -1 hung the
+   relaxation loop (a negative times 100 never reaches 1e-4), 1 and 2
+   priced a different race, a string was coerced and NaN returned NaN
+   (#445, matching python's races._as_delta). */
+export function asDelta(delta, where = "raceProbabilities") {
+  if (typeof delta !== "number" || !Number.isFinite(delta) ||
+      !(delta > 0 && delta < 0.5))
+    throw new Error(`${where}: delta must be a number in (0, 0.5); got ${typeof delta === "string" ? JSON.stringify(delta) : String(delta)}`);
+  return delta;
+}
+
 export function forwardGrid(Mall, sd, st, points, win = "bulk",
                             delta = 1e-12) {
   asWindow(win, "forwardGrid");
+  asDelta(delta, "forwardGrid");
   let x;
   if (win === "bulk") {
     x = bulkWindow(Mall, sd, points, delta, st.fn || null);
@@ -439,6 +451,7 @@ export function raceProbabilities(mu, opts = {}) {
   // is omission, as for every option.
   if (win !== "bulk" && win !== "span")
     throw new Error(`raceProbabilities: window must be "bulk" or "span"; got ${typeof win === "string" ? JSON.stringify(win) : String(win)}`);
+  asDelta(delta);                                         // (#445)
   const c = collapseStructure(structure, V, D, F, W, "raceProbabilities");
   if (c.structure) {
     return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes, window: win, delta });
@@ -518,9 +531,8 @@ function validatedRaceTarget(pTarget, targetFloor) {
   if (targetFloor != null) {
     if (!(typeof targetFloor === "number" && targetFloor > 0 && Number.isFinite(targetFloor)))
       throw new Error("targetFloor must be positive");
-    target = floorableTarget(target, 1);   // a probability floor (#592)
-    floored = target.map(v => v < targetFloor);
-    target = target.map(v => Math.max(v, targetFloor));
+    // a probability floor, in the final normalised scale (#592)
+    ({ target, floored } = applyFloor(target, 1, targetFloor));
   } else if (target.some(v => v <= 0)) {
     throw new Error(
       "all target probabilities must be positive: a zero share has no " +

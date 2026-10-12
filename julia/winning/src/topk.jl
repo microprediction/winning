@@ -205,7 +205,7 @@ function _topk_factor_nodes(V, n, qa, caller)
          reshape(Float64.(collect(V)), :, 1)
     r = size(Vm, 2)
     r > 2 && error("$caller is implemented for factor rank <= 2")
-    Vm = Vm .- sum(Vm, dims = 1) ./ n
+    Vm = _gauge_center(Vm)                     # scale-safe (#471)
     h = hermite1(qa)
     if r == 0
         # the EMPTY PRODUCT: rank 1 was special-cased and every other
@@ -422,8 +422,23 @@ function _validated_topk_target(q, k, n, target_floor)
             error("target entries must be finite and non-negative")
         target = target ./ maximum(target)
         target .*= k / sum(target)
+        # in the FINAL k-slot scale: floored entries sit exactly at the
+        # floor, the others give up that mass proportionally (python
+        # races._apply_floor); clamp-then-renormalise scaled the floor
+        # back down to 0.167 for [.7, .3, 0] at .2 (#592)
         floored = target .< target_floor
-        target = max.(target, target_floor)
+        scaled = copy(target)
+        for _ in 1:n
+            free = k - target_floor * count(floored)
+            rest = sum(target[.!floored])
+            (free > 0 && rest > 0) ||
+                error("target_floor=$target_floor is infeasible: flooring $(count(floored)) of $n entries at it leaves no mass for the rest of a target of total $k")
+            scaled = ifelse.(floored, target_floor, target .* (free / rest))
+            newly = .!floored .& (scaled .< target_floor)
+            any(newly) || break
+            floored = floored .| newly
+        end
+        target = scaled
     elseif any(target .<= 0)
         error("all target memberships must be positive")
     end

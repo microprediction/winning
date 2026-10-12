@@ -24,6 +24,8 @@
 #' @param gamma coupling strength in [0, 1]
 #' @param parent 1-based parent index per node (root: 0/NA)
 #' @param strength per-node shared-effect strength
+#' @param leaves optional Tree leaf labels in leaf-node order; NULL uses
+#'   the sorted cluster labels (#372)
 #' @return a structure object for the structure= argument
 #' @name structures
 NULL
@@ -49,9 +51,9 @@ Nested <- function(cluster, loading, D, coupling, gamma = 1.0)
 
 #' @rdname structures
 #' @export
-Tree <- function(cluster, loading, D, parent, strength)
+Tree <- function(cluster, loading, D, parent, strength, leaves = NULL)
   .structure("Tree", cluster = cluster, loading = loading, D = D,
-             parent = parent, strength = strength)
+             parent = parent, strength = strength, leaves = leaves)
 
 .dispatch_probabilities <- function(mu, s, base = "normal", points = 257,
                                     qa = 9, qf = 15, return_slopes = FALSE,
@@ -84,7 +86,8 @@ Tree <- function(cluster, loading, D, parent, strength)
   if (cls == "Tree") {
     return(tree_race_probabilities(mu, s$cluster, s$loading, s$D,
                                    s$parent, s$strength,
-                                   points = points, qa = qa))
+                                   points = points, qa = qa,
+                                   leaves = s$leaves))
   }
   stop("unknown structure ", cls)
 }
@@ -151,7 +154,7 @@ Tree <- function(cluster, loading, D, parent, strength)
     return(tot)
   }
   if (cls == "Tree") {
-    inv <- .cluster_index(s$cluster)
+    inv <- .tree_leaf_index(s$cluster, s$leaves)         # (#372)
     nC <- max(inv)
     lam <- as.numeric(s$strength)
     parent <- .validate_tree(s$parent, lam, nC)
@@ -215,8 +218,44 @@ Tree <- function(cluster, loading, D, parent, strength)
 #'   ids 0-based, distance, size)
 #' @return a \code{\link{Tree}} structure
 #' @export
+# A scipy-style linkage checked at the constructor's own boundary (python
+# structures._as_linkage): row k merges two DISTINCT clusters that already
+# exist and are still active, at a finite non-negative height. A
+# self-reference built a cyclic parent (#328), ids were truncated, and a
+# negative height was squared into the tree of its absolute value (#459).
+.check_linkage <- function(Z) {
+  if (length(Z) == 0L) return(matrix(numeric(0), 0, 4))
+  if (!is.numeric(Z) || length(dim(Z)) != 2L || ncol(Z) < 3L)
+    stop("a linkage must be a numeric (n-1) x 4 matrix", call. = FALSE)
+  n <- nrow(Z) + 1L
+  used <- logical(2L * n - 1L)
+  for (k in seq_len(nrow(Z))) {
+    r <- k - 1L                                  # 0-based row, as scipy
+    h <- Z[k, 3]
+    if (!is.finite(h) || h < 0)
+      stop(sprintf("linkage row %d merges at height %s: merge heights are finite non-negative distances (#459)",
+                   r, format(h)), call. = FALSE)
+    for (cc in Z[k, 1:2]) {
+      if (!is.finite(cc) || cc != floor(cc))
+        stop(sprintf("linkage row %d names cluster %s: cluster ids are whole numbers (#328)",
+                     r, format(cc)), call. = FALSE)
+      if (cc < 0 || cc >= n + r)
+        stop(sprintf("linkage row %d uses cluster %d before it is formed: row %d may merge only ids below %d (#328)",
+                     r, as.integer(cc), r, n + r), call. = FALSE)
+      if (used[cc + 1L])
+        stop(sprintf("linkage row %d reuses cluster %d, already merged by an earlier row (#328)",
+                     r, as.integer(cc)), call. = FALSE)
+    }
+    if (Z[k, 1] == Z[k, 2])
+      stop(sprintf("linkage row %d merges cluster %d with itself (#328)",
+                   r, as.integer(Z[k, 1])), call. = FALSE)
+    used[Z[k, 1:2] + 1L] <- TRUE
+  }
+  Z
+}
+
 tree_from_linkage <- function(Z) {
-  Z <- as.matrix(Z)
+  Z <- .check_linkage(as.matrix(Z))
   n <- nrow(Z) + 1L
   nT <- 2L * n - 1L
   parent <- integer(nT)                    # 0 = root

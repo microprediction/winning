@@ -374,4 +374,16 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   check("a 1e308 pair is the even race, not +-Infinity (#475)", pair, [0, 0], 1e-12);
 }
 
+/* --- an exactly common loading column is inert at any scale (#471) --- */
+{
+  const n = 9, mu = Array.from({ length: n }, (_, i) => (i - 4) * 0.1), D = Array(n).fill(1);
+  const F = [[-1], [1]], W = [0.5, 0.5];
+  const ind = winProbabilitiesFactor(mu, Array.from({ length: n }, () => [0]), D, F, W, { points: 257 }).p;
+  for (const c of [1e20, 1e100, 1e308]) {
+    const V = Array.from({ length: n }, () => [c]);
+    check(`common [${c}] column prices the independent race (#471)`,
+          winProbabilitiesFactor(mu, V, D, F, W, { points: 257 }).p, ind, 1e-15);
+  }
+}
+
 process.exit(failures ? 1 : 0);

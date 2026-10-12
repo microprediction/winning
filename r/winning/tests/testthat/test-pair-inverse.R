@@ -12,3 +12,18 @@ test_that("pair inverse is finite and mirrors under relabeling", {
     expect_equal(a[2] - a[1], z, tolerance = 1e-10)
   }
 })
+
+# The pair closed form is a start for a caller's factor rule, certified by
+# the forward: a centred two-point law has the right two moments and a
+# different pair map, and a translated rule carries a mean shift (#374).
+test_that("pair inverse round-trips a non-Gaussian caller rule", {
+  V <- matrix(c(0, 1), 2, 1); W <- c(.5, .5)
+  for (cs in list(list(F = c(-1, 1), D = .05, m = .4),
+                  list(F = c(0, 2), D = .2, m = .3))) {
+    F <- matrix(cs$F, 2, 1); D <- rep(cs$D, 2)
+    t <- race_probabilities(c(-cs$m, cs$m), V = V, D = D, F = F, W = W,
+                            points = 1025)
+    mu <- abilities_from_race(t, V = V, D = D, F = F, W = W, points = 1025)
+    expect_equal(mu, c(-cs$m, cs$m), tolerance = 1e-6)
+  }
+})

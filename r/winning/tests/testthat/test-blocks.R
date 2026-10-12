@@ -140,3 +140,11 @@ test_that("nested coupling must have a contestant axis, never recycled (#469)", 
                nested_race_probabilities(mu, cl, ld, D, coupling = G,
                                          points = 257, qa = 3, qf = 5))
 })
+
+# a scalar block loading is one loading for every contestant (#684)
+test_that("scalar block loading equals the expanded vector", {
+  mu <- c(-.5, -.1, .2, .4); cl <- c(0, 0, 1, 1); D <- c(.8, .9, 1, 1.1)
+  expect_equal(block_race_probabilities(mu, cl, .3, D, points = 129),
+               block_race_probabilities(mu, cl, rep(.3, 4), D, points = 129),
+               tolerance = 0)
+})

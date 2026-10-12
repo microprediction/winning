@@ -6,7 +6,7 @@
 // the derivations and the two-branch refusal of exact-rank targets.
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
-         jacobiSweeps, rescaledTarget, floorableTarget } from "./core.mjs";
+         jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter } from "./core.mjs";
 import { BASES, _factorNodeRule, baseResolution } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -351,7 +351,7 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
 }
 
 function factorNodes(V, n, qa, D = null) {
-  const Vm = asLoadings(V, n).map(row => row.slice());
+  let Vm = asLoadings(V, n).map(row => row.slice());
   const r = Vm[0].length;
   if (r > 2)
     throw new Error("topKProbabilities is implemented for factor rank <= 2");
@@ -368,12 +368,10 @@ function factorNodes(V, n, qa, D = null) {
     return { Vm: rule.V, nodes: F, w: W };
   }
   if (qa === undefined) qa = 15;   // an explicit value, null included, goes to hermite1's check
-  for (let c = 0; c < r; c++) {
-    let m = 0;
-    for (let i = 0; i < n; i++) m += Vm[i][c];
-    m /= n;
-    for (let i = 0; i < n; i++) Vm[i][c] -= m;
-  }
+  // the shared scale-safe gauge: a raw column sum overflowed at a common
+  // [1e308] column, and at [1e307] left a residue that zeroed the
+  // Jacobian and broke the count window (#471)
+  Vm = gaugeCenter(Vm);
   const h = hermite1(qa);
   let nodes, w;
   if (r === 0) {
@@ -630,9 +628,8 @@ function validatedTarget(q, k, n, targetFloor) {
     if (typeof targetFloor !== "number" || !Number.isFinite(targetFloor) ||
         !(targetFloor > 0))
       throw new Error(`targetFloor must be a finite positive number; got ${typeof targetFloor === "string" ? JSON.stringify(targetFloor) : String(targetFloor)}`);
-    target = floorableTarget(target, k);   // a membership floor (#592)
-    floored = target.map(v => v < targetFloor);
-    target = target.map(v => Math.max(v, targetFloor));
+    // a membership floor, in the final k-slot scale (#592)
+    ({ target, floored } = applyFloor(target, k, targetFloor));
   } else if (target.some(v => v <= 0)) {
     throw new Error(
       "all target memberships must be positive: a zero top-k probability " +

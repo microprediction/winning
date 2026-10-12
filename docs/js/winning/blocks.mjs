@@ -1,7 +1,7 @@
 // Block, nested and tree races -- port of winning/factor/blocks.py.
 import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
-         asFactorNodes, asWeights, asIterations, asTolerance,
+         asFactorNodes, asWeights, asFactorLaw, asIterations, asTolerance,
          asFiniteVector, rescaledTarget } from "./core.mjs";
 import { invNormalRational } from "./races.mjs";
 
@@ -9,10 +9,10 @@ import { invNormalRational } from "./races.mjs";
    core.mjs for why an options object needs this at all. */
 const BLOCK_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "nodes"]);
 const NESTED_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "qf", "coupling", "gamma"]);
-const TREE_RACE_PROBABILITIES_OPTS = new Set(["points", "qa"]);
+const TREE_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "leaves"]);
 const BLOCK_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
 const NESTED_RACE_JACOBIAN_OPTS = new Set(["points", "qa", "qf", "coupling", "gamma"]);
-const TREE_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
+const TREE_RACE_JACOBIAN_OPTS = new Set(["points", "qa", "leaves"]);
 const ABILITIES_FROM_BLOCK_RACE_OPTS = new Set(["points", "qa", "maxIter", "tol"]);
 
 
@@ -26,6 +26,38 @@ export function clusterIndex(cluster) {
   const map = new Map(lv.map((v, i) => [v, i]));
   return cluster.map(c => map.get(c));
 }
+
+/* Each runner's LEAF NODE index in a tree (python blocks.tree_leaf_index).
+   leaves == null keeps the sorted-label order, so labels 0..nC-1 are the
+   leaf nodes; any other spelling lands on leaves by its sort order, and
+   renaming [0, 0, 1, 2] to [30, 30, 10, 20] priced a different tree when
+   the leaves sit at unequal depths (#372). leaves[j] = the label of leaf
+   node j states the map explicitly. */
+export function treeLeafIndex(cluster, leaves = null) {
+  if (leaves == null) return clusterIndex(cluster);
+  if (!isVector(leaves))
+    throw new Error("leaves must be an array: leaves[j] is the label of leaf node j (#372)");
+  const pos = new Map();
+  leaves.forEach((lab, j) => {
+    if (pos.has(lab)) throw new Error(`leaves names label ${JSON.stringify(lab)} twice (#372)`);
+    pos.set(lab, j);
+  });
+  const seen = new Array(leaves.length).fill(false);
+  const out = cluster.map((lab, i) => {
+    if (!pos.has(lab))
+      throw new Error(`runner ${i} has cluster label ${JSON.stringify(lab)}, which leaves does not map to a leaf node (#372)`);
+    seen[pos.get(lab)] = true;
+    return pos.get(lab);
+  });
+  const miss = seen.indexOf(false);
+  if (miss >= 0)
+    throw new Error(`leaf ${miss} (label ${JSON.stringify(leaves[miss])}) carries no runner: every leaf node must hold a cluster (#372)`);
+  return out;
+}
+
+/* A Tree structure's runner-to-leaf indices (0..nC-1): the explicit map
+   when given, the sorted-label order otherwise. */
+export const treeCluster = s => treeLeafIndex(s.cluster, s.leaves);
 
 /* One door for the block/nested/tree arguments.
 
@@ -173,7 +205,17 @@ function windowNodes(mu, sd, amp, delta = 1e-12, padSds = 2) {
 // Raw lattice mass is a diagnostic, not a nuisance: a material defect means
 // the window missed the winner's region, and normalizing it away returns
 // confident wrong shares. Stop instead.
-function checkedMass(raw, kind, massTol = 5e-3) {
+/* The mass tolerance in force (python blocks._MASS_TOL): an inverse's
+   internal trial states are priced under a looser one, and the state it
+   returns is re-priced strictly (#656). */
+let MASS_TOL = 5e-3;
+export function withTrialMassTolerance(fn) {
+  const prev = MASS_TOL;
+  MASS_TOL = Math.max(prev, 0.05);
+  try { return fn(); } finally { MASS_TOL = prev; }
+}
+
+function checkedMass(raw, kind, massTol = MASS_TOL) {
   const t = raw.reduce((a, b) => a + b, 0);
   // NaN compares false against any tolerance, so test finiteness
   // explicitly or a NaN mass sails through the check
@@ -229,8 +271,10 @@ function clusterNodes(r, qa) {
 function checkedNodes(o, r) {
   if (!o || typeof o !== "object" || !("nodes" in o) || !("w" in o))
     throw new Error("nodes must be {nodes, w}: the factor nodes and their weights");
-  const nodes = asFactorNodes(o.nodes, r, "nodes.nodes");
-  return { nodes, w: asWeights(o.w, nodes.length, "nodes.w") };
+  // paired, with null nodes dropped: zero-weight padding sized the
+  // block window and threw "captured total mass 0" (#416)
+  const law = asFactorLaw(o.nodes, o.w, r, "nodes.nodes", "nodes.w");
+  return { nodes: law.F, w: law.W };
 }
 
 function fieldPass(muO, sdO, shifts, cO, nC, x) {
@@ -465,7 +509,8 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
 
 export function treeRaceProbabilities(mu, cluster, loading, D, parent, strength, opts = {}) {
   checkOpts(opts, TREE_RACE_PROBABILITIES_OPTS, "treeRaceProbabilities", OPT_HINTS);
-  const { points = 257, qa = 9 } = opts;
+  const { points = 257, qa = 9, leaves = null } = opts;
+  if (leaves != null) cluster = treeLeafIndex(cluster, leaves);      // (#372)
   const I = treeInternals(mu, cluster, loading, D, parent, strength, points, qa);
   const pO = new Array(I.n).fill(0);
   for (let i = 0; i < I.n; i++) {
@@ -632,7 +677,8 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
 
 export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts = {}) {
   checkOpts(opts, TREE_RACE_JACOBIAN_OPTS, "treeRaceJacobian", OPT_HINTS);
-  const { points = 257, qa = 9 } = opts;
+  const { points = 257, qa = 9, leaves = null } = opts;
+  if (leaves != null) cluster = treeLeafIndex(cluster, leaves);      // (#372)
   // With any ancestor effect the cross-cluster Gram term is not the
   // derivative (it factorises the two-leaf cavity as R_i R_j / G_root):
   // two leaves under a common root priced invariantly in the root
@@ -727,54 +773,62 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
   // trust radius were absolute numbers, so loading -> c loading,
   // D -> c^2 D missed by 0.40 of a share at c = 1e-3 (#100, as python)
   const scale = blockScale(loading, D, n);
-  let mu = lt.map(v => -(v - lm) * scale);
-  let eta = 1.0;
-  let lp = forward(mu).map(v => Math.log(Math.max(v, TINY)));
-  let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
-  for (let it = 0; it < 200 && err >= 0.2; it++) {
-    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
-    const mm = mean(muN);
-    muN = muN.map(v => v - mm);
-    const lpN = forward(muN).map(v => Math.log(Math.max(v, TINY)));
-    const eN = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
-    if (eN < err) { mu = muN; lp = lpN; err = eN; eta = Math.min(eta * 1.2, 1.5); }
-    else { eta *= 0.5; if (eta < 1e-4) break; }
-  }
   const residualAt = m => {
     let pv = forward(m).map(v => Math.max(v, TINY));
     const sv = pv.reduce((a, b) => a + b, 0);
     pv = pv.map(v => v / sv);
     return { pv, r: pv.map((v, i) => Math.log(v) - lt[i]) };
   };
-  let iterations = 0;
-  for (let it = 0; it < maxIter; it++) {
-    const { pv, r } = residualAt(mu);
-    const cur = Math.max(...r.map(Math.abs));
-    if (cur < tol) return { mu: mu.map(v => v - mean(mu)), residual: cur, iterations };
-    iterations = it + 1;
-    const J = blockRaceJacobian(mu, cluster, loading, D, { points, qa });
-    const A = J.map((row, i) => row.map(v => v / pv[i] * scale + 1 / n));
-    let step = solve(A, r.map(v => -v));
-    const nn = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
-    if (nn > 5) step = step.map(v => v * 5 / nn);
-    step = step.map(v => v * scale);
-    let accepted = false;
-    for (let k = 0; k < 8; k++) {
-      let muN = mu.map((m, i) => m + step[i]);
+  // trial states (warm start, line search) under the looser trial mass
+  // tolerance: they only steer, and the strict 0.5% check rejected a
+  // self-generated target at its own warm start (#656). The returned
+  // state is re-priced below under the strict check.
+  const solved = withTrialMassTolerance(() => {
+    let mu = lt.map(v => -(v - lm) * scale);
+    let eta = 1.0;
+    let lp = forward(mu).map(v => Math.log(Math.max(v, TINY)));
+    let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+    for (let it = 0; it < 200 && err >= 0.2; it++) {
+      let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
       const mm = mean(muN);
       muN = muN.map(v => v - mm);
-      let pN = forward(muN).map(v => Math.max(v, TINY));
-      const sN = pN.reduce((a, b) => a + b, 0);
-      pN = pN.map(v => v / sN);
-      if (Math.max(...pN.map((v, i) => Math.abs(Math.log(v) - lt[i]))) < cur) {
-        mu = muN; accepted = true; break;
-      }
-      step = step.map(v => v * 0.5);
+      const lpN = forward(muN).map(v => Math.log(Math.max(v, TINY)));
+      const eN = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
+      if (eN < err) { mu = muN; lp = lpN; err = eN; eta = Math.min(eta * 1.2, 1.5); }
+      else { eta *= 0.5; if (eta < 1e-4) break; }
     }
-    // no line-search step improved: the state cannot change, so further
-    // sweeps would repeat this one exactly. Stop and report (#421).
-    if (!accepted) break;
-  }
+    let iterations = 0;
+    for (let it = 0; it < maxIter; it++) {
+      const { pv, r } = residualAt(mu);
+      const cur = Math.max(...r.map(Math.abs));
+      if (cur < tol) return { mu, iterations };
+      iterations = it + 1;
+      const J = blockRaceJacobian(mu, cluster, loading, D, { points, qa });
+      const A = J.map((row, i) => row.map(v => v / pv[i] * scale + 1 / n));
+      let step = solve(A, r.map(v => -v));
+      const nn = Math.sqrt(step.reduce((a, b) => a + b * b, 0));
+      if (nn > 5) step = step.map(v => v * 5 / nn);
+      step = step.map(v => v * scale);
+      let accepted = false;
+      for (let k = 0; k < 8; k++) {
+        let muN = mu.map((m, i) => m + step[i]);
+        const mm = mean(muN);
+        muN = muN.map(v => v - mm);
+        let pN = forward(muN).map(v => Math.max(v, TINY));
+        const sN = pN.reduce((a, b) => a + b, 0);
+        pN = pN.map(v => v / sN);
+        if (Math.max(...pN.map((v, i) => Math.abs(Math.log(v) - lt[i]))) < cur) {
+          mu = muN; accepted = true; break;
+        }
+        step = step.map(v => v * 0.5);
+      }
+      // no line-search step improved: the state cannot change, so further
+      // sweeps would repeat this one exactly. Stop and report (#421).
+      if (!accepted) break;
+    }
+    return { mu, iterations };
+  });
+  const mu = solved.mu, iterations = solved.iterations;
   const { pv } = residualAt(mu);
   return { mu: mu.map(v => v - mean(mu)),
            residual: Math.max(...pv.map((v, i) => Math.abs(Math.log(v) - lt[i]))),

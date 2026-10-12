@@ -119,7 +119,7 @@
     # shifts every conditional mean equally and cannot move an argmin,
     # so center V and make node selection and the lattice window
     # invariant under V -> V + 1 c'
-    V <- sweep(V, 2, colMeans(V))
+    V <- .gauge_center(V)                                    # (#471)
     if (is.null(F) || is.null(W)) {
       # adaptive order matching the python reference: sharp conditional
       # races (small D relative to loadings) need more factor nodes.
@@ -297,7 +297,7 @@
   }
   # times the base's central scale, as python and the browser (#600)
   budget <- 0.5 * min(s) * .base_resolution(fn) * max(points - 1, 1)
-  d <- delta
+  d <- .as_delta(delta)
   w <- window_at(d)
   while (w[2] - w[1] > budget && d < 1e-4) {
     d <- min(d * 100, 1e-4)
@@ -473,6 +473,37 @@
                  paste(names(given)[given], collapse = ", ")), call. = FALSE)
 }
 
+# The gauge, scale-safe (python core._gauge_center, #471): an exactly
+# common column centres to exactly zero, and a column whose mean or
+# differences overflow ([1e308] * 9, or c(1, 1, -1) * 1e308) is centred in
+# units of its largest entry. Ordinary columns take the plain mean.
+.gauge_center <- function(V) {
+  V <- as.matrix(V)
+  if (!nrow(V) || !ncol(V)) return(V)
+  Vc <- suppressWarnings(sweep(V, 2, colMeans(V)))
+  for (j in seq_len(ncol(V))) {
+    if (all(V[, j] == V[1, j])) {
+      Vc[, j] <- 0
+    } else if (!all(is.finite(Vc[, j]))) {
+      s <- max(abs(V[, j]))
+      u <- V[, j] / s
+      Vc[, j] <- (u - mean(u)) * s
+    }
+  }
+  Vc
+}
+
+# The bulk window's tail mass: a number in (0, 0.5). delta = -1 hung the
+# relaxation loop and 1 or 2 priced a different race (#445, matching
+# python's races._as_delta and the browser's asDelta).
+.as_delta <- function(delta) {
+  if (!is.numeric(delta) || length(delta) != 1L || !is.finite(delta) ||
+      !(delta > 0 && delta < 0.5))
+    stop(sprintf("delta must be a number in (0, 0.5); got %s",
+                 paste(deparse(delta), collapse = " ")), call. = FALSE)
+  as.numeric(delta)
+}
+
 race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                base = "normal", points = 257,
                                return_slopes = FALSE, structure = NULL,
@@ -484,6 +515,7 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
         window %in% c("bulk", "span")))
     stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
                  paste(deparse(window), collapse = " ")), call. = FALSE)
+  delta <- .as_delta(delta)                                    # (#445)
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
@@ -613,7 +645,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   # on a scalar V gave a 1x1 that the pair branch indexed at [2, 2] (#482)
   Dn <- .as_idio(D, n, positive = TRUE)
   Vn <- if (is.null(V)) matrix(0, n, 1) else .as_loadings(V, n)
-  Vc <- sweep(Vn, 2, colMeans(Vn))
+  Vc <- .gauge_center(Vn)                                    # (#471)
   if (!is.null(V) && !is.null(F)) {
     Fq <- as.matrix(F)
     # through max(W) first: sum(W) can overflow for finite weights (#415)
@@ -641,11 +673,24 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     # invert the SMALLER share: for c(1, 1e-16) the normalized first
     # share rounds to exactly 1 and qnorm(1) = Inf, while the
     # permutation was finite (#412)
-    gap <- if (target[1] <= target[2]) sd_d * qnorm(target[1]) else
-      -sd_d * qnorm(target[2])
-    return(c(-0.5 * gap, 0.5 * gap))
+    # the shift is the caller rule's weighted MEAN, (v2 - v1) . E[F]
+    shift <- if (!is.null(V) && !is.null(F))
+      sum((Vc[2, ] - Vc[1, ]) * colSums(Fq * Wq)) else 0
+    gap <- (if (target[1] <= target[2]) sd_d * qnorm(target[1]) else
+      -sd_d * qnorm(target[2])) - shift
+    mu0 <- c(-0.5 * gap, 0.5 * gap)
+    if (is.null(V) || is.null(F) || !all(is.finite(mu0))) return(mu0)
+    # A caller's rule need not be Gaussian (a centred two-point law has
+    # the right mean and variance and a different pair map): the closed
+    # form is a START, certified by the forward it claims to invert
+    # (#374, matching python and the browser).
+    ph <- race_probabilities(mu0, V = V, D = D, F = F, W = W, base = base,
+                             points = points)
+    if (max(abs(log(pmax(ph, 1e-300)) - logt)) < tol) return(mu0)
+  } else {
+    mu0 <- NULL
   }
-  mu <- -(logt - mean(logt)) / 2 * scale
+  mu <- if (is.null(mu0)) -(logt - mean(logt)) / 2 * scale else mu0
   top2 <- if (n > 2) sum(sort(target, decreasing = TRUE)[1:2]) else 1
   alpha <- if (n == 2 || top2 > 0.8) 0.7 else 1.0
   if (!is.null(dense)) {

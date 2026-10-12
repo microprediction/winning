@@ -349,6 +349,33 @@ export function asWeights(W, nNodes, where = "W") {
   return u.map(v => v / total);
 }
 
+/* A quadrature rule with its null nodes removed -- python's
+   shapes.as_factor_law. Nodes of weight zero, and the lightest nodes
+   whose COMBINED relative mass is at most 1e-15, change no share at
+   double precision, but every lattice sizes its window from all the
+   nodes it is handed: a zero (or 1e-300) atom at f = 1000 widened the
+   window until the real density spikes fell between lattice points
+   (0.69 against 0.54 on one share), and padded block nodes threw
+   "captured total mass 0" (#416). */
+export function asFactorLaw(F, W, rank, whereF = "F", whereW = "W") {
+  const Fv = asFactorNodes(F, rank, whereF);
+  const Wn = asWeights(W, Fv.length, whereW);
+  const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
+  const drop = new Array(Wn.length).fill(false);
+  let cum = 0;
+  for (const q of order) {
+    cum += Wn[q];
+    if (cum > 1e-15) break;
+    drop[q] = true;
+  }
+  if (!drop.some(Boolean)) return { F: Fv, W: Wn };
+  const keepF = [], keepW = [];
+  let tot = 0;
+  for (let q = 0; q < Wn.length; q++)
+    if (!drop[q]) { keepF.push(Fv[q]); keepW.push(Wn[q]); tot += Wn[q]; }
+  return { F: keepF, W: keepW.map(v => v / tot) };
+}
+
 /* A finite nonnegative vector normalised to total `mass`, scale-safely.
    A relative target is a law up to a positive factor, but summing first
    overflows when every ENTRY is finite: [0.8, 0.6, 0.4, 0.2] * 1e308 has
@@ -521,7 +548,19 @@ export function gaugeCenter(V) {
   const v0 = V[0];
   const colMean = v0.slice();
   for (const row of V) for (let j = 0; j < r; j++) colMean[j] += (row[j] - v0[j]) / n;
-  return V.map(row => row.map((x, j) => x - colMean[j]));
+  const out = V.map(row => row.map((x, j) => x - colMean[j]));
+  // a column whose differences overflow ([1, 1, -1] * 1e308: row - v0 is
+  // -inf) is centred in units of its largest entry, (V/s - mean) * s, as
+  // python's _gauge_center does (#471)
+  for (let j = 0; j < r; j++) {
+    if (out.every(row => Number.isFinite(row[j]))) continue;
+    let s = 0;
+    for (const row of V) s = Math.max(s, Math.abs(row[j]));
+    let m = 0;
+    for (const row of V) m += row[j] / s / n;
+    for (let i = 0; i < n; i++) out[i][j] = (V[i][j] / s - m) * s;
+  }
+  return out;
 }
 
 /* First d primes, generated. Literal tables put silent cliffs in the
@@ -598,6 +637,32 @@ export function floorableTarget(target, mass) {
   const t = target.map(v => v / mx);
   const s = t.reduce((a, b) => a + b, 0);
   return t.map(v => v * (mass / s));
+}
+
+/* Floor a target at `floor` IN ITS FINAL NORMALISED SCALE (python
+   races._apply_floor, #592): normalise to `mass`, raise the entries below
+   the floor to exactly the floor and take that mass proportionally from
+   the others, repeating if that pushes another entry under. Clamping and
+   then renormalising scaled the floor itself back down ([.7, .3, 0] at
+   floor .2 repriced the floored runner at 0.167). An infeasible floor
+   (no mass left for the unfloored entries) throws. */
+export function applyFloor(target, mass, floor) {
+  const t = floorableTarget(target, mass);
+  let floored = t.map(v => v < floor);
+  let scaled = t;
+  for (let it = 0; it < t.length; it++) {
+    const m = floored.filter(Boolean).length;
+    const free = mass - floor * m;
+    const rest = t.reduce((a, v, i) => a + (floored[i] ? 0 : v), 0);
+    if (!(free > 0 && rest > 0))
+      throw new Error(`targetFloor=${floor} is infeasible: flooring ${m} of ${t.length} ` +
+                      `entries at it leaves no mass for the rest of a target of total ${mass}`);
+    scaled = t.map((v, i) => (floored[i] ? floor : v * (free / rest)));
+    const newly = scaled.map((v, i) => !floored[i] && v < floor);
+    if (!newly.some(Boolean)) break;
+    floored = floored.map((f, i) => f || newly[i]);
+  }
+  return { target: scaled, floored };
 }
 
 export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {

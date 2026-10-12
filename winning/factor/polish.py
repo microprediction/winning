@@ -345,7 +345,7 @@ def _structure_engines(structure, points):
                         m, c, L, D, coupling=g, gamma=ga, points=points))))
     if isinstance(structure, Tree):
         from .blocks import tree_race_probabilities, tree_race_jacobian
-        c, L, D, pa, lam = (structure.cluster, structure.loading,
+        c, L, D, pa, lam = (structure.leaf_index, structure.loading,
                             structure.D, structure.parent, structure.strength)
         fwd = lambda m: tree_race_probabilities(m, c, L, D, pa, lam,
                                                 points=points)
