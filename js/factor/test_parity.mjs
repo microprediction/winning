@@ -374,4 +374,43 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   check("a 1e308 pair is the even race, not +-Infinity (#475)", pair, [0, 0], 1e-12);
 }
 
+/* --- removal rows past the lattice cap, removal pairs, huge skew
+   shapes and the pair inverse's minority side (#455 #411 #399 #412) --- */
+{
+  const keep = console.warn;
+  console.warn = () => {};
+  try {
+    const mu = [-50, 0.01515020819626168, 0.01296182990586568];
+    const D = [10, 0.0009309393203102079, 0.004283991517502709].map((s) => s * s);
+    const del = winProbabilitiesFactor(mu, [[], [], []], D, [[]], [1], { deletions: true });
+    // exact (python removal_shares and the direct survivor race): 0.30883
+    check("a capped removal row is refined, not certified (#455)",
+          del.deletions[0], [0, 0.30882742, 0.69117258], 1e-4);
+    const pairDel = winProbabilitiesFactor([0, 1000], [[], []], [1, 1], [[]], [1],
+                                           { base: skewNormalBase(400), deletions: true });
+    check("removing one of two runners leaves the other certain (#411)",
+          pairDel.deletions, [[0, 1], [1, 0]], 1e-300);
+    const lim = winProbabilitiesFactor([-1, 0, 1], [[], [], []], [1, 1, 1], [[]], [1],
+                                       { base: skewNormalBase(1e100) }).p;
+    for (const a of [Number.MAX_VALUE, 1e300]) {
+      const b = skewNormalBase(a);
+      check(`skewNormalBase(${a}) density is finite (#399)`,
+            [-5, 5].map((z) => Number.isFinite(b.pdf(z)) ? 0 : 1), [0, 0], 0.5);
+      check(`skewNormalBase(${a}) prices as the 1e100 limit (#399)`,
+            winProbabilitiesFactor([-1, 0, 1], [[], [], []], [1, 1, 1], [[]], [1], { base: b }).p, lim, 1e-12);
+    }
+    check("logndtr at +-Infinity is exact (#399)", [logndtr(Infinity), Math.exp(logndtr(-Infinity))], [0, 0], 1e-300);
+  } finally { console.warn = keep; }
+  for (const t of [1e-16, 1e-20]) {
+    const a = abilitiesFromProbabilitiesFactor([1, t], [[0], [0]], [1, 1], [[0]], [1]);
+    const b = abilitiesFromProbabilitiesFactor([t, 1], [[0], [0]], [1, 1], [[0]], [1]);
+    check(`pair [1, ${t}] mirrors [${t}, 1] (#412)`, a, [-b[0], -b[1]], 1e-12);
+  }
+  const V = [[0], [1]], D = [0.05, 0.05], F = [[-1], [1]], W = [0.5, 0.5];
+  const fit = abilitiesFromProbabilitiesFactor([1, 0.001], V, D, F, W, { returnInfo: true });
+  const rp = winProbabilitiesFactor(fit.mu, V, D, F, W).p;
+  check("non-Gaussian pair with a near-certain favourite converges (#412)",
+        [fit.converged ? 0 : 1, Math.log(rp[1] / (0.001 / 1.001))], [0, 0], 1e-5);
+}
+
 process.exit(failures ? 1 : 0);

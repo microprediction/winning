@@ -45,6 +45,11 @@ function erfcx(x) {
 
 /* log of the standard normal CDF, tail-stable (port of scipy.log_ndtr use) */
 export function logndtr(z) {
+  // the endpoints exactly: a skew-normal at a huge finite shape evaluates
+  // Phi(alpha u) at alpha u = +-Infinity, and the continued fraction
+  // turned erfcx(Infinity) into NaN, so the density was NaN (#399)
+  if (z === Infinity) return 0;
+  if (z === -Infinity) return -Infinity;
   if (z >= 1.0) {
     // log(1 - Phi(-z)); Phi(-z) computed via the negative branch
     return Math.log1p(-Math.exp(logndtr(-z)));
@@ -90,7 +95,37 @@ function lattice(Mall, sd, points, spans, resolution = 1) {
   }
   const x = new Float64Array(points);
   for (let l = 0; l < points; l++) x[l] = lo + (hi - lo) * l / (points - 1);
-  return { x, dx: (hi - lo) / (points - 1) };
+  return { x, dx: (hi - lo) / (points - 1), lo, hi, capped: need > points };
+}
+
+/* The unnormalised single-removal rows q[i][j] = P(j wins | i removed) on
+   an explicit lattice of `pts` points over [lo, hi]: the refinement pass
+   of the deletion ensemble when the shared lattice was capped (#455). */
+const REMOVAL_POINT_BUDGET = 4000000;
+function removalRows(M, sd, base, W, lo, hi, pts) {
+  const N = sd.length, dx = (hi - lo) / (pts - 1);
+  const q = Array.from({ length: N }, () => new Float64Array(N));
+  const logS = Array.from({ length: N }, () => new Float64Array(pts));
+  const f = Array.from({ length: N }, () => new Float64Array(pts));
+  const field = new Float64Array(pts);
+  for (let c = 0; c < M.length; c++) {
+    field.fill(0);
+    for (let i = 0; i < N; i++) for (let l = 0; l < pts; l++) {
+      const { ls, fx } = base.eval((lo + l * dx - M[c][i]) / sd[i], sd[i]);
+      logS[i][l] = ls; f[i][l] = fx; field[l] += ls;
+    }
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      if (j === i) continue;
+      let acc = 0;
+      for (let l = 0; l < pts; l++) {
+        let e = field[l] - logS[i][l] - logS[j][l];
+        if (e > 0) e = 0;
+        if (e >= -745) acc += f[j][l] * Math.exp(e);
+      }
+      q[i][j] += W[c] * acc * dx;
+    }
+  }
+  return q;
 }
 
 /* ---- the boundary: the same contracts as docs/js/winning/core.mjs ----
@@ -500,7 +535,8 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   // loadings across contestants (a common column cannot move an argmin)
   V = centredLoadings(V, N);
   const M = condMeans(mu, V, F);
-  const { x, dx } = lattice(M, sd, points, base.spans, base.resolution || 1);
+  const grid = lattice(M, sd, points, base.spans, base.resolution || 1);
+  const { x, dx } = grid;
   const L = x.length;
   const p = new Float64Array(N);
   const slope = new Float64Array(N);
@@ -510,7 +546,12 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   const wantCross = !!opts.ownLogSlope;
   const cross = new Float64Array(N);
   const w = opts.pairwise ? Array.from({ length: N }, () => new Float64Array(N)) : null;
-  const q = opts.deletions ? Array.from({ length: N }, () => new Float64Array(N)) : null;
+  // Removing either of two runners leaves the other certain, whatever the
+  // field: integrating that anyway let an irrelevant ability gap decide
+  // whether the call succeeded -- a skew-normal pair 1000 apart captured
+  // row mass 1.0096 and threw (#411; python removal_shares)
+  const pairRemoval = !!opts.deletions && N === 2;
+  const q = opts.deletions && !pairRemoval ? Array.from({ length: N }, () => new Float64Array(N)) : null;
 
   const logS = Array.from({ length: N }, () => new Float64Array(L));
   const f = Array.from({ length: N }, () => new Float64Array(L));
@@ -590,6 +631,45 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
       slope[i] / Math.max(a, 1e-300) - (slope[i] + cross[i]) / total);
   }
   if (w) res.w = w.map((r) => Array.from(r));
+  if (pairRemoval) {
+    res.deletionMass = [1, 1];
+    res.deletions = [[0, 1], [1, 0]];
+  }
+  if (q && grid.capped) {
+    // A capped lattice cannot be policed by the row masses: cell errors
+    // of opposite sign cancel in each row sum. A sd-9.3e-4 runner 50
+    // units from a sd-10 one gave the row [0, 0.765, 0.235] at mass
+    // 0.99923 against a direct [0, 0.309, 0.691] (#455). As python's
+    // removal_shares: refine by doubling, watch the CELLS until they stop
+    // moving, and refuse if the budget runs out first.
+    const MOVE_TOL = 1e-3;
+    const sMin = Math.min(...sd);
+    const needR = Math.ceil((grid.hi - grid.lo) / (sMin / 8)) + 1;
+    const ceiling = Math.max(L, Math.min(needR, Math.floor(REMOVAL_POINT_BUDGET / N)));
+    const norm = (rows) => rows.map((r) => {
+      const t = r.reduce((a, b) => a + b, 0);
+      return Array.from(r, (v) => v / t);
+    });
+    let prev = norm(q), moved = Infinity, pts = L, cur = q;
+    while (pts < ceiling) {
+      pts = Math.min(2 * pts - 1, ceiling);
+      cur = removalRows(M, sd, base, W, grid.lo, grid.hi, pts);
+      const nc = norm(cur);
+      moved = 0;
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
+        moved = Math.max(moved, Math.abs(nc[i][j] - prev[i][j]));
+      prev = nc;
+      if (moved <= MOVE_TOL) break;
+    }
+    if (!(moved <= MOVE_TOL))
+      throw new Error(
+        `deletion rows: the field needs ${needR} lattice points to resolve ` +
+        `its sharpest runner and the budget stops at ${ceiling}; refining ` +
+        `to there still moved a share by ${moved.toExponential(2)}. The row ` +
+        "masses are not evidence here -- cell errors of opposite sign " +
+        "cancel in them. Narrow the field.");
+    for (let i = 0; i < N; i++) q[i] = cur[i];
+  }
   if (q) {
     // each removal row is its own race and carries its own mass check:
     // the full race's `total` says nothing about it -- 0.99984 there sat
@@ -687,13 +767,22 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     // the last word, so a non-Gaussian rule is handled too.
     const s0 = Math.sqrt(D[0] + D[1] + quad(
       Vc[0].map((v, d) => v - Vc[1][d]), Vc[0].map((v, d) => v - Vc[1][d])));
-    const g0 = s0 * ndtri(p[0]) - (shift[1] - shift[0]);
+    // Solve on the MINORITY runner's share, read off its own target.
+    // ndtri(p[0]) with p[0] = 1/(1 + 1e-16) rounded to ndtri(1) = -inf and
+    // came back NaN, while the mirrored target was finite; and log p0 of a
+    // near-certain favourite is flat, so a non-Gaussian [1, 0.001] stalled
+    // at 92% low after fifty iterations where [0.001, 1] converged in 20
+    // (#412). p0 rises with g, p1 falls, so h below is increasing either way.
+    const m = p[1] < p[0] ? 1 : 0;
+    const sgn = m === 0 ? 1 : -1;
+    const g0 = sgn * s0 * ndtri(p[m]) - (shift[1] - shift[0]);
     const p0At = (g) => winProbabilitiesFactor([-0.5 * g, 0.5 * g], V, D, F, W, fwdOpts).p;
     let g = g0, ph = p0At(g), res = residualOf(ph.map((v) => Math.max(v, PFLOOR)));
     let it = 0;
     if (res >= tol) {
-      // bracket the root of h(g) = log p0(g) - log p0* (increasing in g)
-      const h = (gg) => Math.log(Math.max(p0At(gg)[0], PFLOOR)) - logp[0];
+      // bracket the root of h(g) = +-(log p_m(g) - log p_m*), increasing in g;
+      // floored at 1e-300, not PFLOOR, so a 1e-16 minority is still steered
+      const h = (gg) => sgn * (Math.log(Math.max(p0At(gg)[m], 1e-300)) - logp[m]);
       let lo = g0, hi = g0, step = Math.max(0.25 * s0, 1e-6);
       let hlo = h(lo), hhi = hlo;
       while (hlo > 0 && it < nIter) { lo -= step; step *= 2; hlo = h(lo); it++; }
@@ -701,14 +790,14 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
       while (hhi < 0 && it < nIter) { hi += step; step *= 2; hhi = h(hi); it++; }
       for (; it < nIter; it++) {
         // secant inside the bracket, bisection when it leaves it
-        let m = hhi !== hlo ? hi - hhi * (hi - lo) / (hhi - hlo) : 0.5 * (lo + hi);
-        if (!(m > lo && m < hi)) m = 0.5 * (lo + hi);
-        const hm = h(m);
-        g = m;
+        let mid = hhi !== hlo ? hi - hhi * (hi - lo) / (hhi - hlo) : 0.5 * (lo + hi);
+        if (!(mid > lo && mid < hi)) mid = 0.5 * (lo + hi);
+        const hm = h(mid);
+        g = mid;
         ph = p0At(g);
         res = residualOf(ph.map((v) => Math.max(v, PFLOOR)));
         if (res < tol) { it++; break; }
-        if (hm < 0) { lo = m; hlo = hm; } else { hi = m; hhi = hm; }
+        if (hm < 0) { lo = mid; hlo = hm; } else { hi = mid; hhi = hm; }
       }
     }
     return finish([-0.5 * g, 0.5 * g], res < tol, res, it);
