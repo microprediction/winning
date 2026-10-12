@@ -91,6 +91,46 @@ for (const [lbl, P] of [["independent", rIndep], ["factor", rFactor]]) {
         Math.max(...rows.map(v => Math.abs(v - 1)), ...cols.map(v => Math.abs(v - 1))) < 5e-3);
 }
 
+// --- rare exact places are not deconvolution residue (#511)
+{
+  // independent min-Gumbels are Plackett-Luce with weights exp(-pi/sqrt6 mu)
+  const mu = [-9, -2, 2, 10], c = Math.PI / Math.sqrt(6);
+  const w = mu.map(v => Math.exp(-c * v));
+  const E = mu.map(() => mu.map(() => 0));
+  const perm = (a, k = 0) => {
+    if (k === a.length) {
+      let p = 1;
+      for (let r = 0; r < a.length - 1; r++) {
+        let d = 0;
+        for (let s = r; s < a.length; s++) d += w[a[s]];
+        p *= w[a[r]] / d;
+      }
+      a.forEach((i, r) => { E[i][r] += p; });
+      return;
+    }
+    for (let j = k; j < a.length; j++) {
+      [a[k], a[j]] = [a[j], a[k]]; perm(a, k + 1); [a[k], a[j]] = [a[j], a[k]];
+    }
+  };
+  perm([0, 1, 2, 3]);
+  for (const points of [129, 513, 8193]) {
+    const P = topk.rankProbabilities(mu, { D: 1, base: "gumbel", points });
+    const worst = Math.max(...P.flatMap((row, i) => row.map((v, r) => Math.abs(v / E[i][r] - 1))));
+    holds(`Gumbel rank matrix matches Plackett-Luce entrywise at ${points} points (#511)`,
+          worst < 1e-5, `last place ${P[0][3].toExponential(4)} vs ${E[0][3].toExponential(4)}`);
+  }
+  for (const points of [513, 8193]) {
+    const last = topk.rankProbabilities([-12, -4, 4, 12], { points })[1][3];
+    holds(`normal last place is the cavity product at ${points} points (#511)`,
+          Math.abs(last / 2.9183334444853456e-30 - 1) < 1e-9, last.toExponential(6));
+    const q = topk.topKProbabilities([-14, 0, 0], 1, { points })[1];
+    const r = races.raceProbabilities([-14, 0, 0], { points })[1];
+    holds(`top-1 equals the win market in the tail at ${points} points (#511)`,
+          Math.abs(q / 2.091912795347403e-23 - 1) < 1e-9 && Math.abs(q / r - 1) < 3e-3,
+          `${q.toExponential(6)} vs race ${r.toExponential(6)}`);
+  }
+}
+
 // --- legitimate calls still work everywhere
 holds("forward works", races.raceProbabilities(mu3, { D: D3 }).every(Number.isFinite));
 holds("inverse works", races.abilitiesFromRace([0.5, 0.3, 0.2], { D: D3 }).every(Number.isFinite));

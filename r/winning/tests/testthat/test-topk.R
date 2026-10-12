@@ -299,3 +299,29 @@ test_that("mu0 must have one entry per runner, not redefine the field (#554)", {
                                       points = 129, n_iter = 1)
   expect_length(out, 4L)
 })
+
+test_that("rare exact places are not deconvolution residue (#511)", {
+  # independent min-Gumbels are Plackett-Luce with weights exp(-pi/sqrt6 mu)
+  perms <- function(v) if (length(v) <= 1) list(v) else
+    do.call(c, lapply(seq_along(v), function(i)
+      lapply(perms(v[-i]), function(p) c(v[i], p))))
+  mu <- c(-9, -2, 2, 10)
+  w <- exp(-pi / sqrt(6) * mu)
+  E <- matrix(0, 4, 4)
+  for (o in perms(1:4)) {
+    p <- 1
+    for (r in 1:3) p <- p * w[o[r]] / sum(w[o[r:4]])
+    for (r in 1:4) E[o[r], r] <- E[o[r], r] + p
+  }
+  for (pts in c(129, 513, 8193)) {
+    P <- suppressWarnings(rank_probabilities(mu, D = rep(1, 4),
+                                             base = "gumbel", points = pts))
+    expect_lt(max(abs(P / E - 1)), 1e-5)
+  }
+  for (pts in c(513, 8193)) {
+    P <- rank_probabilities(c(-12, -4, 4, 12), points = pts)
+    expect_lt(abs(P[2, 4] / 2.9183334444853456e-30 - 1), 1e-9)
+    q <- top_k_probabilities(c(-14, 0, 0), 1, points = pts)
+    expect_lt(abs(q[2] / 2.091912795347403e-23 - 1), 1e-9)
+  }
+})
