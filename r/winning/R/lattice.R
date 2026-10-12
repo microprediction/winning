@@ -28,6 +28,13 @@ as_classic_density <- function(density, where = "density") {
          ") to represent distinct offsets")
   if (!all(is.finite(d))) stop(where, " has a non-finite atom")
   total <- sum(d)
+  # finite atoms whose total overflows are the same law: rescale by the
+  # largest first (only then, so ordinary input is bit-identical). The
+  # raw total was Inf and every atom normalised to 0 (#339)
+  if (!is.finite(total)) {
+    d <- d / max(abs(d))
+    total <- sum(d)
+  }
   if (!(total > 0)) stop(where, " has no positive mass")
   if (min(d) < -1e-12 * total) stop(where, " has a negative atom (", min(d), ")")
   pmax(d, 0) / total
@@ -41,6 +48,10 @@ as_classic_prices <- function(prices, where = "prices") {
   if (!all(is.finite(p))) stop(where, " has a non-finite entry")
   if (min(p) < 0) stop(where, " has a negative entry (", min(p), ")")
   total <- sum(p)
+  if (!is.finite(total)) {             # c(1e308, 9e307) was a tie (#339)
+    p <- p / max(p)
+    total <- sum(p)
+  }
   if (!(total > 0)) stop(where, " has no positive mass")
   p / total
 }
