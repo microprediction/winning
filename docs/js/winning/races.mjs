@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget, canonicalBasis } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, floorableTarget, canonicalBasis, asPoints } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -385,6 +385,7 @@ export function asWindow(win, where = "raceProbabilities") {
 
 export function forwardGrid(Mall, sd, st, points, win = "bulk",
                             delta = 1e-12) {
+  points = asPoints(points);           // #444
   asWindow(win, "forwardGrid");
   let x;
   if (win === "bulk") {

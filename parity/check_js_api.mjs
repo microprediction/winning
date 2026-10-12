@@ -973,6 +973,25 @@ accepts("the inverse takes a scalar D, matching python",
   }
 }
 
+// --- a lattice size is a whole number >= 2 at every modular door (#444)
+{
+  const mu = [-0.5, 0, 0.5];
+  const doors = {
+    raceProbabilities: p => races.raceProbabilities(mu, { points: p }),
+    raceJacobian: p => polish.raceJacobian(mu, { points: p }),
+    abilitiesFromRace: p => races.abilitiesFromRace([0.5, 0.3, 0.2], { points: p }),
+    topKProbabilities: p => topk.topKProbabilities(mu, 1, { points: p }),
+    rankProbabilities: p => topk.rankProbabilities(mu, { points: p }),
+    blockRaceProbabilities: p => blocks.blockRaceProbabilities(mu, [0, 0, 1], [0.5, 0.5, 0.5], 1, { points: p }),
+  };
+  for (const [name, f] of Object.entries(doors))
+    for (const p of [0, 1, true, null, -1, 2.5, "257", Infinity, NaN])
+      rejects(f, [p], `${name} refuses points=${JSON.stringify(p)} (#444)`, "lattice");
+  const p257 = races.raceProbabilities(mu, { points: 257 });
+  const want = [0.5487437165504273, 0.3009257008897869, 0.15033058255978574];
+  holds("points=257 still prices (#444)",
+        Math.max(...p257.map((v, i) => Math.abs(v - want[i]))) < 1e-12);
+}
 // --- the classic input contract (#339, #377)
 {
   const dV = classic.skewNormalDensity(50, 0.1);

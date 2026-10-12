@@ -45,7 +45,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..shapes import (as_factor_law, as_idio, as_loadings, as_nonnegative,
-                      as_tolerance, rescaled_target)
+                      as_points, as_tolerance, rescaled_target)
 
 
 from .races import _jacobi_sweeps, BASES, _resolution
@@ -526,7 +526,7 @@ def _refined_topk(raw_at, k, points, kind):
     paid by a call that would otherwise have raised. A field that still
     fails raises, naming the points it tried. A call that passes first
     time is untouched."""
-    points = int(points)
+    points = as_points(points)     # int() read 2.5 and "257" as budgets (#444)
     cap = min(4 * (points - 1) + 1, _MAX_TOPK_POINTS)
     pts = points
     while True:
@@ -832,6 +832,9 @@ def _resolved_points(lo, hi, sd, points, res=1.0):
     narrowest sd, capped at 8193, warning when the cap still leaves the
     lattice coarse -- rounded up to a dyadic count (#515, below).
     """
+    # a floor the caller set, validated as every lattice's: int() read
+    # -1, 2.5 and "257" as budgets and the adaptive size replaced them (#444)
+    points = as_points(points)
     smin = max(float(np.min(sd)), 1e-300) * float(res)
     need = int(np.ceil((hi - lo) / (0.5 * smin))) + 1
     if need > 8193:
@@ -843,7 +846,7 @@ def _resolved_points(lo, hi, sd, points, res=1.0):
             "the mass check cannot see, since it is one scalar and "
             "runner-level errors of opposite sign cancel in it.",
             RuntimeWarning, stacklevel=3)
-    return max(int(points), _dyadic_points(need))
+    return max(points, _dyadic_points(need))
 
 
 def _dyadic_points(need):

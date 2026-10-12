@@ -2,7 +2,7 @@
 import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
          asFactorNodes, asWeights, asIterations, asTolerance,
-         asFiniteVector, rescaledTarget, canonicalBasis } from "./core.mjs";
+         asFiniteVector, rescaledTarget, canonicalBasis, asPoints } from "./core.mjs";
 import { invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -332,7 +332,7 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
   const maxNodeNorm = Math.max(...nodes.map(nq => Math.sqrt(nq.reduce((a, b) => a + b * b, 0))));
   const amp = VO.map(vi => Math.sqrt(vi.reduce((a, b) => a + b * b, 0)) * maxNodeNorm);
   const [lo, hi] = windowNodes(muO, sdO, amp);
-  const P = points;
+  const P = asPoints(points);              // #444
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
   const dx = x[1] - x[0];
@@ -466,7 +466,7 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
   const maxAn = Math.max(...an.map(Math.abs));
   const amp = muO.map((mm, i) => (Math.abs(vO[i]) + depth[cO[i]]) * maxAn);
   const [lo, hi] = windowNodes(muO, sdO, amp);
-  const P = points;
+  const P = asPoints(points);              // #444
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
   const dx = x[1] - x[0];
@@ -618,7 +618,7 @@ export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
   const maxAnJ = Math.max(...an.map(Math.abs));
   const ampJ = muO.map((mm, i) => Math.abs(vO[i]) * maxAnJ);
   const [lo, hi] = windowNodes(muO, sdO, ampJ);
-  const P = points;
+  const P = asPoints(points);              // #444
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
   const dx = x[1] - x[0];

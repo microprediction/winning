@@ -138,6 +138,21 @@ export function asCount(x, name, minimum, who = "hermiteNodes") {
   return x;
 }
 
+/* A lattice size: a whole number of at least two points (python's
+   shapes.as_points). Every lattice divides by points - 1, so 0, 1, null
+   and true reached the race grid and came back all NaN, -1 and 2.5 as
+   "Invalid array length", and the top-k grid silently replaced them with
+   its own adaptive size (#444). */
+export function asPoints(points, name = "points", minimum = 2) {
+  if (typeof points !== "number" || !Number.isFinite(points) || !Number.isInteger(points))
+    throw new Error(`${name} must be a whole number of lattice points; got ` +
+                    `${typeof points === "string" ? JSON.stringify(points) : String(points)}`);
+  if (points < minimum)
+    throw new Error(`${name} must be at least ${minimum}: a lattice of ${points} point` +
+                    `${points === 1 ? "" : "s"} has no spacing to integrate on`);
+  return points;
+}
+
 /* An iteration budget is a finite positive whole number of sweeps.
 
    Every browser solver used its budget as a bare loop bound, so 0, a

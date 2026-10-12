@@ -6,7 +6,7 @@
 // the derivations and the two-branch refusal of exact-rank targets.
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
-         jacobiSweeps, rescaledTarget, floorableTarget } from "./core.mjs";
+         jacobiSweeps, rescaledTarget, floorableTarget, asPoints } from "./core.mjs";
 import { BASES, _factorNodeRule, baseResolution } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -237,6 +237,7 @@ function pairPmfAt(Qi, F, i, k) {
 }
 
 function resolvedPoints(lo, hi, sd, points, res = 1) {
+  points = asPoints(points);   // a floor the caller set, not a hint to replace (#444)
   // about two points per NARROWEST sd, capped at 8193. The window is set
   // by the widest runner and the grid by `points`, so a heterogeneous
   // field leaves the narrowest density between samples, and the mass
