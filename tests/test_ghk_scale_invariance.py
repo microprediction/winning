@@ -79,3 +79,30 @@ def test_fit_covariance_is_homogeneous():
         assert out[s][0] == out[1.0][0]
         assert out[s][1] == pytest.approx(out[1.0][1], rel=1e-9)
         assert 0.5 * np.abs(out[s][2] - out[1.0][2]).sum() < 1e-12
+
+
+@pytest.mark.parametrize("method", [ghk, qmc_ghk])
+@pytest.mark.parametrize("c", [1e-150, 1e-155])
+def test_subnormal_scale_is_the_same_race_409(method, c):
+    # the relative ridge's 1e-300 floor was an absolute 1e-312 below it:
+    # D = 1e-310 priced 0.7597, D = 1e-320 0.5000
+    mu = np.array([0.0, c])
+    p, _ = method(mu, np.empty((2, 0)), np.array([c * c, c * c]),
+                  budget=32, seed=9)
+    assert p[1] == pytest.approx(EXACT, abs=1e-12)
+
+
+@pytest.mark.parametrize("method,budget", [(ghk, 200_000),
+                                           (qmc_ghk, 65_536)])
+def test_a_valid_small_pivot_is_not_inflated_409(method, budget):
+    # near-twins share a unit factor with variance 2^-43 each, their gap
+    # scaled to that direction. The always-on relative ridge priced
+    # [0.5, 0.167, 0.333] at any budget; exact via a standardized
+    # bivariate CDF: [0.49999992, 0.07932763, 0.42067245]
+    delta = 2.0 ** -43
+    a = 0.5 * np.sqrt(2 * delta)
+    V = np.array([[0.0], [1.0], [1.0]])
+    D = np.array([1.0, delta, delta])
+    p, _ = method(-np.array([0.0, a, -a]), V, D, budget=budget, seed=9)
+    np.testing.assert_allclose(p, [0.49999992, 0.07932763, 0.42067245],
+                               atol=2e-3)

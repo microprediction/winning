@@ -448,18 +448,22 @@ end
     @test bytes < 20_000_000
     p = max_cdf(c, 3.0)
     @test 0 < p < 1
-    # streaming is the same arithmetic as the stored transitions
+    # streaming is the same arithmetic as building every transition
     cs = stationary_ar1(0.6, 12)
-    x, dx = GE._grid(cs, 120)
-    T = GE._transitions(cs, x, dx)
-    v = [GE._interval_mass(xi - dx / 2, min(xi + dx / 2, 0.7), 0.0, 1.0)
-         for xi in x]
-    keep = clamp.((0.7 .- (x .- dx / 2)) ./ dx, 0.0, 1.0)
-    for M in T
+    R = GE._offsets(cs, [0.7])
+    lat = GE._lattice(cs, 120, R)
+    cells(t) = GE._cells!(zeros(lat.L), lat, t)
+    h1 = lat.dz[1] / 2
+    v = [GE._interval_mass(zi - h1, min(zi + h1, R[1, 1]), 0.0, cs.sd0)
+         for zi in cells(1)]
+    for t in 1:11
+        M = GE._transition!(zeros(lat.L, lat.L), cs.phi[t], cs.s[t],
+                            cells(t), lat.dz[t], cells(t + 1), lat.dz[t + 1])
+        keep = clamp.((R[t + 1, 1] .- (cells(t + 1) .- lat.dz[t + 1] / 2)) ./
+                      lat.dz[t + 1], 0.0, 1.0)
         v = keep .* (M * v)
     end
-    @test abs(GE._restricted_masses(cs, x, dx, [0.7])[1][end, 1] - sum(v)) <
-          1e-14
+    @test abs(GE._restricted_masses(cs, lat, R)[1][end, 1] - sum(v)) < 1e-14
     # an explicit lattice past the one-matrix budget is refused up front
     @test_throws ArgumentError max_cdf(stationary_ar1(0.5, 3), 0.0;
                                        points = 10_000)
@@ -468,6 +472,92 @@ end
     # a single node has no transition, so no matrix to budget
     @test isfinite(max_cdf(GaussMarkovChain([0.0], 1.0, Float64[], Float64[]),
                            0.0; points = 10_000))
+end
+
+@testset "a chain and its exact reversal agree (#640)" begin
+    # sd(X1) = 0.01 next to sd(X3) = 8: one shared lattice put X1 in a
+    # single cell and gave 0.231 forward, 0.130 reversed
+    c = GaussMarkovChain(zeros(3), 0.01, [2.0, -1 / 3], [0.28, 8.0])
+    S = [0.0001 0.0002 -0.00006666666666666667
+         0.0002 0.0788 -0.02626666666666667
+         -0.00006666666666666667 -0.02626666666666667 64.00875555555556]
+    p32 = S[2, 3] / S[3, 3]
+    p21 = S[1, 2] / S[2, 2]
+    cr = GaussMarkovChain(zeros(3), sqrt(S[3, 3]), [p32, p21],
+                          [sqrt(S[2, 2] - p32^2 * S[3, 3]),
+                           sqrt(S[1, 1] - p21^2 * S[2, 2])])
+    sd = sqrt.([S[i, i] for i in 1:3])
+    Rho = S ./ (sd * sd')
+    exact = 1 / 8 + (asin(Rho[1, 2]) + asin(Rho[1, 3]) + asin(Rho[2, 3])) / (4pi)
+    for points in (400, 800)
+        f, r = max_cdf(c, 0.0; points), max_cdf(cr, 0.0; points)
+        @test abs(f - exact) < 1e-5
+        @test abs(r - exact) < 1e-5
+        @test abs(f - r) < 1e-6
+    end
+    # the narrow node in the middle, and at either end of a longer chain
+    for sds in ([1.0, 0.01, 1.0], [0.01, 1.0, 5.0, 5.0], [5.0, 5.0, 1.0, 0.01])
+        n = length(sds)
+        phis = [0.5 * sds[t + 1] / sds[t] for t in 1:(n - 1)]
+        ss = [sqrt(0.75) * sds[t + 1] for t in 1:(n - 1)]
+        ch = GaussMarkovChain(zeros(n), sds[1], phis, ss)
+        # reverse: corr(t, t+1) = 0.5 throughout, so the reversed chain
+        # has the same form read backwards
+        rs = reverse(sds)
+        chr = GaussMarkovChain(zeros(n), rs[1],
+                               [0.5 * rs[t + 1] / rs[t] for t in 1:(n - 1)],
+                               [sqrt(0.75) * rs[t + 1] for t in 1:(n - 1)])
+        @test abs(max_cdf(ch, 0.0) - max_cdf(chr, 0.0)) < 1e-5
+    end
+end
+
+@testset "a common shift moves nothing but the location (#657)" begin
+    # means and threshold on a quarter grid, so every shifted input up
+    # to 2^50 (where the ulp is 0.25) is exact and the law is unchanged
+    z = GaussMarkovChain([0.0, 0.25, -0.25], 1.0, [0.7, 0.5], [0.6, 0.9])
+    m0 = max_cdf(z, 0.5)
+    e0 = excursion_probability(z, 0.5)
+    f0 = first_passage(z, 0.5)
+    a0 = argmax_marginals(z)
+    x0 = expected_max(z)
+    for shift in (1e12, 1e15, 2.0^50)
+        c = GaussMarkovChain(z.mu .+ shift, z.sd0, z.phi, z.s)
+        @test abs(max_cdf(c, 0.5 + shift) - m0) < 1e-12
+        @test abs(excursion_probability(c, 0.5 + shift) - e0) < 1e-12
+        f = first_passage(c, 0.5 + shift)
+        @test abs(sum(f) - 1) < 1e-12
+        @test maximum(abs.(f .- f0)) < 1e-12
+        @test maximum(abs.(argmax_marginals(c) .- a0)) < 1e-9
+        @test abs(expected_max(c) - (x0 + shift)) <= 4 * eps(shift) + 1e-9
+    end
+    # the issue's one-node reproducer, where the threshold offset is exact
+    one = GaussMarkovChain([2.0^50], 1.0, Float64[], Float64[])
+    @test abs(max_cdf(one, 2.0^50) - 0.5) < 1e-12
+    @test abs(excursion_probability(one, 2.0^50) - 0.5) < 1e-12
+    @test abs(sum(first_passage(one, 2.0^50)) - 1) < 1e-12
+    @test argmax_marginals(one) == [1.0]
+end
+
+@testset "reciprocal finite scales do not square to NaN (#663)" begin
+    for (phi, sd0) in ((1e160, 1e-160), (1e200, 1e-200))
+        c = GaussMarkovChain([0.0, 0.0], sd0, [phi], [1.0])
+        @test GE.marginal_sd(c) ≈ [sd0, sqrt(2.0)]
+        @test abs(max_cdf(c, 0.0) - 0.375) < 1e-4
+        @test maximum(abs.(first_passage(c, 0.0) .- [0.5, 0.125, 0.375])) < 1e-4
+    end
+    # a marginal scale genuinely past Float64 is refused, not gridded
+    big = GaussMarkovChain([0.0, 0.0], 1e200, [1e200], [1.0])
+    @test_throws ArgumentError max_cdf(big, 0.0)
+end
+
+@testset "no lattice warning for a central threshold (#685)" begin
+    n = 200
+    c = stationary_ar1(0.5, n)
+    @test_logs max_cdf(c, 2.0)
+    @test_logs first_passage(c, 3.0)
+    @test_logs max_cdf(stationary_ar1(0.5, 20), 0.5; points = 2000)
+    # a threshold that does force a much coarser lattice still warns
+    @test_logs (:warn, r"far outside") max_cdf(c, 30.0)
 end
 
 println("all GMRFExtremes tests passed")

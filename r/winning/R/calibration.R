@@ -147,6 +147,15 @@ CALIBRATION_WARN_TOL <- 1e-3
   invisible(miss)
 }
 
+.check_unit <- function(unit, where) {
+  # the lattice spacing is finite and positive: a negative one reversed
+  # every ability, zero tied the field, NaN/Inf gave non-finite (#649)
+  if (length(unit) != 1L || !is.numeric(unit) || !is.finite(unit) || unit <= 0)
+    stop(where, ": unit must be a finite positive number; got ",
+         deparse(unit), call. = FALSE)
+  invisible(unit)
+}
+
 #' Ability implied by state prices
 #' @param prices numeric win probabilities (nonnegative; a zero price
 #'   returns ability Inf)
@@ -155,6 +164,7 @@ CALIBRATION_WARN_TOL <- 1e-3
 #' @return numeric abilities (lower is better), in units of `unit`
 #' @export
 state_price_implied_ability <- function(prices, density, unit = 1.0) {
+  .check_unit(unit, "state_price_implied_ability")
   # A zero price -- a scratched runner, or the zero, negative or infinite
   # dividend prices_from_dividends maps to 0 -- is not calibrated: its
   # ability is Inf (lower is better, so it never wins;
@@ -193,6 +203,7 @@ dividend_implied_ability <- function(dividends, density,
 #' @export
 ability_implied_state_prices <- function(ability, density, unit = 1.0,
                                          max_depth = 3L) {
+  .check_unit(unit, "ability_implied_state_prices")
   # the reference's full extended handling, not just centring: a runner
   # hundreds of support widths behind pushed the viable ones off the
   # lattice edge, where the shift clamp made them identical -- a 75/25

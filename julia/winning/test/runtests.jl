@@ -316,3 +316,66 @@ end
                                       points = 1025, return_info = true)
     @test abs(sum(w.mu)) < 1e-12 && abs(sum(log.(w.sd))) < 1e-12
 end
+
+@testset "top-k inverse: dominant pair converges (#408)" begin
+    for (n, eps) in ((3, 6e-4), (10, 1e-4), (30, 1e-4))
+        p = [0.6, 0.4, fill(eps, n - 2)...]
+        p ./= sum(p)
+        D = fill(3.2^2, n)
+        out = abilities_from_topk(p, 1; D = D, points = 500,
+                                  return_info = true)
+        @test out.converged
+        @test out.max_logit_residual < 1e-8
+        q = top_k_probabilities(out.mu, 1; D = D, points = 500)
+        @test maximum(abs.(q .- p)) < 1e-6
+    end
+end
+
+@testset "top-k inverse is equivariant to units (#100)" begin
+    mu0 = [-1.2, -0.35, 0.15, 0.55, 0.85]
+    D0 = [0.7, 1.1, 0.8, 0.9, 1.2]
+    q = top_k_probabilities(mu0, 2; D = D0)
+    ref = abilities_from_topk(q, 2; D = D0)
+    for c in (1e-6, 1e-2, 1e3, 1e6)
+        out = abilities_from_topk(q, 2; D = c^2 .* D0, return_info = true)
+        @test out.converged
+        @test maximum(abs.(out.mu ./ c .- ref)) < 1e-7
+        @test maximum(abs.(top_k_probabilities(out.mu, 2; D = c^2 .* D0) .- q)) < 1e-8
+    end
+end
+
+@testset "ridge stall on an impossible board is not convergence (#353)" begin
+    q1 = [0.8, 0.1, 0.1]
+    q2 = [0.2, 0.9, 0.9]
+    for ridge in (0.0, 1e-4)
+        r = loc_scale_from_topk_pair(q1, 1, q2, 2; points = 1025,
+                                     ridge = ridge, return_info = true)
+        @test !r.converged
+        @test !r.fit_converged
+        @test !r.nested
+        @test r.max_logit_residual > 1
+    end
+    # a feasible board under a ridge keeps a residual by design and is a
+    # stationary, nested fit
+    mu = [-0.8, -0.2, 0.1, 0.4, 0.5]
+    sd = [0.8, 1.0, 1.1, 0.9, 1.2]
+    a = top_k_probabilities(mu, 1; D = sd .^ 2)
+    b = top_k_probabilities(mu, 3; D = sd .^ 2)
+    r = loc_scale_from_topk_pair(a, 1, b, 3; ridge = 0.0025,
+                                 return_info = true)
+    @test r.converged && r.stationary && r.nested && !r.fit_converged
+end
+
+@testset "bottom-k keeps a rare last place (#365)" begin
+    exact = 7.726967753938469e-24
+    for points in (513, 2049, 8193)
+        b = bottom_k_probabilities([-12.0, 0.0, 0.0], 1; D = ones(3),
+                                   points = points)
+        @test abs(b[1] - exact) < 1e-9 * exact
+        @test abs(sum(b) - 1) < 1e-12
+    end
+    mu = [-1.2, -0.35, 0.15, 0.55, 0.85]
+    D = [0.7, 1.1, 0.8, 0.9, 1.2]
+    @test bottom_k_probabilities(mu, 2; D = D, points = 257) ≈
+          1 .- top_k_probabilities(mu, 3; D = D, points = 257) atol = 1e-10
+end

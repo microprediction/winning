@@ -731,6 +731,40 @@ function _choice_logprob_terms(mu::AbstractMatrix, V::AbstractMatrix,
     return lp, dmu, GV
 end
 
+
+# Lower Cholesky factor of a contrast covariance, AS GIVEN whenever it has
+# one (python: winning.methods.native._contrast_cholesky). An absolute
+# 1e-12 ridge was model noise in the utility unit (#409), and the relative
+# ridge that replaced it, added always, still inflated a valid small
+# pivot: near-twins with variance 2^-43 priced [0.5, 0.167, 0.333] for the
+# exact [0.5, 0.079, 0.421]; its 1e-300 floor was an absolute ridge below
+# that scale. The matrix is brought to unit scale by an exact power of
+# two, factorised unmodified, given a ridge of 1e-12 of its unit mean
+# variance only if that fails, and the factor scaled back exactly. An
+# exactly zero contrast (a tie, Dirac scope) keeps the old floor.
+function _contrast_cholesky(C::AbstractMatrix{Float64})
+    m = size(C, 1)
+    tr = sum(C[d, d] for d in 1:m) / m
+    if !(tr > 0.0 && isfinite(tr))
+        Cr = copy(C)
+        for d in 1:m
+            Cr[d, d] += 1e-12 * max(tr, 1e-300)
+        end
+        return Matrix(cholesky(Symmetric(Cr)).L)
+    end
+    k = -fld(exponent(tr) + 1, 2)
+    Cs = ldexp.(C, 2k)
+    F = cholesky(Symmetric(Cs); check = false)
+    if !issuccess(F)
+        ts = sum(Cs[d, d] for d in 1:m) / m
+        for d in 1:m
+            Cs[d, d] += 1e-12 * ts
+        end
+        F = cholesky(Symmetric(Cs))
+    end
+    return ldexp.(Matrix(F.L), -k)
+end
+
 """Log-likelihood of observed argmax choices with the ANALYTIC score.
 mu: (T, J) utilities; V: (J, r) loadings; choice: 1-based indices.
 Returns (loglik, dmu, dV), plus the per-observation loading scores
@@ -803,11 +837,7 @@ function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
     Vd = Float64.(V[others, :]) .- Float64.(V[k:k, :])
     C = Vd * Vd' .+ Dv[k] .+ [r == c ? Dv[others[r]] : 0.0
                               for r in 1:m, c in 1:m]
-    ridge = 1e-12 * max(sum(C[d, d] for d in 1:m) / m, 1e-300)
-    for d in 1:m
-        C[d, d] += ridge
-    end
-    Lc = cholesky(Symmetric(C)).L
+    Lc = _contrast_cholesky(C)
     rng = Xoshiro(seed)
     z = zeros(m, r_draws)
     logprob = zeros(r_draws)
@@ -839,9 +869,13 @@ function _check_r_draws(r_draws)
     return nothing
 end
 
-"""GHK simulated log-likelihood over all observations (CRN: the seed
-per observation is a deterministic function of its index, so the
-objective is smooth-in-parameters for a fixed draw set)."""
+"""GHK simulated log-likelihood over all observations, with common
+random numbers: every observation uses the SAME base-uniform cloud (the
+stream of `seed`), so the objective is smooth in the parameters for a
+fixed draw set AND a function of the sample, not of its row order. The
+stream used to be `seed + 7919 t`, keyed by row position, so swapping two
+rows reassigned their draws and moved the log-likelihood by 1.18 nats
+on a two-row sample (#619)."""
 function ghk_loglik(mu::AbstractMatrix, V::AbstractMatrix,
                     choice::AbstractVector; r_draws = 1000, seed = 9)
     _check_r_draws(r_draws)
@@ -849,8 +883,7 @@ function ghk_loglik(mu::AbstractMatrix, V::AbstractMatrix,
     ll = 0.0
     for t in 1:T
         p = ghk_choice_prob(vec(mu[t, :]), V, Int(choice[t]);
-                            r_draws = r_draws,
-                            seed = seed + 7919 * t)
+                            r_draws = r_draws, seed = seed)
         ll += log(max(p, TINY))
     end
     return ll
