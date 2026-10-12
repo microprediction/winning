@@ -206,7 +206,7 @@ def as_weights(W, name="W"):
     return W / W.sum()
 
 
-def as_factor_law(F, W, name="W"):
+def as_factor_law(F, W, name="W", negligible=True):
     """A quadrature rule (F, W) for the factor law, with null nodes removed.
 
     W goes through as_weights (finite, non-negative, positive total,
@@ -235,7 +235,7 @@ def as_factor_law(F, W, name="W"):
     # lightest nodes whose COMBINED relative mass is at most _NEGLIGIBLE
     # are dropped; that bounds the change to every normalised share by
     # the same amount, under double-precision resolution of the result.
-    if len(W) > 1:
+    if negligible and len(W) > 1:
         o = np.argsort(W, kind="stable")
         light = np.cumsum(W[o]) <= _NEGLIGIBLE * W.sum()
         keep[o[light]] = False

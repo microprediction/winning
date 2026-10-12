@@ -411,6 +411,7 @@ def _translated_home(mu, D):
 
 
 def _setup(mu, V, D, F, W, base):
+    caller_rule = F is not None
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
     # mu was the one argument nobody checked: D goes through as_idio, V
@@ -558,8 +559,9 @@ def _setup(mu, V, D, F, W, base):
     # contract everywhere else.
     # as_factor_law also drops zero-weight nodes, which are no-ops for
     # the integral but would otherwise widen every window built from F
-    # (#416).
-    F, W = as_factor_law(F, W)
+    # (#416). Negligible caller nodes go too; the library's own rules
+    # are left exactly as built.
+    F, W = as_factor_law(F, W, negligible=caller_rule)
     return mu, V, D, F, W, fn, left, right
 
 
