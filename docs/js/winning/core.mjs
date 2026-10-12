@@ -548,7 +548,19 @@ export function gaugeCenter(V) {
   const v0 = V[0];
   const colMean = v0.slice();
   for (const row of V) for (let j = 0; j < r; j++) colMean[j] += (row[j] - v0[j]) / n;
-  return V.map(row => row.map((x, j) => x - colMean[j]));
+  const out = V.map(row => row.map((x, j) => x - colMean[j]));
+  // a column whose differences overflow ([1, 1, -1] * 1e308: row - v0 is
+  // -inf) is centred in units of its largest entry, (V/s - mean) * s, as
+  // python's _gauge_center does (#471)
+  for (let j = 0; j < r; j++) {
+    if (out.every(row => Number.isFinite(row[j]))) continue;
+    let s = 0;
+    for (const row of V) s = Math.max(s, Math.abs(row[j]));
+    let m = 0;
+    for (const row of V) m += row[j] / s / n;
+    for (let i = 0; i < n; i++) out[i][j] = (V[i][j] / s - m) * s;
+  }
+  return out;
 }
 
 /* First d primes, generated. Literal tables put silent cliffs in the
@@ -625,6 +637,32 @@ export function floorableTarget(target, mass) {
   const t = target.map(v => v / mx);
   const s = t.reduce((a, b) => a + b, 0);
   return t.map(v => v * (mass / s));
+}
+
+/* Floor a target at `floor` IN ITS FINAL NORMALISED SCALE (python
+   races._apply_floor, #592): normalise to `mass`, raise the entries below
+   the floor to exactly the floor and take that mass proportionally from
+   the others, repeating if that pushes another entry under. Clamping and
+   then renormalising scaled the floor itself back down ([.7, .3, 0] at
+   floor .2 repriced the floored runner at 0.167). An infeasible floor
+   (no mass left for the unfloored entries) throws. */
+export function applyFloor(target, mass, floor) {
+  const t = floorableTarget(target, mass);
+  let floored = t.map(v => v < floor);
+  let scaled = t;
+  for (let it = 0; it < t.length; it++) {
+    const m = floored.filter(Boolean).length;
+    const free = mass - floor * m;
+    const rest = t.reduce((a, v, i) => a + (floored[i] ? 0 : v), 0);
+    if (!(free > 0 && rest > 0))
+      throw new Error(`targetFloor=${floor} is infeasible: flooring ${m} of ${t.length} ` +
+                      `entries at it leaves no mass for the rest of a target of total ${mass}`);
+    scaled = t.map((v, i) => (floored[i] ? floor : v * (free / rest)));
+    const newly = scaled.map((v, i) => !floored[i] && v < floor);
+    if (!newly.some(Boolean)) break;
+    floored = floored.map((f, i) => f || newly[i]);
+  }
+  return { target: scaled, floored };
 }
 
 export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {

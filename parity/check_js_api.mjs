@@ -2034,5 +2034,39 @@ accepts("treeFromLinkage builds a valid linkage (#328)",
           "leaves must map every label (#372)", "does not map");
 }
 
+// --- targetFloor holds in the final normalised target (#592)
+for (const c of [1e-3, 1, 1e3])
+  accepts(`top-k targetFloor holds at scale ${c} (#592)`,
+          () => topk.topKProbabilities(topk.abilitiesFromTopk([0.7 * c, 0.3 * c, 0], 1,
+                  { D: [1, 1, 1], targetFloor: 0.2 }), 1, { D: [1, 1, 1] }),
+          q => Math.abs(q[2] - 0.2) < 1e-6 && Math.abs(q[0] - 0.56) < 1e-6);
+rejects(races.abilitiesFromRace, [[0.5, 0.5, 0], { targetFloor: 0.4 }],
+        "an infeasible targetFloor is refused (#592)", "infeasible");
+
+// --- an exactly common loading column is inert at any scale (#471)
+{
+  const n = 9, mu = Array.from({ length: n }, (_, i) => (i - 4) * 0.1), D = Array(n).fill(1);
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const ind = races.raceProbabilities(mu, { D, points: 257 });
+  const tk = topk.topKProbabilities(mu, 3, { D, points: 257 });
+  const J0 = topk.topKJacobians(mu, 3, { D, points: 257 }).Jmu.flat();
+  for (const c of [1e20, 1e307, 1e308]) {
+    const V = Array.from({ length: n }, () => [c]);
+    accepts(`a common [${c}] column leaves the race unchanged (#471)`,
+            () => races.raceProbabilities(mu, { V, D, F: [[-1], [1]], W: [0.5, 0.5], points: 257 }),
+            p => md(p, ind) < 1e-15);
+    accepts(`a common [${c}] column leaves top-k unchanged (#471)`,
+            () => topk.topKProbabilities(mu, 3, { V, D, points: 257, qa: 3 }),
+            q => md(q, tk) < 1e-12);
+    accepts(`a common [${c}] column leaves the top-k Jacobian unchanged (#471)`,
+            () => topk.topKJacobians(mu, 3, { V, D, points: 257, qa: 3 }).Jmu.flat(),
+            J => md(J, J0) < 1e-12);
+  }
+  const mu3 = [0, 0.3, -0.2], c = 1e308;
+  accepts("an overflowing loading with compensating nodes prices the same race (#471)",
+          () => races.raceProbabilities(mu3, { V: [[c], [c], [-c]], D: [1, 1, 1], F: [[-1 / c], [1 / c]], W: [0.5, 0.5] }),
+          p => md(p, races.raceProbabilities(mu3, { V: [[1], [1], [-1]], D: [1, 1, 1], F: [[-1], [1]], W: [0.5, 0.5] })) < 1e-12);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

@@ -323,3 +323,20 @@ end
     end
     @test all(isfinite, race_probabilities([-1.0, 0, 1]; D = [1.0, 1, 1], delta = 1e-3))
 end
+
+@testset "top-k target_floor holds after renormalisation (#592)" begin
+    for c in (1e-3, 1.0, 1e3)
+        m = abilities_from_topk([.7, .3, 0] .* c, 1; D = [1.0, 1, 1], target_floor = .2)
+        @test isapprox(top_k_probabilities(m, 1; D = [1.0, 1, 1]), [.56, .24, .2]; atol = 1e-6)
+    end
+    @test_throws ErrorException abilities_from_topk([.5, .5, 0], 1; D = [1.0, 1, 1], target_floor = .4)
+end
+
+@testset "a common loading column vanishes at any scale (#471)" begin
+    n = 9; mu = ((0:8) .- 4) .* 0.1; D = ones(n)
+    ind = race_probabilities(mu; D = D)
+    for c in (1e20, 1e308)
+        @test isapprox(race_probabilities(mu; V = fill(c, n, 1), D = D,
+                       F = reshape([-1.0, 1], 2, 1), W = [.5, .5]), ind; atol = 1e-14)
+    end
+end

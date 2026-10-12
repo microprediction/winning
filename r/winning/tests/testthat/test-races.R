@@ -282,3 +282,13 @@ test_that("race_probabilities validates delta", {
   expect_true(all(is.finite(race_probabilities(c(-1, 0, 1), D = c(1, 1, 1),
                                                delta = 1e-3))))
 })
+
+# an exactly common loading column is inert at any finite scale (#471)
+test_that("a common loading column vanishes at any scale", {
+  n <- 9; mu <- (0:8 - 4) * 0.1; D <- rep(1, n)
+  ind <- race_probabilities(mu, D = D)
+  for (cc in c(1e20, 1e308))
+    expect_equal(race_probabilities(mu, V = matrix(cc, n, 1), D = D,
+                                    F = matrix(c(-1, 1), 2, 1), W = c(.5, .5)),
+                 ind, tolerance = 1e-14)
+})

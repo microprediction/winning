@@ -1328,9 +1328,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         # the floor is a PROBABILITY: normalize (scale-safely) first. Floored
         # in the caller's units, [c, 0] at c = 1e-6 / 1 / 1e6 returned gaps
         # of 0 / 4.75 / 7.03 for one and the same relative target (#592)
-        target = _floorable(target, 1.0)
-        floored = target < target_floor
-        target = np.maximum(target, target_floor)
+        target, floored = _apply_floor(target, 1.0, target_floor)
     else:
         floored = np.zeros(len(target), dtype=bool)
         if np.any(target <= 0):
@@ -1401,7 +1399,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # The default nodes have unit covariance, where this is mean ||V_i||^2.
     _Dn = np.ones(n_t) if D is None else as_idio(D, n_t)
     _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
-    _Vc = _Vn - _Vn.mean(axis=0)
+    _Vc = _gauge_center(_Vn)                       # scale-safe (#471)
     if V is not None and nodes_given:
         _Fq = np.asarray(F, dtype=float).reshape(len(F), -1)
         _Wq = (np.ones(len(_Fq)) / len(_Fq) if W is None
@@ -1689,6 +1687,34 @@ def _floorable(target, mass):
             "small and zero shares, not negative ones")
     target = target / target.max()
     return target * (mass / target.sum())
+
+
+def _apply_floor(target, mass, floor):
+    """Floor a target at `floor` IN ITS FINAL NORMALISED SCALE (#592).
+
+    Normalise to `mass` (1 for a race, k slots for top-k), raise the
+    entries below the floor to exactly the floor, and take that mass
+    proportionally from the others -- repeating if that pushes another
+    entry under the floor. Clamping and then renormalising scaled the
+    floor itself back down: [.7, .3, 0] at floor .2 repriced its floored
+    runner at 0.167. A floor no target of this mass can meet (n * floor
+    >= mass) raises. Returns (target, floored mask)."""
+    t = _floorable(target, mass)
+    floored = t < floor
+    for _ in range(len(t)):
+        free = mass - floor * int(floored.sum())
+        rest = t[~floored].sum()
+        if not (free > 0 and rest > 0):
+            raise ValueError(
+                f"target_floor={floor:g} is infeasible: flooring "
+                f"{int(floored.sum())} of {len(t)} entries at it leaves no "
+                f"mass for the rest of a target of total {mass:g}")
+        scaled = np.where(floored, floor, t * (free / rest))
+        newly = ~floored & (scaled < floor)
+        if not newly.any():
+            break
+        floored = floored | newly
+    return scaled, floored
 
 
 def _inverse_return(mu, converged, resid_max, iters, floored, tol,

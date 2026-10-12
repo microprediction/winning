@@ -119,7 +119,7 @@
     # shifts every conditional mean equally and cannot move an argmin,
     # so center V and make node selection and the lattice window
     # invariant under V -> V + 1 c'
-    V <- sweep(V, 2, colMeans(V))
+    V <- .gauge_center(V)                                    # (#471)
     if (is.null(F) || is.null(W)) {
       # adaptive order matching the python reference: sharp conditional
       # races (small D relative to loadings) need more factor nodes.
@@ -471,6 +471,26 @@
                  paste(names(given)[given], collapse = ", ")), call. = FALSE)
 }
 
+# The gauge, scale-safe (python core._gauge_center, #471): an exactly
+# common column centres to exactly zero, and a column whose mean or
+# differences overflow ([1e308] * 9, or c(1, 1, -1) * 1e308) is centred in
+# units of its largest entry. Ordinary columns take the plain mean.
+.gauge_center <- function(V) {
+  V <- as.matrix(V)
+  if (!nrow(V) || !ncol(V)) return(V)
+  Vc <- suppressWarnings(sweep(V, 2, colMeans(V)))
+  for (j in seq_len(ncol(V))) {
+    if (all(V[, j] == V[1, j])) {
+      Vc[, j] <- 0
+    } else if (!all(is.finite(Vc[, j]))) {
+      s <- max(abs(V[, j]))
+      u <- V[, j] / s
+      Vc[, j] <- (u - mean(u)) * s
+    }
+  }
+  Vc
+}
+
 # The bulk window's tail mass: a number in (0, 0.5). delta = -1 hung the
 # relaxation loop and 1 or 2 priced a different race (#445, matching
 # python's races._as_delta and the browser's asDelta).
@@ -619,7 +639,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   # on a scalar V gave a 1x1 that the pair branch indexed at [2, 2] (#482)
   Dn <- .as_idio(D, n, positive = TRUE)
   Vn <- if (is.null(V)) matrix(0, n, 1) else .as_loadings(V, n)
-  Vc <- sweep(Vn, 2, colMeans(Vn))
+  Vc <- .gauge_center(Vn)                                    # (#471)
   if (!is.null(V) && !is.null(F)) {
     Fq <- as.matrix(F)
     # through max(W) first: sum(W) can overflow for finite weights (#415)

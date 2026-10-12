@@ -185,3 +185,63 @@ def test_tree_leaves_map_is_validated(leaves, msg):
     with pytest.raises(ValueError, match=msg):
         Tree([30, 30, 10, 20], [0.2] * 4, [1.0] * 4, [3, 3, 4, 4, -1],
              [0, 0, 0, .6, .4], leaves=leaves)
+
+
+# #592: the floor holds in the final normalised target, whatever the units.
+@pytest.mark.parametrize("c", [1e-3, 1.0, 1e3])
+def test_topk_target_floor_holds_after_renormalisation(c):
+    from winning.factor.topk import abilities_from_topk, top_k_probabilities
+    mu, info = abilities_from_topk(np.array([.7, .3, 0.]) * c, 1,
+                                   D=np.ones(3), target_floor=.2,
+                                   return_info=True)
+    q = top_k_probabilities(mu, 1, D=np.ones(3))
+    assert info["converged"] and info["floored"].tolist() == [0, 0, 1]
+    assert np.allclose(q, [0.56, 0.24, 0.2], atol=1e-7)
+
+
+def test_race_target_floor_is_scale_free_and_respected():
+    from winning.factor.races import abilities_from_race, race_probabilities
+    out = [abilities_from_race(np.array([c, 0.]), D=[.5, .5],
+                               target_floor=1e-6) for c in (1e-6, 1, 1e6)]
+    assert max(np.abs(o - out[0]).max() for o in out) < 1e-9
+    assert abs(race_probabilities(out[0], D=[.5, .5])[1] - 1e-6) < 1e-12
+    with pytest.raises(ValueError, match="infeasible"):
+        abilities_from_race([.5, .5, 0], target_floor=.4)
+
+
+# #471: an exactly common loading column vanishes at any finite scale, and
+# a column whose centring overflows is centred in units of its largest entry.
+@pytest.mark.parametrize("c", [1e20, 1e100, 1e307, 1e308])
+def test_common_loading_column_is_inert_at_any_scale(c):
+    from winning.factor.races import abilities_from_race, race_probabilities
+    from winning.factor.topk import (abilities_from_topk, top_k_jacobians,
+                                     top_k_probabilities)
+    n = 9
+    mu = (np.arange(n) - 4) * 0.1; D = np.ones(n); V = np.full((n, 1), c)
+    F = np.array([[-1.0], [1.0]]); W = np.array([0.5, 0.5])
+    ind = race_probabilities(mu, D=D, points=257)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        p = race_probabilities(mu, V=V, D=D, F=F, W=W, points=257)
+        q = top_k_probabilities(mu, 3, D=D, V=V)
+        m = abilities_from_race(ind, V=V, D=D, F=F, W=W, points=257)
+    assert np.abs(p - ind).max() < 1e-15
+    assert np.abs(q - top_k_probabilities(mu, 3, D=D)).max() < 1e-12
+    assert np.abs(m - (mu - mu.mean())).max() < 1e-6
+    J = top_k_jacobians(mu, 3, D=D, V=V)
+    J0 = top_k_jacobians(mu, 3, D=D)
+    assert np.abs(np.asarray(J[0]) - np.asarray(J0[0])).max() < 1e-12
+    t = top_k_probabilities(mu, 3, D=D)
+    mt = abilities_from_topk(t, 3, D=D, V=V)
+    assert np.abs(mt - (mu - mu.mean())).max() < 1e-6
+
+
+def test_overflowing_loading_with_compensating_nodes_prices_the_same_race():
+    from winning.factor.races import race_probabilities
+    mu = np.array([0., .3, -.2]); D = np.ones(3); W = np.array([.5, .5])
+    ref = race_probabilities(mu, V=np.array([1., 1., -1.]), D=D,
+                             F=np.array([[-1.], [1.]]), W=W)
+    c = 1e308
+    got = race_probabilities(mu, V=c * np.array([1., 1., -1.]), D=D,
+                             F=np.array([[-1.], [1.]]) / c, W=W)
+    assert np.all(np.isfinite(got)) and np.abs(got - ref).max() < 1e-12

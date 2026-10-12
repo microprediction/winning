@@ -1033,14 +1033,30 @@ def _gauge_center(V):
     """V minus each factor's mean loading across contestants -- the
     gauge every factor path fixes -- without overflowing: a column of
     [1e308] * 9 has an infinite plain mean, and inf - inf made the race
-    NaN where the exactly common column should vanish (#471). Centred on
-    the first row only when the plain mean is not finite, so ordinary
-    loadings stay bit-identical."""
+    NaN where the exactly common column should vanish (#471).
+
+    The contract: an exactly common column centres to EXACTLY zero (a
+    [1e20] * 9 column left a residue of 16384 from the rounded mean), and
+    a column whose plain mean or difference overflows is centred in
+    units of its largest entry, (V/s - mean(V/s)) s, so c [1, 1, -1] at
+    c = 1e308 with F / c prices the same race as c = 1 (the first-row
+    fallback overflowed in V - V[0] and returned NaN). Ordinary columns
+    take the plain mean and stay bit-identical."""
+    V = np.asarray(V, dtype=float)
     with np.errstate(over="ignore", invalid="ignore"):
         m = V.mean(axis=0)
-    if not np.all(np.isfinite(m)):
-        m = V[0] + (V - V[0]).mean(axis=0)
-    return V - m
+        Vc = V - m
+    if V.ndim == 2 and V.shape[0]:
+        bad = ~(np.isfinite(m) & np.isfinite(Vc).all(axis=0))
+        for j in np.flatnonzero(bad):
+            s = float(np.abs(V[:, j]).max())
+            u = V[:, j] / s
+            with np.errstate(over="ignore"):
+                Vc[:, j] = (u - u.mean()) * s
+        common = (V == V[:1]).all(axis=0)
+        if common.any():
+            Vc[:, common] = 0.0
+    return Vc
 
 
 def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
