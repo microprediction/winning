@@ -340,6 +340,14 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 # factor draw, so its cell is an INDICATOR (#206). `hi` and `lo` are
 # matrices already shifted by the mean and the factor term; `s` is the
 # per-coordinate sd, recycled down the columns.
+# erf(x / sqrt(2)) = P(|Z| <= |x|) with x's sign, without forming
+# 2 pnorm(x) - 1, which cancels for small x; below 1e-8 the series' first
+# term is exact to double precision (and x^2 would underflow)
+.erf_r2 <- function(x) {
+  ifelse(abs(x) < 1e-8, x * sqrt(2 / pi),
+         sign(x) * pchisq(x * x, df = 1))
+}
+
 .log_cell_mass <- function(hi, lo, s) {
   sdm <- matrix(rep(s, each = nrow(hi)), nrow = nrow(hi))
   if (all(s > 0) && all(lo == -Inf)) {
@@ -360,7 +368,13 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
     lb <- pnorm(b2, log.p = TRUE)
     la <- pnorm(a2, log.p = TRUE)
     left <- suppressWarnings(lb + log1p(-exp(la - lb)))
-    mid <- log1p(-(pnorm(a2) + pnorm(-b2)))
+    # straddling zero: 1 - Phi(a) - Phi(-b) while the mass is the larger
+    # part; a narrow central interval is (erf(b/r2) + erf(-a/r2)) / 2, two
+    # same-signed small terms. The complement alone rounded
+    # [-1e-17, 1e-17] to exactly 0 (#664).
+    out_ <- pnorm(a2) + pnorm(-b2)
+    mid <- suppressWarnings(ifelse(out_ < 0.5, log1p(-out_),
+                                   log(0.5 * (.erf_r2(b2) - .erf_r2(a2)))))
     lm <- ifelse(b2 <= 0, left, mid)
     lm[a2 >= b2] <- -Inf
     out[pos] <- lm
@@ -425,10 +439,95 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
   x
 }
 
+# Exactly one complete covariance: sigma alone, or V and D together. Any
+# other mix used to be resolved in silence -- sigma beside one of V, D
+# dropped the factor half, a complete (V, D) beside sigma dropped sigma --
+# so a stale argument priced a different Gaussian (#480, #89).
+.check_covariance_inputs <- function(sigma, V, D) {
+  have <- c(sigma = !is.null(sigma), V = !is.null(V), D = !is.null(D))
+  if (identical(unname(have), c(TRUE, FALSE, FALSE)) ||
+      identical(unname(have), c(FALSE, TRUE, TRUE))) return(invisible(TRUE))
+  if (!any(have)) stop("supply sigma, or V and D", call. = FALSE)
+  stop("supply exactly one covariance: sigma alone, or V and D together ",
+       "(sigma = V V' + diag(D)); got ",
+       paste(names(have)[have], collapse = " and "), call. = FALSE)
+}
+
+# A finite, square, symmetric, positive-semidefinite matrix, or an error;
+# returns the symmetrised matrix (python: _as_covariance). The fallback
+# dropped a zero-variance coordinate by its diagonal alone, so the
+# indefinite matrix [[0, 1], [1, 1]] lost its first row and came back as
+# pnorm(0) = 0.5 with method "factor" (#639).
+.as_covariance <- function(sigma) {
+  C <- as.matrix(sigma)
+  storage.mode(C) <- "double"
+  if (nrow(C) != ncol(C))
+    stop(sprintf("sigma must be a square matrix; got %d x %d", nrow(C),
+                 ncol(C)), call. = FALSE)
+  if (any(!is.finite(C))) stop("sigma contains NA, NaN or Inf", call. = FALSE)
+  if (length(C) == 0L) return(C)
+  asym <- max(abs(C - t(C)))
+  if (asym > 1e-8 * max(max(abs(C)), 1e-300))
+    stop(sprintf(paste0("sigma is not symmetric (max asymmetry %.2e); pass ",
+                        "(sigma + t(sigma))/2 if the asymmetry is numerical ",
+                        "noise"), asym), call. = FALSE)
+  C <- 0.5 * C + 0.5 * t(C)
+  lam <- min(eigen(C, symmetric = TRUE, only.values = TRUE)$values)
+  if (lam < -1e-8 * max(mean(diag(C)), 1e-300))
+    stop(sprintf(paste0("sigma is not positive semidefinite (min eigenvalue ",
+                        "%.2e); it is not a covariance matrix"), lam),
+         call. = FALSE)
+  C
+}
+
+# The number of coordinates (python: _infer_dimension). It came from
+# nrow(V) alone, so a scalar loading or the (rank, n) spelling redefined an
+# n-coordinate rectangle as one coordinate and then refused the length-n D
+# (#556). A loading MATRIX still decides by its rows -- unless no
+# length-bearing argument (D, mean, lower, upper with more than one
+# entry) has that many entries and one has ncol(V): the (rank, n)
+# spelling. A scalar or vector V defers to those arguments, D first. Any
+# remaining disagreement is reported by .as_len under the argument's name.
+.infer_dimension <- function(V, D, mean, lower, upper) {
+  lens <- c(length(D), length(mean), length(lower), length(upper))
+  lens <- lens[lens > 1L]
+  if (!is.null(dim(V)) && length(dim(V)) == 2L) {
+    if (!length(lens) || nrow(V) %in% lens || !(ncol(V) %in% lens))
+      return(nrow(V))
+    return(ncol(V))
+  }
+  if (length(lens)) return(lens[1])
+  length(V)
+}
+
+# Loadings as the (n, rank) matrix (python: winning.shapes.as_loadings): a
+# scalar is one common loading, a length-n vector rank one, an (n, rank)
+# matrix as given, a (rank, n) matrix transposed (rank != n only: a square
+# V is never transposed).
+.as_loadings <- function(V, n) {
+  A <- V
+  if (!is.numeric(A) || any(!is.finite(A)))
+    stop("V must be finite numeric loadings", call. = FALSE)
+  if (is.null(dim(A))) {
+    if (length(A) == 1L) return(matrix(as.numeric(A), n, 1L))
+    if (length(A) == n) return(matrix(as.numeric(A), n, 1L))
+  } else if (length(dim(A)) == 2L) {
+    A <- matrix(as.numeric(A), nrow(A), ncol(A))
+    if (nrow(A) == n) return(A)
+    if (ncol(A) == n) return(t(A))
+  }
+  stop(sprintf(paste0("V must carry one row per coordinate: expected a ",
+                      "scalar, a vector of length %d, or a (%d, rank) ",
+                      "matrix; got %s"), n, n,
+               paste(if (is.null(dim(A))) length(A) else dim(A),
+                     collapse = " x ")), call. = FALSE)
+}
+
 pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                          sigma = NULL, V = NULL, D = NULL, ...) {
-  if (is.null(V) || is.null(D)) {
-    if (is.null(sigma)) stop("supply sigma, or V and D")
+  .check_covariance_inputs(sigma, V, D)
+  if (!is.null(sigma)) {
+    sigma <- .as_covariance(sigma)
     # Normalise every per-coordinate argument ONCE, before dispatch: the
     # dense fallback used to forward the raw `mean` to mvtnorm, whose
     # checker recycles it (cbind(lower, upper, mean)), so mean = c(0, 1)
@@ -474,8 +573,8 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     }
     V <- fd$V; D <- fd$D
   }
-  V <- as.matrix(V)
-  n <- nrow(V)
+  n <- .infer_dimension(V, D, mean, lower, upper)
+  V <- .as_loadings(V, n)
   # every per-coordinate argument goes through the same contract; a
   # bound may be infinite, a variance may not
   D <- .as_len(D, n, "D", nonneg = TRUE)

@@ -369,7 +369,13 @@ function _log_cell(hi::Float64, lo::Float64, sd::Float64)
         lb = _log_ndtr(b)
         return lb + log1p(-exp(_log_ndtr(a) - lb))
     end
-    return log1p(-(ndtr(a) + ndtr(-b)))
+    # straddling zero: 1 - Phi(a) - Phi(-b) while the mass is the larger
+    # part; a narrow central interval is (erf(b/r2) + erf(-a/r2)) / 2, two
+    # same-signed small terms. The complement alone rounded
+    # [-1e-17, 1e-17] to exactly 0 (#664).
+    out = ndtr(a) + ndtr(-b)
+    out < 0.5 && return log1p(-out)
+    return log(0.5 * (_cephes_erf(b * _SQRTH) - _cephes_erf(a * _SQRTH)))
 end
 
 """
@@ -427,7 +433,7 @@ _univariate(lo, up, mu, var) =
 
 function _dense_fallback(lower, upper, mean, sigma; kwargs...)
     n = size(sigma, 1)
-    mu = _bound_vector(mean, 0.0, n, "mean")
+    mu = _mean_vector(mean, n)
     lo = _bound_vector(lower, -Inf, n, "lower")
     up = _bound_vector(upper, Inf, n, "upper")
     _check_bounds(lo, up)
@@ -659,17 +665,101 @@ end
 # answer 2-3%, or sent the call to the dense fallback (#487).
 _unconstrained(lo, up) = (lo .== -Inf) .& (up .== Inf)
 
+# Exactly one complete covariance: sigma alone, or V and D together. Any
+# other mix used to be resolved in silence -- sigma beside one of V, D
+# dropped the factor half, a complete (V, D) beside sigma dropped sigma --
+# so a stale argument priced a different Gaussian (#480, #89).
+function _check_covariance_inputs(sigma, V, D)
+    have = [name for (name, x) in (("sigma", sigma), ("V", V), ("D", D))
+            if x !== nothing]
+    (have == ["sigma"] || have == ["V", "D"]) && return nothing
+    isempty(have) && throw(ArgumentError("supply sigma, or V and D"))
+    throw(ArgumentError(
+        "supply exactly one covariance: sigma alone, or V and D together " *
+        "(sigma = V V' + diag(D)); got " * join(have, " and ")))
+end
+
+# The mean is one finite value per coordinate: an infinite mean made an
+# impossible cell, and a NaN propagated, both into a plausible-looking
+# number (#531).
+function _mean_vector(mean, n::Int)
+    mu = _bound_vector(mean, 0.0, n, "mean")
+    all(isfinite, mu) || throw(ArgumentError("mean must be finite"))
+    return mu
+end
+
+# Idiosyncratic VARIANCES, scalar or length n, finite and non-negative
+# (python: winning.shapes.as_idio). A NaN went through sqrt and the
+# `sd > 0` test read it as a point mass at zero: D = [NaN, 1] priced
+# (0.5, "factor") (#500). Negative only by round-off is zero.
+function _variance_vector(D, n::Int)
+    Dv = _bound_vector(D, 0.0, n, "D")
+    all(isfinite, Dv) || throw(ArgumentError(
+        "D has a non-finite entry: D is an idiosyncratic variance and " *
+        "must be finite"))
+    tol = 1e-12 * max(1.0, maximum(abs, Dv; init = 0.0))
+    any(<(-tol), Dv) && throw(ArgumentError(
+        "D has a negative entry (min $(minimum(Dv))): D is an " *
+        "idiosyncratic variance and cannot be negative"))
+    return max.(Dv, 0.0)
+end
+
+# The number of coordinates (python: _infer_dimension, R: .infer_dimension).
+# It came from size(V, 1) alone, so a scalar loading failed outright and
+# the (rank, n) spelling redefined an n-coordinate rectangle as one
+# coordinate (#556). A loading MATRIX decides by its rows -- unless no
+# length-bearing argument has that many entries and one has size(V, 2).
+function _infer_dimension(V, D, mean, lower, upper)
+    lens = Int[]
+    for x in (D, mean, lower, upper)
+        x === nothing && continue
+        x isa Number && continue
+        length(x) > 1 && push!(lens, length(x))
+    end
+    if V isa AbstractMatrix
+        (isempty(lens) || size(V, 1) in lens || !(size(V, 2) in lens)) &&
+            return size(V, 1)
+        return size(V, 2)
+    end
+    isempty(lens) || return lens[1]
+    return V isa Number ? 1 : length(V)
+end
+
+# Loadings as the (n, rank) matrix: a scalar is one common loading, a
+# length-n vector rank one, an (n, rank) matrix as given, a (rank, n)
+# matrix transposed (rank != n only).
+function _as_loadings(V, n::Int)
+    if V isa Number
+        A = fill(Float64(V), n, 1)
+    elseif V isa AbstractMatrix
+        A = Float64.(Matrix(V))
+        if size(A, 1) != n
+            size(A, 2) == n || throw(ArgumentError(
+                "V must carry one row per coordinate: expected an ($n, " *
+                "rank) matrix; got size $(size(A))"))
+            A = permutedims(A)
+        end
+    else
+        v = Float64.(collect(V))
+        length(v) == n || throw(ArgumentError(
+            "V has length $(length(v)) but the problem has $n coordinates"))
+        A = reshape(v, n, 1)
+    end
+    all(isfinite, A) || throw(ArgumentError("V has a non-finite entry"))
+    return A
+end
+
 function _impl(lower, upper, mean, sigma, V, D; gh_order = nothing,
                kwargs...)
-    if V === nothing || D === nothing
-        sigma === nothing && error("supply sigma, or V and D")
+    _check_covariance_inputs(sigma, V, D)
+    if sigma !== nothing
         sigma = _as_covariance(sigma)
         nn = size(sigma, 1)
         lo0 = _bound_vector(lower, -Inf, nn, "lower")
         up0 = _bound_vector(upper, Inf, nn, "upper")
         _check_bounds(lo0, up0)
         # scalar-or-length-n on this branch too (#397)
-        mu0 = _bound_vector(mean, 0.0, nn, "mean")
+        mu0 = _mean_vector(mean, nn)
         free = _unconstrained(lo0, up0)
         all(free) && return 1.0, "factor"
         if any(free)
@@ -685,17 +775,13 @@ function _impl(lower, upper, mean, sigma, V, D; gh_order = nothing,
         V, D = fd
         lower, upper, mean = lo0, up0, mu0
     end
-    Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
-         reshape(Float64.(collect(V)), :, 1)
-    n = size(Vm, 1)
-    Dv = D isa Number ? fill(Float64(D), n) : Float64.(collect(D))
-    # a one-element D is the scalar shorthand, as in python and R (#422)
-    length(Dv) == 1 && (Dv = fill(Dv[1], n))
-    length(Dv) == n || throw(ArgumentError(
-        "D has length $(length(Dv)) but V has $n rows"))
+    n = _infer_dimension(V, D, mean, lower, upper)
+    Vm = _as_loadings(V, n)
+    # scalar-or-length-n, finite and non-negative (#422, #500)
+    Dv = _variance_vector(D, n)
     # scalar-or-length-n, the bounds' rule and the Python/R behaviour; a
     # short mean used to be taken at its own length (#397)
-    mu = _bound_vector(mean, 0.0, n, "mean")
+    mu = _mean_vector(mean, n)
     lo = _bound_vector(lower, -Inf, n, "lower")
     up = _bound_vector(upper, Inf, n, "upper")
     _check_bounds(lo, up)

@@ -442,3 +442,48 @@ test_that("an unconstrained coordinate is marginalised out (#487)", {
                                              D = c(D, 1))), base)
   expect_equal(as.numeric(pmvnorm_fast(upper = Inf, V = cbind(v), D = D)), 1)
 })
+
+test_that("exactly one covariance representation (#480, #89)", {
+  b <- c(0, 0); S <- diag(2); V <- c(10, -10); D <- c(1, 1)
+  expect_error(pmvnorm_fast(upper = b, sigma = S, V = V), "exactly one")
+  expect_error(pmvnorm_fast(upper = b, sigma = S, D = 100 * D), "exactly one")
+  expect_error(pmvnorm_fast(upper = b, sigma = S, V = V, D = D), "exactly one")
+  expect_error(pmvnorm_fast(upper = b, V = V), "exactly one")
+  expect_error(pmvnorm_fast(upper = b, D = D), "exactly one")
+  expect_error(pmvnorm_fast(upper = b), "supply sigma")
+  expect_equal(as.numeric(pmvnorm_fast(upper = b, sigma = S)), 0.25)
+  expect_lt(abs(as.numeric(pmvnorm_fast(upper = b, V = V, D = D)) /
+                  0.0224147254 - 1), 1e-8)
+})
+
+test_that("sigma must be a covariance before any coordinate is dropped (#639)", {
+  expect_error(pmvnorm_fast(upper = c(0, 0), sigma = matrix(c(0, 1, 1, 1), 2)),
+               "positive semidefinite")
+  expect_error(pmvnorm_fast(upper = c(0, 0),
+                            sigma = matrix(c(0, 1, 0, 1), 2)), "symmetric")
+  # a valid singular PSD matrix still reduces exactly
+  expect_equal(as.numeric(pmvnorm_fast(upper = c(0, 0),
+                                       sigma = diag(c(0, 1)))), 0.5)
+})
+
+test_that("scalar and transposed loadings are the same model (#556)", {
+  D <- rep(1, 3); v <- c(0.7, -0.2, 0.4)
+  p_col <- as.numeric(pmvnorm_fast(upper = 0, V = matrix(v, ncol = 1), D = D))
+  expect_identical(as.numeric(pmvnorm_fast(upper = 0, V = matrix(v, nrow = 1),
+                                           D = D)), p_col)
+  expect_identical(as.numeric(pmvnorm_fast(upper = 0, V = v, D = D)), p_col)
+  rho <- 0.49 / 1.49
+  expect_lt(abs(as.numeric(pmvnorm_fast(upper = 0, V = 0.7, D = D)) -
+                  (1 / 8 + 3 * asin(rho) / (4 * pi))), 1e-8)
+  expect_error(pmvnorm_fast(upper = rep(0, 4), V = matrix(v, ncol = 1), D = D),
+               "upper must be a scalar or one value per coordinate")
+})
+
+test_that("a narrow central interval keeps its mass (#664)", {
+  for (eps in c(1e-15, 1e-16, 1e-17, 1e-100, 1e-300)) {
+    exact <- eps * sqrt(2 / pi)       # erf(eps / sqrt 2) to double precision
+    p <- as.numeric(pmvnorm_fast(lower = -eps, upper = eps,
+                                 V = matrix(numeric(0), 1, 0), D = 1))
+    expect_lt(abs(p / exact - 1), 1e-12)
+  }
+})

@@ -29,7 +29,7 @@ import numpy as np
 from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
-from scipy.special import log_ndtr, ndtr, ndtri
+from scipy.special import erf, log_ndtr, ndtr, ndtri
 
 
 def _halton_unit(r, n):
@@ -325,10 +325,27 @@ def _infer_dimension(V, D, mean, lower, upper):
     return A.shape[0]
 
 
+def _check_covariance_inputs(sigma, V, D):
+    """Exactly one complete covariance: sigma alone, or V and D together.
+
+    Any other mix used to be resolved in silence -- sigma beside one of
+    V, D dropped the factor half, and a complete (V, D) beside sigma
+    dropped sigma -- so a stale or forgotten argument priced a different
+    Gaussian: 0.25 against 0.0224 on the same orthant (#480, #89)."""
+    have = [k for k, x in (("sigma", sigma), ("V", V), ("D", D))
+            if x is not None]
+    if have == ["sigma"] or have == ["V", "D"]:
+        return
+    if not have:
+        raise ValueError("supply sigma, or V and D")
+    raise ValueError(
+        "supply exactly one covariance: sigma alone, or V and D together "
+        "(sigma = V V' + diag(D)); got " + " and ".join(have))
+
+
 def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
-    if V is None or D is None:
-        if sigma is None:
-            raise ValueError("supply sigma, or V and D")
+    _check_covariance_inputs(sigma, V, D)
+    if sigma is not None:
         sigma = _as_covariance(sigma)
         n = len(sigma)
         mu = _per_coordinate(mean, n, "mean", 0.0, True)
@@ -496,6 +513,7 @@ def _sign_fixed(V):
 
 
 _LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
+_SQRT_HALF = np.sqrt(0.5)
 
 
 def _gh_order(r, sharp):
@@ -789,8 +807,14 @@ def _log_interval_mass(hi, lo_, s):
         la = log_ndtr(a)
         # both in the lower tail (b <= 0): log(Phi(b) - Phi(a))
         left = lb + np.log1p(-np.exp(la - lb))
-        # straddling zero: 1 - Phi(a) - Phi(-b), no cancellation
-        mid = np.log1p(-(ndtr(a) + ndtr(-b)))
+        # straddling zero: 1 - Phi(a) - Phi(-b) while the mass is the
+        # larger part; a narrow central interval is (erf(b/r2) +
+        # erf(-a/r2)) / 2, two same-signed small terms. The complement
+        # alone rounded [-1e-17, 1e-17] to exactly 0 (#664).
+        out_ = ndtr(a) + ndtr(-b)
+        mid = np.where(out_ < 0.5, np.log1p(-out_),
+                       np.log(0.5 * (erf(b * _SQRT_HALF)
+                                     - erf(a * _SQRT_HALF))))
         lm = np.where(b <= 0.0, left, mid)
         lm = np.where(a >= b, -np.inf, lm)
     return np.where(g, lm, out)

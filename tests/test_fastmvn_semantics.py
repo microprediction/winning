@@ -317,3 +317,41 @@ def test_unconstrained_coordinates_leave_the_answer_alone_487(fm):
                            sigma=S5)
     assert full == fm.mvn_cdf_fast(upper=up, mean=mu, sigma=S)
     assert fm.mvn_cdf_fast_info(upper=np.inf, V=v, D=D) == (1.0, "factor")
+
+
+# --- #480 / #89: exactly one covariance representation ---
+
+@pytest.mark.parametrize("kw", [
+    dict(sigma=np.eye(2), V=[10.0, -10.0]),
+    dict(sigma=np.eye(2), D=[100.0, 100.0]),
+    dict(sigma=np.eye(2), V=[10.0, -10.0], D=[1.0, 1.0]),
+    dict(V=[10.0, -10.0]),
+    dict(D=[1.0, 1.0]),
+    dict(),
+])
+def test_mixed_covariance_inputs_are_refused_480(fm, kw):
+    with pytest.raises(ValueError, match="sigma"):
+        fm.mvn_cdf_fast_info(upper=np.zeros(2), **kw)
+
+
+def test_one_covariance_is_accepted_480(fm):
+    assert fm.mvn_cdf_fast(upper=np.zeros(2), sigma=np.eye(2)) == \
+        pytest.approx(0.25, abs=1e-15)
+    assert fm.mvn_cdf_fast(upper=np.zeros(2), V=[10.0, -10.0],
+                           D=[1.0, 1.0]) == pytest.approx(0.0224147254,
+                                                          rel=1e-8)
+
+
+# --- #664: a narrow central interval keeps its mass ---
+
+@pytest.mark.parametrize("eps", [1e-15, 1e-16, 1e-17, 1e-100, 1e-300])
+def test_narrow_central_interval_664(fm, eps):
+    from scipy.special import erf
+    exact = erf(eps / np.sqrt(2.0))
+    p = fm.mvn_cdf_fast(lower=[-eps], upper=[eps], V=np.zeros((1, 0)),
+                        D=[1.0])
+    assert p == pytest.approx(exact, rel=1e-12)
+    # inside a product
+    p2 = fm.mvn_cdf_fast(lower=[-eps, -np.inf], upper=[eps, 0.0],
+                         V=np.zeros((2, 0)), D=[1.0, 1.0])
+    assert p2 == pytest.approx(exact / 2, rel=1e-12)

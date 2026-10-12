@@ -390,3 +390,48 @@ end
     @test mvn_cdf_fast_info(upper = Inf, V = reshape(v, :, 1), D = D) ==
         (1.0, "factor")
 end
+
+@testset "exactly one covariance representation (#480, #89)" begin
+    b = zeros(2); S = [1.0 0.0; 0.0 1.0]; V = [10.0, -10.0]; D = ones(2)
+    for kw in ((sigma = S, V = V), (sigma = S, D = 100 .* D),
+               (sigma = S, V = V, D = D), (V = V,), (D = D,), NamedTuple())
+        @test_throws ArgumentError mvn_cdf_fast_info(; upper = b, kw...)
+    end
+    @test mvn_cdf_fast(upper = b, sigma = S) ≈ 0.25 atol = 1e-15
+end
+
+@testset "D and mean are validated values (#500, #531)" begin
+    V = zeros(3, 1)
+    @test mvn_cdf_fast(upper = 0.0, V = V, D = 1.0) ≈ 0.125 atol = 1e-15
+    @test mvn_cdf_fast(upper = 0.0, V = V, D = [1.0]) ≈ 0.125 atol = 1e-15
+    for bad in ([NaN, 1.0, 1.0], [Inf, 1.0, 1.0], [-1.0, 1.0, 1.0], NaN)
+        @test_throws ArgumentError mvn_cdf_fast(upper = 0.0, V = V, D = bad)
+    end
+    # zero is a legal variance (the indicator cell), round-off below it too
+    @test mvn_cdf_fast(upper = 0.0, V = zeros(2, 1), D = [0.0, 1.0]) ≈ 0.5
+    @test mvn_cdf_fast(upper = 0.0, V = zeros(2, 1), D = [-1e-18, 1.0]) ≈ 0.5
+    for m in ([0.0, Inf], [0.0, NaN], -Inf)
+        @test_throws ArgumentError mvn_cdf_fast(upper = zeros(2),
+                                                V = zeros(2, 1), D = ones(2),
+                                                mean = m)
+    end
+end
+
+@testset "scalar and transposed loadings are the same model (#556)" begin
+    v = [0.7, -0.2, 0.4]; D = ones(3)
+    p = mvn_cdf_fast(upper = 0.0, V = reshape(v, :, 1), D = D)
+    @test mvn_cdf_fast(upper = 0.0, V = reshape(v, 1, :), D = D) == p
+    @test mvn_cdf_fast(upper = 0.0, V = v, D = D) == p
+    rho = 0.49 / 1.49
+    @test abs(mvn_cdf_fast(upper = 0.0, V = 0.7, D = D) -
+              (1 / 8 + 3 * asin(rho) / (4pi))) < 1e-8
+end
+
+@testset "a narrow central interval keeps its mass (#664)" begin
+    for eps in (1e-15, 1e-16, 1e-17, 1e-100, 1e-300)
+        exact = eps * sqrt(2 / pi)
+        p = mvn_cdf_fast(lower = [-eps], upper = [eps], V = zeros(1, 0),
+                         D = [1.0])
+        @test abs(p / exact - 1) < 1e-12
+    end
+end
