@@ -291,6 +291,16 @@ export function polishRace(opts = {}) {
       if (!Number.isFinite(b[k]))
         throw new Error(`b[${k}] is not a finite number`);
     });
+    // Each row in its own units: p0 + p1 <= 0.9 and 1e-8 p0 + 1e-8 p1 <=
+    // 9e-9 are the same constraint, but every penalty and every feasibility
+    // and activity threshold below is absolute, so the scaled spelling
+    // passed a 10-point violation as feasible and returned the original
+    // race certified converged (#653). Divide each nonzero row and its
+    // bound by max |coefficient|; a zero row is left as written.
+    A.forEach((row, k) => {
+      const s = Math.max(...row.map(Math.abs));
+      if (s > 0 && s !== 1) { A[k] = row.map(v => v / s); b[k] = b[k] / s; }
+    });
     A0 = A0.concat(A); b0 = b0.concat(b);
   }
   if (!b0.length) return { p: fwdM(mu0), mu: mu0, info: { active: [] } };
