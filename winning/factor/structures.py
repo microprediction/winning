@@ -90,6 +90,56 @@ class Nested:
         return len(np.asarray(self.cluster))
 
 
+def _as_linkage(Z):
+    """A scipy-style linkage, checked at the constructor's own boundary.
+
+    Row k merges two DISTINCT clusters that already exist and are still
+    active (ids below n + k, each merged at most once) at a finite,
+    non-negative height. Unchecked, a self-reference [[3, 0, .5, 2], ...]
+    built parent = [3, 4, 4, 3, -1], a cycle (#328); fractional ids were
+    truncated; and a negative height was squared into the same tree as
+    its absolute value (#459). Mirrors scipy's is_valid_linkage."""
+    try:
+        Z = np.asarray(Z, dtype=float)
+    except (TypeError, ValueError):
+        raise ValueError("a linkage must be a numeric (n-1) x 4 matrix") \
+            from None
+    if Z.size == 0:
+        return Z.reshape(0, 4)
+    if Z.ndim != 2 or Z.shape[1] < 3:
+        raise ValueError(
+            f"a linkage must be an (n-1) x 4 matrix; got shape {Z.shape}")
+    n = len(Z) + 1
+    used = np.zeros(2 * n - 1, bool)
+    for k in range(len(Z)):
+        h = Z[k, 2]
+        if not np.isfinite(h) or h < 0:
+            raise ValueError(
+                f"linkage row {k} merges at height {h}: merge heights are "
+                "finite non-negative distances (#459)")
+        ids = Z[k, :2]
+        for c in ids:
+            if not np.isfinite(c) or c != np.floor(c):
+                raise ValueError(
+                    f"linkage row {k} names cluster {c}: cluster ids are "
+                    "whole numbers (#328)")
+            if not 0 <= c < n + k:
+                raise ValueError(
+                    f"linkage row {k} uses cluster {int(c)} before it is "
+                    f"formed: row {k} may merge only ids below {n + k} "
+                    "(#328)")
+            if used[int(c)]:
+                raise ValueError(
+                    f"linkage row {k} reuses cluster {int(c)}, already "
+                    "merged by an earlier row (#328)")
+        if ids[0] == ids[1]:
+            raise ValueError(
+                f"linkage row {k} merges cluster {int(ids[0])} with itself "
+                "(#328)")
+        used[int(ids[0])] = used[int(ids[1])] = True
+    return Z
+
+
 @dataclass(frozen=True)
 class Tree:
     cluster: object
@@ -97,6 +147,12 @@ class Tree:
     D: object
     parent: object
     strength: object
+
+    def __post_init__(self):
+        # whole node indices at the constructor: [2.7, 2, -1] used to be
+        # stored and later truncated to [2, 2, -1] by pricing (#328)
+        from .blocks import _as_parent
+        _as_parent(self.parent)
 
     @property
     def n(self):
@@ -114,7 +170,7 @@ class Tree:
         rho_t = 1 - 2 h^2 (increments nonnegative by linkage monotonicity);
         D_i = 1 - rho at the leaf's first merge. Unit total variance per
         runner; see tests/test_race_invariants.py for the exactness proof."""
-        Z = np.asarray(Z, float)
+        Z = _as_linkage(Z)
         n = len(Z) + 1
         nT = 2 * n - 1
         parent = -np.ones(nT, int)
@@ -292,8 +348,8 @@ def structure_variances(structure):
     if isinstance(structure, Tree):
         from .blocks import _scalar_loading
         tot = D + _scalar_loading(structure.loading, "tree races") ** 2
-        from .blocks import _without_common_shock
-        parent = np.asarray(structure.parent, int)
+        from .blocks import _without_common_shock, _as_parent
+        parent = _as_parent(structure.parent)
         # Cluster labels are remapped below; a common ancestor's shock
         # cancels and is no part of the surrogate's variance (#489)
         n_clusters = len(np.unique(np.asarray(structure.cluster)))

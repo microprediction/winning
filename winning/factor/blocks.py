@@ -520,6 +520,25 @@ def _without_common_shock(parent, strength, n_clusters):
     return lam
 
 
+def _as_parent(parent):
+    """Tree parent pointers as int64: a 1-D array of whole numbers. A
+    plain int cast truncated [2.7, 2, -1] to [2, 2, -1] and priced that
+    topology, where the browser refuses it (#328)."""
+    p = np.asarray(parent)
+    if p.ndim != 1:
+        raise ValueError(f"parent must be a 1-D array; got shape {p.shape}")
+    if p.dtype.kind not in "iu":
+        if (p.dtype.kind not in "f" or not np.isfinite(p).all()
+                or (p != np.floor(p)).any()):
+            bad = [x for x in p.tolist()
+                   if not (isinstance(x, (int, float)) and np.isfinite(x)
+                           and x == int(x))]
+            raise ValueError(
+                "parent must hold whole node indices (-1 for the root); got "
+                f"{bad[0] if bad else p.dtype!r}")
+    return p.astype(np.int64)
+
+
 def _validate_tree(parent, strength, n_clusters):
     """A tree is a tree: one root, every parent an existing node, no
     cycles, the cluster nodes are leaves. The kernels walk parent
@@ -583,7 +602,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
-    parent = np.asarray(parent, int); lam = np.asarray(strength, float)
+    parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
@@ -688,7 +707,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
-    parent = np.asarray(parent, int); lam = np.asarray(strength, float)
+    parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1

@@ -16,7 +16,39 @@ export const Tree = (cluster, loading, D, parent, strength) =>
 /* the tree race whose implied correlation IS the cophenetic matrix of a
    scipy-style linkage; negative cophenetic correlation floored at zero.
    A non-monotonic linkage (an inversion) is refused, as in python. */
+/* A scipy-style linkage checked at the constructor's own boundary
+   (python structures._as_linkage): row k merges two DISTINCT clusters that
+   already exist and are still active, at a finite non-negative height.
+   A self-reference built a cyclic parent (#328), ids were rounded, and a
+   negative height was squared into the tree of its absolute value (#459). */
+function checkLinkage(Z) {
+  if (!isVector(Z))
+    throw new Error("treeFromLinkage: a linkage must be an array of (n-1) rows");
+  const n = Z.length + 1;
+  const used = new Array(2 * n - 1).fill(false);
+  for (let k = 0; k < Z.length; k++) {
+    const row = Z[k];
+    if (!isVector(row) || row.length < 3)
+      throw new Error(`treeFromLinkage: linkage row ${k} must be [a, b, height, count]`);
+    const h = row[2];
+    if (typeof h !== "number" || !Number.isFinite(h) || h < 0)
+      throw new Error(`treeFromLinkage: linkage row ${k} merges at height ${h}: merge heights are finite non-negative distances (#459)`);
+    for (const c of [row[0], row[1]]) {
+      if (typeof c !== "number" || !Number.isInteger(c))
+        throw new Error(`treeFromLinkage: linkage row ${k} names cluster ${c}: cluster ids are whole numbers (#328)`);
+      if (c < 0 || c >= n + k)
+        throw new Error(`treeFromLinkage: linkage row ${k} uses cluster ${c} before it is formed: row ${k} may merge only ids below ${n + k} (#328)`);
+      if (used[c])
+        throw new Error(`treeFromLinkage: linkage row ${k} reuses cluster ${c}, already merged by an earlier row (#328)`);
+    }
+    if (row[0] === row[1])
+      throw new Error(`treeFromLinkage: linkage row ${k} merges cluster ${row[0]} with itself (#328)`);
+    used[row[0]] = used[row[1]] = true;
+  }
+}
+
 export function treeFromLinkage(Z) {
+  checkLinkage(Z);
   const n = Z.length + 1;
   const nT = 2 * n - 1;
   const parent = new Array(nT).fill(-1);
@@ -24,7 +56,7 @@ export function treeFromLinkage(Z) {
   // few ulps for near-duplicate leaves (python Tree.from_linkage, #430)
   const d = new Array(nT).fill(1);
   for (let k = 0; k < Z.length; k++) {
-    const a = Math.round(Z[k][0]), b = Math.round(Z[k][1]), h = Z[k][2];
+    const a = Z[k][0], b = Z[k][1], h = Z[k][2];
     const t = n + k;
     parent[a] = t; parent[b] = t;
     d[t] = Math.min(2 * h * h, 1);

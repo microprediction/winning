@@ -109,3 +109,41 @@ def test_classic_offsets_must_be_finite_on_every_backend(rust, x):
         assert abs(sum(state_prices_from_offsets(d, [0, 1, 2])) - 1) < 1e-12
     finally:
         rustconfig.use_rust(prev)
+
+
+# #328 / #459: linkage topology and heights are checked at the constructor,
+# and fractional explicit parents are refused rather than truncated.
+@pytest.mark.parametrize("Z, msg", [
+    ([[0, 1, -0.5, 2], [2, 3, 0.8, 3]], "height"),
+    ([[0, 1, np.nan, 2], [2, 3, 0.8, 3]], "height"),
+    ([[3, 0, 0.5, 2], [1, 2, 0.8, 3]], "before it is formed"),
+    ([[0, 0, 0.5, 2], [1, 2, 0.8, 3]], "with itself"),
+    ([[0, 1, 0.5, 2], [0, 2, 0.8, 3]], "reuses"),
+    ([[0, 1.5, 0.5, 2], [2, 3, 0.8, 3]], "whole numbers"),
+    ([[0, 1, 0.5, 2], [2, 9, 0.8, 3]], "before it is formed"),
+])
+def test_linkage_is_validated_at_the_constructor(Z, msg):
+    from winning.factor.structures import Tree
+    with pytest.raises(ValueError, match=msg):
+        Tree.from_linkage(np.array(Z, float))
+
+
+def test_valid_linkage_still_builds():
+    from winning.factor.structures import Tree
+    t = Tree.from_linkage(np.array([[0, 1, 0.5, 2], [2, 3, 0.8, 3]]))
+    assert t.parent.tolist() == [3, 3, 4, 4, -1]
+    assert Tree.from_linkage(np.zeros((0, 4))).parent.tolist() == [-1]
+
+
+def test_fractional_tree_parent_is_refused():
+    from winning.factor.blocks import tree_race_probabilities
+    from winning.factor.structures import Tree
+    args = dict(mu=[0, 0.3, 0.6], cluster=[0, 0, 1], loading=[1, 1, 1],
+                D=[1, 1, 1], strength=[.3, .3, .3])
+    with pytest.raises(ValueError, match="whole node indices"):
+        tree_race_probabilities(parent=[2.7, 2, -1], **args)
+    with pytest.raises(ValueError, match="whole node indices"):
+        Tree(cluster=[0, 1, 0], loading=[0, 0, 0], D=[1, 1, 1],
+             parent=[2.7, 2, -1], strength=[.2, .2, .2])
+    p = tree_race_probabilities(parent=[2.0, 2.0, -1.0], **args)
+    assert np.allclose(p, tree_race_probabilities(parent=[2, 2, -1], **args))

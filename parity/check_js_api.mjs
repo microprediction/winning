@@ -2005,5 +2005,18 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
           p => md(p, c) < 1e-12);
 }
 
+// --- treeFromLinkage checks topology and heights itself (#328, #459)
+for (const [Z, why] of [
+  [[[0, 1, -0.5, 2], [2, 3, 0.8, 3]], "a negative height"],
+  [[[0, 1, NaN, 2], [2, 3, 0.8, 3]], "a NaN height"],
+  [[[3, 0, 0.5, 2], [1, 2, 0.8, 3]], "a future cluster"],
+  [[[0, 0, 0.5, 2], [1, 2, 0.8, 3]], "a self-merge"],
+  [[[0, 1, 0.5, 2], [0, 2, 0.8, 3]], "a reused cluster"],
+  [[[0, 1.5, 0.5, 2], [2, 3, 0.8, 3]], "a fractional id"]])
+  rejects(structures.treeFromLinkage, [Z], `treeFromLinkage refuses ${why} (#328/#459)`, "linkage row");
+accepts("treeFromLinkage builds a valid linkage (#328)",
+        () => structures.treeFromLinkage([[0, 1, 0.5, 2], [2, 3, 0.8, 3]]),
+        t => t.parent.join() === "3,3,4,4,-1");
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
