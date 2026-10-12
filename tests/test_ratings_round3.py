@@ -96,3 +96,54 @@ def test_log_domain_order_pass_matches_linear_on_ordinary_orders():
                         float((m + 8 * sd.max()).max()), 2001)
         l2, g2 = _order_pass_log(m[None], sd, o, x)
         assert abs(l1 - l2[0]) < 1e-12 and np.abs(g1 - g2[0]).max() < 1e-12
+
+
+# --- #650: a perfectly common belief component changes nothing
+
+def test_common_component_is_invisible_to_full_updates():
+    from winning.ratings.full import update_order_full, update_winner_full
+    from winning.ratings.teams import update_team_winner_full
+    from scipy.special import ndtr
+    m = np.array([1e-6, 0.0])
+    eps = 1e-12
+    a = np.array([1.0, -1.0])
+    S0 = eps * np.eye(2)
+    S1 = S0 + np.ones((2, 2))
+    for fn, kw in [(update_winner_full, {"winner": 0}),
+                   (update_order_full, {"order": [0, 1]}),
+                   (update_team_winner_full, {"A": np.eye(2), "winner": 0})]:
+        out = [fn(m, S, beta2=eps, **kw) for S in (S0, S1)]
+        for mp, Sp, lz in out:
+            assert np.exp(lz) == pytest.approx(ndtr(0.5), rel=1e-4)
+            assert a @ mp == pytest.approx(1.5091604338370335e-6, rel=1e-3)
+            assert a @ Sp @ a == pytest.approx(1.4861754e-12, rel=2e-3)
+
+
+@pytest.mark.parametrize("eps", [1e-2, 1e-4, 1e-6, 1e-8])
+def test_common_component_three_runner_order(eps):
+    from winning.ratings.full import update_order_full
+    a = np.array([1.0, -1.0, 0.0])
+    m = np.array([np.sqrt(eps), 0.0, -0.5 * np.sqrt(eps)])
+    r = []
+    for S in (eps * np.eye(3), eps * np.eye(3) + np.ones((3, 3))):
+        mp, Sp, lz = update_order_full(m, S, [0, 2, 1], beta2=eps)
+        r.append((lz, a @ mp / np.sqrt(eps), a @ Sp @ a / eps))
+    assert np.allclose(r[0], r[1], rtol=1e-3)
+
+
+def test_psd_repair_keeps_valid_small_eigenvalues():
+    from winning.ratings.full import _psd_repair
+    S = 1e-12 * np.eye(2) + np.ones((2, 2))
+    assert np.array_equal(_psd_repair(S), S)
+    neg = np.array([[1.0, 1.0], [1.0, 1.0 - 1e-15]])
+    assert np.linalg.eigvalsh(_psd_repair(neg)).min() >= -1e-15
+
+
+def test_market_full_accepts_a_singular_belief():
+    from winning.ratings.full import update_market_full
+    y = np.array([1.0, 0.0, -1.0])
+    S = np.ones((3, 3))                      # common-mode only: singular
+    m, Sp, lz = update_market_full(np.zeros(3), S, None, tau2=1.0,
+                                   invert=lambda p: y)
+    assert np.all(np.isfinite(m)) and np.all(np.isfinite(Sp))
+    assert np.allclose(m, 0.0) and np.allclose(Sp, S)
