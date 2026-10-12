@@ -81,6 +81,30 @@
   match(cluster, lv)                       # np.unique return_inverse
 }
 
+# Each runner's 1-based LEAF NODE in a tree (python blocks.tree_leaf_index).
+# leaves = NULL keeps the sorted-label order, so labels 0..nC-1 (1..nC)
+# are the leaf nodes; other spellings land on leaves by their sort order,
+# and renaming c(0, 0, 1, 2) to c(30, 30, 10, 20) priced a different tree
+# when the leaves sit at unequal depths (#372). leaves[j] = the label of
+# leaf node j states the map explicitly.
+.tree_leaf_index <- function(cluster, leaves = NULL) {
+  if (is.null(leaves)) return(.cluster_index(cluster))
+  if (anyDuplicated(leaves))
+    stop(sprintf("leaves names label %s twice (#372)",
+                 format(leaves[anyDuplicated(leaves)])), call. = FALSE)
+  inv <- match(cluster, leaves)
+  if (anyNA(inv)) {
+    i <- which(is.na(inv))[1]
+    stop(sprintf("runner %d has cluster label %s, which leaves does not map to a leaf node (#372)",
+                 i, format(cluster[i])), call. = FALSE)
+  }
+  miss <- setdiff(seq_along(leaves), inv)
+  if (length(miss))
+    stop(sprintf("leaf %d (label %s) carries no runner: every leaf node must hold a cluster (#372)",
+                 miss[1], format(leaves[miss[1]])), call. = FALSE)
+  inv
+}
+
 .cluster_nodes <- function(r, qa) {
   if (r == 0) {
     # the EMPTY PRODUCT: one node of weight 1 with no columns. Rank 1
@@ -336,17 +360,20 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
 #' @inheritParams block_race_probabilities
 #' @param parent integer vector over all nodes, 1-based; root has 0/NA
 #' @param strength per-node shared-effect strength
+#' @param leaves optional labels of the leaf nodes in order (leaves[j] is
+#'   the cluster label of leaf node j); NULL uses the sorted labels (#372)
 #' @return win probabilities summing to one
 #' @export
 tree_race_probabilities <- function(mu, cluster, loading, D, parent,
-                                    strength, points = 257, qa = 9) {
+                                    strength, points = 257, qa = 9,
+                                    leaves = NULL) {
   mu <- as.numeric(mu)
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
   lam <- as.numeric(strength)
   n <- length(m)
-  inv <- .cluster_index(cluster)
+  inv <- .tree_leaf_index(cluster, leaves)            # (#372)
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
   nT <- length(parent)
@@ -619,14 +646,14 @@ abilities_from_block_race <- function(p, cluster, loading, D,
 #' @return n x n matrix with zero row sums
 #' @export
 tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
-                               points = 257, qa = 9) {
+                               points = 257, qa = 9, leaves = NULL) {
   mu <- as.numeric(mu)
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
   lam <- as.numeric(strength)
   n <- length(m)
-  inv <- .cluster_index(cluster)
+  inv <- .tree_leaf_index(cluster, leaves)            # (#372)
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
   nT <- length(parent)
@@ -642,9 +669,9 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
     J <- matrix(0, n, n)
     for (j in seq_len(n)) {
       e <- numeric(n); e[j] <- h
-      J[, j] <- (tree_race_probabilities(mu + e, cluster, loading, D, parent,
+      J[, j] <- (tree_race_probabilities(mu + e, inv, loading, D, parent,
                                          strength, points = points, qa = qa) -
-                 tree_race_probabilities(mu - e, cluster, loading, D, parent,
+                 tree_race_probabilities(mu - e, inv, loading, D, parent,
                                          strength, points = points, qa = qa)) /
         (2 * h)
     }

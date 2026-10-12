@@ -6,7 +6,7 @@ import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asAbilities,
 import { raceProbabilities, abilitiesFromRace, BASES, SPANS,
          forwardGrid, factorRule, requireWholeRule,
          collapseStructure, translatedHome } from "./races.mjs";
-import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./blocks.mjs";
+import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster } from "./blocks.mjs";
 
 export function raceJacobian(mu, opts = {}) {
   checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
@@ -21,7 +21,7 @@ export function raceJacobian(mu, opts = {}) {
       return nestedRaceJacobian(mu, s.cluster, s.loading, s.D,
         { coupling: s.coupling, gamma: s.gamma, points, qa, qf });
     if (s.kind === "Tree")
-      return treeRaceJacobian(mu, s.cluster, s.loading, s.D, s.parent, s.strength,
+      return treeRaceJacobian(mu, treeCluster(s), s.loading, s.D, s.parent, s.strength,
         { points, qa });
     throw new Error("race_jacobian: unknown structure");
   }

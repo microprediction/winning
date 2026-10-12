@@ -1,7 +1,8 @@
 // One race, five covariance grammars -- port of winning/factor/structures.py.
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
-         abilitiesFromBlockRace, validateTree, withoutCommonShock } from "./blocks.mjs";
+         abilitiesFromBlockRace, validateTree, withoutCommonShock,
+         treeCluster } from "./blocks.mjs";
 import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
          asLoadings, asIdio } from "./core.mjs";
 
@@ -10,8 +11,10 @@ export const Factor = (V, D) => ({ kind: "Factor", V, D });
 export const Blocks = (cluster, loading, D) => ({ kind: "Blocks", cluster, loading, D });
 export const Nested = (cluster, loading, D, coupling, gamma = 1.0) =>
   ({ kind: "Nested", cluster, loading, D, coupling, gamma });
-export const Tree = (cluster, loading, D, parent, strength) =>
-  ({ kind: "Tree", cluster, loading, D, parent, strength });
+// leaves[j] = the label of leaf node j; null keeps the sorted-label order
+// (labels 0..nC-1 are the leaf nodes) -- see blocks.treeLeafIndex (#372)
+export const Tree = (cluster, loading, D, parent, strength, leaves = null) =>
+  ({ kind: "Tree", cluster, loading, D, parent, strength, leaves });
 
 /* the tree race whose implied correlation IS the cophenetic matrix of a
    scipy-style linkage; negative cophenetic correlation floored at zero.
@@ -184,14 +187,14 @@ function structureScale(s) {
     // the walk below follows parent pointers: validate first, as the
     // kernels do, or a cyclic tree spins here before they can refuse it
     validateTree(s.parent, s.strength, new Set(s.cluster).size, "Tree");
-    // add each leaf cluster's ancestor variance (labels remapped as the
-    // kernel does: sorted unique labels are leaf node ids)
-    const labels = [...new Set(s.cluster)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    const idx = new Map(labels.map((v, k) => [v, k]));
+    // add each leaf cluster's ancestor variance (labels mapped to leaf
+    // nodes as the kernel maps them, explicit leaves included, #372)
+    const leaf = treeCluster(s);
+    const nC = new Set(leaf).size;
     // a common ancestor's shock cancels: not part of the surrogate (#489)
-    const lam = withoutCommonShock(s.parent, s.strength, labels.length);
+    const lam = withoutCommonShock(s.parent, s.strength, nC);
     for (let i = 0; i < n; i++) {
-      let u = idx.get(s.cluster[i]), a = 0;
+      let u = leaf[i], a = 0;
       while (s.parent[u] >= 0) { u = s.parent[u]; a += lam[u] ** 2; }
       tot[i] += a;
     }
@@ -218,7 +221,7 @@ function dp(mu, s, opts) {
     return nestedRaceProbabilities(mu, s.cluster, s.loading, s.D,
                                    { coupling: s.coupling, gamma: s.gamma, points, qa, qf });
   if (s.kind === "Tree")
-    return treeRaceProbabilities(mu, s.cluster, s.loading, s.D, s.parent, s.strength,
+    return treeRaceProbabilities(mu, treeCluster(s), s.loading, s.D, s.parent, s.strength,
                                  { points, qa });
   throw new Error("unknown structure " + s.kind);
 }
@@ -248,7 +251,7 @@ function da(p, s, opts) {
     return invertGenericInfo(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
       { coupling: s.coupling, gamma: s.gamma, points, qa, qf }), tol, nIter ?? 400, structureScale(s));
   if (s.kind === "Tree")
-    return invertGenericInfo(p, m => treeRaceProbabilities(m, s.cluster, s.loading, s.D,
+    return invertGenericInfo(p, m => treeRaceProbabilities(m, treeCluster(s), s.loading, s.D,
       s.parent, s.strength, { points, qa }), tol, nIter ?? 400, structureScale(s));
   throw new Error("unknown structure " + s.kind);
 }

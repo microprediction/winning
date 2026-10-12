@@ -34,7 +34,8 @@ race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     if (cls == "Tree")
       return(tree_race_jacobian(mu, structure$cluster, structure$loading,
                                 structure$D, structure$parent,
-                                structure$strength, points = points, qa = qa))
+                                structure$strength, points = points, qa = qa,
+                                leaves = structure$leaves))
     stop("race_jacobian: structure ", cls, " not yet supported")
   }
   st <- .race_setup(mu, V, D, F, W, base)

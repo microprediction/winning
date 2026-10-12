@@ -2018,5 +2018,21 @@ accepts("treeFromLinkage builds a valid linkage (#328)",
         () => structures.treeFromLinkage([[0, 1, 0.5, 2], [2, 3, 0.8, 3]]),
         t => t.parent.join() === "3,3,4,4,-1");
 
+// --- an explicit Tree leaf map makes relabeling invariant (#372)
+{
+  const mu = [-0.5, -0.1, 0.2, 0.4], D = [0.8, 0.9, 1.0, 1.1], L = [0.2, 0.3, -0.1, 0.4];
+  const pa = [3, 3, 4, 4, -1], st = [0, 0, 0, 0.6, 0.4];
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const a = blocks.treeRaceProbabilities(mu, [0, 0, 1, 2], L, D, pa, st);
+  accepts("treeRaceProbabilities honours leaves (#372)",
+          () => blocks.treeRaceProbabilities(mu, [30, 30, 10, 20], L, D, pa, st, { leaves: [30, 10, 20] }),
+          p => md(p, a) === 0);
+  accepts("Tree(..., leaves) prices the canonical tree (#372)",
+          () => races.raceProbabilities(mu, { structure: structures.Tree([30, 30, 10, 20], L, D, pa, st, [30, 10, 20]) }),
+          p => md(p, races.raceProbabilities(mu, { structure: structures.Tree([0, 0, 1, 2], L, D, pa, st) })) === 0);
+  rejects(blocks.treeRaceProbabilities, [mu, [30, 30, 10, 20], L, D, pa, st, { leaves: [30, 10] }],
+          "leaves must map every label (#372)", "does not map");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

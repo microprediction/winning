@@ -24,6 +24,8 @@
 #' @param gamma coupling strength in [0, 1]
 #' @param parent 1-based parent index per node (root: 0/NA)
 #' @param strength per-node shared-effect strength
+#' @param leaves optional Tree leaf labels in leaf-node order; NULL uses
+#'   the sorted cluster labels (#372)
 #' @return a structure object for the structure= argument
 #' @name structures
 NULL
@@ -49,9 +51,9 @@ Nested <- function(cluster, loading, D, coupling, gamma = 1.0)
 
 #' @rdname structures
 #' @export
-Tree <- function(cluster, loading, D, parent, strength)
+Tree <- function(cluster, loading, D, parent, strength, leaves = NULL)
   .structure("Tree", cluster = cluster, loading = loading, D = D,
-             parent = parent, strength = strength)
+             parent = parent, strength = strength, leaves = leaves)
 
 .dispatch_probabilities <- function(mu, s, base = "normal", points = 257,
                                     qa = 9, qf = 15, return_slopes = FALSE,
@@ -84,7 +86,8 @@ Tree <- function(cluster, loading, D, parent, strength)
   if (cls == "Tree") {
     return(tree_race_probabilities(mu, s$cluster, s$loading, s$D,
                                    s$parent, s$strength,
-                                   points = points, qa = qa))
+                                   points = points, qa = qa,
+                                   leaves = s$leaves))
   }
   stop("unknown structure ", cls)
 }
@@ -135,7 +138,7 @@ Tree <- function(cluster, loading, D, parent, strength)
     return(.invert_generic(p, function(m)
       tree_race_probabilities(m, s$cluster, s$loading, s$D,
                               s$parent, s$strength,
-                              points = points, qa = qa),
+                              points = points, qa = qa, leaves = s$leaves),
       tol = ctl(tol, 1e-9), max_iter = ctl(n_iter, 400)))
   }
   stop("unknown structure ", cls)

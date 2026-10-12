@@ -147,3 +147,41 @@ def test_fractional_tree_parent_is_refused():
              parent=[2.7, 2, -1], strength=[.2, .2, .2])
     p = tree_race_probabilities(parent=[2.0, 2.0, -1.0], **args)
     assert np.allclose(p, tree_race_probabilities(parent=[2, 2, -1], **args))
+
+
+# #372: an explicit label -> leaf map makes Tree pricing spelling-free.
+def test_tree_leaves_map_makes_relabeling_invariant():
+    from winning import Tree
+    from winning.factor.blocks import (tree_race_jacobian,
+                                       tree_race_probabilities)
+    from winning.factor.races import abilities_from_race, race_probabilities
+    mu = [-0.5, -0.1, 0.2, 0.4]; D = [0.8, 0.9, 1.0, 1.1]
+    L = [0.2, 0.3, -0.1, 0.4]; pa = [3, 3, 4, 4, -1]
+    st = [0, 0, 0, 0.6, 0.4]
+    a = tree_race_probabilities(mu, [0, 0, 1, 2], L, D, pa, st)
+    b = tree_race_probabilities(mu, [30, 30, 10, 20], L, D, pa, st,
+                                leaves=[30, 10, 20])
+    assert np.abs(a - b).max() == 0.0
+    # the default is unchanged: sorted labels are the leaf nodes
+    c = tree_race_probabilities(mu, [30, 30, 10, 20], L, D, pa, st)
+    assert np.abs(a - c).max() > 1e-2
+    Ja = tree_race_jacobian(mu, [0, 0, 1, 2], L, D, pa, st)
+    Jb = tree_race_jacobian(mu, ["b", "b", "c", "a"], L, D, pa, st,
+                            leaves=["b", "c", "a"])
+    assert np.abs(Ja - Jb).max() == 0.0
+    T = Tree([30, 30, 10, 20], L, D, pa, st, leaves=[30, 10, 20])
+    T0 = Tree([0, 0, 1, 2], L, D, pa, st)
+    p = race_probabilities(mu, structure=T)
+    assert np.abs(p - race_probabilities(mu, structure=T0)).max() == 0.0
+    m = abilities_from_race(p, structure=T)
+    assert np.abs(m - (np.array(mu) - np.mean(mu))).max() < 1e-6
+
+
+@pytest.mark.parametrize("leaves, msg", [
+    ([30, 10], "does not map"), ([30, 10, 20, 40], "carries no runner"),
+    ([30, 30, 20], "twice")])
+def test_tree_leaves_map_is_validated(leaves, msg):
+    from winning import Tree
+    with pytest.raises(ValueError, match=msg):
+        Tree([30, 30, 10, 20], [0.2] * 4, [1.0] * 4, [3, 3, 4, 4, -1],
+             [0, 0, 0, .6, .4], leaves=leaves)

@@ -9,10 +9,10 @@ import { invNormalRational } from "./races.mjs";
    core.mjs for why an options object needs this at all. */
 const BLOCK_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "nodes"]);
 const NESTED_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "qf", "coupling", "gamma"]);
-const TREE_RACE_PROBABILITIES_OPTS = new Set(["points", "qa"]);
+const TREE_RACE_PROBABILITIES_OPTS = new Set(["points", "qa", "leaves"]);
 const BLOCK_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
 const NESTED_RACE_JACOBIAN_OPTS = new Set(["points", "qa", "qf", "coupling", "gamma"]);
-const TREE_RACE_JACOBIAN_OPTS = new Set(["points", "qa"]);
+const TREE_RACE_JACOBIAN_OPTS = new Set(["points", "qa", "leaves"]);
 const ABILITIES_FROM_BLOCK_RACE_OPTS = new Set(["points", "qa", "maxIter", "tol"]);
 
 
@@ -26,6 +26,37 @@ export function clusterIndex(cluster) {
   const map = new Map(lv.map((v, i) => [v, i]));
   return cluster.map(c => map.get(c));
 }
+
+/* Each runner's LEAF NODE index in a tree (python blocks.tree_leaf_index).
+   leaves == null keeps the sorted-label order, so labels 0..nC-1 are the
+   leaf nodes; any other spelling lands on leaves by its sort order, and
+   renaming [0, 0, 1, 2] to [30, 30, 10, 20] priced a different tree when
+   the leaves sit at unequal depths (#372). leaves[j] = the label of leaf
+   node j states the map explicitly. */
+export function treeLeafIndex(cluster, leaves = null) {
+  if (leaves == null) return clusterIndex(cluster);
+  if (!isVector(leaves))
+    throw new Error("leaves must be an array: leaves[j] is the label of leaf node j (#372)");
+  const pos = new Map();
+  leaves.forEach((lab, j) => {
+    if (pos.has(lab)) throw new Error(`leaves names label ${JSON.stringify(lab)} twice (#372)`);
+    pos.set(lab, j);
+  });
+  const seen = new Array(leaves.length).fill(false);
+  const out = cluster.map((lab, i) => {
+    if (!pos.has(lab))
+      throw new Error(`runner ${i} has cluster label ${JSON.stringify(lab)}, which leaves does not map to a leaf node (#372)`);
+    seen[pos.get(lab)] = true;
+    return pos.get(lab);
+  });
+  const miss = seen.indexOf(false);
+  if (miss >= 0)
+    throw new Error(`leaf ${miss} (label ${JSON.stringify(leaves[miss])}) carries no runner: every leaf node must hold a cluster (#372)`);
+  return out;
+}
+
+/* A Tree structure's runner-to-leaf indices: the explicit map when given. */
+export const treeCluster = s => (s.leaves == null ? s.cluster : treeLeafIndex(s.cluster, s.leaves));
 
 /* One door for the block/nested/tree arguments.
 
@@ -464,7 +495,8 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
 
 export function treeRaceProbabilities(mu, cluster, loading, D, parent, strength, opts = {}) {
   checkOpts(opts, TREE_RACE_PROBABILITIES_OPTS, "treeRaceProbabilities", OPT_HINTS);
-  const { points = 257, qa = 9 } = opts;
+  const { points = 257, qa = 9, leaves = null } = opts;
+  if (leaves != null) cluster = treeLeafIndex(cluster, leaves);      // (#372)
   const I = treeInternals(mu, cluster, loading, D, parent, strength, points, qa);
   const pO = new Array(I.n).fill(0);
   for (let i = 0; i < I.n; i++) {
@@ -631,7 +663,8 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
 
 export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts = {}) {
   checkOpts(opts, TREE_RACE_JACOBIAN_OPTS, "treeRaceJacobian", OPT_HINTS);
-  const { points = 257, qa = 9 } = opts;
+  const { points = 257, qa = 9, leaves = null } = opts;
+  if (leaves != null) cluster = treeLeafIndex(cluster, leaves);      // (#372)
   // With any ancestor effect the cross-cluster Gram term is not the
   // derivative (it factorises the two-leaf cavity as R_i R_j / G_root):
   // two leaves under a common root priced invariantly in the root

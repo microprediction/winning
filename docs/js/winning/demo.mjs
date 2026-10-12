@@ -3,7 +3,7 @@
 // a Monte Carlo sampler to race against.
 import { hermite1, interpClamped, solve, firstPrimes, asLoadings,
          isVector, asCount, asIdio } from "./core.mjs";
-import { clusterIndex } from "./blocks.mjs";
+import { treeCluster } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
@@ -430,7 +430,7 @@ export function structureCov(s) {
     // every shared factor silently gone -- and negative or string
     // labels threw `anc[...] is not iterable` (#306). Same remapper as
     // the kernels, imported rather than repeated.
-    const cluster = clusterIndex(s.cluster);
+    const cluster = treeCluster(s);                       // (#372)
     const anc = [];
     const nc = Math.max(...cluster) + 1;
     for (let c = 0; c < nc; c++) {

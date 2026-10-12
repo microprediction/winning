@@ -589,15 +589,58 @@ def _validate_tree(parent, strength, n_clusters):
             f"first {n_clusters} nodes are the clusters and must be leaves")
 
 
+def _tree_leaf_index(cluster, leaves=None):
+    """Each runner's LEAF NODE index in a tree, from its cluster label.
+
+    leaves=None (the default) gives leaf node j to the j-th label in
+    sorted order, so canonical labels 0..nC-1 ARE the leaf nodes. Other
+    spellings are still a bijection onto the leaves, but which label lands
+    on which leaf follows their sort order: renaming [0, 0, 1, 2] to
+    [30, 30, 10, 20] moves the clusters to leaves 2, 0, 1, a different
+    tree when the leaves sit at unequal depths (#372). Pass
+    leaves=[label of leaf 0, label of leaf 1, ...] to state the map
+    explicitly; then any spelling prices the same tree. Every leaf label
+    must be carried by at least one runner, and every runner's label must
+    be a leaf."""
+    cluster = np.asarray(cluster)
+    if leaves is None:
+        return np.unique(cluster, return_inverse=True)[1].reshape(-1)
+    leaves = list(np.asarray(leaves).reshape(-1).tolist())
+    pos = {}
+    for j, lab in enumerate(leaves):
+        if lab in pos:
+            raise ValueError(f"leaves names label {lab!r} twice (#372)")
+        pos[lab] = j
+    out = np.empty(len(cluster), dtype=np.int64)
+    for i, lab in enumerate(cluster.reshape(-1).tolist()):
+        if lab not in pos:
+            raise ValueError(
+                f"runner {i} has cluster label {lab!r}, which leaves= does "
+                "not map to a leaf node (#372)")
+        out[i] = pos[lab]
+    missing = sorted(set(range(len(leaves))) - set(out.tolist()))
+    if missing:
+        raise ValueError(
+            f"leaf {missing[0]} (label {leaves[missing[0]]!r}) carries no "
+            "runner: every leaf node must hold a cluster (#372)")
+    return out
+
+
 def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
-                            points=257, qa=9):
+                            points=257, qa=9, leaves=None):
     """P(i wins | min-wins) under a hierarchy of uniform shared effects.
 
     Leaf clusters keep per-member loadings; each internal node t (indices
     continuing past the leaf clusters) applies strength[t] uniformly to every
     leaf beneath it; parent[t] gives the tree (root's parent = -1). Two
     message passes on the lattice; see research/pqrace/SCHUR.md for the
-    validation history (MC to noise floor, common-root invariance 3e-7)."""
+    validation history (MC to noise floor, common-root invariance 3e-7).
+
+    The label-to-leaf map is `leaves` (see _tree_leaf_index): by default
+    the sorted order of the labels, so use labels 0..nC-1 or pass
+    leaves= explicitly when the leaves sit at unequal depths (#372)."""
+    if leaves is not None:
+        cluster = _tree_leaf_index(cluster, leaves)
     mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
@@ -683,7 +726,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
 
 
 def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
-                       points=257, qa=9):
+                       points=257, qa=9, leaves=None):
     """d p / d mu for the tree race (min-wins), one pass.
 
     Same-cluster term EXACT under the downward message R_c; cross-cluster
@@ -702,7 +745,9 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     to 0.1792 at root strength 0.8 and was not refined away by points
     (#350). There the matrix is the central difference of the exact
     forward instead -- the derivative of the map actually returned, at
-    2n forward passes."""
+    2n forward passes. `leaves` as in tree_race_probabilities (#372)."""
+    if leaves is not None:
+        cluster = _tree_leaf_index(cluster, leaves)
     mu = np.asarray(mu, float)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
