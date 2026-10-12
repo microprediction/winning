@@ -226,3 +226,69 @@ def test_known_coordinate_stays_known_on_ranked_path():
     _, v = update_ranking_exact(np.array([.3, 0, -.2]),
                                 np.array([1.0, 0.0, 1.0]), [2, 0, 1])
     assert v[1] == 0.0
+
+
+# --- #652: walk_forward scores score-only contests
+
+def test_walk_forward_scores_score_only_contests():
+    from winning.ratings.history import predict_race, rate_history, walk_forward
+    races = [
+        {"t": 0.0, "runners": ["a", "b"], "scores": [1.0, 0.0]},
+        {"t": 1.0, "runners": ["a", "b"], "scores": [0.0, 1.0]},
+        {"t": 2.0, "runners": ["a", "b"], "scores": [2.0, 1.0]},
+    ]
+    out = walk_forward(races, warmup=1, beta2=1.0, lengths_scale=1.0)
+    assert out["n_scored"] == 2
+    assert [r["winner"] for r in out["records"]] == [1, 0]
+    _, _, st = rate_history(races[:1], ids=["a", "b"], beta2=1.0,
+                            lengths_scale=1.0, return_state=True)
+    p, _ = predict_race(st, ["a", "b"], t=1.0, beta2=1.0)
+    assert np.allclose(out["records"][0]["p_model"], p)
+    neg = [dict(r, margins=[-x for x in r.pop("scores")]) for r in
+           [dict(r) for r in races]]
+    out2 = walk_forward(neg, warmup=1, beta2=1.0, lengths_scale=1.0)
+    assert [r["winner"] for r in out2["records"]] == [1, 0]
+    assert out2["log_loss_model"] == pytest.approx(out["log_loss_model"])
+
+
+# --- #654: the history clock never runs backwards
+
+def _state_at_10():
+    from winning.ratings.history import rate_history
+    return rate_history(
+        [{"t": 10.0, "runners": ["a", "b"], "scores": [1.0, 0.0]}],
+        ids=["a", "b"], timescale=10.0, prior_var=1.0, beta2=1.0,
+        lengths_scale=1.0, return_state=True)[2]
+
+
+def test_stale_race_is_refused_not_rewound():
+    from winning.ratings.history import rate_history
+    st = _state_at_10()
+    stale = {"t": 5.0, "runners": ["a"], "winner": 0}
+    with pytest.raises(ValueError, match="older"):
+        rate_history([stale], state=st, timescale=10.0, prior_var=1.0)
+    with pytest.raises(ValueError, match="older"):
+        rate_history([{"t": 12.0, "runners": ["a"], "winner": 0}, stale],
+                     state=st, timescale=10.0, prior_var=1.0)
+    with pytest.raises(ValueError, match="finite"):
+        rate_history([{"t": float("nan"), "runners": ["a"], "winner": 0}],
+                     state=st, timescale=10.0, prior_var=1.0)
+
+
+def test_missing_time_on_resumed_state_means_now_and_split_equals_single():
+    from winning.ratings.history import rate_history
+    st = _state_at_10()
+    _, _, a = rate_history([{"runners": ["a"], "winner": 0}], state=st,
+                           timescale=10.0, prior_var=1.0, return_state=True)
+    assert a["t"] == 10.0 and np.allclose(a["S"], st["S"])
+    races = [{"t": float(t), "runners": ["a", "b"], "scores": [t % 2, 1.0]}
+             for t in range(6)]
+    kw = dict(timescale=10.0, prior_var=1.0, beta2=1.0, lengths_scale=1.0)
+    _, lz, one = rate_history(races, ids=["a", "b"], return_state=True, **kw)
+    _, lz1, s1 = rate_history(races[:3], ids=["a", "b"], return_state=True,
+                              **kw)
+    _, lz2, two = rate_history(races[3:], state=s1, return_state=True, **kw)
+    assert np.allclose(one["m"], two["m"]) and np.allclose(one["S"], two["S"])
+    assert lz == pytest.approx(lz1 + lz2)
+    # equal timestamps remain valid
+    rate_history([races[0], races[0]], ids=["a", "b"], **kw)

@@ -159,7 +159,24 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
                     f"{float(_a[_bad[0]])!r} is not finite ({_bad.size} of "
                     f"{_k} are). The filter folds this into state it keeps, "
                     "so every entity's rating would be NaN from here on.")
-        t = float(race.get("t", 0.0))
+        # The clock only moves forward. An older timestamp skipped the
+        # (negative) diffusion but then REWOUND t_last, so the next race
+        # diffused from the stale time and double-counted the interval
+        # (#654). A missing 't' means "now": the state's own time on a
+        # resumed filter (it defaulted to 0.0, which is a rewind), 0.0
+        # on a fresh one. Equal times are fine; NaN is refused.
+        if race.get("t") is None:
+            t = t_last if t_last is not None else 0.0
+        else:
+            t = float(race["t"])
+            if not np.isfinite(t):
+                raise ValueError(f"race time t = {race['t']!r} is not finite")
+        if t_last is not None and t < t_last:
+            raise ValueError(
+                f"race at t = {t!r} is older than the filter state "
+                f"(t = {t_last!r}). A forward filter cannot fold in an "
+                "out-of-order observation; sort the races by time, or "
+                "rerun from a state saved before t.")
         if t_last is not None and t > t_last:
             m, S = diffuse_full(m, S, dt=t - t_last, timescale=timescale,
                                 prior_mean=prior_mean, prior_var=prior_var)
@@ -310,9 +327,10 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
     for i, race in enumerate(races):
         if i >= warmup and (race.get("winner") is not None
                             or race.get("order") is not None
-                            or race.get("margins") is not None):
+                            or race.get("margins") is not None
+                            or race.get("scores") is not None):
             p, _ = predict_race(state, race["runners"],
-                                t=float(race.get("t", 0.0)),
+                                t=race.get("t"),
                                 V=race.get(V_key),
                                 beta2=params.get("beta2", 1.0),
                                 # the base the filter updates under; it
@@ -323,8 +341,13 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
                 w = int(race["order"][0])
             elif race.get("winner") is not None:
                 w = int(race["winner"])
-            else:
+            elif race.get("margins") is not None:
                 w = int(np.argmin(np.asarray(race["margins"])))
+            else:
+                # score-only contests are scored too: they were skipped,
+                # so a goals/points history evaluated to n_scored = 0
+                # while still moving the filter (#652). Higher is better.
+                w = int(np.argmax(np.asarray(race["scores"])))
             ll_model += float(np.log(max(p[w], 1e-12)))
             rec = {"i": i, "p_model": p, "winner": w}
             if race.get("p_market") is not None:
