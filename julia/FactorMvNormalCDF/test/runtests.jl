@@ -318,4 +318,22 @@ end
     @test abs(p2 - r121) <= e2 + 1e-15
 end
 
+@testset "factorize_covariance refuses a tolerance outside (0, 1) and bad controls (#658)" begin
+    # tol is on correlations: tol = Inf, or any tol >= 1, accepted the
+    # 0.9-equicorrelation matrix as diagonal and dropped its correlations
+    S = [i == j ? 1.0 : 0.9 for i in 1:3, j in 1:3]
+    for t in (Inf, 1.0, 2.0, 0.0, -1e-3, NaN, true)
+        @test_throws ArgumentError factorize_covariance(S; tol = t)
+    end
+    for r in (-1, 1.5, Inf, true)
+        @test_throws ArgumentError factorize_covariance(S; max_rank = r)
+    end
+    for k in (0, 2.5, NaN)
+        @test_throws ArgumentError factorize_covariance(S; n_iter = k)
+    end
+    V, D = factorize_covariance(S)
+    @test size(V, 2) == 1
+    @test maximum(abs.(V * V' .+ [i == j ? D[i] : 0.0 for i in 1:3, j in 1:3] .- S)) < 1e-10
+end
+
 println("all FactorMvNormalCDF tests passed")

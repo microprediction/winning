@@ -76,6 +76,19 @@
 #' variance into an artificial loading (#132).
 factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
                                  n_iter = 300L) {
+  # the controls are checked first (#658). tol is in correlation units,
+  # where no off-diagonal exceeds 1: tol = Inf, or any tol >= 1, accepted
+  # every matrix as diagonal and dropped all its correlations
+  if (!is.numeric(tol) || length(tol) != 1L || !is.finite(tol) ||
+      tol <= 0 || tol >= 1)
+    stop("tol must be a finite number in (0, 1), a tolerance on ",
+         "correlations; got ", deparse(tol))
+  whole <- function(v, lo) is.numeric(v) && length(v) == 1L &&
+    is.finite(v) && v == floor(v) && v >= lo
+  if (!whole(max_rank, 0))
+    stop("max_rank must be a whole number >= 0; got ", deparse(max_rank))
+  if (!whole(n_iter, 1))
+    stop("n_iter must be a whole number >= 1; got ", deparse(n_iter))
   sigma <- as.matrix(sigma)
   n <- nrow(sigma)
   if (ncol(sigma) != n || any(!is.finite(sigma))) return(NULL)

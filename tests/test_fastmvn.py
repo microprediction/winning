@@ -232,3 +232,34 @@ def test_a_free_coordinate_is_unaffected_by_the_deterministic_branch():
     ps = multivariate_normal(mean=np.zeros(n), cov=V @ V.T + np.diag(D)).cdf(up)
     assert meth == "factor"
     assert abs(p - ps) < 5e-5
+
+
+# ---------------------------------------------------------------- #658
+
+_EQUI = np.full((3, 3), 0.9) + 0.1 * np.eye(3)
+
+
+@pytest.mark.parametrize("tol", [np.inf, 1.0, 2.0, 0.0, -1e-3, np.nan, True,
+                                 "1e-11", None])
+def test_factorize_covariance_refuses_a_tolerance_outside_0_1_658(tol):
+    # tol is on correlations, so tol = inf or any tol >= 1 accepted the
+    # 0.9-equicorrelation matrix as diagonal and returned V of rank 0
+    with pytest.raises(ValueError, match="tol"):
+        factorize_covariance(_EQUI, tol=tol)
+
+
+@pytest.mark.parametrize("kw", [{"max_rank": -1}, {"max_rank": 1.5},
+                                {"max_rank": np.inf}, {"max_rank": True},
+                                {"n_iter": 0}, {"n_iter": 2.5},
+                                {"n_iter": np.nan}])
+def test_factorize_covariance_refuses_bad_controls_658(kw):
+    with pytest.raises(ValueError):
+        factorize_covariance(_EQUI, **kw)
+
+
+def test_factorize_covariance_default_keeps_the_equicorrelation_658():
+    V, D = factorize_covariance(_EQUI)
+    assert V.shape == (3, 1)
+    assert np.abs(V @ V.T + np.diag(D) - _EQUI).max() < 1e-10
+    p = mvn_cdf_fast(upper=np.zeros(3), V=V, D=D)
+    assert abs(p - (1 / 8 + 3 * np.arcsin(0.9) / (4 * np.pi))) < 1e-6

@@ -202,6 +202,19 @@ with an artificial loading of 9487, which priced its independent
 rectangle 5.6e-4 low (#132)."""
 function factorize_covariance(sigma::AbstractMatrix; max_rank = 6,
                               tol = 1e-11, n_iter = 300)
+    # the controls are checked first (#658). tol is in correlation
+    # units, where no off-diagonal exceeds 1: tol = Inf, or any
+    # tol >= 1, accepted every matrix as diagonal and dropped all its
+    # correlations
+    (tol isa Real && !(tol isa Bool) && isfinite(tol) && 0 < tol < 1) ||
+        throw(ArgumentError("tol must be a finite number in (0, 1), a " *
+                            "tolerance on correlations; got $tol"))
+    for (name, v, lo) in (("max_rank", max_rank, 0), ("n_iter", n_iter, 1))
+        (v isa Real && !(v isa Bool) && isfinite(v) && v == floor(v) &&
+         v >= lo) ||
+            throw(ArgumentError("$name must be a whole number >= $lo; got $v"))
+    end
+    max_rank, n_iter = Int(max_rank), Int(n_iter)
     sigma = Float64.(Matrix(sigma))
     n = size(sigma, 1)
     (size(sigma, 2) == n && all(isfinite, sigma)) || return nothing

@@ -41,3 +41,14 @@ def test_explicit_api():
                              cov=V @ V.T + np.diag(D)).cdf(b)
     assert meth == "factor"
     assert abs(p - ps) < 5e-5
+
+
+def test_factorize_covariance_refuses_a_tolerance_that_accepts_everything():
+    # tol is on correlations; tol = inf made every matrix "diagonal" (#658)
+    import pytest
+    from fastmvn import factorize_covariance
+    S = np.full((3, 3), 0.9) + 0.1 * np.eye(3)
+    for tol in (float("inf"), 1.0):
+        with pytest.raises(ValueError, match="tol"):
+            factorize_covariance(S, tol=tol)
+    assert factorize_covariance(S)[0].shape == (3, 1)
