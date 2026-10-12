@@ -121,7 +121,8 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
     # caller declared perfectly known must not have uncertainty
     # manufactured for it: it stays zero, as it does in update_winner's
     # means. Unchanged wherever v > 0.
-    return mu, np.where(known, 0.0, np.maximum(var, 1e-6)), logZ
+    # relative to the prior variance, not 1e-6 ability units (#660)
+    return mu, np.where(known, 0.0, np.maximum(var, 1e-6 * v)), logZ
 
 
 def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,

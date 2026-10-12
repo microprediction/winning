@@ -350,7 +350,7 @@ def _grad_logp_row(m, D, i, V=None, F=None, W=None, base="normal",
     return -Ji / max(p[i], 1e-300), p[i]
 
 
-def _floor_v(v_prior, v_post):
+def _floor_v(v_prior, v_post, frac=1e-6):
     """Floor the posterior variance, except where the caller declared
     the coordinate perfectly known.
 
@@ -361,8 +361,17 @@ def _floor_v(v_prior, v_post):
     belief could not stay known across an update (#78). Unchanged
     wherever v > 0, which is where the floor exists to keep a
     downstream 1/v finite.
+
+    The floor is a FRACTION of the prior variance, not an absolute
+    number in ability units: an absolute 1e-6 (1e-4 on the ranked
+    paths) imposed a unit the API never declares, so the same model
+    written at ability scale 1e-6 had its posterior variance inflated
+    a million-fold and the next race moved abilities by 800 natural
+    units (#660). At unit prior variance the floors are unchanged.
     """
-    return np.where(v_prior <= 0.0, 0.0, np.maximum(v_post, 1e-6))
+    v_prior = np.asarray(v_prior, dtype=float)
+    return np.where(v_prior <= 0.0, 0.0,
+                    np.maximum(v_post, frac * v_prior))
 
 
 def update_winner(m, v, winner, beta2=1.0, eps=1e-4, base="normal"):
@@ -791,7 +800,7 @@ def update_ranking_exact(m, v, order, beta2=1.0, eps=1e-3,
         _, gm = _order_pass(m - ej, sd, order, base=base, curves=curves)
         d2[j] = (gp[j] - gm[j]) / (2 * step[j])
     d2 = _clamp_d2(d2, base)
-    v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
+    v_new = _floor_v(v, v + v ** 2 * d2, frac=1e-4)          # #660
     return m_new, v_new
 
 
@@ -943,7 +952,7 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
         gm, _ = mixture(m - ej)
         d2[j] = (gp[j] - gm[j]) / (2 * step[j])
     d2 = _clamp_d2(d2, base)
-    v_new = np.clip(v + v ** 2 * d2, 1e-4, None)
+    v_new = _floor_v(v, v + v ** 2 * d2, frac=1e-4)          # #660
     return m_new, v_new, float(logZ)
 
 

@@ -385,7 +385,7 @@ class AbilityTracker:
                 from .history import update_margins_full
                 m, S, lz = update_margins_full(m, np.diag(v), scores=-np.asarray(scores, float),
                                                V=V, beta2=b2)
-                v = np.maximum(np.diag(S).copy(), 1e-6)
+                v = np.maximum(np.diag(S).copy(), 1e-6 * v)      # #660
             self.evidence += lz
         elif order is not None:                                    # order-only fallback
             # Ranks censor the magnitudes. 'exact' uses winning's exact win-node

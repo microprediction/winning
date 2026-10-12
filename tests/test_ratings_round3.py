@@ -187,3 +187,42 @@ def test_market_evidence_obeys_the_unit_law(c):
                            tau2=c * c, invert=lambda _p: y)
     assert a[2] == pytest.approx(want, abs=1e-9)
     assert b[2] == pytest.approx(want, abs=1e-9)
+
+
+# --- #660: diagonal updates are equivariant in the ability unit
+
+@pytest.mark.parametrize("c", [1e-8, 1e-6, 1e-3, 1.0, 1e3, 1e8])
+def test_diagonal_updates_are_unit_equivariant(c):
+    from winning.ratings.market import update_market, update_race
+    from winning.ratings.nway import (update_order_correlated,
+                                      update_ranking_exact)
+    y = np.array([1.0, 0.0, -1.0])
+    ref = []
+    for s in (1.0, c):
+        out = []
+        m, v, _ = update_market(np.zeros(3), np.full(3, s * s), None,
+                                tau2=s * s, invert=lambda _p: s * y)
+        out += [m / s, v / s ** 2]
+        m, v, _ = update_race(np.zeros(3), np.full(3, s * s), winner=0,
+                              p_market=np.ones(3), tau2=s * s, beta2=s * s,
+                              invert=lambda _p: s * y)
+        out += [m / s, v / s ** 2]
+        m, v = update_ranking_exact(s * np.array([.3, 0, -.2]),
+                                    np.full(3, s * s), [2, 0, 1],
+                                    beta2=s * s)
+        out += [m / s, v / s ** 2]
+        m, v, _ = update_order_correlated(s * np.array([.3, 0, -.2]),
+                                          np.full(3, s * s), [2, 0, 1],
+                                          s * np.array([.5, -.2, .1]),
+                                          beta2=s * s)
+        out += [m / s, v / s ** 2]
+        ref.append(out)
+    for a, b in zip(*ref):
+        assert np.allclose(a, b, rtol=1e-6, atol=1e-9)
+
+
+def test_known_coordinate_stays_known_on_ranked_path():
+    from winning.ratings.nway import update_ranking_exact
+    _, v = update_ranking_exact(np.array([.3, 0, -.2]),
+                                np.array([1.0, 0.0, 1.0]), [2, 0, 1])
+    assert v[1] == 0.0
