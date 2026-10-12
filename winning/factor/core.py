@@ -1166,6 +1166,92 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     return (out, total) if return_total else out
 
 
+def _pair_solve(gap, p, V, D, F, W, points, tol, n_iter, s):
+    """Certify, and if needed refine, a pair's closed-form gap against the
+    forward it claims to invert (#374).
+
+    The Gaussian contrast formula is exact only for a Gaussian factor law;
+    a caller's rule (a centred two-point law, or a coarse Hermite rule
+    against a small D) gives a different pair map with the same first two
+    moments. The forward is monotone in the gap, so a bracketed scalar
+    solve on the smaller share's log residual finds the true gap.
+    Returns (mu, forward evaluations, max |log residual|)."""
+    i = 0 if p[0] <= p[1] else 1          # the smaller share: finite logs
+    sign = 1.0 if i == 0 else -1.0        # p0 increases with the gap
+    logp = np.log(p)
+    floor = max(1e-9, 1e-4 / 2)
+    ident = p > floor
+    evals = [0]
+
+    def mu_of(g):
+        return np.array([-0.5 * g, 0.5 * g])
+
+    def resid(g):
+        evals[0] += 1
+        ph = win_probabilities_factor(mu_of(g), V, D, F, W, points=points)
+        r = np.log(np.maximum(ph / ph.sum(), 1e-300)) - logp
+        return r
+
+    def score(r):
+        return float(np.abs(r[ident]).max() if np.any(ident)
+                     else np.abs(r).max())
+
+    if not np.isfinite(gap):
+        return mu_of(gap), 0, np.inf
+    r0 = resid(gap)
+    if score(r0) < tol or n_iter == 0:
+        return mu_of(gap), evals[0], score(r0)
+    h0 = sign * r0[i]
+    # bracket: h(g) = sign * r_i(g) is increasing in g
+    step = max(s, 1e-300) * 0.25
+    a, ha, b, hb = gap, h0, gap, h0
+    for _ in range(60):
+        if h0 > 0:
+            a = a - step
+            ra = resid(a)
+            ha = sign * ra[i]
+            if ha <= 0:
+                break
+            b, hb = a, ha
+        else:
+            b = b + step
+            rb = resid(b)
+            hb = sign * rb[i]
+            if hb >= 0:
+                break
+            a, ha = b, hb
+        step *= 2.0
+    else:
+        return mu_of(gap), evals[0], score(r0)
+    best_g, best_s = gap, score(r0)
+    # Illinois regula falsi: superlinear, never leaves the bracket
+    side = 0
+    for _ in range(max(n_iter, 1)):
+        g = b - hb * (b - a) / (hb - ha) if hb != ha else 0.5 * (a + b)
+        if not (min(a, b) < g < max(a, b)):
+            g = 0.5 * (a + b)
+        r = resid(g)
+        sc = score(r)
+        if sc < best_s:
+            best_g, best_s = g, sc
+        if sc < tol:
+            break
+        hg = sign * r[i]
+        if hg > 0:
+            b, hb = g, hg
+            if side == 1:
+                ha *= 0.5
+            side = 1
+        else:
+            a, ha = g, hg
+            if side == -1:
+                hb *= 0.5
+            side = -1
+        if abs(b - a) <= 1e-15 * max(abs(a), abs(b), s):
+            break
+    return mu_of(best_g), evals[0], best_s
+
+
 def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
                                         D: np.ndarray, F: np.ndarray,
                                         W: np.ndarray, n_iter: int = 50,
@@ -1246,9 +1332,19 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         # longshot still carries the finite contrast (#110)
         q = float(ndtri(p[0])) if p[0] <= 0.5 else -float(ndtri(p[1]))
         gap = s * q - float(shift[1] - shift[0])
-        mu = np.array([-0.5 * gap, 0.5 * gap])
+        mu, iters, res = _pair_solve(gap, p, V, D, F, W, points, tol,
+                                     n_iter, s)
+        converged = bool(res < tol)
+        if not converged and not return_info:
+            import warnings
+            warnings.warn(
+                f"abilities_from_probabilities_factor did not converge: max "
+                f"|log residual| {res:.2e} on the pair (tol {tol:.0e}). "
+                "Pass return_info=True for the diagnostics instead of this "
+                "warning.", RuntimeWarning, stacklevel=2)
         if return_info:
-            return mu, {"iterations": 0, "residual": 0.0, "converged": True}
+            return mu, {"iterations": int(iters), "residual": float(res),
+                        "converged": converged}
         return mu
     # warm start: exact INDEPENDENT inversion (allocation's design), using each
     # runner's total sd, via this same Newton with a single zero factor node

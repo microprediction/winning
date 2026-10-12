@@ -629,11 +629,24 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     # invert the SMALLER share: for c(1, 1e-16) the normalized first
     # share rounds to exactly 1 and qnorm(1) = Inf, while the
     # permutation was finite (#412)
-    gap <- if (target[1] <= target[2]) sd_d * qnorm(target[1]) else
-      -sd_d * qnorm(target[2])
-    return(c(-0.5 * gap, 0.5 * gap))
+    # the shift is the caller rule's weighted MEAN, (v2 - v1) . E[F]
+    shift <- if (!is.null(V) && !is.null(F))
+      sum((Vc[2, ] - Vc[1, ]) * colSums(Fq * Wq)) else 0
+    gap <- (if (target[1] <= target[2]) sd_d * qnorm(target[1]) else
+      -sd_d * qnorm(target[2])) - shift
+    mu0 <- c(-0.5 * gap, 0.5 * gap)
+    if (is.null(V) || is.null(F) || !all(is.finite(mu0))) return(mu0)
+    # A caller's rule need not be Gaussian (a centred two-point law has
+    # the right mean and variance and a different pair map): the closed
+    # form is a START, certified by the forward it claims to invert
+    # (#374, matching python and the browser).
+    ph <- race_probabilities(mu0, V = V, D = D, F = F, W = W, base = base,
+                             points = points)
+    if (max(abs(log(pmax(ph, 1e-300)) - logt)) < tol) return(mu0)
+  } else {
+    mu0 <- NULL
   }
-  mu <- -(logt - mean(logt)) / 2 * scale
+  mu <- if (is.null(mu0)) -(logt - mean(logt)) / 2 * scale else mu0
   top2 <- if (n > 2) sum(sort(target, decreasing = TRUE)[1:2]) else 1
   alpha <- if (n == 2 || top2 > 0.8) 0.7 else 1.0
   if (!is.null(dense)) {
