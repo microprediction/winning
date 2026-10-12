@@ -96,6 +96,9 @@ win_probabilities_factor <- function(mu, V, D, nodes = NULL, points = 501) {
   if (is.null(nodes)) nodes <- hermite_nodes(ncol(V))
   law <- .as_factor_law(nodes$F, nodes$W)
   F <- law$F; W <- law$W
+  # scalar or one per contestant: a short D recycled silently across the
+  # column-major lattice, D = c(1, 9) pricing as c(1, 9, 1, 9) (#319)
+  D <- .as_idio(D, N)
   sd <- sqrt(D)
   M <- matrix(mu, nrow(F), N, byrow = TRUE) + F %*% t(V)
   pad <- 8 * max(sd)
@@ -149,6 +152,7 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
   if (nrow(V) != N && ncol(V) == N) V <- t(V)
   # the forward's gauge, BEFORE the warm start and step caps (#70)
   V <- sweep(V, 2, colMeans(V))
+  D <- .as_idio(D, N)                                        # (#319)
   sd <- sqrt(D)
   if (is.null(nodes)) nodes <- hermite_nodes(ncol(V))
   law <- .as_factor_law(nodes$F, nodes$W)

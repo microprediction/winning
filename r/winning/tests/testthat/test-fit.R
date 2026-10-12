@@ -280,6 +280,30 @@ test_that("the GHK ridge is relative: a race in tiny units is the same race (#10
   }
 })
 
+test_that("GHK keeps subnormal scales and a valid small pivot (#409)", {
+  # the 1e-300 floor was an absolute 1e-312 ridge below it
+  for (cc in c(1e-150, 1e-155)) {
+    g <- .ghk_race(c(0, cc), diag(cc^2, 2), budget = 64L)
+    expect_lt(abs(g$p[1] - pnorm(1 / sqrt(2))), 1e-10)
+  }
+  # the issue's 8-runner dense race in units 2^-525 is the same race
+  n <- 8L
+  P <- diag(n) - matrix(1 / n, n, n)
+  mu <- seq(-0.7, 0.7, length.out = n)
+  cc <- 2^-525
+  g1 <- .ghk_race(mu, P, budget = 1024L)$p
+  g2 <- .ghk_race(cc * mu, cc^2 * P, budget = 1024L)$p
+  expect_lt(max(abs(g1 - g2)), 1e-12)          # was 0.159
+  # near-twins (min-wins): runners 2 and 3 share a unit factor with
+  # variance 2^-43 each; the always-on relative ridge priced
+  # [0.5, 0.167, 0.333] for the exact [0.49999992, 0.07932763, 0.42067245]
+  delta <- 2^-43
+  a <- 0.5 * sqrt(2 * delta)
+  C <- matrix(c(1, 0, 0, 0, 1 + delta, 1, 0, 1, 1 + delta), 3)
+  g <- .ghk_race(c(0, a, -a), C, budget = 65536L)$p
+  expect_lt(max(abs(g - c(0.49999992, 0.07932763, 0.42067245))), 3e-3)
+})
+
 test_that("near-singular contrasts survive the closing floor (#407)", {
   C <- diag(c(1e-8, 1e-8, 1))
   f <- fit_covariance(C)

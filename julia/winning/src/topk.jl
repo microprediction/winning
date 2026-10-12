@@ -279,11 +279,52 @@ function top_k_probabilities(mu, k; V = nothing, D = nothing,
     return _checked_topk(raw, k, "top-k race")
 end
 
-function bottom_k_probabilities(mu, k; kwargs...)
+"""Rows of the reflected noise -e: survival 1 - S(-z), density f(-z),
+derivative -f'(-z). Used ONLY to place the bottom-k window."""
+_reflected(fn) = z -> (b = fn(-z); (S = 1 .- b.S, f = b.f, fp = -b.fp))
+
+"""P(i among the k LARGEST) = int f_i(x) P(M_{-i}(x) <= k-1) dx, with
+M_{-i}(x) the number of OTHER runners ABOVE x: the top-k count program
+with the survivals in the role the CDFs play there, on the top-k window
+of the reflected field."""
+function _bottomk_independent(mu, sd, k, fn, points)
+    lo_r, hi_r = _count_window(-mu, sd, k, _reflected(fn))
+    lo, hi = -hi_r, -lo_r
+    points = _resolved_points(lo, hi, sd, points)
+    x = collect(range(lo, hi, length = points))
+    b = fn((x .- mu') ./ sd')
+    G = clip01(b.S)
+    C = _count_distribution(G)
+    cdf = _loo_cdf(C, G, k)
+    dens = b.f' ./ sd
+    return vec(sum(dens .* cdf, dims = 2)) .* (x[2] - x[1])
+end
+
+"""P(runner i among the k LARGEST), min-wins: the worst k.
+
+Computed DIRECTLY, from the count of runners above x, so a rare
+last-place probability keeps its relative precision. It was
+`1 - top_k(n - k)`: exact in the continuum, and at mu = [-12, 0, 0] it
+returned 0.0 at 513 points and 2.4e-15 at 2049 for a true 7.73e-24
+(#365, as python/R/browser)."""
+function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
+                                base = "normal", points = 513, qa = 15)
+    mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
-    return 1 .- top_k_probabilities(mu, n - k; kwargs...)
+    sd = sqrt.(_as_idio(D, n))
+    fn = _base_fn(base)
+    V === nothing &&
+        return _checked_topk(_bottomk_independent(mu, sd, k, fn, points),
+                             k, "bottom-k race")
+    fac = _topk_factor_nodes(V, n, qa, "bottom_k_probabilities")
+    raw = zeros(n)
+    for q in 1:size(fac.nodes, 1)
+        raw .+= fac.w[q] .* _bottomk_independent(
+            mu .+ fac.Vm * fac.nodes[q, :], sd, k, fn, points)
+    end
+    return _checked_topk(raw, k, "bottom-k race")
 end
 
 """Both top-k Jacobians (dq/dmu, dq/dsigma); factor rank <= 2 via the
@@ -433,10 +474,21 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
           _topk_factor_nodes(V, n, qa, "abilities_from_topk", D)
     logit_t = log.(target) .- log1p.(-target)
     logt = log.(target)
-    mu = -(logt .- sum(logt) / n) ./ 2
-    alpha = n > 2 ? 1.0 : 0.7
-    resid_max = Inf
-    iters = 0
+    # in the field's own units, as python and R (#100): a dimensionless
+    # start, absolute step caps and an absolute slope floor left
+    # abilities_from_topk 0.46 off its target at sd 0.1 and 0.39 at
+    # sd 1e3, where the same race at sd 1 converged
+    sv = fac === nothing ? 0.0 : sum(fac.Vm .^ 2) / n
+    Dn = sort(sd .^ 2)
+    medD = isodd(n) ? Dn[(n + 1) ÷ 2] : 0.5 * (Dn[n ÷ 2] + Dn[n ÷ 2 + 1])
+    scale = sqrt(medD + sv)
+    mu = -(logt .- sum(logt) / n) ./ 2 .* scale
+    # damping, as python: the k = 1 gate is the win race's top-two share
+    # (two runners holding nearly all the win mass two-cycle undamped at
+    # any n -- `n > 2 ? 1.0 : 0.7` failed #151's fixtures at n = 3, 10,
+    # 30, #408), and the sweeps adapt it to the contraction they observe
+    top2 = (k == 1 && n > 2) ? sum(sort(target)[(end - 1):end]) : 1.0
+    alpha = (n == 2 || (k == 1 && top2 > 0.8)) ? 0.7 : 1.0
     function fwd(m)
         local qraw, sl
         if fac === nothing
@@ -454,31 +506,11 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
         end
         qhat = _checked_topk(qraw, k, "top-k inversion")
         resid = (log.(max.(qhat, TINY)) .- log.(max.(1 .- qhat, TINY))) .- logit_t
-        return resid, qhat, sl
+        dlogit = min.(sl ./ max.(qhat .* (1 .- qhat), TINY), -1e-6 / scale)
+        return resid, dlogit
     end
-    prev_mu = nothing
-    for it in 1:n_iter
-        iters = it
-        resid, qhat, sl = fwd(mu)
-        resid_max = maximum(abs.(resid))
-        resid_max < tol && break
-        prev_mu = copy(mu)
-        dlogit = min.(sl ./ max.(qhat .* (1 .- qhat), TINY), -1e-6)
-        lim = min.(2, 10 .* abs.(resid))
-        mu .-= clamp.(alpha .* resid ./ dlogit, -lim, lim)
-        mu .-= sum(mu) / n
-    end
-    if !(resid_max < tol)
-        # exhausted after a step no sweep priced: price the returned
-        # iterate and keep the better of the two, so the diagnostics
-        # describe the mu returned (#497, matching python)
-        r_end = maximum(abs.(fwd(mu)[1]))
-        if prev_mu !== nothing && !(r_end < resid_max)
-            mu = prev_mu
-        else
-            resid_max = r_end
-        end
-    end
+    mu, _, resid_max, iters = _jacobi_sweeps(mu, fwd, scale, alpha, n_iter,
+                                             tol)
     converged = resid_max < tol
     return_info && return (mu = mu, converged = converged,
                            max_logit_residual = resid_max,
@@ -545,6 +577,7 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
     lam = 1e-6
     iters = 0
     last_accepted = true
+    last_grad = Inf
     for it in 1:n_iter
         iters = it
         resid_max < tol && break
@@ -559,6 +592,7 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
         J = vcat(blocks...)
         JtJ = J' * J
         Jtr = J' * r
+        last_grad = maximum(abs.(Jtr))
         accepted = false
         for _ in 1:8
             step = try
@@ -593,10 +627,23 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
         last_accepted = accepted
         accepted || break
     end
-    converged = resid_max < tol || (sqr > 0 && !last_accepted)
+    # A ridge stall counts only where it is a stationary point of the
+    # penalized objective AND the board passes the exact nesting
+    # necessity P(top k1) <= P(top k2) for k1 < k2. `resid < tol ||
+    # (ridge > 0 && stalled)` certified every rejected step, including
+    # q1 = [.8, .1, .1] against q2 = [.2, .9, .9], which no (mu, sigma)
+    # can fit: converged = true at a logit residual of 1.57 and a 0.35
+    # repricing miss (#353, as python/R/browser).
+    lo_t, hi_t = k1 < k2 ? (t1, t2) : (t2, t1)
+    nested = all(lo_t .<= hi_t .+ 1e-12)
+    fit_ok = resid_max < tol
+    stationary = fit_ok || (!last_accepted && iters > 0 &&
+                            last_grad <= 1e-6 * max(1.0, cost))
+    converged = fit_ok || (sqr > 0 && stationary && nested)
     return_info && return (mu = mu, sd = sd, converged = converged,
                            max_logit_residual = resid_max,
-                           iterations = iters)
+                           iterations = iters, fit_converged = fit_ok,
+                           stationary = stationary, nested = nested)
     converged || @warn "loc_scale_from_topk_pair did not converge" resid_max
     return (mu = mu, sd = sd)
 end

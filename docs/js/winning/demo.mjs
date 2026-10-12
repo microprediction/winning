@@ -580,13 +580,16 @@ export function ghkPrepareOne(mu, C, i) {
   const L = new Float64Array(d * d);
   // the pivot floor is relative to the difference problem's own scale:
   // an absolute 1e-12 replaced valid small contrast variances, so the
-  // same race in smaller units simulated a different one (#375)
+  // same race in smaller units simulated a different one (#375). And it
+  // floors only a pivot that is not positive: raising every pivot below
+  // it inflated a valid small one -- near-twins with variance 2^-43
+  // priced [0.5, 0.158, 0.342] for the exact [0.5, 0.079, 0.421] (#409)
   const eps = 1e-12 * diffScale(S, d);
   for (let a = 0; a < d; a++) {
     for (let b = 0; b <= a; b++) {
       let s = S[a * d + b];
       for (let k = 0; k < b; k++) s -= L[a * d + k] * L[b * d + k];
-      if (a === b) L[a * d + a] = Math.sqrt(Math.max(s, eps));
+      if (a === b) L[a * d + a] = Math.sqrt(s > 0 ? s : eps);
       else L[a * d + b] = s / L[b * d + b];
     }
   }

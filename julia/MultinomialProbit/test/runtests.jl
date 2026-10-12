@@ -3,7 +3,7 @@
 # agreement, and an end-to-end fit recovery.
 #   julia --project=julia/MultinomialProbit/test julia/MultinomialProbit/test/runtests.jl
 using Test
-using Random: Xoshiro
+using Random: Xoshiro, randperm
 import LinearAlgebra
 import ForwardDiff
 
@@ -350,6 +350,25 @@ end
     end
 end
 
+@testset "GHK keeps a valid small pivot and subnormal scales (#409)" begin
+    exact = MP.ndtr(1 / sqrt(2))
+    for c in (1e-150, 1e-155)
+        # the 1e-300 floor was an absolute 1e-312 ridge below it
+        p = MP.ghk_choice_prob([0.0, c], zeros(2, 0), 2;
+                               D = [c^2, c^2], r_draws = 32, seed = 9)
+        @test abs(p - exact) < 1e-12
+    end
+    # near-twins sharing a unit factor with variance 2^-43; the always-on
+    # relative ridge priced [0.5, 0.167, 0.333]
+    delta = 2.0^-43
+    a = 0.5 * sqrt(2 * delta)
+    mu = [0.0, -a, a]
+    p = [MP.ghk_choice_prob(mu, reshape([0.0, 1.0, 1.0], 3, 1), k;
+                            D = [1.0, delta, delta], r_draws = 200_000,
+                            seed = 7 + k) for k in 1:3]
+    @test maximum(abs.(p ./ sum(p) .- [0.49999992, 0.07932763, 0.42067245])) < 3e-3
+end
+
 @testset "GHK refuses a D that is not a variance (#367)" begin
     V = zeros(2, 0)
     @test_throws ArgumentError MP.ghk_choice_prob([0.0, 1.0], V, 2;
@@ -636,4 +655,28 @@ end
     @test_throws ArgumentError fit!(mg; method = :ghk, r_draws = 0)
     @test mg.theta == th && isnan(mg.loglik)
     @test MP.ghk_choice_prob([0.0, 0.0], Z, 1; D = ones(2), r_draws = 1) ≈ 0.5
+end
+
+@testset "GHK likelihood ignores observation row order (#619)" begin
+    mu = [5.671347349259726 0.7030680274166967 -0.5542175268217469 0.42845918505707187 -0.6072857954627274 2.226262047348098
+          -1.2556641311588315 1.4926790751025314 0.35972560246545665 1.4729169780465117 -5.49977946129139 2.6228400691944653]
+    choice = [4, 1]
+    V = [0.0 0.0
+         -3.261049037785404 0.0
+         -3.5258462254859224 -2.503124070275932
+         -3.868636725222654 -3.848344435795788
+         4.279705429237719 3.627916479526973
+         3.3817943464273412 2.8854641918855872]
+    ll1 = MP.ghk_loglik(mu, V, choice; r_draws = 1000, seed = 9)
+    ll2 = MP.ghk_loglik(mu[[2, 1], :], V, choice[[2, 1]]; r_draws = 1000,
+                        seed = 9)
+    @test ll1 == ll2
+    # and over a larger sample, any permutation
+    rng = Xoshiro(3)
+    M = randn(rng, 12, 4)
+    ch = rand(rng, 1:4, 12)
+    Vs = 0.5 .* randn(rng, 4, 1)
+    perm = randperm(rng, 12)
+    @test MP.ghk_loglik(M, Vs, ch; r_draws = 200) ≈
+          MP.ghk_loglik(M[perm, :], Vs, ch[perm]; r_draws = 200) atol = 1e-10
 end

@@ -653,23 +653,61 @@ pub fn ghk_prob_one_factor(mu: &[f64], v: &[f64], k: usize, d: &[f64], n: usize,
 
 /// The GHK recursion on a contrast problem: P(d < 0), d ~ N(a, C).
 ///
-/// The Cholesky ridge is RELATIVE to the contrast's mean variance. It was
-/// an absolute 1e-12 added to every diagonal, which is model noise in the
-/// utility unit: rescaling mu -> c mu, V -> c V, D -> c^2 D must leave the
-/// race unchanged, but at c = 1e-8 the binary favourite fell from
-/// Phi(1/sqrt 2) = 0.7602 to 0.5040 (#409, #101).
+/// The contrast covariance is factorised AS GIVEN whenever it has a
+/// Cholesky factor (python: _contrast_cholesky). An absolute 1e-12 ridge
+/// was model noise in the utility unit (#409, #101), and the relative
+/// ridge that replaced it, added always, still inflated a valid small
+/// pivot: two near-twins with variance 2^-43 priced [0.5, 0.167, 0.333]
+/// against the exact [0.5, 0.079, 0.421]; its 1e-300 floor was an
+/// absolute ridge below that scale. The matrix is brought to unit scale
+/// by an exact power of two, factorised unmodified, and given a ridge of
+/// 1e-12 of its unit mean variance only if that fails; the factor is
+/// scaled back exactly. An exactly zero contrast (a tie, Dirac scope)
+/// keeps the old floor.
 fn ghk_contrast(a: &[f64], mut c: Vec<f64>, m: usize, r_draws: usize,
                 seed: u64) -> f64 {
     let mut tr = 0.0f64;
     for d in 0..m {
         tr += c[d * m + d];
     }
-    let ridge = 1e-12 * (tr / m.max(1) as f64).max(1e-300);
-    for d in 0..m {
-        c[d * m + d] += ridge;
-    }
-    if !cholesky(&mut c, m) {
-        return f64::NAN;
+    tr /= m.max(1) as f64;
+    if tr > 0.0 && tr.is_finite() {
+        // tr = f 2^e with f in [0.5, 1); scale by 2^(2k), k = -floor(e/2),
+        // applied as two exact multiplications by 2^k so that a subnormal
+        // scale never needs an overflowing 2^(2k)
+        let e = tr.log2().floor() as i32 + 1;
+        let k = -(e.div_euclid(2));
+        let pk = 2f64.powi(k);
+        for x in c.iter_mut() {
+            *x = *x * pk * pk;
+        }
+        let saved = c.clone();
+        if !cholesky(&mut c, m) {
+            c = saved;
+            let mut ts = 0.0f64;
+            for d in 0..m {
+                ts += c[d * m + d];
+            }
+            let ridge = 1e-12 * ts / m as f64;
+            for d in 0..m {
+                c[d * m + d] += ridge;
+            }
+            if !cholesky(&mut c, m) {
+                return f64::NAN;
+            }
+        }
+        let back = 2f64.powi(-k);
+        for x in c.iter_mut() {
+            *x *= back;
+        }
+    } else {
+        let ridge = 1e-12 * tr.max(1e-300);
+        for d in 0..m {
+            c[d * m + d] += ridge;
+        }
+        if !cholesky(&mut c, m) {
+            return f64::NAN;
+        }
     }
     let mut rng = Xo::new(seed);
     // draw-major layout: z[t] is an R-vector; the running mean for step t is
@@ -1502,9 +1540,30 @@ pub fn exact_implicit_prices(
         .collect()
 }
 
+/// Only differences between offsets matter. Each offset past +/-(L-2) was
+/// clamped on its own, so translating a book across the lattice edge
+/// erased its contrast: [-3, 3] priced [1, 0] and [17, 23] [0.5, 0.5] at
+/// L=15 (#585). A book with an entry out of range is first moved by the
+/// integer nearest its midpoint; an in-range book is untouched.
+pub fn edge_centred(offsets: &[f64], l: i64) -> Vec<f64> {
+    let fin: Vec<f64> = offsets.iter().copied().filter(|o| o.is_finite()).collect();
+    if fin.is_empty() {
+        return offsets.to_vec();
+    }
+    let lo = fin.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = fin.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let edge = (l - 2) as f64;
+    if lo >= -edge && hi <= edge {
+        return offsets.to_vec();
+    }
+    let c = ((lo + hi) / 2.0 + 0.5).floor();
+    offsets.iter().map(|&o| if o.is_finite() { o - c } else { o }).collect()
+}
+
 /// state_prices_from_offsets on the exact engine (#418, #362, #348, #373).
 pub fn exact_state_prices_from_offsets(density: &[f64], offsets: &[f64]) -> Vec<f64> {
     let l = ((density.len() - 1) / 2) as i64;
+    let offsets = edge_centred(offsets, l);
     let base = padded_base_cdf(density);
     let cdfs: Vec<Vec<f64>> = offsets.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
     exact_state_prices_from_cdfs(&cdfs)
@@ -1529,10 +1588,22 @@ pub fn check_offset_samples(xs: &[f64]) -> Result<(), String> {
     Ok(())
 }
 
+/// A calibration iteration budget is a positive count (#628).
+pub fn check_iterations(n_iter: usize) -> Result<(), String> {
+    if n_iter == 0 {
+        return Err("n_iter must be a positive number of iterations; zero returns the warm start".into());
+    }
+    Ok(())
+}
+
 /// solve_for_implied_offsets: the paper's table iteration as a defect
 /// correction, a_i += T^{-1}(p_i) - T^{-1}(P_i(a)), so its fixed point
 /// is the exact forward map (see lattice_calibration.py). The field is
 /// re-centred by the integer part of its mean after each step (#498).
+///
+/// Panics when `n_iter == 0`: zero steps returned the warm start as if it
+/// were a calibration, the contract python, R, the browser and fastrace
+/// already refuse (#543, #628).
 pub fn exact_calibrate(
     density: &[f64],
     prices: &[f64],
@@ -1540,6 +1611,9 @@ pub fn exact_calibrate(
     guess: &[f64],
     n_iter: usize,
 ) -> Vec<f64> {
+    if let Err(e) = check_iterations(n_iter) {
+        panic!("{e}");
+    }
     if let Err(e) = check_offset_samples(offset_samples) {
         panic!("{e}");
     }
@@ -1776,7 +1850,11 @@ pub fn top_k_window_kernel(
     if let Err(e) = r {
         panic!("{e}");
     }
-    let smax = sd.iter().cloned().fold(f64::MIN, f64::max).max(1e-12);
+    // the field's own scale (sd is checked positive above): an absolute
+    // 1e-12 floor kept the window from shrinking with the model, so the
+    // same field in units below 1e-12 got a window wider than its
+    // spread and lost resolution (#100)
+    let smax = sd.iter().cloned().fold(f64::MIN, f64::max);
     let mean_count = |x: f64| -> f64 {
         let mut t = 0.0;
         for i in 0..n {
@@ -3000,6 +3078,26 @@ mod tests {
     }
 
     #[test]
+    fn common_translation_across_the_edge_keeps_the_contrast() {
+        // #585: each offset past +/-(L-2) was clamped on its own
+        let l = 15usize;
+        let d: Vec<f64> = (0..2 * l + 1)
+            .map(|i| (-0.5 * ((i as f64 - l as f64) * 0.5).powi(2)).exp())
+            .collect();
+        let s: f64 = d.iter().sum();
+        let d: Vec<f64> = d.iter().map(|x| x / s).collect();
+        let base = exact_state_prices_from_offsets(&d, &[-3.0, 3.0]);
+        for c in [20.0, -20.0, 11.0, 40.0] {
+            let p = exact_state_prices_from_offsets(&d, &[-3.0 + c, 3.0 + c]);
+            assert!((p[0] - base[0]).abs() < 1e-12 && (p[1] - base[1]).abs() < 1e-12, "{c} {p:?} {base:?}");
+        }
+        assert!(base[0] > 0.9);
+        // in range: untouched
+        assert_eq!(edge_centred(&[-13.0, 13.0], 15), vec![-13.0, 13.0]);
+        assert_eq!(edge_centred(&[17.0, 23.0], 15), vec![-3.0, 3.0]);
+    }
+
+    #[test]
     fn tree_needs_exactly_one_root() {
         assert!(check_tree(&[2, 2, -1], 2).is_ok());
         let e = check_tree(&[-1, -1], 2).unwrap_err();
@@ -3024,6 +3122,21 @@ mod tests {
         let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
         assert!(exact_state_prices_from_offsets(&d, &[]).is_empty());
         assert!(exact_calibrate(&d, &[], &[1.0, 0.0, -1.0], &[], 3).is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "positive number of iterations")]
+    fn calibrate_refuses_zero_iterations() {
+        // #628: zero steps returned the tied warm start [0, 0]
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        exact_calibrate(&d, &[0.7, 0.3], &[1.0, 0.0, -1.0], &[0.0, 0.0], 0);
+    }
+
+    #[test]
+    fn calibrate_one_iteration_moves_the_guess() {
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        let a = exact_calibrate(&d, &[0.7, 0.3], &[1.0, 0.0, -1.0], &[0.0, 0.0], 1);
+        assert!(a[0] != a[1], "{a:?}");
     }
 
     #[test]

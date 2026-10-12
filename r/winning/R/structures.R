@@ -124,46 +124,82 @@ Tree <- function(cluster, loading, D, parent, strength)
                                      max_iter = ctl(n_iter, 25),
                                      tol = ctl(tol, 1e-10))$mu)
   }
-  if (cls == "Nested") {
-    return(.invert_generic(p, function(m)
-      nested_race_probabilities(m, s$cluster, s$loading, s$D,
-                                coupling = s$coupling, gamma = s$gamma,
-                                points = points, qa = qa, qf = qf),
-      tol = ctl(tol, 1e-9), max_iter = ctl(n_iter, 400)))
-  }
-  if (cls == "Tree") {
-    return(.invert_generic(p, function(m)
-      tree_race_probabilities(m, s$cluster, s$loading, s$D,
-                              s$parent, s$strength,
-                              points = points, qa = qa),
-      tol = ctl(tol, 1e-9), max_iter = ctl(n_iter, 400)))
+  if (cls == "Nested" || cls == "Tree") {
+    out <- .abilities_from_structure(
+      p, s, function(m) .dispatch_probabilities(m, s, points = points,
+                                                qa = qa, qf = qf),
+      points = points, n_iter = ctl(n_iter, 400), tol = ctl(tol, 1e-9))
+    return(out$mu)
   }
   stop("unknown structure ", cls)
 }
 
-# Adaptive fixed-point inversion for structures without a Jacobian --
-# port of polish._invert_generic.
-.invert_generic <- function(p, forward, tol = 1e-9, max_iter = 400) {
-  p <- as.numeric(p); p <- p / sum(p)
-  lt <- log(pmax(p, 1e-300))
-  mu <- -(lt - mean(lt))
-  eta <- 1.0
-  lp <- log(pmax(forward(mu), 1e-300))
-  err <- max(abs(lp - lt))
-  for (i in seq_len(max_iter)) {
-    if (err < tol) break
-    mu_n <- mu - eta * (lt - lp); mu_n <- mu_n - mean(mu_n)
-    lp_n <- log(pmax(forward(mu_n), 1e-300))
-    e <- max(abs(lp_n - lt))
-    if (e < err) {
-      mu <- mu_n; lp <- lp_n; err <- e
-      eta <- min(eta * 1.2, 1.5)
-    } else {
-      eta <- eta * 0.5
-      if (eta < 1e-4) break
-    }
+# Total per-runner variance of a structure (shared effects plus
+# idiosyncratic): the marginal the generic inverter's independent
+# surrogate matches. Python structures.structure_variances.
+.structure_variances <- function(s) {
+  cls <- class(s)[1]
+  n <- length(s$cluster)
+  D <- .as_idio(s$D, n, positive = TRUE)
+  if (cls == "Blocks")
+    return(D + rowSums(.as_loadings(s$loading, n, name = "loading")^2))
+  if (cls == "Nested") {
+    tot <- D + rowSums(.as_loadings(s$loading, n, name = "loading")^2)
+    if (!is.null(s$coupling) && s$gamma != 0)
+      tot <- tot + s$gamma^2 *
+        rowSums(.as_loadings(s$coupling, n, name = "coupling")^2)
+    return(tot)
   }
-  mu
+  if (cls == "Tree") {
+    inv <- .cluster_index(s$cluster)
+    nC <- max(inv)
+    lam <- as.numeric(s$strength)
+    parent <- .validate_tree(s$parent, lam, nC)
+    # a common ancestor's shock cancels and is no part of the race (#489)
+    lam <- .without_common_shock(parent, lam, nC)
+    anc <- numeric(nC)
+    for (cc in seq_len(nC)) {
+      u <- cc
+      while (parent[u] > 0) { anc[cc] <- anc[cc] + lam[parent[u]]^2; u <- parent[u] }
+    }
+    return(D + .scalar_loading(s$loading)^2 + anc[inv])
+  }
+  stop("unknown structure ", cls)
+}
+
+# Generic grammar inversion, python races._abilities_from_structure: the
+# exact forward through the dispatch, a damped log-residual fixed point
+# preconditioned by the own-slope of the independent race at matched
+# total variances, in the field's own units. It replaced a port of
+# polish._invert_generic whose start and steps were unit-free, so the
+# same Nested/Tree race missed by 0.41 of a share when written at
+# c = 1e-3 and 0.18 at c = 1e3 (#100). Returns list(mu, converged,
+# resid, iters).
+.abilities_from_structure <- function(p, s, forward, points = 257,
+                                      n_iter = 120, tol = 1e-8) {
+  target <- .rescaled_target(as.numeric(p))
+  logt <- log(target)
+  totvar <- .structure_variances(s)
+  scale <- sqrt(stats::median(totvar))
+  mu <- -(logt - mean(logt)) / 2 * scale
+  alpha <- 0.7; last <- Inf
+  err <- Inf; iters <- 0L
+  for (it in seq_len(n_iter)) {
+    iters <- it
+    phat <- forward(mu)
+    resid <- log(pmax(phat, 1e-300)) - logt
+    err <- max(abs(resid))
+    if (err < tol) break
+    if (err > last) alpha <- max(alpha * 0.5, 0.05)
+    last <- err
+    ps <- race_probabilities(mu, D = totvar, points = points,
+                             return_slopes = TRUE)
+    dlogp <- pmin(ps$slopes / pmax(ps$p, 1e-300), -1e-6 / scale)
+    lim <- pmin(2, 10 * abs(resid)) * scale
+    mu <- mu - pmin(pmax(alpha * resid / dlogp, -lim), lim)
+    mu <- mu - mean(mu)
+  }
+  list(mu = mu, converged = err < tol, resid = err, iters = iters)
 }
 
 #' The tree race implied by a hierarchical clustering (HRP's belief)

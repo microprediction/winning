@@ -792,6 +792,20 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
             return state_prices
 
 
+def _edge_centred(offsets, L):
+    """ Only differences between offsets matter. Each offset past
+    +/-(L-2) was clamped on its own, so translating a book across the
+    lattice edge erased its contrast: [-3, 3] priced [1, 0] and [17, 23]
+    [0.5, 0.5] at L=15 (#585). A book with an entry out of range is first
+    moved by the integer nearest its midpoint; an in-range book is
+    untouched, so its prices do not move. """
+    fin = [float(o) for o in offsets if math.isfinite(o)]
+    if not fin or (min(fin) >= -(L - 2) and max(fin) <= L - 2):
+        return offsets
+    c = math.floor((min(fin) + max(fin)) / 2 + 0.5)
+    return [o - c if math.isfinite(o) else o for o in offsets]
+
+
 def state_prices_from_offsets(density, offsets):
     """ Returns a list of state prices for a race where all horses have the same density
         up to a translation (the offsets)
@@ -799,6 +813,7 @@ def state_prices_from_offsets(density, offsets):
     # See the paper for a definition of state price
     # Be aware that this may fail if offsets provided are integers rather than float
     density = as_classic_density(density)
+    offsets = _edge_centred(offsets, implied_L(density))
     if _HAVE_RUST:
         return list(_fastrace.classic_exact_state_prices(
             [float(d) for d in density], [float(o) for o in offsets]))
@@ -934,7 +949,14 @@ def as_classic_density(density, where='density'):
                          + ') to represent distinct offsets')
     if not np.all(np.isfinite(d)):
         raise ValueError(where + ' has a non-finite atom')
-    total = float(d.sum())
+    with np.errstate(over='ignore'):
+        total = float(d.sum())
+    if not np.isfinite(total):
+        # finite atoms whose total overflows are the same law: rescale by
+        # the largest first (only then, so ordinary input is bit-identical).
+        # The raw total was inf and every atom normalised to 0 (#339)
+        d = d / np.abs(d).max()
+        total = float(d.sum())
     if not total > 0:
         raise ValueError(where + ' has no positive mass')
     if d.min() < -1e-12 * total:
@@ -957,7 +979,12 @@ def as_classic_prices(prices, where='prices'):
         raise ValueError(where + ' has a non-finite entry')
     if p.min() < 0:
         raise ValueError(where + ' has a negative entry (' + repr(float(p.min())) + ')')
-    total = float(p.sum())
+    with np.errstate(over='ignore'):
+        total = float(p.sum())
+    if not np.isfinite(total):
+        # [1e308, 9e307] normalised to [0, 0], a tie (#339)
+        p = p / p.max()
+        total = float(p.sum())
     if not total > 0:
         raise ValueError(where + ' has no positive mass')
     return p / total

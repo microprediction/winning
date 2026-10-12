@@ -2,6 +2,7 @@
 import math
 
 import numpy as np
+import pytest
 
 from winning.classic.lattice import skew_normal_density
 from winning.classic.lattice_calibration import ability_implied_state_prices, dividend_implied_ability
@@ -32,3 +33,68 @@ def test_scratched_runner_never_places():
         assert math.isnan(prices[bet][4]), (bet, prices[bet])  # zero counts
     # with five runners a top-4 slot is everyone else's: never the scratch
     assert math.isnan(prices["place4"][4])
+
+
+@pytest.mark.parametrize("n_live", [1, 2, 3, 4])
+def test_scratches_never_fill_places_in_a_short_field(n_live):
+    # fewer than four live runners: placegetters_from_performances asked
+    # for four places and nsmallest filled the rest with scratches (#627)
+    np.random.seed(1)
+    book = [2.0, 4.0, 8.0, 16.0][:n_live] + [math.inf] * (5 - n_live)
+    prices = skew_normal_place_pricing(book, n_samples=200)
+    for k, bet in enumerate(("win", "place2", "place3", "place4"), start=1):
+        p = prices[bet]
+        assert all(math.isnan(x) for x in p[n_live:]), (bet, p)  # scratches never place
+        if k > n_live:
+            assert all(math.isnan(x) for x in p), (bet, p)        # market unavailable
+        else:
+            assert all(x >= 1.0 for x in p[:n_live]), (bet, p)
+
+
+def test_placegetter_skips_infinite_scores():
+    from winning.classic.lattice_simulation import placegetter
+    row = [math.inf, 3.0, math.inf, 1.0]
+    assert [placegetter(row, k) for k in range(4)] == [3, 1, None, None]
+
+
+@pytest.mark.parametrize("sentinel", [2000.0, 9999.0, math.inf])
+def test_scratched_dividend_round_trips(sentinel):
+    # nan_value was accepted and ignored: the scratch came back NaN, and
+    # prices_from_dividends revived it as a missing quote at ~0.0005 (#665)
+    from winning.classic.lattice_calibration import ability_implied_dividends, prices_from_dividends
+    d = skew_normal_density(50, 0.1, a=0)
+    divs = ability_implied_dividends([0.0, 1.0, math.inf, math.inf], d, nan_value=sentinel)
+    assert divs[2] == divs[3] == math.inf
+    assert all(math.isfinite(x) for x in divs[:2])
+    back = prices_from_dividends(divs)
+    assert back[2] == back[3] == 0.0
+    np.testing.assert_allclose(back[:2], ability_implied_state_prices([0.0, 1.0, math.inf, math.inf], d)[:2], rtol=1e-12)
+
+
+def test_ability_implied_dividends_finite_book_unchanged():
+    from winning.classic.lattice_calibration import ability_implied_dividends
+    d = skew_normal_density(50, 0.1, a=0)
+    sp = ability_implied_state_prices([0.0, 1.0, 2.5], d)
+    np.testing.assert_allclose(ability_implied_dividends([0.0, 1.0, 2.5], d), [1 / x for x in sp], rtol=0)
+
+
+@pytest.mark.parametrize("unit", [0, -0.1, math.nan, math.inf, -math.inf, "0.1", None])
+def test_calibration_unit_must_be_finite_positive(unit):
+    # a negative unit reversed every ability, zero tied the field (#649)
+    from winning.classic.lattice_calibration import dividend_implied_ability, ability_implied_dividends
+    d = skew_normal_density(50, 0.1, a=0)
+    with pytest.raises(ValueError, match="finite positive"):
+        dividend_implied_ability([2, 4], d, unit=unit)
+    with pytest.raises(ValueError, match="finite positive"):
+        ability_implied_state_prices([0.0, 1.0], d, unit=unit)
+    with pytest.raises(ValueError, match="finite positive"):
+        ability_implied_dividends([0.0, 1.0], d, unit=unit)
+
+
+def test_calibration_positive_unit_golden():
+    from winning.classic.lattice_calibration import dividend_implied_ability
+    d = skew_normal_density(50, 0.1, a=0)
+    a = dividend_implied_ability([2, 4], d, unit=0.1)
+    np.testing.assert_allclose(a, [-0.2646016516, 0.3455146431], atol=1e-8)
+    from winning.classic.lattice import state_prices_from_offsets
+    np.testing.assert_allclose(state_prices_from_offsets(d, [x / 0.1 for x in a]), [2 / 3, 1 / 3], atol=1e-8)

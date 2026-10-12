@@ -135,19 +135,35 @@ def _contrast(i, Sigma=None, V=None, D=None):
 
 
 def _contrast_cholesky(C):
-    """Cholesky of a contrast covariance with a RELATIVE ridge.
+    """Cholesky of a contrast covariance, as given whenever it has one.
 
-    The ridge was an absolute 1e-12 on every diagonal, which is model
-    noise in the utility unit, not numerical stabilisation: scaling a
-    race by c (mu -> c mu, V -> c V, D -> c^2 D) must leave it
-    unchanged, but at c = 1e-8 the binary favourite fell from
-    Phi(1/sqrt 2) = 0.7602 to 0.5040 (#409, #101). Proportional to the
-    contrast's own mean variance it is homogeneous, and at 1e-12 of it
-    it moves nothing a double can resolve.
+    An absolute 1e-12 on every diagonal was model noise in the utility
+    unit (#409, #101), and the relative ridge that replaced it still
+    changed valid races: it was added ALWAYS, so a positive pivot far
+    below the mean variance -- two near-twins whose small gap is the
+    whole question -- was inflated, and an ordinary-scale race with a
+    2^-43 twin variance came back [0.5, 0.167, 0.333] against the exact
+    [0.5, 0.079, 0.421]. Its 1e-300 floor also left an absolute ridge
+    below that scale (D = 1e-320 priced 0.50 for 0.76).
+
+    So the matrix is first brought to unit scale by an exact power of
+    two (no rounding, subnormals included), factorised unmodified, and
+    only if that fails is a ridge of 1e-12 of the (now unit) mean
+    variance added; the factor is scaled back exactly. An exactly zero
+    contrast is a tie, outside what this prices (Dirac scope), and keeps
+    the old floor.
     """
     m = len(C)
-    scale = max(float(np.trace(C)) / max(m, 1), 1e-300)
-    return np.linalg.cholesky(C + 1e-12 * scale * np.eye(m))
+    tr = float(np.trace(C)) / max(m, 1)
+    if not (tr > 0.0 and np.isfinite(tr)):
+        return np.linalg.cholesky(C + 1e-312 * np.eye(m))
+    k = -(int(np.frexp(tr)[1]) // 2)
+    Cs = np.ldexp(C, 2 * k)
+    try:
+        L = np.linalg.cholesky(Cs)
+    except np.linalg.LinAlgError:
+        L = np.linalg.cholesky(Cs + 1e-12 * (np.trace(Cs) / m) * np.eye(m))
+    return np.ldexp(L, -k)
 
 
 def _ghk_prob(mu, C, i, R, u, return_slope=False):
