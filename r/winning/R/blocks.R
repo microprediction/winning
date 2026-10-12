@@ -569,13 +569,20 @@ abilities_from_block_race <- function(p, cluster, loading, D,
   ones <- matrix(1 / n, n, n)
   forward <- function(m) block_race_probabilities(m, cluster, loading, D,
                                                   points = points, qa = qa)
-  mu <- -(lt - mean(lt))
+  # the field's own scale, as python (#100): the warm start, fixed-point
+  # step and Newton trust radius were unit-variance numbers, so the same
+  # race with loading -> c loading, D -> c^2 D missed by 0.55 of a share
+  # at c = 1e-6 and 0.21 at c = 1e6. Everything below is in its units.
+  scale <- sqrt(stats::median(.as_idio(D, n, positive = TRUE) +
+                              rowSums(.as_loadings(loading, n,
+                                                   name = "loading")^2)))
+  mu <- -(lt - mean(lt)) * scale
   eta <- 1.0
   lp <- log(pmax(forward(mu), .TINY))
   err <- max(abs(lp - lt))
   for (i in 1:200) {
     if (err < 0.2) break
-    mu_n <- mu - eta * (lt - lp); mu_n <- mu_n - mean(mu_n)
+    mu_n <- mu - eta * (lt - lp) * scale; mu_n <- mu_n - mean(mu_n)
     lp_n <- log(pmax(forward(mu_n), .TINY))
     e_n <- max(abs(lp_n - lt))
     if (e_n < err) {
@@ -594,12 +601,13 @@ abilities_from_block_race <- function(p, cluster, loading, D,
                                iterations = it))
     J <- block_race_jacobian(mu, cluster, loading, D,
                              points = points, qa = qa)
-    Jl <- J / pv
+    Jl <- J / pv * scale                    # dimensionless
     step <- tryCatch(qr.solve(Jl + ones, -r, tol = 1e-12),
                      error = function(e) qr.coef(qr(Jl + ones), -r))
     step[is.na(step)] <- 0
     nn <- sqrt(sum(step^2))
     if (nn > 5) step <- step * 5 / nn
+    step <- step * scale
     for (k in 1:8) {
       mu_n <- mu + step; mu_n <- mu_n - mean(mu_n)
       p_n <- pmax(forward(mu_n), .TINY); p_n <- p_n / sum(p_n)

@@ -97,3 +97,15 @@ test_that("the block window has no absolute scale floor (#100)", {
                                                points = 257, qa = 9) - ref)),
               1e-12)
 })
+
+test_that("the block inverse is equivariant to units (#100)", {
+  p <- c(.5, .3, .2, .1); p <- p / sum(p)
+  cl <- c(0, 0, 1, 1); L <- c(.4, -.2, .3, -.1); D <- c(.7, 1.1, .8, .9)
+  ref <- abilities_from_block_race(p, cl, L, D)$mu
+  for (c in c(1e-6, 1e6, 1e10)) {
+    m <- abilities_from_block_race(p, cl, c * L, c^2 * D)$mu
+    expect_lt(max(abs(block_race_probabilities(m, cl, c * L, c^2 * D) - p)),
+              1e-10)
+    expect_lt(max(abs(m / c - ref)), 1e-8)
+  }
+})
