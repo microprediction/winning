@@ -1952,44 +1952,59 @@ fn topk_field(
     lo: f64,
     dx: f64,
     points: usize,
-) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     let n = mu.len();
     let par = points * n * n >= TOPK_PAR_WORK;
     let inv_sqrt2pi = 1.0 / (2.0 * std::f64::consts::PI).sqrt();
     let mut fmat = vec![0.0f64; points * n];
+    let mut smat = vec![0.0f64; points * n];
     let mut dens = vec![0.0f64; points * n];
     let mut zmat = vec![0.0f64; points * n];
-    let fill = |l: usize, frow: &mut [f64], drow: &mut [f64], zrow: &mut [f64]| {
+    // F and the survival S each from the tail where it is small, one erfc
+    // per entry: a top-1 cavity is a product of survivals and 1 - ndtr(z)
+    // rounds a 1e-12 survival to a few digits (#511)
+    let fill = |l: usize, frow: &mut [f64], srow: &mut [f64],
+                drow: &mut [f64], zrow: &mut [f64]| {
         let x = lo + l as f64 * dx;
         for i in 0..n {
             let z = (x - mu[i]) / sd[i];
-            frow[i] = ndtr(z);
+            if z <= 0.0 {
+                frow[i] = ndtr(z);
+                srow[i] = 1.0 - frow[i];
+            } else {
+                srow[i] = ndtr(-z);
+                frow[i] = 1.0 - srow[i];
+            }
             drow[i] = (-0.5 * z * z).exp() * inv_sqrt2pi / sd[i];
             zrow[i] = z;
         }
     };
     if par {
         fmat.par_chunks_mut(n)
+            .zip(smat.par_chunks_mut(n))
             .zip(dens.par_chunks_mut(n))
             .zip(zmat.par_chunks_mut(n))
             .enumerate()
-            .for_each(|(l, ((frow, drow), zrow))| fill(l, frow, drow, zrow));
+            .for_each(|(l, (((frow, srow), drow), zrow))| {
+                fill(l, frow, srow, drow, zrow)
+            });
     } else {
-        for (l, ((frow, drow), zrow)) in fmat
+        for (l, (((frow, srow), drow), zrow)) in fmat
             .chunks_mut(n)
+            .zip(smat.chunks_mut(n))
             .zip(dens.chunks_mut(n))
             .zip(zmat.chunks_mut(n))
             .enumerate()
         {
-            fill(l, frow, drow, zrow);
+            fill(l, frow, srow, drow, zrow);
         }
     }
     let mut c = vec![0.0f64; points * (n + 1)];
     let count = |l: usize, row: &mut [f64]| {
         row[0] = 1.0;
         let frow = &fmat[l * n..(l + 1) * n];
-        for (j, &f) in frow.iter().enumerate() {
-            let s = 1.0 - f;
+        let srow = &smat[l * n..(l + 1) * n];
+        for (j, (&f, &s)) in frow.iter().zip(srow.iter()).enumerate() {
             for m in (1..=j + 1).rev() {
                 row[m] = row[m] * s + row[m - 1] * f;
             }
@@ -2005,27 +2020,142 @@ fn topk_field(
             count(l, row);
         }
     }
-    (fmat, dens, zmat, c)
+    (fmat, smat, dens, zmat, c)
+}
+
+// Cavity deconvolution with error bounds (#511); mirrors
+// winning/factor/topk.py::_deconv. Every count coefficient carries
+// relative roundoff <= 2 (n+1) eps plus an underflow floor; each step adds
+// one subtraction and one division, and the running first-order bound
+// tracks the absolute error of each recovered coefficient (capped at 1).
+// The forward pass is exact at m = 0, the backward at m = n-1; taking
+// each coefficient from the pass with the smaller bound stops subtraction
+// residue from posing as a rare exact-place probability (the old one-
+// direction-per-point rule gave 1.6e12x the true last place at
+// mu = [-12, -4, 4, 12]).
+const TOPK_CDF_REL: f64 = 1e-6;
+
+#[inline]
+fn count_err_consts(n: usize) -> (f64, f64) {
+    // 2 (n+1) eps for the count entry, plus one eps each for the
+    // subtraction (its subtrahend is at most the entry) and the division
+    let m = n as f64 + 1.0;
+    ((2.0 * m + 2.0) * f64::EPSILON, m * f64::MIN_POSITIVE)
 }
 
 /// Full leave-one-out pmf at one lattice point: Q[m] = P(N_{-i} = m),
-/// m = 0..n-1, by stable-direction deconvolution of the count row.
+/// m = 0..n-1, both passes in full, each coefficient from the pass with
+/// the smaller error bound; `eb` receives the chosen bounds.
 #[inline]
-fn loo_pmf_row(row: &[f64], fi: f64, n: usize, q: &mut [f64]) {
-    let si = 1.0 - fi;
-    if si >= fi {
-        let s_safe = si.max(1e-300);
-        q[0] = (row[0] / s_safe).clamp(0.0, 1.0);
-        for m in 1..n {
-            q[m] = ((row[m] - fi * q[m - 1]) / s_safe).clamp(0.0, 1.0);
-        }
+fn loo_pmf_row(row: &[f64], fi: f64, si: f64, n: usize, q: &mut [f64],
+               eb: &mut [f64]) {
+    let (cr, floor) = count_err_consts(n);
+    // forward
+    let inv = 1.0 / si.max(1e-300);
+    let mut qv = (row[0] * inv).min(1.0);
+    let mut e = if si < 1e-300 {
+        1.0
     } else {
-        let f_safe = fi.max(1e-300);
-        q[n - 1] = (row[n] / f_safe).clamp(0.0, 1.0);
-        for m in (0..n - 1).rev() {
-            q[m] = ((row[m + 1] - si * q[m + 1]) / f_safe).clamp(0.0, 1.0);
+        ((cr * row[0] + floor) * inv).min(1.0)
+    };
+    q[0] = qv;
+    eb[0] = e;
+    for m in 1..n {
+        let mq = fi * qv;
+        let qn = ((row[m] - mq) * inv).clamp(0.0, 1.0);
+        e = ((cr * row[m] + floor + fi * e) * inv).min(1.0);
+        qv = qn;
+        q[m] = qv;
+        eb[m] = e;
+    }
+    // backward, replacing a coefficient only where strictly better bounded
+    let inv = 1.0 / fi.max(1e-300);
+    qv = (row[n] * inv).min(1.0);
+    e = if fi < 1e-300 {
+        1.0
+    } else {
+        ((cr * row[n] + floor) * inv).min(1.0)
+    };
+    if e < eb[n - 1] {
+        q[n - 1] = qv;
+        eb[n - 1] = e;
+    }
+    for m in (0..n - 1).rev() {
+        let sq = si * qv;
+        let qn = ((row[m + 1] - sq) * inv).clamp(0.0, 1.0);
+        e = ((cr * row[m + 1] + floor + si * e) * inv).min(1.0);
+        qv = qn;
+        if e < eb[m] {
+            q[m] = qv;
+            eb[m] = e;
         }
     }
+}
+
+/// P(N_{-i} <= k-1) at one lattice point: the forward head sum or one
+/// minus the backward tail sum, whichever has the smaller bound, redone
+/// per coefficient (both passes in full) where even that bound exceeds
+/// 1e-6 of the value. Mirrors topk.py::_leave_one_out_cdf.
+#[inline]
+fn loo_cdf_row(row: &[f64], fi: f64, si: f64, n: usize, k: usize,
+               q: &mut [f64], eb: &mut [f64]) -> f64 {
+    if k >= n {
+        return 1.0;
+    }
+    let eps = f64::EPSILON;
+    let (cr, floor) = count_err_consts(n);
+    let inv = 1.0 / si.max(1e-300);
+    let mut qv = (row[0] * inv).min(1.0);
+    let mut e = if si < 1e-300 {
+        1.0
+    } else {
+        ((cr * row[0] + floor) * inv).min(1.0)
+    };
+    let mut head = qv;
+    let mut head_e = e;
+    for m in 1..k {
+        let mq = fi * qv;
+        qv = ((row[m] - mq) * inv).clamp(0.0, 1.0);
+        e = ((cr * row[m] + floor + fi * e) * inv).min(1.0);
+        head += qv;
+        head_e += e;
+    }
+    let inv = 1.0 / fi.max(1e-300);
+    qv = (row[n] * inv).min(1.0);
+    e = if fi < 1e-300 {
+        1.0
+    } else {
+        ((cr * row[n] + floor) * inv).min(1.0)
+    };
+    let mut tail = qv;
+    let mut tail_e = eps + e;
+    for m in (k..n - 1).rev() {
+        let sq = si * qv;
+        qv = ((row[m + 1] - sq) * inv).clamp(0.0, 1.0);
+        e = ((cr * row[m + 1] + floor + si * e) * inv).min(1.0);
+        tail += qv;
+        tail_e += e;
+    }
+    let (mut cdf, bound) = if head_e <= tail_e {
+        (head, head_e)
+    } else {
+        (1.0 - tail, tail_e)
+    };
+    if bound > (TOPK_CDF_REL * cdf).max(1e-280) {
+        loo_pmf_row(row, fi, si, n, q, eb);
+        let (mut h, mut he, mut t, mut te) = (0.0, 0.0, 0.0, eps);
+        for m in 0..n {
+            if m < k {
+                h += q[m];
+                he += eb[m];
+            } else {
+                t += q[m];
+                te += eb[m];
+            }
+        }
+        cdf = if he <= te { h } else { 1.0 - t };
+    }
+    cdf.clamp(0.0, 1.0)
 }
 
 /// One pair coefficient P(N_{-ij} = k-1) from the leave-i pmf, stable
@@ -2070,33 +2200,16 @@ pub fn top_k_slopes_kernel(
     assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
-    let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one = |i: usize| {
             let mut acc_q = 0.0f64;
             let mut acc_sl = 0.0f64;
+            let mut qbuf = vec![0.0f64; n];
+            let mut ebuf = vec![0.0f64; n];
             for l in 0..points {
-                let f = fmat[l * n + i];
-                let s = 1.0 - f;
                 let row = &c[l * (n + 1)..(l + 1) * (n + 1)];
-                let cdf = if s >= f {
-                    let s_safe = s.max(1e-300);
-                    let mut q = (row[0] / s_safe).clamp(0.0, 1.0);
-                    let mut tot = q;
-                    for m in 1..k {
-                        q = ((row[m] - f * q) / s_safe).clamp(0.0, 1.0);
-                        tot += q;
-                    }
-                    tot.clamp(0.0, 1.0)
-                } else {
-                    let f_safe = f.max(1e-300);
-                    let mut q = (row[n] / f_safe).clamp(0.0, 1.0);
-                    let mut tail = q;
-                    for m in (k..n - 1).rev() {
-                        q = ((row[m + 1] - s * q) / f_safe).clamp(0.0, 1.0);
-                        tail += q;
-                    }
-                    (1.0 - tail).clamp(0.0, 1.0)
-                };
+                let cdf = loo_cdf_row(row, fmat[l * n + i], smat[l * n + i],
+                                      n, k, &mut qbuf, &mut ebuf);
                 let d = dens[l * n + i];
                 acc_q += d * cdf;
                 // -f'(z)/sd^2 = z f(z)/sd^2 = z (f(z)/sd) / sd
@@ -2132,15 +2245,18 @@ pub fn top_k_jacobians_kernel(
     assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
-    let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one_row = |i: usize| {
             let mut qi = vec![0.0f64; points * n];
+            let mut ebuf = vec![0.0f64; n];
             for l in 0..points {
                 loo_pmf_row(
                     &c[l * (n + 1)..(l + 1) * (n + 1)],
                     fmat[l * n + i],
+                    smat[l * n + i],
                     n,
                     &mut qi[l * n..(l + 1) * n],
+                    &mut ebuf,
                 );
             }
             let mut row_mu = vec![0.0f64; n];
@@ -2210,13 +2326,15 @@ pub fn rank_marginals_kernel(
     assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
-    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one = |i: usize| {
         let mut qi = vec![0.0f64; n];
+        let mut ebuf = vec![0.0f64; n];
         let mut row = vec![0.0f64; n];
         for l in 0..points {
             loo_pmf_row(&c[l * (n + 1)..(l + 1) * (n + 1)],
-                        fmat[l * n + i], n, &mut qi);
+                        fmat[l * n + i], smat[l * n + i], n, &mut qi,
+                        &mut ebuf);
             let d = dens[l * n + i];
             for m in 0..n {
                 row[m] += qi[m] * d;
@@ -2259,13 +2377,14 @@ pub fn rank_jacobian_kernel(
     assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
-    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one = |i: usize| {
         let mut qi = vec![0.0f64; points * n];
+        let mut ebuf = vec![0.0f64; n];
         for l in 0..points {
             loo_pmf_row(&c[l * (n + 1)..(l + 1) * (n + 1)],
-                        fmat[l * n + i], n,
-                        &mut qi[l * n..(l + 1) * n]);
+                        fmat[l * n + i], smat[l * n + i], n,
+                        &mut qi[l * n..(l + 1) * n], &mut ebuf);
         }
         let mut p_i = 0.0f64;
         for l in 0..points {
@@ -2337,35 +2456,18 @@ pub fn top_k_kernel(
     let par = points * n * n >= TOPK_PAR_WORK;
     // shared field rows and count distribution (serial under the small-
     // field threshold, identical arithmetic)
-    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
 
     // deconvolution + integration per runner
     let one = |i: usize| {
             let mut acc = 0.0f64;
+            let mut qbuf = vec![0.0f64; n];
+            let mut ebuf = vec![0.0f64; n];
             for l in 0..points {
-                let f = fmat[l * n + i];
-                let s = 1.0 - f;
                 let row = &c[l * (n + 1)..(l + 1) * (n + 1)];
-                let cdf = if s >= f {
-                    let s_safe = s.max(1e-300);
-                    let mut q = (row[0] / s_safe).clamp(0.0, 1.0);
-                    let mut tot = q;
-                    for m in 1..k {
-                        q = ((row[m] - f * q) / s_safe).clamp(0.0, 1.0);
-                        tot += q;
-                    }
-                    tot
-                } else {
-                    let f_safe = f.max(1e-300);
-                    let mut q = (row[n] / f_safe).clamp(0.0, 1.0);
-                    let mut tail = q;
-                    for m in (k..n - 1).rev() {
-                        q = ((row[m + 1] - s * q) / f_safe).clamp(0.0, 1.0);
-                        tail += q;
-                    }
-                    1.0 - tail
-                };
-                acc += dens[l * n + i] * cdf.clamp(0.0, 1.0);
+                let cdf = loo_cdf_row(row, fmat[l * n + i], smat[l * n + i],
+                                      n, k, &mut qbuf, &mut ebuf);
+                acc += dens[l * n + i] * cdf;
             }
             acc * dx
     };
@@ -2852,6 +2954,25 @@ mod tests {
         for k in 1..3 {
             let q = top_k_kernel(&mu, &sd, k, -8.0, 9.0, 1001);
             assert!((q.iter().sum::<f64>() - k as f64).abs() < 1e-6);
+        }
+    }
+
+    // #511: the old one-direction-per-point deconvolution integrated
+    // subtraction residue as rare places -- last place 1.6e12x too large
+    // at mu = [-12, -4, 4, 12], top-1 1.8e5x at mu = [-14, 0, 0]
+    #[test]
+    fn rare_places_are_not_deconvolution_residue() {
+        for &points in &[513usize, 4097] {
+            let p = rank_marginals_kernel(&[-12.0, -4.0, 4.0, 12.0], &[1.0; 4],
+                                          -21.0, 18.0, points);
+            let last = p[4 + 3];
+            assert!((last / 2.9183334444853456e-30 - 1.0).abs() < 1e-6, "{last}");
+            let q = top_k_kernel(&[-14.0, 0.0, 0.0], &[1.0; 3], 1, -23.0, 9.0,
+                                 points);
+            assert!((q[1] / 2.091912795347403e-23 - 1.0).abs() < 1e-6, "{}", q[1]);
+            let (qs, _) = top_k_slopes_kernel(&[-14.0, 0.0, 0.0], &[1.0; 3], 1,
+                                             -23.0, 9.0, points);
+            assert!((qs[1] / q[1] - 1.0).abs() < 1e-12);
         }
     }
 

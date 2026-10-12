@@ -6,7 +6,7 @@
 // the derivations and the two-branch refusal of exact-rank targets.
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
-         jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter } from "./core.mjs";
+         jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints } from "./core.mjs";
 import { BASES, _factorNodeRule, baseResolution } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -41,6 +41,7 @@ function baseFn(base) {
 }
 
 const clip01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
+const SYMMETRIC_BASES = new Set([BASES.normal, BASES.logistic, BASES.laplace]);
 
 /* searched in STANDARDISED units (centred, over the widest sd) and mapped
    back: memberships are invariant under mu -> a + c mu, sd -> c sd, but an
@@ -138,71 +139,130 @@ function baseGrid(fn, x, mu, sd) {
   return { S, f, fp, z };
 }
 
-function countDistribution(F) {
+function countDistribution(F, S = null) {
+  // S, when given, is used in place of 1 - F (accurate where that cancels)
   const L = F.length, n = F[0].length;
   const C = new Array(L);
   for (let t = 0; t < L; t++) {
     const row = new Array(n + 1).fill(0);
     row[0] = 1;
     for (let j = 0; j < n; j++) {
-      const q = F[t][j];
+      const q = F[t][j], sq = S ? S[t][j] : 1 - q;
       for (let m = Math.min(j + 1, n); m >= 1; m--)
-        row[m] = row[m] * (1 - q) + row[m - 1] * q;
-      row[0] *= 1 - q;
+        row[m] = row[m] * sq + row[m - 1] * q;
+      row[0] *= sq;
     }
     C[t] = row;
   }
   return C;
 }
 
-function leaveOneOutCdf(C, F, k) {
+/* Cavity deconvolution with error bounds (#511); mirrors python's
+   topk._deconv and rust's loo_pmf_row. Every count coefficient carries
+   relative roundoff <= 2 (n+1) eps plus an underflow floor; each step adds
+   a subtraction and a division (one eps each, folded into the same
+   constant), and the running first-order bound tracks the absolute error
+   of each recovered coefficient, capped at 1. The forward pass is exact
+   at m = 0, the backward at m = n-1. The old rule ran ONE direction per
+   lattice point and integrated the subtraction residue (~eps x the
+   neighbouring coefficient) as a rare exact place: 62x the true Gumbel
+   last place at mu = [-9, -2, 2, 10], 1.8e5x a top-1 share at
+   mu = [-14, 0, 0]. */
+const EPS = Number.EPSILON, REALMIN = 2.2250738585072014e-308;
+const CDF_REL = 1e-6;
+
+function errConsts(n) {
+  return [(2 * (n + 1) + 2) * EPS, (n + 1) * REALMIN];
+}
+
+// both passes in full at one lattice point, each coefficient from the
+// pass with the smaller bound; q receives the pmf, eb the chosen bounds
+function pmfRow(row, fi, si, n, q, eb) {
+  const [cr, floor] = errConsts(n);
+  let inv = 1 / Math.max(si, TINY);
+  let qv = Math.min(row[0] * inv, 1);
+  let e = si < TINY ? 1 : Math.min((cr * row[0] + floor) * inv, 1);
+  q[0] = qv; eb[0] = e;
+  for (let m = 1; m < n; m++) {
+    qv = clip01((row[m] - fi * qv) * inv);
+    e = Math.min((cr * row[m] + floor + fi * e) * inv, 1);
+    q[m] = qv; eb[m] = e;
+  }
+  inv = 1 / Math.max(fi, TINY);
+  qv = Math.min(row[n] * inv, 1);
+  e = fi < TINY ? 1 : Math.min((cr * row[n] + floor) * inv, 1);
+  if (e < eb[n - 1]) { q[n - 1] = qv; eb[n - 1] = e; }
+  for (let m = n - 2; m >= 0; m--) {
+    qv = clip01((row[m + 1] - si * qv) * inv);
+    e = Math.min((cr * row[m + 1] + floor + si * e) * inv, 1);
+    if (e < eb[m]) { q[m] = qv; eb[m] = e; }
+  }
+}
+
+// P(N_{-i} <= k-1) at one lattice point: forward head or one minus the
+// backward tail, whichever is better bounded; redone per coefficient
+// where even that bound exceeds 1e-6 of the value
+function cdfRow(row, fi, si, n, k, q, eb) {
+  if (k >= n) return 1;
+  const [cr, floor] = errConsts(n);
+  let inv = 1 / Math.max(si, TINY);
+  let qv = Math.min(row[0] * inv, 1);
+  let e = si < TINY ? 1 : Math.min((cr * row[0] + floor) * inv, 1);
+  let head = qv, headE = e;
+  for (let m = 1; m < k; m++) {
+    qv = clip01((row[m] - fi * qv) * inv);
+    e = Math.min((cr * row[m] + floor + fi * e) * inv, 1);
+    head += qv; headE += e;
+  }
+  inv = 1 / Math.max(fi, TINY);
+  qv = Math.min(row[n] * inv, 1);
+  e = fi < TINY ? 1 : Math.min((cr * row[n] + floor) * inv, 1);
+  let tail = qv, tailE = EPS + e;
+  for (let m = n - 2; m >= k; m--) {
+    qv = clip01((row[m + 1] - si * qv) * inv);
+    e = Math.min((cr * row[m + 1] + floor + si * e) * inv, 1);
+    tail += qv; tailE += e;
+  }
+  let cdf, bound;
+  if (headE <= tailE) { cdf = head; bound = headE; }
+  else { cdf = 1 - tail; bound = tailE; }
+  if (bound > Math.max(CDF_REL * cdf, 1e-280)) {
+    pmfRow(row, fi, si, n, q, eb);
+    let h = 0, he = 0, tl = 0, te = EPS;
+    for (let m = 0; m < n; m++) {
+      if (m < k) { h += q[m]; he += eb[m]; }
+      else { tl += q[m]; te += eb[m]; }
+    }
+    cdf = he <= te ? h : 1 - tl;
+  }
+  return clip01(cdf);
+}
+
+function leaveOneOutCdf(C, F, k, S = null) {
   const L = F.length, n = F[0].length;
   const out = new Array(n);
+  const q = new Array(n), eb = new Array(n);
   for (let i = 0; i < n; i++) {
     const row = new Array(L);
     for (let t = 0; t < L; t++) {
-      const Fi = F[t][i], Si = 1 - Fi;
-      if (Si >= Fi) {
-        const s = Math.max(Si, TINY);
-        let Q = clip01(C[t][0] / s), acc = Q;
-        for (let m = 1; m < k; m++) {
-          Q = clip01((C[t][m] - Fi * Q) / s);
-          acc += Q;
-        }
-        row[t] = clip01(acc);
-      } else {
-        const fi = Math.max(Fi, TINY);
-        let Qb = clip01(C[t][n] / fi), acc = Qb;
-        for (let m = n - 2; m >= k; m--) {
-          Qb = clip01((C[t][m + 1] - Si * Qb) / fi);
-          acc += Qb;
-        }
-        row[t] = clip01(1 - acc);
-      }
+      const Fi = F[t][i], Si = S ? S[t][i] : 1 - Fi;
+      row[t] = cdfRow(C[t], Fi, Si, n, k, q, eb);
     }
     out[i] = row;
   }
   return out;
 }
 
-function looPmf(C, F, i) {
-  // full leave-one-out pmf Q[t][m], m = 0..n-1, stable direction per t
+function looPmf(C, F, i, S = null) {
+  // full leave-one-out pmf Q[t][m], m = 0..n-1, per coefficient from the
+  // better-bounded deconvolution direction
   const L = F.length, n = F[0].length;
   const Q = new Array(L);
+  const eb = new Array(n);
   for (let t = 0; t < L; t++) {
-    const Fi = F[t][i], Si = 1 - Fi;
+    const Fi = F[t][i], Si = S ? S[t][i] : 1 - Fi;
     const row = new Array(n);
-    if (Si >= Fi) {
-      const s = Math.max(Si, TINY);
-      row[0] = clip01(C[t][0] / s);
-      for (let m = 1; m < n; m++)
-        row[m] = clip01((C[t][m] - Fi * row[m - 1]) / s);
-    } else {
-      const fi = Math.max(Fi, TINY);
-      row[n - 1] = clip01(C[t][n] / fi);
-      for (let m = n - 2; m >= 0; m--)
-        row[m] = clip01((C[t][m + 1] - Si * row[m + 1]) / fi);
-    }
+    pmfRow(C[t], Fi, Si, n, row, eb);
     Q[t] = row;
   }
   return Q;
@@ -237,6 +297,7 @@ function pairPmfAt(Qi, F, i, k) {
 }
 
 function resolvedPoints(lo, hi, sd, points, res = 1) {
+  points = asPoints(points);   // a floor the caller set, not a hint to replace (#444)
   // about two points per NARROWEST sd, capped at 8193. The window is set
   // by the widest runner and the grid by `points`, so a heterogeneous
   // field leaves the narrowest density between samples, and the mass
@@ -279,8 +340,15 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   const dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
   const g = baseGrid(fn, x, mu, sd);
-  const F = g.S.map(row => row.map(s => clip01(1 - s)));
-  return { x, dx, F, ...g };
+  // the count program wants F and S each accurate where it is small:
+  // 1 - S rounds a lower-tail CDF to zero once S is near one, and those
+  // CDFs are what a last place multiplies together. A base symmetric
+  // about zero has the CDF as its reflected survival S(-z) (#511).
+  const sym = SYMMETRIC_BASES.has(fn);
+  const S = g.S.map(row => row.map(clip01));
+  const F = S.map((row, t) => row.map((s, i) =>
+    sym && s > 0.5 ? clip01(fn(-g.z[t][i])[0]) : clip01(1 - s)));
+  return { x, dx, ...g, F, S };
 }
 
 /* P(i among the k LARGEST) directly: the top-k integral with the count of
@@ -314,9 +382,9 @@ function bottomkIndependent(mu, sd, k, fn, points) {
 
 function topkWithSlopes(mu, sd, k, fn, points) {
   const n = mu.length;
-  const { dx, F, f, fp } = topkGrid(mu, sd, k, fn, points);
-  const C = countDistribution(F);
-  const cdf = leaveOneOutCdf(C, F, k);
+  const { dx, F, S, f, fp } = topkGrid(mu, sd, k, fn, points);
+  const C = countDistribution(F, S);
+  const cdf = leaveOneOutCdf(C, F, k, S);
   const q = new Array(n).fill(0), slopes = new Array(n).fill(0);
   for (let i = 0; i < n; i++) {
     let s0 = 0, s1 = 0;
@@ -359,13 +427,14 @@ function factorNodes(V, n, qa, D = null) {
     // qa omitted (the default): the general race's sharpness rule, as
     // python and R. A fixed qa = 15 Gauss-Hermite rule missed the race by
     // 10.7 points on a sharp rank-one field and moved a top-2 membership
-    // 1.3 points under a covariance-preserving rotation (#340). Past the
-    // race's 8192-node escalation the first 1024 Halton points are used:
-    // every node here is a full count-program pass.
-    const rule = _factorNodeRule(Vm, D == null ? new Array(n).fill(1) : D);
-    let F = rule.F, W = rule.W;
-    if (W.length > 1024) { F = F.slice(0, 1024); W = new Array(1024).fill(1 / 1024); }
-    return { Vm: rule.V, nodes: F, w: W };
+    // 1.3 points under a covariance-preserving rotation (#340). Past 1024
+    // nodes a whole 1024-node rule of the same family is built, as
+    // python's 2^10 Sobol (every node here is a full count-program pass):
+    // the first 1024 nodes of a longer rule are NOT a rule -- of a
+    // 3393-node midpoint grid they are its lower quarter, and top-1
+    // missed the race by 0.50.
+    const rule = _factorNodeRule(Vm, D == null ? new Array(n).fill(1) : D, 1024);
+    return { Vm: rule.V, nodes: rule.F, w: rule.W };
   }
   if (qa === undefined) qa = 15;   // an explicit value, null included, goes to hermite1's check
   // the shared scale-safe gauge: a raw column sum overflowed at a common
@@ -497,14 +566,14 @@ export function topKJacobians(mu, k, opts = {}) {
   const Dv = asIdio(D, n);
   const sd = Dv.map(Math.sqrt);
   const fn = baseFn(base);
-  const { dx, F, f, fp, z } = topkGrid(mu, sd, k, fn, points);
+  const { dx, F, S, f, fp, z } = topkGrid(mu, sd, k, fn, points);
   const L = F.length;
   const dens = [];
   for (let t = 0; t < L; t++) dens.push(f[t].map((v, i) => v / sd[i]));
-  const C = countDistribution(F);
+  const C = countDistribution(F, S);
   const Jm = [], Js = [];
   for (let i = 0; i < n; i++) {
-    const Qi = looPmf(C, F, i);
+    const Qi = looPmf(C, F, i, S);
     const pair = pairPmfAt(Qi, F, i, k);
     const rowMu = new Array(n).fill(0), rowSd = new Array(n).fill(0);
     for (let j = 0; j < n; j++) {
@@ -542,11 +611,11 @@ export function rankProbabilities(mu, opts = {}) {
   // one factor node: the cavity count pmf against each runner's own
   // density, as in python's rank_probabilities.one_node
   const oneNode = (m) => {
-    const { dx, F, f } = topkGrid(m, sd, n - 1, fn, points);
-    const C = countDistribution(F);
+    const { dx, F, S, f } = topkGrid(m, sd, n - 1, fn, points);
+    const C = countDistribution(F, S);
     const out = [];
     for (let i = 0; i < n; i++) {
-      const Qi = looPmf(C, F, i);
+      const Qi = looPmf(C, F, i, S);
       const row = new Array(n).fill(0);
       for (let t = 0; t < F.length; t++) {
         const d = f[t][i] / sd[i];
@@ -900,14 +969,14 @@ export function locScaleFromWinAndSecond(pWin, pSecond, opts = {}) {
 
 function rankMarginalWithJacobian(mu, sd, r, fn, points) {
   const n = mu.length;
-  const { dx, F, f } = topkGrid(mu, sd, n - 1, fn, points);
+  const { dx, F, S, f } = topkGrid(mu, sd, n - 1, fn, points);
   const L = F.length;
   const dens = [];
   for (let t = 0; t < L; t++) dens.push(f[t].map((v, i) => v / sd[i]));
-  const C = countDistribution(F);
+  const C = countDistribution(F, S);
   const p = new Array(n), J = [];
   for (let i = 0; i < n; i++) {
-    const Qi = looPmf(C, F, i);
+    const Qi = looPmf(C, F, i, S);
     let pi = 0;
     for (let t = 0; t < L; t++) pi += Qi[t][r - 1] * dens[t][i];
     p[i] = pi * dx;

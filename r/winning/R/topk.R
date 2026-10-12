@@ -153,66 +153,138 @@
   x <- seq(w[1], w[2], length.out = points)
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
+  # F and S each accurate where small: 1 - S rounds a lower-tail CDF to
+  # zero once S is near one, and those CDFs are what a last place
+  # multiplies together; a base symmetric about zero has the CDF as its
+  # reflected survival S(-z) (#511)
+  S <- .clip01(b$S)
+  F <- .clip01(1 - S)
+  if (.symmetric_base(fn)) {
+    lower <- S > 0.5
+    if (any(lower)) F[lower] <- .clip01(fn(-z[lower])$S)
+  }
   list(x = x, dx = x[2] - x[1], z = z,
-       S = b$S, f = b$f, fp = b$fp, F = .clip01(1 - b$S))
+       S = S, f = b$f, fp = b$fp, F = F)
 }
 
-.count_distribution <- function(F) {
+.symmetric_base <- function(fn) {
+  identical(fn, .BASES$normal) || identical(fn, .BASES$logistic) ||
+    identical(fn, .BASES$laplace)
+}
+
+.count_distribution <- function(F, S = NULL) {
+  # S, when given, is used in place of 1 - F (accurate where that cancels)
   L <- nrow(F); n <- ncol(F)
+  if (is.null(S)) S <- 1 - F
   C <- matrix(0, L, n + 1)
   C[, 1] <- 1
   for (j in 1:n) {
     f <- F[, j]
+    s <- S[, j]
     idx <- 2:(j + 1)
-    C[, idx] <- C[, idx, drop = FALSE] * (1 - f) +
+    C[, idx] <- C[, idx, drop = FALSE] * s +
       C[, idx - 1, drop = FALSE] * f
-    C[, 1] <- C[, 1] * (1 - f)
+    C[, 1] <- C[, 1] * s
   }
   C
 }
 
-.loo_cdf <- function(C, F, k) {
-  L <- nrow(F); n <- ncol(F)
-  out <- matrix(0, n, L)
-  for (i in 1:n) {
-    Fi <- F[, i]; Si <- 1 - Fi
-    fwd <- Si >= Fi
-    s <- pmax(Si, 1e-300)
-    Q <- .clip01(C[, 1] / s)
-    acc_f <- Q
-    if (k >= 2) for (m in 2:k) {
-      Q <- .clip01((C[, m] - Fi * Q) / s)
-      acc_f <- acc_f + Q
-    }
-    f <- pmax(Fi, 1e-300)
-    Qb <- .clip01(C[, n + 1] / f)
-    acc_b <- Qb
-    if (n - 1 >= k + 1) for (mm in seq(n - 1, k + 1, by = -1)) {
-      Qb <- .clip01((C[, mm + 1] - Si * Qb) / f)
-      acc_b <- acc_b + Qb
-    }
-    out[i, ] <- .clip01(ifelse(fwd, acc_f, 1 - acc_b))
-  }
-  out
+# Cavity deconvolution with error bounds (#511); mirrors python's
+# topk._deconv. Each count coefficient carries relative roundoff
+# <= 2 (n+1) eps plus an underflow floor; each recursion step adds a
+# subtraction and a division (one eps each, folded into the constant), and
+# the running first-order bound tracks the absolute error of every
+# recovered coefficient, capped at 1. The forward pass is exact at the
+# first coefficient, the backward at the last. The old rule ran ONE
+# direction per lattice point and integrated the subtraction residue as a
+# rare exact place: 62x the true Gumbel last place at mu = c(-9, -2, 2, 10)
+# and 1.6e12x at mu = c(-12, -4, 4, 12) for the normal.
+.count_err <- function(C) {
+  n <- ncol(C) - 1
+  (2 * (n + 1) + 2) * .Machine$double.eps * C + (n + 1) * .Machine$double.xmin
 }
 
-.loo_pmf <- function(C, F, i) {
+# both passes in full, each coefficient from the pass with the smaller
+# bound: list(Q = pmf (L x n), B = chosen bounds)
+.loo_both <- function(C, E, Fi, Si) {
+  n <- ncol(C) - 1; L <- nrow(C)
+  Q <- matrix(0, L, n); B <- matrix(0, L, n)
+  inv <- 1 / pmax(Si, 1e-300)
+  q <- pmin(C[, 1] * inv, 1)
+  e <- ifelse(Si < 1e-300, 1, pmin(E[, 1] * inv, 1))
+  Q[, 1] <- q; B[, 1] <- e
+  if (n >= 2) for (m in 2:n) {
+    q <- .clip01((C[, m] - Fi * q) * inv)
+    e <- pmin((E[, m] + Fi * e) * inv, 1)
+    Q[, m] <- q; B[, m] <- e
+  }
+  inv <- 1 / pmax(Fi, 1e-300)
+  q <- pmin(C[, n + 1] * inv, 1)
+  e <- ifelse(Fi < 1e-300, 1, pmin(E[, n + 1] * inv, 1))
+  better <- e < B[, n]
+  Q[better, n] <- q[better]; B[better, n] <- e[better]
+  if (n >= 2) for (m in (n - 1):1) {
+    q <- .clip01((C[, m + 1] - Si * q) * inv)
+    e <- pmin((E[, m + 1] + Si * e) * inv, 1)
+    better <- e < B[, m]
+    Q[better, m] <- q[better]; B[better, m] <- e[better]
+  }
+  list(Q = Q, B = B)
+}
+
+# P(N_{-i} <= k-1): the forward head sum or one minus the backward tail
+# sum, whichever is better bounded; points where even that bound exceeds
+# 1e-6 of the value are redone per coefficient by .loo_both
+.loo_cdf <- function(C, F, k, S = NULL) {
+  # every runner at once: (L x n) state, C's columns recycled down them
   L <- nrow(F); n <- ncol(F)
-  Fi <- F[, i]; Si <- 1 - Fi
-  fwd <- Si >= Fi
-  s <- pmax(Si, 1e-300)
-  Qf <- matrix(0, L, n)
-  Qf[, 1] <- .clip01(C[, 1] / s)
-  if (n >= 2) for (m in 2:n)
-    Qf[, m] <- .clip01((C[, m] - Fi * Qf[, m - 1]) / s)
-  f <- pmax(Fi, 1e-300)
-  Qb <- matrix(0, L, n)
-  Qb[, n] <- .clip01(C[, n + 1] / f)
-  if (n >= 2) for (m in seq(n - 1, 1, by = -1))
-    Qb[, m] <- .clip01((C[, m + 1] - Si * Qb[, m + 1]) / f)
-  Q <- Qb
-  Q[fwd, ] <- Qf[fwd, , drop = FALSE]
-  Q
+  eps <- .Machine$double.eps
+  if (k >= n) return(matrix(1, n, L))
+  if (is.null(S)) S <- 1 - F
+  E <- .count_err(C)
+  inv <- 1 / pmax(S, 1e-300)
+  q <- pmin(C[, 1] * inv, 1)
+  e <- pmin(E[, 1] * inv, 1)
+  e[S < 1e-300] <- 1
+  head <- q; head_e <- e
+  if (k >= 2) for (m in 2:k) {
+    q <- .clip01((C[, m] - F * q) * inv)
+    e <- pmin((E[, m] + F * e) * inv, 1)
+    head <- head + q; head_e <- head_e + e
+  }
+  inv <- 1 / pmax(F, 1e-300)
+  q <- pmin(C[, n + 1] * inv, 1)
+  e <- pmin(E[, n + 1] * inv, 1)
+  e[F < 1e-300] <- 1
+  tail <- q; tail_e <- eps + e
+  if (n - 1 >= k + 1) for (m in (n - 1):(k + 1)) {
+    q <- .clip01((C[, m + 1] - S * q) * inv)
+    e <- pmin((E[, m + 1] + S * e) * inv, 1)
+    tail <- tail + q; tail_e <- tail_e + e
+  }
+  use_head <- head_e <= tail_e
+  cdf <- 1 - tail
+  cdf[use_head] <- head[use_head]
+  bound <- tail_e
+  bound[use_head] <- head_e[use_head]
+  loose <- which(bound > pmax(1e-6 * cdf, 1e-280))
+  if (length(loose)) {
+    li <- (loose - 1) %% L + 1
+    r <- .loo_both(C[li, , drop = FALSE], E[li, , drop = FALSE],
+                   F[loose], S[loose])
+    hd <- rowSums(r$Q[, 1:k, drop = FALSE])
+    he <- rowSums(r$B[, 1:k, drop = FALSE])
+    tl <- rowSums(r$Q[, (k + 1):n, drop = FALSE])
+    te <- eps + rowSums(r$B[, (k + 1):n, drop = FALSE])
+    cdf[loose] <- ifelse(he <= te, hd, 1 - tl)
+  }
+  t(.clip01(cdf))
+}
+
+.loo_pmf <- function(C, F, i, S = NULL) {
+  Fi <- F[, i]
+  Si <- if (is.null(S)) 1 - Fi else S[, i]
+  .loo_both(C, .count_err(C), Fi, Si)$Q
 }
 
 .pair_pmf_at <- function(Qi, F, i, k) {
@@ -236,8 +308,8 @@
 
 .topk_with_slopes <- function(mu, sd, k, fn, points) {
   g <- .topk_grid(mu, sd, k, fn, points)
-  C <- .count_distribution(g$F)
-  cdf <- .loo_cdf(C, g$F, k)
+  C <- .count_distribution(g$F, g$S)
+  cdf <- .loo_cdf(C, g$F, k, g$S)
   n <- length(mu)
   dens <- t(g$f) / sd                       # (n, L)
   dmu <- -t(g$fp) / (sd * sd)
@@ -374,11 +446,11 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
   g <- .topk_grid(mu, sd, k, fn, points)
   dens <- t(g$f) / sd                       # (n, L)
   zdens <- t(g$z * g$f) / sd
-  C <- .count_distribution(g$F)
+  C <- .count_distribution(g$F, g$S)
   Jm <- matrix(0, n, n)
   Js <- matrix(0, n, n)
   for (i in 1:n) {
-    Qi <- .loo_pmf(C, g$F, i)
+    Qi <- .loo_pmf(C, g$F, i, g$S)
     pair <- .pair_pmf_at(Qi, g$F, i, k)
     kern <- pair * matrix(dens[i, ], n, ncol(pair), byrow = TRUE)
     row_mu <- rowSums(kern * dens) * g$dx
@@ -397,10 +469,10 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
 .rank_matrix_node <- function(mu, sd, fn, points) {
   n <- length(mu)
   g <- .topk_grid(mu, sd, n - 1, fn, points)
-  C <- .count_distribution(g$F)
+  C <- .count_distribution(g$F, g$S)
   P <- matrix(0, n, n)
   for (i in 1:n) {
-    Qi <- .loo_pmf(C, g$F, i)
+    Qi <- .loo_pmf(C, g$F, i, g$S)
     P[i, ] <- colSums(Qi * (g$f[, i] / sd[i])) * g$dx
   }
   P
@@ -710,11 +782,11 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
   n <- length(mu)
   g <- .topk_grid(mu, sd, n - 1, fn, points)
   dens <- t(g$f) / sd                       # (n, L)
-  C <- .count_distribution(g$F)
+  C <- .count_distribution(g$F, g$S)
   p <- numeric(n)
   J <- matrix(0, n, n)
   for (i in 1:n) {
-    Qi <- .loo_pmf(C, g$F, i)
+    Qi <- .loo_pmf(C, g$F, i, g$S)
     p[i] <- sum(Qi[, r] * dens[i, ]) * g$dx
     # P(N_{-ij} = n-1) is identically zero (only n-2 others exist);
     # deconvolving it injects window-edge-sensitive junk

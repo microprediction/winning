@@ -2,7 +2,7 @@
 import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
          asFactorNodes, asWeights, asFactorLaw, asIterations, asTolerance,
-         asFiniteVector, rescaledTarget } from "./core.mjs";
+         asFiniteVector, rescaledTarget, canonicalBasis, asPoints } from "./core.mjs";
 import { invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -264,6 +264,63 @@ function clusterNodes(r, qa) {
   return { nodes, w };
 }
 
+/* Each cluster's rank-r effect is its own N(0, I) draw, so a separate
+   orthogonal map per cluster -- V_c -> V_c Q_c -- is the SAME race. The
+   node cloud is not invariant under those maps: moving one block's two
+   active columns from positions 0, 1 to 68, 69 of an 80-column loading
+   moved a share by 0.195, and swapping them by 0.234, through the
+   high-dimensional Halton projections (#130). Each cluster's rows are
+   put in canonical form (canonicalBasis: principal axes, null
+   directions dropped, cube-sum signs) and zero-padded to the largest
+   cluster rank, so the rule depends on each V_c V_c' alone. Ranks one
+   and two keep python's Gauss-Hermite tensor in the caller's axes. */
+function canonicalBlockLoadings(L, cluster) {
+  // rank <= 2 is python's tensor Gauss-Hermite in the caller's axes:
+  // kept exactly, for parity (symmetric under permutations and signs)
+  if (L[0].length < 3) return L;
+  const inv = clusterIndex(cluster);
+  const nC = Math.max(...inv) + 1;
+  const members = Array.from({ length: nC }, () => []);
+  inv.forEach((c, i) => members[c].push(i));
+  const parts = members.map(ix => canonicalBasis(ix.map(i => L[i])).C);
+  const R = Math.max(1, ...parts.map(C => (C.length ? C[0].length : 0)));
+  const out = L.map(() => new Array(R).fill(0));
+  members.forEach((ix, c) => ix.forEach((i, k) => {
+    parts[c][k].forEach((v, j) => { out[i][j] = v; });
+  }));
+  return out;
+}
+
+/* python's blocks._warn_if_sharp: the fixed Gauss-Hermite cluster rule
+   does not escalate, and past sharpness 3 (loading norm over
+   idiosyncratic sd) its error lands on group shares -- 5e-2 TV at
+   sharpness 18. Once per (qa, rounded sharpness), not once per call. */
+const SHARP_WARNED = new Set();
+function warnIfSharp(V, sd, qa, threshold = 3.0) {
+  let s = 0;
+  V.forEach((row, i) => {
+    s = Math.max(s, Math.hypot(...row) / Math.max(sd[i], 1e-300));
+  });
+  const key = `${qa}:${s.toPrecision(2)}`;
+  if (!(s > threshold) || SHARP_WARNED.has(key) || typeof console === "undefined") return;
+  SHARP_WARNED.add(key);
+  console.warn(
+    `block/nested quadrature is a fixed ${qa}-node Gauss-Hermite rule and ` +
+    `this field's cluster sharpness is ${s.toPrecision(2)} (loading over ` +
+    `idiosyncratic sd); past ${threshold} the conditional integrand is a ` +
+    "near-step and Gauss-Hermite fails at any order, on group shares. " +
+    "Restructure sharp shared effects into the factor grammar, which " +
+    "escalates its node family; raising qa does not fix this.");
+}
+
+/* The nested coupling is one global factor: V -> V Q is the same law,
+   so its node rule is built for the canonical coupling (#130). */
+function canonicalCoupling(g) {
+  if (g[0].length < 3) return g;     // tensor GH in the caller's axes, as python
+  const { C } = canonicalBasis(g);
+  return C[0].length ? C : g.map(() => [0]);
+}
+
 /* The caller-node override goes through the same doors as F/W in the
    factor race: a node matrix of the loading's rank and exactly one
    finite non-negative weight per node, normalised. Signed weights moved
@@ -313,11 +370,12 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
   const nC = Math.max(...cO) + 1;
   const { nodes, w } = nodesOverride
     ? checkedNodes(nodesOverride, r) : clusterNodes(r, qa);
+  if (!nodesOverride && r <= 2) warnIfSharp(VO, sdO, qa);
   const Q = nodes.length;
   const maxNodeNorm = Math.max(...nodes.map(nq => Math.sqrt(nq.reduce((a, b) => a + b * b, 0))));
   const amp = VO.map(vi => Math.sqrt(vi.reduce((a, b) => a + b * b, 0)) * maxNodeNorm);
   const [lo, hi] = windowNodes(muO, sdO, amp);
-  const P = points;
+  const P = asPoints(points);              // #444
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
   const dx = x[1] - x[0];
@@ -353,7 +411,10 @@ export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   const { points = 257, qa = 9, nodes = null } = opts;
   const a = blockArgs(mu, cluster, loading, D, "blockRaceProbabilities");
   const sd = a.D.map(Math.sqrt);
-  const p = blockMax(a.mu.map(v => -v), sd, a.cluster, a.L, points, qa, nodes);
+  // a caller's nodes are in the caller's coordinates, so only the
+  // automatic rule gets the canonical loadings
+  const L = nodes ? a.L : canonicalBlockLoadings(a.L, a.cluster);
+  const p = blockMax(a.mu.map(v => -v), sd, a.cluster, L, points, qa, nodes);
   return checkedMass(p, "block race");
 }
 
@@ -380,7 +441,7 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   // it: a (rank, n) coupling is the SAME race as (n, rank). This
   // normalised by hand and never transposed, so the transposed
   // spelling was read as rank n and refused (#264).
-  const g = asLoadings(coupling, mu.length, "coupling");
+  const g = canonicalCoupling(asLoadings(coupling, mu.length, "coupling"));
   const k = g[0].length;
   let fn, fw;
   if (k === 1) {
@@ -392,12 +453,13 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   }
   const n = mu.length;
   const sd = a.D.map(Math.sqrt);
+  const La = canonicalBlockLoadings(a.L, a.cluster);     // #130
   const p = new Array(n).fill(0);
   for (let q = 0; q < fn.length; q++) {
     // average the RAW conditional masses (each near one) and normalize
     // once: normalizing each conditional separately hides a window defect
     const shifted = mu.map((m, i) => -(m + gamma * g[i].reduce((a, b, r) => a + b * fn[q][r], 0)));
-    const pq = blockMax(shifted, sd, a.cluster, a.L, points, qa, null);
+    const pq = blockMax(shifted, sd, a.cluster, La, points, qa, null);
     for (let i = 0; i < n; i++) p[i] += fw[q] * pq[i];
   }
   return checkedMass(p, "nested race");
@@ -447,7 +509,7 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
   const maxAn = Math.max(...an.map(Math.abs));
   const amp = muO.map((mm, i) => (Math.abs(vO[i]) + depth[cO[i]]) * maxAn);
   const [lo, hi] = windowNodes(muO, sdO, amp);
-  const P = points;
+  const P = asPoints(points);              // #444
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
   const dx = x[1] - x[0];
@@ -600,7 +662,7 @@ export function blockRaceJacobian(mu, cluster, loading, D, opts = {}) {
   const maxAnJ = Math.max(...an.map(Math.abs));
   const ampJ = muO.map((mm, i) => Math.abs(vO[i]) * maxAnJ);
   const [lo, hi] = windowNodes(muO, sdO, ampJ);
-  const P = points;
+  const P = asPoints(points);              // #444
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
   const dx = x[1] - x[0];
@@ -655,7 +717,7 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
   // it: a (rank, n) coupling is the SAME race as (n, rank). This
   // normalised by hand and never transposed, so the transposed
   // spelling was read as rank n and refused (#264).
-  const g = asLoadings(coupling, mu.length, "coupling");
+  const g = canonicalCoupling(asLoadings(coupling, mu.length, "coupling"));
   const k = g[0].length;
   let fn, fw;
   if (k === 1) {

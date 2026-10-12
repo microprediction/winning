@@ -348,8 +348,17 @@ export function averageLinkage(dist) {
    indivisible -- returns two, and a block race moved 3.3 points (#346).
    maxclust takes the smallest threshold t (over "below every merge" and
    the merge heights) at which no more than k clusters remain, merging
-   every node whose subtree maximum height is <= t (scipy's monocrit
-   maxdists, so an inverted linkage is handled the same way). */
+   every node whose subtree maximum height is <= t.
+
+   A non-monotonic linkage (a merge BELOW one of its children, as
+   centroid and median linkage produce) is refused, as treeFromLinkage
+   refuses it (#133) and R's cutree does. scipy accepts it, but its
+   maxclust then binary-searches merge heights in ROW order, which is
+   unsorted for an inversion, so its partition is an artifact of that
+   search: on [[0,1,3,2],[2,3,1,2],[4,5,2,4]] it returns one cluster for
+   k = 3 and this function, which claimed parity, returned three -- a
+   20-point move in a block race (#667). There is no parity to claim on
+   such input. Ties (equal heights) are monotone and still accepted. */
 export function cutLinkage(Z, n, k) {
   if (!Number.isInteger(n) || n < 1)
     throw new Error(`cutLinkage: n must be a positive integer; got ${n}`);
@@ -371,7 +380,16 @@ export function cutLinkage(Z, n, k) {
       throw new Error(`cutLinkage: row ${m} uses the same cluster more than once`);
     parent[a] = n + m;
     parent[b] = n + m;
-    maxd[n + m] = Math.max(h, maxd[a], maxd[b]);
+    const below = Math.max(maxd[a], maxd[b]);
+    // relative slack for round-off in a computed linkage, as
+    // treeFromLinkage's 1e-9
+    if (h < below - 1e-12 * Math.max(1, Math.abs(below)))
+      throw new Error(
+        `cutLinkage: this linkage is not monotonic: row ${m} merges at height ${h}, ` +
+        `below its child's ${below}. maxclust has no well-defined cut of an inversion ` +
+        "(scipy's result depends on row order). Use a monotonic method (average, " +
+        "complete, ward) or pass cluster labels directly.");
+    maxd[n + m] = Math.max(h, below);
   }
   const clustersAt = t => {
     // a leaf belongs to its highest ancestor whose subtree max <= t

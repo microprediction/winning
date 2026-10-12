@@ -91,6 +91,46 @@ for (const [lbl, P] of [["independent", rIndep], ["factor", rFactor]]) {
         Math.max(...rows.map(v => Math.abs(v - 1)), ...cols.map(v => Math.abs(v - 1))) < 5e-3);
 }
 
+// --- rare exact places are not deconvolution residue (#511)
+{
+  // independent min-Gumbels are Plackett-Luce with weights exp(-pi/sqrt6 mu)
+  const mu = [-9, -2, 2, 10], c = Math.PI / Math.sqrt(6);
+  const w = mu.map(v => Math.exp(-c * v));
+  const E = mu.map(() => mu.map(() => 0));
+  const perm = (a, k = 0) => {
+    if (k === a.length) {
+      let p = 1;
+      for (let r = 0; r < a.length - 1; r++) {
+        let d = 0;
+        for (let s = r; s < a.length; s++) d += w[a[s]];
+        p *= w[a[r]] / d;
+      }
+      a.forEach((i, r) => { E[i][r] += p; });
+      return;
+    }
+    for (let j = k; j < a.length; j++) {
+      [a[k], a[j]] = [a[j], a[k]]; perm(a, k + 1); [a[k], a[j]] = [a[j], a[k]];
+    }
+  };
+  perm([0, 1, 2, 3]);
+  for (const points of [129, 513, 8193]) {
+    const P = topk.rankProbabilities(mu, { D: 1, base: "gumbel", points });
+    const worst = Math.max(...P.flatMap((row, i) => row.map((v, r) => Math.abs(v / E[i][r] - 1))));
+    holds(`Gumbel rank matrix matches Plackett-Luce entrywise at ${points} points (#511)`,
+          worst < 1e-5, `last place ${P[0][3].toExponential(4)} vs ${E[0][3].toExponential(4)}`);
+  }
+  for (const points of [513, 8193]) {
+    const last = topk.rankProbabilities([-12, -4, 4, 12], { points })[1][3];
+    holds(`normal last place is the cavity product at ${points} points (#511)`,
+          Math.abs(last / 2.9183334444853456e-30 - 1) < 1e-9, last.toExponential(6));
+    const q = topk.topKProbabilities([-14, 0, 0], 1, { points })[1];
+    const r = races.raceProbabilities([-14, 0, 0], { points })[1];
+    holds(`top-1 equals the win market in the tail at ${points} points (#511)`,
+          Math.abs(q / 2.091912795347403e-23 - 1) < 1e-9 && Math.abs(q / r - 1) < 3e-3,
+          `${q.toExponential(6)} vs race ${r.toExponential(6)}`);
+  }
+}
+
 // --- legitimate calls still work everywhere
 holds("forward works", races.raceProbabilities(mu3, { D: D3 }).every(Number.isFinite));
 holds("inverse works", races.abilitiesFromRace([0.5, 0.3, 0.2], { D: D3 }).every(Number.isFinite));
@@ -130,6 +170,22 @@ for (const [t, z] of [[1e-12, -7.034483825301272], [1e-16, -8.222082216130435],
         && Math.abs(b.mu[0] - a.mu[1]) <= 1e-12 * Math.abs(a.mu[1])
         && Math.abs((b.mu[0] - b.mu[1]) - z) <= 1e-8 * Math.abs(z),
         `a=${a.mu} b=${b.mu}`);
+}
+// --- a larger budget never returns a worse race inverse (#646); python
+// returns 0.70704802702675 at n_iter 2, 3 and 4
+{
+  const D = [4.109124193642786, 1.1933390070735221, 0.22399089188231003,
+             0.14226868263033934, 0.156512843473103];
+  const t = [0.14786642573393072, 0.04868820314808961, 0.015147330702447054,
+             0.01374172467779407, 0.7745563157377385];
+  const r = [2, 3, 4].map(nIter => {
+    const o = races.abilitiesFromRace(t, { D, points: 2049, nIter, tol: 1e-12, returnInfo: true });
+    const p = races.raceProbabilities(o.mu, { D, points: 2049 });
+    return [o.maxLogResidual, Math.max(...p.map((x, i) => Math.abs(Math.log(x / t[i]))))];
+  });
+  holds("race inverse keeps the better of its last two iterates (#646)",
+        r.every(([rep, act]) => Math.abs(rep - 0.70704802702675) < 1e-9 && Math.abs(act - rep) < 1e-12),
+        JSON.stringify(r));
 }
 // --- the loadings shape contract, in every module that takes V (#232)
 // V is (n, rank), one ROW per contestant, and as_loadings is the one
@@ -206,6 +262,54 @@ rejects(races.abilitiesFromRace, [[0.5, 0.3, 0.2], { D: [1, 1, 1], targetFloor: 
         Math.max(...plain.map((v, i) => Math.abs(v - info.mu[i]))) < 1e-12);
 }
 
+// --- the automatic node rule depends on V V' alone (#130) and the top-k
+// node budget is met with a whole rule, not a prefix (#340)
+{
+  const mx = (p, q) => Math.max(...p.map((x, i) => Math.abs(x - q[i])));
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const mu = [-0.5, 0.1, 0.7], D = [0.19, 0.19, 1.0], b = [[0.9, 0], [0, 0.9], [0, 0]];
+    const pad = (a, c) => b.map(r => { const o = Array(80).fill(0); o[a] = r[0]; o[c] = r[1]; return o; });
+    const p0 = races.raceProbabilities(mu, { V: pad(0, 1), D, points: 257 });
+    holds("80-column padding: placement and swap of the active columns (#130)",
+          mx(p0, races.raceProbabilities(mu, { V: pad(68, 69), D, points: 257 })) < 1e-12
+          && mx(p0, races.raceProbabilities(mu, { V: pad(69, 68), D, points: 257 })) < 1e-12
+          // the unpadded spelling keeps python's rule in its own axes: 1.1e-5
+          && mx(p0, races.raceProbabilities(mu, { V: b, D, points: 257 })) < 5e-5);
+    const n = 4, r = 12;
+    const m4 = Array.from({ length: n }, (_, i) => 0.7 * Math.sin((i + 1) * 9 * 0.37) + 0.2 * i);
+    const V12 = Array.from({ length: n }, (_, i) =>
+      Array.from({ length: r }, (_, j) => 0.25 * Math.sin((i + 1) * (j + 2) + 8 * 0.31)));
+    const D4 = [0.03, 0.045, 0.06, 0.075];
+    holds("rank-12 column reversal prices the same race (#130)",
+          mx(races.raceProbabilities(m4, { V: V12, D: D4 }),
+             races.raceProbabilities(m4, { V: V12.map(row => row.slice().reverse()), D: D4 })) < 1e-12);
+    const bm = [-0.7, -0.1, 0.35, 0.9], cl = [0, 0, 0, 0], bD = [0.08, 0.08, 0.08, 0.08];
+    const bb = [[2.5, 0], [0, 2.5], [-2.5, 0], [0, -2.5]];
+    const bpad = (a, c) => bb.map(x => Array.from({ length: 80 }, (_, j) => j === a ? x[0] : j === c ? x[1] : 0));
+    const q0 = blocks.blockRaceProbabilities(bm, cl, bb, bD, { points: 257, qa: 9 });
+    holds("block loading padding and column swap price the same race (#130)",
+          [[0, 1], [68, 69], [69, 68]].every(([a, c]) =>
+            mx(q0, blocks.blockRaceProbabilities(bm, cl, bpad(a, c), bD, { points: 257, qa: 9 })) < 1e-12));
+    const V1 = [[-3], [-1], [1], [3]];
+    for (const d of [1e-3, 1e-4]) {
+      const m = [-0.015, 0.005, 0.010, 0.0], Dd = [d, d, d, d];
+      holds(`sharp rank-one top-1 is the race at D=${d} (#340)`,
+            mx(races.raceProbabilities(m, { V: V1, D: Dd, points: 257 }),
+               topk.topKProbabilities(m, 1, { V: V1, D: Dd, points: 257 })) < 1e-9);
+    }
+    const tm = [0.15270157009363175, -0.2301855193451047, 0.23726646788418293, 0.15630929786711933];
+    const tD = [0.009629986205992744, 0.0018727096736087688, 0.00503595103127878, 0.010563698968609512];
+    const tV = [[1.2288664504885674, 0.8170432653278112], [-1.1702364422380924, 2.074527421966195],
+                [0.64559206366539, -1.9816835839301348], [0.021002475172281265, 1.0335299242287874]];
+    const th = 0.47, c = Math.cos(th), s = Math.sin(th);
+    const tVr = tV.map(([a, bq]) => [a * c + bq * s, -a * s + bq * c]);
+    holds("a sharp rank-two rotation leaves top-3 alone (#340)",
+          mx(topk.topKProbabilities(tm, 3, { V: tV, D: tD, points: 513 }),
+             topk.topKProbabilities(tm, 3, { V: tVr, D: tD, points: 513 })) < 1e-12);
+  } finally { console.warn = warn; }
+}
 // --- an allowlist names PUBLIC keys, not destructured locals (#207)
 // polishRace reads `const { mu0: mu0In = null } = opts`, and #204 put the
 // LOCAL name in its allowlist. So the supported call was refused as an
@@ -927,6 +1031,25 @@ accepts("the inverse takes a scalar D, matching python",
   }
 }
 
+// --- a lattice size is a whole number >= 2 at every modular door (#444)
+{
+  const mu = [-0.5, 0, 0.5];
+  const doors = {
+    raceProbabilities: p => races.raceProbabilities(mu, { points: p }),
+    raceJacobian: p => polish.raceJacobian(mu, { points: p }),
+    abilitiesFromRace: p => races.abilitiesFromRace([0.5, 0.3, 0.2], { points: p }),
+    topKProbabilities: p => topk.topKProbabilities(mu, 1, { points: p }),
+    rankProbabilities: p => topk.rankProbabilities(mu, { points: p }),
+    blockRaceProbabilities: p => blocks.blockRaceProbabilities(mu, [0, 0, 1], [0.5, 0.5, 0.5], 1, { points: p }),
+  };
+  for (const [name, f] of Object.entries(doors))
+    for (const p of [0, 1, true, null, -1, 2.5, "257", Infinity, NaN])
+      rejects(f, [p], `${name} refuses points=${JSON.stringify(p)} (#444)`, "lattice");
+  const p257 = races.raceProbabilities(mu, { points: 257 });
+  const want = [0.5487437165504273, 0.3009257008897869, 0.15033058255978574];
+  holds("points=257 still prices (#444)",
+        Math.max(...p257.map((v, i) => Math.abs(v - want[i]))) < 1e-12);
+}
 // --- the classic input contract (#339, #377)
 {
   const dV = classic.skewNormalDensity(50, 0.1);
@@ -1658,6 +1781,30 @@ accepts("the inverse takes a scalar D, matching python",
     rejects(structures.cutLinkage, [Z, 4, bad], `cutLinkage refuses k=${bad} (#346)`, "k must");
 }
 
+// --- cutLinkage refuses an inverted linkage (#667): scipy's maxclust on
+// one is an artifact of binary-searching unsorted row heights (it gives
+// [1,1,1,1] at k=3 here; the browser gave three clusters while claiming
+// parity). R's cutree and treeFromLinkage (#133) refuse it too.
+{
+  rejects(structures.cutLinkage, [[[0, 1, 3, 2], [2, 3, 1, 2], [4, 5, 2, 4]], 4, 3],
+          "cutLinkage refuses an inverted linkage (#667)", "not monotonic");
+  rejects(structures.cutLinkage, [[[0, 1, 0.5, 2], [2, 3, 0.3, 3]], 3, 2],
+          "cutLinkage refuses a parent below its child (#667)", "not monotonic");
+  // computed average linkages are monotone up to round-off: never refused
+  const g = demo.rng(667);
+  let refused = 0;
+  for (let rep = 0; rep < 50; rep++) {
+    const m = 3 + (rep % 9);
+    const P = Array.from({ length: m }, () => [g.n(), g.n(), g.n()]);
+    const Dm = P.map(a => P.map(b => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])));
+    const Zr = structures.averageLinkage(Dm);
+    for (let k = 1; k <= m; k++) {
+      try { structures.cutLinkage(Zr, m, k); } catch (e) { refused++; }
+    }
+  }
+  holds("average linkages are never refused as inverted (#667)", refused === 0, String(refused));
+}
+
 // --- demo helpers: structureCov for every grammar (#337); fitGrammar
 // validates its input (#357), keeps a pair's contrast and is scale
 // equivariant (#341), and does not cut a tied eigenspace (#383); the
@@ -1757,6 +1904,25 @@ accepts("the inverse takes a scalar D, matching python",
           relabel([0, 0, 0, 0], CB, pm) < 1e-14);
 }
 
+// --- converge.html's lattice reference runs in a worker (#647): the
+// default rank-2 Factor fixture really does take the 8,192-node rule (so
+// it must stay off the main thread), and the worker's reference is the
+// ordinary race on the field the page builds from (generator, n, seed)
+{
+  const cw = await import(here + "../docs/js/converge_worker.mjs");
+  const dflt = Object.keys(demo.GENERATORS)[0];
+  const { g } = cw.demoField(dflt, 60, 7);
+  holds("the default converge fixture reports its 8,192-node reference (#647)",
+        cw.referenceNodes(g) === 8192, String(cw.referenceNodes(g)));
+  const { g: gb, mu: mb } = cw.demoField("sectors (blocks)", 12, 3);
+  accepts("the worker's reference is the page's race (#647)",
+          () => cw.latticeReference("sectors (blocks)", 12, 3),
+          r => Number.isFinite(r.tLat)
+               && Math.max(...r.pLat.map((x, i) => Math.abs(x - races.raceProbabilities(
+                    mb, { structure: gb.structure, points: 257 })[i]))) === 0);
+  rejects(cw.demoField, ["factr", 10, 1], "the worker refuses an unknown generator (#647)", "unknown generator");
+}
+
 // --- callable-base central resolution reaches every lattice (#468, #600)
 {
   const student3 = z => {
@@ -1832,6 +1998,54 @@ for (const c of [1e-8, 100]) {
         o.info.converged && Math.abs(o.p[0] + o.p[1] - 0.9) < 1e-7 &&
         Math.abs(o.mu[2] / c - 0.7279331) < 1e-5, `${o.mu.map(x => x / c)}`);
 }
+
+// --- a constraint row means the same thing at any positive scale (#653)
+{
+  const base = { mu0: [-1.5, -1.5, 3], D: [1, 1, 1], points: 257 };
+  const ref = polish.polishRace({ ...base, A: [[1, 1, 0]], b: [0.9] });
+  const refL = polish.polishRace({ ...base, A: [[0, 0, -1]], b: [-0.2] });
+  for (const c of [1e-12, 1e-8, 1, 1e8]) {
+    const o = polish.polishRace({ ...base, A: [[c, c, 0]], b: [0.9 * c] });
+    holds(`a cap row scaled by ${c} is the unit-row optimum (#653)`,
+          o.info.converged && o.info.active.length === 1 && o.info.active[0] === 0 &&
+          Math.abs(o.p[0] + o.p[1] - 0.9) < 1e-7 &&
+          Math.max(...o.mu.map((v, i) => Math.abs(v - ref.mu[i]))) < 1e-6,
+          `${o.p} ${o.info.converged} [${o.info.active}]`);
+    const l = polish.polishRace({ ...base, A: [[0, 0, -c]], b: [-0.2 * c] });
+    holds(`a lower-bound row scaled by ${c} is the unit-row optimum (#653)`,
+          l.info.converged && l.info.active.length === 1 && Math.abs(l.p[2] - 0.2) < 1e-7 &&
+          Math.max(...l.mu.map((v, i) => Math.abs(v - refL.mu[i]))) < 1e-6,
+          `${l.p} ${l.info.converged} [${l.info.active}]`);
+  }
+  const r = polish.polishRace({ ...base, A: [[1, 1, 0], [1e-8, 1e-8, 0]], b: [0.9, 9e-9] });
+  holds("a redundant scaled copy of a row changes nothing (#653)",
+        r.info.converged && Math.abs(r.p[0] + r.p[1] - 0.9) < 1e-7 &&
+        Math.max(...r.mu.map((v, i) => Math.abs(v - ref.mu[i]))) < 1e-6, `${r.p}`);
+}
+
+// --- a saturated capped pair lands on the exact boundary, not the
+// opposite deterministic winner (#683). Exact: mu = -+Phi^-1(0.9)/sqrt 2.
+{
+  const xs = 0.9061938024368232;
+  // starting longshot shares 2.1e-12 (above the old 1e-12 cut), 7.7e-13
+  // (below it) and 6.2e-16 (the issue's fixture)
+  for (const a of [4.9, 5, 8 / Math.SQRT2])
+    for (const points of [129, 257, 1025])
+      for (const fdFallback of [false, true]) {
+        const o = polish.polishRace({ mu0: [-a, a], D: [1, 1], nameCaps: [0.9, NaN],
+                                      points, fdFallback });
+        holds(`saturated pair a=${a.toFixed(3)} points=${points} fd=${fdFallback} is the exact cap (#683)`,
+              o.info.converged && o.info.active.length === 1 && o.info.active[0] === 0 &&
+              Math.abs(o.p[0] - 0.9) < 1e-8 && Math.abs(o.mu[0] + xs) < 1e-8 &&
+              Math.abs(o.mu[1] - xs) < 1e-8, `${o.p} ${o.mu} ${o.info.converged}`);
+      }
+}
+
+// --- a structured Jacobian refuses a base its forward refuses (#89)
+for (const s of [structures.Blocks([0, 0, 1], 0.8, 0.2),
+                 structures.Tree([0, 0, 1], 0.8, 0.2, [2, 2, -1], [0, 0, 0.5])])
+  rejects(polish.raceJacobian, [[0, 0.3, 0.8], { structure: s, base: "logistic" }],
+          `${s.kind} raceJacobian refuses base "logistic" like its forward (#89)`, "support base");
 
 // --- typed controls are not coerced, and falsy is not "omitted"
 {
@@ -1985,6 +2199,63 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
   } finally { console.warn = keep; }
   holds("an unrepresentable target warns (#498)",
         warned.length === 1 && warned[0].includes("did not reach the target"));
+}
+
+// --- classic: the ability forward takes the scratch sentinel (#662);
+// statePricesFromOffsets still refuses it (#438). Reference values are
+// python's ability_implied_state_prices on the same inputs.
+{
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const d = classic.skewNormalDensity(15, 0.2, { a: 0 });
+  for (const scratch of [Infinity, 0, -1]) {
+    const a = classic.dividendImpliedAbility([2, 4, scratch], d);
+    accepts(`dividends [2, 4, ${scratch}] round-trip through abilityImpliedStatePrices (#662)`,
+            () => classic.abilityImpliedStatePrices(a, d),
+            p => p[2] === 0 && maxAbs(p, [0.6553529940305943, 0.3446470059694057, 0]) < 1e-12,
+            p => String(p));
+  }
+  accepts("one live runner and a scratch price exactly [1, 0] (#662)",
+          () => classic.abilityImpliedStatePrices(classic.dividendImpliedAbility([2, Infinity], d), d),
+          p => p[0] === 1 && p[1] === 0, p => String(p));
+  // python: ability_implied_state_prices([-0.4, 0.3], d) (the support is
+  // wider than L here, so this is the clustered branch, not the plain one)
+  const live = [0.5367196595728523, 0.4632803404271477];
+  for (const at of [0, 1, 2]) {
+    const a = [-0.4, 0.3]; a.splice(at, 0, Infinity);
+    accepts(`a scratch at index ${at} keeps shape and order (#662)`,
+            () => classic.abilityImpliedStatePrices(a, d),
+            p => p.length === 3 && p[at] === 0
+                 && maxAbs(p.filter((_, i) => i !== at), live) < 1e-14, p => String(p));
+  }
+  const d200 = classic.skewNormalDensity(200, 0.1, { a: 0 });
+  accepts("an all-live in-window field equals statePricesFromOffsets (#662)",
+          () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], d200),
+          p => maxAbs(p, classic.statePricesFromOffsets(d200, [0, 0.7, 1.3, 2.1])) < 1e-15);
+  accepts("an all-live field wider than the lattice matches python (#662)",
+          () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], classic.skewNormalDensity(40, 0.1, { a: 0 })),
+          p => maxAbs(p, [0.28573759854465663, 0.2577847581738416, 0.23941631079393647,
+                          0.2170613324875653]) < 1e-14, p => String(p));
+  accepts("-Infinity runners split the pot, +Infinity alone is uniform (#662)",
+          () => [classic.abilityImpliedStatePrices([-Infinity, 0.3, -Infinity], d),
+                 classic.abilityImpliedStatePrices([Infinity, Infinity], d)],
+          ([a, b]) => maxAbs(a, [0.5, 0, 0.5]) === 0 && maxAbs(b, [0.5, 0.5]) === 0);
+  const d50 = classic.skewNormalDensity(50, 0.1, { a: 0 });
+  accepts("a far-separated field is clustered as python (#662)",
+          () => classic.abilityImpliedStatePrices([-40, -39, 40, 41, 42.5], d50),
+          p => maxAbs(p, [0.5277153991928714, 0.472284600798019, 3.4847031497493502e-12,
+                          3.072512437648325e-12, 2.5524467876884387e-12]) < 1e-14, p => String(p));
+  accepts("a no-chance runner far behind prices 0 (#662)",
+          () => classic.abilityImpliedStatePrices([0, 0.5, 400], d50),
+          p => p[2] === 0 && maxAbs(p, [0.5138576995988393, 0.4861423004011607, 0]) < 1e-14);
+  accepts("unit rescales the abilities (#662)",
+          () => classic.abilityImpliedStatePrices([-0.08, 0.06, Infinity], d, { unit: 0.2 }),
+          p => maxAbs(p, classic.abilityImpliedStatePrices([-0.4, 0.3, Infinity], d)) === 0);
+  rejects(classic.statePricesFromOffsets, [d, [0, Infinity]],
+          "statePricesFromOffsets still refuses the sentinel (#438, #662)", "finite");
+  rejects(classic.abilityImpliedStatePrices, [[0, NaN], d], "abilityImpliedStatePrices refuses NaN (#662)", "not a number");
+  rejects(classic.abilityImpliedStatePrices, [[0, "1"], d], "abilityImpliedStatePrices refuses a string (#662)", "not a number");
+  rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unti: 1 }], "abilityImpliedStatePrices refuses a misspelt option (#662)", "unknown option 'unti'");
+  rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unit: 0 }], "abilityImpliedStatePrices refuses unit 0 (#662)", "finite positive");
 }
 
 // --- classic: skewNormalDensity's domain (#509) and option typos (#561)

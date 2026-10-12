@@ -200,12 +200,37 @@ function _checked_topk(raw, k, kind; mass_tol = 5e-3)
     return clip01(raw .* (k / t))
 end
 
-function _topk_factor_nodes(V, n, qa, caller)
+const _TOPK_QMC_NODES = 1024
+
+function _topk_factor_nodes(V, n, qa, caller, D = nothing)
     Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
          reshape(Float64.(collect(V)), :, 1)
     r = size(Vm, 2)
     r > 2 && error("$caller is implemented for factor rank <= 2")
     Vm = _gauge_center(Vm)                     # scale-safe (#471)
+    if qa === nothing && r > 0
+        # qa omitted (the default): the GENERAL RACE'S node rule, as
+        # python and the browser. A fixed 15-node Gauss-Hermite rule
+        # missed the race by 10.7 points on a sharp rank-one field (#340).
+        # Past 1024 nodes a whole 1024-node rule of the same family is
+        # used (every node is a full count-program pass): the midpoint
+        # grid at rank one, Halton at rank two (python: 2^10 Sobol).
+        st = _race_setup(zeros(n), Vm, D === nothing ? ones(n) : D,
+                         nothing, nothing, "normal")
+        nodes, w = st.F, st.W
+        if length(w) > _TOPK_QMC_NODES
+            Q = _TOPK_QMC_NODES
+            if r == 1
+                nodes = reshape(qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
+                w = fill(1.0 / Q, Q)
+            else
+                hw = halton_normal_nodes(r, Q)
+                nodes, w = hw.F, hw.W
+            end
+        end
+        return (Vm = st.V, nodes = nodes, w = w)
+    end
+    qa === nothing && (qa = 15)
     h = hermite1(qa)
     if r == 0
         # the EMPTY PRODUCT: rank 1 was special-cased and every other
@@ -235,7 +260,7 @@ end
 
 """P(runner i among the k smallest), min-wins; slot identity enforced."""
 function top_k_probabilities(mu, k; V = nothing, D = nothing,
-                             base = "normal", points = 513, qa = 15)
+                             base = "normal", points = 513, qa = nothing)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -245,7 +270,7 @@ function top_k_probabilities(mu, k; V = nothing, D = nothing,
     V === nothing &&
         return _checked_topk(_topk_with_slopes(mu, sd, k, fn, points).q,
                              k, "top-k race")
-    fac = _topk_factor_nodes(V, n, qa, "top_k_probabilities")
+    fac = _topk_factor_nodes(V, n, qa, "top_k_probabilities", D)
     raw = zeros(n)
     for q in 1:size(fac.nodes, 1)
         shift = fac.Vm * fac.nodes[q, :]
@@ -283,7 +308,7 @@ last-place probability keeps its relative precision. It was
 returned 0.0 at 513 points and 2.4e-15 at 2049 for a true 7.73e-24
 (#365, as python/R/browser)."""
 function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
-                                base = "normal", points = 513, qa = 15)
+                                base = "normal", points = 513, qa = nothing)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -293,7 +318,7 @@ function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
     V === nothing &&
         return _checked_topk(_bottomk_independent(mu, sd, k, fn, points),
                              k, "bottom-k race")
-    fac = _topk_factor_nodes(V, n, qa, "bottom_k_probabilities")
+    fac = _topk_factor_nodes(V, n, qa, "bottom_k_probabilities", D)
     raw = zeros(n)
     for q in 1:size(fac.nodes, 1)
         raw .+= fac.w[q] .* _bottomk_independent(
@@ -305,13 +330,13 @@ end
 """Both top-k Jacobians (dq/dmu, dq/dsigma); factor rank <= 2 via the
 exact Gauss-Hermite node mixture."""
 function top_k_jacobians(mu, k; D = nothing, base = "normal",
-                         points = 513, V = nothing, qa = 15)
+                         points = 513, V = nothing, qa = nothing)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
     if V !== nothing
-        fac = _topk_factor_nodes(V, n, qa, "top_k_jacobians")
+        fac = _topk_factor_nodes(V, n, qa, "top_k_jacobians", D)
         Jm = zeros(n, n)
         Js = zeros(n, n)
         for q in 1:size(fac.nodes, 1)
@@ -369,7 +394,7 @@ to have no `V` at all, so the correlated call was a keyword error while
 the adjacent top-k verbs priced it (#202). Column 1 is correlated top-1
 membership and cumulative row sums are correlated top-k."""
 function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
-                            V = nothing, qa = 15)
+                            V = nothing, qa = nothing)
     mu = Float64.(collect(mu))
     n = length(mu)
     sd = sqrt.(_as_idio(D, n))
@@ -377,7 +402,7 @@ function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
     P = if V === nothing
         _rank_matrix_node(mu, sd, fn, points)
     else
-        fac = _topk_factor_nodes(V, n, qa, "rank_probabilities")
+        fac = _topk_factor_nodes(V, n, qa, "rank_probabilities", D)
         acc = zeros(n, n)
         for q in 1:size(fac.nodes, 1)
             acc .+= fac.w[q] .* _rank_matrix_node(
@@ -450,7 +475,7 @@ end
 
 """Invert one top-k curve for mean-zero locations (logit residuals)."""
 function abilities_from_topk(q, k; V = nothing, D = nothing,
-                             base = "normal", points = 513, qa = 15,
+                             base = "normal", points = 513, qa = nothing,
                              n_iter = 80, tol = 1e-8,
                              target_floor = nothing, return_info = false)
     n = length(q)
@@ -461,7 +486,7 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
     sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     fac = V === nothing ? nothing :
-          _topk_factor_nodes(V, n, qa, "abilities_from_topk")
+          _topk_factor_nodes(V, n, qa, "abilities_from_topk", D)
     logit_t = log.(target) .- log1p.(-target)
     logt = log.(target)
     # in the field's own units, as python and R (#100): a dimensionless

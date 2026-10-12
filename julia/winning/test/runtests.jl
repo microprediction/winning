@@ -317,6 +317,21 @@ end
     @test abs(sum(w.mu)) < 1e-12 && abs(sum(log.(w.sd))) < 1e-12
 end
 
+@testset "top-k default node rule is the race's (#340)" begin
+    # a fixed 15-node Gauss-Hermite default missed the race by 10.7
+    # points; the first 1024 nodes of a longer midpoint grid by 50
+    V = reshape([-3.0, -1, 1, 3], 4, 1)
+    r = race_probabilities([-0.15, 0.05, 0.10, 0.0]; V = V, D = fill(0.01, 4), points = 1025)
+    t = top_k_probabilities([-0.15, 0.05, 0.10, 0.0], 1; V = V, D = fill(0.01, 4), points = 1025)
+    @test maximum(abs.(r .- t)) < 1e-9
+    for d in (1e-3, 1e-4)
+        mu = [-0.015, 0.005, 0.010, 0.0]
+        r = race_probabilities(mu; V = V, D = fill(d, 4), points = 257)
+        t = top_k_probabilities(mu, 1; V = V, D = fill(d, 4), points = 257)
+        @test maximum(abs.(r .- t)) < 1e-9
+    end
+end
+
 @testset "bulk-window delta is validated (#445)" begin
     for d in (-1, 0, 0.5, 1, NaN, Inf, true)
         @test_throws ArgumentError race_probabilities([-1.0, 0, 1]; D = [1.0, 1, 1], delta = d)
