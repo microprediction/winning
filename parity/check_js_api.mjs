@@ -2068,5 +2068,16 @@ rejects(races.abilitiesFromRace, [[0.5, 0.5, 0], { targetFloor: 0.4 }],
           p => md(p, races.raceProbabilities(mu3, { V: [[1], [1], [-1]], D: [1, 1, 1], F: [[-1], [1]], W: [0.5, 0.5] })) < 1e-12);
 }
 
+// --- gamma = 0 Nested ignores its coupling in the inverse too (#644)
+{
+  const s0 = structures.Nested([0, 0, 1], [0.4, 0.6, 0.5], [1, 1, 1], [0.2, 0.3], 0);
+  const p0 = races.raceProbabilities([-0.4, 0.1, 0.3], { structure: s0 });
+  accepts("gamma 0 Nested with a stale coupling inverts (#644)",
+          () => races.abilitiesFromRace(p0, { structure: s0, returnInfo: true }),
+          o => o.converged && Math.abs(o.mu[0] + 0.4) < 1e-6);
+  rejects(races.raceProbabilities, [[-0.4, 0.1, 0.3], { structure: structures.Nested([0, 0, 1], [0.4, 0.6, 0.5], [1, 1, 1], [0.2, 0.3], 0.5) }],
+          "an active wrong-length coupling is still refused (#644)", "coupling");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

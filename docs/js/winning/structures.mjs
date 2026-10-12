@@ -176,7 +176,11 @@ function structureScale(s) {
   // scalar D, a scalar or (1, n) loading and a scalar coupling NaN (#597)
   const L = asLoadings(s.loading, n, "loading");
   const Dv = asIdio(s.D, n, "D");
-  const G = s.kind === "Nested" && s.coupling != null ? asLoadings(s.coupling, n, "coupling") : null;
+  // only an ACTIVE coupling is read: gamma === 0 is the Blocks race in the
+  // forward, which never looks at the coupling, so a stale wrong-length
+  // one priced fine and then failed the inverse (#644, as python)
+  const G = s.kind === "Nested" && s.coupling != null && (s.gamma ?? 1) !== 0
+    ? asLoadings(s.coupling, n, "coupling") : null;
   const tot = [];
   for (let i = 0; i < n; i++) {
     let v = Dv[i] + L[i].reduce((a, b) => a + b * b, 0);
