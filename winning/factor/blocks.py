@@ -239,6 +239,12 @@ def _block_max(mu, sd, cluster, v, points, qa):
     """Max-wins kernel (numpy reference); public functions negate."""
     mu = np.asarray(mu, float); sd = np.asarray(sd, float)
     v = np.asarray(v, float); cluster = np.asarray(cluster)
+    if v.ndim == 0:
+        # a scalar is one common loading for every contestant, as
+        # as_loadings and the Jacobian read it; the reshape below raised
+        # for it, so forward, inverse and Blocks dispatch refused the
+        # spelling the Jacobian accepted (#684)
+        v = np.full(len(mu), float(v))
     if v.ndim == 2 and v.shape[-1] == 0:
         # rank zero is the independent race (Blocks with zero loadings,
         # the containment the grammar documents); it fell into the

@@ -329,3 +329,23 @@ def test_ordered_k1_with_cov_routes_like_the_win_race():
                                     points=257)
     assert np.abs(p - q).max() == 0.0
     assert np.abs(q - oracle).max() < 1e-4
+
+
+# #684: a scalar block loading means the same loading for every runner.
+def test_scalar_block_loading_is_accepted_everywhere():
+    from winning import Blocks
+    from winning.factor.blocks import (abilities_from_block_race,
+                                       block_race_probabilities)
+    from winning.factor.races import abilities_from_race, race_probabilities
+    mu = np.array([-.5, -.1, .2, .4]); cl = np.array([0, 0, 1, 1])
+    D = np.array([.8, .9, 1., 1.1])
+    p = block_race_probabilities(mu, cl, np.full(4, .3), D, points=129)
+    assert np.abs(block_race_probabilities(mu, cl, .3, D, points=129)
+                  - p).max() == 0.0
+    m, res, _ = abilities_from_block_race(p, cl, .3, D, points=129)
+    assert np.abs(m - (mu - mu.mean())).max() < 1e-6
+    s = Blocks(cl, .3, D)
+    assert np.abs(race_probabilities(mu, structure=s, points=129)
+                  - p).max() < 1e-15
+    assert np.abs(abilities_from_race(p, structure=s, points=129)
+                  - (mu - mu.mean())).max() < 1e-6

@@ -137,6 +137,9 @@
     return(.block_max_r(mu, sd, cluster, v, points, qa))
   }
   v <- as.numeric(v)
+  # a scalar is one common loading for every contestant (as python and
+  # the browser read it); indexing it by contestant gave NA (#684)
+  if (length(v) == 1L && length(mu) > 1L) v <- rep(v, length(mu))
   n <- length(mu)
   inv <- .cluster_index(cluster)
   ord <- order(inv)                        # stable
