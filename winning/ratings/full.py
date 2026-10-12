@@ -61,6 +61,41 @@ def _psd_repair(S, floor_frac=1e-8):
     return (U * np.maximum(lam, floor)) @ U.T
 
 
+def _check_full_inputs(m, S, V=None, A=None, beta2=1.0):
+    """The shape contract of every full-covariance update, checked up
+    front: m a finite (n,) vector, S an (n, n) matrix, A (k, n) when
+    given, V loadings for the k observed rows and beta2 broadcastable to
+    k. A singleton order returns before any of these is touched, so it
+    certified a length-2 "covariance" for a length-3 mean, or a team map
+    with the wrong number of players, as an exact posterior (#456)."""
+    m = np.asarray(m, dtype=float)
+    if m.ndim != 1:
+        raise ValueError(f"m must be a vector of belief means; got shape {m.shape}")
+    n = m.shape[0]
+    S = np.asarray(S, dtype=float)
+    if S.shape != (n, n):
+        raise ValueError(
+            f"S must be the ({n}, {n}) belief covariance of the {n} means; "
+            f"got shape {S.shape}")
+    k = n
+    if A is not None:
+        A = np.atleast_2d(np.asarray(A, dtype=float))
+        if A.ndim != 2 or A.shape[1] != n:
+            raise ValueError(
+                f"A must map the {n} players to the observed rows, shape "
+                f"(k, {n}); got shape {A.shape}")
+        k = A.shape[0]
+    if V is not None:
+        as_loadings(V, k)
+    try:
+        np.broadcast_to(np.asarray(beta2, dtype=float), (k,))
+    except ValueError:
+        raise ValueError(
+            f"beta2 must be a scalar or one variance per observed row "
+            f"({k}); got shape {np.shape(beta2)}") from None
+    return k
+
+
 def _belief_split(S, tol=1e-8, max_rank=8):
     """Represent S = B B' + diag(psi) with psi >= 0.
 
@@ -328,6 +363,7 @@ def update_order_full(m, S, order, V=None, beta2=1.0, nodes_log2=10,
     are order-heavy.
     """
     from ..outcomes import as_order
+    _check_full_inputs(m, S, V=V, beta2=beta2)                 # #456
     order = as_order(order, len(np.asarray(m)))                # #129
     if len(order) <= 1:                  # tautology: exact, no mixture
         return (np.asarray(m, dtype=float).copy(),

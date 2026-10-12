@@ -911,6 +911,11 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     v = as_variance(v, len(np.asarray(m)))
     sd = np.sqrt(v + np.asarray(beta2, dtype=float))
     order = as_order(order, len(np.asarray(m)))                # #129
+    # the loading and noise shapes, before the tautology return: a
+    # singleton order skipped the mixture, where a wrong-shaped V was
+    # the only thing that would have been refused (#456)
+    as_loadings(V, len(v))
+    _beta_per_player(beta2, len(v))
     if len(order) <= 1:
         # a tautology: P = 1 exactly. Through the mixture it came back as
         # log(sum W), which is 2.2e-16 rather than 0 wherever the node

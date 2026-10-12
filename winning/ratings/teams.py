@@ -20,8 +20,8 @@ import numpy as np
 from ..shapes import as_loadings
 
 
-from .full import (_mixture_update_full, _order_kernel, _psd_repair,
-                   _winner_kernel)
+from .full import (_check_full_inputs, _mixture_update_full, _order_kernel,
+                   _psd_repair, _winner_kernel)
 
 
 def update_team_winner_full(m, S, A, winner, V=None, beta2=1.0,
@@ -39,6 +39,7 @@ def update_team_order_full(m, S, A, order, V=None, beta2=1.0,
     """Full team finishing order (best first, rows of A)."""
     A = np.atleast_2d(np.asarray(A, dtype=float))
     from ..outcomes import as_order
+    _check_full_inputs(m, S, V=V, A=A, beta2=beta2)            # #456
     order = as_order(order, A.shape[0])                        # #129
     if len(order) <= 1:                  # tautology: exact, no mixture
         return (np.asarray(m, dtype=float).copy(),
