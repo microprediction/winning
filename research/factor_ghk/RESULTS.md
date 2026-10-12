@@ -187,7 +187,8 @@ more for a longshot. The consequences, from the tables:
   6.9e-3 against 8.2e-3.
 - **Wall time is LP-bound and the hybrid loses it.** n=10,000: hybrid
   R=2048 277 s (one process per target) against Sobol 2^15 at 158 s for
-  every runner on 12 workers. n=100,000: 2,162 s against 998 s. Each draw costs two LPs per factor dimension
+  every runner on 12 workers. n=100,000: 2,162 s against 998 s (the first Sobol 2^15 run; the #609 rerun
+  shown in the table took 1,939 s). Each draw costs two LPs per factor dimension
   with n-1 constraints, 30 ms each at n=10,000 and 290 ms at n=100,000.
 - **GHK on the runner contrasts is dead as a field method by n=10,000.**
   Per target it is fine at n=1,000 (1.2 s for 4,096 draws) but already
@@ -278,20 +279,20 @@ Per-target relative error, favourites left, longshots right:
 
 ### n = 100,000, rank 3, D = 0.05, sharpness 31.7
 
-Truth: Sobol 2^17 (seed 101), vs second scramble 2.5e-05, vs MC 1.8e-03. Read nothing below 5e-05.
+Truth: Sobol 2^17 (seed 101), vs second scramble 2.5e-05, vs MC 9.5e-04. Read nothing below 5e-05.
 
 † priced before the truth was extended to 2^17; its saved estimates are rescored against that truth here, its wall time is from the earlier run.
 
 | method | passes | per target | max abs err | max rel err | wall s |
 |---|---:|---:|---:|---:|---:|
-| fixed scrambled Sobol 2^7 | 128 | 128 | 5.8e-03 | 7.0e-01 | 8.6 |
-| fixed scrambled Sobol 2^9 | 512 | 512 | 2.5e-03 | 3.6e-01 | 22.9 |
-| fixed scrambled Sobol 2^11 | 2048 | 2048 | 9.8e-04 | 6.4e-02 | 81.8 |
-| fixed scrambled Sobol 2^13 | 8192 | 8192 | 1.7e-04 | 7.5e-03 | 314.8 |
+| fixed scrambled Sobol 2^7 | 128 | 128 | 5.8e-03 | 7.0e-01 | 8.4 |
+| fixed scrambled Sobol 2^9 | 512 | 512 | 2.5e-03 | 3.6e-01 | 31.4 |
+| fixed scrambled Sobol 2^11 | 2048 | 2048 | 9.8e-04 | 6.4e-02 | 123.3 |
+| fixed scrambled Sobol 2^13 | 8192 | 8192 | 1.7e-04 | 7.5e-03 | 488.6 |
 | Hybrid A per-winner R=32 x 12 targets † | 384 | 32 | 1.4e-02 | 7.1e-01 | 34.1 |
 | Hybrid A per-winner R=128 x 12 targets † | 1536 | 128 | 7.8e-03 | 1.5e-01 | 133.7 |
-| Hybrid A per-winner R=512 x 12 targets | 6144 | 512 | 1.4e-03 | 4.7e-02 | 529.9 |
-| fixed scrambled Sobol 2^15 | 32768 | 32768 | 1.1e-04 | 7.4e-03 | 998.5 |
+| Hybrid A per-winner R=512 x 12 targets † | 6144 | 512 | 1.4e-03 | 4.7e-02 | 529.9 |
+| fixed scrambled Sobol 2^15 | 32768 | 32768 | 1.1e-04 | 7.4e-03 | 1938.9 |
 | Hybrid A per-winner R=2048 x 12 targets | 24576 | 2048 | 8.4e-05 | 1.1e-02 | 2162.4 |
 
 Per-target relative error, favourites left, longshots right:
@@ -304,7 +305,7 @@ Per-target relative error, favourites left, longshots right:
 | fixed scrambled Sobol 2^13 | 7.2e-04 | 2.5e-03 | 1.1e-03 | 4.8e-03 | 1.3e-03 | 4.7e-03 | 3.2e-03 | 4.2e-03 | 4.6e-03 | 2.4e-03 | 7.5e-03 | 4.3e-03 |
 | Hybrid A per-winner R=32 x 12 targets † | 1.3e-01 | 4.2e-02 | 6.5e-03 | 1.3e-01 | 1.1e-01 | 2.3e-01 | 8.3e-02 | 7.5e-02 | 1.9e-01 | 4.9e-01 | 2.0e-01 | 7.1e-01 |
 | Hybrid A per-winner R=128 x 12 targets † | 7.5e-02 | 1.3e-02 | 5.5e-02 | 1.3e-02 | 1.2e-02 | 3.4e-02 | 3.5e-02 | 7.1e-03 | 2.0e-02 | 8.5e-02 | 1.5e-01 | 3.6e-03 |
-| Hybrid A per-winner R=512 x 12 targets | 3.3e-03 | 2.6e-02 | 3.9e-04 | 7.2e-03 | 3.0e-03 | 1.3e-02 | 6.8e-04 | 6.9e-03 | 1.9e-02 | 2.4e-02 | 1.9e-02 | 4.7e-02 |
+| Hybrid A per-winner R=512 x 12 targets † | 3.3e-03 | 2.6e-02 | 3.9e-04 | 7.2e-03 | 3.0e-03 | 1.3e-02 | 6.8e-04 | 6.9e-03 | 1.9e-02 | 2.4e-02 | 1.9e-02 | 4.7e-02 |
 | fixed scrambled Sobol 2^15 | 2.8e-04 | 2.0e-03 | 1.2e-03 | 7.6e-04 | 1.2e-03 | 1.5e-03 | 5.4e-04 | 1.9e-04 | 2.6e-03 | 3.1e-03 | 2.0e-03 | 7.4e-03 |
 | Hybrid A per-winner R=2048 x 12 targets | 5.6e-04 | 1.1e-03 | 6.8e-04 | 7.9e-04 | 1.0e-03 | 7.2e-04 | 1.5e-03 | 1.5e-03 | 7.8e-03 | 2.7e-03 | 2.6e-03 | 1.1e-02 |
 
@@ -376,7 +377,7 @@ contenders. Both match the figures below.
   (n=100,000). Contenders per node: 146 of 1,000; 530 of 10,000; 1,630
   of 100,000. Pass cost: 4.6 to 1.1 ms; 45 to 4.6 ms; 448 to 18 ms. Sobol
   2^15 at n=100,000 in 591 s on one process against 998 s for the engine
-  on 12 workers. No pilot, no margin, no approximation.
+  on 12 workers (its first run; the #609 rerun took 1,939 s). No pilot, no margin, no approximation.
 
 ## What this means for winning
 

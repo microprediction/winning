@@ -1502,9 +1502,30 @@ pub fn exact_implicit_prices(
         .collect()
 }
 
+/// Only differences between offsets matter. Each offset past +/-(L-2) was
+/// clamped on its own, so translating a book across the lattice edge
+/// erased its contrast: [-3, 3] priced [1, 0] and [17, 23] [0.5, 0.5] at
+/// L=15 (#585). A book with an entry out of range is first moved by the
+/// integer nearest its midpoint; an in-range book is untouched.
+pub fn edge_centred(offsets: &[f64], l: i64) -> Vec<f64> {
+    let fin: Vec<f64> = offsets.iter().copied().filter(|o| o.is_finite()).collect();
+    if fin.is_empty() {
+        return offsets.to_vec();
+    }
+    let lo = fin.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = fin.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let edge = (l - 2) as f64;
+    if lo >= -edge && hi <= edge {
+        return offsets.to_vec();
+    }
+    let c = ((lo + hi) / 2.0 + 0.5).floor();
+    offsets.iter().map(|&o| if o.is_finite() { o - c } else { o }).collect()
+}
+
 /// state_prices_from_offsets on the exact engine (#418, #362, #348, #373).
 pub fn exact_state_prices_from_offsets(density: &[f64], offsets: &[f64]) -> Vec<f64> {
     let l = ((density.len() - 1) / 2) as i64;
+    let offsets = edge_centred(offsets, l);
     let base = padded_base_cdf(density);
     let cdfs: Vec<Vec<f64>> = offsets.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
     exact_state_prices_from_cdfs(&cdfs)
@@ -2876,6 +2897,26 @@ mod tests {
         assert!(check_offset_samples(&[0.0, 1.0]).is_err());
         assert!(check_offset_samples(&[]).is_err());
         assert!(check_offset_samples(&[1.0, f64::NAN]).is_err());
+    }
+
+    #[test]
+    fn common_translation_across_the_edge_keeps_the_contrast() {
+        // #585: each offset past +/-(L-2) was clamped on its own
+        let l = 15usize;
+        let d: Vec<f64> = (0..2 * l + 1)
+            .map(|i| (-0.5 * ((i as f64 - l as f64) * 0.5).powi(2)).exp())
+            .collect();
+        let s: f64 = d.iter().sum();
+        let d: Vec<f64> = d.iter().map(|x| x / s).collect();
+        let base = exact_state_prices_from_offsets(&d, &[-3.0, 3.0]);
+        for c in [20.0, -20.0, 11.0, 40.0] {
+            let p = exact_state_prices_from_offsets(&d, &[-3.0 + c, 3.0 + c]);
+            assert!((p[0] - base[0]).abs() < 1e-12 && (p[1] - base[1]).abs() < 1e-12, "{c} {p:?} {base:?}");
+        }
+        assert!(base[0] > 0.9);
+        // in range: untouched
+        assert_eq!(edge_centred(&[-13.0, 13.0], 15), vec![-13.0, 13.0]);
+        assert_eq!(edge_centred(&[17.0, 23.0], 15), vec![-3.0, 3.0]);
     }
 
     #[test]
