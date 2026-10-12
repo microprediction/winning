@@ -309,3 +309,23 @@ def test_covariance_validation_accepts_heterogeneous_scales():
         _validate_covariance(A * c)
     _validate_covariance(np.diag([1e-12, 1.0, 1e12]))
     _validate_covariance(np.zeros((2, 2)))
+
+
+# #682: ordered_probabilities(k=1, cov=) is race_probabilities(cov=).
+def test_ordered_k1_with_cov_routes_like_the_win_race():
+    from winning.factor import race_probabilities
+    from winning.factor.permutations import ordered_probabilities
+    n = 8
+    rng = np.random.default_rng(3)
+    V0 = rng.normal(size=(n, 3)); d0 = 0.05 + rng.random(n)
+    S = V0 @ V0.T + np.diag(d0); s = np.sqrt(np.diag(S))
+    C = S / np.outer(s, s)
+    mu = np.linspace(-0.6, 0.6, n)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = np.asarray(race_probabilities(mu, cov=C, points=257))
+        q = ordered_probabilities(mu, k=1, cov=C, points=257)
+        oracle = race_probabilities(mu, V=V0 / s[:, None], D=d0 / s**2,
+                                    points=257)
+    assert np.abs(p - q).max() == 0.0
+    assert np.abs(q - oracle).max() < 1e-4
