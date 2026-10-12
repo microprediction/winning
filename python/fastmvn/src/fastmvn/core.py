@@ -5,7 +5,9 @@ factor-plus-diagonal slice.
 P(a <= X <= b) with X ~ N(mu, V V' + diag(D)): conditional on the
 r-dimensional factor the coordinates are independent, so the rectangle
 probability is an r-dimensional smooth integral of a product of
-univariate normal CDFs. Deterministic, milliseconds at dimensions where
+univariate normal CDFs, on Gauss-Hermite nodes placed at the
+integrand's mode and scaled by its curvature (rank <= 2) or on a
+scrambled Sobol cloud in a canonical factor basis. Deterministic, milliseconds at dimensions where
 Genz-style quadrature needs seconds to minutes (measured: 4.6 s for one
 probability at n = 200 via scipy's integrator vs ~2 ms here).
 
@@ -28,7 +30,6 @@ from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
 from scipy.special import log_ndtr, ndtr, ndtri
-from scipy.stats import norm
 
 
 def _halton_unit(r, n):
@@ -94,23 +95,7 @@ def _nodes_for(V, D):
         u = qmc.Sobol(r, scramble=True, seed=0).random(n)
         F = ndtri(np.clip(u, 1e-12, 1 - 1e-12))
         return F, np.full(n, 1.0 / n)
-    # The order grows like sharpness SQUARED, not 8 x sharpness. A
-    # cell's transition in factor space is 1/sharpness wide and
-    # Gauss-Hermite resolves it only once its node spacing is well below
-    # that; the linear rule gave 0.2% relative error on a two-coordinate
-    # orthant at correlation 0.8 (sharpness 2, Q = 16) and 0.7% at 0.9,
-    # against closed forms (#132). At sharpness <= 1 this is the old
-    # old 15-point floor at rank two, so ordinary inputs pay what they
-    # always did, and the rules are cached. Rank one floors at 61: its
-    # cost is n x Q evaluations (microseconds once the rule is cached),
-    # and 15 points left 2e-6 at correlation 0.5, and 2.6e-3 on a
-    # 200-coordinate field whose rows are individually mild but whose
-    # product is sharp. The caps (201, 41) and the Sobol escalation past
-    # sharpness 3 are unchanged. Measured: correlation 0.8 orthant
-    # 4e-3 -> 3e-8; a rank-two sharpness-2.8 field 2e-3 -> 2e-7 at 0.15 ms.
-    Q = int(np.clip(np.ceil(15.0 * sharp * sharp), 61 if r == 1 else 15,
-                    201 if r == 1 else 41))
-    return _gh_nodes(r, Q)
+    return _gh_nodes(r, _gh_order(r, sharp))
 
 
 def factorize_covariance(sigma, max_rank=6, tol=1e-11, n_iter=300):
@@ -350,6 +335,12 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
         lo = _per_coordinate(lower, n, "lower", -np.inf, False)
         up = _per_coordinate(upper, n, "upper", np.inf, False)
         _check_bounds(lo, up)
+        free = _unconstrained(lo, up)
+        if free is not None:
+            if free.all():
+                return 1.0, "factor"
+            k = np.flatnonzero(~free)
+            sigma, mu, lo, up = sigma[np.ix_(k, k)], mu[k], lo[k], up[k]
         fd = factorize_covariance(sigma)
         if fd is None:
             return _dense(lo, up, mu, sigma)
@@ -363,7 +354,25 @@ def _mvn_cdf_impl(lower, upper, mean, sigma, V, D):
         lo = _per_coordinate(lower, n, "lower", -np.inf, False)
         up = _per_coordinate(upper, n, "upper", np.inf, False)
         _check_bounds(lo, up)
+        free = _unconstrained(lo, up)
+        if free is not None:
+            if free.all():
+                return 1.0, "factor"
+            V, D, mu, lo, up = V[~free], D[~free], mu[~free], lo[~free], \
+                up[~free]
     return _structured(lo, up, mu, V, D)
+
+
+def _unconstrained(lo, up):
+    """Coordinates bounded by (-inf, inf), or None if there are none.
+
+    Such a coordinate's cell is 1 for every factor draw, so it is
+    marginalised out exactly, before any rule is chosen. Left in, its
+    loading still sized the quadrature and an irrelevant row moved the
+    answer 2-3% (#487); in the sigma= path its covariance row also
+    steers the factor decomposition (#518)."""
+    free = (lo == -np.inf) & (up == np.inf)
+    return free if free.any() else None
 
 
 def _drop_constants(var, mu, lo, up):
@@ -425,14 +434,18 @@ def _structured(lo, up, mu, V, D):
         var = var[keep]
     if len(D) == 1:
         return _univariate(lo, up, mu, var[0])
-    # a factor no coordinate loads on integrates out exactly
-    V = V[:, np.any(V != 0.0, axis=0)]
+    V = _canonical_loadings(V)
     if V.shape[1] == 0:
         # rank zero is the exact independent product
         return float(np.exp(_log_interval_mass(up - mu, lo - mu,
                                                np.sqrt(D)).sum())), "factor"
     s = np.sqrt(D)
-    F, W = _nodes_for(V, D)
+    rule = _adaptive_rule(V, D, mu, lo, up)
+    if rule is None:
+        V = _sign_fixed(V)
+        F, W = _nodes_for(V, D)
+    else:
+        F, W = rule
     contrib = W * _cell_products(F, V, s, mu, lo, up)
     p = float(contrib.sum())
     # The answer is trusted only if it is RESOLVED. On the equal-weight
@@ -445,6 +458,211 @@ def _structured(lo, up, mu, V, D):
     if p >= 1e-8 and (not sobol or ess >= 100.0):
         return p, "factor"
     return _recentered(V, s, mu, lo, up), "factor-recentered"
+
+
+def _canonical_loadings(V):
+    """V with the factor basis fixed by V V' alone.
+
+    Any V O with O orthogonal is the same Gaussian, but the node rules
+    are not rotation invariant: the scrambled Sobol cloud moved 6.8% under
+    a sign flip of one column (#518), and the raw column count chose the
+    rule, so two appended zero columns moved a rank-one answer 2.37%
+    (#457). The columns are replaced by V W, W the eigenvectors of V'V in
+    decreasing order (the left singular vectors scaled by the singular
+    values), directions carrying nothing are dropped -- zero columns, and
+    one factor split across dependent columns. One r x r
+    eigendecomposition. Signs are fixed by _sign_fixed where a rule needs
+    them.
+    """
+    V = V[:, np.any(V != 0.0, axis=0)]
+    r = V.shape[1]
+    if r == 0:
+        return V
+    if r > 1:
+        lam, U = np.linalg.eigh(V.T @ V)
+        order = np.argsort(lam)[::-1]
+        lam, U = lam[order], U[:, order]
+        U = U[:, lam > 1e-13 * lam[0]]
+        V = V @ U
+    return V
+
+
+def _sign_fixed(V):
+    """Each column's sign fixed by its largest entry: the Gauss-Hermite
+    rules are symmetric and need none of this; the Sobol cloud is not."""
+    big = np.abs(V).argmax(axis=0)
+    sign = np.where(V[big, np.arange(V.shape[1])] < 0.0, -1.0, 1.0)
+    return np.ascontiguousarray(V * sign)
+
+
+_LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
+
+
+def _gh_order(r, sharp):
+    # The order grows like sharpness SQUARED, not 8 x sharpness. A
+    # cell's transition in factor space is 1/sharpness wide and
+    # Gauss-Hermite resolves it only once its node spacing is well below
+    # that; the linear rule gave 0.2% relative error on a two-coordinate
+    # orthant at correlation 0.8 (sharpness 2, Q = 16) and 0.7% at 0.9,
+    # against closed forms (#132). Rank one floors at 61: its cost is
+    # n x Q evaluations, and 15 points left 2e-6 at correlation 0.5. The
+    # caps (201, 41) and the Sobol escalation past sharpness 3 are
+    # unchanged.
+    return int(np.clip(np.ceil(15.0 * sharp * sharp), 61 if r == 1 else 15,
+                       201 if r == 1 else 41))
+
+
+def _adaptive_rule(V, D, mu, lo, up):
+    """Adaptive Gauss-Hermite nodes and weights at rank <= 2, or None.
+
+    The integrand in factor space is phi(f) prod_i cell_i(f). Its width
+    is set by the SUM of the cells' curvatures, not by the sharpest row:
+    two hundred individually mild rows (sharpness 1) on a ring make an
+    integrand 0.28 wide, which the fixed 15 x 15 rule centred at zero
+    with unit scale saw through one node -- 36.7% high (#470); ordinary
+    random rank-two fields with two-sided cells lost 1-2% the same way.
+    The rule is therefore placed where the integrand is (Liu & Pierce
+    1994): at the mode f0 of the log-integrand, along the eigenvectors U
+    of its curvature P there, with widths sig, f = f0 + U diag(sig) x,
+    and the ratio of the standard normal to that Gaussian folded into
+    the weights. The log-integrand is concave, so damped Newton from the
+    origin finds the mode in two or three evaluations.
+
+    sig starts at P's eigenvalues^-1/2 and is widened, never past the
+    prior's 1, to the width the log-integrand's drop three widths out
+    implies on its flatter side: a cell that is a soft step is steep on
+    one side and leaves only the prior on the other, and nodes scaled to
+    the steep side miss the flat side's mass (1.9e-5 on the rho = 0.9
+    trivariate orthant without this, 3e-9 with it).
+
+    f0, U and sig follow the Gaussian, not the factor basis: V O prices
+    like V for any orthogonal O, sign flips included (#518). The order
+    is the sharpness rule's, unchanged. Returns None -- the fixed rules
+    then apply -- past rank 2 or sharpness 3, and when a cell is empty
+    at a point the search visits.
+    """
+    r = V.shape[1]
+    if r > 2:
+        return None
+    s = np.sqrt(D)
+    Ws = V / np.sqrt(np.maximum(D, 1e-300))[:, None]
+    sharp = float(np.sqrt((Ws * Ws).sum(axis=1).max()))
+    if not sharp <= 3.0:
+        return None
+    cb = (up - mu) / s
+    one_sided = bool(np.all(lo == -np.inf))
+    ca = None if one_sided else (lo - mu) / s
+    eye = np.eye(r)
+
+    def logcells(m):
+        # sum over coordinates of log cell, at factor means m = Ws f
+        if one_sided:
+            return log_ndtr(cb - m), None
+        a = ca - m
+        return _log_interval_mass(cb - m, a, 1.0), a
+
+    def evaluate(f):
+        # log-integrand, its gradient and minus its Hessian, at f. With
+        # u = -v_i.f / s_i a cell is Phi(b + u) - Phi(a + u), so
+        # d/du log C = (phi(b) - phi(a)) / C and d2/du2 =
+        # (a phi(a) - b phi(b)) / C - (d/du)^2, formed as ratios in the
+        # log domain: the tails neither underflow nor cancel.
+        # Unconstrained coordinates are gone, so a one-sided b is finite.
+        m = Ws @ f
+        lC, a = logcells(m)
+        tot = float(lC.sum())
+        if not np.isfinite(tot):
+            return None
+        b = cb - m
+        eb = np.exp(-0.5 * b * b - _LOG_SQRT_2PI - lC)
+        if one_sided:
+            g1 = eb
+            g2 = -(b + eb) * eb
+        else:
+            ea = np.exp(-0.5 * a * a - _LOG_SQRT_2PI - lC)
+            g1 = eb - ea
+            g2 = (np.where(ea > 0.0, a * ea, 0.0)
+                  - np.where(eb > 0.0, b * eb, 0.0) - g1 * g1)
+        return (tot - 0.5 * float(f @ f), -(g1 @ Ws) - f,
+                eye - (Ws * g2[:, None]).T @ Ws)
+
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        f = np.zeros(r)
+        d = evaluate(f)
+        if d is None:
+            return None
+        val, G, P = d
+        for _ in range(50):
+            step = _solve_small(P, G)
+            dec = float(G @ step)
+            if not np.isfinite(dec):
+                return None
+            # dec / 2 is the predicted rise to the mode: 1e-4 is within
+            # a hundredth of a width of it, which moves no answer
+            if dec < 1e-4:
+                break
+            t = 1.0
+            while True:
+                fn = f + t * step
+                dn = evaluate(fn)
+                if dn is not None and dn[0] >= val - 1e-12:
+                    break
+                t *= 0.5
+                if t < 1e-6:
+                    break
+            if t < 1e-6:
+                break
+            f, (val, G, P) = fn, dn
+        lam, U = _eigh_small(P)
+        # P = I + (positive semidefinite): never wider than the prior
+        sig = 1.0 / np.sqrt(np.maximum(lam, 1.0))
+        probe = f + 3.0 * np.concatenate([U * sig, -U * sig], axis=1).T
+        lC, _ = logcells(probe @ Ws.T)
+        drop = val - lC.sum(axis=1) + 0.5 * (probe * probe).sum(axis=1)
+        eff = 3.0 * sig / np.sqrt(2.0 * np.minimum(drop[:r], drop[r:]))
+        sig = np.minimum(np.maximum(sig, np.where(eff > 0.0, eff, 1.0)),
+                         1.0)
+    X, W, X2 = _gh_rule(r, _gh_order(r, sharp))
+    F = f + (X * sig) @ U.T
+    logw = 0.5 * (X2 - (F * F).sum(axis=1)) + float(np.log(sig).sum())
+    return F, W * np.exp(logw)
+
+
+@functools.lru_cache(maxsize=64)
+def _gh_rule(r, Q):
+    """The cached GH rule with its nodes' squared norms."""
+    X, W = _gh_nodes_cached(r, Q)
+    X2 = (X ** 2).sum(axis=1)
+    X2.setflags(write=False)
+    return X, W, X2
+
+
+def _solve_small(P, G):
+    """P^-1 G for a 1 x 1 or 2 x 2 positive definite P, in closed form:
+    np.linalg.solve costs more than the rest of a Newton step here."""
+    if len(G) == 1:
+        return G / P[0, 0]
+    det = P[0, 0] * P[1, 1] - P[0, 1] * P[1, 0]
+    return np.array([P[1, 1] * G[0] - P[0, 1] * G[1],
+                     P[0, 0] * G[1] - P[1, 0] * G[0]]) / det
+
+
+def _eigh_small(P):
+    """Eigenvalues and orthonormal eigenvectors of a symmetric 1 x 1 or
+    2 x 2 matrix, in closed form."""
+    if len(P) == 1:
+        return np.array([P[0, 0]]), np.ones((1, 1))
+    a, b, c = P[0, 0], 0.5 * (P[0, 1] + P[1, 0]), P[1, 1]
+    if b == 0.0:
+        return np.array([a, c]), np.eye(2)
+    h = 0.5 * (a - c)
+    rad = np.hypot(h, b)
+    l1 = 0.5 * (a + c) + rad
+    # eigenvector of l1, from the better-conditioned row
+    v = np.array([b, l1 - a]) if h <= 0.0 else np.array([l1 - c, b])
+    v = v / np.hypot(v[0], v[1])
+    return (np.array([l1, 0.5 * (a + c) - rad]),
+            np.array([[v[0], -v[1]], [v[1], v[0]]]))
 
 
 def _cell_products(F, V, s, mu, lo, up):
@@ -479,6 +697,7 @@ def _log_cells(F, V, s, mu, lo, up):
 def _recentered(V, s, mu, lo, up):
     """Deep tail: recenter the node set at the mode of the log-integrand
     and importance-reweight (see r/mvtnormfast)."""
+    V = _sign_fixed(V)
     r = V.shape[1]
 
     def logint(f):

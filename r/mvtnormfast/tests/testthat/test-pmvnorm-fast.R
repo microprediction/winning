@@ -374,3 +374,71 @@ test_that("factorize_covariance refuses a tolerance outside (0, 1) and bad contr
   expect_equal(ncol(fd$V), 1)
   expect_lt(max(abs(fd$V %*% t(fd$V) + diag(fd$D) - S)), 1e-10)
 })
+
+test_that("many mild rows make a narrow integrand (#470)", {
+  # rowwise sharpness 1, so the fixed rule was 15 x 15 at unit scale; the
+  # product of 200 cells is 0.28 wide and the answer was 36.7% high
+  n <- 200; th <- 2 * pi * (0:(n - 1)) / n
+  p <- pmvnorm_fast(upper = rep(2, n), V = cbind(cos(th), sin(th)),
+                    D = rep(1, n))
+  expect_equal(attr(p, "method"), "factor")
+  expect_lt(abs(as.numeric(p) / 0.0007891258848216968 - 1), 1e-8)
+})
+
+test_that("the answer depends on VV', not on the factor basis (#518, #457)", {
+  V <- rbind(c(0.30812945940123476, -1.8936005031221805),
+             c(0.05423700319905680, -1.8882188805898732),
+             c(-0.04568751096449155, 1.2303149108078115),
+             c(-1.2824267666411462, -0.7947487032502422))
+  D <- c(0.48381594889619123, 0.607241434401239, 0.2137039397661559,
+         0.5038986029743953)
+  mu <- c(1.3435081180060733, 0.48784958537212353, 0.20068268880906692,
+          1.449261738300165)
+  up <- c(0.3670668335351432, -0.9140137229005407, -0.16906974496655425,
+          0.6067127817398206)
+  base <- as.numeric(pmvnorm_fast(upper = up, mean = mu, V = V, D = D))
+  expect_lt(abs(base / 1.4197622e-4 - 1), 2e-6)
+  for (t in c(0.3, 1.7, 4)) {
+    O <- matrix(c(cos(t), sin(t), -sin(t), cos(t)), 2)
+    expect_equal(as.numeric(pmvnorm_fast(upper = up, mean = mu, V = V %*% O,
+                                         D = D)), base, tolerance = 1e-12)
+  }
+  expect_equal(as.numeric(pmvnorm_fast(upper = up, mean = mu,
+                                       V = V %*% diag(c(1, -1)), D = D)),
+               base, tolerance = 1e-12)
+  # rank three: the Sobol cloud sees a canonical basis
+  V3 <- rbind(c(2.692520713523368, 1.392980981803484, 0.7503218321328118),
+              c(-3.1413260603735793, 3.1757401235045286, 4.534002392597087),
+              c(5.505616602042417, -2.6084117064617693, 0.7630448809882905),
+              c(2.8733471786655946, -1.889424026920147, -2.6786504937506477))
+  D3 <- c(1.354640723776008, 0.07136225300228002, 0.4603168051577446,
+          0.2640963072247931)
+  b3 <- as.numeric(pmvnorm_fast(upper = 0, V = V3, D = D3))
+  for (fl in list(c(1, -1, 1), c(-1, 1, -1)))
+    expect_equal(as.numeric(pmvnorm_fast(upper = 0, V = V3 %*% diag(fl),
+                                         D = D3)), b3, tolerance = 1e-12)
+  expect_equal(as.numeric(pmvnorm_fast(upper = 0, V = V3[, c(3, 1, 2)],
+                                       D = D3)), b3, tolerance = 1e-12)
+  # zero and split columns are the rank-one model (#457)
+  v <- c(-1.19009272, 2.32396446, -1.49968514, 2.14990819)
+  Dv <- c(0.24428964, 0.62490739, 0.25676327, 1.17899935)
+  b <- c(1.21213156, -1.15078308, 1.50271797, 6.29628221)
+  p1 <- as.numeric(pmvnorm_fast(upper = b, V = cbind(v), D = Dv))
+  expect_lt(abs(p1 / 0.11879131458669231 - 1), 1e-9)
+  for (W in list(cbind(v, 0, 0), cbind(v, v) / sqrt(2)))
+    expect_equal(as.numeric(pmvnorm_fast(upper = b, V = W, D = Dv)), p1,
+                 tolerance = 1e-12)
+})
+
+test_that("an unconstrained coordinate is marginalised out (#487)", {
+  v <- c(-2.145, 0.525, 3.328, 1.261); D <- c(1.122, 0.142, 2.040, 0.300)
+  mu <- c(0.702, 0.319, 0.254, -3.958); up <- c(-2.305, 4.151, 1.287, 0.557)
+  base <- as.numeric(pmvnorm_fast(upper = up, mean = mu, V = cbind(v), D = D))
+  expect_lt(abs(base / 0.0037867371230754 - 1), 1e-9)
+  for (load in c(3, 4, 40))
+    expect_identical(as.numeric(pmvnorm_fast(upper = c(up, Inf),
+                                             mean = c(mu, 123),
+                                             V = cbind(c(v, load)),
+                                             D = c(D, 1))), base)
+  expect_equal(as.numeric(pmvnorm_fast(upper = Inf, V = cbind(v), D = D)), 1)
+})

@@ -7,9 +7,10 @@
 # nodes. No lattice, no simulation, milliseconds at n in the hundreds.
 #
 # The node rule mirrors the python reference (winning/fastmvn.py):
-# Gauss-Hermite order scaled by the sharpness ratio max ||v_i||/sqrt(D_i),
-# with a FAMILY escalation to scrambled Sobol (R/sobol.R) past sharpness
-# 3 or rank 2 (Gauss-Hermite converges slowly on sharp integrands at any
+# Gauss-Hermite placed at the mode of the integrand and scaled by its
+# curvature (.adaptive_rule, #470), order scaled by the sharpness ratio
+# max ||v_i||/sqrt(D_i), with a FAMILY escalation to scrambled Sobol
+# (R/sobol.R) past sharpness 3 or rank 2 (Gauss-Hermite converges slowly on sharp integrands at any
 # order; low-discrepancy sets do not). It was fixed-prime Halton: rank 7
 # indexed a missing seventh prime and died in the radical inverse, and a
 # rank-4 rectangle was 1.06% high at 8192 points (#143).
@@ -40,8 +41,17 @@
   wgrid <- do.call(expand.grid, rep(list(w), r))
   W <- apply(as.matrix(wgrid), 1, prod)
   keep <- W > 1e-12 * max(W)
-  list(F = as.matrix(grids)[keep, , drop = FALSE], W = W[keep] / sum(W[keep]))
+  F <- as.matrix(grids)[keep, , drop = FALSE]
+  list(F = F, W = W[keep] / sum(W[keep]), X2 = rowSums(F^2))
 }
+
+# The order grows like sharpness SQUARED, not 8 x sharpness: a cell's
+# transition in factor space is 1/sharpness wide, and the linear rule gave
+# 0.2% relative error on a correlation-0.8 orthant (#132). Rank two floors
+# at 15 points, rank one at 61. Same rule as winning/fastmvn.py.
+.gh_order <- function(r, sharp)
+  as.integer(min(max(ceiling(15 * sharp^2), if (r == 1) 61 else 15),
+                 if (r == 1) 201 else 41))
 
 .nodes_for <- function(V, D) {
   r <- ncol(V)
@@ -49,16 +59,148 @@
   if (sharp > 3.0 || r > 2) {
     .sobol_normal(r, 2^13, seed = 0L)
   } else {
-    # The order grows like sharpness SQUARED, not 8 x sharpness: a
-    # cell's transition in factor space is 1/sharpness wide, and the
-    # linear rule gave 0.2% relative error on a correlation-0.8 orthant
-    # (#132). Rank two keeps the old 15-point floor so ordinary inputs
-    # cost what they did; rank one floors at 61 (n x Q work, negligible
-    # once cached). Same rule as winning/fastmvn.py.
-    Q <- as.integer(min(max(ceiling(15 * sharp^2), if (r == 1) 61 else 15),
-                        if (r == 1) 201 else 41))
-    .gh_nodes(r, Q)
+    .gh_nodes(r, .gh_order(r, sharp))
   }
+}
+
+# V with the factor basis fixed by VV' alone (winning/fastmvn.py,
+# _canonical_loadings). Any V O with O orthogonal is the same Gaussian,
+# but the Sobol cloud is not rotation invariant (a sign flip of one column
+# moved a rank-3 answer, #518) and the raw column count chose the rule
+# (two zero columns moved a rank-one answer 2.37%, #457). Columns become
+# V W, W the eigenvectors of V'V in decreasing order; directions carrying
+# nothing are dropped.
+.canonical_loadings <- function(V) {
+  V <- V[, colSums(V != 0) > 0, drop = FALSE]
+  if (ncol(V) > 1L) {
+    e <- eigen(crossprod(V), symmetric = TRUE)   # decreasing
+    keep <- e$values > 1e-13 * e$values[1]
+    V <- V %*% e$vectors[, keep, drop = FALSE]
+  }
+  V
+}
+
+# Each column's sign fixed by its largest entry: the Gauss-Hermite rules
+# are symmetric and need none of this; the Sobol cloud is not.
+.sign_fixed <- function(V) {
+  if (ncol(V) == 0L) return(V)
+  big <- apply(abs(V), 2, which.max)
+  sgn <- ifelse(V[cbind(big, seq_len(ncol(V)))] < 0, -1, 1)
+  V * rep(sgn, each = nrow(V))
+}
+
+.eigh_small <- function(P) {
+  if (nrow(P) == 1L) return(list(values = P[1, 1], vectors = matrix(1, 1, 1)))
+  a <- P[1, 1]; b <- 0.5 * (P[1, 2] + P[2, 1]); c <- P[2, 2]
+  if (b == 0) return(list(values = c(a, c), vectors = diag(2)))
+  h <- 0.5 * (a - c)
+  rad <- sqrt(h^2 + b^2)
+  l1 <- 0.5 * (a + c) + rad
+  v <- if (h <= 0) c(b, l1 - a) else c(l1 - c, b)
+  v <- v / sqrt(sum(v^2))
+  list(values = c(l1, 0.5 * (a + c) - rad),
+       vectors = matrix(c(v[1], v[2], -v[2], v[1]), 2, 2))
+}
+
+# Adaptive Gauss-Hermite nodes and weights at rank <= 2, or NULL (python
+# reference: winning/fastmvn.py, _adaptive_rule).
+#
+# The integrand's width in factor space is set by the SUM of the cells'
+# curvatures, not by the sharpest row: 200 individually mild rows on a
+# ring made an integrand 0.28 wide, which the fixed 15 x 15 rule at unit
+# scale saw through one node, 36.7% high (#470). The rule is placed at the
+# mode f0 of the log-integrand (damped Newton from the origin; the
+# log-integrand is concave), along the eigenvectors U of its curvature P
+# there, with widths sig: f = f0 + U diag(sig) x, and the ratio of the
+# standard normal to that Gaussian folded into the weights. sig starts at
+# P's eigenvalues^-1/2 and is widened, never past 1, to the width the
+# log-integrand's drop three widths out implies on its flatter side (a
+# soft-step cell leaves only the prior on one side). f0, U and sig follow
+# the Gaussian, not the factor basis, so V O prices like V (#518).
+.adaptive_rule <- function(V, D, mean, lower, upper) {
+  r <- ncol(V)
+  if (r > 2L) return(NULL)
+  s <- sqrt(D)
+  Ws <- V / sqrt(pmax(D, 1e-300))
+  sharp <- sqrt(max(rowSums(Ws^2)))
+  if (!(sharp <= 3.0)) return(NULL)
+  n <- length(D)
+  cb <- (upper - mean) / s
+  one_sided <- all(lower == -Inf)
+  ca <- if (one_sided) NULL else (lower - mean) / s
+  ones <- rep(1, n)
+  l2pi <- 0.5 * log(2 * pi)
+  eye <- diag(1, r)
+  evaluate <- function(f) {
+    m <- as.vector(Ws %*% f)
+    b <- cb - m
+    if (one_sided) {
+      lC <- pnorm(b, log.p = TRUE)
+    } else {
+      a <- ca - m
+      lC <- as.vector(.log_cell_mass(matrix(b, 1), matrix(a, 1), ones))
+    }
+    tot <- sum(lC)
+    if (!is.finite(tot)) return(NULL)
+    eb <- exp(-0.5 * b * b - l2pi - lC)
+    if (one_sided) {
+      g1 <- eb
+      g2 <- -(b + eb) * eb
+    } else {
+      ea <- exp(-0.5 * a * a - l2pi - lC)
+      g1 <- eb - ea
+      ta <- a * ea; ta[ea == 0] <- 0
+      tb <- b * eb; tb[eb == 0] <- 0
+      g2 <- ta - tb - g1 * g1
+    }
+    list(val = tot - 0.5 * sum(f * f),
+         G = -as.vector(crossprod(Ws, g1)) - f,
+         P = eye - crossprod(Ws * g2, Ws))
+  }
+  solve_small <- function(P, G) {
+    if (r == 1L) return(G / P[1, 1])
+    c(P[2, 2] * G[1] - P[1, 2] * G[2], P[1, 1] * G[2] - P[2, 1] * G[1]) /
+      (P[1, 1] * P[2, 2] - P[1, 2] * P[2, 1])
+  }
+  f <- rep(0, r)
+  d <- evaluate(f)
+  if (is.null(d)) return(NULL)
+  for (it in seq_len(50L)) {
+    step <- solve_small(d$P, d$G)
+    dec <- sum(d$G * step)
+    if (!is.finite(dec)) return(NULL)
+    # dec / 2 is the predicted rise to the mode: 1e-4 is within a
+    # hundredth of a width of it
+    if (dec < 1e-4) break
+    t <- 1
+    repeat {
+      fn <- f + t * step
+      dn <- evaluate(fn)
+      if (!is.null(dn) && dn$val >= d$val - 1e-12) break
+      t <- t / 2
+      if (t < 1e-6) break
+    }
+    if (t < 1e-6) break
+    f <- fn; d <- dn
+  }
+  e <- .eigh_small(d$P)
+  U <- e$vectors
+  sig <- 1 / sqrt(pmax(e$values, 1))
+  Us <- U * rep(sig, each = r)
+  probe <- rbind(t(3 * Us), t(-3 * Us)) + rep(f, each = 2L * r)  # (2r, r)
+  mp <- probe %*% t(Ws)                                          # (2r, n)
+  bp <- rep(cb, each = 2L * r) - mp
+  lC <- if (one_sided) pnorm(bp, log.p = TRUE) else
+    .log_cell_mass(bp, rep(ca, each = 2L * r) - mp, ones)
+  drop <- d$val - rowSums(lC) + 0.5 * rowSums(probe^2)
+  eff <- 3 * sig / sqrt(2 * pmin(drop[seq_len(r)], drop[r + seq_len(r)]))
+  eff[is.na(eff) | !(eff > 0)] <- 1
+  sig <- pmin(pmax(sig, eff), 1)
+  gh <- .gh_nodes(r, .gh_order(r, sharp))
+  X <- gh$F
+  F <- (X * rep(sig, each = nrow(X))) %*% t(U) + rep(f, each = nrow(X))
+  logw <- 0.5 * (gh$X2 - rowSums(F^2)) + sum(log(sig))
+  list(F = F, W = gh$W * exp(logw))
 }
 
 #' Exact factor-plus-diagonal decomposition of a covariance, if one exists
@@ -297,6 +439,14 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     mean <- if (is.null(mean)) rep(0, nn) else .as_len(mean, nn, "mean")
     lower <- .as_len(lower, nn, "lower", finite = FALSE)
     upper <- .as_len(upper, nn, "upper", finite = FALSE)
+    .check_bounds(lower, upper)
+    # unconstrained coordinates leave before the decomposition (#487)
+    free <- lower == -Inf & upper == Inf
+    if (all(free)) return(structure(1, method = "factor"))
+    if (any(free)) {
+      sigma <- as.matrix(sigma)[!free, !free, drop = FALSE]
+      mean <- mean[!free]; lower <- lower[!free]; upper <- upper[!free]
+    }
     fd <- factorize_covariance(sigma)
     if (is.null(fd)) {
       sigma <- as.matrix(sigma)
@@ -333,6 +483,14 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
   lower <- .as_len(lower, n, "lower", finite = FALSE)
   upper <- .as_len(upper, n, "upper", finite = FALSE)
   .check_bounds(lower, upper)
+  # a coordinate bounded by (-Inf, Inf) has cell 1 for every factor draw:
+  # marginalised out exactly before any rule is chosen (#487)
+  free <- lower == -Inf & upper == Inf
+  if (all(free)) return(structure(1, method = "factor"))
+  if (any(free)) {
+    V <- V[!free, , drop = FALSE]; D <- D[!free]; mean <- mean[!free]
+    lower <- lower[!free]; upper <- upper[!free]
+  }
   st <- .drop_constants(rowSums(V^2) + D, mean, lower, upper)
   if (!is.null(st$done)) return(st$done)
   keep <- st$keep
@@ -342,14 +500,17 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
   }
   if (length(D) == 1L)
     return(.univariate(lower, upper, mean, sum(V^2) + D))
-  # a factor no coordinate loads on integrates out exactly
-  V <- V[, colSums(V != 0) > 0, drop = FALSE]
+  V <- .canonical_loadings(V)
   s <- sqrt(D)
   if (ncol(V) == 0L) {
     lm <- .log_cell_mass(matrix(upper - mean, 1), matrix(lower - mean, 1), s)
     return(structure(exp(sum(lm)), method = "factor", nodes = 1L))
   }
-  nd <- .nodes_for(V, D)
+  nd <- .adaptive_rule(V, D, mean, lower, upper)
+  if (is.null(nd)) {
+    V <- .sign_fixed(V)
+    nd <- .nodes_for(V, D)
+  }
   M <- nd$F %*% t(V)                        # (Q, n) conditional shifts
   lo <- sweep(-M, 2, lower - mean, "+")     # (Q, n): lower - mean - v'f
   hi <- sweep(-M, 2, upper - mean, "+")
@@ -364,6 +525,7 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     # deep tail: the integrand concentrates in a corner of factor space
     # that centered nodes cannot see. Recenter at the mode of the
     # log-integrand and importance-reweight.
+    V <- .sign_fixed(V)
     r <- ncol(V)
     logint <- function(f) {
       z <- as.vector(V %*% f)
