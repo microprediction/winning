@@ -581,8 +581,14 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
                 pad = max(pad, float(max(span)))
             else:
                 pad = max(pad, 12.0)
-        lo = float((m - pad * sd.max()).min())
-        hi = float((m + pad * sd.max()).max())
+        # sized from the RANKED runners only: an omitted runner is
+        # integrated out and never enters the integrand, but a diffuse
+        # one stretched the grid until the likelihood exceeded one and a
+        # distant one moved it off the field altogether (#648)
+        act = np.asarray(order, dtype=int)
+        ma, sda = m[act], sd[act]
+        lo = float((ma - pad * sda.max()).min())
+        hi = float((ma + pad * sda.max()).max())
     x = np.linspace(lo, hi, L)
     dx = x[1] - x[0]
 
@@ -964,16 +970,20 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     if base != "normal":
         span = getattr(base, "span", None)
         pad = max(pad, float(max(span))) if span is not None else max(pad, 12.0)
+    # every extent from the ranked columns only: unranked runners are
+    # integrated out and must not size the lattice (#648)
+    act = np.asarray(order, dtype=int)
+    Ma, sda = Ms[:, act], sd[act]
     if curves is not None:
         ext_lo = min(float(curves[j][0][0]) for j in order)
         ext_hi = max(float(curves[j][0][-1]) for j in order)
-        lo = float(Ms.min()) + ext_lo
-        hi = float(Ms.max()) + ext_hi
+        lo = float(Ma.min()) + ext_lo
+        hi = float(Ma.max()) + ext_hi
     else:
-        lo = float((Ms - pad * sd.max()).min())
-        hi = float((Ms + pad * sd.max()).max())
+        lo = float((Ma - pad * sda.max()).min())
+        hi = float((Ma + pad * sda.max()).max())
     if L is None:
-        span_single = float(Ms[0].max() - Ms[0].min()) + 16 * float(sd.max())
+        span_single = float(Ma[0].max() - Ma[0].min()) + 16 * float(sda.max())
         dx_t = span_single / 2001.0
         L = int(np.clip(np.ceil((hi - lo) / max(dx_t, 1e-12)), 2001, 8001))
     x = np.linspace(lo, hi, L)
