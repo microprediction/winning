@@ -81,6 +81,18 @@ low_high <- function(offset, L) {
   }
 }
 
+# Only differences between offsets matter. Each offset past +/-(L-2) was
+# clamped on its own, so translating a book across the lattice edge
+# erased its contrast: c(-3, 3) priced c(1, 0) and c(17, 23) c(.5, .5) at
+# L=15 (#585). A book with an entry out of range is first moved by the
+# integer nearest its midpoint; an in-range book is untouched.
+edge_centred <- function(offsets, L) {
+  fin <- offsets[is.finite(offsets)]
+  if (!length(fin) || (min(fin) >= -(L - 2) && max(fin) <= L - 2)) return(offsets)
+  c0 <- floor((min(fin) + max(fin)) / 2 + 0.5)
+  ifelse(is.finite(offsets), offsets - c0, offsets)
+}
+
 shifted_cdf <- function(cdf, offset, L) {
   lh <- low_high(offset, L)
   lh$lo_coef * integer_shift(cdf, lh$lo) +
@@ -230,6 +242,7 @@ np_interp <- function(x, xp, fp) {
 state_prices_from_offsets <- function(density, offsets) {
   density <- as_classic_density(density)
   L <- implied_L(density)
+  offsets <- edge_centred(offsets, L)
   base <- padded_base_cdf(density)
   cdfs <- lapply(offsets, function(o) shifted_cdf(base, o, L))
   exact_state_prices_from_cdfs(cdfs)

@@ -263,10 +263,24 @@ function asOffsets(x, where) {
   return asFiniteVector(x, where, "offset");
 }
 
+/* Only differences between offsets matter. Each offset past +/-(L-2)
+   was clamped on its own, so translating a book across the lattice edge
+   erased its contrast: [-3, 3] priced [1, 0] and [17, 23] [0.5, 0.5] at
+   L=15 (#585). A book with an entry out of range is first moved by the
+   integer nearest its midpoint; an in-range book is untouched. */
+function edgeCentred(offsets, L) {
+  if (!offsets.length) return offsets;
+  const lo = Math.min(...offsets), hi = Math.max(...offsets);
+  if (lo >= -(L - 2) && hi <= L - 2) return offsets;
+  const c = Math.floor((lo + hi) / 2 + 0.5);
+  return offsets.map(o => o - c);
+}
+
 export function statePricesFromOffsets(density, offsets) {
   density = asClassicDensity(density);
   offsets = asOffsets(offsets, "offsets");
   const L = impliedL(density);
+  offsets = edgeCentred(offsets, L);
   const base = paddedBaseCdf(density);
   return exactStatePrices(Array.from(offsets, o => shiftedCdf(base, o, L)));
 }

@@ -277,3 +277,11 @@ test_that("a scratched runner's dividend is Inf and round-trips to zero (#665)",
   expect_equal(divs[3], Inf)
   expect_equal(prices_from_dividends(divs)[3], 0)
 })
+
+test_that("a common translation across the lattice edge keeps the contrast (#585)", {
+  d <- skew_normal_density(15, 0.5, a = 0)
+  base <- state_prices_from_offsets(d, c(-3, 3, 1))
+  for (s in c(11, 20, -20, 40, -55))
+    expect_lt(max(abs(state_prices_from_offsets(d, c(-3, 3, 1) + s) - base)), 1e-12)
+  expect_gt(base[1], 0.9)
+})

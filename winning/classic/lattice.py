@@ -792,6 +792,20 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
             return state_prices
 
 
+def _edge_centred(offsets, L):
+    """ Only differences between offsets matter. Each offset past
+    +/-(L-2) was clamped on its own, so translating a book across the
+    lattice edge erased its contrast: [-3, 3] priced [1, 0] and [17, 23]
+    [0.5, 0.5] at L=15 (#585). A book with an entry out of range is first
+    moved by the integer nearest its midpoint; an in-range book is
+    untouched, so its prices do not move. """
+    fin = [float(o) for o in offsets if math.isfinite(o)]
+    if not fin or (min(fin) >= -(L - 2) and max(fin) <= L - 2):
+        return offsets
+    c = math.floor((min(fin) + max(fin)) / 2 + 0.5)
+    return [o - c if math.isfinite(o) else o for o in offsets]
+
+
 def state_prices_from_offsets(density, offsets):
     """ Returns a list of state prices for a race where all horses have the same density
         up to a translation (the offsets)
@@ -799,6 +813,7 @@ def state_prices_from_offsets(density, offsets):
     # See the paper for a definition of state price
     # Be aware that this may fail if offsets provided are integers rather than float
     density = as_classic_density(density)
+    offsets = _edge_centred(offsets, implied_L(density))
     if _HAVE_RUST:
         return list(_fastrace.classic_exact_state_prices(
             [float(d) for d in density], [float(o) for o in offsets]))

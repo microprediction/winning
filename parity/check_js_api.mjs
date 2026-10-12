@@ -1990,5 +1990,16 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         a => a[0] < a[1] && Math.abs(a[0] + 0.2646016516) < 1e-8 && Math.abs(a[1] - 0.3455146431) < 1e-8,
         a => JSON.stringify(a));
 
+// --- classic: a common translation across the lattice edge keeps the contrast (#585)
+{
+  const d = classic.skewNormalDensity(15, 0.5, { a: 0 });
+  const base = classic.statePricesFromOffsets(d, [-3, 3, 1]);
+  for (const c of [11, 20, -20, 40, -55])
+    accepts(`statePricesFromOffsets is translation-free at shift ${c} (#585)`,
+            () => classic.statePricesFromOffsets(d, [-3 + c, 3 + c, 1 + c]),
+            p => p.every((x, i) => Math.abs(x - base[i]) < 1e-12) && base[0] > 0.9,
+            p => JSON.stringify(p));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
