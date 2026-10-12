@@ -63,7 +63,10 @@ def verify(verbose=True):
     V2 = rng2.normal(size=(4, 2)) * 0.5
     ch = rng2.integers(0, 4, 20)
     ll, dmu, dV = choice_loglik_and_score(mu2, V2, ch)
-    check("likelihood value", float(ll), -51.33284124278608, 1e-6)
+    # regenerated 2026-10-12 for the tilted own-noise rule (#128, #270):
+    # was -51.33284124278608; a 21-node tensor gives -51.33082, so the
+    # default rule moved from 2.0e-3 to 7e-5 of it
+    check("likelihood value", float(ll), -51.33089133248173, 1e-6)
     check("likelihood common-shift invariance",
           float(choice_loglik_and_score(mu2 + 2.5, V2, ch)[0] - ll),
           0.0, 1e-9)
