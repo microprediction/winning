@@ -16,7 +16,11 @@
   if (length(amp) == 1) amp <- rep(amp, length(mu))
   m_lo <- mu - amp
   m_hi <- mu + amp
-  smax <- max(max(sd), 1e-12)
+  # the field's own scale: every caller passes positive sds (.as_idio),
+  # and an absolute 1e-12 floor stopped the window shrinking with the
+  # model, so the same race in units of 1e-14 lost 0.7% of its mass at 257
+  # points and raised (#100)
+  smax <- max(sd)
   Fx <- function(x, m) exp(sum(log(pmax(stats::pnorm((x - m) / sd), .TINY))))
   lo <- min(m_lo) - 9 * smax
   step <- 9 * smax

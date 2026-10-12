@@ -360,7 +360,9 @@
   prev_step <- NULL
   rmax <- Inf
   cached <- NULL  # forward of an accepted Aitken trial
+  iters <- 0L
   for (it in seq_len(n_iter)) {
+    iters <- it
     fw <- if (is.null(cached)) forward(mu) else cached
     cached <- NULL
     resid <- fw$resid
@@ -426,7 +428,7 @@
     if (!is.null(prev) && !isTRUE(r_end < prev$rmax)) mu <- prev$mu
     else rmax <- r_end
   }
-  list(mu = mu, converged = rmax < tol, resid = rmax)
+  list(mu = mu, converged = rmax < tol, resid = rmax, iters = iters)
 }
 
 # The Aitken-extrapolated iterate as a bounded, checked trial (#583),
@@ -577,6 +579,15 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     }
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
+  target <- as.numeric(p)
+  # finite BEFORE the sign test: NaN slips past `<= 0` (#110). And
+  # before the structure= dispatch, so every grammar shares one target
+  # contract: Blocks floored a zero share and Nested/Tree logged it as
+  # 1e-300, returning finite abilities for an impossible target that
+  # Independent and Factor refused (#659)
+  if (length(target) == 0L || any(!is.finite(target)))
+    stop("target probabilities must be finite", call. = FALSE)
+  if (any(target <= 0)) stop("all target probabilities must be positive")
   if (!is.null(structure)) {
     if (is.null(cov)) .refuse_second_covariance(V, D, F, W)
     # an explicit n_iter/tol reaches every grammar; left missing, each
@@ -586,11 +597,6 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
                                n_iter = if (missing(n_iter)) NULL else n_iter,
                                tol = if (missing(tol)) NULL else tol))
   }
-  target <- as.numeric(p)
-  # finite BEFORE the sign test: NaN slips past `<= 0` (#110)
-  if (length(target) == 0L || any(!is.finite(target)))
-    stop("target probabilities must be finite", call. = FALSE)
-  if (any(target <= 0)) stop("all target probabilities must be positive")
   target <- .rescaled_target(target)
   logt <- log(target)
   n <- length(target)
@@ -624,8 +630,14 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
   scale <- sqrt(median(Dn) + mean(diag(SigV)))
   if (n == 2 && identical(base, "normal")) {
     # a pair is one Gaussian contrast: closed form (matching python)
-    sd_d <- sqrt(max(SigV[1, 1] + SigV[2, 2] - 2 * SigV[1, 2] + Dn[1] + Dn[2],
-                     1e-300))
+    # The contrast sd, formed in units of the largest entry so it neither
+    # overflows (D = c(9e307, 9e307) summed to Inf and returned -Inf/Inf)
+    # nor hits an absolute floor (max(var, 1e-300) changed the model below
+    # contrast sd 1e-150, #100)
+    cs <- sqrt(max(Dn[1], Dn[2], abs(SigV[1, 1]), abs(SigV[2, 2])))
+    sd_d <- cs * sqrt(max((SigV[1, 1] / cs) / cs + (SigV[2, 2] / cs) / cs -
+                          2 * (SigV[1, 2] / cs) / cs +
+                          (Dn[1] / cs) / cs + (Dn[2] / cs) / cs, 0))
     # invert the SMALLER share: for c(1, 1e-16) the normalized first
     # share rounds to exactly 1 and qnorm(1) = Inf, while the
     # permutation was finite (#412)
@@ -645,7 +657,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     mu <- -(logt - mean(logt)) / 2 * scale
     fwd <- function(m) {
       g <- .ghk_race(m, dense, want_slopes = TRUE)
-      list(resid = g$logp - logt, dres = pmin(g$dlogp, -1e-6))
+      list(resid = g$logp - logt, dres = pmin(g$dlogp, -1e-6 / scale))
     }
     out <- .jacobi_sweeps(mu, fwd, scale, alpha, max(n_iter, 120), tol)
     if (!out$converged)
@@ -656,7 +668,10 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     ps <- race_probabilities(m, V = V, D = D, F = F, W = W, base = base,
                              points = points, return_slopes = TRUE)
     phat <- pmax(ps$p, 1e-300)
-    list(resid = log(phat) - logt, dres = pmin(ps$slopes / phat, -1e-6))
+    # the slope floor in the field's units: d log p / d mu scales as
+    # 1 / scale, so an absolute -1e-6 took over past scale 1e6 and the
+    # same race at D = 1e20 stopped 0.062 of a share short (#100)
+    list(resid = log(phat) - logt, dres = pmin(ps$slopes / phat, -1e-6 / scale))
   }
   out <- .jacobi_sweeps(mu, fwd, scale, alpha, n_iter, tol)
   if (!out$converged)
