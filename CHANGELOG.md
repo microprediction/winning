@@ -26,17 +26,18 @@
   and was 4.9e-7 (normal), 2.2e-5 (logistic) and 3.0e-5 (gumbel) off,
   falling to 1e-16 at 101-201 nodes, whatever the lattice size.
 
-- The Laplace base (and the exponential power family below beta = 2)
-  integrates on a lattice split at every runner's kink, Gauss-Legendre
-  on each piece (`races.kink_lattice`), in `race_probabilities` and in
-  `race_jacobian`/`race_jacobian_row`, which must share its grid. The
-  uniform lattice is second order across a kink: a four-runner laplace
-  race was 4e-4 off at the default 257 points and 2e-6 off at 4097,
-  against the certificate; it is now 3.5e-15 off at the same budget.
-  The `races.py` note calling the kinked case "measured accurate" was
-  wrong. Kinked bases no longer dispatch to the compiled kernel, which
-  has only the uniform lattice. Not yet carried over: `topk`
-  (likely #267), and the R and Julia ports.
+- `kink_split=True` (opt-in; default `False`) on `race_probabilities`,
+  `race_jacobian` and `race_jacobian_row`: the Laplace base (and the
+  exponential power family below beta = 2) integrates on a lattice split
+  at every runner's kink, Gauss-Legendre on each piece
+  (`races.kink_lattice`). The default uniform lattice is second order
+  across a kink: a four-runner laplace race is 4e-4 off at the default
+  257 points; with `kink_split=True` it is 3.5e-15 off at the same
+  budget. The default path, its results and its compiled dispatch are
+  unchanged, bit for bit. The split lattice keeps at most `points // 4`
+  kinks (about `2 * points` nodes per factor node at any n) and costs
+  1.0-1.7x the numpy default; it has no compiled kernel. Not yet carried
+  over: `topk` (likely #267), and the R and Julia ports.
 
 ### Issue sweep, October 2026
 
