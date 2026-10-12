@@ -20,7 +20,9 @@ mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
     interactions, factor contrasts). Alternative-specific intercepts
     are added unless the formula removes the intercept with
     \code{0 +} or \code{- 1}; multi-part (\code{|}) formulas are not
-    supported.}
+    supported. \code{offset()} terms are fixed, coefficient-one
+    additions to each row's utility (several are summed) and must be
+    finite.}
   \item{data}{a long-format data frame, one row per (chooser,
     alternative), carrying an \code{idx} column or attribute whose
     first column is the chooser and second the alternative. A plain
@@ -43,11 +45,17 @@ mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
 \value{
 An object of class \code{mlogit_fast}: a list with
 \code{coefficients} (named covariate effects),
-\code{covariance_par} (loading parameters), \code{logLik},
-\code{time} (seconds), \code{convergence} (0 for success; 2, with a
-warning, when an alternative is never chosen, so its intercept has no
-finite MLE), \code{J}
-and \code{r}. A \code{print} method summarizes the fit.
+\code{covariance_par} (loading parameters, named \code{v[alternative,column]}),
+\code{loadings} (the loading matrix, rows named by alternative),
+\code{alternatives} (the alternative labels in fitted order),
+\code{logLik} (of the raw per-choice quadrature masses that are
+maximized), \code{time} (seconds), \code{convergence} (0 for success; 2,
+with a warning, when the likelihood has no finite maximizer: an
+alternative is never chosen, or the covariates separate the choices),
+\code{separation} (the recession direction, or \code{NULL}),
+\code{mass_defect} (the largest \code{|1 - sum_k P_k|} over the
+observations: how far the raw masses are from summing to one),
+\code{J} and \code{r}. A \code{print} method summarizes the fit.
 }
 \examples{
 set.seed(1)
