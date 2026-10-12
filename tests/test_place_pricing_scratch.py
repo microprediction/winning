@@ -2,6 +2,7 @@
 import math
 
 import numpy as np
+import pytest
 
 from winning.classic.lattice import skew_normal_density
 from winning.classic.lattice_calibration import ability_implied_state_prices, dividend_implied_ability
@@ -32,3 +33,25 @@ def test_scratched_runner_never_places():
         assert math.isnan(prices[bet][4]), (bet, prices[bet])  # zero counts
     # with five runners a top-4 slot is everyone else's: never the scratch
     assert math.isnan(prices["place4"][4])
+
+
+@pytest.mark.parametrize("n_live", [1, 2, 3, 4])
+def test_scratches_never_fill_places_in_a_short_field(n_live):
+    # fewer than four live runners: placegetters_from_performances asked
+    # for four places and nsmallest filled the rest with scratches (#627)
+    np.random.seed(1)
+    book = [2.0, 4.0, 8.0, 16.0][:n_live] + [math.inf] * (5 - n_live)
+    prices = skew_normal_place_pricing(book, n_samples=200)
+    for k, bet in enumerate(("win", "place2", "place3", "place4"), start=1):
+        p = prices[bet]
+        assert all(math.isnan(x) for x in p[n_live:]), (bet, p)  # scratches never place
+        if k > n_live:
+            assert all(math.isnan(x) for x in p), (bet, p)        # market unavailable
+        else:
+            assert all(x >= 1.0 for x in p[:n_live]), (bet, p)
+
+
+def test_placegetter_skips_infinite_scores():
+    from winning.classic.lattice_simulation import placegetter
+    row = [math.inf, 3.0, math.inf, 1.0]
+    assert [placegetter(row, k) for k in range(4)] == [3, 1, None, None]

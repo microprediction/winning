@@ -40,9 +40,15 @@ def placegetter(scores:[float], position:int):
     """ Return the index of the participant finishing in position+1
     :param scores:
     :param position:  0 for first place, 1 for second etc
-    :return:
+    :return:  the index, or None when fewer than position+1 participants
+              have a finite score. A scratched entrant (+inf score) never
+              finishes: nsmallest used to fill the missing places with
+              scratches in input order (#627).
     """
-    return heapq.nsmallest(position + 1, range(len(scores)), key=scores.__getitem__)[position]
+    live = [i for i, x in enumerate(scores) if x < math.inf]
+    if position >= len(live):
+        return None
+    return heapq.nsmallest(position + 1, live, key=scores.__getitem__)[position]
 
 
 def skew_normal_place_pricing(dividends, n_samples=N_SAMPLES, longshot_expon:float=1.0, a:float=STD_A, scale=STD_SCALE, nan_value=NAN_DIVIDEND) -> dict:
@@ -69,8 +75,14 @@ def skew_normal_place_pricing(dividends, n_samples=N_SAMPLES, longshot_expon:flo
     placegetters = placegetters_from_performances(performances=performances, n=4)
     the_counts = exotic_count(placegetters, do_exotics=False)
     n_runners = len(adj_dividends)
+    n_live = n_runners - sum(scratched)
     prices = dict()
     for bet_type, multiplicity in zip(PLACING_NAMES,range(1,5)):
+        if multiplicity > n_live:
+            # a top-k market needs k finishers: with fewer live runners it is
+            # unavailable, not completed with scratches (#627)
+            prices[bet_type] = [np.nan] * n_runners
+            continue
         prices[bet_type] = dividends_from_prices( [the_counts[bet_type][j] for j in range(n_runners)], multiplicity=multiplicity)
     return prices
 
