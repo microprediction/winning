@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+- `winning.certified`: win probabilities of the independent race as
+  Arb balls that provably contain the answer, for the normal, Gumbel,
+  logistic and Laplace bases. `certified_race_probabilities` integrates
+  with Arb's rigorous Gauss-Legendre rule (split at the Laplace kinks)
+  and bounds the tails in closed form; it returns 30 digits in under a
+  second for small fields and raises rather than return a wider ball.
+  `bracket_race_probabilities` is an independent first-order
+  certificate that uses only the monotonicity of the survival
+  functions. Tests pin both to closed forms (two-runner normal,
+  three- and four-runner arcsine orthants, Gumbel as Luce) and check
+  the float engine against them: inside 1e-13 for every base. Needs
+  `pip install winning[certified]` (python-flint).
+
+- `certified_factor_race_probabilities`: the same guarantee for the
+  factor race, U = mu + V f + sqrt(D) eps, on the analytic bases. An
+  adaptive tensor Gauss-Legendre cubature over (x, f) whose per-box
+  error is bounded by the Bernstein-ellipse theorem, with the integrand
+  bounded rigorously on complex boxes; the truncation is bounded by the
+  base's own tails. Five runners at rank one take seconds at 16 digits;
+  rank two takes tens of seconds. It measures the default factor node
+  rule: on a five-runner rank-one field it chose 15 Gauss-Hermite nodes
+  and was 4.9e-7 (normal), 2.2e-5 (logistic) and 3.0e-5 (gumbel) off,
+  falling to 1e-16 at 101-201 nodes, whatever the lattice size.
+
+- `kink_split=True` (opt-in; default `False`) on `race_probabilities`,
+  `race_jacobian` and `race_jacobian_row`: the Laplace base (and the
+  exponential power family below beta = 2) integrates on a lattice split
+  at every runner's kink, Gauss-Legendre on each piece
+  (`races.kink_lattice`). The default uniform lattice is second order
+  across a kink: a four-runner laplace race is 4e-4 off at the default
+  257 points; with `kink_split=True` it is 3.5e-15 off at the same
+  budget. The default path, its results and its compiled dispatch are
+  unchanged, bit for bit. The split lattice keeps at most `points // 4`
+  kinks (about `2 * points` nodes per factor node at any n) and costs
+  1.0-1.7x the numpy default; it has no compiled kernel. Not yet carried
+  over: `topk` (likely #267), and the R and Julia ports.
+
 ### Issue sweep, October 2026
 
 Fixes from the port-by-port issue sweep. Each block is from the PR that made the changes, and the issue numbers are in the PR bodies.

@@ -176,7 +176,8 @@ import winning.factor.races as wfr         # noqa: E402
 import winning.factor.topk as wft          # noqa: E402
 
 _HELPERS = {"as_loadings", "as_idio", "as_variance", "load_fastrace",
-            "forward_grid", "roots_hermitenorm", "ndtr", "ndtri",
+            "forward_grid", "kink_lattice", "roots_hermitenorm", "ndtr",
+            "ndtri",
             "log_ndtr", "logsumexp"}
 
 
@@ -266,6 +267,8 @@ OPTION_WAIVERS = {
         "W": "as F",
         "window": "covered by factor2_span",
         "delta": "a numerical floor, not a mode",
+        "kink_split": "python-only opt-in (the split lattice); the ports "
+                      "have the default uniform lattice the scenarios pin",
     },
     "abilities_from_race": {
         "temperature": "softmin is python only",
