@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.special import ndtr, ndtri
+from scipy.special import log_ndtr as _log_ndtr
 
 from .core import as_idio, as_loadings, as_weights, _gauge_center, hermite_nodes
 from ..shapes import as_factor_law, as_points, as_target, as_tolerance
@@ -410,6 +411,7 @@ def _translated_home(mu, D):
 
 
 def _setup(mu, V, D, F, W, base):
+    caller_rule = F is not None
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
     # mu was the one argument nobody checked: D goes through as_idio, V
@@ -557,8 +559,9 @@ def _setup(mu, V, D, F, W, base):
     # contract everywhere else.
     # as_factor_law also drops zero-weight nodes, which are no-ops for
     # the integral but would otherwise widen every window built from F
-    # (#416).
-    F, W = as_factor_law(F, W)
+    # (#416). Negligible caller nodes go too; the library's own rules
+    # are left exactly as built.
+    F, W = as_factor_law(F, W, negligible=caller_rule)
     return mu, V, D, F, W, fn, left, right
 
 
@@ -681,7 +684,7 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     # uses, so relaxation fires only when the tail would genuinely
     # outrun the lattice rather than whenever the budget is modest
     budget = 0.5 * float(s.min()) * _resolution(fn) * max(points - 1, 1)
-    d = float(delta)
+    d = _as_delta(delta)
     lo, hi = window_at(d)
     while hi - lo > budget and d < 1e-4:
         d = min(d * 100.0, 1e-4)
@@ -695,7 +698,104 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
             f"{hi - lo:.3g} units wide at the relaxed delta and exact "
             "there. Raise points= to tighten it.",
             RuntimeWarning, stacklevel=3)
+    if fn is None or fn is _normal:
+        lo, hi, points = _rare_winner_edges(mu_lo, mu_hi, s, lo, hi, points)
     return np.linspace(lo, hi, points)
+
+
+# Relative tail mass a runner's win integrand may leave outside the bulk
+# window, and the most the window's point count may grow to cover it.
+_EDGE_REL_TOL = 1e-6
+_EDGE_POINTS_CAP = 4
+
+
+def _edge_terms(x, m, s):
+    """At the points x (shape (K,)): every runner's log win-integrand
+    log g_i = log f_i + sum_{j != i} log S_j and its slope, for normal
+    performances at locations m, sds s. Shapes (K, n); O(K n)."""
+    z = (np.asarray(x, dtype=float)[:, None] - m[None, :]) / s[None, :]
+    logS = _log_ndtr(-z)
+    logphi = -0.5 * z * z - 0.5 * np.log(2.0 * np.pi)
+    haz = np.exp(logphi - logS) / s[None, :]
+    logg = logphi - np.log(s)[None, :] + logS.sum(axis=1, keepdims=True) - logS
+    slope = -z / s[None, :] - haz.sum(axis=1, keepdims=True) + haz
+    return logg, slope
+
+
+def _rare_winner_edges(mu_lo, mu_hi, s, lo, hi, points):
+    """Post-check the bulk window's edges against each runner's OWN win
+    integrand, and widen within a bounded cap (#97).
+
+    [G^-1(delta), H^-1(1 - delta)] holds all but 2 delta of the WINNER
+    distribution, which bounds every share's error by delta absolutely
+    but not relatively: at mu = [0, 20, 40] the middle runner wins near
+    x = 10, past the right edge, and came back at 0.099 of its 1.04e-45.
+    For a log-concave (normal) integrand, the mass beyond an edge is at
+    most g(edge) / |slope| (tangent bound) and the mass inside is at
+    least the chord integral over any inner stretch next to the edge
+    (the best of a geometric ladder of lengths is used); a runner whose
+    ratio exceeds _EDGE_REL_TOL (or whose integrand still rises at the
+    edge) is truncated. The edge then moves out until every runner
+    passes, with the point count scaled to keep the spacing, up to
+    _EDGE_POINTS_CAP times the request; past the cap the window stops
+    there and a warning says so. One O(13 n) probe per edge; ordinary
+    fields pass it and are unchanged."""
+    width0 = hi - lo
+    if not (width0 > 0) or len(s) < 2:
+        return lo, hi, points
+    spacing = width0 / max(points - 1, 1)
+    max_width = spacing * (_EDGE_POINTS_CAP * points - 1)
+    ws = 0.5 * width0 * 0.25 ** np.arange(6)
+    log_ws = np.log(ws)[:, None]
+
+    def bad(edge, m, sign):
+        # sign +1: right edge (integrand must FALL outward), -1: left
+        logg_all, slope_all = _edge_terms(np.r_[edge, edge - sign * ws], m, s)
+        logg, out_slope = logg_all[0], sign * slope_all[0]
+        logg_in = logg_all[1:]
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            tail = logg - np.log(np.maximum(-out_slope, 1e-300))
+            d = np.abs(logg_in - logg[None, :])
+            big = np.maximum(logg_in, logg[None, :])
+            # log of the chord integral w (e^A - e^B) / (A - B)
+            c = np.where(d < 1e-12, logg[None, :] + log_ws,
+                         big + log_ws + np.log(-np.expm1(-d))
+                         - np.log(np.maximum(d, 1e-300)))
+            ratio = tail - c.max(axis=0)
+        # NaN (an unrepresentable field) is not evidence of truncation
+        return (out_slope >= 0) | (ratio >= np.log(_EDGE_REL_TOL))
+
+    new_lo, new_hi = lo, hi
+    for sign, m in ((+1, mu_hi), (-1, mu_lo)):
+        edge = new_hi if sign > 0 else new_lo
+        if not bad(edge, m, sign).any():
+            continue
+        step = float(s.max())
+        for _ in range(60):
+            cand = edge + sign * step
+            if (max(new_hi, cand) - min(new_lo, cand)) > max_width:
+                edge = (new_lo + max_width) if sign > 0 else (new_hi - max_width)
+                import warnings
+                warnings.warn(
+                    "bulk window: a rare winner's integrand extends past "
+                    f"the window even at {_EDGE_POINTS_CAP}x the point "
+                    "budget, so its share is truncated (relatively; the "
+                    "absolute error stays below delta). Raise points= or "
+                    "use window='span' for relative accuracy on such "
+                    "shares.", RuntimeWarning, stacklevel=4)
+                break
+            edge = cand
+            if not bad(edge, m, sign).any():
+                break
+            step *= 2.0
+        if sign > 0:
+            new_hi = edge
+        else:
+            new_lo = edge
+    if (new_lo, new_hi) == (lo, hi):
+        return lo, hi, points
+    pts = int(np.ceil((new_hi - new_lo) / spacing)) + 1
+    return new_lo, new_hi, max(points, min(pts, _EDGE_POINTS_CAP * points))
 
 
 def _resolution(fn):
@@ -729,6 +829,20 @@ def _as_window(window):
     return window
 
 
+def _as_delta(delta):
+    """The bulk window's tail mass: a real number in (0, 0.5). It was
+    unvalidated: delta=-1 made the relaxation loop multiply a negative
+    number by 100 forever (a hang), delta=1 or 2 put both quantiles past
+    each other and priced a different race, and NaN returned NaN (#445)."""
+    if (isinstance(delta, (bool, np.bool_))
+            or not isinstance(delta, (int, float, np.integer, np.floating))):
+        raise ValueError(f"delta must be a number in (0, 0.5); got {delta!r}")
+    d = float(delta)
+    if not (np.isfinite(d) and 0.0 < d < 0.5):
+        raise ValueError(f"delta must be a number in (0, 0.5); got {delta!r}")
+    return d
+
+
 def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
                  delta=1e-12):
     """THE lattice: window plus any sharpness refinement, in one place.
@@ -744,6 +858,7 @@ def forward_grid(M_all, sd, V, fn, left, right, points, window="bulk",
     """
     sd = np.asarray(sd, dtype=float)
     _as_window(window)
+    delta = _as_delta(delta)                          # (#445)
     if window == "bulk":
         x = _bulk_window(M_all, sd, points, delta, fn)
     else:
@@ -763,6 +878,9 @@ def _refine_grid(x, sd, V, points, stacklevel=2, fn=None):
     crossing the n*Q threshold silently dropped the refinement (TV
     2.5e-2 on a scaled sharp field). Returns (x, points)."""
     sd = np.asarray(sd, dtype=float)
+    # the window may arrive longer than requested: the rare-winner edge
+    # check widens it at the requested spacing (#97)
+    points = max(points, len(x))
     dx = x[1] - x[0]
     smin = float(sd.min())
     res = _resolution(fn)
@@ -1067,6 +1185,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     temperature = _as_temperature(temperature)
     points = as_points(points)
     window = _as_window(window)                      # (#582)
+    delta = _as_delta(delta)                          # (#445)
     if cov is not None:
         # The forward normal race with no slopes is the one case that can
         # be answered without the fit at all; everything else (slopes for
@@ -1321,9 +1440,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         # the floor is a PROBABILITY: normalize (scale-safely) first. Floored
         # in the caller's units, [c, 0] at c = 1e-6 / 1 / 1e6 returned gaps
         # of 0 / 4.75 / 7.03 for one and the same relative target (#592)
-        target = _floorable(target, 1.0)
-        floored = target < target_floor
-        target = np.maximum(target, target_floor)
+        target, floored = _apply_floor(target, 1.0, target_floor)
     else:
         floored = np.zeros(len(target), dtype=bool)
         if np.any(target <= 0):
@@ -1394,7 +1511,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     # The default nodes have unit covariance, where this is mean ||V_i||^2.
     _Dn = np.ones(n_t) if D is None else as_idio(D, n_t)
     _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
-    _Vc = _Vn - _Vn.mean(axis=0)
+    _Vc = _gauge_center(_Vn)                       # scale-safe (#471)
     if V is not None and nodes_given:
         _Fq = np.asarray(F, dtype=float).reshape(len(F), -1)
         _Wq = (np.ones(len(_Fq)) / len(_Fq) if W is None
@@ -1705,6 +1822,34 @@ def _floorable(target, mass):
     return target * (mass / target.sum())
 
 
+def _apply_floor(target, mass, floor):
+    """Floor a target at `floor` IN ITS FINAL NORMALISED SCALE (#592).
+
+    Normalise to `mass` (1 for a race, k slots for top-k), raise the
+    entries below the floor to exactly the floor, and take that mass
+    proportionally from the others -- repeating if that pushes another
+    entry under the floor. Clamping and then renormalising scaled the
+    floor itself back down: [.7, .3, 0] at floor .2 repriced its floored
+    runner at 0.167. A floor no target of this mass can meet (n * floor
+    >= mass) raises. Returns (target, floored mask)."""
+    t = _floorable(target, mass)
+    floored = t < floor
+    for _ in range(len(t)):
+        free = mass - floor * int(floored.sum())
+        rest = t[~floored].sum()
+        if not (free > 0 and rest > 0):
+            raise ValueError(
+                f"target_floor={floor:g} is infeasible: flooring "
+                f"{int(floored.sum())} of {len(t)} entries at it leaves no "
+                f"mass for the rest of a target of total {mass:g}")
+        scaled = np.where(floored, floor, t * (free / rest))
+        newly = ~floored & (scaled < floor)
+        if not newly.any():
+            break
+        floored = floored | newly
+    return scaled, floored
+
+
 def _inverse_return(mu, converged, resid_max, iters, floored, tol,
                     return_info):
     """One exit for every inversion path, so the contract cannot differ
@@ -1744,6 +1889,23 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
     # written at c = 1e-3 and 0.25 at c = 1e3 (#100)
     scale = float(np.sqrt(np.median(totvar)))
     mu = -(logt - logt.mean()) / 2.0 * scale
+    # Trial states are priced under the hierarchical kernels' looser trial
+    # mass tolerance: they only steer, and the strict 0.5% check rejected
+    # a self-generated target at its own warm start (#656). The state
+    # returned as converged is re-priced under the strict check below.
+    from .blocks import _trial_mass_tolerance
+    with _trial_mass_tolerance():
+        mu, err, iters = _structure_sweeps(mu, logt, structure, totvar,
+                                           scale, points, n_iter, tol)
+    if err < tol:
+        phat = dispatch_probabilities(mu, structure, points=points)
+        err = float(np.abs(np.log(np.maximum(phat, 1e-300)) - logt).max())
+    return mu, bool(err < tol), float(err), iters
+
+
+def _structure_sweeps(mu, logt, structure, totvar, scale, points, n_iter,
+                      tol):
+    from .structures import dispatch_probabilities
     alpha, last = 0.7, np.inf
     err, iters = np.inf, 0
     for it in range(n_iter):
@@ -1762,7 +1924,7 @@ def _abilities_from_structure(target, structure, points=257, n_iter=120,
         lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
         mu = mu - np.clip(alpha * resid / dlogp, -lim, lim)
         mu -= mu.mean()
-    return mu, bool(err < tol), float(err), iters
+    return mu, float(err), iters
 
 
 # ---------------------------------------------------------------------------
@@ -2169,8 +2331,13 @@ def plackett_luce_topk_probabilities(p, k=3):
     # drifted to k + 3e-3 (caught by the gap-stress battery)
     rest = np.array([p[np.arange(n) != j].sum() for j in range(n)])
     # second: j first, i second -- P2[j, i] = p_j p_i / rest_j
-    P2 = (p / np.maximum(rest, 1e-300))[:, None] * p[None, :]
+    # as p_j * (p_i / rest_j): p_i <= rest_j off the diagonal, so the
+    # ratio is at most one and every POSITIVE rest is a valid divisor. A
+    # floor of 1e-300 under rest underpaid subnormal longshots, so
+    # [1, 1e-301 x3] gave top-2 memberships summing to 1.3, not 2 (#384).
     exhausted = rest <= 0.0
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        P2 = p[:, None] * (p[None, :] / np.where(exhausted, 1.0, rest)[:, None])
     P2[exhausted, :] = (p[exhausted] / (n - 1))[:, None]
     np.fill_diagonal(P2, 0.0)
     out += P2.sum(axis=0)
@@ -2196,7 +2363,10 @@ def plackett_luce_topk_probabilities(p, k=3):
             if denom2 <= 0.0:
                 contrib = np.full(n, w / (n - 2))
             else:
-                contrib = w * p / denom2
+                # w * (p / denom2): the product w * p underflows first
+                # for subnormal longshots (#384)
+                with np.errstate(over="ignore", invalid="ignore"):
+                    contrib = w * (p / denom2)
             contrib[j] = 0.0
             contrib[sec] = 0.0
             out += contrib

@@ -15,7 +15,7 @@ Blocks(cluster, loading, D)
 
 Nested(cluster, loading, D, coupling, gamma = 1)
 
-Tree(cluster, loading, D, parent, strength)
+Tree(cluster, loading, D, parent, strength, leaves = NULL)
 }
 \arguments{
 \item{D}{idiosyncratic variances (always the VARIANCE)}
@@ -26,6 +26,9 @@ Tree(cluster, loading, D, parent, strength)
 \item{gamma}{coupling strength in [0, 1]}
 \item{parent}{1-based parent index per node (root: 0 or NA)}
 \item{strength}{per-node uniform shared-effect strength}
+
+\item{leaves}{optional Tree leaf labels in leaf-node order; NULL uses the
+sorted cluster labels (#372)}
 }
 \value{A structure object for the structure= argument of
 \code{\link{race_probabilities}}, \code{\link{abilities_from_race}},

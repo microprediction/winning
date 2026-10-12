@@ -380,3 +380,20 @@ test_that("a rank that splits a tied eigenspace warns, as python (#383)", {
   C2 <- tcrossprod(V) + diag(runif(n, 0.5, 1.5))
   expect_no_warning(.warn_if_rank_splits_a_tie(C2, 3L))
 })
+
+# positive semidefiniteness in correlation units (#666)
+test_that("fit_covariance refuses an indefinite block hidden by scale", {
+  expect_error(fit_covariance(rbind(c(1, 2, 0), c(2, 1, 0), c(0, 0, 1e12))),
+               "not positive semidefinite")
+  expect_error(fit_covariance(rbind(c(0, 1e-309), c(1e-309, 0))),
+               "not positive semidefinite")
+})
+
+# a common shift cancels from every contrast and from the fit (#465)
+test_that("fit_covariance is invariant to a common shift", {
+  C0 <- rbind(c(1.5, .3, -.2, .1), c(.3, 1.2, .4, 0), c(-.2, .4, .9, .2),
+              c(.1, 0, .2, 1.1))
+  f1 <- suppressWarnings(fit_covariance(C0 + 1))
+  f2 <- suppressWarnings(fit_covariance(C0 + 1e6))
+  expect_equal(f2$D, f1$D, tolerance = 1e-8)
+})

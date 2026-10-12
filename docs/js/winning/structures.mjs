@@ -1,7 +1,8 @@
 // One race, five covariance grammars -- port of winning/factor/structures.py.
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
-         abilitiesFromBlockRace, validateTree, withoutCommonShock } from "./blocks.mjs";
+         abilitiesFromBlockRace, validateTree, withoutCommonShock,
+         treeCluster, withTrialMassTolerance } from "./blocks.mjs";
 import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
          asLoadings, asIdio } from "./core.mjs";
 
@@ -10,13 +11,47 @@ export const Factor = (V, D) => ({ kind: "Factor", V, D });
 export const Blocks = (cluster, loading, D) => ({ kind: "Blocks", cluster, loading, D });
 export const Nested = (cluster, loading, D, coupling, gamma = 1.0) =>
   ({ kind: "Nested", cluster, loading, D, coupling, gamma });
-export const Tree = (cluster, loading, D, parent, strength) =>
-  ({ kind: "Tree", cluster, loading, D, parent, strength });
+// leaves[j] = the label of leaf node j; null keeps the sorted-label order
+// (labels 0..nC-1 are the leaf nodes) -- see blocks.treeLeafIndex (#372)
+export const Tree = (cluster, loading, D, parent, strength, leaves = null) =>
+  ({ kind: "Tree", cluster, loading, D, parent, strength, leaves });
 
 /* the tree race whose implied correlation IS the cophenetic matrix of a
    scipy-style linkage; negative cophenetic correlation floored at zero.
    A non-monotonic linkage (an inversion) is refused, as in python. */
+/* A scipy-style linkage checked at the constructor's own boundary
+   (python structures._as_linkage): row k merges two DISTINCT clusters that
+   already exist and are still active, at a finite non-negative height.
+   A self-reference built a cyclic parent (#328), ids were rounded, and a
+   negative height was squared into the tree of its absolute value (#459). */
+function checkLinkage(Z) {
+  if (!isVector(Z))
+    throw new Error("treeFromLinkage: a linkage must be an array of (n-1) rows");
+  const n = Z.length + 1;
+  const used = new Array(2 * n - 1).fill(false);
+  for (let k = 0; k < Z.length; k++) {
+    const row = Z[k];
+    if (!isVector(row) || row.length < 3)
+      throw new Error(`treeFromLinkage: linkage row ${k} must be [a, b, height, count]`);
+    const h = row[2];
+    if (typeof h !== "number" || !Number.isFinite(h) || h < 0)
+      throw new Error(`treeFromLinkage: linkage row ${k} merges at height ${h}: merge heights are finite non-negative distances (#459)`);
+    for (const c of [row[0], row[1]]) {
+      if (typeof c !== "number" || !Number.isInteger(c))
+        throw new Error(`treeFromLinkage: linkage row ${k} names cluster ${c}: cluster ids are whole numbers (#328)`);
+      if (c < 0 || c >= n + k)
+        throw new Error(`treeFromLinkage: linkage row ${k} uses cluster ${c} before it is formed: row ${k} may merge only ids below ${n + k} (#328)`);
+      if (used[c])
+        throw new Error(`treeFromLinkage: linkage row ${k} reuses cluster ${c}, already merged by an earlier row (#328)`);
+    }
+    if (row[0] === row[1])
+      throw new Error(`treeFromLinkage: linkage row ${k} merges cluster ${row[0]} with itself (#328)`);
+    used[row[0]] = used[row[1]] = true;
+  }
+}
+
 export function treeFromLinkage(Z) {
+  checkLinkage(Z);
   const n = Z.length + 1;
   const nT = 2 * n - 1;
   const parent = new Array(nT).fill(-1);
@@ -24,7 +59,7 @@ export function treeFromLinkage(Z) {
   // few ulps for near-duplicate leaves (python Tree.from_linkage, #430)
   const d = new Array(nT).fill(1);
   for (let k = 0; k < Z.length; k++) {
-    const a = Math.round(Z[k][0]), b = Math.round(Z[k][1]), h = Z[k][2];
+    const a = Z[k][0], b = Z[k][1], h = Z[k][2];
     const t = n + k;
     parent[a] = t; parent[b] = t;
     d[t] = Math.min(2 * h * h, 1);
@@ -101,21 +136,28 @@ function invertGenericInfo(p, forward, tol = 1e-9, maxIter = 400, scale = 1) {
   pv = rescaledTarget(pv);                 // overflow-safe (#463)
   const lt = pv.map(v => Math.log(v));
   const lm = mean(lt);
-  let mu = lt.map(v => -(v - lm) * scale);
-  let eta = 1.0;
-  let lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
-  let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
-  let iters = 0;
-  for (let it = 0; it < maxIter && err >= tol; it++) {
-    iters = it + 1;
-    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
-    const mm = mean(muN);
-    muN = muN.map(v => v - mm);
-    const lpN = forward(muN).map(v => Math.log(Math.max(v, 1e-300)));
-    const e = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
-    if (e < err) { mu = muN; lp = lpN; err = e; eta = Math.min(eta * 1.2, 1.5); }
-    else { eta *= 0.5; if (eta < 1e-4) break; }
-  }
+  // trial states under the hierarchical kernels' looser trial mass
+  // tolerance; the returned state is re-priced strictly (#656)
+  let { mu, iters } = withTrialMassTolerance(() => {
+    let mu = lt.map(v => -(v - lm) * scale);
+    let eta = 1.0;
+    let lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
+    let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+    let iters = 0;
+    for (let it = 0; it < maxIter && err >= tol; it++) {
+      iters = it + 1;
+      let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
+      const mm = mean(muN);
+      muN = muN.map(v => v - mm);
+      const lpN = forward(muN).map(v => Math.log(Math.max(v, 1e-300)));
+      const e = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
+      if (e < err) { mu = muN; lp = lpN; err = e; eta = Math.min(eta * 1.2, 1.5); }
+      else { eta *= 0.5; if (eta < 1e-4) break; }
+    }
+    return { mu, iters };
+  });
+  const lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
+  const err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
   return { mu, converged: err < tol, maxLogResidual: err, iterations: iters };
 }
 
@@ -141,7 +183,11 @@ function structureScale(s) {
   // scalar D, a scalar or (1, n) loading and a scalar coupling NaN (#597)
   const L = asLoadings(s.loading, n, "loading");
   const Dv = asIdio(s.D, n, "D");
-  const G = s.kind === "Nested" && s.coupling != null ? asLoadings(s.coupling, n, "coupling") : null;
+  // only an ACTIVE coupling is read: gamma === 0 is the Blocks race in the
+  // forward, which never looks at the coupling, so a stale wrong-length
+  // one priced fine and then failed the inverse (#644, as python)
+  const G = s.kind === "Nested" && s.coupling != null && (s.gamma ?? 1) !== 0
+    ? asLoadings(s.coupling, n, "coupling") : null;
   const tot = [];
   for (let i = 0; i < n; i++) {
     let v = Dv[i] + L[i].reduce((a, b) => a + b * b, 0);
@@ -152,14 +198,14 @@ function structureScale(s) {
     // the walk below follows parent pointers: validate first, as the
     // kernels do, or a cyclic tree spins here before they can refuse it
     validateTree(s.parent, s.strength, new Set(s.cluster).size, "Tree");
-    // add each leaf cluster's ancestor variance (labels remapped as the
-    // kernel does: sorted unique labels are leaf node ids)
-    const labels = [...new Set(s.cluster)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    const idx = new Map(labels.map((v, k) => [v, k]));
+    // add each leaf cluster's ancestor variance (labels mapped to leaf
+    // nodes as the kernel maps them, explicit leaves included, #372)
+    const leaf = treeCluster(s);
+    const nC = new Set(leaf).size;
     // a common ancestor's shock cancels: not part of the surrogate (#489)
-    const lam = withoutCommonShock(s.parent, s.strength, labels.length);
+    const lam = withoutCommonShock(s.parent, s.strength, nC);
     for (let i = 0; i < n; i++) {
-      let u = idx.get(s.cluster[i]), a = 0;
+      let u = leaf[i], a = 0;
       while (s.parent[u] >= 0) { u = s.parent[u]; a += lam[u] ** 2; }
       tot[i] += a;
     }
@@ -186,7 +232,7 @@ function dp(mu, s, opts) {
     return nestedRaceProbabilities(mu, s.cluster, s.loading, s.D,
                                    { coupling: s.coupling, gamma: s.gamma, points, qa, qf });
   if (s.kind === "Tree")
-    return treeRaceProbabilities(mu, s.cluster, s.loading, s.D, s.parent, s.strength,
+    return treeRaceProbabilities(mu, treeCluster(s), s.loading, s.D, s.parent, s.strength,
                                  { points, qa });
   throw new Error("unknown structure " + s.kind);
 }
@@ -216,7 +262,7 @@ function da(p, s, opts) {
     return invertGenericInfo(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
       { coupling: s.coupling, gamma: s.gamma, points, qa, qf }), tol, nIter ?? 400, structureScale(s));
   if (s.kind === "Tree")
-    return invertGenericInfo(p, m => treeRaceProbabilities(m, s.cluster, s.loading, s.D,
+    return invertGenericInfo(p, m => treeRaceProbabilities(m, treeCluster(s), s.loading, s.D,
       s.parent, s.strength, { points, qa }), tol, nIter ?? 400, structureScale(s));
   throw new Error("unknown structure " + s.kind);
 }

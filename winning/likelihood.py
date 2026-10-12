@@ -31,7 +31,7 @@ from .outcomes import as_luce_temperature, as_order
 from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
-from scipy.special import log_ndtr, ndtr, ndtri
+from scipy.special import log_ndtr, ndtri
 
 
 def _gh1(Q):
@@ -39,13 +39,64 @@ def _gh1(Q):
     return x, w / w.sum()
 
 
+# Factor orientation is arbitrary: V and V Q price the same law for any
+# orthogonal Q, and in particular for a column sign flip or permutation.
+# The Gauss-Hermite tensor is invariant under both, but a scrambled Sobol
+# cloud is not, so the sharp-branch probability moved by 0.0047 when one
+# loading column changed sign (#605). The cloud is therefore the orbit
+# of base points under the signed permutations of the factor
+# coordinates (all 2^r r! of them while that is at most 384, i.e.
+# r <= 4; the 2^r sign flips beyond), at about the same node count.
+# General rotations are not covered.
+_MAX_SYMMETRY_ORDER = 384
+
+
+def _factor_symmetries(r, n):
+    """(perms, signs) of the symmetrising group for r factor columns at
+    a budget of n nodes."""
+    import itertools
+    if r == 0:
+        return [()], [np.ones(0)]
+    signs = [np.array(sg, dtype=float)
+             for sg in itertools.product((1.0, -1.0), repeat=r)]
+    full = (2 ** r) * int(np.prod(np.arange(1, r + 1)))
+    if full <= min(_MAX_SYMMETRY_ORDER, n):
+        perms = list(itertools.permutations(range(r)))
+    elif 2 ** r <= n:
+        perms = [tuple(range(r))]
+    else:
+        return [tuple(range(r))], [np.ones(r)]
+    return perms, signs
+
+
+def symmetric_sobol_normal(r, extra, n, seed):
+    """Standard-normal scrambled-Sobol cloud of about n points in
+    r + extra dimensions whose first r (factor) coordinates are closed
+    under the signed permutations of _factor_symmetries; the extra
+    coordinates (own noise) ride along unchanged. Equal weights."""
+    import warnings
+    from scipy.stats import qmc
+    perms, signs = _factor_symmetries(r, n)
+    order = len(perms) * len(signs)
+    nb = int(np.ceil(n / order))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")   # balance needs n = 2^m; nb is not
+        u = qmc.Sobol(r + extra, scramble=True, seed=seed).random(nb)
+    X = ndtri(np.clip(u, 1e-12, 1 - 1e-12))
+    out = []
+    for pm in perms:
+        Xp = X[:, list(pm)] if r else X[:, :0]
+        for sg in signs:
+            out.append(np.hstack([Xp * sg[None, :], X[:, r:]]))
+    F = np.vstack(out)
+    return F, np.full(len(F), 1.0 / len(F))
+
+
 def nodes_for_likelihood(r, Qf=7, Qz=7, sharp=0.0):
-    """(F, W): nodes over (factor^r, own-noise); Sobol past sharpness 3."""
+    """(F, W): nodes over (factor^r, own-noise); Sobol past sharpness 3,
+    symmetrised over factor signs and permutations (#605)."""
     if sharp > 3.0:
-        from scipy.stats import qmc
-        n = 2 ** 10
-        u = qmc.Sobol(r + 1, scramble=True, seed=0).random(n)
-        return ndtri(np.clip(u, 1e-12, 1 - 1e-12)), np.full(n, 1.0 / n)
+        return symmetric_sobol_normal(r, 1, 2 ** 10, seed=0)
     xf, wf = _gh1(Qf)
     xz, wz = _gh1(Qz)
     grids = np.meshgrid(*([xf] * r + [xz]), indexing="ij")
@@ -111,66 +162,183 @@ def _blend_weight(sharp):
     return t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t) / (_BLEND_HI - _BLEND_LO)
 
 
-def _sharpness_grad(V, D):
-    """d sharpness_bound / dV (a.e.; the max picks one row). The bound is
-    sqrt(2) ||c_i*|| / sqrt(min D) with c = PV, so its derivative in row
-    l is sqrt(2)/sqrt(min D) * c_i*/||c_i*|| * (delta_{l i*} - 1/J)."""
-    J = V.shape[0]
+# The blend's difficulty statistic must be differentiable and symmetric
+# in the alternatives. sharpness_bound takes max_i ||(PV)_i||, which has
+# a cusp wherever two rows tie, and the score took np.argmax's first tied
+# row, so inside the window the gradient depended on alternative labels
+# and was not the derivative (left/right differences 0.88/0.26 on the
+# tied #420 fixture). A p-norm over the centred row norms is smooth,
+# permutation symmetric, at least the max and at most J^(1/p) above it.
+_SHARP_P = 32.0
+
+
+def _smooth_sharpness(V, D):
+    """sqrt(2) ||(||(PV)_i||)_i||_p / sqrt(min D), and its V-gradient."""
     C = V - V.mean(axis=0)
-    nrm = np.sqrt((C ** 2).sum(axis=1))
-    i = int(np.argmax(nrm))
-    G = np.zeros_like(V)
-    if nrm[i] <= 0.0:
-        return G
-    u = np.sqrt(2.0) / np.sqrt(float(np.min(D))) * C[i] / nrm[i]
-    G -= u[None, :] / J
-    G[i] += u
-    return G
+    n2 = (C ** 2).sum(axis=1)
+    M = float(n2.max())
+    scale = np.sqrt(2.0) / np.sqrt(float(np.min(D)))
+    if not M > 0.0:
+        return 0.0, np.zeros_like(V)
+    u = n2 / M
+    up = u ** (0.5 * _SHARP_P)
+    Su = float(up.sum())
+    sn = np.sqrt(M) * Su ** (1.0 / _SHARP_P)
+    # d sn / d n2_i = 0.5 sn u_i^(p/2 - 1) / (M sum u^(p/2))
+    dn2 = 0.5 * sn * (u ** (0.5 * _SHARP_P - 1.0)) / (M * Su)
+    G = 2.0 * dn2[:, None] * C
+    G = G - G.mean(axis=0)            # through the centring
+    return scale * sn, scale * G
 
 
-def _choice_terms(mu, V, choice, s, F, W):
+# The own-noise tilt (#128, #270, #352). The nodes sample the chosen
+# alternative's own noise z where its PRIOR has mass, but when the
+# chosen alternative is behind, the integrand
+#
+#     h(z) = phi(z) prod_j Phi((c_j + s_k z) / s_j)
+#
+# has its mass far to the right: at a utility gap of -8 the 7-node rule
+# returned log P = -35.3 against the exact -28.9, and -295.8 against
+# -146.6 at -20. On the Gauss-Hermite tensor each observation's own-noise
+# nodes are therefore moved to the mode m of log h and scaled by the
+# curvature there, z = m + sigma x, with the change of measure carried
+# in the weights -- log sigma - z^2/2 + x^2/2 -- so the rule integrates
+# the same h and is exact in the limit of many nodes. The mode is taken
+# with the factors integrated out in the Gaussian approximation (each
+# rival's noise widened to t_j^2 = s_j^2 + |v_k - v_j|^2), which keeps
+# the tilt honest when loadings are large. log h is strictly concave
+# (curvature <= -1), so the mode is unique.
+#
+# An earlier version solved for m by Newton to convergence and treated
+# (m, sigma) as constants in the score, which is then the quadrature of
+# the true gradient but not the gradient of the computed objective: an
+# end-to-end fit went from 4 s to 160 s and stopped converging. Here m
+# is a FIXED smooth map of the utilities and loadings -- four Newton
+# steps on a Mills-ratio surrogate (lambda ~ (sqrt(a^2 + 4) - a) / 2),
+# then two exact steps -- whose derivatives are carried alongside, and
+# sigma comes from the curvature at the last exact point, so the
+# analytic score is the exact gradient of the returned log-likelihood.
+# Cost: two extra log-CDF evaluations per rival per observation, not
+# per node.
+#
+# The scrambled-Sobol branch (sharp loadings) is NOT tilted: with paired
+# (factor, own-noise) points the change-of-measure weight is unbounded
+# in x and the low-discrepancy error grew tenfold on the #213 field.
+_TILT_SURROGATE_STEPS, _TILT_EXACT_STEPS = 4, 2
+
+
+def _tilt_mode(c0, t, sk):
+    """Smooth approximate mode of g(z) = -z^2/2 + sum_j log Phi((c_j +
+    sk z) / t_j), with derivatives.
+
+    c0 (R, n): utility contrasts mu_k - mu_j; t (R, 1): effective rival
+    noise sd. Returns m (n,), h (n,) = -g''(m_last) at the last exact
+    point, and the total derivatives dm_c, dh_c (R, n) in c_j and
+    dm_t, dh_t (R, n) in t_j."""
+    R, n = c0.shape
+    m = np.zeros(n)
+    dm_c = np.zeros((R, n))
+    dm_t = np.zeros((R, n))
+    inv_t = 1.0 / t
+    rho = sk * inv_t
+    rho2, rho3 = rho * rho, rho * rho * rho
+    for it in range(_TILT_SURROGATE_STEPS + _TILT_EXACT_STEPS):
+        a = (c0 + sk * m[None, :]) * inv_t
+        if it < _TILT_SURROGATE_STEPS:
+            q = np.sqrt(a * a + 4.0)
+            lam = 0.5 * (q - a)
+            kap = 0.5 * (1.0 - a / q)            # -d lam / da
+            kp = -2.0 / (q * q * q)              # d kap / da
+        else:
+            lam = np.exp(-0.5 * a * a - 0.5 * np.log(2 * np.pi)
+                         - log_ndtr(a))
+            kap = lam * (a + lam)                # -lam'
+            kp = lam * (1.0 - kap) - kap * (a + lam)
+        g1 = -m + (rho * lam).sum(axis=0)
+        h = 1.0 + (rho2 * kap).sum(axis=0)
+        S3 = (rho3 * kp).sum(axis=0)[None, :]
+        # in c_j: da_l/dc_j = delta_lj / t_l + rho_l dm_j
+        dg1_c = -(rho * kap) * inv_t - h[None, :] * dm_c
+        dh_c = (rho2 * kp) * inv_t + S3 * dm_c
+        # in t_j: da_l/dt_j = rho_l dm_j - delta_lj a_l / t_l, and
+        # drho_l/dt_j = -delta_lj rho_l / t_l
+        dg1_t = rho * (kap * a - lam) * inv_t - h[None, :] * dm_t
+        dh_t = -rho2 * (2.0 * kap + kp * a) * inv_t + S3 * dm_t
+        step = g1 / h
+        sc = (g1 / (h * h))[None, :]
+        dm_c = dm_c + dg1_c / h[None, :] - sc * dh_c
+        dm_t = dm_t + dg1_t / h[None, :] - sc * dh_t
+        m = m + step
+    return m, h, dm_c, dh_c, dm_t, dh_t
+
+
+def _choice_terms(mu, V, choice, s, F, W, tilt=True):
     """Per-observation log P(choice), d/dmu and d/dV on one node set.
-    V is gauge-centred; F holds (factor^r, own-noise) node columns."""
+    V is gauge-centred; F holds (factor^r, own-noise) node columns for
+    the N(0, I) measure. With tilt, the own-noise column is moved per
+    observation (see _tilt_mode)."""
     T, J = mu.shape
     r = V.shape[1]
-    Fq, zq = F[:, :r], F[:, r]
+    Fq, xq = F[:, :r], F[:, r]
     Vf = Fq @ V.T                                  # (Q, J)
+    logW = np.log(W)
     lp = np.zeros(T)
     dmu = np.zeros((T, J))
     dV = np.zeros((T, J, r))
+    half_log2pi = 0.5 * np.log(2 * np.pi)
     for k in range(J):
         idx = np.where(choice == k)[0]
         if len(idx) == 0:
             continue
-        rivals = [j for j in range(J) if j != k]
-        dmu_k = mu[idx, k][:, None] - mu[idx][:, rivals]   # (Ti, J-1)
-        acc = np.zeros((len(idx), len(W)))
-        A = {}
-        logPhi = {}
-        for c, j in enumerate(rivals):
-            shift = Vf[:, k] - Vf[:, j] + zq * s[k]
-            A[j] = (dmu_k[:, c][:, None] + shift[None, :]) / s[j]
-            # log_ndtr, not log(max(ndtr, 1e-300)): the floor made every
-            # deep tail the same -690.78 and the Mills ratio a zero
-            # score, so an optimizer stopped exactly where an
-            # observation was most badly contradicted (#270)
-            logPhi[j] = log_ndtr(A[j])
-            acc += logPhi[j]
-        m = acc.max(axis=1)
-        pw = np.exp(acc - m[:, None]) * W[None, :]
+        Ti = len(idx)
+        rv = np.array([j for j in range(J) if j != k])
+        sj = s[rv][:, None]                                   # (R, 1)
+        rho = s[k] / sj
+        c0 = mu[idx, k][None, :] - mu[idx][:, rv].T           # (R, Ti)
+        dk = V[k][None, :] - V[rv]                            # (R, r)
+        if tilt:
+            t = np.sqrt(sj[:, 0] ** 2 + (dk * dk).sum(axis=1))[:, None]
+            m, h, dm_c, dh_c, dm_t, dh_t = _tilt_mode(c0, t, s[k])
+            sig = 1.0 / np.sqrt(h)
+            dsig_c = -0.5 * (sig / h)[None, :] * dh_c          # (R, Ti)
+            dsig_t = -0.5 * (sig / h)[None, :] * dh_t
+        else:
+            m, sig = np.zeros(Ti), np.ones(Ti)
+        z = m[:, None] + sig[:, None] * xq[None, :]           # (Ti, Q)
+        sh = Vf[:, k][None, :] - Vf[:, rv].T                  # (R, Q)
+        # A[j, t, q] = (c0_j + shift_j(f_q) + s_k z_tq) / s_j
+        A = (c0[:, :, None] + sh[:, None, :] + s[k] * z[None, :, :]) \
+            / sj[:, :, None]
+        # log_ndtr, not log(max(ndtr, 1e-300)): the floor made every
+        # deep tail the same -690.78 and the Mills ratio a zero score
+        # (#270)
+        logPhi = log_ndtr(A)
+        lam = np.exp(-0.5 * A * A - half_log2pi - logPhi)
+        acc = logPhi.sum(axis=0) + logW[None, :]
+        if tilt:
+            acc = acc + 0.5 * (xq * xq)[None, :] - 0.5 * z * z
+        mx = acc.max(axis=1)
+        pw = np.exp(acc - mx[:, None])
         rs = pw.sum(axis=1)
-        lp[idx] = m + np.log(np.maximum(rs, 1e-300))
+        lp[idx] = np.log(sig) + mx + np.log(np.maximum(rs, 1e-300))
         omega = pw / rs[:, None]
-        for j in rivals:
-            lam = np.exp(-0.5 * A[j] ** 2 - 0.5 * np.log(2 * np.pi)
-                         - logPhi[j])
-            wl = omega * lam / s[j]
-            g = wl.sum(axis=1)                     # (Ti,)
-            dmu[idx, k] += g
-            dmu[idx, j] -= g
-            H = wl @ Fq                            # (Ti, r)
-            dV[idx, k] += H
-            dV[idx, j] -= H
+        wl = omega[None, :, :] * lam / sj[:, :, None]          # (R, Ti, Q)
+        dc = wl.sum(axis=2)                                    # (R, Ti)
+        H = wl @ Fq                                            # (R, Ti, r)
+        if tilt:
+            # the tilt's own derivative: d log P = dsig/sig
+            # + E[g'(z) (dm + x dsig)], g' the true integrand's slope
+            gp = -z + (rho[:, :, None] * lam).sum(axis=0)
+            Eg = (omega * gp).sum(axis=1)[None, :]
+            Egx = (omega * gp * xq[None, :]).sum(axis=1)[None, :]
+            dc = dc + dsig_c / sig[None, :] + Eg * dm_c + Egx * dsig_c
+            dt = dsig_t / sig[None, :] + Eg * dm_t + Egx * dsig_t
+            # t_j = sqrt(s_j^2 + |v_k - v_j|^2): dt_j/dv_k = dk_j / t_j
+            H = H + (dt / t)[:, :, None] * dk[:, None, :]
+        dmu[idx, k] += dc.sum(axis=0)
+        dmu[idx[None, :], rv[:, None]] -= dc
+        dV[idx, k] += H.sum(axis=0)
+        dV[idx[None, :], rv[:, None]] -= H
     return lp, dmu, dV
 
 
@@ -236,8 +404,9 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
     s = np.sqrt(D)
     # gauge-fix and dispatch on the pairwise-safe bound (eighth review):
     # only loading DIFFERENCES decide a race, and
-    # sqrt(2) max_i |(PV)_i|/sqrt(D_i) bounds the pairwise sharpness
-    sharp = sharpness_bound(V, D)
+    # sqrt(2) max_i |(PV)_i|/sqrt(D_i) bounds the pairwise sharpness; the
+    # smooth p-norm form of it, so the blend has no cusp at ties (#420)
+    sharp, sharp_grad = _smooth_sharpness(V, D)
     Vc = V - V.mean(axis=0)
     # A loading column that is zero after centring changes no choice
     # probability, but it changed the Sobol dimension, so a zero-padded
@@ -251,15 +420,25 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
         dV = np.zeros((T, J, r))
         dV[:, :, live] = dVl
         return lp, dmu, dV
+    # A rival much less noisy than the chosen alternative makes the
+    # own-noise integrand a step of width s_j / s_k, which the tilted
+    # rule needs more nodes to resolve: at D = [0.1, 1, 1] seven nodes
+    # left the probability 0.4% low (3.3% before the tilt, #352). The
+    # own-noise order grows with that ratio, capped at 4x; D = 1 (every
+    # MNProbit fit) is unaffected, and nearer-deterministic rivals are
+    # outside the accuracy envelope.
+    ratio = float(np.sqrt(np.max(D) / np.min(D)))
+    if ratio > 1.0:
+        Qz = int(min(4 * Qz, np.ceil(Qz * ratio)))
     w, dw = _blend_weight(sharp)
     if w == 0.0 or w == 1.0:
         F, Wt = nodes_for_likelihood(r, Qf, Qz, sharp)
-        return _choice_terms(mu, Vc, choice, s, F, Wt)
+        return _choice_terms(mu, Vc, choice, s, F, Wt, tilt=(w == 0.0))
     # inside the blend window: both rules, mixed in probability
     Fg, Wg = nodes_for_likelihood(r, Qf, Qz, 0.0)
     Fs, Ws = nodes_for_likelihood(r, Qf, Qz, np.inf)
     lg, dmg, dVg = _choice_terms(mu, Vc, choice, s, Fg, Wg)
-    ls, dms, dVs = _choice_terms(mu, Vc, choice, s, Fs, Ws)
+    ls, dms, dVs = _choice_terms(mu, Vc, choice, s, Fs, Ws, tilt=False)
     lp = np.logaddexp(np.log1p(-w) + lg, np.log(w) + ls)
     a = np.exp(np.log1p(-w) + lg - lp)             # posterior rule weights
     b = np.exp(np.log(w) + ls - lp)
@@ -267,7 +446,7 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
     dV = a[:, None, None] * dVg + b[:, None, None] * dVs
     # d lp / d V through w: (P_S - P_GH) / P * dw/dsharp * dsharp/dV
     gw = (np.exp(ls - lp) - np.exp(lg - lp)) * dw          # (T,)
-    dV = dV + gw[:, None, None] * _sharpness_grad(V, D)[None, :, :]
+    dV = dV + gw[:, None, None] * sharp_grad[None, :, :]
     return lp, dmu, dV
 
 
@@ -365,10 +544,9 @@ def _factor_nodes(r, Qf=7, nodes_log2=10, sharp=0.0):
     hard-coded at 1024, so the parameter did nothing in exactly the
     regime a user would reach for it)."""
     if r > 2 or sharp > _FACTOR_SOBOL_SHARP:
-        from scipy.stats import qmc
-        n = 2 ** int(nodes_log2)
-        u = qmc.Sobol(r, scramble=True, seed=0).random(n)
-        return ndtri(np.clip(u, 1e-12, 1 - 1e-12)), np.full(n, 1.0 / n)
+        # symmetrised over factor signs and permutations, as the choice
+        # likelihood's cloud (#605)
+        return symmetric_sobol_normal(r, 0, 2 ** int(nodes_log2), seed=0)
     if r == 0:
         # the EMPTY PRODUCT, as hermite_nodes and choice_loglik_and_score
         # already treat it: rank 1 was special-cased here and rank 0 fell

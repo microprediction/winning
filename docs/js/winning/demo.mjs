@@ -3,7 +3,7 @@
 // a Monte Carlo sampler to race against.
 import { hermite1, interpClamped, solve, firstPrimes, asLoadings,
          isVector, asCount, asIdio } from "./core.mjs";
-import { clusterIndex } from "./blocks.mjs";
+import { treeCluster } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
@@ -308,32 +308,54 @@ export function fitGrammar(C, k = 3, m = 4) {
   if (!Number.isInteger(k) || k < 0 || !Number.isInteger(m) || m < 0)
     throw new Error(`fitGrammar: k and m must be non-negative integers; got k=${k}, m=${m}`);
   const n = C.length;
-  let meanDiag = 0;
-  for (let i = 0; i < n; i++) meanDiag += C[i][i] / n;
-  // the floor is RELATIVE to each runner's own variance, as python's.
-  // An absolute 0.03 floor added 0.06 to a pair's only identifiable
-  // contrast (2% -> 8%, a 16-point price move) and broke scale
-  // equivariance for every field: the same race at 1e-4 x the
-  // covariance came back nearly uniform (#341).
-  const floor = C.map((row, i) => 1e-6 * Math.max(row[i], 1e-6 * Math.max(meanDiag, 1e-300)));
-  if (n === 1) return { V: [[0]], D: [Math.max(C[0][0], floor[0])] };
+  if (n === 1) return { V: [[0]], D: [Math.max(C[0][0], 1e-6 * Math.max(C[0][0], 1e-300))] };
+  // Everything below reads C only through its pairwise CONTRASTS,
+  // Delta_ij = (C_ii - C_ij) + (C_jj - C_ij), formed as anchored
+  // differences before any averaging. A common shift a 11' cancels from
+  // every contrast, but summing raw rows near a = 2**51 rounded the +1 of
+  // each variance away, P C P came back as I instead of I - 11'/4, and a
+  // field whose six contrasts were all exactly 2 fitted contrasts of 2.06
+  // and 2.86 (a 3.6-point price move). P C P = -P Delta P / 2 (#465).
+  const Delta = C.map((row, i) => row.map((v, j) =>
+    (i === j ? 0 : (row[i] - v) + (C[j][j] - v))));
+  // the floor is RELATIVE to each runner's own contrast scale -- half its
+  // smallest contrast, the most variance any shared part can leave it --
+  // not to its raw variance, which a common shift inflates at will (#465).
+  // Relative, not absolute: an absolute 0.03 floor added 0.06 to a
+  // pair's only identifiable contrast and broke scale equivariance (#341).
+  const own = Delta.map((row, i) => 0.5 * Math.min(...row.filter((_, j) => j !== i)));
+  const meanOwn = own.reduce((a, b) => a + b, 0) / n;
+  const floor = own.map(v => 1e-6 * Math.max(v, 1e-6 * Math.max(meanOwn, 1e-300)));
   if (n === 2) {
     // a pair has ONE choice-relevant number, Var(X0 - X1); python returns
     // it as two equal idiosyncratic halves with no factor, which prices
     // the pair exactly (no near-step factor integral to resolve)
-    const half = 0.5 * Math.max(C[0][0] + C[1][1] - 2 * C[0][1], floor[0] + floor[1]);
+    const half = 0.5 * Math.max(Delta[0][1], floor[0] + floor[1]);
     return { V: [[0], [0]], D: [half, half] };
   }
-  // a direction is dead relative to the matrix's own scale, not 1e-8
-  // absolute, which changed the fitted rank under rescaling (#341)
-  const dead = 1e-8 * Math.max(meanDiag, 1e-300);
   const proj = M => {
-    // P M P with P = I - 11'/n
+    // P M P with P = I - 11'/n (for matrices with no large common part)
     const rm = M.map(row => row.reduce((a, b) => a + b, 0) / n);
     const tot = rm.reduce((a, b) => a + b, 0) / n;
     return M.map((row, i) => row.map((v, j) => v - rm[i] - rm[j] + tot));
   };
-  const CP = proj(C);
+  const CP = proj(Delta).map(row => row.map(v => -0.5 * v));
+  let meanCP = 0;
+  for (let i = 0; i < n; i++) meanCP += CP[i][i] / n;
+  // a direction is dead relative to the matrix's own (choice-relevant)
+  // scale, not 1e-8 absolute, which changed the fitted rank under
+  // rescaling (#341), nor the raw variance a common shift inflates (#465)
+  const dead = 1e-8 * Math.max(meanCP, 1e-300);
+  // P (C - sum col col') P, from the stable CP: P is linear
+  const projMinus = colsNow => {
+    const VV = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => {
+      let s = 0;
+      for (const col of colsNow) s += col[i] * col[j];
+      return s;
+    }));
+    const VP = proj(VV);
+    return CP.map((row, i) => row.map((v, j) => v - VP[i][j]));
+  };
   const { values, vectors } = jacobiEigh(CP, 50);
   const order = values.map((v, i) => i).sort((a, b) => values[b] - values[a]);
   const kk = untiedRank(order.map(i => values[i]), Math.min(k, n), "factor stage");
@@ -343,11 +365,7 @@ export function fitGrammar(C, k = 3, m = 4) {
     if (lam > dead) cols.push(vectors.map(row => row[idx] * Math.sqrt(lam)));
   }
   // projected residual, diagonal zeroed, top-m eigencolumns promoted
-  const E = proj(C.map((row, i) => row.map((v, j) => {
-    let s = v;
-    for (const col of cols) s -= col[i] * col[j];
-    return s;
-  })));
+  const E = projMinus(cols);
   for (let i = 0; i < n; i++) E[i][i] = 0;
   const eE = jacobiEigh(E, 50);
   const orderE = eE.values.map((v, i) => i).sort((a, b) => eE.values[b] - eE.values[a]);
@@ -360,12 +378,7 @@ export function fitGrammar(C, k = 3, m = 4) {
   // as the LOWER-BOUNDED least squares (python's water-filling), not a
   // generic solve with a floor applied afterwards: P o P is singular at
   // n = 2, where the generic solve silently zeroed a coordinate (#341)
-  const R = C.map((row, i) => row.map((v, j) => {
-    let s = v;
-    for (const col of cols) s -= col[i] * col[j];
-    return s;
-  }));
-  const RP = proj(R);
+  const RP = projMinus(cols);
   const a = 1 - 2 / n, b = 1 / (n * n);
   const rhs = RP.map((row, i) => row[i]);
   const fsum = floor.reduce((x, y) => x + y, 0);
@@ -438,7 +451,7 @@ export function structureCov(s) {
     // every shared factor silently gone -- and negative or string
     // labels threw `anc[...] is not iterable` (#306). Same remapper as
     // the kernels, imported rather than repeated.
-    const cluster = clusterIndex(s.cluster);
+    const cluster = treeCluster(s);                       // (#372)
     const anc = [];
     const nc = Math.max(...cluster) + 1;
     for (let c = 0; c < nc; c++) {

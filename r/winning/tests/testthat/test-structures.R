@@ -61,3 +61,32 @@ test_that("an empty linkage is the one-runner tree (#382)", {
   tr2 <- tree_from_linkage(matrix(c(0, 1, 0.5, 2), nrow = 1))
   expect_equal(tr2$D, c(0.5, 0.5))
 })
+
+# linkage topology and heights are checked at the constructor (#328, #459)
+test_that("tree_from_linkage refuses malformed linkages", {
+  bad <- list(rbind(c(0, 1, -0.5, 2), c(2, 3, 0.8, 3)),
+              rbind(c(0, 1, NaN, 2), c(2, 3, 0.8, 3)),
+              rbind(c(3, 0, 0.5, 2), c(1, 2, 0.8, 3)),
+              rbind(c(0, 0, 0.5, 2), c(1, 2, 0.8, 3)),
+              rbind(c(0, 1, 0.5, 2), c(0, 2, 0.8, 3)),
+              rbind(c(0, 1.5, 0.5, 2), c(2, 3, 0.8, 3)))
+  for (Z in bad) expect_error(tree_from_linkage(Z), "linkage row")
+  expect_equal(tree_from_linkage(rbind(c(0, 1, 0.5, 2), c(2, 3, 0.8, 3)))$D,
+               c(0.5, 0.5, 1))
+})
+
+# an explicit leaf map makes Tree pricing independent of label spelling (#372)
+test_that("Tree leaves map makes relabeling invariant", {
+  mu <- c(-0.5, -0.1, 0.2, 0.4); D <- c(0.8, 0.9, 1.0, 1.1)
+  L <- c(0.2, 0.3, -0.1, 0.4); pa <- c(4, 4, 5, 5, 0); st <- c(0, 0, 0, 0.6, 0.4)
+  a <- tree_race_probabilities(mu, c(0, 0, 1, 2), L, D, pa, st)
+  b <- tree_race_probabilities(mu, c(30, 30, 10, 20), L, D, pa, st,
+                               leaves = c(30, 10, 20))
+  expect_equal(a, b, tolerance = 0)
+  T <- Tree(c(30, 30, 10, 20), L, D, pa, st, leaves = c(30, 10, 20))
+  expect_equal(race_probabilities(mu, structure = T),
+               race_probabilities(mu, structure = Tree(c(0, 0, 1, 2), L, D, pa, st)),
+               tolerance = 0)
+  expect_error(tree_race_probabilities(mu, c(30, 30, 10, 20), L, D, pa, st,
+                                       leaves = c(30, 10)), "does not map")
+})

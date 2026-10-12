@@ -14,7 +14,7 @@ nested_race_probabilities(mu, cluster, loading, D, coupling = NULL,
   gamma = 1, points = 257, qa = 9, qf = 15)
 
 tree_race_probabilities(mu, cluster, loading, D, parent, strength,
-  points = 257, qa = 9)
+  points = 257, qa = 9, leaves = NULL)
 
 block_race_jacobian(mu, cluster, loading, D, points = 257, qa = 9)
 
@@ -25,7 +25,7 @@ abilities_from_block_race(p, cluster, loading, D, points = 257, qa = 9,
   tol = 1e-10, max_iter = 25)
 
 tree_race_jacobian(mu, cluster, loading, D, parent, strength,
-  points = 257, qa = 9)
+  points = 257, qa = 9, leaves = NULL)
 }
 \arguments{
 \item{mu}{abilities (min-wins), length n}
@@ -38,6 +38,9 @@ pure R; supply quadrature nodes for higher rank)}
 \item{gamma}{coupling strength: 0 = independent blocks, 1 = full}
 \item{parent}{1-based parent index per tree node; root marked 0 or NA}
 \item{strength}{per-node uniform shared-effect strength}
+
+\item{leaves}{optional labels of the leaf nodes in order (leaves[j] is the
+cluster label of leaf node j); NULL uses the sorted labels (#372)}
 \item{points}{lattice size}
 \item{qa, qf}{quadrature orders (cluster effect, global factor)}
 \item{tol}{inversion tolerance}

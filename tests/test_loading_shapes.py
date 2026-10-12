@@ -151,17 +151,17 @@ def test_ordered_probabilities_accepts_the_declarative_covariances():
                                         structure=Independent(D=D))
                   - ind).max() == 0.0
 
-    # cov= must route through the same fit the forward call uses, so
-    # k=1 here and race_probabilities(cov=) are one number. (That fit
-    # can return a near-zero D and therefore a very fine lattice; the
-    # warning is fit_covariance's, not this call's, and the mass check
-    # below it is what decides accuracy.)
+    # cov= must route through the same door the forward call uses, so
+    # k=1 here and race_probabilities(cov=) are one number: k=1 now IS
+    # that call (#682), dense routing of a degraded fit included.
     Dv = np.linspace(0.8, 1.2, N)
     cov = np.outer(V1, V1) + np.diag(Dv)
-    with pytest.warns(RuntimeWarning, match=r"too wide to resolve"):
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         by_cov = ordered_probabilities(MU, k=1, cov=cov, points=301)
-    fwd = np.asarray(wf.race_probabilities(MU, cov=cov, points=257))
-    assert np.abs(by_cov - fwd).max() < 5e-3
+        fwd = np.asarray(wf.race_probabilities(MU, cov=cov, points=301))
+    assert np.abs(by_cov - fwd).max() == 0.0
 
     with pytest.raises(NotImplementedError, match=r"factor lattice"):
         ordered_probabilities(MU, k=2, points=301,

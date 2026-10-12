@@ -325,3 +325,15 @@ test_that("rare exact places are not deconvolution residue (#511)", {
     expect_lt(abs(q[2] / 2.091912795347403e-23 - 1), 1e-9)
   }
 })
+
+# the membership floor holds in the final k-slot target (#592)
+test_that("top-k target_floor is respected after renormalisation", {
+  for (cc in c(1e-3, 1, 1e3)) {
+    mu <- abilities_from_topk(c(.7, .3, 0) * cc, 1, D = c(1, 1, 1),
+                              target_floor = .2)
+    expect_equal(top_k_probabilities(mu, 1, D = c(1, 1, 1)), c(.56, .24, .2),
+                 tolerance = 1e-6)
+  }
+  expect_error(abilities_from_topk(c(.5, .5, 0), 1, D = c(1, 1, 1),
+                                   target_floor = .4), "infeasible")
+})

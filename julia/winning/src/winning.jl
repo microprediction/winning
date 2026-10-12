@@ -321,7 +321,7 @@ function _race_setup(mu, V, D, F, W, base)
         size(Vm, 1) == n || throw(ArgumentError(
             "V must have one row per contestant; got " *
             string(size(Vm, 1)) * " for " * string(n)))
-        Vm = Vm .- sum(Vm, dims = 1) ./ n      # common column is gauge
+        Vm = _gauge_center(Vm)                 # common column is gauge (#471)
         if F === nothing || W === nothing
             sharp = sqrt(2) * maximum(sqrt.(vec(sum(Vm .^ 2, dims = 2))) ./
                                       sqrt.(max.(D, TINY)))
@@ -424,6 +424,12 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
                             return_slopes = false, window = "bulk",
                             delta = 1e-12)
     _check_points(points)
+    # the bulk window's tail mass: a number in (0, 0.5); delta = -1 hung
+    # python's and the browser's relaxation loop and 1 or 2 priced a
+    # different race (#445)
+    (delta isa Real && !(delta isa Bool) && isfinite(delta) &&
+     0 < delta < 0.5) ||
+        throw(ArgumentError("delta must be a number in (0, 0.5); got $delta"))
     st = _race_setup(mu, V, D, F, W, base)
     n = length(st.mu)
     sd = sqrt.(st.D)
@@ -476,6 +482,27 @@ function _check_points(points)
     return Int(points)
 end
 
+# The gauge, scale-safe (python core._gauge_center, #471): an exactly
+# common column centres to exactly zero, and a column whose mean or
+# differences overflow ([1e308] * 9, or [1, 1, -1] * 1e308) is centred in
+# units of its largest entry. Ordinary columns take the plain mean.
+function _gauge_center(V::AbstractMatrix)
+    n = size(V, 1)
+    n == 0 && return Float64.(V)
+    Vc = V .- sum(V, dims = 1) ./ n
+    for j in 1:size(V, 2)
+        col = view(V, :, j)
+        if all(==(col[1]), col)
+            Vc[:, j] .= 0.0
+        elseif !all(isfinite, view(Vc, :, j))
+            s = maximum(abs, col)
+            u = col ./ s
+            Vc[:, j] .= (u .- sum(u) / n) .* s
+        end
+    end
+    return Vc
+end
+
 """Invert the general race: mean-zero mu with matching probabilities,
 by the damped own-slope iteration with residual-proportional caps,
 in the field's own units (#100)."""
@@ -503,7 +530,7 @@ function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
     st = _race_setup(zeros(n), V, D, F, W, base)
     Dn = sort(st.D)
     medD = isodd(n) ? Dn[(n + 1) ÷ 2] : 0.5 * (Dn[n ÷ 2] + Dn[n ÷ 2 + 1])
-    Vc = st.V .- sum(st.V, dims = 1) ./ n
+    Vc = _gauge_center(st.V)
     scale = sqrt(medD + sum(Vc .^ 2) / n)
     mu = -(logt .- sum(logt) / n) ./ 2 .* scale
     # damped for a pair AND for a dominant pair at any n (top-two share

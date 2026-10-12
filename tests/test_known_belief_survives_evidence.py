@@ -53,11 +53,14 @@ def test_a_known_belief_stays_known_through_a_winner():
 
 def test_the_floor_still_applies_where_the_variance_is_positive():
     """The floor exists so a downstream 1/v is finite; only the declared
-    -known coordinates are exempt."""
-    mu, var, _ = update_winner(M, np.full(3, 1e-12), 0)
-    assert (var >= 1e-6).all()
-    mu2, var2, _ = update_market(M, np.full(3, 1e-12), P)
-    assert (var2 >= 1e-6).all()
+    -known coordinates are exempt. It is a fraction of the PRIOR
+    variance: an absolute 1e-6 raised a 1e-12 prior a million-fold, an
+    ability unit the API never declares (#660)."""
+    v0 = np.full(3, 1e-12)
+    mu, var, _ = update_winner(M, v0, 0)
+    assert (var >= 1e-6 * v0).all() and (var <= v0 * (1 + 1e-9)).all()
+    mu2, var2, _ = update_market(M, v0, P)
+    assert (var2 >= 1e-6 * v0).all() and (var2 <= v0 * (1 + 1e-9)).all()
 
 
 def test_zero_is_the_limit_of_small_not_a_special_case():

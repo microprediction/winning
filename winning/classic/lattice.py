@@ -813,6 +813,7 @@ def state_prices_from_offsets(density, offsets):
     # See the paper for a definition of state price
     # Be aware that this may fail if offsets provided are integers rather than float
     density = as_classic_density(density)
+    offsets = as_classic_offsets(offsets)                  # (#438)
     offsets = _edge_centred(offsets, implied_L(density))
     if _HAVE_RUST:
         return list(_fastrace.classic_exact_state_prices(
@@ -988,6 +989,29 @@ def as_classic_prices(prices, where='prices'):
     if not total > 0:
         raise ValueError(where + ' has no positive mass')
     return p / total
+
+
+def as_classic_offsets(offsets, where='offsets'):
+    """Finite runner offsets, as a 1-d float vector, BEFORE any dispatch.
+
+    The compiled kernel refuses NaN and +-inf; the pure path clamped an
+    infinite offset to the lattice boundary and returned a plausible book,
+    and NaN failed with an unrelated TypeError, so the accepted inputs
+    depended on the backend (#438). Deliberate infinite abilities belong
+    to state_prices_from_extended_offsets.
+    """
+    try:
+        o = np.asarray(offsets, dtype=float)
+    except (TypeError, ValueError):
+        raise ValueError(where + ' must be a 1-d vector of finite numbers; got '
+                         + repr(offsets)) from None
+    if o.ndim != 1 or o.size == 0:
+        raise ValueError(where + ' must be a nonempty 1-d vector')
+    bad = np.flatnonzero(~np.isfinite(o))
+    if bad.size:
+        i = int(bad[0])
+        raise ValueError(f'{where}[{i}] = {o[i]} is not finite')
+    return o
 
 
 def _gauss_legendre01(n_nodes):

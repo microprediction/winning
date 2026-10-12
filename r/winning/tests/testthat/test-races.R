@@ -272,3 +272,23 @@ test_that("the race inverse validates D and V like the forward map (#482)", {
   expect_equal(abilities_from_race(c(.5, .3, .2), V = matrix(V, 1)),
                abilities_from_race(c(.5, .3, .2), V = V))
 })
+
+# delta is the bulk window's tail mass in (0, 0.5); -1 hung the
+# relaxation loop and 1 or 2 priced a different race (#445)
+test_that("race_probabilities validates delta", {
+  for (d in list(-1, 0, 0.5, 1, NaN, Inf, "1e-2", c(1e-3, 1e-3)))
+    expect_error(race_probabilities(c(-1, 0, 1), D = c(1, 1, 1), delta = d),
+                 "delta must be")
+  expect_true(all(is.finite(race_probabilities(c(-1, 0, 1), D = c(1, 1, 1),
+                                               delta = 1e-3))))
+})
+
+# an exactly common loading column is inert at any finite scale (#471)
+test_that("a common loading column vanishes at any scale", {
+  n <- 9; mu <- (0:8 - 4) * 0.1; D <- rep(1, n)
+  ind <- race_probabilities(mu, D = D)
+  for (cc in c(1e20, 1e308))
+    expect_equal(race_probabilities(mu, V = matrix(cc, n, 1), D = D,
+                                    F = matrix(c(-1, 1), 2, 1), W = c(.5, .5)),
+                 ind, tolerance = 1e-14)
+})

@@ -17,8 +17,10 @@ polish_race):
                                          coupling from 0 (independent blocks)
                                          to 1 (fully coupled)
     Tree(cluster, loading, D,
-         parent, strength)               hierarchy of uniform shared effects
-                                         (leaf loadings are SCALAR: rank-one)
+         parent, strength, leaves=None)  hierarchy of uniform shared effects
+                                         (leaf loadings are SCALAR: rank-one;
+                                         leaves[j] = the label of leaf node
+                                         j, default sorted labels, #372)
 
 Containments: Independent = Blocks with zero loadings = Factor with empty V;
 rank-one Blocks = Tree of depth 1; Nested = Tree with a rank-1 root IF the coupling is
@@ -90,6 +92,56 @@ class Nested:
         return len(np.asarray(self.cluster))
 
 
+def _as_linkage(Z):
+    """A scipy-style linkage, checked at the constructor's own boundary.
+
+    Row k merges two DISTINCT clusters that already exist and are still
+    active (ids below n + k, each merged at most once) at a finite,
+    non-negative height. Unchecked, a self-reference [[3, 0, .5, 2], ...]
+    built parent = [3, 4, 4, 3, -1], a cycle (#328); fractional ids were
+    truncated; and a negative height was squared into the same tree as
+    its absolute value (#459). Mirrors scipy's is_valid_linkage."""
+    try:
+        Z = np.asarray(Z, dtype=float)
+    except (TypeError, ValueError):
+        raise ValueError("a linkage must be a numeric (n-1) x 4 matrix") \
+            from None
+    if Z.size == 0:
+        return Z.reshape(0, 4)
+    if Z.ndim != 2 or Z.shape[1] < 3:
+        raise ValueError(
+            f"a linkage must be an (n-1) x 4 matrix; got shape {Z.shape}")
+    n = len(Z) + 1
+    used = np.zeros(2 * n - 1, bool)
+    for k in range(len(Z)):
+        h = Z[k, 2]
+        if not np.isfinite(h) or h < 0:
+            raise ValueError(
+                f"linkage row {k} merges at height {h}: merge heights are "
+                "finite non-negative distances (#459)")
+        ids = Z[k, :2]
+        for c in ids:
+            if not np.isfinite(c) or c != np.floor(c):
+                raise ValueError(
+                    f"linkage row {k} names cluster {c}: cluster ids are "
+                    "whole numbers (#328)")
+            if not 0 <= c < n + k:
+                raise ValueError(
+                    f"linkage row {k} uses cluster {int(c)} before it is "
+                    f"formed: row {k} may merge only ids below {n + k} "
+                    "(#328)")
+            if used[int(c)]:
+                raise ValueError(
+                    f"linkage row {k} reuses cluster {int(c)}, already "
+                    "merged by an earlier row (#328)")
+        if ids[0] == ids[1]:
+            raise ValueError(
+                f"linkage row {k} merges cluster {int(ids[0])} with itself "
+                "(#328)")
+        used[int(ids[0])] = used[int(ids[1])] = True
+    return Z
+
+
 @dataclass(frozen=True)
 class Tree:
     cluster: object
@@ -97,6 +149,25 @@ class Tree:
     D: object
     parent: object
     strength: object
+    # leaves[j] is the cluster label carried by leaf node j. None keeps
+    # the sorted-label order, so labels 0..nC-1 are the leaf nodes; with
+    # unequal-depth leaves any other spelling should say which label is
+    # which leaf (#372). See blocks._tree_leaf_index.
+    leaves: object = None
+
+    def __post_init__(self):
+        # whole node indices at the constructor: [2.7, 2, -1] used to be
+        # stored and later truncated to [2, 2, -1] by pricing (#328)
+        from .blocks import _as_parent, _tree_leaf_index
+        _as_parent(self.parent)
+        if self.leaves is not None:
+            _tree_leaf_index(self.cluster, self.leaves)
+
+    @property
+    def leaf_index(self):
+        """Each runner's leaf node index (#372)."""
+        from .blocks import _tree_leaf_index
+        return _tree_leaf_index(self.cluster, self.leaves)
 
     @property
     def n(self):
@@ -114,7 +185,7 @@ class Tree:
         rho_t = 1 - 2 h^2 (increments nonnegative by linkage monotonicity);
         D_i = 1 - rho at the leaf's first merge. Unit total variance per
         runner; see tests/test_race_invariants.py for the exactness proof."""
-        Z = np.asarray(Z, float)
+        Z = _as_linkage(Z)
         n = len(Z) + 1
         nT = 2 * n - 1
         parent = -np.ones(nT, int)
@@ -245,7 +316,7 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
                                          gamma=structure.gamma,
                                          points=points, qa=qa, qf=qf)
     if isinstance(structure, Tree):
-        return tree_race_probabilities(mu, structure.cluster,
+        return tree_race_probabilities(mu, structure.leaf_index,
                                        structure.loading, structure.D,
                                        structure.parent, structure.strength,
                                        points=points, qa=qa)
@@ -292,11 +363,12 @@ def structure_variances(structure):
     if isinstance(structure, Tree):
         from .blocks import _scalar_loading
         tot = D + _scalar_loading(structure.loading, "tree races") ** 2
-        from .blocks import _without_common_shock
-        parent = np.asarray(structure.parent, int)
+        from .blocks import _without_common_shock, _as_parent
+        parent = _as_parent(structure.parent)
         # Cluster labels are remapped below; a common ancestor's shock
         # cancels and is no part of the surrogate's variance (#489)
-        n_clusters = len(np.unique(np.asarray(structure.cluster)))
+        cluster = structure.leaf_index                  # (#146, #372)
+        n_clusters = int(cluster.max()) + 1
         strength = _without_common_shock(
             parent, np.asarray(structure.strength, float), n_clusters)
         # Cluster labels are arbitrary comparable values, and the forward
@@ -306,9 +378,8 @@ def structure_variances(structure):
         # priced fine and then inverted with "index 10 is out of bounds
         # for axis 0 with size 3", and string labels died in int()
         # (#146). Same remapping here, so a label means the same thing
-        # on both paths.
-        _labels, cluster = np.unique(np.asarray(structure.cluster),
-                                     return_inverse=True)
+        # on both paths: Tree.leaf_index is that remapping, or the
+        # caller's explicit leaves= map (#372).
         anc = np.zeros(len(strength))
         for c in range(len(strength)):
             u, s = c, 0.0

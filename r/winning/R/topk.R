@@ -344,7 +344,7 @@
   r <- ncol(Vm)
   if (r > 2)
     stop("top_k_probabilities is implemented for factor rank <= 2")
-  Vm <- sweep(Vm, 2, colMeans(Vm))
+  Vm <- .gauge_center(Vm)                                    # (#471)
   if (is.null(qa)) {
     # qa = NULL (the default): the general race's sharpness rule, as in
     # python's topk._factor_nodes. A fixed 15-node rule missed the race by
@@ -537,8 +537,25 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
       stop("target entries must be finite and non-negative", call. = FALSE)
     target <- target / max(target)
     target <- target * (k / sum(target))
+    # in the FINAL k-slot scale: floored entries sit exactly at the floor
+    # and the others give up that mass proportionally (python
+    # races._apply_floor). Clamping then renormalising scaled the floor
+    # back down: c(.7, .3, 0) at floor .2 repriced at 0.167 (#592).
     floored <- target < target_floor
-    target <- pmax(target, target_floor)
+    for (it in seq_len(n)) {
+      free <- k - target_floor * sum(floored)
+      rest <- sum(target[!floored])
+      if (!(free > 0 && rest > 0))
+        stop(sprintf(paste0("target_floor=%g is infeasible: flooring %d of %d ",
+                            "entries at it leaves no mass for the rest of a ",
+                            "target of total %g"),
+                     target_floor, sum(floored), n, k), call. = FALSE)
+      scaled <- ifelse(floored, target_floor, target * (free / rest))
+      newly <- !floored & scaled < target_floor
+      if (!any(newly)) break
+      floored <- floored | newly
+    }
+    target <- scaled
   } else if (any(target <= 0)) {
     stop(paste0(
       "all target memberships must be positive: a zero top-k probability ",

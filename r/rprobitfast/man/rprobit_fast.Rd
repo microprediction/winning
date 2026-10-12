@@ -30,13 +30,19 @@ rprobit_fast(df, covariates, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
 }
 \value{
 An object of class \code{rprobit_fast}: a list with
-\code{coefficients}, \code{covariance_par}, \code{boundary} (TRUE when
-the loading norm runs to the boundary, a real feature of exact MNP
-likelihoods that simulation noise masks), \code{logLik}, \code{time},
+\code{coefficients} (intercepts named \code{asc_<alternative label>}),
+\code{covariance_par} (named \code{v[alternative,column]}),
+\code{loadings} (the loading matrix, rows named by alternative),
+\code{alternatives} (the alternative labels in fitted order),
+\code{boundary} (TRUE when the loading norm runs to the boundary, a real
+feature of exact MNP likelihoods that simulation noise masks, or when
+there is no finite MLE), \code{logLik}, \code{time},
 \code{convergence} (0 for success; 2, with a warning, when an
-alternative is never chosen, so its intercept has no finite MLE),
-\code{J} and \code{r}. A \code{print} method
-summarizes the fit.
+alternative is never chosen or the covariates separate the choices, so
+there is no finite MLE), \code{separation} (the recession direction, or
+\code{NULL}), \code{mass_defect} (the largest \code{|1 - sum_k P_k|} of
+the raw per-choice masses the fit maximizes), \code{J} and \code{r}. A
+\code{print} method summarizes the fit.
 }
 \examples{
 set.seed(1)

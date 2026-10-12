@@ -79,8 +79,12 @@ def _check_contrast_rank(X, names, tol=1e-10):
     a column is aliased when its contrast residual on the earlier kept
     columns is below tol of its own contrast norm (Gram scale)."""
     T, J, p = X.shape
-    if p == 0 or J < 2:
+    if p == 0:
         return
+    if J < 2:
+        raise ValueError(
+            "with fewer than two alternatives no mean-design column is "
+            "identified from within-choice-set contrasts (#581)")
     Dc = (X[:, 1:, :] - X[:, :1, :]).reshape(-1, p)
     G = Dc.T @ Dc
     kept, aliased = [], []
@@ -107,6 +111,48 @@ def _check_contrast_rank(X, names, tol=1e-10):
             "intercepts come first). The likelihood is flat along them, "
             "so any reported coefficient would be arbitrary; drop them "
             "(#581)")
+
+
+def _separation_direction(X, choice):
+    """A recession direction of the mean design, or None.
+
+    Every choice probability rises with each of its own contrasts
+    mu_chosen - mu_j, so if some d gives every observed contrast
+    (X[t, chosen] - X[t, j]) d >= 0, with at least one strict, the
+    likelihood rises along beta + s d for ever and has no finite
+    maximizer -- complete or quasi-complete separation. The fitters
+    stopped wherever the score fell under gtol and called that converged,
+    at a coefficient set by the tolerance and the sample size (#642).
+    The never-chosen alternative of #496 is one such direction.
+
+    Found by the LP  max 1'(A d)  s.t.  A d >= 0, |d|_inf <= 1, with A's
+    columns scaled to unit max; its optimum is zero exactly when no such
+    direction exists. Returns the unit-norm direction in the caller's
+    coefficient units."""
+    from scipy.optimize import linprog
+    T, J, p = X.shape
+    if p == 0 or J < 2:
+        return None
+    rows = np.arange(T)
+    A = []
+    for j in range(J):
+        sel = choice != j
+        if sel.any():
+            A.append(X[rows[sel], choice[sel], :] - X[rows[sel], j, :])
+    A = np.vstack(A)
+    cs = np.abs(A).max(axis=0)
+    cs = np.where(cs > 0, cs, 1.0)
+    As = A / cs
+    res = linprog(-As.sum(axis=0), A_ub=-As, b_ub=np.zeros(len(As)),
+                  bounds=[(-1.0, 1.0)] * p, method="highs")
+    if res.status != 0 or not -res.fun > 1e-9:
+        return None
+    d = res.x
+    marg = As @ d
+    if marg.min() < -1e-9 or marg.max() <= 1e-7:
+        return None
+    d = d / cs
+    return d / np.linalg.norm(d)
 
 
 def _fill_positions(J, r):
@@ -137,6 +183,15 @@ class MNProbit:
                 f"X must be (observations, alternatives, covariates); "
                 f"got {X.ndim} dimensions")
         self.T, self.J, p = X.shape
+        # One alternative is no choice at all: every probability is one
+        # and the objective is flat in every coefficient, so the fit
+        # returned its initializer as a converged estimate with loglik 0
+        # (#581). A filtered panel can leave one alternative; say so.
+        if self.J < 2:
+            raise ValueError(
+                f"a choice model needs at least two alternatives; X has "
+                f"{self.J}. With one, every coefficient is unidentified "
+                "(#581)")
         # An empty design has an empty-sum likelihood with zero score,
         # so the optimiser stopped at once and reported the arbitrary
         # initial coefficients as a converged fit (#591).
@@ -208,12 +263,7 @@ class MNProbit:
                            options={"maxiter": maxiter, "gtol": 1e-6})
         if polish:
             import winning.likelihood as _L
-            from scipy.stats import qmc
-            from scipy.special import ndtri
-            n = 2 ** 13
-            u = qmc.Sobol(self.r + 1, scramble=True, seed=3).random(n)
-            F = ndtri(np.clip(u, 1e-12, 1 - 1e-12))
-            W = np.full(n, 1.0 / n)
+            F, W = _L.symmetric_sobol_normal(self.r, 1, 2 ** 13, seed=3)
             orig = _L.nodes_for_likelihood
             _L.nodes_for_likelihood =                 lambda r, Qf=7, Qz=7, sharp=0.0: (F, W)
             try:
@@ -235,6 +285,22 @@ class MNProbit:
         self.never_chosen_ = (
             np.flatnonzero(np.bincount(self.choice, minlength=self.J) == 0)
             if self.intercepts else np.array([], dtype=int))
+        sep = _separation_direction(self.X, self.choice)
+        self.separated_ = sep is not None
+        self.separation_direction_ = sep
+        if self.separated_ and not self.never_chosen_.size:
+            self.converged_ = False
+            self.boundary_ = True
+            warnings.warn(
+                "the mean design is separated: moving the coefficients "
+                f"along {np.round(sep, 6).tolist()} never lowers any "
+                "observed choice probability and raises at least one, so "
+                "the likelihood has no finite maximizer (complete or "
+                "quasi-complete separation). The reported fit is a "
+                "tolerance-dependent point on that ray, flagged "
+                "converged_=False, boundary_=True; see "
+                "separation_direction_ (#642).", RuntimeWarning,
+                stacklevel=2)
         if self.never_chosen_.size:
             self.converged_ = False
             self.boundary_ = True
@@ -247,15 +313,11 @@ class MNProbit:
                 "intercepts.", RuntimeWarning, stacklevel=2)
         # referee likelihood: independent scrambles, reported with se
         import winning.likelihood as _L
-        from scipy.stats import qmc as _qmc
-        from scipy.special import ndtri as _ndtri
         mu = self.X @ self.params_
         vals = []
         for seed in (101, 102):
-            n = 2 ** 15
-            u = _qmc.Sobol(self.r + 1, scramble=True, seed=seed).random(n)
-            F = _ndtri(np.clip(u, 1e-12, 1 - 1e-12))
-            W = np.full(n, 1.0 / n)
+            # symmetrised like the likelihood's own cloud (#605)
+            F, W = _L.symmetric_sobol_normal(self.r, 1, 2 ** 15, seed=seed)
             orig = _L.nodes_for_likelihood
             _L.nodes_for_likelihood =                 lambda r, Qf=7, Qz=7, sharp=0.0: (F, W)
             try:
@@ -265,11 +327,35 @@ class MNProbit:
                 _L.nodes_for_likelihood = orig
         self.loglik_ = float(np.mean(vals))
         self.loglik_se_ = float(abs(vals[0] - vals[1]) / 2)
+        # the fit maximized raw per-choice masses; prediction normalizes
+        # them. Report how far apart those two maps are here (#376).
+        self.mass_defect_ = float(np.max(np.abs(self.mass_defect())))
         return self
 
-    def predict_proba(self, X=None):
+    def predict_proba(self, X=None, normalize=True):
         """Choice probabilities per observation, by per-alternative
-        conditional-product integrals under the fitted parameters."""
+        conditional-product integrals under the fitted parameters.
+
+        The per-alternative quadrature masses do not sum to one exactly
+        (the gap is the quadrature error, see `mass_defect`). `fit`
+        maximizes the RAW mass of each observed choice; `normalize=True`
+        (the default, a probability vector per row) divides by the row
+        total, `normalize=False` returns the raw masses the fit
+        optimized (#376)."""
+        P = self._raw_proba(X)
+        if not normalize:
+            return P
+        return P / P.sum(axis=1, keepdims=True)
+
+    def mass_defect(self, X=None):
+        """1 - sum_k raw P_k per observation: how far the quadrature's
+        per-alternative masses are from a probability vector. This is
+        the difference between the objective `fit` maximizes (raw) and
+        the normalized `predict_proba` (#376); `fit` stores its largest
+        absolute value on the training rows as `mass_defect_`."""
+        return 1.0 - self._raw_proba(X).sum(axis=1)
+
+    def _raw_proba(self, X=None):
         X = self.X if X is None else np.asarray(X, dtype=float)
         if X is not self.X:
             # New data must carry the design the model was FITTED on.
@@ -311,7 +397,7 @@ class MNProbit:
         P = np.empty((T, J))
         for k in range(J):
             P[:, k] = _prob_of(mu, self.V_, k)
-        return P / P.sum(axis=1, keepdims=True)
+        return P
 
 
 def _prob_of(mu, V, k):
@@ -350,8 +436,13 @@ class MNProbitClassifier:
     def predict(self, X):
         return self.predict_proba(X).argmax(axis=1)
 
-    def score(self, X, y):
-        P = self.predict_proba(X)
+    def score(self, X, y, normalize=True):
+        """Mean log probability of the observed choices: of the
+        normalized prediction by default, or (normalize=False) of the raw
+        per-choice masses, which is the objective `fit` maximized
+        (#376)."""
+        P = self.model_.predict_proba(np.asarray(X, dtype=float),
+                                      normalize=normalize)
         # the fit's label contract: one label in 0..J-1 per row of X. A
         # bare index scored a short y on a prefix of X and read -1 as
         # the last alternative (#492).

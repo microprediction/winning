@@ -397,7 +397,6 @@ def _validate_covariance(C, name="cov="):
     if C.ndim != 2 or C.shape[0] != C.shape[1]:
         raise ValueError(
             f"{name} must be square; got shape {C.shape}")
-    n = len(C)
     if not np.isfinite(C).all():
         raise ValueError(f"{name} contains NaN or inf")
     asym = float(np.abs(C - C.T).max())
@@ -411,15 +410,36 @@ def _validate_covariance(C, name="cov="):
     # came back out as a non-finite variance (#279). The two are
     # the same number everywhere else.
     C = 0.5 * C + 0.5 * C.T
-    lam_min = float(np.linalg.eigvalsh(C).min())
-    # mean diagonal, divided BEFORE summing: np.trace overflows for
-    # finite entries near the ceiling, which made the tolerance inf
-    # and the comparison meaningless (#279)
-    if lam_min < -1e-8 * max(float(np.sum(np.diag(C) / n)), 1e-300):
-        raise ValueError(
-            f"{name} is not positive semidefinite (min eigenvalue "
-            f"{lam_min:.2e}); this is not a covariance matrix. Project "
-            "to the PSD cone first if it came from noisy estimation.")
+    # Positive semidefiniteness is judged in CORRELATION units (#666).
+    # The tolerance used to be 1e-8 times the mean raw variance, so an
+    # unrelated variance of 1e12 hid a pair with correlation 2 (eigenvalue
+    # -1), and an absolute 1e-300 floor let [[0, c], [c, 0]] through at
+    # c = 1e-309. Now: no negative variance; a zero-variance coordinate
+    # has a zero row (its 2x2 minors are -C_ij^2 otherwise); and the
+    # positive-variance block, standardised, has min eigenvalue >= -1e-8.
+    d = np.diag(C).copy()
+    _psd_refusal = (f"{name} is not positive semidefinite; this is not a "
+                    "covariance matrix. Project to the PSD cone first if "
+                    "it came from noisy estimation.")
+    if np.any(d < 0):
+        i = int(np.flatnonzero(d < 0)[0])
+        raise ValueError(f"{_psd_refusal} (variance [{i}] = {d[i]:.2e} < 0)")
+    pos = d > 0
+    if not pos.all():
+        off = C[~pos].copy()
+        off[np.arange(int((~pos).sum())), np.flatnonzero(~pos)] = 0.0
+        if np.any(off != 0.0):
+            i = int(np.flatnonzero(~pos)[np.flatnonzero((off != 0).any(1))[0]])
+            raise ValueError(
+                f"{_psd_refusal} (variance [{i}] is zero but its row is not)")
+    if pos.any():
+        s = np.sqrt(d[pos])
+        R = C[np.ix_(pos, pos)] / s[:, None] / s[None, :]
+        lam_min = float(np.linalg.eigvalsh(R).min())
+        if lam_min < -1e-8:
+            raise ValueError(
+                f"{_psd_refusal} (min eigenvalue of the correlation matrix "
+                f"{lam_min:.2e})")
     return C
 
 
@@ -453,6 +473,51 @@ def _as_block_labels(blocks, n):
     # sent every whole-valued float beyond its range to one value, so
     # [1e20, 2e20, 1e20, 2e20] became a single block (#633)
     return np.unique(lab, return_inverse=True)[1]
+
+
+def _without_common_shift(C):
+    """A race-equivalent representative of C with its removable common
+    shift taken out, so fit_covariance(C + a 11') fits the SAME matrix
+    for every a >= 0 (#465).
+
+    A shared shock a 11' cannot change an ordering, but the fitter's
+    stages (unit scaling by the mean variance, clustering correlations,
+    the eigen arm, dead-column and floor thresholds) read the raw matrix:
+    a common shift of 1e6 on a unit-scale field moved a fitted price by
+    0.037, and at 2**51 the fit came back as four equal variances of
+    2.25e9 with every contrast destroyed.
+
+    When every off-diagonal is positive, m = min_{i != j} C_ij is removed
+    elementwise, C - m, which is exact in floating point for the entries
+    near the shift (Sterbenz), so the representative depends only on the
+    stored contrasts. If that over-removes (C - m 11' indefinite: possible
+    when variances differ), the largest removable part is restored to
+    keep it a covariance: t = -min_{1'x = 1} x'(C - m)x, from one KKT
+    solve. A field with any non-positive covariance is returned unchanged,
+    bit for bit."""
+    n = len(C)
+    if n < 2:
+        return C
+    off = C[~np.eye(n, dtype=bool)]
+    m = float(off.min())
+    if not m > 0.0:
+        return C
+    B = C - m
+    K = np.zeros((n + 1, n + 1))
+    K[:n, :n] = B
+    K[:n, n] = 1.0
+    K[n, :n] = 1.0
+    rhs = np.zeros(n + 1)
+    rhs[n] = 1.0
+    try:
+        sol = np.linalg.solve(K, rhs)
+    except np.linalg.LinAlgError:
+        sol = np.linalg.lstsq(K, rhs, rcond=None)[0]
+    x = sol[:n]
+    v = float(x @ B @ x)
+    if np.isfinite(v) and v < 0.0:
+        B = B - v
+    return B
 
 
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
@@ -490,6 +555,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     from scipy.spatial.distance import squareform
 
     C = _validate_covariance(C)
+    # a common shift cancels from every contrast: fit the representative
+    # without it, so C and C + a 11' are fitted identically (#465)
+    C = _without_common_shift(C)
     n = len(C)
     labels = None if blocks is None or np.ndim(blocks) == 0 \
         else _as_block_labels(blocks, n)
@@ -1033,14 +1101,30 @@ def _gauge_center(V):
     """V minus each factor's mean loading across contestants -- the
     gauge every factor path fixes -- without overflowing: a column of
     [1e308] * 9 has an infinite plain mean, and inf - inf made the race
-    NaN where the exactly common column should vanish (#471). Centred on
-    the first row only when the plain mean is not finite, so ordinary
-    loadings stay bit-identical."""
+    NaN where the exactly common column should vanish (#471).
+
+    The contract: an exactly common column centres to EXACTLY zero (a
+    [1e20] * 9 column left a residue of 16384 from the rounded mean), and
+    a column whose plain mean or difference overflows is centred in
+    units of its largest entry, (V/s - mean(V/s)) s, so c [1, 1, -1] at
+    c = 1e308 with F / c prices the same race as c = 1 (the first-row
+    fallback overflowed in V - V[0] and returned NaN). Ordinary columns
+    take the plain mean and stay bit-identical."""
+    V = np.asarray(V, dtype=float)
     with np.errstate(over="ignore", invalid="ignore"):
         m = V.mean(axis=0)
-    if not np.all(np.isfinite(m)):
-        m = V[0] + (V - V[0]).mean(axis=0)
-    return V - m
+        Vc = V - m
+    if V.ndim == 2 and V.shape[0]:
+        bad = ~(np.isfinite(m) & np.isfinite(Vc).all(axis=0))
+        for j in np.flatnonzero(bad):
+            s = float(np.abs(V[:, j]).max())
+            u = V[:, j] / s
+            with np.errstate(over="ignore"):
+                Vc[:, j] = (u - u.mean()) * s
+        common = (V == V[:1]).all(axis=0)
+        if common.any():
+            Vc[:, common] = 0.0
+    return Vc
 
 
 def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
@@ -1166,6 +1250,92 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     return (out, total) if return_total else out
 
 
+def _pair_solve(gap, p, V, D, F, W, points, tol, n_iter, s):
+    """Certify, and if needed refine, a pair's closed-form gap against the
+    forward it claims to invert (#374).
+
+    The Gaussian contrast formula is exact only for a Gaussian factor law;
+    a caller's rule (a centred two-point law, or a coarse Hermite rule
+    against a small D) gives a different pair map with the same first two
+    moments. The forward is monotone in the gap, so a bracketed scalar
+    solve on the smaller share's log residual finds the true gap.
+    Returns (mu, forward evaluations, max |log residual|)."""
+    i = 0 if p[0] <= p[1] else 1          # the smaller share: finite logs
+    sign = 1.0 if i == 0 else -1.0        # p0 increases with the gap
+    logp = np.log(p)
+    floor = max(1e-9, 1e-4 / 2)
+    ident = p > floor
+    evals = [0]
+
+    def mu_of(g):
+        return np.array([-0.5 * g, 0.5 * g])
+
+    def resid(g):
+        evals[0] += 1
+        ph = win_probabilities_factor(mu_of(g), V, D, F, W, points=points)
+        r = np.log(np.maximum(ph / ph.sum(), 1e-300)) - logp
+        return r
+
+    def score(r):
+        return float(np.abs(r[ident]).max() if np.any(ident)
+                     else np.abs(r).max())
+
+    if not np.isfinite(gap):
+        return mu_of(gap), 0, np.inf
+    r0 = resid(gap)
+    if score(r0) < tol or n_iter == 0:
+        return mu_of(gap), evals[0], score(r0)
+    h0 = sign * r0[i]
+    # bracket: h(g) = sign * r_i(g) is increasing in g
+    step = max(s, 1e-300) * 0.25
+    a, ha, b, hb = gap, h0, gap, h0
+    for _ in range(60):
+        if h0 > 0:
+            a = a - step
+            ra = resid(a)
+            ha = sign * ra[i]
+            if ha <= 0:
+                break
+            b, hb = a, ha
+        else:
+            b = b + step
+            rb = resid(b)
+            hb = sign * rb[i]
+            if hb >= 0:
+                break
+            a, ha = b, hb
+        step *= 2.0
+    else:
+        return mu_of(gap), evals[0], score(r0)
+    best_g, best_s = gap, score(r0)
+    # Illinois regula falsi: superlinear, never leaves the bracket
+    side = 0
+    for _ in range(max(n_iter, 1)):
+        g = b - hb * (b - a) / (hb - ha) if hb != ha else 0.5 * (a + b)
+        if not (min(a, b) < g < max(a, b)):
+            g = 0.5 * (a + b)
+        r = resid(g)
+        sc = score(r)
+        if sc < best_s:
+            best_g, best_s = g, sc
+        if sc < tol:
+            break
+        hg = sign * r[i]
+        if hg > 0:
+            b, hb = g, hg
+            if side == 1:
+                ha *= 0.5
+            side = 1
+        else:
+            a, ha = g, hg
+            if side == -1:
+                hb *= 0.5
+            side = -1
+        if abs(b - a) <= 1e-15 * max(abs(a), abs(b), s):
+            break
+    return mu_of(best_g), evals[0], best_s
+
+
 def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
                                         D: np.ndarray, F: np.ndarray,
                                         W: np.ndarray, n_iter: int = 50,
@@ -1246,9 +1416,19 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
         # longshot still carries the finite contrast (#110)
         q = float(ndtri(p[0])) if p[0] <= 0.5 else -float(ndtri(p[1]))
         gap = s * q - float(shift[1] - shift[0])
-        mu = np.array([-0.5 * gap, 0.5 * gap])
+        mu, iters, res = _pair_solve(gap, p, V, D, F, W, points, tol,
+                                     n_iter, s)
+        converged = bool(res < tol)
+        if not converged and not return_info:
+            import warnings
+            warnings.warn(
+                f"abilities_from_probabilities_factor did not converge: max "
+                f"|log residual| {res:.2e} on the pair (tol {tol:.0e}). "
+                "Pass return_info=True for the diagnostics instead of this "
+                "warning.", RuntimeWarning, stacklevel=2)
         if return_info:
-            return mu, {"iterations": 0, "residual": 0.0, "converged": True}
+            return mu, {"iterations": int(iters), "residual": float(res),
+                        "converged": converged}
         return mu
     # warm start: exact INDEPENDENT inversion (allocation's design), using each
     # runner's total sd, via this same Newton with a single zero factor node

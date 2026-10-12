@@ -20,8 +20,8 @@ import numpy as np
 from ..shapes import as_loadings
 
 
-from .full import (_mixture_update_full, _order_kernel, _psd_repair,
-                   _winner_kernel)
+from .full import (_check_full_inputs, _mixture_update_full, _order_kernel,
+                   _psd_repair, _winner_kernel)
 
 
 def update_team_winner_full(m, S, A, winner, V=None, beta2=1.0,
@@ -39,6 +39,7 @@ def update_team_order_full(m, S, A, order, V=None, beta2=1.0,
     """Full team finishing order (best first, rows of A)."""
     A = np.atleast_2d(np.asarray(A, dtype=float))
     from ..outcomes import as_order
+    _check_full_inputs(m, S, V=V, A=A, beta2=beta2)            # #456
     order = as_order(order, A.shape[0])                        # #129
     if len(order) <= 1:                  # tautology: exact, no mixture
         return (np.asarray(m, dtype=float).copy(),
@@ -131,18 +132,17 @@ def _lift_contrast_update(m, S, A, y, Cn, log_jac=0.0):
     P = np.eye(k) - np.ones((k, k)) / k
     PA = P @ A
     M = PA @ S @ PA.T + P @ Cn @ P
-    lam, U = np.linalg.eigh(M)
-    keep = lam > 1e-10 * max(float(lam.max()), 1e-300)
-    Uk = U[:, keep]
     r = y - PA @ m
-    z = Uk.T @ r
-    K = S @ PA.T @ (Uk * (1.0 / lam[keep])) @ Uk.T
+    # shared contrast-space evidence: exact removal of the common
+    # direction and a numerical rank test, so a valid low-variance
+    # contrast beside a very noisy one is kept (#651)
+    from ._contrast import contrast_gaussian
+    lz, Minv = contrast_gaussian(
+        r, M, scale=float(np.linalg.norm(y)) + float(np.linalg.norm(PA @ m)))
+    K = S @ PA.T @ Minv
     m_new = m + K @ r
     S_new = _psd_repair(S - K @ (PA @ S))
-    logZ = float(-0.5 * (np.sum(z * z / lam[keep])
-                         + np.sum(np.log(lam[keep]))
-                         + keep.sum() * np.log(2.0 * np.pi))) + log_jac
-    return m_new, S_new, logZ
+    return m_new, S_new, lz + log_jac
 
 
 def _noise_cov(k, beta2, meas_var=0.0, V=None):

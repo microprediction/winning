@@ -2270,6 +2270,135 @@ accepts("dividendImpliedAbility still takes unit (#561)",
         () => classic.dividendImpliedAbility([2, 4, 8], classic.skewNormalDensity(50, 0.1), { unit: 0.1 }),
         a => a.every(Number.isFinite));
 
+// --- the bulk window's delta: (0, 0.5), and -1 used to hang (#445)
+for (const d of [-1, -1e-9, 0, 0.5, 1, 2, NaN, Infinity, "1e-2", null, true])
+  rejects(races.raceProbabilities, [[-1, 0, 1], { D: [1, 1, 1], delta: d, points: 257 }],
+          `raceProbabilities refuses delta=${String(d)} (#445)`, "delta must be");
+accepts("raceProbabilities takes delta=1e-3 (#445)",
+        () => races.raceProbabilities([-1, 0, 1], { D: [1, 1, 1], delta: 1e-3 }),
+        p => p.every(Number.isFinite));
+
+// --- null and negligible factor nodes are no-ops for the price (#416)
+{
+  const mu = [-0.8, -0.1, 0.5, 1.0], V = [[-1], [-0.2], [0.4], [0.8]], D = [1, 1, 1, 1];
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const base = races.raceProbabilities(mu, { V, D, F: [[-1], [1]], W: [0.5, 0.5], points: 257 });
+  for (const w of [0, 1e-300, 1e-17])
+    accepts(`a weight-${w} node far out leaves the race unchanged (#416)`,
+            () => races.raceProbabilities(mu, { V, D, F: [[-1], [1], [1000]], W: [0.5, 0.5, w], points: 257 }),
+            p => md(p, base) < 1e-12);
+  const m2 = [0.1, 0.2, 0.4], V2 = [[2], [0], [-2]], D2 = [1e-6, 1e-6, 1e-6];
+  const c = blocks.blockRaceProbabilities(m2, [0, 1, 2], V2, D2, { points: 501, qa: 7, nodes: { nodes: [[0]], w: [1] } });
+  accepts("zero-weight block node padding is a no-op (#416)",
+          () => blocks.blockRaceProbabilities(m2, [0, 1, 2], V2, D2, { points: 501, qa: 7, nodes: { nodes: [[-100], [0], [100]], w: [0, 1, 0] } }),
+          p => md(p, c) < 1e-12);
+}
+
+// --- treeFromLinkage checks topology and heights itself (#328, #459)
+for (const [Z, why] of [
+  [[[0, 1, -0.5, 2], [2, 3, 0.8, 3]], "a negative height"],
+  [[[0, 1, NaN, 2], [2, 3, 0.8, 3]], "a NaN height"],
+  [[[3, 0, 0.5, 2], [1, 2, 0.8, 3]], "a future cluster"],
+  [[[0, 0, 0.5, 2], [1, 2, 0.8, 3]], "a self-merge"],
+  [[[0, 1, 0.5, 2], [0, 2, 0.8, 3]], "a reused cluster"],
+  [[[0, 1.5, 0.5, 2], [2, 3, 0.8, 3]], "a fractional id"]])
+  rejects(structures.treeFromLinkage, [Z], `treeFromLinkage refuses ${why} (#328/#459)`, "linkage row");
+accepts("treeFromLinkage builds a valid linkage (#328)",
+        () => structures.treeFromLinkage([[0, 1, 0.5, 2], [2, 3, 0.8, 3]]),
+        t => t.parent.join() === "3,3,4,4,-1");
+
+// --- an explicit Tree leaf map makes relabeling invariant (#372)
+{
+  const mu = [-0.5, -0.1, 0.2, 0.4], D = [0.8, 0.9, 1.0, 1.1], L = [0.2, 0.3, -0.1, 0.4];
+  const pa = [3, 3, 4, 4, -1], st = [0, 0, 0, 0.6, 0.4];
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const a = blocks.treeRaceProbabilities(mu, [0, 0, 1, 2], L, D, pa, st);
+  accepts("treeRaceProbabilities honours leaves (#372)",
+          () => blocks.treeRaceProbabilities(mu, [30, 30, 10, 20], L, D, pa, st, { leaves: [30, 10, 20] }),
+          p => md(p, a) === 0);
+  accepts("Tree(..., leaves) prices the canonical tree (#372)",
+          () => races.raceProbabilities(mu, { structure: structures.Tree([30, 30, 10, 20], L, D, pa, st, [30, 10, 20]) }),
+          p => md(p, races.raceProbabilities(mu, { structure: structures.Tree([0, 0, 1, 2], L, D, pa, st) })) === 0);
+  rejects(blocks.treeRaceProbabilities, [mu, [30, 30, 10, 20], L, D, pa, st, { leaves: [30, 10] }],
+          "leaves must map every label (#372)", "does not map");
+}
+
+// --- targetFloor holds in the final normalised target (#592)
+for (const c of [1e-3, 1, 1e3])
+  accepts(`top-k targetFloor holds at scale ${c} (#592)`,
+          () => topk.topKProbabilities(topk.abilitiesFromTopk([0.7 * c, 0.3 * c, 0], 1,
+                  { D: [1, 1, 1], targetFloor: 0.2 }), 1, { D: [1, 1, 1] }),
+          q => Math.abs(q[2] - 0.2) < 1e-6 && Math.abs(q[0] - 0.56) < 1e-6);
+rejects(races.abilitiesFromRace, [[0.5, 0.5, 0], { targetFloor: 0.4 }],
+        "an infeasible targetFloor is refused (#592)", "infeasible");
+
+// --- an exactly common loading column is inert at any scale (#471)
+{
+  const n = 9, mu = Array.from({ length: n }, (_, i) => (i - 4) * 0.1), D = Array(n).fill(1);
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const ind = races.raceProbabilities(mu, { D, points: 257 });
+  const tk = topk.topKProbabilities(mu, 3, { D, points: 257 });
+  const J0 = topk.topKJacobians(mu, 3, { D, points: 257 }).Jmu.flat();
+  for (const c of [1e20, 1e307, 1e308]) {
+    const V = Array.from({ length: n }, () => [c]);
+    accepts(`a common [${c}] column leaves the race unchanged (#471)`,
+            () => races.raceProbabilities(mu, { V, D, F: [[-1], [1]], W: [0.5, 0.5], points: 257 }),
+            p => md(p, ind) < 1e-15);
+    accepts(`a common [${c}] column leaves top-k unchanged (#471)`,
+            () => topk.topKProbabilities(mu, 3, { V, D, points: 257, qa: 3 }),
+            q => md(q, tk) < 1e-12);
+    accepts(`a common [${c}] column leaves the top-k Jacobian unchanged (#471)`,
+            () => topk.topKJacobians(mu, 3, { V, D, points: 257, qa: 3 }).Jmu.flat(),
+            J => md(J, J0) < 1e-12);
+  }
+  const mu3 = [0, 0.3, -0.2], c = 1e308;
+  accepts("an overflowing loading with compensating nodes prices the same race (#471)",
+          () => races.raceProbabilities(mu3, { V: [[c], [c], [-c]], D: [1, 1, 1], F: [[-1 / c], [1 / c]], W: [0.5, 0.5] }),
+          p => md(p, races.raceProbabilities(mu3, { V: [[1], [1], [-1]], D: [1, 1, 1], F: [[-1], [1]], W: [0.5, 0.5] })) < 1e-12);
+}
+
+// --- gamma = 0 Nested ignores its coupling in the inverse too (#644)
+{
+  const s0 = structures.Nested([0, 0, 1], [0.4, 0.6, 0.5], [1, 1, 1], [0.2, 0.3], 0);
+  const p0 = races.raceProbabilities([-0.4, 0.1, 0.3], { structure: s0 });
+  accepts("gamma 0 Nested with a stale coupling inverts (#644)",
+          () => races.abilitiesFromRace(p0, { structure: s0, returnInfo: true }),
+          o => o.converged && Math.abs(o.mu[0] + 0.4) < 1e-6);
+  rejects(races.raceProbabilities, [[-0.4, 0.1, 0.3], { structure: structures.Nested([0, 0, 1], [0.4, 0.6, 0.5], [1, 1, 1], [0.2, 0.3], 0.5) }],
+          "an active wrong-length coupling is still refused (#644)", "coupling");
+}
+
+// --- a default hierarchical target inverts with default controls (#656)
+{
+  const mu = [0.36, -0.92, 0.30, 0.26], cl = [0, 0, 1, 2];
+  const L = [0.022, 1.28, -0.083, -0.04], D = [0.035, 25, 0.062, 0.015];
+  const keep = console.warn; console.warn = () => {};
+  try {
+    const t = blocks.blockRaceProbabilities(mu, cl, L, D);
+    accepts("abilitiesFromBlockRace round-trips a default target (#656)",
+            () => blocks.abilitiesFromBlockRace(t, cl, L, D, { tol: 1e-8 }),
+            o => o.residual < 1e-8 && Math.abs(o.mu[1] + 0.92) < 1e-6);
+    const tr = structures.Tree(cl, L, D, [3, 3, 4, 4, -1], [0, 0, 0, 0.2, 0]);
+    const p = races.raceProbabilities(mu, { structure: tr });
+    accepts("structured Tree inverse round-trips a default target (#656)",
+            () => races.abilitiesFromRace(p, { structure: tr, returnInfo: true }),
+            o => o.converged && Math.abs(o.mu[1] + 0.92) < 1e-6);
+  } finally { console.warn = keep; }
+}
+
+// --- fitGrammar reads C through its contrasts: a common shift cancels (#465)
+{
+  const n = 4;
+  const contr = M => { const o = []; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) o.push(M[i][i] + M[j][j] - 2 * M[i][j]); return o; };
+  const fitAt = a => demo.fitGrammar(Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => a + (i === j ? 1 : 0))), 3, 4);
+  const f0 = fitAt(0);
+  for (const a of [2 ** 20, 2 ** 51])
+    accepts(`fitGrammar(C + ${a} 11') fits C (#465)`, () => fitAt(a),
+            f => JSON.stringify(f) === JSON.stringify(f0) &&
+                 contr(demo.structureCov({ kind: "Factor", ...f })).every(c => Math.abs(c - 2) < 1e-5));
+}
+
 // --- classic: dividendImpliedAbility's output unit is a lattice spacing (#649)
 for (const unit of [0, -0.1, NaN, Infinity, -Infinity, "0.1"])
   rejects(classic.dividendImpliedAbility, [[2, 4], classic.skewNormalDensity(50, 0.1, { a: 0 }), { unit }],

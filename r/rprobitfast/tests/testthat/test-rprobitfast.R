@@ -186,7 +186,10 @@ test_that("node dispatch uses the centred pairwise-safe bound (#419)", {
   gh <- .nodes3(7L, 7L, 1L)
   got <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
                         nodes_sharp = .sobol_nodes3(1L, 10L))$value)
-  expect_lt(abs(got - 0.15149432190016066), 2e-3)
+  # smooth sharpness 3.017 sits inside the blend window (#420), so this
+  # is the continuous mix of the tilted tensor and the Sobol cloud, as in
+  # python (0.15682 there; Sobol generators differ)
+  expect_lt(abs(got - 0.15149432190016066), 6e-3)
   forced_gh <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
                               nodes_sharp = gh)$value)
   expect_gt(abs(forced_gh - 0.15149432190016066), 1e-2)
@@ -378,9 +381,115 @@ test_that("Gauss-Hermite order one is the one-node rule (#504)", {
   d <- data.frame(id = rep(1:2, each = 2), alt = rep(1:2, 2),
                   chosen = c(TRUE, FALSE, FALSE, TRUE),
                   x = c(-1, 1, -0.5, 0.5))
-  f1 <- rprobit_fast(d, "x", r = 0L, Qf = 1L, Qz = 3L, maxit = 3L)
-  f7 <- rprobit_fast(d, "x", r = 0L, Qf = 7L, Qz = 3L, maxit = 3L)
+  # two observations are separated (#642): the warning is expected here
+  f1 <- suppressWarnings(rprobit_fast(d, "x", r = 0L, Qf = 1L, Qz = 3L,
+                                      maxit = 3L))
+  f7 <- suppressWarnings(rprobit_fast(d, "x", r = 0L, Qf = 7L, Qz = 3L,
+                                      maxit = 3L))
   expect_equal(f1$logLik, f7$logLik)
-  expect_true(is.finite(rprobit_fast(d, "x", r = 0L, Qf = 3L, Qz = 1L,
-                                     maxit = 3L)$logLik))
+  expect_true(is.finite(suppressWarnings(
+    rprobit_fast(d, "x", r = 0L, Qf = 3L, Qz = 1L, maxit = 3L))$logLik))
+})
+
+# --- round 3 (#581, #642, #643, #376, #420, #605) ---
+
+.sep_panel <- function(Tn = 100L) {
+  d <- data.frame(id = rep(seq_len(Tn), each = 2), alt = rep(1:2, Tn))
+  d$x <- ifelse((d$id <= Tn / 2 & d$alt == 1) | (d$id > Tn / 2 & d$alt == 2),
+                1, -1)
+  d$chosen <- d$x == 1
+  d
+}
+
+test_that("one alternative is refused by name (#581)", {
+  d <- data.frame(id = 1:8, alt = 1L, chosen = TRUE, x = 0:7)
+  expect_error(rprobit_fast(d, "x", r = 0L), "at least two alternatives")
+})
+
+test_that("a separated design is not reported converged (#642)", {
+  expect_warning(f <- rprobit_fast(.sep_panel(), "x", r = 0L, maxit = 500L),
+                 "separated")
+  expect_equal(f$convergence, 2L)
+  expect_true(f$boundary)
+  expect_equal(unname(abs(f$separation[["x"]]) > 0.5), TRUE)
+  set.seed(9)
+  n <- 150L; J <- 3L
+  d <- data.frame(id = rep(seq_len(n), each = J), alt = rep(seq_len(J), n),
+                  x = rnorm(n * J))
+  u <- 0.7 * d$x + rnorm(n * J)
+  d$chosen <- unlist(lapply(split(u, d$id),
+                            function(v) seq_along(v) == which.max(v)))
+  f2 <- rprobit_fast(d, "x", r = 1L, Qf = 5L, Qz = 5L)
+  expect_null(f2$separation)
+  expect_equal(f2$convergence, 0L)
+  # both normalisations: raw masses are fitted; the defect is reported
+  expect_true(is.finite(f2$mass_defect) && f2$mass_defect < 1e-3)
+})
+
+test_that("fitted parameters keep the alternative labels (#643)", {
+  make <- function(lv) {
+    data.frame(id = rep(1:6, each = 3),
+               alt = factor(rep(c("bus", "rail", "walk"), 6), levels = lv),
+               chosen = rep(c(TRUE, FALSE, FALSE, FALSE, TRUE, FALSE,
+                              FALSE, FALSE, TRUE), 2),
+               x = round(sin(seq_len(18)), 3))
+  }
+  a <- rprobit_fast(make(c("bus", "rail", "walk")), "x", r = 1L, Qf = 3L,
+                    Qz = 3L, maxit = 0L)
+  b <- rprobit_fast(make(c("walk", "bus", "rail")), "x", r = 1L, Qf = 3L,
+                    Qz = 3L, maxit = 0L)
+  expect_equal(names(a$coefficients), c("asc_rail", "asc_walk", "x"))
+  expect_equal(names(b$coefficients), c("asc_bus", "asc_rail", "x"))
+  expect_equal(a$alternatives, c("bus", "rail", "walk"))
+  expect_equal(b$alternatives, c("walk", "bus", "rail"))
+  expect_equal(names(a$covariance_par), c("v[rail,1]", "v[walk,1]"))
+  expect_equal(rownames(b$loadings), c("walk", "bus", "rail"))
+  # integer alternatives keep their historical names
+  d <- .sep_panel(10L); d$chosen[] <- c(TRUE, FALSE)
+  expect_equal(names(suppressWarnings(rprobit_fast(d, "x", r = 0L,
+                                                   maxit = 0L))$coefficients),
+               c("asc_2", "x"))
+})
+
+test_that("the family switch is continuous and cusp-free (#420)", {
+  # the blend edges (2.9, 3.1) and the old hard switch (3): no jumps
+  X <- diag(3)
+  base <- c(3.4, 0.4)
+  s1 <- .mnp_smooth_sharpness(matrix(c(0, base)))$value
+  for (target in c(2.9, 3.0, 3.1)) {
+    vals <- vapply(c(1 - 1e-9, 1 + 1e-9), function(e) {
+      th <- c(-0.5, 0.3, 0.1, base * target / s1 * e)
+      -.nll_core(th, list(X), 2L, 3L, 1L, .nodes3(7L, 7L, 1L),
+                 .sobol_nodes3(1L, 10L))$value
+    }, 0)
+    expect_lt(abs(diff(vals)), 1e-7)
+  }
+  # analytic score inside the blend window matches central differences
+  th <- c(-0.5, 0.3, 0.1, base * 3.03 / s1)
+  sm <- .mnp_smooth_sharpness(matrix(c(0, th[4:5])))$value
+  expect_true(sm > 2.9 && sm < 3.1)
+  g <- .nll_core(th, list(X), 2L, 3L, 1L, .nodes3(7L, 7L, 1L),
+                 .sobol_nodes3(1L, 10L))$grad
+  h <- 1e-6
+  for (i in seq_along(th)) {
+    e <- replace(numeric(length(th)), i, h)
+    fd <- (.nll(th + e, list(X), 2L, 3L, 1L, .nodes3(7L, 7L, 1L),
+                .sobol_nodes3(1L, 10L)) -
+             .nll(th - e, list(X), 2L, 3L, 1L, .nodes3(7L, 7L, 1L),
+                  .sobol_nodes3(1L, 10L))) / (2 * h)
+    expect_lt(abs(fd - g[i]), 1e-6)
+  }
+})
+
+test_that("the sharp cloud is closed under factor signs and order (#605)", {
+  for (r in 1:4) {
+    nd <- .sobol_nodes3(r, 10L)
+    key <- function(F) sort(apply(round(F, 10), 1, paste, collapse = ","))
+    flip <- nd$F; flip[, 1] <- -flip[, 1]
+    expect_identical(key(flip), key(nd$F))
+    if (r >= 2) {
+      sw <- nd$F; sw[, 1:2] <- sw[, 2:1]
+      expect_identical(key(sw), key(nd$F))
+    }
+  }
 })

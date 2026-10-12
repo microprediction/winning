@@ -476,7 +476,10 @@ def _factor_nodes(V, n, qa, caller, D=None, F=None, W=None):
     as race_probabilities reads them (relative weights, zero-weight
     nodes dropped) -- what fit_covariance returns, for instance."""
     Vm = as_loadings(V, n)
-    Vm = Vm - Vm.mean(axis=0, keepdims=True)
+    # the shared scale-safe gauge: a plain mean overflowed at a common
+    # [1e308] column and left a huge residue at [1e307] (#471)
+    from .core import _gauge_center
+    Vm = _gauge_center(Vm)
     if F is not None or W is not None:
         if F is None or W is None:
             raise ValueError(
@@ -1047,11 +1050,9 @@ def _validated_topk_target(q, k, n, target_floor):
     if target_floor is not None:
         # a membership floor, applied to memberships: normalized to k
         # slots first, not in the caller's units (#592)
-        from .races import _floorable
+        from .races import _apply_floor
         target_floor = as_tolerance(target_floor, "target_floor")
-        target = _floorable(target, float(k))
-        floored = target < target_floor
-        target = np.maximum(target, target_floor)
+        target, floored = _apply_floor(target, float(k), target_floor)
     else:
         floored = np.zeros(n, dtype=bool)
         if np.any(target <= 0):

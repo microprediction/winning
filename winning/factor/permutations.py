@@ -85,6 +85,15 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
             return np.asarray(race_probabilities(
                 mu, structure=structure, base=base, points=points,
                 temperature=temperature), float)
+    if k == 1 and cov is not None:
+        # k = 1 IS the win race, and with cov= the win race routes a
+        # degraded fit to dense GHK. Pricing the degraded factor fit here
+        # missed race_probabilities(cov=) by 0.0071 on the repository's
+        # rank-three degradation fixture (#682). Same door, same answer.
+        from .races import race_probabilities
+        return np.asarray(race_probabilities(
+            mu, V=V, D=D, F=F, W=W, structure=structure, cov=cov,
+            base=base, points=points, temperature=temperature), float)
     if cov is not None:
         V, D, F, W, _ = _fit_cov(cov, structure, V, D, stacklevel=3)
     elif structure is not None:
