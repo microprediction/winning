@@ -58,3 +58,41 @@ def test_partial_order_ignores_omitted_runner(om, osd):
         assert lb[0] == pytest.approx(ll0, abs=1e-9)
         assert np.allclose(np.delete(g, pos), g0, atol=1e-10)
         assert g[pos] == 0.0 and gb[0, pos] == 0.0
+
+
+# --- #655: contradicted orders keep a full, gauge-consistent score
+
+@pytest.mark.parametrize("E", [45.0, 50.0])
+def test_contradicted_order_score_is_complete(E):
+    from winning.ratings.nway import (_order_pass_batch, order_loglik,
+                                      update_ranking_exact)
+    m = np.linspace(-E, E, 4)
+    sd = np.sqrt(np.full(4, 2.0))
+    order = np.arange(4)
+    ll, g = order_loglik(m, sd, order, L=4001)
+    assert np.isfinite(ll) and ll < -1000
+    assert abs(g.sum()) < 1e-8 * np.abs(g).max()       # translation gauge
+    eps = 1e-2
+    fd = [(order_loglik(m + e, sd, order, L=4001)[0]
+           - order_loglik(m - e, sd, order, L=4001)[0]) / (2 * eps)
+          for e in np.eye(4) * eps]
+    assert np.allclose(g, fd, rtol=2e-4)
+    mp, vp = update_ranking_exact(m, np.ones(4), order, beta2=1.0)
+    assert np.all(np.abs(mp - m) > 1.0) and np.all(vp < 0.9)
+    lb, gb = _order_pass_batch(m[None, :], sd, order)
+    assert np.isfinite(lb[0]) and np.all(gb[0] != 0.0)
+    assert abs(gb[0].sum()) < 1e-8 * np.abs(gb[0]).max()
+
+
+def test_log_domain_order_pass_matches_linear_on_ordinary_orders():
+    from winning.ratings.nway import _order_pass, _order_pass_log
+    rng = np.random.default_rng(0)
+    for _ in range(5):
+        m = rng.normal(size=6)
+        sd = rng.uniform(.5, 2, 6)
+        o = rng.permutation(6)
+        l1, g1 = _order_pass(m, sd, o)
+        x = np.linspace(float((m - 8 * sd.max()).min()),
+                        float((m + 8 * sd.max()).max()), 2001)
+        l2, g2 = _order_pass_log(m[None], sd, o, x)
+        assert abs(l1 - l2[0]) < 1e-12 and np.abs(g1 - g2[0]).max() < 1e-12
