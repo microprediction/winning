@@ -55,3 +55,57 @@ def test_bulk_window_delta_accepts_ordinary_values():
     b = race_probabilities([-1.0, 0.0, 1.0], D=[1.0, 1.0, 1.0],
                            delta=np.float32(1e-6))
     assert np.all(np.isfinite(a)) and np.abs(a - b).max() < 1e-6
+
+
+# #416: a node of weight 0 or 1e-300 far out must not change the price.
+@pytest.mark.parametrize("w", [0.0, 1e-300, 1e-17])
+def test_negligible_factor_nodes_are_no_ops(w):
+    from winning.factor import race_probabilities
+    mu = np.array([-0.8, -0.1, 0.5, 1.0])
+    V = np.array([[-1.0], [-0.2], [0.4], [0.8]]); D = np.ones(4)
+    F0 = np.array([[-1.0], [1.0]]); W0 = np.array([0.5, 0.5])
+    F = np.array([[-1.0], [1.0], [1000.0]]); W = np.array([0.5, 0.5, w])
+    base = win_probabilities_factor(mu, V, D, F0, W0, points=257)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        a = win_probabilities_factor(mu, V, D, F, W, points=257)
+        b = race_probabilities(mu, V=V, D=D, F=F, W=W, points=257)
+    assert np.abs(a - base).max() < 1e-12
+    assert np.abs(b - race_probabilities(mu, V=V, D=D, F=F0, W=W0,
+                                         points=257)).max() < 1e-12
+
+
+def test_factor_law_keeps_ordinary_rules_intact():
+    from winning.shapes import as_factor_law
+    for Q in (7, 15):
+        F, W = hermite_nodes(1, Q)
+        F2, W2 = as_factor_law(F, W)
+        assert len(W2) == Q and np.allclose(W2, W / W.sum(), rtol=1e-14, atol=0)
+
+
+# #384: subnormal longshots keep their Harville memberships.
+@pytest.mark.parametrize("t", [1e-301, 1e-310, 0.0])
+@pytest.mark.parametrize("k", [2, 3])
+def test_harville_topk_sums_to_k_with_subnormal_shares(t, k):
+    from winning.factor.races import plackett_luce_topk_probabilities
+    q = plackett_luce_topk_probabilities(np.array([1.0, t, t, t]), k)
+    assert abs(q.sum() - k) < 1e-12
+    assert np.allclose(q[1:], (k - 1) / 3, atol=1e-12)
+
+
+# #438: the pure classic path refuses non-finite offsets like the kernel.
+@pytest.mark.parametrize("rust", [True, False])
+@pytest.mark.parametrize("x", [np.inf, -np.inf, np.nan])
+def test_classic_offsets_must_be_finite_on_every_backend(rust, x):
+    from winning.classic.lattice import (skew_normal_density,
+                                         state_prices_from_offsets)
+    d = skew_normal_density(50, 0.1)
+    from winning import rustconfig
+    prev = rustconfig.rust_active()
+    rustconfig.use_rust(rust)
+    try:
+        with pytest.raises(ValueError, match=r"offsets\[1\] = .* is not finite"):
+            state_prices_from_offsets(d, [0.0, x])
+        assert abs(sum(state_prices_from_offsets(d, [0, 1, 2])) - 1) < 1e-12
+    finally:
+        rustconfig.use_rust(prev)
