@@ -438,6 +438,10 @@ export function dividendImpliedAbility(dividends, density, opts = {}) {
   // a misspelt `unti` silently returned abilities 10x the intended (#561)
   checkOpts(opts, DIVIDEND_IMPLIED_ABILITY_OPTS, "dividendImpliedAbility", OPT_HINTS);
   const { nanValue = 2000, unit = 1.0 } = opts;
+  // a negative unit reversed every ability, zero tied the field and
+  // NaN/Infinity returned non-finite abilities (#649)
+  if (typeof unit !== "number" || !Number.isFinite(unit) || !(unit > 0))
+    throw new Error(`dividendImpliedAbility: unit must be a finite positive number; got ${unit}`);
   const p = asClassicPrices(pricesFromDividends(dividends, nanValue));
   const live = [];
   p.forEach((x, i) => { if (x > 0) live.push(i); });

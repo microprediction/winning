@@ -76,3 +76,25 @@ def test_ability_implied_dividends_finite_book_unchanged():
     d = skew_normal_density(50, 0.1, a=0)
     sp = ability_implied_state_prices([0.0, 1.0, 2.5], d)
     np.testing.assert_allclose(ability_implied_dividends([0.0, 1.0, 2.5], d), [1 / x for x in sp], rtol=0)
+
+
+@pytest.mark.parametrize("unit", [0, -0.1, math.nan, math.inf, -math.inf, "0.1", None])
+def test_calibration_unit_must_be_finite_positive(unit):
+    # a negative unit reversed every ability, zero tied the field (#649)
+    from winning.classic.lattice_calibration import dividend_implied_ability, ability_implied_dividends
+    d = skew_normal_density(50, 0.1, a=0)
+    with pytest.raises(ValueError, match="finite positive"):
+        dividend_implied_ability([2, 4], d, unit=unit)
+    with pytest.raises(ValueError, match="finite positive"):
+        ability_implied_state_prices([0.0, 1.0], d, unit=unit)
+    with pytest.raises(ValueError, match="finite positive"):
+        ability_implied_dividends([0.0, 1.0], d, unit=unit)
+
+
+def test_calibration_positive_unit_golden():
+    from winning.classic.lattice_calibration import dividend_implied_ability
+    d = skew_normal_density(50, 0.1, a=0)
+    a = dividend_implied_ability([2, 4], d, unit=0.1)
+    np.testing.assert_allclose(a, [-0.2646016516, 0.3455146431], atol=1e-8)
+    from winning.classic.lattice import state_prices_from_offsets
+    np.testing.assert_allclose(state_prices_from_offsets(d, [x / 0.1 for x in a]), [2 / 3, 1 / 3], atol=1e-8)

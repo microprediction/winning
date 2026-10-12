@@ -259,3 +259,21 @@ test_that("skew_normal_density refuses a nonpositive unit or scale (#509)", {
   expect_error(skew_normal_density(50, 0.1, scale = -1), "finite positive")
   expect_error(skew_normal_density(50, 0.1, scale = 0), "finite positive")
 })
+
+test_that("the calibration unit is a finite positive spacing (#649)", {
+  d <- skew_normal_density(50, 0.1, a = 0)
+  for (u in list(0, -0.1, NaN, Inf, -Inf, NA_real_, "0.1", c(0.1, 0.2))) {
+    expect_error(dividend_implied_ability(c(2, 4), d, unit = u), "finite positive")
+    expect_error(ability_implied_state_prices(c(0, 1), d, unit = u), "finite positive")
+    expect_error(ability_implied_dividends(c(0, 1), d, unit = u), "finite positive")
+  }
+  a <- dividend_implied_ability(c(2, 4), d, unit = 0.1)
+  expect_lt(max(abs(a - c(-0.2646016516, 0.3455146431))), 1e-8)
+})
+
+test_that("a scratched runner's dividend is Inf and round-trips to zero (#665)", {
+  d <- skew_normal_density(50, 0.1, a = 0)
+  divs <- ability_implied_dividends(c(0, 1, Inf), d)
+  expect_equal(divs[3], Inf)
+  expect_equal(prices_from_dividends(divs)[3], 0)
+})

@@ -44,6 +44,19 @@ def dividend_implied_ability(dividends, density, nan_value=NAN_DIVIDEND, unit=1.
     return state_price_implied_ability(prices=p, density=density, unit=unit)
 
 
+def _check_unit(unit, where):
+    """ unit is the lattice spacing: finite and positive. A negative one
+    reversed every ability (a 2/3-1/3 book came back 1/3-2/3), zero tied
+    every field and NaN/inf returned non-finite abilities (#649). """
+    try:
+        ok = isinstance(unit, (int, float, np.integer, np.floating)) and not isinstance(unit, bool) \
+            and math.isfinite(unit) and unit > 0
+    except TypeError:
+        ok = False
+    if not ok:
+        raise ValueError(where + ': unit must be a finite positive number; got ' + repr(unit))
+
+
 def state_price_implied_ability(prices, density, unit=1.0):
     """ Calibrate offsets (translations of the performance density) to match state prices
 
@@ -57,6 +70,7 @@ def state_price_implied_ability(prices, density, unit=1.0):
     # By default this returns scale free offsets.
     # User should supply the lattice unit if they wish ability to be commensurate with some lattice
     # width that was assumed when generating the density
+    _check_unit(unit, 'state_price_implied_ability')
     p = as_classic_prices(prices)
     live = [i for i, x in enumerate(p) if x > 0]
     ability = [float('inf')] * len(p)
@@ -86,6 +100,7 @@ def ability_implied_state_prices(ability, density, unit=1.0, max_depth=3):
     :param max_depth 
     :return: [ 7.6, 12.3, ... ]
     """
+    _check_unit(unit, 'ability_implied_state_prices')
     scale_free_offsets = [ a/unit for a in ability ]
     return state_prices_from_extended_offsets(density=density, offsets=scale_free_offsets, max_depth=max_depth)
 

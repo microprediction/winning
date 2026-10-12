@@ -1981,5 +1981,14 @@ accepts("dividendImpliedAbility still takes unit (#561)",
         () => classic.dividendImpliedAbility([2, 4, 8], classic.skewNormalDensity(50, 0.1), { unit: 0.1 }),
         a => a.every(Number.isFinite));
 
+// --- classic: dividendImpliedAbility's output unit is a lattice spacing (#649)
+for (const unit of [0, -0.1, NaN, Infinity, -Infinity, "0.1"])
+  rejects(classic.dividendImpliedAbility, [[2, 4], classic.skewNormalDensity(50, 0.1, { a: 0 }), { unit }],
+          `dividendImpliedAbility refuses unit ${String(unit)} (#649)`, "finite positive");
+accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
+        () => classic.dividendImpliedAbility([2, 4], classic.skewNormalDensity(50, 0.1, { a: 0 }), { unit: 0.1 }),
+        a => a[0] < a[1] && Math.abs(a[0] + 0.2646016516) < 1e-8 && Math.abs(a[1] - 0.3455146431) < 1e-8,
+        a => JSON.stringify(a));
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
