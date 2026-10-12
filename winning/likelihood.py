@@ -31,7 +31,7 @@ from .outcomes import as_luce_temperature, as_order
 from .shapes import as_idio, as_loadings
 
 from numpy.polynomial.hermite_e import hermegauss
-from scipy.special import log_ndtr, ndtr, ndtri
+from scipy.special import log_ndtr, ndtri
 
 
 def _gh1(Q):
@@ -174,7 +174,6 @@ _SHARP_P = 32.0
 
 def _smooth_sharpness(V, D):
     """sqrt(2) ||(||(PV)_i||)_i||_p / sqrt(min D), and its V-gradient."""
-    J = V.shape[0]
     C = V - V.mean(axis=0)
     n2 = (C ** 2).sum(axis=1)
     M = float(n2.max())
