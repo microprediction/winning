@@ -58,11 +58,17 @@ from __future__ import annotations
 import itertools
 import math
 
+from .shapes import as_idio, as_loadings
+
 try:
     from flint import acb, arb, ctx
 except ImportError as exc:  # pragma: no cover - exercised only without flint
+    # keep the original "No module named 'flint'" first: callers and the
+    # shape-contract discovery recognise a missing optional backend by
+    # that message, and a reworded one reads as a broken module
     raise ImportError(
-        "winning.certified needs python-flint: pip install python-flint"
+        f"{exc}; winning.certified needs python-flint: "
+        "pip install winning[certified]"
     ) from exc
 
 __all__ = ["BASES", "certified_race_probabilities",
@@ -194,6 +200,12 @@ def _field(mu, D):
         raise ValueError("a race needs at least two contestants")
     if D is None:
         D = [1] * n
+    elif not _has_exact(D):
+        # plain numbers take the package's one variance rule (shape,
+        # finiteness, sign), so a malformed D fails here exactly as it
+        # fails in every other verb; exact balls and decimal strings keep
+        # their own path, since numpy would round them to floats
+        D = as_idio(D, n, positive=True).tolist()
     elif isinstance(D, (int, float, str, arb)):
         D = [D] * n
     if len(D) != n:
@@ -426,15 +438,35 @@ def _gauss_legendre(n, prec):
     return _GL[key]
 
 
+def _has_exact(x):
+    """True if any entry is an Arb ball or a decimal string: input the
+    caller meant exactly, which numpy would silently round to a float."""
+    if isinstance(x, (arb, str)):
+        return True
+    if isinstance(x, (list, tuple)):
+        return any(_has_exact(e) for e in x)
+    return False
+
+
 def _loadings(V, n):
-    try:
-        rows = [list(r) for r in V]
-    except TypeError:
-        raise ValueError("V must be (n, k) loadings") from None
-    if len(rows) != n:
-        raise ValueError(f"V has {len(rows)} rows for {n} contestants")
-    if not all(isinstance(r, list) for r in rows) or not rows[0]:
-        raise ValueError("V must be (n, k) loadings")
+    """(n, k) loadings as balls. Plain numbers go through
+    ``winning.shapes.as_loadings``, the one place the loadings shape rule
+    is decided, so a flat rank-one vector, a scalar and the transposed
+    spelling all describe the same race here as in every other verb.
+    Exact input keeps this parser, which accepts the (n, k) and flat
+    (n,) spellings."""
+    if not _has_exact(V):
+        A = as_loadings(V, n)
+        return [[_ball(v) for v in r] for r in A.tolist()], A.shape[1]
+    rows = list(V)
+    if len(rows) == n and not any(isinstance(r, (list, tuple)) for r in rows):
+        rows = [[r] for r in rows]                     # flat: rank one
+    else:
+        rows = [list(r) if isinstance(r, (list, tuple)) else None for r in rows]
+    if len(rows) != n or any(r is None for r in rows) or not rows[0]:
+        raise ValueError(
+            f"V must have one row per contestant: (n, k) or flat (n,) "
+            f"loadings for n = {n}")
     k = len(rows[0])
     if any(len(r) != k for r in rows):
         raise ValueError("V rows must all have the same length")

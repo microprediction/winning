@@ -334,6 +334,15 @@ for _name in _METHODS:
     driver(_name)(lambda V, _n=_name: _mod(_n)(MU, V, D)[0])
 
 
+# --- winning.certified (python-flint) ------------------------------------
+# Arb balls flatten to their midpoints, so the sweep compares midpoints.
+@driver("winning.certified.certified_factor_race_probabilities",
+        requires="flint")
+def _d_certfactor(V):
+    return _mod("winning.certified.certified_factor_race_probabilities")(
+        MU, V, D=D, digits=10)
+
+
 # --- winning.alternatives ------------------------------------------------
 @driver("winning.alternatives.cdf_grad.cdf_gradient_shares", requires="jax")
 def _d_cdfgrad(V):
@@ -515,8 +524,8 @@ def _discover():
 # from the sweep (#80). test_optional_backends_list_is_exactly_what_
 # winning_imports keeps this list true by reading the imports themselves.
 HARD_DEPS = ("numpy", "scipy")
-OPTIONAL_BACKENDS = frozenset({"fastrace", "jax", "matplotlib", "mpl_toolkits",
-                               "pandas", "trueskill"})
+OPTIONAL_BACKENDS = frozenset({"fastrace", "flint", "jax", "matplotlib",
+                               "mpl_toolkits", "pandas", "trueskill"})
 # match the MESSAGE, not the class name: ModuleNotFoundError subclasses
 # ImportError and either can carry a missing optional backend
 _MISSING = re.compile(r"No module named '?([A-Za-z_][\w.]*)'?")
@@ -603,7 +612,12 @@ def test_every_public_V_is_covered():
     assert not missing, (
         "public functions taking V that are neither driven nor exempted "
         "in tests/test_shape_contract.py:\n  " + "\n  ".join(missing))
-    stale = sorted(covered - found)
+    # a driver for a module that could not import because an optional
+    # backend is absent is not stale: the module still exists, the sweep
+    # is narrowed, and the warning above already says so
+    # (winning.certified imports python-flint at module level)
+    stale = sorted(nm for nm in covered - found
+                   if nm.rsplit(".", 1)[0] not in optional)
     assert not stale, ("drivers/exemptions naming functions that no "
                        "longer exist:\n  " + "\n  ".join(stale))
 
@@ -1241,6 +1255,22 @@ def _dd_topk_jac_row_sigma(Dx):
 def _dd_rank_marginal(Dx):
     from winning.factor.topk import abilities_from_rank_marginal
     return abilities_from_rank_marginal(P, 1, D=Dx, points=129, n_iter=20)
+
+
+@d_driver("winning.certified.certified_race_probabilities")
+def _dd_certified(Dx):
+    pytest.importorskip("flint", reason="winning.certified needs python-flint, "
+                        "which CI does not install; unverified here, not waived")
+    from winning.certified import certified_race_probabilities
+    return certified_race_probabilities(MU, D=Dx, digits=12)
+
+
+@d_driver("winning.certified.bracket_race_probabilities")
+def _dd_bracket(Dx):
+    pytest.importorskip("flint", reason="winning.certified needs python-flint, "
+                        "which CI does not install; unverified here, not waived")
+    from winning.certified import bracket_race_probabilities
+    return bracket_race_probabilities(MU, D=Dx, cells=400, digits=12)
 
 
 D_EXEMPT = {
