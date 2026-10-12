@@ -114,8 +114,11 @@ fn check_base_params(base_id: u32, params: &[f64]) -> PyResult<()> {
     }
     let p = params;
     let ok = match base_id {
-        4 => p[0] > 0.0 && p[1] > 0.0,               // beta, a
-        5 => p[0] > 0.0 && p[1] > 0.0,               // nu, s
+        // the constructors' domains: exponential_power_base refuses
+        // beta < 1 (a cusp the lattice cannot resolve, wrong-signed own
+        // slopes, #103) and student_base needs nu > 2 for unit variance
+        4 => p[0] >= 1.0 && p[1] > 0.0,              // beta, a
+        5 => p[0] > 2.0 && p[1] > 0.0,               // nu, s
         6 => p[2] > 0.0,                             // alpha, m, sd
         7 => p[0] > 0.0 && p[2] > 0.0,               // alpha, m, c
         8 => (0.0..=1.0).contains(&p[0]) && p[1] > 0.0 && p[4] > 0.0,
@@ -530,6 +533,12 @@ fn check_classic_density(density: &[f64]) -> PyResult<()> {
     if density.iter().any(|x| !x.is_finite() || *x < 0.0) {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "classic density must be finite and nonnegative"));
+    }
+    // positive total, as python/R/browser: seven zero atoms priced every
+    // runner at 0 (#339). Tested on the max, which cannot overflow.
+    if !density.iter().any(|x| *x > 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "classic density has no positive mass"));
     }
     Ok(())
 }

@@ -949,7 +949,14 @@ def as_classic_density(density, where='density'):
                          + ') to represent distinct offsets')
     if not np.all(np.isfinite(d)):
         raise ValueError(where + ' has a non-finite atom')
-    total = float(d.sum())
+    with np.errstate(over='ignore'):
+        total = float(d.sum())
+    if not np.isfinite(total):
+        # finite atoms whose total overflows are the same law: rescale by
+        # the largest first (only then, so ordinary input is bit-identical).
+        # The raw total was inf and every atom normalised to 0 (#339)
+        d = d / np.abs(d).max()
+        total = float(d.sum())
     if not total > 0:
         raise ValueError(where + ' has no positive mass')
     if d.min() < -1e-12 * total:
@@ -972,7 +979,12 @@ def as_classic_prices(prices, where='prices'):
         raise ValueError(where + ' has a non-finite entry')
     if p.min() < 0:
         raise ValueError(where + ' has a negative entry (' + repr(float(p.min())) + ')')
-    total = float(p.sum())
+    with np.errstate(over='ignore'):
+        total = float(p.sum())
+    if not np.isfinite(total):
+        # [1e308, 9e307] normalised to [0, 0], a tie (#339)
+        p = p / p.max()
+        total = float(p.sum())
     if not total > 0:
         raise ValueError(where + ' has no positive mass')
     return p / total

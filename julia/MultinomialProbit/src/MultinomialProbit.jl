@@ -524,9 +524,13 @@ function _check_r_draws(r_draws)
     return nothing
 end
 
-"""GHK simulated log-likelihood over all observations (CRN: the seed
-per observation is a deterministic function of its index, so the
-objective is smooth-in-parameters for a fixed draw set)."""
+"""GHK simulated log-likelihood over all observations, with common
+random numbers: every observation uses the SAME base-uniform cloud (the
+stream of `seed`), so the objective is smooth in the parameters for a
+fixed draw set AND a function of the sample, not of its row order. The
+stream used to be `seed + 7919 t`, keyed by row position, so swapping two
+rows reassigned their draws and moved the log-likelihood by 1.18 nats
+on a two-row sample (#619)."""
 function ghk_loglik(mu::AbstractMatrix, V::AbstractMatrix,
                     choice::AbstractVector; r_draws = 1000, seed = 9)
     _check_r_draws(r_draws)
@@ -534,8 +538,7 @@ function ghk_loglik(mu::AbstractMatrix, V::AbstractMatrix,
     ll = 0.0
     for t in 1:T
         p = ghk_choice_prob(vec(mu[t, :]), V, Int(choice[t]);
-                            r_draws = r_draws,
-                            seed = seed + 7919 * t)
+                            r_draws = r_draws, seed = seed)
         ll += log(max(p, TINY))
     end
     return ll

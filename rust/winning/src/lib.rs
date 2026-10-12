@@ -1550,10 +1550,22 @@ pub fn check_offset_samples(xs: &[f64]) -> Result<(), String> {
     Ok(())
 }
 
+/// A calibration iteration budget is a positive count (#628).
+pub fn check_iterations(n_iter: usize) -> Result<(), String> {
+    if n_iter == 0 {
+        return Err("n_iter must be a positive number of iterations; zero returns the warm start".into());
+    }
+    Ok(())
+}
+
 /// solve_for_implied_offsets: the paper's table iteration as a defect
 /// correction, a_i += T^{-1}(p_i) - T^{-1}(P_i(a)), so its fixed point
 /// is the exact forward map (see lattice_calibration.py). The field is
 /// re-centred by the integer part of its mean after each step (#498).
+///
+/// Panics when `n_iter == 0`: zero steps returned the warm start as if it
+/// were a calibration, the contract python, R, the browser and fastrace
+/// already refuse (#543, #628).
 pub fn exact_calibrate(
     density: &[f64],
     prices: &[f64],
@@ -1561,6 +1573,9 @@ pub fn exact_calibrate(
     guess: &[f64],
     n_iter: usize,
 ) -> Vec<f64> {
+    if let Err(e) = check_iterations(n_iter) {
+        panic!("{e}");
+    }
     if let Err(e) = check_offset_samples(offset_samples) {
         panic!("{e}");
     }
@@ -1797,7 +1812,11 @@ pub fn top_k_window_kernel(
     if let Err(e) = r {
         panic!("{e}");
     }
-    let smax = sd.iter().cloned().fold(f64::MIN, f64::max).max(1e-12);
+    // the field's own scale (sd is checked positive above): an absolute
+    // 1e-12 floor kept the window from shrinking with the model, so the
+    // same field in units below 1e-12 got a window wider than its
+    // spread and lost resolution (#100)
+    let smax = sd.iter().cloned().fold(f64::MIN, f64::max);
     let mean_count = |x: f64| -> f64 {
         let mut t = 0.0;
         for i in 0..n {
@@ -2944,6 +2963,21 @@ mod tests {
         let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
         assert!(exact_state_prices_from_offsets(&d, &[]).is_empty());
         assert!(exact_calibrate(&d, &[], &[1.0, 0.0, -1.0], &[], 3).is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "positive number of iterations")]
+    fn calibrate_refuses_zero_iterations() {
+        // #628: zero steps returned the tied warm start [0, 0]
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        exact_calibrate(&d, &[0.7, 0.3], &[1.0, 0.0, -1.0], &[0.0, 0.0], 0);
+    }
+
+    #[test]
+    fn calibrate_one_iteration_moves_the_guess() {
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        let a = exact_calibrate(&d, &[0.7, 0.3], &[1.0, 0.0, -1.0], &[0.0, 0.0], 1);
+        assert!(a[0] != a[1], "{a:?}");
     }
 
     #[test]
