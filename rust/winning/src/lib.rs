@@ -607,6 +607,12 @@ pub fn cholesky(a: &mut [f64], n: usize) -> bool {
 /// dense utility covariance `sigma` (row-major n x n).
 pub fn ghk_prob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize, r_draws: usize,
                 seed: u64) -> f64 {
+    ghk_logprob_one(mu, sigma, n, i, r_draws, seed).exp()
+}
+
+/// log of `ghk_prob_one`, finite where the probability underflows (#270).
+pub fn ghk_logprob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize,
+                       r_draws: usize, seed: u64) -> f64 {
     let m = n - 1;
     // difference covariance C = M Sigma M', means a = mu_others - mu_i
     let others: Vec<usize> = (0..n).filter(|&j| j != i).collect();
@@ -634,6 +640,15 @@ pub fn ghk_prob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize, r_draws: usiz
 /// priced as certain (#302).
 pub fn ghk_prob_one_factor(mu: &[f64], v: &[f64], k: usize, d: &[f64], n: usize,
                            i: usize, r_draws: usize, seed: u64) -> f64 {
+    ghk_logprob_one_factor(mu, v, k, d, n, i, r_draws, seed).exp()
+}
+
+/// log of `ghk_prob_one_factor`, finite where the probability underflows
+/// (#270).
+#[allow(clippy::too_many_arguments)]
+pub fn ghk_logprob_one_factor(mu: &[f64], v: &[f64], k: usize, d: &[f64],
+                              n: usize, i: usize, r_draws: usize,
+                              seed: u64) -> f64 {
     let m = n - 1;
     let others: Vec<usize> = (0..n).filter(|&j| j != i).collect();
     let mut a = vec![0.0f64; m];
@@ -651,7 +666,14 @@ pub fn ghk_prob_one_factor(mu: &[f64], v: &[f64], k: usize, d: &[f64], n: usize,
     ghk_contrast(&a, c, m, r_draws, seed)
 }
 
-/// The GHK recursion on a contrast problem: P(d < 0), d ~ N(a, C).
+/// The GHK recursion on a contrast problem: log P(d < 0), d ~ N(a, C).
+///
+/// Log space throughout (#270): each conditional factor enters as
+/// log_ndtr, the truncated draw is inverted from its log CDF
+/// (ndtri_log), and the draws are averaged by log-sum-exp. Flooring the
+/// factor and the truncated uniform at 1e-300 made every share of an
+/// alternative trailing by ~50 utility units exactly 1e-300 before
+/// normalisation, a plateau rather than a tail.
 ///
 /// The contrast covariance is factorised AS GIVEN whenever it has a
 /// Cholesky factor (python: _contrast_cholesky). An absolute 1e-12 ridge
@@ -732,17 +754,39 @@ fn ghk_contrast(a: &[f64], mut c: Vec<f64>, m: usize, r_draws: usize,
         let zt = &mut z[t];
         for dr in 0..r_draws {
             let b = (-at - mean[dr]) / ltt;
-            let fb = ndtr(b);
-            logprob[dr] += fb.max(1e-300).ln();
-            let u = rng.uniform() * fb;
-            zt[dr] = ndtri(u.clamp(1e-300, 1.0 - 1e-16));
+            let lfb = log_ndtr(b);
+            logprob[dr] += lfb;
+            let lu = rng.uniform().max(f64::MIN_POSITIVE).ln() + lfb;
+            zt[dr] = ndtri_log(lu.min((-1e-16f64).ln_1p()));
         }
     }
-    let mut acc = 0.0f64;
-    for lp in logprob.iter() {
-        acc += lp.exp();
+    let top = logprob.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    if !top.is_finite() {
+        return top;
     }
-        acc / r_draws as f64
+    let acc: f64 = logprob.iter().map(|lp| (lp - top).exp()).sum();
+    top + acc.ln() - (r_draws as f64).ln()
+}
+
+/// Phi^-1(exp(lp)) for lp <= 0, accurate where exp(lp) underflows or
+/// falls below ndtri's 1e-300 clamp: ndtri itself while exp(lp) is an
+/// ordinary double, else Newton on log_ndtr(x) = lp from the tail
+/// asymptote (#270).
+pub fn ndtri_log(lp: f64) -> f64 {
+    if lp > -600.0 {
+        return ndtri(lp.exp());
+    }
+    let t = -2.0 * lp;
+    let mut x = -(t - t.ln() - (2.0 * std::f64::consts::PI).ln()).sqrt();
+    for _ in 0..30 {
+        let l = log_ndtr(x);
+        let step = (l - lp) / (-0.5 * x * x - LN_SQRT_2PI - l).exp();
+        x -= step;
+        if step.abs() <= 1e-15 * x.abs() {
+            break;
+        }
+    }
+    x
 }
 
 

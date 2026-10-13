@@ -34,7 +34,7 @@ using Random: Xoshiro
 export MNProbit, max_identified_rank, fit!, loglikelihood, predict_proba, coef, vcov,
     mass_defect,
     stderror, score_matrix, loglik_hessian,
-    choice_loglik_and_score, ghk_choice_prob
+    choice_loglik_and_score, ghk_choice_prob, ghk_choice_logprob
 
 const TINY = 1e-300
 
@@ -814,6 +814,20 @@ fall from 0.7602 to 0.5040 when the race was written in units 1e-8
 (#409)."""
 function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
                          D = nothing, r_draws = 1000, seed = 9)
+    return exp(ghk_choice_logprob(mu, V, k; D = D, r_draws = r_draws,
+                                  seed = seed))
+end
+
+"""log P(alternative k chosen | mu row) by the same GHK sampler as
+`ghk_choice_prob`, kept in log space throughout (#270): each draw's
+conditional factors are summed as `logndtr`, the truncated draw is
+inverted from its log CDF (`_ndtri_log`), and the draws are averaged by
+log-sum-exp. The old route floored every factor and every truncated
+uniform at 1e-300, so the log-likelihood went flat at log(1e-300) =
+-690.78 once the chosen alternative trailed by about 50 utility units,
+with a zero score, while the exact value kept falling (-986 at -55)."""
+function ghk_choice_logprob(mu::AbstractVector, V::AbstractMatrix, k::Int;
+                            D = nothing, r_draws = 1000, seed = 9)
     _check_r_draws(r_draws)
     J = length(mu)
     size(V, 1) == J || throw(ArgumentError(
@@ -830,7 +844,7 @@ function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
             "cannot be negative"))
     end
     Dv = max.(Dv, 0.0)                  # within tolerance: these ARE zero
-    J == 1 && return 1.0
+    J == 1 && return 0.0
     m = J - 1
     others = [j for j in 1:J if j != k]
     a = [mu[j] - mu[k] for j in others]
@@ -851,13 +865,35 @@ function ghk_choice_prob(mu::AbstractVector, V::AbstractMatrix, k::Int;
         ltt = Lc[t, t]
         for dr in 1:r_draws
             b = (-a[t] - mean_t[dr]) / ltt
-            fb = ndtr(b)
-            logprob[dr] += log(max(fb, TINY))
-            u = rand(rng) * fb
-            z[t, dr] = ndtri(clamp(u, TINY, 1 - 1e-16))
+            lfb = logndtr(b)
+            logprob[dr] += lfb
+            # the truncated draw Phi^-1(u Phi(b)), from its log so a deep
+            # bound keeps z near b instead of pinning it at Phi^-1(1e-300)
+            lu = log(max(rand(rng), floatmin(Float64))) + lfb
+            z[t, dr] = _ndtri_log(min(lu, log1p(-1e-16)))
         end
     end
-    return sum(exp, logprob) / r_draws
+    top = maximum(logprob)
+    isfinite(top) || return top
+    return top + log(sum(x -> exp(x - top), logprob)) - log(r_draws)
+end
+
+"""Phi^-1(exp(lp)) for lp <= 0, accurate where exp(lp) underflows or
+falls below ndtri's range: ndtri itself while exp(lp) is an ordinary
+double, else Newton on logndtr(x) = lp from the tail asymptote (logndtr
+is concave, so the iteration is monotone)."""
+function _ndtri_log(lp::Float64)
+    lp > -600.0 && return ndtri(exp(lp))
+    t = -2 * lp
+    x = -sqrt(t - log(t) - log(2 * pi))
+    for _ in 1:30
+        g = logndtr(x) - lp
+        d = exp(-0.5 * x * x - 0.5 * log(2 * pi) - logndtr(x))
+        step = g / d
+        x -= step
+        abs(step) <= 1e-15 * abs(x) && break
+    end
+    return x
 end
 
 # A draw budget is a positive whole number: r_draws = 0 averaged an
@@ -882,9 +918,8 @@ function ghk_loglik(mu::AbstractMatrix, V::AbstractMatrix,
     T = size(mu, 1)
     ll = 0.0
     for t in 1:T
-        p = ghk_choice_prob(vec(mu[t, :]), V, Int(choice[t]);
-                            r_draws = r_draws, seed = seed)
-        ll += log(max(p, TINY))
+        ll += ghk_choice_logprob(vec(mu[t, :]), V, Int(choice[t]);
+                                 r_draws = r_draws, seed = seed)
     end
     return ll
 end
