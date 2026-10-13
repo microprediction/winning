@@ -417,3 +417,18 @@ end
     @test bottom_k_probabilities(mu, 2; D = D, points = 257) ≈
           1 .- top_k_probabilities(mu, 3; D = D, points = 257) atol = 1e-10
 end
+
+@testset "relative targets survive finite-scale extremes (#461, #483)" begin
+    q = [0.8, 0.6, 0.4, 0.2]
+    a1 = abilities_from_topk(q, 2; D = ones(4))
+    r1 = abilities_from_rank_marginal(q, 1)
+    R = rank_probabilities([-0.5, -0.1, 0.2, 0.4]; D = ones(4))
+    w, s = R[:, 1], R[:, 2]
+    ls1 = loc_scale_from_win_and_second(w, s)[1]
+    for c in (4e-309, 1e308)
+        @test maximum(abs.(abilities_from_topk(c .* q, 2; D = ones(4)) .- a1)) < 1e-9
+        @test maximum(abs.(abilities_from_rank_marginal(c .* q, 1) .- r1)) < 1e-9
+        @test maximum(abs.(loc_scale_from_win_and_second(
+            w ./ maximum(w) .* c, s ./ maximum(s) .* c)[1] .- ls1)) < 1e-9
+    end
+end

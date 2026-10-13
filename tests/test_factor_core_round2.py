@@ -493,6 +493,10 @@ def test_inverse_normalizers_survive_a_sum_overflow_461_463_483():
         warnings.simplefilter("ignore")
         for call in calls:
             assert np.abs(call(1e308) - call(1.0)).max() < 1e-9
+            # and a finite sum below k / MAX (#461 follow-up)
+            assert np.abs(call(4e-309) - call(1.0)).max() < 1e-9
+    tiny = rescaled_target(q * 4e-309, 2)
+    assert np.isfinite(tiny).all() and abs(tiny.sum() - 2) < 1e-12
 
 
 # ---------------------------------------------------------------- #489

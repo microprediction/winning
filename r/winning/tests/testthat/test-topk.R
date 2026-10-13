@@ -379,3 +379,12 @@ test_that("Gumbel last place keeps its Plackett-Luce tail (#710)", {
     expect_lt(abs(r / exact - 1), 1e-9)
   }
 })
+
+test_that("relative targets survive a finite sum below k / xmax (#461)", {
+  q <- c(0.8, 0.6, 0.4, 0.2)
+  t <- .rescaled_target(q * 4e-309, 2)
+  expect_true(all(is.finite(t)))
+  expect_lt(abs(sum(t) - 2), 1e-12)
+  expect_lt(max(abs(abilities_from_topk(q * 4e-309, 2) -
+                      abilities_from_topk(q, 2))), 1e-9)
+})
