@@ -493,3 +493,22 @@ test_that("the sharp cloud is closed under factor signs and order (#605)", {
     }
   }
 })
+
+test_that("own-noise order: 7 below J = 6, 11 from J = 6 (#173)", {
+  expect_equal(vapply(c(3L, 5L, 6L, 10L), .default_qz, 0L), c(7L, 7L, 11L, 11L))
+  mk <- function(J, n = 40L) {
+    set.seed(173)
+    x <- rnorm(n * J)
+    u <- matrix(0.7 * x + rnorm(n * J), n, J, byrow = TRUE)
+    ch <- max.col(u)
+    alt <- rep(seq_len(J), n)
+    data.frame(id = rep(seq_len(n), each = J), alt = alt,
+               chosen = alt == rep(ch, each = J), x = x)
+  }
+  ll <- function(d, ...) suppressWarnings(
+    rprobit_fast(d, "x", r = 1L, Qf = 5L, maxit = 0L, ...))$logLik
+  d5 <- mk(5L); d6 <- mk(6L)
+  expect_identical(ll(d5), ll(d5, Qz = 7L))
+  expect_identical(ll(d6), ll(d6, Qz = 11L))
+  expect_false(identical(ll(d6), ll(d6, Qz = 7L)))
+})

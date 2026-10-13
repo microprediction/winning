@@ -664,13 +664,19 @@ function _choice_pair(mu::AbstractMatrix, V::AbstractMatrix,
     return lp, dmu, GV
 end
 
+# Own-noise Gauss-Hermite order when the caller gives none: 7 below
+# J = 6, 11 from J = 6, where the product of J - 1 rival CDFs is sharper
+# than seven nodes resolve (python: winning.likelihood.default_qz, #173).
+default_qz(J::Integer) = J >= 6 ? 11 : 7
+
 """Per-observation log P(choice_t) with score rows (lp, dmu, GV): the
 one probability map that fitting, inference and prediction share."""
 function _choice_logprob_terms(mu::AbstractMatrix, V::AbstractMatrix,
                                choice::Vector{Int}, Dv::Vector{Float64};
-                               Qf = 7, Qz = 7, nodes = nothing)
+                               Qf = 7, Qz = nothing, nodes = nothing)
     T, J = size(mu)
     r = size(V, 2)
+    Qz === nothing && (Qz = default_qz(J))
     if nodes === nothing && J == 2
         # the closed form needs only D_k + D_j + |v_k - v_j|^2 > 0
         all(>=(0.0), Dv) || throw(ArgumentError(
@@ -772,11 +778,12 @@ Returns (loglik, dmu, dV), plus the per-observation loading scores
 in closed form; J >= 3 integrates the factors and the chosen
 alternative's own noise on a Gauss-Hermite tensor with tilted own-noise
 nodes, or past sharpness 3 a symmetrised Halton cloud, blended
-continuously across the switch. `nodes = (F, W)` integrates the
+continuously across the switch. `Qz = nothing` takes 7 own-noise nodes
+below J = 6 and 11 from J = 6 (#173). `nodes = (F, W)` integrates the
 caller's rule as given."""
 function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
                                  choice::AbstractVector;
-                                 D = nothing, Qf = 7, Qz = 7,
+                                 D = nothing, Qf = 7, Qz = nothing,
                                  nodes = nothing, per_obs = false)
     T, J = size(mu)
     # Every observation must be accounted for: a row whose choice is

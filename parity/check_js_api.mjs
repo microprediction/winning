@@ -131,6 +131,50 @@ for (const [lbl, P] of [["independent", rIndep], ["factor", rFactor]]) {
   }
 }
 
+// --- a callable base may carry its own tails: cdf / logCdf / logSf
+// (#511 follow-up). A wrapper of a symmetric named base lost the lower
+// tail (identity-keyed reflection): [-20, 0, 0]'s second place 99% low.
+{
+  for (const name of ["normal", "logistic", "laplace"]) {
+    const b = races.BASES[name];
+    const plain = z => b(z);
+    const tailed = z => b(z);
+    tailed.cdf = name === "normal" ? core.ndtr : z => b(-z)[0];
+    tailed.logSf = b.logSf;
+    for (const lead of [-20, -30]) {
+      const mu = [lead, 0, 0];
+      const ref = [topk.rankProbabilities(mu, { base: name })[0][1],
+                   topk.bottomKProbabilities(mu, 1, { base: name })[0]];
+      const got = [topk.rankProbabilities(mu, { base: tailed })[0][1],
+                   topk.bottomKProbabilities(mu, 1, { base: tailed })[0]];
+      const worst = Math.max(...got.map((g, j) => Math.abs(g / ref[j] - 1)));
+      holds(`${name} wrapper with cdf/logSf matches the named base at ${lead} (#511)`,
+            worst < 1e-12, `worst rel ${worst.toExponential(2)}`);
+    }
+    if (name === "normal") {
+      const lost = topk.rankProbabilities([-30, 0, 0], { base: plain })[0][1];
+      holds("a plain normal wrapper still takes 1 - S (#511)",
+            lost < 1e-10 * 7.212994e-100, lost.toExponential(3));
+    }
+  }
+  const lc = z => races.BASES.normal(z);
+  lc.logCdf = core.logndtr;
+  const r = topk.rankProbabilities([-20, 0, 0], { base: lc })[0][1];
+  holds("logCdf serves when cdf is absent (#511)",
+        Math.abs(r / topk.rankProbabilities([-20, 0, 0])[0][1] - 1) < 1e-12,
+        r.toExponential(6));
+  const bad = extra => Object.assign(z => races.BASES.normal(z), extra);
+  rejects(topk.rankProbabilities, [[0, 1, 2], { base: bad({ cdf: 0.5 }) }],
+          "a non-function cdf", "must be a function");
+  rejects(topk.rankProbabilities, [[0, 1, 2], { base: bad({ cdf: z => core.ndtr(-z) }) }],
+          "a survival passed as cdf", "non-decreasing");
+  rejects(topk.rankProbabilities,
+          [[0, 1, 2], { base: bad({ cdf: z => 1 / (1 + Math.exp(-z)) }) }],
+          "a cdf of another law", "disagrees");
+  rejects(races.raceProbabilities, [[0, 1, 2], { base: bad({ logSf: z => -core.logndtr(-z) }) }],
+          "an increasing logSf", "non-increasing");
+}
+
 // --- #511 residuals: pair cavities, bottom-k CDFs, floored survivals (#502)
 {
   // off-diagonals against python's, whose pair cavities match a directly

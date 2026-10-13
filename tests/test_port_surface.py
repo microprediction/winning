@@ -689,3 +689,28 @@ def test_a_forwarder_and_its_callee_allow_the_same_options():
         assert not extra, (
             f"{key} accepts {', '.join(extra)} but {callee}, which it "
             f"forwards to, rejects them")
+
+
+# Optional tail attributes of a callable base (#511 follow-up), by port:
+# python name -> (R status, browser status, reason for any gap). They are
+# not keywords, so the option audit above cannot see them.
+BASE_TAIL_ATTRIBUTES = {
+    "cdf": (GAP, PRESENT,
+            "python and browser only: R's callable bases keep 1 - S for the "
+            "lower tail (the named bases there reflect, as everywhere)"),
+    "log_cdf": (GAP, PRESENT, "as cdf"),
+    "log_sf": (GAP, PRESENT,
+               "R reads log_sf only from its named bases; a callable's is "
+               "python and browser only"),
+}
+
+
+@pytest.mark.parametrize("attr", sorted(BASE_TAIL_ATTRIBUTES))
+def test_callable_base_tail_attributes_are_declared(attr):
+    r_status, js_status, reason = BASE_TAIL_ATTRIBUTES[attr]
+    races_src = (ROOT / "winning/factor/races.py").read_text()
+    assert f'"{attr}"' in races_src, f"python no longer reads base.{attr}"
+    if js_status == PRESENT:
+        assert re.search(rf"\bfn\.{_camel(attr)}\b|\"{_camel(attr)}\"",
+                         JS_SRC), f"the browser does not read base.{_camel(attr)}"
+    assert r_status == GAP and reason

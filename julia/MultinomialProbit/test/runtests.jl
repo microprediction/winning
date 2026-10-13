@@ -820,3 +820,23 @@ end
         @test MP._ndtri_log(MP.logndtr(x)) ≈ x rtol = 1e-10
     end
 end
+
+@testset "own-noise order: 7 below J = 6, 11 from J = 6 (#173)" begin
+    @test [MultinomialProbit.default_qz(J) for J in (3, 5, 6, 10)] == [7, 7, 11, 11]
+    for (J, r) in ((4, 1), (5, 2))
+        mu = reshape(collect(range(-1.0, 1.0, length = J)), 1, J)
+        V = 0.4 .* reshape(sin.(1:J*r), J, r)
+        @test choice_loglik_and_score(mu, V, [2])[1] ==
+              choice_loglik_and_score(mu, V, [2]; Qz = 7)[1]
+    end
+    mu6 = reshape(collect(range(-1.0, 1.0, length = 6)), 1, 6)
+    V6 = 0.4 .* reshape(sin.(1:6), 6, 1)
+    @test choice_loglik_and_score(mu6, V6, [2])[1] ==
+          choice_loglik_and_score(mu6, V6, [2]; Qz = 11)[1]
+    # ten independent probit runners: 1-d quadrature reference
+    mu10 = reshape(collect(range(-2.0, 2.0, length = 10)), 1, 10)
+    ll = choice_loglik_and_score(mu10, zeros(10, 0), [6])[1]
+    @test abs(ll - (-3.514068769353895)) < 1e-5
+    @test abs(choice_loglik_and_score(mu10, zeros(10, 0), [6]; Qz = 7)[1] -
+              (-3.514068769353895)) > 5e-5
+end

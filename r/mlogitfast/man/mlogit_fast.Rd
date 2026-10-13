@@ -10,7 +10,7 @@ data and a formula for alternative-specific covariates, as used by the
 \pkg{mlogit} package.
 }
 \usage{
-mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
+mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = NULL, maxit = 400L)
 }
 \arguments{
   \item{formula}{choice ~ covariates, with the response a logical
@@ -39,7 +39,8 @@ mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = 7L, maxit = 400L)
     identified.}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
     integrals; a sharpness rule escalates to scrambled Sobol nodes when the
-    conditional races become nearly deterministic.}
+    conditional races become nearly deterministic. \code{Qz = NULL} takes
+    7 below \code{J = 6} and 11 from \code{J = 6}.}
   \item{maxit}{BFGS iteration cap, a non-negative whole number.}
 }
 \value{
