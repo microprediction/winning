@@ -361,7 +361,7 @@ function fitGrammarScaled(C, k, m) {
   // returns { V, D } columns for raceProbabilities. Only P C P is
   // choice-relevant, so every stage fits the projected matrix and the
   // closing diagonal solves (P.P) d = diag(P R P).
-  C = validateCovariance(C, "fitGrammar: C");          // #357
+  // C arrives validated and symmetrized by fitGrammar (#357)
   if (!Number.isInteger(k) || k < 0 || !Number.isInteger(m) || m < 0)
     throw new Error(`fitGrammar: k and m must be non-negative integers; got k=${k}, m=${m}`);
   const n = C.length;
