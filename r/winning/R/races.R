@@ -44,6 +44,66 @@
   S <- ifelse(z < 0, 1 - 0.5 * exp(z / b), 0.5 * exp(-z / b))
   list(S = pmax(S, 1e-300), f = f, fp = -sign(z) * f / b)
 }
+# the density is not analytic at z = 0: the inverses take their slopes on
+# the split lattice there (.kink_lattice, #267); the forward is unchanged
+attr(.base_laplace, "kinks") <- 0
+
+# Gauss-Legendre nodes and weights on [-1, 1] (Golub-Welsch), cached
+.LEGENDRE <- new.env(parent = emptyenv())
+.legendre <- function(m) {
+  key <- as.character(m)
+  if (!is.null(.LEGENDRE[[key]])) return(.LEGENDRE[[key]])
+  k <- seq_len(m - 1)
+  off <- k / sqrt(4 * k * k - 1)
+  J <- matrix(0, m, m)
+  if (m > 1) {
+    J[cbind(k, k + 1)] <- off
+    J[cbind(k + 1, k)] <- off
+  }
+  e <- eigen(J, symmetric = TRUE)
+  idx <- order(e$values)
+  out <- list(t = e$values[idx], w = 2 * e$vectors[1, idx]^2)
+  assign(key, out, envir = .LEGENDRE)
+  out
+}
+
+# Nodes and weights over the window of the uniform lattice x, split at
+# every runner's kink and Gauss-Legendre on each piece: python's
+# races.kink_lattice, same budget rule (outer pieces at a quarter weight,
+# at least four nodes a piece, at most length(x) %/% 4 kinks kept). A
+# kinked base makes the slope integrand -f'(z) JUMP at every runner's
+# location, so a uniform rectangle sum of a slope or Jacobian is only
+# first order there; on these pieces it is spectral (#267). Used for the
+# inverses' derivatives only: the forward maps keep the uniform lattice.
+.kink_lattice <- function(x, M, sd, kinks) {
+  a <- x[1]; b <- x[length(x)]; L <- length(x)
+  K <- as.vector(outer(M, rep(1, length(kinks))) + outer(sd, kinks))
+  K <- sort(unique(K[K > a & K < b]))
+  cap <- max(1L, L %/% 4L)
+  if (length(K) > cap) {
+    width <- (b - a) / cap
+    K <- K[!duplicated(floor((K - a) / width))]
+  }
+  cuts <- c(a, K, b)
+  P <- length(cuts) - 1
+  lo <- cuts[-length(cuts)]; hi <- cuts[-1]
+  eff <- hi - lo
+  eff[1] <- eff[1] * 0.25
+  eff[P] <- eff[P] * 0.25
+  cnt <- pmax(4L, as.integer(round(L * eff / sum(eff))))
+  xs <- numeric(0); ws <- numeric(0)
+  for (j in seq_len(P)) {
+    gl <- .legendre(cnt[j])
+    mid <- 0.5 * (hi[j] + lo[j]); half <- 0.5 * (hi[j] - lo[j])
+    xs <- c(xs, mid + half * gl$t); ws <- c(ws, half * gl$w)
+  }
+  list(x = xs, w = ws)
+}
+
+.kinks_of <- function(fn) {
+  k <- attr(fn, "kinks")
+  if (is.numeric(k) && length(k)) k else NULL
+}
 
 # Exact log survivals of the named bases, used by the integrator only
 # where S was floored at 1e-300 (#502): summed as mass, the floor
@@ -378,6 +438,7 @@ attr(.base_laplace, "log_sf") <- function(z) {
 }
 
 .jacobi_sweeps <- function(mu, forward, scale, alpha, n_iter, tol) {
+  backoffs <- 0L
   # Own-slope-preconditioned coordinate sweeps on the mean-zero quotient,
   # matching python's races._jacobi_sweeps. `forward(mu)` returns
   # list(resid, dres): the residual in whatever space the caller inverts
@@ -397,7 +458,26 @@ attr(.base_laplace, "log_sf") <- function(z) {
   iters <- 0L
   for (it in seq_len(n_iter)) {
     iters <- it
-    fw <- if (is.null(cached)) forward(mu) else cached
+    fw <- cached
+    if (is.null(fw)) {
+      fw <- tryCatch(forward(mu), error = function(e) e)
+      if (inherits(fw, "error")) {
+        # the forward refused this iterate (a lattice defect, or a
+        # membership above one): back off halfway toward the last priced
+        # iterate, as python's _jacobi_sweeps (#267). The first forward
+        # still errors; a persistent refusal returns the last priced
+        # iterate as not converged.
+        if (is.null(prev)) stop(fw)
+        if (backoffs >= 20L)
+          return(list(mu = prev$mu, converged = prev$rmax < tol,
+                      resid = prev$rmax, iters = iters))
+        backoffs <- backoffs + 1L
+        mu <- prev$mu + 0.5 * (mu - prev$mu)
+        penalty <- max(0.5 * penalty, 0.1)
+        prev_step <- NULL
+        next
+      }
+    }
     cached <- NULL
     resid <- fw$resid
     dlogp <- fw$dres
@@ -576,6 +656,31 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   sd <- sqrt(st$D)
   Q <- nrow(st$F)
   M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)
+  lat <- .race_lattice(st, M_all, sd, points, window, delta)
+  x <- lat$x; dx <- lat$dx; points <- lat$points
+  p <- numeric(n)
+  slope <- numeric(n)
+  xm <- matrix(x, n, points, byrow = TRUE)
+  for (q in seq_len(Q)) {
+    z <- (xm - M_all[q, ]) / sd
+    b <- st$fn(z)
+    f <- b$f / sd
+    logS <- .log_survival(st$fn, z, b$S)
+    L <- colSums(logS)
+    rest <- exp(pmin(pmax(matrix(L, n, points, byrow = TRUE) - logS,
+                          -745), 0))
+    p <- p + st$W[q] * rowSums(f * rest) * dx
+    slope <- slope + st$W[q] * rowSums(-b$fp / sd^2 * rest) * dx
+  }
+  total <- sum(p)
+  if (return_slopes) return(list(p = p / total, slopes = slope / total))
+  p / total
+}
+
+# The race lattice: window plus the sharpness refinement, in one place
+# (race_probabilities and .split_race_slopes integrate over the same one).
+.race_lattice <- function(st, M_all, sd, points, window = "bulk",
+                          delta = 1e-12) {
   x <- if (identical(window, "bulk")) {
     .bulk_window(M_all, sd, points, delta, st$fn)
   } else {
@@ -599,23 +704,38 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
       warning("conditional races sharper than the lattice can resolve ",
               "even at 8193 points; results may carry percent-level error")
   }
+  list(x = x, dx = dx, points = points)
+}
+
+# Own-slopes of the race on the kink-split lattice, for a base that
+# declares kinks: the uniform rectangle sum of the slope integrand
+# -f'(z), which jumps at each runner's kink, is first order -- a laplace
+# own-slope came out 6x too large and abilities_from_race missed an exact
+# self-generated target by 0.099 (#267). Normalised by the split total,
+# as python's race_probabilities(..., kink_split=True).
+.split_race_slopes <- function(mu, V, D, F, W, base, points) {
+  st <- .race_setup(mu, V, D, F, W, base)
+  n <- length(st$mu)
+  sd <- sqrt(st$D)
+  Q <- nrow(st$F)
+  M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)
+  x <- suppressWarnings(.race_lattice(st, M_all, sd, points))$x
+  kinks <- .kinks_of(st$fn)
   p <- numeric(n)
   slope <- numeric(n)
-  xm <- matrix(x, n, points, byrow = TRUE)
   for (q in seq_len(Q)) {
-    z <- (xm - M_all[q, ]) / sd
+    kl <- .kink_lattice(x, M_all[q, ], sd, kinks)
+    T <- length(kl$x)
+    z <- (matrix(kl$x, n, T, byrow = TRUE) - M_all[q, ]) / sd
     b <- st$fn(z)
     f <- b$f / sd
     logS <- .log_survival(st$fn, z, b$S)
     L <- colSums(logS)
-    rest <- exp(pmin(pmax(matrix(L, n, points, byrow = TRUE) - logS,
-                          -745), 0))
-    p <- p + st$W[q] * rowSums(f * rest) * dx
-    slope <- slope + st$W[q] * rowSums(-b$fp / sd^2 * rest) * dx
+    rest <- exp(pmin(pmax(matrix(L, n, T, byrow = TRUE) - logS, -745), 0))
+    p <- p + st$W[q] * as.vector((f * rest) %*% kl$w)
+    slope <- slope + st$W[q] * as.vector((-b$fp / sd^2 * rest) %*% kl$w)
   }
-  total <- sum(p)
-  if (return_slopes) return(list(p = p / total, slopes = slope / total))
-  p / total
+  slope / sum(p)
 }
 
 #' Invert the general race: mean-zero mu reproducing probabilities p
@@ -743,9 +863,15 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
       warning(sprintf("abilities_from_race did not converge: max |log residual| %.2e (tol %.0e)", out$resid, tol), call. = FALSE)
     return(out$mu)
   }
+  fn_b <- if (is.function(base)) base else .BASES[[base]]
+  kinked <- !is.null(.kinks_of(fn_b))
   fwd <- function(m) {
     ps <- race_probabilities(m, V = V, D = D, F = F, W = W, base = base,
                              points = points, return_slopes = TRUE)
+    # a kinked base: the slope from the split lattice, the value from the
+    # map being inverted (#267)
+    if (kinked)
+      ps$slopes <- .split_race_slopes(m, V, D, F, W, base, points)
     phat <- pmax(ps$p, 1e-300)
     # the slope floor in the field's units: d log p / d mu scales as
     # 1 / scale, so an absolute -1e-6 took over past scale 1e6 and the

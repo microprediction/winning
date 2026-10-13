@@ -142,7 +142,11 @@
   c(xlo - pad_sds * smax, b + pad_sds * smax)
 }
 
-.topk_grid <- function(mu, sd, k, fn, points, delta = 1e-12) {
+# split = TRUE: the kink-split lattice (.kink_lattice) over the same
+# window, for the inverses' derivatives of a kinked base (#267); then w
+# holds the node weights and every reduction is a weighted sum (.wsum).
+# On the default lattice w is NULL and the rectangle sum is unchanged.
+.topk_grid <- function(mu, sd, k, fn, points, delta = 1e-12, split = FALSE) {
   w <- .count_window(mu, sd, k, fn, delta)
   # about two points per NARROWEST sd, capped at 8193. The window is
 # set by the widest runner and the grid by `points`, so a heterogeneous
@@ -151,6 +155,11 @@
 # runner-level errors of opposite sign cancel in it (#224).
   points <- .resolved_points(w[1], w[2], sd, points, .base_resolution(fn))
   x <- seq(w[1], w[2], length.out = points)
+  wts <- NULL
+  if (split && !is.null(.kinks_of(fn))) {
+    kl <- .kink_lattice(x, mu, sd, .kinks_of(fn))
+    x <- kl$x; wts <- kl$w; points <- length(x)
+  }
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
   # F and S each accurate where small: 1 - S rounds a lower-tail CDF to
@@ -167,8 +176,18 @@
     if (any(lower)) F[lower] <- .clip01(.unfloored(fn, -z[lower],
                                                    fn(-z[lower])$S))
   }
-  list(x = x, dx = x[2] - x[1], z = z,
+  list(x = x, dx = x[2] - x[1], w = wts, z = z,
        S = S, f = b$f, fp = b$fp, F = F)
+}
+
+# rows of M (n, L) integrated on the grid g: the rectangle sum, or the
+# split lattice's weighted sum
+.wsum <- function(M, g) {
+  if (is.null(g$w)) {
+    if (is.matrix(M)) rowSums(M) * g$dx else sum(M) * g$dx
+  } else {
+    if (is.matrix(M)) as.vector(M %*% g$w) else sum(M * g$w)
+  }
 }
 
 .unfloored <- function(fn, z, S) {
@@ -336,15 +355,15 @@
   out
 }
 
-.topk_with_slopes <- function(mu, sd, k, fn, points) {
-  g <- .topk_grid(mu, sd, k, fn, points)
+.topk_with_slopes <- function(mu, sd, k, fn, points, split = FALSE) {
+  g <- .topk_grid(mu, sd, k, fn, points, split = split)
   C <- .count_distribution(g$F, g$S)
   cdf <- .loo_cdf(C, g$F, k, g$S)
   n <- length(mu)
   dens <- t(g$f) / sd                       # (n, L)
   dmu <- -t(g$fp) / (sd * sd)
-  list(q = rowSums(dens * cdf) * g$dx,
-       slopes = rowSums(dmu * cdf) * g$dx)
+  list(q = .wsum(dens * cdf, g),
+       slopes = .wsum(dmu * cdf, g))
 }
 
 .checked_topk <- function(raw, k, kind, mass_tol = 5e-3) {
@@ -481,9 +500,15 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
     return(list(Jmu = Jm, Jsigma = Js))
   }
   Dv <- .as_idio(D, n)
-  sd <- sqrt(Dv)
   fn <- if (is.function(base)) base else .BASES[[base]]
-  g <- .topk_grid(mu, sd, k, fn, points)
+  .topk_jacobians_core(mu, k, Dv, fn, points, FALSE)
+}
+
+# The independent-race Jacobians; split as in .topk_grid (#267).
+.topk_jacobians_core <- function(mu, k, Dv, fn, points, split) {
+  n <- length(mu)
+  sd <- sqrt(Dv)
+  g <- .topk_grid(mu, sd, k, fn, points, split = split)
   dens <- t(g$f) / sd                       # (n, L)
   zdens <- t(g$z * g$f) / sd
   C <- .count_distribution(g$F, g$S)
@@ -493,13 +518,13 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
     Qi <- .loo_pmf(C, g$F, i, g$S)
     pair <- .pair_pmf_at(Qi, g$F, i, k, g$S)
     kern <- pair * matrix(dens[i, ], n, ncol(pair), byrow = TRUE)
-    row_mu <- rowSums(kern * dens) * g$dx
-    row_sd <- rowSums(kern * zdens) * g$dx
+    row_mu <- .wsum(kern * dens, g)
+    row_sd <- .wsum(kern * zdens, g)
     row_mu[i] <- 0
     row_mu[i] <- -sum(row_mu)
     cdf_i <- rowSums(Qi[, seq_len(k), drop = FALSE])
     dfdsd <- -(g$z[, i] * g$fp[, i] + g$f[, i]) / Dv[i]
-    row_sd[i] <- sum(dfdsd * cdf_i) * g$dx
+    row_sd[i] <- .wsum(dfdsd * cdf_i, g)
     Jm[i, ] <- row_mu
     Js[i, ] <- row_sd
   }
@@ -637,9 +662,17 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   alpha <- if (n == 2 || (k == 1 && top2 > 0.8)) 0.7 else 1.0
   n_iter <- .as_iter_budget(n_iter)
   tol <- .as_tolerance(tol)                                   # (#551)
+  # a kinked base takes its slopes from the split lattice, the value from
+  # the map being inverted (#267)
+  kinked <- !is.null(.kinks_of(fn))
+  with_slopes <- function(m) {
+    ws <- .topk_with_slopes(m, sd, k, fn, points)
+    if (kinked) ws$slopes <- .topk_with_slopes(m, sd, k, fn, points, TRUE)$slopes
+    ws
+  }
   fwd <- function(m) {
     if (is.null(fac)) {
-      ws <- .topk_with_slopes(m, sd, k, fn, points)
+      ws <- with_slopes(m)
       qraw <- ws$q
       sl <- ws$slopes
     } else {
@@ -647,12 +680,18 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
       sl <- rep(0, n)
       for (j in seq_len(nrow(fac$nodes))) {
         shift <- as.vector(fac$Vm %*% fac$nodes[j, ])
-        ws <- .topk_with_slopes(m + shift, sd, k, fn, points)
+        ws <- with_slopes(m + shift)
         qraw <- qraw + fac$w[j] * ws$q
         sl <- sl + fac$w[j] * ws$slopes
       }
     }
     qhat <- .checked_topk(qraw, k, "top-k inversion")
+    # a membership above one, clipped to exactly one, leaves a flat logit
+    # residual of ~690 the sweeps stall in: refuse the iterate so they
+    # back off (the uniform lattice overshoots one near saturation for a
+    # kinked base, #267)
+    if (max(qraw) * k > sum(qraw))
+      stop("top-k inversion: a membership above one")
     resid <- (log(pmax(qhat, 1e-300)) - log(pmax(1 - qhat, 1e-300))) -
       logit_t
     list(resid = resid,
@@ -730,20 +769,46 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
   iters <- 0L
   last_accepted <- TRUE
   last_grad <- Inf
+  # A kinked base (laplace) takes its Jacobians from the split lattice,
+  # where they are the continuum derivatives; and when LM stalls or
+  # crawls on the uniform map -- whose window slides across the kinks, so
+  # its own derivative is not the continuum one -- the Jacobian is taken
+  # by forward differences of the map itself, as python (#267).
+  fn_b <- if (is.function(base)) base else .BASES[[base]]
+  kinked <- !is.null(.kinks_of(fn_b))
+  fd_mode <- FALSE
+  slow <- 0L
+  fd_jacobian <- function(m, s, r0) {
+    h <- 1e-6
+    cols <- vector("list", 2 * n)
+    for (j in seq_len(n)) {
+      e <- numeric(n); e[j] <- h
+      cols[[j]] <- (logits(m + e, s)$r - r0) / h
+      cols[[n + j]] <- (logits(m, s * exp(e))$r - r0) / h
+    }
+    do.call(cbind, cols)
+  }
   for (it in seq_len(n_iter)) {
     if (resid_max < tol) break
     iters <- it
-    blocks <- list()
-    pairs <- list(list(k = k1, qh = qh1), list(k = k2, qh = qh2))
-    for (bi in 1:2) {
-      Jp <- top_k_jacobians(mu, pairs[[bi]]$k, D = sd^2, base = base,
-                            points = points)
-      g <- 1 / pmax(pairs[[bi]]$qh * (1 - pairs[[bi]]$qh), 1e-300)
-      blocks[[bi]] <- cbind(Jp$Jmu * g,
-                            sweep(Jp$Jsigma, 2, sd, "*") * g)
+    if (fd_mode) {
+      J <- tryCatch(fd_jacobian(mu, sd, r), error = function(e) NULL)
+      if (is.null(J)) break
+    } else {
+      blocks <- list()
+      pairs <- list(list(k = k1, qh = qh1), list(k = k2, qh = qh2))
+      for (bi in 1:2) {
+        Jp <- if (kinked)
+          .topk_jacobians_core(mu, pairs[[bi]]$k, sd^2, fn_b, points, TRUE)
+        else top_k_jacobians(mu, pairs[[bi]]$k, D = sd^2, base = base,
+                             points = points)
+        g <- 1 / pmax(pairs[[bi]]$qh * (1 - pairs[[bi]]$qh), 1e-300)
+        blocks[[bi]] <- cbind(Jp$Jmu * g,
+                              sweep(Jp$Jsigma, 2, sd, "*") * g)
+      }
+      J <- rbind(blocks[[1]], blocks[[2]],
+                 cbind(matrix(0, n, n), sqr * diag(n)))
     }
-    J <- rbind(blocks[[1]], blocks[[2]],
-               cbind(matrix(0, n, n), sqr * diag(n)))
     JtJ <- crossprod(J)
     Jtr <- as.vector(crossprod(J, r))
     last_grad <- max(abs(Jtr))
@@ -761,6 +826,8 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
       if (is.null(lg_n)) { lam <- lam * 8; next }
       cost_n <- sum(lg_n$r * lg_n$r)
       if (cost_n < cost) {
+        # crawling: an accepted step that does not halve the residual norm
+        slow <- if (cost_n > 0.25 * cost) slow + 1L else 0L
         mu <- mu_n; sd <- sd_n; r <- lg_n$r
         qh1 <- lg_n$qh1; qh2 <- lg_n$qh2
         cost <- cost_n
@@ -772,6 +839,11 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
       lam <- lam * 8
     }
     last_accepted <- accepted
+    if (kinked && !fd_mode && (!accepted || slow >= 2L)) {
+      fd_mode <- TRUE
+      lam <- 1e-6
+      next
+    }
     if (!accepted) break
   }
   # A ridge stall counts as convergence only at a stationary point of the
@@ -818,28 +890,34 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
                            return_info = return_info)
 }
 
-.rank_marginal_with_jacobian <- function(mu, sd, r, fn, points) {
+# split as in .topk_grid; jacobian = FALSE skips the pair terms; mass is
+# each runner's density mass on this lattice, the row sum
+# rank_probabilities normalises by (#267)
+.rank_marginal_with_jacobian <- function(mu, sd, r, fn, points,
+                                         split = FALSE, jacobian = TRUE) {
   n <- length(mu)
-  g <- .topk_grid(mu, sd, n - 1, fn, points)
+  g <- .topk_grid(mu, sd, n - 1, fn, points, split = split)
   dens <- t(g$f) / sd                       # (n, L)
+  mass <- .wsum(dens, g)
   C <- .count_distribution(g$F, g$S)
   p <- numeric(n)
   J <- matrix(0, n, n)
   for (i in 1:n) {
     Qi <- .loo_pmf(C, g$F, i, g$S)
-    p[i] <- sum(Qi[, r] * dens[i, ]) * g$dx
+    p[i] <- .wsum(Qi[, r] * dens[i, ], g)
+    if (!jacobian) next
     # P(N_{-ij} = n-1) is identically zero (only n-2 others exist);
     # deconvolving it injects window-edge-sensitive junk
     pair <- if (r <= n - 1) .pair_pmf_at(Qi, g$F, i, r, g$S)
             else matrix(0, n, length(g$x))
     if (r >= 2) pair <- pair - .pair_pmf_at(Qi, g$F, i, r - 1, g$S)
     kern <- pair * matrix(dens[i, ], n, ncol(pair), byrow = TRUE)
-    row <- rowSums(kern * dens) * g$dx
+    row <- .wsum(kern * dens, g)
     row[i] <- 0
     row[i] <- -sum(row)
     J[i, ] <- row
   }
-  list(p = p, J = J)
+  list(p = p, J = J, mass = mass)
 }
 
 abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
@@ -879,16 +957,48 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
       call. = FALSE)
   mu <- if (is.null(mu0)) rep(0, n) else .as_warm_start(mu0, n)  # #554
 
-  st <- .rank_marginal_with_jacobian(mu, sd, r, fn, points)
-  resid <- log(pmax(st$p, 1e-300)) - logt
+  # The model is the PUBLIC map: rows normalised by their lattice mass as
+  # rank_probabilities does, and the column renormalised as the target is.
+  # The raw column is a different map wherever that mass is not one (a
+  # laplace row is up to 1.6e-3 off), and self-generated laplace targets
+  # never converged (#267). A kinked base takes its Jacobian from the
+  # split lattice and falls back to forward differences of the map when
+  # LM stalls or crawls, as python.
+  kinked <- !is.null(.kinks_of(fn))
+  model <- function(m, jac = TRUE) {
+    nx <- .rank_marginal_with_jacobian(m, sd, r, fn, points,
+                                       jacobian = jac && !kinked)
+    u <- nx$p / nx$mass
+    tot <- sum(u)
+    logp <- log(pmax(u / tot, 1e-300))
+    if (!jac) return(list(logp = logp, Jlog = NULL))
+    Jv <- if (kinked)
+      .rank_marginal_with_jacobian(m, sd, r, fn, points, split = TRUE)$J
+    else nx$J
+    Jlog <- Jv / pmax(nx$p, 1e-300) -
+      matrix(colSums(Jv / nx$mass) / tot, n, n, byrow = TRUE)
+    list(logp = logp, Jlog = Jlog)
+  }
+  fd_jacobian <- function(m, logp) {
+    h <- 1e-6
+    sapply(seq_len(n), function(j) {
+      e <- numeric(n); e[j] <- h
+      (model(m + e, FALSE)$logp - logp) / h
+    })
+  }
+  st <- model(mu)
+  logp <- st$logp; Jlog <- st$Jlog
+  resid <- logp - logt
   cost <- sum(resid * resid)
   resid_max <- max(abs(resid))
   lam <- 1e-6
   iters <- 0L
+  fd_mode <- FALSE
+  slow <- 0L
   for (it in seq_len(n_iter)) {
     if (resid_max < tol) break
     iters <- it
-    Jlog <- st$J / pmax(st$p, 1e-300)
+    if (fd_mode) Jlog <- fd_jacobian(mu, logp)
     A <- crossprod(Jlog)
     gvec <- as.vector(crossprod(Jlog, resid))
     accepted <- FALSE
@@ -898,17 +1008,25 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
       if (is.null(step)) { lam <- lam * 8; next }
       mu_n <- mu + step
       mu_n <- mu_n - mean(mu_n)
-      st_n <- .rank_marginal_with_jacobian(mu_n, sd, r, fn, points)
-      r_n <- log(pmax(st_n$p, 1e-300)) - logt
+      st_n <- model(mu_n, !(kinked || fd_mode))
+      r_n <- st_n$logp - logt
       cost_n <- sum(r_n * r_n)
       if (cost_n < cost) {
-        mu <- mu_n; st <- st_n; resid <- r_n; cost <- cost_n
+        slow <- if (cost_n > 0.25 * cost) slow + 1L else 0L
+        mu <- mu_n; logp <- st_n$logp; resid <- r_n; cost <- cost_n
         resid_max <- max(abs(resid))
         lam <- max(lam / 3, 1e-10)
         accepted <- TRUE
+        if (!is.null(st_n$Jlog)) Jlog <- st_n$Jlog
+        else if (!fd_mode && !(resid_max < tol)) Jlog <- model(mu)$Jlog
         break
       }
       lam <- lam * 8
+    }
+    if (kinked && !fd_mode && (!accepted || slow >= 2L)) {
+      fd_mode <- TRUE
+      lam <- 1e-6
+      next
     }
     if (!accepted) break
   }

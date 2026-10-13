@@ -2472,5 +2472,62 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
             p => JSON.stringify(p));
 }
 
+// --- laplace inverses on exact self-generated targets (#267): the uniform
+// lattice's slopes are first order across each runner's kink, so the
+// inverses take their derivatives from the split lattice
+{
+  const quiet = console.warn; console.warn = () => {};
+  const mx = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+  {
+    const mu = [-1.5, 1.5, 0], o = { D: [0.1, 6, 2], base: "laplace" };
+    for (const points of [257, 513]) {
+      const t = races.raceProbabilities(mu, { ...o, points });
+      const f = races.abilitiesFromRace(t, { ...o, points, returnInfo: true });
+      holds(`laplace race inverse round-trips at ${points} points (#267)`,
+            f.converged && mx(races.raceProbabilities(f.mu, { ...o, points }), t) < 1e-8);
+    }
+  }
+  {
+    const mu = [-1.0758897613734006, 0.8221703173592687, 1.2747228138148785,
+                -1.7811144122853875, 0.7601110424846411];
+    const sd = [0.5289511696798439, 1.2097101565229562, 0.9433803641440728,
+                1.3242591310799288, 1.2509595951816537];
+    const D = sd.map(v => v * v);
+    const q1 = topk.topKProbabilities(mu, 1, { D, base: "laplace" });
+    const q2 = topk.topKProbabilities(mu, 2, { D, base: "laplace" });
+    const f = topk.locScaleFromTopkPair(q1, 1, q2, 2, { base: "laplace", returnInfo: true });
+    const Df = f.sd.map(v => v * v);
+    holds("laplace loc/scale pair round-trips at 513 points (#267)",
+          f.info.converged &&
+          mx(topk.topKProbabilities(f.mu, 2, { D: Df, base: "laplace" }), q2) < 1e-8);
+  }
+  {
+    const mu = [-1.7151211049140525, 1.6647723741888125, 0.5038679121443425,
+                -0.5829490360565223, 0.12942985463742007];
+    const D = [0.7813762250327798, 0.7548860941612756, 1.0407350057755838,
+               0.5488380588062226, 2.0439199583301906];
+    const q = topk.topKProbabilities(mu, 3, { D, base: "laplace" });
+    const f = topk.abilitiesFromTopk(q, 3, { D, base: "laplace", returnInfo: true });
+    holds("laplace top-3 inverse round-trips at 513 points (#267)",
+          f.info.converged &&
+          mx(topk.topKProbabilities(f.mu, 3, { D, base: "laplace" }), q) < 1e-8);
+  }
+  {
+    const mu = [-0.32582296524196863, 0.47305250354111195, 0.6627286607399583,
+                1.3682900704443455, 1.9737782655283809];
+    const sd = [1.1240951818414033, 1.6630497237201780, 0.37187049128115174,
+                0.4599949211347848, 0.7765970396809280];
+    const mu0 = [-0.34953938962426034, 0.5153643666766584, 0.6403211534721777,
+                 1.3358619652222843, 2.0055403112666683];
+    const D = sd.map(v => v * v);
+    const t = topk.rankProbabilities(mu, { D, base: "laplace" }).map(r => r[1]);
+    const f = topk.abilitiesFromRankMarginal(t, 2, { D, base: "laplace", mu0, returnInfo: true });
+    const c = v => v.map(x => x - v.reduce((a, b) => a + b, 0) / v.length);
+    holds("laplace exact-rank inverse recovers its generating field (#267)",
+          f.info.converged && mx(c(f.mu), c(mu)) < 1e-6);
+  }
+  console.warn = quiet;
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

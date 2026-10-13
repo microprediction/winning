@@ -6,7 +6,8 @@
 // the derivations and the two-branch refusal of exact-rank targets.
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
-         jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints } from "./core.mjs";
+         jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints,
+         kinkLattice } from "./core.mjs";
 import { BASES, _factorNodeRule, baseResolution } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -359,12 +360,25 @@ export function dyadicPoints(need) {
   return Math.min(2 ** Math.ceil(Math.log2(need - 1)) + 1, 8193);
 }
 
-function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
+/* split: the kink-split lattice (core.kinkLattice) over the same window,
+   for the inverses' derivatives of a kinked base (#267). Then w holds
+   the node weights and dx is 1, so every `sum * wt` then `* dx` below is
+   the weighted sum; on the default lattice wt is 1 and nothing moves. */
+function kinksOf(fn) {
+  return fn && Array.isArray(fn.kinks) && fn.kinks.length ? fn.kinks : null;
+}
+
+function topkGrid(mu, sd, k, fn, points, delta = 1e-12, split = false) {
   const [lo, hi] = countWindow(mu, sd, k, fn, delta);
   points = resolvedPoints(lo, hi, sd, points, baseResolution(fn));
-  const x = new Array(points);
-  const dx = (hi - lo) / (points - 1);
+  let x = new Array(points);
+  let dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
+  let w = null;
+  if (split && kinksOf(fn)) {
+    const kl = kinkLattice(x, mu, sd, fn.kinks);
+    x = kl.xs; w = kl.ws; dx = 1;
+  }
   const g = baseGrid(fn, x, mu, sd);
   // the count program wants F and S each accurate where it is small:
   // 1 - S rounds a lower-tail CDF to zero once S is near one, and those
@@ -375,7 +389,7 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   const F = S.map((row, t) => row.map((s, i) =>
     sym && s > 0.5 ? clip01(unfloored(fn, -g.z[t][i], fn(-g.z[t][i])[0]))
                    : clip01(1 - s)));
-  return { x, dx, ...g, F, S };
+  return { x, dx, w, ...g, F, S };
 }
 
 /* P(i among the k LARGEST) directly: the top-k integral with the count of
@@ -415,17 +429,18 @@ function bottomkIndependent(mu, sd, k, fn, points) {
   return q;
 }
 
-function topkWithSlopes(mu, sd, k, fn, points) {
+function topkWithSlopes(mu, sd, k, fn, points, split = false) {
   const n = mu.length;
-  const { dx, F, S, f, fp } = topkGrid(mu, sd, k, fn, points);
+  const { dx, w, F, S, f, fp } = topkGrid(mu, sd, k, fn, points, 1e-12, split);
   const C = countDistribution(F, S);
   const cdf = leaveOneOutCdf(C, F, k, S);
   const q = new Array(n).fill(0), slopes = new Array(n).fill(0);
   for (let i = 0; i < n; i++) {
     let s0 = 0, s1 = 0;
     for (let t = 0; t < F.length; t++) {
-      s0 += (f[t][i] / sd[i]) * cdf[i][t];
-      s1 -= (fp[t][i] / (sd[i] * sd[i])) * cdf[i][t];
+      const wt = w ? w[t] : 1;
+      s0 += (f[t][i] / sd[i]) * cdf[i][t] * wt;
+      s1 -= (fp[t][i] / (sd[i] * sd[i])) * cdf[i][t] * wt;
     }
     q[i] = s0 * dx;
     slopes[i] = s1 * dx;
@@ -598,10 +613,14 @@ export function topKJacobians(mu, k, opts = {}) {
     }
     return { Jmu, Jsigma };
   }
-  const Dv = asIdio(D, n);
+  return topkJacobiansCore(mu, k, asIdio(D, n), baseFn(base), points, false);
+}
+
+/* The independent-race Jacobians; split as in topkGrid (#267). */
+function topkJacobiansCore(mu, k, Dv, fn, points, split) {
+  const n = mu.length;
   const sd = Dv.map(Math.sqrt);
-  const fn = baseFn(base);
-  const { dx, F, S, f, fp, z } = topkGrid(mu, sd, k, fn, points);
+  const { dx, w, F, S, f, fp, z } = topkGrid(mu, sd, k, fn, points, 1e-12, split);
   const L = F.length;
   const dens = [];
   for (let t = 0; t < L; t++) dens.push(f[t].map((v, i) => v / sd[i]));
@@ -616,7 +635,7 @@ export function topKJacobians(mu, k, opts = {}) {
       if (j === i) continue;
       let sm = 0, ss = 0;
       for (let t = 0; t < L; t++) {
-        const kern = pair[j][t] * dens[t][i];
+        const kern = pair[j][t] * dens[t][i] * (w ? w[t] : 1);
         sm += kern * dens[t][j];
         ss += kern * z[t][j] * dens[t][j];
       }
@@ -628,7 +647,7 @@ export function topKJacobians(mu, k, opts = {}) {
     for (let t = 0; t < L; t++) {
       let cdfI = 0;
       for (let m = 0; m < k; m++) cdfI += Qi[t][m];
-      own += (-(z[t][i] * fp[t][i] + f[t][i]) / Dv[i]) * cdfI;
+      own += (-(z[t][i] * fp[t][i] + f[t][i]) / Dv[i]) * cdfI * (w ? w[t] : 1);
     }
     rowSd[i] = own * dx;
     Jm.push(rowMu); Js.push(rowSd);
@@ -787,10 +806,18 @@ export function abilitiesFromTopk(q, k, opts = {}) {
     ? target.slice().sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0)
     : 1;
   const alpha = (n === 2 || (k === 1 && top2 > 0.8)) ? 0.7 : 1.0;
+  // a kinked base takes its slopes from the split lattice, the value from
+  // the map being inverted (#267)
+  const kinked = !!kinksOf(fn);
+  const withSlopes = m => {
+    const node = topkWithSlopes(m, sd, k, fn, points);
+    if (kinked) node.slopes = topkWithSlopes(m, sd, k, fn, points, true).slopes;
+    return node;
+  };
   const forward = mu => {
     let qraw, sl;
     if (!fac) {
-      ({ q: qraw, slopes: sl } = topkWithSlopes(mu, sd, k, fn, points));
+      ({ q: qraw, slopes: sl } = withSlopes(mu));
       sl = sl.slice();
     } else {
       qraw = new Array(n).fill(0);
@@ -802,7 +829,7 @@ export function abilitiesFromTopk(q, k, opts = {}) {
             s += fac.Vm[i][c] * fac.nodes[j][c];
           return s;
         });
-        const node = topkWithSlopes(shifted, sd, k, fn, points);
+        const node = withSlopes(shifted);
         for (let i = 0; i < n; i++) {
           qraw[i] += fac.w[j] * node.q[i];
           sl[i] += fac.w[j] * node.slopes[i];
@@ -810,6 +837,12 @@ export function abilitiesFromTopk(q, k, opts = {}) {
       }
     }
     const qhat = checkedTopk(qraw, k, "top-k inversion");
+    // a membership above one, clipped to exactly one, leaves a flat
+    // logit residual of ~690 the sweeps stall in: refuse the iterate so
+    // they back off (the uniform lattice overshoots one near saturation
+    // for a kinked base, #267)
+    if (Math.max(...qraw) * k > qraw.reduce((a, b) => a + b, 0))
+      throw new Error("top-k inversion: a membership above one");
     const resid = qhat.map((v, i) =>
       Math.log(Math.max(v, 1e-300)) - Math.log(Math.max(1 - v, 1e-300))
       - logitT[i]);
@@ -893,27 +926,54 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   let cost = r.reduce((a, b) => a + b * b, 0);
   let residMax = fitMax(r);
   let lam = 1e-6, iters = 0, lastAccepted = true, lastGrad = Infinity;
+  // A kinked base (laplace) takes its Jacobians from the split lattice,
+  // where they are the continuum derivatives; and when LM stalls or
+  // crawls on the uniform map -- whose window slides across the kinks,
+  // so its own derivative is not the continuum one -- the Jacobian is
+  // taken by forward differences of the map itself, as python (#267).
+  const fnB = baseFn(base);
+  const kinked = !!kinksOf(fnB);
+  let fdMode = false, slow = 0;
+  const fdJacobian = (m, s, r0) => {
+    const h = 1e-6, cols = [];
+    for (let j = 0; j < n; j++) {
+      const mm = m.slice(); mm[j] += h;
+      const rr = logits(mm, s).r;
+      cols.push(rr.map((v, t) => (v - r0[t]) / h));
+    }
+    for (let j = 0; j < n; j++) {
+      const ss = s.slice(); ss[j] *= Math.exp(h);
+      const rr = logits(m, ss).r;
+      cols.push(rr.map((v, t) => (v - r0[t]) / h));
+    }
+    return r0.map((_, t) => cols.map(c => c[t]));
+  };
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
     if (residMax < tol) break;
-    const J = [];
-    for (const [kk, qh] of [[k1, qh1], [k2, qh2]]) {
-      const { Jmu, Jsigma } = topKJacobians(mu, kk,
-        { D: sd.map(v => v * v), base, points });
-      for (let i = 0; i < n; i++) {
-        const g = 1 / Math.max(qh[i] * (1 - qh[i]), 1e-300);
-        const row = new Array(2 * n);
-        for (let j = 0; j < n; j++) {
-          row[j] = Jmu[i][j] * g;
-          row[n + j] = Jsigma[i][j] * sd[j] * g;
+    let J = [];
+    if (fdMode) {
+      try { J = fdJacobian(mu, sd, r); } catch (e) { break; }
+    } else {
+      for (const [kk, qh] of [[k1, qh1], [k2, qh2]]) {
+        const { Jmu, Jsigma } = kinked
+          ? topkJacobiansCore(mu, kk, sd.map(v => v * v), fnB, points, true)
+          : topKJacobians(mu, kk, { D: sd.map(v => v * v), base, points });
+        for (let i = 0; i < n; i++) {
+          const g = 1 / Math.max(qh[i] * (1 - qh[i]), 1e-300);
+          const row = new Array(2 * n);
+          for (let j = 0; j < n; j++) {
+            row[j] = Jmu[i][j] * g;
+            row[n + j] = Jsigma[i][j] * sd[j] * g;
+          }
+          J.push(row);
         }
+      }
+      for (let i = 0; i < n; i++) {
+        const row = new Array(2 * n).fill(0);
+        row[n + i] = sqr;
         J.push(row);
       }
-    }
-    for (let i = 0; i < n; i++) {
-      const row = new Array(2 * n).fill(0);
-      row[n + i] = sqr;
-      J.push(row);
     }
     const rows = J.length;
     const JtJ = [], Jtr = new Array(2 * n).fill(0);
@@ -951,6 +1011,8 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
       }
       const costN = out.r.reduce((a, b) => a + b * b, 0);
       if (costN < cost) {
+        // crawling: an accepted step that does not halve the residual norm
+        slow = costN > 0.25 * cost ? slow + 1 : 0;
         mu = muN; sd = sdN; r = out.r; qh1 = out.qh1; qh2 = out.qh2;
         cost = costN;
         residMax = fitMax(r);
@@ -961,6 +1023,10 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
       lam *= 8;
     }
     lastAccepted = accepted;
+    if (kinked && !fdMode && (!accepted || slow >= 2)) {
+      fdMode = true; lam = 1e-6;
+      continue;
+    }
     if (!accepted) break;
   }
   // with a ridge the penalized optimum keeps a nonzero fit residual by
@@ -1003,20 +1069,28 @@ export function locScaleFromWinAndSecond(pWin, pSecond, opts = {}) {
   return locScaleFromTopkPair(p1, 1, top2, 2, opts);
 }
 
-function rankMarginalWithJacobian(mu, sd, r, fn, points) {
+/* split as in topkGrid; jacobian=false skips the pair terms; mass is each
+   runner's density mass on this lattice, the row sum rankProbabilities
+   normalises by (#267). */
+function rankMarginalWithJacobian(mu, sd, r, fn, points, split = false,
+                                  jacobian = true) {
   const n = mu.length;
-  const { dx, F, S, f } = topkGrid(mu, sd, n - 1, fn, points);
+  const { dx, w, F, S, f } = topkGrid(mu, sd, n - 1, fn, points, 1e-12, split);
   const L = F.length;
   const dens = [];
   for (let t = 0; t < L; t++) dens.push(f[t].map((v, i) => v / sd[i]));
   const C = countDistribution(F, S);
-  const p = new Array(n), J = [];
+  const p = new Array(n), J = [], mass = new Array(n);
   for (let i = 0; i < n; i++) {
+    let mi = 0;
+    for (let t = 0; t < L; t++) mi += dens[t][i] * (w ? w[t] : 1);
+    mass[i] = mi * dx;
     const Qe = [];
     const Qi = looPmf(C, F, i, S, Qe);
     let pi = 0;
-    for (let t = 0; t < L; t++) pi += Qi[t][r - 1] * dens[t][i];
+    for (let t = 0; t < L; t++) pi += Qi[t][r - 1] * dens[t][i] * (w ? w[t] : 1);
     p[i] = pi * dx;
+    if (!jacobian) { J.push(new Array(n).fill(0)); continue; }
     // P(N_{-ij} = n-1) is identically zero (only n-2 others exist);
     // deconvolving it injects window-edge-sensitive junk
     const hiPair = r <= n - 1 ? pairPmfAt(Qi, F, i, r, S, Qe) : null;
@@ -1028,14 +1102,14 @@ function rankMarginalWithJacobian(mu, sd, r, fn, points) {
       for (let t = 0; t < L; t++) {
         let c = hiPair ? hiPair[j][t] : 0;
         if (loPair) c -= loPair[j][t];
-        s += c * dens[t][j] * dens[t][i];
+        s += c * dens[t][j] * dens[t][i] * (w ? w[t] : 1);
       }
       row[j] = s * dx;
     }
     row[i] = -row.reduce((a, b) => a + b, 0);
     J.push(row);
   }
-  return { p, J };
+  return { p, J, mass };
 }
 
 export function abilitiesFromRankMarginal(p, r, opts = {}) {
@@ -1080,16 +1154,49 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
     mu = new Array(n).fill(0);
   }
 
-  let { p: phat, J } = rankMarginalWithJacobian(mu, sd, r, fn, points);
-  let resid = phat.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
+  // The model is the PUBLIC map: rows normalised by their lattice mass as
+  // rankProbabilities does, and the column renormalised as the target is.
+  // The raw column is a different map wherever that mass is not one (a
+  // laplace row is up to 1.6e-3 off), and self-generated laplace targets
+  // never converged (#267). A kinked base takes its Jacobian from the
+  // split lattice, and falls back to forward differences of the map when
+  // LM stalls or crawls, as python.
+  const kinked = !!kinksOf(fn);
+  const model = (m, jac = true) => {
+    const nx = rankMarginalWithJacobian(m, sd, r, fn, points, false,
+                                        jac && !kinked);
+    const u = nx.p.map((v, i) => v / nx.mass[i]);
+    const tot = u.reduce((a, b) => a + b, 0);
+    const logp = u.map(v => Math.log(Math.max(v / tot, 1e-300)));
+    if (!jac) return { logp, Jlog: null };
+    const Jv = kinked
+      ? rankMarginalWithJacobian(m, sd, r, fn, points, true).J
+      : nx.J;
+    const colw = new Array(n).fill(0);
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++) colw[j] += Jv[i][j] / nx.mass[i];
+    const Jlog = Jv.map((row, i) => row.map((v, j) =>
+      v / Math.max(nx.p[i], 1e-300) - colw[j] / tot));
+    return { logp, Jlog };
+  };
+  const fdJacobian = (m, logp) => {
+    const h = 1e-6, cols = [];
+    for (let j = 0; j < n; j++) {
+      const mm = m.slice(); mm[j] += h;
+      const lp = model(mm, false).logp;
+      cols.push(lp.map((v, i) => (v - logp[i]) / h));
+    }
+    return logp.map((_, i) => cols.map(c => c[i]));
+  };
+  let { logp, Jlog } = model(mu);
+  let resid = logp.map((v, i) => v - logt[i]);
   let cost = resid.reduce((a, b) => a + b * b, 0);
   let residMax = Math.max(...resid.map(Math.abs));
-  let lam = 1e-6, iters = 0;
+  let lam = 1e-6, iters = 0, fdMode = false, slow = 0;
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
     if (residMax < tol) break;
-    const Jlog = J.map((row, i) =>
-      row.map(v => v / Math.max(phat[i], 1e-300)));
+    if (fdMode) Jlog = fdJacobian(mu, logp);
     const A = [], g = new Array(n).fill(0);
     for (let a = 0; a < n; a++) {
       const row = new Array(n).fill(0);
@@ -1110,18 +1217,24 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
       let muN = mu.map((v, i) => v + step[i]);
       const mm = muN.reduce((a, b) => a + b, 0) / n;
       muN = muN.map(v => v - mm);
-      const nx = rankMarginalWithJacobian(muN, sd, r, fn, points);
-      const rN = nx.p.map((v, i) =>
-        Math.log(Math.max(v, 1e-300)) - logt[i]);
+      const nx = model(muN, !(kinked || fdMode));
+      const rN = nx.logp.map((v, i) => v - logt[i]);
       const costN = rN.reduce((a, b) => a + b * b, 0);
       if (costN < cost) {
-        mu = muN; phat = nx.p; J = nx.J; resid = rN; cost = costN;
+        slow = costN > 0.25 * cost ? slow + 1 : 0;
+        mu = muN; logp = nx.logp; resid = rN; cost = costN;
         residMax = Math.max(...resid.map(Math.abs));
         lam = Math.max(lam / 3, 1e-10);
         accepted = true;
+        if (nx.Jlog) Jlog = nx.Jlog;
+        else if (!fdMode && !(residMax < tol)) Jlog = model(mu).Jlog;
         break;
       }
       lam *= 8;
+    }
+    if (kinked && !fdMode && (!accepted || slow >= 2)) {
+      fdMode = true; lam = 1e-6;
+      continue;
     }
     if (!accepted) break;
   }

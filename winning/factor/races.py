@@ -1534,7 +1534,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
 def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                         points=257, temperature=0.0, n_iter=None, tol=1e-8,
                         structure=None, cov=None, target_floor=None,
-                        return_info=False):
+                        return_info=False, kink_split=False):
     """Invert the general race: mean-zero mu with race_probabilities(mu) = p.
 
     Accepts the same covariance descriptions as the forward call: V=/D=
@@ -1550,7 +1550,18 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     bound on the floored contrasts, not their inverse; the returned info
     dict (return_info=True) reports which entries were floored, whether
     the iteration converged, and the achieved residual. Non-convergence
-    warns rather than returning silently."""
+    warns rather than returning silently.
+
+    kink_split: opt-in, default False -- invert the split-lattice map
+    race_probabilities(..., kink_split=True) instead of the default one.
+    Either way a kinked base (laplace, exponential_power_base with
+    beta < 2) in a hard race takes its Newton own-slopes from the split
+    lattice. The uniform rectangle sum of the slope integrand -f'(z),
+    which JUMPS at the runner's kink, is only first order: dx times the
+    jump, which grows as 1/sd^2, so a runner whose sd is three lattice
+    spacings had an own-slope 6x too large and exact self-generated
+    targets failed to converge, missing by 0.099 (#267). The residual is
+    always the map being inverted, so the answer is that map's."""
     # finite and >= 0; negative and NaN used to select the hard race
     # silently, and +inf failed in grid sizing (#366)
     temperature = as_soft_temperature(temperature)
@@ -1779,10 +1790,21 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         return _inverse_return(mu, converged, resid_max, iters, floored,
                                tol, return_info)
 
+    _fn = BASES.get(base) if isinstance(base, str) else base
+    split_slopes = (not temperature and not kink_split
+                    and bool(getattr(_fn, "kinks", ())))
+
     def _lattice(m):
         phat, sl = race_probabilities(m, V=V, D=D, F=F, W=W, base=base,
                                       points=points, temperature=temperature,
-                                      return_slopes=True)
+                                      return_slopes=True,
+                                      kink_split=kink_split)
+        if split_slopes:
+            # a kinked base: the slope from the split lattice, the value
+            # from the map being inverted (#267)
+            sl = race_probabilities(m, V=V, D=D, F=F, W=W, base=base,
+                                    points=points, return_slopes=True,
+                                    kink_split=True)[1]
         phat = np.maximum(phat, 1e-300)
         # the slope floor in the field's units: d log p / d mu scales as
         # 1 / scale, so an absolute -1e-6 took over past scale 1e6 and the
@@ -1898,12 +1920,34 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
     alpha_base = float(alpha)  # the Richardson value: persistent
     penalty = 1.0              # caution after a bad sweep: transient
     cached = None              # forward of an accepted Aitken trial
+    backoffs = 0
     for it in range(n_iter):
         iters = it + 1
         if cached is not None:
             (resid, dlogp), cached = cached, None
         else:
-            resid, dlogp = forward(mu)
+            try:
+                resid, dlogp = forward(mu)
+            except RuntimeError:
+                # The forward refused this iterate (a lattice defect, or
+                # a membership above one -- the uniform lattice's mass
+                # for a kinked base can exceed one near saturation,
+                # #267). Before, that ended the inverse with the error
+                # although the last priced iterate was fine. Back off
+                # halfway toward it, with the transient caution halved,
+                # a bounded number of times. The very first forward still
+                # raises; a persistent refusal returns the last priced
+                # iterate, reported as not converged.
+                if prev is None:
+                    raise
+                if backoffs >= 20:
+                    mu, resid_max = prev[0], prev[3]
+                    return mu, resid_max < tol, resid_max, iters
+                backoffs += 1
+                mu = prev[0] + 0.5 * (mu - prev[0])
+                penalty = max(0.5 * penalty, 0.1)
+                prev_step = None
+                continue
         resid_max = float(np.abs(resid).max())
         resid_rms = float(np.sqrt(np.mean(resid * resid)))
         if resid_max < tol:

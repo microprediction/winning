@@ -282,6 +282,8 @@ OPTION_WAIVERS = {
         "return_info": "diagnostics, not a different race",
         "n_iter": "iteration budget, not a different race",
         "tol": "as n_iter",
+        "kink_split": "python-only opt-in (the split lattice), as for "
+                      "race_probabilities",
     },
 }
 
