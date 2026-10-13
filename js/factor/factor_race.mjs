@@ -311,10 +311,24 @@ function tabulatedBase(pdfStd, spans, { dpdf = null, dx = 0.005 } = {}) {
     // identically zero rather than the derivative at the left end. What
     // actually fixed the 1e-5 survival gap was the span widening in the
     // same PR, BASES.t4 [12,12] -> [24,24].
-    const lsOf = (c) => {
+    // The survival is swept right to left, not formed as T - c[k]: once
+    // the prefix rounded to T the subtraction erased every right tail
+    // below ~1e-16, and skewNormalBase(10) jumped from e^-30 to the 1e-300
+    // floor at z = 12 (true e^-35); a gap-15 longshot priced 3e-51 for
+    // 9.7e-21 (#501). Same pieces, same trapezoids, same total T.
+    const tailR = new Float64Array(NOUT);
+    for (let k = NOUT - 2; k >= 0; k--) tailR[k] = tailR[k + 1] + 0.5 * (fR[k] + fR[k + 1]) * DXO;
+    const tail = new Float64Array(NPTS); tail[NPTS - 1] = tailR[0];
+    for (let k = NPTS - 2; k >= 0; k--) tail[k] = tail[k + 1] + 0.5 * (f[k] + f[k + 1]) * DX;
+    const tailL = new Float64Array(NOUT); tailL[NOUT - 1] = tail[0];
+    for (let k = NOUT - 2; k >= 0; k--) tailL[k] = tailL[k + 1] + 0.5 * (fL[k] + fL[k + 1]) * DXO;
+    const lsOf = (c, sv) => {
       const a = new Float64Array(c.length);
+      // the left of the table keeps the subtraction, where T - c is the
+      // accurate one (a survival near 1 summed from the right carries the
+      // whole bulk's rounding); the right uses the swept tail
       for (let k = 0; k < c.length; k++)
-        a[k] = Math.log(Math.max((T - c[k]) / T, 1e-300));
+        a[k] = Math.log(Math.max((sv[k] < 0.5 * T ? sv[k] : T - c[k]) / T, 1e-300));
       return a;
     };
     const dOf = (arr, h) => {
@@ -323,9 +337,9 @@ function tabulatedBase(pdfStd, spans, { dpdf = null, dx = 0.005 } = {}) {
       return a;
     };
     const fp = dOf(f, DX), fpR = dOf(fR, DXO), fpL = dOf(fL, DXO);
-    g = { f, ls: lsOf(cum), fp,
-          fR, lsR: lsOf(cumR), fpR,
-          fL, lsL: lsOf(cumL), fpL };
+    g = { f, ls: lsOf(cum, tail), fp,
+          fR, lsR: lsOf(cumR, tailR), fpR,
+          fL, lsL: lsOf(cumL, tailL), fpL };
   };
   return {
     spans,
@@ -664,7 +678,12 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
     res.deletionMass = [1, 1];
     res.deletions = [[0, 1], [1, 0]];
   }
-  if (q && grid.capped) {
+  // grid.capped can come from a base's feature width (a sharp skew-normal)
+  // while the removal spacing needR is already met by this lattice; the
+  // loop then ran zero times and refused on its Infinity sentinel (#697)
+  const needRemoval = q && grid.capped
+    ? Math.ceil((grid.hi - grid.lo) / (Math.min(...sd) / 8)) + 1 : 0;
+  if (q && grid.capped && needRemoval > L) {
     // A capped lattice cannot be policed by the row masses: cell errors
     // of opposite sign cancel in each row sum. A sd-9.3e-4 runner 50
     // units from a sd-10 one gave the row [0, 0.765, 0.235] at mass
@@ -672,8 +691,7 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
     // removal_shares: refine by doubling, watch the CELLS until they stop
     // moving, and refuse if the budget runs out first.
     const MOVE_TOL = 1e-3;
-    const sMin = Math.min(...sd);
-    const needR = Math.ceil((grid.hi - grid.lo) / (sMin / 8)) + 1;
+    const needR = needRemoval;
     const ceiling = Math.max(L, Math.min(needR, Math.floor(REMOVAL_POINT_BUDGET / N)));
     const norm = (rows) => rows.map((r) => {
       const t = r.reduce((a, b) => a + b, 0);
@@ -693,8 +711,10 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
     if (!(moved <= MOVE_TOL))
       throw new Error(
         `deletion rows: the field needs ${needR} lattice points to resolve ` +
-        `its sharpest runner and the budget stops at ${ceiling}; refining ` +
-        `to there still moved a share by ${moved.toExponential(2)}. The row ` +
+        `its sharpest runner and the budget stops at ${ceiling}; ` +
+        (pts === L ? `the lattice already has ${L}, so no refinement could be measured. `
+                   : `refining to there still moved a share by ${moved.toExponential(2)}. `) +
+        "The row " +
         "masses are not evidence here -- cell errors of opposite sign " +
         "cancel in them. Narrow the field.");
     for (let i = 0; i < N; i++) q[i] = cur[i];
