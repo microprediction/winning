@@ -45,23 +45,53 @@ def _psd_inv_sqrt(H):
     return (Q / np.sqrt(lam)) @ Q.T
 
 
-def _unit(*variances):
-    """A power of two near the square root of the typical variance.
+def _unit(K, *variances):
+    """Per-coordinate powers of two near the square root of each
+    coordinate's own typical variance, shape (K,).
 
-    The three constructors are scale-equivariant: multiplying every
-    location by c and every variance by c^2 multiplies m and W by c and
-    d by c^2. Dividing the inputs by an exact power of two near their
-    own scale and multiplying the outputs back is therefore exact, bit
-    for bit, wherever no intermediate over- or underflows, and it keeps
-    the precisions (n/D, counts/sigma_n^2) finite when the variances sit
-    near the bottom of the float range: at D = 4e-308, n/D overflowed and
-    a representable posterior variance of 3.6e-309 came back as 0 (#670).
+    The three constructors are equivariant under a per-coordinate change
+    of units: scaling coordinate i's locations, loadings and sds by c_i
+    (variances by c_i^2) scales m_i and row i of W by c_i and d_i by
+    c_i^2. Dividing by an exact power of two per coordinate and
+    multiplying the outputs back is therefore exact (m and d bit for bit,
+    W W' to rounding, since W's final compression is not row-scale
+    equivariant) wherever no intermediate over- or underflows, and keeps
+    the precisions (n/D, counts/sigma_n^2) finite when variances sit near
+    either end of the float range: at D = 4e-308, n/D overflowed and a
+    representable posterior variance of 3.6e-309 came back as 0 (#670).
+    One global unit could not serve a field mixing 2e-154 and 1e154
+    scales (NaN means); each coordinate now takes its own. Each argument
+    is (K,) or (K, R) (NaN or nonpositive entries ignored).
     """
-    v = np.concatenate([np.ravel(x) for x in variances])
+    rows = [np.asarray(x, dtype=float).reshape(K, -1) for x in variances]
+    v = np.hstack(rows) if rows else np.zeros((K, 0))
+    good = np.isfinite(v) & (v > 0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        lv = np.where(good, np.log2(np.where(good, v, 1.0)), np.nan)
+    u = np.ones(K)
+    ok = good.any(axis=1)
+    if ok.any():
+        # the median of the logs: a median of two 1e308 variances
+        # averaged them to inf
+        med = np.nanmedian(lv[ok], axis=1)
+        u[ok] = np.ldexp(1.0, np.round(0.5 * med).astype(int))
+    return u
+
+
+def _pooled_unit(*variances):
+    """One power of two near the square root of the median variance of
+    the whole field (the pre-#670 global unit): the scale of a latent
+    common shift, whose flat prior makes its scale arbitrary, so the
+    free column level keeps the latent unit it always had."""
+    v = np.concatenate([np.ravel(np.asarray(x, dtype=float))
+                        for x in variances])
     v = v[np.isfinite(v) & (v > 0)]
     if v.size == 0:
         return 1.0
-    return float(np.ldexp(1.0, int(np.round(0.5 * np.log2(np.median(v))))))
+    with np.errstate(over="ignore"):
+        med = np.median(v)
+    lm = np.log2(med) if np.isfinite(med) else np.median(np.log2(v))
+    return float(np.ldexp(1.0, int(np.round(0.5 * lm))))
 
 
 def _positive_vector(x, n, name, what):
@@ -150,8 +180,9 @@ def crn_posterior(V, D, n, ybar, s0, m0=None):
     rho = Vm.shape[1]
     if nr == 0:
         return m0v.copy(), s0v ** 2, np.zeros((K, rho))
-    u = _unit(Dv, s0v ** 2)
-    Vm, Dv, s0v, yb, m0v = Vm / u, Dv / u / u, s0v / u, yb / u, m0v / u
+    u = _unit(K, Dv, s0v ** 2)
+    Vm, Dv, s0v, yb, m0v = (Vm / u[:, None], Dv / u / u, s0v / u, yb / u,
+                            m0v / u)
     s02 = s0v ** 2
     tau = s02 + Dv / nr
     k = s02 / tau
@@ -161,7 +192,7 @@ def crn_posterior(V, D, n, ybar, s0, m0=None):
     r = yb - m0v
     fhat = np.linalg.solve(H, Vm.T @ (r / tau)) if rho else np.zeros(0)
     m = m0v + k * (r - Vm @ fhat)
-    return m * u, d * u * u, W * u
+    return m * u, d * u * u, W * u[:, None]
 
 
 def crn_posterior_replicates(V, D, Y, s0=None, m0=None, *, prior=None,
@@ -263,8 +294,9 @@ def crn_posterior_replicates(V, D, Y, s0=None, m0=None, *, prior=None,
     s0v = _positive_vector(s0, K, "s0", "a prior sd")
     m0v = np.zeros(K) if m0 is None else _finite_vector(m0, K, "m0")
     rho = Vm.shape[1]
-    u = _unit(Dv, s0v ** 2)
-    Vm, Dv, s0v, Ym, m0v = Vm / u, Dv / u / u, s0v / u, Ym / u, m0v / u
+    u = _unit(K, Dv, s0v ** 2)
+    Vm, Dv, s0v, Ym, m0v = (Vm / u[:, None], Dv / u / u, s0v / u,
+                            Ym / u[:, None], m0v / u)
     obs = ~np.isnan(Ym)
     keep = obs.any(axis=0)
     obs, Yz = obs[:, keep], np.where(obs, Ym, 0.0)[:, keep]
@@ -303,7 +335,7 @@ def crn_posterior_replicates(V, D, Y, s0=None, m0=None, *, prior=None,
     if W.shape[1] > K:
         U, s, _ = np.linalg.svd(W, full_matrices=False)
         W = U * s
-    return m * u, (1.0 / a) * u * u, W * u
+    return m * u, (1.0 / a) * u * u, W * u[:, None]
 
 
 def _crn_prior(prior, s0, m0, K):
@@ -424,10 +456,12 @@ def _crn_general(V, D, Y, s0, m0, prior, counts, groups, common):
                         as_loadings(g[1], K)))
     obs = ~np.isnan(Ym)
     Dc = _crn_cells(D, counts, Ym, obs)
-    u = _unit(Dc[obs], d0)
-    Ym, m0v, V0, d0, Vm, Dc = (Ym / u, m0v / u, V0 / u, d0 / u / u, Vm / u,
-                               Dc / u / u)
-    lev = [(lab, U / u) for lab, U in lev]
+    u = _unit(K, np.where(obs, Dc, np.nan), d0)
+    u0 = _pooled_unit(Dc[obs], d0)
+    uc = u[:, None]
+    Ym, m0v, V0, d0, Vm, Dc = (Ym / uc, m0v / u, V0 / uc, d0 / u / u,
+                               Vm / uc, Dc / uc / uc)
+    lev = [(lab, U / uc) for lab, U in lev]
     keep = obs.any(axis=0)
     obs, Dc = obs[:, keep], Dc[:, keep]
     Yz = np.where(obs, Ym[:, keep], 0.0)
@@ -456,7 +490,10 @@ def _crn_general(V, D, Y, s0, m0, prior, counts, groups, common):
     if Vm.shape[1]:
         levels.append((np.arange(Lc), Vm, c))
     if common == "free":
-        levels.append((np.arange(Lc), np.ones((K, 1)), np.zeros(Lc)))
+        # one common shift: u0 / u_i in these units, u0 the field's
+        # pooled unit (any scale serves under its flat prior; this one
+        # keeps the arithmetic of the pre-#670 global unit)
+        levels.append((np.arange(Lc), u0 / uc, np.zeros(Lc)))
     for lab, U in lev:
         if U.shape[1]:
             codes = np.unique(lab[first], return_inverse=True)[1].ravel()
@@ -523,7 +560,7 @@ def _crn_general(V, D, Y, s0, m0, prior, counts, groups, common):
             W = Us * sv
     else:
         W = np.zeros((K, 0))
-    return m * u, (1.0 / a) * u * u, W * u
+    return m * u, (1.0 / a) * u * u, W * u[:, None]
 
 
 def feature_bandit_posterior(V0, d0, counts, sums, sigma_n):
@@ -557,8 +594,8 @@ def feature_bandit_posterior(V0, d0, counts, sums, sigma_n):
     Vm = as_loadings(V0, K)
     d0v = as_idio(d0, K, positive=True)
     sn = _positive_vector(sigma_n, K, "sigma_n", "a noise sd")
-    u = _unit(d0v, sn ** 2)
-    Vm, d0v, sn, sm = Vm / u, d0v / u / u, sn / u, sm / u
+    u = _unit(K, d0v, sn ** 2)
+    Vm, d0v, sn, sm = Vm / u[:, None], d0v / u / u, sn / u, sm / u
     lam = cnt / sn ** 2
     r = 1.0 / (1.0 + d0v * lam)
     rho = Vm.shape[1]
@@ -567,7 +604,7 @@ def feature_bandit_posterior(V0, d0, counts, sums, sigma_n):
     d = d0v * r
     h = sm / sn ** 2
     m = d * h + W @ (W.T @ h)
-    return m * u, d * u * u, W * u
+    return m * u, d * u * u, W * u[:, None]
 
 
 def _psd_sqrt(C):
