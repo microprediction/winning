@@ -657,24 +657,40 @@ def _bulk_window(M_all, sd, points, delta, fn=None):
     # the normal base needs only its survival here; calling _normal would
     # also build the density and its slope, discarded, ~160 times (#112).
     # The upper tail directly, not 1 - ndtr(z), which cancels past ~8 sd (#96)
-    S_of = (lambda z: np.maximum(_ndtr_local(-z), 1e-300)) \
-        if fn is None or fn is _normal \
-        else (lambda z: np.maximum(fn(z)[0], 1e-300))
     mu_lo = M_all.min(axis=0)
     mu_hi = M_all.max(axis=0)
     s = sd
+    if fn is None or fn is _normal:
+        # ~110 evaluations per call run in Python before any kernel, so
+        # each is a fixed chain of in-place ufuncs on one buffer (#112).
+        # Bit-identical to ndtr(-((x - m) / s)): IEEE subtraction and
+        # division are sign-symmetric, so (m - x) / s == -((x - m) / s)
+        # exactly, signed zeros included where ndtr is even.
+        from scipy.special import ndtr as _ndtr
+        buf = np.empty(np.broadcast(mu_lo, s).shape)
+        sub, div, mx, log, exp = (np.subtract, np.divide, np.maximum,
+                                  np.log, np.exp)
+
+        def _envelope(x, m):
+            sub(m, x, out=buf)
+            div(buf, s, out=buf)
+            _ndtr(buf, out=buf)
+            mx(buf, 1e-300, out=buf)
+            log(buf, out=buf)
+            return 1.0 - exp(buf.sum())
+    else:
+        def _envelope(x, m):
+            z = (x - m) / s
+            logS = np.log(np.maximum(fn(z)[0], 1e-300))
+            return 1.0 - np.exp(logS.sum())
 
     def G(x):
         # envelope: winner cdf using each runner's most favourable node
-        z = (x - mu_lo) / s
-        logS = np.log(S_of(z))
-        return 1.0 - np.exp(logS.sum())
+        return _envelope(x, mu_lo)
 
     def H(x):
         # right edge from the LEAST favourable nodes: no runner's density cut
-        z = (x - mu_hi) / s
-        logS = np.log(S_of(z))
-        return 1.0 - np.exp(logS.sum())
+        return _envelope(x, mu_hi)
 
     def _bracket(x0, step0, ok, sign):
         """Push x0 outward until ok(x0), doubling the step (sixth review).
@@ -864,11 +880,6 @@ def _resolution(fn):
     (#385). Bases declare it as .resolution; the default is 1."""
     r = getattr(fn, "resolution", 1.0) if fn is not None else 1.0
     return float(r) if np.isfinite(r) and r > 0 else 1.0
-
-
-def _ndtr_local(z):
-    from scipy.special import ndtr
-    return ndtr(z)
 
 
 # Above this many n * Q entries the Rust front door skips the Q x n

@@ -207,3 +207,28 @@ def test_window_search_stops_at_adjacent_floats_and_skips_the_density():
         fast = races._bulk_window(M, sd, 257, 1e-12, races._normal)
         assert np.array_equal(generic, fast)
         assert calls[0] < 130, calls[0]     # was 162 at every n
+
+
+def test_normal_envelope_in_place_chain_is_bitwise_the_generic_one(
+        monkeypatch):
+    """#112: the normal envelope is now one in-place ufunc chain on
+    (m - x) / s, against ndtr(-((x - m) / s)) before. IEEE subtraction
+    and division are sign-symmetric, so the window must not move a bit --
+    including on ties, exact zeros, and tiny or huge scales. (The
+    rare-winner edge check runs for the normal base only, so it is held
+    off here to compare the bisected windows themselves.)"""
+    import winning.factor.races as races
+    monkeypatch.setattr(races, "_rare_winner_edges",
+                        lambda mu_lo, mu_hi, s, lo, hi, points: (lo, hi, points))
+    rng = np.random.default_rng(112)
+    for k in range(60):
+        n = int(rng.integers(2, 120))
+        scale = float(rng.choice([1e-6, 1.0, 1e3, 1e8]))
+        M = rng.normal(size=(int(rng.choice([1, 3])), n)) * 4.0 * scale
+        if k % 3 == 0:
+            M = np.round(M / scale) * scale       # ties and exact zeros
+        sd = np.exp(rng.normal(size=n) * 0.7) * scale
+        generic = races._bulk_window(M, sd, 257, 1e-12,
+                                     lambda z: races._normal(z))
+        fast = races._bulk_window(M, sd, 257, 1e-12, races._normal)
+        assert generic.tobytes() == fast.tobytes()

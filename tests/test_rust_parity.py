@@ -202,3 +202,33 @@ def test_all_parity_scenarios_rust_matches_numpy():
             bad.append(f"{name}: |rust-numpy|={d:.2e} > tol {tol:.0e}")
     assert len(rust) >= 39, f"only {len(rust)} scenarios built"
     assert not bad, "Rust != numpy on:\n  " + "\n  ".join(bad)
+
+
+def test_one_node_runner_split_returns_the_sequential_bits():
+    """#112: a one-node (independent) field used to run the compiled
+    kernel on one thread, and lost to numpy from n = 100 up. It is now
+    split over runners, which must not move a bit. Reference: the same
+    field as TWO identical nodes of weight 1/2, which takes the
+    node-parallel path; halving is exact, so it reproduces the one-node
+    sequential sums bit for bit."""
+    rng = np.random.default_rng(112)
+    for n, points in ((300, 257), (500, 257), (1500, 513), (300, 300)):
+        mu = rng.normal(size=n) * 2.0
+        D = np.exp(rng.normal(size=n) * 0.4)
+        V = np.zeros((n, 1))
+        one = (np.zeros((1, 1)), np.ones(1))
+        two = (np.zeros((2, 1)), np.full(2, 0.5))
+        calls = [lambda F, W: fastrace.forward_and_slopes(
+            mu, V, D, F, W, points, -9.0, 8.0)]
+        if hasattr(fastrace, "forward_and_slopes_base"):
+            for bid, prm in ((1, []), (2, []), (3, []),
+                             (5, [5.0, (3.0 / 5.0) ** 0.5])):
+                calls.append(lambda F, W, bid=bid, prm=prm:
+                             fastrace.forward_and_slopes_base(
+                                 mu, V, D, F, W, points, -9.0, 8.0, bid, prm))
+        for call in calls:
+            p1, s1, t1 = call(*one)
+            p2, s2, t2 = call(*two)
+            assert np.asarray(p1).tobytes() == np.asarray(p2).tobytes()
+            assert np.asarray(s1).tobytes() == np.asarray(s2).tobytes()
+            assert t1 == t2

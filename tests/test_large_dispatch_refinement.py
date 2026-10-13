@@ -25,6 +25,11 @@ def _sharp_field(n=40):
 def _price(threshold, monkeypatch, **kw):
     mu, V, D, F, W = _sharp_field()
     monkeypatch.setattr(R, "_LARGE_DISPATCH_ENTRIES", threshold)
+    # the spy below needs the compiled path; an earlier test in the same
+    # worker can leave use_rust(False) behind (KeyError 'dx' under xdist)
+    if R._fastrace is None:                 # WINNING_PURE
+        pytest.skip("compiled kernels disabled")
+    monkeypatch.setattr(R, "_HAVE_RUST", True)
     seen = {}
     real = R._fastrace.forward_and_slopes
 
