@@ -307,11 +307,12 @@ def _tilt_mode(c0, t, sk):
     return m, h, dm_c, dh_c, dm_t, dh_t
 
 
-def _choice_terms(mu, V, choice, s, F, W, tilt=True):
+def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
     """Per-observation log P(choice), d/dmu and d/dV on one node set.
     V is gauge-centred; F holds (factor^r, own-noise) node columns for
     the N(0, I) measure. With tilt, the own-noise column is moved per
-    observation (see _tilt_mode)."""
+    observation (see _tilt_mode). score=False returns (lp, None, None)
+    and skips the score's node arrays; lp is the same to the bit."""
     T, J = mu.shape
     r = V.shape[1]
     Fq, xq = F[:, :r], F[:, r]
@@ -348,7 +349,6 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True):
         # deep tail the same -690.78 and the Mills ratio a zero score
         # (#270)
         logPhi = log_ndtr(A)
-        lam = np.exp(-0.5 * A * A - half_log2pi - logPhi)
         acc = logPhi.sum(axis=0) + logW[None, :]
         if tilt:
             acc = acc + 0.5 * (xq * xq)[None, :] - 0.5 * z * z
@@ -356,6 +356,9 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True):
         pw = np.exp(acc - mx[:, None])
         rs = pw.sum(axis=1)
         lp[idx] = np.log(sig) + mx + np.log(np.maximum(rs, 1e-300))
+        if not score:
+            continue
+        lam = np.exp(-0.5 * A * A - half_log2pi - logPhi)
         omega = pw / rs[:, None]
         wl = omega[None, :, :] * lam / sj[:, :, None]          # (R, Ti, Q)
         dc = wl.sum(axis=2)                                    # (R, Ti)
@@ -374,6 +377,8 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True):
         dmu[idx[None, :], rv[:, None]] -= dc
         dV[idx, k] += H.sum(axis=0)
         dV[idx[None, :], rv[:, None]] -= H
+    if not score:
+        return lp, None, None
     return lp, dmu, dV
 
 
@@ -429,13 +434,15 @@ def default_qz(J):
     return QZ_LARGE if J >= QZ_LARGE_FROM_J else QZ_SMALL
 
 
-def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=None):
+def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=None,
+                          score=True):
     """Per-observation log P(choice_t), with its score rows: the one
     probability map that fitting, reporting and prediction share.
 
     Returns (lp (T,), dmu (T, J), dV (T, J, r)) for the observed
     `choice`. This is the engine under choice_loglik_and_score and
     MNProbit.predict_proba, so both price a model the same way.
+    score=False returns (lp, None, None), the same lp without the score.
     """
     mu = np.asarray(mu, dtype=float)
     T, J = mu.shape
@@ -448,7 +455,8 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=None):
         # the closed form needs only D_k + D_j + ||V_k - V_j||^2 > 0, so a
         # deterministic alternative (D_j = 0) is legal here (#352)
         D = np.ones(J) if D is None else as_idio(D, J)          # #84
-        return _choice_pair(mu, V, choice, D)
+        lp, dmu, dV = _choice_pair(mu, V, choice, D)
+        return (lp, dmu, dV) if score else (lp, None, None)
     # J >= 3: the own-noise integral conditions on each rival through
     # Phi(./sqrt(D_j)); at D_j = 0 that is 0/0 and returned NaN,
     # label-asymmetrically (#352). The central door refuses it (#84).
@@ -468,7 +476,10 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=None):
     live = np.flatnonzero(np.any(Vc != 0.0, axis=0))
     if live.size < r:
         lp, dmu, dVl = _choice_logprob_terms(mu, V[:, live], D=D,
-                                             choice=choice, Qf=Qf, Qz=Qz)
+                                             choice=choice, Qf=Qf, Qz=Qz,
+                                             score=score)
+        if not score:
+            return lp, None, None
         dV = np.zeros((T, J, r))
         dV[:, :, live] = dVl
         return lp, dmu, dV
@@ -485,13 +496,17 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=None):
     w, dw = _blend_weight(sharp)
     if w == 0.0 or w == 1.0:
         F, Wt = nodes_for_likelihood(r, Qf, Qz, sharp)
-        return _choice_terms(mu, Vc, choice, s, F, Wt, tilt=(w == 0.0))
+        return _choice_terms(mu, Vc, choice, s, F, Wt, tilt=(w == 0.0),
+                             score=score)
     # inside the blend window: both rules, mixed in probability
     Fg, Wg = nodes_for_likelihood(r, Qf, Qz, 0.0)
     Fs, Ws = nodes_for_likelihood(r, Qf, Qz, np.inf)
-    lg, dmg, dVg = _choice_terms(mu, Vc, choice, s, Fg, Wg)
-    ls, dms, dVs = _choice_terms(mu, Vc, choice, s, Fs, Ws, tilt=False)
+    lg, dmg, dVg = _choice_terms(mu, Vc, choice, s, Fg, Wg, score=score)
+    ls, dms, dVs = _choice_terms(mu, Vc, choice, s, Fs, Ws, tilt=False,
+                                 score=score)
     lp = np.logaddexp(np.log1p(-w) + lg, np.log(w) + ls)
+    if not score:
+        return lp, None, None
     a = np.exp(np.log1p(-w) + lg - lp)             # posterior rule weights
     b = np.exp(np.log(w) + ls - lp)
     dmu = a[:, None] * dmg + b[:, None] * dms

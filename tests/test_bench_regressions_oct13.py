@@ -4,7 +4,7 @@ import pytest
 from scipy.special import log_ndtr
 
 import winning.likelihood as L
-from winning.likelihood import _mills_gap, _tilt_mode
+from winning.likelihood import _choice_logprob_terms, _mills_gap, _tilt_mode
 
 # the contrasts of the julia Fishing fit's first BFGS trial step (#716)
 _C0 = np.array([-174823.91047091805, -174848.3798915476,
@@ -52,3 +52,17 @@ def test_mills_gap_is_the_old_expression_above_the_tail_and_continuous():
     hi = _mills_gap(np.array([L._MILLS_TAIL]))
     assert lo[0][0] == pytest.approx(hi[0][0], rel=1e-14)
     assert lo[1][0] == pytest.approx(hi[1][0], rel=1e-10)
+
+
+@pytest.mark.parametrize("J, r, scale", [
+    (2, 1, 1.0), (4, 2, 0.3), (4, 2, 1.0), (4, 2, 3.0), (5, 1, 0.5)])
+def test_value_only_likelihood_is_the_same_to_the_bit(J, r, scale):
+    """#717: the referee and predict_proba ask for lp only."""
+    rng = np.random.default_rng(J * 10 + r)
+    mu = rng.normal(size=(40, J))
+    V = scale * rng.normal(size=(J, r))
+    ch = rng.integers(0, J, size=40)
+    full = _choice_logprob_terms(mu, V, choice=ch)
+    lp, dmu, dV = _choice_logprob_terms(mu, V, choice=ch, score=False)
+    assert dmu is None and dV is None
+    assert np.array_equal(lp, full[0])
