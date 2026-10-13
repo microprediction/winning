@@ -629,3 +629,25 @@ def test_block_kernels_are_scale_free():
                                   257), atol=1e-14)
     with pytest.raises(ValueError):
         fastrace.block_race(mu, sd, v, starts, an, -aw, 257)
+
+
+# --- #377: the direct classic inverse takes relative prices ---------------
+
+def test_classic_calibrate_is_scale_free_377():
+    from winning.classic.lattice import skew_normal_density
+    d = list(skew_normal_density(50, 0.1, a=1.5))
+    p = [0.4, 0.3, 0.2, 0.1]
+    grid = [float(x) for x in range(48, -49, -1)]
+    out = []
+    for c in (1.0, 1.1, 10.0):
+        a = np.asarray(fastrace.classic_exact_calibrate(
+            d, [c * x for x in p], grid, [0.0] * 4, 3))
+        out.append(a - a.mean())
+    assert np.abs(out[1] - out[0]).max() < 1e-12      # was 0.087
+    assert np.abs(out[2] - out[0]).max() < 1e-12      # was an all-tie
+    with pytest.raises(ValueError, match="negative"):
+        fastrace.classic_exact_calibrate(d, [-0.1, 0.5, 0.6], grid,
+                                         [0.0] * 3, 3)
+    with pytest.raises(ValueError, match="no positive mass"):
+        fastrace.classic_exact_calibrate(d, [0.0, 0.0, 0.0], grid,
+                                         [0.0] * 3, 3)
