@@ -202,14 +202,32 @@ def _cdf_rows(base_rows, z, S):
     zero (or to a few digits) once S is near one, and those CDFs are
     exactly what a last place or a top-k cavity multiplies together; for
     a base symmetric about zero the CDF is the reflected survival
-    S(-z), accurate to full relative precision (#511)."""
-    S = np.clip(S, 0.0, 1.0)
+    S(-z), accurate to full relative precision (#511).
+
+    A named base floors S at 1e-300, a guard for log(0); used as a
+    probability here it fabricated rare-place mass (top-1 of a normal
+    runner 53 behind: 1.0e-300 for 1.105e-307), so floored points take
+    the base's exact log survival instead (#502). Nothing above 1e-300
+    moves."""
+    S = _unfloored(base_rows, z, np.clip(S, 0.0, 1.0))
     F = 1.0 - S
     if base_rows in _SYMMETRIC_BASES:
         lower = S > 0.5
         if lower.any():
-            F = np.where(lower, base_rows(-z)[0], F)
+            F = np.where(lower, _unfloored(base_rows, -z,
+                                           base_rows(-z)[0]), F)
     return np.clip(F, 0.0, 1.0), S
+
+
+def _unfloored(base_rows, z, S):
+    lsf = getattr(base_rows, "log_sf", None)
+    if lsf is None:
+        return S
+    low = S <= 1e-300
+    if not low.any():
+        return S
+    with np.errstate(under="ignore", over="ignore", invalid="ignore"):
+        return np.where(low, np.exp(np.maximum(lsf(z), -1e300)), S)
 
 
 # Cavity deconvolution with error bounds (#511). Every entry of the count
@@ -376,18 +394,21 @@ def _loo_pmfs(C, F, S=None, runners=None):
             bwd = {m: (q, e) for m, q, e in _deconv(Ct, Et, Fc, Sc, False)}
             for m, qf, ef in fwd:
                 qb, eb = bwd[m]
-                yield idx, m, np.where(ef <= eb, qf, qb)
+                better = ef <= eb
+                yield idx, m, np.where(better, qf, qb), np.where(better, ef, eb)
 
 
 def _loo_pmf(C, F, i, S=None):
     """Full leave-one-out pmf Q^{-i}[l, m], m = 0..n-1, each coefficient
     from whichever deconvolution direction has the smaller error bound
-    at that lattice point (#511)."""
+    at that lattice point (#511), and that bound (L, n)."""
     L, n = F.shape
     Q = np.empty((L, n))
-    for _, m, q in _loo_pmfs(C, F, S, runners=[i]):
+    E = np.empty((L, n))
+    for _, m, q, e in _loo_pmfs(C, F, S, runners=[i]):
         Q[:, m] = q[0]
-    return Q
+        E[:, m] = e[0]
+    return Q, E
 
 
 def _reflected(base_rows):
@@ -445,9 +466,14 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
             dx = x[1] - x[0]
         z = (x[:, None] - mu[None, :]) / sd[None, :]
         S, f, _ = base_rows(z)
-        G = np.clip(S, 0.0, 1.0)
-        C = _count_distribution(G)
-        cdf = _leave_one_out_cdf(C, G, k)
+        # survival in the role the CDF plays for top-k, and the CDF in
+        # the role of the survival -- taken from _cdf_rows, not as 1 - S:
+        # below a leader the others' CDFs are tiny, 1 - S rounded them to
+        # zero, and at mu = [-30, 0, 0] the last place 4.68e-134 came
+        # back 500x low (#511)
+        F, S = _cdf_rows(base_rows, z, S)
+        C = _count_distribution(S, F)
+        cdf = _leave_one_out_cdf(C, S, k, S=F)
         dens = (f / sd[None, :]).T
         if kinks:
             return (dens * cdf) @ wq
@@ -789,28 +815,36 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     return _checked_topk(raw, k, "bottom-k race")
 
 
-def _pair_pmf_at(Qi, F, i, k, chunk=256):
+def _pair_pmf_at(Qi, F, i, k, S=None, Qerr=None, chunk=256):
     """P(N_{-ij} = k-1) for every j != i at every lattice point:
-    deconvolve runner j's Bernoulli from the leave-i pmf Qi (L, n),
-    stable direction per (j, x), forward k-1 steps or backward n-1-k
-    steps since only one coefficient is needed."""
+    deconvolve runner j's Bernoulli from the leave-i pmf Qi (L, n).
+
+    The same bounded two-direction rule as the first level (#511): the
+    forward pass to coefficient k-1 and the backward pass down to it
+    each carry a running error bound, seeded with Qerr (the bound on Qi
+    itself, from _loo_pmf) plus Qi's own rounding, and the better-bounded
+    pass wins at each (j, x). The old rule picked one direction by F_j
+    alone, and the cancellation in its subtraction came back as residue:
+    off-diagonal Jacobian entries 1e5 to 1e75 times too large on
+    mu = [-12, -4, 4, 12] and [-20, -6, 0, 3, 9] against a directly
+    multiplied pair cavity on the same grid. S is the survival to use in
+    place of 1 - F."""
     L, n = F.shape
     out = np.zeros((n, L))
-    for a in range(0, n, chunk):
-        b = min(a + chunk, n)
-        Fc = F[:, a:b].T                       # (c, L)
-        Sc = 1.0 - Fc
-        fwd = Sc >= Fc
-        s_safe = np.maximum(Sc, TINY)
-        Q = np.clip(Qi[None, :, 0] / s_safe, 0.0, 1.0)
-        for m in range(1, k):
-            Q = np.clip((Qi[None, :, m] - Fc * Q) / s_safe, 0.0, 1.0)
-        f_safe = np.maximum(Fc, TINY)
-        Qb = np.clip(Qi[None, :, n - 1] / f_safe, 0.0, 1.0)
-        for m in range(n - 3, k - 2, -1):
-            Qb = np.clip((Qi[None, :, m + 1] - Sc * Qb) / f_safe,
-                         0.0, 1.0)
-        out[a:b] = np.where(fwd, Q, Qb)
+    if k - 1 > n - 2:            # only n-2 others: P(N_{-ij} = k-1) = 0
+        return out
+    E = _count_error(Qi) + (0.0 if Qerr is None else Qerr)
+    Qt, Et = Qi[None], E[None]
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        for a in range(0, n, chunk):
+            b = min(a + chunk, n)
+            Fc = F[:, a:b].T                       # (c, L)
+            Sc = 1.0 - Fc if S is None else S[:, a:b].T
+            for _, qf, ef in _deconv(Qt, Et, Fc, Sc, True, stop=n - 1 - k):
+                pass
+            for _, qb, eb in _deconv(Qt, Et, Fc, Sc, False, stop=k - 1):
+                pass
+            out[a:b] = np.where(ef <= eb, qf, qb)
     out[i] = 0.0
     return out
 
@@ -845,8 +879,8 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     F, S = _cdf_rows(base_rows, z, S)
     dens = f / sd[None, :]                     # (L, n)
     C = _count_distribution(F, S)
-    Qi = _loo_pmf(C, F, i, S=S)
-    pair = _pair_pmf_at(Qi, F, i, k)           # (n, L)
+    Qi, Qe = _loo_pmf(C, F, i, S=S)
+    pair = _pair_pmf_at(Qi, F, i, k, S=S, Qerr=Qe)   # (n, L)
     row = (pair * dens.T * dens[:, i][None, :]).sum(axis=1) * dx
     row[i] = 0.0
     row[i] = -row.sum()
@@ -900,8 +934,8 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     F, S = _cdf_rows(base_rows, z, S)
     dens = f / sd[None, :]                       # (L, n)
     C = _count_distribution(F, S)
-    Qi = _loo_pmf(C, F, i, S=S)
-    pair = _pair_pmf_at(Qi, F, i, k)             # (n, L)
+    Qi, Qe = _loo_pmf(C, F, i, S=S)
+    pair = _pair_pmf_at(Qi, F, i, k, S=S, Qerr=Qe)   # (n, L)
     kern = pair * dens[:, i][None, :]
     row_mu = (kern * dens.T).sum(axis=1) * dx
     row_sd = (kern * (z * dens).T).sum(axis=1) * dx
@@ -979,8 +1013,8 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     Jm = np.empty((n, n))
     Js = np.empty((n, n))
     for i in range(n):
-        Qi = _loo_pmf(C, F, i, S=S)
-        pair = _pair_pmf_at(Qi, F, i, k)
+        Qi, Qe = _loo_pmf(C, F, i, S=S)
+        pair = _pair_pmf_at(Qi, F, i, k, S=S, Qerr=Qe)
         kern = pair * dens[:, i][None, :]
         cdf_i = Qi[:, :k].sum(axis=1)
         dfdsd = -(z[:, i] * fp[:, i] + f[:, i]) / D[i]
@@ -1606,12 +1640,12 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
     p = np.empty(n)
     J = np.zeros((n, n))
     for i in range(n):
-        Qi = _loo_pmf(C, F, i, S=S)
+        Qi, Qe = _loo_pmf(C, F, i, S=S)
         p[i] = _wsum(Qi[:, r - 1] * dens[:, i])
         if not jacobian:
             continue
         if r <= n - 1:
-            hi_pair = _pair_pmf_at(Qi, F, i, r)      # P(N_{-ij} = r-1)
+            hi_pair = _pair_pmf_at(Qi, F, i, r, S=S, Qerr=Qe)  # = r-1
             row = _wsum(hi_pair * dens.T * dens[:, i][None, :])
         else:
             # only n-2 others exist: P(N_{-ij} = n-1) is identically
@@ -1619,7 +1653,8 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
             # junk that is hypersensitive to the window edge
             row = np.zeros(n)
         if r >= 2:
-            lo_pair = _pair_pmf_at(Qi, F, i, r - 1)  # P(N_{-ij} = r-2)
+            lo_pair = _pair_pmf_at(Qi, F, i, r - 1, S=S,
+                                   Qerr=Qe)  # P(N_{-ij} = r-2)
             row -= _wsum(lo_pair * dens.T * dens[:, i][None, :])
         row[i] = 0.0
         row[i] = -row.sum()
@@ -1842,7 +1877,7 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
         dens = f / sd[None, :]
         C = _count_distribution(F, S)
         P = np.empty((n, n))
-        for idx, r, q in _loo_pmfs(C, F, S):
+        for idx, r, q, _ in _loo_pmfs(C, F, S):
             if kinks:
                 P[idx, r] = (q * dens[:, idx].T) @ wq
             else:

@@ -16,15 +16,20 @@ export const BASES = {
     const c = Math.PI / Math.sqrt(6);
     const u = Math.min(z * c - EULER, 30);
     const eu = Math.exp(u);
-    const S = Math.max(Math.exp(-eu), 1e-300);
-    const f = c * eu * S;
-    return [S, f, c * c * eu * S * (1 - eu)];
+    const S0 = Math.exp(-eu);
+    // density and slope from the unfloored survival (#502)
+    const f = c * eu * S0;
+    return [Math.max(S0, 1e-300), f, c * c * eu * S0 * (1 - eu)];
   },
   logistic(z) {
     const c = Math.PI / Math.sqrt(3);
-    const u = Math.min(Math.max(c * z, -700), 700);
-    const S = 1 / (1 + Math.exp(u));
-    const f = c * S * (1 - S);
+    const u = c * z;
+    // reflected, from e = exp(-|u|) <= 1, as python: f = c S (1 - S)
+    // rounded 1 - S to zero once S hit 1, zeroing the left-tail density
+    // (a runner 25 sd behind priced 7.3e-19 for 3.0e-18, #467)
+    const e = Math.exp(-Math.abs(u));
+    const S = u > 0 ? e / (1 + e) : 1 / (1 + e);
+    const f = c * e / ((1 + e) * (1 + e));
     return [Math.max(S, 1e-300), f, -c * f * (1 - 2 * S)];
   },
   laplace(z) {
@@ -37,6 +42,23 @@ export const BASES = {
 // the density is not analytic at z = 0: the inverses take their slopes on
 // the split lattice there (kinkLattice, #267); the forward is unchanged
 BASES.laplace.kinks = [0];
+
+/* Exact log survivals of the named bases, used by the integrator only
+   where S was floored at 1e-300 (#502): the floor guards log(0), and
+   summed as mass it plateaued a rare winner at ~1e-300 (normal gap 53:
+   1.0e-300 for 1.105e-307; Laplace gap 500: 1.0e-300 for 1.43e-305).
+   Results above that range are unchanged bit for bit. */
+BASES.normal.logSf = z => logndtr(-z);
+BASES.gumbel.logSf = z =>
+  -Math.exp(Math.min(z * Math.PI / Math.sqrt(6) - EULER, 30));
+BASES.logistic.logSf = z => {
+  const u = Math.PI / Math.sqrt(3) * z;
+  return -Math.max(u, 0) - Math.log1p(Math.exp(-Math.abs(u)));
+};
+BASES.laplace.logSf = z => {
+  const b = 1 / Math.sqrt(2);
+  return z < 0 ? Math.log1p(-0.5 * Math.exp(z / b)) : Math.log(0.5) - z / b;
+};
 /* A base's central scale in standardized units, as python's _resolution
    (#385): a unit-variance law can still concentrate on a much narrower
    centre, and spacing measured in sd alone left that centre between
@@ -533,7 +555,10 @@ export function raceProbabilities(mu, opts = {}) {
       for (let t = 0; t < x.length; t++) {
         const z = (x[t] - Mq[i]) / sd[i];
         const [S, f, fp] = st.fn(z);
-        li[t] = Math.log(S);
+        // bounded below: an overflowing log (mu = 1e308) gave -Infinity
+        // and -Inf - -Inf a NaN race; f is exactly 0 wherever it binds
+        li[t] = S <= 1e-300 && st.fn.logSf
+          ? Math.max(st.fn.logSf(z), -1e300) || -1e300 : Math.log(S);
         fi[t] = f / sd[i];
         fpi[t] = fp;
         L[t] += li[t];

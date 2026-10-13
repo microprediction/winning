@@ -20,16 +20,21 @@
   cc <- pi / sqrt(6)
   u <- pmin(z * cc - .EULER, 30)
   eu <- exp(u)
-  S <- pmax(exp(-eu), 1e-300)
-  f <- cc * eu * S
-  list(S = S, f = f, fp = cc * cc * eu * S * (1 - eu))
+  S0 <- exp(-eu)
+  # density and slope from the unfloored survival (#502)
+  f <- cc * eu * S0
+  list(S = pmax(S0, 1e-300), f = f, fp = cc * cc * eu * S0 * (1 - eu))
 }
 
 .base_logistic <- function(z) {
   cc <- pi / sqrt(3)
-  u <- pmin(pmax(cc * z, -700), 700)
-  S <- 1 / (1 + exp(u))
-  f <- cc * S * (1 - S)
+  u <- cc * z
+  # reflected, from e = exp(-|u|) <= 1, as python: f = cc S (1 - S)
+  # rounded 1 - S to zero once S hit 1, zeroing the left-tail density
+  # (a runner 25 sd behind priced 7.3e-19 for 9.0e-19, #467)
+  e <- exp(-abs(u))
+  S <- ifelse(u > 0, e / (1 + e), 1 / (1 + e))
+  f <- cc * e / (1 + e)^2
   list(S = pmax(S, 1e-300), f = f, fp = -cc * f * (1 - 2 * S))
 }
 
@@ -98,6 +103,35 @@ attr(.base_laplace, "kinks") <- 0
 .kinks_of <- function(fn) {
   k <- attr(fn, "kinks")
   if (is.numeric(k) && length(k)) k else NULL
+}
+
+# Exact log survivals of the named bases, used by the integrator only
+# where S was floored at 1e-300 (#502): summed as mass, the floor
+# plateaued a rare winner at ~1e-300 (normal mu = c(0, 53, 106): 1.0e-300
+# for 1.105e-307). Results above that range are unchanged bit for bit.
+attr(.base_normal, "log_sf") <- function(z)
+  stats::pnorm(z, lower.tail = FALSE, log.p = TRUE)
+attr(.base_gumbel, "log_sf") <- function(z)
+  -exp(pmin(z * pi / sqrt(6) - .EULER, 30))
+attr(.base_logistic, "log_sf") <- function(z) {
+  u <- pi / sqrt(3) * z
+  -pmax(u, 0) - log1p(exp(-abs(u)))
+}
+attr(.base_laplace, "log_sf") <- function(z) {
+  b <- 1 / sqrt(2)
+  ifelse(z < 0, log1p(-0.5 * exp(-abs(z) / b)), log(0.5) - abs(z) / b)
+}
+
+.log_survival <- function(fn, z, S) {
+  logS <- log(S)
+  lsf <- attr(fn, "log_sf")
+  if (!is.null(lsf)) {
+    low <- S <= 1e-300
+    # bounded below: an overflowing log (mu = 1e308) gave -Inf and
+    # -Inf - -Inf a NaN race; the density is 0 wherever this binds
+    if (any(low)) logS[low] <- pmax(lsf(z)[low], -1e300, na.rm = TRUE)
+  }
+  logS
 }
 
 .BASES <- list(normal = .base_normal, gumbel = .base_gumbel,
@@ -695,7 +729,7 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     z <- (matrix(kl$x, n, T, byrow = TRUE) - M_all[q, ]) / sd
     b <- st$fn(z)
     f <- b$f / sd
-    logS <- log(b$S)
+    logS <- .log_survival(st$fn, z, b$S)
     L <- colSums(logS)
     rest <- exp(pmin(pmax(matrix(L, n, T, byrow = TRUE) - logS, -745), 0))
     p <- p + st$W[q] * as.vector((f * rest) %*% kl$w)

@@ -132,6 +132,13 @@ the module docstrings give the measured cost of crossing over.
   `crn_posterior_replicates` when entrants ran on different replicates)
   and for a shared-feature bandit (`feature_bandit_posterior`), each
   returning `(m, d, W)` ready for `race_probabilities(-m, V=-W, D=d)`.
+  `crn_posterior_replicates` also takes, still exactly, a factor or
+  dense prior (`prior=(V0, d0, m0)`), per-cell noise (`D` as a matrix,
+  or `counts=` of runs averaged per cell), shared trial and seed shocks
+  (`groups=[(trial_id, U_t), (seed_id, U_s)]`) and a nuisance column
+  level (`common="free"`). `fit_factor_model_missing(Y, k)` estimates
+  the `V, D` those take from a trials x entrants score matrix with
+  missing cells (maximum likelihood by EM, with a convergence report).
   `update_contrast` conditions a dense or factor belief on one linear
   observation `a'theta ~ N(mean, var)`, such as a judgment of child
   minus parent (exact; a factor belief stays exact at one extra

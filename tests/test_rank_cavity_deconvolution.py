@@ -90,7 +90,7 @@ def test_every_cavity_integral_matches_a_direct_product(seed):
         keep = [j for j in range(n) if j != i]
         direct = T._count_distribution(F[:, keep], S[:, keep])
         d = dens[:, i][:, None]
-        got = (T._loo_pmf(C, F, i, S=S) * d).sum(axis=0) * dx
+        got = (T._loo_pmf(C, F, i, S=S)[0] * d).sum(axis=0) * dx
         want = (direct * d).sum(axis=0) * dx
         ok = want > 1e-100
         assert np.all(np.abs(got[ok] / want[ok] - 1.0) < 1e-9)
@@ -126,3 +126,53 @@ def test_a_dead_divisor_carries_no_information():
     C = T._count_distribution(F, S)
     cdf = T._leave_one_out_cdf(C, F, 1, S=S)
     assert cdf[0, 0] == pytest.approx(1.0 - 2.5e-5, rel=1e-14)
+
+
+def _pair_direct(F, S, i, j, k):
+    keep = [r for r in range(F.shape[1]) if r not in (i, j)]
+    C = T._count_distribution(F[:, keep], S[:, keep])
+    return C[:, k - 1] if k - 1 < C.shape[1] else np.zeros(len(F))
+
+
+@pytest.mark.parametrize("mu", [[-12.0, -4.0, 4.0, 12.0], [-14.0, 0.0, 0.0],
+                                [-20.0, -6.0, 0.0, 3.0, 9.0],
+                                [0.0, 0.5, 8.0, 9.0, 22.0]])
+def test_pair_cavities_match_a_direct_product(mu):
+    """The second-level deconvolution behind the Jacobian off-diagonals
+    takes the same bounded two-direction rule: its one-direction choice
+    returned residue 1e5..1e75 times the true pair term on these fields
+    (#511 residual)."""
+    mu = np.asarray(mu)
+    n = len(mu)
+    F, S, dens, dx = _field("normal", mu, np.ones(n), points=513)
+    C = T._count_distribution(F, S)
+    for i in range(n):
+        Qi, Qe = T._loo_pmf(C, F, i, S=S)
+        for k in range(1, n):
+            pair = T._pair_pmf_at(Qi, F, i, k, S=S, Qerr=Qe)
+            for j in range(n):
+                if j == i:
+                    continue
+                w = dens[:, i] * dens[:, j]
+                got = (pair[j] * w).sum() * dx
+                want = (_pair_direct(F, S, i, j, k) * w).sum() * dx
+                if want > 1e-280:
+                    assert abs(got / want - 1.0) < 1e-9, (i, j, k)
+                else:
+                    assert got <= 1e-270
+
+
+def test_bottom_k_takes_the_cdf_directly():
+    """bottom-k's count program used 1 - S for the others' CDFs, which
+    rounds to zero below a leader: the last place of mu = [-30, 0, 0]
+    came back 4.6e-136 for 4.68e-134 (#511 residual, as #365)."""
+    from scipy.special import log_ndtr
+    from winning.factor.topk import bottom_k_probabilities
+    for g in (-20.0, -30.0):
+        x = np.linspace(-60.0, 20.0, 800001)
+        lf = (-0.5 * (x - g) ** 2 - 0.5 * np.log(2 * np.pi)
+              + 2 * log_ndtr(x))
+        m = lf.max()
+        want = np.exp(m) * np.trapezoid(np.exp(lf - m), x)
+        got = bottom_k_probabilities(np.array([g, 0.0, 0.0]), 1)[0]
+        assert got == pytest.approx(want, rel=1e-9)

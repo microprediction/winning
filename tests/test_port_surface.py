@@ -91,6 +91,9 @@ SURFACE = {
     "fit_covariance":                      (PRESENT, GAP,
                                         "covariance fitting, reached through cov= rather than"
                                         "called"),
+    "fit_factor_model_missing":            (GAP, GAP,
+                                        "python only: estimation of the CRN posteriors'"
+                                        " (V, D) from a score matrix with NaN (#637)"),
     "fit_tree":                            (GAP, GAP,
                                         "python only: dense-covariance intake onto a known"
                                         " genealogy (#622); the ports price the Tree it returns"),

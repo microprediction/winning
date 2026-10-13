@@ -166,11 +166,15 @@
   # zero once S is near one, and those CDFs are what a last place
   # multiplies together; a base symmetric about zero has the CDF as its
   # reflected survival S(-z) (#511)
-  S <- .clip01(b$S)
+  # floored survivals (1e-300, a log(0) guard) take the base's exact log
+  # survival: used as count probabilities they fabricated rare-place
+  # mass, 1.0e-300 for a 1.105e-307 top-1 (#502)
+  S <- .clip01(.unfloored(fn, z, b$S))
   F <- .clip01(1 - S)
   if (.symmetric_base(fn)) {
     lower <- S > 0.5
-    if (any(lower)) F[lower] <- .clip01(fn(-z[lower])$S)
+    if (any(lower)) F[lower] <- .clip01(.unfloored(fn, -z[lower],
+                                                   fn(-z[lower])$S))
   }
   list(x = x, dx = x[2] - x[1], w = wts, z = z,
        S = S, f = b$f, fp = b$fp, F = F)
@@ -184,6 +188,14 @@
   } else {
     if (is.matrix(M)) as.vector(M %*% g$w) else sum(M * g$w)
   }
+}
+
+.unfloored <- function(fn, z, S) {
+  lsf <- attr(fn, "log_sf")
+  if (is.null(lsf)) return(S)
+  low <- S <= 1e-300
+  if (any(low)) S[low] <- exp(pmax(lsf(z[low]), -1e300, na.rm = TRUE))
+  S
 }
 
 .symmetric_base <- function(fn) {
@@ -303,24 +315,42 @@
 .loo_pmf <- function(C, F, i, S = NULL) {
   Fi <- F[, i]
   Si <- if (is.null(S)) 1 - Fi else S[, i]
-  .loo_both(C, .count_err(C), Fi, Si)$Q
+  r <- .loo_both(C, .count_err(C), Fi, Si)
+  structure(r$Q, err = r$B)        # the pair level seeds its bound with B
 }
 
-.pair_pmf_at <- function(Qi, F, i, k) {
+# P(N_{-ij} = k-1) for every j != i: the forward pass up to coefficient
+# k-1 and the backward pass down to it, each with its running bound
+# (seeded with the bound on Qi itself), the better-bounded one winning at
+# each point -- the rule .loo_both uses one level up. The old rule chose
+# one direction by F_j alone, and its subtraction residue came back as
+# Jacobian off-diagonals 1e5..1e75 times the directly multiplied pair
+# term (#511 residual).
+.pair_pmf_at <- function(Qi, F, i, k, S = NULL) {
   L <- nrow(F); n <- ncol(F)
   out <- matrix(0, n, L)
+  nn <- n - 1                                   # others of i
+  if (k - 1 > nn - 1) return(out)               # only n-2 besides j
+  E <- .count_err(Qi)
+  if (!is.null(attr(Qi, "err"))) E <- E + attr(Qi, "err")
   for (j in 1:n) {
     if (j == i) next
-    Fj <- F[, j]; Sj <- 1 - Fj
-    fwd <- Sj >= Fj
-    s <- pmax(Sj, 1e-300)
-    Q <- .clip01(Qi[, 1] / s)
-    if (k >= 2) for (m in 2:k) Q <- .clip01((Qi[, m] - Fj * Q) / s)
-    f <- pmax(Fj, 1e-300)
-    Qb <- .clip01(Qi[, n] / f)
-    if (n - 1 >= k + 1) for (mm in seq(n - 1, k + 1, by = -1))
-      Qb <- .clip01((Qi[, mm] - Sj * Qb) / f)
-    out[j, ] <- ifelse(fwd, Q, Qb)
+    Fj <- F[, j]; Sj <- if (is.null(S)) 1 - Fj else S[, j]
+    inv <- 1 / pmax(Sj, 1e-300)
+    q <- pmin(Qi[, 1] * inv, 1)
+    e <- ifelse(Sj < 1e-300, 1, pmin(E[, 1] * inv, 1))
+    if (k >= 2) for (m in 2:k) {
+      q <- .clip01((Qi[, m] - Fj * q) * inv)
+      e <- pmin((E[, m] + Fj * e) * inv, 1)
+    }
+    inv <- 1 / pmax(Fj, 1e-300)
+    qb <- pmin(Qi[, n] * inv, 1)
+    eb <- ifelse(Fj < 1e-300, 1, pmin(E[, n] * inv, 1))
+    if (nn - 1 >= k) for (cc in seq(nn - 1, k, by = -1)) {
+      qb <- .clip01((Qi[, cc + 1] - Sj * qb) * inv)
+      eb <- pmin((E[, cc + 1] + Sj * eb) * inv, 1)
+    }
+    out[j, ] <- ifelse(e <= eb, q, qb)
   }
   out
 }
@@ -414,9 +444,19 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
   x <- seq(w[1], w[2], length.out = points)
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
-  G <- .clip01(b$S)
-  C <- .count_distribution(G)
-  cdf <- .loo_cdf(C, G, k)
+  # survivals in the role of the CDFs, and the CDFs -- taken directly,
+  # not as 1 - S, which rounds them to zero below a leader -- in the
+  # role of the survivals (#511): mu = c(-30, 0, 0)'s last place came
+  # back ~500x low
+  G <- .clip01(.unfloored(fn, z, b$S))
+  Fc <- .clip01(1 - G)
+  if (.symmetric_base(fn)) {
+    lower <- G > 0.5
+    if (any(lower)) Fc[lower] <- .clip01(.unfloored(fn, -z[lower],
+                                                    fn(-z[lower])$S))
+  }
+  C <- .count_distribution(G, Fc)
+  cdf <- .loo_cdf(C, G, k, Fc)
   dens <- t(b$f) / sd
   rowSums(dens * cdf) * (x[2] - x[1])
 }
@@ -476,7 +516,7 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
   Js <- matrix(0, n, n)
   for (i in 1:n) {
     Qi <- .loo_pmf(C, g$F, i, g$S)
-    pair <- .pair_pmf_at(Qi, g$F, i, k)
+    pair <- .pair_pmf_at(Qi, g$F, i, k, g$S)
     kern <- pair * matrix(dens[i, ], n, ncol(pair), byrow = TRUE)
     row_mu <- .wsum(kern * dens, g)
     row_sd <- .wsum(kern * zdens, g)
@@ -868,9 +908,9 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
     if (!jacobian) next
     # P(N_{-ij} = n-1) is identically zero (only n-2 others exist);
     # deconvolving it injects window-edge-sensitive junk
-    pair <- if (r <= n - 1) .pair_pmf_at(Qi, g$F, i, r)
+    pair <- if (r <= n - 1) .pair_pmf_at(Qi, g$F, i, r, g$S)
             else matrix(0, n, length(g$x))
-    if (r >= 2) pair <- pair - .pair_pmf_at(Qi, g$F, i, r - 1)
+    if (r >= 2) pair <- pair - .pair_pmf_at(Qi, g$F, i, r - 1, g$S)
     kern <- pair * matrix(dens[i, ], n, ncol(pair), byrow = TRUE)
     row <- .wsum(kern * dens, g)
     row[i] <- 0

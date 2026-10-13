@@ -78,9 +78,11 @@ def _gumbel_min(z):
     c = np.pi / np.sqrt(6.0)
     u = np.minimum(z * c - _EULER, 30.0)
     eu = np.exp(u)
-    S = np.maximum(np.exp(-eu), 1e-300)
-    f = c * eu * S
-    return S, f, c * c * eu * S * (1.0 - eu)
+    S0 = np.exp(-eu)
+    # the density and its slope from the unfloored survival: c eu 1e-300
+    # was a fabricated right-tail density (#502)
+    f = c * eu * S0
+    return np.maximum(S0, 1e-300), f, c * c * eu * S0 * (1.0 - eu)
 
 
 def _logistic(z):
@@ -115,6 +117,53 @@ def _laplace(z):
 # the density is not analytic at z = 0: kink_split=True lattices split
 # there (kink_lattice); the default uniform lattice ignores this
 _laplace.kinks = (0.0,)
+
+
+# Log survivals of the named bases, exact where S itself is floored at
+# 1e-300 (#502). The integrators take log S; the floor is only a guard
+# for log(0), and summed as real mass it made a rare winner plateau at
+# ~1e-300 (normal mu = [0, 53, 106]: 1.0e-300 for 1.105e-307). Only the
+# floored points use these, so every result above that range is
+# unchanged bit for bit.
+def _gumbel_log_sf(z):
+    c = np.pi / np.sqrt(6.0)
+    return -np.exp(np.minimum(z * c - _EULER, 30.0))
+
+
+def _logistic_log_sf(z):
+    u = (np.pi / np.sqrt(3.0)) * np.asarray(z, dtype=float)
+    return -np.maximum(u, 0.0) - np.log1p(np.exp(-np.abs(u)))
+
+
+def _laplace_log_sf(z):
+    b = 1.0 / np.sqrt(2.0)
+    az = np.abs(z)
+    return np.where(z < 0, np.log1p(-0.5 * np.exp(-az / b)),
+                    np.log(0.5) - az / b)
+
+
+_normal.log_sf = lambda z: _log_ndtr(-z)
+_gumbel_min.log_sf = _gumbel_log_sf
+_logistic.log_sf = _logistic_log_sf
+_laplace.log_sf = _laplace_log_sf
+
+
+def _log_survival(fn, z, S):
+    """log S for the race integrators: np.log(S), except at points where
+    a named base floored S at 1e-300, which take the base's exact log
+    survival (#502)."""
+    logS = np.log(S)
+    lsf = getattr(fn, "log_sf", None)
+    if lsf is not None:
+        low = S <= 1e-300
+        if low.any():
+            # bounded below: an overflowing -z^2 (mu = 1e308) gave -inf,
+            # and -inf - -inf is a NaN race; the density is exactly zero
+            # wherever this bound binds, so it prices nothing
+            with np.errstate(over="ignore", invalid="ignore"):
+                exact = np.maximum(lsf(z), -1e300)
+            logS = np.where(low, exact, logS)
+    return logS
 
 
 BASES = {"normal": _normal, "gumbel": _gumbel_min,
@@ -1445,7 +1494,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             z = (xq[None, :] - M_all[q][:, None]) / sd[:, None]
             S, f, fp = fn(z)
             f = f / sd[:, None]
-            logS = np.log(S)
+            logS = _log_survival(fn, z, S)
             rest = np.exp(np.clip(logS.sum(axis=0)[None, :] - logS,
                                   -745.0, 0.0))
             p += W[q] * ((f * rest) @ wq)
@@ -1461,7 +1510,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         z = (x[None, None, :] - M[:, :, None]) / sd[None, :, None]
         S, f, fp = fn(z)
         f = f / sd[None, :, None]
-        logS = np.log(S)
+        logS = _log_survival(fn, z, S)
         rest = np.exp(np.clip(logS.sum(axis=1)[:, None, :] - logS, -745.0, 0.0))
         p += Wc @ (np.sum(f * rest, axis=2) * dx)
         slope += Wc @ (np.sum(-fp / sd[None, :, None] ** 2 * rest, axis=2) * dx)
@@ -2215,7 +2264,7 @@ def tie_densities(mu, V=None, D=None, F=None, W=None, base="normal",
         z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
         S, f, _ = fn(z)
         f = f / sd[:, None]
-        logS = np.log(S)
+        logS = _log_survival(fn, z, S)
         logSfield = logS.sum(0)
         for i in range(n):
             rest = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,
@@ -2286,7 +2335,7 @@ def removal_shares(mu, V=None, D=None, F=None, W=None, base="normal",
             z = (x[None, :] - M_all[c][:, None]) / sd[:, None]
             S, f, _ = fn(z)
             f = f / sd[:, None]
-            logS = np.log(S)
+            logS = _log_survival(fn, z, S)
             logSfield = logS.sum(0)
             for i in range(n):
                 rest = np.exp(np.clip(logSfield[None, :] - logS[i] - logS,

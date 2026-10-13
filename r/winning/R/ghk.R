@@ -128,7 +128,10 @@
     logprob <- logprob + lF
     if (want_slope)
       score <- score + exp(stats::dnorm(bb, log = TRUE) - lF) / L[t, t]
-    z[, t] <- stats::qnorm(pmin(pmax(u[, t] * exp(lF), 1e-300), 1 - 1e-16))
+    # the truncated draw from its log CDF: flooring u * Phi(b) at 1e-300
+    # pinned draws behind a deep bound at qnorm(1e-300) (#270)
+    lu <- log(pmax(u[, t], .Machine$double.xmin)) + lF
+    z[, t] <- stats::qnorm(pmin(lu, log1p(-1e-16)), log.p = TRUE)
   }
   lse <- function(v) { m <- max(v); m + log(sum(exp(v - m))) }
   out <- list(logP = lse(logprob) - log(R))
