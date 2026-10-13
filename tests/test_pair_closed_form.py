@@ -74,3 +74,51 @@ def test_pair_closed_form_matches_the_lattice():
         assert q[0] == pytest.approx(p2[0], abs=1e-7)
 
 
+
+
+def test_every_grammar_prices_a_pair_in_closed_form_86():
+    """Blocks, Nested and Tree integrated a lattice for a pair and priced
+    a 14-sd tail at 0.107x the exact 1.04e-45; a pair is one Gaussian
+    contrast under every grammar."""
+    from scipy.special import ndtr
+    from winning.factor.blocks import tree_race_probabilities
+    from winning.factor.races import race_probabilities
+    from winning.factor.structures import Blocks, Nested, Tree
+    mu = np.array([0.0, 20.0])
+    exact = ndtr(-20 / np.sqrt(2))
+    for s in (Blocks(np.array([0, 1]), np.zeros(2), np.ones(2)),
+              Nested(np.array([0, 1]), np.zeros(2), np.ones(2), np.zeros(2),
+                     0.5),
+              Tree(np.array([0, 1]), np.zeros(2), np.ones(2),
+                   np.array([2, 2, -1]), np.zeros(3))):
+        assert race_probabilities(mu, structure=s)[1] / exact == \
+            pytest.approx(1.0, rel=1e-12)
+    # correlated pairs: the factor form is the grammar's covariance
+    mu = np.array([0.0, 1.3])
+    s = Blocks(np.array([0, 0]), np.array([0.8, -0.5]), np.array([1.0, 2.0]))
+    u = 1.3 / np.sqrt(1.3 ** 2 + 3.0)
+    assert race_probabilities(mu, structure=s)[0] == pytest.approx(ndtr(u))
+    s = Nested(np.array([0, 1]), np.array([0.8, -0.5]), np.array([1.0, 2.0]),
+               np.array([0.7, 0.2]), 0.6)
+    u = 1.3 / np.sqrt(0.64 + 0.25 + 3.0 + (0.6 * 0.5) ** 2)
+    assert race_probabilities(mu, structure=s)[0] == pytest.approx(ndtr(u))
+    s = Tree(np.array([0, 1]), np.array([0.8, -0.5]), np.array([1.0, 2.0]),
+             np.array([2, 3, 3, -1]), np.array([0.0, 0.0, 0.9, 1.5]))
+    u = 1.3 / np.sqrt(0.64 + 0.81 + 0.25 + 3.0)
+    assert race_probabilities(mu, structure=s)[0] == pytest.approx(ndtr(u))
+    ref = tree_race_probabilities(mu, s.leaf_index, s.loading, s.D, s.parent,
+                                  s.strength, points=4097, qa=41)
+    assert np.abs(race_probabilities(mu, structure=s) - ref).max() < 1e-6
+    with pytest.raises(ValueError, match="exactly one root"):
+        race_probabilities(mu, structure=Tree(
+            np.array([0, 1]), np.zeros(2), np.ones(2), np.array([-1, -1]),
+            np.zeros(2)))
+
+
+def test_pair_jacobian_is_the_closed_form_one_86():
+    from scipy.stats import norm
+    from winning.factor.polish import race_jacobian
+    J = race_jacobian(np.array([0.0, 12 * np.sqrt(2)]), D=np.ones(2))
+    d = norm.pdf(12.0) / np.sqrt(2)
+    assert J[0, 0] == pytest.approx(-d, rel=1e-10)    # was +1.5e-16
+    assert J[0, 1] == pytest.approx(d, rel=1e-10)

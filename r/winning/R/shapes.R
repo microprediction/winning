@@ -109,7 +109,11 @@
   }
   # `mass` keeps the caller's own arithmetic, so the ordinary path is
   # bit-identical to the expression it replaced
-  if (is.null(mass)) target / tot else target * (mass / tot)
+  if (is.null(mass)) return(target / tot)
+  f <- mass / tot
+  # a finite total below mass / .Machine$double.xmax overflowed the
+  # multiplier; target / tot is still a law (#461)
+  if (is.finite(f)) target * f else (target / tot) * mass
 }
 
 # A warm start selects a branch of an inverse; it must not redefine the

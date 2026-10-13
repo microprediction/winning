@@ -19,6 +19,26 @@ import numpy as np
 _LOG2PI = float(np.log(2.0 * np.pi))
 
 
+def _components(adj):
+    """Connected components (sorted index lists) of a boolean adjacency."""
+    K = adj.shape[0]
+    label = np.full(K, -1)
+    comps = []
+    for s0 in range(K):
+        if label[s0] >= 0:
+            continue
+        label[s0] = len(comps)
+        stack, comp = [s0], []
+        while stack:
+            i = stack.pop()
+            comp.append(i)
+            for j in np.flatnonzero(adj[i] & (label < 0)):
+                label[j] = len(comps)
+                stack.append(int(j))
+        comps.append(sorted(int(i) for i in comp))
+    return comps
+
+
 def _ledermann(K):
     """Largest k with no more factor parameters than covariance entries."""
     return int(np.floor((2 * K + 1 - np.sqrt(8 * K + 1)) / 2 + 1e-9))
@@ -160,7 +180,13 @@ def fit_factor_model_missing(Y, k=None, *, k_max=None, min_pairs=1,
     Refusals. min_pairs (default 1): every pair of entrants must share at
     least that many trials, else ValueError naming the pair; pass 0 to
     let the factor structure carry pairs never scored together (their
-    covariance is then extrapolated through V, not observed). Each
+    covariance is then extrapolated through V, not observed). Even with
+    min_pairs=0 the entrants must form one connected co-observation graph
+    (an edge where a trial scores both) when k > 0 or k is None: separate
+    groups have independent factor gauges, so their cross-group
+    covariance is not identified and is refused rather than invented. The
+    fit is translation invariant: a constant added to every score moves
+    only report["mean"]. Each
     entrant needs k + 2 observed trials. k above the Ledermann bound is
     not identified and is refused. A rank that does not converge within
     max_iter emits a RuntimeWarning and report["converged"] is False.
@@ -200,6 +226,14 @@ def fit_factor_model_missing(Y, k=None, *, k_max=None, min_pairs=1,
             f"entrants {i} and {j} share {int(pairs[i, j])} scored trials, "
             f"fewer than min_pairs={min_pairs}; their covariance would rest "
             "on the factor model alone. Pass min_pairs=0 to accept that")
+    comps = _components(pairs > 0)
+    if len(comps) > 1 and (k is None or k > 0):
+        raise ValueError(
+            "the entrant co-observation graph is disconnected (no trial "
+            f"scores entrants from two of these groups together: {comps}); "
+            "the factor coordinates of separate groups are not identified, "
+            "so any cross-group covariance would be invented. Fit each "
+            "group separately, or pass k=0 (independent entrants)")
     lb = _ledermann(K)
     if k is None:
         ks = list(range(0, min(lb, 5 if k_max is None else int(k_max)) + 1))
@@ -219,6 +253,9 @@ def fit_factor_model_missing(Y, k=None, *, k_max=None, min_pairs=1,
             f"factor fit needs at least {need} per entrant")
     Yz = np.where(obs, Ym, 0.0)
     mu0 = Yz.sum(axis=0) / nobs
+    # EM runs on scores centred at this anchor (#709): its M-step forms
+    # D from raw second moments, which cancel when the location is large
+    # against the spread. The anchor is added back to the fitted mean.
     R = np.where(obs, Ym - mu0, 0.0)
     var = (R * R).sum(axis=0) / nobs
     if not (var > 0).all():
@@ -231,12 +268,13 @@ def fit_factor_model_missing(Y, k=None, *, k_max=None, min_pairs=1,
     floor = 1e-8 * var
     fits, bic = {}, {}
     for kk in ks:
-        fits[kk] = _fit_k(Yz, obs, kk, C, floor, tol, max_iter,
+        fits[kk] = _fit_k(R, obs, kk, C, floor, tol, max_iter,
                           max(int(n_starts), 1), seed)
         p = 2 * K + K * kk - kk * (kk - 1) / 2
         bic[kk] = -2.0 * fits[kk][3][-1] + p * np.log(T)
     kk = min(bic, key=bic.get)
     mu, V, D, trace, converged = fits[kk]
+    mu = mu + mu0
     slow = [j for j in ks if not fits[j][4]]
     if slow:
         warnings.warn(

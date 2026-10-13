@@ -425,9 +425,16 @@ def _loo_pmf(C, F, i, S=None):
 def _reflected(base_rows):
     """Rows of the reflected noise -e: survival F(-z) = 1 - S(-z), density
     f(-z), derivative -f'(-z). Used ONLY to place a window -- the
-    subtraction is exact enough for that and for nothing finer."""
+    subtraction is exact enough for that and for nothing finer, except
+    where the base carries its own lower tail (the Gumbel, a callable
+    with cdf/log_cdf): there 1 - S(-z) rounded a far tail to zero and
+    the window treated it as empty (#710)."""
+    cdf = _lower_cdf(base_rows)
+
     def rows(z):
         S, f, fp = base_rows(-z)
+        if cdf is not None:
+            return np.maximum(cdf(-z), 1e-300), f, -fp
         return 1.0 - S, f, -fp
     # the reflection keeps the base's central scale: without it the
     # bottom-k window budget ignored the declared resolution (#468)

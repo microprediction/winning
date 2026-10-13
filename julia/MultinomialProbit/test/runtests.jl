@@ -840,3 +840,35 @@ end
     @test abs(choice_loglik_and_score(mu10, zeros(10, 0), [6]; Qz = 7)[1] -
               (-3.514068769353895)) > 5e-5
 end
+
+@testset "Hessian vcov is covariate-unit equivariant (#702)" begin
+    # l(b) = log Phi(a b / sqrt 2) + log Phi(-a b / sqrt 2): MLE b = 0,
+    # exact Hessian -2 a^2 / pi, so a^2 vcov = pi / 2 at every unit
+    for a in (1e-6, 1.0, 1e8)
+        X = zeros(2, 2, 1)
+        X[:, 1, 1] .= a
+        m = MNProbit(X, [1, 2]; intercepts = false, r = 0)
+        fit!(m)
+        @test a^2 * vcov(m; method = :hessian)[1, 1] ≈ pi / 2 rtol = 1e-6
+    end
+end
+
+@testset "sharp cloud keeps its own-noise resolution (#694)" begin
+    for r in 1:5
+        F, W = MultinomialProbit._symmetric_halton(r, 1, 2^10)
+        @test length(unique(F[:, r + 1])) >= 2^10 ÷ 8
+        @test sum(W) ≈ 1.0
+    end
+    mu = reshape([0.6094341595088627, -2.079968212480991,
+                  1.5009023916129145, 1.8811294327824277,
+                  -3.902070377307673], 1, 5)
+    V = [-2.7227514556621832 0.2673038870461732 -0.6612375437551032 -0.03512985407199214;
+         -1.783645483057296 1.8387496528290126 1.6262996869719497 0.13806481898674158;
+         2.356969696558986 0.9775240168074725 -1.7967106622591427 0.771027902717065;
+         -2.004945542037578 1.8367681444891217 -0.10439101989911242 -0.386532169172916;
+         -1.4237683041845364 2.5562345221532174 -0.3231085806743851 -0.8955986445411943]
+    ref = [0.17760492, 0.02211342, 0.43580930, 0.36438589, 0.00008646]
+    raw = [exp(choice_loglik_and_score(mu, V, [k])[1]) for k in 1:5]
+    @test abs(sum(raw) - 1) < 0.02
+    @test maximum(abs.(raw ./ sum(raw) .- ref)) < 0.01
+end

@@ -128,6 +128,16 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
     kinked base (laplace, exponential power with beta < 2); see there.
     False, or a smooth base, is the uniform lattice unchanged.
     """
+    if (isinstance(base, str) and base == "normal" and np.size(mu) == 2):
+        # the forward prices a normal pair in closed form (one Gaussian
+        # contrast), so its Jacobian is the closed form's: the lattice
+        # quotient rule differentiated a map the forward does not use and
+        # gave J[0, 0] = +1.5e-16 against -1.5e-32 at a 12-sd gap (#86)
+        p, sl = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
+                                   points=points, window=window,
+                                   delta=delta, return_slopes=True)
+        d = float(-sl[0])
+        return np.array([[-d, d], [d, -d]])
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T

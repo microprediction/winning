@@ -148,14 +148,44 @@ def test_sharp_cloud_ignores_factor_signs_and_order(transform):
 def test_symmetric_cloud_is_closed_under_its_group(r):
     F, W = symmetric_sobol_normal(r, 1, 1024, seed=0)
     assert abs(W.sum() - 1.0) < 1e-12 and len(F) <= 1200
+    # #694: the group (order <= 8) never collapses the own-noise rule
+    assert len(np.unique(F[:, -1])) >= 1024 // 8
     key = {tuple(np.round(row, 12)) for row in F}
-    flip = F.copy()
-    flip[:, 0] = -flip[:, 0]
-    assert {tuple(np.round(row, 12)) for row in flip} == key
-    if r <= 4 and r >= 2:
+    if r <= 3:          # sign flips up to r = 3
+        flip = F.copy()
+        flip[:, 0] = -flip[:, 0]
+        assert {tuple(np.round(row, 12)) for row in flip} == key
+    if r == 2:          # and permutations at r = 2
         sw = F.copy()
         sw[:, [0, 1]] = sw[:, [1, 0]]
         assert {tuple(np.round(row, 12)) for row in sw} == key
+
+
+_MU694 = np.array([[0.6094341595088627, -2.079968212480991,
+                    1.5009023916129145, 1.8811294327824277,
+                    -3.902070377307673]])
+_V694 = np.array([
+    [-2.7227514556621832, 0.2673038870461732, -0.6612375437551032,
+     -0.03512985407199214],
+    [-1.783645483057296, 1.8387496528290126, 1.6262996869719497,
+     0.13806481898674158],
+    [2.356969696558986, 0.9775240168074725, -1.7967106622591427,
+     0.771027902717065],
+    [-2.004945542037578, 1.8367681444891217, -0.10439101989911242,
+     -0.386532169172916],
+    [-1.4237683041845364, 2.5562345221532174, -0.3231085806743851,
+     -0.8955986445411943]])
+# scipy MVN contrast CDFs, three seeds at maxpts 2e6, abseps 1e-9
+_REF694 = np.array([0.17760492, 0.02211342, 0.43580930, 0.36438589,
+                    0.00008646])
+
+
+def test_rank_four_sharp_rule_keeps_its_resolution_694():
+    """#694: the r = 4 orbit of 384 left three own-noise values; raw
+    masses summed to 1.216 and the normalised error was 0.042."""
+    raw = np.array([_prob_of(_MU694, _V694, k)[0] for k in range(5)])
+    assert abs(raw.sum() - 1.0) < 0.01
+    assert np.abs(raw / raw.sum() - _REF694).max() < 0.01
 
 
 def _fixture(T=300, J=4, seed=0):

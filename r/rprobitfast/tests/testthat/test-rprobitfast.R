@@ -482,12 +482,16 @@ test_that("the family switch is continuous and cusp-free (#420)", {
 })
 
 test_that("the sharp cloud is closed under factor signs and order (#605)", {
-  for (r in 1:4) {
+  for (r in 1:5) {
     nd <- .sobol_nodes3(r, 10L)
+    # #694: a group of order <= 8 never collapses the own-noise rule
+    expect_gte(length(unique(nd$F[, r + 1L])), 1024L / 8L)
     key <- function(F) sort(apply(round(F, 10), 1, paste, collapse = ","))
-    flip <- nd$F; flip[, 1] <- -flip[, 1]
-    expect_identical(key(flip), key(nd$F))
-    if (r >= 2) {
+    if (r <= 3) {
+      flip <- nd$F; flip[, 1] <- -flip[, 1]
+      expect_identical(key(flip), key(nd$F))
+    }
+    if (r == 2) {
       sw <- nd$F; sw[, 1:2] <- sw[, 2:1]
       expect_identical(key(sw), key(nd$F))
     }

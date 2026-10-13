@@ -90,3 +90,15 @@ test_that("Tree leaves map makes relabeling invariant", {
   expect_error(tree_race_probabilities(mu, c(30, 30, 10, 20), L, D, pa, st,
                                        leaves = c(30, 10)), "does not map")
 })
+
+test_that("every grammar prices a pair in closed form (#86)", {
+  ex <- pnorm(-20 / sqrt(2))
+  for (s in list(Blocks(c(0, 1), c(0, 0), c(1, 1)),
+                 Nested(c(0, 1), c(0, 0), c(1, 1), c(0, 0), 0.5),
+                 Tree(c(0, 1), c(0, 0), c(1, 1), c(3, 3, 0), c(0, 0, 0))))
+    expect_lt(abs(race_probabilities(c(0, 20), structure = s)[2] / ex - 1), 1e-12)
+  expect_lt(abs(race_probabilities(c(0, 20), D = c(1, 1))[2] / ex - 1), 1e-12)
+  s <- Tree(c(0, 1), c(.8, -.5), c(1, 2), c(3, 4, 4, 0), c(0, 0, .9, 1.5))
+  expect_lt(abs(race_probabilities(c(0, 1.3), structure = s)[1] -
+                  pnorm(1.3 / sqrt(.64 + .81 + .25 + 3))), 1e-14)
+})
