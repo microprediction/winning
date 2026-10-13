@@ -268,3 +268,52 @@ def test_factor_refuses_kinked_base():
     with pytest.raises(NotImplementedError):
         certified_factor_race_probabilities([0.0, 1.0], [[0.5], [0.1]],
                                             base="laplace")
+
+
+@pytest.mark.parametrize("spell", [
+    lambda v: list(v),
+    lambda v: np.array(v),
+    lambda v: np.array(v, dtype=object),
+])
+def test_exact_d_survives_numpy_containers(spell):
+    # #699: decimal strings inside a NumPy array took the float path and
+    # the certificate excluded the exact-decimal truth.
+    from flint import arb, ctx
+    from winning.certified import certified_race_probabilities
+    old = ctx.prec
+    try:
+        ctx.prec = 256
+        mu = ["0.1", "0"]
+        got = certified_race_probabilities(mu, spell(["0.1", "0.2"]),
+                                           digits=35)[0]
+        z = (arb(mu[1]) - arb(mu[0])) / (arb("0.1") + arb("0.2")).sqrt()
+        truth = (-z / arb(2).sqrt()).erfc() / 2
+        assert got.contains(truth)
+    finally:
+        ctx.prec = old
+
+
+def test_exact_fractions_and_numpy_loadings():
+    from fractions import Fraction
+    from flint import arb, ctx
+    from winning.certified import (certified_factor_race_probabilities,
+                                   certified_race_probabilities)
+    old = ctx.prec
+    try:
+        ctx.prec = 256
+        z = -arb("0.1") / (arb(1) / 10 + arb(2) / 10).sqrt()
+        truth = (-z / arb(2).sqrt()).erfc() / 2
+        got = certified_race_probabilities(
+            [Fraction(1, 10), 0], [Fraction(1, 10), Fraction(1, 5)],
+            digits=35)[0]
+        assert got.contains(truth)
+        mu = ["0.1", "0", "-0.1"]
+        ref = certified_factor_race_probabilities(
+            mu, ["0.3", "0.1", "0.2"], D=["0.5", "0.6", "0.7"], digits=12)
+        for V in (np.array(["0.3", "0.1", "0.2"]),
+                  np.array([["0.3"], ["0.1"], ["0.2"]], dtype=object)):
+            got = certified_factor_race_probabilities(
+                mu, V, D=np.array(["0.5", "0.6", "0.7"]), digits=12)
+            assert all(a.overlaps(b) for a, b in zip(ref, got))
+    finally:
+        ctx.prec = old
