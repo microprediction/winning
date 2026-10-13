@@ -42,6 +42,132 @@ pub fn log_ndtr(z: f64) -> f64 {
     }
 }
 
+/// Below this many n * points cells a one-node field stays on one
+/// thread; above it node_runner_par splits it over runners (#112).
+/// Measured on a loaded 28-core machine: the split wins 2x at
+/// n = 500 x 257 points and is a wash at n = 100, where waking the
+/// pool costs what it saves; so it starts at n ~ 255 on 257 points.
+pub const INNER_PAR_WORK: usize = 65_536;
+const RUNNERS_PER_TASK: usize = 8;
+const COLS_PER_TASK: usize = 32;
+/// Scratch cap per array for node_runner_par, in floats (the sequential
+/// body's own n * tile cap).
+const INNER_SCRATCH: usize = 25_000_000;
+
+/// One factor node of forward_kernel / forward_kernel_base, parallel over
+/// RUNNERS instead of nodes, for the one-node (independent) field whose
+/// node-parallel loop ran on a single thread (#112). Bit-for-bit the
+/// sequential node body: every per-(runner, column) term is the same
+/// expression on the same inputs; the shared field is summed over
+/// runners in index order per column, as before; and each runner sums
+/// its own columns tile by tile, in column order, with the same
+/// `acc += w * s * dx` update after each `tile` columns. Only
+/// independent work moves to threads. Many tiles are filled per
+/// parallel phase (up to INNER_SCRATCH floats per array) so a 257-point
+/// lattice costs three fork-joins, not six. `eval(i, z)` gives
+/// (log S, log g, score) for pass 1 (score stored only if `score`);
+/// `slope(i, z, c, v)` the slope increment for pass 2.
+#[allow(clippy::too_many_arguments)]
+fn node_runner_par<E, S>(m: &[f64], wq: f64, sd: &[f64], lo: f64, dx: f64,
+                         points: usize, tile: usize, use_score: bool,
+                         eval: E, slope: S) -> Vec<f64>
+where
+    E: Fn(usize, f64) -> (f64, f64, f64) + Sync,
+    S: Fn(usize, f64, f64, f64) -> f64 + Sync,
+{
+    let n = m.len();
+    // a block is a whole number of tiles
+    let per = (INNER_SCRATCH / n.max(1) / tile).max(1) * tile;
+    let block = per.min(points.div_ceil(tile) * tile);
+    let mut acc = vec![0.0f64; 2 * n];
+    let mut logs = vec![0.0f64; n * block];
+    let mut logg = vec![0.0f64; n * block];
+    let mut score = vec![0.0f64; if use_score { n * block } else { 0 }];
+    let mut field = vec![0.0f64; block];
+    let mut b0 = 0;
+    while b0 < points {
+        let bl = block.min(points - b0);
+        let fill = |i: usize, row_s: &mut [f64], row_g: &mut [f64],
+                    mut row_c: Option<&mut [f64]>| {
+            let inv_sd = 1.0 / sd[i];
+            let mi = m[i];
+            for t in 0..bl {
+                let x = lo + (b0 + t) as f64 * dx;
+                let z = (x - mi) * inv_sd;
+                let (ls, lg, c) = eval(i, z);
+                row_s[t] = ls;
+                row_g[t] = lg;
+                if let Some(rc) = row_c.as_deref_mut() {
+                    rc[t] = c;
+                }
+            }
+        };
+        if use_score {
+            logs.par_chunks_mut(block)
+                .zip(logg.par_chunks_mut(block))
+                .zip(score.par_chunks_mut(block))
+                .enumerate()
+                .with_min_len(RUNNERS_PER_TASK)
+                .for_each(|(i, ((rs, rg), rc))| fill(i, rs, rg, Some(rc)));
+        } else {
+            logs.par_chunks_mut(block)
+                .zip(logg.par_chunks_mut(block))
+                .enumerate()
+                .with_min_len(RUNNERS_PER_TASK)
+                .for_each(|(i, (rs, rg))| fill(i, rs, rg, None));
+        }
+        // the shared field, summed over runners in index order per column
+        let logs_r = &logs;
+        field[..bl]
+            .par_chunks_mut(COLS_PER_TASK)
+            .enumerate()
+            .for_each(|(k, fc)| {
+                let c0 = k * COLS_PER_TASK;
+                fc.fill(0.0);
+                for i in 0..n {
+                    let row = &logs_r[i * block + c0..i * block + c0 + fc.len()];
+                    for (f, &l) in fc.iter_mut().zip(row) {
+                        *f += l;
+                    }
+                }
+            });
+        let (logg_r, score_r, field_r) = (&logg, &score, &field);
+        let (acc_p, acc_s) = acc.split_at_mut(n);
+        acc_p.par_iter_mut()
+            .zip(acc_s.par_iter_mut())
+            .enumerate()
+            .with_min_len(RUNNERS_PER_TASK)
+            .for_each(|(i, (ap, asl))| {
+                let row_s = &logs_r[i * block..i * block + bl];
+                let row_g = &logg_r[i * block..i * block + bl];
+                let inv_sd = 1.0 / sd[i];
+                let mi = m[i];
+                let mut t0 = 0;
+                while t0 < bl {
+                    let tl = tile.min(bl - t0);
+                    let mut s = 0.0f64;
+                    let mut sl = 0.0f64;
+                    for t in t0..t0 + tl {
+                        let e = row_g[t] + field_r[t] - row_s[t];
+                        if e > -745.0 {
+                            let v = e.exp();
+                            s += v;
+                            let x = lo + (b0 + t) as f64 * dx;
+                            let z = (x - mi) * inv_sd;
+                            let c = if use_score { score_r[i * block + t] } else { 0.0 };
+                            sl += slope(i, z, c, v);
+                        }
+                    }
+                    *ap += wq * s * dx;
+                    *asl += wq * sl * dx;
+                    t0 += tl;
+                }
+            });
+        b0 += bl;
+    }
+    acc
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn forward_kernel(
     mu: ArrayView1<f64>,
@@ -52,6 +178,23 @@ pub fn forward_kernel(
     points: usize,
     lo_in: f64,
     hi_in: f64,
+) -> (Array1<f64>, Array1<f64>, f64) {
+    forward_kernel_impl(mu, v, d, f_nodes, w, points, lo_in, hi_in, true)
+}
+
+/// forward_kernel, optionally without the one-node runner split (the
+/// reference the split is tested against bit for bit, #112).
+#[allow(clippy::too_many_arguments)]
+fn forward_kernel_impl(
+    mu: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    d: ArrayView1<f64>,
+    f_nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+    inner_ok: bool,
 ) -> (Array1<f64>, Array1<f64>, f64) {
     let n = mu.len();
     let q = f_nodes.nrows();
@@ -85,11 +228,24 @@ pub fn forward_kernel(
     // per-task scratch is n * tile floats twice over; cap it so large n
     // does not swap (n = 1e6 with the fixed 256-tile costs 2 GB per task)
     let tile = TILE.min((25_000_000usize / n.max(1)).max(4));
+    // one node (an independent field, rank 0) left every core but one
+    // idle and lost to numpy (#112): split that node over runners instead
+    let inner = inner_ok && q == 1 && n * points >= INNER_PAR_WORK;
     let p: Vec<f64> = (0..q)
         .into_par_iter()
         .map(|qi| {
             let m = &m_all[qi * n..(qi + 1) * n];
             let wq = w[qi];
+            if inner {
+                return node_runner_par(m, wq, &sd, lo, dx, points, tile, false,
+                                       |i, z| {
+                    (log_ndtr(-z), -0.5 * z * z - log_norm[i], 0.0)
+                }, |i, z, _c, v| {
+                    // (x - mi) * inv_sd * inv_sd * v, as before
+                    let inv_sd = 1.0 / sd[i];
+                    z * inv_sd * v
+                });
+            }
             let mut acc = vec![0.0f64; 2 * n];
             let mut logs = vec![0.0f64; n * tile];
             let mut logg = vec![0.0f64; n * tile];
@@ -2638,6 +2794,24 @@ pub fn forward_kernel_base(
     hi_in: f64,
     base: BaseSpec,
 ) -> (Array1<f64>, Array1<f64>, f64) {
+    forward_kernel_base_impl(mu, v, d, f_nodes, w, points, lo_in, hi_in, base, true)
+}
+
+/// forward_kernel_base, optionally without the one-node runner split (the
+/// reference the split is tested against bit for bit, #112).
+#[allow(clippy::too_many_arguments)]
+fn forward_kernel_base_impl(
+    mu: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    d: ArrayView1<f64>,
+    f_nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+    base: BaseSpec,
+    inner_ok: bool,
+) -> (Array1<f64>, Array1<f64>, f64) {
     let n = mu.len();
     let q = f_nodes.nrows();
     let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
@@ -2664,11 +2838,24 @@ pub fn forward_kernel_base(
     }
     let dx = (hi - lo) / (points - 1) as f64;
     let tile = TILE.min((25_000_000usize / n.max(1)).max(4));
+    let inner = inner_ok && q == 1 && n * points >= INNER_PAR_WORK;        // (#112)
     let p: Vec<f64> = (0..q)
         .into_par_iter()
         .map(|qi| {
             let m = &m_all[qi * n..(qi + 1) * n];
             let wq = w[qi];
+            if inner {
+                return node_runner_par(m, wq, &sd, lo, dx, points, tile, true,
+                                       |i, z| {
+                    let (ls, lf, dl) = base.eval(z);
+                    (ls, lf - sd[i].ln(), dl)
+                }, |i, _z, c, val| {
+                    let inv_sd = 1.0 / sd[i];
+                    // sl -= c * inv_sd * val, as sl + (-(..)): IEEE
+                    // defines a - b as a + (-b), so the bits agree
+                    -(c * inv_sd * val)
+                });
+            }
             let mut acc = vec![0.0f64; 2 * n];
             let mut logs = vec![0.0f64; n * tile];
             let mut logg = vec![0.0f64; n * tile];
@@ -2935,6 +3122,48 @@ pub fn ordered_kernel(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // #112: the one-node field is split over runners, and must return the
+    // sequential node body's bits exactly -- every compiled base, ragged
+    // and whole last tiles, a sub-tile lattice, the default window
+    #[test]
+    fn one_node_runner_split_is_bitwise_sequential() {
+        let bases = [(0u32, [0.0; 6]), (1, [0.0; 6]), (2, [0.0; 6]),
+                     (3, [0.0; 6]), (5, [5.0, (3.0f64 / 5.0).sqrt(), 0.0, 0.0, 0.0, 0.0])];
+        for &(n, points) in &[(300usize, 257usize), (300, 300), (1000, 513),
+                              (256, 256), (800, 83)] {
+            let mu = Array1::from_iter((0..n).map(|i| ((i * 37 % 101) as f64 - 50.0) / 17.0));
+            let d = Array1::from_iter((0..n).map(|i| 0.5 + (i % 7) as f64 / 5.0));
+            let v = ndarray::Array2::<f64>::zeros((n, 1));
+            let f = ndarray::Array2::<f64>::zeros((1, 1));
+            let w = Array1::from_elem(1, 1.0);
+            // the last case takes the kernel's own default window
+            let (lo, hi) = if n != 800 { (-9.0, 8.0) } else { (f64::NAN, f64::NAN) };
+            let pts = points;
+            assert!(n * pts >= INNER_PAR_WORK, "case n={n} must take the split");
+            let (p0, s0, t0) = forward_kernel_impl(mu.view(), v.view(), d.view(), f.view(),
+                                                   w.view(), pts, lo, hi, false);
+            let (p1, s1, t1) = forward_kernel(mu.view(), v.view(), d.view(), f.view(),
+                                              w.view(), pts, lo, hi);
+            assert_eq!(t0.to_bits(), t1.to_bits());
+            for i in 0..n {
+                assert_eq!(p0[i].to_bits(), p1[i].to_bits(), "normal p n={n} i={i}");
+                assert_eq!(s0[i].to_bits(), s1[i].to_bits(), "normal slope n={n} i={i}");
+            }
+            for &(id, params) in &bases {
+                let spec = BaseSpec { id, params };
+                let (p0, s0, t0) = forward_kernel_base_impl(
+                    mu.view(), v.view(), d.view(), f.view(), w.view(), pts, lo, hi, spec, false);
+                let (p1, s1, t1) = forward_kernel_base(
+                    mu.view(), v.view(), d.view(), f.view(), w.view(), pts, lo, hi, spec);
+                assert_eq!(t0.to_bits(), t1.to_bits());
+                for i in 0..n {
+                    assert_eq!(p0[i].to_bits(), p1[i].to_bits(), "base {id} p n={n} i={i}");
+                    assert_eq!(s0[i].to_bits(), s1[i].to_bits(), "base {id} slope n={n} i={i}");
+                }
+            }
+        }
+    }
 
     #[test]
     fn top_k_depth_contract() {
