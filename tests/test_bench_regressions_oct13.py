@@ -5,6 +5,7 @@ from scipy.special import log_ndtr
 
 import winning.likelihood as L
 from winning.likelihood import _choice_logprob_terms, _mills_gap, _tilt_mode
+from winning.methods.orthant_extra import _order_variables
 
 # the contrasts of the julia Fishing fit's first BFGS trial step (#716)
 _C0 = np.array([-174823.91047091805, -174848.3798915476,
@@ -66,3 +67,43 @@ def test_value_only_likelihood_is_the_same_to_the_bit(J, r, scale):
     lp, dmu, dV = _choice_logprob_terms(mu, V, choice=ch, score=False)
     assert dmu is None and dV is None
     assert np.array_equal(lp, full[0])
+
+
+def _order_reference(a, C):
+    """the #454 key sort, verbatim"""
+    z = a / np.sqrt(np.diag(C))
+    m = len(a)
+
+    def key(t):
+        others = sorted((-float(C[t, s]) for s in range(m) if s != t))
+        return (-float(z[t]), -float(C[t, t]), tuple(others))
+
+    return np.array(sorted(range(m), key=key), dtype=int)
+
+
+def test_order_variables_is_the_full_key_sort():
+    """#718: the tie-break is built only inside tied runs; the order is
+    the one the full key sort gives, ties and signed zeros included."""
+    rng = np.random.default_rng(0)
+    for trial in range(3000):
+        m = int(rng.integers(1, 12))
+        kind = trial % 4
+        if kind == 0:
+            a = rng.normal(size=m)
+        elif kind == 1:
+            a = rng.integers(-2, 3, size=m).astype(float)
+        elif kind == 2:
+            a = np.zeros(m)
+        else:
+            a = np.round(rng.normal(size=m), 1)
+        if trial % 50 == 0:
+            a[0] = -0.0
+        if trial % 3 == 0:
+            B = rng.normal(size=(m, 2))
+            C = B @ B.T + np.eye(m)
+        elif trial % 3 == 1:
+            C = np.ones((m, m)) + np.eye(m)
+        else:
+            B = rng.integers(-1, 2, size=(m, 2)).astype(float)
+            C = B @ B.T + np.diag(rng.integers(1, 3, size=m).astype(float))
+        assert np.array_equal(_order_variables(a, C), _order_reference(a, C))
