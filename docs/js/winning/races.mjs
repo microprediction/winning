@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor, canonicalBasis, asPoints } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor, canonicalBasis, asPoints, kinkLattice } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -34,6 +34,9 @@ export const BASES = {
     return [Math.max(S, 1e-300), f, -Math.sign(z) * f / b];
   },
 };
+// the density is not analytic at z = 0: the inverses take their slopes on
+// the split lattice there (kinkLattice, #267); the forward is unchanged
+BASES.laplace.kinks = [0];
 /* A base's central scale in standardized units, as python's _resolution
    (#385): a unit-variance law can still concentrate on a much narrower
    centre, and spacing measured in sd alone left that centre between
@@ -557,6 +560,50 @@ export function raceProbabilities(mu, opts = {}) {
   return pn;
 }
 
+/* Own-slopes of the race on the kink-split lattice (core.kinkLattice),
+   for a base that declares kinks: the uniform rectangle sum of the slope
+   integrand -f'(z), which jumps at each runner's kink, is first order --
+   a laplace own-slope came out 6x too large and abilitiesFromRace missed
+   an exact self-generated target by 0.79 (#267). Normalised by the split
+   total, as python's race_probabilities(..., kink_split=True). */
+function splitRaceSlopes(mu, { V, D, F, W, base, points }) {
+  const st = setup(mu, V, D, F, W, base);
+  const n = st.mu.length;
+  const sd = st.D.map(Math.sqrt);
+  const Mall = condMeans(st.mu, st.V, st.F);
+  const { x } = forwardGrid(Mall, sd, st, points, "bulk", 1e-12);
+  const p = new Array(n).fill(0), slope = new Array(n).fill(0);
+  for (let q = 0; q < st.F.length; q++) {
+    const Mq = Mall[q], wq = st.W[q];
+    const { xs, ws } = kinkLattice(x, Mq, sd, st.fn.kinks);
+    const T = xs.length;
+    const L = new Array(T).fill(0);
+    const logS = new Array(n), fArr = new Array(n), fpArr = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const li = new Array(T), fi = new Array(T), fpi = new Array(T);
+      for (let t = 0; t < T; t++) {
+        const [S, f, fp] = st.fn((xs[t] - Mq[i]) / sd[i]);
+        li[t] = Math.log(S); fi[t] = f / sd[i]; fpi[t] = fp;
+        L[t] += li[t];
+      }
+      logS[i] = li; fArr[i] = fi; fpArr[i] = fpi;
+    }
+    for (let i = 0; i < n; i++) {
+      const sd2 = sd[i] * sd[i];
+      let si = 0, sl = 0;
+      for (let t = 0; t < T; t++) {
+        const rest = Math.exp(Math.min(Math.max(L[t] - logS[i][t], -745), 0));
+        si += fArr[i][t] * rest * ws[t];
+        sl += -fpArr[i][t] / sd2 * rest * ws[t];
+      }
+      p[i] += wq * si;
+      slope[i] += wq * sl;
+    }
+  }
+  const total = p.reduce((a, b) => a + b, 0);
+  return slope.map(v => v / total);
+}
+
 /* One exit for every inversion path, as python's _inverse_return: warn
    on non-convergence unless the caller asked for the diagnostics, and
    report the iteration actually reached. Without it a starved solve came
@@ -713,8 +760,13 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
   let prevStep = null;
   let iters = 0;
   let cached = null;  // forward of an accepted Aitken trial (#583)
+  const fnBase = typeof base === "function" ? base : BASES[base];
+  const kinked = !!(fnBase && Array.isArray(fnBase.kinks) && fnBase.kinks.length);
   const sweepForward = m => {
-    const { p: praw, slopes: sl } = raceProbabilities(m, { V, D, F, W, base, points, returnSlopes: true });
+    let { p: praw, slopes: sl } = raceProbabilities(m, { V, D, F, W, base, points, returnSlopes: true });
+    // a kinked base: the slope from the split lattice, the value from the
+    // map being inverted (#267)
+    if (kinked) sl = splitRaceSlopes(m, { V, D, F, W, base, points });
     const phat = praw.map(v => Math.max(v, 1e-300));
     return { resid: phat.map((v, i) => Math.log(v) - logt[i]),
              // in the field's units: an absolute -1e-6 took over past

@@ -702,6 +702,81 @@ export function aitkenTrial(mu, step, ratio, scale, forward, residMax,
   return { mu: cand, fwd };
 }
 
+/* Gauss-Legendre nodes and weights on [-1, 1] (Newton on P_m), cached.
+   Python's numpy leggauss; agreement to rounding. */
+const LEGENDRE = new Map();
+export function legendre(m) {
+  if (LEGENDRE.has(m)) return LEGENDRE.get(m);
+  const t = new Array(m), w = new Array(m);
+  for (let i = 0; i < m; i++) {
+    let x = Math.cos(Math.PI * (i + 0.75) / (m + 0.5));
+    let dp = 1;
+    for (let it = 0; it < 100; it++) {
+      let p0 = 1, p1 = x;
+      for (let j = 2; j <= m; j++) {
+        const p2 = ((2 * j - 1) * x * p1 - (j - 1) * p0) / j;
+        p0 = p1; p1 = p2;
+      }
+      if (m === 1) { p1 = x; p0 = 1; }
+      dp = m * (x * p1 - p0) / (x * x - 1);
+      const dx = p1 / dp;
+      x -= dx;
+      if (Math.abs(dx) < 1e-15) break;
+    }
+    t[m - 1 - i] = x;
+    w[m - 1 - i] = 2 / ((1 - x * x) * dp * dp);
+  }
+  const out = { t, w };
+  LEGENDRE.set(m, out);
+  return out;
+}
+
+/* Nodes and weights over the window of the uniform lattice x, split at
+   every runner's kink and Gauss-Legendre on each piece: python's
+   races.kink_lattice, same budget rule (the two outer pieces at a
+   quarter weight, at least four nodes a piece, at most len(x) / 4 kinks
+   kept, merged onto equal-width bins beyond that). A kinked base
+   (laplace) makes the slope integrand -f'(z) JUMP at every runner's
+   location, so a uniform rectangle sum of a slope or Jacobian is only
+   first order there; on these pieces it is spectral (#267). Used for the
+   inverses' derivatives only: the forward maps keep the uniform lattice. */
+export function kinkLattice(x, M, sd, kinks) {
+  const a = x[0], b = x[x.length - 1], L = x.length;
+  let K = [];
+  for (let i = 0; i < M.length; i++)
+    for (const c of kinks) {
+      const v = M[i] + c * sd[i];
+      if (v > a && v < b) K.push(v);
+    }
+  K = Array.from(new Set(K)).sort((u, v) => u - v);
+  const cap = Math.max(1, Math.floor(L / 4));
+  if (K.length > cap) {
+    const width = (b - a) / cap;
+    const seen = new Set(), kept = [];
+    for (const v of K) {
+      const bin = Math.floor((v - a) / width);
+      if (!seen.has(bin)) { seen.add(bin); kept.push(v); }
+    }
+    K = kept;
+  }
+  const cuts = [a, ...K, b];
+  const P = cuts.length - 1;
+  const eff = new Array(P);
+  let tot = 0;
+  for (let j = 0; j < P; j++) {
+    eff[j] = (cuts[j + 1] - cuts[j]) * (j === 0 || j === P - 1 ? 0.25 : 1);
+    tot += eff[j];
+  }
+  const xs = [], ws = [];
+  for (let j = 0; j < P; j++) {
+    const m = Math.max(4, Math.round(L * eff[j] / tot));
+    const { t, w } = legendre(m);
+    const mid = 0.5 * (cuts[j + 1] + cuts[j]), half = 0.5 * (cuts[j + 1] - cuts[j]);
+    for (let r = 0; r < m; r++) { xs.push(mid + half * t[r]); ws.push(half * w[r]); }
+  }
+  return { xs, ws };
+}
+
 /* A target about to be floored, as a law of total `mass`: the floor is a
    probability, so it applies to normalized entries, never the caller's
    arbitrary units -- [c, 0] floored at 1e-6 returned ability gaps of 0,
@@ -749,9 +824,31 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
   let alphaBase = alpha, penalty = 1;
   let cached = null;  // forward of an accepted Aitken trial
   const n = mu.length;
+  let backoffs = 0;
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
-    let { resid, dres } = cached || forward(mu);
+    let fw = cached;
+    if (!fw) {
+      try {
+        fw = forward(mu);
+      } catch (e) {
+        // the forward refused this iterate (a lattice defect, or a
+        // membership above one): back off halfway toward the last priced
+        // iterate, as python's _jacobi_sweeps (#267). The first forward
+        // still throws; a persistent refusal returns the last priced
+        // iterate as not converged.
+        if (!prev) throw e;
+        if (backoffs >= 20)
+          return { mu: prev.mu, converged: prev.residMax < tol,
+                   residMax: prev.residMax, iterations: iters };
+        backoffs += 1;
+        mu = prev.mu.map((m, i) => m + 0.5 * (mu[i] - m));
+        penalty = Math.max(0.5 * penalty, 0.1);
+        prevStep = null;
+        continue;
+      }
+    }
+    let { resid, dres } = fw;
     cached = null;
     residMax = Math.max(...resid.map(Math.abs));
     residRms = Math.sqrt(resid.reduce((a, b) => a + b * b, 0) / n);
