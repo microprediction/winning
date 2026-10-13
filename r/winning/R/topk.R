@@ -175,7 +175,7 @@
   lsf <- attr(fn, "log_sf")
   if (is.null(lsf)) return(S)
   low <- S <= 1e-300
-  if (any(low)) S[low] <- exp(lsf(z[low]))
+  if (any(low)) S[low] <- exp(pmax(lsf(z[low]), -1e300, na.rm = TRUE))
   S
 }
 

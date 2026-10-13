@@ -128,7 +128,7 @@ function countWindowAt(mu, sd, k, fn, delta, padSds) {
    behind: 1.0e-300 for 1.105e-307), so floored points take the base's
    exact log survival (#502). Nothing above 1e-300 moves. */
 function unfloored(fn, z, s) {
-  return s <= 1e-300 && fn.logSf ? Math.exp(fn.logSf(z)) : s;
+  return s <= 1e-300 && fn.logSf ? Math.exp(Math.max(fn.logSf(z), -1e300) || -1e300) : s;
 }
 
 function baseGrid(fn, x, mu, sd) {

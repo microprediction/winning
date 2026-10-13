@@ -157,7 +157,12 @@ def _log_survival(fn, z, S):
     if lsf is not None:
         low = S <= 1e-300
         if low.any():
-            logS = np.where(low, lsf(z), logS)
+            # bounded below: an overflowing -z^2 (mu = 1e308) gave -inf,
+            # and -inf - -inf is a NaN race; the density is exactly zero
+            # wherever this bound binds, so it prices nothing
+            with np.errstate(over="ignore", invalid="ignore"):
+                exact = np.maximum(lsf(z), -1e300)
+            logS = np.where(low, exact, logS)
     return logS
 
 

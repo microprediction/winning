@@ -2607,7 +2607,7 @@ impl BaseSpec {
                 let sv = if z < 0.0 { 1.0 - half } else { half };
                 // exact below 1e-300 rather than floored there (#502);
                 // ln(sv) unchanged wherever it is representable
-                let ls = if sv > 1e-300 { sv.ln() } else { -std::f64::consts::LN_2 - az / b };
+                let ls = if sv > 1e-300 { sv.ln() } else { (-std::f64::consts::LN_2 - az / b).max(-1e300) };
                 (ls, lf, -z.signum() / b)
             }
             4 => {

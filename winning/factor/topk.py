@@ -226,8 +226,8 @@ def _unfloored(base_rows, z, S):
     low = S <= 1e-300
     if not low.any():
         return S
-    with np.errstate(under="ignore"):
-        return np.where(low, np.exp(lsf(z)), S)
+    with np.errstate(under="ignore", over="ignore", invalid="ignore"):
+        return np.where(low, np.exp(np.maximum(lsf(z), -1e300)), S)
 
 
 # Cavity deconvolution with error bounds (#511). Every entry of the count

@@ -48,3 +48,14 @@ def test_ordinary_results_do_not_move(pure):
         assert np.array_equal(R._log_survival(fn, z, S)[S > 1e-300],
                               np.log(S[S > 1e-300]))
         assert np.isfinite(R.race_probabilities(mu, base=base)).all()
+
+
+def test_an_overflowing_log_survival_is_not_a_nan_race(pure):
+    # log_ndtr(-z) at z ~ 1e308 overflows to -inf, and -inf - -inf was NaN
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = R.race_probabilities(np.array([0.0, 1e308, -0.2, 0.5]))
+        q = R.race_probabilities(np.array([0.0, 0.3, -0.2, 0.5]),
+                                 D=np.array([1.0, 1e308, 1.0, 1.0]))
+    assert np.isfinite(p).all() and np.isfinite(q).all()

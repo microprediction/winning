@@ -67,7 +67,9 @@ attr(.base_laplace, "log_sf") <- function(z) {
   lsf <- attr(fn, "log_sf")
   if (!is.null(lsf)) {
     low <- S <= 1e-300
-    if (any(low)) logS[low] <- lsf(z)[low]
+    # bounded below: an overflowing log (mu = 1e308) gave -Inf and
+    # -Inf - -Inf a NaN race; the density is 0 wherever this binds
+    if (any(low)) logS[low] <- pmax(lsf(z)[low], -1e300, na.rm = TRUE)
   }
   logS
 }

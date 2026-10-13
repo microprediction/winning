@@ -552,7 +552,10 @@ export function raceProbabilities(mu, opts = {}) {
       for (let t = 0; t < x.length; t++) {
         const z = (x[t] - Mq[i]) / sd[i];
         const [S, f, fp] = st.fn(z);
-        li[t] = S <= 1e-300 && st.fn.logSf ? st.fn.logSf(z) : Math.log(S);
+        // bounded below: an overflowing log (mu = 1e308) gave -Infinity
+        // and -Inf - -Inf a NaN race; f is exactly 0 wherever it binds
+        li[t] = S <= 1e-300 && st.fn.logSf
+          ? Math.max(st.fn.logSf(z), -1e300) || -1e300 : Math.log(S);
         fi[t] = f / sd[i];
         fpi[t] = fp;
         L[t] += li[t];
