@@ -49,9 +49,11 @@
 # transition in factor space is 1/sharpness wide, and the linear rule gave
 # 0.2% relative error on a correlation-0.8 orthant (#132). Rank two floors
 # at 15 points, rank one at 61. Same rule as winning/fastmvn.py.
+# Rank two: ceil(8 sharp^2) in [11, 41], as accurate as 15 sharp^2 in
+# [15, 41] on the adaptive rule at about half the nodes.
 .gh_order <- function(r, sharp)
-  as.integer(min(max(ceiling(15 * sharp^2), if (r == 1) 61 else 15),
-                 if (r == 1) 201 else 41))
+  if (r == 1) as.integer(min(max(ceiling(15 * sharp^2), 61), 201)) else
+    as.integer(min(max(ceiling(8 * sharp^2), 11), 41))
 
 .nodes_for <- function(V, D) {
   r <- ncol(V)
@@ -474,11 +476,32 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
                         "(sigma + t(sigma))/2 if the asymmetry is numerical ",
                         "noise"), asym), call. = FALSE)
   C <- 0.5 * C + 0.5 * t(C)
-  lam <- min(eigen(C, symmetric = TRUE, only.values = TRUE)$values)
-  if (lam < -1e-8 * max(mean(diag(C)), 1e-300))
-    stop(sprintf(paste0("sigma is not positive semidefinite (min eigenvalue ",
-                        "%.2e); it is not a covariance matrix"), lam),
-         call. = FALSE)
+  # PSD in CORRELATION units (#666; winning.factor.core): a tolerance on
+  # the mean raw variance let a 1e12 variance hide a correlation of 2, and
+  # its 1e-300 floor let [[0, c], [c, 0]] through at c = 1e-309
+  d <- diag(C)
+  if (any(d < 0))
+    stop(sprintf(paste0("sigma is not positive semidefinite (variance [%d] ",
+                        "< 0); it is not a covariance matrix"),
+                 which(d < 0)[1]), call. = FALSE)
+  pos <- d > 0
+  if (any(!pos)) {
+    off <- C[!pos, , drop = FALSE]
+    off[cbind(seq_len(sum(!pos)), which(!pos))] <- 0
+    if (any(off != 0))
+      stop(paste0("sigma is not positive semidefinite (a zero variance ",
+                  "with a nonzero row); it is not a covariance matrix"),
+           call. = FALSE)
+  }
+  if (any(pos)) {
+    s <- sqrt(d[pos])
+    R <- C[pos, pos, drop = FALSE] / outer(s, s)
+    lam <- min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)
+    if (lam < -1e-8)
+      stop(sprintf(paste0("sigma is not positive semidefinite (min ",
+                          "eigenvalue of the correlation matrix %.2e); it ",
+                          "is not a covariance matrix"), lam), call. = FALSE)
+  }
   C
 }
 

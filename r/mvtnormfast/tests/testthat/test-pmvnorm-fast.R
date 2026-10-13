@@ -487,3 +487,14 @@ test_that("a narrow central interval keeps its mass (#664)", {
     expect_lt(abs(p / exact - 1), 1e-12)
   }
 })
+
+test_that("PSD is judged in correlation units (#666)", {
+  S <- matrix(c(1, 2, 0, 2, 1, 0, 0, 0, 1e12), 3)
+  expect_error(pmvnorm_fast(upper = 0, sigma = S), "positive semidefinite")
+  for (cc in c(1, 1e-300, 1e-309, 1e-320))
+    expect_error(pmvnorm_fast(upper = 0, sigma = matrix(c(0, cc, cc, 0), 2)),
+                 "positive semidefinite")
+  S2 <- matrix(c(1, .5, 0, .5, 1, 0, 0, 0, 1e12), 3)
+  expect_lt(abs(as.numeric(pmvnorm_fast(upper = 0, sigma = S2)) -
+                  (0.25 + asin(0.5) / (2 * pi)) / 2), 1e-6)
+})

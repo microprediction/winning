@@ -144,8 +144,10 @@ end
 
 # Rank two keeps the 15-point floor so ordinary inputs cost what they
 # did; rank one floors at 61 (n x Q work, negligible once cached).
-_gh_order(r, sharp) = Int(clamp(ceil(15.0 * sharp^2), r == 1 ? 61 : 15,
-                                r == 1 ? 201 : 41))
+# Rank two: ceil(8 sharp^2) in [11, 41], as accurate as 15 sharp^2 in
+# [15, 41] on the adaptive rule (#470) at about half the nodes.
+_gh_order(r, sharp) = r == 1 ? Int(clamp(ceil(15.0 * sharp^2), 61, 201)) :
+                               Int(clamp(ceil(8.0 * sharp^2), 11, 41))
 
 const _GH_CACHE = Dict{Tuple{Int,Int},Tuple{Matrix{Float64},Vector{Float64}}}()
 const _GH_LOCK = ReentrantLock()
@@ -288,12 +290,31 @@ function _as_covariance(sigma)
             "(sigma + sigma')/2 if the asymmetry is numerical noise"))
     end
     C = 0.5 .* C .+ 0.5 .* C'
+    # PSD in CORRELATION units (#666; winning.factor.core): a tolerance on
+    # the mean raw variance let a 1e12 variance hide a correlation of 2,
+    # and its 1e-300 floor let [[0, c], [c, 0]] through at c = 1e-309
     n = size(C, 1)
-    lam = minimum(eigen(Symmetric(C)).values)
-    if lam < -1e-8 * max(sum(diag(C) ./ n), 1e-300)
-        throw(ArgumentError(
-            "sigma is not positive semidefinite (min eigenvalue $lam); " *
-            "it is not a covariance matrix"))
+    d = diag(C)
+    for i in 1:n
+        d[i] < 0 && throw(ArgumentError(
+            "sigma is not positive semidefinite (variance [$i] = $(d[i]) " *
+            "< 0); it is not a covariance matrix"))
+    end
+    for i in 1:n, j in 1:n
+        if d[i] == 0 && i != j && C[i, j] != 0
+            throw(ArgumentError(
+                "sigma is not positive semidefinite (variance [$i] is zero " *
+                "but its row is not); it is not a covariance matrix"))
+        end
+    end
+    pos = findall(>(0.0), d)
+    if !isempty(pos)
+        sd = sqrt.(d[pos])
+        R = C[pos, pos] ./ (sd * sd')
+        lam = minimum(eigen(Symmetric(R)).values)
+        lam < -1e-8 && throw(ArgumentError(
+            "sigma is not positive semidefinite (min eigenvalue of the " *
+            "correlation matrix $lam); it is not a covariance matrix"))
     end
     return C
 end
