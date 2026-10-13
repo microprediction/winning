@@ -43,6 +43,30 @@
 # underflowed to a score of exactly zero (#270).
 .log_mills <- function(a) dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE)
 
+# (lam, a + lam) for lam = phi(a)/Phi(a). lam (a + lam) is the tilt's
+# curvature term and lies in (0, 1), but in the far left tail lam ~ -a
+# and the sum cancels: through exp(dnorm(log) - pnorm(log.p)) lam carries
+# the rounding of a^2/2, and from a first BFGS step's contrasts
+# (a ~ -5.7e4) the tilt curvature came out negative -- a DomainError in
+# the julia port, NaN here (#716). Below -20 the erfcx continued
+# fraction gives both without cancellation (twelve terms are converged
+# there): lam = -a + sqrt(2) cf, a + lam = sqrt(2) cf. Port of
+# winning/likelihood.py::_mills_gap.
+.mills_gap <- function(a) {
+  lam <- exp(dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE))
+  gap <- a + lam
+  tail <- which(a < -20)
+  if (length(tail)) {
+    x <- -a[tail] / sqrt(2)
+    cf <- numeric(length(x))
+    for (k in 12:1) cf <- (k / 2) / (x + cf)
+    g <- sqrt(2) * cf
+    lam[tail] <- -a[tail] + g
+    gap[tail] <- g
+  }
+  list(lam = lam, gap = gap)
+}
+
 # Own-noise order when the caller gives none: 7 below J = 6, 11 from
 # J = 6, where the product of J - 1 rival CDFs is sharper than seven nodes
 # resolve (python: winning.likelihood.default_qz, #173).
@@ -268,9 +292,10 @@
       kap <- 0.5 * (1 - a / q)              # -dlam/da
       kp <- -2 / q^3                        # dkap/da
     } else {
-      lam <- exp(dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE))
-      kap <- lam * (a + lam)
-      kp <- lam * (1 - kap) - kap * (a + lam)
+      mg <- .mills_gap(a)
+      lam <- mg$lam
+      kap <- lam * mg$gap
+      kp <- lam * (1 - kap) - kap * mg$gap
     }
     g1 <- -m + colSums(rho * lam)
     h <- 1 + colSums(rho^2 * kap)

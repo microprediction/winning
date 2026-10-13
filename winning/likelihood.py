@@ -140,6 +140,42 @@ def _log_mills(a):
     return -0.5 * a * a - 0.5 * np.log(2.0 * np.pi) - log_ndtr(a)
 
 
+# Below this the tilt's curvature term lam (a + lam) is taken from the
+# erfcx continued fraction instead of exp(log phi - log Phi); see
+# _mills_gap. Equal to scipy's own log_ndtr crossover.
+_MILLS_TAIL = -20.0
+
+
+def _mills_gap(a):
+    """(lam, a + lam) for the inverse Mills ratio lam = phi(a)/Phi(a).
+
+    lam (a + lam) lies in (0, 1) -- it is the tilt's curvature term -- but
+    in the far left tail lam ~ -a and the sum cancels. Through
+    exp(-a^2/2 - log(2 pi)/2 - log_ndtr(a)) lam carries the rounding of
+    a^2/2 (2e-7 relative at a = -5.7e4), which the cancellation turns
+    into a sum of either sign: the tilt curvature came out at -196 (julia,
+    a DomainError in the Fishing fit) or -682 (python, a NaN), from the
+    contrasts of an ordinary first BFGS step (#716). Below
+    _MILLS_TAIL the continued fraction erfcx(x) = 1/(sqrt(pi) (x + cf)),
+    x = -a/sqrt(2), gives both without cancellation: lam = -a + sqrt(2)
+    cf and a + lam = sqrt(2) cf. Twelve terms are converged from x = 14.
+    Above _MILLS_TAIL this is the old expression, to the bit."""
+    a = np.asarray(a, dtype=float)
+    with np.errstate(over="ignore"):
+        lam = np.exp(-0.5 * a * a - 0.5 * np.log(2 * np.pi) - log_ndtr(a))
+    gap = a + lam
+    tail = a < _MILLS_TAIL
+    if np.any(tail):
+        x = -a[tail] / np.sqrt(2.0)
+        cf = np.zeros_like(x)
+        for k in range(12, 0, -1):
+            cf = (0.5 * k) / (x + cf)
+        g = np.sqrt(2.0) * cf
+        lam[tail] = -a[tail] + g
+        gap[tail] = g
+    return lam, gap
+
+
 # The node family switches from the Hermite tensor to scrambled Sobol at
 # sharpness 3, and the two rules disagree there: on the binary #420
 # fixture a 1e-10 change in a loading moved the returned log-likelihood
@@ -250,10 +286,9 @@ def _tilt_mode(c0, t, sk):
             kap = 0.5 * (1.0 - a / q)            # -d lam / da
             kp = -2.0 / (q * q * q)              # d kap / da
         else:
-            lam = np.exp(-0.5 * a * a - 0.5 * np.log(2 * np.pi)
-                         - log_ndtr(a))
-            kap = lam * (a + lam)                # -lam'
-            kp = lam * (1.0 - kap) - kap * (a + lam)
+            lam, gap = _mills_gap(a)             # gap = a + lam
+            kap = lam * gap                      # -lam'
+            kp = lam * (1.0 - kap) - kap * gap
         g1 = -m + (rho * lam).sum(axis=0)
         h = 1.0 + (rho2 * kap).sum(axis=0)
         S3 = (rho3 * kp).sum(axis=0)[None, :]

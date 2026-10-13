@@ -840,3 +840,34 @@ end
     @test abs(choice_loglik_and_score(mu10, zeros(10, 0), [6]; Qz = 7)[1] -
               (-3.514068769353895)) > 5e-5
 end
+
+@testset "tilt curvature in the far tail; logndtr crossover (#716)" begin
+    # the Fishing fit's first BFGS trial step: h was -196, a DomainError
+    c0 = [-174823.91047091805, -174848.3798915476, -174803.45321830967]
+    tj = [1.6888473976942278, 1.694115546292384, 2.9793037849297694]
+    m, h, dm_c, dh_c, dm_t, dh_t = MP._tilt_mode(c0, tj, 1.0)
+    @test h >= 1 && isfinite(m)
+    @test all(isfinite, vcat(dm_c, dh_c, dm_t, dh_t))
+    rng = Xoshiro(1)
+    for sc in (1e3, 1e5, 1e6, 1e8)
+        for _ in 1:200
+            c = -abs.(sc .+ sc / 10 .* randn(rng, 3))
+            @test MP._tilt_mode(c, 1 .+ 2 .* rand(rng, 3), 1.0)[2] >= 1
+        end
+    end
+    for a in (-1e3, -5.7e4, -1e6)
+        y = -a
+        lam, gap = MP._mills_gap(a)
+        @test gap ≈ 1 / y - 2 / y^3 + 10 / y^5 - 74 / y^7 rtol = 1e-13
+        @test 0 < lam * gap <= 1
+    end
+    # the cephes / continued-fraction crossover moved to -20: both sides
+    # agree there, and with the 60-term fraction it used to take from -3.54
+    cfval(z) = log(0.5 * MP._erfcx(-z / sqrt(2))) - 0.5 * z * z
+    for z in (-3.6, -5.0, -10.0, -19.9, -20.0, -20.1, -37.0, -1e4)
+        @test MP.logndtr(z) ≈ cfval(z) rtol = 1e-14
+    end
+    for x in (14.2, 30.0, 1e3, 1e7)
+        @test MP._erfcx_cf(x, 12) == MP._erfcx_cf(x, 60)
+    end
+end

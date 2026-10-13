@@ -478,3 +478,25 @@ test_that("own-noise order: 7 below J = 6, 11 from J = 6 (#173)", {
   expect_identical(ll(d6), ll(d6, Qz = 11L))
   expect_false(identical(ll(d6), ll(d6, Qz = 7L)))
 })
+
+test_that("the tilt curvature stays >= 1 at far-tail contrasts (#716)", {
+  # a first BFGS step's contrasts: lam (a + lam) cancelled and the
+  # curvature went to -500 (NaN sigma); julia threw a DomainError
+  set.seed(716)
+  for (sc in c(1e3, 1e5, 1e6, 1e8)) {
+    c0 <- matrix(-abs(rnorm(3 * 200, sc, sc / 10)), 3)
+    tm <- .tilt_mode(c0, runif(3, 1, 3))
+    expect_true(all(tm$h >= 1))
+    expect_true(all(is.finite(tm$m)))
+  }
+  for (a in c(-1e3, -5.7e4, -1e6)) {
+    y <- -a
+    mg <- .mills_gap(a)
+    expect_equal(mg$gap, 1 / y - 2 / y^3 + 10 / y^5 - 74 / y^7,
+                 tolerance = 1e-12)
+  }
+  # above the tail it is the old expression, to the bit
+  a <- seq(-20, 8, length.out = 501)
+  old <- exp(dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE))
+  expect_identical(.mills_gap(a)$lam, old)
+})

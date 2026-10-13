@@ -52,13 +52,18 @@ function _erf_series(x::Real)          # Real, not Float64: logndtr
     return (2 / sqrt(pi)) * s
 end
 
-function _erfcx(x::Real)
+# the tail of the erfcx continued fraction, erfcx(x) = 1/(sqrt(pi)(x + cf)),
+# from n terms: 60 is converged from x = 2.5, 12 from x = 14 (the n-term
+# truncation error there is below 1e-19 relative)
+function _erfcx_cf(x::Real, n::Int = 60)
     cf = 0.0
-    for k in 60:-1:1
+    for k in n:-1:1
         cf = (k / 2) / (x + cf)
     end
-    return 1 / (sqrt(pi) * (x + cf))
+    return cf
 end
+
+_erfcx(x::Real) = 1 / (sqrt(pi) * (x + _erfcx_cf(x)))
 
 # ---- normal cdf: Cephes ndtr (Moshier, public domain; the same
 # rational approximations scipy's ndtr compiles). The series+erfcx
@@ -226,6 +231,13 @@ likelihood objective FLAT in the tail and its score exactly zero (#270)."""
 # log-likelihood. _ndtr_series already knows the right crossover, 2.5,
 # so use the same one rather than inventing a second.
 const _LOGNDTR_CUT = 2.5 * sqrt(2)
+# Cephes ndtr is RELATIVELY accurate in the left tail until it underflows
+# near -37.5 (erfc is exp(-x^2) times a rational function), so log(ndtr)
+# is exact enough down to -20, scipy's log_ndtr crossover. The 60-term
+# continued fraction is kept for the far tail only: taking it from
+# -3.54 put ~60 divisions on every tail node and doubled the Fishing
+# fit (12.7 s -> 24.5 s, the same optimum to 1e-13; #716).
+const _LOGNDTR_TAIL = -20.0
 
 function logndtr(z::Real)
     # cephes ndtr in the ordinary range, not _ndtr_series: the series
@@ -235,15 +247,35 @@ function logndtr(z::Real)
     # CDF is O(1e-4) or larger, so log of it loses nothing.
     if z > _LOGNDTR_CUT
         return log1p(-ndtr(-z))                  # the complement is tiny
-    elseif z >= -_LOGNDTR_CUT
+    elseif z >= _LOGNDTR_TAIL
         return log(ndtr(z))
     end
-    x = -z / sqrt(2)                             # x >= 2.5: CF is good here
-    return log(0.5 * _erfcx(x)) - 0.5 * z * z
+    x = -z / sqrt(2)                             # x >= 14: 12 terms suffice
+    return log(0.5 / (sqrt(pi) * (x + _erfcx_cf(x, 12)))) - 0.5 * z * z
 end
 
 """log of phi(a)/Phi(a), the inverse Mills ratio, stable in the far tail."""
 _log_mills(a::Real) = -0.5 * a * a - 0.5 * log(2 * pi) - logndtr(a)
+
+"""(lam, a + lam) for the inverse Mills ratio lam = phi(a)/Phi(a).
+
+lam (a + lam) is the tilt's curvature term and lies in (0, 1), but in
+the far left tail lam ~ -a and the sum cancels: through
+exp(-a^2/2 - log(2pi)/2 - logndtr(a)) lam carried the rounding of a^2/2
+(2e-7 relative at a = -5.7e4), the sum came out negative, the tilt
+curvature h = -196 and sqrt(h) threw a DomainError in the Fishing fit
+(#716). Below _LOGNDTR_TAIL the continued fraction gives both
+without cancellation: lam = sqrt(2)(x + cf) = -a + sqrt(2) cf,
+a + lam = sqrt(2) cf, x = -a/sqrt(2). Port of
+winning/likelihood.py::_mills_gap."""
+function _mills_gap(a::Real)
+    if a < _LOGNDTR_TAIL
+        g = sqrt(2) * _erfcx_cf(-a / sqrt(2), 12)
+        return -a + g, g
+    end
+    lam = exp(-0.5 * a * a - 0.5 * log(2 * pi) - logndtr(a))
+    return lam, a + lam
+end
 
 # ---- node rules -------------------------------------------------------
 
@@ -501,9 +533,9 @@ function _tilt_mode(c0::AbstractVector, t::AbstractVector, sk::Real)
                 kap[j] = (1 - a[j] / q) / 2
                 kp[j] = -2 / q^3
             else
-                lam[j] = exp(-a[j]^2 / 2 - 0.5 * log(2 * pi) - logndtr(a[j]))
-                kap[j] = lam[j] * (a[j] + lam[j])
-                kp[j] = lam[j] * (1 - kap[j]) - kap[j] * (a[j] + lam[j])
+                lam[j], gap = _mills_gap(a[j])
+                kap[j] = lam[j] * gap
+                kp[j] = lam[j] * (1 - kap[j]) - kap[j] * gap
             end
         end
         g1 = -m
@@ -555,9 +587,17 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
     z = zeros(ET, Q)
     c0 = zeros(ET, R)
     tj = zeros(ET, R)
+    rv = zeros(Int, R)
+    dcs = zeros(ET, R)
+    Hj = zeros(ET, R, r)
     for t in 1:T
         k = choice[t]
-        rv = [j for j in 1:J if j != k]
+        i = 0
+        for j in 1:J
+            j == k && continue
+            i += 1
+            rv[i] = j
+        end
         for (i, j) in enumerate(rv)
             c0[i] = mu[t, k] - mu[t, j]
             tj[i] = sqrt(s[j]^2 + sum((V[k, c] - V[j, c])^2 for c in 1:r;
@@ -569,7 +609,7 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
         else
             m, sig = zero(ET), one(ET)
         end
-        for q in 1:Q
+        @inbounds for q in 1:Q
             z[q] = m + sig * xq[q]
             a_acc = logW[q]
             for (i, j) in enumerate(rv)
@@ -590,21 +630,28 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
         end
         lp[t] = log(sig) + mx + log(max(rs, TINY))
         Eg = zero(ET); Egx = zero(ET)
-        dcs = zeros(ET, R)
-        for q in 1:Q
+        fill!(dcs, zero(ET))
+        fill!(Hj, zero(ET))
+        # the factor score is accumulated per rival and written to GV
+        # once per observation: scattering it into the (T, J, r) array
+        # on every node cost more than the likelihood itself
+        @inbounds for q in 1:Q
             om = acc[q] / rs
             gp = -z[q]
             for (i, j) in enumerate(rv)
                 wl = om * lam[i, q] / s[j]
                 dcs[i] += wl
                 for c in 1:r
-                    GV[t, k, c] += wl * Fq[q, c]
-                    GV[t, j, c] -= wl * Fq[q, c]
+                    Hj[i, c] += wl * Fq[q, c]
                 end
                 gp += s[k] / s[j] * lam[i, q]
             end
             Eg += om * gp
             Egx += om * gp * xq[q]
+        end
+        for (i, j) in enumerate(rv), c in 1:r
+            GV[t, k, c] += Hj[i, c]
+            GV[t, j, c] -= Hj[i, c]
         end
         for (i, j) in enumerate(rv)
             dci = dcs[i]
@@ -1217,12 +1264,18 @@ function _separation_direction(X::AbstractArray{<:Real,3},
                                choice::AbstractVector{Int})
     T, J, p = size(X)
     (p == 0 || J < 2) && return nothing
-    rows = Vector{Vector{Float64}}()
+    # filled in place: permutedims(hcat(rows...)) splatted one argument
+    # per contrast row, and compiling hcat for the Fishing data's 3546
+    # arguments took 4.7 s of every fresh-session fit
+    A = zeros(T * (J - 1), p)
+    row = 0
     for t in 1:T, j in 1:J
         j == choice[t] && continue
-        push!(rows, [X[t, choice[t], c] - X[t, j, c] for c in 1:p])
+        row += 1
+        for c in 1:p
+            A[row, c] = X[t, choice[t], c] - X[t, j, c]
+        end
     end
-    A = permutedims(hcat(rows...))
     cs = [max(maximum(abs, A[:, c]), 0.0) for c in 1:p]
     cs = [x > 0 ? x : 1.0 for x in cs]
     As = A ./ cs'
