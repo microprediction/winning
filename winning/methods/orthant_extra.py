@@ -48,7 +48,36 @@ def _order_variables(a, C):
         others = sorted((-float(C[t, s]) for s in range(m) if s != t))
         return (-float(z[t]), -float(C[t, t]), tuple(others))
 
-    return np.array(sorted(range(m), key=key), dtype=int)
+    nz = -np.asarray(z, dtype=float)
+    nd = -np.asarray(np.diag(C), dtype=float)
+    if np.isnan(nz).any() or np.isnan(nd).any():
+        # NaN keys order arbitrarily under Python's sort; keep its answer
+        return np.array(sorted(range(m), key=key), dtype=int)
+    # The covariance tie-break is O(m^2 log m) Python work per problem,
+    # and building it for every constraint of every difference problem
+    # made Mendell-Elston 2.1x slower (#718). Sort on the first two key
+    # fields with numpy -- lexsort is stable, as sorted() is, so equal
+    # keys keep index order -- and build the full key only inside runs
+    # that actually tie on both. The result is the same permutation.
+    order = np.lexsort((nd, nz))
+    so, sd = nz[order], nd[order]
+    tie = (so[1:] == so[:-1]) & (sd[1:] == sd[:-1])
+    if not tie.any():
+        return order.astype(int)
+    out = order.astype(int)
+    i = 0
+    while i < m - 1:
+        if not tie[i]:
+            i += 1
+            continue
+        j = i + 1
+        while j < m - 1 and tie[j]:
+            j += 1
+        # positions i..j tie on (z, C_tt); ascending index within the
+        # run (lexsort is stable), so sorted() sees the same input order
+        out[i:j + 1] = sorted(out[i:j + 1].tolist(), key=key)
+        i = j + 1
+    return out
 
 
 def _seq_logprob(a, L, u):

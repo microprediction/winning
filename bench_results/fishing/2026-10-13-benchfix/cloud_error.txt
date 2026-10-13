@@ -1,0 +1,12 @@
+8e1815f4..b3b55b29 fit (-1212.82): sharpness 10.25, truth (GH 151) -1212.87, objective -1224.69
+  plain Sobol 2^10 (pre-#605)        bias  -0.70  rms  1.74  seed 0  +0.26
+  symmetrised 2^10 (#605, default)   bias  -5.52  rms  9.45  seed 0 -11.82
+  symmetrised 2^12                   bias  -0.45  rms  2.55  seed 0  +0.60
+#291..216700b5 fit (-1215.24): sharpness 10.97, truth (GH 151) -1215.13, objective -1222.74
+  plain Sobol 2^10 (pre-#605)        bias  -0.10  rms  1.09  seed 0  +0.18
+  symmetrised 2^10 (#605, default)   bias  -3.47  rms  5.18  seed 0  -7.62
+  symmetrised 2^12                   bias  -0.35  rms  1.09  seed 0  -0.26
+#693..main fit (-1215.86): sharpness 2.88, truth (GH 151) -1216.30, objective -1215.68
+  plain Sobol 2^10 (pre-#605)        bias  -1.84  rms  2.57  seed 0  -2.92
+  symmetrised 2^10 (#605, default)   bias  -3.76  rms  7.42  seed 0 -16.89
+  symmetrised 2^12                   bias  -1.37  rms  2.27  seed 0  -1.88

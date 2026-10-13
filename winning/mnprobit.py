@@ -321,8 +321,10 @@ class MNProbit:
             orig = _L.nodes_for_likelihood
             _L.nodes_for_likelihood =                 lambda r, Qf=7, Qz=7, sharp=0.0: (F, W)
             try:
-                vals.append(choice_loglik_and_score(
-                    mu, self.V_, self.choice)[0])
+                # value only: the referee never used the score, which
+                # was half its cost
+                vals.append(float(_L._choice_logprob_terms(
+                    mu, self.V_, choice=self.choice, score=False)[0].sum()))
             finally:
                 _L.nodes_for_likelihood = orig
         self.loglik_ = float(np.mean(vals))
@@ -409,7 +411,8 @@ def _prob_of(mu, V, k):
     node-family switch (#420), the J = 2 closed form, and log_ndtr
     instead of the 1e-300 probability floor this copy still carried."""
     T = mu.shape[0]
-    lp, _, _ = _choice_logprob_terms(mu, V, choice=np.full(T, int(k)))
+    lp, _, _ = _choice_logprob_terms(mu, V, choice=np.full(T, int(k)),
+                                     score=False)
     return np.exp(lp)
 
 
