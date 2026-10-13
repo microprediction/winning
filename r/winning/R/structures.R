@@ -74,6 +74,14 @@ Tree <- function(cluster, loading, D, parent, strength, leaves = NULL)
   # and a different race priced (#89); refuse them, as python does
   .refuse_hierarchical_controls(cls, base, window, delta)
   if (return_slopes) stop("return_slopes is available for Independent/Factor only")
+  if (length(mu) == 2L) {
+    # a two-runner Gaussian race is one contrast under every grammar;
+    # the hierarchical lattices priced a 14-sd pair tail at 0.107x its
+    # exact 1.04e-45 (#86, as python): the same race as a factor model
+    # takes race_probabilities' closed form
+    pf <- .pair_factor(s, cls)
+    return(race_probabilities(mu, V = pf$V, D = pf$D, points = points))
+  }
   if (cls == "Blocks") {
     return(block_race_probabilities(mu, s$cluster, s$loading, s$D,
                                     points = points, qa = qa))
@@ -90,6 +98,46 @@ Tree <- function(cluster, loading, D, parent, strength, leaves = NULL)
                                    leaves = s$leaves))
   }
   stop("unknown structure ", cls)
+}
+
+# (V, D) of a two-runner Blocks, Nested or Tree race as a factor model
+# with the same covariance, after the grammar's own validation: one
+# column block per cluster, Nested's coupling times gamma, and one column
+# per internal tree node holding its strength for each runner beneath it.
+.pair_factor <- function(s, cls) {
+  n <- 2L
+  D <- .as_idio(s$D, n, positive = TRUE)
+  if (cls == "Tree") {
+    v <- .scalar_loading(s$loading)
+    if (length(v) == 1L) v <- rep(v, n)
+    lam <- as.numeric(s$strength)
+    inv <- .tree_leaf_index(s$cluster, s$leaves)
+    nC <- max(inv)
+    parent <- .validate_tree(s$parent, lam, nC)        # 0 = root
+    nT <- length(parent)
+    V <- matrix(0, n, nC + nT)
+    for (i in seq_len(n)) {
+      u <- inv[i]
+      V[i, u] <- v[i]
+      while (parent[u] > 0) {
+        V[i, nC + parent[u]] <- lam[parent[u]]
+        u <- parent[u]
+      }
+    }
+    return(list(V = V, D = D))
+  }
+  L <- .as_loadings(s$loading, n)
+  inv <- .cluster_index(s$cluster)
+  if (length(inv) != n) stop("cluster must have one label per runner")
+  r <- ncol(L)
+  V <- matrix(0, n, max(inv) * max(r, 1L))
+  for (i in seq_len(n)) if (r > 0L)
+    V[i, (inv[i] - 1L) * r + seq_len(r)] <- L[i, ]
+  if (cls == "Nested" && !is.null(s$coupling) && s$gamma != 0) {
+    g <- .as_loadings(s$coupling, n, name = "coupling")
+    V <- cbind(V, s$gamma * g)
+  }
+  list(V = V, D = D)
 }
 
 .refuse_hierarchical_controls <- function(cls, base, window = "bulk",
