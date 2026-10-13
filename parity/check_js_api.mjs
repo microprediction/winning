@@ -900,6 +900,16 @@ accepts("the inverse takes a scalar D, matching python",
                  Math.abs(p[2] - 0.42067245) < 3e-3,
             p => `shares ${p.map(x => x.toFixed(5))}`);
   }
+  // #666: PSD in correlation units, at every scale
+  for (const [C, label] of [[[[1, 0], [0, -1e-9]], "negative variance"],
+                            [[[1, 2, 0], [2, 1, 0], [0, 0, 1e12]],
+                             "correlation 2 beside a 1e12 variance"],
+                            [[[0, 1e-309], [1e-309, 0]], "[[0,c],[c,0]] at 1e-309"]])
+    rejects(demo.validateCovariance, [C],
+            `validateCovariance refuses ${label} (#666)`, "positive semidefinite");
+  accepts("validateCovariance keeps a valid heterogeneous-scale matrix (#666)",
+          () => demo.validateCovariance([[1, 0.5, 0], [0.5, 1, 0], [0, 0, 1e12]]),
+          S => S.length === 3, () => "refused");
   accepts("cholesky keeps the covariance scale at 1e-12 I",
           () => demo.cholesky([[1e-12, 0], [0, 1e-12]]),
           L => Math.abs(L[0][0] - 1e-6) < 1e-18 && Math.abs(L[1][1] - 1e-6) < 1e-18,

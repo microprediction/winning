@@ -233,14 +233,32 @@ export function validateCovariance(C, name = "C") {
       "pass (C + C')/2 if the asymmetry is numerical noise -- a fit cannot " +
       "choose a triangle for you");
   const S = M.map((row, i) => row.map((v, j) => 0.5 * v + 0.5 * M[j][i]));
-  let md = 0;
-  for (let i = 0; i < n; i++) md += S[i][i] / n;
-  const lamMin = Math.min(...jacobiEigh(S, 50).values);
-  if (lamMin < -1e-8 * Math.max(md, 1e-300))
-    throw new Error(
-      `${name} is not positive semidefinite (min eigenvalue ` +
-      `${lamMin.toExponential(2)}); a covariance has no negative variance ` +
-      "in any direction, and clipping it silently invents a different model");
+  // PSD in CORRELATION units (#666; python winning.factor.core): a
+  // tolerance on the mean raw variance let a 1e12 variance hide a
+  // correlation of 2, and its 1e-300 floor let [[0, c], [c, 0]] through
+  // at c = 1e-309. No negative variance; a zero variance has a zero row;
+  // the standardised positive-variance block has min eigenvalue >= -1e-8.
+  const notPsd = why => new Error(
+    `${name} is not positive semidefinite (${why}); a covariance has no ` +
+    "negative variance in any direction, and clipping it silently invents " +
+    "a different model");
+  const pos = [];
+  for (let i = 0; i < n; i++) {
+    const d = S[i][i];
+    if (d < 0) throw notPsd(`variance [${i}] = ${d.toExponential(2)} < 0`);
+    if (d > 0) pos.push(i);
+    else for (let j = 0; j < n; j++)
+      if (j !== i && S[i][j] !== 0)
+        throw notPsd(`variance [${i}] is zero but its row is not`);
+  }
+  if (pos.length) {
+    const sd = pos.map(i => Math.sqrt(S[i][i]));
+    const R = pos.map((i, a) => pos.map((j, b) => S[i][j] / sd[a] / sd[b]));
+    const lamMin = Math.min(...jacobiEigh(R, 50).values);
+    if (lamMin < -1e-8)
+      throw notPsd("min eigenvalue of the correlation matrix " +
+                   lamMin.toExponential(2));
+  }
   return S;
 }
 
