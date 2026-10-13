@@ -314,6 +314,20 @@ def _loglik_terms(theta, st, base="normal"):
                                             base=base)
             else:
                 lpv, gr = _winner_batch(Ms[sl], base=base)
+            # A probability is at most one, and the lattice sum need not
+            # be: for a kinked base (laplace) the rectangle rule over the
+            # winner's density is second order across its kink, so a
+            # near-certain event summed to 1.0000305 -- log-likelihood
+            # +3.0e-5 -- and its score, from the density derivative that
+            # JUMPS at the kink, was -1.4e-2 against a derivative of the
+            # sum of -1.5e-5 (#267; normal fields reach +1e-13 by
+            # rounding). Clamp to log p <= 0, and give a clamped event the
+            # clamped function's derivative, zero, so objective and score
+            # stay one function. Events below one are untouched.
+            over = lpv > 0.0
+            if over.any():
+                lpv = np.where(over, 0.0, lpv)
+                gr = np.where(over[:, None], 0.0, gr)
             lp[idx[sl]] = np.where(np.isfinite(lpv), lpv, _LP_FLOOR)
             dmu[ri[sl]] = gr
     return lp, dmu

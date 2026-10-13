@@ -48,7 +48,7 @@ from ..shapes import (as_factor_law, as_idio, as_loadings, as_nonnegative,
                       as_points, as_tolerance, rescaled_target)
 
 
-from .races import _jacobi_sweeps, BASES, _resolution
+from .races import _jacobi_sweeps, BASES, _resolution, kink_lattice
 from .blocks import TINY, roots_hermitenorm
 
 from ..rustconfig import load_fastrace
@@ -403,8 +403,28 @@ def _reflected(base_rows):
     return rows
 
 
+def _kinks(base_rows, kink_split):
+    """The base's kink offsets when the split lattice is asked for, else
+    (). Smooth bases have none, so kink_split=True is a no-op for them."""
+    return tuple(getattr(base_rows, "kinks", ())) if kink_split else ()
+
+
+def _split_nodes(lo, hi, points, mu, sd, kinks):
+    """Nodes and weights of the kink-split lattice (races.kink_lattice)
+    over the window [lo, hi] at the given budget: Gauss-Legendre on the
+    pieces between runners' kinks. The uniform rectangle sum is only
+    second order across a kink, and its slope integrand -f'(z) JUMPS
+    there, so a rectangle-sum slope or Jacobian is only first order with
+    an error of dx times the jump (which scales as 1/sd^2): a laplace
+    own-slope came out 6x too large for a runner whose sd is three
+    spacings (#267). On the split lattice both are spectral again. The
+    node count stays under about 2 * points (kink_lattice's cap)."""
+    return kink_lattice(np.linspace(lo, hi, points),
+                        np.asarray(mu, dtype=float), sd, kinks)
+
+
 def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
-                      is_normal=False, upper=False):
+                      is_normal=False, upper=False, kink_split=False):
     if upper:
         # P(i among the k LARGEST) = int f_i(x) P(M_{-i}(x) <= k-1) dx,
         # M_{-i}(x) the number of OTHER runners ABOVE x: the same count
@@ -417,14 +437,20 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
                                    _reflected(base_rows), delta=delta)
         lo, hi = -hi_r, -lo_r
         points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
-        x = np.linspace(lo, hi, points)
-        dx = x[1] - x[0]
+        kinks = _kinks(base_rows, kink_split)
+        if kinks:
+            x, wq = _split_nodes(lo, hi, points, mu, sd, kinks)
+        else:
+            x = np.linspace(lo, hi, points)
+            dx = x[1] - x[0]
         z = (x[:, None] - mu[None, :]) / sd[None, :]
         S, f, _ = base_rows(z)
         G = np.clip(S, 0.0, 1.0)
         C = _count_distribution(G)
         cdf = _leave_one_out_cdf(C, G, k)
         dens = (f / sd[None, :]).T
+        if kinks:
+            return (dens * cdf) @ wq
         return (dens * cdf).sum(axis=1) * dx
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
@@ -433,14 +459,22 @@ def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
         return np.asarray(_fastrace.top_k(
             np.ascontiguousarray(mu, dtype=float),
             np.ascontiguousarray(sd, dtype=float), k, lo, hi, points))
-    x = np.linspace(lo, hi, points)
-    dx = x[1] - x[0]
+    # kink_split (opt-in): a kinked base on the split lattice; off, this
+    # is the uniform rectangle sum exactly as before
+    kinks = _kinks(base_rows, kink_split)
+    if kinks:
+        x, wq = _split_nodes(lo, hi, points, mu, sd, kinks)
+    else:
+        x = np.linspace(lo, hi, points)
+        dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, _ = base_rows(z)
     F, S = _cdf_rows(base_rows, z, S)
     C = _count_distribution(F, S)
     cdf = _leave_one_out_cdf(C, F, k, S=S)    # (n, L)
     dens = (f / sd[None, :]).T                # (n, L)
+    if kinks:
+        return (dens * cdf) @ wq
     return (dens * cdf).sum(axis=1) * dx
 
 
@@ -623,7 +657,7 @@ def _as_depth(k, n, where="k"):
 
 
 def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
-                        qa=None, F=None, W=None):
+                        qa=None, F=None, W=None, kink_split=False):
     """P(X_i among the k smallest), for every i, min-wins.
 
     mu: locations; D: idiosyncratic variances; V: optional factor
@@ -647,7 +681,15 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     refined, doubling up to four times the requested points; a defect
     that survives that raises, naming points=. The cap keeps a field
     the lattice cannot resolve from costing more than about seven
-    ordinary calls before it says so."""
+    ordinary calls before it says so.
+
+    kink_split: opt-in, default False (the uniform lattice, unchanged).
+    As in race_probabilities: a base whose density has a kink (laplace,
+    exponential_power_base with beta < 2) is integrated on the split
+    lattice races.kink_lattice -- Gauss-Legendre between the runners'
+    kinks, at most about 2 * points nodes, numpy only -- instead of the
+    uniform rectangle sum, which is second order across a kink. Smooth
+    bases ignore it."""
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)
@@ -667,7 +709,8 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     if V is None:
         def raw_at(pts):
             return _topk_independent(mu, sd, k, base_rows, pts,
-                                     is_normal=is_normal)
+                                     is_normal=is_normal,
+                                     kink_split=kink_split)
     else:
         Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_probabilities", D,
                                      F=F, W=W)
@@ -678,7 +721,8 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
                 shift = Vm @ nodes[q]
                 raw += w[q] * _topk_independent(mu + shift, sd, k,
                                                 base_rows, pts,
-                                                is_normal=is_normal)
+                                                is_normal=is_normal,
+                                                kink_split=kink_split)
             return raw
     return _refined_topk(raw_at, k, points, "top-k race")
 
@@ -714,7 +758,7 @@ def _refined_topk(raw_at, k, points, kind):
 
 
 def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
-                           points=513, qa=None):
+                           points=513, qa=None, kink_split=False):
     """P(X_i among the k largest), for every i, min-wins: the worst k.
 
     Computed DIRECTLY, as the top-k integral with the count of runners
@@ -724,7 +768,8 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     and useless in floating point at the tail this API faces: it returned
     0 for a 7.7e-24 last place, and lattice noise in the near-one top-k
     value fabricated 3.6e-15 when refined (#365). The slot identity
-    sum = k is checked as for top-k."""
+    sum = k is checked as for top-k. kink_split as in
+    top_k_probabilities (opt-in, default off)."""
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)
@@ -732,13 +777,15 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
     if V is None:
-        raw = _topk_independent(mu, sd, k, base_rows, points, upper=True)
+        raw = _topk_independent(mu, sd, k, base_rows, points, upper=True,
+                                kink_split=kink_split)
         return _checked_topk(raw, k, "bottom-k race")
     Vm, nodes, w = _factor_nodes(V, n, qa, "bottom_k_probabilities", D)
     raw = np.zeros(n)
     for q in range(len(nodes)):
         raw += w[q] * _topk_independent(mu + Vm @ nodes[q], sd, k,
-                                        base_rows, points, upper=True)
+                                        base_rows, points, upper=True,
+                                        kink_split=kink_split)
     return _checked_topk(raw, k, "bottom-k race")
 
 
@@ -867,7 +914,7 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
 
 
 def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
-                    qa=None):
+                    qa=None, kink_split=False):
     """Full (n, n) matrices (dq/dmu, dq/dsigma). The lattice, the
     field rows and the shared count distribution are built ONCE and
     reused across rows -- the row helper rebuilds them per call, which
@@ -878,7 +925,14 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     draw the race is independent and the shift by V f_q leaves d/dmu and
     d/dsigma untouched, so the correlated Jacobians are the same node
     mixture as the forward pass,
-    J = sum_q w_q J_ind(mu + V f_q, sigma)."""
+    J = sum_q w_q J_ind(mu + V f_q, sigma).
+
+    kink_split: opt-in, default False. True differentiates the split
+    lattice top_k_probabilities(..., kink_split=True) integrates on. For
+    a kinked base that is also the continuum Jacobian to spectral
+    accuracy, where the uniform rectangle sum of the own-scale term
+    (whose integrand jumps at the runner's kink) is only first order;
+    the calibrators use it for that reason (#267)."""
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)
@@ -888,7 +942,8 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
         Js = np.zeros((n, n))
         for j in range(len(nodes)):
             Jm_q, Js_q = top_k_jacobians(mu + Vm @ nodes[j], k, D=D,
-                                         base=base, points=points)
+                                         base=base, points=points,
+                                         kink_split=kink_split)
             Jm += w[j] * Jm_q
             Js += w[j] * Js_q
         return Jm, Js
@@ -909,8 +964,12 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
             np.ascontiguousarray(sd, dtype=float), k, lo, hi, points)
         return (np.asarray(jm, dtype=float).reshape(n, n),
                 np.asarray(js, dtype=float).reshape(n, n))
-    x = np.linspace(lo, hi, points)
-    dx = x[1] - x[0]
+    kinks = _kinks(base_rows, kink_split)
+    if kinks:
+        x, wq = _split_nodes(lo, hi, points, mu, sd, kinks)
+    else:
+        x = np.linspace(lo, hi, points)
+        dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, fp = base_rows(z)
     F, S = _cdf_rows(base_rows, z, S)
@@ -923,13 +982,20 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
         Qi = _loo_pmf(C, F, i, S=S)
         pair = _pair_pmf_at(Qi, F, i, k)
         kern = pair * dens[:, i][None, :]
-        row_mu = (kern * dens.T).sum(axis=1) * dx
-        row_sd = (kern * zdens).sum(axis=1) * dx
-        row_mu[i] = 0.0
-        row_mu[i] = -row_mu.sum()
         cdf_i = Qi[:, :k].sum(axis=1)
         dfdsd = -(z[:, i] * fp[:, i] + f[:, i]) / D[i]
-        row_sd[i] = (dfdsd * cdf_i).sum() * dx
+        if kinks:
+            row_mu = (kern * dens.T) @ wq
+            row_sd = (kern * zdens) @ wq
+        else:
+            row_mu = (kern * dens.T).sum(axis=1) * dx
+            row_sd = (kern * zdens).sum(axis=1) * dx
+        row_mu[i] = 0.0
+        row_mu[i] = -row_mu.sum()
+        if kinks:
+            row_sd[i] = (dfdsd * cdf_i) @ wq
+        else:
+            row_sd[i] = (dfdsd * cdf_i).sum() * dx
         Jm[i] = row_mu
         Js[i] = row_sd
     return Jm, Js
@@ -1001,7 +1067,7 @@ def _dyadic_points(need):
 
 
 def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
-                      is_normal=False):
+                      is_normal=False, kink_split=False):
     """One forward pass returning the raw memberships AND the own
     translation slopes
 
@@ -1020,14 +1086,20 @@ def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
             np.ascontiguousarray(mu, dtype=float),
             np.ascontiguousarray(sd, dtype=float), k, lo, hi, points)
         return np.asarray(q, dtype=float), np.asarray(sl, dtype=float)
-    x = np.linspace(lo, hi, points)
-    dx = x[1] - x[0]
+    kinks = _kinks(base_rows, kink_split)
+    if kinks:
+        x, wq = _split_nodes(lo, hi, points, mu, sd, kinks)
+    else:
+        x = np.linspace(lo, hi, points)
+        dx = x[1] - x[0]
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, fp = base_rows(z)
     F, S = _cdf_rows(base_rows, z, S)
     C = _count_distribution(F, S)
     cdf = _leave_one_out_cdf(C, F, k, S=S)     # (n, L)
     dens = (f / sd[None, :]).T
+    if kinks:
+        return (dens * cdf) @ wq, -((fp / (sd ** 2)[None, :]).T * cdf) @ wq
     q = (dens * cdf).sum(axis=1) * dx
     slopes = -((fp / (sd ** 2)[None, :]).T * cdf).sum(axis=1) * dx
     return q, slopes
@@ -1093,7 +1165,7 @@ def _topk_inverse_return(mu, converged, resid_max, iters, floored, tol,
 
 def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
                         qa=None, n_iter=80, tol=1e-8, target_floor=None,
-                        return_info=False):
+                        return_info=False, kink_split=False):
     """Invert the top-k race: mean-zero mu with
     top_k_probabilities(mu, k) = q. k = 1 recovers abilities_from_race.
 
@@ -1107,7 +1179,15 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     after that renormalization raises. V= (any rank) enters by the
     usual node mixture. When k > n/2 the information lives in the
     longshots; inverting the complement (bottom_k_probabilities) is the
-    same call at n - k on 1 - q."""
+    same call at n - k on 1 - q.
+
+    kink_split: opt-in, default False -- invert the split-lattice map
+    top_k_probabilities(..., kink_split=True) instead of the default
+    one. Either way, a kinked base (laplace, exponential_power_base with
+    beta < 2) takes its Newton slopes from the split lattice: the
+    rectangle-sum slope is first order there and was up to 6x off,
+    which stalled exact self-generated targets (#267). The residual is
+    always the map being inverted, so the answer is that map's."""
     mu_probe = np.asarray(q, dtype=float)
     n = len(mu_probe)
     k = _as_depth(k, n)
@@ -1147,20 +1227,37 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     _top2 = float(np.sort(target)[-2:].sum()) if (k == 1 and n > 2) else 1.0
     alpha = 0.7 if (n == 2 or (k == 1 and _top2 > 0.8)) else 1.0
 
+    split_slopes = bool(getattr(base_rows, "kinks", ())) and not kink_split
+
+    def _with_slopes(m):
+        qj, sj = _topk_with_slopes(m, sd, k, base_rows, points,
+                                   is_normal=(base == "normal"),
+                                   kink_split=kink_split)
+        if split_slopes:
+            # a kinked base: the slope from the split lattice, the value
+            # from the map being inverted (#267)
+            sj = _topk_with_slopes(m, sd, k, base_rows, points,
+                                   kink_split=True)[1]
+        return qj, sj
+
     def _forward(m):
         if nodes is None:
-            qraw, sl = _topk_with_slopes(m, sd, k, base_rows, points,
-                                         is_normal=(base == "normal"))
+            qraw, sl = _with_slopes(m)
         else:
             qraw = np.zeros(n)
             sl = np.zeros(n)
             for j in range(len(nodes)):
-                qj, sj = _topk_with_slopes(m + Vm @ nodes[j], sd, k,
-                                           base_rows, points,
-                                           is_normal=(base == "normal"))
+                qj, sj = _with_slopes(m + Vm @ nodes[j])
                 qraw += w[j] * qj
                 sl += w[j] * sj
         qhat = _checked_topk(qraw, k, "top-k inversion")
+        if float(qraw.max()) * k > float(qraw.sum()):
+            # a membership above one, clipped to exactly one: the logit
+            # residual there is ~690 and flat, and the sweeps stalled in
+            # it (a laplace top-3 target diverged to residual 683, #267).
+            # The uniform lattice overshoots one near saturation for a
+            # kinked base; refusing the iterate makes the sweeps back off.
+            raise RuntimeError("top-k inversion: a membership above one")
         resid = (np.log(np.maximum(qhat, 1e-300))
                  - np.log(np.maximum(1.0 - qhat, 1e-300))) - logit_t
         dlogit = np.minimum(sl / np.maximum(qhat * (1.0 - qhat), 1e-300),
@@ -1176,7 +1273,8 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
 
 def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
                              points=513, n_iter=60, tol=1e-8, ridge=0.0,
-                             mu0=None, V=None, return_info=False):
+                             mu0=None, V=None, return_info=False,
+                             kink_split=False):
     """Joint (loc, scale) calibration from two membership curves: find
     per-runner (mu_i, sigma_i) with top_k_probabilities(mu, k1) = q1 and
     top_k_probabilities(mu, k2) = q2. The market pair is (top-1, top-2):
@@ -1226,7 +1324,16 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     market pair outside the family's range converges to its
     least-squares fit and reports converged=False. Independent races
     only, like the Jacobians it stacks. O(n^2 L min(k, n-k)) per
-    iteration."""
+    iteration.
+
+    kink_split: opt-in, default False -- fit the split-lattice map
+    top_k_probabilities(..., kink_split=True) instead of the default
+    one. Either way a kinked base (laplace, exponential_power_base with
+    beta < 2) takes its LM Jacobians from the split lattice, where they
+    are the continuum derivatives to spectral accuracy; on the uniform
+    lattice they are first order across every runner's kink and exact
+    self-generated laplace boards stalled at logit residual 2e-3 (#267).
+    The residual is always the map being fitted."""
     if V is not None:
         raise NotImplementedError(
             "loc_scale_from_topk_pair with fixed factor loadings is "
@@ -1271,12 +1378,18 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
         # here buys iterations without moving the final answer
         mu, _info0 = abilities_from_topk(ta, ka, D=sd ** 2, base=base,
                                          points=points, n_iter=20,
-                                         tol=1e-3, return_info=True)
+                                         tol=1e-3, return_info=True,
+                                         kink_split=kink_split)
     sqr = float(np.sqrt(ridge))
+    base_rows = BASES[base] if not callable(base) else base
+    # the Jacobians of a kinked base always come from the split lattice
+    jac_split = kink_split or bool(getattr(base_rows, "kinks", ()))
 
     def logits(m, s):
-        qh1 = top_k_probabilities(m, k1, D=s ** 2, base=base, points=points)
-        qh2 = top_k_probabilities(m, k2, D=s ** 2, base=base, points=points)
+        qh1 = top_k_probabilities(m, k1, D=s ** 2, base=base, points=points,
+                                  kink_split=kink_split)
+        qh2 = top_k_probabilities(m, k2, D=s ** 2, base=base, points=points,
+                                  kink_split=kink_split)
         qh1 = np.clip(qh1, 1e-300, 1.0 - 1e-15)
         qh2 = np.clip(qh2, 1e-300, 1.0 - 1e-15)
         r = np.concatenate([np.log(qh1) - np.log1p(-qh1) - lt1,
@@ -1291,21 +1404,57 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     iters = 0
     last_grad = np.inf
     accepted = True
+    # Polish for a kinked base on the DEFAULT lattice (#267). The uniform
+    # map is the one being fitted, and it is not the continuum: its
+    # window slides with (mu, sigma), so the grid moves across every
+    # runner's kink and the rectangle sum's second-order error turns
+    # into an O(1) term in the map's DERIVATIVE (a laplace dq/dsigma
+    # read 0.62 by central differences against a continuum 0.10, the
+    # same at steps 1e-4 and 1e-6). LM on the continuum Jacobian then
+    # stalls near the map's own discretization error (logit residual
+    # 1e-3 on an exact self-generated board). When it stalls, the
+    # Jacobian is taken instead by forward differences of the map
+    # itself -- 2n extra evaluations of each curve per iteration, paid
+    # only by a kinked base on the default lattice after a stall. The
+    # split lattice (kink_split=True) is smooth and never needs it.
+    fd_allowed = jac_split and not kink_split
+    fd_mode = False
+    slow = 0
+
+    def _fd_jacobian(m, s, r0):
+        h = 1e-6
+        cols = []
+        for j in range(n):
+            e = np.zeros(n)
+            e[j] = h
+            cols.append((logits(m + e, s)[0] - r0) / h)
+        for j in range(n):
+            e = np.zeros(n)
+            e[j] = h
+            cols.append((logits(m, s * np.exp(e))[0] - r0) / h)
+        return np.column_stack(cols)
+
     for it in range(n_iter):
         iters = it + 1
         if resid_max < tol:
             break
-        blocks = []
-        for kk, qh in ((k1, qh1), (k2, qh2)):
-            Jm, Js = top_k_jacobians(mu, kk, D=sd ** 2, base=base,
-                                     points=points)
-            g = 1.0 / np.maximum(qh * (1.0 - qh), 1e-300)
-            # chain to (mu, log sigma) and to logit residuals
-            blocks.append(np.hstack([Jm * g[:, None],
-                                     (Js * sd[None, :]) * g[:, None]]))
-        # ridge rows: d(sqr log sigma)/d(log sigma) = sqr, zero in mu
-        blocks.append(np.hstack([np.zeros((n, n)), sqr * np.eye(n)]))
-        J = np.vstack(blocks)
+        if fd_mode:
+            try:
+                J = _fd_jacobian(mu, sd, r)
+            except RuntimeError:
+                break
+        else:
+            blocks = []
+            for kk, qh in ((k1, qh1), (k2, qh2)):
+                Jm, Js = top_k_jacobians(mu, kk, D=sd ** 2, base=base,
+                                         points=points, kink_split=jac_split)
+                g = 1.0 / np.maximum(qh * (1.0 - qh), 1e-300)
+                # chain to (mu, log sigma) and to logit residuals
+                blocks.append(np.hstack([Jm * g[:, None],
+                                         (Js * sd[None, :]) * g[:, None]]))
+            # ridge rows: d(sqr log sigma)/d(log sigma) = sqr, zero in mu
+            blocks.append(np.hstack([np.zeros((n, n)), sqr * np.eye(n)]))
+            J = np.vstack(blocks)
         JtJ = J.T @ J
         Jtr = J.T @ r
         last_grad = float(np.abs(Jtr).max())
@@ -1330,12 +1479,19 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
                 continue
             cost_n = float(r_n @ r_n)
             if cost_n < cost:
+                # crawling: an accepted Gauss-Newton step that does not
+                # even halve the residual norm, twice running
+                slow = slow + 1 if cost_n > 0.25 * cost else 0
                 mu, sd, r, qh1, qh2, cost = mu_n, sd_n, r_n, q1_n, q2_n, cost_n
                 resid_max = float(np.abs(r[:2 * n]).max())
                 lam = max(lam / 3.0, 1e-10)
                 accepted = True
                 break
             lam *= 8.0
+        if fd_allowed and not fd_mode and (not accepted or slow >= 2):
+            fd_mode = True
+            lam = 1e-6
+            continue
         if not accepted:
             break
     # With a ridge the penalized optimum generally keeps a nonzero fit
@@ -1370,7 +1526,8 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
 
 def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
                                   points=513, n_iter=60, tol=1e-8,
-                                  ridge=0.0, mu0=None, return_info=False):
+                                  ridge=0.0, mu0=None, return_info=False,
+                                  kink_split=False):
     """The two-marginal transform stated in market terms: win
     probabilities plus EXACTLY-SECOND probabilities, jointly inverted
     for per-runner (mu_i, sigma_i).
@@ -1380,7 +1537,7 @@ def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
     (win, top-2) is the well-posed pair loc_scale_from_topk_pair
     solves. Each marginal is renormalized to unit mass first (the
     market overround treatment), so the top-2 target sums to its two
-    slots by construction. ridge= and mu0= pass through."""
+    slots by construction. ridge=, mu0= and kink_split= pass through."""
     from ..shapes import as_target
     p1 = as_target(p_win, "p_win")
     p2 = as_target(p_second, "p_second")
@@ -1395,11 +1552,13 @@ def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
     return loc_scale_from_topk_pair(p1, 1, p1 + p2, 2, D0=D0, base=base,
                                     points=points, n_iter=n_iter, tol=tol,
                                     ridge=ridge, mu0=mu0,
-                                    return_info=return_info)
+                                    return_info=return_info,
+                                    kink_split=kink_split)
 
 
 def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
-                                 is_normal=False):
+                                 is_normal=False, kink_split=False,
+                                 jacobian=True, with_mass=False):
     """P(R_i = r) for every i, plus its full mu-Jacobian:
 
         dP(R_i = r)/dmu_j = int f_i f_j [ P(N_{-ij} = r-1)
@@ -1408,19 +1567,37 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
     (the r = 1 case drops the second term and recovers the win
     Jacobian), with the diagonal from translation invariance.
     is_normal=True routes through the compiled kernel on the same
-    python-computed window."""
+    python-computed window. jacobian=False skips the pair terms (J is
+    then zero). with_mass=True also returns each runner's density mass
+    on this lattice, the row sum rank_probabilities normalises by."""
     n = len(mu)
     lo, hi = _count_window(mu, sd, n - 1, base_rows, is_normal=is_normal)
     points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
+    kinks = _kinks(base_rows, kink_split)
+    if kinks:
+        x, dx = _split_nodes(lo, hi, points, mu, sd, kinks)
+    else:
+        x = np.linspace(lo, hi, points)
+        dx = x[1] - x[0]
     if (is_normal and _HAVE_RUST
             and hasattr(_fastrace, "rank_marginal_jacobian")):
         p, jac = _fastrace.rank_marginal_jacobian(
             np.ascontiguousarray(mu, dtype=float),
             np.ascontiguousarray(sd, dtype=float), int(r), lo, hi, points)
-        return (np.asarray(p, dtype=float),
-                np.asarray(jac, dtype=float).reshape(n, n))
-    x = np.linspace(lo, hi, points)
-    dx = x[1] - x[0]
+        out = (np.asarray(p, dtype=float),
+               np.asarray(jac, dtype=float).reshape(n, n))
+        if with_mass:
+            dens = base_rows((x[:, None] - mu[None, :]) / sd[None, :])[1]
+            out += ((dens / sd[None, :]).sum(axis=0) * dx,)
+        return out
+    # dx is the uniform spacing, or the split lattice's weight vector,
+    # which every reduction below takes as an inner product instead
+    if kinks:
+        def _wsum(a):
+            return a @ dx
+    else:
+        def _wsum(a):
+            return a.sum(axis=-1) * dx
     z = (x[:, None] - mu[None, :]) / sd[None, :]
     S, f, _ = base_rows(z)
     F, S = _cdf_rows(base_rows, z, S)
@@ -1430,11 +1607,12 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
     J = np.zeros((n, n))
     for i in range(n):
         Qi = _loo_pmf(C, F, i, S=S)
-        p[i] = (Qi[:, r - 1] * dens[:, i]).sum() * dx
+        p[i] = _wsum(Qi[:, r - 1] * dens[:, i])
+        if not jacobian:
+            continue
         if r <= n - 1:
             hi_pair = _pair_pmf_at(Qi, F, i, r)      # P(N_{-ij} = r-1)
-            row = (hi_pair * dens.T
-                   * dens[:, i][None, :]).sum(axis=1) * dx
+            row = _wsum(hi_pair * dens.T * dens[:, i][None, :])
         else:
             # only n-2 others exist: P(N_{-ij} = n-1) is identically
             # zero, and computing it by deconvolution injects clamped
@@ -1442,17 +1620,18 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
             row = np.zeros(n)
         if r >= 2:
             lo_pair = _pair_pmf_at(Qi, F, i, r - 1)  # P(N_{-ij} = r-2)
-            row -= (lo_pair * dens.T
-                    * dens[:, i][None, :]).sum(axis=1) * dx
+            row -= _wsum(lo_pair * dens.T * dens[:, i][None, :])
         row[i] = 0.0
         row[i] = -row.sum()
         J[i] = row
+    if with_mass:
+        return p, J, _wsum(dens.T)
     return p, J
 
 
 def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
                                  points=513, n_iter=60, tol=1e-8,
-                                 return_info=False):
+                                 return_info=False, kink_split=False):
     """Invert one EXACT-rank marginal -- P(finish exactly r-th) -- for
     mean-zero locations at frozen scales, by Levenberg-damped
     Gauss-Newton on log residuals.
@@ -1465,7 +1644,13 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
     with no promise it is the one you meant. The target is renormalized
     to unit mass (every rank is taken by someone). For the well-posed
     alternative, combine with the win curve: see
-    loc_scale_from_win_and_second and abilities_from_topk."""
+    loc_scale_from_win_and_second and abilities_from_topk.
+
+    kink_split: opt-in, default False -- invert the split-lattice map
+    rank_probabilities(..., kink_split=True). Either way a kinked base
+    takes its Jacobian from the split lattice (#267: on the uniform one
+    an exact self-generated laplace target stopped at log residual
+    2.7e-3); the residual is always the map being inverted."""
     from ..shapes import as_target
     target = as_target(p, "p")
     n = len(target)
@@ -1503,18 +1688,69 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
           else np.asarray(mu0, dtype=float) - np.mean(mu0))
 
     is_n = base == "normal"
-    phat, J = _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
-                                           is_normal=is_n)
-    resid = np.log(np.maximum(phat, 1e-300)) - logt
+    kinked = bool(getattr(base_rows, "kinks", ()))
+    split_jac = kinked and not kink_split
+
+    def _model(m, jac=True):
+        """log of the public column and its Jacobian. The public map is
+        rank_probabilities: each ROW normalised by its runner's lattice
+        mass, and the target column is then renormalised to unit mass
+        here, so the model column is too. The raw column the solver
+        used to fit is a different map wherever the lattice mass is not
+        one -- a laplace row carries up to 1.6e-3 of rectangle-sum error
+        across its kink -- and an exact self-generated target sat 1.5e-3
+        (log) outside its range (#267)."""
+        pv, Jv, mass = _rank_marginal_with_jacobian(
+            m, sd, r, base_rows, points, is_normal=is_n,
+            kink_split=kink_split, jacobian=jac and not split_jac,
+            with_mass=True)
+        u = pv / mass
+        tot = u.sum()
+        logp = np.log(np.maximum(u / tot, 1e-300))
+        if not jac:
+            return logp, None
+        if split_jac:
+            # a kinked base: the Jacobian from the split lattice, the
+            # value from the map being inverted (#267)
+            Jv = _rank_marginal_with_jacobian(m, sd, r, base_rows, points,
+                                              kink_split=True)[1]
+        # d log(u_i / sum u), the lattice mass held fixed (its continuum
+        # derivative is zero)
+        Jlog = (Jv / np.maximum(pv, 1e-300)[:, None]
+                - ((Jv / mass[:, None]).sum(axis=0) / tot)[None, :])
+        return logp, Jlog
+
+    def _fd_jacobian(m, logp):
+        # forward differences of the map itself (values only)
+        h = 1e-6
+        cols = []
+        for j in range(n):
+            e = np.zeros(n)
+            e[j] = h
+            cols.append((_model(m + e, jac=False)[0] - logp) / h)
+        return np.column_stack(cols)
+
+    logp, Jlog = _model(mu)
+    resid = logp - logt
     cost = float(resid @ resid)
     resid_max = float(np.abs(resid).max())
     lam = 1e-6
     iters = 0
+    # Polish for a kinked base on the default lattice, as in
+    # loc_scale_from_topk_pair: the uniform map's window slides across
+    # the kinks, so its derivative is not the continuum one, and LM on
+    # the continuum Jacobian crawls or stalls near the map's own
+    # discretization error. Then the Jacobian is taken by forward
+    # differences of the map (n value-only evaluations an iteration).
+    fd_allowed = split_jac
+    fd_mode = False
+    slow = 0
     for it in range(n_iter):
         iters = it + 1
         if resid_max < tol:
             break
-        Jlog = J / np.maximum(phat, 1e-300)[:, None]
+        if fd_mode:
+            Jlog = _fd_jacobian(mu, logp)
         A = Jlog.T @ Jlog
         g = Jlog.T @ resid
         accepted = False
@@ -1526,18 +1762,28 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
                 continue
             mu_n = mu + step
             mu_n -= mu_n.mean()
-            p_n, J_n = _rank_marginal_with_jacobian(mu_n, sd, r,
-                                                    base_rows, points,
-                                                    is_normal=is_n)
-            r_n = np.log(np.maximum(p_n, 1e-300)) - logt
+            # a smooth base gets its Jacobian with the value, as before; a
+            # kinked one's comes from a second lattice, so only an
+            # accepted trial pays for it
+            lp_n, J_n = _model(mu_n, jac=not (split_jac or fd_mode))
+            r_n = lp_n - logt
             cost_n = float(r_n @ r_n)
             if cost_n < cost:
-                mu, phat, J, resid, cost = mu_n, p_n, J_n, r_n, cost_n
+                slow = slow + 1 if cost_n > 0.25 * cost else 0
+                mu, logp, resid, cost = mu_n, lp_n, r_n, cost_n
                 resid_max = float(np.abs(resid).max())
                 lam = max(lam / 3.0, 1e-10)
                 accepted = True
+                if J_n is not None:
+                    Jlog = J_n
+                elif not fd_mode and resid_max >= tol:
+                    Jlog = _model(mu)[1]
                 break
             lam *= 8.0
+        if fd_allowed and not fd_mode and (not accepted or slow >= 2):
+            fd_mode = True
+            lam = 1e-6
+            continue
         if not accepted:
             break
     return _topk_inverse_return(mu, resid_max < tol, resid_max, iters,
@@ -1549,7 +1795,7 @@ _TINY = 1e-300
 
 
 def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
-                       qa=None):
+                       qa=None, kink_split=False):
     """The full rank marginals: an (n, n) matrix whose (i, r) entry is
     P(contestant i finishes in position r+1), min-wins.
 
@@ -1560,7 +1806,8 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     one-finish coefficient, and so on down the field. Rows sum to one
     (every runner takes exactly one rank) and columns sum to one (every
     rank is taken), and both identities are enforced. Cumulative row
-    sums reproduce top_k_probabilities. O(n^2 L) per factor node."""
+    sums reproduce top_k_probabilities. O(n^2 L) per factor node.
+    kink_split as in top_k_probabilities (opt-in, default off)."""
     mu = np.asarray(mu, float)
     n = len(mu)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
@@ -1583,8 +1830,12 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
                 np.ascontiguousarray(m, dtype=float),
                 np.ascontiguousarray(sd, dtype=float), lo, hi, pts)
             return np.asarray(flat, dtype=float).reshape(n, n)
-        x = np.linspace(lo, hi, pts)
-        dx = x[1] - x[0]
+        kinks = _kinks(base_rows, kink_split)
+        if kinks:
+            x, wq = _split_nodes(lo, hi, pts, m, sd, kinks)
+        else:
+            x = np.linspace(lo, hi, pts)
+            dx = x[1] - x[0]
         z = (x[:, None] - m[None, :]) / sd[None, :]
         S, f, _ = base_rows(z)
         F, S = _cdf_rows(base_rows, z, S)
@@ -1592,7 +1843,10 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
         C = _count_distribution(F, S)
         P = np.empty((n, n))
         for idx, r, q in _loo_pmfs(C, F, S):
-            P[idx, r] = (q * dens[:, idx].T).sum(axis=1) * dx
+            if kinks:
+                P[idx, r] = (q * dens[:, idx].T) @ wq
+            else:
+                P[idx, r] = (q * dens[:, idx].T).sum(axis=1) * dx
         return P
 
     if V is None:
