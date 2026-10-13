@@ -355,3 +355,27 @@ def test_narrow_central_interval_664(fm, eps):
     p2 = fm.mvn_cdf_fast(lower=[-eps, -np.inf], upper=[eps, 0.0],
                          V=np.zeros((2, 0)), D=[1.0, 1.0])
     assert p2 == pytest.approx(exact / 2, rel=1e-12)
+
+
+# --- #666: positive semidefiniteness in correlation units ---
+
+def test_a_large_variance_does_not_hide_correlation_two_666(fm):
+    S = np.array([[1.0, 2.0, 0.0], [2.0, 1.0, 0.0], [0.0, 0.0, 1e12]])
+    with pytest.raises(ValueError, match="positive semidefinite"):
+        fm.mvn_cdf_fast_info(upper=0.0, sigma=S)
+
+
+@pytest.mark.parametrize("c", [1.0, 1e-300, 1e-309, 1e-320, 2.0 ** -1070])
+def test_indefinite_is_refused_at_every_scale_666(fm, c):
+    S = np.array([[0.0, c], [c, 0.0]])
+    with pytest.raises(ValueError, match="positive semidefinite"):
+        fm.mvn_cdf_fast_info(upper=0.0, sigma=S)
+
+
+def test_valid_heterogeneous_scales_still_pass_666(fm):
+    S = np.array([[1.0, 0.5, 0.0], [0.5, 1.0, 0.0], [0.0, 0.0, 1e12]])
+    p = fm.mvn_cdf_fast(upper=0.0, sigma=S)
+    assert p == pytest.approx((0.25 + np.arcsin(0.5) / (2 * np.pi)) / 2,
+                              abs=1e-9)
+    assert fm.mvn_cdf_fast(upper=0.0, sigma=np.diag([0.0, 1.0])) == \
+        pytest.approx(0.5, abs=1e-15)
