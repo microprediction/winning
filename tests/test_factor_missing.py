@@ -150,3 +150,51 @@ def test_refusals():
         fit_factor_model_missing(np.where(Y > 2, np.inf, Y), 1)
     with pytest.raises(ValueError, match="non-negative integer"):
         fit_factor_model_missing(Y, 1.5)
+
+
+@pytest.mark.parametrize("k", [0, 1])
+@pytest.mark.parametrize("missing", [False, True])
+def test_translation_invariant(k, missing):
+    # #709: a constant added to every score moves only the fitted mean.
+    # Raw second moments cancelled at a 2^30 offset and pinned D to the
+    # Heywood floor while reporting convergence.
+    rng, V0, D0, mu0, Y = _simulate(709, K=5, k=1, T=400)
+    if missing:
+        Y = _mcar(rng, Y, 0.2)
+    c = 2.0 ** 30
+    V, D, rep = fit_factor_model_missing(Y, k)
+    Vs, Ds, reps = fit_factor_model_missing(Y + c, k)
+    assert reps["converged"]
+    assert np.allclose(Ds, D, rtol=1e-6)
+    assert np.allclose(Vs @ Vs.T, V @ V.T, rtol=1e-5, atol=1e-6)
+    assert np.allclose(reps["mean"] - c, rep["mean"], atol=1e-5)
+    assert len(reps["heywood"]) == 0
+    assert np.all(np.diff(reps["trace"]) >= -1e-8 * np.abs(reps["trace"][1:]))
+
+
+def test_translation_invariant_exact_k0():
+    x = np.array([-1.0, 0.0, 1.0])
+    Y = np.column_stack([x, 2 * x]) + 2.0 ** 30
+    _, D, rep = fit_factor_model_missing(Y, 0)
+    assert np.allclose(D, [2 / 3, 8 / 3], rtol=1e-12)
+
+
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
+def test_disconnected_design_is_refused():
+    # #705: two groups never scored together have independent factor
+    # gauges, so the cross-group covariance is not identified.
+    rng = np.random.default_rng(704)
+    T = 1000
+    z = rng.normal(size=T)
+    e = 0.3 * rng.normal(size=(T, 4))
+    Y = np.full((T, 4), np.nan)
+    Y[:T // 2, :2] = z[:T // 2, None] + e[:T // 2, :2]
+    Y[T // 2:, 2:] = z[T // 2:, None] + e[T // 2:, 2:]
+    for k in (1, None):
+        with pytest.raises(ValueError, match="disconnected"):
+            fit_factor_model_missing(Y, k, min_pairs=0)
+    _, D, _ = fit_factor_model_missing(Y, 0, min_pairs=0)
+    assert np.all(D > 0.5)
+    # bridging rows connect the groups and the fit proceeds
+    Yb = np.vstack([Y, z[:20, None] + e[:20]])
+    fit_factor_model_missing(Yb, 1, min_pairs=0, max_iter=50)
