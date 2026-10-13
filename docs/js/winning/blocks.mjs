@@ -2,7 +2,7 @@
 import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
          asFactorNodes, asWeights, asFactorLaw, asIterations, asTolerance,
-         asFiniteVector, rescaledTarget, canonicalBasis, asPoints } from "./core.mjs";
+         asFiniteVector, rescaledTarget, canonicalBasis, asPoints, gaugeCenter } from "./core.mjs";
 import { invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -317,7 +317,10 @@ function warnIfSharp(V, sd, qa, threshold = 3.0) {
    so its node rule is built for the canonical coupling (#130). */
 function canonicalCoupling(g) {
   if (g[0].length < 3) return g;     // tensor GH in the caller's axes, as python
-  const { C } = canonicalBasis(g);
+  // g -> g + 1c' adds one common shock c'f to every contestant: the same
+  // race. Canonicalizing the raw Gram matrix let that shift rotate the
+  // Halton cloud and moved a share by 0.0015 (#698); centre first.
+  const { C } = canonicalBasis(gaugeCenter(g));
   return C[0].length ? C : g.map(() => [0]);
 }
 

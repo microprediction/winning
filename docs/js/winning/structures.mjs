@@ -4,7 +4,7 @@ import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
          abilitiesFromBlockRace, validateTree, withoutCommonShock,
          treeCluster, withTrialMassTolerance } from "./blocks.mjs";
 import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
-         asLoadings, asIdio } from "./core.mjs";
+         asLoadings, asIdio, gaugeCenter } from "./core.mjs";
 
 export const Independent = D => ({ kind: "Independent", D });
 export const Factor = (V, D) => ({ kind: "Factor", V, D });
@@ -187,7 +187,7 @@ function structureScale(s) {
   // forward, which never looks at the coupling, so a stale wrong-length
   // one priced fine and then failed the inverse (#644, as python)
   const G = s.kind === "Nested" && s.coupling != null && (s.gamma ?? 1) !== 0
-    ? asLoadings(s.coupling, n, "coupling") : null;
+    ? gaugeCenter(asLoadings(s.coupling, n, "coupling")) : null;  // common part cancels (#698)
   const tot = [];
   for (let i = 0; i < n; i++) {
     let v = Dv[i] + L[i].reduce((a, b) => a + b * b, 0);
@@ -330,9 +330,10 @@ export function averageLinkage(dist) {
     const rest = active.filter((_, k) => k !== bi && k !== bj);
     for (const c of rest) {
       const da = D.get(key(a.id, c.id)), db = D.get(key(b.id, c.id));
-      D.set(key(merged.id, c.id),
-        (da * a.members.length + db * b.members.length)
-          / (a.members.length + b.members.length));
+      // convex weights first: na*da + nb*db overflowed finite distances
+      // near 9e307 into an Infinity merge height (#695)
+      const na = a.members.length, nb = b.members.length;
+      D.set(key(merged.id, c.id), (na / (na + nb)) * da + (nb / (na + nb)) * db);
     }
     active = rest.concat([merged]);
   }
