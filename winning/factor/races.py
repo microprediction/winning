@@ -1253,6 +1253,40 @@ def _as_temperature(temperature):
     return tau
 
 
+def _massless_lattice(mu, V, D, base, nodes_given, return_slopes):
+    """The factor lattice captured NO winner mass (total 0 or non-finite).
+
+    That happens when every conditional race is far sharper than the
+    lattice spacing: a posterior whose idiosyncratic variances have
+    collapsed to ~1e-17 under O(1) loadings (the #669 field) leaves each
+    of the 8,192 conditional winner densities ~1e-9 wide, and whether
+    any of them lands near a lattice point is luck. Normalizing then
+    divided 0 by 0 and returned NaN for every runner -- on Linux and
+    not on macOS, because the luck depends on the last bits of the
+    window. A normal race under the library's own factor rule is still
+    an ordinary Gaussian race, so it is priced on the dense GHK route
+    (the one cov= uses) with a warning; anything else refuses. Only
+    reached when the lattice would otherwise return NaN, so every field
+    that priced before prices identically."""
+    import warnings
+    if isinstance(base, str) and base == "normal" and not nodes_given:
+        warnings.warn(
+            "race_probabilities: the factor lattice captured no winner "
+            "mass (conditional races far sharper than the lattice: min "
+            f"idiosyncratic sd {float(np.sqrt(np.min(D))):.1e}); priced "
+            "by the dense-covariance GHK route instead.",
+            RuntimeWarning, stacklevel=3)
+        V = np.asarray(V, dtype=float).reshape(len(mu), -1)
+        cov = V @ V.T + np.diag(np.asarray(D, dtype=float))
+        return _race_dense(mu, cov, return_slopes=return_slopes)
+    raise FloatingPointError(
+        "race_probabilities: the factor lattice captured no winner mass "
+        f"(min idiosyncratic sd {float(np.sqrt(np.min(D))):.1e} against "
+        "O(1) loadings), so every share would be 0/0 = NaN. This is the "
+        "near-deterministic regime; raise D, or pass the dense covariance "
+        "as cov= for a normal base.")
+
+
 def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                        points=257, temperature=0.0, return_slopes=False,
                        structure=None, window="bulk", delta=1e-12, cov=None,
@@ -1458,6 +1492,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             np.ascontiguousarray(mu), np.ascontiguousarray(V),
             np.ascontiguousarray(D), np.ascontiguousarray(F),
             np.ascontiguousarray(W), points, float(x[0]), float(x[-1]))
+        if not (np.isfinite(total) and total > 0):
+            return _massless_lattice(mu, V, D, base, nodes_given,
+                                     return_slopes)
         if return_slopes:
             return np.asarray(p), np.asarray(sl) / total
         return np.asarray(p)
@@ -1472,6 +1509,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
                 np.ascontiguousarray(D), np.ascontiguousarray(F),
                 np.ascontiguousarray(W), points,
                 float(x[0]), float(x[-1]))
+            if not (np.isfinite(total) and total > 0):
+                return _massless_lattice(mu, V, D, base, nodes_given,
+                                         return_slopes)
             if return_slopes:
                 return np.asarray(p), np.asarray(sl) / total
             return np.asarray(p)
@@ -1492,6 +1532,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             np.ascontiguousarray(D), np.ascontiguousarray(F),
             np.ascontiguousarray(W), points,
             float(x[0]), float(x[-1]), int(bid), [float(v) for v in prm])
+        if not (np.isfinite(total) and total > 0):
+            return _massless_lattice(mu, V, D, base, nodes_given,
+                                     return_slopes)
         if return_slopes:
             return np.asarray(p), np.asarray(sl) / total
         return np.asarray(p)
@@ -1511,6 +1554,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
             p += W[q] * ((f * rest) @ wq)
             slope += W[q] * ((-fp / (sd ** 2)[:, None] * rest) @ wq)
         total = p.sum()
+        if not (np.isfinite(total) and total > 0):
+            return _massless_lattice(mu, V, D, base, nodes_given,
+                                     return_slopes)
         if return_slopes:
             return p / total, slope / total
         return p / total
@@ -1526,6 +1572,9 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         p += Wc @ (np.sum(f * rest, axis=2) * dx)
         slope += Wc @ (np.sum(-fp / sd[None, :, None] ** 2 * rest, axis=2) * dx)
     total = p.sum()
+    if not (np.isfinite(total) and total > 0):
+        return _massless_lattice(mu, V, D, base, nodes_given,
+                                 return_slopes)
     if return_slopes:
         return p / total, slope / total
     return p / total
