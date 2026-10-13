@@ -216,13 +216,39 @@ def _as_covariance(sigma):
             f"sigma is not symmetric (max asymmetry {asym:.2e}); pass "
             "(sigma + sigma.T)/2 if the asymmetry is numerical noise")
     C = 0.5 * C + 0.5 * C.T
-    if C.size:
-        lam_min = float(np.linalg.eigvalsh(C).min())
-        n = len(C)
-        if lam_min < -1e-8 * max(float(np.sum(np.diag(C) / n)), 1e-300):
+    # Positive semidefiniteness in CORRELATION units, the predicate of
+    # winning.factor.core._validate_covariance (#666). The tolerance was
+    # 1e-8 times the mean raw variance, so an unrelated variance of 1e12
+    # hid a pair with correlation 2 (eigenvalue -1, priced 0.25), and its
+    # 1e-300 floor let [[0, c], [c, 0]] through at c = 1e-309 (priced
+    # 1.0). Now: no negative variance; a zero-variance coordinate has a
+    # zero row; the standardised positive-variance block has min
+    # eigenvalue >= -1e-8.
+    d = np.diag(C).copy()
+    if np.any(d < 0):
+        i = int(np.flatnonzero(d < 0)[0])
+        raise ValueError(f"sigma is not positive semidefinite (variance "
+                         f"[{i}] = {d[i]:.2e} < 0); it is not a "
+                         "covariance matrix")
+    pos = d > 0
+    if not pos.all():
+        off = C[~pos].copy()
+        off[np.arange(int((~pos).sum())), np.flatnonzero(~pos)] = 0.0
+        if np.any(off != 0.0):
+            i = int(np.flatnonzero(~pos)[
+                np.flatnonzero((off != 0).any(1))[0]])
             raise ValueError(
-                f"sigma is not positive semidefinite (min eigenvalue "
-                f"{lam_min:.2e}); it is not a covariance matrix")
+                f"sigma is not positive semidefinite (variance [{i}] is "
+                "zero but its row is not); it is not a covariance matrix")
+    if pos.any():
+        s = np.sqrt(d[pos])
+        R = C[np.ix_(pos, pos)] / s[:, None] / s[None, :]
+        lam_min = float(np.linalg.eigvalsh(R).min())
+        if lam_min < -1e-8:
+            raise ValueError(
+                f"sigma is not positive semidefinite (min eigenvalue of "
+                f"the correlation matrix {lam_min:.2e}); it is not a "
+                "covariance matrix")
     return C
 
 
@@ -524,11 +550,15 @@ def _gh_order(r, sharp):
     # that; the linear rule gave 0.2% relative error on a two-coordinate
     # orthant at correlation 0.8 (sharpness 2, Q = 16) and 0.7% at 0.9,
     # against closed forms (#132). Rank one floors at 61: its cost is
-    # n x Q evaluations, and 15 points left 2e-6 at correlation 0.5. The
-    # caps (201, 41) and the Sobol escalation past sharpness 3 are
-    # unchanged.
-    return int(min(max(math.ceil(15.0 * sharp * sharp), 61 if r == 1 else 15),
-                   201 if r == 1 else 41))
+    # n x Q evaluations, and 15 points left 2e-6 at correlation 0.5. Rank
+    # two is ceil(8 sharp^2) in [11, 41]: on the adaptive rule (nodes at
+    # the integrand's mode, #470) it matches 15 sharp^2 in [15, 41] --
+    # p99 6.9e-7 against 6.5e-7, the same 2.1e-6 worst case over 500
+    # random rectangles and orthants -- at about half the nodes. The
+    # caps and the Sobol escalation past sharpness 3 are unchanged.
+    if r == 1:
+        return int(min(max(math.ceil(15.0 * sharp * sharp), 61), 201))
+    return int(min(max(math.ceil(8.0 * sharp * sharp), 11), 41))
 
 
 def _adaptive_rule(V, D, mu, lo, up):
