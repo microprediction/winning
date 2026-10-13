@@ -367,3 +367,15 @@ test_that("pair cavities, bottom-k CDFs and floored survivals (#511, #502)", {
   expect_lt(abs(p[2] / 8.990174560131736e-19 - 1), 1e-9)
   expect_lt(abs(p[3] / 1.8637021047561597e-38 - 1), 1e-9)
 })
+
+test_that("Gumbel last place keeps its Plackett-Luce tail (#710)", {
+  cc <- pi / sqrt(6)
+  for (gap in c(20, 30, 35)) {
+    w0 <- exp(cc * gap)
+    exact <- 2 / ((w0 + 2) * (w0 + 1))
+    b <- bottom_k_probabilities(c(-gap, 0, 0), 1, base = "gumbel")[1]
+    r <- rank_probabilities(c(-gap, 0, 0), base = "gumbel")[1, 3]
+    expect_lt(abs(b / exact - 1), 1e-9)
+    expect_lt(abs(r / exact - 1), 1e-9)
+  }
+})

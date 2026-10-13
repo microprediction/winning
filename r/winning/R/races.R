@@ -113,6 +113,11 @@ attr(.base_normal, "log_sf") <- function(z)
   stats::pnorm(z, lower.tail = FALSE, log.p = TRUE)
 attr(.base_gumbel, "log_sf") <- function(z)
   -exp(pmin(z * pi / sqrt(6) - .EULER, 30))
+# the min-Gumbel is asymmetric, so its lower-tail CDF cannot be the
+# reflected survival; 1 - S rounded a representable last place to zero
+# (mu = c(-35, 0, 0): 0 for 2.05e-39, #710)
+attr(.base_gumbel, "cdf") <- function(z)
+  -expm1(-exp(pmin(z * pi / sqrt(6) - .EULER, 30)))
 attr(.base_logistic, "log_sf") <- function(z) {
   u <- pi / sqrt(3) * z
   -pmax(u, 0) - log1p(exp(-abs(u)))

@@ -102,7 +102,7 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
             raise ValueError("structure= replaces V=/D=; pass one only")
         V, D = _factor_of_structure(structure, "ordered_probabilities")
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
-    lower_cdf = _lower_cdf(fn) if callable(base) else None
+    lower_cdf = _lower_cdf(fn)
     sd = np.sqrt(D)
     n = len(mu)
     tau = float(temperature)

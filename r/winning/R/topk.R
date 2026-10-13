@@ -175,6 +175,9 @@
     lower <- S > 0.5
     if (any(lower)) F[lower] <- .clip01(.unfloored(fn, -z[lower],
                                                    fn(-z[lower])$S))
+  } else if (!is.null(attr(fn, "cdf"))) {
+    lower <- S > 0.5
+    if (any(lower)) F[lower] <- .clip01(attr(fn, "cdf")(z[lower]))
   }
   list(x = x, dx = x[2] - x[1], w = wts, z = z,
        S = S, f = b$f, fp = b$fp, F = F)
@@ -435,7 +438,14 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 # the count of runners ABOVE x: 1 - top_k(n - k) cancelled, returning 0
 # for a 7.7e-24 last place and lattice residue when refined (#365)
 .bottomk_independent <- function(mu, sd, k, fn, points) {
-  refl <- function(z) { b <- fn(-z); list(S = 1 - b$S, f = b$f, fp = -b$fp) }
+  # a base with its own lower tail (the Gumbel) reflects through it:
+  # 1 - S(-z) rounded a far tail to zero and the window dropped it (#710)
+  lcdf <- attr(fn, "cdf")
+  refl <- function(z) {
+    b <- fn(-z)
+    S <- if (is.null(lcdf)) 1 - b$S else pmax(lcdf(-z), 1e-300)
+    list(S = S, f = b$f, fp = -b$fp)
+  }
   res <- .base_resolution(fn)
   attr(refl, "resolution") <- res   # the reflection keeps the centre (#468)
   wr <- .count_window(-mu, sd, k, refl)
@@ -454,6 +464,9 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
     lower <- G > 0.5
     if (any(lower)) Fc[lower] <- .clip01(.unfloored(fn, -z[lower],
                                                     fn(-z[lower])$S))
+  } else if (!is.null(attr(fn, "cdf"))) {
+    lower <- G > 0.5
+    if (any(lower)) Fc[lower] <- .clip01(attr(fn, "cdf")(z[lower]))
   }
   C <- .count_distribution(G, Fc)
   cdf <- .loo_cdf(C, G, k, Fc)

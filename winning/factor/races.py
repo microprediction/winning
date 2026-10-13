@@ -154,8 +154,17 @@ def _laplace_log_sf(z):
                     np.log(0.5) - az / b)
 
 
+def _gumbel_cdf(z):
+    # the min-Gumbel is asymmetric, so its lower tail cannot be the
+    # reflected survival; 1 - S rounded a representable CDF to zero once
+    # S hit one (last place 35 sd ahead: 0 for 2.05e-39, #710)
+    c = np.pi / np.sqrt(6.0)
+    return -np.expm1(-np.exp(np.minimum(z * c - _EULER, 30.0)))
+
+
 _normal.log_sf = lambda z: _log_ndtr(-z)
 _gumbel_min.log_sf = _gumbel_log_sf
+_gumbel_min.cdf = _gumbel_cdf
 _logistic.log_sf = _logistic_log_sf
 _laplace.log_sf = _laplace_log_sf
 
@@ -248,9 +257,10 @@ def _tail_fn(fn, name):
 
 def _lower_cdf(fn):
     """z -> F(z) from a callable base's cdf or log_cdf attribute, or None
-    when it carries neither (and for the named bases, which reflect)."""
+    when it carries neither. Of the named bases only the asymmetric
+    Gumbel carries one (#710); the symmetric ones reflect."""
     if _is_named(fn):
-        return None
+        return getattr(fn, "cdf", None)
     cdf = _tail_fn(fn, "cdf")
     if cdf is not None:
         return lambda z: np.clip(np.asarray(cdf(z), dtype=float), 0.0, 1.0)

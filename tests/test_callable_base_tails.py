@@ -95,3 +95,32 @@ def test_log_sf_prices_an_underflowing_winner():
 def test_bad_tails_are_refused(tails, err, match):
     with pytest.raises(err, match=match):
         rank_probabilities([0.0, 1.0, 2.0], base=_wrap("normal", **tails))
+
+
+@pytest.mark.parametrize("gap", [20.0, 30.0, 35.0])
+def test_gumbel_last_place_is_plackett_luce(gap):
+    # #710: the min-Gumbel is asymmetric, so its lower tail cannot be
+    # the reflected survival, and 1 - S rounded it to zero: last place at
+    # gap 35 came back 0 for 2.05e-39 at every resolution.
+    c = np.pi / np.sqrt(6.0)
+    w0 = np.exp(c * gap)
+    exact = 2.0 / ((w0 + 2.0) * (w0 + 1.0))
+    mu = [-gap, 0.0, 0.0]
+    for points in (513, 8193):
+        b = bottom_k_probabilities(mu, 1, base="gumbel", points=points)
+        R = rank_probabilities(mu, base="gumbel", points=points)
+        assert b[0] == pytest.approx(exact, rel=1e-9)
+        assert R[0, -1] == pytest.approx(exact, rel=1e-9)
+        assert np.allclose(R.sum(axis=0), 1.0, atol=1e-9)
+    # the rare winner of an exacta takes the same lower tail
+    w = np.exp(-c * gap)
+    o = ordered_probabilities([gap, 0.0, 0.0], 2, base="gumbel")
+    assert o[0, 1] == pytest.approx(w / (w + 2.0) / 2.0, rel=1e-9)
+
+
+def test_gumbel_cdf_matches_its_survival():
+    g = BASES["gumbel"]
+    z = np.linspace(-6, 6, 25)
+    assert np.allclose(_lower_cdf(g)(z) + g(z)[0], 1.0, atol=1e-15)
+    for name in ("normal", "logistic", "laplace"):
+        assert _lower_cdf(BASES[name]) is None
