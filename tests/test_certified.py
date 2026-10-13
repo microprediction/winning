@@ -327,3 +327,19 @@ def test_rank_zero_factor_certificate_is_the_independent_one_68():
     for V0 in (np.empty((2, 0)), [[], []], np.empty((0, 2))):
         got = certified_factor_race_probabilities(mu, V0, D, digits=6)
         assert all(a.overlaps(b) for a, b in zip(ref, got))
+
+
+def test_exact_common_origin_does_not_move_the_certificate_477():
+    # #477: exact-string [2^65, 2^65 + 1] failed (radius over target) and
+    # [2^78, 2^78 + 1] found no window; the answer is Phi(1/sqrt 2).
+    from winning.certified import (bracket_race_probabilities,
+                                   certified_race_probabilities)
+    ref = certified_race_probabilities(["0", "1"], digits=12)
+    refb = bracket_race_probabilities(["0", "1"], digits=12, cells=200)
+    for e in (65, 78, 100, 300):
+        c = 2 ** e
+        mu = [str(c), str(c + 1)]
+        got = certified_race_probabilities(mu, digits=12)
+        assert got[0].overlaps(ref[0]) and got[0].rad() < 1e-12
+        b = bracket_race_probabilities(mu, digits=12, cells=200)
+        assert b[0].overlaps(refb[0]) and b[0].rad() < 2 * refb[0].rad()

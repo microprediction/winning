@@ -210,8 +210,40 @@ def _ball(x):
     return arb(float(x))
 
 
+def _rational(x):
+    """x as an exact Fraction when it has one (decimal string, int,
+    float, Fraction, Decimal), else None (an Arb ball)."""
+    if isinstance(x, bytes):
+        x = x.decode()
+    if isinstance(x, (bool, np.bool_, int, np.integer)):
+        return Fraction(int(x))
+    if isinstance(x, (str, Fraction, Decimal)):
+        try:
+            return Fraction(x)
+        except (ValueError, ZeroDivisionError):
+            return None
+    if isinstance(x, (float, np.floating)) and math.isfinite(x):
+        return Fraction(float(x))
+    return None
+
+
 def _field(mu, D):
-    mu = [_ball(m) for m in mu]
+    # Win probabilities are translation invariant, so centre on an exact
+    # anchor before anything is rounded: the float window heuristic lost
+    # the contrast of exact-string [2^65, 2^65 + 1] and could not place
+    # [2^78, 2^78 + 1] at all (#477), and at a working precision of a few
+    # dozen bits the parse itself rounds 2^100 + 1. Exactly representable
+    # entries are differenced as rationals; with an Arb ball present the
+    # anchor is the first midpoint (a point, so no radius is added).
+    mu = list(mu)
+    q = [_rational(m) for m in mu]
+    if mu and all(r is not None for r in q):
+        mu = [_ball(r - q[0]) for r in q]
+    else:
+        mu = [_ball(m) for m in mu]
+        if mu:
+            anchor = arb(mu[0].mid())
+            mu = [m - anchor for m in mu]
     n = len(mu)
     if n < 2:
         raise ValueError("a race needs at least two contestants")
