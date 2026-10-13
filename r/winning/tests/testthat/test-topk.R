@@ -337,3 +337,33 @@ test_that("top-k target_floor is respected after renormalisation", {
   expect_error(abilities_from_topk(c(.5, .5, 0), 1, D = c(1, 1, 1),
                                    target_floor = .4), "infeasible")
 })
+
+test_that("pair cavities, bottom-k CDFs and floored survivals (#511, #502)", {
+  # pair terms against python's, which match a directly multiplied pair
+  # cavity to 1e-15; the one-direction rule was 1e5..1e75 off
+  J <- top_k_jacobians(c(-20, -6, 0, 3, 9), 1)$Jmu
+  ref <- c(1.47899073950077e-22, 1.0488416889543e-44, 1.01368725593504e-58,
+           4.71442776496118e-93)
+  expect_lt(max(abs(J[1, 2:5] / ref - 1)), 1e-8)
+  expect_lt(max(abs(J[2:5, 1] / ref - 1)), 1e-8)
+  J3 <- top_k_jacobians(c(-20, -6, 0, 3, 9), 3)$Jmu
+  expect_lt(abs(J3[1, 3] / 8.38483810428965e-71 - 1), 1e-8)
+  expect_lt(abs(J3[2, 5] / 8.25460739746445e-26 - 1), 1e-8)
+  # bottom-k: 1 - S rounded the others' CDFs to zero below a leader
+  expect_lt(abs(bottom_k_probabilities(c(-30, 0, 0), 1)[1] /
+                  4.684196986668009e-134 - 1), 1e-9)
+  # the 1e-300 survival floor is not mass
+  expect_lt(abs(top_k_probabilities(c(0, 53, 106), 1)[2] /
+                  1.1054538321318671e-307 - 1), 1e-6)
+  expect_lt(abs(race_probabilities(c(0, 53, 106), window = "span",
+                                   points = 8193)[2] /
+                  1.1054538321318671e-307 - 1), 1e-6)
+  expect_lt(abs(race_probabilities(c(0, 500), base = "laplace",
+                                   window = "span", points = 65537)[2] /
+                  1.4324466679622696e-305 - 1), 1e-5)
+  # logistic left tail (#467)
+  p <- race_probabilities(c(0, 25, 50), base = "logistic", window = "span",
+                          points = 65537)
+  expect_lt(abs(p[2] / 8.990174560131736e-19 - 1), 1e-9)
+  expect_lt(abs(p[3] / 1.8637021047561597e-38 - 1), 1e-9)
+})

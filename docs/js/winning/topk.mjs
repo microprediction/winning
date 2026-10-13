@@ -123,6 +123,14 @@ function countWindowAt(mu, sd, k, fn, delta, padSds) {
   return [xlo - padSds * smax, b + padSds * smax];
 }
 
+/* A named base floors S at 1e-300, a guard for log(0); used as a count
+   probability it fabricated rare-place mass (top-1 of a normal runner 53
+   behind: 1.0e-300 for 1.105e-307), so floored points take the base's
+   exact log survival (#502). Nothing above 1e-300 moves. */
+function unfloored(fn, z, s) {
+  return s <= 1e-300 && fn.logSf ? Math.exp(fn.logSf(z)) : s;
+}
+
 function baseGrid(fn, x, mu, sd) {
   const L = x.length, n = mu.length;
   const S = [], f = [], fp = [], z = [];
@@ -132,7 +140,7 @@ function baseGrid(fn, x, mu, sd) {
     for (let i = 0; i < n; i++) {
       const zz = (x[t] - mu[i]) / sd[i];
       const [s, ff, ffp] = fn(zz);
-      Sr[i] = s; fr[i] = ff; fpr[i] = ffp; zr[i] = zz;
+      Sr[i] = unfloored(fn, zz, s); fr[i] = ff; fpr[i] = ffp; zr[i] = zz;
     }
     S.push(Sr); f.push(fr); fp.push(fpr); z.push(zr);
   }
@@ -253,22 +261,51 @@ function leaveOneOutCdf(C, F, k, S = null) {
   return out;
 }
 
-function looPmf(C, F, i, S = null) {
+function looPmf(C, F, i, S = null, E = null) {
   // full leave-one-out pmf Q[t][m], m = 0..n-1, per coefficient from the
-  // better-bounded deconvolution direction
+  // better-bounded deconvolution direction; E, when given, receives each
+  // coefficient's bound (the pair level needs it)
   const L = F.length, n = F[0].length;
   const Q = new Array(L);
-  const eb = new Array(n);
   for (let t = 0; t < L; t++) {
     const Fi = F[t][i], Si = S ? S[t][i] : 1 - Fi;
-    const row = new Array(n);
+    const row = new Array(n), eb = new Array(n);
     pmfRow(C[t], Fi, Si, n, row, eb);
     Q[t] = row;
+    if (E) E[t] = eb;
   }
   return Q;
 }
 
-function pairPmfAt(Qi, F, i, k) {
+/* P(N_{-ij} = k-1) at one lattice point from the leave-i pmf qrow (bound
+   erow): the forward pass up to coefficient k-1 and the backward pass
+   down to it, each with its running bound, the better-bounded one wins.
+   The old rule picked one direction by F_j alone and its subtraction
+   residue came back as Jacobian off-diagonals 1e5..1e75 times the
+   directly multiplied pair term (#511 residual). */
+function pairCoef(qrow, erow, fj, sj, n, k) {
+  const nn = n - 1;                          // others of i
+  if (k - 1 > nn - 1) return 0;              // only n-2 others besides j
+  const [cr, floor] = errConsts(nn);
+  const er = m => cr * qrow[m] + floor + (erow ? erow[m] : 0);
+  let inv = 1 / Math.max(sj, TINY);
+  let qf = Math.min(qrow[0] * inv, 1);
+  let ef = sj < TINY ? 1 : Math.min(er(0) * inv, 1);
+  for (let m = 1; m < k; m++) {
+    qf = clip01((qrow[m] - fj * qf) * inv);
+    ef = Math.min((er(m) + fj * ef) * inv, 1);
+  }
+  inv = 1 / Math.max(fj, TINY);
+  let qb = Math.min(qrow[nn] * inv, 1);
+  let eb = fj < TINY ? 1 : Math.min(er(nn) * inv, 1);
+  for (let m = nn - 2; m >= k - 1; m--) {
+    qb = clip01((qrow[m + 1] - sj * qb) * inv);
+    eb = Math.min((er(m + 1) + sj * eb) * inv, 1);
+  }
+  return ef <= eb ? qf : qb;
+}
+
+function pairPmfAt(Qi, F, i, k, S = null, E = null) {
   // P(N_{-ij} = k-1) for every j != i at every lattice point
   const L = F.length, n = F[0].length;
   const out = new Array(n);
@@ -276,19 +313,8 @@ function pairPmfAt(Qi, F, i, k) {
     const row = new Array(L).fill(0);
     if (j !== i) {
       for (let t = 0; t < L; t++) {
-        const Fj = F[t][j], Sj = 1 - Fj;
-        if (Sj >= Fj) {
-          const s = Math.max(Sj, TINY);
-          let Q = clip01(Qi[t][0] / s);
-          for (let m = 1; m < k; m++) Q = clip01((Qi[t][m] - Fj * Q) / s);
-          row[t] = Q;
-        } else {
-          const fj = Math.max(Fj, TINY);
-          let Qb = clip01(Qi[t][n - 1] / fj);
-          for (let m = n - 3; m >= k - 1; m--)
-            Qb = clip01((Qi[t][m + 1] - Sj * Qb) / fj);
-          row[t] = Qb;
-        }
+        const Fj = F[t][j], Sj = S ? S[t][j] : 1 - Fj;
+        row[t] = pairCoef(Qi[t], E ? E[t] : null, Fj, Sj, n, k);
       }
     }
     out[j] = row;
@@ -347,7 +373,8 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12) {
   const sym = SYMMETRIC_BASES.has(fn);
   const S = g.S.map(row => row.map(clip01));
   const F = S.map((row, t) => row.map((s, i) =>
-    sym && s > 0.5 ? clip01(fn(-g.z[t][i])[0]) : clip01(1 - s)));
+    sym && s > 0.5 ? clip01(unfloored(fn, -g.z[t][i], fn(-g.z[t][i])[0]))
+                   : clip01(1 - s)));
   return { x, dx, ...g, F, S };
 }
 
@@ -368,9 +395,17 @@ function bottomkIndependent(mu, sd, k, fn, points) {
   const dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
   const g = baseGrid(fn, x, mu, sd);
+  // survivals in the role of the CDFs, and the CDFs -- taken directly,
+  // not as 1 - S, which rounds them to zero below a leader -- in the
+  // role of the survivals: mu = [-30, 0, 0]'s last place 4.68e-134 came
+  // back ~500x low (#511)
+  const sym = SYMMETRIC_BASES.has(fn);
   const G = g.S.map(row => row.map(clip01));
-  const C = countDistribution(G);
-  const cdf = leaveOneOutCdf(C, G, k);
+  const Fc = G.map((row, t) => row.map((s, i) =>
+    sym && s > 0.5 ? clip01(unfloored(fn, -g.z[t][i], fn(-g.z[t][i])[0]))
+                   : clip01(1 - s)));
+  const C = countDistribution(G, Fc);
+  const cdf = leaveOneOutCdf(C, G, k, Fc);
   const q = new Array(n).fill(0);
   for (let i = 0; i < n; i++) {
     let s0 = 0;
@@ -573,8 +608,9 @@ export function topKJacobians(mu, k, opts = {}) {
   const C = countDistribution(F, S);
   const Jm = [], Js = [];
   for (let i = 0; i < n; i++) {
-    const Qi = looPmf(C, F, i, S);
-    const pair = pairPmfAt(Qi, F, i, k);
+    const Qe = [];
+    const Qi = looPmf(C, F, i, S, Qe);
+    const pair = pairPmfAt(Qi, F, i, k, S, Qe);
     const rowMu = new Array(n).fill(0), rowSd = new Array(n).fill(0);
     for (let j = 0; j < n; j++) {
       if (j === i) continue;
@@ -976,14 +1012,15 @@ function rankMarginalWithJacobian(mu, sd, r, fn, points) {
   const C = countDistribution(F, S);
   const p = new Array(n), J = [];
   for (let i = 0; i < n; i++) {
-    const Qi = looPmf(C, F, i, S);
+    const Qe = [];
+    const Qi = looPmf(C, F, i, S, Qe);
     let pi = 0;
     for (let t = 0; t < L; t++) pi += Qi[t][r - 1] * dens[t][i];
     p[i] = pi * dx;
     // P(N_{-ij} = n-1) is identically zero (only n-2 others exist);
     // deconvolving it injects window-edge-sensitive junk
-    const hiPair = r <= n - 1 ? pairPmfAt(Qi, F, i, r) : null;
-    const loPair = r >= 2 ? pairPmfAt(Qi, F, i, r - 1) : null;
+    const hiPair = r <= n - 1 ? pairPmfAt(Qi, F, i, r, S, Qe) : null;
+    const loPair = r >= 2 ? pairPmfAt(Qi, F, i, r - 1, S, Qe) : null;
     const row = new Array(n).fill(0);
     for (let j = 0; j < n; j++) {
       if (j === i) continue;

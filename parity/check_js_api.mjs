@@ -131,6 +131,49 @@ for (const [lbl, P] of [["independent", rIndep], ["factor", rFactor]]) {
   }
 }
 
+// --- #511 residuals: pair cavities, bottom-k CDFs, floored survivals (#502)
+{
+  // off-diagonals against python's, whose pair cavities match a directly
+  // multiplied pair term to 1e-15; the one-direction rule was 1e5..1e75 off
+  const ref = {
+    1: [[0, 1.47899073950077e-22, 1.0488416889543e-44, 1.01368725593504e-58, 4.71442776496118e-93],
+        [0, 0, 1.44874122289024e-48, 3.38899276549204e-61, 2.87678936277052e-94],
+        [0, 0, 0, 3.20946024779509e-71, 2.59194254794805e-100],
+        [0, 0, 0, 0, 1.8451583059137e-107]],
+    3: [[0, 7.51220871032102e-72, 8.38483810428965e-71, 1.28051609107831e-70, 4.80864530065274e-98],
+        [0, 0, 1.67688004459801e-11, 4.99629173629526e-11, 8.25460739746445e-26],
+        [0, 0, 0, 0.029732572278728, 4.99629173629526e-11],
+        [0, 0, 0, 0, 1.67688004459801e-11]],
+  };
+  for (const k of [1, 3]) {
+    const J = topk.topKJacobians([-20, -6, 0, 3, 9], k).Jmu;
+    let worst = 0;
+    for (let i = 0; i < 4; i++)
+      for (let j = i + 1; j < 5; j++)
+        worst = Math.max(worst, Math.abs(J[i][j] / ref[k][i][j] - 1),
+                         Math.abs(J[j][i] / ref[k][i][j] - 1));
+    holds(`top-${k} Jacobian pair terms are not deconvolution residue (#511)`,
+          worst < 1e-8, `worst rel ${worst.toExponential(2)}`);
+  }
+  const last = topk.bottomKProbabilities([-30, 0, 0], 1)[0];
+  holds("bottom-k takes the CDFs directly, not 1 - S (#511)",
+        Math.abs(last / 4.684196986668009e-134 - 1) < 1e-9, last.toExponential(6));
+  const t1 = topk.topKProbabilities([0, 53, 106], 1)[1];
+  holds("top-1 below 1e-300 is not the survival floor (#502)",
+        Math.abs(t1 / 1.1054538321318671e-307 - 1) < 1e-6, t1.toExponential(6));
+  const pn = races.raceProbabilities([0, 53, 106], { window: "span", points: 8193 })[1];
+  holds("race below 1e-300 is not the survival floor: normal (#502)",
+        Math.abs(pn / 1.1054538321318671e-307 - 1) < 1e-6, pn.toExponential(6));
+  const pl = races.raceProbabilities([0, 500], { base: "laplace", window: "span", points: 65537 })[1];
+  holds("race below 1e-300 is not the survival floor: laplace (#502)",
+        Math.abs(pl / 1.4324466679622696e-305 - 1) < 1e-5, pl.toExponential(6));
+  const pg = races.raceProbabilities([0, 25, 50], { base: "logistic", window: "span", points: 65537 });
+  holds("logistic left-tail density is not zeroed (#467)",
+        Math.abs(pg[1] / 8.990174560131736e-19 - 1) < 1e-9 &&
+        Math.abs(pg[2] / 1.8637021047561597e-38 - 1) < 1e-9,
+        `${pg[1].toExponential(6)} ${pg[2].toExponential(6)}`);
+}
+
 // --- legitimate calls still work everywhere
 holds("forward works", races.raceProbabilities(mu3, { D: D3 }).every(Number.isFinite));
 holds("inverse works", races.abilitiesFromRace([0.5, 0.3, 0.2], { D: D3 }).every(Number.isFinite));

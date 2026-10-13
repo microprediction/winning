@@ -2202,28 +2202,40 @@ fn loo_cdf_row(row: &[f64], fi: f64, si: f64, n: usize, k: usize,
     cdf.clamp(0.0, 1.0)
 }
 
-/// One pair coefficient P(N_{-ij} = k-1) from the leave-i pmf, stable
-/// direction: forward k-1 steps or backward n-1-k steps.
+/// One pair coefficient P(N_{-ij} = k-1) from the leave-i pmf `qrow`
+/// (bounds `erow`): the forward pass up to coefficient k-1 and the
+/// backward pass down to it, each with its running error bound seeded by
+/// erow, the better-bounded one winning -- loo_pmf_row's rule one level
+/// down. The old one-direction choice by F_j alone returned subtraction
+/// residue as Jacobian off-diagonals 1e5..1e75 times the directly
+/// multiplied pair term (#511 residual).
 #[inline]
-fn pair_coefficient(qrow: &[f64], fj: f64, n: usize, k: usize) -> f64 {
-    let sj = 1.0 - fj;
-    if sj >= fj {
-        let s_safe = sj.max(1e-300);
-        let mut q = (qrow[0] / s_safe).clamp(0.0, 1.0);
-        for m in 1..k {
-            q = ((qrow[m] - fj * q) / s_safe).clamp(0.0, 1.0);
-        }
-        q
-    } else {
-        let f_safe = fj.max(1e-300);
-        let mut qb = (qrow[n - 1] / f_safe).clamp(0.0, 1.0);
-        let mut m = n as isize - 3;
-        while m >= k as isize - 1 {
-            qb = ((qrow[(m + 1) as usize] - sj * qb) / f_safe).clamp(0.0, 1.0);
-            m -= 1;
-        }
-        qb
+fn pair_coefficient(qrow: &[f64], erow: &[f64], fj: f64, sj: f64, n: usize,
+                    k: usize) -> f64 {
+    let nn = n - 1; // others of i
+    if k > nn {
+        return 0.0; // only n-2 others besides j
     }
+    let (cr, floor) = count_err_consts(nn);
+    let er = |m: usize| cr * qrow[m] + floor + erow[m];
+    let inv = 1.0 / sj.max(1e-300);
+    let mut qf = (qrow[0] * inv).min(1.0);
+    let mut ef = if sj < 1e-300 { 1.0 } else { (er(0) * inv).min(1.0) };
+    for m in 1..k {
+        qf = ((qrow[m] - fj * qf) * inv).clamp(0.0, 1.0);
+        ef = ((er(m) + fj * ef) * inv).min(1.0);
+    }
+    let inv = 1.0 / fj.max(1e-300);
+    let mut qb = (qrow[nn] * inv).min(1.0);
+    let mut eb = if fj < 1e-300 { 1.0 } else { (er(nn) * inv).min(1.0) };
+    let mut m = nn as isize - 2;
+    while m >= k as isize - 1 {
+        let mu = m as usize;
+        qb = ((qrow[mu + 1] - sj * qb) * inv).clamp(0.0, 1.0);
+        eb = ((er(mu + 1) + sj * eb) * inv).min(1.0);
+        m -= 1;
+    }
+    if ef <= eb { qf } else { qb }
 }
 
 /// Top-k memberships AND their own translation slopes, normal base:
@@ -2292,7 +2304,7 @@ pub fn top_k_jacobians_kernel(
     let (fmat, smat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one_row = |i: usize| {
             let mut qi = vec![0.0f64; points * n];
-            let mut ebuf = vec![0.0f64; n];
+            let mut ei = vec![0.0f64; points * n];
             for l in 0..points {
                 loo_pmf_row(
                     &c[l * (n + 1)..(l + 1) * (n + 1)],
@@ -2300,7 +2312,7 @@ pub fn top_k_jacobians_kernel(
                     smat[l * n + i],
                     n,
                     &mut qi[l * n..(l + 1) * n],
-                    &mut ebuf,
+                    &mut ei[l * n..(l + 1) * n],
                 );
             }
             let mut row_mu = vec![0.0f64; n];
@@ -2314,7 +2326,9 @@ pub fn top_k_jacobians_kernel(
                 for l in 0..points {
                     let pair = pair_coefficient(
                         &qi[l * n..(l + 1) * n],
+                        &ei[l * n..(l + 1) * n],
                         fmat[l * n + j],
+                        smat[l * n + j],
                         n,
                         k,
                     );
@@ -2424,11 +2438,12 @@ pub fn rank_jacobian_kernel(
     let (fmat, smat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one = |i: usize| {
         let mut qi = vec![0.0f64; points * n];
-        let mut ebuf = vec![0.0f64; n];
+        let mut ei = vec![0.0f64; points * n];
         for l in 0..points {
             loo_pmf_row(&c[l * (n + 1)..(l + 1) * (n + 1)],
                         fmat[l * n + i], smat[l * n + i], n,
-                        &mut qi[l * n..(l + 1) * n], &mut ebuf);
+                        &mut qi[l * n..(l + 1) * n],
+                        &mut ei[l * n..(l + 1) * n]);
         }
         let mut p_i = 0.0f64;
         for l in 0..points {
@@ -2443,17 +2458,19 @@ pub fn rank_jacobian_kernel(
             let mut s = 0.0f64;
             for l in 0..points {
                 let qrow = &qi[l * n..(l + 1) * n];
+                let erow = &ei[l * n..(l + 1) * n];
                 let fj = fmat[l * n + j];
+                let sj = smat[l * n + j];
                 // P(N_{-ij} = n-1) is identically zero (only n-2
                 // others exist); deconvolving it injects clamped junk
                 // hypersensitive to the window edge
                 let mut coef = if r <= n - 1 {
-                    pair_coefficient(qrow, fj, n, r)
+                    pair_coefficient(qrow, erow, fj, sj, n, r)
                 } else {
                     0.0
                 };
                 if r >= 2 {
-                    coef -= pair_coefficient(qrow, fj, n, r - 1);
+                    coef -= pair_coefficient(qrow, erow, fj, sj, n, r - 1);
                 }
                 s += coef * dens[l * n + j] * dens[l * n + i];
             }
@@ -2569,14 +2586,17 @@ impl BaseSpec {
                 let c = std::f64::consts::PI / 6.0f64.sqrt();
                 let u = (c * z - EULER_GAMMA).min(30.0);
                 let eu = u.exp();
-                ((-eu).max(-690.0), c.ln() + u - eu, c * (1.0 - eu))
+                // no -690 floor (#502): -eu is the exact log survival,
+                // and a floored one summed as mass plateaued a rare
+                // winner near 1e-300
+                (-eu, c.ln() + u - eu, c * (1.0 - eu))
             }
             2 => {
                 let c = std::f64::consts::PI / 3.0f64.sqrt();
                 let u = (c * z).clamp(-700.0, 700.0);
                 let sp = softplus(u);
                 let sig = 1.0 / (1.0 + (-u).exp());
-                ((-sp).max(-690.0), c.ln() + u - 2.0 * sp,
+                (-sp, c.ln() + u - 2.0 * sp,
                  c * (1.0 - 2.0 * sig))
             }
             3 => {
@@ -2585,7 +2605,10 @@ impl BaseSpec {
                 let lf = -az / b - (2.0 * b).ln();
                 let half = 0.5 * (-az / b).exp();
                 let sv = if z < 0.0 { 1.0 - half } else { half };
-                (sv.max(1e-300).ln(), lf, -z.signum() / b)
+                // exact below 1e-300 rather than floored there (#502);
+                // ln(sv) unchanged wherever it is representable
+                let ls = if sv > 1e-300 { sv.ln() } else { -std::f64::consts::LN_2 - az / b };
+                (ls, lf, -z.signum() / b)
             }
             4 => {
                 let (beta, a) = (p[0], p[1]);
