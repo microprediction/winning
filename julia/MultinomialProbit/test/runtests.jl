@@ -803,3 +803,20 @@ end
     @test MP.ghk_loglik(M, Vs, ch; r_draws = 200) ≈
           MP.ghk_loglik(M[perm, :], Vs, ch[perm]; r_draws = 200) atol = 1e-10
 end
+
+@testset "GHK log-likelihood keeps its tail slope (#270)" begin
+    # flat at log(1e-300) = -690.78 below gap -50 before; references are a
+    # 1-d conditional-normal quadrature in log space
+    V = reshape([0.3, -0.2, 0.1], 3, 1)
+    for (g, ref) in ((-10.0, -37.51799189156518), (-55.0, -952.7976771047145),
+                     (-60.0, -1131.5948698859718), (-80.0, -2001.2502944154676))
+        ll = MP.ghk_loglik(reshape([g, 0.0, 0.5], 1, 3), V, [1]; r_draws = 4000)
+        @test abs(ll - ref) < 0.05
+    end
+    # binary: one truncation step, exact
+    @test MP.ghk_choice_logprob([0.0, 53.0], zeros(2, 0), 1; r_draws = 4) ≈
+          MP.logndtr(-53 / sqrt(2)) rtol = 1e-10
+    for x in (-40.0, -60.0, -200.0)
+        @test MP._ndtri_log(MP.logndtr(x)) ≈ x rtol = 1e-10
+    end
+end

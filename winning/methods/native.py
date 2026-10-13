@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 
 
-from scipy.special import log_ndtr, logsumexp, ndtr, ndtri
+from scipy.special import log_ndtr, logsumexp, ndtr, ndtri, ndtri_exp
 from scipy.stats import qmc
 
 from ..factor.core import (
@@ -192,7 +192,12 @@ def _ghk_prob(mu, C, i, R, u, return_slope=False):
         logprob += lF
         if return_slope:
             score += np.exp(-0.5 * b * b - 0.5 * np.log(2.0 * np.pi) - lF) / L[t, t]
-        z[:, t] = ndtri(np.clip(u[:, t] * np.exp(lF), 1e-300, 1 - 1e-16))
+        # the truncated draw Phi^-1(u Phi(b)) from its log: clipping
+        # u Phi(b) at 1e-300 pinned every draw behind a bound deeper
+        # than -37 at Phi^-1(1e-300), so later steps conditioned on the
+        # wrong point and the tail lost its slope (#270)
+        lu = np.log(np.maximum(u[:, t], np.finfo(float).tiny)) + lF
+        z[:, t] = ndtri_exp(np.minimum(lu, np.log1p(-1e-16)))
     logP = float(logsumexp(logprob) - np.log(R))
     if return_slope:
         logS = float(logsumexp(logprob + np.log(np.maximum(score, 1e-300)))

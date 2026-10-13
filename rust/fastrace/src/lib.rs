@@ -408,13 +408,17 @@ fn ghk_all_shares<'py>(
         let vs: Vec<f64> = v_o.iter().cloned().collect();   // row-major n x k
         let ds: Vec<f64> = d_o.iter().cloned().collect();
         let mus: Vec<f64> = mu_o.iter().cloned().collect();
-        let p: Vec<f64> = (0..n)
+        // normalised in log space (#270): the per-alternative estimates
+        // used to be floored at 1e-300 each, so a far-trailing share
+        // plateaued instead of falling
+        let lp: Vec<f64> = (0..n)
             .into_par_iter()
-            .map(|i| ghk_prob_one_factor(&mus, &vs, k, &ds, n, i, r_draws,
-                                         seed.wrapping_add(i as u64)))
+            .map(|i| ghk_logprob_one_factor(&mus, &vs, k, &ds, n, i, r_draws,
+                                            seed.wrapping_add(i as u64)))
             .collect();
-        let total: f64 = p.iter().sum();
-        Array1::from_iter(p.into_iter().map(|x| x / total))
+        let top = lp.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let total: f64 = lp.iter().map(|x| (x - top).exp()).sum();
+        Array1::from_iter(lp.into_iter().map(|x| (x - top).exp() / total))
     }));
     Ok(out.into_pyarray(py))
 }
