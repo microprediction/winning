@@ -458,3 +458,23 @@ test_that("a separated design is flagged and the mass defect reported", {
   expect_equal(f$alternatives, c("1", "2"))
   expect_true(f$mass_defect < 1e-12)          # J = 2 is the closed form
 })
+
+test_that("own-noise order: 7 below J = 6, 11 from J = 6 (#173)", {
+  expect_equal(vapply(c(3L, 5L, 6L, 10L), .default_qz, 0L), c(7L, 7L, 11L, 11L))
+  mk <- function(J, n = 40L) {
+    set.seed(173)
+    d <- data.frame(x = rnorm(n * J))
+    u <- 0.7 * d$x + rnorm(n * J)
+    d$chosen <- unlist(lapply(split(u, rep(seq_len(n), each = J)),
+                              function(w) seq_along(w) == which.max(w)))
+    attr(d, "idx") <- data.frame(id = rep(seq_len(n), each = J),
+                                 alt = rep(seq_len(J), n))
+    d
+  }
+  ll <- function(d, ...) suppressWarnings(
+    mlogit_fast(chosen ~ x, d, r = 1L, Qf = 5L, maxit = 0L, ...))$logLik
+  d5 <- mk(5L); d6 <- mk(6L)
+  expect_identical(ll(d5), ll(d5, Qz = 7L))
+  expect_identical(ll(d6), ll(d6, Qz = 11L))
+  expect_false(identical(ll(d6), ll(d6, Qz = 7L)))
+})

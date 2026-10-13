@@ -379,7 +379,22 @@ def _choice_pair(mu, V, choice, D):
     return lp, dmu, dV
 
 
-def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
+# Own-noise Gauss-Hermite order when the caller gives none. Seven nodes
+# carry J <= 5; from J = 6 the chosen alternative's own-noise integrand is
+# a product of J - 1 rival CDFs, sharper than seven nodes resolve. On 528
+# ordinary fields (J 3-10, r 0-3, sharpness 0.3-6) against a tight scipy
+# MVN reference, 11 nodes cut the worst weak-factor error at J = 10 from
+# 5.3e-3 to 5.3e-4 nats for 1.0-1.6x the cost (#173). J < 6 is unchanged.
+QZ_SMALL, QZ_LARGE, QZ_LARGE_FROM_J = 7, 11, 6
+
+
+def default_qz(J):
+    """The own-noise order used when Qz is None: 7 below J = 6, 11 from
+    J = 6 (#173)."""
+    return QZ_LARGE if J >= QZ_LARGE_FROM_J else QZ_SMALL
+
+
+def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=None):
     """Per-observation log P(choice_t), with its score rows: the one
     probability map that fitting, reporting and prediction share.
 
@@ -392,6 +407,8 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=7):
     V = as_loadings(V, J)
     r = V.shape[1]
     choice = np.asarray(choice, dtype=int)
+    if Qz is None:
+        Qz = default_qz(J)
     if J == 2:
         # the closed form needs only D_k + D_j + ||V_k - V_j||^2 > 0, so a
         # deterministic alternative (D_j = 0) is legal here (#352)
@@ -479,7 +496,7 @@ def check_choice(choice, T, J):
     return choice.astype(int, copy=False)
 
 
-def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
+def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     """Log-likelihood of observed argmax choices, with analytic score.
 
     Parameters
@@ -488,6 +505,9 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=7):
     V : (J, r) factor loadings.
     choice : (T,) chosen alternative indices in 0..J-1.
     D : (J,) idiosyncratic variances, default all ones.
+    Qf : Gauss-Hermite order per factor dimension.
+    Qz : own-noise Gauss-Hermite order; None (default) takes 7 below
+        J = 6 and 11 from J = 6 (#173).
 
     Returns
     -------

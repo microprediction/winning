@@ -43,6 +43,11 @@
 # underflowed to a score of exactly zero (#270).
 .log_mills <- function(a) dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE)
 
+# Own-noise order when the caller gives none: 7 below J = 6, 11 from
+# J = 6, where the product of J - 1 rival CDFs is sharper than seven nodes
+# resolve (python: winning.likelihood.default_qz, #173).
+.default_qz <- function(J) if (J >= 6L) 11L else 7L
+
 # The chosen alternative's own-noise nodes are tilted per observation
 # (.tilt_mode, below): the fixed Gauss-Hermite rule sampled z where the
 # PRIOR has its mass, and for a large observed contrast the integrand's
@@ -690,4 +695,5 @@
 #'   works, and so does a dfidx object (dfidx is not a dependency).
 #' @param r number of factor columns (default 2 covers the full
 #'   identified covariance at J = 4).
-#' @param Qf,Qz Gauss-Hermite orders for factor and own-noise nodes.
+#' @param Qf,Qz Gauss-Hermite orders for factor and own-noise nodes;
+#'   Qz = NULL takes 7 below J = 6 and 11 from J = 6 (#173).

@@ -41,7 +41,7 @@
        call. = FALSE)
 }
 
-rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
+rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = NULL,
                          maxit = 400L) {
   t0 <- Sys.time()
   maxit <- .check_count(maxit, "maxit")
@@ -76,6 +76,7 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = 7L,
   unchosen <- .never_chosen(choice, J, levels(alt_f))
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
+  if (is.null(Qz)) Qz <- .default_qz(J)
   nodes <- .nodes3(Qf, Qz, r)
   # built only if the sharpness rule ever selects it (#388)
   nodes_sharp <- .lazy_sharp_nodes(r, 10L)

@@ -43,6 +43,11 @@
 # underflowed to a score of exactly zero (#270).
 .log_mills <- function(a) dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE)
 
+# Own-noise order when the caller gives none: 7 below J = 6, 11 from
+# J = 6, where the product of J - 1 rival CDFs is sharper than seven nodes
+# resolve (python: winning.likelihood.default_qz, #173).
+.default_qz <- function(J) if (J >= 6L) 11L else 7L
+
 # The chosen alternative's own-noise nodes are tilted per observation
 # (.tilt_mode, below): the fixed Gauss-Hermite rule sampled z where the
 # PRIOR has its mass, and for a large observed contrast the integrand's
@@ -690,7 +695,8 @@
 #'   works, and so does a dfidx object (dfidx is not a dependency).
 #' @param r number of factor columns (default 2 covers the full
 #'   identified covariance at J = 4).
-#' @param Qf,Qz Gauss-Hermite orders for factor and own-noise nodes.
+#' @param Qf,Qz Gauss-Hermite orders for factor and own-noise nodes;
+#'   Qz = NULL takes 7 below J = 6 and 11 from J = 6 (#173).
 .check_choice_sets <- function(ids, alt, J) {
   # The reshape downstream is POSITIONAL --
   #   mu <- matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)
@@ -754,7 +760,7 @@
   list(X = mm[, colnames(mm) != "(Intercept)", drop = FALSE], offset = off)
 }
 
-mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
+mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = NULL,
                         maxit = 400L) {
   t0 <- Sys.time()
   maxit <- .check_count(maxit, "maxit")
@@ -820,6 +826,7 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = 7L,
     .never_chosen(choice, J, levels(alt_f)) else character(0)
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
+  if (is.null(Qz)) Qz <- .default_qz(J)
   nodes <- .nodes3(Qf, Qz, r)
   # built only if the sharpness rule ever selects it (#388)
   nodes_sharp <- .lazy_sharp_nodes(r, 10L)
