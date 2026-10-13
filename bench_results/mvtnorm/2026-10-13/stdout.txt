@@ -1,0 +1,7 @@
+n50k2 maxpts=25000: 3.4s abs 7.3e-04 logodds 1.7e-02
+n50k2 maxpts=250000: 18.9s abs 8.3e-04 logodds 1.8e-02
+n200k2 maxpts=25000: 112.3s abs 7.1e-04 logodds 5.1e-02
+n200k2 maxpts=250000: 657.3s abs 5.9e-04 logodds 4.6e-02
+n200k3 maxpts=25000: 105.2s abs 2.2e-04 logodds 4.3e-02
+n200k3 maxpts=250000: 645.5s abs 2.7e-04 logodds 4.3e-02
+wrote /Users/petercotton/github/winning-bench-oct13/bench_results/mvtnorm/2026-10-13/MVTNORM.md

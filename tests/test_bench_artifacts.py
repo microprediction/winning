@@ -78,3 +78,13 @@ def test_sdist_does_not_ship_the_repository_test_suite():
     results; an sdist without them cannot run it."""
     manifest = (ROOT / "MANIFEST.in").read_text()
     assert re.search(r"(?m)^prune tests\s*$", manifest)
+
+
+def test_runner_records_serialise_array_info():
+    """ghk's info carries a "logp" array; the runner must still write it."""
+    import json
+    import numpy as np
+    from winning.bench.runner import _jsonable
+    rec = {"info": {"logp": np.array([-0.5, -1.0]), "n": np.int64(3)}}
+    assert json.loads(json.dumps(rec, default=_jsonable)) == {
+        "info": {"logp": [-0.5, -1.0], "n": 3}}
