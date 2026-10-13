@@ -50,3 +50,24 @@ def test_a_known_coordinate_with_heterogeneous_tau2():
     assert np.allclose(m, m2, atol=1e-8)
     free = [0, 2, 3]
     assert np.allclose(v[free], np.diag(S2)[free], atol=1e-8)
+
+
+@pytest.mark.parametrize("tau2", [
+    np.full(4, 0.3),
+    np.array([0.05, 0.2, 0.8, 1.7]),
+    np.array([1e-3, 1.0, 1.0, 10.0]),
+])
+def test_full_covariance_update_matches_too(tau2):
+    """#93 follow-up: update_market_full kept P diag(1/tau2) P, 0.23 off
+    in the means for heterogeneous tau2, with a correlated prior too."""
+    from winning.ratings.full import update_market_full
+    inv = lambda p: Y
+    rng = np.random.default_rng(93)
+    A = rng.normal(size=(4, 4))
+    for S0 in (np.diag(V), A @ A.T / 4 + np.diag(V)):
+        m, S, lz = update_market_full(M, S0, None, tau2=tau2, invert=inv)
+        m2, S2, lz2 = update_team_market_full(M, S0, np.eye(4), None,
+                                              tau2=tau2, invert=inv)
+        assert np.allclose(m, m2, atol=1e-12)
+        assert np.allclose(S, S2, atol=1e-12)
+        assert abs(lz - lz2) < 1e-12
