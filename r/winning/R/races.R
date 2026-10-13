@@ -665,7 +665,7 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     z <- (xm - M_all[q, ]) / sd
     b <- st$fn(z)
     f <- b$f / sd
-    logS <- log(b$S)
+    logS <- .log_survival(st$fn, z, b$S)
     L <- colSums(logS)
     rest <- exp(pmin(pmax(matrix(L, n, points, byrow = TRUE) - logS,
                           -745), 0))
