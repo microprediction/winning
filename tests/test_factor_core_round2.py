@@ -592,6 +592,21 @@ def test_large_skew_logistic_shape_keeps_negative_slopes_499(alpha):
         winning.use_rust(prev)
 
 
+def test_skew_logistic_span_is_finite_and_on_the_right_side_499():
+    """The span divided alpha by 1e-9 (inf from alpha = 2e299, NaN races)
+    and put the lower edge on the wrong side (1092 sd at 1e299, an
+    under-resolved lattice). The standardized law converges as alpha
+    grows, so every large alpha prices the same race."""
+    from winning.factor.races import race_probabilities, skew_logistic_base
+    ref = np.array([0.59165956, 0.29192641, 0.11641403])
+    for alpha in (1e17, 1e299, 2e299, 1e308):
+        b = skew_logistic_base(alpha)
+        assert np.all(np.isfinite(b.span)) and max(b.span) < 20
+        p = race_probabilities([0.0, 0.5, 1.0], D=np.ones(3), base=b,
+                               window="span", points=1025)
+        assert np.abs(p - ref).max() < 1e-6
+
+
 # ------------------------------------------------------------ #471 #477
 
 def test_common_offsets_cannot_move_the_race_471_477():

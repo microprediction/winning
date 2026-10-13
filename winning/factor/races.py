@@ -427,10 +427,19 @@ def skew_logistic_base(alpha):
     # falls (raw left quantile ~ log of the alpha-th root), so place the
     # span at the actual 1e-9 quantiles. log(expm1(.)) overflowed to inf
     # below alpha ~ 0.029 and every race came back NaN (#108).
-    q_lo = (float(_log_expm1(np.log(1e-9) / -alpha)) if alpha < 60
-            else np.log(1e-9 / alpha))
-    lo_edge = abs((-abs(q_lo) - m)) / c + 2.0
-    hi_edge = abs((np.log(alpha / 1e-9) - m)) / c + 2.0
+    # Both raw quantiles in closed form, signed and overflow-free (#499):
+    # lower, G(x) = 1e-9 at x = -log(expm1(log(1e9) / alpha)); upper,
+    # 1 - G(x) = 1e-9 at x = -log(expm1(-log1p(-1e-9) / alpha)), which is
+    # log(alpha) + log(1e9) to working precision once alpha is large.
+    # The old forms took -abs() of the lower one (the wrong side for
+    # alpha > 1: a 1092-sd window at alpha = 1e299) and divided alpha by
+    # 1e-9, which overflowed to an infinite span and NaN races from
+    # alpha = 2e299.
+    x_lo = -float(_log_expm1(np.log(1e9) / alpha))
+    x_hi = (-float(_log_expm1(-np.log1p(-1e-9) / alpha)) if alpha < 1e6
+            else float(np.log(alpha) + np.log(1e9)))
+    lo_edge = abs(x_lo - m) / c + 2.0
+    hi_edge = abs(x_hi - m) / c + 2.0
     _skew_logistic.span = (max(14.0, lo_edge), max(14.0, hi_edge))
     _skew_logistic.rust_base = (7, [alpha, m, c])
 
