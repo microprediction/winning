@@ -1,0 +1,14 @@
+
+Homogeneous noise (TrueSkill's home model; expect a tie)
+ races  exact rho  TS rho  exact rmse  TS rmse
+   100      0.925   0.925       0.327    0.327
+   300      0.969   0.969       0.203    0.203
+   700      0.987   0.987       0.124    0.124
+  1500      0.993   0.993       0.085    0.085
+
+Heteroskedastic noise (per-player scales; TrueSkill restricted to one beta)
+ races  exact rho  TS rho  exact rmse  TS rmse
+   100      0.911   0.911       0.349    0.366
+   300      0.966   0.964       0.220    0.241
+   700      0.985   0.983       0.140    0.175
+  1500      0.994   0.992       0.094    0.145

@@ -1,0 +1,33 @@
+................................                                         [100%]
+=============================== warnings summary ===============================
+tests_research/conftest.py:4
+  /Users/petercotton/github/winning-bench-oct13/tests_research/conftest.py:4: DeprecationWarning: winning.research is the retired research engine; for calibration under the normal race (or a built-in base= such as gumbel) use winning.calibrate_abilities(p, V=, D=, base=), which is materially faster and more accurate and uses the compiled kernels. A custom Density has no front-door equivalent and calibrates a different model: this package stays for it and for the pipelines that still need it.
+    from winning.research import Density, UniformLattice
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================== slowest durations ===============================
+0.67s call     tests_arena/test_methods.py::test_binary_closed_form[stern]
+0.44s call     tests_experiments/test_ghk_benchmark.py::test_inversion_roundtrip_small
+0.38s call     tests_arena/test_methods.py::test_five_way_vs_mc[stern]
+0.22s call     tests_arena/test_ratings.py::test_exact_moments_match_monte_carlo
+0.18s call     tests_experiments/test_ghk_benchmark.py::test_shares_sum_to_one_and_positive
+0.15s call     tests_experiments/test_ghk_benchmark.py::test_small_field_methods_agree_with_mc
+0.12s call     tests_arena/test_methods.py::test_five_way_vs_mc[direct_mc]
+0.11s call     tests_arena/test_methods.py::test_five_way_vs_mc[smc_orthant]
+0.10s call     tests_arena/test_methods.py::test_five_way_vs_mc[tilting]
+0.10s call     tests_arena/test_methods.py::test_five_way_vs_mc[genz_bretz]
+0.10s call     tests_arena/test_methods.py::test_five_way_vs_mc[ghk]
+0.09s call     tests_arena/test_methods.py::test_five_way_vs_mc[factor_rqmc]
+0.09s call     tests_arena/test_methods.py::test_five_way_vs_mc[ep_orthant]
+0.09s call     tests_arena/test_methods.py::test_five_way_vs_mc[sobol_direct]
+0.09s call     tests_arena/test_methods.py::test_five_way_vs_mc[qmc_ghk]
+0.09s call     tests_arena/test_methods.py::test_five_way_vs_mc[lattice]
+0.09s call     tests_arena/test_methods.py::test_five_way_vs_mc[mendell_elston]
+0.02s call     tests_experiments/test_ghk_benchmark.py::test_binary_probit_closed_form_all_methods
+0.01s call     tests_arena/test_methods.py::test_binary_closed_form[direct_mc]
+0.01s call     tests_arena/test_methods.py::test_binary_closed_form[ghk]
+0.01s call     tests_arena/test_ratings.py::test_order_pass_gradient_matches_fd_n20
+0.01s call     tests_arena/test_methods.py::test_binary_closed_form[sobol_direct]
+
+(74 durations < 0.005s hidden.  Use -vv to show these durations.)
+32 passed, 1 skipped, 1 warning in 5.83s
