@@ -266,19 +266,25 @@ end
 # The Gauss-Hermite tensor is invariant under both; a Halton cloud is
 # not, so the sharp-branch probability moved by 0.0029 when one loading
 # column changed sign (#605). The cloud is the orbit of base points under
-# the signed permutations of the factor coordinates (all 2^r r! of them
-# while that is at most 384, i.e. r <= 4; the 2^r sign flips beyond), at
-# about the same node count. General rotations are not covered.
-const _MAX_SYMMETRY_ORDER = 384
+# a group of signed permutations of the factor coordinates, at about the
+# same node count. General rotations are not covered.
+#
+# The group order is capped at 8, so at least n/8 base points (and as
+# many distinct own-noise values) remain: the full 2^r r! = 384 at r = 4
+# left three own-noise values for a 1024-point rule (#694). Within the
+# cap: all signed permutations at r <= 2, sign flips at r = 3, none from
+# r = 4, as python's winning.likelihood.
+const _MAX_SYMMETRY_ORDER = 8
 
 function _factor_symmetries(r::Int, n::Int)
     r == 0 && return [Int[]], [Float64[]]
     signs = [Float64[((s >> (c - 1)) & 1) == 0 ? 1.0 : -1.0 for c in 1:r]
              for s in 0:(2^r - 1)]
+    cap = min(_MAX_SYMMETRY_ORDER, n)
     full = 2^r * factorial(r)
-    if full <= min(_MAX_SYMMETRY_ORDER, n)
+    if full <= cap
         return _permutations(r), signs
-    elseif 2^r <= n
+    elseif 2^r <= cap
         return [collect(1:r)], signs
     end
     return [collect(1:r)], [ones(r)]

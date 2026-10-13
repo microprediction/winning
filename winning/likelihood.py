@@ -44,28 +44,37 @@ def _gh1(Q):
 # The Gauss-Hermite tensor is invariant under both, but a scrambled Sobol
 # cloud is not, so the sharp-branch probability moved by 0.0047 when one
 # loading column changed sign (#605). The cloud is therefore the orbit
-# of base points under the signed permutations of the factor
-# coordinates (all 2^r r! of them while that is at most 384, i.e.
-# r <= 4; the 2^r sign flips beyond), at about the same node count.
-# General rotations are not covered.
-_MAX_SYMMETRY_ORDER = 384
+# of base points under a group of signed permutations of the factor
+# coordinates, at about the same node count.
+#
+# The group order is capped at 8, so at least n/8 base points (and as
+# many distinct own-noise values) remain. The full group of 2^r r!
+# (48 at r = 3, 384 at r = 4) left ceil(1024/384) = 3 base points: a
+# three-point own-noise rule, raw masses summing to 1.216 and a 4.2-point
+# error after normalisation (#694). Within the cap: all signed
+# permutations at r <= 2, the 2^r sign flips at r = 3, no symmetrisation
+# from r = 4 (there a sign group of 16 cost more accuracy than its
+# invariance was worth). General rotations are not covered.
+_MAX_SYMMETRY_ORDER = 8
 
 
 def _factor_symmetries(r, n):
     """(perms, signs) of the symmetrising group for r factor columns at
-    a budget of n nodes."""
+    a budget of n nodes: the largest of {all signed permutations, sign
+    flips, identity} whose order is at most min(_MAX_SYMMETRY_ORDER, n)."""
     import itertools
     if r == 0:
         return [()], [np.ones(0)]
-    signs = [np.array(sg, dtype=float)
-             for sg in itertools.product((1.0, -1.0), repeat=r)]
+    cap = min(_MAX_SYMMETRY_ORDER, n)
     full = (2 ** r) * int(np.prod(np.arange(1, r + 1)))
-    if full <= min(_MAX_SYMMETRY_ORDER, n):
+    if full <= cap:
         perms = list(itertools.permutations(range(r)))
-    elif 2 ** r <= n:
+    elif 2 ** r <= cap:
         perms = [tuple(range(r))]
     else:
         return [tuple(range(r))], [np.ones(r)]
+    signs = [np.array(sg, dtype=float)
+             for sg in itertools.product((1.0, -1.0), repeat=r)]
     return perms, signs
 
 
@@ -73,7 +82,8 @@ def symmetric_sobol_normal(r, extra, n, seed):
     """Standard-normal scrambled-Sobol cloud of about n points in
     r + extra dimensions whose first r (factor) coordinates are closed
     under the signed permutations of _factor_symmetries; the extra
-    coordinates (own noise) ride along unchanged. Equal weights."""
+    coordinates (own noise) ride along unchanged, so they take
+    ceil(n / group order) >= n/8 distinct values. Equal weights."""
     import warnings
     from scipy.stats import qmc
     perms, signs = _factor_symmetries(r, n)
