@@ -530,7 +530,13 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     sharpness 3, scrambled Sobol, blended continuously across the switch.
     Known limits at J >= 3: a large observed utility gap puts the mass
     outside the fixed own-noise nodes (#128, #270), and a near-
-    deterministic rival makes the integrand a step (#352).
+    deterministic rival makes the integrand a step (#352). The Hermite
+    branch tilts the own noise toward that mass; the Sobol branch does
+    not, so a rare choice in a sharp field is still understated there
+    (mu = [-8, 0, 1], V = [0, 3, -3]: -42.58 against the exact -30.10,
+    #270). A product of the Sobol factor cloud with the tilted own-noise
+    rule reached -31.10 at 1.6-2.2x the cost of every sharp call, and a
+    joint factor/own-noise tilt is not implemented.
     """
     mu = np.asarray(mu, dtype=float)
     T, J = mu.shape
