@@ -631,6 +631,11 @@ def certified_factor_race_probabilities(mu, V, D=None, base="normal",
     moves with the factors, so it is refused rather than mishandled.
     """
     base = _base(base)
+    # rank zero is the independent race (as_loadings keeps (n, 0) as
+    # exactly that); the cubature below assumes a factor and raised
+    # IndexError on it (#68)
+    if _loadings(V, len(mu))[1] == 0:
+        return certified_race_probabilities(mu, D, base=base, digits=digits)
     if base.kinks:
         raise NotImplementedError(
             f"the {base.name} base has kinks that move with the factors; "

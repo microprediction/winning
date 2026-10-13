@@ -317,3 +317,13 @@ def test_exact_fractions_and_numpy_loadings():
             assert all(a.overlaps(b) for a, b in zip(ref, got))
     finally:
         ctx.prec = old
+
+
+def test_rank_zero_factor_certificate_is_the_independent_one_68():
+    from winning.certified import (certified_factor_race_probabilities,
+                                   certified_race_probabilities)
+    mu, D = [0.0, 0.2], [1.0, 1.0]
+    ref = certified_race_probabilities(mu, D, digits=6)
+    for V0 in (np.empty((2, 0)), [[], []], np.empty((0, 2))):
+        got = certified_factor_race_probabilities(mu, V0, D, digits=6)
+        assert all(a.overlaps(b) for a, b in zip(ref, got))
