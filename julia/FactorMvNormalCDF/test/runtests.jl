@@ -435,3 +435,15 @@ end
         @test abs(p / exact - 1) < 1e-12
     end
 end
+
+@testset "PSD is judged in correlation units (#666)" begin
+    S = [1.0 2.0 0.0; 2.0 1.0 0.0; 0.0 0.0 1e12]
+    @test_throws ArgumentError mvn_cdf_fast_info(upper = 0.0, sigma = S)
+    for c in (1.0, 1e-300, 1e-309, 1e-320)
+        @test_throws ArgumentError mvn_cdf_fast_info(upper = 0.0,
+                                                     sigma = [0.0 c; c 0.0])
+    end
+    S2 = [1.0 0.5 0.0; 0.5 1.0 0.0; 0.0 0.0 1e12]
+    @test abs(mvn_cdf_fast(upper = 0.0, sigma = S2) -
+              (0.25 + asin(0.5) / (2pi)) / 2) < 1e-6
+end
