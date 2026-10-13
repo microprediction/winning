@@ -102,7 +102,9 @@ tau-scaled Gumbel kernel, so the same engine serves it. Inversion holds
 the temperature fixed; a single race pins down the abilities alone.
 
 Custom densities go in as formulas: any standardized survival and
-density pair, skewed or multimodal, is a `base=` callable. Empirical
+density pair, skewed or multimodal, is a `base=` callable; give it
+`cdf` (and `log_sf`) attributes and rare places such as last place and
+bottom-k keep full tail precision, as the named bases do. Empirical
 data go to `winning.classic`: histograms, integer scores, and dead
 heats with real mass are lattice atoms there, and its multiplicity
 calculus prices ties exactly. Formulas to `base=`, atoms to `classic`;

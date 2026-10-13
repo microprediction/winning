@@ -28,6 +28,7 @@ from ..outcomes import as_luce_temperature, as_order
 from ..shapes import as_weights
 from ..rustconfig import load_fastrace
 from .races import (_as_temperature, _fit_cov, _factor_of_structure, _setup,
+                    _lower_cdf,
                     _tempered_curves)
 from ..shapes import as_points, as_tolerance
 
@@ -101,6 +102,7 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
             raise ValueError("structure= replaces V=/D=; pass one only")
         V, D = _factor_of_structure(structure, "ordered_probabilities")
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
+    lower_cdf = _lower_cdf(fn) if callable(base) else None
     sd = np.sqrt(D)
     n = len(mu)
     tau = float(temperature)
@@ -143,9 +145,14 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
             # the lower tail directly where the base has it: 1 - S rounds
             # to 0 below z = -8 while ndtr(z) is still representable, and
             # a rare exacta came out 506x small (the Rust kernel already
-            # stores ndtr(z), #598)
-            Fc = (ndtr(z) if tau <= 0 and isinstance(base, str)
-                  and base == "normal" else 1.0 - S)
+            # stores ndtr(z), #598); a callable base's validated cdf
+            # attribute gives it the same way
+            if tau <= 0 and isinstance(base, str) and base == "normal":
+                Fc = ndtr(z)
+            elif tau <= 0 and lower_cdf is not None:
+                Fc = lower_cdf(z)
+            else:
+                Fc = 1.0 - S
             logSfield = logS.sum(0)
             if k == 1:
                 rest = np.exp(np.clip(logSfield[None, :] - logS, -745.0, 0.0))

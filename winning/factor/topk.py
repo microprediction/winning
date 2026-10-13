@@ -48,7 +48,8 @@ from ..shapes import (as_factor_law, as_idio, as_loadings, as_nonnegative,
                       as_points, as_tolerance, rescaled_target)
 
 
-from .races import _jacobi_sweeps, BASES, _resolution, kink_lattice
+from .races import (_jacobi_sweeps, BASES, _resolution, kink_lattice,
+                    _lower_cdf, _tail_fn)
 from .blocks import TINY, roots_hermitenorm
 
 from ..rustconfig import load_fastrace
@@ -208,7 +209,11 @@ def _cdf_rows(base_rows, z, S):
     probability here it fabricated rare-place mass (top-1 of a normal
     runner 53 behind: 1.0e-300 for 1.105e-307), so floored points take
     the base's exact log survival instead (#502). Nothing above 1e-300
-    moves."""
+    moves.
+
+    A callable base has no identity to reflect on; one that carries a
+    cdf (or log_cdf) attribute gets its lower tail from that instead,
+    and one with neither keeps 1 - S."""
     S = _unfloored(base_rows, z, np.clip(S, 0.0, 1.0))
     F = 1.0 - S
     if base_rows in _SYMMETRIC_BASES:
@@ -216,11 +221,17 @@ def _cdf_rows(base_rows, z, S):
         if lower.any():
             F = np.where(lower, _unfloored(base_rows, -z,
                                            base_rows(-z)[0]), F)
+    else:
+        cdf = _lower_cdf(base_rows)
+        if cdf is not None:
+            lower = S > 0.5
+            if lower.any():
+                F = np.where(lower, cdf(z), F)
     return np.clip(F, 0.0, 1.0), S
 
 
 def _unfloored(base_rows, z, S):
-    lsf = getattr(base_rows, "log_sf", None)
+    lsf = _tail_fn(base_rows, "log_sf")
     if lsf is None:
         return S
     low = S <= 1e-300
@@ -715,7 +726,14 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     lattice races.kink_lattice -- Gauss-Legendre between the runners'
     kinks, at most about 2 * points nodes, numpy only -- instead of the
     uniform rectangle sum, which is second order across a kink. Smooth
-    bases ignore it."""
+    bases ignore it.
+
+    base: a named base or a callable z -> (S, f, fp). A callable may
+    carry `cdf(z)` (or `log_cdf(z)`) and `log_sf(z)`: the count program
+    then takes lower-tail CDFs and underflowing survivals from them, as
+    it does for the named bases, instead of 1 - S, which cancels on rare
+    places (bottom-k, last place). They are checked once on a probe;
+    without them nothing changes. See winning.factor.races."""
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)

@@ -23,6 +23,16 @@ UNIT-VARIANCE law (standardization keeps noise family separate from
 noise scale). Zero factors is literally the one-node quadrature, so the
 independent race is not a separate code path.
 
+A callable base may also carry optional attributes: `span` (left, right)
+tail extents, `resolution` (central scale), `kinks`, `sample`, and the
+tails `cdf(z)` (= 1 - S, accurate in the lower tail), `log_cdf(z)` (used
+when cdf is absent) and `log_sf(z)`. The count program behind top-k,
+bottom-k and rank marginals takes a lower-tail CDF from `cdf`/`log_cdf`
+where 1 - S would cancel, and floored survivals take `log_sf`, as the
+named bases do internally; without them a wrapper of the normal prices
+[-30, 0, 0]'s second place 21 orders low. The tails are checked once on
+a probe (callable, finite, monotone, within 1e-6 of the base's own S).
+
 WHAT A DISTRIBUTION IS HERE, and why it matters: a formula, not a
 vector. The engine never tabulates a distribution -- it evaluates
 S_i and f_i EXACTLY at the lattice points via the base callable, and
@@ -49,6 +59,8 @@ experiments (the Gumbel base's zero-loading case equals softmax to
 """
 
 from __future__ import annotations
+
+import weakref
 
 import numpy as np
 from scipy.special import ndtr, ndtri
@@ -148,12 +160,117 @@ _logistic.log_sf = _logistic_log_sf
 _laplace.log_sf = _laplace_log_sf
 
 
+# Optional tail attributes of a CALLABLE base (#511 follow-up). The named
+# bases carry log_sf, and the top-k count program reflects the symmetric
+# ones for a lower-tail CDF that 1 - S cannot give. A callable has no
+# identity to key that on, so it may carry the tails itself:
+#   cdf(z)      F(z) = 1 - S(z), accurate in the lower tail
+#   log_cdf(z)  log F(z), the same (used when cdf is absent)
+#   log_sf(z)   log S(z), accurate where S underflows
+# Each is checked once per base on a probe before first use: callable,
+# finite, the right shape, monotone, and consistent with the base's own S.
+_TAIL_ATTRS = ("cdf", "log_cdf", "log_sf")
+_TAIL_PROBE = np.linspace(-6.0, 6.0, 25)[:, None]
+# fn -> ids of the checked attributes (bound methods by their function),
+# so a cache entry holds no reference that would keep fn alive
+_TAIL_CHECKED = weakref.WeakKeyDictionary()
+
+
+def _check_tails(fn):
+    attrs = tuple(getattr(fn, a, None) for a in _TAIL_ATTRS)
+    key = tuple(id(getattr(a, "__func__", a)) for a in attrs)
+    try:
+        if _TAIL_CHECKED.get(fn) == key:
+            return
+    except TypeError:               # not weak-referenceable: check again
+        pass
+    if all(a is None for a in attrs):
+        return
+    z = _TAIL_PROBE
+    S = None
+    for name, a in zip(_TAIL_ATTRS, attrs):
+        if a is None:
+            continue
+        if not callable(a):
+            raise TypeError(f"base.{name} must be callable z -> array, "
+                            f"got {type(a).__name__}")
+        try:
+            v = np.asarray(a(z), dtype=float)
+        except Exception as e:  # noqa: BLE001 -- name the attribute
+            raise ValueError(f"base.{name} failed on a probe of z in "
+                             f"[-6, 6]: {e}") from e
+        if v.shape != z.shape or not np.all(np.isfinite(v)):
+            raise ValueError(f"base.{name} must return a finite array of "
+                             "the input's shape on z in [-6, 6]")
+        step = np.diff(v[:, 0])
+        if name == "log_sf":
+            ok = np.all(v <= 1e-12) and np.all(step <= 1e-12)
+        elif name == "log_cdf":
+            ok = np.all(v <= 1e-12) and np.all(step >= -1e-12)
+        else:
+            ok = (np.all(v >= 0.0) and np.all(v <= 1.0)
+                  and np.all(step >= -1e-12))
+        if not ok:
+            raise ValueError(
+                f"base.{name} is not a valid {name} on z in [-6, 6]: it "
+                "must be " + ("non-increasing" if name == "log_sf"
+                              else "non-decreasing")
+                + (" and <= 0" if name != "cdf" else " and in [0, 1]"))
+        if S is None:
+            S = np.asarray(fn(z)[0], dtype=float)
+        F = np.exp(v) if name == "log_cdf" else v
+        gap = np.abs(np.exp(v) - S) if name == "log_sf" \
+            else np.abs(F - (1.0 - S))
+        if not np.all(gap <= 1e-6):
+            raise ValueError(
+                f"base.{name} disagrees with the base's own survival S by "
+                f"{float(gap.max()):.2e} on z in [-6, 6]; it must describe "
+                "the same law (min-wins, mean zero, unit variance)")
+    try:
+        _TAIL_CHECKED[fn] = key
+    except TypeError:
+        pass
+
+
+def _is_named(fn):
+    return any(fn is b for b in _NAMED_BASES)
+
+
+def _tail_fn(fn, name):
+    """The base's validated tail attribute `name` ('log_sf', 'cdf',
+    'log_cdf'), or None. The named bases are trusted as written."""
+    a = getattr(fn, name, None)
+    if a is None or _is_named(fn):
+        return a
+    _check_tails(fn)
+    return a
+
+
+def _lower_cdf(fn):
+    """z -> F(z) from a callable base's cdf or log_cdf attribute, or None
+    when it carries neither (and for the named bases, which reflect)."""
+    if _is_named(fn):
+        return None
+    cdf = _tail_fn(fn, "cdf")
+    if cdf is not None:
+        return lambda z: np.clip(np.asarray(cdf(z), dtype=float), 0.0, 1.0)
+    lcdf = _tail_fn(fn, "log_cdf")
+    if lcdf is not None:
+        def from_log(z):
+            with np.errstate(under="ignore", over="ignore",
+                             invalid="ignore"):
+                return np.minimum(np.exp(np.maximum(
+                    np.asarray(lcdf(z), dtype=float), -1e300)), 1.0)
+        return from_log
+    return None
+
+
 def _log_survival(fn, z, S):
     """log S for the race integrators: np.log(S), except at points where
     a named base floored S at 1e-300, which take the base's exact log
-    survival (#502)."""
+    survival (#502); a callable base's validated log_sf likewise."""
     logS = np.log(S)
-    lsf = getattr(fn, "log_sf", None)
+    lsf = _tail_fn(fn, "log_sf")
     if lsf is not None:
         low = S <= 1e-300
         if low.any():
@@ -166,6 +283,7 @@ def _log_survival(fn, z, S):
     return logS
 
 
+_NAMED_BASES = (_normal, _gumbel_min, _logistic, _laplace)
 BASES = {"normal": _normal, "gumbel": _gumbel_min,
          "logistic": _logistic, "laplace": _laplace}
 _SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails

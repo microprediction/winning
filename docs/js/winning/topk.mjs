@@ -8,7 +8,8 @@ import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
          jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints,
          kinkLattice } from "./core.mjs";
-import { BASES, _factorNodeRule, baseResolution } from "./races.mjs";
+import { BASES, _factorNodeRule, baseResolution, checkTails,
+         lowerCdf } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -38,6 +39,7 @@ function baseFn(base) {
   if (typeof fn !== "function")
     throw new Error(`unknown base ${JSON.stringify(base)}; known: ${Object.keys(BASES).join(", ")}, or a function`);
   baseResolution(fn);
+  checkTails(fn);
   return fn;
 }
 
@@ -383,12 +385,14 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12, split = false) {
   // the count program wants F and S each accurate where it is small:
   // 1 - S rounds a lower-tail CDF to zero once S is near one, and those
   // CDFs are what a last place multiplies together. A base symmetric
-  // about zero has the CDF as its reflected survival S(-z) (#511).
+  // about zero has the CDF as its reflected survival S(-z) (#511); a
+  // callable base gives it through its cdf / logCdf attribute.
   const sym = SYMMETRIC_BASES.has(fn);
+  const lc = sym ? null : lowerCdf(fn);
   const S = g.S.map(row => row.map(clip01));
   const F = S.map((row, t) => row.map((s, i) =>
     sym && s > 0.5 ? clip01(unfloored(fn, -g.z[t][i], fn(-g.z[t][i])[0]))
-                   : clip01(1 - s)));
+      : lc && s > 0.5 ? clip01(lc(g.z[t][i])) : clip01(1 - s)));
   return { x, dx, w, ...g, F, S };
 }
 
@@ -414,10 +418,11 @@ function bottomkIndependent(mu, sd, k, fn, points) {
   // role of the survivals: mu = [-30, 0, 0]'s last place 4.68e-134 came
   // back ~500x low (#511)
   const sym = SYMMETRIC_BASES.has(fn);
+  const lc = sym ? null : lowerCdf(fn);
   const G = g.S.map(row => row.map(clip01));
   const Fc = G.map((row, t) => row.map((s, i) =>
     sym && s > 0.5 ? clip01(unfloored(fn, -g.z[t][i], fn(-g.z[t][i])[0]))
-                   : clip01(1 - s)));
+      : lc && s > 0.5 ? clip01(lc(g.z[t][i])) : clip01(1 - s)));
   const C = countDistribution(G, Fc);
   const cdf = leaveOneOutCdf(C, G, k, Fc);
   const q = new Array(n).fill(0);

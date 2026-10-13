@@ -59,6 +59,69 @@ BASES.laplace.logSf = z => {
   const b = 1 / Math.sqrt(2);
   return z < 0 ? Math.log1p(-0.5 * Math.exp(z / b)) : Math.log(0.5) - z / b;
 };
+/* Optional tail attributes of a CALLABLE base, as python's cdf / log_cdf /
+   log_sf (#511 follow-up): fn.cdf(z) = 1 - S(z) accurate in the lower
+   tail, fn.logCdf(z) its log (used when cdf is absent), fn.logSf(z) the
+   log survival where S underflows. The named bases carry logSf and the
+   count program reflects the symmetric ones; a wrapper has no identity to
+   key that on, so it may carry the tails itself. Each is checked once per
+   base on a probe of z in [-6, 6]: a function, finite, monotone, and
+   within 1e-6 of the base's own survival. */
+const NAMED_BASES = new Set(Object.values(BASES));
+const TAILS_CHECKED = new WeakMap();
+const TAIL_ATTRS = ["cdf", "logCdf", "logSf"];
+export function checkTails(fn) {
+  if (fn == null || NAMED_BASES.has(fn)) return;
+  const attrs = TAIL_ATTRS.map(a => fn[a]);
+  if (attrs.every(a => a === undefined)) return;
+  const hit = TAILS_CHECKED.get(fn);
+  if (hit && hit.every((a, j) => a === attrs[j])) return;
+  const zs = Array.from({ length: 25 }, (_, t) => -6 + 0.5 * t);
+  TAIL_ATTRS.forEach((name, j) => {
+    const a = attrs[j];
+    if (a === undefined) return;
+    if (typeof a !== "function")
+      throw new Error(`base.${name} must be a function z -> number; got ${typeof a}`);
+    const v = zs.map(z => a(z));
+    if (!v.every(Number.isFinite))
+      throw new Error(`base.${name} must be finite on z in [-6, 6]`);
+    let ok = true;
+    for (let t = 0; t < v.length; t++) {
+      const d = t ? v[t] - v[t - 1] : 0;
+      if (name === "logSf") ok = ok && v[t] <= 1e-12 && d <= 1e-12;
+      else if (name === "logCdf") ok = ok && v[t] <= 1e-12 && d >= -1e-12;
+      else ok = ok && v[t] >= 0 && v[t] <= 1 && d >= -1e-12;
+    }
+    if (!ok)
+      throw new Error(`base.${name} is not a valid ${name} on z in [-6, 6]: it must be ` +
+        (name === "logSf" ? "non-increasing" : "non-decreasing") +
+        (name === "cdf" ? " and in [0, 1]" : " and <= 0"));
+    let gap = 0;
+    for (let t = 0; t < v.length; t++) {
+      const S = fn(zs[t])[0];
+      const g = name === "logSf" ? Math.abs(Math.exp(v[t]) - S)
+        : Math.abs((name === "logCdf" ? Math.exp(v[t]) : v[t]) - (1 - S));
+      gap = Math.max(gap, g);
+    }
+    if (!(gap <= 1e-6))
+      throw new Error(`base.${name} disagrees with the base's own survival S by ` +
+        `${gap.toExponential(2)} on z in [-6, 6]; it must describe the same law ` +
+        "(min-wins, mean zero, unit variance)");
+  });
+  TAILS_CHECKED.set(fn, attrs);
+}
+
+/* z -> F(z) from a callable base's cdf or logCdf, or null (the named
+   bases reflect instead). */
+export function lowerCdf(fn) {
+  if (fn == null || NAMED_BASES.has(fn)) return null;
+  checkTails(fn);
+  if (typeof fn.cdf === "function") return fn.cdf;
+  if (typeof fn.logCdf === "function")
+    return z => Math.min(Math.exp(Math.max(fn.logCdf(z), -1e300) || -1e300), 1);
+  return null;
+}
+
 /* A base's central scale in standardized units, as python's _resolution
    (#385): a unit-variance law can still concentrate on a much narrower
    centre, and spacing measured in sd alone left that centre between
@@ -271,6 +334,7 @@ function setup(mu, V, D, F, W, base) {
   if (typeof fn !== "function")
     throw new Error(`unknown base ${JSON.stringify(base)}; known: ${Object.keys(BASES).join(", ")}, or a function`);
   baseResolution(fn);          // malformed metadata fails here, not mid-grid
+  checkTails(fn);
   // a callable base may declare its own span, as python's
   // getattr(base, "span", (12, 12)) (#106)
   const span = typeof base === "function"
