@@ -61,7 +61,10 @@
       <p class="legend">Six runners in two camps; each camp shares a luck factor.
         Drag the observed win shares and the correlation, and the engine inverts
         the shares to standalone abilities live in your browser — the same
-        calibration the Python package ships, at machine-precision parity. The
+        calibration the Python package ships, checked against Python and SciPy
+        reference vectors: normal and Gumbel forward shares agree to about
+        1e-15, calibrated abilities and the tabulated skew and t bases to within
+        2e-6. The
         curves are the fitted performance densities (switch the runners to Gumbel
         and they skew). Below them, hollow dots pretend the runners are
         independent and filled dots admit the correlation: a runner whose camp is
