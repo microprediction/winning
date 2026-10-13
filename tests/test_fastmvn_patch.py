@@ -89,3 +89,27 @@ def test_patch_keeps_scipys_shapes_332(patched):
     assert multivariate_normal.cdf(np.zeros(3), cov=S, lower_limit=-1.0) \
         == pytest.approx(patched.mvn_cdf_fast(lower=-1.0, upper=0.0,
                                               sigma=S), abs=1e-15)
+
+
+def test_patch_honours_tighter_accuracy_692(patched):
+    # #692: abseps/releps tighter than scipy's defaults were ignored on
+    # the fast path (8.5e-6 error at a requested 1e-10). They now go to
+    # scipy; default-accuracy calls still take the fast path.
+    from scipy.stats import multivariate_normal
+    rho = -0.499
+    S = np.full((3, 3), rho)
+    np.fill_diagonal(S, 1.0)
+    x = np.zeros(3)
+    exact = 0.125 + 3 * np.arcsin(rho) / (4 * np.pi)
+    kw = {}
+    import inspect
+    if "rng" in inspect.signature(patched.patch._ORIGINAL["cdf"]).parameters:
+        kw["rng"] = np.random.default_rng(0)
+    got = multivariate_normal.cdf(x, cov=S, maxpts=10_000_000,
+                                  abseps=1e-10, releps=1e-10, **kw)
+    assert abs(got - exact) < 1e-9
+    fast = patched.mvn_cdf_fast(upper=x, sigma=S)
+    assert multivariate_normal.cdf(x, cov=S) == pytest.approx(fast, abs=1e-15)
+    assert multivariate_normal.cdf(x, cov=S, maxpts=10, abseps=1e-2,
+                                   releps=1e-2) == pytest.approx(fast,
+                                                                 abs=1e-15)
