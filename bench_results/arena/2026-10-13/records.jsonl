@@ -1,0 +1,8 @@
+{"problem": "n50k2", "n": 50, "k": 2, "method": "lattice", "budget": null, "seconds": 0.026, "max_err": 0.0008258207970211484, "max_log_err": 0.017741225889976064, "info": {"backend": "fastrace", "L": 501, "prenorm_defect": 1.1102230246251565e-16}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "direct_mc", "budget": 100000, "seconds": 0.0399, "max_err": 0.0009080000000000199, "max_log_err": 0.15008095820555756, "info": {"draws": 100000}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "direct_mc", "budget": 1000000, "seconds": 0.3861, "max_err": 0.0007579999999999809, "max_log_err": 0.035406699625792015, "info": {"draws": 1000000}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "sobol_direct", "budget": 16384, "seconds": 0.0199, "max_err": 0.0019362031250000078, "max_log_err": 0.1396617823119808, "info": {"points": 16384}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "sobol_direct", "budget": 131072, "seconds": 0.0852, "max_err": 0.0011595537109375005, "max_log_err": 0.05682534987069854, "info": {"points": 131072}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "factor_rqmc", "budget": 4096, "seconds": 0.1025, "max_err": 0.0010856301652063527, "max_log_err": 0.031526019136104644, "info": {"points": 4096}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "factor_rqmc", "budget": 16384, "seconds": 0.3994, "max_err": 0.001001342750934442, "max_log_err": 0.016896142057150065, "info": {"points": 16384}}
+{"problem": "n50k2", "n": 50, "k": 2, "method": "ghk", "budget": 1000, "seconds": 0.1256, "max_err": 0.008543683685822163, "max_log_err": 0.3514991449807572, "info": {"draws": 1000}}
