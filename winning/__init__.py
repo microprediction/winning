@@ -60,6 +60,7 @@ from .factor.posteriors import (crn_posterior,  # noqa: F401
                                 crn_posterior_replicates,
                                 feature_bandit_posterior,
                                 update_contrast)
+from .factor.missing import fit_factor_model_missing  # noqa: F401
 from .factor.topk import (top_k_probabilities,  # noqa: F401
                           bottom_k_probabilities,
                           rank_probabilities)

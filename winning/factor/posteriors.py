@@ -164,13 +164,56 @@ def crn_posterior(V, D, n, ybar, s0, m0=None):
     return m * u, d * u * u, W * u
 
 
-def crn_posterior_replicates(V, D, Y, s0, m0=None):
+def crn_posterior_replicates(V, D, Y, s0=None, m0=None, *, prior=None,
+                             counts=None, groups=None, common=None):
     """Exact CRN posterior when entrants were run on different replicates.
 
     Y is (n_entrants x R): column r holds replicate r's outputs, NaN for
     an entrant not run on it (same model as crn_posterior; replicate r
     shares one F_r across every entrant it ran). Returns (m, d, W),
     theta ~ N(m, diag(d) + W W') EXACTLY.
+
+    Keyword extensions (#635, #636, #638). Each is exact Gaussian
+    conditioning, not an approximation; the general model they share is
+
+        theta = m0 + V0 beta + e,      beta ~ N(0, I_q), e ~ N(0, diag d0),
+        Y_ir  = theta_i + v_i' F_r + sum_l u_li' G_{l, g_l(r)}
+                + c_r + eps_ir,        eps_ir ~ N(0, D_ir),
+
+    every shock independent N(0, I) except c_r (see common=).
+
+    prior=(V0, d0) or (V0, d0, m0), a TUPLE, or a dense (K, K) Sigma0
+        replaces the independent s0^2 I prior (#635); pass s0=None. A factor
+        prior keeps its eigenstructure: W rotates with V0 and nothing is
+        refit. A dense Sigma0 must be positive definite; it is split
+        exactly as Sigma0 = diag(d0) + V0 V0' with d0 = (c/2) diag(Sigma0),
+        c the smallest eigenvalue of its correlation matrix (V0 has rank
+        n_entrants, so W does too).
+    D may be (n_entrants, R): a noise variance per cell (#638). Entries
+        at unobserved cells are ignored.
+    counts (n_entrants, R): the number of runs averaged into each cell
+        (#638). D is then the SINGLE-RUN variance (per entrant, or per
+        cell) and cell (i, r) has variance D_ir / counts_ir. This is exact
+        when the runs pooled in a cell share that column's shocks and
+        differ only in independent noise: the cell mean is then sufficient
+        for the cell. Observed cells need counts > 0; an unobserved cell
+        must have count 0 or NaN.
+    groups=[(labels, U), ...] adds shared shock levels (#636): labels has
+        length R, and columns with the same label share one draw G with
+        loadings U (n_entrants x rho_l). Trials repeated under shared seeds
+        are groups=[(trial_id, U_trial), (seed_id, U_seed)], with V the
+        column-level (trial x seed) shock, which may have zero columns.
+    common="free" gives each column a level shift c_r with a FLAT prior
+        and integrates it out exactly (#636): only within-column contrasts
+        then inform theta, the limit of a synthetic common column whose
+        variance goes to infinity. A column observed for one entrant then
+        carries no information.
+
+    The general path (any keyword above, or V=None for no column-level
+    shock) costs O(P^3) in P = q + rho R' + sum_l rho_l n_l (+ R' with
+    common="free"), R' the number of distinct columns: columns are merged
+    only when their pattern, noise, and group labels coincide. Without
+    any keyword the original path below runs unchanged.
 
     Derivation. Group the replicates by observation pattern S_l (the set
     of entrants run), c_l replicates and per-entrant sums T_l in group
@@ -189,7 +232,26 @@ def crn_posterior_replicates(V, D, Y, s0, m0=None):
     a factor form of rank rho * L. With equal counts (L = 1) this is
     crn_posterior. The rank, not the exactness, is what unequal
     observation costs; columns beyond n_entrants are compressed away.
+
+    The general path is the same elimination with theta = m0 + V0 beta + e:
+    the latent psi = (beta, every shock) has posterior precision H (the
+    Schur complement of e in the joint precision of (e, psi), positive
+    definite whenever the posterior is proper) and
+
+        d = 1/a,  a_i = 1/d0_i + s_i,  s_i = sum_r 1/D_ir (observed),
+        W = Ghat H^{-1/2},  Ghat = [diag(kappa) V0, -diag(1/a) Gt],
+        kappa_i = 1/(1 + d0_i s_i),
+
+    with Gt the e-to-shock block of the joint precision. The beta parts
+    of Ghat, of H and of the score are formed subtraction-free through
+    kappa, as in feature_bandit_posterior; with no shocks this IS
+    feature_bandit_posterior, and with q = 0 it is the derivation above.
     """
+    if (prior is not None or counts is not None or groups is not None
+            or common is not None or V is None or np.ndim(D) == 2):
+        return _crn_general(V, D, Y, s0, m0, prior, counts, groups, common)
+    if s0 is None:
+        raise ValueError("s0 is required unless prior= is given")
     Ym = np.asarray(Y, dtype=float)
     if Ym.ndim != 2:
         raise ValueError(f"Y must be (n_entrants, R); got shape {Ym.shape}")
@@ -241,6 +303,226 @@ def crn_posterior_replicates(V, D, Y, s0, m0=None):
     if W.shape[1] > K:
         U, s, _ = np.linalg.svd(W, full_matrices=False)
         W = U * s
+    return m * u, (1.0 / a) * u * u, W * u
+
+
+def _crn_prior(prior, s0, m0, K):
+    """(m0, V0, d0) of the prior theta ~ N(m0, V0 V0' + diag d0)."""
+    if prior is None:
+        if s0 is None:
+            raise ValueError("s0 is required unless prior= is given")
+        s0v = _positive_vector(s0, K, "s0", "a prior sd")
+        m0v = np.zeros(K) if m0 is None else _finite_vector(m0, K, "m0")
+        return m0v, np.zeros((K, 0)), s0v ** 2
+    if s0 is not None:
+        raise ValueError("pass either s0 (independent prior) or prior=, "
+                         "not both")
+    # a TUPLE is the factor form; anything else is read as a dense matrix,
+    # so a nested-list 2 x 2 covariance is never taken for (V0, d0)
+    if isinstance(prior, tuple):
+        if len(prior) not in (2, 3):
+            raise ValueError("prior= is (V0, d0), (V0, d0, m0) or a dense "
+                             "(K, K) covariance")
+        V0 = as_loadings(prior[0], K)
+        d0 = as_idio(prior[1], K, positive=True)
+        mp = prior[2] if len(prior) == 3 else None
+        if mp is not None and m0 is not None:
+            raise ValueError("the prior mean was given twice (prior=(V0, "
+                             "d0, m0) and m0=)")
+        mp = m0 if mp is None else mp
+        m0v = np.zeros(K) if mp is None else _finite_vector(mp, K, "m0")
+        return m0v, V0, d0
+    S = np.asarray(prior, dtype=float)
+    if S.shape != (K, K):
+        raise ValueError(f"a dense prior must be ({K}, {K}); got {S.shape}")
+    from .core import _validate_covariance
+    S = _validate_covariance(S, name="prior")
+    sd = np.sqrt(np.diag(S))
+    if not (sd > 0).all():
+        raise ValueError("prior has a zero variance: a point mass, which is "
+                         "outside the scope of these updates")
+    lam = float(np.linalg.eigvalsh(S / np.outer(sd, sd)).min())
+    if not lam > 1e-10:
+        raise ValueError(
+            f"prior is (numerically) singular: smallest correlation "
+            f"eigenvalue {lam:.2e}. A singular prior is a point mass on a "
+            "contrast, outside the scope of these updates; pass a factor "
+            "prior (V0, d0) with d0 > 0 if that is what is meant")
+    # exact split: S - (lam/2) diag(S) is positive definite (its
+    # correlation-scale eigenvalues are >= lam/2), so it has a symmetric
+    # square root and nothing is clamped
+    d0 = 0.5 * lam * np.diag(S)
+    V0 = _psd_sqrt(S - np.diag(d0))
+    m0v = np.zeros(K) if m0 is None else _finite_vector(m0, K, "m0")
+    return m0v, V0, d0
+
+
+def _crn_cells(D, counts, Ym, obs):
+    """Per-cell noise variances (K, R), meaningful where obs."""
+    K, R = Ym.shape
+    Dm = np.asarray(D, dtype=float)
+    if Dm.ndim == 2:
+        if Dm.shape != (K, R):
+            raise ValueError(f"a D matrix must be ({K}, {R}); got {Dm.shape}")
+        Dc = Dm.copy()
+    else:
+        Dc = np.broadcast_to(as_idio(D, K, positive=True)[:, None],
+                             (K, R)).copy()
+    if Dm.ndim == 2:
+        bad = obs & ~(np.isfinite(Dc) & (Dc > 0))
+        if bad.any():
+            i, r = np.argwhere(bad)[0]
+            raise ValueError(
+                f"D[{i}, {r}] = {Dc[i, r]!r} at an observed cell: noise "
+                "variances must be finite and > 0 (a zero is a point mass, "
+                "outside the scope of these updates)")
+    if counts is not None:
+        C = np.asarray(counts, dtype=float)
+        if C.shape != (K, R):
+            raise ValueError(f"counts must be ({K}, {R}); got {C.shape}")
+        if (np.isinf(C) | (C < 0)).any():
+            raise ValueError("counts must be finite and >= 0 (NaN allowed "
+                             "at unobserved cells)")
+        if (obs & ~(C > 0)).any():
+            i, r = np.argwhere(obs & ~(C > 0))[0]
+            raise ValueError(f"cell ({i}, {r}) is observed but counts is "
+                             f"{C[i, r]!r}; an observed cell needs counts > 0")
+        if (~obs & (C > 0)).any():
+            i, r = np.argwhere(~obs & (C > 0))[0]
+            raise ValueError(f"cell ({i}, {r}) has counts {C[i, r]!r} but "
+                             "Y is NaN there; a cell with runs needs a value")
+        Dc = np.where(obs, Dc / np.where(obs, C, 1.0), 1.0)
+    return np.where(obs, Dc, 1.0)
+
+
+def _crn_general(V, D, Y, s0, m0, prior, counts, groups, common):
+    """crn_posterior_replicates with a factor/dense prior, per-cell noise,
+    shared shock levels and/or a free column level (see its docstring)."""
+    Ym = np.asarray(Y, dtype=float)
+    if Ym.ndim != 2:
+        raise ValueError(f"Y must be (n_entrants, R); got shape {Ym.shape}")
+    K, R = Ym.shape
+    if np.isinf(Ym).any():
+        raise ValueError("Y has an infinite entry (NaN marks 'not run')")
+    m0v, V0, d0 = _crn_prior(prior, s0, m0, K)
+    Vm = np.zeros((K, 0)) if V is None else as_loadings(V, K)
+    if common not in (None, "free"):
+        raise ValueError(f"common must be None or 'free'; got {common!r}")
+    lev = []
+    if groups is not None:
+        for j, g in enumerate(groups):
+            if not (isinstance(g, (tuple, list)) and len(g) == 2):
+                raise ValueError("groups is a list of (labels, loadings) "
+                                 "pairs")
+            lab = np.asarray(g[0])
+            if lab.shape != (R,):
+                raise ValueError(f"groups[{j}] labels must have length {R} "
+                                 f"(one per column of Y); got {lab.shape}")
+            if lab.dtype.kind == "f" and not np.isfinite(lab).all():
+                raise ValueError(f"groups[{j}] labels must be finite")
+            lev.append((np.unique(lab, return_inverse=True)[1].ravel(),
+                        as_loadings(g[1], K)))
+    obs = ~np.isnan(Ym)
+    Dc = _crn_cells(D, counts, Ym, obs)
+    u = _unit(Dc[obs], d0)
+    Ym, m0v, V0, d0, Vm, Dc = (Ym / u, m0v / u, V0 / u, d0 / u / u, Vm / u,
+                               Dc / u / u)
+    lev = [(lab, U / u) for lab, U in lev]
+    keep = obs.any(axis=0)
+    obs, Dc = obs[:, keep], Dc[:, keep]
+    Yz = np.where(obs, Ym[:, keep], 0.0)
+    lev = [(lab[keep], U) for lab, U in lev]
+    # merge columns whose pattern, cell noise and group labels coincide:
+    # c of them are one column with mean Y, noise D/c and a column shock
+    # of precision c (the within-group deviations are free of theta and
+    # of every shared shock, so they carry nothing about theta)
+    key = np.column_stack([obs.T, np.where(obs, Dc, 0.0).T]
+                          + [lab[:, None] for lab, _ in lev])
+    if key.shape[0]:
+        _, inv = np.unique(key, axis=0, return_inverse=True)
+        inv = np.asarray(inv).ravel()
+    else:
+        inv = np.zeros(0, dtype=int)
+    Lc = int(inv.max()) + 1 if inv.size else 0
+    c = np.bincount(inv, minlength=Lc).astype(float)
+    first = np.unique(inv, return_index=True)[1]     # one column per group
+    T = np.zeros((K, Lc))
+    np.add.at(T.T, inv, Yz.T)
+    obs_l = obs[:, first]
+    w = np.where(obs_l, c / Dc[:, first], 0.0)      # precision of the mean
+    r = np.where(obs_l, T / c - m0v[:, None], 0.0)
+    # shock levels: (codes per merged column, loadings, prior precision)
+    levels = []
+    if Vm.shape[1]:
+        levels.append((np.arange(Lc), Vm, c))
+    if common == "free":
+        levels.append((np.arange(Lc), np.ones((K, 1)), np.zeros(Lc)))
+    for lab, U in lev:
+        if U.shape[1]:
+            codes = np.unique(lab[first], return_inverse=True)[1].ravel()
+            levels.append((codes, U, np.ones(int(codes.max()) + 1
+                                             if codes.size else 0)))
+    s = w.sum(axis=1)
+    a = 1.0 / d0 + s
+    kap = 1.0 / (1.0 + d0 * s)
+    he = (w * r).sum(axis=1)
+    Gts, hz, sizes = [], [], []
+    for codes, U, _ in levels:
+        n_l = int(codes.max()) + 1 if codes.size else 0
+        Wa = np.zeros((K, n_l))
+        np.add.at(Wa.T, codes, w.T)
+        WRa = np.zeros((K, n_l))
+        np.add.at(WRa.T, codes, (w * r).T)
+        Gts.append((Wa[:, :, None] * U[:, None, :]).reshape(K, -1))
+        hz.append((WRa.T @ U).reshape(-1))
+        sizes.append(n_l * U.shape[1])
+    Pz = int(sum(sizes))
+    q = V0.shape[1]
+    Gt = np.hstack(Gts) if Gts else np.zeros((K, 0))
+    Bz = np.zeros((Pz, Pz))
+    offs = np.concatenate([[0], np.cumsum(sizes)]).astype(int)
+    for x, (cx, Ux, px) in enumerate(levels):
+        nx, rx = sizes[x] // Ux.shape[1], Ux.shape[1]
+        idx = np.arange(nx * rx).reshape(nx, rx)
+        Bz[offs[x] + idx, offs[x] + idx] += px[:, None]
+        for y, (cy, Uy, _) in enumerate(levels):
+            if y < x:
+                continue
+            ny, ry = sizes[y] // Uy.shape[1], Uy.shape[1]
+            Tl = np.einsum("il,ia,ib->lab", w, Ux, Uy)
+            acc = np.zeros((nx, ny, rx, ry))
+            np.add.at(acc, (cx, cy), Tl)
+            blk = acc.transpose(0, 2, 1, 3).reshape(nx * rx, ny * ry)
+            Bz[offs[x]:offs[x + 1], offs[y]:offs[y + 1]] += blk
+            if y != x:
+                Bz[offs[y]:offs[y + 1], offs[x]:offs[x + 1]] += blk.T
+    P = q + Pz
+    H = np.empty((P, P))
+    H[:q, :q] = np.eye(q) + (V0.T * (s * kap)) @ V0
+    H[:q, q:] = (V0.T * kap) @ Gt
+    H[q:, :q] = H[:q, q:].T
+    H[q:, q:] = Bz - (Gt.T / a) @ Gt
+    H = 0.5 * (H + H.T)
+    score = np.concatenate([V0.T @ (kap * he),
+                            (np.concatenate(hz) if hz else np.zeros(0))
+                            - Gt.T @ (he / a)])
+    Ghat = np.hstack([kap[:, None] * V0, -Gt / a[:, None]])
+    m = m0v + he / a
+    if P:
+        lam, Q = np.linalg.eigh(H)
+        if not lam[0] > 1e-12 * max(float(lam[-1]), 1e-300):
+            raise ValueError(
+                "the shared shocks are not identified by these data "
+                f"(posterior precision eigenvalue {lam[0]:.2e} against "
+                f"{lam[-1]:.2e}); the posterior is improper or numerically "
+                "singular, so no exact answer is returned")
+        m = m + Ghat @ ((Q.T @ score) / lam @ Q.T)
+        W = Ghat @ ((Q / np.sqrt(lam)) @ Q.T)
+        if W.shape[1] > K:
+            Us, sv, _ = np.linalg.svd(W, full_matrices=False)
+            W = Us * sv
+    else:
+        W = np.zeros((K, 0))
     return m * u, (1.0 / a) * u * u, W * u
 
 
