@@ -21,6 +21,16 @@ from ..methods.native import direct_mc
 from . import results_dir
 
 
+def _jsonable(o):
+    """Method info may carry arrays (ghk's "logp" since #168), which
+    json.dumps refused, so the runner crashed at the first ghk record."""
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    if isinstance(o, np.generic):
+        return o.item()
+    raise TypeError(f"not JSON serializable: {type(o).__name__}")
+
+
 def problem(pid, n, k, spread, seed):
     rng = np.random.default_rng(seed)
     mu = rng.normal(0.0, spread, n)
@@ -91,7 +101,7 @@ def main(quick=False, out=None):
                            "max_err": float(np.abs(p - truth).max()),
                            "max_log_err": log_err,
                            "info": info}
-                    fh.write(json.dumps(rec) + "\n")
+                    fh.write(json.dumps(rec, default=_jsonable) + "\n")
                     print(f"{pid:>8} {name:>12} budget={str(budget):>8}: "
                           f"{dt:7.2f}s err {rec['max_err']:.1e}")
 
