@@ -35,6 +35,9 @@ verified with a recomputed factor), and anything failing it goes to
 scipy unchanged, so a loose fit can never masquerade as the structured
 case. The patch caches factorization attempts by covariance content, so
 repeated calls with the same matrix pay the eigendecomposition once.
+The fast rule has no error estimate, so a patched call that asks for
+more than scipy's default accuracy (abseps or releps below 1e-5) goes
+to scipy, which honours it and its maxpts budget.
 
 Part of the winning project
 (github.com/microprediction/winning); the R sibling is mvtnormfast.

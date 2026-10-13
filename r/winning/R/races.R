@@ -113,6 +113,11 @@ attr(.base_normal, "log_sf") <- function(z)
   stats::pnorm(z, lower.tail = FALSE, log.p = TRUE)
 attr(.base_gumbel, "log_sf") <- function(z)
   -exp(pmin(z * pi / sqrt(6) - .EULER, 30))
+# the min-Gumbel is asymmetric, so its lower-tail CDF cannot be the
+# reflected survival; 1 - S rounded a representable last place to zero
+# (mu = c(-35, 0, 0): 0 for 2.05e-39, #710)
+attr(.base_gumbel, "cdf") <- function(z)
+  -expm1(-exp(pmin(z * pi / sqrt(6) - .EULER, 30)))
 attr(.base_logistic, "log_sf") <- function(z) {
   u <- pi / sqrt(3) * z
   -pmax(u, 0) - log1p(exp(-abs(u)))
@@ -651,8 +656,32 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                    window = window, delta = delta))
   }
   if (!is.null(nodes)) { F <- nodes$F; W <- nodes$W }
+  nodes_given <- !is.null(F)
   st <- .race_setup(mu, V, D, F, W, base)
   n <- length(st$mu)
+  if (n == 2L && identical(base, "normal") && !nodes_given) {
+    # A two-runner normal race is ONE Gaussian contrast (python's pair
+    # branch): p1 = Phi((mu2 - mu1) / sd_d), sd_d^2 = |V1 - V2|^2 + D1 + D2
+    # under the default rule, which stands for the standard normal law.
+    # The lattice priced a 14-sd pair tail at 0.107x its exact 1.04e-45
+    # (#86). A caller's nodes need not be Gaussian, so they keep the
+    # lattice, which integrates under their own law.
+    dV <- st$V[1, ] - st$V[2, ]
+    sh <- sum(dV^2)
+    big <- max(abs(sh), st$D[1], st$D[2])
+    sd_d <- if (big > 0) sqrt(big) * sqrt(max(sh / big + (min(st$D) / big +
+                                                          max(st$D) / big), 0))
+            else 0
+    if (!(sd_d > 0)) sd_d <- 1e-150
+    u <- (st$mu[2] - st$mu[1]) / sd_d
+    # each tail directly: 1 - pnorm(u) rounds a 9-sd loser to zero
+    p <- c(pnorm(u), pnorm(-u))
+    if (return_slopes) {
+      dens <- dnorm(u) / sd_d
+      return(list(p = p, slopes = c(-dens, -dens)))
+    }
+    return(p)
+  }
   sd <- sqrt(st$D)
   Q <- nrow(st$F)
   M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)

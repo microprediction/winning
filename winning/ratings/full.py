@@ -438,12 +438,25 @@ def update_market_full(m, S, p_market, tau2=0.25, invert=None,
     # so a singular or near-singular belief needs no inverse (#650):
     # S_new = S - S L K^-1 L' S, K = I + L' S L, and
     # m_new = m + S L K^-1 T^-1/2 (y - P m)
-    it = 1.0 / np.sqrt(tau2)
-    Lw = P * it[None, :]
+    if np.allclose(tau2, tau2[0]):
+        it = 1.0 / np.sqrt(tau2)
+        Lw = P * it[None, :]
+        z = it * (y - P @ m)
+    else:
+        # The noise P eta has covariance P diag(tau2) P (rank n-1), whose
+        # pseudo-inverse is P diag(1/tau2) P only for uniform tau2: the
+        # posterior used that while the evidence used the true one, 0.23
+        # off in the means for heterogeneous tau2 (#93, as update_market).
+        # In an orthonormal contrast basis B, with B' T B = C C', the
+        # precision is L L' for L = B C^-T.
+        B = np.linalg.svd(P)[0][:, :n - 1]
+        C = np.linalg.cholesky(B.T @ (tau2[:, None] * B))
+        Lw = np.linalg.solve(C, B.T).T
+        z = Lw.T @ (y - P @ m)
     SL = S @ Lw
-    K = np.eye(n) + Lw.T @ SL
+    K = np.eye(Lw.shape[1]) + Lw.T @ SL
     S_new = S - SL @ np.linalg.solve(K, SL.T)
-    m_new = m + SL @ np.linalg.solve(K, it * (y - P @ m))
+    m_new = m + SL @ np.linalg.solve(K, z)
     M = P @ (S + np.diag(tau2)) @ P
     # contrast-space evidence with a scale-aware rank test: the absolute
     # lam > 1e-12 dropped every contrast at ability unit 1e-7 and

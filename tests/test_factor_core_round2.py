@@ -493,6 +493,10 @@ def test_inverse_normalizers_survive_a_sum_overflow_461_463_483():
         warnings.simplefilter("ignore")
         for call in calls:
             assert np.abs(call(1e308) - call(1.0)).max() < 1e-9
+            # and a finite sum below k / MAX (#461 follow-up)
+            assert np.abs(call(4e-309) - call(1.0)).max() < 1e-9
+    tiny = rescaled_target(q * 4e-309, 2)
+    assert np.isfinite(tiny).all() and abs(tiny.sum() - 2) < 1e-12
 
 
 # ---------------------------------------------------------------- #489
@@ -586,6 +590,21 @@ def test_large_skew_logistic_shape_keeps_negative_slopes_499(alpha):
         assert np.abs(race_probabilities(mu, **kw) - t).max() < 1e-8
     finally:
         winning.use_rust(prev)
+
+
+def test_skew_logistic_span_is_finite_and_on_the_right_side_499():
+    """The span divided alpha by 1e-9 (inf from alpha = 2e299, NaN races)
+    and put the lower edge on the wrong side (1092 sd at 1e299, an
+    under-resolved lattice). The standardized law converges as alpha
+    grows, so every large alpha prices the same race."""
+    from winning.factor.races import race_probabilities, skew_logistic_base
+    ref = np.array([0.59165956, 0.29192641, 0.11641403])
+    for alpha in (1e17, 1e299, 2e299, 1e308):
+        b = skew_logistic_base(alpha)
+        assert np.all(np.isfinite(b.span)) and max(b.span) < 20
+        p = race_probabilities([0.0, 0.5, 1.0], D=np.ones(3), base=b,
+                               window="span", points=1025)
+        assert np.abs(p - ref).max() < 1e-6
 
 
 # ------------------------------------------------------------ #471 #477

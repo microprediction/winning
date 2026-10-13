@@ -594,6 +594,32 @@ fn check_classic_field(name: &str, x: &[f64]) -> PyResult<()> {
     winning::check_finite(name, x).map_err(bad)
 }
 
+/// Target state prices carry only relative mass, as the Python wrapper's
+/// as_classic_prices: nonnegative, positive total, normalised scale-safely.
+/// The direct call read p and 1.1 p off the table as different absolute
+/// ordinates (a contrast moved 0.087) and returned a tie for 10 p (#377).
+/// A vector already normalised (to 1e-12, as the wrapper's is) passes
+/// through unchanged, so the wrapped path stays bit-identical.
+fn classic_relative_prices(prices: Vec<f64>) -> PyResult<Vec<f64>> {
+    if let Some(m) = prices.iter().cloned().find(|&x| x < 0.0) {
+        return Err(bad(format!("prices has a negative entry ({m})")));
+    }
+    let mut total: f64 = prices.iter().sum();
+    let mut p = prices;
+    if !total.is_finite() {
+        let mx = p.iter().cloned().fold(0.0_f64, f64::max);
+        p.iter_mut().for_each(|x| *x /= mx);
+        total = p.iter().sum();
+    }
+    if !(total > 0.0) {
+        return Err(bad("prices has no positive mass".to_string()));
+    }
+    if (total - 1.0).abs() > 1e-12 {
+        p.iter_mut().for_each(|x| *x /= total);
+    }
+    Ok(p)
+}
+
 #[pyfunction]
 fn classic_exact_state_prices(py: Python<'_>, density: Vec<f64>, offsets: Vec<f64>)
                               -> PyResult<Vec<f64>> {
@@ -627,6 +653,7 @@ fn classic_exact_calibrate(
     }
     winning::check_offset_samples(&offset_samples).map_err(bad)?;
     check_classic_field("prices", &prices)?;
+    let prices = classic_relative_prices(prices)?;
     winning::check_finite("guess", &guess).map_err(bad)?;
     // zero steps returned the warm start as a calibration (#543)
     if n_iter == 0 {

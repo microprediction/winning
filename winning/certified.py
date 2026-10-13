@@ -57,6 +57,10 @@ from __future__ import annotations
 
 import itertools
 import math
+from decimal import Decimal
+from fractions import Fraction
+
+import numpy as np
 
 from .shapes import as_idio, as_loadings
 
@@ -187,14 +191,59 @@ BASES = {b.name: b for b in (_Normal(), _GumbelMin(), _Logistic(), _Laplace())}
 
 def _ball(x):
     """Exact conversion: a float is a dyadic rational and becomes a point
-    ball; a string becomes Arb's enclosure of the decimal it spells."""
+    ball; a string (or Decimal) becomes Arb's enclosure of the decimal it
+    spells, a Fraction the enclosure of p/q, and an integer is exact at
+    any size. Only a float, or a value with no exact spelling, goes
+    through float() (#699)."""
+    if isinstance(x, bytes):
+        x = x.decode()
     if isinstance(x, (arb, str)):
         return arb(x)
+    if isinstance(x, (bool, np.bool_)):
+        return arb(int(x))
+    if isinstance(x, (int, np.integer)):
+        return arb(int(x))
+    if isinstance(x, Fraction):
+        return arb(x.numerator) / arb(x.denominator)
+    if isinstance(x, Decimal):
+        return arb(str(x))
     return arb(float(x))
 
 
+def _rational(x):
+    """x as an exact Fraction when it has one (decimal string, int,
+    float, Fraction, Decimal), else None (an Arb ball)."""
+    if isinstance(x, bytes):
+        x = x.decode()
+    if isinstance(x, (bool, np.bool_, int, np.integer)):
+        return Fraction(int(x))
+    if isinstance(x, (str, Fraction, Decimal)):
+        try:
+            return Fraction(x)
+        except (ValueError, ZeroDivisionError):
+            return None
+    if isinstance(x, (float, np.floating)) and math.isfinite(x):
+        return Fraction(float(x))
+    return None
+
+
 def _field(mu, D):
-    mu = [_ball(m) for m in mu]
+    # Win probabilities are translation invariant, so centre on an exact
+    # anchor before anything is rounded: the float window heuristic lost
+    # the contrast of exact-string [2^65, 2^65 + 1] and could not place
+    # [2^78, 2^78 + 1] at all (#477), and at a working precision of a few
+    # dozen bits the parse itself rounds 2^100 + 1. Exactly representable
+    # entries are differenced as rationals; with an Arb ball present the
+    # anchor is the first midpoint (a point, so no radius is added).
+    mu = list(mu)
+    q = [_rational(m) for m in mu]
+    if mu and all(r is not None for r in q):
+        mu = [_ball(r - q[0]) for r in q]
+    else:
+        mu = [_ball(m) for m in mu]
+        if mu:
+            anchor = arb(mu[0].mid())
+            mu = [m - anchor for m in mu]
     n = len(mu)
     if n < 2:
         raise ValueError("a race needs at least two contestants")
@@ -206,7 +255,12 @@ def _field(mu, D):
         # fails in every other verb; exact balls and decimal strings keep
         # their own path, since numpy would round them to floats
         D = as_idio(D, n, positive=True).tolist()
-    elif isinstance(D, (int, float, str, arb)):
+    elif isinstance(D, np.ndarray):
+        # a str/object array keeps the exact path, as a list does (#699)
+        D = D.tolist()
+        if not isinstance(D, list):
+            D = [D] * n
+    elif not isinstance(D, (list, tuple)):
         D = [D] * n
     if len(D) != n:
         raise ValueError(f"D has {len(D)} entries for {n} contestants")
@@ -307,7 +361,9 @@ def certified_race_probabilities(mu, D=None, base="normal", digits=30):
 
     mu and D follow race_probabilities: D is the performance variance,
     scalar or per runner. Floats are taken as the exact binary numbers
-    they are; pass strings ("0.1") to mean decimals.
+    they are; pass strings ("0.1"), Decimals or Fractions to mean
+    decimals and rationals, in a list, tuple or NumPy str/object array
+    alike (a float array is already binary and is taken as such).
     """
     base = _base(base)
     with _Precision(digits) as p:
@@ -439,10 +495,16 @@ def _gauss_legendre(n, prec):
 
 
 def _has_exact(x):
-    """True if any entry is an Arb ball or a decimal string: input the
-    caller meant exactly, which numpy would silently round to a float."""
-    if isinstance(x, (arb, str)):
+    """True if any entry is an Arb ball, a decimal string, a Fraction or a
+    Decimal: input the caller meant exactly, which numpy would silently
+    round to a float. Lists, tuples and NumPy str/object arrays are all
+    searched, so the container never changes the model (#699)."""
+    if isinstance(x, (arb, str, bytes, Fraction, Decimal)):
         return True
+    if isinstance(x, np.ndarray):
+        if x.dtype.kind in "USO":
+            return any(_has_exact(e) for e in x.ravel().tolist())
+        return False
     if isinstance(x, (list, tuple)):
         return any(_has_exact(e) for e in x)
     return False
@@ -458,6 +520,8 @@ def _loadings(V, n):
     if not _has_exact(V):
         A = as_loadings(V, n)
         return [[_ball(v) for v in r] for r in A.tolist()], A.shape[1]
+    if isinstance(V, np.ndarray):
+        V = V.tolist()
     rows = list(V)
     if len(rows) == n and not any(isinstance(r, (list, tuple)) for r in rows):
         rows = [[r] for r in rows]                     # flat: rank one
@@ -599,6 +663,11 @@ def certified_factor_race_probabilities(mu, V, D=None, base="normal",
     moves with the factors, so it is refused rather than mishandled.
     """
     base = _base(base)
+    # rank zero is the independent race (as_loadings keeps (n, 0) as
+    # exactly that); the cubature below assumes a factor and raised
+    # IndexError on it (#68)
+    if _loadings(V, len(mu))[1] == 0:
+        return certified_race_probabilities(mu, D, base=base, digits=digits)
     if base.kinks:
         raise NotImplementedError(
             f"the {base.name} base has kinks that move with the factors; "

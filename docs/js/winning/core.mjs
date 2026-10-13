@@ -26,6 +26,12 @@ export function ndtr(z) {
   return 0.5 * (1 + erfSeries(x));
 }
 export function logndtr(z) {
+  if (z === Infinity) return 0;
+  if (z === -Infinity) return -Infinity;
+  // the reflected lower tail: log(ndtr(z)) formed 1 - Phi(-z) and was
+  // exactly 0 from z ~ 8.3, though log Phi(z) is representable to z ~ 38
+  // (#696); this matches js/factor's logndtr and scipy's log_ndtr
+  if (z >= 1) return Math.log1p(-Math.exp(logndtr(-z)));
   if (z > -3.5355) return Math.log(ndtr(z));
   const x = -z / Math.SQRT2;
   return Math.log(0.5 * erfcx(x)) - x * x;
@@ -596,6 +602,17 @@ export function gaugeCenter(V) {
  * resolved, as in python. */
 export function canonicalBasis(V, rtol = 1e-12) {
   const n = V.length, r = n ? V[0].length : 0;
+  // a * b and the cubes overflowed for finite loadings near 1e80, so no
+  // rotation ran and V, VQ got different node rules (#130 residual):
+  // work on an exact power-of-two rescale outside 2^+-100, undo on C
+  let amax = 0;
+  for (const row of V) for (const v of row) amax = Math.max(amax, Math.abs(v));
+  if (amax > 0 && Number.isFinite(amax) && (amax > 2 ** 100 || amax < 2 ** -100)) {
+    const e = Math.max(-1022, Math.min(1022, -Math.round(Math.log2(amax))));
+    const out = canonicalBasis(V.map(row => row.map(v => v * 2 ** e)), rtol);
+    const h = 2 ** (-e / 2);   // two steps: 2^-e alone can overflow
+    return { C: out.C.map(row => row.map(v => v * h * h)), Q: out.Q };
+  }
   const A = V.map(row => row.slice());
   const Q = Array.from({ length: r }, (_, i) => Array.from({ length: r }, (_, j) => (i === j ? 1 : 0)));
   for (let sweep = 0; sweep < 60; sweep++) {

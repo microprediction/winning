@@ -226,8 +226,8 @@ in under a minute. Every number comes from a committed, seeded script in
 
 [research/demos](research/demos) holds explanatory scripts: the shared
 survival field, the cavity downdate. [js/factor](js/factor) is a
-dependency-free JavaScript port at machine-precision parity with the
-Python, for browser demos. [r/winning](r/winning) is a pure-R package.
+dependency-free JavaScript port checked against the Python (forward
+shares to ~1e-15, calibrated abilities to 2e-6), for browser demos. [r/winning](r/winning) is a pure-R package.
 [rust/fastrace](rust/fastrace) holds the optional compiled kernels,
 built with `pip install maturin && maturin develop --release`, and
 `winning.methods` uses them automatically.

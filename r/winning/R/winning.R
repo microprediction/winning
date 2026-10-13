@@ -183,6 +183,7 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
     dx <- x[2] - x[1]
     phat <- numeric(N)
     slope <- numeric(N)
+    cross <- numeric(N)
     for (q in seq_len(nrow(F))) {
       z <- (matrix(x, N, points, byrow = TRUE) - M[q, ]) / sd
       logS <- pnorm(z, lower.tail = FALSE, log.p = TRUE)
@@ -191,14 +192,25 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
       rest <- exp(pmin(pmax(sweep(-logS, 2, field, "+"), -745), 0))
       phat <- phat + W[q] * rowSums(f * rest) * dx
       slope <- slope + W[q] * rowSums(z * f / sd * rest) * dx
+      # sum_{j != i} d a_j / d mu_i by the hazard identity
+      # f_i rest_i (H - h_i), h_j = f_j / S_j, in logs (python #524)
+      haz <- exp(dnorm(z, log = TRUE) - log(sd) - logS)
+      H <- matrix(colSums(haz), N, points, byrow = TRUE)
+      cross <- cross + W[q] * rowSums(f * rest * (H - haz)) * dx
     }
-    phat <- pmax(phat / sum(phat), 1e-300)
+    total <- sum(phat)
+    # d log p_i / d mu_i of the NORMALISED share the residual measures:
+    # a_i'/a_i - (a_i' + sum_j w_ij) / total. The raw own slope over the
+    # normalised share parted from finite differences by 86% on a coarse
+    # lattice and the solve missed a self-generated target by 0.21 (#371)
+    dlogp_n <- slope / pmax(phat, 1e-300) - (slope + cross) / total
+    phat <- pmax(phat / total, 1e-300)
     resid <- log(phat) - logp
     res <- if (any(ident)) max(abs(resid[ident])) else max(abs(resid))
     if (res < tol) { converged <- TRUE; break }
     if (res > prev_res * 1.2) damp <- max(0.25, damp * 0.5)
     prev_res <- res
-    dlogp <- pmin(slope / phat, -1e-3 / (sd + 1e-9))
+    dlogp <- pmin(dlogp_n, -1e-3 / (sd + 1e-9))
     delta <- pmin(pmax(damp * resid / dlogp, -step_cap), step_cap)
     mu <- mu - delta
     mu <- mu - mean(mu)

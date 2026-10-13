@@ -102,17 +102,21 @@
 # Gauss-Hermite tensor is invariant under both; a Sobol cloud is not, so
 # the sharp-branch probability moved when one loading column changed
 # sign (#605). The cloud is the orbit of base points under the signed
-# permutations of the factor coordinates (all 2^r r! while that is at
-# most 384, i.e. r <= 4; the 2^r sign flips beyond), at about the same
-# node count. General rotations are not covered.
+# permutations of the factor coordinates, at about the same node count.
+# General rotations are not covered. The group order is capped at 8, so
+# at least n/8 base points (and own-noise values) remain: the full
+# 2^r r! = 384 at r = 4 left three own-noise values for a 1024-point
+# rule (#694). Within the cap: all signed permutations at r <= 2, sign
+# flips at r = 3, none from r = 4, as python and julia.
 .factor_symmetries <- function(r, n) {
   if (r == 0L) return(list(perms = list(integer(0)), signs = list(numeric(0))))
   signs <- lapply(0:(2^r - 1), function(s)
     ifelse(bitwAnd(s, 2^(seq_len(r) - 1L)) == 0, 1, -1))
+  cap <- min(8, n)
   full <- 2^r * factorial(r)
-  if (full <= min(384, n))
+  if (full <= cap)
     return(list(perms = .permutations(r), signs = signs))
-  if (2^r <= n) return(list(perms = list(seq_len(r)), signs = signs))
+  if (2^r <= cap) return(list(perms = list(seq_len(r)), signs = signs))
   list(perms = list(seq_len(r)), signs = list(rep(1, r)))
 }
 

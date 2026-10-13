@@ -2573,5 +2573,136 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   console.warn = quiet;
 }
 
+{
+  // averageLinkage is positively homogeneous; the size-weighted numerator
+  // overflowed 9e307 + 9e307 into an Infinity height that treeFromLinkage
+  // then refused (#695)
+  const unit = [[0, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0]];
+  const Z1 = structures.averageLinkage(unit);
+  let ok = true;
+  for (const a of [1e-100, 1e300, 9e307, 1.7e308]) {
+    const Z = structures.averageLinkage(unit.map(r => r.map(x => a * x)));
+    ok = ok && Z.every((row, k) => row[0] === Z1[k][0] && row[1] === Z1[k][1] &&
+                                   row[3] === Z1[k][3] && row[2] === a * Z1[k][2]);
+    try { structures.treeFromLinkage(Z); } catch (e) { ok = false; }
+  }
+  holds("averageLinkage scales its heights and stays finite to 1.7e308 (#695)", ok);
+}
+{
+  // modular logndtr keeps the upper tail: log Phi(z) is representable to
+  // z ~ 38 and log(ndtr(z)) was exactly 0 from z ~ 8.3 (#696). scipy
+  // log_ndtr values.
+  const ref = [[8, -6.220960574271742e-16], [8.3, -5.2055697448902465e-17],
+               [10, -7.619853024160474e-24], [20, -2.753624118606155e-89],
+               [37, -5.725571222523923e-300], [2, -0.02301290932896348],
+               [1, -0.1727537790234499]];
+  const worst = Math.max(...ref.map(([z, v]) => Math.abs(core.logndtr(z) / v - 1)));
+  holds("core logndtr keeps the upper tail to z = 37 (#696)", worst < 1e-12,
+        `worst relative error ${worst.toExponential(2)}`);
+  holds("core logndtr at +-Infinity (#696)",
+        core.logndtr(Infinity) === 0 && core.logndtr(-Infinity) === -Infinity);
+}
+{
+  // g -> g + 1c' is one common shock: the same race. Canonicalizing the
+  // raw rank-12 coupling moved a share by 0.0015 and the Jacobian by
+  // 0.008 (#698); the rank-2 tensor rule is the control.
+  const n = 6, ph = 8;
+  const mu = Array.from({ length: n }, (_, i) => 0.7 * Math.sin((i + 1) * (ph + 1) * 0.37) + 0.2 * i);
+  const cl = [...Array(n).keys()], ld = new Array(n).fill(0);
+  const D = Array.from({ length: n }, (_, i) => 0.03 + 0.015 * (i % 4));
+  const mxm = (a, b) => Math.max(...a.flat().map((v, i) => Math.abs(v - b.flat()[i])));
+  for (const r of [2, 12]) {
+    const g = Array.from({ length: n }, (_, i) =>
+      Array.from({ length: r }, (_, j) => 0.7 * Math.sin((i + 1) * (j + 2) + ph * 0.31)));
+    const gs = g.map(row => row.map((x, j) => x + Math.cos((j + 1) * 0.43)));
+    const o = { gamma: 1, points: 65 };
+    const p = blocks.nestedRaceProbabilities(mu, cl, ld, D, { ...o, coupling: g });
+    const q = blocks.nestedRaceProbabilities(mu, cl, ld, D, { ...o, coupling: gs });
+    const J = blocks.nestedRaceJacobian(mu, cl, ld, D, { ...o, coupling: g });
+    const Js = blocks.nestedRaceJacobian(mu, cl, ld, D, { ...o, coupling: gs });
+    // the inverse (its preconditioner reads the coupling norm) at rank 2
+    // only: a rank-12 Halton inverse is minutes of CI for the same check
+    let inv = 0;
+    if (r === 2) {
+      const m1 = races.abilitiesFromRace(p, { structure: structures.Nested(cl, ld, D, g), points: 65 });
+      const m2 = races.abilitiesFromRace(p, { structure: structures.Nested(cl, ld, D, gs), points: 65 });
+      const c = v => v.map(x => x - v.reduce((a, b) => a + b, 0) / v.length);
+      inv = mxm(c(m1), c(m2));
+    }
+    holds(`Nested rank-${r} forward/Jacobian/inverse ignore a common coupling shift (#698)`,
+          mxm(p, q) < 1e-12 && mxm(J, Js) < 1e-12 && inv < 1e-7,
+          `${mxm(p, q).toExponential(1)} / ${mxm(J, Js).toExponential(1)} / ${inv.toExponential(1)}`);
+  }
+}
+
+{
+  // a two-runner GHK weight is the exact Phi(-gap/sqrt2) with no sampling
+  // error; 1 - ndtr(a) and a 1e-14 cutoff zeroed it from gap 11 (#555)
+  let worst = 0;
+  for (const gap of [8, 11, 12, 20, 50]) {
+    const got = demo.ghkSampleOne(demo.ghkPrepareOne([gap, 0], [[1, 0], [0, 1]], 0), 1, demo.rng(7));
+    worst = Math.max(worst, Math.abs(got / core.ndtr(-gap / Math.SQRT2) - 1));
+  }
+  holds("GHK keeps representable upper tails to gap 50 (#555)", worst < 1e-12,
+        `worst relative error ${worst.toExponential(2)}`);
+  // a rare first truncation followed by nontrivial correlated steps
+  const C = [[1, 0.3, 0.1], [0.3, 1, 0.2], [0.1, 0.2, 1]];
+  const w = demo.ghkSampleOne(demo.ghkPrepareOne([15, 0, 0.5], C, 0), 200, demo.rng(3)) / 200;
+  holds("GHK prices a 15-unit longshot in a correlated three-runner field (#555)",
+        w > 1e-46 && w < 1e-41, w.toExponential(3));
+}
+
+{
+  // jacobiEigh and fitGrammar squared raw entries: past 1e154 no rotation
+  // ran, and fitGrammar(1e160 C) moved normalized contrasts by 0.53 and
+  // returned NaN D at 1e308 (#536). Both now run on an exact power-of-four
+  // rescale.
+  let ok = true;
+  for (const a of [1e-200, 1e154, 1e308]) {
+    const v = demo.jacobiEigh([[0, a], [a, 0]], 50).values.slice().sort((x, y) => x - y);
+    ok = ok && Math.abs(v[0] / -a - 1) < 1e-12 && Math.abs(v[1] / a - 1) < 1e-12;
+  }
+  holds("jacobiEigh finds [-a, a] at every scale (#536)", ok);
+  const B = [[0.8, 0.1], [0.4, -0.3], [-0.2, 0.6], [-0.5, -0.1]], Dd = [0.4, 0.7, 0.5, 0.6];
+  const C = B.map((bi, i) => B.map((bj, j) => bi[0] * bj[0] + bi[1] * bj[1] + (i === j ? Dd[i] : 0)));
+  const contrast = (M, i, j) => M[i][i] + M[j][j] - 2 * M[i][j];
+  const nf = c => {
+    const f = demo.fitGrammar(C.map(r => r.map(x => c * x)));
+    return demo.structureCov(structures.Factor(f.V.map(r => r.map(x => x / Math.sqrt(c))),
+                                               f.D.map(x => x / c)));
+  };
+  const o = nf(1);
+  let drift = 0;
+  for (const c of [1e-300, 1e160, 1e307]) {
+    const f = nf(c);
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++)
+      drift = Math.max(drift, Math.abs(contrast(f, i, j) - contrast(o, i, j)));
+  }
+  holds("fitGrammar is scale-equivariant from 1e-300 to 1e307 (#536)", drift < 1e-12,
+        `max normalized contrast drift ${drift.toExponential(2)}`);
+  const big = demo.fitGrammar([[1e308, 0, 0], [0, 1e308, 0], [0, 0, 1e308]]);
+  holds("fitGrammar(1e308 I_3) is finite (#536)",
+        big.D.every(Number.isFinite) && big.V.flat().every(Number.isFinite));
+}
+
+{
+  // canonicalBasis formed a * b of squared column norms: at loadings near
+  // 1e80 it overflowed, no rotation ran, and V and VQ (the same law)
+  // priced 7e-4 apart (#130 residual)
+  const V = [[-2, 1, .5], [1, -2, 1], [.5, 1.5, -2], [.5, -.5, .5]];
+  const a = .61, b = Math.sqrt(1 - a * a);
+  const Q = [[a, -b, 0], [b, a, 0], [0, 0, 1]];
+  const Vr = V.map(row => Q[0].map((_, j) => Q.reduce((z, r, k) => z + row[k] * r[j], 0)));
+  let worst = 0;
+  for (const s of [1e-80, 1e80, 1e100]) {
+    const mu = [-.7, .1, .4, 1].map(x => x * s), D = [.03, .05, .04, .02].map(x => x * s * s);
+    const p = races.raceProbabilities(mu, { V: V.map(r => r.map(x => x * s)), D, points: 257, delta: 1e-4 });
+    const q = races.raceProbabilities(mu, { V: Vr.map(r => r.map(x => x * s)), D, points: 257, delta: 1e-4 });
+    worst = Math.max(worst, ...p.map((x, i) => Math.abs(x - q[i])));
+  }
+  holds("a rotated factor basis prices alike at 1e-80..1e100 (#130)", worst < 1e-12,
+        worst.toExponential(2));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

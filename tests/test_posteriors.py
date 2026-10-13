@@ -361,3 +361,37 @@ def test_all_three_constructors_are_scale_equivariant_670(c):
         np.testing.assert_allclose(d2 / c / c, d1, rtol=1e-12)
         np.testing.assert_allclose((W2 / c) @ (W2 / c).T, W1 @ W1.T,
                                    rtol=1e-12, atol=1e-14)
+
+
+def test_per_coordinate_units_serve_a_mixed_scale_field_670():
+    # one global unit chose ~6.7e153 for scales 2e-154 and 1e154 and
+    # underflowed the small coordinate: m NaN, d 0 (bandit NaN). Each
+    # coordinate is independent here: m_i / c_i = 10/11, d_i = c_i^2/11
+    c = np.array([2e-154, 1e154])
+    D = c * c
+    Y = np.repeat(c[:, None], 10, axis=1)
+    outs = [crn_posterior(np.zeros((2, 0)), D, 10, c, c),
+            crn_posterior_replicates(np.zeros((2, 0)), D, Y, c),
+            feature_bandit_posterior(np.zeros((2, 0)), D,
+                                     counts=np.array([10.0, 10.0]),
+                                     sums=10 * c, sigma_n=c)]
+    for m, d, _ in outs:
+        np.testing.assert_allclose(m / c, 10 / 11, rtol=1e-13)
+        np.testing.assert_allclose(d / c / c, 1 / 11, rtol=1e-12)
+    # and per-coordinate scaling of a correlated field moves nothing but
+    # the units
+    rng = np.random.default_rng(670)
+    K = 4
+    V = rng.normal(size=(K, 1))
+    D = rng.uniform(0.3, 2, K)
+    s0 = rng.uniform(0.5, 2, K)
+    Y = rng.normal(size=(K, 8))
+    Y[rng.random((K, 8)) < 0.2] = np.nan
+    s = np.array([1e-150, 1.0, 1e100, 1e150])
+    m1, d1, W1 = crn_posterior_replicates(V, D, Y, s0)
+    m2, d2, W2 = crn_posterior_replicates(V * s[:, None], D * s * s,
+                                          Y * s[:, None], s0 * s)
+    np.testing.assert_allclose(m2 / s, m1, rtol=1e-12)
+    np.testing.assert_allclose(d2 / s / s, d1, rtol=1e-12)
+    Wn = W2 / s[:, None]
+    np.testing.assert_allclose(Wn @ Wn.T, W1 @ W1.T, rtol=1e-10, atol=1e-14)

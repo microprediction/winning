@@ -434,6 +434,22 @@ function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
     return P
 end
 
+# A relative target as a law of total `mass`, scale-safe as python's
+# winning.shapes.rescaled_target: the raw sum overflows for finite
+# [1e308, ...] and mass / sum overflows for a finite sum below
+# mass / floatmax (4e-309 .* q), and either collapsed the target before
+# any solver ran (#461, #483). Ordinary inputs take the plain expression.
+function _rescaled_target(t, mass = 1.0)
+    t = Float64.(collect(t))
+    s = sum(t)
+    if !isfinite(s)
+        t = t ./ maximum(t)
+        s = sum(t)
+    end
+    f = mass / s
+    return isfinite(f) ? t .* f : (t ./ s) .* mass
+end
+
 function _validated_topk_target(q, k, n, target_floor)
     target = Float64.(collect(q))
     length(target) == n || error("target has $(length(target)) entries for $n runners")
@@ -467,7 +483,7 @@ function _validated_topk_target(q, k, n, target_floor)
     elseif any(target .<= 0)
         error("all target memberships must be positive")
     end
-    target .*= k / sum(target)
+    target = _rescaled_target(target, k)
     any(target .>= 1) &&
         error("after renormalizing to k slots, a target membership is >= 1")
     return (target = target, floored = floored)
@@ -671,8 +687,8 @@ function loc_scale_from_win_and_second(p_win, p_second; kwargs...)
     length(p_second) == n || error("p_win and p_second must have equal length")
     (any(p_win .<= 0) || any(p_second .<= 0)) &&
         error("all win and second probabilities must be positive")
-    p1 = p_win ./ sum(p_win)
-    top2 = p1 .+ p_second ./ sum(p_second)
+    p1 = _rescaled_target(p_win)
+    top2 = p1 .+ _rescaled_target(p_second)
     return loc_scale_from_topk_pair(p1, 1, top2, 2; kwargs...)
 end
 
@@ -716,7 +732,7 @@ function abilities_from_rank_marginal(p, r; mu0 = nothing, D = nothing,
     1 <= r <= n || error("rank must be in [1, n]; got r=$r, n=$n")
     all(isfinite, p) || error("rank probabilities must be finite")
     any(p .<= 0) && error("all rank probabilities must be positive")
-    logt = log.(p ./ sum(p))
+    logt = log.(_rescaled_target(p))
     sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     zz = [-2.3, -1.1, -0.35, 0.6, 1.7]

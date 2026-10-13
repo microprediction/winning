@@ -305,6 +305,14 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
             + "; ".join(why)
             + ". Use structure=Factor (or V=/D=) for a non-normal base, "
             "finite temperature, slopes, or an explicit lattice window.")
+    if np.size(mu) == 2:
+        # A two-runner Gaussian race is one contrast under every grammar;
+        # Independent and Factor reach the closed form above, the
+        # hierarchical kernels integrated a lattice and priced a 14-sd
+        # pair tail at 0.107x its exact 1.04e-45 (#86). The same race as
+        # a factor loading matrix takes the closed form too.
+        V2, D2 = _pair_factor(structure)
+        return _rp(mu, V=V2, D=D2, points=points)
     if isinstance(structure, Blocks):
         return block_race_probabilities(mu, structure.cluster,
                                         structure.loading, structure.D,
@@ -321,6 +329,55 @@ def dispatch_probabilities(mu, structure, points=257, qa=9, qf=15, **kw):
                                        structure.parent, structure.strength,
                                        points=points, qa=qa)
     raise TypeError(f"unknown structure {type(structure).__name__}")
+
+
+def _pair_factor(structure):
+    """(V, D) of a two-runner Blocks, Nested or Tree race as a factor
+    model with the same covariance, after the grammar's own validation:
+    one column block per cluster (the member loadings), Nested's coupling
+    scaled by gamma, and one column per internal tree node holding its
+    strength for every runner beneath it."""
+    from ..shapes import as_idio, as_loadings
+    from .blocks import (_as_parent, _scalar_loading, _validate_tree)
+    n = 2
+    D = as_idio(structure.D, n, positive=True)
+    if isinstance(structure, Tree):
+        leaf = np.asarray(structure.leaf_index)
+        parent = _as_parent(structure.parent)
+        lam = np.asarray(structure.strength, float)
+        v = _scalar_loading(structure.loading, "tree races")
+        if v.shape != (n,):
+            v = np.broadcast_to(v, (n,)).astype(float)
+        _, inv = np.unique(leaf, return_inverse=True)
+        nC = int(inv.max()) + 1
+        _validate_tree(parent, lam, nC)
+        nT = len(parent)
+        V = np.zeros((n, nC + nT))
+        for i in range(n):
+            c = int(inv[i])
+            V[i, c] = v[i]
+            u = c
+            while parent[u] >= 0:
+                V[i, nC + int(parent[u])] = lam[parent[u]]
+                u = int(parent[u])
+        return V, D
+    L = as_loadings(structure.loading, n)
+    _, inv = np.unique(np.asarray(structure.cluster), return_inverse=True)
+    inv = np.asarray(inv).ravel()
+    if inv.shape != (n,):
+        raise ValueError(f"cluster must have one label per runner; got "
+                         f"{np.shape(structure.cluster)}")
+    r = L.shape[1]
+    V = np.zeros((n, (int(inv.max()) + 1) * r))
+    for i in range(n):
+        V[i, inv[i] * r:(inv[i] + 1) * r] = L[i]
+    if (isinstance(structure, Nested) and structure.coupling is not None
+            and structure.gamma != 0.0):
+        g = np.atleast_2d(np.asarray(structure.coupling, float))
+        if g.shape[0] != n:
+            g = g.T
+        V = np.hstack([V, float(structure.gamma) * g])
+    return V, D
 
 
 def _loading_var(loading, n):

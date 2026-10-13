@@ -41,10 +41,32 @@ def _positive_definite(c):
         return False
 
 
+# SciPy's own defaults. The fast path is a fixed deterministic rule with
+# no error estimate, so it can stand in only for a call that asks for no
+# more than SciPy's default accuracy. A tighter abseps or releps is a
+# request the fast path cannot certify, and it used to be ignored: at
+# abseps = releps = 1e-10 a trivariate orthant came back 8.5e-6 off
+# where SciPy reaches 4e-11 (#692). Such calls now go to SciPy, which
+# also spends the maxpts budget they give; maxpts alone (an effort cap)
+# does not stop a default-accuracy call from taking the cheaper path.
+_SCIPY_ABSEPS = 1e-5
+_SCIPY_RELEPS = 1e-5
+
+
+def _default_accuracy(abseps, releps):
+    try:
+        return float(abseps) >= _SCIPY_ABSEPS and \
+            float(releps) >= _SCIPY_RELEPS
+    except (TypeError, ValueError):
+        return False
+
+
 def patch_scipy():
     """Route scipy.stats.multivariate_normal.cdf through fastmvn when the
-    covariance is exactly factor-plus-diagonal; identical results
-    otherwise via the original implementation."""
+    covariance is exactly factor-plus-diagonal and the call asks for no
+    more than SciPy's default accuracy (abseps, releps >= 1e-5);
+    identical results otherwise via the original implementation, which
+    honours tighter abseps/releps and their maxpts budget."""
     from scipy.stats import _multivariate as m
     if "cdf" in _ORIGINAL:
         return
@@ -59,7 +81,8 @@ def patch_scipy():
         # (#333). The fast path is deterministic, so rng is the one
         # keyword it may ignore; anything else it does not understand
         # goes to scipy, which accepts it or raises as scipy would.
-        fast_ok = set(kwargs) <= {"rng"}
+        fast_ok = set(kwargs) <= {"rng"} and _default_accuracy(abseps,
+                                                                releps)
         try:
             c = np.atleast_2d(np.asarray(cov, dtype=float))
             if fast_ok and c.ndim == 2 and c.shape[0] == c.shape[1] \

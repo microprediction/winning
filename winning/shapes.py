@@ -328,7 +328,13 @@ def rescaled_target(t, mass=None):
         s = t.sum()
     # `mass` keeps each caller's own arithmetic (t / s, or t * (k / s)),
     # so the ordinary path is bit-identical to the expression it replaced
-    return t / s if mass is None else t * (mass / s)
+    if mass is None:
+        return t / s
+    with np.errstate(over="ignore"):
+        f = mass / s
+    # a finite sum below mass / MAX overflowed the multiplier; t / s is
+    # still a law (4e-309 * [0.8, 0.6, 0.4, 0.2], #461)
+    return t * f if np.isfinite(f) else (t / s) * mass
 
 
 def as_target(p, name="target"):
