@@ -28,8 +28,8 @@ from ..outcomes import as_luce_temperature, as_order
 from ..shapes import as_weights
 from ..rustconfig import load_fastrace
 from .races import (_as_temperature, _fit_cov, _factor_of_structure, _setup,
-                    _lower_cdf,
                     _tempered_curves)
+from .topk import _cdf_rows
 from ..shapes import as_points, as_tolerance
 
 # this module's own ceiling (#113): it used to borrow races' flags, and
@@ -102,7 +102,6 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
             raise ValueError("structure= replaces V=/D=; pass one only")
         V, D = _factor_of_structure(structure, "ordered_probabilities")
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
-    lower_cdf = _lower_cdf(fn)
     sd = np.sqrt(D)
     n = len(mu)
     tau = float(temperature)
@@ -149,8 +148,13 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
             # attribute gives it the same way
             if tau <= 0 and isinstance(base, str) and base == "normal":
                 Fc = ndtr(z)
-            elif tau <= 0 and lower_cdf is not None:
-                Fc = lower_cdf(z)
+            elif tau <= 0:
+                # every other base as the count program takes it: the
+                # reflected survival for a symmetric named base, the
+                # base's own cdf for the Gumbel or a callable that
+                # carries one, else 1 - S (#598: logistic mu = [40, 0, 0]
+                # priced the rare winner 1e-15 of its true share)
+                Fc = _cdf_rows(fn, z, S)[0]
             else:
                 Fc = 1.0 - S
             logSfield = logS.sum(0)

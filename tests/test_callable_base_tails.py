@@ -124,3 +124,24 @@ def test_gumbel_cdf_matches_its_survival():
     assert np.allclose(_lower_cdf(g)(z) + g(z)[0], 1.0, atol=1e-15)
     for name in ("normal", "logistic", "laplace"):
         assert _lower_cdf(BASES[name]) is None
+
+
+@pytest.mark.parametrize("base", ["gumbel", "logistic", "laplace"])
+def test_ordered_rare_winner_takes_the_stable_lower_tail_598(base):
+    # #598: the ordered-prefix path formed every non-normal lower tail
+    # as 1 - S; a logistic runner 40 behind won 1e-15 of its true share
+    from winning.factor import race_probabilities
+    for g in (20.0, 40.0):
+        q = ordered_probabilities([g, 0.0, 0.0], 2, base=base, points=2001)
+        r = race_probabilities([g, 0.0, 0.0], base=base, points=8193)
+        assert q[0].sum() == pytest.approx(r[0], rel=1e-4)
+
+
+def test_ordered_gumbel_prefix_is_plackett_luce_598():
+    from winning.factor.permutations import plackett_luce_prefix_logprob
+    for mu in ([0.0, 20.0, 40.0], [0.0, 25.0, 50.0]):
+        mu = np.array(mu)
+        q = ordered_probabilities(mu, k=3, D=np.full(3, np.pi ** 2 / 6),
+                                  base="gumbel", points=1001, mass_tol=1e-5)
+        exact = plackett_luce_prefix_logprob(mu, [2, 1, 0])
+        assert np.log(q[2, 1, 0]) == pytest.approx(exact, abs=1e-4)
