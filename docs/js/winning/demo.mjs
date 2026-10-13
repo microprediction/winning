@@ -163,6 +163,17 @@ export function jacobiEigh(Ain, maxSweeps = 12) {
   // thresholds RELATIVE to the matrix's own size: absolute ones made
   // the decomposition (and so every fit built on it) depend on the units
   // the covariance happened to be written in (#341)
+  // squared norms overflowed past 1e154 (and underflowed below 1e-162),
+  // so no rotation ran and the diagonal came back as the spectrum (#536):
+  // rotate an exactly rescaled copy, and unscale the eigenvalues
+  let amax = 0;
+  for (const row of A) for (const v of row) amax = Math.max(amax, Math.abs(v));
+  const e = pow4Scale(amax);
+  if (e !== 0) {
+    const r = jacobiEigh(A.map(row => row.map(v => v * 2 ** e)), maxSweeps);
+    const down = 2 ** (-e / 2);
+    return { values: r.values.map(v => v * down * down), vectors: r.vectors };
+  }
   let tot = 0;
   for (let p = 0; p < n; p++) for (let q = 0; q < n; q++) tot += A[p][q] * A[p][q];
   const tiny = 1e-15 * Math.sqrt(tot);
@@ -315,7 +326,35 @@ function untiedRank(values, want, stage, tol = 1e-6) {
   return lo;
 }
 
+/* An exact power-of-four rescale bringing amax near 1, or 1 when amax is
+   already within 2^+-200 (so ordinary inputs run bit-identically). The
+   fitter squares entries and sums contrasts: at 1e308 they overflowed and
+   it returned D = NaN (#536); a power of four keeps sqrt(scale) exact. */
+function pow4Scale(amax) {
+  if (!(amax > 0) || !Number.isFinite(amax) || (amax < 2 ** 200 && amax > 2 ** -200)) return 0;
+  const e = -2 * Math.round(Math.log2(amax) / 2);
+  return Math.max(-1022, Math.min(1022, e));
+}
+
 export function fitGrammar(C, k = 3, m = 4) {
+  C = validateCovariance(C, "fitGrammar: C");
+  let amax = 0;
+  for (const row of C) for (const v of row) amax = Math.max(amax, Math.abs(v));
+  const e = pow4Scale(amax);
+  if (e === 0) return fitGrammarScaled(C, k, m);
+  const up = 2 ** e;
+  const fit = fitGrammarScaled(C.map(row => row.map(v => v * up)), k, m);
+  // undo in two exact steps: 2^-e alone overflows to Infinity past e = 1023
+  const down = 2 ** (-e / 2);
+  const out = { V: fit.V.map(row => row.map(v => v * down)),
+                D: fit.D.map(d => d * down * down) };
+  if (!out.D.every(Number.isFinite) || !out.V.flat().every(Number.isFinite))
+    throw new Error("fitGrammar: the fitted grammar is not representable in " +
+                    "double precision at this covariance scale");
+  return out;
+}
+
+function fitGrammarScaled(C, k, m) {
   // rank-k + promoted residual on the PROJECTED residual (the package's
   // fit_covariance pipeline; blocks omitted for browser latency, and the
   // contrast heuristic stands in for the certified quotient ALS):
@@ -581,7 +620,6 @@ export function mcBatch(mu, L, r, batch, counts) {
    times a single-alternative price, before a single draw is taken. */
 import { ndtr, npdf } from "./core.mjs";
 
-function invNormalCdf(p) { return invNormal(Math.min(Math.max(p, 1e-15), 1 - 1e-15)); }
 
 function diffScale(S, d) {
   let t = 0;
@@ -639,10 +677,16 @@ export function ghkSampleOne(prob, reps, r) {
       const Lk = k * d;
       for (let l = 0; l < k; l++) partial += L[Lk + l] * e[l];
       const a = -partial / L[Lk + k];
-      const Fa = ndtr(a), q = 1 - Fa;
+      // the upper tail as the reflected lower one: 1 - ndtr(a) cancelled
+      // to 0 from a ~ 8.3 and a 1e-14 cutoff zeroed it before that, so a
+      // two-runner gap of 11 priced 0 for 3.7e-15 (#555). Draw e > a as
+      // -Phi^{-1}((1 - u) q), which is Phi^{-1}(Fa + u q) without the
+      // rounded-to-one sum.
+      const q = ndtr(-a);
       w *= q;
-      if (q < 1e-14) { w = 0; break; }
-      e[k] = invNormalCdf(Fa + r.u() * q);
+      if (!(q > 0)) { w = 0; break; }
+      const v = (1 - r.u()) * q;
+      e[k] = -invNormal(Math.min(Math.max(v, 1e-300), 1 - 1e-15));
     }
     sum += w;
   }
