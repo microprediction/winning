@@ -840,3 +840,15 @@ end
     @test abs(choice_loglik_and_score(mu10, zeros(10, 0), [6]; Qz = 7)[1] -
               (-3.514068769353895)) > 5e-5
 end
+
+@testset "Hessian vcov is covariate-unit equivariant (#702)" begin
+    # l(b) = log Phi(a b / sqrt 2) + log Phi(-a b / sqrt 2): MLE b = 0,
+    # exact Hessian -2 a^2 / pi, so a^2 vcov = pi / 2 at every unit
+    for a in (1e-6, 1.0, 1e8)
+        X = zeros(2, 2, 1)
+        X[:, 1, 1] .= a
+        m = MNProbit(X, [1, 2]; intercepts = false, r = 0)
+        fit!(m)
+        @test a^2 * vcov(m; method = :hessian)[1, 1] ≈ pi / 2 rtol = 1e-6
+    end
+end

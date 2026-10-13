@@ -1346,6 +1346,19 @@ function score_matrix(m::MNProbit, theta = m.theta)
     return G
 end
 
+function _hessian_steps(m::MNProbit, np::Integer, h::Real)
+    steps = fill(float(h), np)
+    m.J >= 2 || return steps
+    for pp in 1:m.p
+        c = m.X[:, 2:m.J, pp] .- m.X[:, 1:1, pp]
+        s = sqrt(sum(abs2, c) / length(c))
+        if isfinite(s) && s > 0
+            steps[pp] = h / s
+        end
+    end
+    return steps
+end
+
 # armed by the ForwardDiff package extension: exact dual-mode
 # derivative of the analytic score (forward-over-analytic)
 const HESSIAN_ENGINE = Ref{Union{Nothing,Function}}(nothing)
@@ -1353,14 +1366,24 @@ const HESSIAN_ENGINE = Ref{Union{Nothing,Function}}(nothing)
 """Hessian of the log-likelihood at theta: central differences of the
 ANALYTIC score by default (the score is exact, so this is ~1e-8);
 loading ForwardDiff arms a machine-precision dual-mode engine.
-Exact-likelihood fits only (#214)."""
+Exact-likelihood fits only (#214).
+
+The step for mean coefficient j is h divided by the RMS of column j's
+within-choice contrasts (its effect on the utility differences), so it
+moves the predictor by about h whatever the covariate's unit: one raw
+step h at a covariate measured in 1e8 units moved the probit argument
+by ~700 and the Hessian measured a secant across saturation, inflating
+a^2 vcov from pi/2 to 2 (#702). Loading steps stay h (their unit is
+fixed by the unit idiosyncratic variance)."""
 function loglik_hessian(m::MNProbit, theta = m.theta; h = 1e-5)
     _require_exact(m, "loglik_hessian")
     eng = HESSIAN_ENGINE[]
     eng !== nothing && return eng(m, theta)
     np = length(theta)
+    steps = _hessian_steps(m, np, h)
     Hs = zeros(np, np)
     for i in 1:np
+        h = steps[i]
         tp = copy(theta); tp[i] += h
         tm = copy(theta); tm[i] -= h
         gp = -_nll_grad(m, tp)[2]
