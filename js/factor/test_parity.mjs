@@ -390,6 +390,45 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
                                            { base: skewNormalBase(400), deletions: true });
     check("removing one of two runners leaves the other certain (#411)",
           pairDel.deletions, [[0, 1], [1, 0]], 1e-300);
+    // a grid capped by the BASE's feature width while the removal spacing
+    // is already met: the refinement loop ran zero times and refused on
+    // its Infinity sentinel (#697). Each row must be its direct N-1 race.
+    for (const shape of [650, 1000]) {
+      const sb = skewNormalBase(shape);
+      let rows = null, err = "";
+      try {
+        rows = winProbabilitiesFactor([-1, 0, 1], [[], [], []], [1, 1, 1], [[]], [1],
+                                      { base: sb, deletions: true }).deletions;
+      } catch (e) { err = e.message; }
+      check(`capped skew-normal(${shape}) deletion rows are returned (#697)`,
+            [rows ? 0 : 1], [0], 0.5);
+      if (!rows) { console.log("   " + err); continue; }
+      const got = [], want = [];
+      for (let k = 0; k < 3; k++) {
+        const keep = [-1, 0, 1].filter((_, j) => j !== k);
+        const direct = winProbabilitiesFactor(keep, [[], []], [1, 1], [[]], [1], { base: sb }).p;
+        got.push(...rows[k].filter((_, j) => j !== k));
+        want.push(...direct);
+      }
+      check(`capped skew-normal(${shape}) deletion rows match the direct races (#697)`,
+            got, want, 1e-8);
+    }
+    // tabulated survival swept from the right: T - prefix erased every
+    // right tail below ~1e-16 (#501). References: scipy skewnorm logsf and
+    // direct quadrature of the standardized contrast.
+    {
+      const b10 = skewNormalBase(10);
+      check("skewNormalBase(10) log survival at z = 12, 13 (#501)",
+            [b10.eval(12, 1).ls / -35.05615946185115, b10.eval(13, 1).ls / -40.23045782445612],
+            [1, 1], 1e-4);
+      for (const points of [501, 2001]) {
+        const p = winProbabilitiesFactor([0, 15], [[], []], [1, 1], [[]], [1], { base: b10, points }).p;
+        check(`skewNormalBase(10) gap-15 longshot at ${points} points (#501)`,
+              [p[1] / 9.715184941659753e-21], [1], 1e-3);
+      }
+      const ps = winProbabilitiesFactor([0, 15], [[], []], [1, 1], [[]], [1], { base: "skew" }).p;
+      check(`"skew" gap-15 longshot (#501)`, [ps[1] / 8.291832902966727e-22], [1], 1e-3);
+    }
     const lim = winProbabilitiesFactor([-1, 0, 1], [[], [], []], [1, 1, 1], [[]], [1],
                                        { base: skewNormalBase(1e100) }).p;
     for (const a of [Number.MAX_VALUE, 1e300]) {
