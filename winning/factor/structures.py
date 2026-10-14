@@ -343,6 +343,11 @@ def _pair_factor(structure):
     D = as_idio(structure.D, n, positive=True)
     if isinstance(structure, Tree):
         leaf = np.asarray(structure.leaf_index)
+        if leaf.shape != (n,):
+            # a three-leaf Tree priced a two-runner mu with its third
+            # leaf silently dropped (#86), as Blocks and Nested refuse
+            raise ValueError(f"cluster must have one label per runner; got "
+                             f"{np.shape(structure.cluster)}")
         parent = _as_parent(structure.parent)
         lam = np.asarray(structure.strength, float)
         v = _scalar_loading(structure.loading, "tree races")

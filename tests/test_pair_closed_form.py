@@ -122,3 +122,30 @@ def test_pair_jacobian_is_the_closed_form_one_86():
     d = norm.pdf(12.0) / np.sqrt(2)
     assert J[0, 0] == pytest.approx(-d, rel=1e-10)    # was +1.5e-16
     assert J[0, 1] == pytest.approx(d, rel=1e-10)
+
+
+@pytest.mark.parametrize("mu,V,want", [
+    ([0.0, 1e155], [[1e155], [-1e155]], 0.5),               # [1, 0] before
+    ([0.0, 1.4e308], [[7e307, 7e307], [-7e307, -7e307]], 2 ** -0.5),
+])
+def test_pair_contrast_whose_square_overflows_86(mu, V, want):
+    """dV @ dV overflowed for finite loadings, the contrast sd became NaN
+    and the 1e-150 fallback priced [1, 0]; in the rank-two case the sd
+    itself exceeds the float range while u = 1/sqrt(2) does not."""
+    import warnings
+    from scipy.special import ndtr
+    from winning.factor.races import race_probabilities
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        p = race_probabilities(mu, V=V, D=[1.0, 1.0])
+    np.testing.assert_allclose(p, [ndtr(want), ndtr(-want)], rtol=1e-12)
+
+
+def test_pair_tree_needs_one_leaf_per_runner_86():
+    from winning.factor.races import race_probabilities
+    from winning.factor.structures import Tree
+    common = dict(loading=np.array([1.0, 1.0]), D=np.array([1.0, 1.0]))
+    bad = Tree(cluster=[0, 1, 2], parent=[3, 3, 4, 4, -1],
+               strength=[0, 0, 0, 0.5, 0.7], **common)
+    with pytest.raises(ValueError, match="one label per runner"):
+        race_probabilities(np.array([0.0, 1.0]), structure=bad)
