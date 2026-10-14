@@ -148,3 +148,26 @@ test_that("scalar block loading equals the expanded vector", {
                block_race_probabilities(mu, cl, rep(.3, 4), D, points = 129),
                tolerance = 0)
 })
+
+# The structured lattices were laid at the caller's origin: at a common
+# offset of 1e13 the block, nested and tree races raised a mass defect
+# (zero mass at 1e15) and their Jacobians came back zero. The contrasts
+# below are exact in binary64 (#477, python's blocks._home).
+test_that("a common ability offset reaches no structured lattice (#477)", {
+  base <- c(-1, 0, 1); cl <- c(1, 2, 3); ld <- c(.3, .2, .4); D <- c(1, 1, 1)
+  cp <- c(.3, -.1, -.2); par <- c(4, 4, 5, 5, 0); st <- c(.5, .5, .3, .3, 0)
+  f <- list(
+    function(x) block_race_probabilities(x, cl, ld, D),
+    function(x) nested_race_probabilities(x, cl, ld, D, coupling = cp),
+    function(x) tree_race_probabilities(x, cl, ld, D, par, st),
+    function(x) block_race_jacobian(x, cl, ld, D),
+    function(x) nested_race_jacobian(x, cl, ld, D, coupling = cp),
+    function(x) tree_race_jacobian(x, cl, ld, D, par, st),
+    function(x) win_probabilities_factor(x, matrix(cp, 3, 1), D))
+  for (c in c(1e12, 1e13, 1e15)) {
+    x <- base + c
+    expect_identical(x - x[2], base)
+    for (g in f) expect_equal(g(x), g(base), tolerance = 1e-14)
+  }
+})
+

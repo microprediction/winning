@@ -100,6 +100,9 @@ win_probabilities_factor <- function(mu, V, D, nodes = NULL, points = 501) {
   # column-major lattice, D = c(1, 9) pricing as c(1, 9, 1, 9) (#319)
   D <- .as_idio(D, N)
   sd <- sqrt(D)
+  # the origin is a gauge: at a common offset of 1e15 the lattice
+  # collapsed to the float spacing and the race refused (#477)
+  mu <- .translated_home(as.numeric(mu), D)
   M <- matrix(mu, nrow(F), N, byrow = TRUE) + F %*% t(V)
   pad <- 8 * max(sd)
   lo <- min(M) - pad; hi <- max(M) + pad
