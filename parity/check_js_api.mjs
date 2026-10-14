@@ -2832,5 +2832,25 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         Z1.every((r, k) => r[0] === Z2[k][0] && r[1] === Z2[k][1]));
 }
 
+{
+  // mass / sum overflowed for a finite sum below ~1/MAX_VALUE, so a tiny
+  // common scale made the normalised target Infinity (#461 residual)
+  const q = [0.2, 0.3, 0.5], tiny = q.map(x => 4e-309 * x);
+  const keep = console.warn;
+  console.warn = () => {};
+  try {
+    const a = topk.abilitiesFromTopk(q, 1, { D: 1, returnInfo: true });
+    accepts("abilitiesFromTopk takes a 4e-309-scaled target (#461)",
+            () => topk.abilitiesFromTopk(tiny, 1, { D: 1, returnInfo: true }),
+            b => b.info.converged && b.mu.every((v, i) => Math.abs(v - a.mu[i]) < 1e-6));
+    const r = topk.abilitiesFromRankMarginal(q, 1, { D: 1, returnInfo: true });
+    accepts("abilitiesFromRankMarginal takes a 4e-309-scaled target (#461)",
+            () => topk.abilitiesFromRankMarginal(tiny, 1, { D: 1, returnInfo: true }),
+            b => b.info.converged && b.mu.every((v, i) => Math.abs(v - r.mu[i]) < 1e-6));
+    holds("rescaledTarget(4e-309 q) is q (#461)",
+          core.rescaledTarget(tiny).every((v, i) => Math.abs(v - q[i]) < 1e-12));
+  } finally { console.warn = keep; }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
