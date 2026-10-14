@@ -2945,5 +2945,32 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
           "a three-leaf Tree is refused for a pair (#86)");
 }
 
+{
+  // Nested: only gamma g is identified; coupling c g with gamma 0.8 / c
+  // is the same race. At c = 1e308 g @ node overflowed before gamma
+  // (NaN mass), and the inverse's scale squared gamma and g separately,
+  // 0 * inf at 1e307 (#722, as python's _coupled_shift)
+  const mu = [-0.4, -0.1, 0.2, 0.5, 0.8], cl = [0, 0, 1, 1, 2];
+  const ld = [0.4, 0.2, 0.3, 0.5, 0.1], D = [0.7, 0.8, 0.9, 1, 1.1];
+  const g = [-0.4, 0.1, 0.4, -0.2, 0.1];
+  const make = c => structures.Nested(cl, ld, D, g.map(x => x * c), 0.8 / c);
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const o = { points: 257, qa: 9, qf: 15 };
+  const p0 = races.raceProbabilities(mu, { structure: make(1), ...o });
+  const J0 = blocks.nestedRaceJacobian(mu, cl, ld, D, { coupling: g, gamma: 0.8, ...o });
+  const m0 = races.abilitiesFromRace(p0, { structure: make(1), ...o });
+  for (const c of [1e307, 1e308]) {
+    accepts(`Nested forward at coupling scale ${c} (#722)`,
+            () => races.raceProbabilities(mu, { structure: make(c), ...o }),
+            p => maxAbs(p, p0) < 1e-15, p => String(p));
+    accepts(`Nested Jacobian at coupling scale ${c} (#722)`,
+            () => blocks.nestedRaceJacobian(mu, cl, ld, D, { coupling: g.map(x => x * c), gamma: 0.8 / c, ...o }),
+            J => maxAbs(J.flat(), J0.flat()) < 1e-15, J => String(J[0]));
+    accepts(`Nested inverse at coupling scale ${c} (#722)`,
+            () => races.abilitiesFromRace(p0, { structure: make(c), ...o }),
+            m => maxAbs(m, m0) < 1e-9, m => String(m));
+  }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

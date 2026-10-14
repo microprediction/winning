@@ -482,6 +482,18 @@ export function pairFactor(mu, s) {
   return { V, D: a.D };
 }
 
+/* gamma (g @ node), the global factor's shift (port of python's
+   blocks._coupled_shift). Only gamma g is identified: coupling c g with
+   gamma / c is the same race, but at c = 1e308 the raw g @ node
+   overflowed before gamma was applied (NaN lattice mass, #722). That
+   spelling is kept wherever it is finite; otherwise gamma is absorbed
+   into g first. */
+function coupledShift(g, gamma, node) {
+  const s = g.map(gi => gi.reduce((a, b, r) => a + b * node[r], 0));
+  if (s.every(Number.isFinite)) return s.map(v => gamma * v);
+  return g.map(gi => gi.reduce((a, b, r) => a + (gamma * b) * node[r], 0));
+}
+
 function asGamma(gamma, where) {
   if (typeof gamma !== "number" || !Number.isFinite(gamma))
     throw new Error(`${where}: gamma must be a finite number; got ${typeof gamma === "string" ? JSON.stringify(gamma) : String(gamma)}`);
@@ -522,7 +534,8 @@ export function nestedRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   for (let q = 0; q < fn.length; q++) {
     // average the RAW conditional masses (each near one) and normalize
     // once: normalizing each conditional separately hides a window defect
-    const shifted = mu.map((m, i) => -(m + gamma * g[i].reduce((a, b, r) => a + b * fn[q][r], 0)));
+    const shift = coupledShift(g, gamma, fn[q]);
+    const shifted = mu.map((m, i) => -(m + shift[i]));
     const pq = blockMax(shifted, sd, a.cluster, La, points, qa, null);
     for (let i = 0; i < n; i++) p[i] += fw[q] * pq[i];
   }
@@ -795,7 +808,8 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
   const n = mu.length;
   const J = Array.from({ length: n }, () => new Array(n).fill(0));
   for (let q = 0; q < fn.length; q++) {
-    const shifted = mu.map((m, i) => m + gamma * g[i].reduce((a, b, r) => a + b * fn[q][r], 0));
+    const shift = coupledShift(g, gamma, fn[q]);
+    const shifted = mu.map((m, i) => m + shift[i]);
     const Jq = blockRaceJacobian(shifted, cluster, loading, D, { points, qa });
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) J[i][j] += fw[q] * Jq[i][j];
   }
