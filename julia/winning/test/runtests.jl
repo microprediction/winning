@@ -497,6 +497,27 @@ end
               1.101321e-26 - 1) < 1e-5
 end
 
+@testset "normal tails: direct survival and the bounded deconvolution" begin
+    # S was 1 - ndtr(z), which cancels past ~8.3 sd, and the normal
+    # top-k kept the one-direction cavity deconvolution, whose residue
+    # was integrated as a rare place: rank [-12, -4, 4, 12][1, 4] came
+    # back 5.5e-72 for R's and python's 4.19e-68 (#96, #511). R's values.
+    R = rank_probabilities([-12.0, -4, 4, 12])
+    @test abs(R[1, 4] / 4.1937661044827e-68 - 1) < 1e-9
+    @test abs(R[1, 3] / 2.918333444485356e-30 - 1) < 1e-9
+    @test abs(bottom_k_probabilities([-30.0, 0, 0], 1)[1] /
+              4.684196986668059e-134 - 1) < 1e-9
+    @test abs(rank_probabilities([-9.0, -2, 2, 10])[1, 4] /
+              2.232140669201e-42 - 1) < 1e-9
+    # a floored survival takes the exact log tail (#502): 1.1055e-307
+    @test abs(top_k_probabilities([0.0, 53, 106], 1)[2] /
+              1.105453832131805e-307 - 1) < 1e-9
+    # cumulative ranks are the top-k memberships
+    mu = [-9.0, -2, 2, 10]
+    t2 = top_k_probabilities(mu, 2)
+    @test maximum(abs.(vec(sum(rank_probabilities(mu)[:, 1:2], dims = 2)) .- t2)) < 1e-12
+end
+
 @testset "a pair whose contrast norm overflows keeps its price (#86)" begin
     # rank two at 7e307: |dV| = 2e308 overflowed, a = Inf, NaN, and the
     # 1e-150 fallback priced [1, 0] for Phi(1/sqrt 2)

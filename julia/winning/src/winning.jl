@@ -158,9 +158,31 @@ end
 # ---- base families: z -> (S, f, fp), elementwise over arrays -------
 
 function base_normal(z)
-    S = max.(1 .- ndtr.(z), TINY)
+    # the upper tail directly: 1 - ndtr(z) cancels to exactly 0 past about
+    # 8.3 sd, and a rank-4 last place of [-12, -4, 4, 12] came back
+    # 5.5e-72 for R's and python's 4.2e-68 (#96)
+    S = max.(ndtr.(.-z), TINY)
     f = npdf.(z)
     return (S = S, f = f, fp = -z .* f)
+end
+
+"""log of the normal survival where `base_normal` floored it at TINY
+(z past 37): log(erfcx(z/sqrt 2)/2) - z^2/2, as R's pnorm(log.p = TRUE)
+and python's log_ndtr(-z) (#502). Used only at floored points, so
+nothing above 1e-300 moves."""
+_log_sf_normal(z::Float64) = z > 0 ? log(0.5 * _erfcx(z / sqrt(2))) - 0.5 * z * z :
+                                     log(ndtr(-z))
+
+"""log S for the race integrator: log.(S), except where the normal base
+floored S at TINY, which take its exact log survival (R's .log_survival,
+python's _log_survival). The floor plateaued a rare winner at ~1e-300."""
+function _log_survival(fn, z, S)
+    logS = log.(S)
+    fn === base_normal || return logS
+    for i in eachindex(S)
+        S[i] <= TINY && (logS[i] = max(_log_sf_normal(z[i]), -1e300))
+    end
+    return logS
 end
 
 function base_gumbel(z)
@@ -513,7 +535,7 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
         z = (x' .- M_all[q, :]) ./ sd            # (n, L)
         b = st.fn(z)
         f = b.f ./ sd
-        logS = log.(b.S)
+        logS = _log_survival(st.fn, z, b.S)
         Lfield = vec(sum(logS, dims = 1))        # per lattice point
         rest = exp.(clamp.(Lfield' .- logS, -745, 0))
         p .+= st.W[q] .* vec(sum(f .* rest, dims = 2)) .* dx
