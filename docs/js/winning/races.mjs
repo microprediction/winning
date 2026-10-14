@@ -724,7 +724,13 @@ function pairClosedForm(st, nodesGiven, returnSlopes) {
     let wmax = 0;
     for (const w of W) wmax = Math.max(wmax, w);
     const wr = W.map(w => w / wmax), ws = wr.reduce((a, b) => a + b, 0);
-    const proj = F.map(f => f.reduce((acc, x, j) => acc + x * dV[j], 0));
+    // V -> aV, F -> F/a is the same race: at a = 1e308 the opposite rows
+    // overflowed dV before the tiny nodes met it (NaN race, #86). Then
+    // each row is projected first and the projections subtracted.
+    const proj = dV.every(Number.isFinite)
+      ? F.map(f => f.reduce((acc, x, j) => acc + x * dV[j], 0))
+      : F.map(f => f.reduce((acc, x, j) => acc + x * V[0][j], 0) -
+                   f.reduce((acc, x, j) => acc + x * V[1][j], 0));
     for (let q = 0; q < F.length; q++) shift += (wr[q] / ws) * proj[q];
     let v = D[0] + D[1];
     for (let q = 0; q < F.length; q++) v += (wr[q] / ws) * (proj[q] - shift) ** 2;
@@ -739,9 +745,22 @@ function pairClosedForm(st, nodesGiven, returnSlopes) {
       v += D[0] / big / big + D[1] / big / big;
     }
     sdD = big * Math.sqrt(v);
+    // the sd itself may exceed the float range (a rank-two 7e307
+    // contrast priced [0.5, 0.5] for Phi(1/sqrt 2)): u in big's unit, as
+    // python's big_unit (#86)
+    if (!Number.isFinite(sdD)) {
+      const u = (mu[1] / big - mu[0] / big) / Math.sqrt(v);
+      const p = [ndtr(u), ndtr(-u)];
+      if (!returnSlopes) return p;
+      const dens = npdf(u) / big / Math.sqrt(v);
+      return { p, slopes: [-dens, -dens] };
+    }
   }
   if (!(sdD > 0)) sdD = 1e-150;     // an exactly deterministic contrast
-  const u = (mu[1] - mu[0] + shift) / sdD;
+  // the node mean raises each runner's location by V_i . Fm, so the
+  // contrast mu1 - mu0 loses dV . Fm: adding it priced the shifted
+  // runner as the favourite (#86)
+  const u = (mu[1] - mu[0] - shift) / sdD;
   const p = [ndtr(u), ndtr(-u)];
   if (!returnSlopes) return p;
   const dens = npdf(u) / sdD;       // dp_i/dmu_i, equal and negative

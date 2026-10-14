@@ -1,4 +1,5 @@
 // One race, five covariance grammars -- port of winning/factor/structures.py.
+const MIN_NORMAL = 2.2250738585072014e-308;     // numpy finfo(float).tiny
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
          abilitiesFromBlockRace, validateTree, withoutCommonShock,
@@ -191,7 +192,15 @@ function structureScale(s) {
   const tot = [];
   for (let i = 0; i < n; i++) {
     let v = Dv[i] + L[i].reduce((a, b) => a + b * b, 0);
-    if (G) v += (s.gamma ?? 1) ** 2 * G[i].reduce((a, b) => a + b * b, 0);
+    if (G) {
+      const ga = s.gamma ?? 1;
+      let cv = ga ** 2 * G[i].reduce((a, b) => a + b * b, 0);
+      // only gamma g is identified: coupling 1e307 g with gamma 1e-307
+      // squared each factor alone, 0 * inf (#722, as python)
+      if (!(Number.isFinite(cv) && ga ** 2 >= MIN_NORMAL && ga ** 2 < Infinity))
+        cv = G[i].reduce((a, b) => a + (ga * b) ** 2, 0);
+      v += cv;
+    }
     tot.push(v);
   }
   if (s.kind === "Tree") {

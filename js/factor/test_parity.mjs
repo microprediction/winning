@@ -473,6 +473,70 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   // converged must mean every positive share reprices; otherwise say so
   const ok = !fit.converged || p.every((v, i) => Math.abs(Math.log(Math.max(q[i], 1e-300) / v)) < 1e-6);
   check("[1, 1e-17, 3e-65] target: converged only if it reprices (#588)", [ok ? 0 : 1], [0], 0.5);
+  // both tails are below the solver's PFLOOR: not certifiable, and it says so
+  check("[1, 1e-17, 3e-65] target reports non-convergence (#588)", [fit.converged ? 1 : 0], [0], 0.5);
+  // a representable tail (1.1e-5) beside an unrepresentable one (5.7e-18)
+  // must converge and match the contrast, as python: scoring the 5.7e-18
+  // share against PFLOOR made it an irreducible failure (#588)
+  const p6 = winProbabilitiesFactor([-6, 0, 6], V, D, F, W, o).p;
+  const f6 = abilitiesFromProbabilitiesFactor(p6, V, D, F, W, { ...o, returnInfo: true });
+  const q6 = winProbabilitiesFactor(f6.mu, V, D, F, W, o).p;
+  check("self-generated [1, 1.1e-5, 5.7e-18] converges and reprices its contrast (#588)",
+        [f6.converged ? 0 : 1, Math.log(q6[1] / p6[1]), f6.mu[1] - f6.mu[0]], [0, 0, 6], 1e-5);
+}
+
+/* --- a pair scores its minority, not the multi-runner tail mask (#727) --- */
+{
+  const V = [[0], [1]], D = [0.05, 0.05], F = [[-1], [1]], W = [0.5, 0.5];
+  for (const t of [1e-6, 1e-8]) {
+    for (const target of [[t, 1], [1, t]]) {
+      const fit = abilitiesFromProbabilitiesFactor(target, V, D, F, W, { returnInfo: true });
+      const q = winProbabilitiesFactor(fit.mu, V, D, F, W).p;
+      const s = target[0] + target[1];
+      const err = Math.max(...q.map((v, i) => Math.abs(Math.log(v / (target[i] / s)))));
+      check(`pair [${target}] under a two-point law certifies only if it reprices (#727)`,
+            [fit.converged ? 0 : 1, err, fit.residual - err], [0, 0, 0], 1e-6);
+    }
+  }
+}
+
+/* --- a common ability offset reaches no lattice (#477, as python) --- */
+{
+  const base = [-1, 0, 1], D = [1, 1, 1], V = [[0.5], [0.2], [-0.3]], F = [[-1], [1]], W = [0.5, 0.5];
+  const p0 = winProbabilitiesFactor(base, V, D, F, W, { deletions: true, ownLogSlope: true });
+  for (const c of [1e12, 1e15, 2 ** 52]) {
+    const r = winProbabilitiesFactor(base.map((x) => x + c), V, D, F, W, { deletions: true, ownLogSlope: true });
+    check(`factor forward at common offset ${c} is the unshifted race (#477)`,
+          [...r.p, ...r.ownLogSlope, ...r.deletions.flat()], [...p0.p, ...p0.ownLogSlope, ...p0.deletions.flat()], 1e-15);
+  }
+}
+
+/* --- round 7: ordinary inputs near the fixes are unchanged (pinned from
+   origin/main 9b29ddef), and the fixed cases match python (#733) --- */
+{
+  const V = [[0], [1]], D = [0.05, 0.05], F = [[-1], [1]], W = [0.5, 0.5];
+  check("pair inverse 0.3/0.7 under the two-point law unchanged (#727)",
+        abilitiesFromProbabilitiesFactor([0.3, 0.7], V, D, F, W), [0.4599423060309007, -0.4599423060309007], 1e-15);
+  check("pair inverse 1e-3 minority unchanged (#727)",
+        abilitiesFromProbabilitiesFactor([1e-3, 1], V, D, F, W), [0.9551271779506695, -0.9551271779506695], 1e-15);
+  check("multiway inverse with identified tails unchanged (#588)",
+        abilitiesFromProbabilitiesFactor([0.6, 0.3, 0.09, 0.009, 0.001], [[], [], [], [], []], [1, 1, 1, 1, 1], [[]], [1]),
+        [-1.6156188787232308, -1.0306115347579299, -0.20225967790553134, 0.9886327009788445, 1.859857390407848], 1e-15);
+  check("factor forward at an ordinary offset 1000 unchanged (#477)",
+        winProbabilitiesFactor([999, 1000, 1001], [[0.5], [0.2], [-0.3]], [1, 1, 1], [[-1], [1]], [0.5, 0.5]).p,
+        [0.7101770877961181, 0.2188244364442892, 0.07099847575959269], 1e-15);
+  // python abilities_from_probabilities_factor / win_probabilities_factor
+  check("pair [1e-6, 1] matches python's _pair_solve (#727)",
+        abilitiesFromProbabilitiesFactor([1e-6, 1], V, D, F, W), [1.229123604182169, -1.229123604182169], 1e-9);
+  check("pair [1e-8, 1] matches python's _pair_solve (#727)",
+        abilitiesFromProbabilitiesFactor([1e-8, 1], V, D, F, W), [1.3681798918259662, -1.3681798918259662], 1e-9);
+  const p6 = winProbabilitiesFactor([-6, 0, 6], [[], [], []], [1, 1, 1], [[]], [1], { points: 1001 }).p;
+  check("[1, 1.1e-5, 5.7e-18] inverse matches python (#588)",
+        abilitiesFromProbabilitiesFactor(p6, [[], [], []], [1, 1, 1], [[]], [1], { points: 1001 }),
+        [-9.697146356239006, -3.697146532125112, 13.394292888364118], 1e-9);
+  check("factor forward at offset 1e15 matches python (#477)",
+        winProbabilitiesFactor([1e15 - 1, 1e15, 1e15 + 1], [[0.5], [0.2], [-0.3]], [1, 1, 1], [[-1], [1]], [0.5, 0.5]).p,
+        [0.7101770877961151, 0.21882443644429006, 0.07099847575959484], 1e-14);
 }
 
 process.exit(failures ? 1 : 0);

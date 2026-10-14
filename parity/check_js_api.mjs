@@ -2341,15 +2341,16 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
     const a = classic.dividendImpliedAbility([2, 4, scratch], d);
     accepts(`dividends [2, 4, ${scratch}] round-trip through abilityImpliedStatePrices (#662)`,
             () => classic.abilityImpliedStatePrices(a, d),
-            p => p[2] === 0 && maxAbs(p, [0.6553529940305943, 0.3446470059694057, 0]) < 1e-12,
+            p => p[2] === 0 && maxAbs(p, [0.6666650774147869, 0.33333492258521313, 0]) < 1e-12,
             p => String(p));
   }
   accepts("one live runner and a scratch price exactly [1, 0] (#662)",
           () => classic.abilityImpliedStatePrices(classic.dividendImpliedAbility([2, Infinity], d), d),
           p => p[0] === 1 && p[1] === 0, p => String(p));
   // python: ability_implied_state_prices([-0.4, 0.3], d) (the support is
-  // wider than L here, so this is the clustered branch, not the plain one)
-  const live = [0.5367196595728523, 0.4632803404271477];
+  // wider than L here: since #725 the exact primitive, not the clustered
+  // branch; these reference values were regenerated from python then)
+  const live = [0.5393127261020825, 0.46068727389791747];
   for (const at of [0, 1, 2]) {
     const a = [-0.4, 0.3]; a.splice(at, 0, Infinity);
     accepts(`a scratch at index ${at} keeps shape and order (#662)`,
@@ -2363,8 +2364,8 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
           p => maxAbs(p, classic.statePricesFromOffsets(d200, [0, 0.7, 1.3, 2.1])) < 1e-15);
   accepts("an all-live field wider than the lattice matches python (#662)",
           () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], classic.skewNormalDensity(40, 0.1, { a: 0 })),
-          p => maxAbs(p, [0.28573759854465663, 0.2577847581738416, 0.23941631079393647,
-                          0.2170613324875653]) < 1e-14, p => String(p));
+          p => maxAbs(p, [0.2857735535103666, 0.2602754063229543, 0.23973136959104835,
+                          0.21421967057563077]) < 1e-14, p => String(p));
   accepts("-Infinity runners split the pot, +Infinity alone is uniform (#662)",
           () => [classic.abilityImpliedStatePrices([-Infinity, 0.3, -Infinity], d),
                  classic.abilityImpliedStatePrices([Infinity, Infinity], d)],
@@ -2372,11 +2373,11 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
   const d50 = classic.skewNormalDensity(50, 0.1, { a: 0 });
   accepts("a far-separated field is clustered as python (#662)",
           () => classic.abilityImpliedStatePrices([-40, -39, 40, 41, 42.5], d50),
-          p => maxAbs(p, [0.5277153991928714, 0.472284600798019, 3.4847031497493502e-12,
-                          3.072512437648325e-12, 2.5524467876884387e-12]) < 1e-14, p => String(p));
+          p => maxAbs(p, [0.5281742859903972, 0.47182571400660933, 1.794177037061157e-12,
+                          8.833768045516132e-13, 3.158564164960598e-13]) < 1e-14, p => String(p));
   accepts("a no-chance runner far behind prices 0 (#662)",
           () => classic.abilityImpliedStatePrices([0, 0.5, 400], d50),
-          p => p[2] === 0 && maxAbs(p, [0.5138576995988393, 0.4861423004011607, 0]) < 1e-14);
+          p => p[2] === 0 && maxAbs(p, [0.514087142995957, 0.485912857004043, 0]) < 1e-14);
   accepts("unit rescales the abilities (#662)",
           () => classic.abilityImpliedStatePrices([-0.08, 0.06, Infinity], d, { unit: 0.2 }),
           p => maxAbs(p, classic.abilityImpliedStatePrices([-0.4, 0.3, Infinity], d)) === 0);
@@ -2943,6 +2944,195 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   holds("a structured pair Jacobian is the closed form's too (#86)", Math.abs(Jb[0][1] / d - 1) < 1e-12);
   rejects(races.raceProbabilities, [[0, 1], { structure: structures.Tree([0, 1, 2], [1, 1, 1], [1, 1, 1], [3, 3, 4, 4, -1], [0, 0, 0, 0.5, 0.7]) }],
           "a three-leaf Tree is refused for a pair (#86)");
+}
+
+{
+  // Nested: only gamma g is identified; coupling c g with gamma 0.8 / c
+  // is the same race. At c = 1e308 g @ node overflowed before gamma
+  // (NaN mass), and the inverse's scale squared gamma and g separately,
+  // 0 * inf at 1e307 (#722, as python's _coupled_shift)
+  const mu = [-0.4, -0.1, 0.2, 0.5, 0.8], cl = [0, 0, 1, 1, 2];
+  const ld = [0.4, 0.2, 0.3, 0.5, 0.1], D = [0.7, 0.8, 0.9, 1, 1.1];
+  const g = [-0.4, 0.1, 0.4, -0.2, 0.1];
+  const make = c => structures.Nested(cl, ld, D, g.map(x => x * c), 0.8 / c);
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const o = { points: 257, qa: 9, qf: 15 };
+  const p0 = races.raceProbabilities(mu, { structure: make(1), ...o });
+  const J0 = blocks.nestedRaceJacobian(mu, cl, ld, D, { coupling: g, gamma: 0.8, ...o });
+  const m0 = races.abilitiesFromRace(p0, { structure: make(1), ...o });
+  for (const c of [1e307, 1e308]) {
+    accepts(`Nested forward at coupling scale ${c} (#722)`,
+            () => races.raceProbabilities(mu, { structure: make(c), ...o }),
+            p => maxAbs(p, p0) < 1e-15, p => String(p));
+    accepts(`Nested Jacobian at coupling scale ${c} (#722)`,
+            () => blocks.nestedRaceJacobian(mu, cl, ld, D, { coupling: g.map(x => x * c), gamma: 0.8 / c, ...o }),
+            J => maxAbs(J.flat(), J0.flat()) < 1e-15, J => String(J[0]));
+    accepts(`Nested inverse at coupling scale ${c} (#722)`,
+            () => races.abilitiesFromRace(p0, { structure: make(c), ...o }),
+            m => maxAbs(m, m0) < 1e-9, m => String(m));
+  }
+}
+
+{
+  // the overflow branch reduced the max with a runner-sized spread,
+  // Math.max(...u), which threw RangeError past the engine's argument
+  // limit (150k on node 24) (#461 residual)
+  accepts("rescaledTarget of 150,000 entries at 1e308 (#461)",
+          () => core.rescaledTarget(new Array(150000).fill(1e308)),
+          x => x.length === 150000 && x.every(v => Math.abs(v * 150000 - 1) < 1e-12)
+               && Math.abs(x.reduce((a, b) => a + b, 0) - 1) < 1e-9,
+          x => String(x[0]));
+}
+
+{
+  // browser pair closed form (#86 residuals): the node mean RAISES each
+  // runner's location, so it is subtracted from the contrast (a single
+  // node at +1 on runner 0 priced runner 0 the favourite); reciprocal
+  // V -> aV, F -> F/a overflowed dV at a = 1e308 (NaN); and a rank-two
+  // 7e307 contrast whose sd exceeds the float range priced [0.5, 0.5]
+  const P0 = core.ndtr(-1 / Math.SQRT2);
+  accepts("pair with a nonzero node mean is shifted the right way (#86)",
+          () => [races.raceProbabilities([0, 0], { V: [[1], [0]], D: [1, 1], F: [[1]], W: [1] }),
+                 races.raceProbabilities([0, 0], { V: [[0], [1]], D: [1, 1], F: [[1]], W: [1] })],
+          ([p, q]) => Math.abs(p[0] - P0) < 1e-15 && p[0] === q[1] && p[1] === q[0],
+          ([p]) => String(p));
+  accepts("pair closed form agrees with the lattice under a non-centred two-point law (#86)",
+          () => [races.raceProbabilities([0.3, -0.2], { V: [[1, 0.5], [-0.2, 0.3]], D: [1, 2], F: [[1, 0], [0.5, 2]], W: [0.3, 0.7] }),
+                 races.raceProbabilities([0.3, -0.2, 80], { V: [[1, 0.5], [-0.2, 0.3], [0, 0]], D: [1, 2, 1], F: [[1, 0], [0.5, 2]], W: [0.3, 0.7], points: 4097 })],
+          ([p, q]) => Math.abs(p[0] - q[0]) < 1e-5, ([p, q]) => `${p} vs ${q}`);
+  const mu = [-0.25, 0.25], D = [1, 1], W = [0.5, 0.5];
+  const ref = races.raceProbabilities(mu, { V: [[1], [-1]], D, F: [[-1], [1]], W, returnSlopes: true });
+  const Jref = polish.raceJacobian(mu, { V: [[1], [-1]], D, F: [[-1], [1]], W });
+  for (const a of [1e307, 1e308]) {
+    const o = { V: [[a], [-a]], D, F: [[-1 / a], [1 / a]], W };
+    accepts(`pair under reciprocal V/F scale ${a}: prices, slopes, Jacobian (#86)`,
+            () => [races.raceProbabilities(mu, { ...o, returnSlopes: true }), polish.raceJacobian(mu, o)],
+            ([r, J]) => Math.abs(r.p[0] - ref.p[0]) < 1e-15 && Math.abs(r.slopes[0] - ref.slopes[0]) < 1e-15
+                        && Math.abs(J[0][1] - Jref[0][1]) < 1e-15,
+            ([r]) => String(r.p));
+  }
+  accepts("rank-two 7e307 pair contrast prices Phi(1/sqrt 2) (#86)",
+          () => races.raceProbabilities([0, 1.4e308], { V: [[7e307, 7e307], [-7e307, -7e307]], D: [1, 1] }),
+          p => Math.abs(p[0] - core.ndtr(Math.SQRT1_2)) < 1e-15 && Math.abs(p[1] - core.ndtr(-Math.SQRT1_2)) < 1e-15,
+          p => String(p));
+}
+
+{
+  // classic extended forward: once the support width W reaches L every
+  // nonzero offset "left" the lattice, so an ordinary field was dilated
+  // and clustered. The default L=500, unit=0.01 normal (W = 1000) moved
+  // an 8:4:2:1 round trip 0.0171 off; only offsets past L - 2 hang (#725)
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const d = classic.skewNormalDensity(500, 0.01, { a: 0 });
+  const t = [8, 4, 2, 1].map(x => x / 15);
+  const keep = console.warn; console.warn = () => {};
+  let a;
+  try { a = classic.dividendImpliedAbility(t.map(x => 1 / x), d); } finally { console.warn = keep; }
+  accepts("an 8:4:2:1 field on the default L=500 normal prices on the exact primitive (#725)",
+          () => classic.abilityImpliedStatePrices(a, d),
+          p => maxAbs(p, classic.statePricesFromOffsets(d, a)) < 1e-15 && maxAbs(p, t) < 2e-6,
+          p => String(p));
+  // python's (and R's pinned) values on the same inputs, W = 100 > L = 50
+  accepts("a W > L skew-normal field matches python (#725)",
+          () => classic.abilityImpliedStatePrices([-0.5, 0, 0.3, 2.1, 6], classic.skewNormalDensity(50, 0.1, { a: 1 }), { unit: 0.1 }),
+          p => maxAbs(p, [0.5672982284762254, 0.27027574567228596, 0.16087563506704702,
+                          0.001550390784063666, 3.7779460993255496e-13]) < 1e-14, p => String(p));
+}
+
+{
+  // fitGrammar reports the worst pairwise contrast misfit (python's
+  // contrast_residual_max); ipaf converged on the global residual alone
+  // while an exact v v' + diag(D) had its 0-3 contrast 78x too large (#505)
+  const mk = (v, D) => v.map((x, i) => v.map((y, j) => x * y + (i === j ? D[i] : 0)));
+  const ow = console.warn; let warned = [];
+  console.warn = m => { warned.push(String(m)); };
+  let g, d, h;
+  try {
+    g = demo.fitGrammar(mk([0, 1, 2, 0.01], [1e-6, 1e4, 1e5, 2e-6]), 1, 0, { method: "ipaf" });
+    d = demo.fitGrammar(mk([0, 0, 0, 1, 0, 0.7], [18, 15, 12, 0.08, 6, 0.05]), 1, 0);
+    h = demo.fitGrammar(mk([0, 0, 0, 1, 0, 0.7], [18, 15, 12, 0.08, 6, 0.05]), 1, 0, { method: "ipaf" });
+  } finally { console.warn = ow; }
+  holds("ipaf does not certify a 77x contrast misfit (#505)",
+        !g.ipaf.converged && Math.abs(g.contrastResidualMax - 76.877) < 1e-2
+        && warned.length === 1 && warned[0].includes("contrast"), JSON.stringify(g.ipaf) + " " + g.contrastResidualMax);
+  holds("the default fit reports its contrast misfit (#505)",
+        Math.abs(d.contrastResidualMax - 10.713) < 1e-2 && !("ipaf" in d)
+        && JSON.stringify(Object.keys(d)) === '["V","D"]', String(d.contrastResidualMax));
+  holds("the ipaf report carries the contrast misfit (#505)",
+        g.ipaf.contrastResidualMax === g.contrastResidualMax, JSON.stringify(g.ipaf));
+  holds("an exact ipaf recovery reports converged and a rounding-level contrast misfit (#505)",
+        h.ipaf.converged && h.contrastResidualMax < 1e-10, String(h.contrastResidualMax));
+  const big = demo.fitGrammar(mk([0, 0, 0, 1, 0, 0.7], [18, 15, 12, 0.08, 6, 0.05]).map(r => r.map(x => x * 2 ** 600)), 1, 0);
+  holds("the contrast misfit is scale free (#505)",
+        Math.abs(big.contrastResidualMax / d.contrastResidualMax - 1) < 1e-12, String(big.contrastResidualMax));
+}
+
+{
+  // Round 7: ordinary inputs next to each fix are unchanged. Values pinned
+  // from origin/main 9b29ddef (before #722/#86/#725/#461/#505 here).
+  const close = (a, b) => a.length === b.length && a.every((x, i) => Math.abs(x - b[i]) <= 1e-15 * Math.max(1, Math.abs(b[i])));
+  const mu5 = [-0.4, -0.1, 0.2, 0.5, 0.8], cl = [0, 0, 1, 1, 2], ld = [0.4, 0.2, 0.3, 0.5, 0.1];
+  const D5 = [0.7, 0.8, 0.9, 1, 1.1], g = [-0.4, 0.1, 0.4, -0.2, 0.1];
+  accepts("ordinary Nested forward unchanged (#722)",
+          () => blocks.nestedRaceProbabilities(mu5, cl, ld, D5, { coupling: g, gamma: 0.8 }),
+          p => close(p, [0.38432227045253287, 0.2369657345443022, 0.1832837205047436, 0.12254165848578556, 0.07288661601263577]), p => String(p));
+  accepts("ordinary Nested inverse unchanged (#722)",
+          () => races.abilitiesFromRace([0.3, 0.25, 0.2, 0.15, 0.1], { structure: structures.Nested(cl, ld, D5, g, 0.8) }),
+          m => close(m, [-0.3591375700446748, -0.28170740253620297, -0.023065245258169144, 0.21186843954857346, 0.4520417782904735]), m => String(m));
+  // python's nested_race_probabilities (fixed in #733) at coupling 1e308,
+  // gamma 0.8e-308, points 257, qa 9, qf 15
+  accepts("Nested at coupling 1e308 matches python (#722)",
+          () => blocks.nestedRaceProbabilities(mu5, cl, ld, D5, { coupling: g.map(x => x * 1e308), gamma: 0.8 / 1e308, points: 257, qa: 9, qf: 15 }),
+          p => p.every((x, i) => Math.abs(x - [0.38432227045253237, 0.2369657345443024, 0.1832837205047439,
+                                                0.1225416584857855, 0.07288661601263582][i]) < 1e-14), p => String(p));
+  accepts("a W < L classic field is unchanged (#725)",
+          () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], classic.skewNormalDensity(200, 0.1, { a: 0 }), { unit: 0.1 }),
+          p => close(p, [0.6049811058833535, 0.2601479044907512, 0.1086783458341974, 0.026192643791697244]), p => String(p));
+  accepts("a pair under a centred node law is unchanged (#86)",
+          () => races.raceProbabilities([0.3, -1.2], { V: [[0.4], [-0.3]], D: [1, 2], F: [[-1], [1]], W: [0.5, 0.5] }),
+          p => close(p, [0.21100713763708207, 0.7889928623629179]), p => String(p));
+  accepts("a rank-two V/D pair is unchanged (#86)",
+          () => races.raceProbabilities([0.3, -1.2], { V: [[0.4, 0.1], [-0.3, 0.2]], D: [0.5, 1.5] }),
+          p => close(p, [0.17139085557395572, 0.8286091444260443]), p => String(p));
+  accepts("an ordinary rescaledTarget is unchanged (#461)",
+          () => core.rescaledTarget([0.2, 0.3, 0.5]), x => close(x, [0.2, 0.3, 0.5]), x => String(x));
+  const B = [[0.8, 0.1], [0.4, -0.3], [-0.2, 0.6], [-0.5, -0.1]], DD = [0.4, 0.7, 0.5, 0.6];
+  const C4 = B.map((bi, i) => B.map((bj, j) => bi[0] * bj[0] + bi[1] * bj[1] + (i === j ? DD[i] : 0)));
+  accepts("an ordinary fitGrammar V/D is unchanged and spreads as {V, D} (#505)",
+          () => demo.fitGrammar(C4, 1, 1),
+          f => close(f.V.flat(), [0.7095358236959877, 0.3054231473674566, 0.5371510603993788, -0.37505008127009926, -0.5253351404855342, 0.4285964657625485, -0.7213517436098326, -0.3840532394829272]) && close(f.D, [0.2243577846045471, 0.39648769393078787, 0.4453730286243346, 0.2294107192843008])
+               && JSON.stringify(Object.keys({ ...f })) === '["V","D"]', f => JSON.stringify(f));
+  // the #505 convergence check stays quiet on ordinary covariances:
+  // sample covariances of true k-factor models (fixed seed) and the
+  // demo's dense generators, default and ipaf fits
+  const r = demo.rng(2026);
+  const sampleCov = (V, D, T) => {
+    const X = [];
+    for (let t = 0; t < T; t++) {
+      const f = V[0].map(() => r.n());
+      X.push(D.map((d, i) => V[i].reduce((a, v, q) => a + v * f[q], 0) + Math.sqrt(d) * r.n()));
+    }
+    const m = D.map((_, i) => X.reduce((a, x) => a + x[i], 0) / T);
+    return D.map((_, i) => D.map((_, q) => X.reduce((a, x) => a + (x[i] - m[i]) * (x[q] - m[q]), 0) / (T - 1)));
+  };
+  const Cs = [];
+  for (const n of [6, 10]) for (const k of [1, 2]) for (const T of [100, 500]) {
+    const V = Array.from({ length: n }, () => Array.from({ length: k }, () => 0.6 * r.n()));
+    Cs.push([k, sampleCov(V, Array.from({ length: n }, () => 0.3 + r.u()), T)]);
+  }
+  for (const gen of Object.values(demo.GENERATORS)) { const o = gen(10, demo.rng(5)); if (o.C) Cs.push([2, o.C]); }
+  const ow = console.warn; const loud = [];
+  console.warn = m => { if (String(m).includes("contrast")) loud.push(String(m)); };
+  let worst = 0, flagged = 0;
+  try {
+    for (const [k, C] of Cs) for (const f of [demo.fitGrammar(C), demo.fitGrammar(C, k, 0, { method: "ipaf" }),
+                                              demo.fitGrammar(C, k, 2, { method: "ipaf" })]) {
+      worst = Math.max(worst, f.contrastResidualMax);
+      if (f.ipaf && f.ipaf.contrastResidualMax > 1) flagged++;
+    }
+  } finally { console.warn = ow; }
+  holds(`the #505 contrast check is quiet on ${Cs.length} ordinary covariances (#505)`,
+        loud.length === 0 && flagged === 0 && worst < 1, `worst ${worst}`);
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

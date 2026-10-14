@@ -356,7 +356,14 @@ function pow4Scale(amax) {
    the eigen fit's diagonal), the smaller residual kept, so at most
    2 maxIter iterations. The result carries
    ipaf: { iterations, converged, residual } (iterations summed over the
-   starts run; residual relative to ||P C P||_F; n >= 3 and k >= 1). The residual stage then promotes the top-m eigencolumns
+   starts run; residual relative to ||P C P||_F; n >= 3 and k >= 1).
+   The report also carries contrastResidualMax, and converged requires
+   it to be <= 1 (a contrast off by its own size).
+
+   Every fit carries fit.contrastResidualMax (non-enumerable, so the
+   result still spreads as { V, D }), the worst pairwise contrast misfit
+   |Var_fit(X_i - X_j) / Var_C(X_i - X_j) - 1| (python's
+   contrast_residual_max); V and D do not depend on it. The residual stage then promotes the top-m eigencolumns
    of the remaining projected residual, not of P(C - V V')P. */
 export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
   if (k !== null && typeof k === "object") { opts = k; k = opts.k ?? 3; m = opts.m ?? 4; }
@@ -372,18 +379,71 @@ export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
   let amax = 0;
   for (const row of C) for (const v of row) amax = Math.max(amax, Math.abs(v));
   const e = pow4Scale(amax);
-  if (e === 0) return fitGrammarScaled(C, k, m, ip);
   const up = 2 ** e;
-  const fit = fitGrammarScaled(C.map(row => row.map(v => v * up)), k, m, ip);
+  const Cs = e === 0 ? C : C.map(row => row.map(v => v * up));
+  const fit = fitGrammarScaled(Cs, k, m, ip);
+  // the worst pairwise contrast misfit, as python's contrast_residual_max:
+  // the global residual cannot see a small choice-critical contrast (an
+  // exact v v' + diag(D) fitted its 0-3 contrast 78x too large while ipaf
+  // reported converged at residual 8e-8, #505). Scale free, so measured
+  // in the scaled units; above CONTRAST_MISFIT = 1 ipaf does not claim
+  // convergence.
+  // Non-enumerable on the result, so { ...fit } still spreads as the
+  // { V, D } options raceProbabilities takes (and refuses unknown keys
+  // of); enumerable inside the opt-in ipaf report.
+  const crm = contrastResidualMax(Cs, fit.V, fit.D);
+  const withCrm = o => Object.defineProperty(o, "contrastResidualMax",
+    { value: crm, enumerable: false });
+  if (fit.ipaf) {
+    fit.ipaf.contrastResidualMax = crm;
+    if (fit.ipaf.converged && crm > CONTRAST_MISFIT) {
+      fit.ipaf.converged = false;
+      if (typeof console !== "undefined")
+        console.warn(`fitGrammar: ipaf reached a stationary point (relative residual ` +
+                     `${fit.ipaf.residual}) whose worst pairwise contrast is off by ` +
+                     `${crm.toPrecision(3)} of its own size; not converged`);
+    }
+  }
+  if (e === 0) return withCrm(fit);
   // undo in two exact steps: 2^-e alone overflows to Infinity past e = 1023
   const down = 2 ** (-e / 2);
   const out = { V: fit.V.map(row => row.map(v => v * down)),
                 D: fit.D.map(d => d * down * down) };
   if (fit.ipaf) out.ipaf = fit.ipaf;
+  withCrm(out);
   if (!out.D.every(Number.isFinite) || !out.V.flat().every(Number.isFinite))
     throw new Error("fitGrammar: the fitted grammar is not representable in " +
                     "double precision at this covariance scale");
   return out;
+}
+
+// A contrast off by its own size. python's cov= path warns at 0.05, but a
+// fit to an ordinary SAMPLE covariance misses its contrasts by 5-15%
+// from sampling noise alone: 0.05 flagged 315 of 480 ipaf fits on a
+// fixed-seed battery of sample covariances of true k-factor models
+// (n = 6-16, T = 500). The largest misfit over 1460 ordinary fits
+// (n up to 30, T down to 60, the demo's dense generators) was 0.70;
+// the #505 fixture is 76.9.
+const CONTRAST_MISFIT = 1.0;
+/* max over pairs of |fitted - target| contrast variance over the target
+   contrast variance (python's _worst_contrast_ratio): the target formed
+   as anchored differences (C_ii - C_ij) + (C_jj - C_ij), the fit from
+   the loading differences, so neither sees a common shift. */
+function contrastResidualMax(C, V, D) {
+  const n = C.length;
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += C[i][i] / n;
+  const tiny = 1e-12 * Math.max(mean, 1e-300);
+  let worst = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const target = (C[i][i] - C[i][j]) + (C[j][j] - C[i][j]);
+      let fitted = D[i] + D[j];
+      for (let r = 0; r < V[i].length; r++) fitted += (V[i][r] - V[j][r]) ** 2;
+      worst = Math.max(worst, Math.abs(fitted - target) / Math.max(target, tiny));
+    }
+  }
+  return worst;
 }
 
 function fitGrammarScaled(C, k, m, ip = null) {
