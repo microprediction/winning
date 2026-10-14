@@ -5,6 +5,19 @@
 
 .TINY <- 1e-300
 
+# mu moved next to the origin when a common offset dwarfs the field
+# (races.R's .translated_home, python's blocks._home). These lattices are
+# laid in the caller's units: at an offset of 1e13 they collapsed to the
+# float spacing, so the block, nested and tree races raised a mass defect
+# (zero mass at 1e15) and their Jacobians came back zero (#477). Ordinary
+# inputs are returned unchanged; D is validated downstream, as before.
+.home <- function(mu, D) {
+  mu <- as.numeric(mu)
+  Dn <- suppressWarnings(as.numeric(D))
+  if (!length(mu) || !length(Dn)) return(mu)
+  .translated_home(mu, Dn)
+}
+
 # Winner-bulk window covering every RETAINED conditional race (max-wins):
 # per-runner conditional locations range over [mu - amp, mu + amp] with amp
 # the largest shared-effect shift the quadrature nodes can produce, and the
@@ -233,7 +246,7 @@
 #' @export
 block_race_probabilities <- function(mu, cluster, loading, D,
                                      points = 257, qa = 9) {
-  mu <- as.numeric(mu)
+  mu <- .home(mu, D)                                         # (#477)
   # a scalar D is one variance per contestant, as at every boundary (#510)
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- .block_max(-mu, sd, cluster, loading, points, qa)
@@ -257,7 +270,7 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
     return(block_race_probabilities(mu, cluster, loading, D,
                                     points = points, qa = qa))
   }
-  mu <- as.numeric(mu)
+  mu <- .home(mu, D)                                         # (#477)
   # the shared loading contract: (n, k), (k, n) or a length-n vector.
   # Transposing once and trusting the result let a 2x2 coupling at n = 4
   # recycle g %*% f across the field as a different loading (#469)
@@ -275,10 +288,21 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
   for (q in seq_len(nrow(fn))) {
     # average the RAW conditional masses (each near one) and normalize
     # once: normalizing each conditional separately hides a window defect
-    p <- p + fw[q] * .block_max(-(mu + gamma * as.numeric(g %*% fn[q, ])),
+    p <- p + fw[q] * .block_max(-(mu + .coupled_shift(g, gamma, fn[q, ])),
                                 sd, cluster, loading, points, qa)
   }
   .checked_mass(p, "nested race")
+}
+
+# The global shift gamma * (g %*% node), python's blocks._coupled_shift.
+# Only gamma g is identified, and coupling 1e308 g with gamma 0.8e-308
+# overflowed g %*% node before the tiny gamma was applied, so the nested
+# race and its Jacobian failed on a NaN mass (#722). That spelling is kept
+# wherever it is finite; otherwise gamma is absorbed into g first.
+.coupled_shift <- function(g, gamma, node) {
+  s <- as.numeric(g %*% node)
+  if (all(is.finite(s))) return(gamma * s)
+  as.numeric((gamma * g) %*% node)
 }
 
 # Strengths with every COMMON ancestor's set to zero (python's
@@ -374,7 +398,7 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
 tree_race_probabilities <- function(mu, cluster, loading, D, parent,
                                     strength, points = 257, qa = 9,
                                     leaves = NULL) {
-  mu <- as.numeric(mu)
+  mu <- .home(mu, D)                                         # (#477)
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
@@ -478,7 +502,7 @@ block_race_jacobian <- function(mu, cluster, loading, D,
     stop(paste0("block_race_jacobian is implemented for rank-one cluster ",
                 "loadings only; rank-r tie densities are tracked work."))
   }
-  mu <- as.numeric(mu)
+  mu <- .home(mu, D)                                         # (#477)
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   # rank zero: no shared effect (#508)
@@ -555,7 +579,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
     return(block_race_jacobian(mu, cluster, loading, D,
                                points = points, qa = qa))
   }
-  mu <- as.numeric(mu)
+  mu <- .home(mu, D)                                         # (#477)
   # the shared loading contract: (n, k), (k, n) or a length-n vector.
   # Transposing once and trusting the result let a 2x2 coupling at n = 4
   # recycle g %*% f across the field as a different loading (#469)
@@ -571,7 +595,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
   J <- matrix(0, n, n)
   for (q in seq_len(nrow(fn))) {
     J <- J + fw[q] * block_race_jacobian(
-      mu + gamma * as.numeric(g %*% fn[q, ]), cluster, loading, D,
+      mu + .coupled_shift(g, gamma, fn[q, ]), cluster, loading, D,
       points = points, qa = qa)
   }
   J
@@ -662,7 +686,7 @@ abilities_from_block_race <- function(p, cluster, loading, D,
 #' @export
 tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
                                points = 257, qa = 9, leaves = NULL) {
-  mu <- as.numeric(mu)
+  mu <- .home(mu, D)                                         # (#477)
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)

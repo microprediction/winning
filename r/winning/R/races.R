@@ -691,17 +691,19 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
             else 0
     if (!is.finite(sh)) {
       # a finite loading contrast past 1e154 squared to Inf, and
-      # Inf / Inf made sd_d NaN (#86): take the norms through their own
-      # scale instead. Only where the sum overflowed, so every ordinary
-      # pair keeps its bits.
-      m <- max(abs(dV))
-      a <- m * sqrt(sum((dV / m)^2))               # |dV|, finite
-      c0 <- max(a, sqrt(st$D))
-      sd_d <- c0 * sqrt((a / c0)^2 + (sqrt(st$D[1]) / c0)^2 +
-                          (sqrt(st$D[2]) / c0)^2)
+      # Inf / Inf made sd_d NaN (#86): the norm and u in units of the
+      # largest term instead. The norm itself may pass the float range
+      # (rank two at 7e307 errored on a NaN scale, for Phi(1/sqrt 2));
+      # python's pair branch. Only where the sum overflowed, so every
+      # ordinary pair keeps its bits.
+      m <- max(max(abs(dV)), sqrt(max(st$D)))
+      rel <- sqrt(sum((dV / m)^2) + st$D[1] / m / m + st$D[2] / m / m)
+      sd_d <- m * rel
+      u <- (st$mu[2] / m - st$mu[1] / m) / rel
+    } else {
+      if (!(sd_d > 0)) sd_d <- 1e-150
+      u <- (st$mu[2] - st$mu[1]) / sd_d
     }
-    if (!(sd_d > 0)) sd_d <- 1e-150
-    u <- (st$mu[2] - st$mu[1]) / sd_d
     # each tail directly: 1 - pnorm(u) rounds a 9-sd loser to zero
     p <- c(pnorm(u), pnorm(-u))
     if (return_slopes) {

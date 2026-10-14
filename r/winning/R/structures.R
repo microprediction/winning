@@ -199,9 +199,17 @@ Tree <- function(cluster, loading, D, parent, strength, leaves = NULL)
     return(D + rowSums(.as_loadings(s$loading, n, name = "loading")^2))
   if (cls == "Nested") {
     tot <- D + rowSums(.as_loadings(s$loading, n, name = "loading")^2)
-    if (!is.null(s$coupling) && s$gamma != 0)
-      tot <- tot + s$gamma^2 *
-        rowSums(.as_loadings(s$coupling, n, name = "coupling")^2)
+    if (!is.null(s$coupling) && s$gamma != 0) {
+      g <- .as_loadings(s$coupling, n, name = "coupling")
+      cv <- s$gamma^2 * rowSums(g^2)
+      if (!(all(is.finite(cv)) && s$gamma^2 >= .Machine$double.xmin &&
+            is.finite(s$gamma^2)))
+        # only gamma g is identified: coupling 1e307 g with gamma 1e-307
+        # squared each factor alone, 0 * Inf (#722, python's
+        # structure_variances)
+        cv <- rowSums((s$gamma * g)^2)
+      tot <- tot + cv
+    }
     return(tot)
   }
   if (cls == "Tree") {

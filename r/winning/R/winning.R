@@ -100,6 +100,9 @@ win_probabilities_factor <- function(mu, V, D, nodes = NULL, points = 501) {
   # column-major lattice, D = c(1, 9) pricing as c(1, 9, 1, 9) (#319)
   D <- .as_idio(D, N)
   sd <- sqrt(D)
+  # the origin is a gauge: at a common offset of 1e15 the lattice
+  # collapsed to the float spacing and the race refused (#477)
+  mu <- .translated_home(as.numeric(mu), D)
   M <- matrix(mu, nrow(F), N, byrow = TRUE) + F %*% t(V)
   pad <- 8 * max(sd)
   lo <- min(M) - pad; hi <- max(M) + pad
@@ -159,6 +162,18 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
   F <- law$F; W <- law$W
   floor_ <- max(1e-9, 1e-4 / N)
   ident <- p > floor_
+  # A pair has one contrast and the minority exposes it: the tail mask
+  # (5e-5 at N = 2) dropped a 1e-6 minority and certified an iterate that
+  # repriced it at 3e-19 (#727). With N > 2, one identified share carries
+  # no contrast: [1, 1.1e-5, 5.7e-18] was certified on the favourite
+  # alone (#588). Score every share above 1e-15, else every share, as
+  # python does.
+  if (N == 2L) {
+    ident <- rep(TRUE, N)
+  } else if (sum(ident) < 2L) {
+    ident <- p > 1e-15
+    if (sum(ident) < 2L) ident <- rep(TRUE, N)
+  }
   if (any(V != 0)) {
     sd_tot2 <- D + rowSums(V^2)
     # a warm start: its own exhaustion is not the caller's (#538)

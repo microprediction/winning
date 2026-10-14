@@ -148,3 +148,60 @@ test_that("scalar block loading equals the expanded vector", {
                block_race_probabilities(mu, cl, rep(.3, 4), D, points = 129),
                tolerance = 0)
 })
+
+# The structured lattices were laid at the caller's origin: at a common
+# offset of 1e13 the block, nested and tree races raised a mass defect
+# (zero mass at 1e15) and their Jacobians came back zero. The contrasts
+# below are exact in binary64 (#477, python's blocks._home).
+test_that("a common ability offset reaches no structured lattice (#477)", {
+  base <- c(-1, 0, 1); cl <- c(1, 2, 3); ld <- c(.3, .2, .4); D <- c(1, 1, 1)
+  cp <- c(.3, -.1, -.2); par <- c(4, 4, 5, 5, 0); st <- c(.5, .5, .3, .3, 0)
+  f <- list(
+    function(x) block_race_probabilities(x, cl, ld, D),
+    function(x) nested_race_probabilities(x, cl, ld, D, coupling = cp),
+    function(x) tree_race_probabilities(x, cl, ld, D, par, st),
+    function(x) block_race_jacobian(x, cl, ld, D),
+    function(x) nested_race_jacobian(x, cl, ld, D, coupling = cp),
+    function(x) tree_race_jacobian(x, cl, ld, D, par, st),
+    function(x) win_probabilities_factor(x, matrix(cp, 3, 1), D))
+  for (c in c(1e12, 1e13, 1e15)) {
+    x <- base + c
+    expect_identical(x - x[2], base)
+    for (g in f) expect_equal(g(x), g(base), tolerance = 1e-14)
+  }
+})
+
+# Only gamma g is identified: coupling 1e308 g with gamma 0.8e-308
+# overflowed g %*% node before the tiny gamma was applied (forward and
+# Jacobian failed on a NaN), and the inverse's variance helper formed
+# 0 * Inf from 1e307 (#722).
+test_that("nested reciprocal coupling scaling is the same race (#722)", {
+  mu <- c(-.4, -.1, .2, .5, .8); cl <- c(0, 0, 1, 1, 2)
+  ld <- c(.4, .2, .3, .5, .1); D <- c(.7, .8, .9, 1, 1.1)
+  g <- c(-.4, .1, .4, -.2, .1)
+  mk <- function(c) Nested(cl, ld, D, g * c, 0.8 / c)
+  t0 <- race_probabilities(mu, structure = mk(1))
+  J0 <- nested_race_jacobian(mu, cl, ld, D, g, 0.8)
+  a0 <- abilities_from_race(t0, structure = mk(1))
+  for (c in c(1e307, 1e308)) {
+    expect_equal(race_probabilities(mu, structure = mk(c)), t0,
+                 tolerance = 1e-14)
+    expect_equal(nested_race_jacobian(mu, cl, ld, D, g * c, 0.8 / c), J0,
+                 tolerance = 1e-14)
+    expect_equal(abilities_from_race(t0, structure = mk(c)), a0,
+                 tolerance = 1e-10)
+  }
+})
+
+# Ordinary inputs near the #477/#722 changes keep main's values (9b29ddef).
+test_that("ordinary nested races are unchanged (#477, #722)", {
+  mu <- c(-.4, -.1, .2, .5, .8); cl <- c(0, 0, 1, 1, 2)
+  ld <- c(.4, .2, .3, .5, .1); D <- c(.7, .8, .9, 1, 1.1)
+  g <- c(-.4, .1, .4, -.2, .1)
+  ref <- c(0.38432227045253309, 0.23696573454430217, 0.18328372050474345,
+           0.12254165848578566, 0.072886616012635769)
+  expect_equal(nested_race_probabilities(mu, cl, ld, D, coupling = g,
+                                         gamma = .8), ref, tolerance = 1e-12)
+  expect_equal(nested_race_probabilities(mu + 3.7, cl, ld, D, coupling = g,
+                                         gamma = .8), ref, tolerance = 1e-12)
+})

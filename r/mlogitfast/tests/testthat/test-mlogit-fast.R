@@ -500,3 +500,28 @@ test_that("the tilt curvature stays >= 1 at far-tail contrasts (#716)", {
   old <- exp(dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE))
   expect_identical(.mills_gap(a)$lam, old)
 })
+
+test_that("the binary closed form survives an extreme loading scale (#720)", {
+  # sum(d^2) overflowed at loadings 1e154 (Phi(1) priced as 0.5) and s^3
+  # at 9e153 (a zero loading score); the exact score of a chosen loading
+  # is -lambda(1) / (2a) (python's likelihood._choice_pair)
+  lam <- exp(dnorm(1, log = TRUE) - pnorm(1, log.p = TRUE))
+  for (a in c(9e153, 1e154, 1e300)) {
+    tr <- .mnp_pair(matrix(c(0, sqrt(2) * a), 1, 2),
+                    matrix(c(0, a, 0, a), 2, 2), 2L)
+    expect_equal(exp(tr$logp), pnorm(1), tolerance = 1e-14)
+    expect_equal(tr$GV[1, 2, ], rep(-lam / (2 * a), 2), tolerance = 1e-12)
+    expect_equal(tr$GV[1, 1, ], rep(lam / (2 * a), 2), tolerance = 1e-12)
+  }
+})
+
+test_that("an ordinary binary row keeps its closed form (#720)", {
+  tr <- .mnp_pair(matrix(c(.3, -.2, .1, .5), 2, 2),
+                  matrix(c(0, .7, 0, -.4), 2, 2), c(1L, 2L))
+  expect_equal(unname(unlist(tr)), c(
+    -0.59985606892589227, -0.40585832547984518, 0.44312230917883494,
+    -0.33527209333678759, -0.44312230917883494, 0.33527209333678759,
+    0.023410235201900716, 0.061993707824538072, -0.023410235201900716,
+    -0.061993707824538072, -0.013377277258228982, -0.035424975899736047,
+    0.013377277258228982, 0.035424975899736047), tolerance = 1e-14)
+})

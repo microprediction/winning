@@ -87,7 +87,7 @@ function _topk_grid(mu, sd, k, fn, points; delta = 1e-12)
     z = (x .- mu') ./ sd'                       # (L, n)
     b = fn(z)
     return (x = x, dx = x[2] - x[1], z = z, S = b.S, f = b.f,
-            fp = b.fp, F = _lower_cdf(fn, z, b.S), Sc = _count_survival(fn, b.S))
+            fp = b.fp, F = _lower_cdf(fn, z, b.S), Sc = _count_survival(fn, z, b.S))
 end
 
 """The min-Gumbel's lower-tail CDF, 1 - exp(-exp(c z - gamma)), taken as
@@ -99,18 +99,42 @@ own lower tail where S > 1/2: 1 - S rounded a representable last place
 to exactly zero (mu = [-35, 0, 0]: 0 for 2.05e-39, #710, as R and
 python). Every other base keeps 1 - S, bit for bit."""
 function _lower_cdf(fn, z, S)
+    S = _unfloored(fn, z, S)
     F = clip01(1 .- S)
     if fn === base_gumbel
         lower = S .> 0.5
         any(lower) && (F[lower] .= clip01(_gumbel_cdf(z[lower])))
+    elseif fn === base_normal
+        # symmetric: the CDF is the reflected survival, at full relative
+        # precision where 1 - S cancels (R's and python's #511)
+        lower = S .> 0.5
+        any(lower) && (F[lower] .= clip01(_unfloored(fn, -z[lower],
+                                                     fn(-z[lower]).S)))
     end
     return F
 end
 
+"""S with the normal base's TINY floor replaced by its exact log
+survival (R's .unfloored, python's _unfloored, #502): used as a count
+probability the floor fabricated rare-place mass. Other bases, and
+every point above the floor, are returned as given."""
+function _unfloored(fn, z, S)
+    fn === base_normal || return S
+    low = S .<= TINY
+    any(low) || return S
+    S = copy(S)
+    S[low] .= exp.(max.(_log_sf_normal.(z[low]), -1e300))
+    return S
+end
+
 """The survival rows the count programs pair with `_lower_cdf`: S itself
 where F was taken from the base's own CDF (so neither is a cancelled
-1 - x), otherwise `nothing`, which keeps the old 1 - F."""
-_count_survival(fn, S) = fn === base_gumbel ? clip01(S) : nothing
+1 - x), otherwise `nothing`, which keeps the old 1 - F. The normal and
+Gumbel bases take the error-bounded two-direction deconvolution (#511,
+#710); logistic and Laplace keep the one-direction rule."""
+_count_survival(fn, z, S) = fn === base_gumbel ? clip01(S) :
+                            fn === base_normal ? clip01(_unfloored(fn, z, S)) :
+                            nothing
 
 function _count_distribution(F, S = nothing)
     # S, when given, is used in place of 1 - F (accurate where that cancels)
@@ -465,11 +489,13 @@ function _bottomk_independent(mu, sd, k, fn, points)
     x = collect(range(lo, hi, length = points))
     z = (x .- mu') ./ sd'
     b = fn(z)
-    G = clip01(b.S)
+    G = clip01(_unfloored(fn, z, b.S))
     # survivals in the role of the CDFs and the CDFs, taken from the
     # base's own lower tail where it has one, in the role of the
-    # survivals: 1 - S rounded a Gumbel last place to zero (#710)
-    Fc = fn === base_gumbel ? _lower_cdf(fn, z, b.S) : nothing
+    # survivals: 1 - S rounded a Gumbel last place to zero (#710), and
+    # the normal's (#511)
+    Fc = (fn === base_gumbel || fn === base_normal) ?
+         _lower_cdf(fn, z, b.S) : nothing
     C = _count_distribution(G, Fc)
     cdf = Fc === nothing ? _loo_cdf(C, G, k) : _loo_cdf_bounded(C, G, k, Fc)
     dens = b.f' ./ sd

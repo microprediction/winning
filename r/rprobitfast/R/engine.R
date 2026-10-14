@@ -410,7 +410,17 @@
   k <- choice; j <- 3L - choice
   cc <- mu[cbind(rows, k)] - mu[cbind(rows, j)]
   d <- V[k, , drop = FALSE] - V[j, , drop = FALSE]
-  s <- sqrt(2 + rowSums(d^2))
+  s2 <- 2 + rowSums(d^2)
+  s <- sqrt(s2)
+  bad <- !is.finite(s2)
+  if (any(bad)) {
+    # finite loadings whose squares overflow the sum: the norm in units
+    # of the largest term. Loadings [1e154, 1e154] priced Phi(1) as 0.5
+    # (#720, python's _choice_pair); ordinary rows keep the plain sum.
+    A <- cbind(abs(d[bad, , drop = FALSE]), 1, 1)
+    mx <- apply(A, 1L, max)
+    s[bad] <- mx * sqrt(rowSums((A / mx)^2))
+  }
   zz <- cc / s
   logp <- pnorm(zz, log.p = TRUE)
   lam <- exp(dnorm(zz, log = TRUE) - logp)
@@ -419,7 +429,15 @@
   dmu[cbind(rows, j)] <- -lam / s
   GV <- array(0, c(Tn, 2L, r))
   if (r > 0L) {
-    gd <- (-lam * cc / s^3) * d
+    s3 <- s^3
+    gd <- (-lam * cc / s3) * d
+    plain <- is.finite(s3) & s3 > .Machine$double.xmin
+    if (!all(plain)) {
+      # s^3 overflowed at loadings 9e153 and the score came back zero
+      # (#720): there it is -(lam z / s) (d / s), never forming s^3
+      gd[!plain, ] <- (-(lam * zz / s))[!plain] *
+        (d[!plain, , drop = FALSE] / s[!plain])
+    }
     for (cl in seq_len(r)) {
       GV[cbind(rows, k, cl)] <- gd[, cl]
       GV[cbind(rows, j, cl)] <- -gd[, cl]
