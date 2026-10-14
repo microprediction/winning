@@ -710,7 +710,7 @@ export function mcBatch(mu, L, r, batch, counts) {
    covariance and its own O(n^3/6) Cholesky or sweep. That per-alternative
    structure is the point the demo makes: pricing the whole field costs n
    times a single-alternative price, before a single draw is taken. */
-import { ndtr, npdf } from "./core.mjs";
+import { ndtr, npdf, logndtr } from "./core.mjs";
 
 
 function diffScale(S, d) {
@@ -777,12 +777,32 @@ export function ghkSampleOne(prob, reps, r) {
       const q = ndtr(-a);
       w *= q;
       if (!(q > 0)) { w = 0; break; }
-      const v = (1 - r.u()) * q;
-      e[k] = -invNormal(Math.min(Math.max(v, 1e-300), 1 - 1e-15));
+      const u1 = 1 - r.u(), v = u1 * q;
+      // below 1e-300 the draw is inverted from its LOG: flooring v there
+      // put e[k] inside the truncation (e <= a), so a correlated field
+      // whose first step had q = 2.9e-316 priced 8.6e-322 for >= 2.9e-316
+      // (#555 residual)
+      e[k] = v >= 1e-300 ? -invNormal(Math.min(v, 1 - 1e-15))
+        : -invNormalFromLog(Math.log(u1) + logndtr(-a));
     }
     sum += w;
   }
   return sum;
+}
+
+/* Phi^{-1}(exp(lp)) for a lower-tail log probability lp < log 0.02425:
+   Acklam's tail branch reads p only through sqrt(-2 log p), so it takes
+   the log directly; one Newton step on log Phi refines it. */
+function invNormalFromLog(lp) {
+  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184,
+             -2.54973253934373, 4.37466414146497, 2.93816398269878];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143,
+             3.75440866190742];
+  const q = Math.sqrt(-2 * lp);
+  const z = (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+            ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  const lz = logndtr(z);
+  return z - (lz - lp) * Math.exp(lz - (-0.5 * z * z - 0.5 * Math.log(2 * Math.PI)));
 }
 
 export function mendellElstonOne(mu, C, i) {

@@ -2780,5 +2780,20 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   holds("Gumbel last place matches Plackett-Luce at gaps 20..35 (#710)", worst < 1e-6, worst.toExponential(2));
 }
 
+{
+  // a first truncation with q = 2.9e-316 floored its draw at 1e-300, which
+  // put e[0] inside the truncation and priced the path 8.6e-322 (#555
+  // residual). ndtr(-38) ndtr(5) <= P <= ndtr(-38).
+  const mu = [0, -38, -37.5], C = [[0, 0, 0], [0, 1, 1], [0, 1, 1.01]];
+  const lo = core.ndtr(-38) * core.ndtr(5), hi = core.ndtr(-38);
+  let ok = true, got = [];
+  for (const seed of [1, 2, 3, 7, 19]) {
+    const w = demo.ghkSampleOne(demo.ghkPrepareOne(mu, C, 0), 1, demo.rng(seed));
+    got.push(w.toExponential(3));
+    ok = ok && w >= lo * (1 - 1e-6) && w <= hi * (1 + 1e-6);
+  }
+  holds("GHK keeps a 2.9e-316 correlated path (#555)", ok, got.join(", "));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
