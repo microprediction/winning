@@ -3,7 +3,7 @@ import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
          asFactorNodes, asWeights, asFactorLaw, asIterations, asTolerance,
          asFiniteVector, rescaledTarget, canonicalBasis, asPoints, gaugeCenter } from "./core.mjs";
-import { invNormalRational } from "./races.mjs";
+import { invNormalRational, translatedHome } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -81,7 +81,24 @@ function blockArgs(mu, cluster, loading, D, where) {
   // rank zero is the independent race: as a zero rank-one loading, not
   // the rank >= 3 route's 8192 identical empty nodes (2.2 s vs 4 ms, #508)
   if (L.length && L[0].length === 0) L = L.map(() => [0]);
-  return { mu, cluster: Array.from(cluster), L, D: asIdio(D, n, "D") };
+  L = oneClusterGauge(L, cluster);
+  D = asIdio(D, n, "D");
+  // the origin is a gauge: at a common offset of 1e13 the absolute grid
+  // collapsed below the float spacing and every grammar threw (or its
+  // Jacobian came back 0) though the contrasts were exact (#477)
+  return { mu: translatedHome(mu, D), cluster: Array.from(cluster), L, D };
+}
+
+/* With ONE cluster its loading shock is shared by every contestant and
+   cancels from every comparison, so only the centred loadings are
+   identified: a common c in every row widened the lattice until c = 40
+   threw a 2.5% mass defect, and the Jacobian moved by 0.074 at c = 50
+   (#471). Scale-safe centring (core's gaugeCenter); never per cluster
+   when there are several, where a cluster's common part is a real
+   between-cluster effect. */
+function oneClusterGauge(L, cluster) {
+  for (let i = 1; i < cluster.length; i++) if (cluster[i] !== cluster[0]) return L;
+  return gaugeCenter(L);
 }
 
 /* A tree is a tree: one root, every parent an existing node, no cycles,
@@ -421,6 +438,50 @@ export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   return checkedMass(p, "block race");
 }
 
+/* (V, D) of a two-runner Blocks, Nested or Tree race as a factor model
+   with the same covariance, after the grammar's own doors (port of
+   python's structures._pair_factor, #86): one column block per cluster
+   holding the member loadings, Nested's coupling scaled by gamma, and one
+   column per tree node holding its strength for every runner beneath. */
+export function pairFactor(mu, s) {
+  const where = `${s.kind} race`;
+  if (s.kind === "Tree") {
+    const a = blockArgs(mu, treeCluster(s), s.loading, s.D, where);
+    if (a.L[0].length > 1)
+      throw new Error("tree races take scalar (rank-one) leaf-cluster loadings; rank-r " +
+                      "leaf effects are supported by the block grammar only.");
+    const inv = clusterIndex(a.cluster);
+    const nC = Math.max(...inv) + 1;
+    const tv = validateTree(s.parent, s.strength, nC, where);
+    const nT = tv.parent.length;
+    const V = a.mu.map((_, i) => {
+      const row = new Array(nC + nT).fill(0);
+      row[inv[i]] = a.L[i][0];
+      for (let u = inv[i]; tv.parent[u] >= 0; u = tv.parent[u])
+        row[nC + tv.parent[u]] = tv.strength[tv.parent[u]];
+      return row;
+    });
+    return { V, D: a.D };
+  }
+  if (s.kind !== "Blocks" && s.kind !== "Nested") throw new Error("unknown structure " + s.kind);
+  const a = blockArgs(mu, s.cluster, s.loading, s.D, where);
+  const inv = clusterIndex(a.cluster), r = a.L[0].length;
+  const nC = Math.max(...inv) + 1;
+  const V = a.L.map((li, i) => {
+    const row = new Array(nC * r).fill(0);
+    for (let j = 0; j < r; j++) row[inv[i] * r + j] = li[j];
+    return row;
+  });
+  if (s.kind === "Nested") {
+    asGamma(s.gamma, "nestedRaceProbabilities");
+    if (s.coupling != null && s.gamma !== 0) {
+      const g = canonicalCoupling(asLoadings(s.coupling, 2, "coupling"));
+      g.forEach((gi, i) => { for (const v of gi) V[i].push(s.gamma * v); });
+    }
+  }
+  return { V, D: a.D };
+}
+
 function asGamma(gamma, where) {
   if (typeof gamma !== "number" || !Number.isFinite(gamma))
     throw new Error(`${where}: gamma must be a finite number; got ${typeof gamma === "string" ? JSON.stringify(gamma) : String(gamma)}`);
@@ -716,6 +777,7 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
   if (coupling == null || gamma === 0)
     return blockRaceJacobian(mu, cluster, loading, D, { points, qa });
   mu = asAbilities(mu);
+  mu = translatedHome(mu, asIdio(D, mu.length, "D"));     // before the node shifts (#477)
   // The shared contract, as python's atleast_2d-plus-transpose does
   // it: a (rank, n) coupling is the SAME race as (n, rank). This
   // normalised by hand and never transposed, so the transposed
@@ -800,11 +862,12 @@ export function treeRaceJacobian(mu, cluster, loading, D, parent, strength, opts
 }
 
 /* sqrt(median(D_i + |loading_i|^2)): the block race's contrast scale */
-export function blockScale(loading, D, n) {
+export function blockScale(loading, D, n, cluster = null) {
   // through the SAME shape contract the forwards use: indexing raw
   // arguments made a scalar D, a scalar or (1, n) loading, or a scalar
   // coupling NaN, and the inverse refused its own first iterate (#597)
-  const L = asLoadings(loading, n, "loading");
+  let L = asLoadings(loading, n, "loading");
+  if (isVector(cluster) && cluster.length === n) L = oneClusterGauge(L, cluster);   // #471
   const Dv = asIdio(D, n, "D");
   const tot = [];
   for (let i = 0; i < n; i++) tot.push(Dv[i] + L[i].reduce((a, b) => a + b * b, 0));
@@ -837,7 +900,7 @@ export function abilitiesFromBlockRace(pTarget, cluster, loading, D, opts = {}) 
   // the field's own scale: the start, the fixed-point step and the Newton
   // trust radius were absolute numbers, so loading -> c loading,
   // D -> c^2 D missed by 0.40 of a share at c = 1e-3 (#100, as python)
-  const scale = blockScale(loading, D, n);
+  const scale = blockScale(loading, D, n, cluster);
   const residualAt = m => {
     let pv = forward(m).map(v => Math.max(v, TINY));
     const sv = pv.reduce((a, b) => a + b, 0);

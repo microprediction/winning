@@ -6,7 +6,8 @@ import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asAbilities,
 import { raceProbabilities, abilitiesFromRace, BASES, SPANS,
          forwardGrid, factorRule, requireWholeRule,
          collapseStructure, translatedHome } from "./races.mjs";
-import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster } from "./blocks.mjs";
+import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster,
+         pairFactor } from "./blocks.mjs";
 
 export function raceJacobian(mu, opts = {}) {
   checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
@@ -23,6 +24,11 @@ export function raceJacobian(mu, opts = {}) {
       throw new Error(`${s.kind} races do not support base: the ` +
         "block/nested/tree kernels are Gaussian hard races on their own " +
         "lattice windows. Use structure Factor (or V/D).");
+    if (isVector(mu) && mu.length === 2) {
+      // the forward prices a pair as its factor equivalent (#86)
+      const f = pairFactor(mu, s);
+      return raceJacobian(mu, { V: f.V, D: f.D, points });
+    }
     if (s.kind === "Blocks")
       return blockRaceJacobian(mu, s.cluster, s.loading, s.D, { points, qa });
     if (s.kind === "Nested")
@@ -38,6 +44,14 @@ export function raceJacobian(mu, opts = {}) {
   // typed mu broke the default loadings (#334)
   mu = asAbilities(mu);
   const n = mu.length;
+  if (base === "normal" && n === 2) {
+    // the forward prices a normal pair in closed form, so its Jacobian is
+    // the closed form's: the lattice quotient rule differentiated a map
+    // the forward does not use (python's race_jacobian, #86)
+    const d = -raceProbabilities(mu, { V: c.V, D: c.D, F, W, base, points,
+                                       returnSlopes: true }).slopes[0];
+    return [[-d, d], [d, -d]];
+  }
   const Dv = asIdio(c.D, n);
   mu = translatedHome(mu, Dv);                     // as the forward (#477)
   return raceJacobianExplicit(mu, c.V, Dv, base, points, F, W);
