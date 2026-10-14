@@ -455,3 +455,21 @@ end
     # a field near the origin is left exactly where it is
     @test winning._translated_home(mu, D) === mu
 end
+
+@testset "a two-runner normal race is its exact contrast (#86)" begin
+    # the lattice priced a 20-sd pair tail at 0.0105x its exact 1.04e-45
+    exact = Dict(9 => 9.830802207714438e-11, 14 => 2.091912803889677e-23,
+                 20 => 1.0442437918812723e-45)
+    for (g, e) in exact
+        p = race_probabilities([0.0, g]; D = [1.0, 1.0])
+        @test abs(p[2] / e - 1) < 1e-12
+        @test race_probabilities([g, 0.0]; D = [1.0, 1.0]) == reverse(p)
+    end
+    # a finite loading contrast whose square overflows
+    p = race_probabilities([0.0, 1e155]; V = reshape([1e155, -1e155], 2, 1),
+                           D = [1.0, 1.0])
+    @test abs(p[1] - winning.ndtr(0.5)) < 1e-15 && abs(sum(p) - 1) < 1e-15
+    # slopes: dp_i/dmu_i = -phi(u)/sd_d for both runners
+    r = race_probabilities([0.2, 0.0]; D = [1.0, 1.0], return_slopes = true)
+    @test r.slopes ≈ fill(-winning.npdf(-0.2 / sqrt(2)) / sqrt(2), 2) rtol = 1e-14
+end
