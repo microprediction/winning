@@ -335,6 +335,10 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 # entry is outside 2^-400..2^400 is scaled by that entry's power of two;
 # every other row is untouched.
 .rescale_extreme_rows <- function(V, D, mean, lower, upper) {
+  # every nonzero entry inside 2^-400..2^400: no row is extreme
+  a <- c(abs(V), sqrt(D))
+  if (all(a < 2^400 & (a == 0 | a > 2^-400)))
+    return(list(V = V, D = D, mean = mean, lower = lower, upper = upper))
   m <- sqrt(D)
   if (ncol(V) > 0L) m <- pmax(m, apply(abs(V), 1L, max))
   e <- ifelse(m > 0, floor(log2(m)) + 1, 0)
