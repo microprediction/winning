@@ -358,7 +358,7 @@ function pow4Scale(amax) {
    ipaf: { iterations, converged, residual } (iterations summed over the
    starts run; residual relative to ||P C P||_F; n >= 3 and k >= 1).
    The report also carries contrastResidualMax, and converged requires
-   it to be <= 0.05.
+   it to be <= 1 (a contrast off by its own size).
 
    Every fit carries fit.contrastResidualMax (non-enumerable, so the
    result still spreads as { V, D }), the worst pairwise contrast misfit
@@ -386,8 +386,8 @@ export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
   // the global residual cannot see a small choice-critical contrast (an
   // exact v v' + diag(D) fitted its 0-3 contrast 78x too large while ipaf
   // reported converged at residual 8e-8, #505). Scale free, so measured
-  // in the scaled units; above 0.05 (python's cov= misfit threshold) ipaf
-  // does not claim convergence.
+  // in the scaled units; above CONTRAST_MISFIT = 1 ipaf does not claim
+  // convergence.
   // Non-enumerable on the result, so { ...fit } still spreads as the
   // { V, D } options raceProbabilities takes (and refuses unknown keys
   // of); enumerable inside the opt-in ipaf report.
@@ -417,7 +417,14 @@ export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
   return out;
 }
 
-const CONTRAST_MISFIT = 0.05;
+// A contrast off by its own size. python's cov= path warns at 0.05, but a
+// fit to an ordinary SAMPLE covariance misses its contrasts by 5-15%
+// from sampling noise alone: 0.05 flagged 315 of 480 ipaf fits on a
+// fixed-seed battery of sample covariances of true k-factor models
+// (n = 6-16, T = 500). The largest misfit over 1460 ordinary fits
+// (n up to 30, T down to 60, the demo's dense generators) was 0.70;
+// the #505 fixture is 76.9.
+const CONTRAST_MISFIT = 1.0;
 /* max over pairs of |fitted - target| contrast variance over the target
    contrast variance (python's _worst_contrast_ratio): the target formed
    as anchored differences (C_ii - C_ij) + (C_jj - C_ij), the fit from
