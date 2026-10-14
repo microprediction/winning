@@ -478,10 +478,11 @@ def _rescale_extreme_rows(V, D, mu, lo, up):
     and the coordinate was read as a constant (#720). A row whose
     largest entry is outside 2^-400..2^400 is scaled by the power of two
     of that entry (no rounding); every other row is untouched."""
-    with np.errstate(over="ignore", under="ignore"):
-        m = np.sqrt(D)
-        if V.shape[1]:
-            m = np.maximum(m, np.abs(V).max(axis=1))
+    m = np.sqrt(D)
+    if V.shape[1]:
+        m = np.maximum(m, np.abs(V).max(axis=1))
+    if m.max() < 2.0 ** 400 and m.min() > 2.0 ** -400:
+        return V, D, mu, lo, up
     e = np.frexp(m)[1]
     big = (m > 0) & (np.abs(e) > 400)
     if not big.any():

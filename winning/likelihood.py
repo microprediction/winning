@@ -415,6 +415,9 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
     return lp, dmu, dV
 
 
+_FLOAT_TINY = np.finfo(float).tiny          # smallest normal double
+
+
 def _choice_pair(mu, V, choice, D):
     """J = 2 in closed form: P(k) = Phi(c / s), c = mu_k - mu_j,
     s^2 = D_k + D_j + ||V_k - V_j||^2, with its analytic score. No
@@ -435,9 +438,12 @@ def _choice_pair(mu, V, choice, D):
     # finite loadings whose squares overflow (or underflow) the sum: the
     # norm by max-rescaling instead. Loadings [1e154, 1e154] priced
     # Phi(1) as 0.5 (#720); ordinary rows keep the plain sum.
-    bad = ~np.isfinite(s2) | ((s2 == 0) & (np.any(d != 0, axis=1)
-                                            | (D[k] + D[j] != 0)))
-    if bad.any():
+    if not (s2.max(initial=0.0) < np.inf and s2.min(initial=1.0) > 0.0):
+        bad = ~np.isfinite(s2) | ((s2 == 0) & (np.any(d != 0, axis=1)
+                                                | (D[k] + D[j] != 0)))
+    else:
+        bad = None
+    if bad is not None and bad.any():
         A = np.column_stack([np.abs(d[bad]), np.sqrt(D[k])[bad],
                              np.sqrt(D[j])[bad]])
         mx = A.max(axis=1)
@@ -456,16 +462,20 @@ def _choice_pair(mu, V, choice, D):
     dmu[rows, k] = gc
     dmu[rows, j] = -gc
     # d lp / d d = lam * c * (-1/s^2) * d / s
-    with np.errstate(over="ignore", under="ignore", divide="ignore",
-                     invalid="ignore"):
+    with np.errstate(over="ignore", under="ignore"):
         s3 = sp ** 3
-        plain = (s3 < np.inf) & (s3 > np.finfo(float).tiny)
-        gd = np.where((s > 0) & plain, -lam * c / s3, 0.0)[:, None] * d
-    # s^3 overflowed at loadings 9e153 and the score came back zero
-    # (#720): there it is -(lam z / s) (d / s), never forming s^2 or s^3
-    alt = (s > 0) & ~plain
-    if alt.any():
-        gd[alt] = (-(lam * z / sp))[alt][:, None] * (d[alt] / sp[alt][:, None])
+    if s3.max(initial=0.0) < np.inf and s3.min(initial=1.0) > _FLOAT_TINY:
+        gd = np.where(s > 0, -lam * c / s3, 0.0)[:, None] * d
+    else:
+        # s^3 overflowed at loadings 9e153 and the score came back zero
+        # (#720): there it is -(lam z / s) (d / s), never forming s^3
+        with np.errstate(over="ignore", under="ignore", divide="ignore",
+                         invalid="ignore"):
+            plain = (s3 < np.inf) & (s3 > _FLOAT_TINY)
+            gd = np.where((s > 0) & plain, -lam * c / s3, 0.0)[:, None] * d
+        alt = (s > 0) & ~plain
+        gd[alt] = (-(lam * z / sp))[alt][:, None] * (d[alt]
+                                                     / sp[alt][:, None])
     dV = np.zeros((T, 2, r))
     dV[rows, k] = gd
     dV[rows, j] = -gd
