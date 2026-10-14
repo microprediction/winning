@@ -1209,7 +1209,12 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
         raise ValueError("cov= replaces structure=/V=/D=; pass one only")
     from .core import fit_covariance
     import warnings
-    V, D, F, W, report = fit_covariance(cov, return_report=True)
+    with warnings.catch_warnings():
+        # this function words the contrast warning itself, and says
+        # nothing when will_route sends the call elsewhere
+        warnings.filterwarnings("ignore", message="fit_covariance did not "
+                                "hold", category=RuntimeWarning)
+        V, D, F, W, report = fit_covariance(cov, return_report=True)
     C = np.asarray(cov, dtype=float)
     n = len(C)
     diag = np.diag(C)

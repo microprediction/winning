@@ -377,3 +377,42 @@ def test_in_grammar_small_n_spread_variances_fits_exactly():
     St = Vt @ Vt.T + np.diag(Dt)
     V, D, F, W, rep = fit_covariance(St, return_report=True)
     assert rep["contrast_residual_max"] < 1e-5
+
+
+def test_contrast_residual_warns_on_a_direct_fit_505(monkeypatch):
+    """#505: an exact rank-one-plus-diagonal input whose positive
+    diagonal spans eleven decades, fitted at k=1, m=0, blocks=1, has its
+    0-3 contrast variance off by 77x (contrast_residual_max 76.9) beside
+    a projected residual of 8e-8. The report said so; nothing warned.
+    The fit is unchanged; the cov= front door's 0.05 warning now fires
+    here too, and that front door still warns once, in its own words."""
+    import warnings
+    v = np.array([0, 1, 2, 0.01])
+    Dt = np.array([1e-6, 1e4, 1e5, 2e-6])
+    C = np.outer(v, v) + np.diag(Dt)
+    with pytest.warns(RuntimeWarning, match="nearly singular contrast"):
+        rep = fit_covariance(C, k=1, m=0, blocks=1, return_report=True)[-1]
+    assert rep["contrast_residual_max"] > 50
+    # the same input at the defaults holds every contrast: silent
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        rep = fit_covariance(C, return_report=True)[-1]
+    assert rep["contrast_residual_max"] < 0.05
+    # the cov= front door words the contrast warning itself, once
+    from winning.factor import races
+    import winning.factor.core as core
+    real = core.fit_covariance
+
+    def bad(cov, **kw):
+        return real(cov, **{"k": 1, "m": 0, "blocks": 1, **kw})
+    monkeypatch.setattr(core, "fit_covariance", bad)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        races._fit_cov(C, None, None, None)
+    msgs = [str(x.message) for x in w]
+    assert sum("nearly singular contrast" in m for m in msgs) == 1
+    assert not any(m.startswith("fit_covariance did not") for m in msgs)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        races._fit_cov(C, None, None, None, will_route=True)
+    assert not w
