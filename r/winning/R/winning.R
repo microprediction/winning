@@ -159,6 +159,18 @@ abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
   F <- law$F; W <- law$W
   floor_ <- max(1e-9, 1e-4 / N)
   ident <- p > floor_
+  # A pair has one contrast and the minority exposes it: the tail mask
+  # (5e-5 at N = 2) dropped a 1e-6 minority and certified an iterate that
+  # repriced it at 3e-19 (#727). With N > 2, one identified share carries
+  # no contrast: [1, 1.1e-5, 5.7e-18] was certified on the favourite
+  # alone (#588). Score every share above 1e-15, else every share, as
+  # python does.
+  if (N == 2L) {
+    ident <- rep(TRUE, N)
+  } else if (sum(ident) < 2L) {
+    ident <- p > 1e-15
+    if (sum(ident) < 2L) ident <- rep(TRUE, N)
+  }
   if (any(V != 0)) {
     sd_tot2 <- D + rowSums(V^2)
     # a warm start: its own exhaustion is not the caller's (#538)
