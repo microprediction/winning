@@ -438,7 +438,7 @@ def update_market_full(m, S, p_market, tau2=0.25, invert=None,
     # so a singular or near-singular belief needs no inverse (#650):
     # S_new = S - S L K^-1 L' S, K = I + L' S L, and
     # m_new = m + S L K^-1 T^-1/2 (y - P m)
-    if np.allclose(tau2, tau2[0]):
+    if np.all(tau2 == tau2[0]):
         it = 1.0 / np.sqrt(tau2)
         Lw = P * it[None, :]
         z = it * (y - P @ m)
