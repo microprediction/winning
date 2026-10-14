@@ -512,29 +512,28 @@ function rareWinnerEdges(muLo, muHi, sd, lo, hi, points) {
   for (let k = 0; k < 6; k++) { ws.push(0.5 * width0 * 0.25 ** k); logWs.push(Math.log(ws[k])); }
   const logSd = sd.map(Math.log);
   // log g_i = log f_i + sum_{j != i} log S_j and its slope, at x
-  const terms = (x, m) => {
-    const z = new Array(n), logS = new Array(n), logphi = new Array(n), haz = new Array(n);
+  const z = new Float64Array(n), logS = new Float64Array(n), haz = new Float64Array(n);
+  const terms = (x, m, logg, slope) => {
     let sumLogS = 0, sumHaz = 0;
     for (let i = 0; i < n; i++) {
-      z[i] = (x - m[i]) / sd[i];
-      logS[i] = logndtr(-z[i]);
-      logphi[i] = -0.5 * z[i] * z[i] - LOG_SQRT_2PI;
-      haz[i] = Math.exp(logphi[i] - logS[i]) / sd[i];
-      sumLogS += logS[i]; sumHaz += haz[i];
+      const zi = (x - m[i]) / sd[i], ls = logndtr(-zi);
+      const h = Math.exp(-0.5 * zi * zi - LOG_SQRT_2PI - ls) / sd[i];
+      z[i] = zi; logS[i] = ls; haz[i] = h;
+      sumLogS += ls; sumHaz += h;
     }
-    const logg = new Array(n), slope = new Array(n);
     for (let i = 0; i < n; i++) {
-      logg[i] = logphi[i] - logSd[i] + sumLogS - logS[i];
-      slope[i] = -z[i] / sd[i] - sumHaz + haz[i];
+      logg[i] = -0.5 * z[i] * z[i] - LOG_SQRT_2PI - logSd[i] + sumLogS - logS[i];
+      if (slope) slope[i] = -z[i] / sd[i] - sumHaz + haz[i];
     }
-    return { logg, slope };
   };
+  const gAt = new Float64Array(n), sAt = new Float64Array(n);
+  const inner = ws.map(() => new Float64Array(n));
   const bad = (edge, m, sign) => {
     // sign +1: right edge (the integrand must FALL outward), -1: left
-    const at = terms(edge, m);
-    const inner = ws.map(w => terms(edge - sign * w, m).logg);
+    terms(edge, m, gAt, sAt);
+    ws.forEach((w, k) => terms(edge - sign * w, m, inner[k], null));
     for (let i = 0; i < n; i++) {
-      const g = at.logg[i], out = sign * at.slope[i];
+      const g = gAt[i], out = sign * sAt[i];
       if (out >= 0) return true;
       const tail = g - Math.log(Math.max(-out, 1e-300));
       let cmax = -Infinity;
