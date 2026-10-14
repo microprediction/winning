@@ -2341,15 +2341,16 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
     const a = classic.dividendImpliedAbility([2, 4, scratch], d);
     accepts(`dividends [2, 4, ${scratch}] round-trip through abilityImpliedStatePrices (#662)`,
             () => classic.abilityImpliedStatePrices(a, d),
-            p => p[2] === 0 && maxAbs(p, [0.6553529940305943, 0.3446470059694057, 0]) < 1e-12,
+            p => p[2] === 0 && maxAbs(p, [0.6666650774147869, 0.33333492258521313, 0]) < 1e-12,
             p => String(p));
   }
   accepts("one live runner and a scratch price exactly [1, 0] (#662)",
           () => classic.abilityImpliedStatePrices(classic.dividendImpliedAbility([2, Infinity], d), d),
           p => p[0] === 1 && p[1] === 0, p => String(p));
   // python: ability_implied_state_prices([-0.4, 0.3], d) (the support is
-  // wider than L here, so this is the clustered branch, not the plain one)
-  const live = [0.5367196595728523, 0.4632803404271477];
+  // wider than L here: since #725 the exact primitive, not the clustered
+  // branch; these reference values were regenerated from python then)
+  const live = [0.5393127261020825, 0.46068727389791747];
   for (const at of [0, 1, 2]) {
     const a = [-0.4, 0.3]; a.splice(at, 0, Infinity);
     accepts(`a scratch at index ${at} keeps shape and order (#662)`,
@@ -2363,8 +2364,8 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
           p => maxAbs(p, classic.statePricesFromOffsets(d200, [0, 0.7, 1.3, 2.1])) < 1e-15);
   accepts("an all-live field wider than the lattice matches python (#662)",
           () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], classic.skewNormalDensity(40, 0.1, { a: 0 })),
-          p => maxAbs(p, [0.28573759854465663, 0.2577847581738416, 0.23941631079393647,
-                          0.2170613324875653]) < 1e-14, p => String(p));
+          p => maxAbs(p, [0.2857735535103666, 0.2602754063229543, 0.23973136959104835,
+                          0.21421967057563077]) < 1e-14, p => String(p));
   accepts("-Infinity runners split the pot, +Infinity alone is uniform (#662)",
           () => [classic.abilityImpliedStatePrices([-Infinity, 0.3, -Infinity], d),
                  classic.abilityImpliedStatePrices([Infinity, Infinity], d)],
@@ -2372,11 +2373,11 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
   const d50 = classic.skewNormalDensity(50, 0.1, { a: 0 });
   accepts("a far-separated field is clustered as python (#662)",
           () => classic.abilityImpliedStatePrices([-40, -39, 40, 41, 42.5], d50),
-          p => maxAbs(p, [0.5277153991928714, 0.472284600798019, 3.4847031497493502e-12,
-                          3.072512437648325e-12, 2.5524467876884387e-12]) < 1e-14, p => String(p));
+          p => maxAbs(p, [0.5281742859903972, 0.47182571400660933, 1.794177037061157e-12,
+                          8.833768045516132e-13, 3.158564164960598e-13]) < 1e-14, p => String(p));
   accepts("a no-chance runner far behind prices 0 (#662)",
           () => classic.abilityImpliedStatePrices([0, 0.5, 400], d50),
-          p => p[2] === 0 && maxAbs(p, [0.5138576995988393, 0.4861423004011607, 0]) < 1e-14);
+          p => p[2] === 0 && maxAbs(p, [0.514087142995957, 0.485912857004043, 0]) < 1e-14);
   accepts("unit rescales the abilities (#662)",
           () => classic.abilityImpliedStatePrices([-0.08, 0.06, Infinity], d, { unit: 0.2 }),
           p => maxAbs(p, classic.abilityImpliedStatePrices([-0.4, 0.3, Infinity], d)) === 0);
@@ -3014,6 +3015,28 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
           () => races.raceProbabilities([0, 1.4e308], { V: [[7e307, 7e307], [-7e307, -7e307]], D: [1, 1] }),
           p => Math.abs(p[0] - core.ndtr(Math.SQRT1_2)) < 1e-15 && Math.abs(p[1] - core.ndtr(-Math.SQRT1_2)) < 1e-15,
           p => String(p));
+}
+
+{
+  // classic extended forward: once the support width W reaches L every
+  // nonzero offset "left" the lattice, so an ordinary field was dilated
+  // and clustered. The default L=500, unit=0.01 normal (W = 1000) moved
+  // an 8:4:2:1 round trip 0.0171 off; only offsets past L - 2 hang (#725)
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const d = classic.skewNormalDensity(500, 0.01, { a: 0 });
+  const t = [8, 4, 2, 1].map(x => x / 15);
+  const keep = console.warn; console.warn = () => {};
+  let a;
+  try { a = classic.dividendImpliedAbility(t.map(x => 1 / x), d); } finally { console.warn = keep; }
+  accepts("an 8:4:2:1 field on the default L=500 normal prices on the exact primitive (#725)",
+          () => classic.abilityImpliedStatePrices(a, d),
+          p => maxAbs(p, classic.statePricesFromOffsets(d, a)) < 1e-15 && maxAbs(p, t) < 2e-6,
+          p => String(p));
+  // python's (and R's pinned) values on the same inputs, W = 100 > L = 50
+  accepts("a W > L skew-normal field matches python (#725)",
+          () => classic.abilityImpliedStatePrices([-0.5, 0, 0.3, 2.1, 6], classic.skewNormalDensity(50, 0.1, { a: 1 }), { unit: 0.1 }),
+          p => maxAbs(p, [0.5672982284762254, 0.27027574567228596, 0.16087563506704702,
+                          0.001550390784063666, 3.7779460993255496e-13]) < 1e-14, p => String(p));
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

@@ -394,7 +394,19 @@ function extendedStatePrices(density, offsets, maxDepth, unitRatio) {
   // lattice (or pass lowHigh's exact range)? See calibration.R.
   const sLo = supp[0] - L, sHi = supp[supp.length - 1] - L;
   const left = [], right = [];
+  // Once W reaches L the support fills the lattice (the standard L=500,
+  // unit=0.01 normal has W = 1000) and every nonzero offset "leaves" it,
+  // so this sent an ordinary field to the dilating cluster path, 0.017
+  // off (#725). The exact primitive piles mass leaving the left edge at
+  // -L and drops it past +L, which keeps who wins up to edge dead heats:
+  // for such a density only an offset past the representable range
+  // L - 2 hangs, as python and R.
   co.forEach((o, i) => {
+    if (W >= L) {
+      if (o < -(L - 2)) left.push(i);
+      if (o > L - 2) right.push(i);
+      return;
+    }
     if (Math.floor(o) + sLo < -L || o <= -L + 2) left.push(i);
     if (Math.ceil(o) + sHi > L || o >= L - 2) right.push(i);
   });
