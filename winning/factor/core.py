@@ -731,10 +731,15 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     Rfin = _center2(C - Vall @ Vall.T - np.diag(D))
     worst = _worst_contrast_ratio(C, Rfin)
     if worst > _CONTRAST_WARN:
-        # the cov= front door's warning, raised here too: a direct call
-        # reported contrast_residual_max 76.9 on an exact rank-one input
-        # (k=1, m=0, blocks=1) beside a projected residual of 8e-8, and
-        # said nothing (#505). _fit_cov words its own and filters this.
+        # a direct call reported contrast_residual_max 76.9 on an exact
+        # rank-one input (k=1, m=0, blocks=1) beside a projected residual
+        # of 8e-8, and said nothing (#505). The threshold is NOT the cov=
+        # front door's 0.05: on 200 ordinary fits (n 5-80, rank 1-4, half
+        # exact V V' + D, half sample covariances of 4n draws) 76 exceeded
+        # 0.05 and the largest was 0.20, so 0.05 here would mostly flag
+        # sampling noise. 1.0 -- a contrast variance off by its own size
+        # -- separates the pathological case. _fit_cov keeps its own 0.05
+        # warning and filters this one.
         import warnings
         warnings.warn(
             f"fit_covariance did not hold a nearly singular contrast: the "
@@ -1021,8 +1026,9 @@ def fit_tree(C, parent, k: int = 0, max_n: int = 2000):
     return np.zeros((n, 0)), D, tree, report
 
 
-# contrast_residual_max above which a fit warns (races._fit_cov, #505)
-_CONTRAST_WARN = 0.05
+# contrast_residual_max above which a direct fit_covariance call warns
+# (#505); races._fit_cov warns from 0.05 on its own
+_CONTRAST_WARN = 1.0
 
 
 def _worst_contrast_ratio(C, R, cap_n=4000):
