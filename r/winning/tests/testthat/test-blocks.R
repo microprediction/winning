@@ -171,3 +171,24 @@ test_that("a common ability offset reaches no structured lattice (#477)", {
   }
 })
 
+# Only gamma g is identified: coupling 1e308 g with gamma 0.8e-308
+# overflowed g %*% node before the tiny gamma was applied (forward and
+# Jacobian failed on a NaN), and the inverse's variance helper formed
+# 0 * Inf from 1e307 (#722).
+test_that("nested reciprocal coupling scaling is the same race (#722)", {
+  mu <- c(-.4, -.1, .2, .5, .8); cl <- c(0, 0, 1, 1, 2)
+  ld <- c(.4, .2, .3, .5, .1); D <- c(.7, .8, .9, 1, 1.1)
+  g <- c(-.4, .1, .4, -.2, .1)
+  mk <- function(c) Nested(cl, ld, D, g * c, 0.8 / c)
+  t0 <- race_probabilities(mu, structure = mk(1))
+  J0 <- nested_race_jacobian(mu, cl, ld, D, g, 0.8)
+  a0 <- abilities_from_race(t0, structure = mk(1))
+  for (c in c(1e307, 1e308)) {
+    expect_equal(race_probabilities(mu, structure = mk(c)), t0,
+                 tolerance = 1e-14)
+    expect_equal(nested_race_jacobian(mu, cl, ld, D, g * c, 0.8 / c), J0,
+                 tolerance = 1e-14)
+    expect_equal(abilities_from_race(t0, structure = mk(c)), a0,
+                 tolerance = 1e-10)
+  }
+})

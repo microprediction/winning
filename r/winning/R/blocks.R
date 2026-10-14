@@ -288,10 +288,21 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
   for (q in seq_len(nrow(fn))) {
     # average the RAW conditional masses (each near one) and normalize
     # once: normalizing each conditional separately hides a window defect
-    p <- p + fw[q] * .block_max(-(mu + gamma * as.numeric(g %*% fn[q, ])),
+    p <- p + fw[q] * .block_max(-(mu + .coupled_shift(g, gamma, fn[q, ])),
                                 sd, cluster, loading, points, qa)
   }
   .checked_mass(p, "nested race")
+}
+
+# The global shift gamma * (g %*% node), python's blocks._coupled_shift.
+# Only gamma g is identified, and coupling 1e308 g with gamma 0.8e-308
+# overflowed g %*% node before the tiny gamma was applied, so the nested
+# race and its Jacobian failed on a NaN mass (#722). That spelling is kept
+# wherever it is finite; otherwise gamma is absorbed into g first.
+.coupled_shift <- function(g, gamma, node) {
+  s <- as.numeric(g %*% node)
+  if (all(is.finite(s))) return(gamma * s)
+  as.numeric((gamma * g) %*% node)
 }
 
 # Strengths with every COMMON ancestor's set to zero (python's
@@ -584,7 +595,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
   J <- matrix(0, n, n)
   for (q in seq_len(nrow(fn))) {
     J <- J + fw[q] * block_race_jacobian(
-      mu + gamma * as.numeric(g %*% fn[q, ]), cluster, loading, D,
+      mu + .coupled_shift(g, gamma, fn[q, ]), cluster, loading, D,
       points = points, qa = qa)
   }
   J
