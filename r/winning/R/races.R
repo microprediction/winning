@@ -650,10 +650,7 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
                  paste(deparse(window), collapse = " ")), call. = FALSE)
   delta <- .as_delta(delta)                                    # (#445)
-  # the caller's nodes, not a fit's: fit_covariance() returns F, and
-  # testing F after the fit sent every two-runner cov= race to the
-  # lattice instead of the exact pair formula (#86, as python)
-  nodes_given <- !is.null(F) || !is.null(nodes)
+  nodes_given <- !is.null(F) || !is.null(nodes)   # before cov= sets F (#86)
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
