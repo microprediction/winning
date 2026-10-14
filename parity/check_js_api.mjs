@@ -2813,5 +2813,24 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
           v => v.every(x => x > 0 && x < 1));
 }
 
+{
+  // one global 1e-8 * max|dist| tolerance let an unrelated 1e12 distance
+  // hide a -1 distance, a 1 vs 100 asymmetry and a diagonal of 1 (#721)
+  const H = 1e12;
+  rejects(structures.averageLinkage, [[[0, -1, H], [-1, 0, 2], [H, 2, 0]]],
+          "a negative distance is refused next to a 1e12 one (#721)", "negative");
+  rejects(structures.averageLinkage, [[[0, 1, H], [100, 0, 3], [H, 3, 0]]],
+          "a 1 vs 100 asymmetry is refused next to a 1e12 distance (#721)", "symmetric");
+  rejects(structures.averageLinkage, [[[1, 2, H], [2, 0, 3], [H, 3, 0]]],
+          "a diagonal of 1 is refused next to a 1e12 distance (#721)", "diagonal");
+  const Dm = [[0, 1, 4, H], [1 + 1e-12, 0, 2, H], [4, 2, 0, H], [H, H, H, 0]];
+  accepts("tolerance-level asymmetry is still averaged beside a 1e12 distance (#721)",
+          () => structures.asDistanceMatrix(Dm), M => M[0][1] === M[1][0]);
+  const Z1 = structures.averageLinkage(Dm.map(r => r.map(x => x * 1e-200)));
+  const Z2 = structures.averageLinkage(Dm);
+  holds("rescaling keeps acceptance and topology (#721)",
+        Z1.every((r, k) => r[0] === Z2[k][0] && r[1] === Z2[k][1]));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
