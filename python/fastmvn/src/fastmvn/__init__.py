@@ -6,7 +6,7 @@ covariance, and a transparent scipy accelerator.
 """
 from .core import (factorize_covariance, mvn_cdf_fast,
                    mvn_cdf_fast_info)
-from .patch import patch_scipy, unpatch_scipy
+from .patch import last_route, patch_scipy, unpatch_scipy
 
 __all__ = ["mvn_cdf_fast", "mvn_cdf_fast_info", "factorize_covariance",
-           "patch_scipy", "unpatch_scipy"]
+           "patch_scipy", "unpatch_scipy", "last_route"]

@@ -523,3 +523,33 @@ test_that("a small-unit orthant is the same law (#173)", {
     expect_lt(abs(as.numeric(p) - ex), 1e-8)
   }
 })
+
+test_that("a tolerance tighter than the fast rule goes to mvtnorm (#173)", {
+  # abseps = 1e-10 was silently ignored on the structured path: the
+  # trivariate orthant came back 4.9e-6 off. mvtnorm's defaults, and
+  # maxpts alone, still take the fast path bit for bit.
+  rho <- -0.499
+  S <- matrix(rho, 3, 3); diag(S) <- 1
+  ex <- 0.125 + 3 * asin(rho) / (4 * pi)
+  fast <- pmvnorm_fast(upper = rep(0, 3), sigma = S)
+  expect_true(attr(fast, "method") %in% c("factor", "factor-recentered"))
+  for (p in list(
+    pmvnorm_fast(upper = rep(0, 3), sigma = S, abseps = 1e-10, maxpts = 1e7),
+    pmvnorm_fast(upper = rep(0, 3), sigma = S,
+                 algorithm = mvtnorm::GenzBretz(maxpts = 1e7, abseps = 1e-10)),
+    pmvnorm_fast(upper = rep(0, 3), sigma = S, algorithm = mvtnorm::TVPACK()),
+    pmvnorm_fast(upper = rep(0, 3), V = matrix(c(1, -1, 0), 3),
+                 D = c(1, 1, 2), abseps = 1e-10, maxpts = 1e7))) {
+    expect_identical(attr(p, "method"), "mvtnorm-fallback")
+    expect_match(attr(p, "reason"), "tighter than the fast rule")
+  }
+  p <- pmvnorm_fast(upper = rep(0, 3), sigma = S, abseps = 1e-10,
+                    maxpts = 1e7)
+  expect_lt(abs(as.numeric(p) - ex), 1e-8)
+  for (p in list(pmvnorm_fast(upper = rep(0, 3), sigma = S, abseps = 1e-3),
+                 pmvnorm_fast(upper = rep(0, 3), sigma = S, maxpts = 1e7),
+                 pmvnorm_fast(upper = rep(0, 3), sigma = S,
+                              algorithm = mvtnorm::GenzBretz()))) {
+    expect_identical(p, fast)
+  }
+})

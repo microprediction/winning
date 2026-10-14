@@ -113,3 +113,22 @@ def test_patch_honours_tighter_accuracy_692(patched):
     assert multivariate_normal.cdf(x, cov=S, maxpts=10, abseps=1e-2,
                                    releps=1e-2) == pytest.approx(fast,
                                                                  abs=1e-15)
+
+
+def test_patch_records_why_it_fell_back_173(patched):
+    # #173: a fallback for accuracy is silent by design, but must be
+    # visible. last_route() says which route the call took and why.
+    from scipy.stats import multivariate_normal
+    rho = -0.499
+    S = np.full((3, 3), rho)
+    np.fill_diagonal(S, 1.0)
+    x = np.zeros(3)
+    fast = patched.mvn_cdf_fast(upper=x, sigma=S)
+    assert multivariate_normal.cdf(x, cov=S) == fast       # bitwise
+    assert patched.last_route()[0] == "fastmvn"
+    multivariate_normal.cdf(x, cov=S, abseps=1e-8, maxpts=10_000_000)
+    route, why = patched.last_route()
+    assert route == "scipy" and "abseps=1e-08" in why and "1e-05" in why
+    # maxpts alone is an effort cap, not an accuracy target
+    assert multivariate_normal.cdf(x, cov=S, maxpts=10_000_000) == fast
+    assert patched.last_route()[0] == "fastmvn"
