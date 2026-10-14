@@ -278,6 +278,21 @@ function canonicalRule(V, D, maxNodes) {
   return rule;
 }
 
+/* Runner-sized reductions as loops: Math.max(...D) spreads its array into
+   call arguments, and past an engine's argument limit (~125k on node 24)
+   a valid 130,000-runner field threw "Maximum call stack size exceeded"
+   before any integration (#729). Same values as the spread, NaN included. */
+function maxOf(a) {
+  let m = -Infinity;
+  for (let i = 0; i < a.length; i++) m = Math.max(m, a[i]);
+  return m;
+}
+function minOf(a) {
+  let m = Infinity;
+  for (let i = 0; i < a.length; i++) m = Math.min(m, a[i]);
+  return m;
+}
+
 /* mu moved next to the origin when a common offset dwarfs the field
    (python's races._translated_home). The origin is a gauge, but the
    lattice is built in the caller's units: at an offset of 1e15 its
@@ -287,7 +302,7 @@ function canonicalRule(V, D, maxNodes) {
 export function translatedHome(mu, D) {
   const s = mu.slice().sort((a, b) => a - b);
   const off = s[Math.floor(s.length / 2)];
-  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(Math.max(...D));
+  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(maxOf(D));
   return Math.abs(off) > 1e6 * scale ? mu.map(v => v - off) : mu;
 }
 
@@ -395,7 +410,7 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
     if (row[i] < muLo[i]) muLo[i] = row[i];
     if (row[i] > muHi[i]) muHi[i] = row[i];
   }
-  const smax = Math.max(...sd), smin = Math.min(...sd);
+  const smax = maxOf(sd), smin = minOf(sd);
   const G = (x, mus) => {
     let ls = 0;
     for (let i = 0; i < n; i++) ls += Math.log(S((x - mus[i]) / sd[i]));
@@ -420,8 +435,8 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
   if (fn && Array.isArray(fn.span)) pad = Math.max(pad, 0.25 * Math.max(...fn.span) * smax);
   const windowAt = d => {
     const step0 = Math.max(9 * smax, 1e-12);
-    const lo0 = bracket(Math.min(...muLo) - 9 * smax, step0, x => G(x, muLo) <= d, -1);
-    const hi0 = bracket(Math.max(...muHi) + 9 * smax, step0, x => G(x, muHi) >= 1 - d, +1);
+    const lo0 = bracket(minOf(muLo) - 9 * smax, step0, x => G(x, muLo) <= d, -1);
+    const hi0 = bracket(maxOf(muHi) + 9 * smax, step0, x => G(x, muHi) >= 1 - d, +1);
     let a = lo0, b = hi0;
     for (let it = 0; it < 80; it++) {
       const m = 0.5 * (a + b);
@@ -514,14 +529,14 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
   } else {
     let mn = Infinity, mx = -Infinity;
     for (const row of Mall) for (const v of row) { if (v < mn) mn = v; if (v > mx) mx = v; }
-    const smax = Math.max(...sd);
+    const smax = maxOf(sd);
     x = new Array(points);
     const lo = mn - st.left * smax, hi = mx + st.right * smax;
     for (let t = 0; t < points; t++) x[t] = lo + t * (hi - lo) / (points - 1);
   }
   let dx = x[1] - x[0];
   // extreme-sharpness lattice refinement (matching python/R)
-  const smin = Math.min(...sd);
+  const smin = minOf(sd);
   let vmax = 0;
   for (const row of st.V) vmax = Math.max(vmax, Math.sqrt(row.reduce((a, b) => a + b * b, 0)));
   if (vmax / Math.max(smin, 1e-300) > 25 && dx > 0.5 * smin) {
@@ -741,7 +756,7 @@ function validatedRaceTarget(pTarget, targetFloor) {
   // inputs stay bit-identical (#326).
   let s = target.reduce((a, b) => a + b, 0);
   if (!Number.isFinite(s)) {
-    const mx = Math.max(...target);
+    const mx = maxOf(target);
     target = target.map(v => v / mx);
     s = target.reduce((a, b) => a + b, 0);
   }
@@ -866,7 +881,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     iters = it + 1;
     let { resid, dlogp } = cached || sweepForward(mu);
     cached = null;
-    let rmax = Math.max(...resid.map(Math.abs));
+    let rmax = maxOf(resid.map(Math.abs));
     let rrms = Math.sqrt(mean(resid.map(v => v * v)));
     if (rmax < tol) break;
     if (prev && rmax >= prev.rmax && rrms >= prev.rrms) {
@@ -923,7 +938,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
   // whether to warn when the caller did not ask for the diagnostics
   const pf = raceProbabilities(mu, { V, D, F, W, base, points });
   const resid = pf.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
-  let maxLogResidual = Math.max(...resid.map(Math.abs));
+  let maxLogResidual = maxOf(resid.map(Math.abs));
   // exhausted after a step no sweep priced: keep the better of it and the
   // preceding priced iterate, as python's _jacobi_sweeps and core.mjs
   // jacobiSweeps do -- one more sweep returned a residual of 1.66 where

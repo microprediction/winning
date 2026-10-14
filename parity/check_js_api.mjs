@@ -2737,5 +2737,22 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         worst.toExponential(2));
 }
 
+{
+  // Math.max(...D) spread a runner-sized array into call arguments: past
+  // the engine's argument limit (~125k on node 24) a valid field threw
+  // "Maximum call stack size exceeded" in setup (#729)
+  const n = 150000, keep = console.warn;
+  console.warn = () => {};
+  try {
+    accepts("a 150,000-runner equal field prices uniformly (#729)",
+            () => races.raceProbabilities(new Array(n).fill(0), { D: new Array(n).fill(1), points: 3, delta: 1e-4 }),
+            p => p.length === n && p.every(v => Math.abs(v * n - 1) < 1e-6) &&
+                 Math.abs(p.reduce((a, b) => a + b, 0) - 1) < 1e-9);
+    accepts("translatedHome takes a 150,000-entry D (#729)",
+            () => races.translatedHome(new Array(n).fill(1e15), new Array(n).fill(1)),
+            m => m.length === n && m.every(v => v === 0));
+  } finally { console.warn = keep; }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
