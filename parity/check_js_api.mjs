@@ -2852,5 +2852,38 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   } finally { console.warn = keep; }
 }
 
+{
+  // top-k/rank and the Blocks/Nested/Tree lattices were built at the
+  // caller's absolute origin: exactly representable contrasts shifted by
+  // 2^52 (top-k) or 1e15 (structured) threw mass errors and the
+  // Jacobians came back origin-dependent or all zero (#477)
+  const gap = (a, b) => Math.max(...a.flat(Infinity).map((v, i) => Math.abs(v - b.flat(Infinity)[i])));
+  const mu = [-3, -1, 1, 3], sh = mu.map(x => x + 2 ** 52);
+  const o = { D: [1, 1, 1, 1], points: 513 };
+  const keep = console.warn;
+  console.warn = () => {};
+  try {
+    for (const [name, f] of [
+      ["topKProbabilities", x => topk.topKProbabilities(x, 2, o)],
+      ["bottomKProbabilities", x => topk.bottomKProbabilities(x, 2, o)],
+      ["rankProbabilities", x => topk.rankProbabilities(x, o)],
+      ["topKJacobians", x => { const r = topk.topKJacobians(x, 2, o); return [r.Jmu, r.Jsigma]; }],
+    ]) accepts(`${name} is invariant to a 2^52 common shift (#477)`,
+               () => gap(f(mu), f(sh)), g => g < 1e-12, g => g.toExponential(2));
+    const base = [-1, 0, 1], s15 = base.map(x => x + 1e15);
+    const cl = [0, 1, 2], L = [0, 0, 0], D = [1, 1, 1], coupling = [0, 0, 0];
+    const parent = [3, 3, 4, 4, -1], strength = [0, 0, 0, 0, 0];
+    for (const [name, f] of [
+      ["blockRaceProbabilities", x => blocks.blockRaceProbabilities(x, cl, L, D)],
+      ["nestedRaceProbabilities", x => blocks.nestedRaceProbabilities(x, cl, L, D, { coupling })],
+      ["treeRaceProbabilities", x => blocks.treeRaceProbabilities(x, cl, L, D, parent, strength)],
+      ["blockRaceJacobian", x => blocks.blockRaceJacobian(x, cl, L, D)],
+      ["nestedRaceJacobian", x => blocks.nestedRaceJacobian(x, cl, L, D, { coupling })],
+      ["treeRaceJacobian", x => blocks.treeRaceJacobian(x, cl, L, D, parent, strength)],
+    ]) accepts(`${name} is invariant to a 1e15 common shift (#477)`,
+               () => gap(f(base), f(s15)), g => g < 1e-12, g => g.toExponential(2));
+  } finally { console.warn = keep; }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

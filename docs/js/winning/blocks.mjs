@@ -3,7 +3,7 @@ import { TINY, ndtr, npdf, hermite1, mean, solve, interpClamped, checkOpts,
          OPT_HINTS, asLoadings, firstPrimes, asAbilities, asIdio, isVector,
          asFactorNodes, asWeights, asFactorLaw, asIterations, asTolerance,
          asFiniteVector, rescaledTarget, canonicalBasis, asPoints, gaugeCenter } from "./core.mjs";
-import { invNormalRational } from "./races.mjs";
+import { invNormalRational, translatedHome } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -81,7 +81,11 @@ function blockArgs(mu, cluster, loading, D, where) {
   // rank zero is the independent race: as a zero rank-one loading, not
   // the rank >= 3 route's 8192 identical empty nodes (2.2 s vs 4 ms, #508)
   if (L.length && L[0].length === 0) L = L.map(() => [0]);
-  return { mu, cluster: Array.from(cluster), L, D: asIdio(D, n, "D") };
+  D = asIdio(D, n, "D");
+  // the origin is a gauge: at a common offset of 1e13 the absolute grid
+  // collapsed below the float spacing and every grammar threw (or its
+  // Jacobian came back 0) though the contrasts were exact (#477)
+  return { mu: translatedHome(mu, D), cluster: Array.from(cluster), L, D };
 }
 
 /* A tree is a tree: one root, every parent an existing node, no cycles,
@@ -716,6 +720,7 @@ export function nestedRaceJacobian(mu, cluster, loading, D, opts = {}) {
   if (coupling == null || gamma === 0)
     return blockRaceJacobian(mu, cluster, loading, D, { points, qa });
   mu = asAbilities(mu);
+  mu = translatedHome(mu, asIdio(D, mu.length, "D"));     // before the node shifts (#477)
   // The shared contract, as python's atleast_2d-plus-transpose does
   // it: a (rank, n) coupling is the SAME race as (n, rank). This
   // normalised by hand and never transposed, so the transposed
