@@ -2987,6 +2987,224 @@ fn forward_kernel_base_impl(
     (p_norm, slopes, total)
 }
 
+/// Gauss-Legendre nodes and weights on [-1, 1], ascending: Newton on
+/// P_m from the Chebyshev-like start, weights 2 / ((1 - t^2) P_m'(t)^2),
+/// built in symmetric pairs.
+pub fn gauss_legendre(m: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut t = vec![0.0f64; m];
+    let mut w = vec![0.0f64; m];
+    let mf = m as f64;
+    for i in 0..m.div_ceil(2) {
+        let mut x = (std::f64::consts::PI * (i as f64 + 0.75) / (mf + 0.5)).cos();
+        let mut dp = 1.0;
+        for _ in 0..100 {
+            // P_m(x) and P_m'(x) by the three-term recurrence
+            let (mut p0, mut p1) = (1.0f64, x);
+            for k in 2..=m {
+                let kf = k as f64;
+                let p2 = ((2.0 * kf - 1.0) * x * p1 - (kf - 1.0) * p0) / kf;
+                p0 = p1;
+                p1 = p2;
+            }
+            let pm = if m == 0 { 1.0 } else if m == 1 { x } else { p1 };
+            let pm1 = if m == 1 { 1.0 } else { p0 };
+            dp = mf * (x * pm - pm1) / (x * x - 1.0);
+            let dx = pm / dp;
+            x -= dx;
+            if dx.abs() <= 1e-16 * x.abs().max(1.0) {
+                break;
+            }
+        }
+        let wi = 2.0 / ((1.0 - x * x) * dp * dp);
+        // descending x from i = 0: mirror into ascending order
+        t[m - 1 - i] = x;
+        t[i] = -x;
+        w[m - 1 - i] = wi;
+        w[i] = wi;
+    }
+    if m % 2 == 1 {
+        t[m / 2] = 0.0;
+    }
+    (t, w)
+}
+
+/// Nodes and weights over the window [lo, hi] of a `points`-point
+/// uniform lattice, split at every runner's kink and Gauss-Legendre on
+/// each piece: python's races.kink_lattice, the same budget rule. The
+/// kinks are m[i] + kink * sd[i]; at most points / 4 interior ones are
+/// kept (a larger field's are merged onto that many equal-width bins,
+/// the first in each kept), the two outer pieces count at a quarter
+/// weight, and every piece gets at least four nodes, so the node count
+/// stays under about 2 * points however many runners there are.
+pub fn kink_lattice(lo: f64, hi: f64, points: usize, m: &[f64], sd: &[f64],
+                    kinks: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let (a, b) = (lo, hi);
+    let l = points;
+    let mut k: Vec<f64> = Vec::with_capacity(m.len() * kinks.len());
+    for (i, &mi) in m.iter().enumerate() {
+        for &kk in kinks {
+            let v = mi + kk * sd[i];
+            if v > a && v < b {
+                k.push(v);
+            }
+        }
+    }
+    k.sort_by(|x, y| x.partial_cmp(y).unwrap());
+    k.dedup();
+    let cap = (l / 4).max(1);
+    if k.len() > cap {
+        let width = (b - a) / cap as f64;
+        let mut kept: Vec<f64> = Vec::with_capacity(cap);
+        let mut last_bin = f64::NAN;
+        for &v in &k {
+            let bin = ((v - a) / width).floor();
+            if bin != last_bin {
+                kept.push(v);
+                last_bin = bin;
+            }
+        }
+        k = kept;
+    }
+    let mut cuts = Vec::with_capacity(k.len() + 2);
+    cuts.push(a);
+    cuts.extend_from_slice(&k);
+    cuts.push(b);
+    let pieces = cuts.len() - 1;
+    let mut eff: Vec<f64> = (0..pieces).map(|j| cuts[j + 1] - cuts[j]).collect();
+    eff[0] *= 0.25;
+    eff[pieces - 1] *= 0.25;
+    let total: f64 = eff.iter().sum();
+    let mut xs = Vec::new();
+    let mut ws = Vec::new();
+    for j in 0..pieces {
+        let cnt = ((l as f64 * eff[j] / total).round_ties_even() as usize).max(4);
+        let (t, w) = gauss_legendre(cnt);
+        let mid = 0.5 * (cuts[j + 1] + cuts[j]);
+        let half = 0.5 * (cuts[j + 1] - cuts[j]);
+        for (tt, ww) in t.iter().zip(w.iter()) {
+            xs.push(mid + half * tt);
+            ws.push(half * ww);
+        }
+    }
+    (xs, ws)
+}
+
+/// forward_kernel_base on the kink-split lattice: OPT-IN, for a base
+/// whose density has a kink at each of `kinks` (laplace, exponential
+/// power below beta = 2). A uniform rectangle sum is only second order
+/// across a kink, and the direct Laplace kernel missed the certified
+/// race by 8.4e-5 at 257 points (#541); one kink_lattice per factor node
+/// (the kinks sit at that node's locations) brings it to the window's
+/// own truncation, as python's race_probabilities(..., kink_split=True).
+/// The default forward_kernel_base is untouched. Same window rule,
+/// log-domain field and return convention (normalized p, raw slopes,
+/// raw total), with the lattice weights in place of dx.
+#[allow(clippy::too_many_arguments)]
+pub fn forward_kernel_base_split(
+    mu: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    d: ArrayView1<f64>,
+    f_nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+    base: BaseSpec,
+    kinks: &[f64],
+) -> (Array1<f64>, Array1<f64>, f64) {
+    let n = mu.len();
+    let q = f_nodes.nrows();
+    let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
+    let sd_max = sd.iter().cloned().fold(f64::MIN, f64::max);
+    let mut lo = f64::MAX;
+    let mut hi = f64::MIN;
+    let mut m_all = vec![0.0f64; q * n];
+    for qi in 0..q {
+        for i in 0..n {
+            let mut mi = mu[i];
+            for r in 0..v.ncols() {
+                mi += v[[i, r]] * f_nodes[[qi, r]];
+            }
+            m_all[qi * n + i] = mi;
+            lo = lo.min(mi);
+            hi = hi.max(mi);
+        }
+    }
+    lo -= 12.0 * sd_max;
+    hi += 12.0 * sd_max;
+    if lo_in.is_finite() && hi_in.is_finite() && hi_in > lo_in {
+        lo = lo_in;
+        hi = hi_in;
+    }
+    let tile = TILE.min((25_000_000usize / n.max(1)).max(4));
+    let p: Vec<f64> = (0..q)
+        .into_par_iter()
+        .map(|qi| {
+            let m = &m_all[qi * n..(qi + 1) * n];
+            let wq = w[qi];
+            let (xs, ws) = kink_lattice(lo, hi, points, m, &sd, kinks);
+            let nodes = xs.len();
+            let mut acc = vec![0.0f64; 2 * n];
+            let mut logs = vec![0.0f64; n * tile];
+            let mut logg = vec![0.0f64; n * tile];
+            let mut score = vec![0.0f64; n * tile];
+            let mut field = vec![0.0f64; tile];
+            let mut t0 = 0;
+            while t0 < nodes {
+                let tl = tile.min(nodes - t0);
+                field[..tl].fill(0.0);
+                for i in 0..n {
+                    let inv_sd = 1.0 / sd[i];
+                    let mi = m[i];
+                    let row_s = &mut logs[i * tile..i * tile + tl];
+                    let row_g = &mut logg[i * tile..i * tile + tl];
+                    let row_c = &mut score[i * tile..i * tile + tl];
+                    for t in 0..tl {
+                        let z = (xs[t0 + t] - mi) * inv_sd;
+                        let (ls, lf, dl) = base.eval(z);
+                        row_s[t] = ls;
+                        row_g[t] = lf - sd[i].ln();
+                        row_c[t] = dl;
+                        field[t] += ls;
+                    }
+                }
+                for i in 0..n {
+                    let row_s = &logs[i * tile..i * tile + tl];
+                    let row_g = &logg[i * tile..i * tile + tl];
+                    let row_c = &score[i * tile..i * tile + tl];
+                    let inv_sd = 1.0 / sd[i];
+                    let mut s_acc = 0.0f64;
+                    let mut sl = 0.0f64;
+                    for t in 0..tl {
+                        let e = row_g[t] + field[t] - row_s[t];
+                        if e > -745.0 {
+                            let val = e.exp() * ws[t0 + t];
+                            s_acc += val;
+                            sl -= row_c[t] * inv_sd * val;
+                        }
+                    }
+                    acc[i] += wq * s_acc;
+                    acc[n + i] += wq * sl;
+                }
+                t0 += tl;
+            }
+            acc
+        })
+        .reduce(
+            || vec![0.0f64; 2 * n],
+            |mut a, b| {
+                for (x, y) in a.iter_mut().zip(b) {
+                    *x += y;
+                }
+                a
+            },
+        );
+    let total: f64 = p[..n].iter().sum();
+    let p_norm: Array1<f64> = Array1::from_iter(p[..n].iter().map(|x| x / total));
+    let slopes: Array1<f64> = Array1::from_iter(p[n..].iter().cloned());
+    (p_norm, slopes, total)
+}
+
 /// The per-winner reduced-rank alternative (lpRR protocol): winner i's
 /// max-wins probability as the rectangle P(Y <= 0), Y_j = U_j - U_i,
 /// integrated over common standard-normal draws z (R x (k+1): k factor

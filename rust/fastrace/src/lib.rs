@@ -776,7 +776,18 @@ fn fastrace(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 /// Base-generic forward pass: probabilities and own-slopes for any of
 /// the shipped base families; see winning::forward_kernel_base.
+///
+/// `kink_split` (keyword, default False) is OPT-IN: for a base whose
+/// density has a kink (laplace, base_id 3; exponential power below
+/// beta = 2, base_id 4) it integrates on the kink-split lattice
+/// (winning::forward_kernel_base_split, python's kink_lattice and its
+/// node bound) instead of the uniform one, which missed the certified
+/// Laplace race by 8.4e-5 at 257 points (#541). Smooth bases ignore it.
+/// The default is the uniform lattice, unchanged bit for bit, matching
+/// python's default race_probabilities.
 #[pyfunction]
+#[pyo3(signature = (mu, v, d, f_nodes, w, points, lo, hi, base_id, params,
+                    kink_split = false))]
 #[allow(clippy::too_many_arguments)]
 fn forward_and_slopes_base<'py>(
     py: Python<'py>,
@@ -790,6 +801,7 @@ fn forward_and_slopes_base<'py>(
     hi: f64,
     base_id: u32,
     params: Vec<f64>,
+    kink_split: bool,
 ) -> PyResult<(
     Bound<'py, PyArray1<f64>>,
     Bound<'py, PyArray1<f64>>,
@@ -814,10 +826,18 @@ fn forward_and_slopes_base<'py>(
     let d_o: Array1<f64> = d.as_array().to_owned();
     let f_o: Array2<f64> = f_nodes.as_array().to_owned();
     let w_o: Array1<f64> = rel_weights("w", &w)?;
+    // the kinks of the base's density, as python's base.kinks
+    let kinked = base_id == 3 || (base_id == 4 && pa[0] < 2.0);
     let (p, sl, total) = py.detach(|| with_usable_rayon(|| {
-        winning::forward_kernel_base(
-            mu_o.view(), v_o.view(), d_o.view(), f_o.view(), w_o.view(),
-            points, lo, hi, spec)
+        if kink_split && kinked {
+            winning::forward_kernel_base_split(
+                mu_o.view(), v_o.view(), d_o.view(), f_o.view(), w_o.view(),
+                points, lo, hi, spec, &[0.0])
+        } else {
+            winning::forward_kernel_base(
+                mu_o.view(), v_o.view(), d_o.view(), f_o.view(), w_o.view(),
+                points, lo, hi, spec)
+        }
     }));
     Ok((
         p.into_pyarray(py),

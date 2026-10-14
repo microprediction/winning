@@ -432,3 +432,67 @@ end
             w ./ maximum(w) .* c, s ./ maximum(s) .* c)[1] .- ls1)) < 1e-9
     end
 end
+
+@testset "a common translation of the abilities moves nothing (#477)" begin
+    # the shifted contrasts are exact, so every price must be too; at
+    # 2^52 the lattice collapsed: race NaN, top-k/rank refused mass 0
+    mu = [-3.0, -1.0, 1.0, 3.0]
+    D = [1.0, 1.5, 0.7, 1.0]
+    for e in (30, 45, 50, 52)
+        s = mu .+ 2.0^e
+        @test maximum(abs.(race_probabilities(s; D = D) .-
+                           race_probabilities(mu; D = D))) < 1e-12
+        @test maximum(abs.(top_k_probabilities(s, 2; D = D) .-
+                           top_k_probabilities(mu, 2; D = D))) < 1e-12
+        @test maximum(abs.(bottom_k_probabilities(s, 2; D = D) .-
+                           bottom_k_probabilities(mu, 2; D = D))) < 1e-12
+        @test maximum(abs.(rank_probabilities(s; D = D) .-
+                           rank_probabilities(mu; D = D))) < 1e-12
+        a, b = top_k_jacobians(s, 2; D = D), top_k_jacobians(mu, 2; D = D)
+        @test maximum(abs.(a.Jmu .- b.Jmu)) < 1e-12
+        @test maximum(abs.(a.Jsigma .- b.Jsigma)) < 1e-12
+    end
+    # a field near the origin is left exactly where it is
+    @test winning._translated_home(mu, D) === mu
+end
+
+@testset "a two-runner normal race is its exact contrast (#86)" begin
+    # the lattice priced a 20-sd pair tail at 0.0105x its exact 1.04e-45
+    exact = Dict(9 => 9.830802207714438e-11, 14 => 2.091912803889677e-23,
+                 20 => 1.0442437918812723e-45)
+    for (g, e) in exact
+        p = race_probabilities([0.0, g]; D = [1.0, 1.0])
+        @test abs(p[2] / e - 1) < 1e-12
+        @test race_probabilities([g, 0.0]; D = [1.0, 1.0]) == reverse(p)
+    end
+    # a finite loading contrast whose square overflows
+    p = race_probabilities([0.0, 1e155]; V = reshape([1e155, -1e155], 2, 1),
+                           D = [1.0, 1.0])
+    @test abs(p[1] - winning.ndtr(0.5)) < 1e-15 && abs(sum(p) - 1) < 1e-15
+    # slopes: dp_i/dmu_i = -phi(u)/sd_d for both runners
+    r = race_probabilities([0.2, 0.0]; D = [1.0, 1.0], return_slopes = true)
+    @test r.slopes ≈ fill(-winning.npdf(-0.2 / sqrt(2)) / sqrt(2), 2) rtol = 1e-14
+end
+
+@testset "Gumbel last places keep their exact Plackett-Luce values (#710)" begin
+    # 1 - S rounded the lower-tail CDF to zero (gap 35: 3e-248 times the
+    # truth) and the one-direction deconvolution fabricated mass (gap 20:
+    # 1.9e5 times it). Independent standardized min-Gumbels are
+    # Plackett-Luce with weights exp(-c mu).
+    c = pi / sqrt(6)
+    for gap in (20.0, 30.0, 35.0), points in (513, 8193)
+        mu = [-gap, 0.0, 0.0]
+        w0 = exp(c * gap)
+        exact = 2 / ((w0 + 2) * (w0 + 1))
+        b = bottom_k_probabilities(mu, 1; base = "gumbel", points = points)
+        R = rank_probabilities(mu; base = "gumbel", points = points)
+        @test abs(b[1] / exact - 1) < 1e-10
+        @test abs(R[1, 3] / exact - 1) < 1e-10
+        # cumulative rank = top-k
+        t2 = top_k_probabilities(mu, 2; base = "gumbel", points = points)
+        @test maximum(abs.(vec(sum(R[:, 1:2], dims = 2)) .- t2)) < 1e-10
+    end
+    # the deconvolution residue on a four-runner field (R's value)
+    @test abs(rank_probabilities([-12.0, -4, 4, 12]; base = "gumbel")[1, 4] /
+              1.101321e-26 - 1) < 1e-5
+end
