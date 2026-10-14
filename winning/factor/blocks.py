@@ -351,6 +351,19 @@ def _checked_mass(raw, kind, mass_tol=None):
     return raw / t
 
 
+def _home(mu, D):
+    """mu as floats, moved next to the origin when a common offset dwarfs
+    the field (races._translated_home). The lattices here are built in
+    the caller's units, so at an offset of 1e13 they collapsed to the
+    float spacing and the block, nested and tree races raised a mass
+    defect (zero mass at 1e15) while their Jacobians came back zero
+    (#477). Ordinary inputs are returned unchanged."""
+    from .races import _translated_home
+    mu = np.asarray(mu, float)
+    with np.errstate(invalid="ignore"):
+        return _translated_home(mu, np.asarray(D, float))
+
+
 def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     """P(i wins | min-wins) under one private factor per cluster.
 
@@ -358,7 +371,7 @@ def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     D[i] its idiosyncratic VARIANCE (as everywhere in winning.factor).
     The unnormalized lattice mass is checked before normalization and a
     material defect raises rather than being normalized away."""
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     # one door for D: a scalar is the same variance for everyone (#84)
     raw = _block_max(-mu, np.sqrt(as_idio(D, len(mu), positive=True)),
                      cluster, loading, points, qa)
@@ -386,7 +399,7 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
     # per-node mass defect inside a plausible-looking average
     # (fourteenth review)
     p = np.zeros(len(mu))
-    muv = np.asarray(mu, float)
+    muv = _home(mu, D)
     sdv = np.sqrt(as_idio(D, len(muv), positive=True))
     for q in range(len(fn)):
         p += fw[q] * _block_max(-(muv + _coupled_shift(g, gamma, fn[q])),
@@ -419,7 +432,7 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
     axis"; every inverse and polishing path that calls the Jacobian
     inherited the crash (#145).
     """
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     n = len(mu)
     V = as_loadings(loading, n)          # (n, rank), one ROW per entity
     if V.shape[1] == 0:                  # rank zero: no shared effect (#508)
@@ -697,7 +710,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     leaves= explicitly when the leaves sit at unequal depths (#372)."""
     if leaves is not None:
         cluster = _tree_leaf_index(cluster, leaves)
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
@@ -804,7 +817,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     2n forward passes. `leaves` as in tree_race_probabilities (#372)."""
     if leaves is not None:
         cluster = _tree_leaf_index(cluster, leaves)
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
@@ -923,7 +936,7 @@ def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
     if coupling is None or gamma == 0.0:
         return block_race_jacobian(mu, cluster, loading, D, points=points, qa=qa)
     fn, fw = roots_hermitenorm(qf); fw = fw / fw.sum()
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     g = np.atleast_2d(np.asarray(coupling, float))
     if g.shape[0] != len(mu):
         g = g.T

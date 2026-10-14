@@ -1159,6 +1159,11 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
+    # the origin is a gauge, but the lattice below is built in the
+    # caller's units: at a common offset of 1e15 it collapsed to the
+    # float spacing and shares moved 2.6 points (#477, as the front door)
+    from .races import _translated_home
+    mu = _translated_home(mu, D)
     # gauge-fix: a common loading column shifts every conditional mean
     # equally and cannot move an argmin, so center V for a lattice window
     # and numerics invariant under V -> V + 1c' (eighth review). Done
@@ -1581,6 +1586,8 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     h = np.asarray(h, dtype=float)
     N = len(mu)
     D = as_idio(D, N, positive=True)
+    from .races import _translated_home
+    mu = _translated_home(mu, D)     # the origin is a gauge (#477)
     V = as_loadings(V, N)
     V = _gauge_center(V)             # gauge-fix, as in the forward pass (#114)
     points = as_points(points)
