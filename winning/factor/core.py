@@ -1263,8 +1263,6 @@ def _pair_solve(gap, p, V, D, F, W, points, tol, n_iter, s):
     i = 0 if p[0] <= p[1] else 1          # the smaller share: finite logs
     sign = 1.0 if i == 0 else -1.0        # p0 increases with the gap
     logp = np.log(p)
-    floor = max(1e-9, 1e-4 / 2)
-    ident = p > floor
     evals = [0]
 
     def mu_of(g):
@@ -1277,8 +1275,11 @@ def _pair_solve(gap, p, V, D, F, W, points, tol, n_iter, s):
         return r
 
     def score(r):
-        return float(np.abs(r[ident]).max() if np.any(ident)
-                     else np.abs(r).max())
+        # Both shares, always: a pair has one contrast and the minority
+        # is the side that exposes a law mismatch. The multi-runner
+        # tail mask (p > 5e-5) dropped a 1e-6 minority and certified a
+        # warm start that repriced it at 5e-37 (#727).
+        return float(np.abs(r).max())
 
     if not np.isfinite(gap):
         return mu_of(gap), 0, np.inf
