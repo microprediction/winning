@@ -793,12 +793,19 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
   const shift = Vc.map((row) => row.reduce((acc, v, d) => acc + v * Fm[d], 0));
   const stepCap = D.map((d, i) => Math.sqrt(d + sigV[i]));
 
+  // Tail-aware convergence: shares below the floor are matched best-effort.
+  // But in a multiway field fewer than TWO shares above it carry no
+  // contrast at all -- a
+  // rounded-one favourite alone is matched by any field it dominates, and
+  // [-12, 0, 12] (p = [1, 1.1e-17, 3.5e-65]) certified converged at
+  // abilities that repriced the 1.1e-17 share as 0 (#588). Then every share
+  // counts, so the result either reprices them or says it did not converge.
   const floor = Math.max(1e-9, 1e-4 / N);
-  const ident = p.map((v) => v > floor);
+  let ident = p.map((v) => v > floor);
+  if (N > 2 && ident.filter(Boolean).length < 2) ident = p.map(() => true);
   const residualOf = (phat) => {
-    let res = 0, any = false;
-    for (let i = 0; i < N; i++) if (ident[i]) { any = true; res = Math.max(res, Math.abs(Math.log(phat[i]) - logp[i])); }
-    if (!any) for (let i = 0; i < N; i++) res = Math.max(res, Math.abs(Math.log(phat[i]) - logp[i]));
+    let res = 0;
+    for (let i = 0; i < N; i++) if (ident[i]) res = Math.max(res, Math.abs(Math.log(phat[i]) - logp[i]));
     return res;
   };
 
