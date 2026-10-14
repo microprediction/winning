@@ -2983,5 +2983,38 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
           x => String(x[0]));
 }
 
+{
+  // browser pair closed form (#86 residuals): the node mean RAISES each
+  // runner's location, so it is subtracted from the contrast (a single
+  // node at +1 on runner 0 priced runner 0 the favourite); reciprocal
+  // V -> aV, F -> F/a overflowed dV at a = 1e308 (NaN); and a rank-two
+  // 7e307 contrast whose sd exceeds the float range priced [0.5, 0.5]
+  const P0 = core.ndtr(-1 / Math.SQRT2);
+  accepts("pair with a nonzero node mean is shifted the right way (#86)",
+          () => [races.raceProbabilities([0, 0], { V: [[1], [0]], D: [1, 1], F: [[1]], W: [1] }),
+                 races.raceProbabilities([0, 0], { V: [[0], [1]], D: [1, 1], F: [[1]], W: [1] })],
+          ([p, q]) => Math.abs(p[0] - P0) < 1e-15 && p[0] === q[1] && p[1] === q[0],
+          ([p]) => String(p));
+  accepts("pair closed form agrees with the lattice under a non-centred two-point law (#86)",
+          () => [races.raceProbabilities([0.3, -0.2], { V: [[1, 0.5], [-0.2, 0.3]], D: [1, 2], F: [[1, 0], [0.5, 2]], W: [0.3, 0.7] }),
+                 races.raceProbabilities([0.3, -0.2, 80], { V: [[1, 0.5], [-0.2, 0.3], [0, 0]], D: [1, 2, 1], F: [[1, 0], [0.5, 2]], W: [0.3, 0.7], points: 4097 })],
+          ([p, q]) => Math.abs(p[0] - q[0]) < 1e-5, ([p, q]) => `${p} vs ${q}`);
+  const mu = [-0.25, 0.25], D = [1, 1], W = [0.5, 0.5];
+  const ref = races.raceProbabilities(mu, { V: [[1], [-1]], D, F: [[-1], [1]], W, returnSlopes: true });
+  const Jref = polish.raceJacobian(mu, { V: [[1], [-1]], D, F: [[-1], [1]], W });
+  for (const a of [1e307, 1e308]) {
+    const o = { V: [[a], [-a]], D, F: [[-1 / a], [1 / a]], W };
+    accepts(`pair under reciprocal V/F scale ${a}: prices, slopes, Jacobian (#86)`,
+            () => [races.raceProbabilities(mu, { ...o, returnSlopes: true }), polish.raceJacobian(mu, o)],
+            ([r, J]) => Math.abs(r.p[0] - ref.p[0]) < 1e-15 && Math.abs(r.slopes[0] - ref.slopes[0]) < 1e-15
+                        && Math.abs(J[0][1] - Jref[0][1]) < 1e-15,
+            ([r]) => String(r.p));
+  }
+  accepts("rank-two 7e307 pair contrast prices Phi(1/sqrt 2) (#86)",
+          () => races.raceProbabilities([0, 1.4e308], { V: [[7e307, 7e307], [-7e307, -7e307]], D: [1, 1] }),
+          p => Math.abs(p[0] - core.ndtr(Math.SQRT1_2)) < 1e-15 && Math.abs(p[1] - core.ndtr(-Math.SQRT1_2)) < 1e-15,
+          p => String(p));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
