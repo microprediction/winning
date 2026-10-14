@@ -329,3 +329,9 @@ test_that("a pair whose contrast norm overflows keeps its exact price (#86)", {
   expect_equal(p, c(pnorm(1 / sqrt(2)), pnorm(-1 / sqrt(2))),
                tolerance = 1e-14)
 })
+
+test_that("an ordinary pair keeps its closed form (#86)", {
+  expect_equal(race_probabilities(c(-.3, .4), V = matrix(c(.5, -.2), 2, 1),
+                                  D = c(1, .7)),
+               c(0.68189917673080014, 0.31810082326919986), tolerance = 1e-14)
+})

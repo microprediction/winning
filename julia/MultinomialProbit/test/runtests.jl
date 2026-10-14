@@ -942,3 +942,17 @@ end
                                             D = fill(5e307, 3), r_draws = 64)
                          for k in 1:3])
 end
+
+@testset "ordinary binary rows and GHK draws are unchanged (#720, #409)" begin
+    # values from main before the scale guards (9b29ddef)
+    ll, dmu, dV = choice_loglik_and_score([0.3 0.1; -0.2 0.5], [0.0 0.0; 0.7 -0.4],
+                                          [1, 2]; D = [1.0, 0.8])
+    @test ll ≈ -0.9928626935906544 rtol = 1e-14
+    @test vec(dmu) ≈ [0.45894323076946664, -0.34285868771710376,
+                      -0.45894323076946664, 0.34285868771710376] rtol = 1e-14
+    @test vec(dV) ≈ [0.09479706501596169, -0.09479706501596169,
+                     -0.0541697514376924, 0.0541697514376924] rtol = 1e-14
+    p = [ghk_choice_prob([0.0, 0.3, -0.2], [0.3; -0.1; 0.4;;], k;
+                         D = [1.0, 0.8, 1.2], r_draws = 500, seed = 4) for k in 1:3]
+    @test p ≈ [0.3024763216964466, 0.44220641389309157, 0.2534662469683096] rtol = 1e-13
+end

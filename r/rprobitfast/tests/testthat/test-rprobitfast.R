@@ -557,3 +557,14 @@ test_that("the binary closed form survives an extreme loading scale (#720)", {
     expect_equal(tr$GV[1, 1, ], rep(lam / (2 * a), 2), tolerance = 1e-12)
   }
 })
+
+test_that("an ordinary binary row keeps its closed form (#720)", {
+  tr <- .mnp_pair(matrix(c(.3, -.2, .1, .5), 2, 2),
+                  matrix(c(0, .7, 0, -.4), 2, 2), c(1L, 2L))
+  expect_equal(unname(unlist(tr)), c(
+    -0.59985606892589227, -0.40585832547984518, 0.44312230917883494,
+    -0.33527209333678759, -0.44312230917883494, 0.33527209333678759,
+    0.023410235201900716, 0.061993707824538072, -0.023410235201900716,
+    -0.061993707824538072, -0.013377277258228982, -0.035424975899736047,
+    0.013377277258228982, 0.035424975899736047), tolerance = 1e-14)
+})

@@ -88,3 +88,14 @@ fn an_overflowing_variance_sum_is_the_same_race() {
     let dense = ghk_prob_one(&[0.0, 1e154, -1e154], &sigma, 3, 1, 4096, 10);
     assert!((dense - unit[1]).abs() < 1e-12, "dense: {dense} vs {}", unit[1]);
 }
+
+#[test]
+fn an_ordinary_race_is_unchanged() {
+    // values from main before the overflow-safe trace (9b29ddef)
+    let want = [0.30292768905168094, 0.4424900848341717, 0.2544313709921934];
+    for (i, w) in want.iter().enumerate() {
+        let p = ghk_prob_one_factor(&[0.0, 0.3, -0.2], &[0.3, -0.1, 0.4], 1,
+                                    &[1.0, 0.8, 1.2], 3, i, 500, 4);
+        assert!((p - w).abs() < 1e-13 * w, "share {i}: {p} vs {w}");
+    }
+}

@@ -192,3 +192,16 @@ test_that("nested reciprocal coupling scaling is the same race (#722)", {
                  tolerance = 1e-10)
   }
 })
+
+# Ordinary inputs near the #477/#722 changes keep main's values (9b29ddef).
+test_that("ordinary nested races are unchanged (#477, #722)", {
+  mu <- c(-.4, -.1, .2, .5, .8); cl <- c(0, 0, 1, 1, 2)
+  ld <- c(.4, .2, .3, .5, .1); D <- c(.7, .8, .9, 1, 1.1)
+  g <- c(-.4, .1, .4, -.2, .1)
+  ref <- c(0.38432227045253309, 0.23696573454430217, 0.18328372050474345,
+           0.12254165848578566, 0.072886616012635769)
+  expect_equal(nested_race_probabilities(mu, cl, ld, D, coupling = g,
+                                         gamma = .8), ref, tolerance = 1e-12)
+  expect_equal(nested_race_probabilities(mu + 3.7, cl, ld, D, coupling = g,
+                                         gamma = .8), ref, tolerance = 1e-12)
+})
