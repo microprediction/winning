@@ -3039,5 +3039,30 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
                           0.001550390784063666, 3.7779460993255496e-13]) < 1e-14, p => String(p));
 }
 
+{
+  // fitGrammar reports the worst pairwise contrast misfit (python's
+  // contrast_residual_max); ipaf converged on the global residual alone
+  // while an exact v v' + diag(D) had its 0-3 contrast 78x too large (#505)
+  const mk = (v, D) => v.map((x, i) => v.map((y, j) => x * y + (i === j ? D[i] : 0)));
+  const ow = console.warn; let warned = [];
+  console.warn = m => { warned.push(String(m)); };
+  let g, d, h;
+  try {
+    g = demo.fitGrammar(mk([0, 1, 2, 0.01], [1e-6, 1e4, 1e5, 2e-6]), 1, 0, { method: "ipaf" });
+    d = demo.fitGrammar(mk([0, 0, 0, 1, 0, 0.7], [18, 15, 12, 0.08, 6, 0.05]), 1, 0);
+    h = demo.fitGrammar(mk([0, 0, 0, 1, 0, 0.7], [18, 15, 12, 0.08, 6, 0.05]), 1, 0, { method: "ipaf" });
+  } finally { console.warn = ow; }
+  holds("ipaf does not certify a 77x contrast misfit (#505)",
+        !g.ipaf.converged && Math.abs(g.contrastResidualMax - 76.877) < 1e-2
+        && warned.length === 1 && warned[0].includes("contrast"), JSON.stringify(g.ipaf) + " " + g.contrastResidualMax);
+  holds("the default fit reports its contrast misfit (#505)",
+        Math.abs(d.contrastResidualMax - 10.713) < 1e-2 && !("ipaf" in d), String(d.contrastResidualMax));
+  holds("an exact ipaf recovery reports converged and a rounding-level contrast misfit (#505)",
+        h.ipaf.converged && h.contrastResidualMax < 1e-10, String(h.contrastResidualMax));
+  const big = demo.fitGrammar(mk([0, 0, 0, 1, 0, 0.7], [18, 15, 12, 0.08, 6, 0.05]).map(r => r.map(x => x * 2 ** 600)), 1, 0);
+  holds("the contrast misfit is scale free (#505)",
+        Math.abs(big.contrastResidualMax / d.contrastResidualMax - 1) < 1e-12, String(big.contrastResidualMax));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
