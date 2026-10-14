@@ -55,6 +55,13 @@ BASES.logistic.logSf = z => {
   const u = Math.PI / Math.sqrt(3) * z;
   return -Math.max(u, 0) - Math.log1p(Math.exp(-Math.abs(u)));
 };
+/* The asymmetric min-Gumbel's lower-tail CDF, F = -expm1(-e^u): the count
+   programs (top-k, rank) reflect the symmetric bases' survival for F, and
+   for Gumbel fell back to 1 - S, which is 0 once S rounds to one -- a
+   representable last place of 2.0e-39 (mu = [-35, 0, 0]) came back as an
+   exact 0 at any point count (#710). */
+BASES.gumbel.cdf = z =>
+  -Math.expm1(-Math.exp(Math.min(z * (Math.PI / Math.sqrt(6)) - EULER, 30)));
 BASES.laplace.logSf = z => {
   const b = 1 / Math.sqrt(2);
   return z < 0 ? Math.log1p(-0.5 * Math.exp(z / b)) : Math.log(0.5) - z / b;
@@ -112,9 +119,10 @@ export function checkTails(fn) {
 }
 
 /* z -> F(z) from a callable base's cdf or logCdf, or null (the named
-   bases reflect instead). */
+   symmetric bases reflect instead; Gumbel carries its own cdf, #710). */
 export function lowerCdf(fn) {
-  if (fn == null || NAMED_BASES.has(fn)) return null;
+  if (fn == null) return null;
+  if (NAMED_BASES.has(fn)) return typeof fn.cdf === "function" ? fn.cdf : null;
   checkTails(fn);
   if (typeof fn.cdf === "function") return fn.cdf;
   if (typeof fn.logCdf === "function")
@@ -278,6 +286,21 @@ function canonicalRule(V, D, maxNodes) {
   return rule;
 }
 
+/* Runner-sized reductions as loops: Math.max(...D) spreads its array into
+   call arguments, and past an engine's argument limit (~125k on node 24)
+   a valid 130,000-runner field threw "Maximum call stack size exceeded"
+   before any integration (#729). Same values as the spread, NaN included. */
+function maxOf(a) {
+  let m = -Infinity;
+  for (let i = 0; i < a.length; i++) m = Math.max(m, a[i]);
+  return m;
+}
+function minOf(a) {
+  let m = Infinity;
+  for (let i = 0; i < a.length; i++) m = Math.min(m, a[i]);
+  return m;
+}
+
 /* mu moved next to the origin when a common offset dwarfs the field
    (python's races._translated_home). The origin is a gauge, but the
    lattice is built in the caller's units: at an offset of 1e15 its
@@ -287,7 +310,7 @@ function canonicalRule(V, D, maxNodes) {
 export function translatedHome(mu, D) {
   const s = mu.slice().sort((a, b) => a - b);
   const off = s[Math.floor(s.length / 2)];
-  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(Math.max(...D));
+  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(maxOf(D));
   return Math.abs(off) > 1e6 * scale ? mu.map(v => v - off) : mu;
 }
 
@@ -395,7 +418,7 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
     if (row[i] < muLo[i]) muLo[i] = row[i];
     if (row[i] > muHi[i]) muHi[i] = row[i];
   }
-  const smax = Math.max(...sd), smin = Math.min(...sd);
+  const smax = maxOf(sd), smin = minOf(sd);
   const G = (x, mus) => {
     let ls = 0;
     for (let i = 0; i < n; i++) ls += Math.log(S((x - mus[i]) / sd[i]));
@@ -420,8 +443,8 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
   if (fn && Array.isArray(fn.span)) pad = Math.max(pad, 0.25 * Math.max(...fn.span) * smax);
   const windowAt = d => {
     const step0 = Math.max(9 * smax, 1e-12);
-    const lo0 = bracket(Math.min(...muLo) - 9 * smax, step0, x => G(x, muLo) <= d, -1);
-    const hi0 = bracket(Math.max(...muHi) + 9 * smax, step0, x => G(x, muHi) >= 1 - d, +1);
+    const lo0 = bracket(minOf(muLo) - 9 * smax, step0, x => G(x, muLo) <= d, -1);
+    const hi0 = bracket(maxOf(muHi) + 9 * smax, step0, x => G(x, muHi) >= 1 - d, +1);
     let a = lo0, b = hi0;
     for (let it = 0; it < 80; it++) {
       const m = 0.5 * (a + b);
@@ -454,10 +477,107 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
       `further out than ${points} points can resolve, so the window is ` +
       `${(hi - lo).toPrecision(3)} units wide at the relaxed delta and ` +
       "exact there. Raise points= to tighten it.");
+  if (!fn || fn === BASES.normal)
+    [lo, hi, points] = rareWinnerEdges(muLo, muHi, sd, lo, hi, points);
   const out = new Array(points);
   const step = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) out[t] = lo + t * step;
   return out;
+}
+
+/* Post-check of the bulk window's edges against each runner's OWN win
+   integrand -- port of python's races._rare_winner_edges (#97). The bulk
+   quantiles bound every share's error by delta absolutely, not
+   relatively: at mu = [0, 20, 40] the middle runner wins near x = 10,
+   past the right edge, and came back at 0.099 of its 1.04e-45 at any
+   point count (#723). For a log-concave (normal) integrand the mass
+   beyond an edge is at most g(edge) / |slope| (tangent bound) and the
+   mass inside at least a chord integral next to the edge (best of a
+   geometric ladder); a runner whose ratio reaches EDGE_REL_TOL, or whose
+   integrand still rises at the edge, is truncated. The edge then moves
+   out until every runner passes, the point count growing to keep the
+   spacing, up to EDGE_POINTS_CAP times the request; past the cap the
+   window stops there with a warning. One O(7 n) probe per edge:
+   ordinary fields pass it and their lattice is unchanged. */
+const EDGE_REL_TOL = 1e-6, EDGE_POINTS_CAP = 4;
+const LOG_SQRT_2PI = 0.5 * Math.log(2 * Math.PI);
+let EDGE_WARNED = false;
+function rareWinnerEdges(muLo, muHi, sd, lo, hi, points) {
+  const n = sd.length;
+  const width0 = hi - lo;
+  if (!(width0 > 0) || n < 2) return [lo, hi, points];
+  const spacing = width0 / Math.max(points - 1, 1);
+  const maxWidth = spacing * (EDGE_POINTS_CAP * points - 1);
+  const ws = [], logWs = [];
+  for (let k = 0; k < 6; k++) { ws.push(0.5 * width0 * 0.25 ** k); logWs.push(Math.log(ws[k])); }
+  const logSd = sd.map(Math.log);
+  // log g_i = log f_i + sum_{j != i} log S_j and its slope, at x
+  const z = new Float64Array(n), logS = new Float64Array(n), haz = new Float64Array(n);
+  const terms = (x, m, logg, slope) => {
+    let sumLogS = 0, sumHaz = 0;
+    for (let i = 0; i < n; i++) {
+      const zi = (x - m[i]) / sd[i], ls = logndtr(-zi);
+      const h = Math.exp(-0.5 * zi * zi - LOG_SQRT_2PI - ls) / sd[i];
+      z[i] = zi; logS[i] = ls; haz[i] = h;
+      sumLogS += ls; sumHaz += h;
+    }
+    for (let i = 0; i < n; i++) {
+      logg[i] = -0.5 * z[i] * z[i] - LOG_SQRT_2PI - logSd[i] + sumLogS - logS[i];
+      if (slope) slope[i] = -z[i] / sd[i] - sumHaz + haz[i];
+    }
+  };
+  const gAt = new Float64Array(n), sAt = new Float64Array(n);
+  const inner = ws.map(() => new Float64Array(n));
+  const bad = (edge, m, sign) => {
+    // sign +1: right edge (the integrand must FALL outward), -1: left
+    terms(edge, m, gAt, sAt);
+    ws.forEach((w, k) => terms(edge - sign * w, m, inner[k], null));
+    for (let i = 0; i < n; i++) {
+      const g = gAt[i], out = sign * sAt[i];
+      if (out >= 0) return true;
+      const tail = g - Math.log(Math.max(-out, 1e-300));
+      let cmax = -Infinity;
+      for (let k = 0; k < ws.length; k++) {
+        const gi = inner[k][i], d = Math.abs(gi - g);
+        const c = d < 1e-12
+          ? g + logWs[k]
+          : Math.max(gi, g) + logWs[k] + Math.log(-Math.expm1(-d)) - Math.log(Math.max(d, 1e-300));
+        cmax = Math.max(cmax, c);
+      }
+      // NaN (an unrepresentable field) is not evidence of truncation
+      if (tail - cmax >= Math.log(EDGE_REL_TOL)) return true;
+    }
+    return false;
+  };
+  let newLo = lo, newHi = hi;
+  for (const [sign, m] of [[+1, muHi], [-1, muLo]]) {
+    let edge = sign > 0 ? newHi : newLo;
+    if (!bad(edge, m, sign)) continue;
+    let step = maxOf(sd);
+    for (let it = 0; it < 60; it++) {
+      const cand = edge + sign * step;
+      if (Math.max(newHi, cand) - Math.min(newLo, cand) > maxWidth) {
+        edge = sign > 0 ? newLo + maxWidth : newHi - maxWidth;
+        if (!EDGE_WARNED && typeof console !== "undefined") {
+          EDGE_WARNED = true;
+          console.warn(
+            "bulk window: a rare winner's integrand extends past the window " +
+            `even at ${EDGE_POINTS_CAP}x the point budget, so its share is ` +
+            "truncated (relatively; the absolute error stays below delta). " +
+            'Raise points= or use window: "span" for relative accuracy on ' +
+            "such shares.");
+        }
+        break;
+      }
+      edge = cand;
+      if (!bad(edge, m, sign)) break;
+      step *= 2;
+    }
+    if (sign > 0) newHi = edge; else newLo = edge;
+  }
+  if (newLo === lo && newHi === hi) return [lo, hi, points];
+  const pts = Math.ceil((newHi - newLo) / spacing) + 1;
+  return [newLo, newHi, Math.max(points, Math.min(pts, EDGE_POINTS_CAP * points))];
 }
 
 /* Each race API declares its OWN keys: one shared union let each accept
@@ -514,14 +634,14 @@ export function forwardGrid(Mall, sd, st, points, win = "bulk",
   } else {
     let mn = Infinity, mx = -Infinity;
     for (const row of Mall) for (const v of row) { if (v < mn) mn = v; if (v > mx) mx = v; }
-    const smax = Math.max(...sd);
+    const smax = maxOf(sd);
     x = new Array(points);
     const lo = mn - st.left * smax, hi = mx + st.right * smax;
     for (let t = 0; t < points; t++) x[t] = lo + t * (hi - lo) / (points - 1);
   }
   let dx = x[1] - x[0];
   // extreme-sharpness lattice refinement (matching python/R)
-  const smin = Math.min(...sd);
+  const smin = minOf(sd);
   let vmax = 0;
   for (const row of st.V) vmax = Math.max(vmax, Math.sqrt(row.reduce((a, b) => a + b * b, 0)));
   if (vmax / Math.max(smin, 1e-300) > 25 && dx > 0.5 * smin) {
@@ -588,6 +708,46 @@ export function collapseStructure(structure, V, D, F, W, where) {
   return { structure, V, D };
 }
 
+/* A two-runner normal race is ONE Gaussian contrast, priced in closed
+   form as python's race_probabilities (and R) do: the lattice put a
+   20-sd pair tail at 0.107x its exact 1.04e-45 (#86). Under a caller's
+   nodes F/W the contrast variance is dV' Cov_W(F) dV + D0 + D1, with the
+   node mean shifting the contrast; the default rule stands for the
+   standard normal, so dV' dV. Each tail directly (ndtr(u), ndtr(-u)):
+   full relative precision, and exactly permutation-equivariant. */
+function pairClosedForm(st, nodesGiven, returnSlopes) {
+  const { mu, V, D, F, W } = st;
+  const dV = V[0].map((v, j) => v - V[1][j]);
+  let sdD, shift = 0;
+  if (nodesGiven) {
+    // relative weights, through the max (#415)
+    let wmax = 0;
+    for (const w of W) wmax = Math.max(wmax, w);
+    const wr = W.map(w => w / wmax), ws = wr.reduce((a, b) => a + b, 0);
+    const proj = F.map(f => f.reduce((acc, x, j) => acc + x * dV[j], 0));
+    for (let q = 0; q < F.length; q++) shift += (wr[q] / ws) * proj[q];
+    let v = D[0] + D[1];
+    for (let q = 0; q < F.length; q++) v += (wr[q] / ws) * (proj[q] - shift) ** 2;
+    sdD = Math.sqrt(Math.max(v, 0));
+  } else {
+    // in units of the largest term: no overflow, no absolute floor (#100)
+    let big = Math.max(Math.sqrt(D[0]), Math.sqrt(D[1]));
+    for (const v of dV) big = Math.max(big, Math.abs(v));
+    let v = 0;
+    if (big > 0) {
+      for (const x of dV) v += (x / big) ** 2;
+      v += D[0] / big / big + D[1] / big / big;
+    }
+    sdD = big * Math.sqrt(v);
+  }
+  if (!(sdD > 0)) sdD = 1e-150;     // an exactly deterministic contrast
+  const u = (mu[1] - mu[0] + shift) / sdD;
+  const p = [ndtr(u), ndtr(-u)];
+  if (!returnSlopes) return p;
+  const dens = npdf(u) / sdD;       // dp_i/dmu_i, equal and negative
+  return { p, slopes: [-dens, -dens] };
+}
+
 export function raceProbabilities(mu, opts = {}) {
   const { V = null, D = null, F = null, W = null, base = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
@@ -604,6 +764,10 @@ export function raceProbabilities(mu, opts = {}) {
     return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes, window: win, delta });
   }
   const st = setup(mu, c.V, c.D, F, W, base);
+  if (base === "normal" && st.mu.length === 2) {
+    asPoints(points);
+    return pairClosedForm(st, F != null, returnSlopes);
+  }
   const n = st.mu.length;
   const sd = st.D.map(Math.sqrt);
   const Mall = condMeans(st.mu, st.V, st.F);
@@ -741,7 +905,7 @@ function validatedRaceTarget(pTarget, targetFloor) {
   // inputs stay bit-identical (#326).
   let s = target.reduce((a, b) => a + b, 0);
   if (!Number.isFinite(s)) {
-    const mx = Math.max(...target);
+    const mx = maxOf(target);
     target = target.map(v => v / mx);
     s = target.reduce((a, b) => a + b, 0);
   }
@@ -866,7 +1030,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     iters = it + 1;
     let { resid, dlogp } = cached || sweepForward(mu);
     cached = null;
-    let rmax = Math.max(...resid.map(Math.abs));
+    let rmax = maxOf(resid.map(Math.abs));
     let rrms = Math.sqrt(mean(resid.map(v => v * v)));
     if (rmax < tol) break;
     if (prev && rmax >= prev.rmax && rrms >= prev.rrms) {
@@ -923,7 +1087,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
   // whether to warn when the caller did not ask for the diagnostics
   const pf = raceProbabilities(mu, { V, D, F, W, base, points });
   const resid = pf.map((v, i) => Math.log(Math.max(v, 1e-300)) - logt[i]);
-  let maxLogResidual = Math.max(...resid.map(Math.abs));
+  let maxLogResidual = maxOf(resid.map(Math.abs));
   // exhausted after a step no sweep priced: keep the better of it and the
   // preceding priced iterate, as python's _jacobi_sweeps and core.mjs
   // jacobiSweeps do -- one more sweep returned a residual of 1.66 where

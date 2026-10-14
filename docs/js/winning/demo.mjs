@@ -710,7 +710,7 @@ export function mcBatch(mu, L, r, batch, counts) {
    covariance and its own O(n^3/6) Cholesky or sweep. That per-alternative
    structure is the point the demo makes: pricing the whole field costs n
    times a single-alternative price, before a single draw is taken. */
-import { ndtr, npdf } from "./core.mjs";
+import { ndtr, npdf, logndtr } from "./core.mjs";
 
 
 function diffScale(S, d) {
@@ -719,9 +719,45 @@ function diffScale(S, d) {
   return Math.max(t, 1e-300);
 }
 
-function diffProblem(mu, C, i) {
+function badCovariance(C, where) {
+  for (let a = 0; a < C.length; a++)
+    for (let b = 0; b < C.length; b++)
+      if (typeof C[a][b] !== "number" || !Number.isFinite(C[a][b]))
+        throw new Error(`${where}: C contains a non-finite entry (${C[a][b]}) in row ${a}`);
+  for (let a = 0; a < C.length; a++)
+    if (C[a][a] < 0)
+      throw new Error(`${where}: C is not positive semidefinite (variance [${a}] = ${C[a][a]} < 0)`);
+}
+
+function diffProblem(mu, C, i, where) {
   // mean and covariance of (x_j - x_i)_{j != i}
   const n = mu.length, m = new Float64Array(n - 1);
+  // C at the door, in O(n^2): square, finite, symmetric (the tolerance of
+  // validateCovariance) and no negative variance. Both arms read one
+  // triangle through S, so C and C' priced differently, and an
+  // indefinite C came back as a confident book (#726). Definiteness of
+  // what the arms actually use -- the difference covariance S -- is
+  // checked by its own Cholesky pivots, at no extra order.
+  if (!Array.isArray(C) || C.length !== n)
+    throw new Error(`${where}: C must be a ${n} x ${n} covariance matrix`);
+  for (let a = 0; a < n; a++)
+    if (!isVector(C[a]) || C[a].length !== n)
+      throw new Error(`${where}: C must be square; row ${a} is not ${n} entries`);
+  let amax = 0, asym = 0, bad = 0;
+  for (let a = 0; a < n; a++) {
+    const Ca = C[a];
+    for (let b = 0; b <= a; b++) {
+      const v = Ca[b], w = C[b][a];
+      bad += 0 * v + 0 * w;             // NaN iff an entry is not finite
+      amax = Math.max(amax, Math.abs(v));
+      asym = Math.max(asym, Math.abs(v - w));
+    }
+    if (Ca[a] < 0) bad = -1;
+  }
+  if (bad !== 0) badCovariance(C, where);
+  if (asym > 1e-8 * Math.max(amax, 1e-300))
+    throw new Error(`${where}: C is not symmetric (max asymmetry ${asym.toExponential(2)}); ` +
+                    "pass (C + C')/2 if the asymmetry is numerical noise");
   const S = new Float64Array((n - 1) * (n - 1));
   const idx = [];
   for (let j = 0; j < n; j++) if (j !== i) idx.push(j);
@@ -736,7 +772,7 @@ function diffProblem(mu, C, i) {
 export function ghkPrepareOne(mu, C, i) {
   // per-alternative Cholesky of the difference covariance (the GHK setup
   // cost the wall-time axis charges honestly)
-  const { m, S } = diffProblem(mu, C, i);
+  const { m, S } = diffProblem(mu, C, i, "ghkPrepareOne");
   const d = mu.length - 1;
   const L = new Float64Array(d * d);
   // the pivot floor is relative to the difference problem's own scale:
@@ -744,17 +780,45 @@ export function ghkPrepareOne(mu, C, i) {
   // same race in smaller units simulated a different one (#375). And it
   // floors only a pivot that is not positive: raising every pivot below
   // it inflated a valid small one -- near-twins with variance 2^-43
-  // priced [0.5, 0.158, 0.342] for the exact [0.5, 0.079, 0.421] (#409)
+  // priced [0.5, 0.158, 0.342] for the exact [0.5, 0.079, 0.421] (#409).
+  // A pivot materially below zero (relative to its own variance, as
+  // validateCovariance's -1e-8 in correlation units) is an indefinite
+  // contrast covariance, not roundoff: eps priced it as some other law
+  // (#726).
   const eps = 1e-12 * diffScale(S, d);
   for (let a = 0; a < d; a++) {
     for (let b = 0; b <= a; b++) {
       let s = S[a * d + b];
       for (let k = 0; k < b; k++) s -= L[a * d + k] * L[b * d + k];
-      if (a === b) L[a * d + a] = Math.sqrt(s > 0 ? s : eps);
-      else L[a * d + b] = s / L[b * d + b];
+      if (a === b) {
+        if (s < -1e-8 * Math.abs(S[a * d + a])) negativePivot("ghkPrepareOne", s);
+        L[a * d + a] = Math.sqrt(s > 0 ? s : eps);
+      } else L[a * d + b] = s / L[b * d + b];
     }
   }
   return { m, L, d };
+}
+
+function negativePivot(where, s) {
+  throw new Error(`${where}: C is not positive semidefinite: the ` +
+    `contrast covariance has a negative pivot (${s.toExponential(2)}); ` +
+    "clipping it silently invents a different model");
+}
+
+/* Definiteness of a difference covariance, by the same pivots
+   ghkPrepareOne factors with (#726). */
+function checkDiffDefinite(S, d, where) {
+  const L = new Float64Array(d * d);
+  for (let a = 0; a < d; a++) {
+    for (let b = 0; b <= a; b++) {
+      let s = S[a * d + b];
+      for (let k = 0; k < b; k++) s -= L[a * d + k] * L[b * d + k];
+      if (a === b) {
+        if (s < -1e-8 * Math.abs(S[a * d + a])) negativePivot(where, s);
+        L[a * d + a] = Math.sqrt(s > 0 ? s : 0);
+      } else L[a * d + b] = L[b * d + b] > 0 ? s / L[b * d + b] : 0;
+    }
+  }
 }
 
 export function ghkSampleOne(prob, reps, r) {
@@ -777,12 +841,32 @@ export function ghkSampleOne(prob, reps, r) {
       const q = ndtr(-a);
       w *= q;
       if (!(q > 0)) { w = 0; break; }
-      const v = (1 - r.u()) * q;
-      e[k] = -invNormal(Math.min(Math.max(v, 1e-300), 1 - 1e-15));
+      const u1 = 1 - r.u(), v = u1 * q;
+      // below 1e-300 the draw is inverted from its LOG: flooring v there
+      // put e[k] inside the truncation (e <= a), so a correlated field
+      // whose first step had q = 2.9e-316 priced 8.6e-322 for >= 2.9e-316
+      // (#555 residual)
+      e[k] = v >= 1e-300 ? -invNormal(Math.min(v, 1 - 1e-15))
+        : -invNormalFromLog(Math.log(u1) + logndtr(-a));
     }
     sum += w;
   }
   return sum;
+}
+
+/* Phi^{-1}(exp(lp)) for a lower-tail log probability lp < log 0.02425:
+   Acklam's tail branch reads p only through sqrt(-2 log p), so it takes
+   the log directly; one Newton step on log Phi refines it. */
+function invNormalFromLog(lp) {
+  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184,
+             -2.54973253934373, 4.37466414146497, 2.93816398269878];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143,
+             3.75440866190742];
+  const q = Math.sqrt(-2 * lp);
+  const z = (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+            ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  const lz = logndtr(z);
+  return z - (lz - lp) * Math.exp(lz - (-0.5 * z * z - 0.5 * Math.log(2 * Math.PI)));
 }
 
 export function mendellElstonOne(mu, C, i) {
@@ -790,8 +874,9 @@ export function mendellElstonOne(mu, C, i) {
   // u_k > 0 one coordinate at a time, propagating truncated-normal moments
   // and pretending normality is preserved (it is not; the bias is the
   // flat line this arm draws).
-  const { m, S } = diffProblem(mu, C, i);
+  const { m, S } = diffProblem(mu, C, i, "mendellElstonOne");
   const d = mu.length - 1;
+  checkDiffDefinite(S, d, "mendellElstonOne");     // #726
   let logp = 0;
   // Hardest constraint FIRST, as python's _order_variables does.
   // Sequential moment matching is order dependent -- each step pretends

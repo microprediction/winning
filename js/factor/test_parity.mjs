@@ -464,4 +464,15 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   }
 }
 
+/* --- a rounded-one favourite alone does not certify a multiway fit (#588) --- */
+{
+  const V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1], o = { points: 1001 };
+  const p = winProbabilitiesFactor([-12, 0, 12], V, D, F, W, o).p;
+  const fit = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, nIter: 600, tol: 1e-8, returnInfo: true });
+  const q = winProbabilitiesFactor(fit.mu, V, D, F, W, o).p;
+  // converged must mean every positive share reprices; otherwise say so
+  const ok = !fit.converged || p.every((v, i) => Math.abs(Math.log(Math.max(q[i], 1e-300) / v)) < 1e-6);
+  check("[1, 1e-17, 3e-65] target: converged only if it reprices (#588)", [ok ? 0 : 1], [0], 0.5);
+}
+
 process.exit(failures ? 1 : 0);

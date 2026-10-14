@@ -9,7 +9,7 @@ import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints,
          kinkLattice } from "./core.mjs";
 import { BASES, _factorNodeRule, baseResolution, checkTails,
-         lowerCdf } from "./races.mjs";
+         lowerCdf, translatedHome } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -543,6 +543,7 @@ export function topKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, TOP_K_PROBABILITIES_OPTS, "topKProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa } = opts;
   mu = asAbilities(mu);        // finite and nonempty, before any lattice (#440)
+  mu = translatedHome(mu, asIdio(D, mu.length));   // local coordinates (#477)
   const n = mu.length;
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
@@ -569,6 +570,7 @@ export function bottomKProbabilities(mu, k, opts = {}) {
   checkOpts(opts, BOTTOM_K_PROBABILITIES_OPTS, "bottomKProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa } = opts;
   mu = asAbilities(mu);
+  mu = translatedHome(mu, asIdio(D, mu.length));   // local coordinates (#477)
   const n = mu.length;
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
@@ -593,6 +595,7 @@ export function topKJacobians(mu, k, opts = {}) {
   const { D = null, base = "normal", points = 513, V = null,
           qa } = opts;
   mu = asAbilities(mu);        // an Infinity used to return all-NaN Jacobians (#440)
+  mu = translatedHome(mu, asIdio(D, mu.length));   // local coordinates (#477)
   const n = mu.length;
   k = asDepth(k, n);
   if (V != null) {
@@ -664,6 +667,7 @@ export function rankProbabilities(mu, opts = {}) {
   checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa } = opts;
   mu = asAbilities(mu);        // an empty field threw RangeError (#440)
+  mu = translatedHome(mu, asIdio(D, mu.length));   // local coordinates (#477)
   const n = mu.length;
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);

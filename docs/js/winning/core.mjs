@@ -402,11 +402,13 @@ export function asFactorLaw(F, W, rank, whereF = "F", whereW = "W") {
    overflows when every ENTRY is finite: [0.8, 0.6, 0.4, 0.2] * 1e308 has
    an infinite total, and v / Infinity zeroed the target before any
    solver ran (#461, #463, #483, #484). Rescale by the max only when the
-   sum overflows, so ordinary inputs stay bit-identical (as #326). */
+   sum overflows, so ordinary inputs stay bit-identical (as #326) -- or
+   when mass / sum does: a finite sum below ~1/MAX_VALUE (4e-309 * [0.2,
+   0.3, 0.5]) made every entry Infinity (#461 residual). */
 export function rescaledTarget(v, mass = 1) {
   let u = Array.from(v);
   let s = u.reduce((a, b) => a + b, 0);
-  if (!Number.isFinite(s)) {
+  if (!Number.isFinite(s) || !Number.isFinite(mass / s)) {
     const mx = Math.max(...u.map(Math.abs));
     u = u.map(x => x / mx);
     s = u.reduce((a, b) => a + b, 0);

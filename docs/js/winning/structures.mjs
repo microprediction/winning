@@ -2,7 +2,7 @@
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
          abilitiesFromBlockRace, validateTree, withoutCommonShock,
-         treeCluster, withTrialMassTolerance } from "./blocks.mjs";
+         treeCluster, withTrialMassTolerance, pairFactor } from "./blocks.mjs";
 import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
          asLoadings, asIdio, gaugeCenter } from "./core.mjs";
 
@@ -226,6 +226,13 @@ function dp(mu, s, opts) {
     return raceProbabilities(mu, { V: s.V, D: s.D, base, points, returnSlopes, window: win, delta });
   refuseHierarchical(s.kind, opts);
   if (returnSlopes) throw new Error("returnSlopes: Independent/Factor only");
+  if (isVector(mu) && mu.length === 2) {
+    // a two-runner Gaussian race is one contrast under every grammar: as
+    // its factor equivalent it takes the closed form (python's dispatch);
+    // the hierarchical lattices put a 20-sd pair at 0.107x (#86)
+    const f = pairFactor(mu, s);
+    return raceProbabilities(mu, { V: f.V, D: f.D, points });
+  }
   if (s.kind === "Blocks")
     return blockRaceProbabilities(mu, s.cluster, s.loading, s.D, { points, qa });
   if (s.kind === "Nested")
@@ -271,7 +278,7 @@ _setDispatch(dp, da);
 /* average-linkage agglomerative clustering on a distance matrix,
    returning a scipy-style linkage Z (for treeFromLinkage and demos) */
 /* A distance matrix: nonempty, square, finite, symmetric to a relative
-   1e-8, zero diagonal, non-negative. averageLinkage copied the UPPER
+   1e-8 per pair, zero diagonal, non-negative. averageLinkage copied the UPPER
    triangle only, so a matrix and its transpose built different trees
    and moved a tree-race share by 9.7 points, where scipy's squareform
    refuses both (#361). Tolerance-level asymmetry is averaged away. */
@@ -289,18 +296,26 @@ export function asDistanceMatrix(dist, where = "averageLinkage") {
       return v;
     });
   });
-  let amax = 0;
-  for (const r of M) for (const v of r) amax = Math.max(amax, Math.abs(v));
-  const tol = 1e-8 * Math.max(amax, 1e-300);
+  // LOCAL tolerances: one 1e-8 * max|dist| for every check let a single
+  // 1e12 distance accept dist = -1, a 1 vs 100 asymmetry and a diagonal
+  // of 1 elsewhere in the matrix, and averageLinkage then built a merge
+  // treeFromLinkage refused (#721). Symmetry is relative to the pair
+  // itself; the diagonal and the sign are relative to each row's
+  // smallest positive distance (0 when it has none: exact).
+  const rowScale = M.map((r, i) => {
+    let m = Infinity;
+    for (let j = 0; j < n; j++) if (j !== i && r[j] > 0) m = Math.min(m, r[j]);
+    return m === Infinity ? 0 : m;
+  });
   for (let i = 0; i < n; i++) {
-    if (Math.abs(M[i][i]) > tol)
+    if (Math.abs(M[i][i]) > 1e-8 * rowScale[i])
       throw new Error(`${where}: dist[${i}][${i}] = ${M[i][i]}; a distance matrix has a zero diagonal`);
     for (let j = 0; j < n; j++) {
-      if (Math.abs(M[i][j] - M[j][i]) > tol)
+      if (Math.abs(M[i][j] - M[j][i]) > 1e-8 * Math.max(Math.abs(M[i][j]), Math.abs(M[j][i])))
         throw new Error(
           `${where}: distance matrix must be symmetric: dist[${i}][${j}] = ` +
           `${M[i][j]} but dist[${j}][${i}] = ${M[j][i]}`);
-      if (M[i][j] < -tol)
+      if (M[i][j] < -1e-8 * Math.min(rowScale[i], rowScale[j]))
         throw new Error(`${where}: dist[${i}][${j}] = ${M[i][j]} is a negative distance`);
     }
   }

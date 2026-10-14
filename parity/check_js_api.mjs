@@ -2737,5 +2737,213 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         worst.toExponential(2));
 }
 
+{
+  // Math.max(...D) spread a runner-sized array into call arguments: past
+  // the engine's argument limit (~125k on node 24) a valid field threw
+  // "Maximum call stack size exceeded" in setup (#729)
+  const n = 150000, keep = console.warn;
+  console.warn = () => {};
+  try {
+    accepts("a 150,000-runner equal field prices uniformly (#729)",
+            () => races.raceProbabilities(new Array(n).fill(0), { D: new Array(n).fill(1), points: 3, delta: 1e-4 }),
+            p => p.length === n && p.every(v => Math.abs(v * n - 1) < 1e-6) &&
+                 Math.abs(p.reduce((a, b) => a + b, 0) - 1) < 1e-9);
+    accepts("translatedHome takes a 150,000-entry D (#729)",
+            () => races.translatedHome(new Array(n).fill(1e15), new Array(n).fill(1)),
+            m => m.length === n && m.every(v => v === 0));
+  } finally { console.warn = keep; }
+}
+
+{
+  // the bulk window bracketed only the winner envelope: the middle runner
+  // of [0, 20, 40] wins near x = 10, past its right edge, and came back at
+  // 0.099 of Phi(-20/sqrt 2) at any point count (#723, python's #97)
+  const exact = 1.0442437918812723e-45;
+  let worst = 0;
+  for (const points of [257, 4097])
+    worst = Math.max(worst, Math.abs(races.raceProbabilities([0, 20, 40], { D: [1, 1, 1], points })[1] / exact - 1));
+  holds("default bulk window keeps a 1e-45 middle runner (#723)", worst < 1e-6, worst.toExponential(2));
+}
+
+{
+  // Gumbel's lower-tail CDF was 1 - S, exactly 0 once S rounds to one: the
+  // Plackett-Luce last place 2.0e-39 of [-35, 0, 0] came back 0 (#710)
+  const c = Math.PI / Math.sqrt(6);
+  let worst = 0;
+  for (const gap of [20, 30, 35]) {
+    const w0 = Math.exp(c * gap), exact = 2 / ((w0 + 2) * (w0 + 1));
+    const mu = [-gap, 0, 0];
+    const b = topk.bottomKProbabilities(mu, 1, { base: "gumbel", points: 513 })[0];
+    const r = topk.rankProbabilities(mu, { base: "gumbel", points: 513 })[0][2];
+    worst = Math.max(worst, Math.abs(b / exact - 1), Math.abs(r / exact - 1));
+  }
+  holds("Gumbel last place matches Plackett-Luce at gaps 20..35 (#710)", worst < 1e-6, worst.toExponential(2));
+}
+
+{
+  // a first truncation with q = 2.9e-316 floored its draw at 1e-300, which
+  // put e[0] inside the truncation and priced the path 8.6e-322 (#555
+  // residual). ndtr(-38) ndtr(5) <= P <= ndtr(-38).
+  const mu = [0, -38, -37.5], C = [[0, 0, 0], [0, 1, 1], [0, 1, 1.01]];
+  const lo = core.ndtr(-38) * core.ndtr(5), hi = core.ndtr(-38);
+  let ok = true, got = [];
+  for (const seed of [1, 2, 3, 7, 19]) {
+    const w = demo.ghkSampleOne(demo.ghkPrepareOne(mu, C, 0), 1, demo.rng(seed));
+    got.push(w.toExponential(3));
+    ok = ok && w >= lo * (1 - 1e-6) && w <= hi * (1 + 1e-6);
+  }
+  holds("GHK keeps a 2.9e-316 correlated path (#555)", ok, got.join(", "));
+}
+
+{
+  // GHK and Mendell-Elston clipped negative pivots/variances to eps and
+  // priced an indefinite C as [1, 0] (#726); both refuse at the door now
+  const mu = [0, 0.5];
+  const indef = [[1, 1.4], [1.4, 1]];          // contrast variance -0.8
+  const asym = [[1, 0.3], [0.5, 1]];
+  const negv = [[-1, 0], [0, 1]];
+  for (const [name, C] of [["indefinite", indef], ["asymmetric", asym], ["negative-variance", negv]]) {
+    rejects(demo.ghkPrepareOne, [mu, C, 0], `ghkPrepareOne refuses a ${name} C (#726)`);
+    rejects(demo.mendellElstonOne, [mu, C, 0], `mendellElstonOne refuses a ${name} C (#726)`);
+  }
+  const C3 = [[1, 0.3, 0.1], [0.3, 1, 0.2], [0.1, 0.2, 1]];
+  accepts("a valid C still prices through both arms (#726)",
+          () => [demo.mendellElstonOne([0, 0.3, 0.6], C3, 1),
+                 demo.ghkSampleOne(demo.ghkPrepareOne([0, 0.3, 0.6], C3, 1), 100, demo.rng(1)) / 100],
+          v => v.every(x => x > 0 && x < 1));
+}
+
+{
+  // one global 1e-8 * max|dist| tolerance let an unrelated 1e12 distance
+  // hide a -1 distance, a 1 vs 100 asymmetry and a diagonal of 1 (#721)
+  const H = 1e12;
+  rejects(structures.averageLinkage, [[[0, -1, H], [-1, 0, 2], [H, 2, 0]]],
+          "a negative distance is refused next to a 1e12 one (#721)", "negative");
+  rejects(structures.averageLinkage, [[[0, 1, H], [100, 0, 3], [H, 3, 0]]],
+          "a 1 vs 100 asymmetry is refused next to a 1e12 distance (#721)", "symmetric");
+  rejects(structures.averageLinkage, [[[1, 2, H], [2, 0, 3], [H, 3, 0]]],
+          "a diagonal of 1 is refused next to a 1e12 distance (#721)", "diagonal");
+  const Dm = [[0, 1, 4, H], [1 + 1e-12, 0, 2, H], [4, 2, 0, H], [H, H, H, 0]];
+  accepts("tolerance-level asymmetry is still averaged beside a 1e12 distance (#721)",
+          () => structures.asDistanceMatrix(Dm), M => M[0][1] === M[1][0]);
+  const Z1 = structures.averageLinkage(Dm.map(r => r.map(x => x * 1e-200)));
+  const Z2 = structures.averageLinkage(Dm);
+  holds("rescaling keeps acceptance and topology (#721)",
+        Z1.every((r, k) => r[0] === Z2[k][0] && r[1] === Z2[k][1]));
+}
+
+{
+  // mass / sum overflowed for a finite sum below ~1/MAX_VALUE, so a tiny
+  // common scale made the normalised target Infinity (#461 residual)
+  const q = [0.2, 0.3, 0.5], tiny = q.map(x => 4e-309 * x);
+  const keep = console.warn;
+  console.warn = () => {};
+  try {
+    const a = topk.abilitiesFromTopk(q, 1, { D: 1, returnInfo: true });
+    accepts("abilitiesFromTopk takes a 4e-309-scaled target (#461)",
+            () => topk.abilitiesFromTopk(tiny, 1, { D: 1, returnInfo: true }),
+            b => b.info.converged && b.mu.every((v, i) => Math.abs(v - a.mu[i]) < 1e-6));
+    const r = topk.abilitiesFromRankMarginal(q, 1, { D: 1, returnInfo: true });
+    accepts("abilitiesFromRankMarginal takes a 4e-309-scaled target (#461)",
+            () => topk.abilitiesFromRankMarginal(tiny, 1, { D: 1, returnInfo: true }),
+            b => b.info.converged && b.mu.every((v, i) => Math.abs(v - r.mu[i]) < 1e-6));
+    holds("rescaledTarget(4e-309 q) is q (#461)",
+          core.rescaledTarget(tiny).every((v, i) => Math.abs(v - q[i]) < 1e-12));
+  } finally { console.warn = keep; }
+}
+
+{
+  // top-k/rank and the Blocks/Nested/Tree lattices were built at the
+  // caller's absolute origin: exactly representable contrasts shifted by
+  // 2^52 (top-k) or 1e15 (structured) threw mass errors and the
+  // Jacobians came back origin-dependent or all zero (#477)
+  const gap = (a, b) => Math.max(...a.flat(Infinity).map((v, i) => Math.abs(v - b.flat(Infinity)[i])));
+  const mu = [-3, -1, 1, 3], sh = mu.map(x => x + 2 ** 52);
+  const o = { D: [1, 1, 1, 1], points: 513 };
+  const keep = console.warn;
+  console.warn = () => {};
+  try {
+    for (const [name, f] of [
+      ["topKProbabilities", x => topk.topKProbabilities(x, 2, o)],
+      ["bottomKProbabilities", x => topk.bottomKProbabilities(x, 2, o)],
+      ["rankProbabilities", x => topk.rankProbabilities(x, o)],
+      ["topKJacobians", x => { const r = topk.topKJacobians(x, 2, o); return [r.Jmu, r.Jsigma]; }],
+    ]) accepts(`${name} is invariant to a 2^52 common shift (#477)`,
+               () => gap(f(mu), f(sh)), g => g < 1e-12, g => g.toExponential(2));
+    const base = [-1, 0, 1], s15 = base.map(x => x + 1e15);
+    const cl = [0, 1, 2], L = [0, 0, 0], D = [1, 1, 1], coupling = [0, 0, 0];
+    const parent = [3, 3, 4, 4, -1], strength = [0, 0, 0, 0, 0];
+    for (const [name, f] of [
+      ["blockRaceProbabilities", x => blocks.blockRaceProbabilities(x, cl, L, D)],
+      ["nestedRaceProbabilities", x => blocks.nestedRaceProbabilities(x, cl, L, D, { coupling })],
+      ["treeRaceProbabilities", x => blocks.treeRaceProbabilities(x, cl, L, D, parent, strength)],
+      ["blockRaceJacobian", x => blocks.blockRaceJacobian(x, cl, L, D)],
+      ["nestedRaceJacobian", x => blocks.nestedRaceJacobian(x, cl, L, D, { coupling })],
+      ["treeRaceJacobian", x => blocks.treeRaceJacobian(x, cl, L, D, parent, strength)],
+    ]) accepts(`${name} is invariant to a 1e15 common shift (#477)`,
+               () => gap(f(base), f(s15)), g => g < 1e-12, g => g.toExponential(2));
+  } finally { console.warn = keep; }
+}
+
+{
+  // one cluster: its loading shock is common to every contestant, so V
+  // and V + c price alike; the raw c widened the lattice and threw a
+  // mass defect at c = 40 while the Jacobian silently moved (#471)
+  const gap = (a, b) => Math.max(...a.flat(Infinity).map((v, i) => Math.abs(v - b.flat(Infinity)[i])));
+  const mu = [-.8, -.3, 0, .2, .9], cl = [0, 0, 0, 0, 0], D = [1, 1, 1, 1, 1];
+  const v0 = [.3, -.1, .2, 0, -.4];
+  const p0 = blocks.blockRaceProbabilities(mu, cl, v0, D), J0 = blocks.blockRaceJacobian(mu, cl, v0, D);
+  for (const c of [40, 1e6]) {
+    const v = v0.map(x => x + c);
+    accepts(`one-cluster Blocks forward ignores a common loading ${c} (#471)`,
+            () => gap(p0, blocks.blockRaceProbabilities(mu, cl, v, D)), g => g < 1e-10, g => g.toExponential(2));
+    accepts(`one-cluster Blocks Jacobian ignores a common loading ${c} (#471)`,
+            () => gap(J0, blocks.blockRaceJacobian(mu, cl, v, D)), g => g < 1e-10, g => g.toExponential(2));
+    accepts(`one-cluster Blocks inverse ignores a common loading ${c} (#471)`,
+            () => blocks.abilitiesFromBlockRace(p0, cl, v, D, { maxIter: 25, tol: 1e-8 }),
+            r => gap(blocks.blockRaceProbabilities(r.mu, cl, v0, D), p0) < 1e-7);
+  }
+  // two clusters: a cluster's common part is a real effect and must stay
+  const cl2 = [0, 0, 1, 1, 1];
+  const q0 = blocks.blockRaceProbabilities(mu, cl2, v0, D);
+  const q1 = blocks.blockRaceProbabilities(mu, cl2, v0.map((x, i) => x + (i < 2 ? 1 : 0)), D);
+  holds("a two-cluster common part still prices (#471)", gap(q0, q1) > 1e-3);
+}
+
+{
+  // a normal pair is one Gaussian contrast: every grammar takes the
+  // closed form, as python and R do; Blocks/Nested/Tree integrated their
+  // own lattices and put a 20-sd pair at 0.098x (#86)
+  const D = [1, 1];
+  const models = [
+    ["V/D", { D }],
+    ["Independent", { structure: structures.Independent(D) }],
+    ["Factor", { structure: structures.Factor([[0], [0]], D) }],
+    ["Blocks", { structure: structures.Blocks([0, 1], [0, 0], D) }],
+    ["Nested", { structure: structures.Nested([0, 1], [0, 0], D, [0, 0], 0.5) }],
+    ["Tree", { structure: structures.Tree([0, 1], [0, 0], D, [2, 2, -1], [0, 0, 0]) }],
+  ];
+  let worst = 0, perm = 0;
+  for (const gap of [16, 20]) {
+    const exact = core.ndtr(-gap / Math.SQRT2);
+    for (const [, o] of models) {
+      const p = races.raceProbabilities([0, gap], { ...o, points: 8193 });
+      const q = races.raceProbabilities([gap, 0], { ...o, points: 8193 });
+      worst = Math.max(worst, Math.abs(p[1] / exact - 1));
+      perm = Math.max(perm, Math.abs(p[0] - q[1]), Math.abs(p[1] - q[0]));
+    }
+  }
+  holds("every grammar prices a 16/20-sd pair tail exactly (#86)", worst < 1e-12, worst.toExponential(2));
+  holds("the pair is exactly permutation-equivariant (#86)", perm === 0, String(perm));
+  const J = polish.raceJacobian([0, 12 * Math.SQRT2], { D, points: 501 });
+  const d = Math.exp(-72) / Math.sqrt(2 * Math.PI) / Math.SQRT2;
+  holds("raceJacobian of a 12-sd pair is the closed form's (#86)",
+        Math.abs(J[0][1] / d - 1) < 1e-12 && J[0][0] === -J[0][1], J[0][1].toExponential(6));
+  const Jb = polish.raceJacobian([0, 12 * Math.SQRT2], { structure: structures.Blocks([0, 1], [0, 0], D) });
+  holds("a structured pair Jacobian is the closed form's too (#86)", Math.abs(Jb[0][1] / d - 1) < 1e-12);
+  rejects(races.raceProbabilities, [[0, 1], { structure: structures.Tree([0, 1, 2], [1, 1, 1], [1, 1, 1], [3, 3, 4, 4, -1], [0, 0, 0, 0.5, 0.7]) }],
+          "a three-leaf Tree is refused for a pair (#86)");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
